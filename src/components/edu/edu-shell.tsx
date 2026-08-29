@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Armchair,
+  Banknote,
   Calendar,
+  ClipboardList,
   Contact,
   GraduationCap,
   Home,
@@ -13,6 +15,7 @@ import {
   LogOut,
   Menu,
   Sun,
+  Tags,
   UserCheck,
   Users,
   X,
@@ -50,6 +53,10 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   calendar: Calendar,
   contact: Contact,
   chair: Armchair,
+  // Ola 5 — tarifarios y caja.
+  banknote: Banknote,
+  tags: Tags,
+  "clipboard-list": ClipboardList,
 };
 
 export interface EduShellProps {

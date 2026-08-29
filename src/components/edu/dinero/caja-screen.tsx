@@ -1,0 +1,1304 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Plus, Search, X } from "lucide-react";
+import { EduModal } from "@/components/edu/edu-modal";
+import { eduRequest } from "@/components/edu/edu-http";
+import {
+  eduChargeTotals,
+  eduLineTotalCents,
+  eduMoney,
+  eduMoneyInputValue,
+  type EduChargeFilters,
+  type EduChargeRow,
+  type EduChargesPage,
+  type EduPrecioResuelto,
+  type EduTarifaMatch,
+} from "@/lib/edu/dinero-core";
+import {
+  EDU_CHARGE_STATUSES,
+  EDU_CHARGE_STATUS_LABELS,
+  EDU_PAYMENT_METHODS,
+  EDU_PAYMENT_METHOD_LABELS,
+  type EduChargeStatus,
+  type EduPaymentMethod,
+} from "@/lib/edu/types";
+
+/**
+ * /instituto/caja — COBRAR.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 NI UN PRECIO ESCRITO EN ESTA PANTALLA.
+ *
+ * Al elegir al paciente, la pantalla PREGUNTA al servidor
+ * (/api/instituto/caja/tarifa) qué lista le toca, por qué, y cuánto cuesta
+ * cada procedimiento PARA ÉL. Aquí no hay un número de precio, ni una
+ * regla de "si es de alumno entonces…", ni un descuento calculado: si el
+ * navegador supiera calcular un precio, sabría calcular uno más barato.
+ *
+ * Lo único que se calcula en el cliente es la SUMA de lo que ya cotizó el
+ * servidor, para que el total se mueva mientras se teclea. El servidor la
+ * vuelve a calcular al emitir con SUS precios, y ésa es la que vale: si
+ * las dos discreparan, gana la del servidor y el recibo lo dice.
+ *
+ * 🔴 Y el precio que este componente manda en cada línea se DESCARTA en el
+ * servidor cuando la línea trae `procedureId`. Va en el cuerpo solo para
+ * que el servidor pueda detectar —y registrar— que la caché de precios del
+ * navegador estaba vieja.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduCajaScreenProps {
+  page: EduChargesPage;
+  filters: EduChargeFilters;
+  maxRows: number;
+  /** El turno abierto, si hay. Sin turno se cobra igual: el corte no es un peaje. */
+  turnoAbierto: { id: string; openedAtLabel: string } | null;
+  canCharge: boolean;
+  canRefund: boolean;
+  canCorte: boolean;
+}
+
+const TAG_BY_STATUS: Record<EduChargeStatus, string> = {
+  PENDING: "edu-tag--warn",
+  PARTIAL: "edu-tag--info",
+  PAID: "edu-tag--ok",
+  REFUNDED: "edu-tag--muted",
+  CANCELLED: "edu-tag--muted",
+};
+
+export function EduCajaScreen({
+  page,
+  filters,
+  maxRows,
+  turnoAbierto,
+  canCharge,
+  canRefund,
+  canCorte,
+}: EduCajaScreenProps) {
+  const router = useRouter();
+  const [navigating, startNav] = useTransition();
+  const [q, setQ] = useState(filters.q ?? "");
+  const [cobrando, setCobrando] = useState(false);
+  const [recibo, setRecibo] = useState<EduChargeRow | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  const { rows, truncated, totals } = page;
+  const hayFiltros = Boolean(filters.status || filters.q || !filters.soloTurno);
+
+  function aplicar(next: Record<string, string>) {
+    const actual: Record<string, string> = {};
+    if (filters.status) actual.estado = filters.status;
+    if (filters.q) actual.q = filters.q;
+    if (!filters.soloTurno) actual.ver = "todos";
+
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries({ ...actual, ...next })) {
+      if (v) params.set(k, v);
+    }
+    const qs = params.toString();
+    startNav(() => {
+      router.replace(qs ? `/instituto/caja?${qs}` : "/instituto/caja", { scroll: false });
+    });
+  }
+
+  function recargar(mensaje: string) {
+    setFlash(mensaje);
+    startNav(() => router.refresh());
+  }
+
+  return (
+    <>
+      {flash && (
+        <div className="edu-banner edu-alert--ok" role="status">
+          <div>
+            <p className="edu-banner__title">{flash}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── El turno ────────────────────────────────────────────────
+          Sin turno abierto SE PUEDE COBRAR. El corte es una herramienta
+          para cuadrar el cajón, no un peaje para atender a un paciente que
+          ya está en el mostrador. Lo que pasa es que esos cobros no entran
+          en ningún corte, y eso se dice aquí en vez de descubrirse al
+          cerrar. */}
+      <div className={`edu-banner ${turnoAbierto ? "" : "edu-banner--warn"}`}>
+        <div>
+          <p className="edu-banner__title">
+            {turnoAbierto ? `Turno abierto desde ${turnoAbierto.openedAtLabel}` : "No hay turno de caja abierto"}
+          </p>
+          <p className="edu-banner__detail">
+            {turnoAbierto
+              ? "Todo lo que se cobre y se pague ahora entra en este corte."
+              : "Puedes cobrar igual, pero esos cobros no entrarán en ningún corte hasta que se abra un turno."}
+          </p>
+        </div>
+        {canCorte && (
+          <Link href="/instituto/caja/corte" className="edu-btn edu-btn--ghost edu-btn--sm">
+            {turnoAbierto ? "Ver el corte" : "Abrir turno"}
+          </Link>
+        )}
+      </div>
+
+      <form
+        className="edu-toolbar"
+        onSubmit={(e) => {
+          e.preventDefault();
+          aplicar({ q: q.trim() });
+        }}
+      >
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-caja-q">
+            Buscar
+          </label>
+          <div className="edu-input-wrap">
+            <input
+              id="edu-caja-q"
+              className="edu-input edu-input--sm"
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Folio del cobro o del paciente, o su nombre"
+              autoComplete="off"
+            />
+            <button type="submit" className="edu-reveal" aria-label="Buscar">
+              <Search size={17} />
+            </button>
+          </div>
+        </div>
+
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-caja-estado">
+            Estado
+          </label>
+          <select
+            id="edu-caja-estado"
+            className="edu-input edu-input--sm"
+            value={filters.status ?? ""}
+            onChange={(e) => aplicar({ estado: e.target.value })}
+          >
+            <option value="">Todos</option>
+            {EDU_CHARGE_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {EDU_CHARGE_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-caja-ver">
+            Qué se lista
+          </label>
+          <select
+            id="edu-caja-ver"
+            className="edu-input edu-input--sm"
+            value={filters.soloTurno ? "turno" : "todos"}
+            onChange={(e) => aplicar({ ver: e.target.value === "todos" ? "todos" : "" })}
+          >
+            <option value="turno">Solo el turno abierto</option>
+            <option value="todos">Todo el histórico</option>
+          </select>
+        </div>
+
+        {hayFiltros && (
+          <button
+            type="button"
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+            onClick={() => {
+              setQ("");
+              startNav(() => router.replace("/instituto/caja", { scroll: false }));
+            }}
+          >
+            <X size={15} />
+            Limpiar
+          </button>
+        )}
+      </form>
+
+      <div className="edu-toolbar__foot">
+        <span className="edu-count">
+          {navigating
+            ? "Buscando…"
+            : `${rows.length} ${rows.length === 1 ? "cobro" : "cobros"}${
+                truncated ? ` (se muestran los primeros ${maxRows})` : ""
+              }`}
+        </span>
+        {canCharge && (
+          <button
+            type="button"
+            className="edu-btn edu-btn--primary edu-btn--sm"
+            onClick={() => {
+              setFlash(null);
+              setCobrando(true);
+            }}
+          >
+            <Plus size={16} />
+            Cobrar
+          </button>
+        )}
+      </div>
+
+      {rows.length > 0 && (
+        // 🔴 Los cancelados NO están en estas sumas. Un cobro anulado no es
+        // dinero de la escuela ni deuda del paciente, y contarlo es
+        // exactamente el bug que el producto dental ya pagó.
+        <div className="edu-kpis">
+          <div className="edu-kpi">
+            <span className="edu-kpi__label">Cobrado</span>
+            <span className="edu-kpi__value">{eduMoney(totals.totalCents)}</span>
+          </div>
+          <div className="edu-kpi">
+            <span className="edu-kpi__label">Pagado</span>
+            <span className="edu-kpi__value">{eduMoney(totals.paidCents)}</span>
+          </div>
+          <div className="edu-kpi">
+            <span className="edu-kpi__label">Por cobrar</span>
+            <span className="edu-kpi__value">{eduMoney(totals.balanceCents)}</span>
+          </div>
+        </div>
+      )}
+
+      {rows.length === 0 ? (
+        <div className="edu-empty">
+          <p className="edu-empty__title">
+            {filters.soloTurno && !turnoAbierto
+              ? "No hay turno de caja abierto"
+              : hayFiltros
+                ? "Ningún cobro coincide"
+                : "Todavía no se ha cobrado nada"}
+          </p>
+          <p className="edu-empty__detail">
+            {filters.soloTurno && !turnoAbierto
+              ? "Estás viendo el turno abierto y no hay ninguno. Abre uno, o cambia a “Todo el histórico”."
+              : hayFiltros
+                ? "Prueba con menos filtros, o cambia a “Todo el histórico”."
+                : "Aquí aparecen los cobros conforme se emiten. Elige al paciente y el sistema pone su tarifa: tú no tecleas precios."}
+          </p>
+        </div>
+      ) : (
+        <div className="edu-table edu-table--cobros">
+          <div className="edu-rowhead" aria-hidden="true">
+            <span>Folio</span>
+            <span>Paciente</span>
+            <span>Tarifa</span>
+            <span>Total</span>
+            <span>Saldo</span>
+            <span>Estado</span>
+            <span />
+          </div>
+
+          {rows.map((c) => (
+            <div key={c.id} className={`edu-row ${c.status === "CANCELLED" ? "edu-row--off" : ""}`}>
+              <div className="edu-cell">
+                <span className="edu-cell__label">Folio</span>
+                <span className="edu-cell__value edu-cell__value--strong">{c.folio}</span>
+              </div>
+
+              <div className="edu-cell edu-cell--wide">
+                <span className="edu-cell__label">Paciente</span>
+                <span className="edu-cell__value edu-cell__value--strong">{c.patientName}</span>
+                <span className="edu-cell__sub">{c.patientFolio}</span>
+              </div>
+
+              <div className="edu-cell">
+                <span className="edu-cell__label">Tarifa</span>
+                <span className="edu-cell__value">{c.feeScheduleLabel ?? "—"}</span>
+              </div>
+
+              <div className="edu-cell">
+                <span className="edu-cell__label">Total</span>
+                <span className="edu-cell__value edu-precio">{eduMoney(c.totalCents)}</span>
+                {c.discountCents > 0 && (
+                  <span className="edu-cell__sub">−{eduMoney(c.discountCents)} de descuento</span>
+                )}
+              </div>
+
+              <div className="edu-cell">
+                <span className="edu-cell__label">Saldo</span>
+                <span className="edu-cell__value edu-precio">{eduMoney(c.balanceCents)}</span>
+              </div>
+
+              <div className="edu-cell">
+                <span className="edu-cell__label">Estado</span>
+                <span className={`edu-tag ${TAG_BY_STATUS[c.status]}`}>
+                  {EDU_CHARGE_STATUS_LABELS[c.status]}
+                </span>
+              </div>
+
+              <div className="edu-cell__actions">
+                <button
+                  type="button"
+                  className="edu-btn edu-btn--ghost edu-btn--sm"
+                  onClick={() => {
+                    setFlash(null);
+                    setRecibo(c);
+                  }}
+                >
+                  Recibo
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {cobrando && (
+        <Cobrar
+          onClose={() => setCobrando(false)}
+          onDone={(folio, descartados) => {
+            setCobrando(false);
+            recargar(
+              descartados > 0
+                ? `Cobro ${folio} emitido. Ojo: ${descartados} ${descartados === 1 ? "concepto salió" : "conceptos salieron"} con el precio del servidor porque el de la pantalla estaba viejo.`
+                : `Cobro ${folio} emitido.`,
+            );
+          }}
+        />
+      )}
+
+      {recibo && (
+        <Recibo
+          charge={recibo}
+          canCharge={canCharge}
+          canRefund={canRefund}
+          onClose={() => setRecibo(null)}
+          onDone={(mensaje) => {
+            setRecibo(null);
+            recargar(mensaje);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// COBRAR — paciente → tarifa del servidor → conceptos → recibo
+// ═══════════════════════════════════════════════════════════════════════
+
+interface PacienteBusqueda {
+  id: string;
+  folio: string;
+  name: string;
+}
+
+interface TarifaRespuesta {
+  patientId: string;
+  patientName: string;
+  patientFolio: string;
+  applied: EduTarifaMatch | null;
+  prices: EduPrecioResuelto[];
+  sinPrecio: { id: string; code: string; name: string }[];
+}
+
+interface LineaUI {
+  key: string;
+  procedureId: string | null;
+  description: string;
+  /** Congelado de lo que dijo el servidor. Nunca se edita en pantalla. */
+  unitPriceCents: number;
+  quantity: string;
+  discount: string;
+  fromLabel: string | null;
+  fallback: boolean;
+}
+
+function Cobrar({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: (folio: string, descartados: number) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [buscando, setBuscando] = useState(false);
+  const [resultados, setResultados] = useState<PacienteBusqueda[] | null>(null);
+  const [tarifa, setTarifa] = useState<TarifaRespuesta | null>(null);
+  const [lineas, setLineas] = useState<LineaUI[]>([]);
+  const [elegido, setElegido] = useState("");
+  const [libre, setLibre] = useState(false);
+  const [libreDesc, setLibreDesc] = useState("");
+  const [librePrecio, setLibrePrecio] = useState("");
+  const [conPago, setConPago] = useState(true);
+  const [metodo, setMetodo] = useState<EduPaymentMethod>("CASH");
+  const [monto, setMonto] = useState("");
+  const [referencia, setReferencia] = useState("");
+  const [notas, setNotas] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Un contador para la key de React: dos líneas del mismo procedimiento
+  // son dos renglones distintos y con el procedureId de key la segunda
+  // reusaría el estado de la primera.
+  const contador = useRef(0);
+
+  const totals = useMemo(
+    () =>
+      eduChargeTotals(
+        lineas.map((l) => ({
+          quantity: Number(l.quantity) || 0,
+          unitPriceCents: l.unitPriceCents,
+          discountCents: centavosDe(l.discount),
+        })),
+      ),
+    [lineas],
+  );
+
+  // El monto del pago se propone igual al total mientras nadie lo toque a
+  // mano. Es lo que pasa en el 90 % de los mostradores.
+  const [montoTocado, setMontoTocado] = useState(false);
+  useEffect(() => {
+    if (!montoTocado) setMonto(eduMoneyInputValue(totals.totalCents));
+  }, [totals.totalCents, montoTocado]);
+
+  async function buscar() {
+    setError(null);
+    setBuscando(true);
+    try {
+      const res = await eduRequest<{ rows: { id: string; folio: string; name: string }[] }>(
+        `/api/instituto/pacientes?q=${encodeURIComponent(q.trim())}`,
+      );
+      setResultados(res.rows.slice(0, 20).map((p) => ({ id: p.id, folio: p.folio, name: p.name })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo buscar.");
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  async function elegirPaciente(p: PacienteBusqueda) {
+    setError(null);
+    setBusy(true);
+    try {
+      // 🔴 AQUÍ SE PREGUNTA LA TARIFA. La pantalla no la deduce.
+      const res = await eduRequest<TarifaRespuesta>(
+        `/api/instituto/caja/tarifa?paciente=${encodeURIComponent(p.id)}`,
+      );
+      setTarifa(res);
+      setResultados(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo leer la tarifa.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function agregar(procedureId: string) {
+    const precio = tarifa?.prices.find((p) => p.procedureId === procedureId);
+    if (!precio) return;
+    contador.current += 1;
+    setLineas((ls) => [
+      ...ls,
+      {
+        key: `l${contador.current}`,
+        procedureId: precio.procedureId,
+        description: precio.name,
+        unitPriceCents: precio.priceCents,
+        quantity: "1",
+        discount: "",
+        fromLabel: precio.fromFeeScheduleName,
+        fallback: precio.fallback,
+      },
+    ]);
+    setElegido("");
+  }
+
+  function agregarLibre() {
+    const cents = centavosDe(librePrecio);
+    if (!libreDesc.trim() || cents <= 0) return;
+    contador.current += 1;
+    setLineas((ls) => [
+      ...ls,
+      {
+        key: `l${contador.current}`,
+        procedureId: null,
+        description: libreDesc.trim(),
+        unitPriceCents: cents,
+        quantity: "1",
+        discount: "",
+        fromLabel: null,
+        fallback: false,
+      },
+    ]);
+    setLibreDesc("");
+    setLibrePrecio("");
+    setLibre(false);
+  }
+
+  async function cobrar() {
+    if (!tarifa) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await eduRequest<{ folio: string; descartados: number }>(
+        "/api/instituto/caja/cobros",
+        {
+          method: "POST",
+          body: {
+            patientId: tarifa.patientId,
+            notes: notas.trim() || null,
+            items: lineas.map((l) => ({
+              procedureId: l.procedureId ?? undefined,
+              description: l.procedureId ? undefined : l.description,
+              quantity: Number(l.quantity) || 1,
+              // 🔴 Va, y el servidor lo DESCARTA cuando hay procedureId.
+              // Se manda para que pueda detectar que esta pantalla tenía
+              // un precio viejo, no para que lo use.
+              unitPriceCents: eduMoneyInputValue(l.unitPriceCents),
+              discountCents: l.discount.trim() || undefined,
+            })),
+            payment:
+              conPago && totals.totalCents > 0
+                ? {
+                    method: metodo,
+                    amountCents: monto,
+                    reference: referencia.trim() || null,
+                  }
+                : undefined,
+          },
+        },
+      );
+      onDone(res.folio, res.descartados ?? 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cobrar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const listo = Boolean(tarifa) && lineas.length > 0;
+
+  return (
+    <EduModal
+      title="Cobrar"
+      subtitle="Elige al paciente: el sistema pone su tarifa. Tú no tecleas precios."
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="edu-btn edu-btn--primary"
+            onClick={cobrar}
+            disabled={busy || !listo}
+          >
+            {busy ? "Cobrando…" : `Cobrar ${eduMoney(totals.totalCents)}`}
+          </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="edu-alert" role="alert">
+          {error}
+        </div>
+      )}
+
+      {/* ── 1 · El paciente ─────────────────────────────────────────── */}
+      {!tarifa ? (
+        <>
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-cobro-q">
+              Paciente
+            </label>
+            <div className="edu-input-wrap">
+              <input
+                id="edu-cobro-q"
+                className="edu-input"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    buscar();
+                  }
+                }}
+                placeholder="Nombre, folio o teléfono"
+                autoComplete="off"
+              />
+              <button type="button" className="edu-reveal" onClick={buscar} aria-label="Buscar">
+                <Search size={17} />
+              </button>
+            </div>
+          </div>
+
+          {buscando && <p className="edu-note">Buscando…</p>}
+
+          {resultados !== null && resultados.length === 0 && (
+            <p className="edu-note">
+              Ningún paciente coincide. Se busca por nombre, folio y teléfono.
+            </p>
+          )}
+
+          {resultados !== null && resultados.length > 0 && (
+            <ul className="edu-picklist">
+              {resultados.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className="edu-pick"
+                    onClick={() => elegirPaciente(p)}
+                    disabled={busy}
+                  >
+                    <span className="edu-pick__name">{p.name}</span>
+                    <span className="edu-pick__sub">{p.folio}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <>
+          {/* ── 2 · La tarifa, dicha con su nombre ────────────────── */}
+          <div className="edu-tarifa">
+            <p className="edu-tarifa__quien">
+              {tarifa.patientName} <span className="edu-tarifa__folio">{tarifa.patientFolio}</span>
+            </p>
+            {tarifa.applied ? (
+              <p className="edu-tarifa__lista">
+                <span className="edu-tag edu-tag--info">{tarifa.applied.feeScheduleName}</span>{" "}
+                {tarifa.applied.reason}
+              </p>
+            ) : (
+              <p className="edu-tarifa__lista edu-tarifa__lista--falta">
+                No hay ninguna lista de precios predeterminada. Márcala en Tarifarios antes de
+                cobrar.
+              </p>
+            )}
+            <button
+              type="button"
+              className="edu-btn edu-btn--quiet edu-btn--sm"
+              onClick={() => {
+                setTarifa(null);
+                setLineas([]);
+                setResultados(null);
+              }}
+              disabled={busy}
+            >
+              Cambiar de paciente
+            </button>
+          </div>
+
+          {/* ── 3 · Los conceptos ──────────────────────────────────── */}
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-cobro-proc">
+              Agregar concepto
+            </label>
+            <select
+              id="edu-cobro-proc"
+              className="edu-input"
+              value={elegido}
+              onChange={(e) => {
+                if (e.target.value) agregar(e.target.value);
+              }}
+            >
+              <option value="">Elige un procedimiento…</option>
+              {tarifa.prices.map((p) => (
+                <option key={p.procedureId} value={p.procedureId}>
+                  {p.code} · {p.name} — {eduMoney(p.priceCents)}
+                  {p.fallback ? ` (${p.fromFeeScheduleName})` : ""}
+                </option>
+              ))}
+            </select>
+            <span className="edu-field__hint">
+              Los precios los pone el servidor con la tarifa de este paciente. No se pueden editar
+              aquí — y si se editaran, el servidor los volvería a poner.
+            </span>
+          </div>
+
+          {tarifa.sinPrecio.length > 0 && (
+            <p className="edu-note">
+              {tarifa.sinPrecio.length}{" "}
+              {tarifa.sinPrecio.length === 1
+                ? "procedimiento no aparece porque no tiene precio en ninguna lista"
+                : "procedimientos no aparecen porque no tienen precio en ninguna lista"}
+              : {tarifa.sinPrecio.map((p) => p.code).join(", ")}. Captúralos en Tarifarios.
+            </p>
+          )}
+
+          {lineas.length === 0 ? (
+            <p className="edu-note">Todavía no hay conceptos en este cobro.</p>
+          ) : (
+            <div className="edu-lineas">
+              {lineas.map((l) => (
+                <div className="edu-linea" key={l.key}>
+                  <div className="edu-linea__desc">
+                    <span className="edu-linea__name">{l.description}</span>
+                    <span className="edu-linea__sub">
+                      {eduMoney(l.unitPriceCents)} c/u
+                      {l.procedureId === null ? " · línea libre" : ""}
+                      {l.fallback ? ` · precio de ${l.fromLabel}` : ""}
+                    </span>
+                  </div>
+
+                  <div className="edu-field">
+                    <label className="edu-field__label" htmlFor={`edu-cant-${l.key}`}>
+                      Cant.
+                    </label>
+                    <input
+                      id={`edu-cant-${l.key}`}
+                      className="edu-input edu-input--sm"
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={l.quantity}
+                      onChange={(e) =>
+                        setLineas((ls) =>
+                          ls.map((x) => (x.key === l.key ? { ...x, quantity: e.target.value } : x)),
+                        )
+                      }
+                    />
+                  </div>
+
+                  <div className="edu-field">
+                    <label className="edu-field__label" htmlFor={`edu-desc-${l.key}`}>
+                      Descuento
+                    </label>
+                    <input
+                      id={`edu-desc-${l.key}`}
+                      className="edu-input edu-input--sm"
+                      inputMode="decimal"
+                      value={l.discount}
+                      onChange={(e) =>
+                        setLineas((ls) =>
+                          ls.map((x) => (x.key === l.key ? { ...x, discount: e.target.value } : x)),
+                        )
+                      }
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <span className="edu-linea__total edu-precio">
+                    {eduMoney(
+                      eduLineTotalCents({
+                        quantity: Number(l.quantity) || 0,
+                        unitPriceCents: l.unitPriceCents,
+                        discountCents: centavosDe(l.discount),
+                      }),
+                    )}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="edu-assign__x"
+                    aria-label={`Quitar ${l.description}`}
+                    onClick={() => setLineas((ls) => ls.filter((x) => x.key !== l.key))}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Línea libre: un material, una placa. El servidor no tiene
+              opinión sobre algo que no está en el catálogo, así que aquí sí
+              se teclea el precio — y queda marcada como línea libre en el
+              recibo y en el corte. */}
+          {libre ? (
+            <div className="edu-formgrid edu-formgrid--2">
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-libre-desc">
+                  Concepto libre
+                </label>
+                <input
+                  id="edu-libre-desc"
+                  className="edu-input"
+                  value={libreDesc}
+                  onChange={(e) => setLibreDesc(e.target.value)}
+                  placeholder="Material de laboratorio"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-libre-precio">
+                  Precio
+                </label>
+                <input
+                  id="edu-libre-precio"
+                  className="edu-input"
+                  inputMode="decimal"
+                  value={librePrecio}
+                  onChange={(e) => setLibrePrecio(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="edu-actions">
+                <button
+                  type="button"
+                  className="edu-btn edu-btn--ghost edu-btn--sm"
+                  onClick={agregarLibre}
+                  disabled={!libreDesc.trim() || centavosDe(librePrecio) <= 0}
+                >
+                  Agregar
+                </button>
+                <button
+                  type="button"
+                  className="edu-btn edu-btn--quiet edu-btn--sm"
+                  onClick={() => setLibre(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="edu-btn edu-btn--quiet edu-btn--sm"
+              onClick={() => setLibre(true)}
+            >
+              Agregar concepto libre (material, placa…)
+            </button>
+          )}
+
+          {/* ── 4 · El total y el pago ─────────────────────────────── */}
+          {lineas.length > 0 && (
+            <>
+              <div className="edu-totales">
+                <div className="edu-totales__fila">
+                  <span>Subtotal</span>
+                  <span className="edu-precio">{eduMoney(totals.subtotalCents)}</span>
+                </div>
+                {totals.discountCents > 0 && (
+                  <div className="edu-totales__fila">
+                    <span>Descuento</span>
+                    <span className="edu-precio">−{eduMoney(totals.discountCents)}</span>
+                  </div>
+                )}
+                <div className="edu-totales__fila edu-totales__fila--fuerte">
+                  <span>Total</span>
+                  <span className="edu-precio">{eduMoney(totals.totalCents)}</span>
+                </div>
+              </div>
+
+              <label className="edu-check">
+                <input
+                  type="checkbox"
+                  checked={conPago}
+                  onChange={(e) => setConPago(e.target.checked)}
+                />
+                <span className="edu-check__body">
+                  <span className="edu-check__label">Registrar el pago ahora</span>
+                  <span className="edu-check__hint">
+                    Quítalo si el paciente va a pagar después: el cobro queda con saldo y se
+                    liquida desde su recibo.
+                  </span>
+                </span>
+              </label>
+
+              {conPago && (
+                <div className="edu-formgrid edu-formgrid--2">
+                  <div className="edu-field">
+                    <label className="edu-field__label" htmlFor="edu-pago-metodo">
+                      Método
+                    </label>
+                    <select
+                      id="edu-pago-metodo"
+                      className="edu-input"
+                      value={metodo}
+                      onChange={(e) => setMetodo(e.target.value as EduPaymentMethod)}
+                    >
+                      {EDU_PAYMENT_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {EDU_PAYMENT_METHOD_LABELS[m]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="edu-field">
+                    <label className="edu-field__label" htmlFor="edu-pago-monto">
+                      Monto
+                    </label>
+                    <input
+                      id="edu-pago-monto"
+                      className="edu-input"
+                      inputMode="decimal"
+                      value={monto}
+                      onChange={(e) => {
+                        setMontoTocado(true);
+                        setMonto(e.target.value);
+                      }}
+                    />
+                    <span className="edu-field__hint">
+                      Menos que el total deja saldo pendiente. Más, no se acepta.
+                    </span>
+                  </div>
+                  <div className="edu-field">
+                    <label className="edu-field__label" htmlFor="edu-pago-ref">
+                      Referencia (opcional)
+                    </label>
+                    <input
+                      id="edu-pago-ref"
+                      className="edu-input"
+                      value={referencia}
+                      onChange={(e) => setReferencia(e.target.value)}
+                      placeholder="Autorización de la terminal"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="edu-field">
+                    <label className="edu-field__label" htmlFor="edu-cobro-notas">
+                      Nota del cobro (opcional)
+                    </label>
+                    <input
+                      id="edu-cobro-notas"
+                      className="edu-input"
+                      value={notas}
+                      onChange={(e) => setNotas(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </EduModal>
+  );
+}
+
+/**
+ * Centavos de lo que hay en un input, para la SUMA que se pinta mientras se
+ * teclea. Devuelve 0 ante cualquier cosa rara: es aritmética de pantalla, y
+ * el servidor vuelve a validar y a sumar al emitir. La versión que decide
+ * de verdad es `parseEduMoneyCents` en el servidor.
+ */
+function centavosDe(texto: string): number {
+  const limpio = texto.replace(/[^\d.]/g, "");
+  if (!limpio) return 0;
+  const [ent, dec = ""] = limpio.split(".");
+  const n = Number(ent || "0") * 100 + Number((dec + "00").slice(0, 2));
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EL RECIBO — y lo que se puede hacer desde él
+// ═══════════════════════════════════════════════════════════════════════
+
+function Recibo({
+  charge,
+  canCharge,
+  canRefund,
+  onClose,
+  onDone,
+}: {
+  charge: EduChargeRow;
+  canCharge: boolean;
+  canRefund: boolean;
+  onClose: () => void;
+  onDone: (mensaje: string) => void;
+}) {
+  const [modo, setModo] = useState<"ver" | "pago" | "devolucion" | "cancelar">("ver");
+  const [metodo, setMetodo] = useState<EduPaymentMethod>("CASH");
+  const [monto, setMonto] = useState(eduMoneyInputValue(charge.balanceCents));
+  const [referencia, setReferencia] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cancelado = charge.status === "CANCELLED";
+  const liquidado = charge.balanceCents <= 0;
+
+  async function registrar(isRefund: boolean) {
+    setError(null);
+    setBusy(true);
+    try {
+      await eduRequest(`/api/instituto/caja/cobros/${charge.id}/pagos`, {
+        method: "POST",
+        body: {
+          method: metodo,
+          amountCents: monto,
+          reference: referencia.trim() || null,
+          isRefund,
+        },
+      });
+      onDone(isRefund ? "Devolución registrada." : "Pago registrado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo registrar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelar() {
+    setError(null);
+    setBusy(true);
+    try {
+      await eduRequest(`/api/instituto/caja/cobros/${charge.id}`, {
+        method: "PATCH",
+        body: { reason: motivo.trim() || null },
+      });
+      onDone(`Cobro ${charge.folio} cancelado.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cancelar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <EduModal
+      title={`Recibo ${charge.folio}`}
+      subtitle={`${charge.patientName} · ${charge.patientFolio}`}
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
+          Cerrar
+        </button>
+      }
+    >
+      {error && (
+        <div className="edu-alert" role="alert">
+          {error}
+        </div>
+      )}
+
+      {cancelado && (
+        <div className="edu-banner edu-banner--warn">
+          <div>
+            <p className="edu-banner__title">Este cobro está cancelado</p>
+            <p className="edu-banner__detail">
+              No se le debe nada a nadie y no cuenta en ninguna suma.
+              {charge.cancelReason ? ` Motivo: ${charge.cancelReason}` : ""}
+              {charge.cancelledByName ? ` Lo canceló ${charge.cancelledByName}.` : ""}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="edu-kv edu-kv--2">
+        <div>
+          <span className="edu-kv__k">Tarifa aplicada</span>
+          <span className="edu-kv__v">{charge.feeScheduleLabel ?? "—"}</span>
+        </div>
+        <div>
+          <span className="edu-kv__k">Cobró</span>
+          <span className="edu-kv__v">{charge.chargedByName}</span>
+        </div>
+      </div>
+
+      <div className="edu-lineas">
+        {charge.items.map((i) => (
+          <div className="edu-linea edu-linea--recibo" key={i.id}>
+            <div className="edu-linea__desc">
+              <span className="edu-linea__name">{i.description}</span>
+              <span className="edu-linea__sub">
+                {i.quantity} × {eduMoney(i.unitPriceCents)}
+                {i.discountCents > 0 ? ` · −${eduMoney(i.discountCents)}` : ""}
+                {i.procedureId === null ? " · línea libre" : ""}
+              </span>
+              {/* 🔴 El rastro del antifraude, a la vista de quien puede
+                  verlo. Si la pantalla mandó un precio distinto al del
+                  servidor, se dice aquí — no se esconde en un log. */}
+              {i.clientPriceCents !== null && (
+                <span className="edu-linea__aviso">
+                  La pantalla mandó {eduMoney(i.clientPriceCents)} y se aplicó el precio del
+                  servidor.
+                </span>
+              )}
+            </div>
+            <span className="edu-linea__total edu-precio">{eduMoney(i.totalCents)}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="edu-totales">
+        <div className="edu-totales__fila">
+          <span>Subtotal</span>
+          <span className="edu-precio">{eduMoney(charge.subtotalCents)}</span>
+        </div>
+        {charge.discountCents > 0 && (
+          <div className="edu-totales__fila">
+            <span>Descuento</span>
+            <span className="edu-precio">−{eduMoney(charge.discountCents)}</span>
+          </div>
+        )}
+        <div className="edu-totales__fila edu-totales__fila--fuerte">
+          <span>Total</span>
+          <span className="edu-precio">{eduMoney(charge.totalCents)}</span>
+        </div>
+        <div className="edu-totales__fila">
+          <span>Pagado</span>
+          <span className="edu-precio">{eduMoney(charge.paidCents)}</span>
+        </div>
+        <div className="edu-totales__fila edu-totales__fila--fuerte">
+          <span>Saldo</span>
+          <span className="edu-precio">{eduMoney(charge.balanceCents)}</span>
+        </div>
+      </div>
+
+      {charge.payments.length > 0 && (
+        <div className="edu-stack edu-stack--tight">
+          {charge.payments.map((p) => (
+            <div className="edu-pago" key={p.id}>
+              <span className="edu-pago__q">
+                {p.isRefund ? "Devolución" : "Pago"} · {EDU_PAYMENT_METHOD_LABELS[p.method]}
+                {p.reference ? ` · ${p.reference}` : ""}
+              </span>
+              <span className={`edu-precio ${p.isRefund ? "edu-precio--menos" : ""}`}>
+                {p.isRefund ? "−" : ""}
+                {eduMoney(p.amountCents)}
+              </span>
+              <span className="edu-pago__sub">{p.receivedByName}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!cancelado && modo === "ver" && (
+        <div className="edu-actions">
+          {canCharge && !liquidado && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--primary edu-btn--sm"
+              onClick={() => {
+                setMonto(eduMoneyInputValue(charge.balanceCents));
+                setModo("pago");
+              }}
+            >
+              Registrar pago
+            </button>
+          )}
+          {canRefund && charge.paidCents > 0 && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              onClick={() => {
+                setMonto(eduMoneyInputValue(charge.paidCents));
+                setModo("devolucion");
+              }}
+            >
+              Devolver dinero
+            </button>
+          )}
+          {canRefund && charge.paidCents === 0 && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--danger edu-btn--sm"
+              onClick={() => setModo("cancelar")}
+            >
+              Cancelar cobro
+            </button>
+          )}
+        </div>
+      )}
+
+      {(modo === "pago" || modo === "devolucion") && (
+        <div className="edu-formgrid edu-formgrid--2">
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-rec-metodo">
+              Método
+            </label>
+            <select
+              id="edu-rec-metodo"
+              className="edu-input"
+              value={metodo}
+              onChange={(e) => setMetodo(e.target.value as EduPaymentMethod)}
+            >
+              {EDU_PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {EDU_PAYMENT_METHOD_LABELS[m]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-rec-monto">
+              Monto
+            </label>
+            <input
+              id="edu-rec-monto"
+              className="edu-input"
+              inputMode="decimal"
+              value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+            />
+            <span className="edu-field__hint">
+              {modo === "pago"
+                ? `Como mucho el saldo: ${eduMoney(charge.balanceCents)}.`
+                : `Como mucho lo pagado: ${eduMoney(charge.paidCents)}.`}
+            </span>
+          </div>
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-rec-ref">
+              Referencia (opcional)
+            </label>
+            <input
+              id="edu-rec-ref"
+              className="edu-input"
+              value={referencia}
+              onChange={(e) => setReferencia(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+          <div className="edu-actions">
+            <button
+              type="button"
+              className="edu-btn edu-btn--primary edu-btn--sm"
+              onClick={() => registrar(modo === "devolucion")}
+              disabled={busy}
+            >
+              {busy ? "Guardando…" : modo === "pago" ? "Registrar pago" : "Registrar devolución"}
+            </button>
+            <button
+              type="button"
+              className="edu-btn edu-btn--quiet edu-btn--sm"
+              onClick={() => setModo("ver")}
+              disabled={busy}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {modo === "cancelar" && (
+        <>
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-rec-motivo">
+              Motivo de la cancelación
+            </label>
+            <input
+              id="edu-rec-motivo"
+              className="edu-input"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Se cobró al paciente equivocado"
+              autoComplete="off"
+            />
+            <span className="edu-field__hint">
+              El cobro no se borra: queda cancelado, con quién lo canceló y cuándo, y deja de contar
+              en toda suma de dinero.
+            </span>
+          </div>
+          <div className="edu-actions">
+            <button
+              type="button"
+              className="edu-btn edu-btn--danger edu-btn--sm"
+              onClick={cancelar}
+              disabled={busy}
+            >
+              {busy ? "Cancelando…" : "Cancelar el cobro"}
+            </button>
+            <button
+              type="button"
+              className="edu-btn edu-btn--quiet edu-btn--sm"
+              onClick={() => setModo("ver")}
+              disabled={busy}
+            >
+              Volver
+            </button>
+          </div>
+        </>
+      )}
+    </EduModal>
+  );
+}

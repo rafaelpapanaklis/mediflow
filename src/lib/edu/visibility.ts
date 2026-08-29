@@ -21,6 +21,23 @@
  *               cobra y recibe, no abre expediente clínico.
  *   DIRECCION → todo.
  *
+ * Y desde la Ola 5, el DINERO (recurso "charges"), que se reparte al revés
+ * que todo lo demás:
+ *
+ *   CAJA      → todos los cobros y todos los pagos.
+ *   DIRECCION → todo.
+ *   DOCENTE   → NADA.
+ *   ALUMNO    → NADA. Ni el precio, ni el cobro, ni el saldo.
+ *
+ * 🔴 Ojo a la asimetría: para pacientes, citas y casos, un alumno ve LO
+ * SUYO recortado. Para el dinero NO ve "lo suyo": no ve nada. Un residente
+ * que puede consultar cuánto pagó su paciente sabe cuánto vale su propia
+ * lista de espera, y ése es exactamente el incentivo que la escuela no
+ * quiere crear. Por eso "charges" no cae en el `switch` de roles de abajo
+ * sino que se resuelve ANTES: no hay forma de que un rol nuevo, un `as any`
+ * o un permiso encendido por error acaben devolviendo "own" o "supervised"
+ * sobre dinero.
+ *
  * 🔴 UNA ASIGNACIÓN VENCIDA NO DA ACCESO. El docente ROTA a media
  * generación (por eso la Ola 1A guarda vigencia en vez de sobrescribir):
  * el día que entrega su grupo deja de ver a esos pacientes, y el que entra
@@ -77,7 +94,16 @@ import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
  * (eduClinicalScope) y de ahí lo usan los tres módulos de servidor.
  * ═══════════════════════════════════════════════════════════════════════
  */
-export type EduVisibilityResource = "patients" | "appointments" | "cases";
+export type EduVisibilityResource = "patients" | "appointments" | "cases" | "charges";
+
+/**
+ * Los roles que pueden ver DINERO. Es una lista blanca y no una lista
+ * negra a propósito: si mañana el schema gana un rol (COORDINADOR,
+ * ADMINISTRATIVO, RECTOR), la respuesta por defecto tiene que ser "no ve
+ * dinero" y no "se me olvidó agregarlo a los que no ven". Un olvido con
+ * lista negra abre la caja; con lista blanca, la deja cerrada.
+ */
+const EDU_ROLES_CON_DINERO: EduRole[] = ["DIRECCION", "CAJA"];
 
 export type EduVisibilityScope =
   /** Sin recorte: todas las filas del instituto. */
@@ -129,6 +155,15 @@ export function eduVisibility(
 ): EduVisibilityScope {
   if (typeof actor !== "object" || actor === null) return { kind: "none" };
 
+  // 🔴 EL DINERO SE DECIDE ANTES DEL SWITCH. Es todo o nada, y la lista de
+  // quién lo ve es blanca: cualquier rol que no esté en ella —incluido uno
+  // que no exista todavía— se queda fuera. Si esto viviera dentro del
+  // switch, un `case` nuevo escrito sin pensar en la Ola 5 le abriría la
+  // caja a alguien sin que nadie lo notara.
+  if (resource === "charges") {
+    return EDU_ROLES_CON_DINERO.includes(actor.role) ? { kind: "all" } : { kind: "none" };
+  }
+
   switch (actor.role) {
     case "DIRECCION":
       return { kind: "all" };
@@ -166,6 +201,8 @@ export const EDU_VISIBILITY_NONE_DETAIL: Record<EduVisibilityResource, string> =
     "Tu rol no lista citas. La agenda completa la ven la dirección y caja; un docente ve la de sus alumnos vigentes y un alumno la suya.",
   cases:
     "Tu rol no lista casos clínicos. Caja no los ve a propósito: recibe y cobra, no abre expediente. Si necesitas verlos, pídele a la dirección que revise tu rol.",
+  charges:
+    "Tu rol no ve dinero: ni precios, ni cobros, ni saldos. Los ven la dirección y caja. Un docente y un alumno no, y no es un permiso que se pueda encender: en el piso clínico se atiende, y en el mostrador se cobra.",
 };
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -352,6 +389,51 @@ export function eduCaseScopeWhere({
   const where: Prisma.EduCaseWhereInput = { institutionId };
   if (Object.keys(student).length > 0) where.student = student;
   return where;
+}
+
+// ── Dinero (Ola 5) ──────────────────────────────────────────────────────
+
+export interface EduChargeScopeInput {
+  institutionId: string;
+  scope: EduVisibilityScope;
+}
+
+/**
+ * Los cobros que le tocan a quien pregunta: todos, o ninguno.
+ *
+ * No hay recorte por alumno y no es un olvido — es la regla. Un cobro no
+ * "pertenece" a un residente: pertenece a la caja de la escuela. Y como
+ * `eduVisibility(actor, "charges")` solo devuelve "all" o "none", cualquier
+ * otro alcance que llegue aquí (por un cast, por una llamada equivocada)
+ * cierra la consulta en vez de abrirla.
+ *
+ * No lleva `now`: la vigencia de un docente no entra en esta cuenta,
+ * porque un docente no ve dinero ni vigente ni vencido.
+ */
+export function eduChargeScopeWhere({
+  institutionId,
+  scope,
+}: EduChargeScopeInput): Prisma.EduChargeWhereInput {
+  requireInstitutionId(institutionId, "eduChargeScopeWhere");
+  if (!scope || scope.kind !== "all") return nada(institutionId);
+  return { institutionId };
+}
+
+/**
+ * Lo mismo para los pagos, que se consultan aparte en el corte de caja.
+ *
+ * Existe en vez de reusar el de cobros porque el `where` de Prisma es de
+ * OTRO modelo y los tipos no son intercambiables; y escribir
+ * `{ institutionId }` a mano en el corte es exactamente el atajo que deja
+ * una consulta de dinero fuera del punto único.
+ */
+export function eduPaymentScopeWhere({
+  institutionId,
+  scope,
+}: EduChargeScopeInput): Prisma.EduPaymentWhereInput {
+  requireInstitutionId(institutionId, "eduPaymentScopeWhere");
+  if (!scope || scope.kind !== "all") return nada(institutionId);
+  return { institutionId };
 }
 
 // ═══════════════════════════════════════════════════════════════════════

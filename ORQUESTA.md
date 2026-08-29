@@ -26287,3 +26287,361 @@ barber, preexistentes en `origin/main`) · **191 pruebas** en verde
 `edu-padron` 24, `edu-pacientes` 16, `edu-contract` 9) ·
 `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
 (34 archivos propios, 1 compartido declarado, 0 prohibidos).
+## [Institucional Ola 5] — Tarifarios y caja: N listas de precios, y la tarifa la decide el SERVIDOR con un dato que el navegador no controla ✅ (2026-08-29) · rama `feat/edu-ola-5`
+
+**Qué se entregó.** El instituto ya cobra. Se da de alta el catálogo de
+procedimientos, se crean **las listas de precios que hagan falta** (arranca con
+"Público general" y "Paciente de alumno"), se elige al paciente en caja y **el
+sistema pone su tarifa solo**, con el nombre de quien lo trajo escrito en pantalla;
+se cobra, se registra el pago, se devuelve, se cancela y se cuadra el cajón al
+cerrar el turno.
+
+Cuatro pantallas nuevas, ocho endpoints, siete tablas y **211 pruebas** en el
+vertical (135 de las olas anteriores + **76 nuevas**), todas sin base de datos.
+
+---
+
+### 1. Lo más importante de la ola: la tarifa se resuelve en el SERVIDOR
+
+El dato del que cuelga todo es `EduPatient.referredByStudentId` — CUÁL alumno trajo
+al paciente — que la Ola 2 guarda desde recepción y que solo puede escribir alguien
+con `pacientes.origen` (caja o dirección). El navegador no lo controla, y por eso
+sirve para decidir un precio.
+
+`src/lib/edu/tarifas.ts` lo convierte en dinero en dos funciones:
+
+- **`resolveFeeSchedule(institutionId, patientId)`** → qué lista le toca. Si el
+  paciente trae `referredByStudentId` y existe una lista ACTIVA con la regla
+  `REFERRED_BY_STUDENT`, ésa. Si no, la marcada como predeterminada. Si tampoco hay
+  predeterminada → **`null`**, y caja lo dice en pantalla en vez de inventarse un
+  precio: caer a "la primera lista que haya" es cobrar a ojo.
+- **`resolveUnitPrice(institutionId, patientId, procedureId)`** → el precio. Si la
+  lista que le toca **no cubre** ese procedimiento, cae a la predeterminada y lo
+  **marca** (`fallback: true`); la pantalla escribe "precio de Público general". Sin
+  esa marca, el paciente de alumno pagaría tarifa de público y nadie se enteraría.
+  Si NINGUNA lista lo cubre, devuelve `null` y el cobro se rechaza diciendo qué
+  falta capturar — un cero implícito ahí es regalar el tratamiento sin que nadie lo
+  decidiera.
+
+El desempate entre dos listas de la misma regla es **determinista** (`orderIndex`,
+y la clave para romper empates). Sin eso, el mismo paciente podría pagar distinto en
+dos consultas seguidas según el orden en que Postgres devolviera las filas.
+
+**Estas dos funciones reciben el `institutionId` SUELTO**, contra la regla del
+vertical (que dice que se saca del contexto de sesión), porque así las nombra el
+contrato de la ola. La excepción se paga con tres cerraduras: **lanzan** si les
+llega vacío (en Prisma un `institutionId: undefined` no devuelve cero filas: borra
+el filtro de tenant), el único llamador legítimo es un endpoint que ya pasó por
+`eduApiGuard`, y **una prueba recorre `/api/instituto/**` y falla si algún endpoint
+lee un `institutionId` de un body o de un query**. Esa prueba se verificó al revés:
+inyectándole una violación, falla.
+
+---
+
+### 2. 🔴 ANTIFRAUDE: el precio que manda el navegador se DESCARTA
+
+Sin esto, todo lo anterior es decoración: bastaría con abrir las herramientas del
+navegador y mandar el precio de "paciente de alumno" siendo público general. El
+control de "solo caja marca el origen" sería un letrero.
+
+`resolveEduChargeLines` decide línea por línea:
+
+- **Con `procedureId`** → el precio lo pone el servidor. Lo que venga en
+  `unitPriceCents` se ignora. **En silencio**: no se devuelve error, porque reventar
+  le avisaría al que lo intenta que hay algo que intentar, y rompería a un cliente
+  honesto con la caché vieja de un precio que acaba de cambiar. El cobro sale con el
+  precio bueno.
+- **Sin `procedureId`** (línea libre: un material, una placa) → el precio sí lo pone
+  quien cobra, porque el servidor no tiene ninguna opinión sobre algo que no está en
+  el catálogo. La línea queda marcada como libre en el recibo.
+
+**Y el descarte se GUARDA, no se registra en un log.** `EduChargeItem.clientPriceCents`
+conserva el precio que mandó el navegador cuando difería (`NULL` = no hubo
+discrepancia), y el recibo lo pinta: "la pantalla mandó $1.00 y se aplicó el precio
+del servidor". Un `console.warn` se pierde; una columna se puede consultar el día
+que alguien pregunte por qué un cobro salió raro. (El `console.warn` también está,
+para la traza de operación.)
+
+Probado: mandar $1.00 por una endodoncia de $2,500 deja el total en $2,500 y el
+intento anotado; mandar el precio correcto **no** cuenta como descarte; no mandar
+precio es lo normal y no deja rastro; y mandar el precio de la lista de alumno
+siendo paciente de público no se cuela.
+
+---
+
+### 3. N listas, no dos — y por qué eso es una decisión de schema
+
+El contrato lo pedía con todas sus letras y es la decisión que más cuesta revertir:
+si el precio de alumno fuera un `priceStudentCents` al lado de un `priceCents`, la
+**tercera** lista (un convenio, el personal del instituto, una campaña de
+septiembre) obligaría a rehacer la tabla, las pantallas y los cobros ya emitidos.
+
+Aquí el precio es una **fila** en `(lista × procedimiento)`. Dar de alta "Convenio
+sindicato" es un `INSERT` y una columna más en la tabla comparativa. El catálogo
+(`EduProcedure`) **no trae precio**, tampoco un "precio base": esa columna sería la
+puerta de vuelta a lo mismo.
+
+Dos columnas distintas gobiernan la lista, y son distintas a propósito:
+
+- **`isDefault`** — a cuál se cae cuando ninguna regla dispara.
+- **`rule`** — CUÁNDO se aplica sola.
+
+Las **listas** son abiertas; las **reglas** son un conjunto cerrado (`MANUAL`,
+`REFERRED_BY_STUDENT`), y eso también es a propósito: una regla es código, alguien
+tiene que escribir de dónde sale el dato que la dispara. Una lista nueva nace
+`MANUAL` y se elige a mano al cobrar, **sin tocar una línea de código**.
+
+Que haya UN solo default y UNA sola lista por regla lo garantiza la aplicación
+dentro de la misma transacción que escribe (`apagarMarcasDeOtras`), no la base: un
+índice único parcial no lo puede expresar con `isActive` de por medio, y uno
+completo prohibiría conservar listas históricas desactivadas.
+
+---
+
+### 4. Quién ve el dinero: la asimetría de esta ola
+
+La visibilidad **no se reinventó**: se le agregó un recurso al helper único,
+`src/lib/edu/visibility.ts`.
+
+| | Pacientes | Agenda | Casos | **Dinero** |
+|---|---|---|---|---|
+| **DIRECCION** | todos | toda | todos | **todo** |
+| **CAJA** | todos | toda | ninguno | **todo** |
+| **DOCENTE** | los de sus alumnos vigentes | íd. | íd. | **NADA** |
+| **ALUMNO** | los suyos | las suyas | los suyos | **NADA** |
+
+🔴 **Ojo a la asimetría, que es la regla que se pidió explícitamente.** En pacientes,
+citas y casos un alumno ve **lo suyo** recortado. En dinero **no ve lo suyo: no ve
+nada** — ni el precio, ni el cobro, ni el saldo. Un residente que puede consultar
+cuánto pagó su paciente sabe cuánto vale su propia lista de espera, y ése es
+exactamente el incentivo que una escuela no quiere crear.
+
+Por eso `"charges"` **no cae en el `switch` de roles**: se resuelve ANTES, contra una
+**lista blanca** (`DIRECCION`, `CAJA`). Si mañana el schema gana un rol
+(COORDINADOR, RECTOR), la respuesta por defecto es "no ve dinero". Con lista negra,
+un olvido abre la caja.
+
+Y está cerrado **dos veces**: en el default de permisos (docente y alumno no reciben
+ni una key de dinero) y en el alcance. La prueba lo fija de la forma incómoda:
+dándole a un alumno el override con **todas** las keys del catálogo, `caja.view`
+incluido — y el alcance sigue diciendo "ninguna fila".
+
+**Seis keys nuevas**, con dueño cada una: `tarifarios.view` (la exigen
+`/instituto/tarifarios` y `/instituto/procedimientos`), `tarifarios.manage` (toda
+mutación del catálogo y de los precios), `caja.view`, `caja.charge`, `caja.refund`
+(devolver **y** cancelar) y `caja.corte`. Reparto: **DIRECCION** las seis; **CAJA**
+todas menos `tarifarios.manage` — puede *consultar* el tarifario delante del
+paciente, pero quien cobra no se pone su propio precio; **DOCENTE** y **ALUMNO**,
+ninguna.
+
+---
+
+### 5. El dinero se guarda en centavos enteros
+
+Ni `float` ni `Decimal`. En coma flotante `0.1 + 0.2` no da `0.3`, y un tarifario de
+40 renglones acumula ese error hasta que el corte no cuadra por un peso que nadie
+encuentra. Un `Int` de centavos suma exacto y viaja al navegador como número (un
+`Decimal` de Prisma llega como objeto que hay que convertir).
+
+Consecuencias que están en las pruebas:
+
+- **Leer lo que teclea una persona va por TEXTO**, no con `Math.round(x * 100)`: en
+  coma flotante `1.005 * 100` vale `100.49999999999999` y redondea a `100`, o sea
+  $1.00 por algo que costaba $1.01. Tres decimales se **rechazan** en vez de
+  redondearse: si alguien teclea 99.999 hay que preguntarle, no decidir por él.
+- **No se aceptan negativos.** Una devolución es otra fila con `isRefund`, no un
+  monto con signo — que se colaría en cualquier suma que olvide mirar la bandera.
+- **El invariante del ticket**: `subtotal − descuento == total`, siempre, incluso
+  con un descuento absurdo (el total se queda en cero y el descuento se recorta,
+  para que la resta cuadre en el recibo impreso).
+- **Los topes no son paranoia.** Un `INTEGER` de Postgres llega a $21,474,836.47.
+  Precio unitario máximo $100,000, cantidad máxima 99 y cobro máximo $1,000,000
+  dejan cualquier suma posible muy por debajo, y se rechazan ANTES de tocar la base.
+
+---
+
+### 6. Un cobro CANCELADO debe CERO
+
+Es la lección que costó un bug en el producto dental: cancelar una factura marcaba
+el estado y **dejaba el balance intacto**, así que la ficha del paciente seguía
+ofreciendo "Cobrar ahora · $1,800" de algo anulado, y lo mismo hacían el corte de
+caja y cuatro pantallas más.
+
+Aquí se cierra por tres lados: la columna `balanceCents` se escribe en **0** al
+cancelar, toda suma de dinero filtra por estado, y la función pura
+`eduSaldoVivoCents` devuelve 0 para un cancelado. El `totalCents` sí se conserva: es
+lo que el cobro decía.
+
+Y **cancelar exige que no haya un peso pagado**. Anular algo cobrado sin devolverlo
+deja un pago sin cobro al que pertenecer y descuadra el turno en el que entró:
+primero se devuelve (`caja.refund`), después se cancela.
+
+Otras dos reglas del dinero que valen más que su código:
+
+- **El recálculo del pagado va DENTRO de la transacción y a partir de los pagos
+  REALES**, no sumándole el monto nuevo a la columna. Sumar sobre la columna es cómo
+  dos pagos simultáneos acaban contando uno solo: los dos leen 0, los dos escriben
+  500, y el paciente pagó 1000.
+- **El precio se CONGELA al emitir.** `EduChargeItem` guarda su propio
+  `unitPriceCents` y su propia descripción, y `EduCharge` guarda el **nombre** de la
+  lista aplicada (`feeScheduleLabel`) además del id. Cambiar la tarifa mañana no
+  reescribe un cobro de ayer, y renombrar o desactivar la lista tampoco: un recibo
+  que cambia de contenido después de firmado no es un recibo.
+
+---
+
+### 7. El corte es del TURNO, no del día
+
+La otra lección heredada del dental: allá la lista y los totales salían de la
+ventana del turno y la pantalla los llamaba "ventas del día". Cuando el turno
+cruzaba la medianoche, todo el mundo leía mal el mismo número.
+
+Aquí la ventana va de `openedAt` a `closedAt` (o a ahora), y la pantalla **lo dice**:
+si el turno lleva más de un día natural abierto, sale escrito *"este turno lleva N
+días naturales abiertos: lo que ves NO es lo de hoy"*. Los días se cuentan en la
+**zona del instituto** — en UTC, un turno de las 20:00 a las 22:00 en México
+cruzaría de día él solo (probado con las dos zonas).
+
+- **El turno que se estampa en un pago es el del PAGO, no el del cobro.** Un cobro de
+  ayer que se liquida hoy entra en el corte de HOY, porque el dinero está en la caja
+  de hoy. Colgarlo del turno del cobro descuadraría los dos cortes.
+- **Lo cobrado y lo devuelto van en columnas distintas.** Un corte que enseña un solo
+  neto esconde que hubo que devolver $1,500, que es justo el número por el que
+  pregunta la dirección. Y salen **siempre los cuatro métodos**, también en cero: una
+  tabla a la que le faltan renglones obliga a leerla dos veces.
+- **El "contado" del arqueo arranca VACÍO**, no con el esperado. Prellenarlo
+  convierte el arqueo en un clic y el descuadre deja de existir.
+- **Al cerrar se CONGELAN** `expectedCents` y `differenceCents`: si mañana alguien
+  registra un pago con fecha vieja, el corte que se imprimió y se firmó sigue
+  diciendo lo mismo.
+- **Se puede cobrar sin turno abierto.** El corte es una herramienta para cuadrar el
+  cajón, no un peaje para atender a un paciente que ya está en el mostrador. Lo que
+  pasa es que esos cobros no entran en ningún corte, y la pantalla lo avisa arriba en
+  vez de dejar que se descubra al cerrar.
+
+---
+
+### 8. Las pantallas (móvil primero, clases `edu-*`)
+
+- **`/instituto/procedimientos`** — el catálogo. **Sin precios**, a propósito.
+- **`/instituto/tarifarios`** — las listas y la tabla comparativa. Las columnas se
+  generan a partir de las listas que existan: la rejilla se pasa **en línea**
+  (`--edu-cols`) sobre el contenedor, porque el número de columnas es DATO, no
+  diseño — y encabezado y filas leen la misma variable, así que no pueden
+  desalinearse. En el teléfono cada procedimiento es una tarjeta y cada lista es un
+  par etiqueta/valor ("PACIENTE DE ALUMNO · $300"), que es exactamente una
+  comparativa leída en vertical. Un scroll horizontal en una tabla de precios es cómo
+  se lee mal un precio.
+- **`/instituto/caja`** — cobrar: buscas al paciente → **el servidor contesta qué
+  lista le toca y por qué** ("Paciente de alumno · Lo trajo Sofía Ibarra (A-014)") →
+  agregas conceptos con el precio ya resuelto → cobras → recibo.
+- **`/instituto/caja/corte`** — abrir turno, ver el arqueo por método, cerrar, y los
+  turnos anteriores con su descuadre congelado.
+
+🔴 **Ni un número de precio escrito en un componente.** La pantalla de caja pregunta
+a `/api/instituto/caja/tarifa` y pinta lo que le contesten. Lo único que calcula el
+navegador es la **suma** de lo que ya cotizó el servidor, para que el total se mueva
+mientras se teclea; el servidor la vuelve a calcular al emitir con SUS precios y ésa
+es la que vale.
+
+"Caja" salió de `EDU_UPCOMING_AREAS` en este mismo commit, que es la regla del
+vertical: un área está en el menú o está en "Próximamente", nunca en las dos.
+
+---
+
+### 9. Decisiones que se apartan de lo obvio (para que la integración no las revierta sin querer)
+
+**a) `EduFeeSchedule.rule` es un enum y no un booleano.** Con `esLaDeAlumno: true`
+esto vuelve a ser un diseño de dos casos. El enum deja que la lista de convenio
+exista hoy sin código nuevo, y que una regla futura (`SENIOR`, `STAFF`) sea un valor
+más.
+
+**b) El descuento es por LÍNEA, no del ticket.** Así el invariante
+`subtotal − descuento == total` sale de las líneas y se puede auditar *dónde* se
+descontó. Un descuento global sería otra columna y otra forma de que el recibo no
+cuadre; si algún día hace falta, es una decisión consciente, no un olvido.
+
+**c) `resolveUnitPrice` no tiene llamador en producción.** Es la función que pide el
+contrato y la que fijan las pruebas; el camino que sí recorre un cobro real es su
+versión por lotes (`resolveEduChargeLines` y `getEduTarifaDePaciente`), que
+resuelven N procedimientos con dos consultas en vez de dos por renglón. Se queda
+exportada y probada a propósito, no por descuido.
+
+**d) Solo hay un turno abierto por instituto, y lo garantiza la aplicación.** En la
+base haría falta un índice único PARCIAL (`WHERE "closedAt" IS NULL`) y uno parcial
+rompería cualquier `upsert` futuro: Prisma emite `ON CONFLICT` sin el predicado y
+Postgres no lo infiere. La comprobación va dentro de la transacción, así que la
+ventana de carrera es de milisegundos y hace falta que dos personas abran caja en el
+mismo instante. Si algún día pasara, se ve como dos turnos abiertos y se cierra uno.
+
+**e) Caja no puede colgar un cobro de un caso clínico.** El campo existe
+(`EduCharge.caseId`) y lo usa quien SÍ ve casos; si caja manda un `caseId` se
+**ignora en silencio**, igual que la Ola 2 ignora el origen para quien no tiene
+`pacientes.origen`. Es la línea del contrato de la Ola 2 ("caja recibe y cobra, no
+abre expediente") aplicada al dinero, y se reusa `eduCaseScopeWhere` para decidirlo.
+
+**f) `tsc --noEmit` sale con 6 errores AJENOS** (`src/lib/barber/__tests__/`:
+`dinero-sumas` y `i18n-alcance`). Vienen de `origin/main`, esta rama no tocó esos
+archivos y arreglarlos habría sido salirse del vertical. Del instituto: **cero**.
+
+**g) Archivos que se quisieron tocar y NO se tocaron.** Ninguno se tocó a
+escondidas; se listan para que la integración decida:
+
+- `package.json` — los dos scripts `test:edu-tarifas` y `test:edu-caja`. Es del
+  dental y esta ola tiene prohibido tocarlo; las pruebas se corren con
+  `npx tsx --test …` (el comando está en la cabecera de cada archivo).
+- `prisma/schema.prisma` — **sí se tocó**, y solo de forma ADITIVA: el bloque de la
+  Ola 5 va al FINAL con su propio encabezado, más **cuatro back-relations** que
+  Prisma EXIGE en `EduInstitution`, `EduUser`, `EduPatient` y `EduCase` (una relación
+  no se puede declarar por un solo lado). Son 420 líneas añadidas y **0 borradas**.
+  ⚠️ **`npx prisma format` NO se dejó correr**: reformatea el archivo ENTERO (942
+  inserciones / 522 borrados de puro espacio en blanco) y habría hecho imposible el
+  merge con la Ola 3, que corre en paralelo. Se validó con `prisma generate`.
+- `src/lib/edu/api-guard.ts` — no hizo falta: `eduApiGuard` ya hace lo que se
+  necesita y los ocho endpoints nuevos lo usan sin cambiarlo.
+- `src/lib/edu/padron.ts` — se **reusa** su `EduPadronError` (reexportado como
+  `EduTarifaError` / `EduCajaError`) en vez de inventar un error nuevo, porque
+  `eduApiError` lo mapea tal cual y un error propio habría salido como 500 genérico.
+  No se editó ni una línea.
+- `src/middleware.ts` — no hizo falta: `/instituto/:path*` ya está en el matcher
+  desde la Ola 0.
+- `scripts/edu-guard.cjs` — no hizo falta: `src/components/edu/dinero/` cae bajo el
+  prefijo `src/components/edu/` que ya estaba indultado.
+
+**h) Qué NO se probó, y hay que probarlo con una base real.** Todo lo de arriba se
+comprueba sin base de datos, así que queda fuera: que el `.sql` corra en Supabase,
+que el `upsert` de precios encuentre su índice único, que dos cajas cobrando a la
+vez no repitan folio (el reintento por `P2002` está escrito pero nunca se disparó),
+y el recorrido completo en el navegador. **Nadie ha cobrado todavía un peso real
+desde este producto.**
+
+---
+
+### 10. Cómo aplicarlo (en este orden)
+
+1. `sql/edu-ola-5.sql` en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0.sql`, `edu-ola-1.sql` y `edu-ola-2.sql`. Es idempotente y no tiene un
+   solo DROP: 3 enums, 7 tablas, 20 índices y 22 llaves foráneas.
+2. El **backfill del override** de la sección 6 del `.sql`, solo si hay usuarios con
+   `permissionsOverride` no vacío: el override REEMPLAZA al default, así que las seis
+   keys nuevas **no** le llegan solas a quien ya tenga uno guardado. Hay **dos**
+   bloques y no cuatro a propósito — docente y alumno no reciben ni una key de
+   dinero.
+3. Crear las **dos listas de precios** desde `/instituto/tarifarios` (o con el
+   ejemplo comentado de la sección 7 del `.sql`): una predeterminada y una con la
+   regla "paciente que trajo un alumno". **Sin lista predeterminada no se puede
+   cobrar** —el servidor no sabría qué precio poner— y las dos pantallas lo dicen con
+   el nombre exacto de lo que falta.
+4. Dar de alta el catálogo en `/instituto/procedimientos` y capturarle precios. Un
+   procedimiento sin precio en ninguna lista sale marcado "Sin precio" en el
+   catálogo, para que se descubra ahí y no con el paciente en el mostrador.
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0; ocho rutas de API y cuatro
+páginas nuevas registradas) · `npx tsc --noEmit` ✅ para el vertical (6 errores
+ajenos de barber, preexistentes en `origin/main`) · **211 pruebas** en verde
+(`edu-tarifas` 47, `edu-caja` 29, `edu-visibility` 29, `edu-agenda` 33,
+`edu-pacientes` 16, `edu-permissions` 24, `edu-padron` 24, `edu-contract` 9) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(29 archivos propios, 1 compartido declarado, 0 prohibidos) · un script de
+comprobación confirmó que `schema.prisma` y `sql/edu-ola-5.sql` dicen lo mismo
+(7 tablas / 86 columnas, 20 índices, 22 FKs, 3 enums).

@@ -2189,3 +2189,463 @@ select.edu-input {
 .edu-table--notas {
   --edu-cols: 132px minmax(150px, 1.4fr) minmax(160px, 1.6fr) 116px 96px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   10 · OLA 5 — TARIFARIOS Y CAJA.
+
+   MÓVIL PRIMERO, igual que todo lo anterior. Quien cobra está DE PIE en un
+   mostrador con el paciente enfrente: los campos de dinero son grandes, el
+   total se lee de lejos y los botones son para un pulgar.
+
+   ── LA TABLA COMPARATIVA, EN UN TELÉFONO ────────────────────────────────
+   Una comparativa de 40 procedimientos × 4 listas no cabe en 375 px, y un
+   scroll horizontal en una tabla de precios es cómo se lee mal un precio.
+   No hay dos marcados: se reusa el mecanismo del padrón — en el teléfono
+   cada procedimiento es una tarjeta y cada lista es un par
+   etiqueta/valor ("PACIENTE DE ALUMNO · $300"), que es exactamente una
+   comparativa leída en vertical. A partir de 1180 px la etiqueta se
+   esconde y aparece el renglón con su encabezado.
+
+   La rejilla de esa tabla NO se declara aquí: el número de columnas es
+   DATO (cuántas listas hay), así que la pantalla la pasa en línea sobre el
+   contenedor. Encabezado y filas leen la misma variable, así que no pueden
+   desalinearse.
+
+   ── EL DINERO SE PINTA CON CIFRAS TABULARES ─────────────────────────────
+   `font-variant-numeric: tabular-nums` hace que todos los dígitos midan lo
+   mismo. Sin eso, una columna de precios queda con los puntos decimales
+   bailando y hay que leer cada renglón entero para compararlos.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Toda cantidad de dinero, en cualquier pantalla del vertical. */
+.edu-precio {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.edu-precio--vacio {
+  color: var(--edu-text-3);
+  font-weight: 400;
+}
+
+.edu-precio--menos {
+  color: var(--edu-danger);
+}
+
+/* ── Casilla con explicación debajo ─────────────────────────────────────
+   Un interruptor de dinero ("es la predeterminada", "registrar el pago
+   ahora") sin explicación se marca al azar. La explicación va DENTRO del
+   label para que tocar el texto también marque la casilla — en un teléfono
+   el blanco de 18 px de la casilla es un blanco difícil. */
+.edu-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  background: var(--edu-surface-2);
+  cursor: pointer;
+}
+
+.edu-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--edu-600);
+  cursor: pointer;
+}
+
+.edu-check__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.edu-check__label {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.edu-check__hint {
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+}
+
+/* ── Tarjetas de número grande (los tres del corte y los del turno) ──── */
+.edu-kpis {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 720px) {
+  .edu-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+
+.edu-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-kpi__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-kpi__value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-kpi__note {
+  font-size: 12px;
+  color: var(--edu-text-2);
+}
+
+/* ── Las listas de precios, como tarjetas ─────────────────────────────
+   Es un <ul> de verdad (son una lista y un lector de pantalla las cuenta),
+   así que se le quitan la viñeta y el sangrado a mano. NO se reusa
+   .edu-chiplist: aquella es flex y ésta es grid, y ponerle las dos deja el
+   layout a merced del orden de las reglas en el archivo. */
+.edu-listas {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 720px) {
+  .edu-listas {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+}
+
+.edu-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-lista--off {
+  background: var(--edu-surface-2);
+  opacity: 0.8;
+}
+
+.edu-lista__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.edu-lista__name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.edu-lista__sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-lista__sub code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  font-size: 11.5px;
+}
+
+.edu-lista--off .edu-lista__sub code {
+  background: var(--edu-surface);
+}
+
+/* ── Elegir paciente en el modal de cobro ───────────────────────────── */
+.edu-picklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.edu-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  /* 48 px de alto mínimo: es un blanco para un dedo, no para un ratón. */
+  min-height: 48px;
+  padding: 8px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.edu-pick:hover:not(:disabled) {
+  border-color: var(--edu-line-brand);
+  background: var(--edu-hover);
+}
+
+.edu-pick:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.edu-pick__name {
+  font-size: 14.5px;
+  font-weight: 650;
+}
+
+.edu-pick__sub {
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+}
+
+/* ── La tarifa que resolvió el SERVIDOR, dicha con su nombre ──────────
+   Es el bloque más importante de la pantalla de cobro: quien cobra tiene
+   que poder leer de un vistazo "Paciente de alumno · lo trajo Sofía
+   Ibarra" y saber por qué este paciente paga lo que paga. */
+.edu-tarifa {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--edu-line-brand);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface-2);
+}
+
+.edu-tarifa__quien {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.edu-tarifa__folio {
+  margin-left: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--edu-text-3);
+}
+
+.edu-tarifa__lista {
+  margin: 0;
+  font-size: 13px;
+  color: var(--edu-text-2);
+}
+
+.edu-tarifa__lista--falta {
+  color: var(--edu-amber-900);
+  font-weight: 600;
+}
+
+.dark .edu-tarifa__lista--falta {
+  color: var(--edu-amber-300);
+}
+
+/* ── Las líneas del cobro ───────────────────────────────────────────── */
+.edu-lineas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-linea {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 10px;
+  align-items: end;
+  padding: 10px 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  background: var(--edu-surface);
+}
+
+@media (min-width: 560px) {
+  .edu-linea {
+    grid-template-columns: minmax(0, 1fr) 88px 110px auto auto;
+    align-items: end;
+  }
+}
+
+/* En el recibo la línea ya no se edita: solo concepto y total. */
+.edu-linea--recibo {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.edu-linea__desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 560px) {
+  .edu-linea__desc {
+    grid-column: auto;
+  }
+}
+
+.edu-linea__name {
+  font-size: 14.5px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.edu-linea__sub {
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+/* El rastro del antifraude. Ámbar y no rojo a propósito: no es un error de
+   quien cobra, es un aviso de que la pantalla traía un precio viejo. */
+.edu-linea__aviso {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--edu-amber-900);
+}
+
+.dark .edu-linea__aviso {
+  color: var(--edu-amber-300);
+}
+
+.edu-linea__total {
+  font-size: 15px;
+  align-self: center;
+  justify-self: end;
+}
+
+/* ── Totales del ticket ─────────────────────────────────────────────── */
+.edu-totales {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface-2);
+}
+
+.edu-totales__fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-totales__fila--fuerte {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--edu-text-1);
+  padding-top: 4px;
+  border-top: 1px solid var(--edu-line);
+  margin-top: 4px;
+}
+
+/* ── Los pagos de un recibo ─────────────────────────────────────────── */
+.edu-pago {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  background: var(--edu-surface);
+  font-size: 13px;
+}
+
+.edu-pago__q {
+  font-weight: 600;
+}
+
+.edu-pago__sub {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+/* ── El descuadre del arqueo ────────────────────────────────────────── */
+.edu-dif {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--edu-line-strong);
+  background: var(--edu-surface-2);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.edu-dif--ok {
+  border-color: rgba(21, 128, 61, 0.3);
+  background: #e3f5e9;
+  color: #14612f;
+}
+
+.dark .edu-dif--ok {
+  background: rgba(21, 128, 61, 0.2);
+  color: #b7e8c7;
+}
+
+.edu-dif--mal {
+  border-color: rgba(179, 38, 30, 0.35);
+  background: var(--edu-danger-soft);
+  color: var(--edu-danger);
+}
+
+/* ── Rejillas de las tablas de esta ola ─────────────────────────────────
+   (La de .edu-table--tarifas NO va aquí: su número de columnas es dato y
+   la pantalla la pasa en línea sobre el contenedor.) */
+.edu-table--procedimientos {
+  --edu-cols: 104px minmax(170px, 2fr) minmax(120px, 1fr) 96px 96px 96px;
+}
+
+.edu-table--cobros {
+  --edu-cols: 96px minmax(150px, 1.6fr) minmax(130px, 1.2fr) 112px 112px 112px 96px;
+}
+
+.edu-table--corte {
+  --edu-cols: minmax(120px, 1.2fr) 116px 128px 128px 128px;
+}
+
+.edu-table--turnos {
+  --edu-cols: minmax(140px, 1.3fr) minmax(140px, 1.3fr) 128px 128px 148px;
+}
