@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, UserPlus, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
@@ -281,6 +282,18 @@ export function EduPacientesScreen({
                 >
                   {canManage ? "Ficha" : "Ver"}
                 </button>
+                {/* Ola 3. El modal de arriba sigue siendo el atajo para
+                    corregir un teléfono sin salir de la lista; este enlace
+                    abre la ficha COMPLETA, con el expediente, el
+                    odontograma y los estudios. Cada pestaña de allá exige
+                    su permiso: quien no lo tenga (caja) llega y no ve esas
+                    pestañas. */}
+                <Link
+                  href={`/instituto/pacientes/${p.id}`}
+                  className="edu-btn edu-btn--ghost edu-btn--sm"
+                >
+                  Expediente
+                </Link>
               </div>
             </div>
           ))}
