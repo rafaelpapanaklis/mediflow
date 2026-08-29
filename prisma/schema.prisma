@@ -12318,3 +12318,87 @@ model RealtyAffiliateCommission {
   @@index([affiliateId, status, createdAt(sort: Desc)], map: "realty_affiliate_commissions_affiliate_idx")
   @@map("realty_affiliate_commissions")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// DaleControl INSTITUCIONAL — escuelas de especialidades odontológicas.
+// Producto SEPARADO del dental (Ola 0). Hermano de Barber* y Realty*.
+//
+// Multi-tenant: institutionId sale SIEMPRE de la sesión (getEduContext en
+// src/lib/edu-auth.ts), NUNCA del body/query. Ojo Prisma: un institutionId
+// undefined BORRA el filtro de tenant — jamás dejar pasar un undefined a un
+// where.
+//
+// Estos modelos son ADITIVOS: no tocan ni una columna del dental, que está
+// vivo en producción. El .sql equivalente e idempotente vive en
+// sql/edu-ola-0.sql y hay que aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Rol dentro del instituto. DIRECCION manda; DOCENTE es el profesor que
+/// supervisa y autoriza; ALUMNO es el residente que atiende; CAJA cobra.
+enum EduRole {
+  DIRECCION
+  DOCENTE
+  ALUMNO
+  CAJA
+}
+
+/// El instituto (tenant raíz del vertical).
+model EduInstitution {
+  id        String  @id @default(cuid())
+  name      String  @db.VarChar(160)
+  slug      String  @unique @db.VarChar(80)
+  legalName String? @db.VarChar(200)
+  rfc       String? @db.VarChar(13)
+  city      String? @db.VarChar(80)
+  state     String? @db.VarChar(80)
+  phone     String? @db.VarChar(30)
+  email     String? @db.VarChar(160)
+  logoUrl   String?
+  timezone  String  @default("America/Tijuana") @db.VarChar(60)
+  isActive  Boolean @default(true)
+
+  // Contrato institucional. NO pasa por Stripe ni por el gate de plan del
+  // dental: se administra a mano. Si contractEndsAt queda en el pasado, el
+  // panel avisa pero NO corta el acceso — 120 alumnos con pacientes en el
+  // sillón no se quedan fuera por una fecha vencida.
+  contractStartsAt DateTime?
+  contractEndsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     EduUser[]
+
+  @@map("edu_institutions")
+}
+
+/// Persona con login en el instituto. Espejo de BarberUser/RealtyUser:
+/// supabaseId es la identidad de Supabase Auth y el par
+/// (supabaseId, institutionId) es único, así que una misma persona puede
+/// existir en dos institutos sin pisarse.
+model EduUser {
+  id            String  @id @default(cuid())
+  institutionId String
+  supabaseId    String
+  email         String  @db.VarChar(160)
+  firstName     String  @db.VarChar(80)
+  lastName      String  @db.VarChar(80)
+  role          EduRole
+  phone         String? @db.VarChar(30)
+  avatarUrl     String?
+  isActive      Boolean @default(true)
+  mustChangePassword  Boolean  @default(false)
+  /// Si trae keys, REEMPLAZAN al default del rol (no se suman). Misma
+  /// semántica que User.permissionsOverride del dental — ver
+  /// src/lib/edu/permissions.ts.
+  permissionsOverride String[] @default([])
+  lastLogin     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([supabaseId, institutionId])
+  @@index([supabaseId])
+  @@index([institutionId, role, isActive])
+  @@map("edu_users")
+}
