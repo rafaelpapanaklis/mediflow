@@ -34,7 +34,14 @@ import {
   sanitizeEduPermissionKeys,
   type EduPermissionKey,
 } from "../permissions";
-import { EDU_ROLES, EDU_ROLE_LABELS, EDU_NAV_ITEMS, type EduRole } from "../types";
+import {
+  EDU_NAV_ITEMS,
+  EDU_NAV_LABELS,
+  EDU_ROLES,
+  EDU_ROLE_LABELS,
+  EDU_UPCOMING_AREAS,
+  type EduRole,
+} from "../types";
 
 // ─────────────────────────────────────────────────────────────────────
 // 0 · Candado de tipos: la unión EduRole == el enum EduRole de Prisma
@@ -99,6 +106,96 @@ test("cada item del menú exige una key que existe en el catálogo", () => {
   }
 });
 
+test("cada item del menú tiene etiqueta en español (si no, sale la key en el sidebar)", () => {
+  for (const item of EDU_NAV_ITEMS) {
+    assert.ok(EDU_NAV_LABELS[item.key], `el item "${item.key}" no tiene etiqueta`);
+  }
+});
+
+/**
+ * Ninguna área puede estar en el menú Y en "Próximamente" a la vez: sería
+ * una pantalla que existe anunciada como que no existe. Ni en ninguna de
+ * las dos, que es cómo se entrega algo y nadie lo encuentra.
+ */
+test("un área entregada sale de 'Próximamente' (la Ola 1A sacó el padrón)", () => {
+  const enMenu = new Set(EDU_NAV_ITEMS.map((i) => i.key));
+  for (const area of EDU_UPCOMING_AREAS) {
+    assert.equal(
+      enMenu.has(area.key),
+      false,
+      `"${area.key}" está en el menú y sigue anunciada como Próximamente`,
+    );
+  }
+  assert.ok(enMenu.has("padron"), "el padrón ya se entregó: tiene que estar en el menú");
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 1b · Las cuatro keys de la Ola 1A (padrón académico)
+// ─────────────────────────────────────────────────────────────────────
+
+const KEYS_OLA_1A: EduPermissionKey[] = [
+  "padron.view",
+  "padron.manage",
+  "docentes.view",
+  "supervision.assign",
+];
+
+test("las cuatro keys de la Ola 1A están en el catálogo, descritas en español", () => {
+  for (const k of KEYS_OLA_1A) {
+    assert.ok(k in EDU_ALL_PERMISSIONS, `falta ${k} en el catálogo`);
+    const desc = EDU_ALL_PERMISSIONS[k];
+    assert.ok(desc && desc.length > 8, `${k} sin descripción usable: ${desc}`);
+    assert.notEqual(desc, k, `${k} se describe con su propia key`);
+  }
+});
+
+test("las cuatro keys nuevas viven en el grupo del padrón (y en uno solo)", () => {
+  const grupo = EDU_PERMISSION_GROUPS.find((g) => g.keys.includes("padron.view"));
+  assert.ok(grupo, "no hay grupo para padron.view");
+  for (const k of KEYS_OLA_1A) {
+    assert.ok(grupo.keys.includes(k), `${k} no está en el grupo "${grupo.title}"`);
+    const cuantos = EDU_PERMISSION_GROUPS.filter((g) => g.keys.includes(k)).length;
+    assert.equal(cuantos, 1, `${k} aparece en ${cuantos} grupos`);
+  }
+});
+
+test("los defaults de la Ola 1A son EXACTAMENTE los del contrato", () => {
+  // DIRECCION administra: las cuatro.
+  for (const k of KEYS_OLA_1A) {
+    assert.equal(
+      hasEduPermission({ role: "DIRECCION" }, k),
+      true,
+      `DIRECCION debería traer ${k} por defecto`,
+    );
+  }
+
+  // DOCENTE lee el padrón y la lista de docentes; no administra ni reparte.
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "padron.view"), true);
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "docentes.view"), true);
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "padron.manage"), false);
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "supervision.assign"), false);
+
+  // ALUMNO y CAJA: ninguna de las cuatro.
+  for (const rol of ["ALUMNO", "CAJA"] as EduRole[]) {
+    for (const k of KEYS_OLA_1A) {
+      assert.equal(hasEduPermission({ role: rol }, k), false, `${rol} no debería traer ${k}`);
+    }
+    // …y siguen entrando al panel.
+    assert.equal(hasEduPermission({ role: rol }, "inicio.view"), true);
+  }
+});
+
+test("un permiso NUEVO no le llega solo a quien ya tiene override", () => {
+  // Ésta es la regla que muerde en producción y por la que cada .sql de una
+  // ola trae su backfill comentado: el override REEMPLAZA al default, así
+  // que a quien tenga guardado ["inicio.view"] no le aparece el padrón
+  // aunque su rol lo traiga por defecto.
+  const conOverrideViejo = { role: "DIRECCION" as EduRole, permissionsOverride: ["inicio.view"] };
+  assert.equal(hasEduPermission(conOverrideViejo, "inicio.view"), true);
+  assert.equal(hasEduPermission(conOverrideViejo, "padron.view"), false);
+  assert.equal(hasEduPermission(conOverrideViejo, "padron.manage"), false);
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // 2 · Semántica del override
 // ─────────────────────────────────────────────────────────────────────
@@ -121,12 +218,12 @@ test("override vacío o ausente cae al default del rol (nunca deniega todo)", ()
  * El override REEMPLAZA: el efectivo es EXACTAMENTE el override saneado, y
  * ninguna key del default que no esté tildada se cuela.
  *
- * ⚠️ Honestidad sobre lo que este test prueba HOY: con un catálogo de UNA
- * key, y esa key en el default de los cuatro roles, "reemplazar" y "sumar"
- * dan el mismo resultado — la resta no se puede demostrar con datos reales.
- * El test está escrito sobre TODOS los subconjuntos del catálogo, así que
- * en cuanto una ola agregue la segunda key empieza a morder solo, sin que
- * nadie tenga que acordarse de volver aquí.
+ * La Ola 0 dejó escrito que con UNA sola key "reemplazar" y "sumar" daban
+ * el mismo resultado y que la prueba empezaría a morder sola en cuanto
+ * hubiera una segunda. Ya hay cinco: recorre los 31 subconjuntos del
+ * catálogo por cada rol, y un merge accidental (por ejemplo, un
+ * `[...default, ...override]`) falla aquí en el primer subconjunto que no
+ * contenga inicio.view.
  */
 test("el override REEMPLAZA al default: lo que no está tildado, no se tiene", () => {
   const subconjuntos = (keys: EduPermissionKey[]): EduPermissionKey[][] => {

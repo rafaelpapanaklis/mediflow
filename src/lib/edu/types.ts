@@ -16,11 +16,24 @@
 //   /instituto              → router de entrada (login / inicio)   Ola 0 ✓
 //   /instituto/login        → login DEDICADO del vertical          Ola 0 ✓
 //   /instituto/inicio       → pantalla de inicio                   Ola 0 ✓
+//   /instituto/padron       → padrón de alumnos                    Ola 1A ✓
+//   /instituto/padron/estructura → programas y generaciones        Ola 1A ✓
+//   /instituto/docentes     → docentes y su carga                  Ola 1A ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
 // entrada de menú de EDU_NAV_ITEMS (abajo). Ninguna inventa su propio
 // guard: todas pasan por el layout del grupo (panel).
 // APIs (prefijo /api/instituto/*; multi-tenant desde sesión):
-//   POST /api/instituto/auth/logout  → signOut                     Ola 0 ✓
+//   POST  /api/instituto/auth/logout        → signOut              Ola 0 ✓
+//   GET   /api/instituto/padron             → lista de alumnos     Ola 1A ✓
+//   POST  /api/instituto/padron             → alta de alumno       Ola 1A ✓
+//   PATCH /api/instituto/padron/[id]        → estado, semestre…    Ola 1A ✓
+//   GET·POST  /api/instituto/programas      → programas            Ola 1A ✓
+//   PATCH     /api/instituto/programas/[id] → editar / desactivar  Ola 1A ✓
+//   GET·POST  /api/instituto/generaciones   → generaciones         Ola 1A ✓
+//   PATCH     /api/instituto/generaciones/[id]                     Ola 1A ✓
+//   GET   /api/instituto/docentes           → docentes + carga     Ola 1A ✓
+//   POST  /api/instituto/supervision        → asignar docente      Ola 1A ✓
+//   PATCH /api/instituto/supervision/[id]   → cerrar vigencia      Ola 1A ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -53,6 +66,41 @@ export const EDU_ROLE_DESCRIPTIONS: Record<EduRole, string> = {
   CAJA: "Cobra a los pacientes y hace los cortes del día.",
 };
 
+/**
+ * Estado académico del alumno. Espejo 1:1 del enum EduStudentStatus de
+ * Prisma, escrito como unión para poder importarlo desde componentes
+ * "use client" sin arrastrar el runtime de Prisma al navegador — igual que
+ * EduRole. El candado de que no se desincronicen es un chequeo de TIPOS en
+ * src/lib/edu/__tests__/edu-padron.test.ts (lo verifica `tsc --noEmit`).
+ *
+ * Un alumno NUNCA se borra del padrón: cambia de estado. Los actos
+ * clínicos que hizo siguieron ocurriendo y su expediente los referencia.
+ */
+export type EduStudentStatus = "ACTIVE" | "ON_LEAVE" | "GRADUATED" | "WITHDRAWN";
+
+export const EDU_STUDENT_STATUSES: EduStudentStatus[] = [
+  "ACTIVE",
+  "ON_LEAVE",
+  "GRADUATED",
+  "WITHDRAWN",
+];
+
+/** Cómo se llama cada estado EN PANTALLA. La UI jamás pinta el enum. */
+export const EDU_STUDENT_STATUS_LABELS: Record<EduStudentStatus, string> = {
+  ACTIVE: "Activo",
+  ON_LEAVE: "Baja temporal",
+  GRADUATED: "Egresado",
+  WITHDRAWN: "Baja definitiva",
+};
+
+/** Una línea que explica qué significa el estado (se lee en el alta). */
+export const EDU_STUDENT_STATUS_DESCRIPTIONS: Record<EduStudentStatus, string> = {
+  ACTIVE: "Está inscrito y atendiendo pacientes.",
+  ON_LEAVE: "Pausó la residencia; vuelve a activarse cuando regrese.",
+  GRADUATED: "Terminó el programa. Su expediente sigue completo.",
+  WITHDRAWN: "Ya no pertenece a la generación. No se borra nada de lo que hizo.",
+};
+
 // ── Navegación del panel ────────────────────────────────────────────────
 export type EduNavSection = "operacion" | "academico" | "administracion";
 
@@ -83,13 +131,18 @@ export interface EduNavItem {
 }
 
 /**
- * Menú del panel. En la Ola 0 hay UN item porque hay UNA pantalla: un
- * sidebar con seis entradas que redirigen se lee como una app rota, no como
- * un producto joven.
+ * Menú del panel. Cada item corresponde a una pantalla que EXISTE: un
+ * sidebar con entradas que redirigen se lee como una app rota, no como un
+ * producto joven.
  *
  * Para agregar una pantalla en las olas siguientes: una línea aquí + su key
- * en EDU_ALL_PERMISSIONS + el icono en el mapa de edu-sidebar.tsx. Nada más.
+ * en EDU_ALL_PERMISSIONS + su etiqueta en EDU_NAV_LABELS + el icono en el
+ * mapa ICONS de src/components/edu/edu-shell.tsx. Nada más.
  * ⚠️ Un icono que no esté en ese mapa cae al genérico EN SILENCIO.
+ *
+ * El orden importa: dentro de una sección se pintan en este orden, y el
+ * sidebar marca activo el item cuyo href COINCIDE MÁS (el más largo), así
+ * que /instituto/padron/estructura no enciende también "Padrón".
  */
 export const EDU_NAV_ITEMS: EduNavItemDef[] = [
   {
@@ -98,6 +151,27 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     icon: "home",
     section: "operacion",
     permission: "inicio.view",
+  },
+  {
+    key: "padron",
+    href: "/instituto/padron",
+    icon: "users",
+    section: "academico",
+    permission: "padron.view",
+  },
+  {
+    key: "estructura",
+    href: "/instituto/padron/estructura",
+    icon: "layers",
+    section: "academico",
+    permission: "padron.manage",
+  },
+  {
+    key: "docentes",
+    href: "/instituto/docentes",
+    icon: "user-check",
+    section: "academico",
+    permission: "docentes.view",
   },
 ];
 
@@ -118,6 +192,9 @@ export const EDU_NAV_SECTION_ORDER: EduNavSection[] = [
 /** Etiqueta de menú de cada item (español; el vertical no está en i18n). */
 export const EDU_NAV_LABELS: Record<string, string> = {
   inicio: "Inicio",
+  padron: "Padrón",
+  estructura: "Programas y generaciones",
+  docentes: "Docentes",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────
@@ -137,11 +214,9 @@ export const EDU_BRAND = {
  * EDU_NAV_ITEMS, en el mismo commit.
  */
 export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[] = [
-  {
-    key: "padron",
-    title: "Padrón",
-    detail: "Alumnos, docentes y generaciones, con su expediente académico.",
-  },
+  // "padron" salió de esta lista en la Ola 1A, en el mismo commit en que
+  // entró a EDU_NAV_ITEMS. Es la regla: un área está en el menú o está
+  // aquí, nunca en las dos ni en ninguna.
   {
     key: "agenda",
     title: "Agenda",

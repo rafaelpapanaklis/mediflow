@@ -25200,3 +25200,257 @@ escondidas; se listan para que la integración decida:
 - `src/app/sitemap.ts` — el vertical es 100 % privado (`robots: noindex` en sus
   metadatos), así que no debería entrar; se deja anotado por si la ola de
   landing pública lo necesita.
+
+---
+
+## [Institucional Ola 1A] — El padrón académico: alumnos, generaciones y un docente que ROTA sin borrar la historia ✅ (2026-08-29) · rama `feat/edu-ola-1a`
+
+La Ola 0 dejó sesión, permisos y chrome. Ésta pone lo primero que una escuela
+necesita ver al entrar: **quién es alumno, de qué generación, en qué semestre y
+quién lo supervisa hoy**. Tres pantallas (`/instituto/padron`,
+`/instituto/padron/estructura`, `/instituto/docentes`), once endpoints, cuatro
+tablas y cuatro permisos nuevos.
+
+**30 archivos: 23 nuevos + 5 propios editados + 2 compartidos.** Guardia
+`scripts/edu-guard.cjs` **exit 0, cero prohibidos**. Los compartidos son los dos
+autorizados: `prisma/schema.prisma` (**+173 / −2**, todo dentro del bloque Edu\*)
+y `ORQUESTA.md`. **Ni una línea del dental, de barbería o de inmuebles se movió.**
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE HAY QUE SABER Y NO SE VE EN EL DIFF
+═══════════════════════════════════════════════════════════════════════════
+
+**1. El permiso abre la PANTALLA; el ALCANCE decide las FILAS.** Son dos cosas
+distintas y viven en dos archivos distintos a propósito. `padron.view` contesta
+"¿puedo abrir /instituto/padron?" (`permissions.ts`); `eduPadronScope`
+(`padron-core.ts`) contesta "¿qué alumnos salen ahí adentro?". Un DOCENTE con
+`padron.view` abre la pantalla y ve **solo a sus alumnos asignados y vigentes**;
+darle el permiso NO le abre el padrón entero, y quitárselo lo deja fuera.
+
+El recorte se hace **en el servidor**, dentro de `listEduStudents`, y el alcance
+**no es un parámetro**: no hay forma de que un endpoint pida `{kind:"all"}`. Si
+viviera en el navegador sería una cortina, no un muro.
+
+Un rol desconocido —un `as any` que se coló, un rol nuevo que alguien agregue al
+enum y olvide aquí— cae en `none`, **no en `all`**. La opción segura es la que no
+filtra datos.
+
+**2. `endsAt` no es un lujo: es la única forma de contestar "¿quién supervisaba
+el 3 de marzo?".** El docente rota a media generación. Asignar un titular nuevo
+**CIERRA** al anterior (`endsAt = ahora`) en vez de editarle el
+`supervisorUserId`; la fila vieja se queda con sus fechas. Un UPDATE habría
+borrado esa respuesta para siempre, y ésa es exactamente la pregunta que se hace
+cuando algo sale mal en el sillón.
+
+El predicado vive **una sola vez** —`startsAt <= T && (endsAt == null || endsAt > T)`—
+y de ahí lo usan la UI, el `where` de Prisma y las pruebas. El extremo `>` (y no
+`>=`) está elegido: cerrar es escribir `endsAt = ahora` y crear la nueva con
+`startsAt = ahora`, así que con `>=` el docente saliente y el entrante saldrían
+**los dos** como vigentes durante ese instante. Hay una prueba con ese caso exacto.
+
+**3. Las pruebas no se quedan en "el objeto tiene estas llaves".** `edu-padron.test.ts`
+trae un **intérprete mínimo del `where`** (la función `cumple`, ~40 líneas) y lo
+corre contra filas de mentira. Eso convierte "el objeto tiene un `supervisors.some`"
+en **"un docente cuya asignación se cerró ayer YA NO ve a ese alumno, y el docente
+nuevo SÍ"**. Atrapa lo que importa: olvidar el `startsAt`, escribir `gte` donde va
+`gt`, o dejar caer el filtro de instituto.
+
+Lo que **no** prueba, y se dice aquí: que Prisma traduzca ese objeto al SQL que
+creemos. Eso solo lo demuestra una base de datos, y esta ola no se conecta a
+ninguna a propósito.
+
+**4. `eduStudentWhere` LANZA si le falta el institutionId.** No devuelve un where
+vacío ni cero filas: tira una excepción con el motivo escrito. En Prisma un
+`where: { institutionId: undefined }` **borra** el filtro de tenant y devuelve las
+filas de todos los institutos — un throw ruidoso es infinitamente mejor que una
+escuela leyendo el padrón de otra en silencio. Hay una prueba que recorre los tres
+alcances y comprueba que el `institutionId` sobrevive a todos, y otra que verifica
+que `?institutionId=` en la URL **no se lee ni por accidente**
+(`parseEduPadronFilters` solo conoce cuatro llaves y descarta el resto).
+
+**5. El buscador no le pasa comodines de LIKE a Postgres.** Prisma **no** escapa
+el texto de `contains`: se pega dentro de un `LIKE '%…%'` tal cual, así que buscar
+`%` traería la tabla entera y un término terminado en `\` hace que Postgres tire un
+error de patrón. `eduSearchTokens` quita `%`, `_` y `\`, parte en palabras y pide
+**todas** (AND de ORs) — porque el nombre y el apellido viven en dos columnas y un
+solo `contains` no encontraría nunca a "juan pérez". Máximo tres palabras: es un
+buscador, no un motor de consultas.
+
+**6. Aquí no se borra nada, y el schema lo dice.** Los programas y las generaciones
+se **desactivan** (`isActive`), los alumnos **cambian de estado**. No hay un solo
+handler `DELETE` en los once endpoints, y "quitar el docente" es un `PATCH` que
+escribe `endsAt`, no un `DELETE`. Las FK van en `CASCADE` para que borrar un
+instituto entero (operación de administración, no del panel) no se atore — y queda
+escrito, en el schema y en el `.sql`, que si una ola futura agrega un botón de
+borrar programa tiene que comprobar antes que no le queden alumnos, porque el
+cascade se los llevaría.
+
+**7. El default de `timezone` era 'America/Tijuana' y ahora es 'America/Mexico_City'.**
+Era una plaza concreta metida en un producto genérico. El `.sql` mueve **solo el
+DEFAULT** de la columna: las filas que ya existen se quedan como están. Un UPDATE
+le habría cambiado la hora a un instituto que sí es de Tijuana sin que nadie lo
+pidiera.
+
+**8. Los cuatro permisos nuevos tienen dueño el mismo día que nacen.** La regla del
+catálogo de la Ola 0 sigue en pie y la prueba que la vigila también: `padron.view`
+lo exige `/instituto/padron`, `padron.manage` lo exigen `/padron/estructura` y
+**todas** las mutaciones del padrón, `docentes.view` lo exige `/instituto/docentes`
+y `supervision.assign` lo exigen los dos endpoints de `/api/instituto/supervision`.
+Ninguno es un interruptor que se guarda y no cambia nada.
+
+Reparto: **DIRECCION** las cuatro; **DOCENTE** `padron.view` + `docentes.view`
+(lee, no administra ni reparte); **ALUMNO** y **CAJA** ninguna — un residente no
+lista a su generación y caja cobra, no inscribe.
+
+**9. ⚠️ A quien ya tenga `permissionsOverride`, estas cuatro keys NO le llegan solas.**
+El override REEMPLAZA al default. El `.sql` trae el backfill **comentado y
+separado por rol** (no es lo mismo lo que le toca a la dirección que a un docente)
+y la consulta para ver a quién le falta. Hay una prueba que fija justo eso: una
+DIRECCION con override `["inicio.view"]` guardado **no** tiene `padron.view`.
+
+**10. La lista es UN marcado, no dos.** Cada celda lleva su etiqueta dentro; en el
+teléfono la etiqueta se lee y las celdas se apilan de dos en dos, y a partir de
+**1180 px** la etiqueta se esconde, la fila se vuelve renglón y aparece el
+encabezado. Dos marcados (uno de tarjetas, otro de tabla) es cómo se llega a que
+una de las dos versiones se quede sin el dato nuevo. El corte es 1180 y no 1024
+porque a 1024 el cajón ya es columna fija de 252 px y al contenido le quedan ~708:
+siete columnas ahí no son una tabla.
+
+**11. El sidebar encendía DOS items a la vez.** Con la regla ingenua (`empieza por
+el href`), estar en `/instituto/padron/estructura` marcaba activo "Padrón" **y**
+"Programas y generaciones", porque uno es prefijo del otro. Ahora gana el href más
+largo que coincide. Dos items activos no es un detalle estético: le dice a la
+persona que está en dos sitios.
+
+**12. Esta ola NO crea logins, y la pantalla lo dice en vez de fingir.** Inscribir
+es colgarle matrícula, programa y generación a un `EduUser` con rol ALUMNO que ya
+existe. El desplegable de alta solo ofrece a los que **no** tienen ficha, y si sale
+vacío el modal explica que lo que falta es la cuenta, no un botón. Crear usuarios
+es la ola de Equipo (necesita Supabase Auth).
+
+**13. Los tipos que viajan al navegador viven en el módulo PURO.** `padron.ts`
+importa prisma; `padron-core.ts` no importa nada de runtime. Las formas
+(`EduStudentRow`, `EduProgramOption`…) se definen en el core, no junto a las
+consultas: un `import type` se borra al compilar, sí, pero basta con que alguien le
+quite el `type` para arrastrar el runtime de Prisma al navegador. Si el tipo no
+vive ahí, no hay de dónde. Y a los `<select>` se les manda lo **mínimo**
+(`{id, name, isActive}`), no la fila completa con sus conteos.
+
+**14. El schema quedó `+173 / −2` y NO se corrió `prisma format`.** Reformatea el
+archivo entero y en un `schema.prisma` compartido con tres productos vivos eso es
+ruido que esconde el cambio real. Los dos índices de asignaciones llevan `map:`
+explícito: el nombre que Prisma generaría solo
+(`edu_supervisor_assignments_institutionId_supervisorUserId_endsAt_idx`) pasa de
+los 63 caracteres que admite un identificador de Postgres. Los 23 archivos nuevos
+están en **CRLF**, igual que el resto del repo.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARCHIVOS
+═══════════════════════════════════════════════════════════════════════════
+
+| Archivo | Qué es |
+|---|---|
+| `prisma/schema.prisma` | **compartido** · `EduStudentStatus` + `EduProgram` + `EduCohort` + `EduStudent` + `EduSupervisorAssignment`, relaciones inversas y el default de `timezone` (+173 / −2) |
+| `sql/edu-ola-1.sql` | 1 enum · 1 ALTER de DEFAULT · 4 tablas · 9 índices · 9 FK, idempotente + backfill del override y el alta de ejemplo, comentados |
+| `src/lib/edu/padron-core.ts` | **puro** · alcance, vigencia, `where` del padrón, buscador, saneo y las formas que viajan a la UI |
+| `src/lib/edu/padron.ts` | **servidor** · las consultas; toda función saca el `institutionId` del contexto |
+| `src/lib/edu/api-guard.ts` | **servidor** · `eduApiGuard` (sesión → permiso → 401/403), `eduReadJson`, `eduApiError` |
+| `src/lib/edu/permissions.ts` | +4 keys, su grupo y los defaults por rol |
+| `src/lib/edu/types.ts` | `EduStudentStatus` + etiquetas, 3 items de menú nuevos, el padrón sale de "Próximamente" |
+| `src/lib/edu/__tests__/edu-padron.test.ts` | 22 pruebas · alcance, vigencia, tenant, buscador, saneo (con intérprete del `where`) |
+| `src/lib/edu/__tests__/edu-permissions.test.ts` | +8 pruebas · las 4 keys nuevas, sus defaults y el override que no se hereda |
+| `src/app/instituto/(panel)/padron/page.tsx` | el padrón · exige `padron.view` |
+| `src/app/instituto/(panel)/padron/estructura/page.tsx` | programas y generaciones · exige `padron.manage` |
+| `src/app/instituto/(panel)/docentes/page.tsx` | docentes y su carga de hoy · exige `docentes.view` |
+| `src/components/edu/padron/padron-screen.tsx` | lista + filtros en la URL + ficha del alumno + alta |
+| `src/components/edu/padron/estructura-screen.tsx` | CRUD de programas y generaciones (sin borrar) |
+| `src/components/edu/padron/docentes-screen.tsx` | lista de docentes con sus alumnos vigentes |
+| `src/components/edu/edu-modal.tsx` | modal del vertical: hoja abajo en móvil, centrado en escritorio |
+| `src/components/edu/edu-denied.tsx` | lo que ve quien tecleó una URL que no le toca (no redirige: explica) |
+| `src/components/edu/edu-http.ts` | el `fetch` único; enseña el mensaje del servidor, no "Error 409" |
+| `src/components/edu/edu-shell.tsx` | 3 iconos nuevos + un solo item activo (el href más largo) |
+| `src/app/instituto/edu-theme.css` | +567 · tabla que se vuelve tarjeta, píldoras, modal, vacíos |
+| `src/app/api/instituto/padron/route.ts` | `GET` lista (con alcance) · `POST` inscribir |
+| `src/app/api/instituto/padron/[id]/route.ts` | `PATCH` matrícula, semestre, estado, programa, generación |
+| `src/app/api/instituto/programas/route.ts` · `[id]/route.ts` | `GET`/`POST` · `PATCH` (incluye activar/desactivar) |
+| `src/app/api/instituto/generaciones/route.ts` · `[id]/route.ts` | `GET`/`POST` · `PATCH` (incluye cerrar/reabrir) |
+| `src/app/api/instituto/docentes/route.ts` | `GET` docentes + carga (`?detalle=1` agrega las asignaciones) |
+| `src/app/api/instituto/supervision/route.ts` · `[id]/route.ts` | `POST` asignar (cierra al titular anterior) · `PATCH` cerrar |
+
+═══════════════════════════════════════════════════════════════════════════
+▶ GATES
+═══════════════════════════════════════════════════════════════════════════
+
+- **`npx prisma generate`** → OK (v5.22.0), sin EPERM. Los seis modelos `Edu*`
+  salen en el cliente.
+- **`npm run build` COMPLETO, sin pipes** → **exit 0**, dos veces (una por cada
+  tanda de cambios). Las **17 rutas** del vertical salen dinámicas (`ƒ`): las 6
+  páginas y los 11 endpoints. Cero `Failed to compile`, cero `Type error`, cero
+  `Error occurred prerendering`. Los `prisma:error … DATABASE_URL` del log son del
+  prerender de las páginas públicas del dental en un worktree sin `.env`: ya salían
+  antes de esta ola.
+- **`npx tsc --noEmit` sobre el repo entero** → **cero errores en el vertical**.
+  Los 6 que salen son de `src/lib/barber/__tests__/` (`dinero-sumas`,
+  `i18n-alcance`), **ya existían en `main`**, esta ola no tocó esos archivos
+  (`git diff origin/main...HEAD -- src/lib/barber/` sale vacío) y `next build` no
+  los compila. (Hay que correrlo con `NODE_OPTIONS=--max-old-space-size=8192`: con
+  el heap por defecto de Node se queda sin memoria en este repo.)
+- **Pruebas** → `npx tsx --test` sobre los tres archivos del vertical
+  (`edu-permissions`, `edu-contract`, `edu-padron`) → **51 pruebas, 51 pasan, 0
+  fallan** (eran 21 al terminar la Ola 0).
+- **`node scripts/edu-guard.cjs`** con `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`
+  → **exit 0**, 28 propios, compartidos declarados, **0 prohibidos**.
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE QUEDA ROJO
+═══════════════════════════════════════════════════════════════════════════
+
+**a) 🔴 `sql/edu-ola-1.sql` SIN APLICAR — y `sql/edu-ola-0.sql` TAMPOCO lo está.**
+Hasta que se corran los dos en Supabase (primero el 0), el padrón **no existe en la
+base**: las consultas fallan contra tablas que no están y el panel no puede
+enseñar nada. Los dos archivos son idempotentes (`IF NOT EXISTS` /
+`EXCEPTION WHEN duplicate_object`, cero `DROP`): correrlos dos veces no rompe nada.
+
+**b) 🔴 El backfill del override es un paso APARTE, y sin él la ola parece no
+haberse aplicado.** Quien tenga `permissionsOverride` con keys guardadas entrará al
+panel y **no verá "Padrón" en el menú**. El bloque está comentado al final del
+`.sql`, separado por rol, con la consulta para saber a quién le falta.
+
+**c) Nada de esto ha tocado una base de datos real ni un navegador.** El build
+compila y las 51 pruebas puras pasan; **nadie ha inscrito a un alumno de verdad**,
+ni ha visto la tabla convertirse en tarjetas en un teléfono, ni ha comprobado
+contra Postgres que el `where` del docente se traduzca al SQL que creemos. Todo lo
+que depende de Prisma está escrito contra el contrato y verificado con un
+intérprete propio, no contra la base.
+
+**d) El alcance del DOCENTE es por ROL, no por permiso — con una consecuencia
+conocida.** Un DOCENTE al que la dirección le dé `padron.manage` por override podrá
+dar de alta a un alumno que después **no verá** en su lista, porque no es su
+supervisor. Es lo que pide el contrato de esta ola ("un DOCENTE ve SOLO sus
+alumnos"); si algún día molesta, la salida es darle el rol DIRECCION, no ensanchar
+el alcance. Queda anotado en `eduPadronScope`.
+
+**e) Sin paginación de verdad.** El padrón se corta en **300 filas** y la pantalla
+lo **dice** ("se muestran los primeros 300") en vez de mentir con un total. Para el
+tamaño de una escuela de especialidad sobra; el día que no, hay que paginar y no
+subir el techo.
+
+**f) El modal no atrapa el foco del todo.** Escape cierra, el foco entra al abrir y
+vuelve al botón que lo abrió al cerrar, pero `Tab` puede salirse hacia la página de
+atrás. Está anotado en el propio archivo: meter una biblioteca de diálogos por esto
+habría traído dependencias nuevas al vertical.
+
+**g) El vertical sigue sin i18n y sin `npm run test:edu-*`.** Todo el texto va en
+español duro y las pruebas se corren con `npx tsx --test …` (el comando está en la
+cabecera de cada archivo). `package.json` y `src/i18n/` son del dental y esta ola
+tiene prohibido tocarlos; cuando el vertical se integre a `main`, son tres líneas.
+
+**h) Archivos que se quisieron tocar y NO se tocaron.** Ninguno se tocó a
+escondidas; se listan para que la integración decida:
+- `package.json` — los tres scripts `test:edu-*` (punto g).
+- `src/lib/edu/contract.ts` — se **reusa** su `formatEduContractDate` (reexportado
+  como `formatEduDate`) en vez de escribir un segundo formateador de fechas. No se
+  editó: sus 9 pruebas de la Ola 0 siguen verdes y el nombre "contract" es lo único
+  raro que queda.
+- `src/middleware.ts` — no hizo falta: `/instituto/:path*` ya estaba en el matcher
+  desde la Ola 0 y las rutas nuevas cuelgan de ahí.
