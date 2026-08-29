@@ -3,7 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { GraduationCap, Home, Layers, LogOut, Menu, UserCheck, Users, X } from "lucide-react";
+import {
+  Armchair,
+  Calendar,
+  Contact,
+  GraduationCap,
+  Home,
+  Layers,
+  LogOut,
+  Menu,
+  Sun,
+  UserCheck,
+  Users,
+  X,
+} from "lucide-react";
 import type { EduNavItem, EduNavSection } from "@/lib/edu/types";
 
 /**
@@ -32,6 +45,11 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   users: Users,
   layers: Layers,
   "user-check": UserCheck,
+  // Ola 2 — el piso clínico.
+  sun: Sun,
+  calendar: Calendar,
+  contact: Contact,
+  chair: Armchair,
 };
 
 export interface EduShellProps {

@@ -19,6 +19,11 @@
 //   /instituto/padron       → padrón de alumnos                    Ola 1A ✓
 //   /instituto/padron/estructura → programas y generaciones        Ola 1A ✓
 //   /instituto/docentes     → docentes y su carga                  Ola 1A ✓
+//   /instituto/pacientes    → pacientes de la clínica              Ola 2  ✓
+//   /instituto/agenda       → día y semana, por sillón             Ola 2  ✓
+//   /instituto/agenda/tamizaje → valoración inicial: asigna y abre caso  Ola 2 ✓
+//   /instituto/sillones     → unidades dentales y su horario       Ola 2  ✓
+//   /instituto/mi-dia       → lo que ve un alumno al llegar        Ola 2  ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
 // entrada de menú de EDU_NAV_ITEMS (abajo). Ninguna inventa su propio
 // guard: todas pasan por el layout del grupo (panel).
@@ -34,6 +39,17 @@
 //   GET   /api/instituto/docentes           → docentes + carga     Ola 1A ✓
 //   POST  /api/instituto/supervision        → asignar docente      Ola 1A ✓
 //   PATCH /api/instituto/supervision/[id]   → cerrar vigencia      Ola 1A ✓
+//   GET·POST  /api/instituto/pacientes      → pacientes            Ola 2  ✓
+//   PATCH     /api/instituto/pacientes/[id] → ficha                Ola 2  ✓
+//   PATCH     /api/instituto/pacientes/[id]/origen → CUÁL alumno lo trajo Ola 2 ✓
+//   GET·POST  /api/instituto/sillones       → unidades dentales    Ola 2  ✓
+//   PATCH     /api/instituto/sillones/[id]  → nombre, número, alta/baja Ola 2 ✓
+//   PUT       /api/instituto/sillones/[id]/horario → franjas       Ola 2  ✓
+//   GET·POST  /api/instituto/agenda         → citas del rango      Ola 2  ✓
+//   PATCH     /api/instituto/agenda/[id]    → reagendar y estado   Ola 2  ✓
+//   GET·POST  /api/instituto/casos          → casos clínicos       Ola 2  ✓
+//   PATCH     /api/instituto/casos/[id]     → estado y supervisor  Ola 2  ✓
+//   POST      /api/instituto/tamizaje       → asigna alumno + abre caso  Ola 2 ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -101,6 +117,185 @@ export const EDU_STUDENT_STATUS_DESCRIPTIONS: Record<EduStudentStatus, string> =
   WITHDRAWN: "Ya no pertenece a la generación. No se borra nada de lo que hizo.",
 };
 
+// ═══════════════════════════════════════════════════════════════════════
+// Ola 2 · EL PISO CLÍNICO — pacientes, sillones, agenda y el caso.
+//
+// Los cinco enums que siguen son espejo 1:1 de los de Prisma, escritos como
+// uniones de strings para poder importarlos desde componentes "use client"
+// sin arrastrar el runtime de Prisma al navegador — igual que EduRole y
+// EduStudentStatus. El candado de que no se desincronicen es un chequeo de
+// TIPOS en src/lib/edu/__tests__/edu-visibility.test.ts (lo verifica
+// `tsc --noEmit`).
+//
+// Y la regla de siempre: la UI JAMÁS pinta el valor del enum. "IN_CHAIR"
+// en mayúsculas no es lo que un alumno espera leer sobre su paciente.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** En qué punto del embudo está el paciente de la escuela. */
+export type EduPatientStatus = "NEW" | "ACTIVE" | "DISCHARGED" | "INACTIVE";
+
+export const EDU_PATIENT_STATUSES: EduPatientStatus[] = [
+  "NEW",
+  "ACTIVE",
+  "DISCHARGED",
+  "INACTIVE",
+];
+
+export const EDU_PATIENT_STATUS_LABELS: Record<EduPatientStatus, string> = {
+  NEW: "Nuevo",
+  ACTIVE: "En tratamiento",
+  DISCHARGED: "Dado de alta",
+  INACTIVE: "Inactivo",
+};
+
+export const EDU_PATIENT_STATUS_DESCRIPTIONS: Record<EduPatientStatus, string> = {
+  NEW: "Registrado en recepción. Todavía no pasa por tamizaje.",
+  ACTIVE: "Tiene al menos un caso abierto: alguien lo está atendiendo.",
+  DISCHARGED: "Terminó sus tratamientos. Su historia no se borra.",
+  INACTIVE: "Dejó de venir. Vuelve a estar en tratamiento si regresa.",
+};
+
+/** Sexo tal como se captura en recepción. */
+export type EduSex = "FEMALE" | "MALE" | "OTHER" | "UNSPECIFIED";
+
+export const EDU_SEXES: EduSex[] = ["FEMALE", "MALE", "OTHER", "UNSPECIFIED"];
+
+export const EDU_SEX_LABELS: Record<EduSex, string> = {
+  FEMALE: "Mujer",
+  MALE: "Hombre",
+  OTHER: "Otro",
+  UNSPECIFIED: "Sin especificar",
+};
+
+/**
+ * El ciclo de vida del CASO. Un paciente puede tener varios a la vez, uno
+ * por especialidad: la señora que necesita endodoncia y ortodoncia es una
+ * persona con dos casos, dos alumnos y dos docentes.
+ */
+export type EduCaseStatus =
+  | "SCREENING"
+  | "ASSIGNED"
+  | "IN_TREATMENT"
+  | "ON_HOLD"
+  | "COMPLETED"
+  | "TRANSFERRED"
+  | "ABANDONED";
+
+export const EDU_CASE_STATUSES: EduCaseStatus[] = [
+  "SCREENING",
+  "ASSIGNED",
+  "IN_TREATMENT",
+  "ON_HOLD",
+  "COMPLETED",
+  "TRANSFERRED",
+  "ABANDONED",
+];
+
+export const EDU_CASE_STATUS_LABELS: Record<EduCaseStatus, string> = {
+  SCREENING: "En valoración",
+  ASSIGNED: "Asignado",
+  IN_TREATMENT: "En tratamiento",
+  ON_HOLD: "En pausa",
+  COMPLETED: "Terminado",
+  TRANSFERRED: "Transferido",
+  ABANDONED: "Abandonado",
+};
+
+export const EDU_CASE_STATUS_DESCRIPTIONS: Record<EduCaseStatus, string> = {
+  SCREENING: "Se abrió en el tamizaje y todavía no se decide el tratamiento.",
+  ASSIGNED: "Ya tiene alumno responsable; falta empezar.",
+  IN_TREATMENT: "Ya se le está trabajando al paciente.",
+  ON_HOLD: "Pausado: falta un estudio, un pago o que el paciente vuelva.",
+  COMPLETED: "Terminó. No se borra: la historia queda.",
+  TRANSFERRED: "Pasó a otro alumno o a otra especialidad.",
+  ABANDONED: "El paciente dejó de venir y el caso se cerró así.",
+};
+
+/**
+ * Los tres estados FINALES. Llegar a uno de ellos escribe `closedAt`; el
+ * producto deriva esa fecha del estado y no la captura, para que no exista
+ * un caso "terminado" sin fecha de cierre ni una fecha de cierre en un caso
+ * que sigue vivo.
+ */
+export const EDU_CASE_CLOSED_STATUSES: EduCaseStatus[] = [
+  "COMPLETED",
+  "TRANSFERRED",
+  "ABANDONED",
+];
+
+/** Para qué es la cita. */
+export type EduAppointmentType = "TAMIZAJE" | "TRATAMIENTO" | "CONTROL";
+
+export const EDU_APPOINTMENT_TYPES: EduAppointmentType[] = [
+  "TAMIZAJE",
+  "TRATAMIENTO",
+  "CONTROL",
+];
+
+export const EDU_APPOINTMENT_TYPE_LABELS: Record<EduAppointmentType, string> = {
+  TAMIZAJE: "Tamizaje",
+  TRATAMIENTO: "Tratamiento",
+  CONTROL: "Control",
+};
+
+export const EDU_APPOINTMENT_TYPE_DESCRIPTIONS: Record<EduAppointmentType, string> = {
+  TAMIZAJE: "Valoración inicial. Es la que asigna el paciente a un alumno y abre el caso.",
+  TRATAMIENTO: "Sesión de trabajo en el sillón.",
+  CONTROL: "Revisión posterior, sin tratamiento nuevo.",
+};
+
+/**
+ * Dónde va la cita HOY. "Llegó", "se sentó" y "se le está trabajando" son
+ * tres momentos distintos y la escuela los mide: el tiempo entre el primero
+ * y el segundo es la sala de espera, y el que va del segundo al tercero es
+ * lo que tardó el docente en autorizar.
+ */
+export type EduAppointmentStatus =
+  | "SCHEDULED"
+  | "CHECKED_IN"
+  | "IN_CHAIR"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "NO_SHOW";
+
+export const EDU_APPOINTMENT_STATUSES: EduAppointmentStatus[] = [
+  "SCHEDULED",
+  "CHECKED_IN",
+  "IN_CHAIR",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+  "NO_SHOW",
+];
+
+export const EDU_APPOINTMENT_STATUS_LABELS: Record<EduAppointmentStatus, string> = {
+  SCHEDULED: "Agendada",
+  CHECKED_IN: "Llegó",
+  IN_CHAIR: "En el sillón",
+  IN_PROGRESS: "En tratamiento",
+  COMPLETED: "Terminada",
+  CANCELLED: "Cancelada",
+  NO_SHOW: "No llegó",
+};
+
+export const EDU_APPOINTMENT_STATUS_DESCRIPTIONS: Record<EduAppointmentStatus, string> = {
+  SCHEDULED: "Tiene hora y sillón; el paciente todavía no llega.",
+  CHECKED_IN: "El paciente ya está en recepción.",
+  IN_CHAIR: "Ya está sentado en el sillón.",
+  IN_PROGRESS: "Se le está trabajando.",
+  COMPLETED: "Se terminó la sesión.",
+  CANCELLED: "Se canceló antes de la hora.",
+  NO_SHOW: "Llegó la hora y el paciente no se presentó.",
+};
+
+/**
+ * Los estados que LIBERAN el sillón: una cita cancelada o a la que el
+ * paciente no llegó deja de ocupar su hueco, así que no cuenta para el
+ * choque de horarios. Una terminada SÍ sigue ocupándolo — ocurrió.
+ */
+export const EDU_APPOINTMENT_FREE_STATUSES: EduAppointmentStatus[] = ["CANCELLED", "NO_SHOW"];
+
 // ── Navegación del panel ────────────────────────────────────────────────
 export type EduNavSection = "operacion" | "academico" | "administracion";
 
@@ -153,6 +348,30 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     permission: "inicio.view",
   },
   {
+    // Va justo después de Inicio y antes de la agenda completa a
+    // propósito: es la pantalla del ALUMNO, que llega al piso clínico con
+    // el teléfono en la mano y necesita UNA cosa — qué le toca hoy.
+    key: "mi-dia",
+    href: "/instituto/mi-dia",
+    icon: "sun",
+    section: "operacion",
+    permission: "agenda.view",
+  },
+  {
+    key: "agenda",
+    href: "/instituto/agenda",
+    icon: "calendar",
+    section: "operacion",
+    permission: "agenda.view",
+  },
+  {
+    key: "pacientes",
+    href: "/instituto/pacientes",
+    icon: "contact",
+    section: "operacion",
+    permission: "pacientes.view",
+  },
+  {
     key: "padron",
     href: "/instituto/padron",
     icon: "users",
@@ -173,6 +392,15 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "academico",
     permission: "docentes.view",
   },
+  {
+    // Los sillones son infraestructura de la escuela, no operación del
+    // día: se dan de alta una vez y casi no se vuelven a tocar.
+    key: "sillones",
+    href: "/instituto/sillones",
+    icon: "chair",
+    section: "administracion",
+    permission: "sillones.view",
+  },
 ];
 
 /** Etiqueta de cada sección del menú (las vacías no se pintan). */
@@ -192,9 +420,13 @@ export const EDU_NAV_SECTION_ORDER: EduNavSection[] = [
 /** Etiqueta de menú de cada item (español; el vertical no está en i18n). */
 export const EDU_NAV_LABELS: Record<string, string> = {
   inicio: "Inicio",
+  "mi-dia": "Mi día",
+  agenda: "Agenda",
+  pacientes: "Pacientes",
   padron: "Padrón",
   estructura: "Programas y generaciones",
   docentes: "Docentes",
+  sillones: "Sillones",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────
@@ -214,14 +446,9 @@ export const EDU_BRAND = {
  * EDU_NAV_ITEMS, en el mismo commit.
  */
 export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[] = [
-  // "padron" salió de esta lista en la Ola 1A, en el mismo commit en que
-  // entró a EDU_NAV_ITEMS. Es la regla: un área está en el menú o está
-  // aquí, nunca en las dos ni en ninguna.
-  {
-    key: "agenda",
-    title: "Agenda",
-    detail: "Citas por sillón y por alumno, con el docente que supervisa.",
-  },
+  // "padron" salió de esta lista en la Ola 1A y "agenda" en la Ola 2, en
+  // el mismo commit en que entraron a EDU_NAV_ITEMS. Es la regla: un área
+  // está en el menú o está aquí, nunca en las dos ni en ninguna.
   {
     key: "expediente",
     title: "Expediente",

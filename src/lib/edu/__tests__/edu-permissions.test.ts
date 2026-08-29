@@ -197,6 +197,131 @@ test("un permiso NUEVO no le llega solo a quien ya tiene override", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// 1c · Las nueve keys de la Ola 2 (el piso clínico)
+// ─────────────────────────────────────────────────────────────────────
+
+const KEYS_OLA_2: EduPermissionKey[] = [
+  "pacientes.view",
+  "pacientes.manage",
+  "pacientes.origen",
+  "agenda.view",
+  "agenda.manage",
+  "sillones.view",
+  "sillones.manage",
+  "casos.view",
+  "casos.assign",
+];
+
+test("las nueve keys de la Ola 2 están en el catálogo, descritas en español", () => {
+  for (const k of KEYS_OLA_2) {
+    assert.ok(k in EDU_ALL_PERMISSIONS, `falta ${k} en el catálogo`);
+    const desc = EDU_ALL_PERMISSIONS[k];
+    assert.ok(desc && desc.length > 8, `${k} sin descripción usable: ${desc}`);
+    assert.notEqual(desc, k, `${k} se describe con su propia key`);
+  }
+});
+
+test("el piso clínico está repartido en dos grupos, y cada key en uno solo", () => {
+  const pacientes = EDU_PERMISSION_GROUPS.find((g) => g.keys.includes("pacientes.view"));
+  const agenda = EDU_PERMISSION_GROUPS.find((g) => g.keys.includes("agenda.view"));
+  assert.ok(pacientes && agenda, "faltan los grupos del piso clínico");
+  assert.notEqual(pacientes.title, agenda.title, "los dos grupos son el mismo");
+  for (const k of KEYS_OLA_2) {
+    const cuantos = EDU_PERMISSION_GROUPS.filter((g) => g.keys.includes(k)).length;
+    assert.equal(cuantos, 1, `${k} aparece en ${cuantos} grupos`);
+  }
+});
+
+test("los defaults de la Ola 2 son EXACTAMENTE los del contrato", () => {
+  // DIRECCION: todo.
+  for (const k of KEYS_OLA_2) {
+    assert.equal(hasEduPermission({ role: "DIRECCION" }, k), true, `DIRECCION sin ${k}`);
+  }
+
+  // CAJA: pacientes.* + agenda.* + sillones.view. Recibe, agenda y cobra.
+  const deCaja: EduPermissionKey[] = [
+    "pacientes.view",
+    "pacientes.manage",
+    "pacientes.origen",
+    "agenda.view",
+    "agenda.manage",
+    "sillones.view",
+  ];
+  for (const k of deCaja) {
+    assert.equal(hasEduPermission({ role: "CAJA" }, k), true, `CAJA debería traer ${k}`);
+  }
+  // 🔴 Y NINGÚN caso: es la línea del contrato "caja sin expediente
+  // clínico". Está cerrada aquí y otra vez en el helper de visibilidad,
+  // que para el recurso "cases" le devuelve alcance "none" aunque alguien
+  // le encienda el interruptor por error.
+  assert.equal(hasEduPermission({ role: "CAJA" }, "casos.view"), false);
+  assert.equal(hasEduPermission({ role: "CAJA" }, "casos.assign"), false);
+  assert.equal(hasEduPermission({ role: "CAJA" }, "sillones.manage"), false);
+
+  // DOCENTE: los .view + casos.assign. Mira y reparte; no registra
+  // pacientes (eso es recepción) ni mueve la agenda de la escuela.
+  const deDocente: EduPermissionKey[] = [
+    "pacientes.view",
+    "agenda.view",
+    "sillones.view",
+    "casos.view",
+    "casos.assign",
+  ];
+  for (const k of deDocente) {
+    assert.equal(hasEduPermission({ role: "DOCENTE" }, k), true, `DOCENTE debería traer ${k}`);
+  }
+  const noDelDocente: EduPermissionKey[] = [
+    "pacientes.manage",
+    "pacientes.origen",
+    "agenda.manage",
+    "sillones.manage",
+  ];
+  for (const k of noDelDocente) {
+    assert.equal(hasEduPermission({ role: "DOCENTE" }, k), false, `DOCENTE no debería traer ${k}`);
+  }
+
+  // ALUMNO: tres permisos de LECTURA, y todo lo que lea va recortado a lo
+  // suyo por el ALCANCE, no por el permiso.
+  assert.deepEqual(
+    [...EDU_ROLE_DEFAULTS.ALUMNO].sort(),
+    ["agenda.view", "casos.view", "inicio.view", "pacientes.view"],
+  );
+});
+
+test("el ORIGEN del paciente solo lo marcan caja y dirección", () => {
+  // Decide el precio en la Ola 5: lo pone quien cobra o quien manda. Al
+  // alumno se le PINTA su origen, deshabilitado.
+  assert.equal(hasEduPermission({ role: "CAJA" }, "pacientes.origen"), true);
+  assert.equal(hasEduPermission({ role: "DIRECCION" }, "pacientes.origen"), true);
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "pacientes.origen"), false);
+  assert.equal(hasEduPermission({ role: "ALUMNO" }, "pacientes.origen"), false);
+});
+
+test("los cuatro roles comparten agenda.view y NO ven lo mismo", () => {
+  // El permiso abre la pantalla; el ALCANCE decide las filas. Que los
+  // cuatro compartan la key es correcto y no afloja nada — lo que cada uno
+  // ve lo fija edu-visibility.test.ts.
+  for (const rol of EDU_ROLES) {
+    assert.equal(hasEduPermission({ role: rol }, "agenda.view"), true, `${rol} sin agenda.view`);
+  }
+});
+
+test("la Ola 2 sacó la agenda de 'Próximamente' y la puso en el menú", () => {
+  const enMenu = new Set(EDU_NAV_ITEMS.map((i) => i.key));
+  for (const key of ["mi-dia", "agenda", "pacientes", "sillones"]) {
+    assert.ok(enMenu.has(key), `"${key}" se entregó y no está en el menú`);
+  }
+  assert.equal(
+    EDU_UPCOMING_AREAS.some((a) => a.key === "agenda"),
+    false,
+    "la agenda existe y sigue anunciada como Próximamente",
+  );
+  // El tamizaje NO tiene item propio a propósito: se llega desde la
+  // Agenda, que es donde está la persona cuando el paciente llega.
+  assert.equal(enMenu.has("tamizaje"), false);
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // 2 · Semántica del override
 // ─────────────────────────────────────────────────────────────────────
 
@@ -220,10 +345,16 @@ test("override vacío o ausente cae al default del rol (nunca deniega todo)", ()
  *
  * La Ola 0 dejó escrito que con UNA sola key "reemplazar" y "sumar" daban
  * el mismo resultado y que la prueba empezaría a morder sola en cuanto
- * hubiera una segunda. Ya hay cinco: recorre los 31 subconjuntos del
- * catálogo por cada rol, y un merge accidental (por ejemplo, un
+ * hubiera una segunda. Un merge accidental (por ejemplo, un
  * `[...default, ...override]`) falla aquí en el primer subconjunto que no
  * contenga inicio.view.
+ *
+ * ⚠️ Con las nueve keys de la Ola 2 el catálogo llegó a catorce, y recorrer
+ * TODOS los subconjuntos serían 16 383 por rol — 65 532 comprobaciones para
+ * demostrar lo mismo. Se recorren los subconjuntos de una MUESTRA fija de
+ * cinco keys (una por grupo del catálogo, incluidas las dos que más se
+ * confunden: pacientes.origen y agenda.manage) y, aparte, cada key del
+ * catálogo entera contra un override que no la trae.
  */
 test("el override REEMPLAZA al default: lo que no está tildado, no se tiene", () => {
   const subconjuntos = (keys: EduPermissionKey[]): EduPermissionKey[][] => {
@@ -232,8 +363,16 @@ test("el override REEMPLAZA al default: lo que no está tildado, no se tiene", (
     return out.filter((s) => s.length > 0);
   };
 
+  const MUESTRA: EduPermissionKey[] = [
+    "inicio.view",
+    "padron.manage",
+    "pacientes.origen",
+    "agenda.manage",
+    "casos.assign",
+  ];
+
   for (const rol of EDU_ROLES) {
-    for (const sub of subconjuntos(EDU_ALL_PERMISSION_KEYS)) {
+    for (const sub of subconjuntos(MUESTRA)) {
       const efectivo = getEduEffectivePermissions({ role: rol, permissionsOverride: sub });
       assert.deepEqual(
         [...efectivo].sort(),
@@ -255,8 +394,11 @@ test("el override REEMPLAZA al default: lo que no está tildado, no se tiene", (
 test("keys inválidas se descartan sin romper las válidas", () => {
   assert.deepEqual(sanitizeEduPermissionKeys(["inicio.view"]), ["inicio.view"]);
   assert.deepEqual(sanitizeEduPermissionKeys(["clave.inventada", "*", ""]), []);
+  // ⚠️ Ojo al elegir la key "inventada": "agenda.view" servía en la Ola 1A
+  // y dejó de servir en la Ola 2, cuando entró al catálogo de verdad. Se
+  // usa una que no va a existir nunca.
   assert.deepEqual(
-    sanitizeEduPermissionKeys(["clave.inventada", "inicio.view", "agenda.view"]),
+    sanitizeEduPermissionKeys(["clave.inventada", "inicio.view", "agenda.borrar-todo"]),
     ["inicio.view"],
   );
   // Repetidas → una sola vez.
