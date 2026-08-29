@@ -36,13 +36,19 @@ import {
 import toast from "react-hot-toast";
 import { fetchWithCache, getDecodedSlices, putDecodedSlices } from "@/lib/dicom-cache";
 import { decodeSlice, isDicomEntryName } from "./dicom-decode-core";
+import type { DecodeWorkerOut } from "./dicom-decode.worker";
 import type { VolSlice } from "./Dicom3DVolume";
 import MprPane from "./MprPane";
 import {
   clampInt,
   computeVolStats,
+  isPhysicallyOrdered,
+  keepDominantSeries,
   inferScale,
+  measureZSpacing,
   presetWindow,
+  sameOrientation,
+  sortSlicesForVolume,
   WINDOW_PRESETS,
   type Cross,
   type PlaneKey,
@@ -52,7 +58,12 @@ import {
   type Tool,
   type WindowKey,
 } from "./cbct-mpr-shared";
-import { decodeCbctLite } from "./cbct-lite-shared";
+import { decodeCbctLite, type CbctLiteSourceGeometry } from "./cbct-lite-shared";
+import GeometryWarning, {
+  geometryDoubtReason,
+  GEOMETRY_DOUBT_DETAIL,
+  type GeometryDoubtReason,
+} from "./GeometryWarning";
 
 // Render volumétrico 3D (three.js). Dinámico para no cargar el shader hasta que
 // el componente se monta (trae su propio canvas + controles de densidad/opacidad).
@@ -81,7 +92,7 @@ interface Props {
   name: string;
   fileId: string;
   patientId: string;
-  // CBCT reducido para móvil (`.lite.bin`); "" / undefined si aún no se generó.
+  // CBCT reducido para móvil (`.lite2.bin`); "" / undefined si aún no se generó.
   // En móvil el visor carga ESTE binario (~20 MB) en vez del .zip (300-600 MB).
   liteUrl?: string;
   initialNotes?: string;
@@ -138,12 +149,16 @@ function decodeWithWorker(
     }
     onWorker?.(worker);
     worker.onmessage = (e: MessageEvent) => {
-      const msg = e.data || {};
+      // Tipado con el contrato que declara el propio worker. Mientras esto fue
+      // `any`, el tipo de allí no vigilaba nada: era una declaración que nadie
+      // leía. Con la unión discriminada, quitarle un campo a DecodedSlice o
+      // renombrar un mensaje se ve en compilación y no en pantalla.
+      const msg = (e.data || {}) as DecodeWorkerOut;
       if (msg.type === "progress") {
         onProgress(msg.done, msg.total);
       } else if (msg.type === "done") {
         worker.terminate();
-        resolve(msg.slices as Slice[]);
+        resolve(msg.slices);
       } else if (msg.type === "error") {
         worker.terminate();
         reject(new Error(msg.message || "worker error"));
@@ -353,6 +368,19 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
   // (campo `detail` del 500). Temporal/diagnóstico: se muestra discreto en la
   // pantalla de error para depurar por qué no abre en el dispositivo.
   const [liteError, setLiteError] = useState("");
+  // Procedencia geométrica del estudio ORIGINAL, tal como la declara la cabecera
+  // del binario lite. `null` = este volumen no viene de un lite (ruta escritorio).
+  // Es estado y no un derivado de `slices` porque los cortes del lite NO la
+  // llevan: el binario la resume en su meta y ésta es la única oportunidad de
+  // guardarla. De ella dependen las dos decisiones de geometría de la ruta móvil:
+  // si se advierte, y si se voltean coronal y sagital.
+  const [liteGeometry, setLiteGeometry] = useState<CbctLiteSourceGeometry | null>(null);
+  // ¿Se descartaron cortes por tener otro raster? Es estado y no un derivado de
+  // `slices` porque para cuando `slices` existe los descartados YA no están: todo
+  // lo que se juzga después (orientación, separación, procedencia) se calcula
+  // sobre lo que quedó, y lo que quedó es homogéneo y coherente consigo mismo. Sin
+  // guardar el hecho aquí, un .zip con dos series se veía como un estudio sano.
+  const [droppedForeign, setDroppedForeign] = useState(false);
   // Modo de vista (solo escritorio): rejilla MPR 2×2 (por defecto) o Panorámica
   // (reslice curvo). En móvil se usa `mobileView` (una vista a la vez).
   const [viewMode, setViewMode] = useState<"mpr" | "pano">("mpr");
@@ -373,11 +401,111 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
   // Estadística por percentiles (auto-ventana + presets). Instantánea, una vez por set.
   const stats = useMemo(() => computeVolStats(slices), [slices]);
 
-  // Escala física resuelta (o inferida de los cortes mientras llega la del header).
+  // Espaciado Z medido de las posiciones físicas del set (ya ordenado). Se calcula
+  // SIEMPRE desde los cortes en memoria y NO se cachea nunca. Dos razones, y la
+  // segunda es la importante:
+  //   - es un recorrido O(n) sobre unos cientos de números: no hay nada que ahorrar;
+  //   - así NO existe forma de que un `sz` guardado en localStorage por una versión
+  //     anterior —el de SpacingBetweenSlices/SliceThickness, que es justo el número
+  //     del que este arreglo desconfía— le gane a una medida hecha ahora sobre este
+  //     estudio. Por eso tampoco hace falta versionar la clave `cbct-scale:v1:`:
+  //     bumpearla solo forzaría a releer el header (que sigue diciendo lo mismo),
+  //     mientras que lo cacheado conserva el papel que le toca —fuente de sx/sy y
+  //     último recurso para sz— y la medida se aplica ENCIMA en cada carga.
+  //     `loadStoredScale` además reconstruye el objeto campo a campo y no restaura
+  //     `zVariable`, así que una irregularidad vieja tampoco puede resucitar.
+  const measuredZ = useMemo(() => measureZSpacing(slices), [slices]);
+
+  // Escala física resuelta. PRECEDENCIA de `sz`, de más a menos fiable:
+  //   1) MEDIANA de las posiciones reales (measuredZ) — es una medida del propio
+  //      volumen, no una suposición, así que cuenta como calibrada;
+  //   2) header del estudio (probeScale: SpacingBetweenSlices → SliceThickness), o
+  //      el ScaleInfo que la ruta lite fija desde la meta del binario;
+  //   3) inferido del primer corte (inferScale) mientras no llega nada mejor.
+  // sx/sy NO los toca la medida: las posiciones solo hablan del eje ENTRE cortes.
+  // La ruta móvil (lite) queda intacta: sus cortes vienen sin ImagePositionPatient
+  // (imagePosition null en todos), measureZSpacing devuelve null y el ScaleInfo de
+  // la meta pasa tal cual, sin un pixel de diferencia.
   const scale = useMemo<ScaleInfo>(() => {
     if (slices.length === 0) return { sx: 1, sy: 1, sz: 1, xySource: "none", zCalibrated: false };
-    return scaleInfo ?? inferScale(slices[0]);
-  }, [slices, scaleInfo]);
+    const base = scaleInfo ?? inferScale(slices[0]);
+    if (!measuredZ) return base; // sin posiciones no se afirma nada del eje Z
+    // `sz` puede venir a null: hay posiciones pero todas iguales, así que se midió
+    // y no hay distancia. Ahí se conserva el `sz` del header —hace falta un número
+    // positivo o el raster de coronal/sagital colapsa— pero NO se toca
+    // `zCalibrated`: nada de esto está calibrado, y el aviso lo dice aparte.
+    if (measuredZ.sz === null) return { ...base, zVariable: measuredZ.variable };
+    return { ...base, sz: measuredZ.sz, zCalibrated: true, zVariable: measuredZ.variable };
+  }, [slices, scaleInfo, measuredZ]);
+
+  // ¿Comparten TODOS los cortes la misma orientación de adquisición? Un .zip de
+  // paciente trae a menudo el volumen y un scout lateral en la misma carpeta, y
+  // los dos declaran posición, así que ninguna comprobación de procedencia los
+  // separa. Se calcula aquí una sola vez y gobierna lo mismo que el orden: si hay
+  // dos series dentro, no se voltea, no se rotula y se avisa.
+  const oneOrientation = useMemo(() => sameOrientation(slices), [slices]);
+
+  // ¿La pila de cortes está apilada por geometría real? Gobierna DOS cosas a la
+  // vez, y por eso es un solo valor: el volteo vertical de coronal/sagital en
+  // MprPane y el rotulado S/I de esos mismos bordes. Si se calcularan por
+  // separado podrían discrepar, y una imagen sin voltear con la letra del volteo
+  // afirma una anatomía invertida — el peor resultado posible de los tres.
+  //
+  // La ruta se elige por `liteGeometry !== null`, NO por `lowMem`: `lowMem` dice
+  // qué clase de aparato es, `liteGeometry` dice que lo que hay en pantalla salió
+  // de un binario lite y trae su procedencia. Los cortes del lite declaran
+  // siempre "instance", así que mirarlos dejaría el móvil sin voltear y el
+  // escritorio volteado con el mismo estudio delante.
+  //
+  // `every` y no `some`: en un set mezclado los `order` conviven en unidades
+  // distintas (mm con signo e índices), el volumen queda intercalado y el sentido
+  // de la pila no significa nada. Ahí no se voltea ni se rotula: se advierte.
+  //
+  // Y no basta con que TODOS declaren procedencia física — esa era la comprobación
+  // de la primera versión y dejaba pasar dos estudios en los que la posición está
+  // pero no ordena nada:
+  //   · los 300 cortes con la MISMA ImagePositionPatient (el volumen quedó en el
+  //     orden de llegada del .zip, y aun así se volteaba y se rotulaba S/I);
+  //   · dos series en la misma carpeta, cada una proyectada sobre SU normal, que
+  //     se intercalan sin que nada lo note.
+  // Por eso se exige la prueba completa: procedencia física, una sola orientación,
+  // y una separación real medida entre cortes. Es el mismo trío que exige el
+  // servidor para marcar un lite como "positioned".
+  const zPhysicalOrder = useMemo(() => {
+    if (liteGeometry !== null) return liteGeometry === "positioned";
+    return isPhysicallyOrdered(slices, measuredZ);
+  }, [liteGeometry, slices, measuredZ]);
+
+  // ¿Hay que advertir sobre la geometría de ESTE estudio, y por qué? El juicio
+  // vive fuera del componente (geometryDoubtReason, puro y probado); aquí solo se
+  // elige con qué evidencia se le llama, que es la parte delicada.
+  const geometryDoubt = useMemo<GeometryDoubtReason | null>(
+    () =>
+      liteGeometry !== null
+        ? geometryDoubtReason({
+            route: "lite",
+            sourceGeometry: liteGeometry,
+            mixedSeries: droppedForeign,
+            zVariable: scale.zVariable,
+          })
+        : geometryDoubtReason({
+            route: "full",
+            orderSources: slices.map((s) => s.orderSource),
+            // "Se midió y no hay distancia" (todas las posiciones iguales) frente a
+            // "no había nada que medir" (menos de dos cortes con posición): solo lo
+            // primero es un defecto del estudio, y solo eso se denuncia.
+            samePosition: measuredZ !== null && measuredZ.sz === null,
+            // Dos formas de que en el archivo haya más de una serie, y las dos
+            // cuentan: que los cortes que quedaron no compartan orientación, o
+            // que hubiera que descartar cortes de otro tamaño para llegar hasta
+            // aquí. La segunda no se puede leer del set final —esos cortes ya no
+            // están— y sin ella un .zip con dos series se veía como un estudio
+            // sano al que "casualmente" le faltaban cortes.
+            mixedSeries: !oneOrientation || droppedForeign,
+            zVariable: scale.zVariable,
+          }),
+    [liteGeometry, slices, scale.zVariable, measuredZ, oneOrientation, droppedForeign],
+  );
 
   // Carga del set (idéntico al flujo previo): cache de cortes -> descarga .zip ->
   // decode en worker (fallback main) -> cachea. La url cambia por TTL; depende de
@@ -387,8 +515,22 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
     let activeWorker: Worker | null = null;
     const isCancelled = () => cancelled;
 
-    const finalize = (arr: Slice[]) => {
-      arr.sort((a, b) => a.order - b.order);
+    const finalize = (raw: Slice[]): void => {
+      // Fuera los cortes cuyo raster no encaja con el del primero. El visor indexa
+      // los píxeles con el `cols` del primer corte, así que uno de otro tamaño en
+      // medio del array no da error: si es menor sale una franja negra, y si es
+      // mayor sale una imagen NÍTIDA Y FALSA, con el stride corrido. El generador
+      // del lite ya filtraba así; el escritorio pintaba la basura. Va ANTES del
+      // orden para que no queden huecos en el volumen.
+      const arr = keepDominantSeries(raw);
+      if (arr.length === 0) {
+        setStatus("error");
+        return;
+      }
+      setDroppedForeign(arr.length !== raw.length);
+      // Ordena en sitio (ver sortSlicesForVolume: mm con signo, mezcla de
+      // procedencias y empates).
+      sortSlicesForVolume(arr);
       const mid = Math.floor(arr.length / 2);
       defaultWin.current = { c: arr[mid].center, w: arr[mid].width };
       autoForFile.current = null; // permite aplicar la auto-ventana al nuevo estudio
@@ -404,6 +546,8 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
     setStatus("loading");
     setProgress({ done: 0, total: 0 });
     setScaleInfo(null);
+    setLiteGeometry(null); // otro estudio (o el salto a HD) = otra procedencia
+    setDroppedForeign(false); // ...y otro reparto de rasters
 
     const applyScale = async (blob: Blob | null) => {
       const stored = loadStoredScale(fileId);
@@ -474,7 +618,23 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
               sz: m.dz,
               xySource: m.hasRealSpacing ? "pixel-spacing" : "none",
               zCalibrated: m.hasRealSpacing,
+              // El binario lite no trae posiciones, así que aquí 
+              // no puede medir nada: la irregularidad la midió el SERVIDOR sobre
+              // el .zip original y viaja en la cabecera. Se copia al ScaleInfo
+              // para que el aviso salga por el mismo camino en las dos rutas.
+              zVariable: m.zVariable,
             });
+            // La procedencia del ORDEN no está en los cortes del lite (todos
+            // declaran "instance"): viaja en la cabecera del binario, escrita por
+            // buildCbctLite mirando el .zip original. Guardarla aquí es lo que
+            // permite advertir solo cuando el estudio de verdad no traía
+            // posiciones, en vez de advertir a todos los usuarios de móvil.
+            setLiteGeometry(m.sourceGeometry);
+            // El servidor descarto cortes de otra serie al construir el binario:
+            // aqui esos cortes ya no estan, asi que el dato solo puede venir de la
+            // cabecera. Reusa el mismo estado que la ruta de escritorio para que
+            // las dos digan lo mismo del mismo estudio.
+            setDroppedForeign(m.droppedForeign);
             finalize(parsed.slices as Slice[]);
           } else {
             setStatus("error");
@@ -524,6 +684,14 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
 
         finalize(decoded);
         void applyScale(blob);
+        // Se cachea el set CRUDO, no el que quedó tras descartar la serie
+        // minoritaria. Parece al revés y no lo es: esta caché existe para saltarse
+        // una DECODIFICACIÓN, y el filtrado es una decisión de presentación que se
+        // vuelve a tomar en cada carga. Guardando lo filtrado se perdía la prueba
+        // de que hubo algo que descartar —los cortes ajenos ya no están— y el aviso
+        // de "más de una serie" desaparecía en la segunda apertura del mismo
+        // estudio. Lo que sobra son unos megas en IndexedDB; lo que se compra es
+        // que el estudio se siga viendo igual de dudoso mañana que hoy.
         void putDecodedSlices(fileId, decoded);
       } catch {
         if (!cancelled) setStatus("error");
@@ -686,18 +854,22 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
                 ? "No se pudo abrir en este dispositivo"
                 : "No se pudo leer el set"}
           </p>
+          {/* Cuando el servidor manda un motivo (`detail`), ese motivo SUSTITUYE
+              al texto por defecto en vez de añadirse debajo. No es cosmético: el
+              texto por defecto afirma que el estudio "es muy grande para el
+              teléfono" y manda al usuario a buscar una computadora, y eso es falso
+              en casi todos los motivos reales —un freno de generación, otro
+              teléfono preparando el mismo estudio, un error del códec—. Un titular
+              equivocado con la explicación correcta debajo en 10 px se lee como el
+              titular. */}
           <p className="text-xs mt-1 max-w-sm">
             {status === "empty"
               ? "El .zip no contiene cortes DICOM legibles. Verifica que sea la carpeta del CBCT (archivos .dcm)."
               : lowMem
-                ? "No se pudo preparar la versión para móvil de este estudio. Es muy grande para el teléfono; ábrelo desde una computadora para verlo completo."
+                ? liteError ||
+                  "No se pudo preparar la versión para móvil de este estudio. Es muy grande para el teléfono; ábrelo desde una computadora para verlo completo."
                 : "El archivo no pudo descomprimirse o leerse. Asegúrate de subir un .zip válido del estudio."}
           </p>
-          {lowMem && status === "error" && liteError && (
-            <p className="text-[10px] mt-2 max-w-sm font-mono text-muted-foreground/80 break-words">
-              {liteError}
-            </p>
-          )}
           <a
             href={url}
             download={name}
@@ -720,6 +892,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
       key={p.key}
       slices={slices}
       plane={p.key}
+      zPhysicalOrder={zPhysicalOrder}
       label={p.label}
       cross={cross}
       scale={scale}
@@ -765,6 +938,8 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
         <Dicom3DVolume
           slices={slices as unknown as VolSlice[]}
           maxDim={hd ? 384 : 256}
+          zSpacingMm={scale.sz}
+          zPhysicalOrder={zPhysicalOrder}
           height={volumeMax ? "72vh" : 460}
         />
       </div>
@@ -775,6 +950,12 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Advertencia de geometría. Va arriba del todo —antes de la barra de control
+          y de los planos— porque condiciona cómo hay que leer TODAS las medidas de
+          abajo, y verla después de medir no sirve de nada. Solo aparece cuando
+          CONSTA que el orden o el espaciado no son de fiar. */}
+      {geometryDoubt && <GeometryWarning detail={GEOMETRY_DOUBT_DETAIL[geometryDoubt]} />}
+
       {/* Barra de control: herramientas + guías + presets de ventana + ajuste fino. */}
       <div className="flex flex-col gap-2 bg-muted/40 rounded-lg p-2 border border-border">
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -967,7 +1148,14 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
           </p>
         </div>
       ) : viewMode === "pano" ? (
-        <PanoramicPane slices={slices} scale={scale} center={center} width={width} initialZ={cross.z} />
+        <PanoramicPane
+          slices={slices}
+          scale={scale}
+          center={center}
+          width={width}
+          initialZ={cross.z}
+          zPhysicalOrder={zPhysicalOrder}
+        />
       ) : maximized === "volume" ? (
         volumeCell
       ) : maximizedPlane ? (

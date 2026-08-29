@@ -2,7 +2,7 @@
 // Genera (o devuelve si ya existe) el CBCT "lite": una versión reducida del estudio
 // que un MÓVIL sí puede cargar. El estudio original (300-600 MB) no cabe en la RAM
 // de un iPhone; aquí el SERVIDOR lo descomprime+decodifica+reduce UNA vez y guarda
-// un binario hermano `<path>.lite.bin` (~10-25 MB). Bajo demanda + cacheado en
+// un binario hermano `<path>.lite2.bin` (~10-25 MB). Bajo demanda + cacheado en
 // storage: la primera apertura en móvil lo genera; las siguientes lo reusan.
 //
 // Patrón análogo al GLB web de models-3d. Multi-tenant: clinicId SIEMPRE de la
@@ -141,7 +141,23 @@ export async function POST(
     scope: "cbct-lite",
     ...LITE_RATE_LIMIT,
   });
-  if (rl) return rl;
+  if (rl) {
+    // El 429 genérico de `persistentRateLimit` no trae `detail`, y `detail` es lo
+    // ÚNICO que el visor móvil sabe mostrar: sin él cae en su texto por defecto y
+    // le dice al usuario que el estudio "es muy grande para el teléfono", que es
+    // falso y además le manda a buscar una computadora que no necesita. Se
+    // reemite el mismo estado y el mismo Retry-After con un motivo de verdad.
+    const retry = rl.headers.get("Retry-After");
+    const mins = Math.max(1, Math.ceil(Number(retry || LITE_RATE_LIMIT.windowSec) / 60));
+    return NextResponse.json(
+      {
+        error: "Demasiadas preparaciones seguidas",
+        detail: `La clínica ya preparó ${LITE_RATE_LIMIT.limit} estudios para móvil en la última hora. Vuelve a intentarlo en unos ${mins} min, o ábrelo desde una computadora mientras tanto.`,
+        rateLimited: true,
+      },
+      { status: 429, headers: retry ? { "Retry-After": retry } : undefined },
+    );
+  }
 
   // 3) Candado por estudio: dos peticiones a la vez sobre el mismo litePath
   //    generaban el MISMO binario dos veces (3 GB × 300 s ×2). El segundo se

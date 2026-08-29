@@ -87,7 +87,7 @@ interface Model3DFile {
   createdAt: string;
   doctorNotes?: string | null;
   annotations?: unknown;
-  // CBCT reducido para móvil (`.lite.bin`); "" si aún no se generó. Lo llena el GET.
+  // CBCT reducido para móvil (`.lite2.bin`); "" si aún no se generó. Lo llena el GET.
   liteUrl?: string;
 }
 

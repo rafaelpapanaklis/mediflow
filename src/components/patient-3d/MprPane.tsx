@@ -19,6 +19,11 @@ import {
   worstStatus,
   fitContain,
   viewRasterDims,
+  edgeLabelsFor,
+  flipNormV,
+  normToVox,
+  voxToNorm,
+  sampleDepthAtRow,
   MAX_DPR,
   MAX_VIEW_SIDE,
 } from "./cbct-mpr-shared";
@@ -35,6 +40,13 @@ const PLANE_COLOR: Record<PlaneKey, string> = {
 // siempre el contenedor. Deja aire para la barra de herramientas dentro del
 // modal del visor, que ya trae su propio scroll (max-h-[80vh]).
 const MAX_PANE_HEIGHT = "78vh";
+
+// Estilo de las letras anatómicas de los bordes. Mismas clases que el HUD del
+// plano (mono, blanco 90 %, negro 50 %) para que se lean como parte del visor y
+// no como un adorno pegado encima; solo se aprieta el relleno horizontal porque
+// una letra suelta en una caja de `px-2` parece una pastilla.
+const EDGE_LABEL_CLS =
+  "absolute text-[11px] font-mono text-white/90 bg-black/50 rounded px-1.5 py-0.5 leading-none";
 
 // En cada plano, qué plano representa la línea vertical (v) y la horizontal (h).
 const LINE_PLANES: Record<PlaneKey, { v: PlaneKey; h: PlaneKey }> = {
@@ -63,6 +75,19 @@ interface ProbePoint {
 interface Props {
   slices: Slice[];
   plane: PlaneKey;
+  // ¿La pila de cortes está ordenada por geometría real? Con `true` el coronal y
+  // el sagital se pintan VOLTEADOS en vertical, para que el extremo +planeNormal
+  // (el superior del paciente en una adquisición normal) quede arriba, como en
+  // cualquier estación radiológica. Con `false` se pinta como llega, porque el
+  // sentido de la pila no se conoce y voltear sería tan arbitrario como no hacerlo
+  // — y entonces tampoco se rotulan S/I (ver edgeLabelsFor).
+  //
+  // Lo decide el orquestador y no este panel: el dato no está en los cortes. Un
+  // volumen que llega del binario lite trae `orderSource: "instance"` en todos sus
+  // cortes y sin embargo SÍ está apilado por geometría (lo ordenó el servidor con
+  // el .zip original delante). Mirarlo aquí dejaría el móvil sin voltear y el
+  // escritorio volteado, con el mismo estudio en pantalla.
+  zPhysicalOrder: boolean;
   label: string;
   cross: Cross;
   scale: ScaleInfo;
@@ -112,6 +137,7 @@ export default function MprPane(props: Props) {
   const {
     slices,
     plane,
+    zPhysicalOrder,
     label,
     cross,
     scale,
@@ -125,6 +151,21 @@ export default function MprPane(props: Props) {
     onToggleMax,
     onCrossChange,
   } = props;
+
+  // ¿Se voltea el eje vertical de ESTE panel? Solo los reformateados apilan
+  // cortes: el axial recorre filas dentro de un corte y nunca se voltea. Este
+  // booleano es el ÚNICO sitio donde se decide, y de él cuelgan los cinco puntos
+  // acoplados de abajo (el pintado de los dos planos, la cruz del overlay, el
+  // clic→vóxel y la sonda). Si se tocan por separado, la cruz deja de caer donde
+  // el usuario hizo clic, que es un fallo peor que ver la imagen del revés.
+  const flipV = zPhysicalOrder && plane !== "axial";
+  // El eje vertical volteado en normalizado 0..1 (cruz, clic y sonda). El pintado
+  // usa `sampleDepthAtRow`, que aplica el mismo volteo sobre el índice de fila.
+  // Las dos vienen del módulo compartido, no de aquí: mientras fueron funciones
+  // locales, la única forma de probarlas era reescribirlas en el archivo de
+  // pruebas, y una prueba que reimplementa lo que comprueba se queda en verde
+  // aunque el pintado se rompa.
+  const flipNorm = (v: number) => flipNormV(v, flipV);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
@@ -152,6 +193,16 @@ export default function MprPane(props: Props) {
   const geom = useMemo(
     () => planeGeom(cols, rows, depth, plane, scale),
     [cols, rows, depth, plane, scale],
+  );
+
+  // Letras anatómicas de los cuatro bordes. Se derivan del PRIMER corte: el
+  // ImageOrientationPatient describe la ADQUISICIÓN y es el mismo para toda la
+  // serie, así que recorrer el volumen entero no daría un dato distinto y sí
+  // costaría un barrido por repintado. `null` = el estudio no declara
+  // orientación → no se pinta ninguna letra y se avisa (ver el JSX de abajo).
+  const edges = useMemo(
+    () => (slices.length > 0 ? edgeLabelsFor(plane, slices[0], zPhysicalOrder) : null),
+    [slices, plane, zPhysicalOrder],
   );
 
   // Extensión FÍSICA del plano en mm: de aquí sale la proporción real del estudio
@@ -288,7 +339,7 @@ export default function MprPane(props: Props) {
       const yb = Math.min(Math.max(nIndex, 0), r - 1) * c;
       paint((a, b) => {
         const fx = ((a + 0.5) * c) / W - 0.5;
-        const fz = ((b + 0.5) * d) / H - 0.5;
+        const fz = sampleDepthAtRow(b, H, d, flipV);
         const x = fx < 0 ? 0 : fx > c - 1 ? c - 1 : fx;
         const z = fz < 0 ? 0 : fz > d - 1 ? d - 1 : fz;
         const x0 = Math.floor(x);
@@ -308,7 +359,7 @@ export default function MprPane(props: Props) {
       const xf = Math.min(Math.max(nIndex, 0), c - 1);
       paint((a, b) => {
         const fy = ((a + 0.5) * r) / W - 0.5;
-        const fz = ((b + 0.5) * d) / H - 0.5;
+        const fz = sampleDepthAtRow(b, H, d, flipV);
         const y = fy < 0 ? 0 : fy > r - 1 ? r - 1 : fy;
         const z = fz < 0 ? 0 : fz > d - 1 ? d - 1 : fz;
         const y0 = Math.floor(y);
@@ -326,7 +377,7 @@ export default function MprPane(props: Props) {
         return left + (right - left) * tz;
       });
     }
-  }, [geom, view, slices, plane, nIndex, center, width, cols, rows, depth]);
+  }, [geom, view, slices, plane, nIndex, center, width, cols, rows, depth, flipV]);
 
   /* ---------------------------------------------------------------------- */
   /* Overlay: cruz sincronizada + medición + sonda. Coordenadas en px raster. */
@@ -350,7 +401,7 @@ export default function MprPane(props: Props) {
 
     // Cruz: índice de vóxel -> normalizado -> píxeles CSS de la caja del corte.
     if (showGuides) {
-      const normOf = (vox: number, n: number) => (n > 0 ? (vox + 0.5) / n : 0);
+      const normOf = voxToNorm;
       let vx: number;
       let hy: number;
       if (plane === "axial") {
@@ -358,10 +409,10 @@ export default function MprPane(props: Props) {
         hy = normOf(cross.y, rows) * H;
       } else if (plane === "coronal") {
         vx = normOf(cross.x, cols) * W;
-        hy = normOf(cross.z, depth) * H;
+        hy = flipNormV(normOf(cross.z, depth), flipV) * H;
       } else {
         vx = normOf(cross.y, rows) * W;
-        hy = normOf(cross.z, depth) * H;
+        hy = flipNormV(normOf(cross.z, depth), flipV) * H;
       }
       const gap = Math.max(6, Math.round(Math.min(W, H) / 36));
       const lp = LINE_PLANES[plane];
@@ -408,14 +459,18 @@ export default function MprPane(props: Props) {
       ctx.lineTo(px, py + len);
       ctx.stroke();
     }
-  }, [geom, fit.w, fit.h, ov, cross, measure, probe, tool, showGuides, plane, cols, rows, depth]);
+  }, [geom, fit.w, fit.h, ov, cross, measure, probe, tool, showGuides, plane, cols, rows, depth, flipV]);
 
   // Cambiar el corte de ESTE plano (o el plano) invalida medición/sonda hechas sobre
-  // otro corte.
+  // otro corte. `flipV` va en la lista por lo mismo: medición y sonda se guardan en
+  // normalizado de PANTALLA, así que si el eje vertical se voltea con ellas puestas
+  // pasan a señalar otro vóxel. Hoy no puede ocurrir —cambiar `zPhysicalOrder` pasa
+  // por una recarga que desmonta el panel— pero es la única de las piezas del
+  // volteo que no lo impedía por construcción, y las otras cuatro sí lo declaran.
   useEffect(() => {
     setMeasure(null);
     setProbe(null);
-  }, [nIndex, plane]);
+  }, [nIndex, plane, flipV]);
 
   // La sonda es un indicador en vivo: al salir de esa herramienta no debe quedar.
   useEffect(() => {
@@ -458,22 +513,12 @@ export default function MprPane(props: Props) {
     return { u, v };
   };
 
-  // normalizado -> índice de vóxel (vecino más cercano), acotado. El centro del
-  // vóxel v cae en (v+0.5)/n, así que el inverso exacto es u·n − 0.5.
-  const normToVox = (t: number, n: number): number => {
-    if (n <= 0) return 0;
-    let v = Math.round(t * n - 0.5);
-    if (v < 0) v = 0;
-    else if (v > n - 1) v = n - 1;
-    return v;
-  };
-
   // Clic en este plano -> qué coordenadas del mundo (vóxel) fija. Las dos en plano;
   // la normal NO se toca (la mantiene este mismo plano).
   const crossFromNorm = (u: number, v: number): Partial<Cross> => {
     if (plane === "axial") return { x: normToVox(u, cols), y: normToVox(v, rows) };
-    if (plane === "coronal") return { x: normToVox(u, cols), z: normToVox(v, depth) };
-    return { y: normToVox(u, rows), z: normToVox(v, depth) };
+    if (plane === "coronal") return { x: normToVox(u, cols), z: normToVox(flipNorm(v), depth) };
+    return { y: normToVox(u, rows), z: normToVox(flipNorm(v), depth) };
   };
 
   // Valor de gris (Int16, rescale aplicado) bajo el puntero por vecino más cercano.
@@ -482,14 +527,14 @@ export default function MprPane(props: Props) {
     if (slices.length === 0) return null;
     if (plane === "coronal") {
       const x = normToVox(u, cols);
-      const z = normToVox(v, depth);
+      const z = normToVox(flipNorm(v), depth);
       const yb = Math.min(Math.max(nIndex, 0), rows - 1) * cols;
       const val = slices[z]?.pixels[yb + x];
       return val == null ? null : val;
     }
     if (plane === "sagittal") {
       const y = normToVox(u, rows);
-      const z = normToVox(v, depth);
+      const z = normToVox(flipNorm(v), depth);
       const xf = Math.min(Math.max(nIndex, 0), cols - 1);
       const val = slices[z]?.pixels[y * cols + xf];
       return val == null ? null : val;
@@ -629,9 +674,16 @@ export default function MprPane(props: Props) {
     const pxNative = Math.hypot(du * geom.nA, dv * geom.nB);
     const axisStat = (axis: "X" | "Y" | "Z"): CalibStatus =>
       axis === "Z"
-        ? geom.sc.zCalibrated
-          ? "exact"
-          : "uncal"
+        ? // Un espaciado IRREGULAR no puede dar un milímetro exacto: `sz` es la
+          // mediana y una medida que cruce la zona del salto arrastra ese error.
+          // Se degrada a "≈" en vez de escribir un número redondo que el volumen
+          // no cumple — el aviso de arriba dice QUÉ pasa, y esto impide que la
+          // regla lo desmienta con un "mm" a secas dos centímetros más abajo.
+          geom.sc.zVariable
+          ? "approx"
+          : geom.sc.zCalibrated
+            ? "exact"
+            : "uncal"
         : geom.sc.xySource === "pixel-spacing"
           ? "exact"
           : geom.sc.xySource === "imager-pixel-spacing"
@@ -693,6 +745,48 @@ export default function MprPane(props: Props) {
             />
           </div>
         </div>
+
+        {/* Letras anatómicas (R/L/A/P/S/I) centradas en cada borde. Van ANTES
+            del HUD y del botón en el DOM para que, si alguna vez se rozaran, sea
+            el control el que quede encima. La capa entera es `pointer-events-none`
+            y `aria-hidden`: no puede robarle un clic a la cruz / paneo / medición
+            / sonda, y para un lector de pantalla es decoración sobre una imagen
+            que él no ve —quien la necesita ya tiene el nombre del plano en el HUD.
+            Un borde puede venir sin letra (su sentido no es derivable): en ese
+            caso no se pinta, nunca se rellena con la suposición habitual. */}
+        {edges && (
+          <div className="absolute inset-0 pointer-events-none" aria-hidden>
+            {edges.top && (
+              <span className={`${EDGE_LABEL_CLS} top-2 left-1/2 -translate-x-1/2`}>{edges.top}</span>
+            )}
+            {edges.bottom && (
+              <span className={`${EDGE_LABEL_CLS} bottom-2 left-1/2 -translate-x-1/2`}>
+                {edges.bottom}
+              </span>
+            )}
+            {edges.left && (
+              <span className={`${EDGE_LABEL_CLS} left-2 top-1/2 -translate-y-1/2`}>{edges.left}</span>
+            )}
+            {edges.right && (
+              <span className={`${EDGE_LABEL_CLS} right-2 top-1/2 -translate-y-1/2`}>
+                {edges.right}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Sin ImageOrientationPatient no se rotula: se DICE que no se sabe. Pasa
+            cuando el estudio no declara la orientación, y también en el móvil si
+            el .zip original mezclaba series — ahí el servidor manda el IOP en null
+            a propósito, en vez de rotular el volumen con la lateralidad de otra
+            adquisición. Va en la única esquina libre —arriba-izquierda es el HUD,
+            arriba-derecha el botón, abajo-derecha la sonda/medición—, en 10 px y
+            sin tapar el centro de la imagen. */}
+        {slices.length > 0 && !edges && (
+          <div className="absolute bottom-2 left-2 max-w-[80%] text-[10px] font-mono text-white/90 bg-black/50 rounded px-2 py-0.5 leading-tight pointer-events-none">
+            orientación no declarada en el estudio
+          </div>
+        )}
 
         {/* Etiqueta del plano (con su color) + corte actual. */}
         <div className="absolute top-2 left-2 flex items-center gap-1.5 text-[11px] font-mono text-white/90 bg-black/50 rounded px-2 py-0.5">

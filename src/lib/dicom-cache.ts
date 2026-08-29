@@ -11,6 +11,11 @@
 // Todo es de degradación elegante: si IndexedDB no existe o falla, los lectores
 // devuelven null y los escritores se ignoran en silencio. Nada de esto lanza.
 
+// Import de TIPO exclusivamente: TypeScript lo borra al compilar, asi que este
+// archivo conserva su cero dependencias en tiempo de ejecucion. Se importa para
+// que la forma de lo guardado no pueda volver a separarse de la del corte real.
+import type { DecodedSlice } from "@/components/patient-3d/dicom-decode-core";
+
 const DB_NAME = "mediflow-files";
 // v2: agrega el store "decoded" junto al "blobs" de v1 (migración no destructiva).
 const DB_VERSION = 2;
@@ -262,14 +267,43 @@ export async function fetchWithCache(fileId: string, url: string): Promise<Blob>
 /* Reabrir un estudio CBCT salta descompresión + decodificación por completo.  */
 /* -------------------------------------------------------------------------- */
 
-export interface DecodedSliceRecord {
-  rows: number;
-  cols: number;
-  pixels: Int16Array;
-  center: number;
-  width: number;
-  invert: boolean;
-  order: number;
+// Lo que se guarda es EXACTAMENTE el corte que produce el decodificador: este
+// almacen existe para saltarse una decodificacion, asi que recortar la forma
+// seria una mentira que se descubre al releer. Antes era una copia a mano de
+// siete campos; cuando el corte crecio con la geometria de paciente
+// (orderSource / imagePosition / planeNormal / imageOrientation) la copia se
+// quedo atras sin que el compilador dijera nada —los campos de mas se aceptan al
+// pasar una variable, no un literal— y el visor recibia cortes sin geometria
+// creyendo que la tenian. Derivarlo del tipo del nucleo evita que se repita.
+export type DecodedSliceRecord = DecodedSlice;
+
+// ¿Este registro trae la geometria de paciente, o es de ANTES del arreglo?
+//
+// Los registros guardados por versiones anteriores siguen en el IndexedDB del
+// navegador de cada usuario y solo tienen los siete campos viejos. Al releerlos,
+// `planeNormal` e `imageOrientation` llegan como `undefined` —no como `null`—,
+// asi que ni siquiera la rama de "no se sabe" los atrapa: el primer
+// `planeNormal[0]` revienta el visor de quien ya habia abierto ese CBCT alguna
+// vez. Por eso la forma se comprueba en la LECTURA, no en la escritura.
+//
+// Rechazarlos no borra nada de golpe: se devuelve `null`, el visor decodifica de
+// nuevo ESE estudio y lo vuelve a guardar ya con geometria. Se cura solo, un
+// estudio a la vez, en lugar de invalidar el almacen entero subiendo DB_VERSION
+// (que obligaria a redecodificar todos los estudios de todos los usuarios).
+//
+// Basta mirar el primer corte: el array se escribe de una sola vez y con un solo
+// productor, asi que no existe el registro a medio migrar.
+function hasPatientGeometry(s: DecodedSliceRecord | undefined): boolean {
+  if (!s) return false;
+  if (s.orderSource !== "position" && s.orderSource !== "instance") return false;
+  if (!Array.isArray(s.planeNormal) || s.planeNormal.length !== 3) return false;
+  // `imagePosition` e `imageOrientation` son nulables por diseño (el estudio
+  // puede no declararlos): aqui solo se exige que el campo EXISTA con una de sus
+  // dos formas validas, que es justo lo que separa "el estudio no lo traia" de
+  // "este registro es viejo y no sabe nada del asunto".
+  if (s.imagePosition !== null && !Array.isArray(s.imagePosition)) return false;
+  if (s.imageOrientation !== null && !Array.isArray(s.imageOrientation)) return false;
+  return true;
 }
 
 interface DecodedRecord {
@@ -295,7 +329,12 @@ export async function getDecodedSlices(fileId: string): Promise<DecodedSliceReco
       req.onerror = () => reject(req.error);
     });
     const slices = rec?.slices;
-    if (Array.isArray(slices) && slices.length > 0 && slices[0]?.pixels instanceof Int16Array) {
+    if (
+      Array.isArray(slices) &&
+      slices.length > 0 &&
+      slices[0]?.pixels instanceof Int16Array &&
+      hasPatientGeometry(slices[0])
+    ) {
       return slices;
     }
     return null;

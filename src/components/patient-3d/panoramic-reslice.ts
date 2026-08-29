@@ -39,6 +39,18 @@ export interface PanoOptions {
   slabMm: number; // grosor bucco-lingual integrado a lo largo de la normal
   mode: SlabMode; // MIP (máximo) o PROMEDIO a lo largo del slab
   maxDim?: number; // cota de tamaño del raster de salida (rendimiento). Default 560.
+  // ¿Se recorre la pila de cortes de ARRIBA A ABAJO? Con `true`, la fila 0 de la
+  // pano (el borde superior) sale del ÚLTIMO corte del volumen en lugar del
+  // primero. Lo pone el visor cuando el volumen está apilado por geometría real,
+  // porque entonces el último corte es el extremo +normal —el superior del
+  // paciente en una adquisición normal— y ahí es donde va, igual que en el
+  // coronal y el sagital del MPR.
+  //
+  // 🔴 Tiene que valer LO MISMO que el volteo del MPR y que el del volumen 3D.
+  // Los tres mapean el eje Z a "arriba en pantalla" por su cuenta; con criterios
+  // distintos, el mismo estudio sale con la mandíbula arriba en una pestaña y
+  // abajo en la otra, y ninguna de las dos parece rota por separado.
+  flipZ?: boolean;
 }
 
 export interface PanoResult {
@@ -189,6 +201,7 @@ function trilinear(vol: VolumeRef, x: number, y: number, z: number): number | nu
 // gris CRUDOS; el window/level se aplica al PINTAR (cambiar brillo no re-resamplea).
 export function reslicePanoramic(vol: VolumeRef, opts: PanoOptions): PanoResult | null {
   const { controlMm, slabMm, mode } = opts;
+  const flipZ = !!opts.flipZ;
   if (!controlMm || controlMm.length < 2) return null;
   if (vol.depth < 2 || vol.cols < 2 || vol.rows < 2) return null;
 
@@ -234,7 +247,12 @@ export function reslicePanoramic(vol: VolumeRef, opts: PanoOptions): PanoResult 
       vyN[k] = (pos.y + t * ny) / sy;
     }
     for (let b = 0; b < H; b++) {
-      const voxZ = (b / (H - 1)) * (vol.depth - 1);
+      // La pano muestrea por EXTREMOS (b=0 y b=H−1 caen justo en el primer y el
+      // último corte), así que el volteo es sobre la fracción `b/(H−1)` y no el
+      // `H−1−b` de un raster centrado en el píxel como el del MPR. Copiar aquel
+      // desplazaría medio corte.
+      const bf = flipZ ? (H - 1 - b) / (H - 1) : b / (H - 1);
+      const voxZ = bf * (vol.depth - 1);
       let best = -Infinity;
       let sum = 0;
       let cnt = 0;
@@ -248,9 +266,11 @@ export function reslicePanoramic(vol: VolumeRef, opts: PanoOptions): PanoResult 
         }
         cnt++;
       }
-      // Fila 0 = parte superior. La imagen pano clínica suele crecer hacia abajo en
-      // Z; aquí b=0 es z=0 (primer corte). Se invierte verticalmente al pintar si
-      // se desea, pero mantenemos b∝Z directo (el visor ya orienta como el resto).
+      // Fila 0 = borde SUPERIOR de la pano. Qué corte cae ahí lo decide `flipZ`
+      // (ver PanoOptions): sin él, el primero del array; con él, el último. Quien
+      // pinta vuelca el búfer tal cual, así que el sentido se resuelve aquí y en
+      // un solo sitio — antes este comentario decía que el visor "ya orienta como
+      // el resto", y dejó de ser verdad en cuanto el MPR aprendió a voltear.
       data[b * W + a] = cnt === 0 ? NaN : mode === "mip" ? best : sum / cnt;
     }
   }

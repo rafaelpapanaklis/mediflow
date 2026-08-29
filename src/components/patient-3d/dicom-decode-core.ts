@@ -16,11 +16,32 @@
 // Además LEE LA GEOMETRÍA FÍSICA del estudio (PixelSpacing + espaciado entre
 // cortes) y la expone en cada corte, para que el MPR y el volumen 3D reconstruyan
 // con proporciones reales (sin esto el CBCT/CT sale deformado cuando el espaciado
-// en plano != el espaciado entre cortes). Soporta archivos multi-frame
+// en plano != el espaciado entre cortes). Desde el arreglo de orientación lee
+// también la POSICIÓN del corte (ImagePositionPatient) y la ORIENTACIÓN del plano
+// (ImageOrientationPatient), y ordena por la posición física proyectada sobre la
+// normal en lugar de por InstanceNumber. Soporta archivos multi-frame
 // (NumberOfFrames > 1): un .dcm puede traer varios cortes apilados, por eso
 // decodeSlice/decodeSliceAsync devuelven un ARRAY de cortes (normalmente longitud 1).
 
 import dicomParser from "dicom-parser";
+
+// De dónde salió el `order` de un corte. Las dos ramas producen números en
+// UNIDADES DISTINTAS, y por eso este campo viaja con cada corte:
+//   "position" → milímetros con signo sobre la normal del plano (criterio bueno).
+//   "instance" → un índice entero sin significado físico (último recurso).
+// Ordenar un set donde conviven las dos ramas no lo invierte: lo BARAJA (un
+// InstanceNumber 1..300 y una posición −120..+60 mm se intercalan). Cualquier
+// consumidor que ordene por `order` debe comprobar antes que todos los cortes
+// comparten `orderSource`.
+export type SliceOrderSource = "position" | "instance";
+
+// ImageOrientationPatient (0020,0037) tal cual: los seis cosenos directores del
+// vector de FILA (indices 0-2) y del de COLUMNA (3-5), en el sistema del paciente
+// (LPS: X+ = izquierda, Y+ = posterior, Z+ = superior). Se conserva crudo ademas
+// de la normal porque la normal sola NO basta para rotular los bordes: dice hacia
+// donde mira el corte, no si la columna 0 del raster cae a la derecha o a la
+// izquierda del paciente. Esa respuesta esta en el vector de fila.
+export type ImageOrientation = [number, number, number, number, number, number];
 
 export interface DecodedSlice {
   rows: number;
@@ -31,6 +52,35 @@ export interface DecodedSlice {
   width: number;
   invert: boolean;
   order: number;
+  // --- Orden y orientación ---------------------------------------------------
+  // Unidad y procedencia de `order` (ver SliceOrderSource). Obligatorio a
+  // propósito: un corte sin procedencia declarada es un corte que nadie puede
+  // ordenar con criterio.
+  orderSource: SliceOrderSource;
+  // ImagePositionPatient (0020,0032) = esquina del primer píxel en el sistema
+  // del paciente, en mm. `null` cuando el tag falta — NO se inventa un origen:
+  // el consumidor tiene que poder distinguir "está en el origen" de "no se sabe".
+  imagePosition: [number, number, number] | null;
+  // Normal del plano del corte, unitaria: producto cruz de los vectores de fila
+  // y columna de ImageOrientationPatient (0020,0037). Cuando ese tag falta o es
+  // degenerado se asume el axial estándar (0,0,1), que es lo que hace un CBCT
+  // dental normal. Con `orderSource === "position"` se cumple que
+  // order === imagePosition · planeNormal.
+  planeNormal: [number, number, number];
+  // ImageOrientationPatient crudo, o `null` cuando el estudio no lo declara (o lo
+  // declara degenerado). NO se sustituye por el axial estandar: `planeNormal` cae
+  // a (0,0,1) para poder ordenar, pero rotular R/L/A/P/S/I a partir de una
+  // suposicion seria escribir sobre la imagen del paciente una lateralidad que el
+  // estudio nunca dijo. Sin este campo, quien rotula no puede distinguir
+  // "orientacion estandar" de "orientacion desconocida".
+  imageOrientation: ImageOrientation | null;
+  // SeriesInstanceUID (0020,000E) — la IDENTIDAD de la serie, tal cual la escribe
+  // el equipo. Es el ÚNICO dato que dice de verdad qué cortes forman un volumen;
+  // todo lo demás (misma matriz, misma orientación, posiciones que encajan) son
+  // indicios que se pueden cumplir entre dos adquisiciones distintas del mismo
+  // paciente. `null` si el estudio no lo trae, y entonces hay que conformarse con
+  // los indicios.
+  seriesUid: string | null;
   // --- Geometría física (mm) -------------------------------------------------
   // La consume el MPR (DicomSetViewer) y el volumen 3D (Dicom3DVolume) para
   // reconstruir con proporciones reales.
@@ -64,6 +114,81 @@ function firstNum(s: string | undefined, fallback: number): number {
   return Number.isFinite(v) ? v : fallback;
 }
 
+// Lee un tag DICOM multivaluado ("a\b\c") como los `expected` primeros números.
+// Devuelve null si el tag falta o si no llega a `expected` valores finitos: en
+// geometría medio vector es tan inútil como ninguno, y es preferible caer al
+// fallback declarado que ordenar un estudio con una coordenada a medias.
+//
+// Acepta que SOBREN componentes en vez de exigir el número exacto, porque hay
+// escritores que dejan una barra invertida final ("-12.5\-3.2\40.1\") y eso
+// produce un cuarto elemento vacío. Con la comparación exacta, un archivo así
+// perdía su posición y caía al índice del .zip — justo lo que este arreglo
+// viene a quitar de en medio.
+function leadingNums(s: string | undefined, expected: number): number[] | null {
+  if (!s) return null;
+  const parts = s.split("\\");
+  if (parts.length < expected) return null;
+  const out: number[] = new Array(expected);
+  for (let i = 0; i < expected; i++) {
+    // parseFloat tolera el relleno con espacios del VR "DS" de DICOM.
+    const v = parseFloat(parts[i]);
+    if (!Number.isFinite(v)) return null;
+    out[i] = v;
+  }
+  return out;
+}
+
+// Normal del plano = producto cruz de los vectores de fila y columna de
+// ImageOrientationPatient, normalizada a longitud 1 (así proyectar la posición
+// sobre ella da milímetros reales, no una escala arbitraria).
+//
+// Devuelve null si el resultado es DEGENERADO —vectores nulos, paralelos o
+// basura—. Sin esa guarda un IOP malformado daría normal (0,0,0), el producto
+// punto valdría 0 para TODOS los cortes y el volumen entero empataría: el sort
+// los dejaría en el orden de llegada del .zip sin un solo síntoma en pantalla.
+export function planeNormalFrom(iop: readonly number[]): [number, number, number] | null {
+  const [rx, ry, rz, cx, cy, cz] = iop;
+  const nx = ry * cz - rz * cy;
+  const ny = rz * cx - rx * cz;
+  const nz = rx * cy - ry * cx;
+  const len = Math.hypot(nx, ny, nz);
+  if (!Number.isFinite(len) || len < 1e-6) return null;
+  return [nx / len, ny / len, nz / len];
+}
+
+// Posición REAL de cada frame de un archivo multi-frame.
+//
+// El tag raíz ImagePositionPatient (0020,0032) describe UN corte. En un DICOM
+// enhanced/multi-frame la posición de cada frame vive en otro sitio:
+//   PerFrameFunctionalGroupsSequence (5200,9230)
+//     → item[f] → PlanePositionSequence (0020,9113)
+//       → item[0] → ImagePositionPatient (0020,0032)
+//
+// Antes esto no se leía y la posición de los frames 1..N se SINTETIZABA sumando
+// `zSpacing` sobre la normal. Eso no era una lectura, era una suposición con
+// forma de dato, y se cerraba en círculo: el visor medía después el espaciado
+// restando esas posiciones, recuperaba exactamente el número que él mismo había
+// inventado, y lo declaraba "calibrado" y "regular". Si además los frames reales
+// iban en sentido decreciente, el volumen quedaba del revés con una "S" impresa
+// donde estaba lo inferior.
+//
+// O están las posiciones de TODOS los frames, o no sirve ninguna: con la mitad,
+// el sort mezcla frames medidos con frames supuestos, que es el caso que este
+// arreglo entero viene a evitar.
+function readFramePositions(ds: any, frames: number): ([number, number, number] | null)[] | null {
+  if (frames < 2) return null;
+  const items = ds?.elements?.x52009230?.items;
+  if (!Array.isArray(items) || items.length < frames) return null;
+  const out: ([number, number, number] | null)[] = new Array(frames);
+  for (let f = 0; f < frames; f++) {
+    const plane = items[f]?.dataSet?.elements?.x00209113?.items?.[0]?.dataSet;
+    const v = plane ? leadingNums(plane.string("x00200032"), 3) : null;
+    if (!v) return null; // un frame sin posición invalida el lote entero
+    out[f] = [v[0], v[1], v[2]];
+  }
+  return out;
+}
+
 // Cabecera del estudio: todo lo que se lee del DICOM SIN tocar los pixeles. La
 // comparten la ruta sin comprimir y la ruta por códec (mismo pipeline HU).
 interface SliceHeaders {
@@ -80,7 +205,15 @@ interface SliceHeaders {
   framesTag: number; // NumberOfFrames (>=1)
   tagC: number; // WindowCenter (NaN si falta)
   tagW: number; // WindowWidth (NaN si falta)
-  baseOrder: number;
+  baseOrder: number; // orden del frame 0; en mm si orderSource==="position"
+  orderSource: SliceOrderSource;
+  imagePosition: [number, number, number] | null; // IPP del frame 0 (mm)
+  planeNormal: [number, number, number]; // unitaria
+  imageOrientation: ImageOrientation | null; // IOP crudo (null si falta/degenerado)
+  seriesUid: string | null; // SeriesInstanceUID (0020,000E)
+  // Posición LEÍDA de cada frame (multi-frame conforme). `null` = archivo de un
+  // solo frame, o multi-frame que no las declara. Ver readFramePositions.
+  framePositions: ([number, number, number] | null)[] | null;
 }
 
 // Lee la cabecera del dataset ya parseado. Devuelve null si el corte no es
@@ -130,13 +263,63 @@ function readHeaders(ds: any, fallbackOrder: number): SliceHeaders | null {
   const tagC = firstNum(ds.string("x00281050"), NaN);
   const tagW = firstNum(ds.string("x00281051"), NaN);
 
-  // Orden base: InstanceNumber (x00200013) o, si no, posición Z (x00200032 z).
-  // En multi-frame, cada frame suma su índice para conservar la secuencia.
-  let baseOrder = parseInt(ds.string("x00200013") || "", 10);
-  if (!Number.isFinite(baseOrder)) {
-    const pos = ds.string("x00200032");
-    baseOrder = pos ? firstNum(pos.split("\\")[2], fallbackOrder) : fallbackOrder;
+  // --- Orden de los cortes ---------------------------------------------------
+  // CRITERIO PRIMARIO: la posición FÍSICA del corte, ImagePositionPatient
+  // (0020,0032) proyectada sobre la normal del plano. Es lo único que el
+  // estándar garantiza monótono a lo largo del eje de adquisición, y además sale
+  // en milímetros, así que la diferencia entre cortes consecutivos es espaciado
+  // real (no hace falta creerse SliceThickness).
+  //
+  // InstanceNumber (0020,0013) baja a ÚLTIMO RECURSO: es un número de catálogo,
+  // no una coordenada. Hay equipos que lo reinician por serie, que lo reutilizan
+  // entre series del mismo estudio y que lo emiten en sentido contrario a la
+  // adquisición; ordenar por él da un volumen invertido o entrelazado que se ve
+  // "casi bien" y solo se detecta midiendo.
+  // Identidad de la serie. Se lee ANTES que la geometría porque es lo que decide
+  // qué cortes forman un volumen; la geometría solo describe cada uno.
+  const seriesUid = (ds.string("x0020000e") || "").trim() || null;
+  const iop = leadingNums(ds.string("x00200037"), 6);
+  const ipp = leadingNums(ds.string("x00200032"), 3);
+  // Sin ImageOrientationPatient (o con uno degenerado) asumimos el plano axial
+  // estándar: la normal es +Z y proyectar sobre ella es quedarse con la z de la
+  // posición, que es exactamente el comportamiento que se quiere para un CBCT
+  // dental. La normal SIEMPRE tiene valor; `imagePosition` puede no tenerlo.
+  const normalFromIop = iop ? planeNormalFrom(iop) : null;
+  const planeNormal: [number, number, number] = normalFromIop || [0, 0, 1];
+  // El IOP crudo solo se conserva si produjo una normal VALIDA: un IOP degenerado
+  // (vectores nulos o paralelos) no describe ningun plano, y guardarlo invitaria a
+  // rotular bordes con basura. O sirve para las dos cosas, o no sirve para ninguna.
+  const imageOrientation: ImageOrientation | null =
+    iop && normalFromIop ? [iop[0], iop[1], iop[2], iop[3], iop[4], iop[5]] : null;
+
+  // Multi-frame: o se leen las posiciones de TODOS sus frames, o este archivo no
+  // aporta geometría. Un multi-frame sin ellas no puede declararse "position":
+  // sabríamos dónde está su primer frame y no dónde están los demás, y ese medio
+  // dato es justo el que antes se completaba a ojo.
+  const framePositions = readFramePositions(ds, framesTag);
+  const frameGeometryUnknown = framesTag > 1 && !framePositions;
+
+  // Un enhanced multi-frame CONFORME no trae ImagePositionPatient en la raíz: su
+  // sitio está dentro de PerFrameFunctionalGroupsSequence, frame a frame. Exigir
+  // el tag raíz mandaba justo esos archivos —los que MEJOR declaran su geometría—
+  // a la rama de "no se sabe", con las posiciones ya leídas y en la mano.
+  const anchor = framePositions ? framePositions[0] : ipp;
+
+  let baseOrder: number;
+  let orderSource: SliceOrderSource;
+  if (anchor && !frameGeometryUnknown) {
+    baseOrder = anchor[0] * planeNormal[0] + anchor[1] * planeNormal[1] + anchor[2] * planeNormal[2];
+    orderSource = "position";
+  } else {
+    // Sin posición no hay geometría de la que tirar: InstanceNumber y, si
+    // tampoco está, el índice de entrada que nos pasa el llamador.
+    const inst = parseInt(ds.string("x00200013") || "", 10);
+    baseOrder = Number.isFinite(inst) ? inst : fallbackOrder;
+    orderSource = "instance";
   }
+  const imagePosition: [number, number, number] | null = anchor
+    ? [anchor[0], anchor[1], anchor[2]]
+    : null;
 
   return {
     transfer,
@@ -153,6 +336,12 @@ function readHeaders(ds: any, fallbackOrder: number): SliceHeaders | null {
     tagC,
     tagW,
     baseOrder,
+    orderSource,
+    imagePosition,
+    planeNormal,
+    imageOrientation,
+    seriesUid,
+    framePositions,
   };
 }
 
@@ -226,6 +415,34 @@ function assembleSlice(
     dc = (frame.minV + frame.maxV) / 2;
     dw = Math.max(1, frame.maxV - frame.minV);
   }
+  // Posición y orden de ESTE frame. Tres casos, y ninguno inventa nada:
+  //
+  //  1) Multi-frame CONFORME (framePositions): la posición del frame se LEYÓ de
+  //     PerFrameFunctionalGroupsSequence. `order` es su proyección sobre la
+  //     normal, igual que en un archivo de un solo corte, así que se mantiene la
+  //     invariante order === imagePosition · planeNormal y un consumidor puede
+  //     derivar el espaciado real restando cortes.
+  //  2) Archivo de UN frame con posición: frameIndex es 0, no hay desplazamiento
+  //     que aplicar y `order` es el de la cabecera.
+  //  3) Multi-frame SIN posiciones por frame: readHeaders ya lo degradó a
+  //     "instance", así que `order` vuelve a ser un ÍNDICE y el frame suma 1,
+  //     exactamente como antes de todo este arreglo. Se conserva la posición del
+  //     frame 0 (esa sí consta, es el tag raíz) y los demás quedan en null: no se
+  //     sabe dónde están, y decirlo es lo único honesto — antes se rellenaban
+  //     sumando `zSpacing`, un número que a menudo era el GROSOR del corte y no
+  //     el paso, y que el visor luego "medía" de vuelta creyéndolo un dato.
+  const perFrame = h.framePositions ? h.framePositions[frameIndex] : null;
+  const ip = h.imagePosition;
+  let imagePosition: [number, number, number] | null;
+  let order: number;
+  if (perFrame) {
+    imagePosition = [perFrame[0], perFrame[1], perFrame[2]];
+    order = perFrame[0] * h.planeNormal[0] + perFrame[1] * h.planeNormal[1] + perFrame[2] * h.planeNormal[2];
+  } else {
+    imagePosition = ip && frameIndex === 0 ? [ip[0], ip[1], ip[2]] : null;
+    order = h.baseOrder + frameIndex; // "instance" ⇒ índice; un solo frame ⇒ +0
+  }
+
   return {
     rows: h.rows,
     cols: h.cols,
@@ -233,7 +450,25 @@ function assembleSlice(
     center: dc,
     width: dw,
     invert: h.invert,
-    order: h.baseOrder + frameIndex,
+    order,
+    orderSource: h.orderSource,
+    imagePosition,
+    // Array propio por corte: el consumidor no debe poder mutar la normal de
+    // todo el estudio escribiendo en la de un corte.
+    planeNormal: [h.planeNormal[0], h.planeNormal[1], h.planeNormal[2]],
+    // Copia propia por corte, por lo mismo que la normal: nadie debe poder mutar
+    // la orientacion del estudio entero escribiendo en la de un corte.
+    imageOrientation: h.imageOrientation
+      ? [
+          h.imageOrientation[0],
+          h.imageOrientation[1],
+          h.imageOrientation[2],
+          h.imageOrientation[3],
+          h.imageOrientation[4],
+          h.imageOrientation[5],
+        ]
+      : null,
+    seriesUid: h.seriesUid,
     pixelSpacing: h.pixelSpacing,
     zSpacing: h.zSpacing,
   };
