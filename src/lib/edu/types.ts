@@ -29,6 +29,10 @@
 //   /instituto/pacientes/[id]/expediente   → notas clínicas        Ola 3  ✓
 //   /instituto/pacientes/[id]/odontograma  → el odontograma        Ola 3  ✓
 //   /instituto/pacientes/[id]/estudios     → radiografías y tomografías Ola 3 ✓
+//   /instituto/procedimientos → catálogo de procedimientos         Ola 5  ✓
+//   /instituto/tarifarios   → listas de precios, tabla comparativa Ola 5  ✓
+//   /instituto/caja         → cobrar: paciente → tarifa → recibo   Ola 5  ✓
+//   /instituto/caja/corte   → corte del turno                      Ola 5  ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
 // entrada de menú de EDU_NAV_ITEMS (abajo). Ninguna inventa su propio
 // guard: todas pasan por el layout del grupo (panel).
@@ -62,6 +66,17 @@
 //   POST      /api/instituto/pacientes/[id]/estudios/sign    → firma Ola 3 ✓
 //   POST      /api/instituto/pacientes/[id]/estudios/confirm        Ola 3 ✓
 //   POST      /api/instituto/pacientes/[id]/estudios/abort          Ola 3 ✓
+//   GET·POST  /api/instituto/procedimientos → catálogo             Ola 5  ✓
+//   PATCH     /api/instituto/procedimientos/[id]                   Ola 5  ✓
+//   GET·POST  /api/instituto/tarifarios     → listas de precios    Ola 5  ✓
+//   PATCH     /api/instituto/tarifarios/[id]                       Ola 5  ✓
+//   PUT       /api/instituto/tarifarios/precios → precios de un procedimiento Ola 5 ✓
+//   GET       /api/instituto/caja/tarifa    → qué lista y qué precios
+//                                              le tocan a un paciente Ola 5 ✓
+//   GET·POST  /api/instituto/caja/cobros    → cobros / cobrar      Ola 5  ✓
+//   GET·PATCH /api/instituto/caja/cobros/[id] → recibo / cancelar  Ola 5  ✓
+//   POST      /api/instituto/caja/cobros/[id]/pagos → pago o devolución Ola 5 ✓
+//   GET·POST·PATCH /api/instituto/caja/corte → turno: ver, abrir, cerrar Ola 5 ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -386,6 +401,95 @@ export const EDU_STUDY_KIND_DESCRIPTIONS: Record<EduStudyKind, string> = {
   OTRO: "Un archivo que no encaja en los anteriores.",
 };
 
+// ═══════════════════════════════════════════════════════════════════════
+// Ola 5 · TARIFARIOS Y CAJA.
+//
+// Los tres enums que siguen son espejo 1:1 de los de Prisma, escritos como
+// uniones de strings para poder importarlos desde componentes "use client"
+// sin arrastrar el runtime de Prisma al navegador — igual que todos los
+// anteriores. El candado de que no se desincronicen es un chequeo de TIPOS
+// en src/lib/edu/__tests__/edu-tarifas.test.ts (lo verifica `tsc --noEmit`).
+//
+// Y la regla de siempre: la UI JAMÁS pinta el valor del enum.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * CUÁNDO se aplica sola una lista de precios.
+ *
+ * 🔴 Las LISTAS son N y abiertas; las REGLAS son un conjunto cerrado, y eso
+ * es a propósito: una regla es código —alguien tiene que escribir de dónde
+ * sale el dato que la dispara—. Una lista nueva (un convenio, una campaña,
+ * el personal del instituto) nace MANUAL y se elige a mano al cobrar, sin
+ * tocar una línea de código ni una migración.
+ */
+export type EduFeeRule = "MANUAL" | "REFERRED_BY_STUDENT";
+
+export const EDU_FEE_RULES: EduFeeRule[] = ["MANUAL", "REFERRED_BY_STUDENT"];
+
+export const EDU_FEE_RULE_LABELS: Record<EduFeeRule, string> = {
+  MANUAL: "Se elige a mano",
+  REFERRED_BY_STUDENT: "Paciente que trajo un alumno",
+};
+
+export const EDU_FEE_RULE_DESCRIPTIONS: Record<EduFeeRule, string> = {
+  MANUAL:
+    "No se aplica sola. Sirve para convenios, campañas y personal: al cobrar se elige a mano.",
+  REFERRED_BY_STUDENT:
+    "Se aplica sola cuando al paciente lo trajo un alumno (el origen que marca recepción con el permiso pacientes.origen).",
+};
+
+/** En qué va el cobro. Se DERIVA de (total, pagado, cancelado). */
+export type EduChargeStatus = "PENDING" | "PARTIAL" | "PAID" | "REFUNDED" | "CANCELLED";
+
+export const EDU_CHARGE_STATUSES: EduChargeStatus[] = [
+  "PENDING",
+  "PARTIAL",
+  "PAID",
+  "REFUNDED",
+  "CANCELLED",
+];
+
+export const EDU_CHARGE_STATUS_LABELS: Record<EduChargeStatus, string> = {
+  PENDING: "Por cobrar",
+  PARTIAL: "Abonado",
+  PAID: "Pagado",
+  REFUNDED: "Devuelto",
+  CANCELLED: "Cancelado",
+};
+
+export const EDU_CHARGE_STATUS_DESCRIPTIONS: Record<EduChargeStatus, string> = {
+  PENDING: "Emitido y sin un peso pagado.",
+  PARTIAL: "Pagado en parte. Falta el saldo.",
+  PAID: "Liquidado.",
+  REFUNDED: "Se pagó y se devolvió: el neto volvió a cero.",
+  CANCELLED: "Anulado. No se le debe nada a nadie y no cuenta en ninguna suma.",
+};
+
+/** Cómo pagó el paciente. */
+export type EduPaymentMethod = "CASH" | "CARD" | "TRANSFER" | "OTHER";
+
+export const EDU_PAYMENT_METHODS: EduPaymentMethod[] = ["CASH", "CARD", "TRANSFER", "OTHER"];
+
+export const EDU_PAYMENT_METHOD_LABELS: Record<EduPaymentMethod, string> = {
+  CASH: "Efectivo",
+  CARD: "Tarjeta",
+  TRANSFER: "Transferencia",
+  OTHER: "Otro",
+};
+
+export const EDU_PAYMENT_METHOD_DESCRIPTIONS: Record<EduPaymentMethod, string> = {
+  CASH: "Entra al cajón y cuenta para el arqueo del turno.",
+  CARD: "Terminal. Se guarda la autorización en la referencia.",
+  TRANSFER: "SPEI o depósito. Se guarda el folio en la referencia.",
+  OTHER: "Beca, intercambio o vale. Existe para no obligar a mentir en el método.",
+};
+
+/**
+ * El único método que se CUENTA en el arqueo del cajón. Los demás entran al
+ * corte como información, pero no hay billetes que contar.
+ */
+export const EDU_CASH_METHOD: EduPaymentMethod = "CASH";
+
 // ── Navegación del panel ────────────────────────────────────────────────
 export type EduNavSection = "operacion" | "academico" | "administracion";
 
@@ -491,6 +595,34 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "sillones.view",
   },
+  // ── Ola 5 · tarifarios y caja ────────────────────────────────────────
+  {
+    // Caja es OPERACIÓN del día y va con la agenda: quien cobra está en el
+    // mostrador, no en una oficina. El corte cuelga de aquí (/caja/corte) y
+    // no lleva item propio: se llega desde la pantalla de cobro, que es
+    // donde uno está cuando decide cortar.
+    key: "caja",
+    href: "/instituto/caja",
+    icon: "banknote",
+    section: "operacion",
+    permission: "caja.view",
+  },
+  {
+    // Los tarifarios y el catálogo son configuración: se tocan al arrancar
+    // y cuando suben los precios, no todos los días.
+    key: "tarifarios",
+    href: "/instituto/tarifarios",
+    icon: "tags",
+    section: "administracion",
+    permission: "tarifarios.view",
+  },
+  {
+    key: "procedimientos",
+    href: "/instituto/procedimientos",
+    icon: "clipboard-list",
+    section: "administracion",
+    permission: "tarifarios.view",
+  },
 ];
 
 /** Etiqueta de cada sección del menú (las vacías no se pintan). */
@@ -517,6 +649,9 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   estructura: "Programas y generaciones",
   docentes: "Docentes",
   sillones: "Sillones",
+  caja: "Caja",
+  tarifarios: "Tarifarios",
+  procedimientos: "Procedimientos",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────
@@ -536,9 +671,11 @@ export const EDU_BRAND = {
  * EDU_NAV_ITEMS, en el mismo commit.
  */
 export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[] = [
-  // "padron" salió de esta lista en la Ola 1A, "agenda" en la Ola 2 y
-  // "expediente" en la Ola 3, en el mismo commit en que se entregaron. Es
-  // la regla: un área está en el menú o está aquí, nunca en las dos.
+  // "padron" salió de esta lista en la Ola 1A, "agenda" en la Ola 2,
+  // "expediente" en la Ola 3 y "caja" en la Ola 5, cada una en el mismo
+  // commit en que se entregó. Es la regla: un área está en el menú o está
+  // aquí, nunca en las dos ni en ninguna. (El candado es la prueba "un
+  // área entregada sale de 'Próximamente'" de edu-permissions.test.ts.)
   //
   // ⚠️ EL EXPEDIENTE ES LA EXCEPCIÓN A "ni en ninguna de las dos", y es a
   // propósito: no tiene item de menú porque no es una pantalla suelta —
@@ -552,11 +689,6 @@ export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[
     key: "autorizaciones",
     title: "Autorizaciones",
     detail: "El visto bueno del docente antes y después de cada procedimiento.",
-  },
-  {
-    key: "caja",
-    title: "Caja",
-    detail: "Cobro al paciente, cuotas de material y corte por turno.",
   },
   {
     key: "evaluacion",

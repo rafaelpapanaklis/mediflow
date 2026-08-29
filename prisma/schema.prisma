@@ -12385,6 +12385,15 @@ model EduInstitution {
   records           EduRecord[]
   odontogramEntries EduOdontogramEntry[]
   studies           EduStudy[]
+  // Ola 5 · tarifarios y caja. Bloque ADITIVO al final de las relaciones:
+  // los modelos viven al FINAL del archivo, con su propio encabezado.
+  procedures       EduProcedure[]
+  feeSchedules     EduFeeSchedule[]
+  feeScheduleItems EduFeeScheduleItem[]
+  charges          EduCharge[]
+  chargeItems      EduChargeItem[]
+  payments         EduPayment[]
+  cashSessions     EduCashSession[]
 
   @@map("edu_institutions")
 }
@@ -12438,6 +12447,16 @@ model EduUser {
   recordsSigned     EduRecord[]          @relation("EduRecordSigner")
   odontogramEntries EduOdontogramEntry[] @relation("EduOdontogramRecorder")
   studiesUploaded   EduStudy[]           @relation("EduStudyUploader")
+
+  /// Ola 5. Rastro del DINERO: quién emitió el cobro, quién lo canceló,
+  /// quién recibió el pago y quién abrió o cerró el turno de caja. Son
+  /// columnas de AUDITORÍA — si un día no cuadra un corte, hay que poder
+  /// preguntar quién hizo qué. Ninguna decide visibilidad.
+  chargesIssued      EduCharge[]      @relation("EduChargeBy")
+  chargesCancelled   EduCharge[]      @relation("EduChargeCancelledBy")
+  paymentsReceived   EduPayment[]     @relation("EduPaymentBy")
+  cashSessionsOpened EduCashSession[] @relation("EduCashOpenedBy")
+  cashSessionsClosed EduCashSession[] @relation("EduCashClosedBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12760,6 +12779,8 @@ model EduPatient {
   records    EduRecord[]
   odontogram EduOdontogramEntry[]
   studies    EduStudy[]
+  /// Ola 5: lo que este paciente debe y lo que ya pagó.
+  charges      EduCharge[]
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -12881,6 +12902,10 @@ model EduCase {
   /// Ola 3: las notas clínicas del caso y los estudios que se le engancharon.
   records EduRecord[]
   studies EduStudy[]
+  /// Ola 5: los cobros que se colgaron de ESTE caso. Es opcional del lado
+  /// del cobro: caja cobra sin abrir expediente (no ve casos), así que la
+  /// mayoría de los cobros no traen caso.
+  charges      EduCharge[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
@@ -13175,4 +13200,399 @@ model EduStudy {
   @@index([institutionId, patientId, createdAt], map: "edu_studies_patient_idx")
   @@index([institutionId, caseId], map: "edu_studies_case_idx")
   @@map("edu_studies")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 5 · TARIFARIOS Y CAJA.
+//
+// Siete tablas: el catálogo de procedimientos (EduProcedure), la LISTA DE
+// PRECIOS (EduFeeSchedule) con el precio de cada procedimiento en cada
+// lista (EduFeeScheduleItem), el cobro (EduCharge) con sus líneas
+// (EduChargeItem), el pago (EduPayment) y el turno de caja
+// (EduCashSession).
+//
+// 🔴 N LISTAS, NO DOS. El instituto arranca con "Público general" y
+// "Paciente de alumno", pero mañana quiere convenios, personal y
+// campañas. Por eso el precio NO es una segunda columna del
+// procedimiento: es una FILA en (lista × procedimiento). Dar de alta
+// "Convenio sindicato" es un INSERT, no una migración — y si esto fuera
+// un `priceStudentCents` al lado de un `priceCents`, la tercera lista
+// obligaría a rehacer la tabla, las pantallas y los cobros ya emitidos.
+//
+// 🔴 EL PRECIO SE CONGELA AL EMITIR. EduChargeItem guarda su propio
+// unitPriceCents y su propia descripción, y EduCharge guarda el NOMBRE de
+// la lista que se aplicó. Cambiar la tarifa mañana no puede reescribir un
+// cobro de ayer: el recibo que se imprimió y se firmó dice lo que dice.
+//
+// 🔴 EL DINERO SE GUARDA EN CENTAVOS ENTEROS (Int), ni float ni Decimal.
+// En coma flotante 0.1 + 0.2 no da 0.3, y un Decimal de Prisma llega al
+// servidor como objeto que hay que convertir para mandarlo al navegador.
+// Un entero de centavos suma exacto y viaja como número. El formateo a
+// "$1,234.50" y la lectura de lo que teclea una persona viven en UN solo
+// lugar: src/lib/edu/dinero-core.ts.
+//
+// 🔴 institutionId está en las SIETE, igual que en las olas 1A y 2 y por
+// la misma razón: toda consulta filtra por el institutionId de la SESIÓN,
+// y un filtro que necesita un JOIN para existir es un filtro que alguien
+// va a olvidar. Ojo Prisma: un institutionId undefined BORRA el filtro.
+//
+// ⚠️ NADA de esto se borra desde el producto. Un procedimiento y una
+// lista se DESACTIVAN (isActive), un cobro se CANCELA y un pago se
+// DEVUELVE con otro pago. Los onDelete son Cascade hacia el instituto
+// para que borrarlo entero (administración, no panel) no se atore en una
+// llave; las referencias "hacia los lados" (la lista aplicada, el
+// procedimiento de una línea, el turno de un pago) van SetNull, porque
+// perder la referencia es aceptable y perder el cobro no.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-5.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// CUÁNDO se aplica sola una lista de precios.
+///
+/// Las LISTAS son abiertas (N); las REGLAS que el servidor sabe evaluar
+/// son un conjunto cerrado, y eso es a propósito: una regla es código —
+/// alguien tiene que escribir de dónde sale el dato. Una lista nueva de
+/// convenio, campaña o personal nace MANUAL y se elige a mano al cobrar,
+/// sin tocar una línea de código.
+enum EduFeeRule {
+  /// No se aplica sola. Es el default de toda lista nueva.
+  MANUAL
+  /// Se aplica cuando el paciente trae `referredByStudentId` — o sea,
+  /// cuando lo trajo un alumno. Es el dato que la Ola 2 guarda desde
+  /// recepción con el permiso `pacientes.origen`.
+  REFERRED_BY_STUDENT
+}
+
+/// En qué va el cobro. Se DERIVA de (total, pagado, cancelado) y se
+/// guarda para poder filtrar e indexar; nunca se captura a mano.
+enum EduChargeStatus {
+  /// Emitido y sin un peso pagado.
+  PENDING
+  /// Pagado en parte.
+  PARTIAL
+  /// Liquidado.
+  PAID
+  /// Se pagó y se devolvió: el neto volvió a cero.
+  REFUNDED
+  /// Anulado. 🔴 Un cobro cancelado deja `balanceCents` en 0: no se le
+  /// debe nada a nadie. Dejarlo en `total` es exactamente el bug que ya
+  /// se pagó en el dental (una factura cancelada seguía apareciendo como
+  /// "Cobrar ahora"). El `totalCents` sí se conserva: es lo que decía.
+  CANCELLED
+}
+
+/// Cómo pagó. OTHER existe para no obligar a mentir: una beca, un
+/// intercambio o un vale no son efectivo ni tarjeta.
+enum EduPaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  OTHER
+}
+
+/// El catálogo de procedimientos de la escuela.
+///
+/// No trae precio: el precio es de la LISTA, no del procedimiento. Un
+/// `priceCents` aquí sería la puerta a "y el de alumno lo pongo en otra
+/// columna", que es justo lo que esta ola no hace.
+model EduProcedure {
+  id            String  @id @default(cuid())
+  institutionId String
+  name          String  @db.VarChar(120)
+  /// La clave corta que la escuela ya usa en sus papeles. Única DENTRO
+  /// del instituto y normalizada en MAYÚSCULAS por la aplicación
+  /// (Postgres distingue: "endo-1" y "ENDO-1" serían dos claves con el
+  /// mismo texto impreso en el tarifario de la pared).
+  code          String  @db.VarChar(20)
+  /// Agrupación libre para leer el tarifario ("Endodoncia", "Prótesis").
+  /// Texto y no catálogo: cada escuela agrupa distinto, y un catálogo
+  /// cerrado obligaría a pedir permiso para dar de alta una categoría.
+  category      String? @db.VarChar(60)
+  /// Cuánto dura en el sillón. Sirve para proponer la duración de la
+  /// cita; no bloquea nada.
+  durationMinutes Int   @default(60)
+  isActive      Boolean @default(true)
+  /// Orden en que se pinta el tarifario. Empata con el alta por defecto.
+  orderIndex    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution       @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  feeItems    EduFeeScheduleItem[]
+  chargeItems EduChargeItem[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId, isActive, orderIndex], map: "edu_procedures_orden_idx")
+  @@index([institutionId, category], map: "edu_procedures_categoria_idx")
+  @@map("edu_procedures")
+}
+
+/// LA LISTA DE PRECIOS. Son N, no dos.
+///
+/// `isDefault` marca la lista que se aplica cuando ninguna regla dispara
+/// (el "Público general"). `rule` marca CUÁNDO se aplica sola. Son dos
+/// cosas distintas y por eso son dos columnas: una lista de convenio se
+/// aplica a mano (MANUAL) y no es el default de nadie.
+///
+/// ⚠️ Que haya UN solo default y UNA sola lista por regla automática lo
+/// garantiza la aplicación (src/lib/edu/tarifas.ts), no la base: un
+/// índice único parcial no lo puede expresar con `isActive` de por medio.
+/// Si hubiera dos, gana la de menor `orderIndex` — el desempate es
+/// determinista a propósito, para que el precio no dependa del orden en
+/// que Postgres devolvió las filas.
+model EduFeeSchedule {
+  id            String     @id @default(cuid())
+  institutionId String
+  name          String     @db.VarChar(80)
+  /// Clave corta y estable ("publico", "alumno", "convenio-imss"). Es lo
+  /// que se lee en un reporte y lo que no cambia cuando la dirección
+  /// renombra la lista. Única dentro del instituto.
+  key           String     @db.VarChar(40)
+  rule          EduFeeRule @default(MANUAL)
+  /// La lista a la que se cae cuando ninguna regla dispara.
+  isDefault     Boolean    @default(false)
+  isActive      Boolean    @default(true)
+  orderIndex    Int        @default(0)
+  /// Para qué es esta lista, en una frase. Se pinta en caja.
+  notes         String?    @db.VarChar(300)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution       @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  items       EduFeeScheduleItem[]
+  charges     EduCharge[]
+
+  @@unique([institutionId, key])
+  @@index([institutionId, isActive, orderIndex], map: "edu_fee_schedules_orden_idx")
+  @@map("edu_fee_schedules")
+}
+
+/// El precio de UN procedimiento en UNA lista. Único por par.
+///
+/// Que un procedimiento no tenga fila en una lista NO es un error: quiere
+/// decir que esa lista no lo cubre, y quien resuelve el precio cae a la
+/// lista default y lo DICE en pantalla ("precio de Público general: la
+/// lista de alumno no tiene este procedimiento"). Un 0 implícito sería
+/// regalar el tratamiento sin que nadie lo decidiera.
+model EduFeeScheduleItem {
+  id             String @id @default(cuid())
+  institutionId  String
+  feeScheduleId  String
+  procedureId    String
+  /// Centavos enteros. Cero es un precio válido y querido (un tamizaje
+  /// gratis), y por eso "sin fila" y "cero" tienen que poder distinguirse.
+  priceCents     Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  feeSchedule EduFeeSchedule @relation(fields: [feeScheduleId], references: [id], onDelete: Cascade)
+  procedure   EduProcedure   @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+
+  @@unique([feeScheduleId, procedureId])
+  @@index([institutionId, procedureId], map: "edu_fee_items_procedure_idx")
+  @@index([institutionId, feeScheduleId], map: "edu_fee_items_schedule_idx")
+  @@map("edu_fee_schedule_items")
+}
+
+/// EL COBRO. Un ticket del paciente.
+///
+/// 🔴 `feeScheduleId` es la lista que se APLICÓ, y `feeScheduleLabel` es
+/// su nombre CONGELADO. Las dos: el id sirve para reportar y se pone en
+/// NULL si algún día la lista desaparece; el texto sobrevive a eso y a
+/// que la dirección la renombre. Un recibo que cambia de contenido
+/// después de firmado no es un recibo.
+model EduCharge {
+  id            String          @id @default(cuid())
+  institutionId String
+  /// Folio del cobro, único dentro del instituto. Lo genera la
+  /// aplicación (C-0001, C-0002…) o lo teclea la escuela.
+  folio         String          @db.VarChar(30)
+  patientId     String
+  /// El caso clínico, cuando se sabe. Es opcional porque CAJA no ve
+  /// casos (src/lib/edu/visibility.ts) y cobra igual: el expediente no es
+  /// asunto suyo. Lo cuelga quien sí los ve.
+  caseId        String?
+  feeScheduleId String?
+  feeScheduleLabel String?      @db.VarChar(80)
+
+  /// Suma de (cantidad × precio unitario) de las líneas, ANTES de
+  /// descuentos. En centavos.
+  subtotalCents Int             @default(0)
+  /// Suma de los descuentos de las líneas. El invariante que las pruebas
+  /// fijan es `subtotal - descuento == total`, siempre.
+  discountCents Int             @default(0)
+  totalCents    Int             @default(0)
+  /// Neto pagado: pagos menos devoluciones. Se recalcula dentro de la
+  /// misma transacción que escribe el pago.
+  paidCents     Int             @default(0)
+  /// Lo que falta. 🔴 Un cobro CANCELADO lo deja en 0.
+  balanceCents  Int             @default(0)
+  status        EduChargeStatus @default(PENDING)
+
+  notes         String?         @db.VarChar(500)
+
+  /// Quién cobró y cuándo. `chargedAt` es el instante del cobro y puede
+  /// diferir de `createdAt` si algún día se captura en diferido.
+  chargedByUserId String
+  chargedAt       DateTime      @default(now()) @db.Timestamptz(3)
+
+  /// El turno de caja en el que se emitió. Null = se emitió sin turno
+  /// abierto (se permite: el corte es una herramienta, no un peaje).
+  cashSessionId String?
+
+  /// Anulación. Se guarda quién y cuándo porque es dinero.
+  cancelledAt      DateTime? @db.Timestamptz(3)
+  cancelledByUserId String?
+  cancelReason     String?   @db.VarChar(300)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case        EduCase?        @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  feeSchedule EduFeeSchedule? @relation(fields: [feeScheduleId], references: [id], onDelete: SetNull)
+  chargedBy   EduUser         @relation("EduChargeBy", fields: [chargedByUserId], references: [id], onDelete: Cascade)
+  cancelledBy EduUser?        @relation("EduChargeCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  cashSession EduCashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  items       EduChargeItem[]
+  payments    EduPayment[]
+
+  @@unique([institutionId, folio])
+  @@index([institutionId, chargedAt], map: "edu_charges_fecha_idx")
+  @@index([institutionId, patientId, chargedAt], map: "edu_charges_patient_idx")
+  @@index([institutionId, status], map: "edu_charges_status_idx")
+  @@index([institutionId, cashSessionId], map: "edu_charges_session_idx")
+  @@map("edu_charges")
+}
+
+/// La línea del cobro.
+///
+/// 🔴 EL PRECIO SE CONGELA AQUÍ. `unitPriceCents` y `description` se
+/// escriben al emitir y no se vuelven a tocar: si mañana sube el
+/// tarifario, este renglón sigue diciendo lo que se cobró. `procedureId`
+/// es opcional para permitir la línea libre (un material, una placa) y va
+/// en SetNull para que dar de baja un procedimiento no borre historia.
+model EduChargeItem {
+  id            String @id @default(cuid())
+  institutionId String
+  chargeId      String
+  procedureId   String?
+  /// El nombre CONGELADO de lo que se cobró.
+  description   String @db.VarChar(160)
+  quantity      Int    @default(1)
+  unitPriceCents Int
+  discountCents  Int   @default(0)
+  /// cantidad × unitario − descuento. Se guarda calculado para que el
+  /// recibo no dependa de que quien lo lea repita la fórmula.
+  totalCents     Int
+
+  /// 🔴 ANTIFRAUDE, EN LA BASE Y NO EN UN LOG. Cuando la línea trae
+  /// `procedureId`, el precio lo pone el SERVIDOR y cualquier precio que
+  /// mande el navegador se descarta. Si el que mandó era distinto, se
+  /// guarda aquí — null = no hubo discrepancia. Un `console.warn` se
+  /// pierde; una columna se puede consultar el día que alguien pregunte
+  /// por qué un cobro salió raro.
+  clientPriceCents Int?
+
+  createdAt DateTime @default(now())
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  charge      EduCharge      @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  procedure   EduProcedure?  @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, chargeId], map: "edu_charge_items_charge_idx")
+  @@index([institutionId, procedureId], map: "edu_charge_items_procedure_idx")
+  @@map("edu_charge_items")
+}
+
+/// El pago (o la devolución) de un cobro.
+///
+/// 🔴 UNA DEVOLUCIÓN ES OTRA FILA, no un pago borrado ni un monto
+/// negativo. `isRefund` la marca y el neto es pagos − devoluciones. Así el
+/// corte puede decir "cobrado $4,200 · devuelto $300" en vez de un solo
+/// número que esconde las dos cosas, y nadie tiene que borrar un renglón
+/// de dinero para corregir un error.
+model EduPayment {
+  id            String           @id @default(cuid())
+  institutionId String
+  chargeId      String
+  method        EduPaymentMethod @default(CASH)
+  /// Siempre POSITIVO, también en una devolución: el signo lo pone
+  /// `isRefund`. Un monto negativo se cuela en cualquier suma que olvide
+  /// mirar la bandera.
+  amountCents   Int
+  isRefund      Boolean          @default(false)
+  /// Autorización de la terminal, folio de la transferencia… texto libre.
+  reference     String?          @db.VarChar(80)
+  notes         String?          @db.VarChar(300)
+  /// Cuándo entró (o salió) el dinero. Es un INSTANTE.
+  paidAt        DateTime         @default(now()) @db.Timestamptz(3)
+  receivedByUserId String
+  /// 🔴 El turno del PAGO, no el del cobro. Un cobro de ayer que se
+  /// liquida hoy entra en el corte de HOY: el dinero está en la caja de
+  /// hoy. Colgarlo del turno del cobro descuadraría los dos cortes.
+  cashSessionId String?
+
+  createdAt DateTime @default(now())
+
+  institution EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  charge      EduCharge       @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  receivedBy  EduUser         @relation("EduPaymentBy", fields: [receivedByUserId], references: [id], onDelete: Cascade)
+  cashSession EduCashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, chargeId], map: "edu_payments_charge_idx")
+  @@index([institutionId, paidAt], map: "edu_payments_fecha_idx")
+  @@index([institutionId, cashSessionId], map: "edu_payments_session_idx")
+  @@map("edu_payments")
+}
+
+/// EL TURNO DE CAJA. Un corte es de TURNO, no de día natural.
+///
+/// 🔴 Es la lección que costó un bug en el dental: la ventana va de
+/// `openedAt` a `closedAt` (o a ahora), y si nadie corta en tres días, la
+/// ventana son tres días. La pantalla lo DICE en vez de titular "hoy"
+/// unos datos que no son de hoy.
+///
+/// Hay como mucho UN turno abierto por instituto (closedAt null). Lo
+/// garantiza la aplicación; en la base no cabe sin un índice único
+/// parcial, y uno parcial rompería cualquier upsert futuro.
+model EduCashSession {
+  id            String    @id @default(cuid())
+  institutionId String
+  openedAt      DateTime  @default(now()) @db.Timestamptz(3)
+  closedAt      DateTime? @db.Timestamptz(3)
+  /// Fondo con el que se abre.
+  openingCents  Int       @default(0)
+  /// Lo que se CONTÓ al cerrar. Null mientras el turno sigue abierto.
+  countedCents  Int?
+  /// Lo que DEBERÍA haber en efectivo: fondo + efectivo cobrado −
+  /// efectivo devuelto. Se congela al cerrar para que el corte impreso no
+  /// cambie si mañana alguien registra un pago con fecha vieja.
+  expectedCents Int?
+  /// contado − esperado. Positivo sobra, negativo falta. También
+  /// congelado al cerrar.
+  differenceCents Int?
+  notes         String?   @db.VarChar(500)
+
+  openedByUserId String
+  closedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  openedBy    EduUser        @relation("EduCashOpenedBy", fields: [openedByUserId], references: [id], onDelete: Cascade)
+  closedBy    EduUser?       @relation("EduCashClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
+  charges     EduCharge[]
+  payments    EduPayment[]
+
+  @@index([institutionId, openedAt], map: "edu_cash_sessions_abierto_idx")
+  @@index([institutionId, closedAt], map: "edu_cash_sessions_cerrado_idx")
+  @@map("edu_cash_sessions")
 }

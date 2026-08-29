@@ -74,6 +74,22 @@ export const EDU_ALL_PERMISSIONS = {
   "odontograma.edit": "Marcar hallazgos en el odontograma",
   "estudios.view": "Ver las radiografías, tomografías y fotos del paciente",
   "estudios.upload": "Subir estudios al expediente del paciente",
+  // ── Ola 5 · tarifarios y caja ────────────────────────────────────────
+  // Seis keys, todas con dueño: tarifarios.view lo exigen /instituto/
+  // tarifarios y /instituto/procedimientos, tarifarios.manage TODA
+  // mutación del catálogo y de los precios, y las cuatro de caja las
+  // exigen la pantalla de cobro y sus endpoints.
+  //
+  // 🔴 Ninguna se le da al DOCENTE ni al ALUMNO. Y no basta con no dárselas:
+  // el dinero está cerrado DOS veces, aquí y en el ALCANCE
+  // (src/lib/edu/visibility.ts, recurso "charges"), para que encenderle
+  // "caja.view" a un alumno por error siga sin enseñarle un solo peso.
+  "tarifarios.view": "Ver las listas de precios y el catálogo de procedimientos",
+  "tarifarios.manage": "Crear listas de precios, capturar precios y editar el catálogo",
+  "caja.view": "Ver los cobros y los pagos de la clínica",
+  "caja.charge": "Cobrarle a un paciente y registrar sus pagos",
+  "caja.refund": "Devolver dinero y cancelar un cobro",
+  "caja.corte": "Abrir y cerrar el turno de caja",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -115,6 +131,17 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
       "odontograma.edit",
       "estudios.view",
       "estudios.upload",
+    ],
+  },
+  {
+    title: "Tarifarios y caja",
+    keys: [
+      "tarifarios.view",
+      "tarifarios.manage",
+      "caja.view",
+      "caja.charge",
+      "caja.refund",
+      "caja.corte",
     ],
   },
 ];
@@ -181,6 +208,25 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * significa que lean lo mismo. El alumno ve las notas de SUS casos, el
  * docente las de los alumnos que supervisa HOY, la dirección todas.
  * Ensanchar el permiso no ensancha lo que se ve.
+ *
+ * ── Ola 5 · el dinero ───────────────────────────────────────────────────
+ * Aquí el reparto es el más estrecho de todo el vertical, y a propósito:
+ *
+ *   DIRECCION todo, incluido "tarifarios.manage": poner precios es decidir
+ *             cuánto cuesta la escuela, y eso lo decide quien la dirige.
+ *   CAJA      todo MENOS "tarifarios.manage". Cobra, devuelve, corta y LEE
+ *             el tarifario —tiene que poder consultarlo delante del
+ *             paciente— pero no lo escribe: quien cobra no se pone su
+ *             propio precio.
+ *   DOCENTE   NADA. Ni una key de dinero.
+ *   ALUMNO    NADA. Ni el precio, ni el cobro, ni el saldo.
+ *
+ * 🔴 Que un alumno no vea dinero NO depende de esta lista. Si mañana
+ * alguien le enciende "caja.view" desde la pantalla de permisos, seguirá
+ * sin ver un peso: el ALCANCE (visibility.ts, recurso "charges") devuelve
+ * "none" para DOCENTE y ALUMNO pase lo que pase. El permiso abre la
+ * pantalla; el alcance decide las filas — y para el dinero, la decisión
+ * está tomada en los dos sitios.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
   DIRECCION: [
@@ -204,6 +250,12 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "odontograma.edit",
     "estudios.view",
     "estudios.upload",
+    "tarifarios.view",
+    "tarifarios.manage",
+    "caja.view",
+    "caja.charge",
+    "caja.refund",
+    "caja.corte",
   ],
   DOCENTE: [
     "inicio.view",
@@ -241,6 +293,11 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "agenda.view",
     "agenda.manage",
     "sillones.view",
+    "tarifarios.view",
+    "caja.view",
+    "caja.charge",
+    "caja.refund",
+    "caja.corte",
   ],
 };
 
