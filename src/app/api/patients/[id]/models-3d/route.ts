@@ -99,7 +99,7 @@ async function signWebGlbUrls(
   return result;
 }
 
-// Firma en UN batch el CBCT lite hermano (`<path>.lite.bin`) de cada set CBCT
+// Firma en UN batch el CBCT lite hermano (`<path>.lite2.bin`) de cada set CBCT
 // (.zip). Es el volumen reducido que carga el MÓVIL. Devuelve "" donde no aplica
 // (no es .zip) o el lite aún no se generó → el visor móvil lo pide bajo demanda.
 async function signCbctLiteUrls(
@@ -182,7 +182,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     files.map((f) => f.url),
     files.map((f) => f.name),
   );
-  // liteUrl: CBCT reducido hermano (`.lite.bin`) para MÓVIL. Vacío si aún no existe
+  // liteUrl: CBCT reducido hermano (`.lite2.bin`) para MÓVIL. Vacío si aún no existe
   // → el visor móvil lo genera bajo demanda (POST .../dicom-set/[fileId]/lite).
   const liteUrls = await signCbctLiteUrls(
     files.map((f) => f.url),

@@ -24941,3 +24941,215 @@ pantalla a un plan que no debe verla. Es trabajo de producto, no de integración
 
 **c) Nada de esto ha tocado una base de datos real.** El build compila; nadie ha
 firmado un contrato, publicado una ficha en la bolsa, ni mandado una campaña.
+
+
+## [CBCT · Geometría y orientación] — El visor apilaba el volumen por un número de catálogo y no por la posición del paciente; tres rondas de verificación adversarial encontraron una letra INVERTIDA sobre la imagen de un paciente ✅ (2026-08-29) · rama `fix/cbct-geometria-orientacion`
+
+**Rama:** `fix/cbct-geometria-orientacion` · **Base:** `df781668` · **Build:** EXIT 0 · **Pruebas:** 56/56
+
+### EL PROBLEMA
+
+El visor CBCT ordenaba los cortes por **InstanceNumber** (0020,0013), que es un
+número de catálogo, no una coordenada. Hay equipos que lo reinician por serie, que
+lo reutilizan entre series del mismo estudio y que lo emiten en sentido contrario a
+la adquisición. Ordenar por él da un volumen invertido o entrelazado que se ve
+"casi bien" y solo se detecta midiendo.
+
+Y el espaciado entre cortes salía de `SliceThickness` (0018,0050), que es el
+**GROSOR** del corte, no el **PASO** entre cortes. Con solapamiento o con hueco son
+números distintos, así que el eje Z del estudio estaba escalado con el número
+equivocado y toda medición vertical arrastraba ese error.
+
+### QUÉ SE HIZO
+
+**1. El orden lo manda la posición física.** `ImagePositionPatient` (0020,0032)
+proyectado sobre la normal del plano, que sale de `ImageOrientationPatient`
+(0020,0037). Es lo único que el estándar garantiza monótono a lo largo del eje de
+adquisición, y además viene en milímetros. InstanceNumber baja a último recurso.
+
+Cada corte declara ahora de dónde salió su `order` (`orderSource: "position" |
+"instance"`), porque las dos ramas producen números en **unidades distintas**:
+mezclarlas no invierte el volumen, lo **baraja** —un InstanceNumber 1..300 se
+intercala entre posiciones de −120 a +60 mm—.
+
+**2. El espaciado se MIDE, no se cree.** Mediana de las distancias entre cortes
+consecutivos, afinada por extremos cuando el paso es regular. La mediana ignora un
+corte que falte (la media repartiría ese error por todo el volumen); el afinado
+reparte el redondeo del `ImagePositionPatient` — con un paso real de 0.125 mm y un
+IPP escrito a dos decimales, los deltas alternan 0.12 y 0.13 y la mediana sola
+daba un **4 % de error** por debajo del umbral de aviso.
+
+**3. Letras anatómicas R/L/A/P/S/I en los bordes**, derivadas del IOP real. En
+LPS: X+ = izquierda del paciente, Y+ = posterior, Z+ = superior. Un borde sin
+sentido derivable se queda **sin letra**: nunca se rellena con la suposición
+habitual.
+
+**4. Volteo vertical de coronal y sagital** cuando el orden es físico, para que el
+extremo +normal quede arriba (convención radiológica).
+
+**5. Franja de aviso** cuando la geometría no es de fiar, con el motivo concreto.
+Solo se avisa de lo que CONSTA que está mal: un aviso permanente que no distingue
+estudios buenos de malos se vuelve ruido y acaba tapando al que sí importaba.
+
+### FASE 4 — VERIFICACIÓN ADVERSARIAL: 3 RONDAS, 12 VERIFICADORES
+
+Cada verificador entró con la instrucción de **refutar** el trabajo y de dar "está
+mal" ante la duda. Las tres rondas dieron MAL. Esto es lo que encontraron.
+
+#### Ronda 1 (5 verificadores) — el eje Z se pintaba en TRES sitios y se volteó UNO
+
+| # | Hallazgo | Quién |
+|---|---|---|
+| 1 | **El volumen 3D y la panorámica quedaron sin voltear.** `Dicom3DVolume` (`zBase=(D-1-z)*sz` + `camera.up=(0,0,1)`) y `panoramic-reslice` (`voxZ=(b/(H-1))*(depth-1)`) ponen `slices[0]` arriba; MprPane pasó a poner `slices[depth-1]`. Antes del cambio los tres coincidían. En la rejilla 2×2 la contradicción se ve de un vistazo. | V1, V2, V5 |
+| 2 | **El generador del lite conservó su propio `sort((a,b)=>a.order-b.order)`** mientras el cliente usaba el defensivo. Un estudio mezclado se barajaba en el móvil y se cacheaba así. | V1, V5 |
+| 3 | **Los `.lite.bin` ya generados no se regeneran nunca**, así que el arreglo no llegaba al móvil: el mismo CBCT con el cráneo arriba en el monitor y abajo en el teléfono, sin aviso en ninguno de los dos. | V4, V5, V1 |
+| 4 | **La justificación del "bucle infinito"** que había escrita para no subir la versión del binario **era falsa**. La traza real: un reintento y una pantalla de error permanente; y `?force=1` existía. | V5, V4 |
+| 5 | **Multi-frame: la posición de los frames 1..N estaba INVENTADA** (se sintetizaba sumando `zSpacing`). El visor luego "medía" esas posiciones, recuperaba el número que él mismo se había inventado y lo declaraba calibrado y regular — un círculo que se autoconfirma. | V3, V4 |
+| 6 | **Dos series en la misma carpeta** (volumen + scout) se apilaban juntas sin que nada lo notara. | V3, V4 |
+| 7 | **Todos los cortes en la misma posición**: `every(orderSource === "position")` se cumplía, no había delta que medir, y el visor volteaba y rotulaba S/I sobre 300 copias del mismo plano **sin decir nada**. Era el único caso de geometría demostradamente inservible que pasaba mudo. | V4 |
+
+Lo que **resistió**: la cruz sincronizada y la sonda de densidad leen exactamente
+el mismo vóxel que se pinta, con y sin volteo (V2 lo comprobó con 806 826 muestras,
+error máximo 0,5 vóxeles — el empate real); y las 132 comprobaciones letra↔píxel de
+V3 no encontraron una sola contradicción en estudio conforme y homogéneo.
+
+#### Ronda 2 (5 verificadores) — dos fallos nuevos, uno de ellos introducido por el propio arreglo
+
+| # | Hallazgo | Quién |
+|---|---|---|
+| 1 | **UNA LETRA INVERTIDA.** Con dos series de la MISMA matriz y lateralidad opuesta (IOP `1\0\0\0\1\0` y `-1\0\0\0\-1\0`), el filtro por raster no las separaba y el panel axial pintaba las cuatro letras del `slices[0]` sobre cortes de la otra serie. Reproducido: esperado `L\|R`, pintado `R\|L`. **Inversión exacta sobre la imagen de un paciente.** | V3, V4 |
+| 2 | **El filtro nuevo podía tirar el estudio entero.** Tomaba la geometría de referencia del primer corte **del .zip** (sin ordenar). Con el scout primero: 301 cortes quedaban en 1, y sin aviso — porque todo lo que se juzga después se calcula sobre lo que quedó, y lo que quedó es homogéneo y coherente consigo mismo. | V1, V2, V4 |
+| 3 | **REGRESIÓN del propio afinado por extremos:** con posiciones no monótonas daba `sz` **9 veces menor** y lo marcaba calibrado. La mediana sola acertaba. | V4 |
+| 4 | **`zVariable` no llegaba al móvil**: un CBCT irregular avisaba en el escritorio y callaba en el teléfono. | V5, V3 |
+| 5 | **Las pruebas de la cruz pasaban por la razón equivocada**: replicaban los helpers de MprPane en vez de importarlos, así que una mutación real del pintado las dejaba en verde. | V5 |
+| 6 | **Un comentario nuevo y FALSO** afirmaba que el lite devuelve `imageOrientation: null` a propósito — cuando el mismo diff acababa de hacer que devolviera el IOP real. El mismo modo de fallo que el "bucle infinito" de la ronda 1. | V5 |
+| 7 | El 429 del freno de generación **mentía al usuario**: sin `detail`, el móvil pintaba "es muy grande para el teléfono", que es falso y le manda a buscar una computadora que no necesita. | V1, V4 |
+
+#### Ronda 3 (2 verificadores) — la lateralidad quedó cerrada; el resto colgaba de una identidad que nadie leía
+
+El verificador de lateralidad reprodujo el contrafactual: **sin el filtro nuevo, el
+axial salía `L=L R=R` sobre 300 de 320 cortes de la otra serie**. Con él, las 12
+letras (3 planos × 4 bordes) coinciden con la geometría en las cuatro
+orientaciones probadas —estándar, prono, normal negativa y oblicuo de 30°—,
+derivando la verdad del IPP/IOP y del píxel real, sin usar la tabla del código.
+
+Lo que quedaba tenía una sola raíz: **el módulo no leía `SeriesInstanceUID`
+(0020,000E) en ninguna parte**. Sin él, "la misma serie" se estaba adivinando por
+indicios (misma matriz, misma orientación), y hay dos adquisiciones del mismo
+paciente que cumplen los dos: dos campos de visión (0.3 y 0.15 mm/px) se apilaban
+juntos con el doble de escala en media pila y un salto de dos centímetros en el
+coronal, **sin un solo aviso**. Leer la identidad que el propio equipo escribió
+cierra ese caso, el de la serie repetida y el falso positivo de la cuantización de
+una tacada. Lo habían pedido tres verificadores a lo largo de las tres rondas.
+
+| # | Hallazgo | Quién |
+|---|---|---|
+| 1 | **El aviso de "más de una serie" desaparecía al reabrir el estudio**: se cacheaba el set ya filtrado, así que en la segunda apertura no había nada que descartar y la evidencia se perdía. | R3 |
+| 2 | **El comentario de la tabla de ejes mentía dos veces**: citaba una fórmula del pintado que ya no existía tras la extracción, y afirmaba "los seis `sense` valen +1" cuatro líneas antes de la tabla donde dos valen −1. | R3 |
+| 3 | **Código muerto**: `flipRow` dejó de usarse al pasar el pintado a `sampleDepthAtRow`, y arrastraba un import. Ni `tsc` ni el lint lo cazan. | R3 |
+| 4 | El `detail` del 429 se pintaba **debajo** del texto por defecto en 10 px, así que el titular falso ("es muy grande para el teléfono") seguía siendo lo que se leía. | R3 |
+| 5 | El servidor descartaba cortes por raster pero **no lo transportaba al binario**: el escritorio avisaba y el móvil callaba. | R3 |
+| 6 | Faltaba la prueba del *enhanced* multi-frame sin IPP raíz — justo el caso que motivó ese cambio. | R3 |
+
+De 15 mutaciones que el verificador aplicó al código de producción, **13 las cazan
+las pruebas**. Las dos que no son la línea que decide el volteo y el arreglo de esa
+misma ronda; las dos viven dentro de componentes React, que no tienen prueba.
+
+### QUÉ SE CORRIGIÓ
+
+- **Se lee el `SeriesInstanceUID`**, que es la identidad que el propio equipo le
+  puso a la adquisición. Todo lo demás son indicios.
+- **Un solo concepto de "serie dominante"** (`keepDominantSeries`): agrupa por UID
+  y se queda con el grupo mayoritario; sin UID —hay .zip anonimizados que lo
+  borran— cae a los indicios, matriz **e** ImageOrientationPatient juntos. Los dos
+  van juntos porque rompen el volumen de formas distintas y separarlos dejaba pasar
+  el peor: con la misma matriz nada falla al pintar, y por eso la letra invertida
+  no daba ningún síntoma.
+- **Mayoritaria, no la del primer corte**: el filtro corre antes de ordenar, así
+  que "el primero" es el que el sistema de archivos puso primero en el .zip. Con un
+  scout ahí, la primera versión del filtro dejaba 301 cortes en 1.
+- **Un solo juicio de "¿está apilado por geometría real?"** (`isPhysicallyOrdered`),
+  usado por el visor Y por el generador del lite del servidor. De él cuelgan el
+  volteo de los tres consumidores del eje Z y el rotulado S/I; escrito dos veces se
+  separaban al primer arreglo que tocara solo uno.
+- **`folded` separado de `variable`**: a un estudio al que le falta un corte el
+  paso le sale irregular y **sigue estando bien apilado** (se puede voltear y
+  rotular sin mentir); uno plegado no está apilado en absoluto. Mezclarlos costaba
+  las letras a cualquier estudio con un corte de menos.
+- **El volteo se propaga a los tres** consumidores del eje Z (MPR, panorámica,
+  volumen 3D) desde el mismo booleano.
+- **El servidor usa las mismas funciones que el cliente** (orden, medida y juicio),
+  no copias suyas.
+- **Multi-frame:** se lee `PerFrameFunctionalGroupsSequence` de verdad; si no
+  está, los frames se declaran "instance" en vez de inventarles una posición.
+- **Los helpers de coordenadas se extrajeron al módulo puro**, y la extracción se
+  validó por MUTACIÓN: cambiar la fórmula del muestreo del pintado ahora tumba 2
+  pruebas; antes no tumbaba ninguna.
+- **La caché guarda el set CRUDO**, no el filtrado: esta caché existe para saltarse
+  una decodificación, y el filtrado es una decisión de presentación que se vuelve a
+  tomar en cada carga. Guardando lo filtrado se perdía la prueba de que hubo algo
+  que descartar y el aviso desaparecía en la segunda apertura.
+- **La medición se degrada a "≈" cuando el espaciado es irregular**, en vez de
+  escribir un milímetro redondo que el volumen no cumple.
+- **Los TRES comentarios falsos, corregidos** (el "bucle infinito", el del
+  `imageOrientation` del lite y el de la tabla de ejes), y la nota de purga del
+  Storage dice ahora que ese trabajo NO existe en vez de insinuar que sí.
+
+### FASE 5 — PRUEBAS
+
+`src/components/patient-3d/__tests__/dicom-geometry.test.ts` — **60 casos, 60 en
+verde**. Corre con `npm run test:cbct-geometry`.
+
+Los DICOM son **sintéticos, construidos byte a byte** (`__tests__/dicom-synth.ts`):
+Part 10 real con preámbulo, "DICM", meta y dataset en Explicit VR Little Endian,
+incluidas las secuencias anidadas del multi-frame. Las pruebas atraviesan
+`dicomParser.parseDicom` y el `readHeaders` real, así que comprueban cómo lee el
+visor las cadenas del estándar —el relleno del VR "DS", la barra invertida de más,
+un valor no numérico— y no un objeto simulado que ya devuelva lo que convenga. **No
+hay ni un .dcm en el repo, y no debe haberlo**: un estudio real lleva datos de
+paciente.
+
+### LO QUE QUEDA PENDIENTE (dicho, no disimulado)
+
+1. **Coste de la regeneración.** El binario del móvil cambió de ruta
+   (`.lite.bin` → `.lite2.bin`) para que los ya cacheados dejen de servirse: sin
+   eso el arreglo no llegaba al teléfono. El primer móvil que abra cada estudio ya
+   cacheado paga una regeneración. El freno es de **10 por hora y por clínica**, y
+   la variante HD cuenta aparte, así que una clínica que revise muchos estudios en
+   una hora verá el aviso de "vuelve a intentarlo en unos minutos" (ahora con el
+   texto correcto). **Si eso molesta, el número a subir es `LITE_RATE_LIMIT` en
+   `src/app/api/patients/[id]/dicom-set/[fileId]/lite/route.ts`** — es una decisión
+   de coste, no la he tomado por mi cuenta.
+2. **Los `.lite.bin` viejos quedan huérfanos** en el bucket: ~22 MB por estudio, y
+   otros ~50 si alguna vez se pidió la variante HD. **No existe ningún trabajo que
+   los borre** (el borrado de un estudio es lógico, NOM-004, y nunca tocó Storage).
+   Purgarlos es una tarea de operación pendiente.
+3. **El servidor no puede votar la serie dominante.** `buildCbctLite` reduce cada
+   corte al vuelo y tira el full-res —es lo que permite procesar un estudio de 3 GB
+   en una función—, así que bloquea el raster con el primero y lanza un error
+   explícito si descartó tanto como lo que guardó. El escritorio elige la mayoría y
+   la enseña; el móvil se niega. Es una divergencia **segura** (correcto frente a
+   error, nunca frente a un estudio de mentira), pero es una divergencia.
+4. **Ningún componente React tiene prueba.** De 15 mutaciones que la ronda 3
+   aplicó al código de producción, 13 las cazan las pruebas; las dos que no —la
+   línea que decide el volteo y el filtro de la serie— viven dentro de componentes.
+   Probarlas pide un renderizador, que este repo no monta hoy.
+5. **La serie repetida sigue siendo un caso abierto** cuando el .zip NO trae
+   `SeriesInstanceUID`: dos pasadas de la misma adquisición sobre las mismas z
+   comparten todos los indicios y se apilan juntas. Avisa (`variable-z` por los
+   cortes duplicados), pero el motivo que da no es el de verdad.
+6. **Nadie ha abierto todavía un CBCT real con este código.** Todo lo de arriba
+   está verificado con archivos sintéticos y lectura de código. La prueba de fuego
+   es un estudio de verdad: comprobar que el cráneo sale derecho en los cuatro
+   paneles, que las letras coinciden con la anatomía, y que la regla mide lo que
+   debe entre dos puntos conocidos.
+
+### ARCHIVOS
+
+`dicom-decode-core.ts` (orden por posición, IOP, multi-frame conforme) ·
+`cbct-mpr-shared.ts` (orden, medida, serie dominante, juicio, letras, coordenadas) ·
+`DicomSetViewer.tsx` (orquestación) · `MprPane.tsx` (volteo + letras) ·
+`Dicom3DVolume.tsx` y `panoramic-reslice.ts`/`PanoramicPane.tsx` (el mismo volteo) ·
+`GeometryWarning.tsx` (nuevo) · `cbct-lite-shared.ts` y `src/lib/cbct-lite.ts` (el
+binario del móvil) · `dicom-cache.ts` (rechaza registros sin geometría) ·
+`lite/route.ts` (el 429 explica qué pasa) · `__tests__/` (nuevo).

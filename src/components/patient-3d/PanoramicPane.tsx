@@ -34,6 +34,11 @@ interface Props {
   center: number;
   width: number;
   initialZ: number; // corte axial inicial (la cruz del MPR)
+  // Mismo booleano que reciben MprPane y Dicom3DVolume: gobierna hacia dónde se
+  // recorre la pila de cortes al reconstruir. Los tres mapean el eje Z a "arriba
+  // en pantalla", y tienen que hacerlo igual o el mismo estudio sale con la
+  // mandíbula arriba en una pestaña y abajo en la otra.
+  zPhysicalOrder: boolean;
 }
 
 const SPLINE_COLOR = "#fbbf24"; // amber-400 (igual que el plano axial del MPR)
@@ -51,7 +56,14 @@ function distToSeg(px: number, py: number, ax: number, ay: number, bx: number, b
   return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
 }
 
-export default function PanoramicPane({ slices, scale, center, width, initialZ }: Props) {
+export default function PanoramicPane({
+  slices,
+  scale,
+  center,
+  width,
+  initialZ,
+  zPhysicalOrder,
+}: Props) {
   const axialRef = useRef<HTMLCanvasElement | null>(null);
   const axialOverlayRef = useRef<HTMLCanvasElement | null>(null);
   const panoRef = useRef<HTMLCanvasElement | null>(null);
@@ -289,6 +301,10 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
   }, [pano, center, width, invert]);
 
   // Cualquier cambio que afecte el reslice marca la pano como desactualizada.
+  // `zPhysicalOrder` entra en la lista porque la pano es el único de los tres
+  // consumidores del eje Z que CACHEA su salida: el MPR y el volumen 3D repintan
+  // desde los cortes, y ésta se queda con el búfer generado. Si el volteo cambiara
+  // con una pano en pantalla, seguiría enseñando la anterior sin marcarse vieja.
   useEffect(() => {
     if (suppressStaleRef.current) {
       suppressStaleRef.current = false; // la auto-detección ya regeneró: no marcar stale
@@ -296,7 +312,7 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
     }
     if (pano) setStale(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [controlVox, slabMm, mode]);
+  }, [controlVox, slabMm, mode, zPhysicalOrder]);
 
   /* ------------------------------ interacción ------------------------------ */
   const rasterAt = (clientX: number, clientY: number): { a: number; b: number; ratio: number } | null => {
@@ -432,11 +448,11 @@ export default function PanoramicPane({ slices, scale, center, width, initialZ }
       if (ctrlVox.length < 3 || depth < 2) return;
       const v = vol ?? buildVol();
       const ctrl = ctrlVox.map((p) => ({ x: p.x * scale.sx, y: p.y * scale.sy }));
-      const res = reslicePanoramic(v, { controlMm: ctrl, slabMm, mode });
+      const res = reslicePanoramic(v, { controlMm: ctrl, slabMm, mode, flipZ: zPhysicalOrder });
       setPano(res);
       setStale(false);
     },
-    [buildVol, depth, scale.sx, scale.sy, slabMm, mode],
+    [buildVol, depth, scale.sx, scale.sy, slabMm, mode, zPhysicalOrder],
   );
 
   const generate = useCallback(() => {

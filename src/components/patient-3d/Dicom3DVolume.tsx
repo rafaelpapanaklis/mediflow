@@ -206,9 +206,28 @@ export default function Dicom3DVolume({
   slices,
   maxDim = MAX_DIM,
   height = DEFAULT_HEIGHT,
+  zSpacingMm,
+  zPhysicalOrder = false,
 }: {
   slices: VolSlice[];
   maxDim?: number;
+  /** Espaciado entre cortes YA RESUELTO por el visor (mm). Cuando el estudio trae
+   *  ImagePositionPatient, el visor lo MIDE como la mediana de las distancias
+   *  reales entre cortes y ese valor le gana al SliceThickness del header, que es
+   *  lo único que se ve desde aquí. Sin esta prop, el volumen 3D reconstruiría con
+   *  un espaciado distinto del que usan el MPR y la panorámica y el mismo estudio
+   *  saldría con dos proporciones según la pestaña. Ausente = no hay medida y se
+   *  cae al header, como siempre. */
+  zSpacingMm?: number;
+  /** ¿La pila de cortes está ordenada por GEOMETRÍA REAL (ascendiendo por
+   *  `ImagePositionPatient · planeNormal`)? Decide hacia dónde apila la textura;
+   *  ver el bloque "ORIENTACIÓN DEL EJE Z" en la construcción del volumen. Tiene
+   *  que ser EL MISMO booleano que reciben MprPane y PanoramicPane: los tres
+   *  mapean el eje Z a "arriba en pantalla" por su cuenta y, si discrepan, el
+   *  mismo estudio sale con el cráneo derecho en un panel y del revés en el de al
+   *  lado. Ausente = orden no verificado, y se conserva la suposición histórica
+   *  (`slices[0]` = vértice). */
+  zPhysicalOrder?: boolean;
   /** Alto CSS del lienzo. Acepta vh para el panel maximizado; el ResizeObserver
    *  mide el valor REAL resultante, así que un tope en CSS no descuadra nada. */
   height?: number | string;
@@ -277,7 +296,12 @@ export default function Dicom3DVolume({
     const sp = slices[0] as any;
     const colSp = Number(sp?.pixelSpacing?.[0]) || 1; // x (columna), mm
     const rowSp = Number(sp?.pixelSpacing?.[1] ?? sp?.pixelSpacing?.[0]) || 1; // y (fila), mm
-    const zSp = Number(sp?.zSpacing ?? sp?.sliceThickness) || 1; // z, mm
+    // Precedencia: la medida del visor (mediana de posiciones reales) y, si no la
+    // hay, el header del propio corte. Nunca 0 ni negativo: colapsaría el eje.
+    const zSp =
+      zSpacingMm && Number.isFinite(zSpacingMm) && zSpacingMm > 0
+        ? zSpacingMm
+        : Number(sp?.zSpacing ?? sp?.sliceThickness) || 1; // z, mm
     // Tamaño físico de CADA vóxel de SALIDA (incluye el submuestreo por eje) y
     // aspecto RELATIVO (el eje más fino = 1, los demás ≥ 1).
     const pmin = Math.min(sx * colSp, sy * rowSp, sz * zSp) || 1;
@@ -291,15 +315,28 @@ export default function Dicom3DVolume({
     // --- CONSTRUCCIÓN DEL VOLUMEN ----------------------------------------
     // Submuestreo por PROMEDIADO (box-filter): cada vóxel de salida es la MEDIA
     // del bloque sx×sy×sz de vóxeles de origen, no un punto decimado → menos
-    // aliasing, conserva trabéculas. El eje Z se INVIERTE en la base del bloque
-    // ((D-1-z)*sz, cráneo derecho con z=0 = tope) promediando hacia adelante.
+    // aliasing, conserva trabéculas.
     // Guardamos el promedio en float para sacar percentiles en una 2ª pasada.
+    //
+    // --- ORIENTACIÓN DEL EJE Z --------------------------------------------
+    // `camera.up` es (0,0,1) y la textura se llena en orden z creciente, así que
+    // el ÚLTIMO índice de la textura es lo que queda ARRIBA en pantalla. Quién va
+    // ahí depende de cómo esté apilado el array de cortes, y eso lo sabe el
+    // orquestador, no este componente:
+    //   · zPhysicalOrder = false → orden NO verificado. Se conserva la suposición
+    //     de siempre —`slices[0]` es el vértice del cráneo— invirtiendo el bloque.
+    //   · zPhysicalOrder = true  → la pila va ascendiendo por la posición real del
+    //     paciente, así que el extremo +normal (el superior en una adquisición
+    //     normal) es `slices[depth-1]` y va arriba SIN invertir.
+    // Los tres consumidores del eje Z —este volumen, el MPR y la panorámica— tienen
+    // que decidirlo con EL MISMO booleano. Mientras solo el MPR lo miró, el mismo
+    // estudio salía con el cráneo derecho en un panel y del revés en el de al lado.
     const avg = new Float32Array(W * H * D);
     let minV = Infinity;
     let maxV = -Infinity;
     let p = 0;
     for (let z = 0; z < D; z++) {
-      const zBase = (D - 1 - z) * sz; // inversión SOLO en la base del bloque
+      const zBase = (zPhysicalOrder ? z : D - 1 - z) * sz; // ver ORIENTACIÓN DEL EJE Z
       for (let y = 0; y < H; y++) {
         const yBase = y * sy;
         for (let x = 0; x < W; x++) {
@@ -437,9 +474,11 @@ export default function Dicom3DVolume({
       frustum * 12,
     );
     // Vista frontal anatómica: cámara delante de la cara (Y anterior), un poco a
-    // un lado y arriba para dar volumen. "Arriba" en pantalla = eje Z = superior
-    // del cráneo (con la inversión de Z de arriba → frente arriba, mandíbula
-    // abajo, mirando al frente).
+    // un lado y arriba para dar volumen. "Arriba" en pantalla = +Z de la textura;
+    // qué corte cae ahí lo decide el bloque ORIENTACIÓN DEL EJE Z de arriba. Con
+    // orden verificado eso es el extremo superior del paciente (frente arriba,
+    // mandíbula abajo); sin él, la suposición histórica de que `slices[0]` es el
+    // vértice — la misma que aplican el MPR y la panorámica en ese caso.
     camera.up.set(0, 0, 1);
     camera.position.set(Wp * 0.6, -Hp * 1.5, Dp * 0.62);
 
@@ -626,7 +665,7 @@ export default function Dicom3DVolume({
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
     };
-  }, [slices, maxDim]);
+  }, [slices, maxDim, zSpacingMm, zPhysicalOrder]);
 
   // Estilo (MIP/ISO) y umbral viven en estado de React: cambiarlos NO
   // re-ejecuta el efecto del visor, así que pedimos un frame para reflejarlos.
