@@ -25454,3 +25454,273 @@ escondidas; se listan para que la integración decida:
   raro que queda.
 - `src/middleware.ts` — no hizo falta: `/instituto/:path*` ya estaba en el matcher
   desde la Ola 0 y las rutas nuevas cuelgan de ahí.
+
+---
+
+## [Institucional Ola 2] — El piso clínico: pacientes, sillones, agenda y EL CASO, con UN solo lugar que decide quién ve qué ✅ (2026-08-29) · rama `feat/edu-ola-2`
+
+**Qué se entregó.** La clínica de la escuela ya existe dentro del producto: se
+registra al paciente, se dan de alta los sillones con su horario, se agenda por
+sillón, se hace el tamizaje que ASIGNA al paciente a un alumno y le abre su caso,
+y un alumno abre `/mi-dia` y ve lo que le toca hoy.
+
+Cinco pantallas nuevas, once endpoints, cinco tablas y **135 pruebas** que corren
+sin base de datos.
+
+---
+
+### 1. Lo más importante de la ola no es una pantalla: es `visibility.ts`
+
+Parchear la visibilidad ruta por ruta es cómo se llega a que doce endpoints la
+apliquen y el decimotercero no. Ese decimotercero funciona perfectamente — para
+todo el mundo. Así que **TODA** lectura de pacientes, citas y casos arma su `where`
+en un solo archivo, `src/lib/edu/visibility.ts`:
+
+| | Pacientes | Agenda | Casos |
+|---|---|---|---|
+| **DIRECCION** | todos | toda | todos |
+| **CAJA** | todos | toda | **NINGUNO** |
+| **DOCENTE** | los de sus alumnos **vigentes** | la de sus alumnos vigentes | los de sus alumnos vigentes |
+| **ALUMNO** | los suyos | las suyas | los suyos |
+
+Tres cosas que valen más que la tabla:
+
+**a) Una asignación VENCIDA no da acceso.** El docente ROTA a media generación
+(por eso la Ola 1A guarda vigencia en vez de sobrescribir). El día que entrega su
+grupo deja de ver a esos pacientes y el que entra empieza a verlos, sin que nadie
+toque nada. El predicado de vigencia **no se reescribió**: se reusa
+`eduCurrentAssignmentWhere` de `padron-core.ts`. Si este archivo tuviera su propia
+copia, tarde o temprano una de las dos olvidaría el `startsAt`.
+
+Está probado con fechas concretas: abierta sí, vencida ayer no, **cerrada en este
+mismo instante no** (cerrar es escribir `endsAt = ahora`; con `>=` el saliente y el
+entrante serían los dos "vigentes" durante el mismo instante), la que empieza
+mañana todavía no, y la rotación completa vista desde antes y desde después.
+
+**b) CAJA no ve casos, y está cerrado DOS veces.** En el default de permisos (no
+trae `casos.view`) y en el helper, que para el recurso `cases` le devuelve alcance
+`none` aunque alguien le encienda el interruptor por error.
+
+**c) El paciente es "mío" por CASO o por CITA — las dos, no una.** La cita de
+TAMIZAJE existe ANTES que el caso (es la que lo abre): mirar solo los casos dejaría
+a quien hace la valoración sin poder abrir la ficha del paciente que tiene
+enfrente. Consecuencia buscada: un paciente que caja acaba de registrar, sin cita y
+sin caso, **no lo ve ningún alumno ni ningún docente**. Todavía no es de nadie.
+
+Y el cinturón de siempre: las tres funciones de `where` **LANZAN** si les llega un
+`institutionId` vacío. En Prisma un `where: { institutionId: undefined }` no
+devuelve cero filas — borra el filtro y devuelve las de TODOS los institutos.
+
+---
+
+### 2. La hora, que es donde se rompen las agendas
+
+Una cita es un **INSTANTE** (`TIMESTAMPTZ`). El horario de un sillón es una hora de
+**PARED** (minutos desde la medianoche): "el sillón 3 abre a las 8" no cambia
+porque cambie el horario de verano. La conversión entre las dos vive en UN solo
+lugar (`agenda-core.ts`) y usa `EduInstitution.timezone` — ni el navegador ni el
+servidor usan la suya.
+
+- **Las etiquetas se calculan en el SERVIDOR** y viajan ya formateadas. Formatearlas
+  en el cliente daría otra hora en el primer render (desajuste de hidratación) y le
+  mentiría a un alumno que viaja con el teléfono en otra zona.
+- **"Hoy" es hoy EN EL INSTITUTO.** Si el servidor corre en UTC (Vercel) y la
+  escuela está en Tijuana, entre las 17:00 y la medianoche los dos "hoy" son días
+  distintos y la agenda abriría en el día equivocado justo en el turno vespertino.
+- **La conversión va en dos pasadas** (desfase del instante ingenuo, y corrección
+  con el desfase del resultado). La prueba lo fija con Madrid el fin de semana en
+  que cambia el horario: las 09:00 del 24 y las del 26 de octubre son la misma hora
+  de pared y dos instantes con una hora de diferencia.
+- El rango del día va de medianoche a medianoche y **el extremo derecho es
+  exclusivo**: con `lte` una cita de las 00:00 saldría en dos días.
+
+---
+
+### 3. El choque, el horario y el estado
+
+**El choque** se comprueba en dos frentes distintos porque son dos problemas
+distintos: el **sillón** (no caben dos pacientes en la misma unidad) y el **alumno**
+(no puede estar en dos sillones a la vez). Los intervalos son medio abiertos
+`[a,b)`, así que 9–10 y 10–11 **no** chocan — una empieza cuando la otra acaba. Las
+canceladas y las "no llegó" no cuentan: su hueco quedó libre; una terminada sí,
+porque ocurrió.
+
+**El horario del sillón:** 🔴 **SIN FILAS = SIEMPRE ABIERTO**, y está escrito con
+todas sus letras en la pantalla porque es lo contrario de lo que la gente supone. Un
+sillón recién dado de alta acepta cualquier hora; en cuanto tiene UNA franja, solo
+acepta lo que cabe **entero** en una sola (si abre 8–12 y 16–20, una cita de 11:30 a
+12:30 no cabe: la mitad está en el hueco de la comida). Obligar a capturar horario
+antes de poder agendar habría convertido el alta de un sillón en un trámite.
+
+**El estado** — llegó → se sentó → se le trabaja → terminó — con dos decisiones:
+
+- Los tres estados finales **no tienen salida**. Una cita terminada no se reabre:
+  se agenda otra. Si se pudiera volver atrás, el `completedAt` dejaría de
+  significar algo.
+- Las marcas de tiempo se **derivan** del estado y no se capturan, y **lo ya escrito
+  no se pisa**: quien llegó a las 9:02 llegó a las 9:02 aunque después alguien
+  vuelva a tocar la fila.
+
+---
+
+### 4. La decisión de permisos que hace que `/mi-dia` sirva de algo
+
+El contrato de la ola le da al ALUMNO tres permisos de LECTURA
+(`agenda.view` + `pacientes.view` + `casos.view`). Con eso al pie de la letra, un
+alumno no podría marcar **nada** de su propio día y `/mi-dia` sería una pantalla de
+solo lectura: la escuela seguiría midiendo tiempos en papel.
+
+Así que el estado de una cita se partió en dos:
+
+- **Los cuatro estados CLÍNICOS** (llegó, en el sillón, en tratamiento, terminada)
+  exigen `agenda.view`. Registrar lo que está pasando en tu sillón no es administrar
+  la agenda. Lo que impide mover la cita de otro **no es el permiso, es el ALCANCE**:
+  el endpoint busca la fila con el `where` de visibilidad y una que no te toca
+  contesta 404, igual que una que no existe.
+- **Cancelar y "no llegó"** exigen `agenda.manage`: son decisiones administrativas
+  (liberan el hueco y, en la Ola 5, tocan el cobro).
+
+Los otros diez endpoints siguen la regla al pie: `assertEduPermission` + el helper
+de visibilidad, siempre.
+
+---
+
+### 5. El ORIGEN del paciente, que decide el precio dentro de tres olas
+
+`referredByStudentId` dice CUÁL alumno trajo al paciente. En la Ola 5 ese dato
+decide la tarifa, así que se captura **desde ya** — reconstruirlo después, de
+memoria, no se puede — y se guarda además **quién** lo marcó y **cuándo**, porque es
+un dato con consecuencia económica: si un día no cuadra una cuenta, hay que poder
+preguntarlo.
+
+Tiene endpoint propio (`PATCH …/pacientes/[id]/origen`) y permiso propio
+(`pacientes.origen`, solo Caja y Dirección). Un `referredByStudentId` que llegue en
+el body del alta o de la edición **se ignora en silencio** para quien no puede
+ponerlo. En la pantalla se **PINTA siempre**, deshabilitado: esconderlo del alumno
+sería peor que enseñárselo bloqueado — tiene derecho a ver si el paciente que trajo
+cuenta como suyo.
+
+---
+
+### 6. El caso, y por qué no es "el expediente del paciente"
+
+Un caso es: este paciente, con este alumno, en esta especialidad. Un paciente puede
+tener **varios** a la vez — la señora que necesita endodoncia y ortodoncia es una
+persona con dos casos, dos alumnos y dos docentes. Meterlo todo en un solo
+expediente "del paciente" es exactamente lo que hace que en una escuela nadie sepa
+de quién era la responsabilidad.
+
+- Se rebota un **segundo caso ABIERTO** del mismo paciente en la misma especialidad
+  (las citas se repartirían entre los dos y el avance dejaría de leerse). Uno
+  cerrado no estorba: el paciente puede volver años después.
+- **El alumno del caso NO se cambia.** Cambiar de alumno es `TRANSFERRED` + un caso
+  nuevo: reescribir el `studentId` borraría la respuesta a "¿quién lo atendía en
+  marzo?", que es justo la pregunta que se hace cuando algo sale mal. Misma regla
+  que la supervisión de la Ola 1A, que se cierra en vez de editarse.
+- `closedAt` se **deriva** del estado; no se captura.
+- Abrir un caso mueve al paciente a "En tratamiento" y cerrar el último lo devuelve
+  a "Dado de alta", **en la misma transacción** y **contando de verdad** (no
+  restando uno: un paciente con tres casos que cierra uno sigue en tratamiento).
+
+---
+
+### 7. Lo que se decidió distinto al contrato, y por qué
+
+**`EduCase.supervisorUserId` quedó OPCIONAL** (el contrato lo listaba sin `?`). Dos
+razones:
+
+1. La visibilidad del DOCENTE **no** se calcula con esa columna sino con la
+   asignación vigente. Si se calculara ahí, un docente que ya rotó seguiría leyendo
+   el caso para siempre.
+2. Exigirla haría que el tamizaje fallara cuando el alumno todavía no tiene
+   supervisor asignado, y la puerta de entrada de la clínica se quedaría atorada por
+   un trámite del padrón.
+
+Lo que sí hace el producto es **rellenarla sola** con el titular vigente del alumno
+al abrir el caso (y proponerlo igual en cada cita), así que en la práctica casi
+nunca queda vacía. Es el responsable EN ESE MOMENTO, guardado para poder
+contestarlo dentro de un año.
+
+---
+
+### 8. Lo que NO se probó, y lo que queda cojo
+
+**a) Nada tocó una base de datos.** El SQL **no se aplicó** y no hubo conexión a
+Postgres: es lo que pedía el encargo. Todo lo que se prueba son funciones que
+reciben datos y devuelven datos (135 pruebas). Lo que **no** está verificado contra
+Postgres: que las cinco tablas se creen sin choque en una base real, que los
+índices únicos rebocen los duplicados, y que las dos llaves cruzadas entre
+`edu_cases` y `edu_appointments` no den problema al insertar. El SQL se generó a
+mano y después se **contrastó línea por línea** con el que produce
+`prisma migrate diff --from-empty` (local, sin conexión): los 15 índices y las 17
+llaves foráneas coinciden en nombre, columnas y `ON DELETE`.
+
+**b) Ninguna pantalla se abrió en un navegador.** Sin base no hay sesión de
+instituto, así que no hay captura de pantalla de nada. Lo que sí está verificado es
+que las once rutas de API y las cinco páginas **compilan y quedan registradas** en
+el build de producción.
+
+**c) El choque de horarios es de aplicación, no de la base.** Dos altas
+EXACTAMENTE simultáneas podrían colarse. Cerrarlo del todo pide una restricción de
+exclusión sobre un `tstzrange`, que Prisma no modela y que dejaría el schema y el
+`.sql` diciendo cosas distintas. En una clínica escolar el alta la teclea una
+persona y el que se cuele se ve en la agenda del día — pero queda anotado.
+
+**d) Un DOCENTE ve las citas de SUS alumnos, no aquellas en las que figura como
+supervisor de guardia.** Es lo que pide el contrato ("nada de otros docentes") y
+deja fuera un caso real: cubrir el turno de un compañero. El producto lo esquiva por
+otro lado (la cita propone al titular vigente del alumno), pero si algún día
+molesta, la línea a tocar es UNA y está en `visibility.ts`.
+
+**e) La agenda no es una rejilla de horas.** Una columna por sillón con las citas
+posicionadas en absoluto es preciosa en un monitor e ilegible en 375 px: o se ven
+dos horas, o las citas miden ocho píxeles. Aquí cada cita es una tarjeta con su hora
+escrita. Se lee igual de bien en la mano que en el escritorio y no depende de que la
+altura sea proporcional al tiempo — que es lo primero que se rompe con una cita de
+10 minutos.
+
+**f) Sin paginación de verdad.** La agenda se corta en 500 filas y los listados en
+300, y la pantalla lo **dice** en vez de mentir con un total.
+
+**g) `tsc --noEmit` sale con 6 errores AJENOS** (`src/lib/barber/__tests__/`:
+`dinero-sumas` y `i18n-alcance`). Vienen de `origin/main`, esta rama no tocó esos
+archivos y arreglarlos habría sido salirse del vertical. Del instituto: **cero**.
+
+**h) Archivos que se quisieron tocar y NO se tocaron.** Ninguno se tocó a
+escondidas; se listan para que la integración decida:
+- `package.json` — los tres scripts `test:edu-visibility`, `test:edu-agenda` y
+  `test:edu-pacientes`. Es del dental y esta ola tiene prohibido tocarlo; las
+  pruebas se corren con `npx tsx --test …` (el comando está en la cabecera de cada
+  archivo).
+- `src/lib/edu/padron.ts` — se **reusa** su `EduPadronError` (reexportado como
+  `EduClinicaError`) en vez de inventar un error nuevo, porque `eduApiError` lo mapea
+  tal cual y un error propio habría salido como 500 genérico. No se editó ni una
+  línea.
+- `src/lib/edu/api-guard.ts` — no hizo falta: `eduApiGuard` ya hace lo que se
+  necesita y los once endpoints nuevos lo usan sin cambiarlo.
+- `src/middleware.ts` — no hizo falta: `/instituto/:path*` ya está en el matcher
+  desde la Ola 0.
+- `scripts/edu-guard.cjs` — no hizo falta: `src/components/edu/clinica/` cae bajo el
+  prefijo `src/components/edu/` que ya estaba indultado.
+
+---
+
+### 9. Cómo aplicarlo (en este orden)
+
+1. `sql/edu-ola-2.sql` en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0.sql` y `edu-ola-1.sql`. Es idempotente y no tiene un solo DROP.
+2. El **backfill del override** de la sección 6 del `.sql`, solo si hay usuarios con
+   `permissionsOverride` no vacío: el override REEMPLAZA al default, así que las
+   nueve keys nuevas **no** le llegan solas a quien ya tenga uno guardado. Está
+   separado por rol a propósito — copiarle a caja el bloque de dirección le abriría
+   el expediente clínico.
+3. Dar de alta los sillones desde `/instituto/sillones` (o con el ejemplo comentado
+   de la sección 7 del `.sql`). **Sin al menos un sillón no se puede agendar a
+   nadie**, y la agenda lo dice en vez de fingir columnas vacías.
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0, once rutas de API y cinco
+páginas registradas) · `npx tsc --noEmit` ✅ para el vertical (6 errores ajenos de
+barber, preexistentes en `origin/main`) · **135 pruebas** en verde
+(`edu-visibility` 29, `edu-agenda` 33, `edu-pacientes` 16, `edu-permissions` 24,
+`edu-padron` 24, `edu-contract` 9) · `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(38 archivos propios, 1 compartido declarado, 0 prohibidos).

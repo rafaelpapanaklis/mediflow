@@ -45,6 +45,19 @@ export const EDU_ALL_PERMISSIONS = {
   "padron.manage": "Dar de alta y de baja alumnos, programas y generaciones",
   "docentes.view": "Ver la lista de docentes",
   "supervision.assign": "Asignar alumnos a un docente supervisor",
+  // ── Ola 2 · el piso clínico ──────────────────────────────────────────
+  // Cada una la EXIGE una pantalla y un endpoint que ya existen; la prueba
+  // de __tests__/edu-permissions.test.ts falla si alguna se queda sin
+  // lector de servidor.
+  "pacientes.view": "Ver los pacientes de la clínica",
+  "pacientes.manage": "Registrar y editar la ficha de un paciente",
+  "pacientes.origen": "Marcar CUÁL alumno trajo al paciente",
+  "agenda.view": "Ver la agenda de la clínica",
+  "agenda.manage": "Agendar, reagendar y cancelar citas",
+  "sillones.view": "Ver las unidades dentales y su horario",
+  "sillones.manage": "Dar de alta sillones y capturar su horario",
+  "casos.view": "Ver los casos clínicos",
+  "casos.assign": "Asignar un paciente a un alumno y abrir su caso",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -64,6 +77,14 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
   {
     title: "Padrón académico",
     keys: ["padron.view", "padron.manage", "docentes.view", "supervision.assign"],
+  },
+  {
+    title: "Pacientes y casos",
+    keys: ["pacientes.view", "pacientes.manage", "pacientes.origen", "casos.view", "casos.assign"],
+  },
+  {
+    title: "Agenda y sillones",
+    keys: ["agenda.view", "agenda.manage", "sillones.view", "sillones.manage"],
   },
 ];
 
@@ -88,12 +109,68 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  *
  * ALUMNO y CAJA no reciben nada de esto. Un residente no tiene por qué
  * leer el padrón completo de su generación, y caja cobra: no inscribe.
+ *
+ * ── Ola 2 · el piso clínico ─────────────────────────────────────────────
+ * Aquí los cuatro roles SÍ se separan, y el reparto es el del contrato:
+ *
+ *   CAJA      recibe al paciente, lo agenda y lo cobra: pacientes.*
+ *             (incluido el ORIGEN, que decide el precio) + agenda.* +
+ *             sillones.view. Ni un caso clínico: no abre expediente.
+ *   DOCENTE   mira todo lo suyo y REPARTE: los .view del piso clínico +
+ *             casos.assign. No registra pacientes (eso es recepción) ni
+ *             mueve la agenda de la escuela.
+ *   ALUMNO    agenda.view + pacientes.view + casos.view. Tres permisos de
+ *             LECTURA, y todo lo que lea está recortado a lo suyo.
+ *
+ * 🔴 Los tres roles de abajo comparten esas keys de lectura, y eso NO
+ * significa que vean lo mismo. El permiso abre la pantalla; el ALCANCE
+ * (src/lib/edu/visibility.ts) decide las filas: con el mismo
+ * "pacientes.view", dirección ve todos, el docente ve los de sus alumnos
+ * VIGENTES y el alumno ve los suyos. Ensanchar el permiso no ensancha lo
+ * que se ve — y ésa es justamente la idea.
+ *
+ * ⚠️ "pacientes.origen" NO se le da al docente ni al alumno: marcar quién
+ * trajo al paciente decide el precio en la Ola 5, así que lo pone quien
+ * cobra (caja) o quien manda (dirección). Al alumno se le PINTA su origen,
+ * deshabilitado.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
-  DIRECCION: ["inicio.view", "padron.view", "padron.manage", "docentes.view", "supervision.assign"],
-  DOCENTE: ["inicio.view", "padron.view", "docentes.view"],
-  ALUMNO: ["inicio.view"],
-  CAJA: ["inicio.view"],
+  DIRECCION: [
+    "inicio.view",
+    "padron.view",
+    "padron.manage",
+    "docentes.view",
+    "supervision.assign",
+    "pacientes.view",
+    "pacientes.manage",
+    "pacientes.origen",
+    "agenda.view",
+    "agenda.manage",
+    "sillones.view",
+    "sillones.manage",
+    "casos.view",
+    "casos.assign",
+  ],
+  DOCENTE: [
+    "inicio.view",
+    "padron.view",
+    "docentes.view",
+    "pacientes.view",
+    "agenda.view",
+    "sillones.view",
+    "casos.view",
+    "casos.assign",
+  ],
+  ALUMNO: ["inicio.view", "agenda.view", "pacientes.view", "casos.view"],
+  CAJA: [
+    "inicio.view",
+    "pacientes.view",
+    "pacientes.manage",
+    "pacientes.origen",
+    "agenda.view",
+    "agenda.manage",
+    "sillones.view",
+  ],
 };
 
 /** Forma mínima que necesita cualquier check: rol + override. */

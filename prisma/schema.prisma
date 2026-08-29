@@ -12375,6 +12375,12 @@ model EduInstitution {
   cohorts      EduCohort[]
   students     EduStudent[]
   supervisions EduSupervisorAssignment[]
+  // Ola 2 · el piso clínico.
+  patients        EduPatient[]
+  chairs          EduChair[]
+  chairSchedules  EduChairSchedule[]
+  cases           EduCase[]
+  appointments    EduAppointment[]
 
   @@map("edu_institutions")
 }
@@ -12411,6 +12417,14 @@ model EduUser {
   /// Alumnos que esta persona supervisa como DOCENTE. Lleva VIGENCIA:
   /// una fila con endsAt en el pasado ya no cuenta (ver EduSupervisorAssignment).
   supervisees    EduSupervisorAssignment[] @relation("EduSupervisor")
+
+  /// Ola 2. Casos y citas en los que esta persona figura como DOCENTE
+  /// responsable, y pacientes a los que le marcó el origen. Son columnas
+  /// de registro: la visibilidad del docente NO se calcula con ellas sino
+  /// con la asignación vigente de arriba (ver src/lib/edu/visibility.ts).
+  casesSupervised        EduCase[]        @relation("EduCaseSupervisor")
+  appointmentsSupervised EduAppointment[] @relation("EduApptSupervisor")
+  patientOriginsSet      EduPatient[]     @relation("EduPatientOriginSetBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12470,6 +12484,8 @@ model EduProgram {
   institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   cohorts     EduCohort[]
   students    EduStudent[]
+  /// Ola 2: el caso clínico cuelga de la especialidad.
+  cases       EduCase[]
 
   @@unique([institutionId, code])
   @@index([institutionId, isActive])
@@ -12528,6 +12544,12 @@ model EduStudent {
   program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
   cohort      EduCohort      @relation(fields: [cohortId], references: [id], onDelete: Cascade)
   supervisors EduSupervisorAssignment[]
+  /// Ola 2: lo que este alumno lleva en el piso clínico.
+  cases            EduCase[]
+  appointments     EduAppointment[]
+  /// Pacientes que ESTE alumno trajo a la clínica. En la Ola 5 decide el
+  /// precio, por eso se guarda desde ahora.
+  referredPatients EduPatient[] @relation("EduPatientReferrer")
 
   @@unique([institutionId, matricula])
   @@index([institutionId, status])
@@ -12572,4 +12594,326 @@ model EduSupervisorAssignment {
   @@index([institutionId, supervisorUserId, endsAt], map: "edu_supervisor_assignments_supervisor_idx")
   @@index([institutionId, studentId, endsAt], map: "edu_supervisor_assignments_student_idx")
   @@map("edu_supervisor_assignments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 2 · EL PISO CLÍNICO.
+//
+// Cinco tablas: el paciente de la escuela (EduPatient), la unidad dental
+// (EduChair) con su horario (EduChairSchedule), EL CASO (EduCase) y la
+// cita (EduAppointment).
+//
+// 🔴 institutionId está en las CINCO, igual que en la Ola 1A y por la
+// misma razón: TODA consulta del vertical filtra por el institutionId de
+// la SESIÓN, y un filtro que necesita un JOIN para existir es un filtro
+// que alguien va a olvidar. Ojo Prisma: un institutionId undefined BORRA
+// el filtro y una escuela ve los pacientes de otra.
+//
+// 🔴 QUIÉN VE QUÉ no se decide aquí ni en cada consulta suelta: hay UN
+// helper, src/lib/edu/visibility.ts, y todas las lecturas de estas cinco
+// tablas pasan por él. ALUMNO ve lo suyo; DOCENTE lo de los alumnos que
+// supervisa CON ASIGNACIÓN VIGENTE; CAJA todos los pacientes y toda la
+// agenda pero NINGÚN caso; DIRECCION todo.
+//
+// ⚠️ NADA de esto se BORRA desde el producto. Un paciente cambia de
+// estado, un sillón se desactiva, un caso se cierra o se transfiere. Los
+// onDelete son Cascade por la misma razón que en la Ola 1A: para que
+// borrar un instituto entero (administración, no panel) no se atore en una
+// llave — salvo los dos que apuntan a la cita/al caso, que van SetNull
+// para no crear un ciclo de cascadas entre EduCase y EduAppointment.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-2.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Estado del paciente DE LA ESCUELA. No es un diagnóstico: es en qué
+/// punto del embudo está. Un paciente no se borra nunca — sus citas y sus
+/// casos ocurrieron.
+enum EduPatientStatus {
+  /// Registrado en recepción. Todavía no pasa por tamizaje.
+  NEW
+  /// Tiene al menos un caso abierto: alguien lo está atendiendo.
+  ACTIVE
+  /// Terminó todos sus tratamientos.
+  DISCHARGED
+  /// Dejó de venir. No se borra: vuelve a ACTIVE si regresa.
+  INACTIVE
+}
+
+/// Sexo del paciente, tal como se captura en la ficha. UNSPECIFIED existe
+/// a propósito: obligar a elegir en recepción produce datos inventados.
+enum EduSex {
+  FEMALE
+  MALE
+  OTHER
+  UNSPECIFIED
+}
+
+/// El ciclo de vida de un caso clínico dentro de la escuela.
+///
+/// SCREENING es el estado en que nace un caso abierto desde el tamizaje
+/// cuando todavía no se decide el tratamiento; ASSIGNED es "ya tiene
+/// alumno"; IN_TREATMENT es "ya se le está haciendo algo"; ON_HOLD es la
+/// pausa (el paciente no vuelve, falta un estudio); COMPLETED, TRANSFERRED
+/// (cambió de alumno o de especialidad) y ABANDONED son finales.
+enum EduCaseStatus {
+  SCREENING
+  ASSIGNED
+  IN_TREATMENT
+  ON_HOLD
+  COMPLETED
+  TRANSFERRED
+  ABANDONED
+}
+
+/// Para qué es la cita. TAMIZAJE es la valoración inicial que decide si el
+/// paciente entra y a qué alumno se le asigna.
+enum EduAppointmentType {
+  TAMIZAJE
+  TRATAMIENTO
+  CONTROL
+}
+
+/// Dónde va la cita HOY. CHECKED_IN es "el paciente ya llegó a recepción",
+/// IN_CHAIR es "ya está sentado en el sillón" e IN_PROGRESS es "ya se le
+/// está trabajando". Son tres momentos distintos y la escuela los mide.
+enum EduAppointmentStatus {
+  SCHEDULED
+  CHECKED_IN
+  IN_CHAIR
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+/// El paciente de la clínica de la escuela.
+///
+/// No es el `Patient` del dental y no comparte con él ni una columna: es
+/// otro producto, con otro tenant y otro expediente.
+///
+/// ── EL ORIGEN, Y POR QUÉ SE GUARDA DESDE HOY ────────────────────────────
+/// `referredByStudentId` dice CUÁL alumno trajo a este paciente. En la Ola
+/// 5 ese dato decide el precio (el paciente que trae el alumno no paga lo
+/// mismo que el que llega solo a la clínica), así que se captura desde ya:
+/// reconstruirlo después, a mano y de memoria, no se puede.
+///
+/// Se guarda además QUIÉN lo marcó (`originSetById`) y CUÁNDO
+/// (`originSetAt`), porque es un dato con consecuencia económica: si un día
+/// no cuadra, hay que poder preguntar quién lo puso. Marcarlo exige el
+/// permiso `pacientes.origen`, que por defecto solo tienen Caja y
+/// Dirección — al alumno se le PINTA su origen, deshabilitado.
+model EduPatient {
+  id            String           @id @default(cuid())
+  institutionId String
+  /// Folio de la escuela. Único DENTRO del instituto y normalizado en
+  /// MAYÚSCULAS por la aplicación (Postgres distingue: "p-01" y "P-01"
+  /// serían dos pacientes con el mismo folio impreso en el expediente).
+  folio         String           @db.VarChar(30)
+  firstName     String           @db.VarChar(80)
+  lastName      String           @db.VarChar(80)
+  phone         String?          @db.VarChar(30)
+  email         String?          @db.VarChar(160)
+  /// Fecha de CALENDARIO: se guarda a medianoche UTC y se pinta en UTC.
+  /// Formatearla en la zona local restaría horas y un nacimiento del 1 de
+  /// enero saldría "31 de diciembre".
+  birthDate     DateTime?
+  sex           EduSex           @default(UNSPECIFIED)
+  notes         String?          @db.VarChar(1000)
+  status        EduPatientStatus @default(NEW)
+
+  /// CUÁL alumno lo trajo. null = llegó solo a la clínica.
+  referredByStudentId String?
+  /// Quién marcó ese origen y cuándo. Se escriben juntos, siempre.
+  originSetById       String?
+  originSetAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution      EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  referredByStudent EduStudent?   @relation("EduPatientReferrer", fields: [referredByStudentId], references: [id], onDelete: SetNull)
+  originSetBy       EduUser?      @relation("EduPatientOriginSetBy", fields: [originSetById], references: [id], onDelete: SetNull)
+  cases        EduCase[]
+  appointments EduAppointment[]
+
+  @@unique([institutionId, folio])
+  @@index([institutionId, status])
+  @@index([institutionId, lastName])
+  @@index([institutionId, referredByStudentId], map: "edu_patients_referrer_idx")
+  @@map("edu_patients")
+}
+
+/// La unidad dental.
+///
+/// 🔴 CUÁNTAS HAY LO DECIDE CADA INSTITUTO. No hay un número en el código
+/// ni un seed con doce sillones: una escuela tiene 40 y otra tiene 6, y el
+/// producto no puede opinar. Se dan de alta desde /instituto/sillones.
+model EduChair {
+  id            String  @id @default(cuid())
+  institutionId String
+  name          String  @db.VarChar(60)
+  /// El número que está pintado en la pared. Único dentro del instituto.
+  number        Int
+  isActive      Boolean @default(true)
+  /// Orden en que se pintan las columnas de la agenda. Empata con `number`
+  /// por defecto, pero se puede cambiar sin renumerar la clínica entera.
+  orderIndex    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution  EduInstitution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  schedules    EduChairSchedule[]
+  appointments EduAppointment[]
+
+  @@unique([institutionId, number])
+  @@index([institutionId, isActive, orderIndex], map: "edu_chairs_orden_idx")
+  @@map("edu_chairs")
+}
+
+/// Horario de un sillón: qué días y en qué franja se puede agendar.
+///
+/// 🔴 SIN FILAS = SIEMPRE ABIERTO. Un sillón recién dado de alta no tiene
+/// horario y acepta cualquier hora; en cuanto tiene UNA fila, solo acepta
+/// lo que cae dentro de sus franjas. Esa asimetría es a propósito: obligar
+/// a capturar un horario antes de poder agendar convertiría el alta de un
+/// sillón en un trámite.
+///
+/// Las horas se guardan como MINUTOS DESDE LA MEDIANOCHE (480 = 08:00) y
+/// en la hora de PARED del instituto, no como instantes: "el sillón 3 abre
+/// a las 8" no cambia porque cambie el horario de verano. La conversión a
+/// instante vive en src/lib/edu/agenda-core.ts y usa la zona horaria del
+/// instituto.
+model EduChairSchedule {
+  id            String @id @default(cuid())
+  institutionId String
+  chairId       String
+  /// 0 = domingo … 6 = sábado (igual que Date#getUTCDay, para no tener que
+  /// traducir en ningún lado).
+  weekday       Int
+  /// Minutos desde la medianoche. startMinute < endMinute, siempre.
+  startMinute   Int
+  endMinute     Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  chair       EduChair       @relation(fields: [chairId], references: [id], onDelete: Cascade)
+
+  @@index([institutionId, chairId, weekday], map: "edu_chair_schedules_chair_idx")
+  @@map("edu_chair_schedules")
+}
+
+/// EL CASO: este paciente, con este alumno, en esta especialidad.
+///
+/// Un paciente puede tener VARIOS casos abiertos a la vez — uno por
+/// especialidad. La señora que necesita endodoncia y ortodoncia es una
+/// sola persona con dos casos, dos alumnos y dos docentes; meterlo todo en
+/// un solo expediente "del paciente" es exactamente lo que hace que en una
+/// escuela nadie sepa de quién es la responsabilidad.
+///
+/// `supervisorUserId` es OPCIONAL a propósito y no es un descuido:
+///   · La visibilidad del DOCENTE NO se calcula con esta columna, sino con
+///     la asignación VIGENTE alumno↔docente de la Ola 1A. Si se calculara
+///     aquí, un docente que ya rotó seguiría viendo el caso para siempre.
+///   · Exigirla haría que abrir un caso fallara cuando el alumno todavía
+///     no tiene supervisor asignado, y el tamizaje se quedaría atorado por
+///     un trámite del padrón.
+/// Lo que sí hace el producto es rellenarla sola con el titular vigente del
+/// alumno en el momento de abrir el caso: es el responsable EN ESE
+/// MOMENTO, guardado para poder contestarlo dentro de un año.
+model EduCase {
+  id            String        @id @default(cuid())
+  institutionId String
+  patientId     String
+  studentId     String
+  /// La especialidad. Es el mismo EduProgram del padrón: un caso de
+  /// Endodoncia y uno de Ortodoncia no son el mismo caso.
+  programId     String
+  supervisorUserId String?
+  status        EduCaseStatus @default(SCREENING)
+  openedAt      DateTime      @default(now())
+  /// Se escribe cuando el caso llega a un estado final (COMPLETED,
+  /// TRANSFERRED, ABANDONED). Se deriva del status: no se captura.
+  closedAt      DateTime?
+  notes         String?       @db.VarChar(1000)
+
+  /// La cita de tamizaje que abrió este caso. Sin FK en cascada: es una
+  /// referencia hacia atrás y borrar la cita no puede llevarse el caso.
+  screeningAppointmentId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  student     EduStudent     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  supervisor  EduUser?       @relation("EduCaseSupervisor", fields: [supervisorUserId], references: [id], onDelete: SetNull)
+  screeningAppointment EduAppointment? @relation("EduCaseScreening", fields: [screeningAppointmentId], references: [id], onDelete: SetNull)
+  appointments EduAppointment[] @relation("EduCaseAppointments")
+
+  @@index([institutionId, status], map: "edu_cases_status_idx")
+  @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
+  @@index([institutionId, patientId], map: "edu_cases_patient_idx")
+  @@index([institutionId, programId, status], map: "edu_cases_program_idx")
+  @@map("edu_cases")
+}
+
+/// La cita en el sillón.
+///
+/// 🔴 startsAt/endsAt son INSTANTES (Timestamptz), no horas de pared. La
+/// agenda se captura en la hora del instituto y se convierte a instante en
+/// UN solo lugar (src/lib/edu/agenda-core.ts) usando
+/// EduInstitution.timezone. Guardar horas de pared en una columna sin zona
+/// es cómo se acaba con una cita que se mueve una hora sola en octubre.
+///
+/// `caseId` es opcional porque la cita de TAMIZAJE ocurre ANTES de que
+/// exista el caso: primero se agenda la valoración, y es esa valoración la
+/// que abre el caso y le engancha el `caseId` después.
+model EduAppointment {
+  id            String               @id @default(cuid())
+  institutionId String
+  patientId     String
+  /// El alumno que atiende. Nunca es opcional: una cita sin dueño no la
+  /// ve nadie (la visibilidad del ALUMNO y la del DOCENTE cuelgan de aquí).
+  studentId     String
+  chairId       String
+  supervisorUserId String?
+  caseId        String?
+  startsAt      DateTime             @db.Timestamptz(3)
+  endsAt        DateTime             @db.Timestamptz(3)
+  type          EduAppointmentType   @default(TRATAMIENTO)
+  status        EduAppointmentStatus @default(SCHEDULED)
+  /// Los tres momentos que la escuela mide: llegó, se sentó, terminó.
+  checkedInAt   DateTime?            @db.Timestamptz(3)
+  startedAt     DateTime?            @db.Timestamptz(3)
+  completedAt   DateTime?            @db.Timestamptz(3)
+  notes         String?              @db.VarChar(1000)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  student     EduStudent     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  chair       EduChair       @relation(fields: [chairId], references: [id], onDelete: Cascade)
+  supervisor  EduUser?       @relation("EduApptSupervisor", fields: [supervisorUserId], references: [id], onDelete: SetNull)
+  case        EduCase?       @relation("EduCaseAppointments", fields: [caseId], references: [id], onDelete: SetNull)
+  screeningFor EduCase[]     @relation("EduCaseScreening")
+
+  // Los nombres van EXPLÍCITOS: el que Prisma generaría solo
+  // (edu_appointments_institutionId_chairId_startsAt_idx y compañía) es
+  // largo y frágil, y sql/edu-ola-2.sql tiene que poder decir lo mismo.
+  //   · por sillón → la agenda del día, que es la consulta de cada mañana
+  //   · por alumno → /mi-dia
+  //   · por paciente → la ficha
+  @@index([institutionId, startsAt], map: "edu_appointments_dia_idx")
+  @@index([institutionId, chairId, startsAt], map: "edu_appointments_chair_idx")
+  @@index([institutionId, studentId, startsAt], map: "edu_appointments_student_idx")
+  @@index([institutionId, patientId, startsAt], map: "edu_appointments_patient_idx")
+  @@index([institutionId, caseId], map: "edu_appointments_case_idx")
+  @@map("edu_appointments")
 }

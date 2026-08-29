@@ -1449,3 +1449,323 @@ select.edu-input {
   flex-direction: column;
   gap: 8px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   9 · OLA 2 — EL PISO CLÍNICO: agenda, sillones, pacientes y mi día.
+
+   MÓVIL PRIMERO, igual que todo lo anterior, y por la misma razón: quien
+   abre la agenda de una escuela es un docente o un alumno DE PIE, con el
+   teléfono en una mano y el paciente enfrente. En el teléfono la agenda es
+   una PILA de grupos (un grupo por sillón, o por día en la vista de
+   semana); a partir de 900 px los grupos se acomodan en columnas.
+
+   ── POR QUÉ NO HAY UNA REJILLA DE HORAS ─────────────────────────────────
+   La agenda "de calendario" (una columna por sillón y una fila por cada
+   15 minutos, con las citas posicionadas en absoluto) es preciosa en un
+   monitor y es ilegible en 375 px: o se ven dos horas, o las citas miden
+   ocho píxeles de alto. Aquí cada cita es una TARJETA con su hora escrita,
+   ordenadas de la primera a la última. Se lee igual de bien en la mano que
+   en el escritorio, y no depende de que la altura sea proporcional al
+   tiempo — que es lo primero que se rompe con una cita de 10 minutos.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Barra de día: ‹ hoy › + día/semana ── */
+.edu-daybar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-daybar__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.edu-daybar__label {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  /* El formateador de es-MX devuelve "lunes 31 de agosto"; en un
+     encabezado se lee mejor con la inicial en mayúscula. */
+  text-transform: capitalize;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Selector de dos posiciones (Día / Semana). */
+.edu-seg {
+  display: inline-flex;
+  border: 1px solid var(--edu-line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--edu-surface);
+}
+
+.edu-seg__btn {
+  border: 0;
+  background: transparent;
+  color: var(--edu-text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  /* 40 px de alto: es un botón para un pulgar, no para un ratón. */
+  min-height: 40px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.edu-seg__btn--on {
+  background: var(--edu-600);
+  color: #ffffff;
+}
+
+/* ── La agenda ── */
+.edu-agenda {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .edu-agenda--cols {
+    grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+  }
+}
+
+.edu-agenda__group {
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+  box-shadow: var(--edu-shadow-1);
+  overflow: hidden;
+}
+
+.edu-agenda__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--edu-surface-2);
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-agenda__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.edu-agenda__sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+.edu-agenda__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.edu-agenda__empty {
+  padding: 14px 12px;
+  font-size: 13px;
+  color: var(--edu-text-3);
+}
+
+/* ── La cita ── */
+.edu-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  /* La banda de la izquierda dice el TIPO de un vistazo. Nunca es lo único
+     que lo dice: el tipo va también escrito en la tarjeta, porque un color
+     no se lee con daltonismo ni impreso en blanco y negro. */
+  border-left: 4px solid var(--edu-400);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.edu-slot:hover {
+  border-color: var(--edu-line-strong);
+  border-left-color: var(--edu-500);
+  background: var(--edu-hover);
+}
+
+.edu-slot--tamizaje {
+  border-left-color: var(--edu-amber-700);
+}
+
+.edu-slot--control {
+  border-left-color: var(--edu-300);
+}
+
+/* Cancelada o "no llegó": sigue ahí (pasó), pero apagada. */
+.edu-slot--off {
+  border-left-color: var(--edu-line-strong);
+  background: var(--edu-surface-2);
+  opacity: 0.78;
+}
+
+.edu-slot--done {
+  border-left-color: var(--edu-ok);
+}
+
+.edu-slot__time {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--edu-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-slot__name {
+  font-size: 14.5px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edu-slot__meta {
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+.edu-slot__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* ── Pares etiqueta/valor (la ficha de un paciente, el detalle de una
+      cita). Dos columnas a partir de 560 px. ── */
+.edu-kv {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 560px) {
+  .edu-kv--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.edu-kv__k {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-kv__v {
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* ── Editor de horario del sillón ── */
+.edu-hours {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-hour {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 10px;
+  padding: 10px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  background: var(--edu-surface-2);
+  align-items: end;
+}
+
+@media (min-width: 560px) {
+  .edu-hour {
+    grid-template-columns: 1.3fr 1fr 1fr auto;
+  }
+}
+
+/* Los días de la semana, como interruptores. */
+.edu-daypick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.edu-daypick__btn {
+  border: 1px solid var(--edu-line);
+  background: var(--edu-surface);
+  color: var(--edu-text-2);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  min-height: 38px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.edu-daypick__btn--on {
+  background: var(--edu-600);
+  border-color: var(--edu-600);
+  color: #ffffff;
+}
+
+/* ── Pila genérica: lo que en el teléfono es una lista de tarjetas ── */
+.edu-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edu-stack--tight {
+  gap: 8px;
+}
+
+/* Fila de acciones de un modal/detalle que envuelve bien en el teléfono. */
+.edu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Anchos de las tablas de esta ola (mismo mecanismo que .edu-table--padron:
+   la rejilla del renglón a partir de 1180 px). */
+.edu-table--pacientes {
+  --edu-cols: 104px minmax(160px, 1.8fr) minmax(140px, 1.3fr) 122px 92px 96px;
+}
+
+.edu-table--sillones {
+  --edu-cols: 84px minmax(140px, 1.2fr) minmax(180px, 2fr) 96px 160px;
+}
+
+.edu-table--casos {
+  --edu-cols: minmax(150px, 1.5fr) minmax(140px, 1.3fr) minmax(120px, 1fr) minmax(120px, 1fr) 128px 96px;
+}
