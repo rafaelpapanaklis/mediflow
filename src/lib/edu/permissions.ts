@@ -26,8 +26,12 @@ import type { EduRole } from "@/lib/edu/types";
  * cerró algo y no cerró nada.
  *
  * Por eso cada ola agrega SUS keys, en el mismo commit que la pantalla que
- * las lee — no las adelanta. La Ola 0 arranca con UNA sola key real,
- * "inicio.view", porque hay UNA sola pantalla.
+ * las lee — no las adelanta. La Ola 0 arrancó con UNA sola key real,
+ * "inicio.view", porque había UNA sola pantalla. La Ola 1A agrega cuatro
+ * y las cuatro tienen dueño: padron.view lo exige /instituto/padron,
+ * padron.manage lo exigen /instituto/padron/estructura y TODA mutación del
+ * padrón, docentes.view lo exige /instituto/docentes y supervision.assign
+ * lo exigen los endpoints de /api/instituto/supervision.
  *
  * El candado no es la buena voluntad: la prueba de
  * __tests__/edu-permissions.test.ts recorre src/app/instituto,
@@ -37,6 +41,10 @@ import type { EduRole } from "@/lib/edu/types";
  */
 export const EDU_ALL_PERMISSIONS = {
   "inicio.view": "Entrar al panel del instituto",
+  "padron.view": "Ver el padrón de alumnos",
+  "padron.manage": "Dar de alta y de baja alumnos, programas y generaciones",
+  "docentes.view": "Ver la lista de docentes",
+  "supervision.assign": "Asignar alumnos a un docente supervisor",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -53,6 +61,10 @@ export const EDU_ALL_PERMISSION_KEYS = Object.keys(
  */
 export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[] = [
   { title: "Panel", keys: ["inicio.view"] },
+  {
+    title: "Padrón académico",
+    keys: ["padron.view", "padron.manage", "docentes.view", "supervision.assign"],
+  },
 ];
 
 /**
@@ -63,10 +75,23 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * Lo que cada rol puede HACER dentro se irá diferenciando ola por ola
  * (autorizar es del docente, cobrar es de caja); mientras esa key no
  * exista, no se escribe aquí.
+ *
+ * ── Ola 1A · por qué el DOCENTE ve el padrón y no lo administra ─────────
+ * El docente necesita la lista para saber a quién trae en el sillón y con
+ * quién más la comparte, así que lleva "padron.view" y "docentes.view".
+ * Pero lo que VE está recortado a sus alumnos vigentes — eso no lo decide
+ * el permiso sino el ALCANCE (eduPadronScope, en padron-core.ts): el
+ * permiso abre la pantalla, el alcance decide las filas.
+ *
+ * "padron.manage" y "supervision.assign" son de DIRECCION: dar de alta,
+ * dar de baja y repartir alumnos es administrar la escuela.
+ *
+ * ALUMNO y CAJA no reciben nada de esto. Un residente no tiene por qué
+ * leer el padrón completo de su generación, y caja cobra: no inscribe.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
-  DIRECCION: ["inicio.view"],
-  DOCENTE: ["inicio.view"],
+  DIRECCION: ["inicio.view", "padron.view", "padron.manage", "docentes.view", "supervision.assign"],
+  DOCENTE: ["inicio.view", "padron.view", "docentes.view"],
   ALUMNO: ["inicio.view"],
   CAJA: ["inicio.view"],
 };

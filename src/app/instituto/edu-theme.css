@@ -882,3 +882,570 @@ body:has(.edu-auth) {
   font-size: 14px;
   color: rgba(226, 233, 246, 0.9);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   4 · PADRÓN ACADÉMICO (Ola 1A)
+
+   ── UNA SOLA TABLA, DOS FORMAS ──────────────────────────────────────────
+   No hay dos marcados (uno de tarjetas y otro de tabla): hay UNO, y la
+   rejilla cambia. Cada celda lleva su etiqueta dentro (.edu-cell__label);
+   en el teléfono la etiqueta se lee y las celdas se apilan de dos en dos,
+   y a partir de 1180 px la etiqueta se esconde, la fila se vuelve renglón
+   y el encabezado (.edu-rowhead) aparece. Duplicar el marcado es cómo se
+   llega a que una de las dos versiones se quede sin el dato nuevo.
+
+   ── POR QUÉ 1180 px Y NO 1024 ───────────────────────────────────────────
+   A 1024 px el cajón ya es columna fija de 252 px y al contenido le quedan
+   ~708 px: siete columnas ahí no son una tabla, son un acordeón ilegible.
+   La forma de tarjeta aguanta perfectamente hasta 1180 y ahí sí sobra
+   ancho para el renglón.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Encabezado de pantalla con acción ── */
+.edu-pagehead {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edu-pagehead__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 720px) {
+  .edu-pagehead {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .edu-pagehead__actions {
+    flex-shrink: 0;
+  }
+}
+
+/* ── Barra de filtros ── */
+.edu-toolbar {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  padding: 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+@media (min-width: 720px) {
+  .edu-toolbar {
+    grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(0, 1fr)) auto;
+    align-items: end;
+  }
+}
+
+.edu-toolbar__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--edu-text-2);
+}
+
+/* Campos: el <select> reusa .edu-input a propósito (mismo alto, mismo
+   borde, mismo foco). globals.css pinta inputs y selects para el panel
+   dental, pero este archivo no vive en ninguna @layer y por eso gana. */
+select.edu-input {
+  cursor: pointer;
+}
+
+.edu-input--sm {
+  min-height: 42px;
+  font-size: 15px;
+}
+
+/* ── La lista ── */
+.edu-table {
+  --edu-cols: 1fr;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edu-rowhead {
+  display: none;
+}
+
+.edu-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-row--off {
+  background: var(--edu-surface-2);
+}
+
+.edu-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.edu-cell--wide {
+  grid-column: 1 / -1;
+}
+
+.edu-cell__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-cell__value {
+  font-size: 14px;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-cell__value--strong {
+  font-weight: 650;
+  font-size: 15px;
+}
+
+.edu-cell__sub {
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-cell__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 1180px) {
+  .edu-table {
+    gap: 0;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+    overflow: hidden;
+  }
+
+  .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .edu-row:last-child {
+    border-bottom: 0;
+  }
+
+  .edu-cell--wide,
+  .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  .edu-cell__label {
+    display: none;
+  }
+
+  .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Las rejillas de cada pantalla. Se declaran aquí y no en línea para que
+   el encabezado y las filas no puedan desalinearse: leen la misma variable. */
+.edu-table--padron {
+  --edu-cols: 104px minmax(150px, 1.6fr) minmax(130px, 1.2fr) 74px 116px minmax(120px, 1.1fr) 96px;
+}
+
+.edu-table--programas {
+  --edu-cols: minmax(150px, 1.6fr) 108px 104px 104px 96px 108px 96px;
+}
+
+.edu-table--generaciones {
+  --edu-cols: minmax(130px, 1.2fr) minmax(130px, 1.2fr) 118px 118px 88px 108px 96px;
+}
+
+.edu-table--docentes {
+  --edu-cols: minmax(150px, 1.5fr) minmax(150px, 1.4fr) 110px 104px 104px;
+}
+
+/* ── Píldoras de estado ── */
+.edu-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Contrastes medidos sobre el fondo de cada píldora, no supuestos:
+   #14612F/#E3F5E9 8.4 ✓ · #B45309/#FEF3C7 4.62 ✓ · #2A3F70/#E3E9F6 8.9 ✓
+   #4A5468/#EDEFF3 6.9 ✓ · #8C1D18/#FBEAE9 7.5 ✓ */
+.edu-tag--ok {
+  color: #14612f;
+  background: #e3f5e9;
+  border: 1px solid rgba(21, 128, 61, 0.28);
+}
+
+.edu-tag--warn {
+  color: var(--edu-amber-900);
+  background: var(--edu-amber-100);
+  border: 1px solid rgba(180, 83, 9, 0.28);
+}
+
+.edu-tag--info {
+  color: var(--edu-700);
+  background: var(--edu-100);
+  border: 1px solid var(--edu-line-brand);
+}
+
+.edu-tag--muted {
+  color: var(--edu-text-2);
+  background: rgba(20, 26, 43, 0.06);
+  border: 1px solid var(--edu-line);
+}
+
+.edu-tag--danger {
+  color: #8c1d18;
+  background: var(--edu-danger-soft);
+  border: 1px solid rgba(179, 38, 30, 0.28);
+}
+
+.dark .edu-tag--ok {
+  color: #b7e8c7;
+  background: rgba(21, 128, 61, 0.24);
+}
+
+.dark .edu-tag--warn {
+  color: var(--edu-amber-100);
+  background: rgba(180, 83, 9, 0.28);
+}
+
+.dark .edu-tag--info {
+  color: var(--edu-200);
+  background: rgba(155, 176, 220, 0.18);
+}
+
+.dark .edu-tag--muted {
+  color: var(--edu-text-2);
+  background: rgba(226, 233, 246, 0.08);
+}
+
+.dark .edu-tag--danger {
+  color: #f2b8b5;
+  background: rgba(179, 38, 30, 0.24);
+}
+
+/* ── Vacíos ── */
+.edu-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  text-align: center;
+  background: var(--edu-surface);
+  border: 1px dashed var(--edu-line-strong);
+  border-radius: var(--edu-radius);
+}
+
+.edu-empty__title {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+}
+
+.edu-empty__detail {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+/* ── Botones chicos (acciones de fila) ── */
+.edu-btn--sm {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* En el teléfono el objetivo táctil vuelve a 44 px: una fila con dos
+   botones de 38 px se toca mal con el guante puesto. */
+@media (max-width: 719px) {
+  .edu-btn--sm {
+    min-height: 44px;
+    flex: 1 1 auto;
+  }
+}
+
+.edu-btn--quiet {
+  background: transparent;
+  border-color: var(--edu-line);
+  color: var(--edu-500);
+}
+
+.edu-btn--quiet:hover:not(:disabled) {
+  background: var(--edu-hover);
+  color: var(--edu-700);
+}
+
+/* ── Modal / hoja inferior ──
+   MÓVIL PRIMERO: en el teléfono sube desde abajo y ocupa lo que necesita
+   (hasta 92 dvh); en escritorio se centra. Es position:fixed y funciona
+   porque NADA en el árbol del panel lleva container-type ni transform: un
+   contenedor de consulta encima lo encerraría dentro de la columna. */
+.edu-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: rgba(18, 26, 46, 0.55);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.edu-modal__card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 92dvh;
+  background: var(--edu-surface);
+  border-radius: 16px 16px 0 0;
+  box-shadow: var(--edu-shadow-3);
+  /* El color se escribe COMPLETO: un modal blanco que hereda un `color`
+     claro de más arriba es un modal en blanco, y eso ya pasó en este repo. */
+  color: var(--edu-text-1);
+}
+
+@media (min-width: 720px) {
+  .edu-modal {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .edu-modal__card {
+    max-width: 560px;
+    max-height: 86dvh;
+    border-radius: 16px;
+  }
+}
+
+.edu-modal__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-modal__title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.edu-modal__sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--edu-text-2);
+}
+
+.edu-modal__body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.edu-modal__foot {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--edu-line);
+}
+
+@media (min-width: 720px) {
+  .edu-modal__foot {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+/* ── Formularios ── */
+.edu-formgrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 560px) {
+  .edu-formgrid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.edu-field__hint {
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+}
+
+/* ── Bloques sueltos ── */
+.edu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edu-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edu-section__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.edu-section__lead {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+  max-width: 68ch;
+}
+
+.edu-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--edu-text-2);
+}
+
+.edu-note {
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+  margin: 0;
+}
+
+.edu-alert--ok {
+  border-color: rgba(21, 128, 61, 0.3);
+  background: #e3f5e9;
+  color: #14612f;
+}
+
+.dark .edu-alert--ok {
+  background: rgba(21, 128, 61, 0.2);
+  color: #b7e8c7;
+}
+
+/* Docentes asignados: una lista de píldoras con su botón de cerrar. */
+.edu-chiplist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.edu-assign {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--edu-line);
+  background: var(--edu-surface-2);
+  font-size: 13px;
+}
+
+.edu-assign__x {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--edu-danger);
+  cursor: pointer;
+}
+
+.edu-assign__x:hover:not(:disabled) {
+  background: var(--edu-danger-soft);
+}
+
+.edu-assign__x:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Detalle desplegable de un docente (sus alumnos vigentes). */
+.edu-detail {
+  grid-column: 1 / -1;
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top: 1px dashed var(--edu-line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

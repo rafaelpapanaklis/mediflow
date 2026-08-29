@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { GraduationCap, Home, LogOut, Menu, X } from "lucide-react";
+import { GraduationCap, Home, Layers, LogOut, Menu, UserCheck, Users, X } from "lucide-react";
 import type { EduNavItem, EduNavSection } from "@/lib/edu/types";
 
 /**
@@ -29,6 +29,9 @@ import type { EduNavItem, EduNavSection } from "@/lib/edu/types";
 // ola agrega un item con icono nuevo, tiene que agregarlo aquí también.
 const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   home: Home,
+  users: Users,
+  layers: Layers,
+  "user-check": UserCheck,
 };
 
 export interface EduShellProps {
@@ -82,10 +85,24 @@ export function EduShell({
     };
   }, [open]);
 
-  function isActive(href: string) {
-    if (!pathname) return false;
-    return pathname === href || pathname.startsWith(href + "/");
-  }
+  /**
+   * Se enciende UN item: el que COINCIDE MÁS.
+   *
+   * 🔴 Con la regla ingenua (`empieza por el href`), estar en
+   * /instituto/padron/estructura encendía "Padrón" Y "Programas y
+   * generaciones" a la vez, porque el href del primero es prefijo del
+   * segundo. Dos items activos no es un detalle estético: le dice a la
+   * persona que está en dos sitios. Gana el href más largo que coincide.
+   */
+  const activeKey = (() => {
+    if (!pathname) return null;
+    let mejor: { key: string; largo: number } | null = null;
+    for (const item of items) {
+      if (pathname !== item.href && !pathname.startsWith(item.href + "/")) continue;
+      if (!mejor || item.href.length > mejor.largo) mejor = { key: item.key, largo: item.href.length };
+    }
+    return mejor?.key ?? null;
+  })();
 
   async function handleLogout() {
     if (leaving) return;
@@ -168,7 +185,7 @@ export function EduShell({
               <div className="edu-nav__section">{s.label}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {s.items.map((item) => {
-                  const active = isActive(item.href);
+                  const active = item.key === activeKey;
                   const Icon = ICONS[item.icon] ?? Home;
                   return (
                     <Link

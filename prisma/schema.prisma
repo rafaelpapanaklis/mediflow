@@ -12354,7 +12354,11 @@ model EduInstitution {
   phone     String? @db.VarChar(30)
   email     String? @db.VarChar(160)
   logoUrl   String?
-  timezone  String  @default("America/Tijuana") @db.VarChar(60)
+  /// Zona horaria del instituto. El default es Ciudad de México porque
+  /// esto es un producto GENÉRICO para cualquier escuela del país, no
+  /// para una de Tijuana. Cambiar el default NO reescribe las filas que
+  /// ya existen: sql/edu-ola-1.sql solo mueve el DEFAULT de la columna.
+  timezone  String  @default("America/Mexico_City") @db.VarChar(60)
   isActive  Boolean @default(true)
 
   // Contrato institucional. NO pasa por Stripe ni por el gate de plan del
@@ -12366,7 +12370,11 @@ model EduInstitution {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  users     EduUser[]
+  users        EduUser[]
+  programs     EduProgram[]
+  cohorts      EduCohort[]
+  students     EduStudent[]
+  supervisions EduSupervisorAssignment[]
 
   @@map("edu_institutions")
 }
@@ -12397,8 +12405,171 @@ model EduUser {
 
   institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
+  /// Ficha académica. Solo la tienen los ALUMNO, y es 1:1: una persona
+  /// no puede estar inscrita dos veces en el mismo instituto.
+  studentProfile EduStudent?
+  /// Alumnos que esta persona supervisa como DOCENTE. Lleva VIGENCIA:
+  /// una fila con endsAt en el pasado ya no cuenta (ver EduSupervisorAssignment).
+  supervisees    EduSupervisorAssignment[] @relation("EduSupervisor")
+
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
   @@index([institutionId, role, isActive])
   @@map("edu_users")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 1A · EL PADRÓN ACADÉMICO.
+//
+// Cuatro tablas: la especialidad (EduProgram), la generación (EduCohort),
+// la ficha del alumno (EduStudent, 1:1 con EduUser) y la asignación
+// alumno↔docente (EduSupervisorAssignment, CON VIGENCIA).
+//
+// 🔴 institutionId está en las CUATRO a propósito, aunque se pudiera
+// deducir subiendo por la relación: TODA consulta del vertical filtra por
+// el institutionId de la sesión y un filtro que necesita un JOIN para
+// existir es un filtro que alguien va a olvidar. Ojo Prisma: un
+// institutionId undefined BORRA el filtro y una escuela ve el padrón de
+// otra.
+//
+// ⚠️ NADA de esto se BORRA desde el producto: los programas y las
+// generaciones se DESACTIVAN (isActive) y los alumnos cambian de status.
+// Por eso los onDelete son Cascade — para que borrar un instituto entero
+// (operación de administración, no del panel) no se atore en una FK. Si
+// una ola futura agrega un botón de borrar programa, tiene que comprobar
+// ANTES que no le queden alumnos: el Cascade se los llevaría.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-1.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Estado académico del alumno. Darse de baja NO borra la ficha: el padrón
+/// es un registro histórico y los actos clínicos que ese alumno hizo
+/// siguieron ocurriendo.
+enum EduStudentStatus {
+  ACTIVE
+  ON_LEAVE
+  GRADUATED
+  WITHDRAWN
+}
+
+/// Especialidad académica que imparte el instituto: Endodoncia,
+/// Ortodoncia, Periodoncia… `code` es la clave corta que la escuela ya usa
+/// en sus papeles, y es única DENTRO del instituto (dos escuelas pueden
+/// llamarle "ENDO" a la suya sin pisarse).
+model EduProgram {
+  id                String   @id @default(cuid())
+  institutionId     String
+  name              String   @db.VarChar(120)
+  code              String   @db.VarChar(20)
+  durationSemesters Int      @default(6)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  cohorts     EduCohort[]
+  students    EduStudent[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId, isActive])
+  @@map("edu_programs")
+}
+
+/// Generación de una especialidad: "2026-A". El nombre es único dentro del
+/// par (instituto, programa) — la "2026-A" de Endodoncia y la "2026-A" de
+/// Ortodoncia son dos generaciones distintas.
+model EduCohort {
+  id            String    @id @default(cuid())
+  institutionId String
+  programId     String
+  name          String    @db.VarChar(60)
+  startDate     DateTime
+  /// null = todavía no termina. Es fecha de CALENDARIO: se guarda a
+  /// medianoche y se pinta en UTC (ver formatEduContractDate) para que el
+  /// 31 de diciembre no salga "30 de diciembre" en una zona UTC−.
+  endDate       DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  students    EduStudent[]
+
+  @@unique([institutionId, programId, name])
+  @@index([institutionId, isActive])
+  @@map("edu_cohorts")
+}
+
+/// Ficha académica del alumno. Es 1:1 con EduUser: el login lo da la ola
+/// de Equipo, esta ola le cuelga la matrícula, el programa y la generación.
+///
+/// ⚠️ institutionId y user.institutionId TIENEN que coincidir. Prisma no
+/// puede exigirlo (haría falta una FK compuesta), así que lo garantiza el
+/// código: la ficha se crea SIEMPRE con el institutionId de la sesión y
+/// buscando al EduUser dentro de ese mismo instituto.
+model EduStudent {
+  id            String           @id @default(cuid())
+  institutionId String
+  userId        String           @unique
+  programId     String
+  cohortId      String
+  matricula     String           @db.VarChar(30)
+  semester      Int              @default(1)
+  status        EduStudentStatus @default(ACTIVE)
+  enrolledAt    DateTime         @default(now())
+  graduatedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user        EduUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  cohort      EduCohort      @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  supervisors EduSupervisorAssignment[]
+
+  @@unique([institutionId, matricula])
+  @@index([institutionId, status])
+  @@index([institutionId, cohortId, status])
+  @@map("edu_students")
+}
+
+/// Alumno ↔ docente, CON VIGENCIA.
+///
+/// 🔴 El endsAt existe a propósito y no es un lujo: el docente ROTA a media
+/// generación. Sin vigencia no se puede contestar "¿quién supervisaba a
+/// este alumno el día que pasó esto?", que es exactamente la pregunta que
+/// se hace cuando algo sale mal en el sillón. Por eso las asignaciones NO
+/// se borran ni se editan al rotar: se cierran (endsAt = ahora) y se abre
+/// una nueva.
+///
+/// Vigente en el instante T ⇔ startsAt <= T && (endsAt == null || endsAt > T).
+/// Ese predicado vive UNA sola vez, en src/lib/edu/padron-core.ts, y de ahí
+/// lo usan la UI, las consultas y las pruebas.
+model EduSupervisorAssignment {
+  id               String    @id @default(cuid())
+  institutionId    String
+  studentId        String
+  /// EduUser con rol DOCENTE. Lo comprueba el endpoint que asigna: el
+  /// schema no puede exigir un rol.
+  supervisorUserId String
+  isPrimary        Boolean   @default(true)
+  startsAt         DateTime  @default(now())
+  /// null = vigente. Cerrar es escribir aquí, nunca borrar la fila.
+  endsAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  student     EduStudent     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  supervisor  EduUser        @relation("EduSupervisor", fields: [supervisorUserId], references: [id], onDelete: Cascade)
+
+  // Los nombres van EXPLÍCITOS porque el que Prisma generaría solo
+  // (edu_supervisor_assignments_institutionId_supervisorUserId_endsAt_idx)
+  // pasa de los 63 caracteres que admite un identificador de Postgres. Con
+  // el map puestos aquí y en sql/edu-ola-1.sql, los dos dicen lo mismo.
+  @@index([institutionId, supervisorUserId, endsAt], map: "edu_supervisor_assignments_supervisor_idx")
+  @@index([institutionId, studentId, endsAt], map: "edu_supervisor_assignments_student_idx")
+  @@map("edu_supervisor_assignments")
 }
