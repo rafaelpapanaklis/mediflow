@@ -24941,3 +24941,262 @@ pantalla a un plan que no debe verla. Es trabajo de producto, no de integración
 
 **c) Nada de esto ha tocado una base de datos real.** El build compila; nadie ha
 firmado un contrato, publicado una ficha en la bolsa, ni mandado una campaña.
+
+---
+
+## [Institucional Ola 0] — El cuarto vertical existe: login propio, panel que se usa DE PIE, y un catálogo de permisos que arranca con UNA sola key ✅ (2026-08-28) · rama `feat/edu-ola-0`
+
+DaleControl **Institucional** (escuelas de especialidades odontológicas) arranca
+como producto APARTE del dental, de barbería y de inmuebles, en este mismo repo.
+Esta ola no vende nada: pone el cimiento —sesión, permisos, chrome y SQL— para
+que las olas de Padrón, Agenda, Expediente, Autorizaciones, Caja y Evaluación
+empiecen sin pelearse por el schema ni por los tipos.
+
+**22 archivos: 19 nuevos + 3 compartidos editados.** Guardia
+`scripts/edu-guard.cjs` **exit 0, cero prohibidos**. Los compartidos son
+exactamente los tres autorizados: `prisma/schema.prisma` (**+84 / −0**),
+`src/middleware.ts` (+13 / −1) y `ORQUESTA.md`. **Ni una línea del dental, de
+barbería o de inmuebles se movió.**
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE HAY QUE SABER Y NO SE VE EN EL DIFF
+═══════════════════════════════════════════════════════════════════════════
+
+**1. El contrato AVISA, no corta — y eso está cableado, no solo comentado.**
+`EduInstitution.contractEndsAt` no pasa por Stripe ni por el gate de plan del
+dental: se administra a mano. Si vence, `src/lib/edu/contract.ts` devuelve un
+**texto** y nada más — ni un redirect, ni un 403, ni un booleano que alguien
+pueda leer como "bloquear". 120 alumnos con pacientes en el sillón no se quedan
+fuera por una fecha administrativa. Hay una prueba que comprueba que el objeto
+del aviso tiene EXACTAMENTE cuatro llaves (`days`, `detail`, `level`, `title`):
+el día que alguien le agregue un `blocked: true`, esa prueba se entera.
+
+Y el aviso **solo lo ve DIRECCION** (`eduContractNoticeIsFor`): un residente no
+puede hacer nada con el contrato de su escuela y sí puede asustarse.
+
+El contrato también vale durante **TODO** su último día. Comparar
+`contractEndsAt < now` a secas —que es lo natural de escribir— marca vencido el
+contrato a las 9 de la mañana del último día válido.
+
+**2. La fecha del contrato se pinta en UTC, y eso es a propósito.** Estas fechas
+se capturan como día suelto y quedan guardadas a medianoche. Formateadas en
+`America/Tijuana` (UTC−7) se les restan siete horas y el **31 de diciembre sale
+"30 de diciembre"** — el mismo error que ya se pagó en el calendario del dental.
+`formatEduContractDate` fuerza `timeZone: "UTC"` y hay una prueba con esa fecha
+exacta.
+
+**3. El catálogo de permisos arranca con UNA key, y hay un candado mecánico que
+lo mantiene honesto.** `EDU_ALL_PERMISSIONS` = `{ "inicio.view": … }`. La regla
+—escrita arriba del catálogo— es que cada key la tiene que EXIGIR de verdad una
+pantalla o un endpoint que ya exista; un interruptor que se guarda y no cambia
+nada es peor que no tenerlo, porque la dirección cree que cerró algo.
+
+El candado no es la buena voluntad: `edu-permissions.test.ts` recorre
+`src/app/instituto`, `src/app/api/instituto`, `src/components/edu`,
+`src/lib/edu` y `src/lib/edu-auth.ts`, y falla si una key **(a)** no la lee
+nadie fuera del catálogo o **(b)** solo la lee la UI. Esconder el item del menú
+no es cerrar la puerta: `/instituto/inicio` comprueba `inicio.view` por su
+cuenta, así que teclear la URL tampoco sirve.
+
+**4. Sin `inicio.view` NO se redirige: se explica.** En la Ola 0 ésta es la
+única pantalla, y `/instituto` manda justo aquí — un redirect sería un bucle
+infinito. La página pinta el motivo ("alguien te quitó `inicio.view`"), que
+además es lo que la dirección necesita leer para arreglarlo. Cuando haya una
+segunda pantalla, esto se puede convertir en redirect; mientras tanto, no.
+
+**5. El override REEMPLAZA al default, y la prueba que lo fija crece sola.**
+Misma semántica que `User.permissionsOverride` del dental. Honestidad sobre lo
+que hoy se puede probar: **con un catálogo de UNA key, "reemplazar" y "sumar"
+dan el mismo resultado** — la resta no se puede demostrar con datos reales. La
+prueba está escrita sobre TODOS los subconjuntos del catálogo, así que en cuanto
+una ola agregue la segunda key empieza a morder sola, sin que nadie tenga que
+acordarse de volver. Está dicho así, con esas palabras, en el propio test.
+
+Consecuencia que muerde en producción y que quedó escrita en tres sitios
+(schema, catálogo y el `.sql`): **un permiso nuevo NO le llega a quien ya tiene
+override**. Cada ola que agregue keys tiene que traer su backfill.
+
+**6. El panel NO reusa el sidebar del dental, y es la decisión de diseño más
+cara de esta ola.** Barbería e inmuebles heredan `.sidebar-new` de
+`globals.css`. Ese sidebar es de ESCRITORIO: en un teléfono de 375 px sigue
+midiendo 180 px pegados a la izquierda y se come media pantalla — está
+`position: sticky` y **no hay ninguna media query que lo esconda**. Aquí el
+usuario típico es un docente o un alumno **de pie en el piso clínico, con el
+teléfono en una mano**, así que el vertical trae su propio chrome
+(`src/components/edu/edu-shell.tsx`, `edu-auth-shell.tsx` y
+`src/app/instituto/edu-theme.css`, clases con prefijo `edu-`) y el menú es un **cajón**: fuera de pantalla por default,
+columna fija a partir de 1024 px. Es más código, y es el único que se lee bien
+en la mano.
+
+Detalles que no se ven: objetivos táctiles de 48 px (40 en escritorio), inputs
+de **16 px** (por debajo de eso iOS hace zoom al enfocar), `Escape` cierra el
+cajón, el fondo no se desplaza mientras está abierto, y cerrado el `<aside>`
+lleva `visibility: hidden` — sin eso, un usuario de teclado tabula hacia enlaces
+que no ve.
+
+**7. `@media` y no `@container`, contra la regla del repo, por un motivo
+concreto.** `container-type` CREA contención y **atrapa a `position: fixed`**:
+un contenedor de consulta encima del cajón lo dejaría dentro de la columna en
+vez de cubrir la pantalla. Ni `.edu-shell` ni `.edu-body` llevan
+`container-type`, y está escrito en la cabecera del CSS para que la próxima ola
+no lo "arregle".
+
+**8. Colores medidos, no supuestos.** Índigo universitario. Contraste sobre
+blanco: 400 `#6C88C6` → **3.51 ✗**, 500 `#4665AC` → 5.65 ✓, 600 `#344E8C` →
+8.03 ✓, 700 → 10.28 ✓. Todo texto blanco va en 500 o más oscuro. Los grises de
+texto se midieron sobre el fondo REAL del panel (`#F5F7FB`): el `#6E7789`
+"natural" daba **4.20 y no pasaba AA**, así que el token quedó en `#67707F`
+(4.66 ✓). Medidas en **px**: la raíz del panel es `clamp(13px … 16px)`, así que
+1 rem no vale 16.
+
+**9. El login es DEDICADO y autocontenido.** `/instituto/login` **no** importa
+`AuthShell` ni `LoginVisual` de `src/components/public/**`: esas piezas llevan
+la marca, el color y el discurso comercial del dental, y este es otro producto
+— no debe heredar nada suyo ni por accidente, cuando alguien retoque el shell
+compartido dentro de un año. Sin precios, sin "crea tu cuenta", sin registro
+público, sin una sola liga al dental: a este login se llega porque la dirección
+del instituto te dio de alta, y poner un "regístrate" sería mentirle a un
+alumno que no puede registrarse.
+
+`signOut()` **antes** de entrar (copiado del login de clínica): la cookie de
+Supabase es UNA para todo el dominio, y una sesión de clínica sin cerrar
+contamina la nueva.
+
+**10. Un endpoint de más, y por qué. `GET /api/instituto/auth/session`.** La
+contraseña correcta NO quiere decir que la cuenta sea de un instituto: una
+credencial de clínica autentica perfectamente. Sin esta comprobación,
+`/instituto` la rebotaría de vuelta al login **sin decir una palabra** y se
+vería como un formulario que no responde. Ahora el login pregunta, y si no es
+de aquí cierra la sesión que acaba de abrir y lo dice. El endpoint devuelve
+`{ ok: boolean }` y **nada más** — ni nombre, ni rol, ni id.
+
+**11. El gate autoritativo es el layout, no el middleware.** `src/middleware.ts`
+corre en el Edge y no puede consultar Prisma: lo único que hace en `/instituto`
+es refrescar la cookie de Supabase (y dejar pasar `/instituto/login`). Quien
+decide quién entra es `src/app/instituto/(panel)/layout.tsx` vía
+`getEduContext`. Mismo reparto que `/proveedores`, y por eso el bloque del
+middleware es una copia literal del suyo.
+
+**12. `error.tsx` desde el día 1.** En este repo un throw al pintar sin límite
+de error desmonta la app entera y deja pantalla blanca con la consola muda (ya
+pasó en barbería). El de `(panel)` no depende de NADA: estilos en línea, texto
+en español, cero imports del vertical. Una pantalla de último recurso que
+depende de algo que también puede fallar no es una pantalla de último recurso.
+
+**13. `getEduContext` no puede tumbar nada.** `try/catch` alrededor del lookup:
+si `edu_users` todavía no existe (el `.sql` sin aplicar), devuelve `null` y
+escribe un **warning** — sin él, "no aplicaste el SQL" y "este usuario no es del
+instituto" se ven exactamente igual desde fuera. Y el archivo lleva escrita la
+trampa de Prisma: **un `institutionId` undefined BORRA el filtro de tenant**; no
+devuelve cero filas, devuelve las de todos los institutos.
+
+**14. El schema quedó `+84 / −0`.** No se corrió `prisma format`: reformatea el
+archivo ENTERO y en un `schema.prisma` compartido con tres productos vivos eso
+es ruido que esconde el cambio real. Los 19 archivos nuevos están en **CRLF**,
+igual que el resto del repo (cero finales de línea sueltos).
+
+═══════════════════════════════════════════════════════════════════════════
+▶ ARCHIVOS
+═══════════════════════════════════════════════════════════════════════════
+
+| Archivo | Qué es |
+|---|---|
+| `prisma/schema.prisma` | **compartido** · enum `EduRole` + `EduInstitution` + `EduUser` al final (+84 / −0) |
+| `src/middleware.ts` | **compartido** · rama `/instituto` + `"/instituto/:path*"` en el matcher |
+| `sql/edu-ola-0.sql` | 1 enum · 2 tablas · 4 índices · 1 FK, idempotente + el alta de ejemplo comentada |
+| `src/lib/edu-auth.ts` | `getEduContext`, `eduUserDisplayName`; re-exporta los helpers de permisos |
+| `src/lib/edu/permissions.ts` | catálogo, grupos, defaults por rol, `has`/`assert`/`sanitize`, `EduForbiddenError` |
+| `src/lib/edu/types.ts` | `EduRole`, etiquetas en español, `EDU_NAV_ITEMS`, marca y las 6 áreas que vienen |
+| `src/lib/edu/contract.ts` | el aviso del contrato (puro, sin BD) |
+| `src/lib/edu/__tests__/edu-permissions.test.ts` | 12 pruebas · matriz, override, catálogo sin muertos |
+| `src/lib/edu/__tests__/edu-contract.test.ts` | 9 pruebas · avisa y no corta, último día, fecha en UTC |
+| `src/app/instituto/page.tsx` | router de entrada |
+| `src/app/instituto/login/page.tsx` | login dedicado (server) |
+| `src/app/instituto/(panel)/layout.tsx` | **gate autoritativo** + menú filtrado por permiso |
+| `src/app/instituto/(panel)/inicio/page.tsx` | Inicio · exige `inicio.view` |
+| `src/app/instituto/(panel)/error.tsx` | límite de error del panel |
+| `src/app/instituto/edu-theme.css` | tema del vertical (móvil primero) |
+| `src/components/edu/edu-shell.tsx` | chrome del panel: cajón + topbar + logout |
+| `src/components/edu/edu-auth-shell.tsx` | shell de las pantallas sin sesión (propio, no el del dental) |
+| `src/components/edu/edu-login-form.tsx` | formulario del login |
+| `src/app/api/instituto/auth/logout/route.ts` | `signOut` |
+| `src/app/api/instituto/auth/session/route.ts` | `{ ok }` — ¿esta sesión es de un instituto? |
+| `scripts/edu-guard.cjs` | guardia mecánica del vertical |
+
+═══════════════════════════════════════════════════════════════════════════
+▶ GATES
+═══════════════════════════════════════════════════════════════════════════
+
+- **`npx prisma generate`** → OK (v5.22.0), sin EPERM.
+- **`npm run build` COMPLETO, sin pipes** → **exit 0**. Las cinco rutas del vertical salen dinámicas (`ƒ`): `/instituto`,
+  `/instituto/inicio`, `/instituto/login`, `/api/instituto/auth/logout` y
+  `/api/instituto/auth/session`. Se corrió TRES veces (una por cada tanda de
+  cambios), las tres con exit 0. Los `prisma:error … DATABASE_URL` del log son
+  del prerender de las páginas públicas del dental en un worktree sin `.env`:
+  ya salían antes de esta ola y no impiden el build.
+- **`npx tsc --noEmit` sobre el repo entero** → **cero errores en el vertical**.
+  Los 6 que salen son de `src/lib/barber/__tests__/` (`dinero-sumas`,
+  `i18n-alcance`), **ya existían en `main`**, esta ola no los tocó y `next build`
+  no los compila porque no entran en el grafo de la build. (Ojo: `tsc --noEmit`
+  se queda sin heap con el default de Node en este repo; hay que correrlo con
+  `NODE_OPTIONS=--max-old-space-size=8192`.)
+- **Pruebas** → `npx tsx --test src/lib/edu/__tests__/edu-permissions.test.ts
+  src/lib/edu/__tests__/edu-contract.test.ts` → **21 pruebas, 21 pasan, 0
+  fallan.**
+- **`node scripts/edu-guard.cjs`** con
+  `EDU_GUARD_SHARED="prisma/schema.prisma,src/middleware.ts,ORQUESTA.md"` →
+  **exit 0**, 19 propios, 3 compartidos declarados, **0 prohibidos**. (Y sí
+  muerde: mientras existió un `build.log` en la raíz lo marcó prohibido y salió
+  con exit 1.)
+
+═══════════════════════════════════════════════════════════════════════════
+▶ LO QUE QUEDA ROJO
+═══════════════════════════════════════════════════════════════════════════
+
+**a) 🔴 `sql/edu-ola-0.sql` SIN APLICAR.** Hasta que se corra en Supabase, el
+vertical **no existe en la base**: `getEduContext` no encuentra `edu_users`,
+devuelve `null` con un warning, y `/instituto` manda a todo el mundo al login en
+un bucle. El archivo es idempotente (todo con `IF NOT EXISTS` / `EXCEPTION WHEN
+duplicate_object`, cero `DROP`, cero `ALTER` sobre nada del dental): correrlo dos
+veces no rompe nada.
+
+Y el alta del primer usuario es de TRES pasos, en este orden, explicado dentro
+del propio `.sql`: (1) crear el instituto; (2) dar de alta a la persona en
+**Supabase Auth** (Authentication → Users → Add user, con *Auto Confirm*), de
+donde sale el UUID; (3) insertar la fila en `edu_users` **con ese UUID** en
+`supabaseId`. Si el UUID no coincide, no hay error visible: la persona entra al
+login una y otra vez.
+
+**b) Nada de esto ha tocado una base de datos real ni un navegador.** El build
+compila y las pruebas puras pasan; **nadie ha iniciado sesión en `/instituto`**,
+ni ha visto el cajón del menú abrirse en un teléfono de verdad. Todo lo que
+depende de Prisma (`getEduContext`) y del cliente de Supabase está escrito
+contra el contrato, no verificado contra la base — porque el `.sql` no está
+aplicado y esta ola no se conecta a la base a propósito.
+
+**c) No hay `npm run test:edu-permissions`.** `package.json` es un archivo del
+producto dental y esta ola tiene prohibido tocarlo. Las pruebas se corren con
+`npx tsx --test …` (los comandos están en la cabecera de cada test). Cuando el
+vertical se integre a `main`, son dos líneas.
+
+**d) El vertical NO está en el diccionario i18n.** Todo el texto va en español
+duro. Es coherente con el alcance del producto (institutos mexicanos) y es una
+decisión, no un olvido: meterlo a `src/i18n/dictionaries/` habría exigido tocar
+archivos fuera de las carpetas autorizadas.
+
+**e) Sin alta pública, sin recuperación de contraseña, sin 2FA.** El primer
+usuario se crea a mano en Supabase + SQL (bloque comentado del `.sql`). El campo
+`mustChangePassword` ya está en la tabla, pero **nadie lo lee todavía**: es
+contrato para la ola de Equipo, no una función que exista hoy.
+
+**f) Archivos que se quisieron tocar y NO se tocaron.** Ninguno se tocó a
+escondidas; se listan para que la integración decida:
+- `package.json` — para el script de pruebas (punto c).
+- `src/middleware.ts` → `RESERVED_PATHS`: la constante existe pero **está
+  muerta** (declarada y jamás usada en el archivo). `instituto` no se agregó
+  porque no haría nada y porque el cambio autorizado era una línea. La ruta
+  estática `/instituto` gana igual sobre `src/app/[slug]` por resolución de
+  Next.
+- `src/app/sitemap.ts` — el vertical es 100 % privado (`robots: noindex` en sus
+  metadatos), así que no debería entrar; se deja anotado por si la ola de
+  landing pública lo necesita.
