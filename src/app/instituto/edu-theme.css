@@ -1758,8 +1758,12 @@ select.edu-input {
 
 /* Anchos de las tablas de esta ola (mismo mecanismo que .edu-table--padron:
    la rejilla del renglón a partir de 1180 px). */
+/* Ola 3: la última columna pasó de 96 a 210 px porque ahora lleva DOS
+   botones ("Ficha" y "Expediente"). Con 96 px el segundo caía a otro
+   renglón y la fila crecía al doble de alto — el error de medir el ancho
+   con el contenido de ayer. */
 .edu-table--pacientes {
-  --edu-cols: 104px minmax(160px, 1.8fr) minmax(140px, 1.3fr) 122px 92px 96px;
+  --edu-cols: 104px minmax(160px, 1.8fr) minmax(140px, 1.3fr) 122px 92px 210px;
 }
 
 .edu-table--sillones {
@@ -1768,4 +1772,420 @@ select.edu-input {
 
 .edu-table--casos {
   --edu-cols: minmax(150px, 1.5fr) minmax(140px, 1.3fr) minmax(120px, 1fr) minmax(120px, 1fr) 128px 96px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Ola 3 · EL EXPEDIENTE CLÍNICO — ficha con pestañas, notas SOAP,
+   odontograma y estudios. MÓVIL PRIMERO, como todo el vertical.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Encabezado de la ficha del paciente ── */
+.edu-fichahead {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+@media (min-width: 720px) {
+  .edu-fichahead {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+}
+
+.edu-fichahead__folio {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-fichahead__name {
+  margin: 2px 0 0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--edu-text-1);
+}
+
+.edu-fichahead__meta {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--edu-text-2);
+}
+
+/* ── Pestañas.
+   En el teléfono se desplazan en horizontal en vez de envolverse en tres
+   renglones: una tira que se arrastra con el pulgar se lee como pestañas;
+   tres renglones de píldoras, no. `scrollbar-width: none` quita la barra
+   en escritorio (donde no hace falta, porque caben). ── */
+.edu-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.edu-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--edu-text-2);
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: 10px 10px 0 0;
+}
+
+.edu-tab:hover {
+  background: var(--edu-hover);
+  color: var(--edu-text-1);
+}
+
+.edu-tab--on {
+  color: var(--edu-600);
+  border-bottom-color: var(--edu-600);
+  background: var(--edu-surface-2);
+}
+
+.dark .edu-tab--on {
+  color: var(--edu-200);
+  border-bottom-color: var(--edu-300);
+}
+
+/* ── La nota clínica ── */
+.edu-nota {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* Una nota FIRMADA se ve distinta a simple vista: barra verde a la
+   izquierda. No es decoración — es el estado que decide si se puede tocar,
+   y confundirlo hace perder tiempo intentando editar lo que no se edita. */
+.edu-nota--firmada {
+  border-left: 4px solid var(--edu-ok);
+}
+
+.edu-nota--enviada {
+  border-left: 4px solid var(--edu-amber-700);
+}
+
+.edu-nota--borrador {
+  border-left: 4px solid var(--edu-line-strong);
+}
+
+/* Una CORRECCIÓN va sangrada y con un filete: se lee de un vistazo que
+   cuelga de la nota de arriba y no es una sesión nueva. */
+.edu-nota--correccion {
+  margin-left: 12px;
+  border-left: 4px solid var(--edu-400);
+}
+
+@media (min-width: 720px) {
+  .edu-nota--correccion {
+    margin-left: 28px;
+  }
+}
+
+.edu-nota__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.edu-nota__when {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--edu-text-1);
+}
+
+.edu-nota__who {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+.edu-nota__soap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 720px) {
+  .edu-nota__soap {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.edu-nota__campo {
+  min-width: 0;
+}
+
+.edu-nota__campo dt {
+  margin: 0 0 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-nota__campo dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--edu-text-1);
+  /* Lo que la persona escribió, con sus saltos de línea. Sin esto, una
+     nota de tres párrafos se pinta como un ladrillo. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.edu-nota__dx {
+  padding: 8px 10px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+}
+
+.edu-nota__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--edu-line);
+}
+
+.edu-nota__firma {
+  font-size: 12px;
+  color: var(--edu-text-2);
+}
+
+/* ── Odontograma ─────────────────────────────────────────────────────────
+   El dibujo viene del dental y trae TODO su CSS bajo `.odo-app`, así que no
+   se pisa con el del panel (se comprobó: no hay ni una regla suelta en
+   odontogram.css). Aquí solo se corrige lo que cambia por vivir dentro de
+   una pestaña en vez de ocupar una pantalla entera. */
+.edu-odo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 🔴 SE LE QUITA EL `min-height: 100vh` Y **NO** EL FONDO.
+   Es tentador poner `background: transparent` para que el dibujo se funda
+   con el panel, y es exactamente el error: `.odo-app` define su propia
+   paleta CLARA (--bg #f4f6fa, --card #fff, --ink #1a2230) y los 45 colores
+   de los hallazgos están calibrados sobre blanco. Con el fondo transparente,
+   en modo OSCURO el panel pinta #19203a debajo de una tinta #1a2230 y el
+   odontograma desaparece — el mismo error que el modal blanco que heredaba
+   el ink de la plantilla. Es una isla clara a propósito, como una placa en
+   un negatoscopio. La regla gana por especificidad (0,2,0 contra 0,1,0), así
+   que no depende del orden en que se junten las dos hojas. */
+.edu-odo .odo-app {
+  min-height: 0;
+  border-radius: 10px;
+}
+
+.edu-odo__lienzo {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+}
+
+/* El dibujo NO se aplasta en el teléfono: 32 dientes en 360 px de ancho son
+   ilegibles. Se le da un ancho mínimo y la caja de arriba se desplaza.
+   ⚠️ El selector lleva TRES clases (0,3,0) y no dos: `.odo-app .odo-chart`
+   del dental ya vale (0,2,0) y pone `min-width: 0`. Con la misma
+   especificidad ganaría la que el bundler dejara última — que es una
+   lotería distinta en cada build. */
+.edu-odo .odo-app .odo-chart {
+  min-width: 720px;
+}
+
+.edu-odo__saving {
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+}
+
+/* ── Estudios ── */
+.edu-estudios {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 620px) {
+  .edu-estudios {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .edu-estudios {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.edu-estudio {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* La miniatura tiene ALTURA FIJA y fondo propio: una radiografía es casi
+   negra y sin caja se confunde con el hueco. Reservar el alto también evita
+   que la rejilla salte cuando cargan las imágenes (CLS). */
+.edu-estudio__thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 150px;
+  overflow: hidden;
+  background: #10131c;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  color: var(--edu-100);
+}
+
+.edu-estudio__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.edu-estudio__name {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-estudio__meta {
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+.edu-estudio__notes {
+  font-size: 13px;
+  color: var(--edu-text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── Subida: barra de progreso real ── */
+.edu-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+}
+
+.edu-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--edu-100);
+  overflow: hidden;
+}
+
+.dark .edu-progress {
+  background: rgba(226, 233, 246, 0.14);
+}
+
+.edu-progress__bar {
+  height: 100%;
+  background: var(--edu-600);
+  border-radius: 999px;
+  transition: width 0.2s linear;
+}
+
+/* ── Visor de un estudio (dentro del modal) ── */
+.edu-visor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edu-visor__marco {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  max-height: 68vh;
+  overflow: auto;
+  background: #10131c;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+}
+
+.edu-visor__marco img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.edu-visor__marco--zoom {
+  place-items: start;
+}
+
+.edu-visor__marco--zoom img {
+  max-width: none;
+  width: 200%;
+}
+
+.edu-visor__pdf {
+  width: 100%;
+  height: 60vh;
+  min-height: 320px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  background: var(--edu-surface-2);
+}
+
+/* Anchos de las tablas de esta ola. */
+.edu-table--notas {
+  --edu-cols: 132px minmax(150px, 1.4fr) minmax(160px, 1.6fr) 116px 96px;
 }

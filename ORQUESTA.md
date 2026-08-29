@@ -25935,3 +25935,355 @@ barber, preexistentes en `origin/main`) · **135 pruebas** en verde
 (`edu-visibility` 29, `edu-agenda` 33, `edu-pacientes` 16, `edu-permissions` 24,
 `edu-padron` 24, `edu-contract` 9) · `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
 (38 archivos propios, 1 compartido declarado, 0 prohibidos).
+
+---
+
+## DaleControl INSTITUCIONAL — Ola 3 · EL EXPEDIENTE CLÍNICO
+
+Rama `feat/edu-ola-3`, sobre `origin/main` (Ola 2 ya integrada, commit `4352140b`).
+Notas clínicas SOAP con firma, odontograma por diente y estudios pesados que suben
+**directo al almacenamiento**. Tres tablas nuevas, seis permisos, cinco pantallas y
+ocho endpoints — y **un solo lugar** que decide que caja no entra.
+
+---
+
+### 1. PASO 0 — qué se encontró en el dental antes de escribir nada
+
+Se revisó el código, no se adivinó. Las dos respuestas salieron distintas.
+
+#### a) El ODONTOGRAMA: **puro. Se IMPORTA.**
+
+`src/components/dashboard/odontogram-v2/` — trece archivos. Los de presentación no
+importan **nada** de `@/`, no tocan prisma, no hacen `fetch` y no leen `window`:
+reciben props y pintan.
+
+| Archivo | Qué es | ¿Puro? |
+|---|---|---|
+| `data.ts` | 45 hallazgos por especialidad + clasificación FDI | ✅ solo importa `./types` |
+| `types.ts` | el contrato (`Records`, `ToothRecord`, props) | ✅ |
+| `Odontogram.tsx` | las dos arcadas | ✅ props |
+| `Surface2D.tsx` · `ToothGlyph.tsx` · `OdoDefs.tsx` | el dibujo y sus `<pattern>` | ✅ props |
+| `Palette.tsx` · `Legend.tsx` | paleta y leyenda | ✅ props |
+| `DetailPanel.tsx` · `Tooth3D.tsx` | el detalle de un diente (three.js) | ✅ props |
+| `odontogram.css` | 14 KB, **todo** bajo `.odo-app` | ✅ comprobado: cero reglas sueltas |
+| **`App.tsx`** (`OdontogramV2`) | la raíz | ❌ modo "vivo" → `adapter.ts` |
+| **`adapter.ts`** | `fetch("/api/odontogram")` | ❌ tabla `odontogram_entries` del **dental** |
+
+→ **Se importan las nueve piezas puras tal cual.** El contenedor propio del vertical
+(`src/components/edu/expediente/odontograma-screen.tsx`) hace lo que hace `App.tsx`
+pero escribiendo en `/api/instituto/pacientes/[id]/odontograma`. **No se copió
+`data.ts`**: dos catálogos que empiezan iguales terminan distintos, y el día que
+alguien agregue "caries radicular" al del dental el del instituto no la tendría y
+nadie lo notaría hasta que un alumno intentara marcarla.
+
+#### b) El VISOR CBCT/DICOM: **acoplado. NO se toca y NO se copia.**
+
+| Archivo | Qué hace | ¿Puro? |
+|---|---|---|
+| `patient-3d/cbct-mpr-shared.ts` · `dicom-decode-core.ts` · `dicom-decode.worker.ts` | matemática y decodificación | ✅ 0 imports `@/` |
+| `patient-3d/MprPane.tsx` · `Dicom3DVolume.tsx` · `PanoramicPane.tsx` · `GeometryWarning.tsx` | render de planos y volumen | ✅ 0 imports `@/` |
+| **`patient-3d/DicomSetViewer.tsx`** | el visor 2×2 completo | ❌ `GET /api/patients/{patientId}/dicom-set/{fileId}/lite` (línea 591) y `PATCH /api/patients/{patientId}/models-3d/{fileId}` (línea 771) |
+| **`patient-3d/DicomViewer2D.tsx`** | visor de un corte | ❌ `PATCH /api/patients/{patientId}/models-3d/{fileId}` (línea 189) |
+| **`patient-3d/Models3DTab.tsx`** | la pestaña del dental | ❌ 3 imports `@/`, 4 rutas |
+
+Esas rutas resuelven contra el `Patient` y el `PatientFile` del **dental**, con la
+sesión del dental: un id del instituto ahí dentro no existe. Copiar el visor entero
+eran ~2 400 líneas y su deuda — incluida la corrección de geometría que el dental
+acaba de pagar (`c668f54f`: una letra **invertida** sobre la imagen de un paciente),
+que habría que aplicar dos veces o quedaría a medias en una de las dos copias. En una
+imagen clínica eso no es un detalle estético.
+
+→ **Versión propia MÍNIMA**, y se dice en pantalla:
+`src/components/edu/expediente/estudio-viewer.tsx` pinta **imágenes** (jpg/png/webp)
+con zoom y **PDF** incrustado; **tomografías, DICOM y mallas se DESCARGAN** con su URL
+firmada. El aviso lo dice con todas sus letras en vez de fingir un visor. Las piezas
+PURAS de arriba quedan disponibles para el contenedor propio de una ola siguiente.
+
+---
+
+### 2. Lo que decide quién ve qué — y **no** es un helper nuevo
+
+El contrato pedía: alumno → sus casos · docente → sus alumnos vigentes · **caja →
+nada** · dirección → todo. Eso ya existía. La Ola 3 **no agregó un cuarto recurso** a
+`src/lib/edu/visibility.ts`: el expediente se lee con el recurso **`"cases"`**, que es
+exactamente donde vive esa regla desde la Ola 2.
+
+```
+· "patients"  → para CAJA es `all`  (recibe, agenda y cobra)
+· "cases"     → para CAJA es `none` (no abre expediente clínico)
+```
+
+Las notas cuelgan del **caso**; el odontograma y los estudios cuelgan del **paciente**
+(la boca es una sola y una tomografía sirve para endodoncia y para ortodoncia). Eso es
+dónde se **guardan**, no quién los **ve**. Colgar la lectura de `"patients"` por
+parecerse habría abierto a caja las notas, el odontograma y las radiografías de toda
+la escuela — y el bug se habría visto **exactamente igual que "funciona"**.
+
+El punto único es una función de una línea, `eduClinicalScope(actor)` en
+`src/lib/edu/expediente-core.ts`, que los tres módulos de servidor llaman en vez de
+llamar a `eduVisibility` con un recurso a mano. Y la puerta única del expediente es
+`getEduClinicalPatient(ctx, patientId)`: si esa persona no puede abrirlo, no se
+consulta ni una fila y el paciente contesta **404**, igual que uno que no existe (un
+403 confirmaría que ese folio existe).
+
+**Dos candados, no uno.** Caja no trae ninguno de los seis permisos *y* su alcance es
+`none`. Un solo candado se abre por accidente; dos hay que abrirlos a propósito. Hay
+una prueba dedicada a esto — `edu-expediente.test.ts`, sección 1 — que además
+documenta el error que la rompería y se pone roja si alguien "arregla"
+`eduClinicalScope` para que use `"patients"`.
+
+---
+
+### 3. Las tres tablas (`prisma/schema.prisma`, aditivo + `sql/edu-ola-3.sql`)
+
+**`EduRecord` — la nota clínica SOAP.** Cuelga del CASO: es el registro de un acto
+clínico y un acto clínico tiene responsable.
+
+🔴 **Dos personas, dos columnas, y no es duplicación.** `studentId` es el alumno
+**responsable** del caso (sale del caso, nunca del body); `authorUserId` es **quién
+tecleó** la nota (sale de la sesión). Cuando escribe el alumno son la misma persona;
+cuando el docente escribe una adenda, no. Sin esa segunda columna habría que
+atribuirle al alumno una nota que no escribió — falsear la autoría de un documento
+clínico, que es justo lo que la NOM-004 pide que no pase.
+
+🔴 **NOM-004: una nota FIRMADA no se edita.** El PATCH rebota **todo** —texto,
+diagnóstico, cita y estado— con 409, aunque venga de la dirección del instituto. Se
+corrige con una nota NUEVA que apunta a la anterior (`correctsId`); quedan las dos y
+la pantalla las enseña juntas. Los sellos (`submittedAt`, `signedAt`, `signedByUserId`)
+se **derivan** del estado y no se capturan: así no existe una firmada sin fecha de
+firma ni una fecha de firma en un borrador. Misma regla que `EduCase.closedAt`.
+
+**`EduOdontogramEntry` — un hallazgo por diente y cara.**
+
+🔴 **`surface` es `NOT NULL DEFAULT ''`, y no es un descuido.** Postgres considera
+**distintos** dos `NULL` dentro de un índice único: con la columna nullable, el mismo
+hallazgo de diente completo entraría dos, diez o mil veces con un doble clic y el
+índice no diría nada — y el `upsert` que lo evita no tendría índice completo al que
+agarrarse. `''` = "el diente entero".
+
+El `condition` se valida **contra el catálogo compartido** (los 45 de `data.ts`, que se
+importa). Sin eso el odontograma acepta texto libre: la fila se guarda, al pintar no
+hay glifo que dibujar, y queda un hallazgo invisible que sí cuenta en los totales. La
+nota por diente usa la key **reservada** `__nota__`, y el saneo rechaza cualquier id
+que empiece con `__` para que el pincel no pueda pisarla ni borrarla.
+
+**`EduStudy` — el archivo.** Nada de bytes en la base: se guarda el **path** interno
+del bucket privado `edu-files`, nunca una URL (una URL firmada caduca y quedaría
+muerta en la columna; se firma on-demand al leer).
+
+🔴 **`sizeBytes` es `BIGINT`, no `INTEGER`.** El tope son 2 GB = 2 147 483 648, **uno
+más** que el máximo de un `INTEGER` de Postgres (2 147 483 647). Con `INTEGER`, el
+archivo más grande que el producto acepta desborda la columna justo **después** de que
+la persona esperó la subida entera. Hay una prueba que lo fija.
+
+---
+
+### 4. La subida directa (patrón del dental, bucket propio)
+
+Se buscó cómo lo resolvió el dental y se siguió: `src/lib/uploads/patient-study-upload.ts`
+y `src/app/api/patients/[id]/uploads/{sign,confirm,abort}`. Tres pasos, y el binario
+**nunca toca el servidor** — el cuerpo de una petición en Vercel se corta muy por
+debajo de lo que pesa una CBCT y subir una constante del handler no mueve ese techo.
+
+```
+1. POST .../estudios/sign     → el servidor valida y firma la URL de subida
+2. PUT  <signedUrl>           → el NAVEGADOR sube directo al bucket (XHR, con % real)
+3. POST .../estudios/confirm  → el servidor MIDE el objeto y crea la fila
+   POST .../estudios/abort    → limpia lo que se subió y no se confirmó
+```
+
+**No se reusó `src/lib/storage.ts`**: su tipo `BucketName` solo admite
+`"patient-files" | "clinic-public"`, así que `"edu-files"` no compila, y agregarlo ahí
+sería tocar un archivo compartido por productos vivos. El vertical trae
+`src/lib/edu/storage.ts` con la misma forma y los mismos cuidados — exactamente lo que
+ya hizo inmuebles con `realty-files`.
+
+Lo que **sí** se valida en el servidor: alcance clínico, lista blanca de extensiones,
+tamaño declarado, y el **path lo compone el servidor** con el `institutionId` de la
+sesión (`<institutionId>/estudios/<patientId>/<uuid>-<nombre>`). Lo que **no** se puede
+validar: la firma real del contenido, porque los bytes no pasan por aquí. Por eso
+`/confirm` vuelve a medir el objeto en Storage y comprueba que el path caiga
+**exactamente** en la carpeta de este instituto y este paciente — sin eso, conociendo
+un path ajeno se podría registrar el archivo de otra escuela en el expediente propio.
+
+`/confirm` es idempotente (índice único sobre el path): un reintento o un doble clic
+devuelven la fila que ya existe. Un corte de red se reintenta hasta 3 veces con
+backoff y el intento fallido se **borra** del bucket: sin eso, cancelar una subida de
+600 MB deja espacio fantasma que el instituto paga y que nadie puede ver.
+
+---
+
+### 5. Qué se entregó
+
+**Permisos (6 keys nuevas, grupo propio "Expediente clínico")**
+
+| key | la exige |
+|---|---|
+| `expediente.view` | la pantalla + `GET .../expediente` |
+| `expediente.write` | `POST .../expediente` y `PATCH /expediente/[id]` |
+| `odontograma.view` | la pantalla + `GET .../odontograma` |
+| `odontograma.edit` | `PUT` y `PATCH .../odontograma` |
+| `estudios.view` | la pantalla + `GET .../estudios` |
+| `estudios.upload` | `/sign`, `/confirm` y `/abort` |
+
+Defaults: **DIRECCION, DOCENTE y ALUMNO** las seis · **CAJA ninguna**. Que los tres
+compartan `expediente.view` no significa que lean lo mismo: el permiso abre la
+pantalla, el alcance decide las filas.
+
+**Pantallas** (`/instituto/(panel)/pacientes/[id]/…`, móvil primero, clases `edu-*`)
+`layout.tsx` (encabezado + pestañas) · `page.tsx` (datos) · `casos` · `expediente` ·
+`odontograma` · `estudios`. Cada pestaña es una **ruta**: se puede compartir el
+enlace, sobrevive a un refresh, y cada una carga solo sus datos — con una sola página,
+abrir la ficha se traería las notas, el odontograma y las radiografías de golpe.
+Se llega desde `/instituto/pacientes` con el botón **Expediente** (la "Ficha" modal de
+la Ola 2 sigue siendo el atajo para corregir un teléfono sin salir de la lista).
+
+**APIs** (8): `GET·POST /api/instituto/pacientes/[id]/expediente` ·
+`PATCH /api/instituto/expediente/[id]` ·
+`GET·PUT·PATCH /api/instituto/pacientes/[id]/odontograma` ·
+`GET /api/instituto/pacientes/[id]/estudios` + `/sign` `/confirm` `/abort`.
+Todas por `eduApiGuard` + la puerta del alcance.
+
+---
+
+### 6. Decisiones que se van a cuestionar (y por qué son así)
+
+**a) El expediente NO tiene item de menú, y salió de "Próximamente".** Es la excepción
+documentada a "un área está en el menú o está en Próximamente": no es una pantalla
+suelta, vive dentro de la ficha del paciente. Un item de sidebar tendría que abrir una
+pantalla que solo pregunta "¿de qué paciente?", y eso es un paso de más en un
+teléfono, de pie, con el paciente en el sillón. Hay una prueba que lo fija.
+
+**b) La pestaña Datos es de LECTURA.** La edición ya existe y funciona en el modal de
+`/instituto/pacientes` (Ola 2), con `pacientes.manage` y su endpoint aparte para el
+ORIGEN. Escribirla otra vez habría dado dos formularios para la misma ficha, y el día
+que alguien agregue un campo lo agregaría a uno de los dos.
+
+**c) El odontograma es una isla CLARA aunque el panel esté en oscuro.** `.odo-app` trae
+su propia paleta y los 45 colores de los hallazgos están calibrados sobre blanco.
+Ponerle `background: transparent` para que se funda con el panel pintaría tinta
+`#1a2230` sobre `#19203a` en modo oscuro: el dibujo desaparece. Es a propósito, como
+una placa en un negatoscopio.
+
+**d) El contador del odontograma se calcula sobre el dibujo, no sobre las filas.** El
+marcado es optimista (un odontograma con medio segundo de espera por diente es
+insoportable) y no se recarga por cada clic. Contar las filas del servidor diría
+"2 hallazgos" con tres dibujados — y de las dos cifras, la que la persona cree es la
+que ve. La lista de "quién marcó qué" **sí** es la foto de cuando se abrió la
+pantalla, lo dice, y trae su botón de Actualizar.
+
+**e) Quien puede abrir el expediente de un paciente ve TODOS sus estudios**, incluidos
+los que subió otro alumno para otro caso. Es a propósito: una tomografía de la boca es
+de la boca, y esconderle al de endodoncia la panorámica que pidió el de ortodoncia
+significa que se la vuelvan a tomar al paciente. Las **notas** sí van por caso.
+
+**f) Firmar exige `expediente.write`, la misma key que escribir.** El contrato de la
+ola no pidió una key separada para firmar y no se inventó una: cada key del catálogo
+tiene que exigirla de verdad una pantalla que existe. Lo que sí queda registrado es
+**quién** firmó (`signedByUserId`), que puede no ser el autor. Si la escuela necesita
+que solo el docente firme, es una key nueva en la ola de Evaluación — no un `if`
+escondido aquí.
+
+---
+
+### 7. Lo que NO se hizo (dicho aquí, no escondido)
+
+**a) No hay visor 3D/CBCT propio.** Ver el punto 1b. Las tomografías se descargan
+completas y la pantalla lo dice. Las piezas puras del dental (`cbct-mpr-shared.ts`,
+`dicom-decode-core.ts`, `MprPane.tsx`, `Dicom3DVolume.tsx`) se pueden reusar tal cual
+el día que el vertical tenga su contenedor.
+
+**b) No hay cuota de almacenamiento.** El dental cobra por clínica
+(`storageQuotaError`) contra su propio bucket y su propia tabla de planes; el
+instituto no tiene todavía plan que consultar. Hoy el único tope es **2 GB por
+archivo**. Una escuela puede llenar el bucket. Es la primera línea de la ola de Dinero
+del vertical.
+
+**c) No hay barrido de huérfanos.** Si el navegador se cierra a media subida, nadie
+llama a `/abort` y el objeto queda en el bucket sin fila. Mismo pendiente que el
+dental documentó en su día.
+
+**d) La subida no es reanudable byte a byte.** Un corte de red se reintenta (3 veces,
+con backoff) y el intento fallido se limpia, pero los bytes vuelven a empezar. La
+reanudación real necesita TUS (`/upload/resumable`), que exige mandar el JWT del
+usuario desde el navegador y abrir políticas RLS de escritura sobre `storage.objects`.
+Hoy el bucket es privado con deny-all y todo pasa por signed URLs de service role;
+abrirlo es una decisión de seguridad aparte.
+
+**e) No hay paginación de verdad.** Notas y estudios se cortan en 200 filas y el
+odontograma en 1 000. La pantalla lo dice en vez de mentir con un total.
+
+**f) Nada de esto se probó contra una base de datos.** Los módulos `-core` son puros y
+las 51 pruebas leen los `where`, los `Records` y los paths que Prisma y Storage
+recibirían. **No se aplicó el `.sql` ni se tocó ninguna base**, así que lo que no
+consta es el comportamiento contra Postgres real ni contra Supabase Storage: el
+`upsert` del odontograma, el índice único con `surface = ''`, la firma de la URL de
+subida y el PUT del navegador **no se han ejercitado nunca**. La primera subida real
+es la prueba de fuego.
+
+**g) `tsc --noEmit` sale con 6 errores AJENOS** (`src/lib/barber/__tests__/`:
+`dinero-sumas` y `i18n-alcance`). Vienen de `origin/main`, esta rama no tocó esos
+archivos y arreglarlos habría sido salirse del vertical. Del instituto: **cero**.
+
+**h) Archivos que se quisieron tocar y NO se tocaron.** Ninguno se tocó a escondidas:
+- `package.json` — el script `test:edu-expediente`. Es del dental y esta ola tiene
+  prohibido tocarlo; la prueba se corre con `npx tsx --test …` (el comando está en la
+  cabecera del archivo).
+- `src/lib/storage.ts` — se quiso agregar `edu-files` a `BUCKETS`. Es del dental y lo
+  comparten productos vivos: el vertical trae su propio helper (punto 4).
+- `src/components/dashboard/odontogram-v2/**` — se **importa** entero y no se editó ni
+  una línea. Lo mismo `src/components/patient-3d/**`, que ni se importa.
+- `next.config.js` — para poder usar `next/image` con el dominio de Supabase en la
+  galería de estudios. Se usa `<img>` en su lugar, que además es lo correcto: la URL
+  es firmada y caduca, y el optimizador la cachearía en una ruta que después da 403.
+- `src/middleware.ts` — no hizo falta: `/instituto/:path*` ya está en el matcher.
+- `scripts/edu-guard.cjs` — no hizo falta: `src/components/edu/expediente/` cae bajo
+  el prefijo `src/components/edu/` que ya estaba indultado.
+
+---
+
+### 8. Archivos
+
+| Archivo | Qué |
+|---|---|
+| `prisma/schema.prisma` | **aditivo**: 2 enums + 3 modelos + las relaciones inversas en los 6 modelos Edu* que ya existían |
+| `sql/edu-ola-3.sql` | 610 líneas idempotentes: 2 enums, 3 tablas, 9 índices, 14 FKs, **el bucket** y el backfill del override (comentado) |
+| `src/lib/edu/expediente-core.ts` | PURO · el alcance clínico (punto único), la máquina de estados y los sellos |
+| `src/lib/edu/expediente.ts` | servidor · notas + `getEduClinicalPatient` (la puerta del expediente) |
+| `src/lib/edu/odontograma-core.ts` | PURO · FDI, caras, catálogo, filas ⇄ dibujo |
+| `src/lib/edu/odontograma.ts` | servidor · upsert por hallazgo y nota por diente |
+| `src/lib/edu/estudios-core.ts` | PURO · bucket, topes, extensiones, paths |
+| `src/lib/edu/estudios.ts` | servidor · los tres pasos de la subida |
+| `src/lib/edu/storage.ts` | `server-only` · el bucket `edu-files` |
+| `src/lib/edu/permissions.ts` · `types.ts` · `visibility.ts` | 6 keys, 2 enums espejo + rutas; en `visibility.ts` **solo comentario** |
+| `src/app/api/instituto/**` (7 archivos) | los 8 endpoints |
+| `src/app/instituto/(panel)/pacientes/[id]/**` (6 archivos) | layout + 5 pantallas |
+| `src/components/edu/expediente/**` (6 archivos) | pestañas, notas, odontograma, estudios, visor, cliente de subida |
+| `src/app/instituto/edu-theme.css` | `+320` líneas: pestañas, notas, odontograma, galería, progreso |
+| `src/components/edu/clinica/pacientes-screen.tsx` | **+1 enlace** "Expediente" y el ancho de su columna |
+| `src/lib/edu/__tests__/edu-expediente.test.ts` | **51 pruebas** nuevas |
+| `src/lib/edu/__tests__/edu-permissions.test.ts` | +5 pruebas de las seis keys |
+
+---
+
+### 9. Cómo aplicarlo (en este orden)
+
+1. `sql/edu-ola-3.sql` en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/2.sql`. Es idempotente y no tiene un solo `DROP`.
+2. **Comprueba el bucket**: la sección 5 del `.sql` lo crea privado con tope de 2 GB,
+   pero si el proyecto de Supabase tiene un tope GLOBAL menor, el PUT del navegador
+   fallará con 413 y `/sign` no puede detectarlo. Settings → Storage.
+3. El **backfill del override** (sección 6 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío: el override REEMPLAZA al default, así que las seis
+   keys nuevas **no** le llegan solas a quien ya tenga uno guardado. El bloque
+   **excluye a caja a propósito** — encendérselas le pintaría tres pestañas vacías.
+4. Las comprobaciones de la sección 7 del `.sql`. Las dos que de verdad importan:
+   `surface` **NOT NULL** y `sizeBytes` **bigint**.
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0; 8 rutas de API y 5 páginas
+nuevas registradas) · `npx tsc --noEmit` ✅ para el vertical (6 errores ajenos de
+barber, preexistentes en `origin/main`) · **191 pruebas** en verde
+(`edu-expediente` 51, `edu-agenda` 33, `edu-permissions` 29, `edu-visibility` 29,
+`edu-padron` 24, `edu-pacientes` 16, `edu-contract` 9) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(34 archivos propios, 1 compartido declarado, 0 prohibidos).

@@ -58,6 +58,22 @@ export const EDU_ALL_PERMISSIONS = {
   "sillones.manage": "Dar de alta sillones y capturar su horario",
   "casos.view": "Ver los casos clínicos",
   "casos.assign": "Asignar un paciente a un alumno y abrir su caso",
+  // ── Ola 3 · el expediente clínico ────────────────────────────────────
+  // Las seis las EXIGE una pantalla y un endpoint que ya existen (la
+  // prueba de __tests__/edu-permissions.test.ts falla si alguna se queda
+  // sin lector de SERVIDOR):
+  //   expediente.view    → /instituto/pacientes/[id]/expediente + su GET
+  //   expediente.write   → POST de notas y PATCH de estado (enviar/firmar)
+  //   odontograma.view   → /instituto/pacientes/[id]/odontograma + su GET
+  //   odontograma.edit   → PUT y PATCH del odontograma
+  //   estudios.view      → /instituto/pacientes/[id]/estudios + su GET
+  //   estudios.upload    → /sign y /confirm de la subida directa
+  "expediente.view": "Leer las notas clínicas del expediente",
+  "expediente.write": "Escribir, enviar y firmar notas clínicas",
+  "odontograma.view": "Ver el odontograma del paciente",
+  "odontograma.edit": "Marcar hallazgos en el odontograma",
+  "estudios.view": "Ver las radiografías, tomografías y fotos del paciente",
+  "estudios.upload": "Subir estudios al expediente del paciente",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -85,6 +101,21 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
   {
     title: "Agenda y sillones",
     keys: ["agenda.view", "agenda.manage", "sillones.view", "sillones.manage"],
+  },
+  {
+    // Grupo APARTE del de "Pacientes y casos" a propósito: son los seis
+    // interruptores que la dirección va a querer apagarle a caja de un
+    // vistazo. Mezclados con pacientes.view, apagar el expediente sin
+    // apagar la recepción sería un ejercicio de leer catorce casillas.
+    title: "Expediente clínico",
+    keys: [
+      "expediente.view",
+      "expediente.write",
+      "odontograma.view",
+      "odontograma.edit",
+      "estudios.view",
+      "estudios.upload",
+    ],
   },
 ];
 
@@ -133,6 +164,23 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * trajo al paciente decide el precio en la Ola 5, así que lo pone quien
  * cobra (caja) o quien manda (dirección). Al alumno se le PINTA su origen,
  * deshabilitado.
+ *
+ * ── Ola 3 · el expediente clínico ───────────────────────────────────────
+ * DIRECCION, DOCENTE y ALUMNO llevan las SEIS keys. CAJA, NINGUNA — y ésta
+ * es la línea del contrato que más fácil se rompe, así que está cerrada en
+ * DOS sitios, no en uno:
+ *
+ *   1. aquí, en el default (caja no trae ni expediente.view);
+ *   2. en el ALCANCE (src/lib/edu/visibility.ts), porque el expediente se
+ *      lee con el recurso "cases", y para caja ese recurso devuelve "none"
+ *      aunque alguien le encienda el interruptor por error.
+ *
+ * Un solo candado se abre por accidente; dos hay que abrirlos a propósito.
+ *
+ * 🔴 Y otra vez: que los tres roles compartan "expediente.view" NO
+ * significa que lean lo mismo. El alumno ve las notas de SUS casos, el
+ * docente las de los alumnos que supervisa HOY, la dirección todas.
+ * Ensanchar el permiso no ensancha lo que se ve.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
   DIRECCION: [
@@ -150,6 +198,12 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "sillones.manage",
     "casos.view",
     "casos.assign",
+    "expediente.view",
+    "expediente.write",
+    "odontograma.view",
+    "odontograma.edit",
+    "estudios.view",
+    "estudios.upload",
   ],
   DOCENTE: [
     "inicio.view",
@@ -160,8 +214,25 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "sillones.view",
     "casos.view",
     "casos.assign",
+    "expediente.view",
+    "expediente.write",
+    "odontograma.view",
+    "odontograma.edit",
+    "estudios.view",
+    "estudios.upload",
   ],
-  ALUMNO: ["inicio.view", "agenda.view", "pacientes.view", "casos.view"],
+  ALUMNO: [
+    "inicio.view",
+    "agenda.view",
+    "pacientes.view",
+    "casos.view",
+    "expediente.view",
+    "expediente.write",
+    "odontograma.view",
+    "odontograma.edit",
+    "estudios.view",
+    "estudios.upload",
+  ],
   CAJA: [
     "inicio.view",
     "pacientes.view",

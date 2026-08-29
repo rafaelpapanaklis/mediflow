@@ -280,12 +280,106 @@ test("los defaults de la Ola 2 son EXACTAMENTE los del contrato", () => {
     assert.equal(hasEduPermission({ role: "DOCENTE" }, k), false, `DOCENTE no debería traer ${k}`);
   }
 
-  // ALUMNO: tres permisos de LECTURA, y todo lo que lea va recortado a lo
-  // suyo por el ALCANCE, no por el permiso.
-  assert.deepEqual(
-    [...EDU_ROLE_DEFAULTS.ALUMNO].sort(),
-    ["agenda.view", "casos.view", "inicio.view", "pacientes.view"],
+  // ALUMNO: del piso clínico solo LECTURA, y todo lo que lea va recortado a
+  // lo suyo por el ALCANCE, no por el permiso. (Las seis del expediente que
+  // agregó la Ola 3 se comprueban en su propio bloque, más abajo.)
+  const deAlumnoOla2: EduPermissionKey[] = [
+    "inicio.view",
+    "agenda.view",
+    "pacientes.view",
+    "casos.view",
+  ];
+  for (const k of deAlumnoOla2) {
+    assert.equal(hasEduPermission({ role: "ALUMNO" }, k), true, `ALUMNO debería traer ${k}`);
+  }
+  const noDelAlumno: EduPermissionKey[] = [
+    "pacientes.manage",
+    "pacientes.origen",
+    "agenda.manage",
+    "sillones.manage",
+    "casos.assign",
+    "padron.view",
+    "padron.manage",
+    "docentes.view",
+    "supervision.assign",
+  ];
+  for (const k of noDelAlumno) {
+    assert.equal(hasEduPermission({ role: "ALUMNO" }, k), false, `ALUMNO no debería traer ${k}`);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 1d · Las seis keys de la Ola 3 (el expediente clínico)
+// ─────────────────────────────────────────────────────────────────────
+
+const KEYS_OLA_3: EduPermissionKey[] = [
+  "expediente.view",
+  "expediente.write",
+  "odontograma.view",
+  "odontograma.edit",
+  "estudios.view",
+  "estudios.upload",
+];
+
+test("las seis keys de la Ola 3 están en el catálogo, descritas en español", () => {
+  for (const k of KEYS_OLA_3) {
+    assert.ok(k in EDU_ALL_PERMISSIONS, `falta ${k} en el catálogo`);
+    const desc = EDU_ALL_PERMISSIONS[k];
+    assert.ok(desc && desc.length > 8, `${k} sin descripción usable: ${desc}`);
+    assert.notEqual(desc, k, `${k} se describe con su propia key`);
+  }
+});
+
+test("las seis viven en el grupo del expediente, y cada una en uno solo", () => {
+  const grupo = EDU_PERMISSION_GROUPS.find((g) => g.keys.includes("expediente.view"));
+  assert.ok(grupo, "no hay grupo para expediente.view");
+  for (const k of KEYS_OLA_3) {
+    assert.ok(grupo.keys.includes(k), `${k} no está en el grupo "${grupo.title}"`);
+    const cuantos = EDU_PERMISSION_GROUPS.filter((g) => g.keys.includes(k)).length;
+    assert.equal(cuantos, 1, `${k} aparece en ${cuantos} grupos`);
+  }
+  // Grupo APARTE del de pacientes: la dirección tiene que poder apagarle el
+  // expediente a alguien sin apagarle la recepción, y al revés.
+  const pacientes = EDU_PERMISSION_GROUPS.find((g) => g.keys.includes("pacientes.view"));
+  assert.ok(pacientes);
+  assert.notEqual(grupo.title, pacientes.title);
+});
+
+test("🔴 CAJA no trae NINGUNA de las seis del expediente (primer candado)", () => {
+  // El segundo candado es el ALCANCE (edu-expediente.test.ts): para caja el
+  // recurso "cases" devuelve "none" aunque alguien le encienda estas keys a
+  // mano. Un solo candado se abre por accidente; dos hay que abrirlos a
+  // propósito.
+  for (const k of KEYS_OLA_3) {
+    assert.equal(hasEduPermission({ role: "CAJA" }, k), false, `CAJA no debería traer ${k}`);
+  }
+  // Y sigue entrando al panel y trabajando: recibe, agenda y cobra.
+  assert.equal(hasEduPermission({ role: "CAJA" }, "inicio.view"), true);
+  assert.equal(hasEduPermission({ role: "CAJA" }, "pacientes.view"), true);
+  assert.equal(hasEduPermission({ role: "CAJA" }, "agenda.manage"), true);
+});
+
+test("DIRECCION, DOCENTE y ALUMNO traen las seis (lo que ven lo recorta el alcance)", () => {
+  for (const rol of ["DIRECCION", "DOCENTE", "ALUMNO"] as EduRole[]) {
+    for (const k of KEYS_OLA_3) {
+      assert.equal(hasEduPermission({ role: rol }, k), true, `${rol} debería traer ${k}`);
+    }
+  }
+});
+
+test("el EXPEDIENTE salió de 'Próximamente' y NO tiene item de menú (vive en la ficha)", () => {
+  const enMenu = new Set(EDU_NAV_ITEMS.map((i) => i.key));
+  assert.equal(
+    EDU_UPCOMING_AREAS.some((a) => a.key === "expediente"),
+    false,
+    "el expediente ya se entregó y sigue anunciado como Próximamente",
   );
+  // Es la EXCEPCIÓN documentada a "un área está en el menú o está en
+  // Próximamente": el expediente no es una pantalla suelta, vive dentro de
+  // /instituto/pacientes/[id]. Un item de sidebar tendría que abrir una
+  // pantalla que solo pregunta "¿de qué paciente?".
+  assert.equal(enMenu.has("expediente"), false);
+  assert.ok(enMenu.has("pacientes"), "y se llega desde Pacientes, que sí está en el menú");
 });
 
 test("el ORIGEN del paciente solo lo marcan caja y dirección", () => {

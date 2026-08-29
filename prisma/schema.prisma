@@ -12381,6 +12381,10 @@ model EduInstitution {
   chairSchedules  EduChairSchedule[]
   cases           EduCase[]
   appointments    EduAppointment[]
+  // Ola 3 · el expediente clínico.
+  records           EduRecord[]
+  odontogramEntries EduOdontogramEntry[]
+  studies           EduStudy[]
 
   @@map("edu_institutions")
 }
@@ -12425,6 +12429,15 @@ model EduUser {
   casesSupervised        EduCase[]        @relation("EduCaseSupervisor")
   appointmentsSupervised EduAppointment[] @relation("EduApptSupervisor")
   patientOriginsSet      EduPatient[]     @relation("EduPatientOriginSetBy")
+
+  /// Ola 3. NOM-004: el AUTOR de una nota clínica siempre es identificable,
+  /// y es un EduUser (no un EduStudent) porque también escribe el docente.
+  /// `recordsSigned` guarda quién la firmó — que puede no ser el que la
+  /// escribió, y es justo lo que hay que poder contestar dentro de un año.
+  recordsAuthored   EduRecord[]          @relation("EduRecordAuthor")
+  recordsSigned     EduRecord[]          @relation("EduRecordSigner")
+  odontogramEntries EduOdontogramEntry[] @relation("EduOdontogramRecorder")
+  studiesUploaded   EduStudy[]           @relation("EduStudyUploader")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12550,6 +12563,10 @@ model EduStudent {
   /// Pacientes que ESTE alumno trajo a la clínica. En la Ola 5 decide el
   /// precio, por eso se guarda desde ahora.
   referredPatients EduPatient[] @relation("EduPatientReferrer")
+  /// Ola 3: las notas clínicas de sus casos. Es el alumno RESPONSABLE del
+  /// acto clínico, no necesariamente quien tecleó la nota (eso es
+  /// EduRecord.authorUserId).
+  records          EduRecord[]
 
   @@unique([institutionId, matricula])
   @@index([institutionId, status])
@@ -12736,6 +12753,13 @@ model EduPatient {
   originSetBy       EduUser?      @relation("EduPatientOriginSetBy", fields: [originSetById], references: [id], onDelete: SetNull)
   cases        EduCase[]
   appointments EduAppointment[]
+  /// Ola 3 · el expediente. El ODONTOGRAMA y los ESTUDIOS cuelgan del
+  /// PACIENTE y no del caso: la boca es una sola y una tomografía sirve
+  /// para la endodoncia y para la ortodoncia. Las NOTAS sí cuelgan del
+  /// caso — son el registro de un acto clínico con un responsable.
+  records    EduRecord[]
+  odontogram EduOdontogramEntry[]
+  studies    EduStudy[]
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -12854,6 +12878,9 @@ model EduCase {
   supervisor  EduUser?       @relation("EduCaseSupervisor", fields: [supervisorUserId], references: [id], onDelete: SetNull)
   screeningAppointment EduAppointment? @relation("EduCaseScreening", fields: [screeningAppointmentId], references: [id], onDelete: SetNull)
   appointments EduAppointment[] @relation("EduCaseAppointments")
+  /// Ola 3: las notas clínicas del caso y los estudios que se le engancharon.
+  records EduRecord[]
+  studies EduStudy[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
@@ -12903,6 +12930,10 @@ model EduAppointment {
   supervisor  EduUser?       @relation("EduApptSupervisor", fields: [supervisorUserId], references: [id], onDelete: SetNull)
   case        EduCase?       @relation("EduCaseAppointments", fields: [caseId], references: [id], onDelete: SetNull)
   screeningFor EduCase[]     @relation("EduCaseScreening")
+  /// Ola 3: la nota de ESTA sesión. Es opcional en los dos sentidos — hay
+  /// citas sin nota (la que se canceló) y notas sin cita (la corrección que
+  /// se escribe al día siguiente).
+  records      EduRecord[]
 
   // Los nombres van EXPLÍCITOS: el que Prisma generaría solo
   // (edu_appointments_institutionId_chairId_startsAt_idx y compañía) es
@@ -12916,4 +12947,232 @@ model EduAppointment {
   @@index([institutionId, patientId, startsAt], map: "edu_appointments_patient_idx")
   @@index([institutionId, caseId], map: "edu_appointments_case_idx")
   @@map("edu_appointments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 3 · EL EXPEDIENTE CLÍNICO.
+//
+// Tres tablas: la NOTA (EduRecord), el ODONTOGRAMA por diente
+// (EduOdontogramEntry) y el ARCHIVO del paciente (EduStudy).
+//
+// 🔴 institutionId está en las TRES, igual que en las olas anteriores y por
+// la misma razón: TODA consulta del vertical filtra por el institutionId de
+// la SESIÓN, y un filtro que necesita un JOIN para existir es un filtro que
+// alguien va a olvidar. Ojo Prisma: un institutionId undefined BORRA el
+// filtro y una escuela lee el expediente de otra.
+//
+// 🔴 QUIÉN VE ESTO — el expediente cuelga del recurso "cases" de
+// src/lib/edu/visibility.ts, NO del recurso "patients". La diferencia es
+// exactamente la línea del contrato que más fácil se rompe:
+//   · "patients"  → CAJA ve a TODOS (recibe, agenda y cobra).
+//   · "cases"     → CAJA no ve NINGUNO. Caja no abre expediente clínico.
+// Si el expediente se colgara de "patients", caja leería las notas, el
+// odontograma y las radiografías de toda la escuela — y el bug se vería
+// exactamente igual que "funciona". Por eso las tres tablas se leen con el
+// alcance de "cases" aunque dos de ellas cuelguen del PACIENTE.
+//
+// 🔴 NADA DE BYTES EN LA BASE. EduStudy guarda el PATH del objeto en
+// Supabase Storage (bucket privado `edu-files`), nunca el binario ni una
+// URL firmada — una URL firmada caduca y quedaría muerta en la columna. El
+// navegador sube DIRECTO al bucket con una signed upload URL: una
+// tomografía pesa cientos de MB y el cuerpo de una petición en Vercel se
+// corta muy por debajo de eso.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-3.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Dónde va una nota clínica.
+///
+/// 🔴 NOM-004: una nota FIRMADA no se edita ni se borra. Se corrige con una
+/// nota NUEVA que referencia a la anterior (EduRecord.correctsId). Si se
+/// pudiera reescribir, el expediente dejaría de ser un registro de lo que
+/// pasó y pasaría a ser un registro de lo que alguien quiere que parezca
+/// que pasó.
+enum EduRecordStatus {
+  /// La escribe el alumno y solo la ve quien puede ver el caso.
+  BORRADOR
+  /// Entregada para revisión del docente. Todavía se puede devolver.
+  ENVIADA
+  /// Cerrada. No se toca nunca más.
+  FIRMADA
+}
+
+/// Qué es el archivo que se subió.
+enum EduStudyKind {
+  RADIOGRAFIA
+  TOMOGRAFIA
+  FOTO
+  PDF
+  OTRO
+}
+
+/// LA NOTA CLÍNICA (SOAP) de una sesión.
+///
+/// Cuelga del CASO —este paciente, con este alumno, en esta especialidad—
+/// porque es el registro de un acto clínico y un acto clínico tiene un
+/// responsable. Meterlas todas en un "expediente del paciente" es lo que
+/// hace que en una escuela nadie sepa de quién era la responsabilidad.
+///
+/// ⚠️ DOS PERSONAS, DOS COLUMNAS, y no es una duplicación:
+///   · `studentId`    → el alumno RESPONSABLE del caso. Sale del caso, no
+///     del body: es de quién es el acto clínico.
+///   · `authorUserId` → QUIÉN TECLEÓ la nota. Sale de la sesión. Cuando el
+///     que escribe es el alumno, los dos apuntan a la misma persona; cuando
+///     el docente escribe una adenda, no. Sin esta columna habría que
+///     atribuirle al alumno una nota que no escribió, que es falsear la
+///     autoría de un documento clínico.
+model EduRecord {
+  id            String @id @default(cuid())
+  institutionId String
+  caseId        String
+  patientId     String
+  studentId     String
+  /// NOM-004: el autor SIEMPRE identificable. Nunca opcional.
+  authorUserId  String
+  /// La sesión que documenta. Opcional en los dos sentidos: hay citas sin
+  /// nota y notas sin cita.
+  appointmentId String?
+
+  /// SOAP. Cuatro campos separados y no un textarea gigante: es el formato
+  /// que la escuela enseña, y separarlos es lo que permite después leer
+  /// "qué diagnosticó" sin leer la nota entera.
+  subjetivo   String? @db.VarChar(4000)
+  objetivo    String? @db.VarChar(4000)
+  analisis    String? @db.VarChar(4000)
+  plan        String? @db.VarChar(4000)
+  diagnostico String? @db.VarChar(500)
+
+  status EduRecordStatus @default(BORRADOR)
+  /// Cuándo se entregó para revisión y cuándo se firmó. Se DERIVAN del
+  /// status (no se capturan), igual que EduCase.closedAt: así no existe una
+  /// nota "firmada" sin fecha de firma.
+  submittedAt DateTime?
+  signedAt    DateTime?
+  /// Quién firmó. Puede no ser el autor — el docente firma lo que el alumno
+  /// escribió, y ésa es justo la pregunta que se hace un año después.
+  signedByUserId String?
+
+  /// La nota a la que ésta CORRIGE. Una firmada no se edita: se corrige con
+  /// una nueva que la referencia. SetNull y no Cascade: perder el enlace es
+  /// aceptable, perder la corrección no.
+  correctsId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  case        EduCase         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patient     EduPatient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  student     EduStudent      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  author      EduUser         @relation("EduRecordAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  signedBy    EduUser?        @relation("EduRecordSigner", fields: [signedByUserId], references: [id], onDelete: SetNull)
+  appointment EduAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  corrects    EduRecord?      @relation("EduRecordCorrections", fields: [correctsId], references: [id], onDelete: SetNull)
+  correctedBy EduRecord[]     @relation("EduRecordCorrections")
+
+  // Los nombres van EXPLÍCITOS: el que Prisma generaría solo
+  // (edu_records_institutionId_patientId_createdAt_idx) se acerca a los 63
+  // caracteres que admite un identificador de Postgres, y sql/edu-ola-3.sql
+  // tiene que poder decir exactamente lo mismo.
+  @@index([institutionId, caseId, createdAt], map: "edu_records_case_idx")
+  @@index([institutionId, patientId, createdAt], map: "edu_records_patient_idx")
+  @@index([institutionId, studentId, status], map: "edu_records_student_idx")
+  @@index([institutionId, appointmentId], map: "edu_records_appt_idx")
+  @@map("edu_records")
+}
+
+/// UN HALLAZGO en UN diente (y opcionalmente en UNA cara).
+///
+/// El odontograma cuelga del PACIENTE y no del caso: la boca es una sola.
+/// El alumno de endodoncia y el de ortodoncia miran el mismo diente 16.
+///
+/// 🔴 `surface` NO es NULLABLE, y no es un descuido. Postgres considera
+/// DISTINTOS dos NULL en un índice único: con `surface` nullable, el mismo
+/// hallazgo de diente completo se podría insertar dos, diez o mil veces y
+/// el índice no diría nada. La cadena VACÍA ("") significa "el diente
+/// entero" y sí la compara el índice.
+///
+/// `condition` es el id del catálogo compartido de hallazgos
+/// (src/components/dashboard/odontogram-v2/data.ts — módulo PURO, sin
+/// prisma ni fetch, que el vertical IMPORTA y no copia). El servidor
+/// valida contra ese catálogo: sin eso, cualquiera escribe texto libre en
+/// el odontograma. La única key que no está en el catálogo es la RESERVADA
+/// "__nota__", que es como se guarda la nota por diente.
+model EduOdontogramEntry {
+  id            String @id @default(cuid())
+  institutionId String
+  patientId     String
+  /// Número FDI del diente (11-18, 21-28, 31-38, 41-48 y los temporales
+  /// 51-55, 61-65, 71-75, 81-85).
+  tooth         Int
+  /// Cara: O/I/M/D/V/L. "" = el diente entero. NUNCA null (ver arriba).
+  surface       String  @default("") @db.VarChar(4)
+  /// Id del hallazgo en el catálogo, o "__nota__" para la nota del diente.
+  condition     String  @db.VarChar(40)
+  notes         String? @db.VarChar(1000)
+
+  /// Quién lo marcó y cuándo. El odontograma es parte del expediente: un
+  /// hallazgo sin autor no sirve para contestar nada.
+  recordedById String
+  recordedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  recordedBy  EduUser        @relation("EduOdontogramRecorder", fields: [recordedById], references: [id], onDelete: Cascade)
+
+  // El índice único COMPLETO: es el que hace posible un upsert y el que
+  // impide que el mismo hallazgo entre dos veces por un doble clic.
+  @@unique([institutionId, patientId, tooth, surface, condition], map: "edu_odontogram_hallazgo_key")
+  @@index([institutionId, patientId, tooth], map: "edu_odontogram_patient_idx")
+  @@map("edu_odontogram_entries")
+}
+
+/// UN ARCHIVO del expediente: radiografía, tomografía, foto o PDF.
+///
+/// 🔴 `storagePath` es el PATH INTERNO del bucket privado `edu-files`,
+/// jamás una URL. Una URL firmada caduca —minutos— y guardarla dejaría la
+/// columna con enlaces muertos; se firma on-demand al leer.
+///
+/// 🔴 `sizeBytes` es BigInt y NO Int: el tope de subida son 2 GB
+/// (2 147 483 648) y un Int de Postgres llega a 2 147 483 647. Con Int, el
+/// archivo más grande que el producto acepta desborda la columna por UN
+/// byte — y falla al escribir, después de que el usuario esperó la subida
+/// entera.
+model EduStudy {
+  id            String @id @default(cuid())
+  institutionId String
+  patientId     String
+  /// El caso al que se enganchó, si se enganchó a alguno. Opcional: una
+  /// panorámica de tamizaje existe antes que cualquier caso.
+  caseId        String?
+
+  kind        EduStudyKind @default(OTRO)
+  /// El nombre ORIGINAL, tal como lo tenía el archivo. Es lo que se le
+  /// enseña a la persona; el path lleva un nombre saneado aparte.
+  name        String  @db.VarChar(160)
+  storagePath String  @db.VarChar(400)
+  mimeType    String  @db.VarChar(120)
+  sizeBytes   BigInt
+  notes       String? @db.VarChar(1000)
+
+  uploadedById String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  uploadedBy  EduUser        @relation("EduStudyUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  // Un path solo puede estar registrado UNA vez. Es lo que hace idempotente
+  // al /confirm: un reintento del cliente devuelve la fila que ya existe en
+  // vez de duplicar el estudio.
+  @@unique([institutionId, storagePath], map: "edu_studies_path_key")
+  @@index([institutionId, patientId, createdAt], map: "edu_studies_patient_idx")
+  @@index([institutionId, caseId], map: "edu_studies_case_idx")
+  @@map("edu_studies")
 }

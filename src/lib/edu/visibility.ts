@@ -51,6 +51,31 @@ import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
  * Las tres cosas que esta ola pone en el piso clínico. Se pregunta por
  * RECURSO y no por rol suelto porque el mismo rol no ve lo mismo en los
  * tres: CAJA ve todos los pacientes y toda la agenda, y ni un caso.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA 3 — EL EXPEDIENTE NO AGREGÓ UN CUARTO RECURSO, Y ESO ES LO
+ * IMPORTANTE.
+ *
+ * Las notas clínicas, el odontograma y los estudios se leen con el recurso
+ * "cases", no con "patients". La diferencia es LA línea del contrato:
+ *
+ *   · "patients"  → CAJA ve a TODOS (recibe, agenda y cobra).
+ *   · "cases"     → CAJA ve NINGUNO. No abre expediente clínico.
+ *
+ * Dos de esas tres cosas cuelgan del PACIENTE en la base (la boca es una
+ * sola, y una tomografía sirve para endodoncia y para ortodoncia) — pero
+ * eso es dónde se GUARDAN, no quién las VE. Colgarlas de "patients" por
+ * parecerse habría abierto a caja las notas, el odontograma y las
+ * radiografías de toda la escuela, y el bug se habría visto exactamente
+ * igual que "funciona".
+ *
+ * En la práctica: el expediente se lee con
+ *   eduPatientScopeWhere({ ..., scope: eduVisibility(ctx, "cases") })
+ * que para caja devuelve el `where` que no trae ni una fila. Un recurso
+ * nuevo que dijera lo mismo solo habría dado un segundo sitio donde
+ * equivocarse. El punto único lo aplica src/lib/edu/expediente-core.ts
+ * (eduClinicalScope) y de ahí lo usan los tres módulos de servidor.
+ * ═══════════════════════════════════════════════════════════════════════
  */
 export type EduVisibilityResource = "patients" | "appointments" | "cases";
 

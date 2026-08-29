@@ -24,6 +24,11 @@
 //   /instituto/agenda/tamizaje → valoración inicial: asigna y abre caso  Ola 2 ✓
 //   /instituto/sillones     → unidades dentales y su horario       Ola 2  ✓
 //   /instituto/mi-dia       → lo que ve un alumno al llegar        Ola 2  ✓
+//   /instituto/pacientes/[id]              → ficha, con pestañas   Ola 3  ✓
+//   /instituto/pacientes/[id]/casos        → sus casos             Ola 3  ✓
+//   /instituto/pacientes/[id]/expediente   → notas clínicas        Ola 3  ✓
+//   /instituto/pacientes/[id]/odontograma  → el odontograma        Ola 3  ✓
+//   /instituto/pacientes/[id]/estudios     → radiografías y tomografías Ola 3 ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
 // entrada de menú de EDU_NAV_ITEMS (abajo). Ninguna inventa su propio
 // guard: todas pasan por el layout del grupo (panel).
@@ -50,6 +55,13 @@
 //   GET·POST  /api/instituto/casos          → casos clínicos       Ola 2  ✓
 //   PATCH     /api/instituto/casos/[id]     → estado y supervisor  Ola 2  ✓
 //   POST      /api/instituto/tamizaje       → asigna alumno + abre caso  Ola 2 ✓
+//   GET·POST  /api/instituto/pacientes/[id]/expediente   → notas    Ola 3 ✓
+//   PATCH     /api/instituto/expediente/[id]  → editar, enviar, firmar Ola 3 ✓
+//   GET·PUT·PATCH /api/instituto/pacientes/[id]/odontograma      Ola 3 ✓
+//   GET       /api/instituto/pacientes/[id]/estudios     → archivos Ola 3 ✓
+//   POST      /api/instituto/pacientes/[id]/estudios/sign    → firma Ola 3 ✓
+//   POST      /api/instituto/pacientes/[id]/estudios/confirm        Ola 3 ✓
+//   POST      /api/instituto/pacientes/[id]/estudios/abort          Ola 3 ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -296,6 +308,84 @@ export const EDU_APPOINTMENT_STATUS_DESCRIPTIONS: Record<EduAppointmentStatus, s
  */
 export const EDU_APPOINTMENT_FREE_STATUSES: EduAppointmentStatus[] = ["CANCELLED", "NO_SHOW"];
 
+// ═══════════════════════════════════════════════════════════════════════
+// Ola 3 · EL EXPEDIENTE CLÍNICO — notas, odontograma y estudios.
+//
+// Los dos enums que siguen son espejo 1:1 de los de Prisma, escritos como
+// uniones de strings para poder importarlos desde componentes "use client"
+// sin arrastrar el runtime de Prisma al navegador — igual que los cinco de
+// la Ola 2. El candado de que no se desincronicen es un chequeo de TIPOS en
+// src/lib/edu/__tests__/edu-expediente.test.ts (lo verifica `tsc --noEmit`).
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Dónde va una nota clínica.
+ *
+ * 🔴 NOM-004: FIRMADA es un estado FINAL. Una nota firmada no se edita ni
+ * se borra; se corrige con una nota NUEVA que referencia a la anterior. Si
+ * se pudiera reescribir, el expediente dejaría de ser el registro de lo que
+ * pasó y pasaría a ser el registro de lo que alguien quiere que parezca que
+ * pasó.
+ */
+export type EduRecordStatus = "BORRADOR" | "ENVIADA" | "FIRMADA";
+
+export const EDU_RECORD_STATUSES: EduRecordStatus[] = ["BORRADOR", "ENVIADA", "FIRMADA"];
+
+export const EDU_RECORD_STATUS_LABELS: Record<EduRecordStatus, string> = {
+  BORRADOR: "Borrador",
+  ENVIADA: "Enviada",
+  FIRMADA: "Firmada",
+};
+
+export const EDU_RECORD_STATUS_DESCRIPTIONS: Record<EduRecordStatus, string> = {
+  BORRADOR: "La estás escribiendo. Todavía se puede cambiar todo.",
+  ENVIADA: "Entregada al docente. Puede firmarla o devolverla para corregir.",
+  FIRMADA: "Cerrada. Ya no se edita: si algo está mal, se corrige con una nota nueva.",
+};
+
+/**
+ * A qué estados puede pasar una nota desde donde está.
+ *
+ * FIRMADA no lleva a ningún lado, y esa lista vacía es la regla de la NOM
+ * escrita como dato en vez de como un `if` que alguien puede olvidar en el
+ * segundo endpoint.
+ */
+export const EDU_RECORD_TRANSITIONS: Record<EduRecordStatus, EduRecordStatus[]> = {
+  BORRADOR: ["ENVIADA", "FIRMADA"],
+  // Devolver (ENVIADA → BORRADOR) existe a propósito: sin esa vuelta, la
+  // única forma de arreglar una nota entregada con un dedazo sería firmarla
+  // mal y corregirla después.
+  ENVIADA: ["FIRMADA", "BORRADOR"],
+  FIRMADA: [],
+};
+
+/** Qué es el archivo que se subió al expediente. */
+export type EduStudyKind = "RADIOGRAFIA" | "TOMOGRAFIA" | "FOTO" | "PDF" | "OTRO";
+
+export const EDU_STUDY_KINDS: EduStudyKind[] = [
+  "RADIOGRAFIA",
+  "TOMOGRAFIA",
+  "FOTO",
+  "PDF",
+  "OTRO",
+];
+
+export const EDU_STUDY_KIND_LABELS: Record<EduStudyKind, string> = {
+  RADIOGRAFIA: "Radiografía",
+  TOMOGRAFIA: "Tomografía",
+  FOTO: "Fotografía",
+  PDF: "Documento",
+  OTRO: "Otro archivo",
+};
+
+export const EDU_STUDY_KIND_DESCRIPTIONS: Record<EduStudyKind, string> = {
+  RADIOGRAFIA: "Periapical, panorámica o cualquier placa en imagen.",
+  TOMOGRAFIA: "CBCT: la carpeta de cortes DICOM comprimida, o un corte suelto.",
+  FOTO: "Fotografía intraoral o extraoral.",
+  PDF: "Reporte, interconsulta o cualquier papel escaneado.",
+  OTRO: "Un archivo que no encaja en los anteriores.",
+};
+
 // ── Navegación del panel ────────────────────────────────────────────────
 export type EduNavSection = "operacion" | "academico" | "administracion";
 
@@ -446,14 +536,18 @@ export const EDU_BRAND = {
  * EDU_NAV_ITEMS, en el mismo commit.
  */
 export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[] = [
-  // "padron" salió de esta lista en la Ola 1A y "agenda" en la Ola 2, en
-  // el mismo commit en que entraron a EDU_NAV_ITEMS. Es la regla: un área
-  // está en el menú o está aquí, nunca en las dos ni en ninguna.
-  {
-    key: "expediente",
-    title: "Expediente",
-    detail: "Historia clínica del paciente de la escuela, firmada por quien atiende.",
-  },
+  // "padron" salió de esta lista en la Ola 1A, "agenda" en la Ola 2 y
+  // "expediente" en la Ola 3, en el mismo commit en que se entregaron. Es
+  // la regla: un área está en el menú o está aquí, nunca en las dos.
+  //
+  // ⚠️ EL EXPEDIENTE ES LA EXCEPCIÓN A "ni en ninguna de las dos", y es a
+  // propósito: no tiene item de menú porque no es una pantalla suelta —
+  // vive DENTRO de la ficha del paciente (/instituto/pacientes/[id]), que
+  // es donde está la persona cuando lo necesita. Un item "Expediente" en
+  // el sidebar tendría que abrir una pantalla que solo pregunta "¿de qué
+  // paciente?", y eso es un paso de más en un teléfono, de pie, con el
+  // paciente en el sillón. Se llega desde Pacientes, que sí está en el
+  // menú.
   {
     key: "autorizaciones",
     title: "Autorizaciones",
