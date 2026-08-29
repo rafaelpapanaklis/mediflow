@@ -12394,6 +12394,10 @@ model EduInstitution {
   chargeItems      EduChargeItem[]
   payments         EduPayment[]
   cashSessions     EduCashSession[]
+  // Ola 4 · el gate de autorización. Back-relation OBLIGATORIA (Prisma no
+  // deja declarar una relación por un solo lado); el modelo vive al FINAL
+  // del archivo, con su propio encabezado.
+  caseApprovals    EduCaseApproval[]
 
   @@map("edu_institutions")
 }
@@ -12465,6 +12469,13 @@ model EduUser {
   paymentsReceived   EduPayment[]     @relation("EduPaymentBy")
   cashSessionsOpened EduCashSession[] @relation("EduCashOpenedBy")
   cashSessionsClosed EduCashSession[] @relation("EduCashClosedBy")
+
+  /// Ola 4. Las dos puntas del GATE: quién PIDIÓ la autorización (el
+  /// alumno) y quién la FIRMÓ (el docente). Son dos columnas y no una
+  /// porque son dos personas distintas — y si algún día se pregunta "¿quién
+  /// autorizó esto?", la respuesta no puede ser "el que lo pidió".
+  approvalsRequested EduCaseApproval[] @relation("EduApprovalRequestedBy")
+  approvalsDecided   EduCaseApproval[] @relation("EduApprovalDecidedBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12924,6 +12935,12 @@ model EduCase {
   /// del cobro: caja cobra sin abrir expediente (no ve casos), así que la
   /// mayoría de los cobros no traen caso.
   charges      EduCharge[]
+  /// Ola 4: las autorizaciones del caso. NO hay una columna "autorizado"
+  /// aquí a propósito — el estado del gate se LEE de estas filas, que son
+  /// también el historial. Una bandera en el caso habría que mantenerla
+  /// sincronizada con ellas, y el día que discrepen gana la bandera, que
+  /// es la que no tiene firma ni fecha.
+  approvals    EduCaseApproval[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
@@ -13613,4 +13630,169 @@ model EduCashSession {
   @@index([institutionId, openedAt], map: "edu_cash_sessions_abierto_idx")
   @@index([institutionId, closedAt], map: "edu_cash_sessions_cerrado_idx")
   @@map("edu_cash_sessions")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 4 · EL GATE DE AUTORIZACIÓN.
+//
+// UNA sola tabla (EduCaseApproval) y dos enums. Es la pieza que convierte
+// esto en una ESCUELA y no en una clínica: el alumno PROPONE, el docente
+// AUTORIZA, y el tratamiento no avanza en medio.
+//
+// 🔴 institutionId está aquí igual que en las olas anteriores y por lo
+// mismo: TODA consulta del vertical filtra por el institutionId de la
+// SESIÓN, y un filtro que necesita un JOIN para existir es un filtro que
+// alguien va a olvidar. Ojo Prisma: un institutionId undefined BORRA el
+// filtro y una escuela lee la bandeja de otra.
+//
+// 🔴 QUIÉN VE ESTO — las autorizaciones cuelgan del CASO y se leen con el
+// recurso "cases" de src/lib/edu/visibility.ts:
+//   · ALUMNO    → las de SUS casos.
+//   · DOCENTE   → las de los alumnos que supervisa CON ASIGNACIÓN VIGENTE.
+//     Un docente que ya rotó deja de ver —y de poder firmar— lo de los
+//     alumnos que entregó.
+//   · CAJA      → NINGUNA. Caja cobra; no autoriza actos clínicos.
+//   · DIRECCION → todas.
+//
+// 🔴 EL GATE NO BLOQUEA ESCRIBIR EL EXPEDIENTE. La NOM-004 exige nota por
+// cada acto: si el alumno no puede registrar lo que hizo, el expediente
+// queda incompleto y el paciente con dolor espera. Lo que estas filas
+// bloquean es el AVANCE del tratamiento (src/lib/edu/casos.ts: pasar un
+// caso a IN_TREATMENT o a COMPLETED), nunca el registro clínico.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-4.sql y hay que
+// aplicarlo a mano en Supabase. Incluye un índice único PARCIAL que Prisma
+// no sabe expresar — ver la nota de los índices, abajo.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// QUÉ se está autorizando. Cuatro momentos, no uno: una escuela no firma
+/// "el caso", firma cada punto en que el tratamiento avanza.
+enum EduApprovalStage {
+  /// El plan de tratamiento propuesto. Es el que abre la puerta de
+  /// IN_TREATMENT: sin plan autorizado, el caso no empieza.
+  PLAN
+  /// Un acto concreto que el alumno va a hacer (una extracción, una
+  /// endodoncia). No mueve el estado del caso; deja constancia de que el
+  /// docente lo vio antes.
+  PROCEDURE
+  /// La sesión de hoy en el sillón: esta hora, este sillón, este tipo.
+  /// Reagendarla invalida la firma — no es la misma sesión.
+  SESSION
+  /// El alta. Es el que abre la puerta de COMPLETED: un caso no se cierra
+  /// solo porque el alumno crea que terminó.
+  DISCHARGE
+}
+
+/// En qué va una autorización.
+///
+/// 🔴 EXPIRED no lo pone una persona: lo pone el sistema cuando el
+/// contenido firmado CAMBIA. Sin ese estado, el alumno manda A, el docente
+/// firma A, el alumno edita a B, y B queda "autorizado por el docente".
+enum EduApprovalStatus {
+  /// Pedida y sin decidir. Es la que sale en la bandeja.
+  PENDING
+  /// Firmada. Vale mientras el contenido siga siendo el que se firmó.
+  APPROVED
+  /// El docente pidió correcciones. También es el estado en el que queda
+  /// una anterior cuando el alumno REENVÍA: el reenvío es, en efecto, un
+  /// cambio, y no hace falta un sexto estado para decir lo mismo.
+  CHANGES_REQUESTED
+  /// El docente dijo que no. No se hace.
+  REJECTED
+  /// El contenido cambió después de firmarse. Hay que volver a pedirla.
+  EXPIRED
+}
+
+/// LA AUTORIZACIÓN de un acto del caso.
+///
+/// ⚠️ `targetType` + `targetId` SIN llave foránea, y es a propósito: apuntan
+/// a filas de tablas DISTINTAS (una nota clínica, una cita) y una FK
+/// obligaría a una columna —y en la práctica a una tabla— por tipo. Mismo
+/// criterio que `AuditLog.actorAdminId` en el dental. Lo que impide que ahí
+/// se guarde cualquier cosa no es la base sino la aplicación:
+/// src/lib/edu/autorizaciones-core.ts tiene la lista CERRADA de tipos y qué
+/// etapa admite cuál, y el servidor comprueba además que la fila apuntada
+/// sea del MISMO caso.
+///
+/// 🔴 `contentHash` ES LO QUE HACE QUE ESTO SIRVA. Es el sha256 de lo que
+/// se mandó a autorizar (los campos clínicos de la nota, o la hora y el
+/// sillón de la cita). Al FIRMAR se vuelve a calcular sobre lo que el
+/// docente tenía delante y se guarda; si el contenido cambia después, la
+/// autorización pasa sola a EXPIRED y hay que volver a pedirla. Sin esta
+/// columna, "autorizado" sería una etiqueta pegada a un texto editable.
+///
+/// 🔴 `isEmergency` es una RUTA, no un permiso. El alumno puede marcar un
+/// acto como urgente y proceder SIN firma previa: no se le impide. Queda la
+/// fila con su motivo, sale destacada arriba de la bandeja y en la ficha
+/// del caso. Ante una urgencia, el producto deja constancia en vez de
+/// bloquear — un gate que impide atender a un paciente con dolor es un gate
+/// que la escuela desconecta el primer mes.
+model EduCaseApproval {
+  id            String            @id @default(cuid())
+  institutionId String
+  caseId        String
+  stage         EduApprovalStage
+  /// Nombre del modelo apuntado ("EduRecord", "EduAppointment"). VarChar
+  /// corto: es un discriminador, no texto libre.
+  targetType    String            @db.VarChar(40)
+  targetId      String
+  /// sha256 en hexadecimal: 64 caracteres exactos.
+  contentHash   String            @db.VarChar(64)
+  status        EduApprovalStatus @default(PENDING)
+
+  /// Quién la pidió (el alumno) y cuándo. `requestedAt` es un INSTANTE: la
+  /// bandeja se ordena por antigüedad y la escuela puede estar en cualquier
+  /// zona del país.
+  requestedById String
+  requestedAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  /// Quién la decidió (el docente), cuándo y qué escribió. Nulos mientras
+  /// esté PENDING; se DERIVAN de la decisión, no se capturan.
+  decidedById  String?
+  decidedAt    DateTime? @db.Timestamptz(3)
+  decisionNote String?   @db.VarChar(1000)
+
+  /// Rastro de la firma. `signatureUrl` es el PATH de un trazo guardado en
+  /// Storage (bucket privado, como los estudios de la Ola 3): nunca el
+  /// binario ni una URL firmada, que caduca y quedaría muerta en la
+  /// columna. Ip y user-agent son lo que convierte "alguien firmó" en "esta
+  /// sesión firmó", que es lo que se pregunta cuando algo sale mal.
+  signatureUrl    String?
+  signedIp        String? @db.VarChar(60)
+  signedUserAgent String? @db.VarChar(300)
+
+  isEmergency     Boolean @default(false)
+  emergencyReason String? @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  case        EduCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  /// CASCADE y no SetNull porque es NOT NULL: es el rastro de quién pidió.
+  /// En este producto un usuario no se borra —se desactiva (isActive)— así
+  /// que no se dispara nunca desde el panel; está para que borrar el
+  /// instituto entero no se atore en una llave.
+  requestedBy EduUser        @relation("EduApprovalRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  decidedBy   EduUser?       @relation("EduApprovalDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  // Los nombres van EXPLÍCITOS (el que Prisma generaría solo se acerca a
+  // los 63 caracteres que admite un identificador de Postgres) y
+  // sql/edu-ola-4.sql tiene que poder decir exactamente lo mismo.
+  //
+  //   · bandeja → la pantalla del docente: PENDING por orden de llegada.
+  //   · caso    → EL GATE: "¿tiene este caso una autorización de esta
+  //     etapa?". Es la consulta que corre en CADA avance de tratamiento.
+  //   · target  → de una nota o una cita a sus autorizaciones, que es la
+  //     dirección en la que se pregunta al pintar la ficha.
+  //
+  // ⚠️ FALTA AQUÍ UN ÍNDICE QUE SÍ ESTÁ EN LA BASE: el único PARCIAL que
+  // impide dos autorizaciones PENDING sobre la misma fila
+  // (`WHERE "status" = 'PENDING'`). Prisma no sabe expresar un índice
+  // parcial, así que vive SOLO en sql/edu-ola-4.sql. Si algún día se corre
+  // `prisma migrate diff` contra esa base, va a proponer borrarlo: NO.
+  @@index([institutionId, status, requestedAt], map: "edu_case_approvals_bandeja_idx")
+  @@index([institutionId, caseId, stage], map: "edu_case_approvals_caso_idx")
+  @@index([targetType, targetId], map: "edu_case_approvals_target_idx")
+  @@map("edu_case_approvals")
 }

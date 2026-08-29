@@ -26941,3 +26941,341 @@ registradas) · `npx tsc --noEmit` ✅ para el vertical (6 errores ajenos de
    una persona de prueba. Copiar la contraseña temporal **antes de cerrar**.
 4. Comprobar el bug arreglado: `/instituto/pacientes`, buscar "Rodriguez" sin
    acento.
+## DALECONTROL INSTITUCIONAL — Ola 4: EL GATE DE AUTORIZACIÓN (rama `feat/edu-ola-4`)
+
+Ésta es la pieza que convierte el vertical en una **escuela** y no en una clínica con
+usuarios. El alumno **propone**, el docente **autoriza**, y el tratamiento **no avanza en
+medio**. Todo lo demás de esta ola existe para que esa frase sea verdad y no una etiqueta.
+
+**Va sobre `origin/main`** (Olas 0, 1A, 2, 3 y 5 ya integradas). No toca el dental, ni
+barbería, ni inmuebles: `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node
+scripts/edu-guard.cjs` → **18 propios · 1 compartido declarado · 0 prohibidos**.
+
+---
+
+### 1. Lo único que hay que entender: `contentHash`
+
+Sin él, el gate es teatro:
+
+> el alumno manda **A** · el docente firma **A** · el alumno edita a **B** · y **B** queda
+> "autorizado por el docente".
+
+Una firma pegada a un texto editable es lo contrario de una firma. Con él:
+
+- al **pedir** se guarda el sha256 de lo que se mandó;
+- al **firmar** se **vuelve a calcular** sobre lo que el docente tiene delante (no se copia
+  el de la petición: si el alumno editó en medio, lo que queda autorizado es lo que se
+  **leyó**);
+- cuando ese contenido cambia después, la autorización pasa **sola a `EXPIRED`** y hay que
+  volver a pedirla. La puerta del caso se cierra otra vez.
+
+**La receta vive en un módulo puro** (`autorizaciones-core.ts`) y el sha256 en otro de una
+función (`autorizaciones-hash.ts`, que importa `node:crypto`). Están separados a propósito:
+el primero lo importan componentes `"use client"` y el segundo no puede tocar el bundle del
+navegador — pero **los dos se prueban sin Postgres y sin navegador**, que es donde de verdad
+se puede demostrar que un hash cambia cuando cambia el contenido.
+
+Qué entra en el resumen y qué **no**, que es la parte que se razona:
+
+| entra | no entra | por qué |
+|---|---|---|
+| SOAP + diagnóstico de la nota | `status` de la nota | firmarla (BORRADOR→FIRMADA) es un acto del docente y **no cambia una letra**; si entrara, el docente invalidaría su propia firma al firmar |
+| hora, sillón y tipo de la cita | `status` de la cita, `notes` de recepción | "llegó" y "en el sillón" ocurren **mientras** pasa lo autorizado |
+| — | `updatedAt`, `submittedAt` | se mueven sin que el contenido cambie |
+
+Y tres normalizaciones que **no son cosmética**: `\r\n`→`\n`, **NFC** y trim de extremos. En
+español la "í" se guarda como un carácter o como dos según el sistema; sin NFC, un plan
+copiado de un Mac a un Windows vencería su propia firma sin que nadie hubiera editado nada.
+Lo que **sí** cambia el hash: una mayúscula ("no extraer" ≠ "NO EXTRAER") y mover el mismo
+párrafo de un campo a otro.
+
+🔴 **La receta lleva versión dentro del texto que se resume** (`edu-approval/v1`). Cambiarla
+vence **todas** las autorizaciones vigentes de golpe y la escuela se despierta con los casos
+bloqueados: es una decisión de producto, no un refactor. Está escrito en el código, en el
+`.sql` y aquí.
+
+---
+
+### 2. Lo que el gate bloquea, y lo que NO
+
+🔴 **NO bloquea escribir el expediente.** La NOM-004 pide nota por cada acto: si el alumno no
+puede registrar lo que hizo, el expediente queda incompleto y el paciente con dolor espera.
+Se puede escribir, enviar y firmar notas con el caso trabado.
+
+Lo que se bloquea es el **AVANCE del tratamiento**, y son **dos puertas, no siete**:
+
+| avance | exige |
+|---|---|
+| → `IN_TREATMENT` ("en tratamiento") | `PLAN` autorizado |
+| → `COMPLETED` ("terminado") | `DISCHARGE` autorizado |
+
+**Pausar, transferir y dar por abandonado pasan sin firma**, y no es un olvido: ninguno
+avanza un tratamiento, los tres son formas de **parar**, y pedir permiso para parar es cómo
+se consigue que nadie registre que paró.
+
+🔴 **El gate vive en `updateEduCase` (`src/lib/edu/casos.ts`), DENTRO de su transacción**, y
+no en el endpoint. Comprobado: en todo el repo solo hay **dos** escrituras de
+`EduCase.status` — el `create` del tamizaje (que asigna, no avanza) y ese `update`. Si el
+gate viviera en `/api/instituto/casos/[id]`, el segundo endpoint que mueva un caso —el de una
+ola futura— nacería sin él y funcionaría perfectamente. Para todo el mundo.
+
+---
+
+### 3. La ruta de urgencia: constancia en vez de bloqueo
+
+El alumno marca un acto como urgente y **procede sin firma previa. No se le impide.** Una
+petición `isEmergency` **PENDING abre la puerta**; queda la fila con su motivo (mínimo 12
+caracteres: "ya" no es un motivo), sale **primero y marcada** en la bandeja y en la ficha del
+caso.
+
+La alternativa —bloquear— tiene un solo final conocido: la escuela pide la contraseña de
+dirección para todo y el gate se apaga el primer mes.
+
+Una urgencia **rechazada** deja de abrir. El acto ya ocurrió y eso no se deshace, pero el
+caso no sigue avanzando con ella.
+
+---
+
+### 4. La bandeja: `/instituto/autorizaciones`
+
+Es la pantalla más importante de la ola y **se usa de pie, con guantes, en un teléfono, con
+un paciente en el sillón**. De ahí sale cada decisión de diseño:
+
+- **Tarjetas, no tabla.** Es la única pantalla del vertical sin su `.edu-table--*`. Una
+  autorización no se compara con la de al lado: se **lee** antes de firmar, y en una celda de
+  120 px con `ellipsis` se firma sin leer. Por lo mismo el contenido se recorta con **scroll
+  propio y no con `line-clamp`**, y cuando algo se recorta la tarjeta **lo dice** y ofrece
+  abrir la nota completa.
+- **Tres botones de 44 px con la palabra escrita.** Una palomita y una cruz, con guantes y
+  con prisa, son el mismo botón. En el teléfono se apilan a ancho completo.
+- **Agrupada por alumno**, porque el docente no piensa "¿qué hay de la señora Ramírez?" sino
+  "¿qué me debe firmar Sofía?".
+- **Urgencias primero**, con barra roja y el motivo **arriba del todo** — y el texto dice
+  "Urgencia · ya se hizo sin firma", que es lo que lee quien no distingue el rojo.
+- **Pedir cambios / rechazar piden motivo**, y el campo se abre **en la tarjeta, no en un
+  modal**: el teclado del teléfono tapa medio modal y quien escribe pierde de vista justo lo
+  que está juzgando.
+- El tiempo de espera viaja **ya formateado desde el servidor** (un `new Date()` en el
+  cliente da otra hidratación) y con severidad: 20 min ámbar, 60 min rojo. Son cortes de piso
+  clínico, no de oficina.
+
+**El lote, y por qué no se lo traga todo.** Sin lote, un docente con quince alumnos firma sin
+leer en dos semanas y el gate se vuelve un sello de goma. Pero si el lote se llevara justo lo
+que hay que leer, el sello de goma lo habríamos construido nosotros. Se quedan **fuera**, con
+su motivo a la vista y comprobado otra vez en el servidor:
+
+- las **urgencias** (las únicas que ya ocurrieron sin firma),
+- las que el alumno **editó después de mandarlas**,
+- las que **pidió uno mismo**,
+- las que dejaron de estar pendientes mientras miraba la lista.
+
+Tope de 40 por lote: no es un límite técnico, es que un "Autorizar las 200" no es una
+decisión, es un botón de rendirse.
+
+La **misma pantalla** sirve para el ALUMNO sin una regla nueva —ve lo que mandó y sigue
+esperando, sin los botones de decidir—, porque el recorte lo hace el alcance y los botones
+los cierra el guard del endpoint.
+
+---
+
+### 5. En la ficha del caso
+
+En `/instituto/pacientes/[id]/casos`, cada caso muestra sus **dos puertas** con el veredicto
+escrito ("qué falta y qué hacer"), el **historial** (quién pidió, quién firmó, **qué
+exactamente** y a qué hora, con la nota de la decisión entrecomillada) y el botón
+**"Enviar a autorización"** del alumno.
+
+🔴 **No hay historial aparte.** Esas filas **son** el historial: cada reenvío crea una nueva y
+deja la anterior en `CHANGES_REQUESTED`. Una tabla de historial en otro sitio habría que
+mantenerla sincronizada, y el día que discrepen gana la que no tiene firma.
+
+⚠️ Detalle que hay que saber leer en la base: una fila con `decidedAt` puesto y
+**`decidedById` nulo** es la que **sustituyó un reenvío**. Nadie la decidió, y atribuírsela a
+un docente sería escribir en su nombre una decisión que no tomó. La nota lo dice con todas
+sus letras.
+
+---
+
+### 6. Permisos: **pedir y firmar son dos keys distintas**
+
+Toda la ola se sostiene en esto. Si fueran una, el alumno se firmaría a sí mismo.
+
+| | request | view | decide |
+|---|---|---|---|
+| **ALUMNO** | ✅ pide | ✅ lo suyo | ❌ |
+| **DOCENTE** | ❌ | ✅ sus alumnos vigentes | ✅ **firma** |
+| **DIRECCION** | ✅ | ✅ todo | ✅ |
+| **CAJA** | ❌ | ❌ | ❌ |
+
+- El **DOCENTE no lleva `request`**: quien firma no pide.
+- La **DIRECCIÓN sí lo lleva** —única key del vertical que tiene la dirección y no el
+  docente— por un caso concreto: un caso cuyo alumno se dio de baja a media generación se
+  queda sin nadie que pueda mandarlo a autorización.
+- **CAJA, ninguna.** Cobrar no es autorizar un acto clínico. Y está cerrado **dos veces**:
+  aquí y en el **ALCANCE** (`visibility.ts`, recurso `"cases"`), que le devuelve `none` aunque
+  alguien le encienda las tres a mano.
+
+🔴 **Y una regla que no es un permiso: NADIE FIRMA SU PROPIA PETICIÓN.** Se comprueba en la
+capa de datos (el endpoint no sabe de quién era la fila) y **no hay excepción para la
+dirección**. Consecuencia que hay que conocer, y que el mensaje de error explica: si la
+dirección manda algo de un alumno **sin supervisor vigente**, nadie más tiene alcance sobre
+ese alumno y la petición se queda sin quien la firme. La salida no es aflojar la regla — es
+asignarle supervisor al alumno, que es lo que le faltaba de todos modos.
+
+---
+
+### 7. Quién ve qué: **no se escribió un alcance nuevo**
+
+Las autorizaciones cuelgan del **caso** y se leen con `eduVisibility(ctx, "cases")`, el mismo
+del expediente. Ni una línea de recorte propia.
+
+- **ALUMNO** → las de sus casos · **DOCENTE** → las de los alumnos que supervisa **con
+  asignación vigente** · **CAJA** → ninguna · **DIRECCION** → todas.
+- 🔴 **Un docente que ya rotó deja de ver —y por tanto de poder firmar— lo de los alumnos que
+  entregó**, sin que nadie le apague un permiso. Tiene prueba propia: se comprueba que el
+  `where` cuelga de la asignación y que lleva los dos extremos de la vigencia evaluados con el
+  `now` que se le pasa.
+- El `institutionId` sale **siempre** de `getEduContext()`. El `caseId` sí viene del body, y
+  no es un agujero: se busca **dentro del alcance**, así que un caso de otra escuela contesta
+  404 igual que uno que no existe.
+
+---
+
+### 8. Modelo y SQL
+
+`EduCaseApproval`, una tabla y dos enums. `sql/edu-ola-4.sql` es idempotente, **cero DROP**:
+2 enums, 1 tabla (20 columnas), **4 índices** y 4 llaves foráneas. Verificado con un script:
+schema.prisma y el `.sql` declaran **las mismas 20 columnas**, los mismos 3 índices y las
+mismas 4 FKs.
+
+🔴 **El cuarto índice no está en Prisma y no puede estarlo**: el **único PARCIAL**
+(`WHERE "status" = 'PENDING'`) que impide dos autorizaciones pendientes sobre la misma fila.
+Va sobre `("targetType","targetId")` y **no** sobre la etapa, para que la misma nota no pueda
+tener a la vez un PLAN y un PROCEDURE esperando firma — el "¿cuál de los dos me están
+pidiendo?" que hunde una bandeja. Es parcial porque el **histórico sí se repite**: cada
+reenvío deja la anterior en `CHANGES_REQUESTED` sobre la misma fila, y ésas tienen que poder
+convivir. ⚠️ Un `prisma migrate diff` contra esa base va a **proponer borrarlo**. No se borra.
+Y por lo mismo: **nunca un `upsert` de Prisma sobre ese par** — emite `ON CONFLICT` sin el
+predicado y Postgres no lo infiere.
+
+`targetType`+`targetId` **sin FK**, mismo criterio que `AuditLog.actorAdminId` del dental:
+apuntan a filas de tablas distintas y una FK obligaría a una columna por tipo. Lo que impide
+que ahí acabe cualquier cosa **no es la base**: es la lista cerrada de
+`autorizaciones-core.ts` (que además exige que la fila apuntada sea **del mismo caso**).
+Consecuencia documentada: borrar una nota **no** borra sus autorizaciones. No es un huérfano
+olvidado — es la constancia de que ese acto se pidió, y la app lo pinta como "ya no existe"
+en vez de fingir que nunca pasó.
+
+**Tres de las cuatro etapas apuntan a una NOTA CLÍNICA** y no es pereza: en una clínica todo
+lo que un residente propone se escribe en el expediente. Si el plan viviera en un campo
+suelto del caso habría dos sitios donde dice qué se le va a hacer al paciente, y el día que
+discrepen gana el que no tiene firma. `SESSION` apunta a la cita.
+
+---
+
+### 9. Decisiones que se apartan de lo obvio (para que la integración no las revierta sin querer)
+
+**a) Una `PENDING` con el contenido cambiado NO se vence sola: se MARCA.** Vencerla haría
+desaparecer de la bandeja la petición de un alumno que corrigió un dedazo, sin que él pudiera
+saber por qué. Lo que sí pasa es que **sale del lote** y la tarjeta avisa "lo editó después de
+mandarlo; lo que ves es lo que dice AHORA y es lo que vas a firmar".
+
+**b) El estado `EXPIRED` se guarda, pero la verdad se RECALCULA en cada lectura.** La columna
+es una **caché**. Cuando el gate deniega un avance, el `throw` del llamador se lleva por
+delante esa escritura (está dentro de la transacción del caso) y la persiste después la ficha
+al abrirse. No rompe nada **porque el gate nunca confía en la columna**: siempre vuelve a
+comparar el hash.
+
+**c) El lote solo AUTORIZA.** Pedir cambios y rechazar llevan motivo escrito y van una por
+una: un "no" en lote es un "no" que nadie explicó.
+
+**d) La IP y el user-agent de la firma salen de la PETICIÓN HTTP, nunca del body**
+(`src/lib/edu/firma.ts`). Un `signedIp` que manda el navegador no es un rastro: es una casilla
+que elige el firmante. Y está anotado lo que **no** es: no es prueba de identidad —eso es
+`decidedById`, que viene de la sesión— sino de desde dónde se firmó. Detrás del edge de Vercel
+`x-forwarded-for` es fiable; en un servidor expuesto directo, no.
+
+**e) `signatureUrl` existe y NO se captura todavía.** Es el path de un trazo en Storage
+(bucket privado, como los estudios de la Ola 3); el endpoint lo acepta y lo guarda si llega,
+pero **ninguna pantalla lo manda**: no hay lienzo de firma. Se deja la columna porque el
+rastro real de esta ola es `decidedById` + hora + IP, y añadir el trazo después es una
+pantalla, no una migración.
+
+**f) Los mensajes del gate no se dirigen a nadie en concreto.** El mismo texto lo lee el
+alumno (que pide y no firma), el docente (que firma y no pide) y la dirección. Un "mándala
+tú" le diría al docente que haga algo que su rol no puede hacer, y quien lo leyera concluiría
+que el sistema está roto.
+
+**g) `tsc --noEmit` sale con 6 errores AJENOS** (`src/lib/barber/__tests__/`: `dinero-sumas`
+y `i18n-alcance`). Vienen de `origin/main`, esta rama no tocó esos archivos y arreglarlos
+habría sido salirse del vertical. **Del instituto: cero.**
+
+**h) Archivos que se quisieron tocar y NO se tocaron.** Ninguno se tocó a escondidas:
+
+- `package.json` — el script `test:edu-autorizaciones`. Es del dental y esta ola tiene
+  prohibido tocarlo; la prueba se corre con `npx tsx --test …` (el comando está en la cabecera
+  del archivo).
+- `prisma/schema.prisma` — **sí se tocó**, y solo de forma **ADITIVA**: el bloque de la Ola 4
+  va al FINAL con su propio encabezado, más **cuatro back-relations** que Prisma EXIGE
+  (`EduInstitution`, `EduUser` ×2, `EduCase`). **182 líneas añadidas, 0 borradas.**
+  ⚠️ `npx prisma format` **NO** se dejó correr: reformatea el archivo entero y haría imposible
+  el merge con la Ola 1B, que corre en paralelo. Se validó con `prisma generate`.
+- `src/lib/edu/api-guard.ts` — no hizo falta: `eduApiGuard` ya hace lo que se necesita y los
+  tres endpoints nuevos lo usan sin cambiarlo.
+- `src/lib/edu/visibility.ts` — **no se tocó ni una línea**, y es el resultado que más
+  importa: el gate no necesitó un alcance nuevo.
+- `src/lib/edu/padron.ts` — se **reusa** su `EduPadronError` (reexportado como
+  `EduAutorizacionError`) porque `eduApiError` lo mapea tal cual. No se editó.
+- `src/middleware.ts` — no hizo falta: `/instituto/:path*` ya está en el matcher desde la
+  Ola 0.
+- `scripts/edu-guard.cjs` — no hizo falta: `src/components/edu/autorizaciones/` cae bajo un
+  prefijo ya indultado.
+- ⚠️ **Sí se editaron tres archivos de olas anteriores**, y la integración debería mirarlos:
+  `casos.ts` (el gate, +25 líneas dentro de la transacción), `types.ts` (enums + item de menú
+  **insertado tercero** en `EDU_NAV_ITEMS`, no al final — la posición es producto) y
+  `permissions.ts` (3 keys + grupo + defaults).
+
+**i) Qué NO se probó, y hay que probarlo con una base real.** Todo lo de arriba se comprueba
+sin base de datos, así que queda fuera: que el `.sql` corra en Supabase; **que el índice único
+parcial rebote de verdad** el segundo `PENDING` (el `catch` de `P2002` está escrito y **nunca
+se ha disparado**); que el `updateMany`+`create` del reenvío sale del índice antes de
+insertar; el recorrido completo en el navegador con datos reales; y el comportamiento con dos
+docentes decidiendo la misma fila a la vez. **Nadie ha firmado todavía una autorización real
+desde este producto.**
+
+**j) Lo que sí se miró en un navegador**: la bandeja y la ficha, renderizadas con
+`edu-theme.css` real sobre un HTML estático (sin base de datos), a **390 px y a 1568 px**. Se
+verificó lo que se puede verificar así: que los tres botones se apilan a ancho completo en el
+teléfono y se ponen en fila desde 560 px, que la urgencia se lee **antes** que el paciente,
+que el encabezado del grupo se queda pegado arriba, que el salto de línea del plan del alumno
+sobrevive (`white-space: pre-wrap`) y que un nombre largo no desborda la tarjeta.
+
+---
+
+### 10. Cómo aplicarlo (en este orden)
+
+1. `sql/edu-ola-4.sql` en Supabase → SQL Editor → Run. Va **después** de `edu-ola-0/1/2/3`;
+   es **independiente** de `edu-ola-5.sql` (cualquier orden entre sí). Idempotente, cero DROP.
+2. **Comprobar que el índice PARCIAL quedó** — es el único que Prisma no sabe escribir y sin
+   él dos peticiones idénticas conviven esperando firma:
+   `SELECT "indexdef" FROM pg_indexes WHERE "indexname" = 'edu_case_approvals_pendiente_uniq';`
+   Tiene que terminar en `WHERE (status = 'PENDING'::"EduApprovalStatus")`.
+3. El **backfill del override** de la sección 6 del `.sql`, solo si hay usuarios con
+   `permissionsOverride` no vacío: el override **reemplaza** al default, así que las tres keys
+   nuevas **no** le llegan solas a quien ya tenga uno guardado — y un docente así **no podría
+   firmar nada y sus alumnos se quedarían trabados**. Son **tres** bloques y son **distintos**:
+   copiarle al docente el de la dirección le daría `request`, que es exactamente la separación
+   que esta ola existe para sostener. Caja no recibe ninguna.
+4. Comprobar que cada alumno activo tiene **supervisor vigente** (`/instituto/docentes`). Sin
+   él, sus peticiones no las ve ningún docente y el caso se traba en la primera puerta.
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0; tres rutas de API y una página
+nuevas registradas: `/api/instituto/autorizaciones`, `…/[id]`, `…/lote` y
+`/instituto/autorizaciones`) · `npx tsc --noEmit` ✅ para el vertical (6 errores ajenos de
+barber, preexistentes en `origin/main`) · **314 pruebas del vertical en verde**
+(`edu-autorizaciones` **47** nuevas, `edu-expediente` 51, `edu-tarifas` 47, `edu-agenda` 33,
+`edu-caja` 29, `edu-permissions` 29, `edu-visibility` 29, `edu-padron` 24, `edu-pacientes` 16,
+`edu-contract` 9) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(18 propios, 1 compartido declarado, 0 prohibidos) · un script confirmó que `schema.prisma` y
+`sql/edu-ola-4.sql` dicen lo mismo (20 columnas, 3 índices comunes + el parcial, 4 FKs).

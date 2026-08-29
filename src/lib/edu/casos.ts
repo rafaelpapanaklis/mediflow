@@ -38,6 +38,9 @@ import {
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
+// Ola 4 · el gate. Se importa aquí y no al revés: `autorizaciones.ts` no
+// sabe nada de este archivo, así que no hay ciclo.
+import { eduCaseGateCheck } from "@/lib/edu/autorizaciones";
 import { EDU_CASE_CLOSED_STATUSES, type EduCaseStatus } from "@/lib/edu/types";
 
 export type { EduCaseRow } from "@/lib/edu/agenda-core";
@@ -373,6 +376,12 @@ export async function createEduCase(
  * borraría la respuesta a "¿quién lo atendía en marzo?", que es
  * exactamente la pregunta que se hace cuando algo sale mal. Es la misma
  * regla que la supervisión de la Ola 1A, que se cierra en vez de editarse.
+ *
+ * 🔴 OLA 4 — AQUÍ VIVE EL GATE. Pasar a "en tratamiento" exige el PLAN
+ * autorizado y pasar a "terminado" exige el ALTA autorizada; los dos se
+ * comprueban DENTRO de la transacción (ver el bloque marcado más abajo).
+ * Un caso trabado no impide escribir el expediente: lo que no avanza es el
+ * TRATAMIENTO.
  */
 export async function updateEduCase(
   ctx: EduClinicaContext,
@@ -436,6 +445,34 @@ export async function updateEduCase(
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
 
   await prisma.$transaction(async (tx) => {
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔴 OLA 4 — EL GATE. Aquí es donde el vertical deja de ser una
+    // clínica y pasa a ser una escuela.
+    //
+    // Va DENTRO de la transacción y en ESTA función, no en el endpoint,
+    // por dos razones que se pagan caras al revés:
+    //   · TODO camino que mueva un caso pasa por `updateEduCase`. Si el
+    //     gate viviera en /api/instituto/casos/[id], el segundo endpoint
+    //     que mueva un caso —el de una ola futura— nacería sin él y
+    //     funcionaría perfectamente. Para todo el mundo.
+    //   · Comprobarlo fuera de la transacción dejaría una ventana entre
+    //     "sí puede avanzar" y el UPDATE.
+    //
+    // Solo se gatean DOS avances (a "en tratamiento" y a "terminado");
+    // pausar, transferir y dar por abandonado pasan sin firma, porque
+    // pedir permiso para PARAR es cómo se consigue que nadie registre que
+    // paró. La lista vive en autorizaciones-core.ts.
+    //
+    // ⚠️ Y lo que este gate NO toca: el expediente. El alumno sigue
+    // pudiendo escribir y firmar notas de todo lo que hizo aunque el caso
+    // esté trabado — la NOM-004 pide nota por cada acto, y un expediente
+    // incompleto es peor que un caso sin autorizar.
+    // ═══════════════════════════════════════════════════════════════════
+    if (data.status) {
+      const verdict = await eduCaseGateCheck(tx, institutionId, current.id, data.status);
+      if (!verdict.ok) throw new EduPadronError(verdict.detail, 409);
+    }
+
     await tx.eduCase.update({ where: { id: current.id }, data });
 
     // Si al paciente no le queda ningún caso abierto, deja de estar "en

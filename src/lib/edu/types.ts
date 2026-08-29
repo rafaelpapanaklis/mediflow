@@ -34,6 +34,7 @@
 //   /instituto/caja         → cobrar: paciente → tarifa → recibo   Ola 5  ✓
 //   /instituto/caja/corte   → corte del turno                      Ola 5  ✓
 //   /instituto/equipo       → altas y bajas de cuentas             Ola 1B ✓
+//   /instituto/autorizaciones → LA BANDEJA DEL DOCENTE             Ola 4  ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
 // entrada de menú de EDU_NAV_ITEMS (abajo). Ninguna inventa su propio
 // guard: todas pasan por el layout del grupo (panel).
@@ -80,6 +81,11 @@
 //   GET·POST·PATCH /api/instituto/caja/corte → turno: ver, abrir, cerrar Ola 5 ✓
 //   POST      /api/instituto/equipo         → alta de cuenta(s)    Ola 1B ✓
 //   PATCH     /api/instituto/equipo/[id]    → baja / reactivación   Ola 1B ✓
+//   GET   /api/instituto/autorizaciones     → la bandeja           Ola 4  ✓
+//   POST  /api/instituto/autorizaciones     → pedir autorización   Ola 4  ✓
+//   PATCH /api/instituto/autorizaciones/[id] → autorizar · pedir cambios ·
+//                                              rechazar            Ola 4  ✓
+//   POST  /api/instituto/autorizaciones/lote → autorizar EN LOTE   Ola 4  ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -500,6 +506,90 @@ export const EDU_PAYMENT_METHOD_DESCRIPTIONS: Record<EduPaymentMethod, string> =
  */
 export const EDU_CASH_METHOD: EduPaymentMethod = "CASH";
 
+// ═══════════════════════════════════════════════════════════════════════
+// Ola 4 · EL GATE DE AUTORIZACIÓN.
+//
+// Los dos enums que siguen son espejo 1:1 de los de Prisma, escritos como
+// uniones de strings para poder importarlos desde componentes "use client"
+// sin arrastrar el runtime de Prisma al navegador — igual que todos los
+// anteriores. El candado de que no se desincronicen es un chequeo de TIPOS
+// en src/lib/edu/__tests__/edu-autorizaciones.test.ts (lo verifica
+// `tsc --noEmit`).
+//
+// Y la regla de siempre: la UI JAMÁS pinta el valor del enum. "CHANGES_
+// REQUESTED" sobre la tarjeta de un alumno no es lo que nadie espera
+// leer.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * QUÉ se está autorizando.
+ *
+ * Cuatro momentos y no uno: una escuela no firma "el caso", firma cada
+ * punto en que el tratamiento AVANZA. Dos de ellos son puertas de verdad
+ * (PLAN abre IN_TREATMENT, DISCHARGE abre COMPLETED) y los otros dos dejan
+ * constancia de que el docente lo vio antes de que ocurriera.
+ */
+export type EduApprovalStage = "PLAN" | "PROCEDURE" | "SESSION" | "DISCHARGE";
+
+export const EDU_APPROVAL_STAGES: EduApprovalStage[] = [
+  "PLAN",
+  "PROCEDURE",
+  "SESSION",
+  "DISCHARGE",
+];
+
+export const EDU_APPROVAL_STAGE_LABELS: Record<EduApprovalStage, string> = {
+  PLAN: "Plan de tratamiento",
+  PROCEDURE: "Procedimiento",
+  SESSION: "Sesión",
+  DISCHARGE: "Alta del caso",
+};
+
+export const EDU_APPROVAL_STAGE_DESCRIPTIONS: Record<EduApprovalStage, string> = {
+  PLAN: "Lo que el alumno propone hacerle al paciente. Sin esto autorizado, el caso no pasa a tratamiento.",
+  PROCEDURE: "Un acto concreto que se va a hacer hoy. No mueve el caso: deja escrito que el docente lo vio antes.",
+  SESSION: "Esta sesión, en esta hora y en este sillón. Si se reagenda, la firma deja de valer.",
+  DISCHARGE: "Dar por terminado el caso. Sin esto autorizado, no se cierra.",
+};
+
+/**
+ * En qué va una autorización.
+ *
+ * 🔴 EXPIRED no lo pone una persona: lo pone el sistema cuando el contenido
+ * firmado CAMBIA. Sin ese estado, el alumno manda A, el docente firma A, el
+ * alumno edita a B, y B queda "autorizado por el docente".
+ */
+export type EduApprovalStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "CHANGES_REQUESTED"
+  | "REJECTED"
+  | "EXPIRED";
+
+export const EDU_APPROVAL_STATUSES: EduApprovalStatus[] = [
+  "PENDING",
+  "APPROVED",
+  "CHANGES_REQUESTED",
+  "REJECTED",
+  "EXPIRED",
+];
+
+export const EDU_APPROVAL_STATUS_LABELS: Record<EduApprovalStatus, string> = {
+  PENDING: "Esperando firma",
+  APPROVED: "Autorizado",
+  CHANGES_REQUESTED: "Con cambios pedidos",
+  REJECTED: "Rechazado",
+  EXPIRED: "Vencido por edición",
+};
+
+export const EDU_APPROVAL_STATUS_DESCRIPTIONS: Record<EduApprovalStatus, string> = {
+  PENDING: "El docente todavía no la ve o no la ha decidido.",
+  APPROVED: "Firmada. Vale mientras el contenido siga siendo el que se firmó.",
+  CHANGES_REQUESTED: "El docente pidió correcciones. Corrige y vuelve a mandarla.",
+  REJECTED: "El docente dijo que no. No se hace.",
+  EXPIRED: "Se editó lo que estaba autorizado, así que la firma dejó de cubrirlo. Hay que pedirla otra vez.",
+};
+
 // ── Navegación del panel ────────────────────────────────────────────────
 export type EduNavSection = "operacion" | "academico" | "administracion";
 
@@ -560,6 +650,19 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     icon: "sun",
     section: "operacion",
     permission: "agenda.view",
+  },
+  {
+    // ── Ola 4 · el gate de autorización ──────────────────────────────
+    // Va TERCERO, pegado a "Mi día" y ANTES de la agenda completa, y la
+    // posición no es decorativa: es la pantalla que un docente abre de
+    // pie, con guantes, en el piso clínico. Enterrada bajo Pacientes se
+    // consulta al final del día — y una autorización que se firma al
+    // final del día es un paciente que se fue sin tratamiento.
+    key: "autorizaciones",
+    href: "/instituto/autorizaciones",
+    icon: "stamp",
+    section: "operacion",
+    permission: "autorizaciones.view",
   },
   {
     key: "agenda",
@@ -666,6 +769,7 @@ export const EDU_NAV_SECTION_ORDER: EduNavSection[] = [
 export const EDU_NAV_LABELS: Record<string, string> = {
   inicio: "Inicio",
   "mi-dia": "Mi día",
+  autorizaciones: "Autorizaciones",
   agenda: "Agenda",
   pacientes: "Pacientes",
   padron: "Padrón",
@@ -701,10 +805,11 @@ export const EDU_BRAND = {
  */
 export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[] = [
   // "padron" salió de esta lista en la Ola 1A, "agenda" en la Ola 2,
-  // "expediente" en la Ola 3 y "caja" en la Ola 5, cada una en el mismo
-  // commit en que se entregó. Es la regla: un área está en el menú o está
-  // aquí, nunca en las dos ni en ninguna. (El candado es la prueba "un
-  // área entregada sale de 'Próximamente'" de edu-permissions.test.ts.)
+  // "expediente" en la Ola 3, "caja" en la Ola 5 y "autorizaciones" en la
+  // Ola 4, cada una en el mismo commit en que se entregó. Es la regla: un
+  // área está en el menú o está aquí, nunca en las dos ni en ninguna. (El
+  // candado es la prueba "un área entregada sale de 'Próximamente'" de
+  // edu-permissions.test.ts.)
   //
   // ⚠️ EL EXPEDIENTE ES LA EXCEPCIÓN A "ni en ninguna de las dos", y es a
   // propósito: no tiene item de menú porque no es una pantalla suelta —
@@ -714,11 +819,6 @@ export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[
   // paciente?", y eso es un paso de más en un teléfono, de pie, con el
   // paciente en el sillón. Se llega desde Pacientes, que sí está en el
   // menú.
-  {
-    key: "autorizaciones",
-    title: "Autorizaciones",
-    detail: "El visto bueno del docente antes y después de cada procedimiento.",
-  },
   {
     key: "evaluacion",
     title: "Evaluación",

@@ -101,6 +101,21 @@ export const EDU_ALL_PERMISSIONS = {
   // más que a quien las administra, y dos interruptores para una pantalla
   // es cómo se llega a que uno de los dos no lo exija nadie.
   "equipo.manage": "Dar de alta cuentas del instituto y darlas de baja",
+  // ── Ola 4 · el gate de autorización ──────────────────────────────────
+  // Tres keys, y las tres tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   autorizaciones.request → POST /api/instituto/autorizaciones
+  //   autorizaciones.view    → /instituto/autorizaciones + su GET
+  //   autorizaciones.decide  → PATCH /api/instituto/autorizaciones/[id]
+  //                            y POST /api/instituto/autorizaciones/lote
+  //
+  // 🔴 PEDIR Y FIRMAR SON DOS KEYS DISTINTAS, y ésa es toda la ola. Si
+  // fueran una, el alumno que puede pedir podría firmarse a sí mismo y el
+  // gate no gatearía nada. El DOCENTE no lleva "request" a propósito: quien
+  // firma no pide.
+  "autorizaciones.request": "Mandar un plan o un procedimiento a autorización",
+  "autorizaciones.view": "Ver la bandeja de autorizaciones",
+  "autorizaciones.decide": "Autorizar, pedir cambios o rechazar",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -161,6 +176,14 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
     // instituto, no qué ve una vez dentro.
     title: "Equipo",
     keys: ["equipo.manage"],
+  },
+  {
+    // Grupo PROPIO y no un renglón dentro de "Pacientes y casos": es la
+    // separación de funciones de la escuela puesta en tres casillas, y la
+    // dirección tiene que poder leerla de un vistazo. La que nunca se
+    // tildan juntas es request + decide sobre la misma persona.
+    title: "Autorizaciones",
+    keys: ["autorizaciones.request", "autorizaciones.view", "autorizaciones.decide"],
   },
 ];
 
@@ -245,6 +268,31 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * "none" para DOCENTE y ALUMNO pase lo que pase. El permiso abre la
  * pantalla; el alcance decide las filas — y para el dinero, la decisión
  * está tomada en los dos sitios.
+ *
+ * ── Ola 4 · el gate de autorización ─────────────────────────────────────
+ * Aquí el reparto ES la ola, y por primera vez en el vertical hay una key
+ * que la DIRECCIÓN tiene y el DOCENTE no, y otra al revés:
+ *
+ *   ALUMNO    "request" + "view". PIDE y mira en qué va lo suyo. NO firma:
+ *             si pudiera, el gate sería un formulario.
+ *   DOCENTE   "view" + "decide". FIRMA y no pide. Es la separación de
+ *             funciones de la escuela — quien autoriza no es quien
+ *             propone — y por eso son dos keys y no una.
+ *   CAJA      NINGUNA. Autorizar un acto clínico no es cobrarlo.
+ *   DIRECCION las tres. Lleva "request" —que el docente no tiene— por una
+ *             razón muy concreta: un caso cuyo alumno se dio de baja a
+ *             media generación se queda sin nadie que pueda mandarlo a
+ *             autorización, y sin esa key la dirección no lo puede
+ *             desatorar. Que dirección pueda pedir Y firmar no rompe la
+ *             separación que importa (alumno ≠ docente) y las dos cosas
+ *             quedan escritas con su nombre y su hora.
+ *
+ * 🔴 Y otra vez, como con el dinero: que ALUMNO y DOCENTE compartan
+ * "autorizaciones.view" NO significa que vean lo mismo. El ALCANCE
+ * (visibility.ts, recurso "cases") le da al alumno lo de SUS casos y al
+ * docente lo de los alumnos que supervisa HOY. Un docente que ya rotó deja
+ * de ver —y por tanto de poder firmar— lo de los alumnos que entregó, sin
+ * que nadie le apague un permiso.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
   DIRECCION: [
@@ -283,6 +331,9 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // se le enciende por override desde la pantalla de permisos — a
     // sabiendas y una por una.
     "equipo.manage",
+    "autorizaciones.request",
+    "autorizaciones.view",
+    "autorizaciones.decide",
   ],
   DOCENTE: [
     "inicio.view",
@@ -299,6 +350,9 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "odontograma.edit",
     "estudios.view",
     "estudios.upload",
+    // Firma y NO pide: quien autoriza no es quien propone.
+    "autorizaciones.view",
+    "autorizaciones.decide",
   ],
   ALUMNO: [
     "inicio.view",
@@ -311,6 +365,9 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "odontograma.edit",
     "estudios.view",
     "estudios.upload",
+    // Pide y NO firma. Si llevara "decide", el gate sería un formulario.
+    "autorizaciones.request",
+    "autorizaciones.view",
   ],
   CAJA: [
     "inicio.view",
