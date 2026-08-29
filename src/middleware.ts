@@ -130,6 +130,18 @@ export async function middleware(request: NextRequest) {
     return await updateSession(request);
   }
 
+  // Panel del instituto (DaleControl Institucional). El login del vertical es
+  // público; el resto refresca la cookie de Supabase. La verificación de auth
+  // la hace src/app/instituto/(panel)/layout.tsx vía getEduContext (mismo
+  // patrón que /proveedores con getSupplierContext: el Edge no puede consultar
+  // Prisma, así que aquí no se decide quién entra).
+  if (pathname.startsWith("/instituto")) {
+    if (pathname === "/instituto/login") {
+      return NextResponse.next();
+    }
+    return await updateSession(request);
+  }
+
   if (pathname.startsWith("/dashboard")) {
     // Fast-path 2FA (Edge, sin crypto): si el cierre de login marcó
     // df_2fa_pending (usuario debe pasar 2FA) y aún no lo superó, lo mandamos
@@ -155,5 +167,5 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // /api/:path* (superset de /api/admin) para inyectar x-pathname en toda ruta
   // /api y habilitar el gate de plan vencido en getAuthContext/getCurrentUser.
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/:path*", "/proveedores/:path*"],
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/:path*", "/proveedores/:path*", "/instituto/:path*"],
 };

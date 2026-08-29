@@ -1,0 +1,1451 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl INSTITUCIONAL — tema del vertical: AZUL UNIVERSITARIO.
+   (Índigo de aula y bata: académico y sobrio, no "startup".)
+
+   Scope: TODO vive bajo .edu-shell / .edu-auth (los wrappers del vertical).
+   NO se tocan los tokens del panel dental, ni los de barbería, ni los de
+   inmuebles, ni globals.css: este archivo lo importan solo el layout del
+   panel y el login del vertical.
+
+   ── POR QUÉ NO REUSA .sidebar-new / panel-chrome-va.css ─────────────────
+   Los otros verticales heredan el sidebar del dental. Ese sidebar es de
+   ESCRITORIO: en un móvil de 375 px sigue midiendo 180 px pegados a la
+   izquierda y se come media pantalla. Aquí el usuario típico es un docente
+   o un alumno DE PIE en el piso clínico, con el teléfono en una mano. Así
+   que el vertical trae su propio chrome, en clases con prefijo `edu-`, y
+   el menú es un cajón que se abre y se cierra. Es más código, pero es el
+   único que se lee bien en la mano.
+
+   ── UNIDADES ────────────────────────────────────────────────────────────
+   Todo en px. La raíz del panel mide clamp(13px … 16px) (globals.css), así
+   que 1rem NO vale 16 y una medida en rem cambia de tamaño según el ancho
+   de la ventana sin que nadie lo haya pedido.
+
+   ── @media Y NO @container ──────────────────────────────────────────────
+   El cajón del menú es position:fixed y container-type CREA contención:
+   un contenedor de consulta encima lo atraparía dentro de la columna en
+   vez de cubrir la pantalla. Por eso este vertical mide la VENTANA.
+
+   ♿ CONTRASTE (medido sobre blanco #FFFFFF, no supuesto):
+     indigo-400 #6C88C6 → 3.51  ✗ no pasa AA en texto chico
+     indigo-500 #4665AC → 5.65  ✓
+     indigo-600 #344E8C → 8.03  ✓
+     indigo-700 #2A3F70 → 10.28 ✓
+     ámbar-700  #B45309 → 5.02  ✓
+   Todo botón o píldora con texto blanco va en 500 o más oscuro; el 400 es
+   para bordes, iconos y superficies. Los grises de texto se midieron sobre
+   el fondo real del panel (#F5F7FB): --edu-text-2 7.10 ✓, --edu-text-3
+   4.66 ✓ (el #6E7789 "natural" daba 4.20 y NO pasaba).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-shell,
+.edu-auth {
+  /* ── Escala índigo (nunca un color plano) ── */
+  --edu-50: #f2f5fb;
+  --edu-100: #e3e9f6;
+  --edu-200: #c4d1ec;
+  --edu-300: #9bb0dc;
+  --edu-400: #6c88c6; /* bordes e iconos — NO texto blanco encima */
+  --edu-500: #4665ac; /* acento (texto blanco OK) */
+  --edu-600: #344e8c; /* acción primaria */
+  --edu-700: #2a3f70;
+  --edu-800: #23345a;
+  --edu-900: #1e2b4a;
+  --edu-950: #121a2e;
+
+  /* Ámbar: el acento de "esto todavía no existe" y de los avisos. */
+  --edu-amber-50: #fffbeb;
+  --edu-amber-100: #fef3c7;
+  --edu-amber-300: #fcd34d;
+  --edu-amber-700: #b45309;
+  --edu-amber-900: #7c3d0a;
+
+  --edu-bg: #f5f7fb;
+  --edu-surface: #ffffff;
+  --edu-surface-2: var(--edu-50);
+  --edu-hover: rgba(70, 101, 172, 0.07);
+
+  --edu-line: rgba(20, 26, 43, 0.12);
+  --edu-line-strong: rgba(20, 26, 43, 0.2);
+  --edu-line-brand: rgba(70, 101, 172, 0.34);
+
+  --edu-text-1: #141a2b;
+  --edu-text-2: #4a5468;
+  --edu-text-3: #67707f;
+
+  --edu-danger: #b3261e;
+  --edu-danger-soft: rgba(179, 38, 30, 0.08);
+  --edu-ok: #15803d;
+
+  /* --ring es un box-shadow completo en este repo, no un color. */
+  --edu-ring: 0 0 0 3px rgba(70, 101, 172, 0.32);
+  --edu-shadow-1: 0 1px 2px rgba(20, 26, 43, 0.06);
+  --edu-shadow-2: 0 6px 18px -6px rgba(20, 26, 43, 0.16);
+  --edu-shadow-3: 0 24px 48px -20px rgba(20, 26, 43, 0.35);
+
+  --edu-radius: 12px;
+  --edu-sidebar-w: 252px;
+
+  color: var(--edu-text-1);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Modo oscuro. Hoy el script del layout raíz solo pone .dark en /dashboard
+   y /admin, así que en /instituto NUNCA se aplica: esto es un seguro para
+   que el día que el vertical tenga su interruptor no salga texto negro
+   sobre fondo negro, no una función que ya exista. */
+.dark .edu-shell,
+.dark .edu-auth {
+  --edu-bg: #10162a;
+  --edu-surface: #19203a;
+  --edu-surface-2: #212a48;
+  --edu-hover: rgba(155, 176, 220, 0.1);
+
+  --edu-line: rgba(226, 233, 246, 0.12);
+  --edu-line-strong: rgba(226, 233, 246, 0.2);
+  --edu-line-brand: rgba(155, 176, 220, 0.4);
+
+  --edu-text-1: #e6ecf7;
+  --edu-text-2: #b9c3d6;
+  --edu-text-3: #9aa4b8;
+
+  --edu-danger: #f2b8b5;
+  --edu-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --edu-shadow-2: 0 6px 18px -6px rgba(0, 0, 0, 0.5);
+  --edu-shadow-3: 0 24px 48px -20px rgba(0, 0, 0, 0.65);
+}
+
+/* El <body> lo pinta globals.css con la retícula violeta del dental. Estas
+   dos reglas la sustituyen SOLO en las páginas del vertical, vía :has(). */
+body:has(.edu-shell),
+body:has(.edu-auth) {
+  background-color: #f5f7fb;
+  background-image: radial-gradient(
+    ellipse 1100px 560px at 50% -12%,
+    rgba(70, 101, 172, 0.09),
+    transparent 70%
+  );
+  background-attachment: fixed;
+}
+
+.dark body:has(.edu-shell),
+.dark body:has(.edu-auth) {
+  background-color: #10162a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   1 · Estructura del panel — MÓVIL PRIMERO
+   El default es el teléfono: una columna, el menú fuera de pantalla. El
+   escritorio se pide explícitamente con min-width.
+   ⚠️ Ni .edu-shell ni .edu-body llevan container-type: atraparían el cajón
+   (position:fixed) dentro de la columna.
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--edu-bg);
+}
+
+.edu-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0; /* sin esto, una tabla ancha empuja el layout entero */
+}
+
+.edu-main {
+  flex: 1;
+  padding: 16px 14px 40px;
+}
+
+/* ── Topbar (solo móvil) ── */
+.edu-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
+  background: var(--edu-surface);
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-topbar__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.edu-topbar__sub {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--edu-500);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dark .edu-topbar__sub {
+  color: var(--edu-300);
+}
+
+.edu-topbar__name {
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Solo en el cajón: en escritorio el <aside> no se cierra y su botón de
+   cerrar no tiene sentido. */
+.edu-only-mobile {
+  display: grid;
+}
+
+/* ── Cajón del menú ── */
+.edu-sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(85vw, 300px);
+  padding: 14px 12px;
+  background: var(--edu-surface);
+  border-right: 1px solid var(--edu-line);
+  box-shadow: var(--edu-shadow-3);
+  transform: translateX(-101%);
+  /* visibility además de transform: cerrado, el cajón sigue en el DOM y sin
+     esto un usuario de teclado tabula hacia enlaces que no ve. Se anima
+     junto al transform para que no desaparezca a mitad del cierre. */
+  visibility: hidden;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), visibility 220ms;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.edu-sidebar[data-open="true"] {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+.edu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(18, 26, 46, 0.5);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edu-sidebar {
+    transition: none;
+  }
+}
+
+.edu-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 16px;
+  border-bottom: 1px solid var(--edu-line);
+  margin-bottom: 10px;
+}
+
+.edu-sidebar__logo {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--edu-600), var(--edu-800));
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-sidebar__brandname {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.edu-sidebar__brandsub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--edu-500);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.edu-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.edu-nav__section {
+  padding: 16px 8px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 48px; /* objetivo táctil real, no 32 px de escritorio */
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: var(--edu-text-2);
+  font-size: 15px;
+  font-weight: 550;
+  text-decoration: none;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.edu-nav__item:hover {
+  background: var(--edu-hover);
+  color: var(--edu-text-1);
+}
+
+.edu-nav__item--active {
+  background: var(--edu-100);
+  border-color: var(--edu-line-brand);
+  color: var(--edu-700);
+  font-weight: 650;
+}
+
+.dark .edu-nav__item--active {
+  background: rgba(155, 176, 220, 0.16);
+  color: var(--edu-200);
+}
+
+.edu-sidebar__foot {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--edu-line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-whoami {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--edu-surface-2);
+  min-width: 0;
+}
+
+.edu-whoami__avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--edu-600);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.edu-whoami__name {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edu-whoami__role {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--edu-500);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dark .edu-whoami__role {
+  color: var(--edu-300);
+}
+
+/* ── Escritorio: el cajón se convierte en columna ── */
+@media (min-width: 1024px) {
+  .edu-topbar {
+    display: none;
+  }
+
+  .edu-scrim {
+    display: none;
+  }
+
+  .edu-only-mobile {
+    display: none;
+  }
+
+  .edu-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100dvh;
+    width: var(--edu-sidebar-w);
+    flex-shrink: 0;
+    transform: none;
+    visibility: visible;
+    box-shadow: none;
+  }
+
+  .edu-nav__item {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .edu-main {
+    padding: 28px 32px 56px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   2 · Piezas de contenido
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1100px;
+}
+
+.edu-page__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.edu-page__lead {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+  color: var(--edu-text-2);
+}
+
+@media (min-width: 1024px) {
+  .edu-page__title {
+    font-size: 27px;
+  }
+}
+
+.edu-card {
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+  padding: 18px;
+}
+
+.edu-card__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+  margin: 0 0 6px;
+}
+
+.edu-card__value {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.edu-card__note {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .edu-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .edu-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.edu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--edu-amber-900);
+  background: var(--edu-amber-100);
+  border: 1px solid rgba(180, 83, 9, 0.28);
+}
+
+.dark .edu-chip {
+  color: var(--edu-amber-100);
+  background: rgba(180, 83, 9, 0.28);
+}
+
+.edu-soon {
+  background: var(--edu-surface);
+  border: 1px dashed var(--edu-line-strong);
+  border-radius: var(--edu-radius);
+  padding: 16px;
+}
+
+.edu-soon__title {
+  margin: 10px 0 4px;
+  font-size: 15.5px;
+  font-weight: 650;
+}
+
+.edu-soon__detail {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+/* ── Avisos (contrato, permiso faltante, error) ── */
+.edu-banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: var(--edu-radius);
+  border: 1px solid var(--edu-line-brand);
+  background: var(--edu-100);
+  color: var(--edu-text-1);
+}
+
+.dark .edu-banner {
+  background: rgba(155, 176, 220, 0.12);
+}
+
+.edu-banner--warn {
+  border-color: rgba(180, 83, 9, 0.35);
+  background: var(--edu-amber-50);
+}
+
+.dark .edu-banner--warn {
+  background: rgba(180, 83, 9, 0.18);
+}
+
+.edu-banner__title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.edu-banner__detail {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+/* ── Botones ── */
+.edu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.edu-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.edu-btn--primary {
+  background: var(--edu-600);
+  border-color: var(--edu-700);
+  color: #fff;
+}
+
+.edu-btn--primary:hover:not(:disabled) {
+  background: var(--edu-700);
+}
+
+.edu-btn--ghost {
+  background: transparent;
+  border-color: var(--edu-line);
+  color: var(--edu-text-2);
+}
+
+.edu-btn--ghost:hover {
+  background: var(--edu-hover);
+  color: var(--edu-text-1);
+}
+
+.edu-btn--danger {
+  background: transparent;
+  border-color: transparent;
+  color: var(--edu-danger);
+  justify-content: flex-start;
+  width: 100%;
+  padding: 0 12px;
+}
+
+.edu-btn--danger:hover {
+  background: var(--edu-danger-soft);
+}
+
+.edu-iconbtn {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--edu-line);
+  background: var(--edu-surface);
+  color: var(--edu-text-2);
+  cursor: pointer;
+}
+
+.edu-iconbtn:hover {
+  background: var(--edu-hover);
+  color: var(--edu-text-1);
+}
+
+/* Un foco visible de verdad, en todo lo que se puede enfocar. El panel se
+   usa con teclado en la sala de cómputo del instituto. */
+.edu-shell :focus-visible,
+.edu-auth :focus-visible {
+  outline: 2px solid var(--edu-600);
+  outline-offset: 2px;
+  box-shadow: var(--edu-ring);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   3 · Login del vertical (/instituto/login)
+   Una columna en el teléfono; el panel de marca aparece en escritorio.
+   Sin precios, sin "crea tu cuenta", sin una sola liga al producto dental:
+   a este login se llega porque el instituto te dio de alta.
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-auth {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--edu-bg);
+}
+
+.edu-auth__visual {
+  display: none;
+}
+
+.edu-auth__panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+  padding: 32px 20px 48px;
+}
+
+.edu-auth__inner {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.edu-auth__mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.edu-auth__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.edu-auth__lead {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.edu-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edu-field__label {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--edu-text-2);
+}
+
+/* Los inputs se escriben COMPLETOS (fondo, color y borde propios) porque
+   globals.css trae reglas de input para el panel dental y heredarlas dejaba
+   campos blancos con texto casi invisible. */
+.edu-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--edu-line-strong);
+  background: var(--edu-surface);
+  color: var(--edu-text-1);
+  font-family: inherit;
+  font-size: 16px; /* < 16px hace que iOS haga zoom al enfocar */
+}
+
+.edu-input::placeholder {
+  color: var(--edu-text-3);
+}
+
+.edu-input:focus {
+  border-color: var(--edu-500);
+  outline: none;
+}
+
+/* Va DESPUÉS del :focus de arriba a propósito: misma especificidad, así que
+   gana el último y el foco de teclado conserva su contorno. Con solo
+   `outline: none` en :focus, quien navega con Tab se quedaba sin él. */
+.edu-input:focus-visible {
+  outline: 2px solid var(--edu-600);
+  outline-offset: 2px;
+}
+
+.edu-input-wrap {
+  position: relative;
+  display: flex;
+}
+
+.edu-input-wrap .edu-input {
+  padding-right: 52px;
+}
+
+.edu-reveal {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--edu-text-3);
+  cursor: pointer;
+}
+
+.edu-reveal:hover {
+  color: var(--edu-text-1);
+}
+
+.edu-alert {
+  padding: 11px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  border: 1px solid rgba(179, 38, 30, 0.3);
+  background: var(--edu-danger-soft);
+  color: #8c1d18;
+}
+
+.dark .edu-alert {
+  color: var(--edu-danger);
+}
+
+.edu-auth__foot {
+  font-size: 13px;
+  color: var(--edu-text-3);
+  text-align: center;
+  line-height: 1.55;
+}
+
+@media (min-width: 900px) {
+  .edu-auth {
+    flex-direction: row;
+  }
+
+  .edu-auth__visual {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    flex: 1 1 46%;
+    padding: 48px 44px;
+    color: #fff;
+    background: linear-gradient(150deg, var(--edu-700), var(--edu-950) 62%, #0b1020);
+  }
+
+  .edu-auth__panel {
+    flex: 1 1 54%;
+    padding: 48px;
+  }
+
+  .edu-auth__title {
+    font-size: 28px;
+  }
+}
+
+.edu-auth__visual-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  max-width: 15ch;
+}
+
+.edu-auth__visual-lead {
+  margin: 14px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(226, 233, 246, 0.86);
+  max-width: 42ch;
+}
+
+.edu-auth__visual-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edu-auth__visual-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: rgba(226, 233, 246, 0.9);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   4 · PADRÓN ACADÉMICO (Ola 1A)
+
+   ── UNA SOLA TABLA, DOS FORMAS ──────────────────────────────────────────
+   No hay dos marcados (uno de tarjetas y otro de tabla): hay UNO, y la
+   rejilla cambia. Cada celda lleva su etiqueta dentro (.edu-cell__label);
+   en el teléfono la etiqueta se lee y las celdas se apilan de dos en dos,
+   y a partir de 1180 px la etiqueta se esconde, la fila se vuelve renglón
+   y el encabezado (.edu-rowhead) aparece. Duplicar el marcado es cómo se
+   llega a que una de las dos versiones se quede sin el dato nuevo.
+
+   ── POR QUÉ 1180 px Y NO 1024 ───────────────────────────────────────────
+   A 1024 px el cajón ya es columna fija de 252 px y al contenido le quedan
+   ~708 px: siete columnas ahí no son una tabla, son un acordeón ilegible.
+   La forma de tarjeta aguanta perfectamente hasta 1180 y ahí sí sobra
+   ancho para el renglón.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Encabezado de pantalla con acción ── */
+.edu-pagehead {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edu-pagehead__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 720px) {
+  .edu-pagehead {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .edu-pagehead__actions {
+    flex-shrink: 0;
+  }
+}
+
+/* ── Barra de filtros ── */
+.edu-toolbar {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  padding: 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+@media (min-width: 720px) {
+  .edu-toolbar {
+    grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(0, 1fr)) auto;
+    align-items: end;
+  }
+}
+
+.edu-toolbar__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--edu-text-2);
+}
+
+/* Campos: el <select> reusa .edu-input a propósito (mismo alto, mismo
+   borde, mismo foco). globals.css pinta inputs y selects para el panel
+   dental, pero este archivo no vive en ninguna @layer y por eso gana. */
+select.edu-input {
+  cursor: pointer;
+}
+
+.edu-input--sm {
+  min-height: 42px;
+  font-size: 15px;
+}
+
+/* ── La lista ── */
+.edu-table {
+  --edu-cols: 1fr;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edu-rowhead {
+  display: none;
+}
+
+.edu-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-row--off {
+  background: var(--edu-surface-2);
+}
+
+.edu-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.edu-cell--wide {
+  grid-column: 1 / -1;
+}
+
+.edu-cell__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-cell__value {
+  font-size: 14px;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-cell__value--strong {
+  font-weight: 650;
+  font-size: 15px;
+}
+
+.edu-cell__sub {
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-cell__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 1180px) {
+  .edu-table {
+    gap: 0;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+    overflow: hidden;
+  }
+
+  .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .edu-row:last-child {
+    border-bottom: 0;
+  }
+
+  .edu-cell--wide,
+  .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  .edu-cell__label {
+    display: none;
+  }
+
+  .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Las rejillas de cada pantalla. Se declaran aquí y no en línea para que
+   el encabezado y las filas no puedan desalinearse: leen la misma variable. */
+.edu-table--padron {
+  --edu-cols: 104px minmax(150px, 1.6fr) minmax(130px, 1.2fr) 74px 116px minmax(120px, 1.1fr) 96px;
+}
+
+.edu-table--programas {
+  --edu-cols: minmax(150px, 1.6fr) 108px 104px 104px 96px 108px 96px;
+}
+
+.edu-table--generaciones {
+  --edu-cols: minmax(130px, 1.2fr) minmax(130px, 1.2fr) 118px 118px 88px 108px 96px;
+}
+
+.edu-table--docentes {
+  --edu-cols: minmax(150px, 1.5fr) minmax(150px, 1.4fr) 110px 104px 104px;
+}
+
+/* ── Píldoras de estado ── */
+.edu-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Contrastes medidos sobre el fondo de cada píldora, no supuestos:
+   #14612F/#E3F5E9 8.4 ✓ · #B45309/#FEF3C7 4.62 ✓ · #2A3F70/#E3E9F6 8.9 ✓
+   #4A5468/#EDEFF3 6.9 ✓ · #8C1D18/#FBEAE9 7.5 ✓ */
+.edu-tag--ok {
+  color: #14612f;
+  background: #e3f5e9;
+  border: 1px solid rgba(21, 128, 61, 0.28);
+}
+
+.edu-tag--warn {
+  color: var(--edu-amber-900);
+  background: var(--edu-amber-100);
+  border: 1px solid rgba(180, 83, 9, 0.28);
+}
+
+.edu-tag--info {
+  color: var(--edu-700);
+  background: var(--edu-100);
+  border: 1px solid var(--edu-line-brand);
+}
+
+.edu-tag--muted {
+  color: var(--edu-text-2);
+  background: rgba(20, 26, 43, 0.06);
+  border: 1px solid var(--edu-line);
+}
+
+.edu-tag--danger {
+  color: #8c1d18;
+  background: var(--edu-danger-soft);
+  border: 1px solid rgba(179, 38, 30, 0.28);
+}
+
+.dark .edu-tag--ok {
+  color: #b7e8c7;
+  background: rgba(21, 128, 61, 0.24);
+}
+
+.dark .edu-tag--warn {
+  color: var(--edu-amber-100);
+  background: rgba(180, 83, 9, 0.28);
+}
+
+.dark .edu-tag--info {
+  color: var(--edu-200);
+  background: rgba(155, 176, 220, 0.18);
+}
+
+.dark .edu-tag--muted {
+  color: var(--edu-text-2);
+  background: rgba(226, 233, 246, 0.08);
+}
+
+.dark .edu-tag--danger {
+  color: #f2b8b5;
+  background: rgba(179, 38, 30, 0.24);
+}
+
+/* ── Vacíos ── */
+.edu-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  text-align: center;
+  background: var(--edu-surface);
+  border: 1px dashed var(--edu-line-strong);
+  border-radius: var(--edu-radius);
+}
+
+.edu-empty__title {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+}
+
+.edu-empty__detail {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+/* ── Botones chicos (acciones de fila) ── */
+.edu-btn--sm {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* En el teléfono el objetivo táctil vuelve a 44 px: una fila con dos
+   botones de 38 px se toca mal con el guante puesto. */
+@media (max-width: 719px) {
+  .edu-btn--sm {
+    min-height: 44px;
+    flex: 1 1 auto;
+  }
+}
+
+.edu-btn--quiet {
+  background: transparent;
+  border-color: var(--edu-line);
+  color: var(--edu-500);
+}
+
+.edu-btn--quiet:hover:not(:disabled) {
+  background: var(--edu-hover);
+  color: var(--edu-700);
+}
+
+/* ── Modal / hoja inferior ──
+   MÓVIL PRIMERO: en el teléfono sube desde abajo y ocupa lo que necesita
+   (hasta 92 dvh); en escritorio se centra. Es position:fixed y funciona
+   porque NADA en el árbol del panel lleva container-type ni transform: un
+   contenedor de consulta encima lo encerraría dentro de la columna. */
+.edu-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: rgba(18, 26, 46, 0.55);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.edu-modal__card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 92dvh;
+  background: var(--edu-surface);
+  border-radius: 16px 16px 0 0;
+  box-shadow: var(--edu-shadow-3);
+  /* El color se escribe COMPLETO: un modal blanco que hereda un `color`
+     claro de más arriba es un modal en blanco, y eso ya pasó en este repo. */
+  color: var(--edu-text-1);
+}
+
+@media (min-width: 720px) {
+  .edu-modal {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .edu-modal__card {
+    max-width: 560px;
+    max-height: 86dvh;
+    border-radius: 16px;
+  }
+}
+
+.edu-modal__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-modal__title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.edu-modal__sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--edu-text-2);
+}
+
+.edu-modal__body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.edu-modal__foot {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--edu-line);
+}
+
+@media (min-width: 720px) {
+  .edu-modal__foot {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+/* ── Formularios ── */
+.edu-formgrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 560px) {
+  .edu-formgrid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.edu-field__hint {
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+}
+
+/* ── Bloques sueltos ── */
+.edu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edu-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edu-section__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.edu-section__lead {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+  max-width: 68ch;
+}
+
+.edu-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--edu-text-2);
+}
+
+.edu-note {
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+  margin: 0;
+}
+
+.edu-alert--ok {
+  border-color: rgba(21, 128, 61, 0.3);
+  background: #e3f5e9;
+  color: #14612f;
+}
+
+.dark .edu-alert--ok {
+  background: rgba(21, 128, 61, 0.2);
+  color: #b7e8c7;
+}
+
+/* Docentes asignados: una lista de píldoras con su botón de cerrar. */
+.edu-chiplist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.edu-assign {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--edu-line);
+  background: var(--edu-surface-2);
+  font-size: 13px;
+}
+
+.edu-assign__x {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--edu-danger);
+  cursor: pointer;
+}
+
+.edu-assign__x:hover:not(:disabled) {
+  background: var(--edu-danger-soft);
+}
+
+.edu-assign__x:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Detalle desplegable de un docente (sus alumnos vigentes). */
+.edu-detail {
+  grid-column: 1 / -1;
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top: 1px dashed var(--edu-line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
