@@ -27249,6 +27249,405 @@ verificó lo que se puede verificar así: que los tres botones se apilan a ancho
 teléfono y se ponen en fila desde 560 px, que la urgencia se lee **antes** que el paciente,
 que el encabezado del grupo se queda pegado arriba, que el salto de línea del plan del alumno
 sobrevive (`white-space: pre-wrap`) y que un nombre largo no desborda la tarjeta.
+## DaleControl INSTITUCIONAL — Ola 3B · dictado, apoyo de IA y consentimientos informados
+
+Rama `feat/edu-ola-3b`, basada en `origin/main` (f2e5d396, Ola 5). **Dos tablas nuevas,
+ocho endpoints, dos pantallas y una página pública.** Ni una línea del dental, de
+barbería ni de inmuebles: `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node
+scripts/edu-guard.cjs` → 29 propios, 1 compartido declarado, **0 prohibidos**.
+
+---
+
+### 1. PASO 0 — el problema de los tokens de IA, contestado con rutas
+
+La pregunta era si la lógica de transcripción y la de análisis radiográfico están
+separadas de la autenticación y del cobro. **La respuesta es distinta para cada una**, y
+por eso la ola hace dos cosas distintas.
+
+**a) DICTADO — SEPARADO. Se reusa la función y se escribe endpoint propio.**
+
+- `src/lib/integrations/whisper.ts` → `transcribeAudio()` es un envoltorio **puro** sobre
+  la API de OpenAI: `import "server-only"` y nada más. No toca prisma, no sabe de
+  sesiones, no cobra.
+- Todo el acoplamiento vive en el **route handler**
+  `src/app/api/ai/transcribe/route.ts`: `getAuthContext()` (exige fila `User` de
+  clínica), `aiTokenLimitError(ctx.clinicId)` y `addAiTokens(ctx.clinicId, …)`.
+- ⇒ Se aplicó el caso (b) del encargo: **`POST /api/instituto/ai/dictado`**
+  (`src/app/api/instituto/ai/dictado/route.ts`) reusa `transcribeAudio` con
+  `eduApiGuard("expediente.write")`, que resuelve la sesión con `getEduContext`. **Cero
+  líneas del dental tocadas.**
+
+**b) ANÁLISIS RADIOGRÁFICO — A MEDIAS, y la mitad que importa está PEGADA al cobro por
+clínica.**
+
+- Lo que SÍ está separado: `src/lib/xray/analysis-modes.ts` (`getModeConfig`) — el system
+  prompt y el esquema JSON de la herramienta. Módulo puro (solo
+  `import type { XrayAnalysisMode }`). **Se importa, no se copia**: la calibración de
+  confianza que el dental afinó vale igual aquí, y una copia divergiría en cuanto el
+  dental la corrigiera.
+- Lo que NO está separado, todo dentro de `src/app/api/xrays/[id]/analyze/route.ts`: la
+  llamada a Anthropic, el parseo del `tool_use`, el fallback defensivo, la derivación de
+  severidad/confianza y la persistencia — atadas a `prisma.clinic` (lectura de cupo +
+  reset mensual **inline**), `addAiTokens(ctx.clinicId, …)`,
+  `recordUsageNoCharge({ clinicId })` y `prisma.xrayAnalysis`, cuyo modelo tiene
+  `clinicId` y `patientId` **NOT NULL** con FK a las tablas del dental. No hay función
+  que importar.
+- ⇒ Se aplicó el caso (c): **no se forzó y no se tocó el dental**. El vertical escribe su
+  propia llamada (`src/lib/edu/ia.ts`) y su propia tabla (`EduStudyAnalysis`).
+
+**Y la decisión de cobro, dicha claro: las DOS funciones nacen APAGADAS tras la bandera
+`EDU_IA_ENABLED`.** No se inventó una cartera de IA del instituto, y no por pereza:
+`EduAiWallet` + cupo + precio por token no es infraestructura, es **decidir cuánto le
+cuesta la IA a una escuela y cuántos minutos de dictado trae su contrato**. Es una
+decisión comercial que nadie ha tomado, y escribir la tabla es la forma más rápida de que
+quede tomada por accidente. La otra opción —dejarlas encendidas sin techo— tampoco es
+"funciona": 120 alumnos dictando queman crédito real de OpenAI y de Anthropic sin límite,
+sin factura y sin que nadie pueda contestar cuánto se gastó.
+
+**Qué pasa hoy, con la bandera apagada:** el micrófono se pinta **deshabilitado** con el
+motivo en su `title`, el panel de IA del visor explica en un párrafo por qué está apagado,
+y los dos endpoints contestan **503 con ese mismo texto** — no un 401, no un 500.
+
+**Qué queda listo para el día que exista la decisión:** los dos endpoints, las dos
+pantallas, y `EduStudyAnalysis`, que guarda de cada lectura su **modelo, sus tokens y su
+costo estimado en millonésimas de dólar enteras**. La sección 6 del `.sql` trae la
+consulta de "cuánto lleva gastado cada instituto". El único interruptor es
+`src/lib/edu/ia-core.ts`.
+
+⚠️ **Antes de encenderla hay que saber esto, y el texto de la pantalla lo dice:** encender
+`EDU_IA_ENABLED` manda el gasto a la **misma cuenta de API que usa el dental**, sin cupo
+por instituto y sin forma de repartir la factura.
+
+---
+
+### 2. Dictado por voz — micrófono PROPIO, y no por gusto
+
+`src/components/edu/expediente/dictado-mic.tsx`. El del dental
+(`src/components/clinical/shared/dictation-mic.tsx`) **no se puede importar**, y la razón
+no es de estilo:
+
+🔴 **llama a `useT()` en su primera línea, y `useT` LANZA fuera de `<I18nProvider>`**
+(`src/i18n/i18n-provider.tsx`: `throw new Error("useT debe usarse dentro de
+<I18nProvider>")`). Ese provider lo monta `src/app/dashboard/layout.tsx` y nada más — el
+panel del instituto no lo tiene. Importarlo no habría dado textos en inglés: **habría
+reventado el árbol de React al abrir la pestaña del expediente.** Además tiene
+`/api/ai/transcribe` cableado, que con sesión de instituto es un 401.
+
+Arreglarlo allá (hacer el `useT` opcional, sacar la URL a una prop) era tocar el dental,
+vivo en producción y con seis pantallas usando ese componente. Así que el vertical trae el
+suyo, con la misma mecánica (MediaRecorder, 60 s, auto-stop, cancelar, reintentar la
+SUBIDA sin re-dictar) y errores **inline** en vez de `react-hot-toast` — en el piso
+clínico un toast en la esquina se pierde.
+
+- Va **por campo** del SOAP, no uno solo arriba: son cuatro apartados distintos y un
+  dictado que cae siempre en el mismo sitio obliga a cortar y pegar cuatro veces.
+- **Agrega al final, nunca reemplaza.** Un dictado que borra el párrafo recién tecleado es
+  la forma más rápida de que nadie vuelva a tocar el micrófono.
+- **Permiso: `expediente.write`, sin key nueva.** Dictar es escribir la nota; el micrófono
+  es una forma de teclear. Una `dictado.use` habría sido un interruptor que no cierra nada
+  —quien lo tenga apagado escribe la misma nota a mano— y el catálogo de este vertical no
+  admite interruptores que no cierren una puerta.
+- 🔴 **El audio no se guarda en ningún sitio.** Entra, se transcribe y se descarta: no
+  toca Storage y no queda en ninguna fila.
+
+---
+
+### 3. Apoyo de IA sobre los estudios — y las dos reglas que lo gobiernan
+
+Modelo **`EduStudyAnalysis`**, pantalla dentro del visor
+(`src/components/edu/expediente/analisis-ia.tsx`), permiso nuevo **`estudios.analyze`**
+(default ALUMNO + DOCENTE + DIRECCION; CAJA no).
+
+🔴 **Regla 1: lo dice.** El aviso de "esto es APOYO, no diagnóstico" va arriba del panel,
+**no se puede cerrar** y no está en letra chica. Quien lee es un alumno en formación —
+exactamente el lector al que un modelo seguro de sí mismo puede convencer.
+
+🔴 **Regla 2: no entra solo en ninguna nota.** `EduStudyAnalysis` **no tiene ninguna
+relación con `EduRecord`**, y no hay ningún camino en el producto que escriba el resultado
+dentro de una nota. Lo único que ofrece la pantalla es **Copiar**: si el alumno quiere usar
+algo, lo pega, lo lee, lo corrige y lo firma con su nombre. El texto copiado
+(`eduAnalisisComoTexto`) **lleva el aviso dentro**, y hay una prueba que lo fija: sin él,
+en la nota quedaría un párrafo que parece escrito por quien la firma.
+
+**Se guarda la HISTORIA, y ahí se aparta del dental a propósito.** `XrayAnalysis` tiene
+`fileId @unique` y hace upsert: re-analizar **pisa** el análisis anterior. En un
+consultorio está bien. En una escuela no: el docente necesita ver **exactamente lo que vio
+su alumno cuando decidió**, no la versión que lo reemplazó. Por eso `studyId` no es único
+y las filas se acumulan; la pantalla enseña la última y deja abrir las anteriores.
+
+**Qué protege la llamada, en orden de más barato a más caro** (y ese orden es a
+propósito): la bandera → el alcance del expediente → formato y tamaño leídos de la FILA
+(los midió Storage al confirmar la subida, nunca el cliente) → un **freno de 90 segundos
+contra el doble toque** que devuelve la lectura recién hecha en vez de pedir otra → y solo
+entonces la descarga de bytes y la llamada que cuesta dinero.
+
+**Lo que NO se le manda al modelo:** ni el nombre del paciente, ni su edad, ni sus
+alergias. El dental sí arma un "CONTEXTO DEL PACIENTE"; aquí no. Quien pide la lectura es
+un alumno y el destinatario es una API externa: mandarle datos identificables de un
+paciente de la escuela no mejora la lectura de una placa lo suficiente como para pagarlo
+con eso. Va el nombre del archivo, que lo puso quien subió el estudio y suele decir qué
+proyección es.
+
+Si el modelo **no usa la herramienta**, se rebota con 502 y **no se guarda nada**. Una fila
+con `summary: "respondió en otro formato"` y cero hallazgos se lee en pantalla como *un
+análisis que no encontró nada*, que es lo contrario de lo que pasó.
+
+---
+
+### 4. Consentimientos informados — tabla propia, y DOS profesionales
+
+Modelo **`EduConsent`** (42 columnas), pestaña **Consentimientos** en la ficha del
+paciente + **página pública de firma por token, sin sesión**. Permisos nuevos:
+`consentimientos.view` / `.create` / `.revoke`.
+
+**Se copió el PATRÓN del `ConsentForm` del dental** —token público, `viewedAt`, IP y
+user-agent de la firma, `contentHash`, dos testigos, contrafirma, revocación que no
+borra— y se **importó lo puro y bueno** en vez de copiarlo:
+
+- `src/lib/consent/templates.ts` → `buildConsentContent`, la redacción completa que sigue
+  la NOM-004-SSA3-2012 10.1.1 y la NOM-013-SSA2-2015 9.6.9, con riesgos, alternativas,
+  curso sin tratamiento y cláusula de revocabilidad. Copiar 400 líneas de prosa
+  médico-legal habría dado dos textos que empiezan iguales y terminan distintos, con el
+  paciente firmando el que se quedó atrás.
+- `src/lib/consent/dates.ts`, `src/components/ui/signature-pad.tsx` (ya trae
+  `theme="light"` para superficies públicas) y `validateSignatureDataUrl` de
+  `src/lib/consent/signature.ts` (**magic number**: que los bytes sean de verdad una
+  imagen). Su `uploadSignature` NO se usa: escribe en el bucket del dental.
+
+🔴 **LO QUE UNA ESCUELA TIENE Y UNA CLÍNICA NO: DOS PROFESIONALES.** El alumno explica y
+trata; el docente responde. Los dos quedan escritos (`studentUserId`+`studentName`,
+`supervisorUserId`+`supervisorName`) y **los dos contrafirman**, en huecos distintos. Y la
+carta lleva un **bloque 0 propio, antes de todo el cuerpo**, que le dice al paciente que lo
+va a atender un alumno, de qué especialidad, y quién lo supervisa. Un anexo al final habría
+sido técnicamente correcto y prácticamente inútil: el dato que más le importa a quien firma
+no puede estar detrás del bloque de firmas.
+
+**El caso es OBLIGATORIO al emitir**, y si el caso no tiene docente asignado la carta
+**no se emite** (409 con el mensaje que dice qué hacer). Un consentimiento cuyo responsable
+se teclea a mano no se puede verificar contra nada.
+
+**El hueco de la contrafirma lo decide la SESIÓN, jamás el cuerpo.** El servidor compara
+`ctx.eduUserId` con las dos columnas. Si el cuerpo pudiera elegirlo, cualquiera con
+`consentimientos.create` firmaría como responsable de un acto que no supervisó. Y **no se
+contrafirma una carta que el paciente no ha firmado**: impide lo que de verdad pasa en una
+clínica con prisa — firmar de antemano un fajo de cartas en blanco.
+
+**El estado se DERIVA, no se guarda** (`eduConsentEstado`), y el orden de las tres
+preguntas es la regla: **revocado gana sobre firmado** (pintar como "Firmado" algo que el
+paciente retiró es cómo alguien acaba tratando a quien dijo que no) y **firmado gana sobre
+vencido** (lo que caduca es la posibilidad de firmar, no la firma). No hay columna `status`
+porque "vencido" depende de la HORA: estaría mintiendo desde el segundo siguiente a
+escribirla.
+
+**El `contentHash` no es decorativo.** Se normaliza **NFC y CRLF** antes de digerir —en
+español la "í" se guarda como un carácter o como dos según el teclado, y sin normalizar la
+misma carta copiada desde otro equipo da otro hash y la firma **parece vencida sola**— se
+serializa un texto canónico con el **nombre de cada campo dentro** (nunca un
+`JSON.stringify`, cuyo orden de claves depende de cómo se construyó el objeto) y la
+**VERSIÓN de la receta va dentro del texto**. Y se **recalcula al leer** en la página
+pública: si alguien tocó el texto de una carta ya emitida, deja de cuadrar, se registra en
+el log del servidor y el paciente lo ve **antes** del documento.
+
+---
+
+### 5. 🔴 La decisión de seguridad de esta ola: los consentimientos se leen con "patients"
+
+Es la única cosa del expediente que **CAJA sí puede ver**, y hay que entenderlo antes de
+"arreglarlo".
+
+Las notas, el odontograma y los estudios se leen con el recurso **`"cases"`**
+(`eduClinicalScope`), que para caja devuelve `"none"`. El consentimiento se lee con
+**`"patients"`**, que para caja devuelve `"all"`. Es lo que pide el contrato de la ola
+(«CAJA: solo view — recepción entrega la carta») **y es correcto**: la carta se imprime, se
+entrega en el mostrador y se recoge firmada; lo que contiene es el acto que se autoriza y
+sus riesgos, no la nota clínica ni el diagnóstico. Con el alcance del expediente, caja no
+vería ni una carta y no podría hacer su trabajo.
+
+⚠️ **Lo que NO cambia:** para alumno y docente los dos recursos recortan **exactamente
+igual** (`own` y `supervised`). La única diferencia entre `"patients"` y `"cases"` es caja,
+y es justo la que aquí se quiere. Hay una prueba que lo fija y que fallará el día que
+alguien "unifique" los dos alcances:
+
+```
+🔴 CAJA ve consentimientos ('patients') y NO ve expediente ('cases')
+para alumno y docente los dos recursos recortan igual (la diferencia es SOLO caja)
+```
+
+`src/lib/edu/visibility.ts` **no se tocó**: se reusan `eduVisibility(ctx, "patients")` y
+`eduPatientScopeWhere` tal cual.
+
+---
+
+### 6. La página pública de firma
+
+`/instituto/consentimiento/[token]` — **fuera del grupo `(panel)`**, y eso es todo el
+diseño: el gate autoritativo del vertical es
+`src/app/instituto/(panel)/layout.tsx`, y esta ruta no pasa por él, exactamente como
+`/instituto/login`. Meterla dentro habría mandado al paciente al login de un instituto
+donde no tiene cuenta. El middleware sí la ve (`/instituto/:path*`) pero ahí solo refresca
+la cookie de Supabase; el único `redirect` de `updateSession` es para `/dashboard`.
+
+**El token ES la credencial.** No hay sesión, no hay permiso y no hay institutionId que
+comprobar, así que el endpoint **vuelve a comprobar todo** aunque la página ya lo hubiera
+pintado. Un token con forma inválida y uno que no existe devuelven **el mismo 404**:
+cualquier diferencia entre esos dos casos es un oráculo para ir adivinando tokens.
+
+Lo que viaja al navegador del paciente es el **mínimo**: texto, procedimiento, nombres y
+firmas. Ni un id interno, ni el caso, ni una línea del expediente.
+
+---
+
+### 7. Decisiones que se apartan de lo obvio (para que la integración no las revierta)
+
+**a) Los nombres de las personas van CONGELADOS al lado de un id opcional.**
+`studentName`, `supervisorName`, `createdByName`, `revokedByName`,
+`supervisorSignedByName`, `requestedByName`. No es desnormalización por descuido: un
+documento firmado tiene que seguir diciendo QUIÉN lo firmó aunque esa persona se dé de baja
+o cambie de apellido. Consecuencia buscada: **los ids de persona no llevan FK** (el mismo
+criterio que `consent_forms` del dental), porque una FK obliga a elegir entre CASCADE
+(borrar a alguien borraría cartas firmadas por pacientes) y RESTRICT (nadie se podría dar
+de baja nunca).
+
+**b) `EduStudyAnalysis` no tiene `patientId`.** El alcance se resuelve cargando el estudio
+dentro del alcance clínico y consultando después por su id. Una segunda copia del paciente
+sería una segunda cosa que puede quedar desincronizada, y ningún `where` la necesita.
+
+**c) Modelo `claude-opus-5` y no `claude-sonnet-4-6` como el dental.** Quien lee esta
+respuesta es un alumno en formación, con menos criterio que un doctor con veinte años de
+placas para detectar un hallazgo inventado. Es **una constante** (`EDU_ANALISIS_MODEL`) y
+se guarda en cada fila: igualarlos algún día es cambiar esa línea y el precio de
+`ia-core.ts`.
+
+**d) `fetch` y no el SDK de Anthropic.** Los ocho sitios del repo que llaman a la API de
+mensajes usan `fetch` (incluida la ruta de radiografías del dental que esta ola espeja), y
+el `@anthropic-ai/sdk` instalado es la **0.91**, anterior a los parámetros que esta llamada
+usa (`output_config.effort`). Seguir la convención del repo mantiene la forma de la
+petición idéntica a la que ya funciona en producción.
+
+**e) El precio no se lee de `src/lib/ai-billing/pricing.ts`.** `getPricingConfig()` lee de
+la base la configuración **comercial del dental** (con su tipo de cambio y su margen).
+Aplicársela al instituto mezclaría dos contabilidades y haría que el costo registrado aquí
+cambiara cuando alguien ajuste el margen de allá. Son constantes locales en `ia-core.ts`,
+explicables, en un solo sitio.
+
+**f) El ALUMNO sí tiene `consentimientos.revoke`.** Revocar no es autorizar: es REGISTRAR
+que el paciente se retractó, y el paciente se retracta en el sillón, delante del alumno. El
+estado peligroso no es una revocación de más (no borra nada y queda con nombre, fecha y
+motivo): es un consentimiento **vivo** para un procedimiento ya rechazado, porque quien lo
+escuchó no podía anotarlo.
+
+**g) Consecuencia conocida y aceptada del punto (f):** el alcance es del PACIENTE, así que
+un alumno puede revocar la carta de **otro caso del mismo paciente**. Se aceptó (no borra
+nada, es ruido reversible y queda auditado) y el sitio exacto para estrecharlo si algún día
+se quiere está escrito en el código, sobre el `where` de `revokeEduConsent`.
+
+**h) El estado del consentimiento no es un enum de Prisma.** Ver §4. Si algún día hace
+falta filtrar en SQL, el `.sql` deja escritos los tres predicados.
+
+**i) `tsc --noEmit` sale con 6 errores AJENOS** (`src/lib/barber/__tests__/`:
+`dinero-sumas` y `i18n-alcance`). Vienen de `origin/main`, esta rama no tocó esos archivos
+y arreglarlos habría sido salirse del vertical. **Del instituto: cero.**
+
+---
+
+### 8. Archivos que se quisieron tocar y NO se tocaron
+
+Ninguno se tocó a escondidas; se listan para que la integración decida.
+
+- **`src/components/clinical/shared/dictation-mic.tsx`** — habría bastado con hacerle el
+  `useT` opcional (`useTOptional` ya existe) y sacar la URL del endpoint a una prop, y el
+  vertical se ahorraba 400 líneas. **No se tocó**: es del dental, vivo en producción, con
+  seis pantallas usándolo. Si algún día se quiere unificar, ése es el cambio exacto.
+- **`src/app/api/xrays/[id]/analyze/route.ts`** — extraer la llamada + el parseo a
+  `src/lib/xray/analyze-core.ts` habría dejado a los dos productos compartiendo esa lógica.
+  **No se tocó**: es la ruta que hoy analiza radiografías de pacientes reales.
+- **`src/lib/edu/visibility.ts`** — no hizo falta. Se reusan `eduVisibility(ctx,"patients")`
+  y `eduPatientScopeWhere`; **no se agregó ningún recurso nuevo**, que era la tentación
+  (un `"consents"` habría sido un segundo sitio donde equivocarse diciendo lo mismo).
+- **`src/lib/edu/api-guard.ts`** — no hizo falta: `eduApiGuard` hace lo que se necesita y
+  los seis endpoints con sesión lo usan sin cambiarlo. El público no lo usa **a propósito**
+  (no hay sesión que resolver) y trae su propio manejo de error, porque el 500 genérico de
+  `eduApiError` está escrito para alguien con sesión y aquí quien lee es un paciente.
+- **`src/lib/consent/signature.ts`** — se **importa** `validateSignatureDataUrl` y no se
+  toca. Su `uploadSignature` no se usa: escribe en `patient-files`, el bucket del dental.
+- **`package.json`** — los dos scripts `test:edu-consentimientos` y `test:edu-ia`. Es del
+  dental. Las pruebas se corren con `npx tsx --test …` (el comando está en la cabecera de
+  cada archivo).
+- **`src/middleware.ts`** — no hizo falta: `/instituto/:path*` y `/api/:path*` ya están en
+  el matcher desde la Ola 0, y ninguno de los dos corta a un visitante anónimo.
+- **`scripts/edu-guard.cjs`** — no hizo falta: todo cae bajo prefijos ya indultados.
+- **`prisma/schema.prisma`** — **sí se tocó**, y solo de forma ADITIVA: **214 líneas
+  añadidas, 0 borradas**. Los dos modelos van al FINAL con su encabezado, más **cinco
+  back-relations** de una línea que Prisma EXIGE (`EduInstitution` ×2, `EduPatient`,
+  `EduCase`, `EduStudy`).
+  ⚠️ **`npx prisma format` NO se dejó correr**: reformatea el archivo entero y haría
+  imposible el merge con las Olas 1B y 4, que corren en paralelo. Se validó con
+  `prisma generate` ✅.
+
+---
+
+### 9. Qué se probó y qué NO
+
+**Probado, sin base de datos — 332 pruebas del vertical en verde** (`edu-consentimientos`
+37 y `edu-ia` 28 son nuevas; las otras 267 son las que ya había y siguen pasando):
+
+- el orden del estado derivado (revocado > firmado > vencido > pendiente);
+- **NFC**: la misma "í" compuesta y descompuesta da el mismo canónico (con un `notEqual`
+  previo que comprueba que las dos cadenas de la prueba de verdad tienen bytes distintos,
+  para que un editor que las normalizara no deje la prueba hueca);
+- **CRLF**, trim de extremos, y que **no** se colapsan espacios interiores ni se baja a
+  minúsculas ("no extraer" ≠ "NO EXTRAER");
+- que la versión de la receta va dentro del canónico y que cambiar una palabra lo cambia
+  (de eso depende la detección de alteración);
+- que la carta nombra al alumno, su matrícula, su especialidad y al docente **antes** del
+  cuerpo, y que hereda las secciones NOM-004 del catálogo compartido;
+- que el token rechaza `../`, comillas y longitudes fuera de rango;
+- que los cinco huecos de firma van a paths distintos y todos empiezan por el
+  institutionId;
+- 🔴 que **caja ve consentimientos y no ve expediente**, y que para alumno y docente los
+  dos recursos recortan igual;
+- que la bandera de IA nace apagada, que el motivo es "falta el cobro" **aunque falten
+  también las llaves** (el orden importa: al revés, alguien pondría la llave creyendo que
+  con eso queda encendido) y que una llave que falta no apaga la otra función;
+- la normalización de lo que devuelve el modelo (hallazgos sin título se descartan,
+  `recommendations` como array **o** como string, confianza en 0-1 **o** en 0-100);
+- que el costo sale en enteros y que un modelo fuera de la tabla devuelve `null` y no un
+  número inventado;
+- que el texto para copiar **lleva el aviso** de que no es un diagnóstico.
+
+**Verificación de esta rama:** `npm run build` ✅ **exit 0** (449/449 páginas; las 6 rutas
+de API y las 2 páginas nuevas registradas) · `npx tsc --noEmit` ✅ para el vertical (6
+errores ajenos de barber, preexistentes en `origin/main`) · guard ✅ · un script comprobó
+que `schema.prisma` y `sql/edu-ola-3b.sql` dicen lo mismo (**14 + 42 columnas, 5 índices,
+5 llaves foráneas**, y que los cuatro `map:` del schema existen en el SQL).
+
+**Qué NO se probó, y hay que probarlo con una base real y un navegador:**
+
+- que el `.sql` corra en Supabase (**no se aplicó; no se tocó ninguna base**);
+- **nadie ha firmado todavía un consentimiento real desde este producto**, ni ha dictado
+  una nota, ni ha pedido un análisis. Las dos funciones de IA están apagadas por diseño, y
+  el circuito de la firma (emitir → copiar liga → abrir en el teléfono → firmar → subir el
+  PNG al bucket → contrafirmar) no se ha recorrido entero;
+- que la carpeta `<institutionId>/consentimientos/…` del bucket `edu-files` acepte la
+  escritura (usa el mismo bucket y el mismo service role que los estudios, que sí
+  funcionan, pero por una función nueva: `eduStorageUpload`);
+- la llamada real a Anthropic con `output_config.effort` y `tool_choice` forzado. La forma
+  de la petición sigue la del dental (que funciona en producción) más los parámetros
+  actuales del modelo, **pero no se ejecutó ni una vez**;
+- que Whisper devuelva algo útil con el hint de vocabulario del vertical.
+
+**Limitación conocida:** el rate limit de la ruta pública es el `rateLimit` en memoria del
+repo, por IP. En serverless cada instancia tiene su propio `Map`, así que frena a una
+persona insistiendo y no a un atacante distribuido — exactamente lo que hace el dental en
+su ruta pública equivalente. Subir de ahí exige un contador persistente (`@/lib/failban` +
+Upstash), que no se trajo al vertical por una puerta que todavía nadie ha usado.
+
+**Lo que esta ola NO hace, y no está escondido:** no hay consentimiento para la cita de
+**tamizaje**, porque ocurre antes de que exista el caso y la carta necesita el caso para
+saber quién atiende y quién responde. No hay PDF imprimible del consentimiento (el dental
+lo tiene; aquí se imprime la página). Y un testigo puede firmar después de que la liga
+caduque, porque la carta ya está FIRMADA y lo que caduca es la posibilidad de firmar del
+paciente.
 
 ---
 
@@ -27279,3 +27678,14 @@ barber, preexistentes en `origin/main`) · **314 pruebas del vertical en verde**
 `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
 (18 propios, 1 compartido declarado, 0 prohibidos) · un script confirmó que `schema.prisma` y
 `sql/edu-ola-4.sql` dicen lo mismo (20 columnas, 3 índices comunes + el parcial, 4 FKs).
+1. **`sql/edu-ola-3b.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/2/3.sql`. Idempotente, cero DROP: 2 tablas, 5 índices, 5 llaves. **No hace
+   falta crear ningún bucket**: las firmas van a `edu-files`, que ya creó `edu-ola-3.sql`.
+2. El **backfill del override** (sección 5 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío. Son **dos bloques y no cuatro**: DIRECCION, DOCENTE y
+   ALUMNO llevan las cuatro keys; **CAJA lleva UNA**, `consentimientos.view`.
+3. La IA se queda **APAGADA**. Para encenderla, `EDU_IA_ENABLED=1` — y antes, leer la
+   sección 6 del `.sql`: el gasto va a la cuenta de API compartida con el dental, sin cupo
+   por instituto. **Esa es la decisión que falta.**
+4. Para que un caso pueda emitir consentimientos necesita **docente responsable asignado**.
+   Sin él, la pantalla lo dice antes de dejar emitir y el servidor rebota con 409.

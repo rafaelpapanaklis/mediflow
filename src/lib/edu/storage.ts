@@ -178,3 +178,68 @@ export async function eduStorageRemove(path: string): Promise<void> {
     throw new Error(`No se pudo borrar ${EDU_FILES_BUCKET}/${path}: ${error.message}`);
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Ola 3B · lo que hace falta para las firmas y para el análisis de IA
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * SUBE bytes al bucket privado desde el SERVIDOR.
+ *
+ * Esto no contradice el "el binario nunca pasa por el servidor" de los
+ * estudios: aquí lo que se sube es una FIRMA manuscrita de unos kilobytes
+ * que el navegador capturó en un canvas y mandó como data URL, y el
+ * servidor tiene que validarla (magic number) antes de guardarla. Firmar
+ * una URL de subida para 20 KB sería un viaje de más y dejaría al cliente
+ * escribiendo directo en el bucket un archivo que nadie inspeccionó.
+ *
+ * `upsert: true` para que reintentar la misma firma no muera con 409.
+ * Devuelve el PATH guardado, o null si falló — el caller decide si eso
+ * invalida la operación (en la firma del paciente NO: perder la imagen es
+ * malo, perder el consentimiento que el paciente acaba de dar es peor).
+ */
+export async function eduStorageUpload(
+  path: string,
+  bytes: Buffer,
+  contentType: string,
+): Promise<string | null> {
+  try {
+    const { error } = await admin()
+      .storage.from(EDU_FILES_BUCKET)
+      .upload(path, bytes, { contentType, upsert: true });
+    if (error) {
+      console.error("[instituto/storage] upload falló:", path, error.message);
+      return null;
+    }
+    return path;
+  } catch (e) {
+    console.error("[instituto/storage] upload excepción:", path, (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * DESCARGA un objeto del bucket privado.
+ *
+ * Solo la usa el análisis de IA, que necesita los bytes de la imagen para
+ * mandárselos al modelo. Devuelve null si no se pudo — el caller contesta
+ * con un mensaje escrito para una persona en vez de un 500.
+ *
+ * ⚠️ Quien llama TIENE que haber comprobado antes el tamaño del objeto
+ * (eduStorageObjectSize). Sin eso, una tomografía de 600 MB se cargaría
+ * entera en memoria de la función serverless antes de que nadie pudiera
+ * decir que no cabe.
+ */
+export async function eduStorageDownload(path: string): Promise<Buffer | null> {
+  try {
+    const { data, error } = await admin().storage.from(EDU_FILES_BUCKET).download(path);
+    if (error || !data) {
+      console.warn("[instituto/storage] download falló para", path, error?.message);
+      return null;
+    }
+    return Buffer.from(await data.arrayBuffer());
+  } catch (e) {
+    console.warn("[instituto/storage] download excepción:", (e as Error).message);
+    return null;
+  }
+}

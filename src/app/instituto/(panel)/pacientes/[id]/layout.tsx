@@ -78,6 +78,16 @@ export default async function InstitutoPacienteLayout({
         permission: "odontograma.view",
       },
       { key: "estudios", href: `${base}/estudios`, label: "Estudios", permission: "estudios.view" },
+      {
+        // Ola 3B. Va la ÚLTIMA y con permiso propio porque es la única
+        // pestaña del expediente que CAJA sí puede abrir: la carta se
+        // imprime y se entrega en el mostrador. Las tres de arriba siguen
+        // cerradas para caja por partida doble (permiso + alcance).
+        key: "consentimientos",
+        href: `${base}/consentimientos`,
+        label: "Consentimientos",
+        permission: "consentimientos.view",
+      },
     ];
 
   const tabs: EduPacienteTab[] = definicion
