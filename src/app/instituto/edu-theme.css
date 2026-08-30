@@ -2841,3 +2841,379 @@ select.edu-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   12 · OLA 4 — EL GATE DE AUTORIZACIÓN.
+
+   MÓVIL PRIMERO, y aquí no es una consigna: la bandeja se usa DE PIE, CON
+   GUANTES, EN UN TELÉFONO, con un paciente en el sillón. De ahí sale cada
+   número de este bloque.
+
+   ── POR QUÉ NO HAY UNA TABLA ────────────────────────────────────────────
+   Todas las demás pantallas del vertical tienen su `.edu-table--*`. Ésta
+   no, y es la única. Una autorización no es una fila de datos que se
+   compara con la de al lado: es un texto que hay que LEER antes de firmar.
+   En una tabla, el "Plan" queda en una celda de 120 px con un `ellipsis`,
+   y firmar con `ellipsis` es firmar sin leer. Tarjetas, siempre.
+
+   ── LOS BOTONES SON DE 44 px ────────────────────────────────────────────
+   No es el mínimo de accesibilidad por cumplir: es un dedo con guante de
+   nitrilo. Y los tres llevan TEXTO — una palomita y una cruz, con guantes y
+   con prisa, son el mismo botón. En el teléfono se apilan a ancho completo
+   (nadie acierta a un tercio de pantalla con el pulgar); a partir de 560 px
+   se ponen en fila.
+
+   ── LA URGENCIA SE VE ANTES DE LEER NADA ────────────────────────────────
+   Barra roja a la izquierda y el motivo ARRIBA, antes que el paciente y
+   antes que el contenido. Una urgencia es lo único de esta pantalla que YA
+   ocurrió sin firma; si hubiera que buscarla, se firmaría como todo lo
+   demás. El color NO es la única señal: el texto dice "Urgencia · ya se
+   hizo sin firma", que es lo que lee quien no distingue el rojo.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── El grupo de un alumno ──────────────────────────────────────────────
+   Agrupar por alumno es lo que hace posible el lote sin que el lote sea
+   "aprobar todo lo de doce personas". El encabezado se queda PEGADO arriba
+   mientras se recorre el grupo: en una lista de quince tarjetas, saber de
+   quién es lo que estás firmando no puede depender de recordar. */
+.edu-auth-grupo {
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+  box-shadow: var(--edu-shadow-1);
+  overflow: hidden;
+}
+
+.edu-auth-grupo__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--edu-surface-2);
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-auth-grupo__name {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+  margin: 0;
+}
+
+.edu-auth-grupo__sub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+}
+
+.edu-auth-grupo__nota {
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  color: var(--edu-amber-700);
+  background: var(--edu-amber-50);
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.dark .edu-auth-grupo__nota {
+  color: var(--edu-amber-300);
+  background: rgba(180, 83, 9, 0.14);
+}
+
+.edu-auth-grupo .edu-stack {
+  padding: 12px 14px 14px;
+}
+
+/* ── La tarjeta que se firma ────────────────────────────────────────────
+   `border-left` de 3 px y no un fondo entero: el fondo de color hace que el
+   texto clínico se lea peor, y lo que hay que leer es el texto. */
+.edu-auth-card {
+  border: 1px solid var(--edu-line);
+  border-left: 3px solid var(--edu-line-brand);
+  border-radius: 10px;
+  background: var(--edu-surface);
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-auth-card--urgente {
+  border-left-color: var(--edu-danger);
+}
+
+.edu-auth-card--cambio {
+  border-left-color: var(--edu-amber-700);
+}
+
+.edu-auth-card__urgencia {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--edu-danger);
+  background: var(--edu-danger-soft);
+}
+
+.edu-auth-card__head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.edu-auth-card__stage {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-auth-card__quien {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+}
+
+.edu-auth-card__folio {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--edu-text-3);
+}
+
+.edu-auth-card__meta {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+}
+
+.edu-auth-card__link {
+  color: var(--edu-500);
+  text-decoration: underline;
+}
+
+.edu-auth-card__aviso {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-amber-700);
+  background: var(--edu-amber-50);
+}
+
+.dark .edu-auth-card__aviso {
+  color: var(--edu-amber-300);
+  background: rgba(180, 83, 9, 0.14);
+}
+
+/* ── Lo que se propone ──────────────────────────────────────────────────
+   `max-height` con scroll propio y NO un `line-clamp`: un texto cortado con
+   puntos suspensivos se firma creyendo que se leyó entero. Cortado con
+   scroll, el pulgar encuentra el resto. */
+.edu-auth-card__que {
+  border: 1px solid var(--edu-line);
+  border-radius: 8px;
+  background: var(--edu-surface-2);
+  padding: 10px 11px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.edu-auth-card__titulo {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+}
+
+.edu-auth-card__campos {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.edu-auth-card__campo dt {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-auth-card__campo dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+  /* El texto clínico llega con saltos de línea del textarea del alumno.
+     Sin esto se aplanaría en un párrafo y un plan de cinco pasos dejaría
+     de leerse como cinco pasos. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── Los tres botones ───────────────────────────────────────────────────
+   Apilados y a ancho completo en el teléfono. 44 px de alto: un dedo con
+   guante. */
+.edu-auth-card__acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.edu-auth-btn {
+  min-height: 44px;
+  width: 100%;
+  justify-content: center;
+  font-size: 14.5px;
+}
+
+@media (min-width: 560px) {
+  .edu-auth-card__acciones {
+    flex-direction: row;
+  }
+
+  .edu-auth-btn {
+    width: auto;
+    flex: 1;
+  }
+}
+
+/* ── El motivo, DENTRO de la tarjeta ────────────────────────────────────
+   No en un modal: el teclado del teléfono tapa medio modal y quien escribe
+   pierde de vista justo lo que está juzgando. */
+.edu-auth-card__motivo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--edu-line);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL GATE EN LA FICHA DEL CASO
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-auth-caso {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--edu-line);
+}
+
+/* Las DOS puertas del caso, una al lado de la otra en cuanto hay sitio. */
+.edu-auth-puertas {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+@media (min-width: 720px) {
+  .edu-auth-puertas {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.edu-auth-puerta {
+  border: 1px solid var(--edu-line);
+  border-left: 3px solid var(--edu-line-strong);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--edu-surface-2);
+}
+
+/* Verde y rojo NUNCA solos: el texto del veredicto dice qué falta y con
+   cuántas palabras haga falta. El color es un atajo para quien lo ve, no
+   la información. */
+.edu-auth-puerta--ok {
+  border-left-color: var(--edu-ok);
+}
+
+.edu-auth-puerta--falta {
+  border-left-color: var(--edu-amber-700);
+}
+
+.edu-auth-puerta__k {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-auth-puerta__v {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--edu-text-2);
+}
+
+.edu-auth-puerta__nota {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--edu-amber-700);
+}
+
+.dark .edu-auth-puerta__nota {
+  color: var(--edu-amber-300);
+}
+
+/* ── El historial: las propias filas del caso ───────────────────────────
+   No hay tabla de historial en otro sitio. Esto ES el historial. */
+.edu-auth-historial {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-auth-historial__item {
+  border-left: 2px solid var(--edu-line);
+  padding-left: 10px;
+}
+
+.edu-auth-historial__head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.edu-auth-historial__stage {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--edu-text-2);
+}
+
+.edu-auth-historial__meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+  overflow-wrap: anywhere;
+}
+
+.edu-auth-historial__nota {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-text-2);
+  font-style: italic;
+}

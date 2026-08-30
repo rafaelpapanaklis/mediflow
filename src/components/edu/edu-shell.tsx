@@ -14,6 +14,7 @@ import {
   Layers,
   LogOut,
   Menu,
+  Stamp,
   Sun,
   Tags,
   UserCheck,
@@ -60,6 +61,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "clipboard-list": ClipboardList,
   // Ola 1B — el equipo.
   "user-plus": UserPlus,
+  // Ola 4 — el gate de autorización.
+  stamp: Stamp,
 };
 
 export interface EduShellProps {

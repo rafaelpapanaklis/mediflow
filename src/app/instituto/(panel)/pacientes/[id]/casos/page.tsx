@@ -8,12 +8,14 @@ import { listEduPatientCases } from "@/lib/edu/casos";
 import { listEduPatientAppointments } from "@/lib/edu/agenda";
 import { eduFormatDayShort } from "@/lib/edu/agenda-core";
 import { eduVisibility } from "@/lib/edu/visibility";
+import { getEduCaseApprovalState } from "@/lib/edu/autorizaciones";
 import {
   EDU_APPOINTMENT_STATUS_LABELS,
   EDU_CASE_CLOSED_STATUSES,
   EDU_CASE_STATUS_LABELS,
 } from "@/lib/edu/types";
 import { EduDenied } from "@/components/edu/edu-denied";
+import { EduCasoAutorizaciones } from "@/components/edu/autorizaciones/caso-autorizaciones";
 
 /**
  * Pestaña CASOS: los casos del paciente y sus últimas citas.
@@ -54,6 +56,19 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
       : Promise.resolve([]),
   ]);
 
+  // ── Ola 4 · el estado de autorización de CADA caso ───────────────────
+  // Se pide en paralelo y solo si esta persona ve autorizaciones. Un
+  // paciente tiene dos o tres casos como mucho (uno por especialidad), así
+  // que son dos o tres consultas y no una lista sin fondo; el desplegable
+  // de "qué mando" NO se carga aquí — lo pide el modal cuando se abre.
+  const veAutorizaciones = hasEduPermission(permUser, "autorizaciones.view");
+  const puedePedir = hasEduPermission(permUser, "autorizaciones.request");
+  const autorizaciones = veAutorizaciones
+    ? await Promise.all(
+        casos.map((c) => getEduCaseApprovalState(ctx, c.id, ctx.institution.timezone)),
+      )
+    : [];
+
   return (
     <div className="edu-stack">
       <section className="edu-section">
@@ -79,8 +94,9 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
           </div>
         ) : (
           <div className="edu-stack edu-stack--tight">
-            {casos.map((c) => {
+            {casos.map((c, i) => {
               const cerrado = (EDU_CASE_CLOSED_STATUSES as string[]).includes(c.status);
+              const auth = autorizaciones[i] ?? null;
               return (
                 <div key={c.id} className={`edu-nota ${cerrado ? "edu-nota--borrador" : ""}`}>
                   <div className="edu-nota__head">
@@ -99,6 +115,19 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
                     {c.appointments} {c.appointments === 1 ? "sesión" : "sesiones"}
                     {c.notes ? ` · ${c.notes}` : ""}
                   </p>
+
+                  {/* Ola 4 · el gate, en la ficha del caso: en qué van sus
+                      dos puertas, quién firmó qué y a qué hora, y el botón
+                      del alumno. */}
+                  {auth && (
+                    <EduCasoAutorizaciones
+                      caseId={c.id}
+                      caseLabel={`${c.programName} · ${c.patientName}`}
+                      gates={auth.gates}
+                      rows={auth.rows}
+                      canRequest={puedePedir && !cerrado}
+                    />
+                  )}
                 </div>
               );
             })}
