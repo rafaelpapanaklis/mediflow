@@ -2649,3 +2649,195 @@ select.edu-input {
 .edu-table--turnos {
   --edu-cols: minmax(140px, 1.3fr) minmax(140px, 1.3fr) 128px 128px 148px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   11 · OLA 1B — EQUIPO: altas, altas masivas y credenciales.
+
+   Bloque ADITIVO al final del archivo, sin tocar una sola regla de las
+   olas anteriores: la Ola 4 corre en paralelo sobre este mismo archivo y
+   un reordenamiento haría el merge imposible.
+
+   Lo único que pide reglas propias es el PANEL DE CREDENCIALES, y es a
+   propósito: tiene que verse distinto de todo lo demás de la pantalla
+   porque contiene lo único que no se puede volver a ver.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Rejillas de las tablas de esta ola ── */
+.edu-table--equipo {
+  --edu-cols: minmax(150px, 1.5fr) minmax(170px, 1.5fr) 108px 128px 116px 128px;
+}
+
+.edu-table--creds {
+  --edu-cols: minmax(140px, 1.2fr) minmax(170px, 1.4fr) 100px minmax(200px, 1.4fr);
+}
+
+/* ── El panel de credenciales ──────────────────────────────────────────
+   Marco de aviso, no de éxito: lo que dice es "cópialo AHORA", y un verde
+   de "guardado" invita a cerrarlo sin leer. */
+.edu-creds {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid rgba(180, 83, 9, 0.35);
+  border-left-width: 4px;
+  border-radius: var(--edu-radius);
+  background: var(--edu-amber-50);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.dark .edu-creds {
+  background: rgba(180, 83, 9, 0.18);
+}
+
+.edu-creds__head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edu-creds__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 720px) {
+  .edu-creds__head {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  .edu-creds__acciones {
+    flex-shrink: 0;
+  }
+}
+
+/* La contraseña en monoespaciada y con espacio entre letras: se va a
+   dictar por teléfono o a teclear a mano en otro dispositivo, y una "l" y
+   un "1" pegados en tipografía de texto se leen igual. (El alfabeto ya
+   excluye los caracteres ambiguos; esto es el segundo cinturón.) */
+.edu-creds__pass {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.edu-creds__pass code {
+  padding: 4px 9px;
+  border: 1px solid var(--edu-line);
+  border-radius: 7px;
+  background: var(--edu-surface);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  /* Se puede seleccionar con el dedo aunque el resto de la fila no. */
+  user-select: all;
+}
+
+.edu-creds__error {
+  color: var(--edu-danger);
+}
+
+/* ── El cuadro del pegado ──
+   Monoespaciada: quien pega una lista de 200 renglones necesita ver las
+   columnas alineadas para cazar el que le falta una coma. */
+.edu-textarea {
+  min-height: 148px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  resize: vertical;
+}
+
+/* ── La vista previa del pegado ────────────────────────────────────────
+   Va DENTRO del modal y por eso lleva su propio scroll: una generación de
+   200 renglones no puede empujar los botones de "crear" y "cancelar"
+   fuera de la pantalla. */
+.edu-preview {
+  margin-top: 4px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface-2);
+  overflow: hidden;
+}
+
+.edu-preview__resumen {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--edu-line);
+  font-size: 13px;
+  color: var(--edu-text-2);
+}
+
+.edu-preview__mal {
+  color: var(--edu-danger);
+  font-weight: 600;
+}
+
+.edu-preview__lista {
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.edu-preview__fila {
+  display: flex;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--edu-line);
+  font-size: 13px;
+}
+
+.edu-preview__fila:last-child {
+  border-bottom: 0;
+}
+
+.edu-preview__fila--mal {
+  background: var(--edu-danger-soft);
+}
+
+.edu-preview__fila--nota {
+  color: var(--edu-text-3);
+  font-style: italic;
+}
+
+.edu-preview__num {
+  flex-shrink: 0;
+  min-width: 26px;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.edu-preview__detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.edu-preview__nombre {
+  font-weight: 600;
+}
+
+/* El renglón crudo del pegado, para que se vea EXACTAMENTE lo que se pegó
+   cuando algo no se entendió. Se recorta con puntos suspensivos: una línea
+   de 400 caracteres rompería el ancho del modal. */
+.edu-preview__crudo {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--edu-text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

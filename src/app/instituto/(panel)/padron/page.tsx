@@ -57,6 +57,10 @@ export default async function InstitutoPadronPage({
 
   const canManage = hasEduPermission(permUser, "padron.manage");
   const canAssign = hasEduPermission(permUser, "supervision.assign");
+  // Para que el diálogo de inscripción sepa si puede mandar a /instituto/
+  // equipo o solo explicar a quién pedírselo. La pantalla de equipo vuelve
+  // a exigir el permiso: esto decide qué se PINTA, no qué se puede hacer.
+  const canManageTeam = hasEduPermission(permUser, "equipo.manage");
   const canSeeTeachers = canAssign || hasEduPermission(permUser, "docentes.view");
 
   // Un solo `now` para TODAS las consultas de esta pantalla: si cada una
@@ -87,7 +91,7 @@ export default async function InstitutoPadronPage({
         {canManage && (
           <div className="edu-pagehead__actions">
             <Link href="/instituto/padron/estructura" className="edu-btn edu-btn--ghost edu-btn--sm">
-              Programas y generaciones
+              Especialidades y generaciones
             </Link>
           </div>
         )}
@@ -101,6 +105,7 @@ export default async function InstitutoPadronPage({
         maxRows={EDU_PADRON_MAX_ROWS}
         canManage={canManage}
         canAssign={canAssign}
+        canManageTeam={canManageTeam}
         programs={programas.map((p) => ({
           id: p.id,
           name: p.name,

@@ -416,6 +416,51 @@ test("la Ola 2 sacó la agenda de 'Próximamente' y la puso en el menú", () => 
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// 1e · La key de la Ola 1B (el equipo)
+//
+// UNA sola key, y es la que faltaba para que el producto se pudiera usar:
+// hasta esta ola no había forma de crear un alumno, un docente ni un
+// cajero desde el panel.
+// ─────────────────────────────────────────────────────────────────────
+
+test("equipo.manage está en el catálogo, descrita en español y en un solo grupo", () => {
+  assert.ok("equipo.manage" in EDU_ALL_PERMISSIONS, "falta equipo.manage en el catálogo");
+  const desc = EDU_ALL_PERMISSIONS["equipo.manage"];
+  assert.ok(desc && desc.length > 8, `equipo.manage sin descripción usable: ${desc}`);
+  assert.notEqual(desc, "equipo.manage");
+  const grupos = EDU_PERMISSION_GROUPS.filter((g) => g.keys.includes("equipo.manage"));
+  assert.equal(grupos.length, 1, "equipo.manage tiene que estar en EXACTAMENTE un grupo");
+});
+
+test("🔴 equipo.manage es SOLO de DIRECCION", () => {
+  // Desde /instituto/equipo se puede crear una cuenta con rol DIRECCION, y
+  // quien da el alta se queda con la contraseña temporal en la mano: darle
+  // esta key a otro rol por defecto sería regalar la llave de la escuela.
+  assert.equal(hasEduPermission({ role: "DIRECCION" }, "equipo.manage"), true);
+  for (const rol of ["DOCENTE", "ALUMNO", "CAJA"] as EduRole[]) {
+    assert.equal(
+      hasEduPermission({ role: rol }, "equipo.manage"),
+      false,
+      `${rol} no debería poder crear cuentas`,
+    );
+  }
+});
+
+test("el EQUIPO tiene item de menú y no está anunciado como Próximamente", () => {
+  const enMenu = new Set(EDU_NAV_ITEMS.map((i) => i.key));
+  assert.ok(enMenu.has("equipo"), "la pantalla existe y no está en el menú");
+  assert.equal(
+    EDU_UPCOMING_AREAS.some((a) => a.key === "equipo"),
+    false,
+  );
+  const item = EDU_NAV_ITEMS.find((i) => i.key === "equipo");
+  assert.equal(item?.permission, "equipo.manage");
+  // Va en ADMINISTRACIÓN: aquí se dan de alta las cuentas de TODO el
+  // instituto (también las de caja), no solo las del padrón académico.
+  assert.equal(item?.section, "administracion");
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // 2 · Semántica del override
 // ─────────────────────────────────────────────────────────────────────
 

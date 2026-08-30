@@ -12414,6 +12414,14 @@ model EduUser {
   avatarUrl     String?
   isActive      Boolean @default(true)
   mustChangePassword  Boolean  @default(false)
+  /// Ola 1B. Nombre + apellido + correo + dígitos del teléfono, en
+  /// minúsculas y SIN ACENTOS. Es lo único que mira el buscador de equipo
+  /// (y el del padrón, junto con la columna del alumno): buscar
+  /// "Rodriguez" tiene que encontrar a "Rodríguez", y `contains` compara
+  /// el texto tal cual. La escribe eduUserSearchIndex
+  /// (src/lib/edu/search.ts) en cada alta y en cada edición; nunca se
+  /// pinta.
+  searchIndex   String  @default("") @db.VarChar(400)
   /// Si trae keys, REEMPLAZAN al default del rol (no se suman). Misma
   /// semántica que User.permissionsOverride del dental — ver
   /// src/lib/edu/permissions.ts.
@@ -12564,6 +12572,10 @@ model EduStudent {
   programId     String
   cohortId      String
   matricula     String           @db.VarChar(30)
+  /// Ola 1B. La matrícula en minúsculas y sin acentos, para que el
+  /// buscador del padrón la encuentre igual que al nombre (que vive en el
+  /// EduUser y tiene su propia columna). La escribe eduStudentSearchIndex.
+  searchIndex   String           @default("") @db.VarChar(400)
   semester      Int              @default(1)
   status        EduStudentStatus @default(ACTIVE)
   enrolledAt    DateTime         @default(now())
@@ -12757,6 +12769,12 @@ model EduPatient {
   sex           EduSex           @default(UNSPECIFIED)
   notes         String?          @db.VarChar(1000)
   status        EduPatientStatus @default(NEW)
+  /// Ola 1B. Folio + nombre + apellido + dígitos del teléfono + correo, en
+  /// minúsculas y SIN ACENTOS. Es la única columna que mira el buscador de
+  /// pacientes (y el del modal de Caja, que pega al mismo endpoint): sin
+  /// ella, buscar "Rodriguez" devolvía cero con "Rodríguez" en la ficha.
+  /// La escribe eduPatientSearchIndex en el alta y en cada edición.
+  searchIndex   String           @default("") @db.VarChar(400)
 
   /// CUÁL alumno lo trajo. null = llegó solo a la clínica.
   referredByStudentId String?

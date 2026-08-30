@@ -36,6 +36,8 @@ import {
 import {
   EDU_PADRON_EMPTY_FILTERS,
   eduAssignmentIsCurrent,
+  eduStudentSearchIndex,
+  eduUserSearchIndex,
   eduCurrentAssignmentWhere,
   eduDateInputValue,
   eduPadronScope,
@@ -133,17 +135,30 @@ function cumple(fila: unknown, where: unknown): boolean {
   return true;
 }
 
+/**
+ * La fila de mentira lleva las columnas `searchIndex` construidas con el
+ * MISMO código que corre en producción (eduStudentSearchIndex /
+ * eduUserSearchIndex), no con un string escrito a mano. Es la diferencia
+ * entre probar el buscador y probar que sabemos copiar un string: si
+ * mañana el índice deja de llevar el correo, esta prueba lo nota.
+ */
 function alumno(over: Partial<Cualquiera> = {}): Cualquiera {
+  const matricula = (over.matricula as string) ?? "ENDO-2026-01";
+  const user = (over.user as { firstName: string; lastName: string; email?: string }) ?? {
+    firstName: "Juan",
+    lastName: "Pérez",
+  };
   return {
     id: "alu_1",
     institutionId: INST,
     programId: "prog_endo",
     cohortId: "gen_2026a",
     status: "ACTIVE",
-    matricula: "ENDO-2026-01",
-    user: { firstName: "Juan", lastName: "Pérez" },
+    matricula,
+    searchIndex: eduStudentSearchIndex({ matricula }),
     supervisors: [],
     ...over,
+    user: { ...user, searchIndex: eduUserSearchIndex(user) },
   };
 }
 
@@ -366,6 +381,29 @@ test("el buscador encuentra por matrícula, por nombre y por nombre completo", (
   // `contains` no encontraría a nadie.
   assert.equal(cumple(alumno(), buscar("juan pérez")), true, "no encuentra por nombre completo");
   assert.equal(cumple(alumno(), buscar("beto")), false);
+});
+
+test("🔴 el buscador del padrón IGNORA LOS ACENTOS, en las dos direcciones", () => {
+  // El mismo bug que se reportó en pacientes: nadie escribe acentos en un
+  // buscador. Aquí se prueba sobre el `where` de verdad, no sobre el
+  // normalizador suelto.
+  const buscar = (q: string) =>
+    eduStudentWhere({
+      institutionId: INST,
+      scope: { kind: "all" },
+      filters: { ...EDU_PADRON_EMPTY_FILTERS, q },
+      now: AHORA,
+    });
+
+  const conAcento = alumno({ user: { firstName: "María Elena", lastName: "Rodríguez" } });
+  assert.equal(cumple(conAcento, buscar("Rodriguez")), true, "sin acento no la encuentra");
+  assert.equal(cumple(conAcento, buscar("rodríguez")), true, "con acento no la encuentra");
+  assert.equal(cumple(conAcento, buscar("MARIA")), true, "en mayúsculas no la encuentra");
+
+  // Y al revés: la que se capturó SIN acento se encuentra tecleando el
+  // acento. Es la mitad que se olvida.
+  const sinAcento = alumno({ user: { firstName: "Maria Elena", lastName: "Rodriguez" } });
+  assert.equal(cumple(sinAcento, buscar("Rodríguez")), true);
 });
 
 test("el buscador no le pasa comodines de LIKE a Postgres", () => {

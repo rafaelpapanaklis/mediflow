@@ -122,8 +122,8 @@ export function EduEstudioViewer({
                 Las tomografías (.zip de cortes DICOM, .dcm sueltos) y las mallas de escáner
                 intraoral se guardan completas y se descargan con el botón de abajo. El visor CBCT
                 del panel dental no se puede reutilizar aquí porque va a buscar el estudio a las
-                tablas de ese otro producto; el visor propio del instituto es trabajo de la ola
-                siguiente. Mientras tanto el archivo está íntegro y a un clic.
+                tablas de ese otro producto; el visor propio del instituto está por construirse.
+                Mientras tanto el archivo está íntegro y a un clic.
               </p>
             </div>
           </div>

@@ -332,7 +332,7 @@ function FormularioTamizaje({
           rows={3}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Lo que justifica la asignación. La historia clínica completa es de otra ola."
+          placeholder="Lo que justifica la asignación. La historia clínica completa va en el expediente."
         />
       </div>
     </EduModal>

@@ -30,11 +30,14 @@ import {
   eduCleanId,
   eduOptionalText,
 } from "@/lib/edu/agenda-core";
+// Ola 1B: el índice sin acentos vive en su propio módulo puro. Se importa
+// de ahí y no de pacientes-core para que quede claro de dónde sale: es el
+// MISMO constructor que usa el .sql del backfill.
+import { eduPatientSearchIndex } from "@/lib/edu/search";
 import {
   eduAgeYears,
   eduPatientFullName,
-  eduPhoneSearchToken,
-  eduSearchTokens,
+  eduPatientSearchAnd,
   normalizeEduEmail,
   normalizeEduFolio,
   normalizeEduPhone,
@@ -174,19 +177,17 @@ function patientsWhere(
     and.push({ referredByStudentId: filters.referredByStudentId });
   }
 
-  for (const token of eduSearchTokens(filters.q)) {
-    const or: Prisma.EduPatientWhereInput[] = [
-      { folio: { contains: token, mode: "insensitive" } },
-      { firstName: { contains: token, mode: "insensitive" } },
-      { lastName: { contains: token, mode: "insensitive" } },
-    ];
-    // El teléfono se guarda SOLO con dígitos, así que se busca con los
-    // dígitos de lo tecleado: buscar "55 4433" tiene que encontrar al que
-    // se capturó como "5544332211".
-    const digits = eduPhoneSearchToken(token);
-    if (digits) or.push({ phone: { contains: digits } });
-    and.push({ OR: or });
-  }
+  // 🔴 SE BUSCA EN `searchIndex` Y EN NADA MÁS (Ola 1B). Esa columna lleva
+  // folio + nombre + apellido + dígitos del teléfono + correo, en
+  // minúsculas y SIN ACENTOS, así que "Rodriguez" encuentra a "Rodríguez" y
+  // "MARIA" encuentra a "María". Buscar contra `firstName` con
+  // `mode: "insensitive"` —que es lo que había— arregla las mayúsculas y NO
+  // los acentos: `contains` compara el texto tal cual.
+  //
+  // La construcción vive en el módulo PURO (pacientes-core) para que se
+  // pueda probar sin base de datos: este archivo importa prisma y una
+  // prueba no lo puede cargar.
+  and.push(...eduPatientSearchAnd(filters.q));
 
   if (and.length > 0) where.AND = and;
   return where;
@@ -381,6 +382,15 @@ export async function createEduPatient(
     originSetAt: referredByStudentId ? now : null,
   };
 
+  /** El índice sin acentos, con el folio que finalmente se le ponga. Se
+   *  calcula aquí y no fuera porque el folio automático se resuelve más
+   *  abajo (y puede cambiar entre reintentos). */
+  const conIndice = (folio: string) => ({
+    ...data,
+    folio,
+    searchIndex: eduPatientSearchIndex({ folio, firstName, lastName, phone, email }),
+  });
+
   if (folioTecleado) {
     const dup = await prisma.eduPatient.findFirst({
       where: { institutionId, folio: folioTecleado },
@@ -388,7 +398,7 @@ export async function createEduPatient(
     });
     if (dup) throw new EduPadronError(`El folio ${folioTecleado} ya está en uso.`, 409);
     const created = await prisma.eduPatient.create({
-      data: { ...data, folio: folioTecleado },
+      data: conIndice(folioTecleado),
       select: { id: true, folio: true },
     });
     return created;
@@ -401,7 +411,7 @@ export async function createEduPatient(
     const folio = await nextEduFolio(institutionId);
     try {
       return await prisma.eduPatient.create({
-        data: { ...data, folio },
+        data: conIndice(folio),
         select: { id: true, folio: true },
       });
     } catch (err) {
@@ -427,9 +437,19 @@ export async function updateEduPatient(
   const id = eduCleanId(patientId);
   if (!id) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
 
+  // Se traen las cinco columnas que alimentan el índice de búsqueda, no
+  // solo el id: al editar solo el apellido hay que reescribir el índice
+  // ENTERO, y para eso hacen falta las otras cuatro tal como están hoy.
   const current = await prisma.eduPatient.findFirst({
     where: { id, institutionId },
-    select: { id: true },
+    select: {
+      id: true,
+      folio: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      email: true,
+    },
   });
   if (!current) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
 
@@ -443,6 +463,7 @@ export async function updateEduPatient(
     sex?: ReturnType<typeof parseEduSex>;
     notes?: string | null;
     status?: EduPatientStatus;
+    searchIndex?: string;
   } = {};
 
   if (input.folio !== undefined) {
@@ -510,6 +531,25 @@ export async function updateEduPatient(
   // endpoint parecería funcionar y no cambiaría absolutamente nada, que es
   // la clase de bug que se busca durante una tarde entera.
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
+
+  // 🔴 El índice se REESCRIBE cuando cambia cualquiera de las cinco
+  // columnas que lo alimentan, y con los valores nuevos MEZCLADOS sobre los
+  // actuales. Si se reconstruyera solo con `data`, corregir el apellido
+  // borraría del índice el folio y el teléfono, y el paciente dejaría de
+  // encontrarse por ellos. Va DESPUÉS del check de "data vacío" para que un
+  // PATCH sin cambios siga siendo un error y no una escritura fantasma.
+  const tocaIndice = ["folio", "firstName", "lastName", "phone", "email"].some(
+    (k) => k in data,
+  );
+  if (tocaIndice) {
+    data.searchIndex = eduPatientSearchIndex({
+      folio: data.folio ?? current.folio,
+      firstName: data.firstName ?? current.firstName,
+      lastName: data.lastName ?? current.lastName,
+      phone: data.phone !== undefined ? data.phone : current.phone,
+      email: data.email !== undefined ? data.email : current.email,
+    });
+  }
 
   await prisma.eduPatient.update({ where: { id }, data });
   return { id };

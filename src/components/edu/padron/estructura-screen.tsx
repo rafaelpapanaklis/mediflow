@@ -14,7 +14,7 @@ import type { EduCohortRow, EduProgramRow } from "@/lib/edu/padron-core";
  * Toda la pantalla exige padron.manage (lo comprueba la página, y cada
  * endpoint lo vuelve a comprobar por su cuenta).
  *
- * 🔴 AQUÍ NO SE BORRA NADA. Un programa con alumnos no se elimina: se
+ * 🔴 AQUÍ NO SE BORRA NADA. Una especialidad con alumnos no se elimina: se
  * DESACTIVA. Borrarlo se llevaría por delante sus generaciones y sus fichas
  * (la FK va en cascada), y el padrón es un registro histórico: el alumno que
  * egresó de una especialidad que la escuela ya no imparte siguió existiendo.
@@ -76,7 +76,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
       <section className="edu-section">
         <div className="edu-section__head">
           <div>
-            <h2 className="edu-section__title">Programas</h2>
+            <h2 className="edu-section__title">Especialidades</h2>
             <p className="edu-section__lead">
               Las especialidades que imparte el instituto. La clave es la que ya usan en sus
               papeles y no se puede repetir.
@@ -91,23 +91,23 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
             }}
           >
             <FolderPlus size={16} />
-            Nuevo programa
+            Nueva especialidad
           </button>
         </div>
 
         {programs.length === 0 ? (
           <div className="edu-empty">
-            <p className="edu-empty__title">Todavía no hay programas</p>
+            <p className="edu-empty__title">Todavía no hay especialidades</p>
             <p className="edu-empty__detail">
-              Un programa es una especialidad: Endodoncia, Ortodoncia, Periodoncia. Es lo primero
-              que hay que crear: sin programa no hay generación, y sin generación no se puede
-              inscribir a nadie.
+              Una especialidad es Endodoncia, Ortodoncia o Periodoncia. Es lo primero que hay que
+              crear: sin especialidad no hay generación, y sin generación no se puede inscribir a
+              nadie.
             </p>
           </div>
         ) : (
           <div className="edu-table edu-table--programas">
             <div className="edu-rowhead" aria-hidden="true">
-              <span>Programa</span>
+              <span>Especialidad</span>
               <span>Clave</span>
               <span>Duración</span>
               <span>Generaciones</span>
@@ -119,7 +119,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
             {programs.map((p) => (
               <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
                 <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Programa</span>
+                  <span className="edu-cell__label">Especialidad</span>
                   <span className="edu-cell__value edu-cell__value--strong">{p.name}</span>
                 </div>
                 <div className="edu-cell">
@@ -176,8 +176,8 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
           <div>
             <h2 className="edu-section__title">Generaciones</h2>
             <p className="edu-section__lead">
-              Cada generación pertenece a un programa. El nombre —&quot;2026-A&quot;— se puede
-              repetir entre programas distintos, pero no dentro del mismo.
+              Cada generación pertenece a una especialidad. El nombre —&quot;2026-A&quot;— se
+              puede repetir entre especialidades distintas, pero no dentro de la misma.
             </p>
           </div>
           <button
@@ -199,7 +199,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
             <p className="edu-empty__title">Todavía no hay generaciones</p>
             <p className="edu-empty__detail">
               {programs.filter((p) => p.isActive).length === 0
-                ? "Antes hace falta un programa activo."
+                ? "Antes hace falta una especialidad activa."
                 : "Una generación es la promoción que entra junta: 2026-A. Los alumnos se inscriben a una."}
             </p>
           </div>
@@ -207,7 +207,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
           <div className="edu-table edu-table--generaciones">
             <div className="edu-rowhead" aria-hidden="true">
               <span>Generación</span>
-              <span>Programa</span>
+              <span>Especialidad</span>
               <span>Inicio</span>
               <span>Fin</span>
               <span>Alumnos</span>
@@ -222,7 +222,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
                   <span className="edu-cell__value edu-cell__value--strong">{c.name}</span>
                 </div>
                 <div className="edu-cell">
-                  <span className="edu-cell__label">Programa</span>
+                  <span className="edu-cell__label">Especialidad</span>
                   <span className="edu-cell__value">{c.programName}</span>
                   <span className="edu-cell__sub">{c.programCode}</span>
                 </div>
@@ -338,7 +338,7 @@ function ProgramaModal({
           method: "POST",
           body: { name, code, durationSemesters: duration },
         });
-        onDone(`Se creó el programa ${name}.`);
+        onDone(`Se creó la especialidad ${name}.`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar.");
@@ -349,7 +349,7 @@ function ProgramaModal({
 
   return (
     <EduModal
-      title={program ? "Editar programa" : "Nuevo programa"}
+      title={program ? "Editar especialidad" : "Nueva especialidad"}
       subtitle={program ? undefined : "Una especialidad del instituto."}
       onClose={onClose}
       busy={busy}
@@ -423,7 +423,7 @@ function ProgramaModal({
 
       {program && program.students > 0 && (
         <p className="edu-note">
-          Este programa tiene {program.students}{" "}
+          Esta especialidad tiene {program.students}{" "}
           {program.students === 1 ? "alumno inscrito" : "alumnos inscritos"}. Cambiarle el nombre o
           la clave no los mueve de sitio.
         </p>
@@ -508,7 +508,7 @@ function GeneracionModal({
       {!cohort && (
         <div className="edu-field">
           <label className="edu-field__label" htmlFor="edu-g-programa">
-            Programa
+            Especialidad
           </label>
           <select
             id="edu-g-programa"
@@ -524,8 +524,8 @@ function GeneracionModal({
             ))}
           </select>
           <span className="edu-field__hint">
-            El programa de una generación no se cambia después: los alumnos ya inscritos quedarían
-            en una especialidad que no cursaron.
+            La especialidad de una generación no se cambia después: los alumnos ya inscritos
+            quedarían en una que no cursaron.
           </span>
         </div>
       )}

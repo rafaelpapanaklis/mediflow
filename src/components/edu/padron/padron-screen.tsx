@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, UserPlus, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
@@ -48,6 +49,9 @@ export interface EduPadronScreenProps {
   enrollables: EduEnrollableUser[];
   canManage: boolean;
   canAssign: boolean;
+  /** ¿Puede crear cuentas? Decide si el callejón sin salida de "no hay
+   *  nadie por inscribir" lleva a /instituto/equipo o solo lo explica. */
+  canManageTeam: boolean;
   maxRows: number;
 }
 
@@ -69,6 +73,7 @@ export function EduPadronScreen({
   enrollables,
   canManage,
   canAssign,
+  canManageTeam,
   maxRows,
 }: EduPadronScreenProps) {
   const router = useRouter();
@@ -158,7 +163,7 @@ export function EduPadronScreen({
 
         <div className="edu-field">
           <label className="edu-field__label" htmlFor="edu-f-programa">
-            Programa
+            Especialidad
           </label>
           <select
             id="edu-f-programa"
@@ -262,7 +267,7 @@ export function EduPadronScreen({
               ? "Prueba con menos filtros o revisa la matrícula que buscaste."
               : scopeKind === "supervised"
                 ? "Aquí aparecerán los alumnos que la dirección te asigne como supervisor."
-                : "Primero crea un programa y una generación en Programas y generaciones, y después inscribe a cada alumno."}
+                : "Primero crea una especialidad y una generación en Especialidades y generaciones, y después inscribe a cada alumno."}
           </p>
         </div>
       ) : (
@@ -270,7 +275,7 @@ export function EduPadronScreen({
           <div className="edu-rowhead" aria-hidden="true">
             <span>Matrícula</span>
             <span>Alumno</span>
-            <span>Programa · Generación</span>
+            <span>Especialidad · Generación</span>
             <span>Sem.</span>
             <span>Estado</span>
             <span>Docente vigente</span>
@@ -297,7 +302,7 @@ export function EduPadronScreen({
                 </div>
 
                 <div className="edu-cell">
-                  <span className="edu-cell__label">Programa · Generación</span>
+                  <span className="edu-cell__label">Especialidad · Generación</span>
                   <span className="edu-cell__value">{r.programName}</span>
                   <span className="edu-cell__sub">{r.cohortName}</span>
                 </div>
@@ -349,6 +354,7 @@ export function EduPadronScreen({
           programs={programs}
           cohorts={cohorts}
           enrollables={enrollables}
+          canManageTeam={canManageTeam}
           onClose={() => setAbriendoAlta(false)}
           onDone={(nombre) => {
             setAbriendoAlta(false);
@@ -384,12 +390,14 @@ function AltaAlumno({
   programs,
   cohorts,
   enrollables,
+  canManageTeam,
   onClose,
   onDone,
 }: {
   programs: EduProgramOption[];
   cohorts: EduCohortOption[];
   enrollables: EduEnrollableUser[];
+  canManageTeam: boolean;
   onClose: () => void;
   onDone: (nombre: string) => void;
 }) {
@@ -453,8 +461,24 @@ function AltaAlumno({
           <p className="edu-empty__title">No hay nadie por inscribir</p>
           <p className="edu-empty__detail">
             Aquí solo aparecen las personas con rol <strong>Alumno</strong> que todavía no tienen
-            ficha académica. Crear la cuenta es otro paso: esta ola todavía no da de alta usuarios.
+            ficha académica. Inscribir es el SEGUNDO paso: primero hay que crearle la cuenta.
           </p>
+          {/* Sin esto el diálogo era un callejón sin salida: decía que
+              faltaba crear la cuenta y no decía dónde. El enlace solo se
+              pinta a quien puede hacerlo — a los demás, ofrecerles una
+              puerta que les va a contestar 403 es peor que no ofrecerla. */}
+          {canManageTeam ? (
+            <p className="edu-empty__detail">
+              <Link href="/instituto/equipo" className="edu-btn edu-btn--primary edu-btn--sm">
+                Ir a Equipo y crear la cuenta
+              </Link>
+            </p>
+          ) : (
+            <p className="edu-empty__detail">
+              Las cuentas se crean en <strong>Equipo</strong>, y eso lo hace la dirección. Pídeselo
+              y vuelve aquí a inscribirlo.
+            </p>
+          )}
         </div>
       ) : (
         <>
@@ -480,7 +504,7 @@ function AltaAlumno({
           <div className="edu-formgrid edu-formgrid--2">
             <div className="edu-field">
               <label className="edu-field__label" htmlFor="edu-alta-programa">
-                Programa
+                Especialidad
               </label>
               <select
                 id="edu-alta-programa"
@@ -511,7 +535,7 @@ function AltaAlumno({
                 onChange={(e) => setCohortId(e.target.value)}
                 disabled={!programId}
               >
-                <option value="">{programId ? "Elige…" : "Elige antes el programa"}</option>
+                <option value="">{programId ? "Elige…" : "Elige antes la especialidad"}</option>
                 {generaciones.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -521,7 +545,8 @@ function AltaAlumno({
               </select>
               {programId && generaciones.length === 0 && (
                 <span className="edu-field__hint">
-                  Ese programa todavía no tiene generaciones. Créala en Programas y generaciones.
+                  Esa especialidad todavía no tiene generaciones. Créala en Especialidades y
+                  generaciones.
                 </span>
               )}
             </div>
@@ -711,7 +736,7 @@ function FichaAlumno({
 
             <div className="edu-field">
               <label className="edu-field__label" htmlFor="edu-ed-programa">
-                Programa
+                Especialidad
               </label>
               <select
                 id="edu-ed-programa"

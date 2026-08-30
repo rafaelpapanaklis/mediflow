@@ -31,6 +31,10 @@ import {
   parseEduDurationSemesters,
   parseEduSemester,
   parseEduStudentStatus,
+  // Ola 1B — el índice sin acentos del alumno. Se reexporta desde
+  // padron-core (vive en src/lib/edu/search.ts) para que el alta y la
+  // edición no puedan escribir dos índices distintos.
+  eduStudentSearchIndex,
   type EduAssignmentRow,
   type EduCohortRow,
   type EduEnrollableUser,
@@ -328,10 +332,11 @@ export async function listEduCurrentAssignments(
 /**
  * Personas con rol ALUMNO que todavía NO tienen ficha académica.
  *
- * Esta ola no crea logins (eso es la ola de Equipo, que necesita Supabase
- * Auth): inscribir es colgarle matrícula, programa y generación a una
- * persona que ya existe. Si esta lista sale vacía, lo que falta es dar de
- * alta a la persona, no un botón aquí.
+ * Inscribir es colgarle matrícula, especialidad y generación a una persona
+ * que YA tiene cuenta. Si esta lista sale vacía, lo que falta es dar de
+ * alta a la persona — y desde la Ola 1B eso sí se puede hacer desde el
+ * panel, en /instituto/equipo (el diálogo de inscripción manda ahí en vez
+ * de dejar a quien lo abrió en un callejón sin salida).
  */
 export async function listEduEnrollableUsers(ctx: EduPadronContext): Promise<EduEnrollableUser[]> {
   const institutionId = requireInstitution(ctx);
@@ -355,10 +360,10 @@ export async function createEduProgram(
   const institutionId = requireInstitution(ctx);
 
   const name = eduRequiredText(input.name, 120);
-  if (!name) throw new EduPadronError("El nombre del programa es obligatorio (máximo 120 caracteres).");
+  if (!name) throw new EduPadronError("El nombre de la especialidad es obligatorio (máximo 120 caracteres).");
 
   const code = normalizeEduProgramCode(input.code);
-  if (!code) throw new EduPadronError("La clave del programa es obligatoria (máximo 20 caracteres, sin espacios).");
+  if (!code) throw new EduPadronError("La clave de la especialidad es obligatoria (máximo 20 caracteres, sin espacios).");
 
   const durationSemesters =
     input.durationSemesters === undefined || input.durationSemesters === null || input.durationSemesters === ""
@@ -370,7 +375,7 @@ export async function createEduProgram(
     where: { institutionId, code },
     select: { id: true, name: true },
   });
-  if (dup) throw new EduPadronError(`La clave ${code} ya la usa el programa "${dup.name}".`, 409);
+  if (dup) throw new EduPadronError(`La clave ${code} ya la usa la especialidad "${dup.name}".`, 409);
 
   const created = await prisma.eduProgram.create({
     data: { institutionId, name, code, durationSemesters },
@@ -389,7 +394,7 @@ export async function updateEduProgram(
     where: { id: programId, institutionId },
     select: { id: true },
   });
-  if (!current) throw new EduPadronError("Ese programa no es de este instituto.", 404);
+  if (!current) throw new EduPadronError("Esa especialidad no es de este instituto.", 404);
 
   const data: {
     name?: string;
@@ -400,17 +405,17 @@ export async function updateEduProgram(
 
   if (input.name !== undefined) {
     const name = eduRequiredText(input.name, 120);
-    if (!name) throw new EduPadronError("El nombre del programa es obligatorio (máximo 120 caracteres).");
+    if (!name) throw new EduPadronError("El nombre de la especialidad es obligatorio (máximo 120 caracteres).");
     data.name = name;
   }
   if (input.code !== undefined) {
     const code = normalizeEduProgramCode(input.code);
-    if (!code) throw new EduPadronError("La clave del programa es obligatoria (máximo 20 caracteres, sin espacios).");
+    if (!code) throw new EduPadronError("La clave de la especialidad es obligatoria (máximo 20 caracteres, sin espacios).");
     const dup = await prisma.eduProgram.findFirst({
       where: { institutionId, code, NOT: { id: programId } },
       select: { name: true },
     });
-    if (dup) throw new EduPadronError(`La clave ${code} ya la usa el programa "${dup.name}".`, 409);
+    if (dup) throw new EduPadronError(`La clave ${code} ya la usa la especialidad "${dup.name}".`, 409);
     data.code = code;
   }
   if (input.durationSemesters !== undefined) {
@@ -420,7 +425,7 @@ export async function updateEduProgram(
   }
   if (input.isActive !== undefined) {
     const b = parseEduBoolean(input.isActive);
-    if (b === null) throw new EduPadronError("El estado del programa tiene que ser verdadero o falso.");
+    if (b === null) throw new EduPadronError("El estado de la especialidad tiene que ser verdadero o falso.");
     data.isActive = b;
   }
 
@@ -447,7 +452,7 @@ export async function createEduCohort(
   const program = programId
     ? await prisma.eduProgram.findFirst({ where: { id: programId, institutionId }, select: { id: true } })
     : null;
-  if (!program) throw new EduPadronError("Elige un programa de este instituto.", 400);
+  if (!program) throw new EduPadronError("Elige una especialidad de este instituto.", 400);
 
   const name = eduRequiredText(input.name, 60);
   if (!name) throw new EduPadronError("El nombre de la generación es obligatorio (máximo 60 caracteres).");
@@ -468,7 +473,7 @@ export async function createEduCohort(
     where: { institutionId, programId: program.id, name },
     select: { id: true },
   });
-  if (dup) throw new EduPadronError(`Ese programa ya tiene una generación llamada "${name}".`, 409);
+  if (dup) throw new EduPadronError(`Esa especialidad ya tiene una generación llamada "${name}".`, 409);
 
   return prisma.eduCohort.create({
     data: { institutionId, programId: program.id, name, startDate, endDate },
@@ -497,7 +502,7 @@ export async function updateEduCohort(
       where: { institutionId, programId: current.programId, name, NOT: { id: cohortId } },
       select: { id: true },
     });
-    if (dup) throw new EduPadronError(`Ese programa ya tiene una generación llamada "${name}".`, 409);
+    if (dup) throw new EduPadronError(`Esa especialidad ya tiene una generación llamada "${name}".`, 409);
     data.name = name;
   }
   if (input.startDate !== undefined) {
@@ -549,14 +554,14 @@ async function resolvePair(
     where: { id: programId, institutionId },
     select: { id: true },
   });
-  if (!program) throw new EduPadronError("Elige un programa de este instituto.", 400);
+  if (!program) throw new EduPadronError("Elige una especialidad de este instituto.", 400);
   const cohort = await prisma.eduCohort.findFirst({
     where: { id: cohortId, institutionId },
     select: { programId: true },
   });
   if (!cohort) throw new EduPadronError("Elige una generación de este instituto.", 400);
   if (cohort.programId !== programId) {
-    throw new EduPadronError("Esa generación no pertenece al programa que elegiste.");
+    throw new EduPadronError("Esa generación no pertenece a la especialidad que elegiste.");
   }
 }
 
@@ -609,7 +614,18 @@ export async function createEduStudent(
   if (dup) throw new EduPadronError(`La matrícula ${matricula} ya está en uso.`, 409);
 
   return prisma.eduStudent.create({
-    data: { institutionId, userId: user.id, programId, cohortId, matricula, semester },
+    data: {
+      institutionId,
+      userId: user.id,
+      programId,
+      cohortId,
+      matricula,
+      semester,
+      // Ola 1B: el índice sin acentos se escribe AQUÍ, en el mismo create.
+      // Si se dejara para después, el alumno existiría y no se podría
+      // buscar — y nadie relacionaría las dos cosas.
+      searchIndex: eduStudentSearchIndex({ matricula }),
+    },
     select: { id: true },
   });
 }
@@ -635,6 +651,7 @@ export async function updateEduStudent(
 
   const data: {
     matricula?: string;
+    searchIndex?: string;
     semester?: number;
     status?: EduStudentStatus;
     programId?: string;
@@ -651,6 +668,9 @@ export async function updateEduStudent(
     });
     if (dup) throw new EduPadronError(`La matrícula ${matricula} ya está en uso.`, 409);
     data.matricula = matricula;
+    // El índice se REESCRIBE con la matrícula nueva. Sin esto, corregir una
+    // matrícula la dejaría buscable por la vieja y no por la nueva.
+    data.searchIndex = eduStudentSearchIndex({ matricula });
   }
   if (input.semester !== undefined) {
     const s = parseEduSemester(input.semester);

@@ -26645,3 +26645,299 @@ ajenos de barber, preexistentes en `origin/main`) · **211 pruebas** en verde
 (29 archivos propios, 1 compartido declarado, 0 prohibidos) · un script de
 comprobación confirmó que `schema.prisma` y `sql/edu-ola-5.sql` dicen lo mismo
 (7 tablas / 86 columnas, 20 índices, 22 FKs, 3 enums).
+
+---
+
+## [Institucional Ola 1B] — Las cuentas se dan de alta DESDE EL PANEL, el buscador deja de ignorar a "Rodríguez" por una tilde, y el producto deja de hablar de "olas" ✅ (2026-08-29) · rama `feat/edu-ola-1b`
+
+Tres cosas que se probaron en producción y bloqueaban el uso. Ninguna es una
+funcionalidad nueva del contrato: las tres son el producto no funcionando.
+
+### 1. El bloqueador: NO existía forma de crear una cuenta
+
+El padrón decía *"las cuentas se dan de alta aparte"* y no había ningún
+"aparte". La única vía para crear un alumno, un docente o un cajero era un
+`INSERT` a mano en Supabase — dos veces, porque hay que crear la cuenta en
+Supabase Auth **y** la fila de `edu_users`. Con una generación de 200
+alumnos, eso no es un producto.
+
+**Pantalla nueva: `/instituto/equipo`** (sección **Administración**, no
+Académico: aquí se dan de alta las cuentas de TODO el instituto, también las
+de caja — meterlo bajo "Académico" haría que quien busca "cómo doy de alta al
+de recepción" no lo encontrara). Exige el permiso nuevo `equipo.manage`, que
+por defecto **solo tiene DIRECCION**.
+
+- **Alta individual** — nombre, apellidos, correo, rol (los cuatro del
+  producto) y teléfono opcional. Crea la cuenta de Supabase Auth **y** la
+  fila de `edu_users` en una sola operación, con el patrón de
+  `src/app/api/team/route.ts` del dental: contraseña temporal generada,
+  `email_confirm: true`, **sin mandar correo**, y `mustChangePassword` en
+  true.
+- 🔴 **La contraseña temporal se enseña EN PANTALLA, con botón de copiar, y
+  es la única vez que se puede ver.** No se guarda en ninguna parte. El panel
+  que la muestra tiene marco ámbar (aviso, no éxito: un verde de "guardado"
+  invita a cerrarlo sin leer) y **no se cierra solo** — se queda hasta que
+  quien dio el alta pulse "Ya las copié". Un `router.refresh()` recarga la
+  lista sin tocar ese estado.
+- 🔴 **El correo que YA existe en Supabase Auth no falla: se REUSA.** Es el
+  caso que reventaba, y es real por partida doble (una persona que ya usa
+  DaleControl dental, y el docente que da clase en dos institutos). El flujo:
+  se intenta `createUser`; si Supabase contesta "ya registrado" —se
+  reconocen las cuatro formas en que GoTrue lo ha dicho según la versión— se
+  resuelve el `supabaseId` existente **primero en nuestras propias tablas**
+  (`edu_users` de cualquier instituto, y `users` del dental, de donde se lee
+  SOLO el `supabaseId`) y, si ahí no está, con **una** llamada al admin de
+  GoTrue filtrando por correo. Esa última compara el correo **exacto**: el
+  `filter` de GoTrue es un LIKE y "ana@x.mx" traería también
+  "mariana@x.mx" — enlazar a la persona equivocada sería darle acceso al
+  expediente de otra. A quien se le reusa la cuenta **no** se le enseña
+  contraseña nueva ni se le marca `mustChangePassword`: entra con la suya de
+  siempre, y cambiársela lo sacaría de su otro producto.
+- **Alta masiva** — se pega la lista (una persona por renglón, separada por
+  comas **o tabuladores**, así que se pega directo de Excel). **Vista previa
+  antes de crear nada**, renglón por renglón, con el número de línea tal como
+  se ve en el cuadro de texto: qué se va a crear y qué renglones tienen
+  problema. Detecta el encabezado pegado sin querer (lo ignora, no lo marca
+  como error), los correos repetidos DENTRO del propio pegado, las columnas
+  de menos y los correos inválidos. El rol es opcional por renglón: hay un
+  "rol por defecto" en el diálogo, porque una generación entera se pega con
+  tres columnas. Al terminar, la tabla de contraseñas con **un botón que
+  copia la tabla entera** separada por tabuladores (se pega en columnas en
+  Excel, que es lo que va a hacer quien acaba de dar de alta a 200 personas).
+- **Sin límite de renglones.** El interpretador no tiene tope; la PANTALLA
+  parte la lista en trozos de 25 y los manda uno tras otro con barra de
+  progreso. El tope por petición existe porque cada alta es una llamada a
+  Supabase Auth de unos cientos de milisegundos: 200 en una sola petición se
+  comerían el tiempo máximo de la función a mitad de la generación. Si el
+  envío se corta a la mitad, **las credenciales de lo que YA se creó se
+  enseñan igual** —no se pueden recuperar de otro sitio— junto con un aviso
+  de hasta dónde se llegó.
+- **Baja: `isActive` en false, JAMÁS un DELETE.** Sus notas clínicas, sus
+  casos, sus citas y sus cobros la referencian por id, los `onDelete` del
+  schema son Cascade (están pensados para borrar un instituto entero, no una
+  persona) y una nota firmada sin autor es justo lo que la NOM-004 no
+  permite. Dar de baja apaga el acceso —`getEduContext` solo resuelve
+  usuarios con `isActive` true—, y **no toca la cuenta de Supabase Auth**:
+  esa misma cuenta puede ser la que la persona usa en el panel dental.
+  Dos candados más: nadie se da de baja **a sí mismo**, y no se puede dar de
+  baja a la **última dirección activa** (el instituto se quedaría sin nadie
+  que pueda dar de alta).
+- **El callejón sin salida del padrón, cerrado.** El diálogo de inscribir
+  alumno decía "no hay nadie por inscribir… crear la cuenta es otro paso" y
+  no decía dónde. Ahora lleva un enlace a `/instituto/equipo` — y solo a
+  quien tiene `equipo.manage`: ofrecerle a los demás una puerta que les va a
+  contestar 403 es peor que no ofrecerla.
+
+### 2. El buscador ignoraba a "Rodríguez" si no tecleabas la tilde
+
+**Reproducido:** en `/instituto/pacientes`, buscar "Mar" encontraba a "María
+Elena Rodríguez"; buscar **"Rodriguez" sin acento devolvía CERO**, con el
+apellido "Rodríguez" en la ficha. Nadie escribe acentos en un buscador, así
+que el paciente estaba ahí y no aparecía.
+
+La causa: el `contains` de Prisma se traduce a `LIKE '%…%'` y compara el
+texto **tal cual**; `mode: "insensitive"` arregla las MAYÚSCULAS y **no** los
+acentos.
+
+**La técnica elegida: una columna normalizada, no `unaccent()`.** `unaccent`
+es más corto de escribir pero solo se usa desde SQL crudo — Prisma no admite
+una función alrededor de la columna en un `contains`. Meter `$queryRaw` en
+el buscador significaría sacar el `where` del único sitio donde hoy vive y,
+con él, **el filtro de `institutionId`**, que es exactamente el filtro que
+nadie puede olvidar. Además `unaccent` es una extensión y no toda instalación
+deja crearla.
+
+Así que hay tres columnas `searchIndex` (VARCHAR(400), `DEFAULT ''`), una por
+tabla, que la aplicación escribe en cada alta y en cada edición:
+
+| tabla | qué lleva |
+|---|---|
+| `edu_users` | nombre + apellido + correo + dígitos del teléfono |
+| `edu_students` | la matrícula |
+| `edu_patients` | folio + nombre + apellido + dígitos del teléfono + correo |
+
+🔴 **Cada índice se alimenta SOLO de su propia fila.** El del alumno lleva la
+matrícula y no el nombre de su `EduUser`: si lo arrastrara, renombrar a la
+persona dejaría la matrícula pegada a un nombre viejo y nadie se enteraría
+hasta buscarlo. El `where` del padrón mira las **dos** columnas.
+
+**Se normalizan los DOS lados** —lo que se guarda y lo que se teclea— con la
+misma función (`eduNormalizeSearch`, en `src/lib/edu/search.ts`: NFD, se
+borran las marcas combinantes U+0300–U+036F, minúsculas, espacios
+colapsados). Por eso funciona en **las dos direcciones**: "Rodriguez"
+encuentra a "Rodríguez" y "Rodríguez" encuentra a "Rodriguez". Y de paso deja
+de hacer falta `mode: "insensitive"`, porque los dos lados ya están en
+minúsculas.
+
+**Arreglado en los cinco buscadores del vertical:** pacientes, padrón,
+docentes, el buscador de paciente del modal de Caja (pega al mismo endpoint
+`/api/instituto/pacientes`, así que se arregló solo) y el de equipo. El
+listado de **cobros** también, que buscaba con la frase entera y ahora se
+parte en palabras como los demás.
+
+**Docentes no tenía buscador**: se le puso uno. Filtra **en memoria** —y ahí
+sí está bien: los docentes de una escuela son veinte y ya llegaron todos del
+servidor— pero con el MISMO troceador y el MISMO normalizador que las
+consultas de Postgres, vía `eduIndexMatches`. En pacientes y padrón, que
+tienen techo de filas, el filtro sigue yendo a la base: filtrar en memoria
+mentiría en cuanto se pase del techo.
+
+### 3. Textos que un cliente no debe ver
+
+- **El lenguaje interno de las "olas", fuera de la interfaz.** Se barrió
+  `src/app/instituto` y `src/components/edu` enteros. Cuatro textos visibles
+  lo decían: `/instituto/pacientes` ("y en la Ola 5 decidirá su tarifa"), el
+  placeholder del tamizaje ("es de otra ola"), el vacío de docentes ("esta
+  ola administra el padrón") y el diálogo de inscripción ("esta ola todavía
+  no da de alta usuarios" — que además ya era mentira). En los comentarios
+  de código se queda.
+- **"Programas" → "Especialidades"** en menú, títulos, etiquetas de filtro,
+  encabezados de tabla, ayudas y **los mensajes de error del servidor** (que
+  también se leen en pantalla: *"Elige una especialidad de este
+  instituto"*). El modelo `EduProgram`, la ruta `/padron/estructura`, el
+  endpoint `/api/instituto/programas` y los nombres de variable **no se
+  renombran**: renombrar el modelo obligaría a migrar tablas y a tocar el
+  dental, y renombrar la ruta rompería los enlaces que la escuela ya tenga
+  guardados.
+- **"residente" → "alumno"** en los cinco textos visibles que lo decían (el
+  placeholder del tarifario, la ayuda de las listas de precios, la columna
+  del login, la descripción del rol ALUMNO y la de "Evaluación"). Se sigue
+  ACEPTANDO "residente" como sinónimo al pegar una lista: ahí escribe una
+  persona.
+
+### Permisos
+
+Una key nueva: **`equipo.manage`** — *"Dar de alta cuentas del instituto y
+darlas de baja"*. Grupo propio ("Equipo"), default **solo DIRECCION**. No se
+parte en `equipo.view` + `equipo.manage`: una pantalla que LISTA las cuentas
+y no deja tocarlas no le sirve a nadie más que a quien las administra.
+
+🔴 **`permissionsOverride` REEMPLAZA al default**, así que a quien ya tenga
+uno guardado **no le llega sola**: entrará al panel, no verá "Equipo" en el
+menú y parecerá que la ola no se aplicó. El `UPDATE` comentado está en la
+sección 6 de `sql/edu-ola-1b.sql`. Hay **un solo bloque** y no cuatro: desde
+esa pantalla se puede crear una cuenta con rol DIRECCION, así que copiárselo
+a un docente o a caja sería regalarles la llave de la escuela.
+
+### Qué se tocó
+
+**Nuevo (9 archivos)** · `src/lib/edu/search.ts` (el normalizador y los tres
+constructores de índice, módulo PURO: lo usan el servidor para escribir y las
+pantallas para filtrar) · `src/lib/edu/equipo-core.ts` (puro: saneo,
+interpretación del pegado, contraseña temporal, filtros) ·
+`src/lib/edu/equipo.ts` (servidor: Prisma + Supabase Auth) ·
+`src/app/api/instituto/equipo/route.ts` y `.../[id]/route.ts` ·
+`src/app/instituto/(panel)/equipo/page.tsx` ·
+`src/components/edu/equipo/equipo-screen.tsx` · `sql/edu-ola-1b.sql` · dos
+archivos de pruebas.
+
+**Compartidos (los dos declarados, y solo de forma ADITIVA)** ·
+`prisma/schema.prisma`: **18 líneas añadidas, 0 borradas** — tres columnas
+`searchIndex`, cada una pegada a los campos de los que se deriva y lejos del
+bloque de relaciones del final, que es donde una ola paralela añadiría las
+suyas. ⚠️ **`npx prisma format` NO se dejó correr**: reformatea el archivo
+entero y haría imposible el merge con la Ola 4, que corre en paralelo. Se
+validó con `prisma generate`. · `ORQUESTA.md`: esta sección, al final.
+
+**Qué NO hizo falta tocar** · `scripts/edu-guard.cjs`:
+`src/components/edu/equipo/` cae bajo el prefijo `src/components/edu/` que ya
+estaba indultado. · `src/middleware.ts`: `/instituto/:path*` ya está en el
+matcher desde la Ola 0. · `src/lib/edu/api-guard.ts`: `eduApiGuard` ya hace
+lo que hacía falta y los dos endpoints nuevos lo usan sin cambiarlo. ·
+`package.json`: es del dental y este vertical no lo toca; las dos pruebas
+nuevas se corren con `npx tsx --test …` (el comando está en la cabecera de
+cada archivo).
+
+**Una decisión que se tomó al revés a propósito:** el endpoint `GET
+/api/instituto/equipo` se escribió y **se borró antes de commitear**. La
+lista la pinta el servidor y después de un alta la pantalla llama a
+`router.refresh()`, que vuelve a pedir ese árbol: el GET no lo llamaba nadie.
+Un endpoint sin lector es superficie de ataque, que es la misma regla que el
+catálogo de permisos le aplica a las keys.
+
+### Lo que NO se hizo, y hay que saberlo
+
+🔴 **`mustChangePassword` se ESCRIBE pero el panel del instituto todavía no
+lo LEE.** No existe `/instituto/cambiar-contrasena` ni un guard en el layout
+que lo exija (en el dental sí, en `/dashboard`). Consecuencia real: la
+contraseña temporal sigue siendo válida hasta que la persona la cambie por su
+cuenta. Se escribe desde ya para que el dato esté cuando esa pantalla se
+construya, y queda anotado aquí porque es lo primero que hay que cerrar.
+
+🔴 **El `.sql` HAY QUE APLICARLO ANTES DE DESPLEGAR EL CÓDIGO**, no después.
+El código nuevo escribe y consulta `searchIndex`; sin la columna, dar de alta
+un paciente y buscar en cualquiera de las listas fallan con "column does not
+exist". Listar sin buscar seguiría funcionando, lo cual lo hace peor: el
+fallo parecería intermitente.
+
+⚠️ **Nadie ha creado todavía una cuenta real desde este producto.** Todo lo de
+abajo se comprueba sin base de datos y sin red.
+
+### Qué se probó, y con qué
+
+**53 pruebas nuevas**, ninguna toca Postgres ni la red:
+
+- `edu-search.test.ts` (24) — el normalizador; qué lleva el índice de cada
+  tabla; **las cuatro búsquedas del reporte** ("Rodriguez", "rodríguez",
+  "MARIA", "P-0001", todas encontrando a la misma paciente); las **dos
+  direcciones**; el teléfono tecleado con adornos; y una prueba que **caza la
+  regresión**: recorre el `where` que se genera y afirma que la única
+  columna que aparece es `searchIndex`. Si alguien vuelve a meter
+  `{ firstName: { contains, mode: "insensitive" } }`, esa prueba falla.
+- `edu-equipo.test.ts` (29) — el saneo de una persona con su error en
+  español; el pegado (comas, tabuladores, encabezado, líneas vacías con sus
+  números de línea intactos, **correos repetidos dentro del propio pegado**,
+  columnas de menos, 200 renglones); la contraseña temporal (forma, y que
+  SIEMPRE acaba en dígito y NUNCA lleva O/0/I/1, comprobado sobre los 256
+  valores de byte); la tabla que se copia; y que los filtros de la URL **no
+  leen un institutionId**.
+
+Y las que ya existían, actualizadas: `edu-padron.test.ts` ahora construye sus
+filas de mentira con los constructores de índice REALES (no con strings a
+mano) y añade la prueba de acentos sobre el `where` de verdad;
+`edu-permissions.test.ts` añade el bloque de `equipo.manage`.
+
+**Total del vertical: 324 pruebas en verde** — edu-agenda 33, edu-caja 29,
+edu-contract 9, **edu-equipo 29**, edu-expediente 51, edu-pacientes 16,
+edu-padron 25, edu-permissions 32, **edu-search 24**, edu-tarifas 47,
+edu-visibility 29.
+
+**Verificación de esta rama:** `npx prisma generate` ✅ · `npm run build`
+✅ (completo, sin pipe; `/instituto/equipo` 6.86 kB y las dos rutas de API
+registradas) · `npx tsc --noEmit` ✅ para el vertical (6 errores ajenos de
+`src/lib/barber/__tests__`, preexistentes en `origin/main`) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs`
+✅ (31 propios, 1 compartido declarado, 0 prohibidos).
+
+**Qué NO se probó, y hay que probarlo con una base y una cuenta reales:**
+
+1. Que `sql/edu-ola-1b.sql` corra en Supabase, y que `edu_search_norm` diga
+   exactamente lo mismo que `eduNormalizeSearch`. La sección 7 del `.sql` trae
+   las tres `SELECT` de comprobación, incluida la del bug
+   (`WHERE "searchIndex" LIKE '%rodriguez%'` tiene que devolver a María).
+2. Que Supabase Auth cree la cuenta y que un correo YA registrado se **reuse**
+   en vez de fallar. Es el camino más importante de esta ola y el único que no
+   se puede probar sin red — ni el `createUser`, ni el reconocimiento del
+   error de "ya registrado", ni el filtro del admin de GoTrue.
+3. El alta masiva de verdad: que 200 renglones se partan en 8 peticiones, que
+   la barra avance y que un corte a la mitad enseñe las credenciales de lo que
+   sí se creó.
+4. El recorrido en el navegador: la pantalla nueva, el panel de credenciales
+   y el botón de copiar (que necesita contexto seguro — en `http://` sin
+   certificado cae al método viejo y, si tampoco, lo dice en vez de fingir una
+   palomita).
+5. Que dar de baja a alguien lo deje efectivamente fuera del panel en la
+   siguiente petición.
+
+### Cómo aplicarlo (en este orden)
+
+1. **`sql/edu-ola-1b.sql` en Supabase → SQL Editor → Run, ANTES de desplegar
+   el código.** Va después de `edu-ola-0/1/2/3/5.sql`. Es idempotente, no
+   tiene un solo DROP y no crea ni una tabla: tres columnas, una función y
+   tres backfills.
+2. El **backfill del override** (sección 6 del `.sql`), solo si hay usuarios
+   con `permissionsOverride` no vacío.
+3. Entrar a `/instituto/equipo` con una cuenta de DIRECCION y dar de alta a
+   una persona de prueba. Copiar la contraseña temporal **antes de cerrar**.
+4. Comprobar el bug arreglado: `/instituto/pacientes`, buscar "Rodriguez" sin
+   acento.

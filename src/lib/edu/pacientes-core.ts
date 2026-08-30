@@ -14,6 +14,7 @@
  * PINTA, deshabilitado, en vez de escondérselo. Un alumno tiene derecho a
  * ver si su paciente cuenta como suyo.
  */
+import type { Prisma } from "@prisma/client";
 import type { EduPatientStatus, EduSex } from "@/lib/edu/types";
 import { EDU_PATIENT_STATUSES, EDU_SEXES } from "@/lib/edu/types";
 import { eduSearchInput, eduSearchTokens } from "@/lib/edu/padron-core";
@@ -227,4 +228,39 @@ export interface EduPatientOption {
  *  padrón para no tener dos. */
 export function eduPatientSearchTokens(raw: string | null | undefined): string[] {
   return eduSearchTokens(raw);
+}
+
+/** El constructor del índice del paciente, reexportado desde el módulo puro
+ *  del buscador para que quien ya importa de aquí no tenga que ir a otro
+ *  archivo. */
+export { eduPatientSearchIndex } from "@/lib/edu/search";
+
+/**
+ * Las cláusulas AND del buscador de pacientes.
+ *
+ * Vive AQUÍ, en el módulo puro, y no dentro de pacientes.ts, por una razón
+ * concreta: pacientes.ts importa prisma y no se puede cargar en una prueba
+ * sin base de datos. Este `where` es justo lo que se rompió en producción
+ * —buscar "Rodriguez" no encontraba a "Rodríguez"— así que tiene que poder
+ * probarse.
+ *
+ * 🔴 Solo mira `searchIndex`: es la columna con el texto ya en minúsculas y
+ * sin acentos. Comparar contra `firstName` con `mode: "insensitive"` —que
+ * es lo que había— arregla las mayúsculas y NO los acentos.
+ */
+export function eduPatientSearchAnd(
+  q: string | null | undefined,
+): Prisma.EduPatientWhereInput[] {
+  const and: Prisma.EduPatientWhereInput[] = [];
+  for (const token of eduSearchTokens(q)) {
+    const or: Prisma.EduPatientWhereInput[] = [{ searchIndex: { contains: token } }];
+    // El teléfono va en el índice SOLO con dígitos, así que un término con
+    // adornos ("55-4433") se prueba también reducido a dígitos: quien
+    // teclea el teléfono como se lo dictaron tiene que encontrar al que se
+    // capturó como "5544332211".
+    const digits = eduPhoneSearchToken(token);
+    if (digits && digits !== token) or.push({ searchIndex: { contains: digits } });
+    and.push({ OR: or });
+  }
+  return and;
 }
