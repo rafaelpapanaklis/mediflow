@@ -461,6 +461,106 @@ test("el EQUIPO tiene item de menú y no está anunciado como Próximamente", ()
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// 1f · Las cinco keys de la Ola 6 (evaluación académica)
+//
+// La línea de esta ola: VER y CALIFICAR son dos keys distintas. El alumno
+// lleva la primera y no la segunda — ve su calificación y no la escribe.
+// ─────────────────────────────────────────────────────────────────────
+
+const KEYS_OLA_6: EduPermissionKey[] = [
+  "rubricas.manage",
+  "requisitos.manage",
+  "evaluacion.view",
+  "evaluacion.grade",
+  "traspaso.manage",
+];
+
+test("las cinco keys de la Ola 6 están en el catálogo, descritas en español", () => {
+  for (const k of KEYS_OLA_6) {
+    assert.ok(k in EDU_ALL_PERMISSIONS, `falta ${k} en el catálogo`);
+    const desc = EDU_ALL_PERMISSIONS[k];
+    assert.ok(desc && desc.length > 8, `${k} sin descripción usable: ${desc}`);
+    assert.notEqual(desc, k, `${k} se describe con su propia key`);
+  }
+});
+
+test("las cinco viven en el grupo de evaluación, y cada una en uno solo", () => {
+  const grupo = EDU_PERMISSION_GROUPS.find((g) => g.keys.includes("evaluacion.view"));
+  assert.ok(grupo, "no hay grupo para evaluacion.view");
+  for (const k of KEYS_OLA_6) {
+    assert.ok(grupo.keys.includes(k), `${k} no está en el grupo "${grupo.title}"`);
+    assert.equal(
+      EDU_PERMISSION_GROUPS.filter((g) => g.keys.includes(k)).length,
+      1,
+      `${k} aparece en más de un grupo`,
+    );
+  }
+});
+
+test("🔴 el ALUMNO VE su evaluación y NO la califica", () => {
+  // Es toda la ola en dos líneas. Si "view" y "grade" fueran una sola
+  // key, o el alumno no vería su propia evaluación —que es lo que la hace
+  // servir para algo— o se la podría escribir.
+  assert.equal(hasEduPermission({ role: "ALUMNO" }, "evaluacion.view"), true);
+  assert.equal(hasEduPermission({ role: "ALUMNO" }, "evaluacion.grade"), false);
+});
+
+test("🔴 el ALUMNO no lleva NINGUNA otra key de la ola", () => {
+  for (const k of ["rubricas.manage", "requisitos.manage", "traspaso.manage"] as EduPermissionKey[]) {
+    assert.equal(hasEduPermission({ role: "ALUMNO" }, k), false, `un alumno no debería tener ${k}`);
+  }
+});
+
+test("el DOCENTE califica y traspasa, pero NO diseña la rúbrica ni el plan", () => {
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "evaluacion.view"), true);
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "evaluacion.grade"), true);
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "traspaso.manage"), true);
+  // Si cada docente pudiera editar la rúbrica con la que se le mide a su
+  // alumno, la rúbrica dejaría de ser un criterio compartido.
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "rubricas.manage"), false);
+  assert.equal(hasEduPermission({ role: "DOCENTE" }, "requisitos.manage"), false);
+});
+
+test("DIRECCION lleva las cinco; CAJA ninguna", () => {
+  for (const k of KEYS_OLA_6) {
+    assert.equal(hasEduPermission({ role: "DIRECCION" }, k), true, `dirección sin ${k}`);
+    assert.equal(hasEduPermission({ role: "CAJA" }, k), false, `caja no debería tener ${k}`);
+  }
+});
+
+test("la EVALUACIÓN salió de 'Próximamente' y está en el menú", () => {
+  const enMenu = new Set(EDU_NAV_ITEMS.map((i) => i.key));
+  assert.equal(
+    EDU_UPCOMING_AREAS.some((a) => a.key === "evaluacion"),
+    false,
+    "la evaluación ya se entregó y sigue anunciada como Próximamente",
+  );
+  for (const key of ["evaluacion", "rubricas", "requisitos"]) {
+    assert.ok(enMenu.has(key), `"${key}" se entregó y no está en el menú`);
+  }
+  // La BITÁCORA no tiene item propio: se llega desde Evaluación, que es
+  // donde uno está cuando se pregunta por un alumno concreto.
+  assert.equal(enMenu.has("bitacora"), false);
+
+  // Y con esto la lista de "Próximamente" se quedó vacía: ya no hay
+  // ninguna área anunciada que no exista. La pantalla de Inicio deja de
+  // pintar el bloque entero (ver src/app/instituto/(panel)/inicio/page.tsx).
+  assert.equal(EDU_UPCOMING_AREAS.length, 0);
+});
+
+test("Evaluación va en ACADÉMICO; rúbricas y requisitos en ADMINISTRACIÓN", () => {
+  const item = (k: string) => EDU_NAV_ITEMS.find((i) => i.key === k);
+  assert.equal(item("evaluacion")?.section, "academico");
+  assert.equal(item("evaluacion")?.permission, "evaluacion.view");
+  // Configuración: se capturan al arrancar el ciclo y casi no se vuelven
+  // a tocar, igual que los tarifarios.
+  assert.equal(item("rubricas")?.section, "administracion");
+  assert.equal(item("rubricas")?.permission, "rubricas.manage");
+  assert.equal(item("requisitos")?.section, "administracion");
+  assert.equal(item("requisitos")?.permission, "requisitos.manage");
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // 2 · Semántica del override
 // ─────────────────────────────────────────────────────────────────────
 

@@ -12402,6 +12402,13 @@ model EduInstitution {
   // relaciones: los modelos viven al FINAL del archivo, con su encabezado.
   studyAnalyses    EduStudyAnalysis[]
   consents         EduConsent[]
+  // Ola 6 · evaluación académica. Bloque ADITIVO al final de las
+  // relaciones: los modelos viven al FINAL del archivo, con su encabezado.
+  rubrics          EduRubric[]
+  rubricCriteria   EduRubricCriterion[]
+  caseGrades       EduCaseGrade[]
+  caseGradeItems   EduCaseGradeItem[]
+  requirements     EduRequirement[]
 
   @@map("edu_institutions")
 }
@@ -12481,6 +12488,12 @@ model EduUser {
   approvalsRequested EduCaseApproval[] @relation("EduApprovalRequestedBy")
   approvalsDecided   EduCaseApproval[] @relation("EduApprovalDecidedBy")
 
+  /// Ola 6. Quién CALIFICÓ (siempre un docente o la dirección: el alumno
+  /// ve su calificación y no la escribe) y quién hizo un TRASPASO de caso.
+  /// Las dos son columnas de autoría; ninguna decide visibilidad.
+  gradesGiven      EduCaseGrade[] @relation("EduGradeBy")
+  transfersMade    EduCase[]      @relation("EduCaseTransferBy")
+
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
   @@index([institutionId, role, isActive])
@@ -12541,6 +12554,12 @@ model EduProgram {
   students    EduStudent[]
   /// Ola 2: el caso clínico cuelga de la especialidad.
   cases       EduCase[]
+  /// Ola 6: las rúbricas y los requisitos del plan de estudios de ESTA
+  /// especialidad. Los dos son opcionales del otro lado (una rúbrica puede
+  /// servir para toda la escuela), así que aquí solo cuelga lo que sí la
+  /// nombra.
+  rubrics      EduRubric[]
+  requirements EduRequirement[]
 
   @@unique([institutionId, code])
   @@index([institutionId, isActive])
@@ -12613,6 +12632,11 @@ model EduStudent {
   /// acto clínico, no necesariamente quien tecleó la nota (eso es
   /// EduRecord.authorUserId).
   records          EduRecord[]
+  /// Ola 6: sus calificaciones. Se guarda el studentId ADEMÁS del caseId
+  /// (que ya lo sabe) porque la bitácora académica se lee por ALUMNO y un
+  /// caso transferido cambia de dueño: la calificación se queda con quien
+  /// la recibió, no con quien tiene el caso hoy.
+  grades           EduCaseGrade[]
 
   @@unique([institutionId, matricula])
   @@index([institutionId, status])
@@ -12924,6 +12948,44 @@ model EduCase {
   /// referencia hacia atrás y borrar la cita no puede llevarse el caso.
   screeningAppointmentId String?
 
+  // ── Ola 6 · evaluación académica ────────────────────────────────────
+
+  /// El procedimiento PRINCIPAL del caso, del catálogo de la Ola 5.
+  ///
+  /// 🔴 Es lo que hace contable un REQUISITO del plan de estudios ("tres
+  /// endodoncias unirradiculares para cerrar tercer semestre"): sin esta
+  /// columna, un requisito solo podría decir "N casos de la especialidad"
+  /// y la escuela cuenta por procedimiento, no por caso genérico.
+  ///
+  /// Opcional a propósito: el caso nace en el TAMIZAJE, donde todavía no
+  /// se sabe qué se le va a hacer al paciente. Se captura después, y un
+  /// caso sin procedimiento no cuenta para ningún requisito que pida uno
+  /// —lo cual la pantalla del alumno DICE, en vez de dejarlo en cero sin
+  /// explicación.
+  ///
+  /// SetNull y no Cascade: si la escuela borrara un procedimiento del
+  /// catálogo, se pierde la clasificación del caso, no el caso.
+  procedureId String?
+
+  /// DE QUÉ CASO VIENE. Auto-relación, opcional.
+  ///
+  /// 🔴 Un traspaso NO reescribe el `studentId`: CIERRA el caso viejo como
+  /// TRANSFERRED y ABRE uno nuevo con el alumno nuevo, conservando paciente
+  /// y especialidad. Si se pudiera reescribir la columna, se borraría la
+  /// respuesta a "¿quién lo atendía en marzo?" — que es exactamente la
+  /// pregunta que se hace cuando algo sale mal en el sillón.
+  ///
+  /// El expediente, los estudios y las calificaciones del caso viejo NO se
+  /// mueven ni se copian: quedan donde ocurrieron. Este enlace es lo que
+  /// permite leer la historia completa desde el caso nuevo.
+  transferredFromCaseId String?
+  /// Por qué se traspasó (rotación, egreso, baja). Va en el caso NUEVO: es
+  /// la razón por la que existe.
+  transferReason        String? @db.VarChar(500)
+  /// Quién hizo el traspaso. SetNull: perder el nombre es aceptable,
+  /// perder el caso no.
+  transferredByUserId   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -12949,11 +13011,22 @@ model EduCase {
   approvals    EduCaseApproval[]
   /// Ola 3B: los consentimientos que se firmaron para ESTE caso.
   consents     EduConsent[]
+  /// Ola 6: el procedimiento principal, las calificaciones de este caso y
+  /// las dos puntas del traspaso.
+  procedure       EduProcedure?  @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  grades          EduCaseGrade[]
+  transferredFrom EduCase?       @relation("EduCaseTransfer", fields: [transferredFromCaseId], references: [id], onDelete: SetNull)
+  transferredTo   EduCase[]      @relation("EduCaseTransfer")
+  transferredBy   EduUser?       @relation("EduCaseTransferBy", fields: [transferredByUserId], references: [id], onDelete: SetNull)
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
   @@index([institutionId, patientId], map: "edu_cases_patient_idx")
   @@index([institutionId, programId, status], map: "edu_cases_program_idx")
+  // Ola 6: contar requisitos por procedimiento, y seguir la cadena de
+  // traspasos hacia atrás sin recorrer la tabla.
+  @@index([institutionId, procedureId, status], map: "edu_cases_procedure_idx")
+  @@index([transferredFromCaseId], map: "edu_cases_transfer_idx")
   @@map("edu_cases")
 }
 
@@ -13369,6 +13442,14 @@ model EduProcedure {
   institution EduInstitution       @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   feeItems    EduFeeScheduleItem[]
   chargeItems EduChargeItem[]
+  /// Ola 6: el catálogo de la Ola 5 es también el vocabulario ACADÉMICO —
+  /// la rúbrica de una endodoncia, el requisito de "tres endodoncias" y el
+  /// caso que cuenta para él hablan del mismo procedimiento. Un segundo
+  /// catálogo "académico" sería una lista paralela que alguien tendría que
+  /// mantener sincronizada a mano.
+  rubrics      EduRubric[]
+  requirements EduRequirement[]
+  cases        EduCase[]
 
   @@unique([institutionId, code])
   @@index([institutionId, isActive, orderIndex], map: "edu_procedures_orden_idx")
@@ -14009,4 +14090,287 @@ model EduConsent {
   @@index([institutionId, caseId], map: "edu_consents_case_idx")
   @@index([institutionId, studentUserId], map: "edu_consents_student_idx")
   @@map("edu_consents")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 6 · EVALUACIÓN ACADÉMICA.
+//
+// Cinco tablas: la rúbrica reusable (EduRubric) con sus criterios
+// (EduRubricCriterion), la calificación de UN caso (EduCaseGrade) con la
+// puntuación de cada criterio (EduCaseGradeItem), y el requisito del plan
+// de estudios (EduRequirement).
+//
+// 🔴 institutionId está en las CINCO, igual que en todas las olas
+// anteriores y por la misma razón: toda consulta filtra por el
+// institutionId de la SESIÓN, y un filtro que necesita un JOIN para
+// existir es un filtro que alguien va a olvidar. Ojo Prisma: un
+// institutionId undefined BORRA el filtro y devuelve las filas de TODOS
+// los institutos.
+//
+// 🔴 LO QUE NO ESTÁ AQUÍ, Y ES LA MITAD DE LA OLA:
+//
+//   · NO hay tabla de AVANCE. El "lleva 5 de 8" se CUENTA cada vez que se
+//     pregunta (src/lib/edu/evaluacion.ts). Un contador guardado es la
+//     forma más fácil de que un alumno se gradúe sin cumplir: basta con
+//     que una escritura falle a la mitad, o que alguien cierre un caso por
+//     SQL, para que el número y la realidad dejen de coincidir — y el que
+//     se enseña en la acreditación es el número.
+//   · NO hay tabla de HORAS CLÍNICAS. Se derivan de las citas COMPLETADAS
+//     del alumno (EduAppointment). No hay captura manual: unas horas que
+//     se teclean son unas horas que se pueden teclear mal.
+//   · NO hay columna "calificación vigente" en el caso. La calificación
+//     actual es la fila que nadie corrige (EduCaseGrade.correctsId), igual
+//     que en la Ola 4 el estado del gate se LEE de las autorizaciones en
+//     vez de vivir en una bandera del caso.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-6.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// LA RÚBRICA. Reusable: se define una vez y se usa en cada caso.
+///
+/// `programId` y `procedureId` son los dos filtros con que se propone en
+/// pantalla ("las rúbricas de Endodoncia", "la de esta endodoncia
+/// unirradicular") y los DOS son opcionales: una escuela chica tiene una
+/// sola rúbrica clínica para todo, y obligar a elegir especialidad la
+/// dejaría dando de alta la misma rúbrica seis veces.
+///
+/// 🔴 LA ESCALA LA DECIDE LA ESCUELA, NO EL CÓDIGO. `scaleMin`/`scaleMax`
+/// guardan de cuánto a cuánto se califica: 1–10 en una escuela mexicana,
+/// 0–100 en otra, 0–5 en la que usa letras. En ningún lado del producto
+/// hay un 100 escrito a mano — se lee de aquí, y se CONGELA en cada
+/// calificación (ver EduCaseGrade) para que subir la escala mañana no
+/// reinterprete lo que se calificó ayer.
+model EduRubric {
+  id            String  @id @default(cuid())
+  institutionId String
+  name          String  @db.VarChar(120)
+  /// La especialidad para la que sirve. null = para todas.
+  programId     String?
+  /// El procedimiento concreto que evalúa. null = cualquiera.
+  procedureId   String?
+  /// De cuánto a cuánto se califica cada criterio. Enteros: media escala
+  /// no existe (la fracción vive en el PESO, no en la escala).
+  scaleMin      Int     @default(0)
+  scaleMax      Int     @default(100)
+  isActive      Boolean @default(true)
+  orderIndex    Int     @default(0)
+  /// Para qué es esta rúbrica, en una frase. Se lee al calificar.
+  notes         String? @db.VarChar(300)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution       @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  program     EduProgram?          @relation(fields: [programId], references: [id], onDelete: SetNull)
+  procedure   EduProcedure?        @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  criteria    EduRubricCriterion[]
+  grades      EduCaseGrade[]
+
+  /// El nombre es lo que el docente elige en un desplegable: dos rúbricas
+  /// que se llaman igual son dos opciones indistinguibles.
+  @@unique([institutionId, name])
+  @@index([institutionId, isActive, orderIndex], map: "edu_rubrics_orden_idx")
+  @@index([institutionId, programId], map: "edu_rubrics_program_idx")
+  @@index([institutionId, procedureId], map: "edu_rubrics_procedure_idx")
+  @@map("edu_rubrics")
+}
+
+/// UN CRITERIO de la rúbrica, con su PESO.
+///
+/// 🔴 Los pesos de una rúbrica suman 100, y eso se valida AL GUARDAR LA
+/// RÚBRICA, no al calificar. La diferencia es de producto, no de estilo:
+/// si se validara al calificar, el error saldría con el paciente ya
+/// atendido, el docente de pie y el alumno esperando —y la única salida
+/// sería no calificar—. Validado al guardar, el que se equivoca es quien
+/// diseña la rúbrica, sentado, y lo arregla ahí mismo.
+///
+/// El peso es ENTERO en por ciento (20 = 20 %). Sin decimales: 33,33 % ×3
+/// no suma 100 y la validación quedaría condenada a una tolerancia, que es
+/// como se acaba con rúbricas que suman 99,99 y nadie sabe por qué.
+model EduRubricCriterion {
+  id            String  @id @default(cuid())
+  institutionId String
+  rubricId      String
+  name          String  @db.VarChar(120)
+  /// Qué se está mirando, para que dos docentes califiquen lo mismo.
+  description   String? @db.VarChar(500)
+  weightPercent Int
+  orderIndex    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  rubric      EduRubric          @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  items       EduCaseGradeItem[]
+
+  @@unique([rubricId, name], map: "edu_rubric_criteria_nombre_key")
+  @@index([institutionId, rubricId, orderIndex], map: "edu_rubric_criteria_orden_idx")
+  @@map("edu_rubric_criteria")
+}
+
+/// LA CALIFICACIÓN DE UN CASO.
+///
+/// 🔴 SOLO EL DOCENTE (O LA DIRECCIÓN) CALIFICA. El alumno VE su
+/// calificación y sus comentarios, y no puede escribirla: lo cierra el
+/// permiso "evaluacion.grade", que un ALUMNO no tiene ni por default ni
+/// —si se lo encendieran por override— sobre un caso que no sea suyo.
+///
+/// 🔴 UNA CALIFICACIÓN GUARDADA NO SE EDITA EN SILENCIO. Corregirla es
+/// escribir una fila NUEVA que apunta a la anterior con `correctsId`,
+/// exactamente como la nota firmada del expediente (EduRecord.correctsId)
+/// y por la misma razón: si se pudiera reescribir, el registro dejaría de
+/// decir lo que pasó y pasaría a decir lo que alguien quiere que parezca
+/// que pasó. La calificación VIGENTE es la fila que nadie corrige — se LEE
+/// de las filas, no vive en una bandera.
+///
+/// 🔴 LO CONGELADO Y POR QUÉ. `rubricName`, `scaleMin` y `scaleMax` se
+/// copian aquí al calificar, igual que `EduCharge.feeScheduleLabel` de la
+/// Ola 5. Si la dirección renombra la rúbrica o cambia la escala de 10 a
+/// 100, un 8 calificado en octubre tiene que seguir leyéndose como 8/10 —
+/// y no como 8/100, que sería reprobar a alguien por una edición
+/// administrativa.
+model EduCaseGrade {
+  id            String  @id @default(cuid())
+  institutionId String
+  caseId        String
+  /// El ALUMNO calificado. Se guarda ADEMÁS del caso porque un caso se
+  /// TRASPASA: la calificación se queda con quien la recibió, no con quien
+  /// tiene el caso hoy.
+  studentId     String
+  /// La rúbrica que se usó. Nullable + SetNull, con el nombre congelado al
+  /// lado: perder la referencia es aceptable, perder la calificación no.
+  rubricId      String?
+  rubricName    String  @db.VarChar(120)
+  scaleMin      Int
+  scaleMax      Int
+
+  /// Quién calificó. NOT NULL: una calificación sin firma no sirve para
+  /// hablar con el alumno ni para una acreditación.
+  gradedById String
+  /// Cuándo. INSTANTE (Timestamptz): la escuela puede estar en cualquier
+  /// zona del país y la bitácora se ordena por esta columna.
+  gradedAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  /// La calificación final, YA calculada: Σ(puntuación × peso) / 100.
+  /// ENTERA ×100 (un 8,75 se guarda como 875) por lo mismo que el dinero
+  /// va en centavos: en coma flotante 0,1 + 0,2 no da 0,3 y un promedio de
+  /// veinte casos acumula el error hasta que el acta no cuadra.
+  finalScoreX100 Int
+  /// Lo que el docente le dice al alumno. Es la mitad de para qué existe
+  /// esto: un número sin comentario no enseña nada.
+  comment        String? @db.VarChar(2000)
+
+  /// La calificación a la que ésta CORRIGE. SetNull y no Cascade: perder
+  /// el enlace es aceptable, perder la corrección no.
+  correctsId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  case        EduCase            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  student     EduStudent         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  rubric      EduRubric?         @relation(fields: [rubricId], references: [id], onDelete: SetNull)
+  /// CASCADE y no SetNull porque es NOT NULL: es el rastro de quién
+  /// calificó. En este producto un usuario no se borra —se desactiva— así
+  /// que no se dispara desde el panel; está para que borrar el instituto
+  /// entero no se atore en una llave.
+  gradedBy    EduUser            @relation("EduGradeBy", fields: [gradedById], references: [id], onDelete: Cascade)
+  corrects    EduCaseGrade?      @relation("EduGradeCorrections", fields: [correctsId], references: [id], onDelete: SetNull)
+  correctedBy EduCaseGrade[]     @relation("EduGradeCorrections")
+  items       EduCaseGradeItem[]
+
+  @@index([institutionId, caseId, gradedAt], map: "edu_case_grades_case_idx")
+  @@index([institutionId, studentId, gradedAt], map: "edu_case_grades_student_idx")
+  @@index([institutionId, correctsId], map: "edu_case_grades_corrects_idx")
+  @@map("edu_case_grades")
+}
+
+/// LA PUNTUACIÓN DE UN CRITERIO dentro de una calificación.
+///
+/// `criterionName` y `weightPercent` se CONGELAN aquí por lo mismo que el
+/// nombre de la rúbrica: cambiar los pesos mañana no puede recalcular lo
+/// que se calificó ayer. Y `criterionId` se guarda igual, para poder
+/// agrupar "cómo va la escuela en Aislamiento" mientras el criterio exista.
+model EduCaseGradeItem {
+  id            String  @id @default(cuid())
+  institutionId String
+  gradeId       String
+  criterionId   String?
+  criterionName String  @db.VarChar(120)
+  weightPercent Int
+  /// La puntuación en la escala de la rúbrica, ENTERA ×100 (un 8,5 se
+  /// guarda como 850). Misma razón que finalScoreX100.
+  scoreX100     Int
+  /// El comentario de ESTE criterio. Es donde de verdad se enseña: "el
+  /// aislamiento se movió a la mitad" vale más que un 6 global.
+  comment       String? @db.VarChar(1000)
+  orderIndex    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution      @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  grade       EduCaseGrade        @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  criterion   EduRubricCriterion? @relation(fields: [criterionId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, gradeId, orderIndex], map: "edu_case_grade_items_grade_idx")
+  @@index([institutionId, criterionId], map: "edu_case_grade_items_criterion_idx")
+  @@map("edu_case_grade_items")
+}
+
+/// UN REQUISITO DEL PLAN DE ESTUDIOS: lo que un alumno debe cumplir.
+///
+/// Lo captura la DIRECCIÓN, porque cada escuela tiene su plan. Se cuenta
+/// por CASOS del alumno que encajan con el requisito.
+///
+/// 🔴 EL AVANCE NO SE GUARDA. No hay aquí —ni en ninguna tabla— un
+/// "cumplidos: 5". Se cuenta al preguntar. Un contador guardado se
+/// desincroniza el día que una escritura falle a la mitad, y el número que
+/// se enseña en una acreditación es justamente ése.
+///
+/// `semesterFrom`/`semesterTo` NO filtran a qué alumnos les aplica: dicen
+/// PARA CUÁNDO se espera. Un requisito de 1º–3º se le sigue exigiendo al
+/// de 5º que no lo cumplió — si el rango lo excluyera, atrasarse sería la
+/// forma de dejar de deber algo.
+model EduRequirement {
+  id            String  @id @default(cuid())
+  institutionId String
+  /// Cómo se llama en el plan de estudios ("Endodoncias unirradiculares").
+  name          String  @db.VarChar(120)
+  /// La especialidad. NOT NULL: un requisito es de un plan de estudios, y
+  /// un plan de estudios es de una especialidad.
+  programId     String
+  /// Desde y hasta qué semestre se espera. null = desde el principio /
+  /// hasta el final de la especialidad.
+  semesterFrom  Int?
+  semesterTo    Int?
+  /// Qué cuenta: un procedimiento concreto, o toda una categoría del
+  /// catálogo ("Endodoncia"). Los dos nulos = cualquier caso de la
+  /// especialidad.
+  procedureId   String?
+  category      String? @db.VarChar(60)
+  /// CUÁNTOS necesita.
+  requiredCount Int
+  /// Si solo cuentan los casos COMPLETADOS. En true (lo normal) un caso a
+  /// medias no suma; en false suma desde que se abre, que es lo que quiere
+  /// una escuela que mide exposición y no resultado.
+  onlyCompleted Boolean @default(true)
+  isActive      Boolean @default(true)
+  orderIndex    Int     @default(0)
+  notes         String? @db.VarChar(300)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  procedure   EduProcedure?  @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+
+  @@unique([institutionId, programId, name], map: "edu_requirements_nombre_key")
+  @@index([institutionId, programId, isActive, orderIndex], map: "edu_requirements_plan_idx")
+  @@index([institutionId, procedureId], map: "edu_requirements_procedure_idx")
+  @@map("edu_requirements")
 }

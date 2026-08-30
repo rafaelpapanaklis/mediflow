@@ -52,6 +52,7 @@ import {
   eduCorteSpanDays,
   eduLineTotalCents,
   eduMoney,
+  eduResolveChargeView,
   parseEduMoneyCentsMax,
   parseEduPaymentMethod,
   type EduCashSessionRow,
@@ -264,8 +265,14 @@ export async function listEduCharges(
   requireDinero(ctx);
   const sesion = filters.soloTurno ? await getEduOpenCashSession(ctx) : null;
 
+  // 🔴 SIN TURNO ABIERTO, EL DEFAULT ENSEÑA EL HISTÓRICO. El fallo que
+  // arregla —un cobro recién emitido que desaparecía de la lista— y por
+  // qué se decide con una función pura están en eduResolveChargeView
+  // (dinero-core.ts). Aquí solo se aplica lo que dijo.
+  const applied = eduResolveChargeView(filters, Boolean(sesion));
+
   const rows = await prisma.eduCharge.findMany({
-    where: chargesWhere(ctx, filters, sesion?.id ?? null),
+    where: chargesWhere(ctx, { ...filters, soloTurno: applied.soloTurno }, sesion?.id ?? null),
     orderBy: [{ chargedAt: "desc" }],
     take: EDU_CAJA_MAX_ROWS + 1,
     select: CHARGE_SELECT,
@@ -286,7 +293,7 @@ export async function listEduCharges(
     { totalCents: 0, paidCents: 0, balanceCents: 0 },
   );
 
-  return { rows: visibles, truncated: rows.length > EDU_CAJA_MAX_ROWS, totals };
+  return { rows: visibles, truncated: rows.length > EDU_CAJA_MAX_ROWS, totals, applied };
 }
 
 /**

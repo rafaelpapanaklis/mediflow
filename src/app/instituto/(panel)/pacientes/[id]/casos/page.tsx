@@ -14,8 +14,10 @@ import {
   EDU_CASE_CLOSED_STATUSES,
   EDU_CASE_STATUS_LABELS,
 } from "@/lib/edu/types";
+import { listEduProcedures } from "@/lib/edu/tarifas";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduCasoAutorizaciones } from "@/components/edu/autorizaciones/caso-autorizaciones";
+import { EduCasoProcedimiento } from "@/components/edu/evaluacion/caso-procedimiento";
 
 /**
  * Pestaña CASOS: los casos del paciente y sus últimas citas.
@@ -69,6 +71,23 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
       )
     : [];
 
+  // ── Ola 6 · el procedimiento principal del caso ──────────────────────
+  // 🔴 Es el único dato que la evaluación le pide al piso clínico, y sin
+  // él un requisito por procedimiento cuenta CERO para siempre.
+  //
+  // ⚠️ El catálogo se carga aunque quien mira no tenga "tarifarios.view",
+  // y eso NO abre el dinero: EduProcedure guarda nombre, clave, categoría
+  // y duración — el precio vive en la lista de precios
+  // (EduFeeScheduleItem), que sigue cerrada. Un docente necesita los
+  // nombres para clasificar el caso; los precios, no.
+  //
+  // Solo lo carga quien puede EDITAR: para el resto la pantalla pinta el
+  // nombre que ya viene en la fila del caso y no hace una consulta de más.
+  const puedeClasificar = hasEduPermission(permUser, "casos.assign");
+  const procedimientos = puedeClasificar
+    ? await listEduProcedures(ctx, { soloActivos: true })
+    : [];
+
   return (
     <div className="edu-stack">
       <section className="edu-section">
@@ -114,7 +133,26 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
                   <p className="edu-estudio__meta">
                     {c.appointments} {c.appointments === 1 ? "sesión" : "sesiones"}
                     {c.notes ? ` · ${c.notes}` : ""}
+                    {c.transferredFromCaseId
+                      ? ` · viene de un traspaso${c.transferReason ? `: ${c.transferReason}` : ""}`
+                      : ""}
                   </p>
+
+                  {/* Ola 6 · lo que hace contable un requisito del plan de
+                      estudios. Lo pone el docente, no el alumno: marcar el
+                      caso decide si cuenta para el avance de ese alumno. */}
+                  <EduCasoProcedimiento
+                    caseId={c.id}
+                    procedureId={c.procedureId}
+                    procedureName={c.procedureName}
+                    procedures={procedimientos.map((p) => ({
+                      id: p.id,
+                      name: p.name,
+                      category: p.category,
+                    }))}
+                    canEdit={puedeClasificar}
+                    cerrado={cerrado}
+                  />
 
                   {/* Ola 4 · el gate, en la ficha del caso: en qué van sus
                       dos puertas, quién firmó qué y a qué hora, y el botón

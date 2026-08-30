@@ -75,6 +75,12 @@ const CASE_SELECT = {
   program: { select: { id: true, name: true } },
   supervisor: { select: { firstName: true, lastName: true, email: true } },
   _count: { select: { appointments: true } },
+  // Ola 6: el procedimiento principal (lo que hace contable un requisito)
+  // y las dos columnas del traspaso.
+  procedureId: true,
+  procedure: { select: { id: true, name: true, category: true } },
+  transferredFromCaseId: true,
+  transferReason: true,
 } satisfies Prisma.EduCaseSelect;
 
 type CasePayload = Prisma.EduCaseGetPayload<{ select: typeof CASE_SELECT }>;
@@ -103,6 +109,13 @@ function toRow(c: CasePayload): EduCaseRow {
     supervisorName: c.supervisor ? personName(c.supervisor) : null,
 
     appointments: c._count.appointments,
+
+    procedureId: c.procedureId,
+    procedureName: c.procedure?.name ?? null,
+    procedureCategory: c.procedure?.category ?? null,
+
+    transferredFromCaseId: c.transferredFromCaseId,
+    transferReason: c.transferReason,
   };
 }
 
@@ -260,6 +273,34 @@ export interface EduCaseInput {
   notes?: unknown;
   /** La cita de tamizaje que lo abrió, si viene del tamizaje. */
   screeningAppointmentId?: unknown;
+  /** Ola 6: el procedimiento principal. Opcional — en el tamizaje todavía
+   *  no se sabe qué se le va a hacer al paciente. */
+  procedureId?: unknown;
+}
+
+/**
+ * El procedimiento del catálogo, comprobado contra ESTE instituto.
+ *
+ * `undefined` = no lo mandaron (no se toca). `null` = lo están borrando.
+ * Un id que no es de este instituto REBOTA en vez de quedarse en null: un
+ * caso clasificado en silencio como "sin procedimiento" es un requisito
+ * que deja de contar sin que nadie se entere.
+ */
+async function resolveProcedureId(
+  institutionId: string,
+  raw: unknown,
+): Promise<string | null | undefined> {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const id = eduCleanId(raw);
+  const proc = id
+    ? await prisma.eduProcedure.findFirst({
+        where: { id, institutionId },
+        select: { id: true },
+      })
+    : null;
+  if (!proc) throw new EduPadronError("Ese procedimiento no es de este instituto.", 404);
+  return proc.id;
 }
 
 /**
@@ -332,6 +373,8 @@ export async function createEduCase(
     screeningAppointmentId = cita.id;
   }
 
+  const procedureId = (await resolveProcedureId(institutionId, input.procedureId)) ?? null;
+
   // Abrir un caso significa que a este paciente lo está atendiendo alguien:
   // deja de estar "Nuevo". Se hace en la MISMA transacción — si el caso se
   // crea y el estado no se mueve, el paciente se queda listado como "sin
@@ -345,12 +388,32 @@ export async function createEduCase(
         programId: partes.programId,
         supervisorUserId,
         screeningAppointmentId,
+        procedureId,
         status: "ASSIGNED",
         openedAt: now,
         notes: eduOptionalText(input.notes, 1000) ?? null,
       },
       select: { id: true },
     });
+
+    // 🔴 OLA 6 — LA CITA DE TAMIZAJE SE ENGANCHA AL CASO QUE ABRIÓ.
+    //
+    // Hasta ahora el enlace existía en UNA sola dirección (el caso sabía
+    // de qué cita nació, la cita no sabía de qué caso). Eso dejaba un
+    // agujero justo en el traspaso: la visibilidad del alumno mira sus
+    // citas además de sus casos, y una cita HUÉRFANA de caso le seguiría
+    // dando acceso al paciente después de entregarlo. Con el enlace
+    // puesto, esa cita cuelga del caso TRANSFERRED y deja de abrir la
+    // puerta (ver src/lib/edu/visibility.ts).
+    //
+    // `updateMany` con el caseId todavía nulo: si la cita ya colgaba de
+    // otro caso, no se le toca — un enlace existente vale más que éste.
+    if (screeningAppointmentId) {
+      await tx.eduAppointment.updateMany({
+        where: { id: screeningAppointmentId, institutionId, caseId: null },
+        data: { caseId: caso.id },
+      });
+    }
 
     await tx.eduPatient.updateMany({
       where: { id: partes.patientId, institutionId, status: { in: ["NEW", "INACTIVE", "DISCHARGED"] } },
@@ -386,7 +449,15 @@ export async function createEduCase(
 export async function updateEduCase(
   ctx: EduClinicaContext,
   caseId: string,
-  input: { status?: unknown; supervisorUserId?: unknown; notes?: unknown },
+  input: {
+    status?: unknown;
+    supervisorUserId?: unknown;
+    notes?: unknown;
+    /** Ola 6: el procedimiento principal, que es lo que hace contable un
+     *  requisito del plan de estudios. SÍ se puede corregir —a diferencia
+     *  del alumno— porque en el tamizaje todavía no se sabía. */
+    procedureId?: unknown;
+  },
   now: Date = new Date(),
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
@@ -409,6 +480,7 @@ export async function updateEduCase(
     closedAt?: Date | null;
     supervisorUserId?: string | null;
     notes?: string | null;
+    procedureId?: string | null;
   } = {};
 
   if (input.status !== undefined) {
@@ -440,6 +512,10 @@ export async function updateEduCase(
 
   if (input.notes !== undefined) {
     data.notes = eduOptionalText(input.notes, 1000) ?? null;
+  }
+
+  if (input.procedureId !== undefined) {
+    data.procedureId = (await resolveProcedureId(institutionId, input.procedureId)) ?? null;
   }
 
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
@@ -510,6 +586,8 @@ export interface EduTamizajeInput {
   programId?: unknown;
   supervisorUserId?: unknown;
   notes?: unknown;
+  /** Ola 6: si en la valoración ya se sabe qué se le va a hacer. */
+  procedureId?: unknown;
 }
 
 /**
@@ -556,7 +634,9 @@ export async function runEduTamizaje(
     patientId = eduCleanId(input.patientId);
   }
 
-  if (!patientId) throw new EduPadronError("Elige el paciente al que le hiciste la valoración.", 400);
+  if (!patientId) {
+    throw new EduPadronError("Elige el paciente al que le hiciste la valoración.", 400);
+  }
 
   // Sin envolver esto en otra transacción: `createEduCase` ya abre la suya
   // (el caso y el estado del paciente se escriben juntos o no se escriben).
@@ -571,6 +651,7 @@ export async function runEduTamizaje(
       supervisorUserId: input.supervisorUserId,
       notes: input.notes,
       screeningAppointmentId,
+      procedureId: input.procedureId,
     },
     now,
   );

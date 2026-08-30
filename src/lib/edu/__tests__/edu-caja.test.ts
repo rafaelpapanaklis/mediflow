@@ -45,6 +45,7 @@ import {
   eduCorteMethods,
   eduCorteSpanDays,
   eduHasChargeFilters,
+  eduResolveChargeView,
   parseEduChargeFilters,
 } from "../dinero-core";
 import { EDU_PAYMENT_METHODS, EDU_ROLES, type EduRole } from "../types";
@@ -365,6 +366,55 @@ test("ver el histórico cuenta como filtro (para que se pueda limpiar)", () => {
   assert.equal(eduHasChargeFilters(EDU_CHARGE_EMPTY_FILTERS), false);
   assert.equal(eduHasChargeFilters(parseEduChargeFilters({ ver: "todos" })), true);
   assert.equal(eduHasChargeFilters(parseEduChargeFilters({ q: "C-0001" })), true);
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 4b · 🔴 EL COBRO RECIÉN EMITIDO NO DESAPARECE (arreglo de la Ola 6)
+//
+// El fallo, tal como se vio en producción: recepción cobra, el recibo
+// sale… y la lista de /instituto/caja aparece VACÍA, porque el filtro por
+// defecto es "solo el turno abierto" y no había ningún turno abierto.
+// Desde el mostrador se ve exactamente igual que un cobro perdido.
+// ─────────────────────────────────────────────────────────────────────
+
+test("🔴 sin turno abierto y sin tocar el selector, el default enseña el HISTÓRICO", () => {
+  const v = eduResolveChargeView(parseEduChargeFilters({}), false);
+  assert.equal(v.soloTurno, false, "el cobro recién emitido tiene que verse");
+  assert.equal(v.fallbackSinTurno, true, "y la pantalla tiene que poder decir por qué");
+});
+
+test("con turno abierto, el default sigue siendo el TURNO", () => {
+  const v = eduResolveChargeView(parseEduChargeFilters({}), true);
+  assert.equal(v.soloTurno, true);
+  assert.equal(v.fallbackSinTurno, false);
+});
+
+test("si la persona ELIGIÓ el turno, se respeta aunque salga vacío", () => {
+  // Es la diferencia entre un default y una decisión: quien puso el
+  // selector en "solo el turno abierto" pidió eso, y verlo vacío es la
+  // respuesta correcta a su pregunta.
+  const f = parseEduChargeFilters({ ver: "turno" });
+  assert.equal(f.turnoExplicito, true);
+  const v = eduResolveChargeView(f, false);
+  assert.equal(v.soloTurno, true);
+  assert.equal(v.fallbackSinTurno, false);
+});
+
+test("elegir el histórico a mano nunca se marca como caída por falta de turno", () => {
+  for (const hayTurno of [true, false]) {
+    const v = eduResolveChargeView(parseEduChargeFilters({ ver: "todos" }), hayTurno);
+    assert.equal(v.soloTurno, false);
+    assert.equal(v.fallbackSinTurno, false);
+  }
+});
+
+test("el parámetro `ver` distingue el default de la decisión", () => {
+  assert.equal(parseEduChargeFilters({}).turnoExplicito, false);
+  assert.equal(parseEduChargeFilters({ ver: "turno" }).turnoExplicito, true);
+  assert.equal(parseEduChargeFilters({ ver: "todos" }).turnoExplicito, true);
+  // Un valor inventado no cuenta como decisión: cae al default.
+  assert.equal(parseEduChargeFilters({ ver: "loquesea" }).turnoExplicito, false);
+  assert.equal(parseEduChargeFilters({ ver: "loquesea" }).soloTurno, true);
 });
 
 // ═════════════════════════════════════════════════════════════════════

@@ -60,6 +60,17 @@ export interface EduCajaScreenProps {
   canCorte: boolean;
 }
 
+/**
+ * Cuánto se espera antes de buscar mientras se teclea.
+ *
+ * 250 ms es lo que tarda una pausa entre palabras: corto para que el
+ * mostrador no perciba retraso, largo para que "María Rodríguez" no se
+ * convierta en quince consultas a Postgres. Vive con nombre y no como un
+ * número suelto dentro del efecto porque es la clase de valor que alguien
+ * va a querer ajustar.
+ */
+const EDU_BUSQUEDA_RETARDO_MS = 250;
+
 const TAG_BY_STATUS: Record<EduChargeStatus, string> = {
   PENDING: "edu-tag--warn",
   PARTIAL: "edu-tag--info",
@@ -84,14 +95,21 @@ export function EduCajaScreen({
   const [recibo, setRecibo] = useState<EduChargeRow | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
-  const { rows, truncated, totals } = page;
-  const hayFiltros = Boolean(filters.status || filters.q || !filters.soloTurno);
+  const { rows, truncated, totals, applied } = page;
+  // El selector cuenta como filtro cuando la persona LO TOCÓ. Si contara
+  // también la caída al histórico por no haber turno, el botón "Limpiar"
+  // aparecería en una pantalla que nadie filtró.
+  const hayFiltros = Boolean(filters.status || filters.q || filters.turnoExplicito);
 
   function aplicar(next: Record<string, string>) {
     const actual: Record<string, string> = {};
     if (filters.status) actual.estado = filters.status;
     if (filters.q) actual.q = filters.q;
-    if (!filters.soloTurno) actual.ver = "todos";
+    // 🔴 "turno" viaja EXPLÍCITO en la URL, no como ausencia del
+    // parámetro. Es lo que distingue "lo pidió una persona" de "es el
+    // default", y de esa distinción depende que un cobro recién emitido se
+    // vea cuando no hay ningún turno abierto.
+    if (filters.turnoExplicito) actual.ver = filters.soloTurno ? "turno" : "todos";
 
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries({ ...actual, ...next })) {
@@ -132,7 +150,9 @@ export function EduCajaScreen({
           <p className="edu-banner__detail">
             {turnoAbierto
               ? "Todo lo que se cobre y se pague ahora entra en este corte."
-              : "Puedes cobrar igual, pero esos cobros no entrarán en ningún corte hasta que se abra un turno."}
+              : applied.fallbackSinTurno
+                ? "Puedes cobrar igual, pero esos cobros no entrarán en ningún corte hasta que se abra un turno. Como no hay turno, abajo se lista TODO el histórico: así ves lo que acabas de cobrar."
+                : "Puedes cobrar igual, pero esos cobros no entrarán en ningún corte hasta que se abra un turno."}
           </p>
         </div>
         {canCorte && (
@@ -195,8 +215,11 @@ export function EduCajaScreen({
           <select
             id="edu-caja-ver"
             className="edu-input edu-input--sm"
-            value={filters.soloTurno ? "turno" : "todos"}
-            onChange={(e) => aplicar({ ver: e.target.value === "todos" ? "todos" : "" })}
+            // 🔴 Lee lo APLICADO, no lo pedido: si dijera "solo el turno
+            // abierto" mientras la tabla enseña el histórico, nadie
+            // entendería qué está viendo.
+            value={applied.soloTurno ? "turno" : "todos"}
+            onChange={(e) => aplicar({ ver: e.target.value === "todos" ? "todos" : "turno" })}
           >
             <option value="turno">Solo el turno abierto</option>
             <option value="todos">Todo el histórico</option>
@@ -264,15 +287,17 @@ export function EduCajaScreen({
       {rows.length === 0 ? (
         <div className="edu-empty">
           <p className="edu-empty__title">
-            {filters.soloTurno && !turnoAbierto
+            {applied.soloTurno && !turnoAbierto
               ? "No hay turno de caja abierto"
               : hayFiltros
                 ? "Ningún cobro coincide"
                 : "Todavía no se ha cobrado nada"}
           </p>
           <p className="edu-empty__detail">
-            {filters.soloTurno && !turnoAbierto
-              ? "Estás viendo el turno abierto y no hay ninguno. Abre uno, o cambia a “Todo el histórico”."
+            {applied.soloTurno && !turnoAbierto
+              ? // Solo se llega aquí si la persona ELIGIÓ "solo el turno
+                // abierto" a mano: el default ya se cayó al histórico.
+                "Elegiste ver solo el turno abierto y no hay ninguno. Abre uno, o cambia a “Todo el histórico”."
               : hayFiltros
                 ? "Prueba con menos filtros, o cambia a “Todo el histórico”."
                 : "Aquí aparecen los cobros conforme se emiten. Elige al paciente y el sistema pone su tarifa: tú no tecleas precios."}
@@ -454,20 +479,59 @@ function Cobrar({
     if (!montoTocado) setMonto(eduMoneyInputValue(totals.totalCents));
   }, [totals.totalCents, montoTocado]);
 
-  async function buscar() {
-    setError(null);
-    setBuscando(true);
-    try {
-      const res = await eduRequest<{ rows: { id: string; folio: string; name: string }[] }>(
-        `/api/instituto/pacientes?q=${encodeURIComponent(q.trim())}`,
-      );
-      setResultados(res.rows.slice(0, 20).map((p) => ({ id: p.id, folio: p.folio, name: p.name })));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo buscar.");
-    } finally {
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 EL BUSCADOR FILTRA MIENTRAS SE TECLEA.
+  //
+  // Antes exigía apretar "Buscar" (o Enter), y lo que pasaba en el
+  // mostrador es lo que tenía que pasar: recepción escribía el nombre del
+  // paciente y se quedaba esperando sin que ocurriera nada. El botón
+  // seguía ahí, pero nadie mira un botón mientras teclea un nombre.
+  //
+  // Con RETARDO y no en cada tecla: sin él, "María Rodríguez" son quince
+  // consultas a Postgres para pintar una lista de tres. El retardo se
+  // reinicia en cada pulsación, así que solo viaja la última.
+  //
+  // Y con NÚMERO DE PETICIÓN: dos búsquedas en vuelo pueden volver al
+  // revés (la de "mar" después de la de "maria") y dejar en pantalla los
+  // resultados de lo que ya no está escrito. Solo se pinta la respuesta de
+  // la última que salió.
+  // ═══════════════════════════════════════════════════════════════════
+  const peticion = useRef(0);
+
+  useEffect(() => {
+    // Con el paciente ya elegido esta pantalla ya no busca: se pasó a
+    // cotizar, y una consulta más solo gastaría una petición.
+    if (tarifa) return;
+
+    const termino = q.trim();
+    if (!termino) {
+      setResultados(null);
       setBuscando(false);
+      return;
     }
-  }
+
+    const mio = ++peticion.current;
+    setBuscando(true);
+    const t = window.setTimeout(async () => {
+      try {
+        const res = await eduRequest<{ rows: { id: string; folio: string; name: string }[] }>(
+          `/api/instituto/pacientes?q=${encodeURIComponent(termino)}`,
+        );
+        if (mio !== peticion.current) return;
+        setResultados(
+          res.rows.slice(0, 20).map((p) => ({ id: p.id, folio: p.folio, name: p.name })),
+        );
+        setError(null);
+      } catch (err) {
+        if (mio !== peticion.current) return;
+        setError(err instanceof Error ? err.message : "No se pudo buscar.");
+      } finally {
+        if (mio === peticion.current) setBuscando(false);
+      }
+    }, EDU_BUSQUEDA_RETARDO_MS);
+
+    return () => window.clearTimeout(t);
+  }, [q, tarifa]);
 
   async function elegirPaciente(p: PacienteBusqueda) {
     setError(null);
@@ -610,28 +674,30 @@ function Cobrar({
               <input
                 id="edu-cobro-q"
                 className="edu-input"
+                type="search"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    buscar();
-                  }
-                }}
                 placeholder="Nombre, folio o teléfono"
                 autoComplete="off"
+                autoFocus
               />
-              <button type="button" className="edu-reveal" onClick={buscar} aria-label="Buscar">
+              {/* La lupa se queda como PISTA de qué es este campo, no como
+                  botón: ya no hay nada que apretar. */}
+              <span className="edu-reveal edu-reveal--pista" aria-hidden="true">
                 <Search size={17} />
-              </button>
+              </span>
             </div>
+            <p className="edu-field__hint">
+              Escribe y la lista se va filtrando sola. Se busca por nombre, folio y teléfono, sin
+              importar los acentos.
+            </p>
           </div>
 
           {buscando && <p className="edu-note">Buscando…</p>}
 
-          {resultados !== null && resultados.length === 0 && (
+          {!buscando && resultados !== null && resultados.length === 0 && (
             <p className="edu-note">
-              Ningún paciente coincide. Se busca por nombre, folio y teléfono.
+              Ningún paciente coincide con “{q.trim()}”. Se busca por nombre, folio y teléfono.
             </p>
           )}
 
