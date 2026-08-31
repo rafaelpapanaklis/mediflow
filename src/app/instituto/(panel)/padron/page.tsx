@@ -17,7 +17,7 @@ import { EduDenied } from "@/components/edu/edu-denied";
 import { EduPadronScreen } from "@/components/edu/padron/padron-screen";
 
 export const metadata: Metadata = {
-  title: "Alumnos · DaleControl Institucional",
+  title: "Estudiantes · DaleControl Institucional",
   robots: { index: false, follow: false },
 };
 
@@ -55,7 +55,7 @@ export default async function InstitutoPadronPage({
     return (
       <EduDenied
         permission="padron.view"
-        what="La lista de alumnos del instituto, con su generación, su semestre y el docente que los supervisa."
+        what="La lista de estudiantes del instituto, con su generación, su semestre y el docente que los supervisa."
       />
     );
   }
@@ -86,11 +86,11 @@ export default async function InstitutoPadronPage({
     <div className="edu-page">
       <header className="edu-pagehead">
         <div>
-          <h1 className="edu-page__title">Alumnos</h1>
+          <h1 className="edu-page__title">Estudiantes</h1>
           <p className="edu-page__lead">
             {page.scope.kind === "supervised"
-              ? "Los alumnos que supervisas hoy. Cuando la dirección te asigne o te quite alguno, esta lista lo refleja sola."
-              : "Todos los alumnos del instituto, con su generación, su semestre y el docente que los supervisa."}
+              ? "Los estudiantes que supervisas hoy. Cuando la dirección te asigne o te quite alguno, esta lista lo refleja sola."
+              : "Todos los estudiantes del instituto, con su generación, su semestre y el docente que los supervisa."}
           </p>
         </div>
         {canManage && (

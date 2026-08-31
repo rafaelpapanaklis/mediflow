@@ -330,7 +330,7 @@ export async function createEduConsent(
   const caseId = eduCleanId(input.caseId);
   if (!caseId) {
     throw new EduPadronError(
-      "Falta el caso. El consentimiento tiene que decir qué alumno te va a atender y qué docente responde, y eso sale del caso.",
+      "Falta el caso. El consentimiento tiene que decir qué estudiante te va a atender y qué docente responde, y eso sale del caso.",
     );
   }
 
@@ -621,7 +621,7 @@ export async function countersignEduConsent(
   else if (esDocente) slot = "docente";
   else {
     throw new EduPadronError(
-      "Esta carta la contrafirman el alumno que atiende y su docente responsable. Tú no eres ninguno de los dos.",
+      "Esta carta la contrafirman el estudiante que atiende y su docente responsable. Tú no eres ninguno de los dos.",
       403,
     );
   }

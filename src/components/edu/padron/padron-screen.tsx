@@ -118,7 +118,7 @@ export function EduPadronScreen({
   if (scopeKind === "none") {
     return (
       <div className="edu-empty">
-        <p className="edu-empty__title">Aquí no hay alumnos que mostrarte</p>
+        <p className="edu-empty__title">Aquí no hay estudiantes que mostrarte</p>
         <p className="edu-empty__detail">{EDU_SCOPE_NONE_DETAIL}</p>
       </div>
     );
@@ -239,7 +239,7 @@ export function EduPadronScreen({
         <span className="edu-count">
           {navigating
             ? "Buscando…"
-            : `${rows.length} ${rows.length === 1 ? "alumno" : "alumnos"}${truncated ? ` (se muestran los primeros ${maxRows})` : ""}`}
+            : `${rows.length} ${rows.length === 1 ? "estudiante" : "estudiantes"}${truncated ? ` (se muestran los primeros ${maxRows})` : ""}`}
           {scopeKind === "supervised" ? " que supervisas" : ""}
         </span>
         {canManage && (
@@ -252,7 +252,7 @@ export function EduPadronScreen({
             }}
           >
             <UserPlus size={16} />
-            Inscribir alumno
+            Inscribir estudiante
           </button>
         )}
       </div>
@@ -260,21 +260,21 @@ export function EduPadronScreen({
       {rows.length === 0 ? (
         <div className="edu-empty">
           <p className="edu-empty__title">
-            {hayFiltros ? "Ningún alumno coincide" : "Todavía no hay alumnos inscritos"}
+            {hayFiltros ? "Ningún estudiante coincide" : "Todavía no hay estudiantes inscritos"}
           </p>
           <p className="edu-empty__detail">
             {hayFiltros
               ? "Prueba con menos filtros o revisa la matrícula que buscaste."
               : scopeKind === "supervised"
-                ? "Aquí aparecerán los alumnos que la dirección te asigne como supervisor."
-                : "Primero crea una especialidad y una generación en Especialidades y generaciones, y después inscribe a cada alumno."}
+                ? "Aquí aparecerán los estudiantes que la dirección te asigne como supervisor."
+                : "Primero crea una especialidad y una generación en Especialidades y generaciones, y después inscribe a cada estudiante."}
           </p>
         </div>
       ) : (
         <div className="edu-table edu-table--padron">
           <div className="edu-rowhead" aria-hidden="true">
             <span>Matrícula</span>
-            <span>Alumno</span>
+            <span>Estudiante</span>
             <span>Especialidad · Generación</span>
             <span>Sem.</span>
             <span>Estado</span>
@@ -293,7 +293,7 @@ export function EduPadronScreen({
                 </div>
 
                 <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Alumno</span>
+                  <span className="edu-cell__label">Estudiante</span>
                   <span className="edu-cell__value edu-cell__value--strong">{r.name}</span>
                   <span className="edu-cell__sub">
                     {r.email}
@@ -358,7 +358,7 @@ export function EduPadronScreen({
           onClose={() => setAbriendoAlta(false)}
           onDone={(nombre) => {
             setAbriendoAlta(false);
-            recargar(`${nombre} quedó inscrito como alumno.`);
+            recargar(`${nombre} quedó inscrito como estudiante.`);
           }}
         />
       )}
@@ -420,7 +420,7 @@ function AltaAlumno({
         method: "POST",
         body: { userId, programId, cohortId, matricula, semester },
       });
-      onDone(enrollables.find((u) => u.id === userId)?.name ?? "El alumno");
+      onDone(enrollables.find((u) => u.id === userId)?.name ?? "El estudiante");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo inscribir.");
     } finally {
@@ -430,7 +430,7 @@ function AltaAlumno({
 
   return (
     <EduModal
-      title="Inscribir alumno"
+      title="Inscribir estudiante"
       subtitle="Se le da ficha académica a una persona que ya tiene cuenta en el instituto."
       onClose={onClose}
       busy={busy}
@@ -460,7 +460,7 @@ function AltaAlumno({
         <div className="edu-empty">
           <p className="edu-empty__title">No hay nadie por inscribir</p>
           <p className="edu-empty__detail">
-            Aquí solo aparecen las personas con rol <strong>Alumno</strong> que todavía no tienen
+            Aquí solo aparecen las personas con rol <strong>Estudiante</strong> que todavía no tienen
             ficha académica. Inscribir es el SEGUNDO paso: primero hay que crearle la cuenta.
           </p>
           {/* Sin esto el diálogo era un callejón sin salida: decía que

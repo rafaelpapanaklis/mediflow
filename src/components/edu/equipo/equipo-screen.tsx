@@ -401,7 +401,7 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
           <p className="edu-empty__detail">
             {hayFiltros
               ? "Prueba con menos filtros. El buscador ignora los acentos y las mayúsculas."
-              : "Da de alta a la dirección, a los docentes, a los alumnos y a caja. A cada persona se le crea el acceso y se te muestra su contraseña temporal una sola vez."}
+              : "Da de alta a la dirección, a los docentes, a los estudiantes y a caja. A cada persona se le crea el acceso y se te muestra su contraseña temporal una sola vez."}
           </p>
         </div>
       ) : (
@@ -841,7 +841,7 @@ function ModalAlta({
       {role === "ALUMNO" && (
         <p className="edu-note">
           Crear la cuenta no lo inscribe: después hay que darle matrícula, especialidad y generación
-          desde Alumnos.
+          desde Estudiantes.
         </p>
       )}
     </EduModal>
@@ -976,7 +976,7 @@ function ModalMasiva({
           rows={8}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          placeholder={"María Elena, Rodríguez Gómez, maria@instituto.mx, Alumno\nJuan, Pérez, juan@instituto.mx"}
+          placeholder={"María Elena, Rodríguez Gómez, maria@instituto.mx, Estudiante\nJuan, Pérez, juan@instituto.mx"}
           spellCheck={false}
         />
         <span className="edu-field__hint">

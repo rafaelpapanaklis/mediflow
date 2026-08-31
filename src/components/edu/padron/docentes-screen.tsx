@@ -159,7 +159,7 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
         <div className="edu-rowhead" aria-hidden="true">
           <span>Docente</span>
           <span>Correo</span>
-          <span>Alumnos hoy</span>
+          <span>Estudiantes hoy</span>
           <span>Estado</span>
           <span />
         </div>
@@ -181,7 +181,7 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
               </div>
 
               <div className="edu-cell">
-                <span className="edu-cell__label">Alumnos hoy</span>
+                <span className="edu-cell__label">Estudiantes hoy</span>
                 <span className="edu-cell__value edu-cell__value--strong">{t.currentStudents}</span>
               </div>
 
@@ -201,7 +201,7 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
                   disabled={t.currentStudents === 0}
                 >
                   {expandido ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                  Alumnos
+                  Estudiantes
                 </button>
               </div>
 
@@ -209,8 +209,8 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
                 <div className="edu-detail">
                   {alumnos.length === 0 ? (
                     <p className="edu-note">
-                      Aquí no hay alumnos que mostrarte. Si el número de arriba no dice cero,
-                      esa lista no te toca: los NOMBRES de los alumnos de otro docente los ve
+                      Aquí no hay estudiantes que mostrarte. Si el número de arriba no dice cero,
+                      esa lista no te toca: los NOMBRES de los estudiantes de otro docente los ve
                       la dirección. El conteo sí es el real.
                     </p>
                   ) : (
@@ -239,8 +239,8 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
                   )}
                   {canAssign && (
                     <p className="edu-note">
-                      Para asignarle un alumno nuevo, entra a Alumnos, abre la ficha del alumno y
-                      elige al docente ahí: la asignación se hace desde el alumno, que es donde se
+                      Para asignarle un estudiante nuevo, entra a Estudiantes, abre la ficha del estudiante y
+                      elige al docente ahí: la asignación se hace desde el estudiante, que es donde se
                       ve con quién más la comparte.
                     </p>
                   )}

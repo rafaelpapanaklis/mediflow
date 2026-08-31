@@ -574,7 +574,7 @@ function AltaCita({
       <div className="edu-formgrid edu-formgrid--2">
         <div className="edu-field">
           <label className="edu-field__label" htmlFor="edu-ac-alumno">
-            Alumno
+            Estudiante
           </label>
           <select
             id="edu-ac-alumno"
@@ -698,7 +698,7 @@ function AltaCita({
         <span className="edu-field__hint">
           {alumno?.supervisorName
             ? `Se propone el titular vigente de ${alumno.matricula}: ${alumno.supervisorName}.`
-            : "Este alumno no tiene titular vigente. Asígnale uno en Alumnos si hace falta."}
+            : "Este estudiante no tiene titular vigente. Asígnale uno en Estudiantes si hace falta."}
         </span>
       </div>
 
@@ -845,7 +845,7 @@ function DetalleCita({
           </span>
         </div>
         <div>
-          <span className="edu-kv__k">Alumno</span>
+          <span className="edu-kv__k">Estudiante</span>
           <span className="edu-kv__v">
             {row.studentMatricula} · {row.studentName}
           </span>
@@ -999,7 +999,7 @@ function DetalleCita({
               </div>
               <div className="edu-field">
                 <label className="edu-field__label" htmlFor="edu-rg-alumno">
-                  Alumno
+                  Estudiante
                 </label>
                 <select
                   id="edu-rg-alumno"

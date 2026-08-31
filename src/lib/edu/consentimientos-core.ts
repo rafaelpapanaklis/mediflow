@@ -319,7 +319,7 @@ export function eduConsentBloqueEscuela(input: EduConsentTextoInput): string {
     "0. QUIÉN TE VA A ATENDER — LÉELO ANTES QUE NADA",
     `Este establecimiento es la clínica de enseñanza de ${input.institutionName}. ` +
       `El procedimiento que se describe abajo lo realiza ${alumno}${especialidad}, ` +
-      `alumno en formación, ${docente}. ` +
+      `estudiante en formación, ${docente}. ` +
       "Se me explicó esta circunstancia ANTES de firmar, pude preguntar lo que quise y la acepto.",
     "",
     "─────────────────────────────────────────────",

@@ -52,8 +52,8 @@ export default async function InstitutoSedesPage() {
             Una sede es un edificio de la escuela: el campus norte, el campus sur, la clínica
             de posgrado. Cada una tiene sus <strong>sillones</strong> —y por lo tanto su
             agenda y su caja— y puede estar en otro huso horario. Lo académico no se divide:
-            los alumnos, las generaciones y las especialidades son los mismos en todas, porque
-            un alumno rota entre sedes y su expediente es uno solo.
+            los estudiantes, las generaciones y las especialidades son los mismos en todas, porque
+            un estudiante rota entre sedes y su expediente es uno solo.
           </p>
         </div>
       </header>

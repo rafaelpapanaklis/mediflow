@@ -45,7 +45,7 @@ export default async function InstitutoEquipoPage({
     return (
       <EduDenied
         permission="equipo.manage"
-        what="Aquí se dan de alta las cuentas del instituto —dirección, docentes, alumnos y caja— y se dan de baja las que ya no se usan."
+        what="Aquí se dan de alta las cuentas del instituto —dirección, docentes, estudiantes y caja— y se dan de baja las que ya no se usan."
       />
     );
   }

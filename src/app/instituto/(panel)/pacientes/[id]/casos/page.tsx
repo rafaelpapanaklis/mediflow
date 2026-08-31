@@ -44,7 +44,7 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
     return (
       <EduDenied
         permission="casos.view"
-        what="Los casos clínicos del paciente: qué especialidad, qué alumno y en qué van."
+        what="Los casos clínicos del paciente: qué especialidad, qué estudiante y en qué van."
       />
     );
   }
@@ -111,7 +111,7 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
         {scope.kind !== "all" && casos.length > 0 && (
           <p className="edu-note">
             Ves los casos que te tocan. Si este paciente tiene otros con otra especialidad y otro
-            alumno, no salen aquí.
+            estudiante, no salen aquí.
           </p>
         )}
 
@@ -119,8 +119,8 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
           <div className="edu-empty">
             <p className="edu-empty__title">Sin casos que mostrarte</p>
             <p className="edu-empty__detail">
-              Un caso se abre en el tamizaje: es lo que le pone alumno y especialidad al paciente. Si
-              este paciente ya tiene casos con otros alumnos, no te tocan.
+              Un caso se abre en el tamizaje: es lo que le pone estudiante y especialidad al paciente. Si
+              este paciente ya tiene casos con otros estudiantes, no te tocan.
             </p>
           </div>
         ) : (

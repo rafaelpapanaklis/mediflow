@@ -311,12 +311,12 @@ async function resolveOriginStudent(
 ): Promise<string | null> {
   if (raw === null || raw === undefined || raw === "") return null;
   const id = eduCleanId(raw);
-  if (!id) throw new EduPadronError("Ese alumno no es válido.");
+  if (!id) throw new EduPadronError("Ese estudiante no es válido.");
   const student = await prisma.eduStudent.findFirst({
     where: { id, institutionId },
     select: { id: true },
   });
-  if (!student) throw new EduPadronError("Ese alumno no es de este instituto.", 404);
+  if (!student) throw new EduPadronError("Ese estudiante no es de este instituto.", 404);
   return student.id;
 }
 

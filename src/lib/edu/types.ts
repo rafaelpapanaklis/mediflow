@@ -147,7 +147,7 @@ export const EDU_ROLES: EduRole[] = ["DIRECCION", "DOCENTE", "ALUMNO", "CAJA"];
 export const EDU_ROLE_LABELS: Record<EduRole, string> = {
   DIRECCION: "Dirección",
   DOCENTE: "Docente",
-  ALUMNO: "Alumno",
+  ALUMNO: "Estudiante",
   CAJA: "Caja",
 };
 
@@ -155,14 +155,15 @@ export const EDU_ROLE_LABELS: Record<EduRole, string> = {
  * Una línea que explica qué hace ese rol; se usa en el panel y en las altas
  * de /instituto/equipo.
  *
- * ⚠️ Aquí NO se dice "residente" (Ola 1B). El producto le dice ALUMNO en
- * todas sus pantallas, y llamarle de dos maneras distintas obliga a quien
- * da de alta a preguntarse si son dos cosas.
+ * ⚠️ Aquí NO se dice "residente" (Ola 1B). El producto le dice ESTUDIANTE
+ * en todas sus pantallas (antes decía "alumno"; el enum sigue siendo
+ * ALUMNO), y llamarle de dos maneras distintas obliga a quien da de alta a
+ * preguntarse si son dos cosas.
  */
 export const EDU_ROLE_DESCRIPTIONS: Record<EduRole, string> = {
-  DIRECCION: "Dirige el instituto: alumnos, docentes, contrato y reportes.",
-  DOCENTE: "Supervisa a los alumnos y autoriza los procedimientos.",
-  ALUMNO: "Alumno en formación: atiende pacientes y pide autorización.",
+  DIRECCION: "Dirige el instituto: estudiantes, docentes, contrato y reportes.",
+  DOCENTE: "Supervisa a los estudiantes y autoriza los procedimientos.",
+  ALUMNO: "Estudiante en formación: atiende pacientes y pide autorización.",
   CAJA: "Cobra a los pacientes y hace los cortes del día.",
 };
 
@@ -287,11 +288,11 @@ export const EDU_CASE_STATUS_LABELS: Record<EduCaseStatus, string> = {
 
 export const EDU_CASE_STATUS_DESCRIPTIONS: Record<EduCaseStatus, string> = {
   SCREENING: "Se abrió en el tamizaje y todavía no se decide el tratamiento.",
-  ASSIGNED: "Ya tiene alumno responsable; falta empezar.",
+  ASSIGNED: "Ya tiene estudiante responsable; falta empezar.",
   IN_TREATMENT: "Ya se le está trabajando al paciente.",
   ON_HOLD: "Pausado: falta un estudio, un pago o que el paciente vuelva.",
   COMPLETED: "Terminó. No se borra: la historia queda.",
-  TRANSFERRED: "Pasó a otro alumno o a otra especialidad.",
+  TRANSFERRED: "Pasó a otro estudiante o a otra especialidad.",
   ABANDONED: "El paciente dejó de venir y el caso se cerró así.",
 };
 
@@ -323,7 +324,7 @@ export const EDU_APPOINTMENT_TYPE_LABELS: Record<EduAppointmentType, string> = {
 };
 
 export const EDU_APPOINTMENT_TYPE_DESCRIPTIONS: Record<EduAppointmentType, string> = {
-  TAMIZAJE: "Valoración inicial. Es la que asigna el paciente a un alumno y abre el caso.",
+  TAMIZAJE: "Valoración inicial. Es la que asigna el paciente a un estudiante y abre el caso.",
   TRATAMIENTO: "Sesión de trabajo en el sillón.",
   CONTROL: "Revisión posterior, sin tratamiento nuevo.",
 };
@@ -496,14 +497,14 @@ export const EDU_FEE_RULES: EduFeeRule[] = ["MANUAL", "REFERRED_BY_STUDENT"];
 
 export const EDU_FEE_RULE_LABELS: Record<EduFeeRule, string> = {
   MANUAL: "Se elige a mano",
-  REFERRED_BY_STUDENT: "Paciente que trajo un alumno",
+  REFERRED_BY_STUDENT: "Paciente que trajo un estudiante",
 };
 
 export const EDU_FEE_RULE_DESCRIPTIONS: Record<EduFeeRule, string> = {
   MANUAL:
     "No se aplica sola. Sirve para convenios, campañas y personal: al cobrar se elige a mano.",
   REFERRED_BY_STUDENT:
-    "Se aplica sola cuando al paciente lo trajo un alumno (el origen que marca recepción con el permiso pacientes.origen).",
+    "Se aplica sola cuando al paciente lo trajo un estudiante (el origen que marca recepción con el permiso pacientes.origen).",
 };
 
 /** En qué va el cobro. Se DERIVA de (total, pagado, cancelado). */
@@ -607,12 +608,12 @@ export const EDU_APPROVAL_STAGE_LABELS: Record<EduApprovalStage, string> = {
 };
 
 export const EDU_APPROVAL_STAGE_DESCRIPTIONS: Record<EduApprovalStage, string> = {
-  PLAN: "Lo que el alumno propone hacerle al paciente. Sin esto autorizado, el caso no pasa a tratamiento.",
+  PLAN: "Lo que el estudiante propone hacerle al paciente. Sin esto autorizado, el caso no pasa a tratamiento.",
   PROCEDURE: "Un acto concreto que se va a hacer hoy. No mueve el caso: deja escrito que el docente lo vio antes.",
   SESSION: "Esta sesión, en esta hora y en este sillón. Si se reagenda, la firma deja de valer.",
   DISCHARGE: "Dar por terminado el caso. Sin esto autorizado, no se cierra.",
   PRESCRIPTION:
-    "La receta que el alumno propone. La firma del docente ES la expedición: sale con su cédula, y sin ella no se imprime.",
+    "La receta que el estudiante propone. La firma del docente ES la expedición: sale con su cédula, y sin ella no se imprime.",
 };
 
 /**
@@ -959,12 +960,13 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   agenda: "Agenda",
   pacientes: "Pacientes",
   // Cierre: era "Padrón" y el dueño del producto tuvo que preguntar qué
-  // significaba — si él dudó, una escuela también. Se renombra SOLO lo que
-  // se lee: la ruta sigue siendo /instituto/padron (renombrarla rompería
-  // los enlaces guardados), el modelo sigue siendo EduStudent y las keys
-  // siguen siendo padron.view / padron.manage. Misma regla que
-  // "Especialidades" un renglón más abajo.
-  padron: "Alumnos",
+  // significaba — si él dudó, una escuela también. Después pidió
+  // "Estudiantes" en vez de "Alumnos". Se renombra SOLO lo que se lee: la
+  // ruta sigue siendo /instituto/padron (renombrarla rompería los enlaces
+  // guardados), el modelo sigue siendo EduStudent y las keys siguen siendo
+  // padron.view / padron.manage. Misma regla que "Especialidades" un
+  // renglón más abajo.
+  padron: "Estudiantes",
   // Ola 1B: la escuela les dice ESPECIALIDADES, no "programas". El modelo
   // sigue llamándose EduProgram y la ruta sigue siendo /padron/estructura —
   // solo cambia lo que se LEE. Renombrar el modelo obligaría a migrar

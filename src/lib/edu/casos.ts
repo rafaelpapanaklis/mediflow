@@ -319,9 +319,9 @@ async function resolveCaseParties(
         select: { id: true, status: true, programId: true },
       })
     : null;
-  if (!student) throw new EduPadronError("Elige un alumno de este instituto.", 400);
+  if (!student) throw new EduPadronError("Elige un estudiante de este instituto.", 400);
   if (student.status !== "ACTIVE") {
-    throw new EduPadronError("Ese alumno no está activo en el padrón. No se le puede asignar un paciente.");
+    throw new EduPadronError("Ese estudiante no está activo en el padrón. No se le puede asignar un paciente.");
   }
 
   const program = programId

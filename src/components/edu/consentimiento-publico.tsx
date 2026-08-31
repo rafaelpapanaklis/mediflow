@@ -111,7 +111,7 @@ export function EduConsentimientoPublico({
           <div>
             <p className="edu-banner__title">Quién te va a atender</p>
             <p className="edu-banner__detail">
-              Te atiende <strong>{vista.studentName}</strong>, alumno en formación de{" "}
+              Te atiende <strong>{vista.studentName}</strong>, estudiante en formación de{" "}
               {vista.institutionName}
               {vista.supervisorName ? (
                 <>
@@ -184,13 +184,13 @@ export function EduConsentimientoPublico({
               {/* P2-14: misma etiqueta del servidor que el aviso de arriba. */}
               Paciente: {vista.signedLabel ? `firmado el ${vista.signedLabel}` : "pendiente"}
             </li>
-            <li>Alumno: {vista.studentSignedAt ? "contrafirmado" : "pendiente"}</li>
+            <li>Estudiante: {vista.studentSignedAt ? "contrafirmado" : "pendiente"}</li>
             <li>Docente responsable: {vista.supervisorSignedAt ? "contrafirmado" : "pendiente"}</li>
             {vista.witness1Name && <li>Testigo 1: {vista.witness1Name}</li>}
             {vista.witness2Name && <li>Testigo 2: {vista.witness2Name}</li>}
           </ul>
           <p className="edu-publico__nota">
-            El alumno y su docente firman desde el sistema del instituto después de que tú firmes.
+            El estudiante y su docente firman desde el sistema del instituto después de que tú firmes.
             Estado actual: {EDU_CONSENT_ESTADO_LABELS[vista.estado]}.
           </p>
         </section>

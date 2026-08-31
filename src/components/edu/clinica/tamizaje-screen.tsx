@@ -269,7 +269,7 @@ function FormularioTamizaje({
 
         <div className="edu-field">
           <label className="edu-field__label" htmlFor="edu-tz-alumno">
-            Alumno que lo va a tratar
+            Estudiante que lo va a tratar
           </label>
           <select
             id="edu-tz-alumno"
@@ -291,7 +291,7 @@ function FormularioTamizaje({
           </select>
           <span className="edu-field__hint">
             {programId
-              ? "Solo los alumnos de esa especialidad."
+              ? "Solo los estudiantes de esa especialidad."
               : "Elige antes la especialidad para acotar la lista."}
           </span>
         </div>
@@ -317,8 +317,8 @@ function FormularioTamizaje({
         </select>
         <span className="edu-field__hint">
           {alumno?.supervisorName
-            ? `Se propone el titular vigente de ${alumno.matricula}: ${alumno.supervisorName}. Queda guardado como el responsable del caso en este momento; quién ve el caso lo sigue decidiendo la asignación vigente alumno–docente.`
-            : "Este alumno no tiene titular vigente. El caso se puede abrir igual y el docente se pone después."}
+            ? `Se propone el titular vigente de ${alumno.matricula}: ${alumno.supervisorName}. Queda guardado como el responsable del caso en este momento; quién ve el caso lo sigue decidiendo la asignación vigente estudiante–docente.`
+            : "Este estudiante no tiene titular vigente. El caso se puede abrir igual y el docente se pone después."}
         </span>
       </div>
 

@@ -121,8 +121,8 @@ export default async function InstitutoMiDiaPage({
                 : "Lo que te toca hoy. Marca aquí cuando el paciente llegue y cuando lo sientes en el sillón."
               : scope.kind === "supervised"
                 ? semana
-                  ? "La semana de los alumnos que supervisas."
-                  : "El día de los alumnos que supervisas hoy."
+                  ? "La semana de los estudiantes que supervisas."
+                  : "El día de los estudiantes que supervisas hoy."
                 : semana
                   ? "La semana completa de la clínica."
                   : "El día completo de la clínica."}

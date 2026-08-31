@@ -62,7 +62,7 @@ export function EduRequisitosScreen({
       });
       recargar(
         r.isActive
-          ? `"${r.name}" deja de exigirse. No se borra nada de lo que los alumnos ya hicieron: el avance se cuenta, no se guarda.`
+          ? `"${r.name}" deja de exigirse. No se borra nada de lo que los estudiantes ya hicieron: el avance se cuenta, no se guarda.`
           : `"${r.name}" vuelve a exigirse, y los casos que ya tenían cuentan solos.`,
       );
     } catch (err) {
@@ -273,7 +273,7 @@ function EditorRequisito({
 
       if (requisito) {
         await eduRequest(`/api/instituto/requisitos/${requisito.id}`, { method: "PATCH", body });
-        onDone(`Requisito "${body.name}" guardado. El avance de cada alumno se recalcula solo.`);
+        onDone(`Requisito "${body.name}" guardado. El avance de cada estudiante se recalcula solo.`);
       } else {
         await eduRequest("/api/instituto/requisitos", { method: "POST", body });
         onDone(`Requisito "${body.name}" capturado.`);
@@ -290,7 +290,7 @@ function EditorRequisito({
   return (
     <EduModal
       title={requisito ? "Editar el requisito" : "Nuevo requisito"}
-      subtitle="Cuántos de qué necesita un alumno para cerrar. El avance se cuenta solo."
+      subtitle="Cuántos de qué necesita un estudiante para cerrar. El avance se cuenta solo."
       onClose={onClose}
       busy={busy}
       footer={
@@ -405,7 +405,7 @@ function EditorRequisito({
           — sin esta frase, quien captura "5º–6º" cree que un caso de 1º
           dejará de contar, y no es eso lo que decide. */}
       <p className="edu-field__hint">
-        El rango marca CUÁNDO se le exige al alumno: antes del semestre inicial el semáforo no se
+        El rango marca CUÁNDO se le exige al estudiante: antes del semestre inicial el semáforo no se
         lo cuenta como pendiente, y dentro del rango la expectativa crece semestre a semestre. Un
         caso hecho antes del rango sí cuenta — lo que se acota es cuándo se espera, no cuándo se
         hizo.

@@ -158,7 +158,7 @@ export function eduResumenAvisos(
     ) {
       out.push({
         kind: "docente",
-        text: `El caso de ${caso.programName} no tiene docente que responda: ni responsable en el caso ni titular vigente del alumno.`,
+        text: `El caso de ${caso.programName} no tiene docente que responda: ni responsable en el caso ni titular vigente del estudiante.`,
       });
     }
   }
