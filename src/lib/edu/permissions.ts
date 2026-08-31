@@ -154,6 +154,26 @@ export const EDU_ALL_PERMISSIONS = {
   "evaluacion.view": "Ver el avance académico y las calificaciones",
   "evaluacion.grade": "Calificar un caso con una rúbrica",
   "traspaso.manage": "Traspasar los casos de un alumno a otro",
+  // ── Ola 11 · las sedes ───────────────────────────────────────────────
+  // DOS keys, y las dos tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   sedes.view   → /instituto/sedes + GET /api/instituto/sedes
+  //   sedes.manage → POST /api/instituto/sedes, PATCH .../[id] y
+  //                  POST .../[id]/acceso
+  //
+  // 🔴 NINGUNA DE LAS DOS HACE FALTA PARA *USAR* LAS SEDES. El selector de
+  // la barra superior, el filtro de la agenda y el de caja NO piden
+  // permiso: cambiar de sede es moverse entre lo que el ACCESO
+  // (edu_user_campus_access) ya autoriza, y pedir un permiso para eso
+  // dejaría a un docente del campus norte sin poder mirar su propia
+  // agenda. Estas dos keys son para ADMINISTRAR las sedes: darlas de alta
+  // y decidir quién entra a cada una.
+  //
+  // ⚠️ Y por eso tampoco son "el permiso de multi-sede": una escuela con
+  // una sola sede nunca ve el selector (nadie elige entre una opción) y no
+  // necesita tocar esta pantalla.
+  "sedes.view": "Ver las sedes del instituto",
+  "sedes.manage": "Dar de alta sedes y decidir quién entra a cada una",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -249,6 +269,16 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
       "evaluacion.grade",
       "traspaso.manage",
     ],
+  },
+  {
+    // Ola 11. Grupo PROPIO y de dos keys: dar de alta un campus y repartir
+    // quién entra a cuál no se parece a nada de lo de arriba — es la
+    // geografía de la escuela, no lo que se hace dentro. Va aparte de
+    // "Equipo" (que decide quién ENTRA al instituto) porque esto decide
+    // DÓNDE entra, y mezclarlas haría que "quitarle una sede a alguien"
+    // pareciera "darlo de baja".
+    title: "Sedes",
+    keys: ["sedes.view", "sedes.manage"],
   },
 ];
 
@@ -411,6 +441,24 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * procedimiento que el paciente ya rechazó porque el alumno tuvo que ir a
  * buscar a su docente. Y lo que puede revocar está recortado a SUS
  * pacientes por el alcance, como todo lo demás.
+ *
+ * ── Ola 11 · las sedes ──────────────────────────────────────────────────
+ * DIRECCION las dos; los otros tres roles, NINGUNA. Y esta vez el reparto
+ * NO es la ola — la ola vive en otro sitio:
+ *
+ * 🔴 EL ACCESO A UNA SEDE NO ES UN PERMISO. Los permisos dicen QUÉ puede
+ * hacer una persona; la sede dice DÓNDE. Un docente con `agenda.view` y
+ * acceso solo al campus norte ve la agenda —el permiso está encendido— pero
+ * solo la del norte, y eso lo decide edu_user_campus_access
+ * (src/lib/edu/campus-core.ts), no esta lista.
+ *
+ * Consecuencia práctica: NINGÚN rol necesita una key para cambiar de sede
+ * en la barra superior ni para que sus pantallas la respeten. Si hiciera
+ * falta una, el día que se aplicara la ola todo el mundo se quedaría sin
+ * poder mirar su propia agenda hasta que alguien encendiera un interruptor.
+ *
+ * `sedes.view` y `sedes.manage` son para ADMINISTRAR: dar de alta un
+ * campus, cerrarlo y repartir quién entra a cuál.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
   DIRECCION: [
@@ -462,6 +510,14 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "evaluacion.view",
     "evaluacion.grade",
     "traspaso.manage",
+    // ── Ola 11 ──────────────────────────────────────────────────────────
+    // Las dos, y SOLO dirección. Abrir un campus es una decisión de la
+    // escuela, y repartir quién entra a cuál es repartir el acceso a los
+    // pacientes de un edificio entero. Si una universidad grande quiere
+    // que su coordinador de sede administre la suya, se le enciende por
+    // override desde la pantalla de permisos — a sabiendas.
+    "sedes.view",
+    "sedes.manage",
   ],
   DOCENTE: [
     "inicio.view",

@@ -48,6 +48,7 @@ import {
 } from "@/lib/edu/agenda-core";
 import {
   eduAppointmentScopeWhere,
+  eduCampusCovers,
   eduScopeIsEmpty,
   eduVisibility,
   type EduClinicaContext,
@@ -180,6 +181,10 @@ export async function listEduAgenda(
       // `student` que el recorte; escribir `where.student` dos veces
       // perdería uno de los dos en silencio.
       studentExtra: query.programId ? { programId: query.programId } : undefined,
+      // 🔴 Ola 11 · LA SEDE. Recorta POR EL SILLÓN de la cita, no por una
+      // columna copiada en la cita: si un sillón se traslada de edificio,
+      // sus citas se van con él, que es lo que la escuela espera.
+      campusIds: ctx.campusIds,
     }),
     startsAt: { gte: rango.from, lt: rango.to },
   };
@@ -459,7 +464,18 @@ async function assertNoClash(
 }
 
 /** Comprueba que paciente, alumno, sillón y supervisor sean de este
- *  instituto. Es lo que un permiso no puede saber. */
+ *  instituto. Es lo que un permiso no puede saber.
+ *
+ * 🔴 Ola 11 — y que el SILLÓN sea de una sede a la que quien agenda entra.
+ * No es un permiso (tiene `agenda.manage`), es alcance: un chairId del body
+ * que apuntara a la otra sede metería un paciente en un edificio al que
+ * quien agenda ni siquiera puede mirar.
+ *
+ * Devuelve además la ZONA HORARIA DE LA SEDE del sillón, que es con la que
+ * hay que interpretar la hora de la cita — no con la del instituto. Una
+ * universidad con un campus en Tijuana y otro en Mérida tiene dos "las 8 de
+ * la mañana" distintas, y el horario del sillón está en la hora de PARED de
+ * su edificio. */
 async function resolveParties(
   institutionId: string,
   input: {
@@ -468,7 +484,14 @@ async function resolveParties(
     chairId?: unknown;
     supervisorUserId?: unknown;
   },
-): Promise<{ patientId: string; studentId: string; chairId: string; supervisorUserId: string | null }> {
+  campusIds?: string[] | null,
+): Promise<{
+  patientId: string;
+  studentId: string;
+  chairId: string;
+  supervisorUserId: string | null;
+  chairTimeZone: string | null;
+}> {
   const patientId = eduCleanId(input.patientId);
   const studentId = eduCleanId(input.studentId);
   const chairId = eduCleanId(input.chairId);
@@ -492,12 +515,24 @@ async function resolveParties(
   const chair = chairId
     ? await prisma.eduChair.findFirst({
         where: { id: chairId, institutionId },
-        select: { id: true, isActive: true, name: true },
+        select: {
+          id: true,
+          isActive: true,
+          name: true,
+          campusId: true,
+          campus: { select: { name: true, timezone: true } },
+        },
       })
     : null;
   if (!chair) throw new EduPadronError("Elige un sillón de este instituto.", 400);
   if (!chair.isActive) {
     throw new EduPadronError(`"${chair.name}" está dado de baja. Reactívalo o elige otro sillón.`);
+  }
+  if (!eduCampusCovers(campusIds, chair.campusId)) {
+    throw new EduPadronError(
+      `"${chair.name}" está en ${chair.campus.name}, una sede a la que no tienes acceso.`,
+      403,
+    );
   }
 
   let supervisorUserId: string | null = null;
@@ -515,7 +550,13 @@ async function resolveParties(
     supervisorUserId = sup.id;
   }
 
-  return { patientId: patient.id, studentId: student.id, chairId: chair.id, supervisorUserId };
+  return {
+    patientId: patient.id,
+    studentId: student.id,
+    chairId: chair.id,
+    supervisorUserId,
+    chairTimeZone: chair.campus.timezone || null,
+  };
 }
 
 export interface EduAppointmentInput {
@@ -538,9 +579,16 @@ export async function createEduAppointment(
   now: Date = new Date(),
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
-  const partes = await resolveParties(institutionId, input);
+  const partes = await resolveParties(institutionId, input, ctx.campusIds);
   const slot = parseSlot(input);
-  const { startsAt, endsAt } = await resolveSlot(institutionId, partes.chairId, slot, timeZone);
+  // 🔴 Ola 11 · LA HORA SE INTERPRETA EN LA ZONA DE LA SEDE DEL SILLÓN, no
+  // en la del instituto. Con dos campus en husos distintos, "las 8" del
+  // campus de Mérida y "las 8" del de Tijuana son dos instantes separados
+  // por dos horas, y el horario del sillón está escrito en la hora de PARED
+  // de su edificio. El `timeZone` que llega por parámetro queda como
+  // respaldo para el instituto sin sedes.
+  const zona = partes.chairTimeZone ?? timeZone;
+  const { startsAt, endsAt } = await resolveSlot(institutionId, partes.chairId, slot, zona);
 
   const type = input.type === undefined || input.type === null || input.type === ""
     ? ("TRATAMIENTO" as EduAppointmentType)
@@ -647,17 +695,25 @@ export async function updateEduAppointment(
 
   let studentId = current.studentId;
   let chairId = current.chairId;
+  // Ola 11: la zona con la que se interpreta la hora es la de la SEDE del
+  // sillón —el de destino si se está mudando la cita—, no la del instituto.
+  let zona = timeZone;
 
   if (cambiaAlumno || cambiaSillon || input.supervisorUserId !== undefined) {
-    const partes = await resolveParties(institutionId, {
-      patientId: current.patientId,
-      studentId: cambiaAlumno ? input.studentId : current.studentId,
-      chairId: cambiaSillon ? input.chairId : current.chairId,
-      supervisorUserId:
-        input.supervisorUserId !== undefined ? input.supervisorUserId : current.supervisorUserId,
-    });
+    const partes = await resolveParties(
+      institutionId,
+      {
+        patientId: current.patientId,
+        studentId: cambiaAlumno ? input.studentId : current.studentId,
+        chairId: cambiaSillon ? input.chairId : current.chairId,
+        supervisorUserId:
+          input.supervisorUserId !== undefined ? input.supervisorUserId : current.supervisorUserId,
+      },
+      ctx.campusIds,
+    );
     studentId = partes.studentId;
     chairId = partes.chairId;
+    zona = partes.chairTimeZone ?? timeZone;
     if (cambiaAlumno) data.studentId = partes.studentId;
     if (cambiaSillon) data.chairId = partes.chairId;
     if (input.supervisorUserId !== undefined) data.supervisorUserId = partes.supervisorUserId;
@@ -667,7 +723,11 @@ export async function updateEduAppointment(
   let endsAt = current.endsAt;
 
   if (cambiaHora) {
-    const z = eduUtcToZoned(current.startsAt, timeZone);
+    // El día y la hora que se CONSERVAN (los que el body no manda) se leen
+    // en la zona a la que VA la cita, no en la de donde estaba: si se
+    // reagenda "solo la hora" a un sillón de otra sede, el día que se
+    // conserva tiene que ser el día del calendario de esa otra sede.
+    const z = eduUtcToZoned(current.startsAt, zona);
     const minutosActuales = Math.round(
       (current.endsAt.getTime() - current.startsAt.getTime()) / 60_000,
     );
@@ -676,21 +736,22 @@ export async function updateEduAppointment(
       startMinute: input.startMinute ?? z.minuteOfDay,
       minutes: input.minutes ?? minutosActuales,
     });
-    const resuelto = await resolveSlot(institutionId, chairId, slot, timeZone);
+    const resuelto = await resolveSlot(institutionId, chairId, slot, zona);
     startsAt = resuelto.startsAt;
     endsAt = resuelto.endsAt;
     data.startsAt = startsAt;
     data.endsAt = endsAt;
   } else if (cambiaSillon) {
     // Cambiar de sillón sin cambiar la hora tiene que volver a comprobar el
-    // horario: el sillón nuevo puede estar cerrado a esa hora.
-    const z = eduUtcToZoned(current.startsAt, timeZone);
+    // horario: el sillón nuevo puede estar cerrado a esa hora — y si está
+    // en otra sede, "esa hora" ni siquiera es el mismo instante.
+    const z = eduUtcToZoned(current.startsAt, zona);
     const minutos = Math.round((current.endsAt.getTime() - current.startsAt.getTime()) / 60_000);
     await resolveSlot(
       institutionId,
       chairId,
       { dayISO: z.dayISO, startMinute: z.minuteOfDay, minutes: minutos },
-      timeZone,
+      zona,
     );
   }
 

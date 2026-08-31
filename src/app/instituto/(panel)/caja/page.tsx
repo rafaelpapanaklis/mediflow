@@ -8,6 +8,8 @@ import { EDU_CAJA_MAX_ROWS, parseEduChargeFilters } from "@/lib/edu/dinero-core"
 import { getEduOpenCashSession, listEduCharges } from "@/lib/edu/caja";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { eduSafeTimeZone } from "@/lib/edu/agenda-core";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduCajaScreen } from "@/components/edu/dinero/caja-screen";
 
@@ -66,9 +68,18 @@ export default async function InstitutoCajaPage({
   const canRefund = hasEduPermission(permUser, "caja.refund");
   const canCorte = hasEduPermission(permUser, "caja.corte");
 
+  // 🔴 Ola 11 · LA SEDE. Un cobro guarda EN QUÉ SEDE se cobró —sellado al
+  // emitir, no deducido de nada— así que filtrar por sede aquí contesta la
+  // pregunta que se hace el mostrador: "¿cuánto entró HOY EN MI SEDE?".
+  //
+  // ⚠️ El TURNO de caja sigue siendo del INSTITUTO y no de la sede: partirlo
+  // por sede sería reescribir el corte de la Ola 5, y no se hace en esta
+  // ola. Está anotado en el reporte.
+  const sede = await getEduCampusScope(ctx);
+  const cctx = eduWithCampus(ctx, sede);
   const filters = parseEduChargeFilters(searchParams);
   const [page, turno] = await Promise.all([
-    listEduCharges(ctx, filters),
+    listEduCharges(cctx, filters),
     getEduOpenCashSession(ctx),
   ]);
 
@@ -97,6 +108,11 @@ export default async function InstitutoCajaPage({
           <p className="edu-page__lead">
             Eliges al paciente y el sistema pone su tarifa: si lo trajo un alumno, paga la lista de
             alumno, y lo dice con el nombre de quien lo trajo. Aquí no se teclean precios.
+            {sede.active
+              ? ` Estás viendo los cobros de ${sede.active.name}.`
+              : sede.showPicker
+                ? " Estás viendo los cobros de todas tus sedes; elige una arriba para cobrar."
+                : ""}
           </p>
         </div>
       </header>

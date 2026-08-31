@@ -127,6 +127,19 @@ export function EduAgendaScreen({
    * los activos, aunque no tengan citas: un sillón vacío es información
    * (ahí cabe alguien). En la de SEMANA son los días.
    */
+  /**
+   * 🔴 Ola 11 · CON DOS SEDES HAY DOS "Sillón 1", uno en cada pared, y sin
+   * el nombre de la sede la agenda consolidada tendría dos columnas
+   * idénticas. Se decide contando las sedes que hay EN LA LISTA que mandó
+   * el servidor: con una sola no se menciona ninguna, que es el caso de
+   * casi todas las escuelas — nombrar algo que no tiene alternativa es
+   * ruido.
+   */
+  const variasSedes = useMemo(
+    () => new Set(chairs.map((c) => c.campusId)).size > 1,
+    [chairs],
+  );
+
   const grupos = useMemo(() => {
     if (query.view === "semana") {
       return days.map((d) => ({
@@ -141,7 +154,9 @@ export function EduAgendaScreen({
     const grupos = acotados.map((c) => ({
       key: c.id,
       title: c.name,
-      sub: c.isActive ? "" : "Dado de baja",
+      sub: [variasSedes ? c.campusName : "", c.isActive ? "" : "Dado de baja"]
+        .filter(Boolean)
+        .join(" · "),
       rows: rows.filter((r) => r.chairId === c.id),
     }));
     // Cinturón: una cita en un sillón que ya no está en la lista (se dio de
@@ -152,7 +167,7 @@ export function EduAgendaScreen({
       grupos.push({ key: "sueltas", title: "Otros sillones", sub: "", rows: sueltas });
     }
     return grupos;
-  }, [query.view, query.chairId, days, rows, chairs, todayISO]);
+  }, [query.view, query.chairId, days, rows, chairs, todayISO, variasSedes]);
 
   return (
     <>
@@ -233,6 +248,7 @@ export function EduAgendaScreen({
             {chairs.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+                {variasSedes ? ` · ${c.campusName}` : ""}
                 {c.isActive ? "" : " (baja)"}
               </option>
             ))}
@@ -447,6 +463,10 @@ function AltaCita({
   onDone: () => void;
 }) {
   const activos = chairs.filter((c) => c.isActive);
+  // Ola 11: el nombre de la sede solo se pinta cuando hay más de una.
+  // Con dos sedes hay dos "Sillón 1" y el desplegable diría dos veces lo
+  // mismo; con una sola, mencionarla es ruido.
+  const variasSedes = new Set(chairs.map((c) => c.campusId)).size > 1;
   const [patientId, setPatientId] = useState("");
   const [studentId, setStudentId] = useState("");
   const [chairId, setChairId] = useState(activos[0]?.id ?? "");
@@ -589,6 +609,7 @@ function AltaCita({
             {activos.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+                {variasSedes ? ` · ${c.campusName}` : ""}
               </option>
             ))}
           </select>
@@ -734,6 +755,10 @@ function DetalleCita({
   const [hora, setHora] = useState(row.startLabel);
   const [minutos, setMinutos] = useState(String(row.minutes));
   const [chairId, setChairId] = useState(row.chairId);
+  // Ola 11: el nombre de la sede solo se pinta cuando hay más de una.
+  // Con dos sedes hay dos "Sillón 1" y el desplegable diría dos veces lo
+  // mismo; con una sola, mencionarla es ruido.
+  const variasSedes = new Set(chairs.map((c) => c.campusId)).size > 1;
   const [studentId, setStudentId] = useState(row.studentId);
   const [supervisorUserId, setSupervisorUserId] = useState(row.supervisorUserId ?? "");
 
@@ -966,6 +991,7 @@ function DetalleCita({
                   {chairs.map((c) => (
                     <option key={c.id} value={c.id} disabled={!c.isActive && c.id !== row.chairId}>
                       {c.name}
+                      {variasSedes ? ` · ${c.campusName}` : ""}
                       {c.isActive ? "" : " (baja)"}
                     </option>
                   ))}

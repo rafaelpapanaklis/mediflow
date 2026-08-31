@@ -65,6 +65,7 @@
 import type { Prisma } from "@prisma/client";
 import type { EduCaseStatus, EduRole } from "@/lib/edu/types";
 import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
+import type { EduCampusAware } from "@/lib/edu/campus-core";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · EL ALCANCE
@@ -140,7 +141,7 @@ export interface EduVisibilityActor {
  *
  * 🔴 `institutionId` viene de getEduContext() y de ningún otro lado.
  */
-export interface EduClinicaContext extends EduVisibilityActor {
+export interface EduClinicaContext extends EduVisibilityActor, EduCampusAware {
   institutionId: string;
 }
 
@@ -377,6 +378,11 @@ export interface EduAppointmentScopeInput {
    * `student`, que es como se pierde uno de los dos filtros en silencio.
    */
   studentExtra?: Prisma.EduStudentWhereInput;
+  /**
+   * Ola 11 · LAS SEDES. `null` (o ausente) = sin recorte por sede.
+   * Ver la sección 4 al final de este archivo.
+   */
+  campusIds?: string[] | null;
 }
 
 /**
@@ -397,6 +403,7 @@ export function eduAppointmentScopeWhere({
   scope,
   now = new Date(),
   studentExtra,
+  campusIds,
 }: EduAppointmentScopeInput): Prisma.EduAppointmentWhereInput {
   requireInstitutionId(institutionId, "eduAppointmentScopeWhere");
   if (eduScopeIsEmpty(scope)) return nada(institutionId);
@@ -409,6 +416,15 @@ export function eduAppointmentScopeWhere({
   const student: Prisma.EduStudentWhereInput = { ...(scopeFilter ?? {}), ...(studentExtra ?? {}) };
   const where: Prisma.EduAppointmentWhereInput = { institutionId };
   if (Object.keys(student).length > 0) where.student = student;
+
+  // 🔴 Ola 11 · LA SEDE DE UNA CITA SE DERIVA DE SU SILLÓN. No hay
+  // `EduAppointment.campusId` y no es un olvido: una columna copiada se
+  // desincroniza el día que un sillón cambia de edificio, y entonces la
+  // agenda de la sede nueva no tendría las citas que ya estaban agendadas
+  // en ese sillón. El sillón es el que sabe dónde está.
+  const chair = eduCampusRelationFilter(institutionId, campusIds);
+  if (chair) where.chair = chair;
+
   return where;
 }
 
@@ -505,6 +521,13 @@ export function eduStudentScopeWhere({
 export interface EduChargeScopeInput {
   institutionId: string;
   scope: EduVisibilityScope;
+  /**
+   * Ola 11 · LAS SEDES. `null` (o ausente) = sin recorte por sede.
+   *
+   * ⚠️ Aquí la sede NO se deriva de nada: `EduCharge.campusId` se SELLA al
+   * emitir el cobro (dónde estaba el mostrador). Ver la sección 4.
+   */
+  campusIds?: string[] | null;
 }
 
 /**
@@ -522,10 +545,13 @@ export interface EduChargeScopeInput {
 export function eduChargeScopeWhere({
   institutionId,
   scope,
+  campusIds,
 }: EduChargeScopeInput): Prisma.EduChargeWhereInput {
   requireInstitutionId(institutionId, "eduChargeScopeWhere");
   if (!scope || scope.kind !== "all") return nada(institutionId);
-  return { institutionId };
+  const where: Prisma.EduChargeWhereInput = { institutionId };
+  if (Array.isArray(campusIds)) where.campusId = { in: campusIds };
+  return where;
 }
 
 /**
@@ -594,4 +620,124 @@ export function eduScopeCoversStudent(
     // "vigentes" durante el mismo instante.
     return !Number.isNaN(ends) && ends > t;
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 4 · LA SEDE (Ola 11) — OTRA DIMENSIÓN, NO OTRA REGLA
+//
+// Todo lo de arriba contesta "¿de quién es esta fila?". Esta sección
+// contesta otra pregunta distinta: "¿en qué edificio pasó?". Se SUMAN, no
+// se sustituyen — un alumno con acceso a las dos sedes sigue viendo solo
+// sus casos, y un docente restringido al campus norte sigue viendo a sus
+// alumnos vigentes, pero solo lo que ocurre en el norte.
+//
+// 🔴 LA SEDE NO ES EL TENANT. `institutionId` sigue estando en TODOS los
+// `where` de este archivo y no se sustituye por `campusId` en ninguno.
+// Filtrar por sede sin institución dejaría la puerta abierta entre
+// escuelas — los ids son opacos y dos escuelas pueden tener las dos una
+// sede "NORTE" — y el bug se vería exactamente igual que "funciona".
+//
+// 🔴 `null` NO ES `[]`, y es LA trampa de esta ola:
+//   · `campusIds === null`  → sin recorte: todas las sedes del instituto.
+//     Es lo que le toca a quien no tiene ninguna fila de acceso (que el
+//     día que se aplica esta ola es TODO EL MUNDO — ver campus-core.ts).
+//   · `campusIds === []`    → NINGUNA fila. Es lo que le toca a quien
+//     tiene filas de acceso y todas apuntan a sedes que ya no existen.
+// Confundirlas en el sentido equivocado (`[]` tratado como "sin filtro")
+// le abre el instituto entero a alguien a quien se le restringió a una
+// sede. Por eso se comprueba con `Array.isArray` y NUNCA con un `if
+// (campusIds?.length)`, que trata el arreglo vacío como ausente.
+//
+// 🔴 QUÉ CUELGA DE LA SEDE Y CÓMO:
+//   · SILLÓN  → columna propia (`EduChair.campusId`). Es dónde está.
+//   · CITA    → SE DERIVA de su sillón, con un `chair: { campusId }`. Sin
+//     columna copiada: una copia se desincroniza el día que un sillón
+//     cambia de edificio.
+//   · COBRO   → columna propia SELLADA al emitir (`EduCharge.campusId`).
+//     No es una copia de nada: es dónde estaba el mostrador.
+//   · PACIENTE, CASO, ALUMNO → NO cuelgan de ninguna sede. Un paciente se
+//     atiende donde haga falta y un alumno ROTA entre sedes; su padrón y
+//     su expediente son UNO solo. Recortarlos por sede partiría el
+//     expediente de una persona en dos mitades que nadie vuelve a juntar.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * El filtro de sede que se cuelga de una RELACIÓN (hoy: el sillón de una
+ * cita). Devuelve `null` cuando no hay recorte, para no meter un
+ * `chair: {}` inútil en el `where`.
+ *
+ * El institutionId se repite DENTRO de la relación a propósito, igual que
+ * en `eduStudentScopeFilter`: cierra el tenant aunque un día alguien
+ * inserte una fila cruzada a mano.
+ */
+function eduCampusRelationFilter(
+  institutionId: string,
+  campusIds: string[] | null | undefined,
+): Prisma.EduChairWhereInput | null {
+  if (!Array.isArray(campusIds)) return null;
+  return { institutionId, campusId: { in: campusIds } };
+}
+
+export interface EduChairScopeInput {
+  institutionId: string;
+  campusIds?: string[] | null;
+}
+
+/**
+ * Las SEDES a las que entra quien pregunta.
+ *
+ * ⚠️ Ojo con la columna: aquí el filtro va sobre `id` y no sobre
+ * `campusId`. Es el error de copiar-pegar que este helper existe para
+ * evitar — un `campusId` sobre la tabla de sedes ni siquiera compila, pero
+ * un `{ institutionId }` a secas compila perfectamente y le enseña a
+ * alguien las sedes a las que no entra.
+ */
+export function eduCampusScopeWhere({
+  institutionId,
+  campusIds,
+}: EduChairScopeInput): Prisma.EduCampusWhereInput {
+  requireInstitutionId(institutionId, "eduCampusScopeWhere");
+  const where: Prisma.EduCampusWhereInput = { institutionId };
+  if (Array.isArray(campusIds)) where.id = { in: campusIds };
+  return where;
+}
+
+/**
+ * Los SILLONES que le tocan a quien pregunta.
+ *
+ * ⚠️ No lleva `scope` de rol y no es un olvido: un sillón es
+ * INFRAESTRUCTURA de la escuela, no la fila de nadie. Quien puede verlos
+ * (`sillones.view`) los ve todos — lo único que los recorta es la SEDE, que
+ * es una pregunta sobre el edificio y no sobre las personas.
+ *
+ * Existe para que ninguna consulta de sillones vuelva a escribir
+ * `{ institutionId, campusId: ... }` a mano: la agenda, la pantalla de
+ * sillones y los desplegables de alta tienen que recortar igual, y tres
+ * copias del mismo `where` son tres sitios donde discrepar.
+ */
+export function eduChairScopeWhere({
+  institutionId,
+  campusIds,
+}: EduChairScopeInput): Prisma.EduChairWhereInput {
+  requireInstitutionId(institutionId, "eduChairScopeWhere");
+  const where: Prisma.EduChairWhereInput = { institutionId };
+  if (Array.isArray(campusIds)) where.campusId = { in: campusIds };
+  return where;
+}
+
+/**
+ * ¿Este sillón cae dentro de las sedes que le tocan a quien pregunta?
+ *
+ * Se usa con el dato YA leído, para las comprobaciones en memoria de las
+ * ESCRITURAS: agendar en un sillón de una sede a la que no entras no es un
+ * problema de permiso —tienes `agenda.manage`— sino de alcance, y el
+ * permiso no sabe de qué edificio es la fila.
+ */
+export function eduCampusCovers(
+  campusIds: string[] | null | undefined,
+  campusId: string | null | undefined,
+): boolean {
+  if (!Array.isArray(campusIds)) return true;
+  if (!campusId) return false;
+  return campusIds.includes(campusId);
 }

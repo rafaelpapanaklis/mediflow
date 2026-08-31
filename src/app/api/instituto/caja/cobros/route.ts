@@ -3,6 +3,9 @@ import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { parseEduChargeFilters } from "@/lib/edu/dinero-core";
 import { createEduCharge, listEduCharges } from "@/lib/edu/caja";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduCampusForCharge, eduWithCampus } from "@/lib/edu/campus-core";
+import { EduPadronError } from "@/lib/edu/padron";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +20,8 @@ export async function GET(request: Request) {
     url.searchParams.forEach((value, key) => {
       params[key] = value;
     });
-    const page = await listEduCharges(g.ctx, parseEduChargeFilters(params));
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const page = await listEduCharges(cctx, parseEduChargeFilters(params));
     return NextResponse.json(page);
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/caja/cobros");
@@ -47,7 +51,23 @@ export async function POST(request: Request) {
       { role: g.ctx.role, permissionsOverride: g.ctx.user.permissionsOverride },
       "caja.refund",
     );
-    const created = await createEduCharge(g.ctx, body, { canRefund });
+    // 🔴 Ola 11 · EN QUÉ SEDE SE ESTÁ COBRANDO. Sale del selector de la
+    // barra superior, JAMÁS del body: un campusId del navegador apuntaría
+    // el cobro a la sede que quisiera y descuadraría el reporte de las dos.
+    //
+    // Con la vista consolidada puesta y varias sedes NO se puede cobrar, y
+    // no es un capricho: cobrar ocurre en UN mostrador, y "todas" no es un
+    // lugar. El mensaje dice dónde está el selector.
+    const sede = await getEduCampusScope(g.ctx);
+    const donde = eduCampusForCharge(sede);
+    if (!donde.ok) {
+      throw new EduPadronError(donde.reason ?? "Elige la sede en la que estás cobrando.", 400);
+    }
+
+    const created = await createEduCharge(eduWithCampus(g.ctx, sede), body, {
+      canRefund,
+      campusId: donde.campusId,
+    });
     return NextResponse.json(
       { ok: true, id: created.id, folio: created.folio, descartados: created.descartados },
       { status: 201 },

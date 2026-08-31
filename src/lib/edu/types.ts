@@ -40,6 +40,7 @@
 //   /instituto/evaluacion/[id] → LA BITÁCORA ACADÉMICA del alumno  Ola 6  ✓
 //   /instituto/rubricas     → rúbricas y sus criterios             Ola 6  ✓
 //   /instituto/requisitos   → el plan de estudios, en números      Ola 6  ✓
+//   /instituto/sedes        → las sedes y quién entra a cada una  Ola 11 ✓
 // PÚBLICA (SIN sesión — vive FUERA del grupo (panel), igual que /login):
 //   /instituto/consentimiento/[token] → el paciente lee y firma    Ola 3B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
@@ -109,6 +110,11 @@
 //   GET  /api/instituto/evaluacion/[id]/export → la bitácora en CSV Ola 6 ✓
 //   POST /api/instituto/traspasos           → traspasar UN caso     Ola 6 ✓
 //   POST /api/instituto/traspasos/lote      → traspasar EN LOTE     Ola 6 ✓
+//   GET·POST  /api/instituto/sedes          → sedes del instituto   Ola 11 ✓
+//   PATCH     /api/instituto/sedes/[id]     → editar / cerrar sede  Ola 11 ✓
+//   GET·POST  /api/instituto/sedes/[id]/acceso → quién entra ahí    Ola 11 ✓
+//   POST      /api/instituto/sedes/elegir   → el SELECTOR: escribe la
+//                                             cookie ya validada     Ola 11 ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -805,6 +811,23 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "equipo.manage",
   },
+  // ── Ola 11 · las sedes ───────────────────────────────────
+  {
+    // Va en ADMINISTRACIÓN y no en Operación: una sede se da de alta al
+    // abrir el campus y casi no se vuelve a tocar, igual que los sillones
+    // o los tarifarios. Lo que se usa TODOS los días no es esta pantalla
+    // sino el selector de la barra superior, que no necesita permiso —
+    // cambiar de sede es moverse entre lo que el acceso ya autoriza.
+    //
+    // Y va DESPUÉS de "Sillones" a propósito: se lee de fuera hacia
+    // dentro (la sede contiene los sillones), pero quien llega buscando
+    // "dónde doy de alta el campus sur" ya está mirando esta sección.
+    key: "sedes",
+    href: "/instituto/sedes",
+    icon: "building",
+    section: "administracion",
+    permission: "sedes.view",
+  },
 ];
 
 /** Etiqueta de cada sección del menú (las vacías no se pintan). */
@@ -844,6 +867,7 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   evaluacion: "Evaluación",
   rubricas: "Rúbricas",
   requisitos: "Requisitos",
+  sedes: "Sedes",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────

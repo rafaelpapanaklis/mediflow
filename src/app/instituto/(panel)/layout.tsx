@@ -13,6 +13,7 @@ import {
   EDU_ROLE_LABELS,
   type EduNavItem,
 } from "@/lib/edu/types";
+import { getEduCampusScope } from "@/lib/edu/campus";
 import { EduShell } from "@/components/edu/edu-shell";
 import "../edu-theme.css";
 
@@ -38,6 +39,20 @@ export const metadata: Metadata = {
  * La navegación se resuelve AQUÍ (server), filtrando por permiso. El
  * sidebar solo pinta. En la Ola 0 sale un item porque hay una pantalla:
  * cada ola agrega el suyo en EDU_NAV_ITEMS y no toca este archivo.
+ *
+ * ── Ola 11 · LA SEDE ────────────────────────────────────────────────────
+ * El ALCANCE POR SEDE también se resuelve aquí, y por la misma razón que la
+ * navegación: para que exista UN solo sitio donde se decide qué sedes puede
+ * ver esta persona. El shell solo pinta el selector.
+ *
+ * 🔴 CON UNA SOLA SEDE NO SE PINTA NADA. `showPicker` lo decide
+ * campus-core.ts y aquí solo se pasa: una escuela de una sede —que son casi
+ * todas— no se entera nunca de que esta ola existe.
+ *
+ * 🔴 Y si las tablas de la ola todavía no están (el .sql sin aplicar),
+ * getEduCampusScope devuelve "sin sedes" en vez de reventar: este layout
+ * envuelve TODAS las pantallas del vertical, y un throw aquí las dejaría
+ * todas en blanco.
  */
 export default async function InstitutoPanelLayout({
   children,
@@ -46,6 +61,8 @@ export default async function InstitutoPanelLayout({
 }) {
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
+
+  const sede = await getEduCampusScope(ctx);
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
 
@@ -71,6 +88,10 @@ export default async function InstitutoPanelLayout({
   return (
     <EduShell
       institutionName={ctx.institution.name}
+      campusOptions={sede.options}
+      campusActiveId={sede.activeId}
+      campusAllLabel={sede.allLabel}
+      showCampusPicker={sede.showPicker}
       brandName={EDU_BRAND.product}
       brandSub={EDU_BRAND.vertical}
       userName={nombre}

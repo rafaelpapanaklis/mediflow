@@ -19,6 +19,8 @@ import { listEduChairOptions } from "@/lib/edu/sillones";
 import { listEduPatientOptions } from "@/lib/edu/pacientes";
 import { listEduPrograms } from "@/lib/edu/padron";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduAgendaScreen } from "@/components/edu/clinica/agenda-screen";
 
@@ -37,10 +39,20 @@ export const metadata: Metadata = {
  * las de sus alumnos con asignación VIGENTE, y caja y dirección la agenda
  * entera. El componente cliente no tiene forma de pedir más.
  *
- * 🔴 LA ZONA HORARIA sale de la sesión (institution.timezone) y el rango
- * del día se calcula con ella. Si se usara la del servidor (UTC en Vercel),
- * la agenda de una escuela en Tijuana empezaría a las cinco de la tarde del
- * día anterior.
+ * 🔴 LA ZONA HORARIA sale de la sesión y el rango del día se calcula con
+ * ella. Si se usara la del servidor (UTC en Vercel), la agenda de una
+ * escuela en Tijuana empezaría a las cinco de la tarde del día anterior.
+ *
+ * ── Ola 11 · LA SEDE ────────────────────────────────────────────────────
+ * 🔴 Y desde esta ola la zona es LA DE LA SEDE que se está viendo, no la
+ * del instituto: una universidad puede tener un campus en Tijuana y otro en
+ * Mérida. Con la vista consolidada puesta se cae a la del instituto y la
+ * pantalla lo DICE — pintar dos husos en la misma rejilla es mentir.
+ *
+ * 🔴 El recorte por sede se aplica en el servidor, con el mismo helper
+ * único: la cita se filtra POR SU SILLÓN (`chair: { campusId }`), no por una
+ * columna copiada en la cita. Un sillón que se traslada de edificio se
+ * lleva sus citas, que es lo que la escuela espera.
  */
 export default async function InstitutoAgendaPage({
   searchParams,
@@ -80,12 +92,14 @@ export default async function InstitutoAgendaPage({
 
   // Un solo `now` y una sola zona para TODAS las consultas de la pantalla.
   const now = new Date();
-  const tz = ctx.institution.timezone;
+  const sede = await getEduCampusScope(ctx);
+  const cctx = eduWithCampus(ctx, sede);
+  const tz = sede.timezone;
   const query = parseEduAgendaQuery(searchParams, tz, now);
 
   const [page, sillones, alumnos, docentes, programas, pacientes] = await Promise.all([
-    listEduAgenda(ctx, query, tz, now),
-    listEduChairOptions(ctx),
+    listEduAgenda(cctx, query, tz, now),
+    listEduChairOptions(cctx),
     listEduStudentOptions(ctx, now),
     canManage ? listEduSupervisorOptions(ctx) : Promise.resolve([]),
     listEduPrograms(ctx),
@@ -99,10 +113,13 @@ export default async function InstitutoAgendaPage({
           <h1 className="edu-page__title">Agenda</h1>
           <p className="edu-page__lead">
             {scope.kind === "all"
-              ? "Las citas de la clínica, por sillón. Las horas están en la hora del instituto."
+              ? "Las citas de la clínica, por sillón."
               : scope.kind === "own"
                 ? "Tus citas. Marca aquí cuando el paciente llegue y cuando lo sientes en el sillón."
-                : "Las citas de los alumnos que supervisas hoy."}
+                : "Las citas de los alumnos que supervisas hoy."}{" "}
+            {sede.active
+              ? `Estás viendo ${sede.active.name}; las horas están en su hora local (${sede.timezone}).`
+              : `Las horas están en la hora del instituto (${sede.timezone}).`}
           </p>
         </div>
         {canAssign && (
@@ -113,6 +130,36 @@ export default async function InstitutoAgendaPage({
           </div>
         )}
       </header>
+
+      {/* 🔴 Dos husos en la MISMA rejilla no se pueden pintar sin mentir:
+          las 9:00 de una sede y las 9:00 de la otra no son el mismo
+          instante, y una columna que las ponga a la misma altura dice que
+          sí. En vez de inventarse una conversión que nadie pidió, se avisa
+          y se deja elegir sede arriba. */}
+      {sede.mixedTimezones && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">Estás viendo sedes en husos distintos</p>
+            <p className="edu-banner__detail">
+              Las horas de abajo están todas en {sede.timezone}, la del instituto — así que
+              las de las sedes en otro huso NO son su hora local. Elige una sede arriba para
+              ver su agenda con su hora.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {sede.locked && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">Tu cuenta no tiene ninguna sede</p>
+            <p className="edu-banner__detail">
+              Alguien te dejó marcado en sedes que ya no existen, así que aquí no hay citas
+              que mostrarte. Pídele a la dirección que te dé una sede en Sedes.
+            </p>
+          </div>
+        </div>
+      )}
 
       <EduAgendaScreen
         rows={page.rows}

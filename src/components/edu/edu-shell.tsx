@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   Armchair,
   Banknote,
+  Building2,
   Calendar,
   ClipboardList,
   Contact,
@@ -26,6 +27,8 @@ import {
   X,
 } from "lucide-react";
 import type { EduNavItem, EduNavSection } from "@/lib/edu/types";
+import type { EduCampusOption } from "@/lib/edu/campus-core";
+import { EduSedeSelector } from "@/components/edu/sedes/sede-selector";
 
 /**
  * Chrome del panel de DaleControl Institucional.
@@ -70,10 +73,24 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   gauge: Gauge,
   ruler: Ruler,
   "list-checks": ListChecks,
+  // Ola 11 — las sedes.
+  building: Building2,
 };
 
 export interface EduShellProps {
   institutionName: string;
+  /**
+   * Ola 11 · LAS SEDES. Ya resueltas por el servidor: qué sedes puede
+   * elegir esta persona, cuál está viendo y si el selector se pinta.
+   *
+   * 🔴 `showCampusPicker` viene decidido de fuera (campus-core.ts) y no se
+   * calcula aquí: con UNA sola sede no se pinta nada, y esa regla no puede
+   * vivir en dos sitios.
+   */
+  campusOptions: EduCampusOption[];
+  campusActiveId: string | null;
+  campusAllLabel: string;
+  showCampusPicker: boolean;
   brandName: string;
   brandSub: string;
   userName: string;
@@ -87,6 +104,10 @@ export interface EduShellProps {
 
 export function EduShell({
   institutionName,
+  campusOptions,
+  campusActiveId,
+  campusAllLabel,
+  showCampusPicker,
   brandName,
   brandSub,
   userName,
@@ -217,6 +238,26 @@ export function EduShell({
           {institutionName}
         </div>
 
+        {/* 🔴 EL SELECTOR SE PINTA DOS VECES, Y NO ES UN DESCUIDO. En
+            escritorio la barra superior NO EXISTE (edu-theme.css la esconde
+            en ≥1024 px: el cajón se vuelve columna fija), así que un
+            selector que solo viviera arriba desaparecería justo en la
+            pantalla donde se administra la escuela. Y uno que solo viviera
+            en el cajón estaría escondido detrás del botón de menú en el
+            teléfono, que es donde se trabaja de pie. Cada copia se esconde
+            en el otro tamaño con .edu-sedeslot--*, y las dos escriben la
+            MISMA cookie. */}
+        {showCampusPicker && (
+          <div className="edu-sedeslot edu-sedeslot--side">
+            <EduSedeSelector
+              options={campusOptions}
+              activeId={campusActiveId}
+              allLabel={campusAllLabel}
+              slot="lateral"
+            />
+          </div>
+        )}
+
         <nav className="edu-nav" aria-label="Secciones">
           {sections.map((s) => (
             <div key={s.section}>
@@ -285,6 +326,16 @@ export function EduShell({
               {institutionName}
             </span>
           </div>
+          {showCampusPicker && (
+            <div className="edu-sedeslot edu-sedeslot--top">
+              <EduSedeSelector
+                options={campusOptions}
+                activeId={campusActiveId}
+                allLabel={campusAllLabel}
+                slot="barra"
+              />
+            </div>
+          )}
         </header>
 
         <main id="main-content" tabIndex={-1} className="edu-main">

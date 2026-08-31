@@ -14,6 +14,7 @@ import {
   type EduChairRow,
   type EduChairScheduleRow,
 } from "@/lib/edu/agenda-core";
+import type { EduCampusOption } from "@/lib/edu/campus-core";
 
 /**
  * /instituto/sillones — las unidades dentales y su horario.
@@ -27,21 +28,34 @@ import {
  * recién dado de alta acepta cualquier hora; en cuanto tiene UNA franja,
  * solo acepta lo que cae dentro.
  *
+ * 🔴 OLA 11 — EL NÚMERO ES ÚNICO DENTRO DE LA SEDE. Con dos campus hay dos
+ * "Sillón 1", uno en cada pared, y eso es lo correcto: el número existe
+ * para que la clínica pueda decir "pásalo al 7". Por eso la columna de sede
+ * solo se pinta cuando hay más de una —en una escuela de un edificio sería
+ * ruido— y el número que se propone al dar de alta se cuenta DENTRO de la
+ * sede elegida.
+ *
  * `canManage` llega ya resuelto y CADA endpoint lo vuelve a exigir: si
  * alguien fabrica el botón desde la consola, el servidor contesta 403.
  */
 export interface EduSillonesScreenProps {
   rows: EduChairRow[];
   canManage: boolean;
+  /** Las sedes a las que ENTRA quien mira. Con una sola, no se pinta nada. */
+  campuses: EduCampusOption[];
 }
 
-export function EduSillonesScreen({ rows, canManage }: EduSillonesScreenProps) {
+export function EduSillonesScreen({ rows, canManage, campuses }: EduSillonesScreenProps) {
   const router = useRouter();
   const [, startNav] = useTransition();
   const [alta, setAlta] = useState(false);
   const [editando, setEditando] = useState<EduChairRow | null>(null);
   const [horario, setHorario] = useState<EduChairRow | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+
+  // Con una sola sede, la sede no se menciona en ningún sitio: nombrar algo
+  // que no tiene alternativa es ruido.
+  const variasSedes = campuses.length > 1;
 
   function recargar(mensaje: string) {
     setFlash(mensaje);
@@ -106,6 +120,7 @@ export function EduSillonesScreen({ rows, canManage }: EduSillonesScreenProps) {
               <div className="edu-cell edu-cell--wide">
                 <span className="edu-cell__label">Sillón</span>
                 <span className="edu-cell__value edu-cell__value--strong">{c.name}</span>
+                {variasSedes && <span className="edu-tag edu-tag--info">{c.campusName}</span>}
                 {!c.isActive && <span className="edu-tag edu-tag--muted">Dado de baja</span>}
               </div>
 
@@ -153,7 +168,8 @@ export function EduSillonesScreen({ rows, canManage }: EduSillonesScreenProps) {
 
       {alta && (
         <AltaSillon
-          siguiente={rows.reduce((max, c) => Math.max(max, c.number), 0) + 1}
+          rows={rows}
+          campuses={campuses}
           onClose={() => setAlta(false)}
           onDone={(nombre) => {
             setAlta(false);
@@ -165,6 +181,7 @@ export function EduSillonesScreen({ rows, canManage }: EduSillonesScreenProps) {
       {editando && (
         <EditarSillon
           chair={editando}
+          campuses={campuses}
           onClose={() => setEditando(null)}
           onDone={(mensaje) => {
             setEditando(null);
@@ -192,18 +209,29 @@ export function EduSillonesScreen({ rows, canManage }: EduSillonesScreenProps) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function AltaSillon({
-  siguiente,
+  rows,
+  campuses,
   onClose,
   onDone,
 }: {
-  siguiente: number;
+  rows: EduChairRow[];
+  campuses: EduCampusOption[];
   onClose: () => void;
   onDone: (nombre: string) => void;
 }) {
+  const activas = campuses.filter((c) => c.isActive);
+  const [campusId, setCampusId] = useState(activas[0]?.id ?? campuses[0]?.id ?? "");
+  // 🔴 El número que se propone se cuenta DENTRO de la sede elegida: el
+  // campus sur empieza por su Sillón 1 aunque el norte llegue al 40.
+  const siguiente =
+    rows.filter((c) => c.campusId === campusId).reduce((max, c) => Math.max(max, c.number), 0) + 1;
   const [numero, setNumero] = useState(String(siguiente));
+  const [numeroTocado, setNumeroTocado] = useState(false);
   const [nombre, setNombre] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const numeroFinal = numeroTocado ? numero : String(siguiente);
 
   async function guardar() {
     setError(null);
@@ -211,9 +239,13 @@ function AltaSillon({
     try {
       await eduRequest("/api/instituto/sillones", {
         method: "POST",
-        body: { number: numero, name: nombre.trim() || undefined },
+        body: {
+          number: numeroFinal,
+          name: nombre.trim() || undefined,
+          campusId: campusId || undefined,
+        },
       });
-      onDone(nombre.trim() || `Sillón ${numero}`);
+      onDone(nombre.trim() || `Sillón ${numeroFinal}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo dar de alta.");
     } finally {
@@ -236,7 +268,7 @@ function AltaSillon({
             type="button"
             className="edu-btn edu-btn--primary"
             onClick={guardar}
-            disabled={busy || !numero.trim()}
+            disabled={busy || !numeroFinal.trim()}
           >
             {busy ? "Guardando…" : "Dar de alta"}
           </button>
@@ -246,6 +278,31 @@ function AltaSillon({
       {error && (
         <div className="edu-alert" role="alert">
           {error}
+        </div>
+      )}
+
+      {campuses.length > 1 && (
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-sillon-sede">
+            Sede
+          </label>
+          <select
+            id="edu-sillon-sede"
+            className="edu-input"
+            value={campusId}
+            onChange={(e) => setCampusId(e.target.value)}
+          >
+            {campuses.map((c) => (
+              <option key={c.id} value={c.id} disabled={!c.isActive}>
+                {c.name}
+                {c.isActive ? "" : " · cerrada"}
+              </option>
+            ))}
+          </select>
+          <span className="edu-field__hint">
+            Un sillón está en un edificio. El número no se repite dentro de la sede, pero cada
+            sede tiene su propio Sillón 1.
+          </span>
         </div>
       )}
 
@@ -260,10 +317,15 @@ function AltaSillon({
             type="number"
             min={1}
             max={999}
-            value={numero}
-            onChange={(e) => setNumero(e.target.value)}
+            value={numeroFinal}
+            onChange={(e) => {
+              setNumeroTocado(true);
+              setNumero(e.target.value);
+            }}
           />
-          <span className="edu-field__hint">No se puede repetir en el instituto.</span>
+          <span className="edu-field__hint">
+            {campuses.length > 1 ? "No se puede repetir en esta sede." : "No se puede repetir."}
+          </span>
         </div>
 
         <div className="edu-field">
@@ -275,11 +337,11 @@ function AltaSillon({
             className="edu-input"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            placeholder={`Sillón ${numero || "…"}`}
+            placeholder={`Sillón ${numeroFinal || "…"}`}
             autoComplete="off"
           />
           <span className="edu-field__hint">
-            Si lo dejas vacío se llama &quot;Sillón {numero || "…"}&quot;.
+            Si lo dejas vacío se llama &quot;Sillón {numeroFinal || "…"}&quot;.
           </span>
         </div>
       </div>
@@ -298,15 +360,18 @@ function AltaSillon({
 
 function EditarSillon({
   chair,
+  campuses,
   onClose,
   onDone,
 }: {
   chair: EduChairRow;
+  campuses: EduCampusOption[];
   onClose: () => void;
   onDone: (mensaje: string) => void;
 }) {
   const [nombre, setNombre] = useState(chair.name);
   const [numero, setNumero] = useState(String(chair.number));
+  const [campusId, setCampusId] = useState(chair.campusId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -338,7 +403,12 @@ function EditarSillon({
             type="button"
             className="edu-btn edu-btn--primary"
             onClick={() =>
-              enviar({ name: nombre, number: numero }, `${nombre} quedó actualizado.`)
+              enviar(
+                { name: nombre, number: numero, campusId },
+                campusId === chair.campusId
+                  ? `${nombre} quedó actualizado.`
+                  : `${nombre} se mudó de sede, y sus citas se fueron con él.`,
+              )
             }
             disabled={busy || !nombre.trim() || !numero.trim()}
           >
@@ -380,6 +450,34 @@ function EditarSillon({
           />
         </div>
       </div>
+
+      {campuses.length > 1 && (
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-ed-sede">
+            Sede
+          </label>
+          <select
+            id="edu-ed-sede"
+            className="edu-input"
+            value={campusId}
+            onChange={(e) => setCampusId(e.target.value)}
+          >
+            {campuses.map((c) => (
+              <option key={c.id} value={c.id} disabled={!c.isActive && c.id !== chair.campusId}>
+                {c.name}
+                {c.isActive ? "" : " · cerrada"}
+              </option>
+            ))}
+          </select>
+          <span className="edu-field__hint">
+            {campusId === chair.campusId
+              ? "Está en esta sede."
+              : `Mudarlo a ${
+                  campuses.find((c) => c.id === campusId)?.name ?? "otra sede"
+                } se lleva también sus citas (la sede de una cita es la de su sillón) y su horario tal cual: si abría a las 8, seguirá abriendo a las 8 en la hora de allá. Y si allá ya hay un sillón con el número ${numero}, el servidor lo rebota.`}
+          </span>
+        </div>
+      )}
 
       <div className="edu-section">
         <p className="edu-note">

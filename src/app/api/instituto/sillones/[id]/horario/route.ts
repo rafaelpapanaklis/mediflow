@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { replaceEduChairSchedule } from "@/lib/edu/sillones";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,10 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   if ("response" in g) return g.response;
 
   try {
-    const res = await replaceEduChairSchedule(g.ctx, params.id, await eduReadJson(request));
+    // 🔴 Ola 11 · el ctx lleva LA SEDE: el horario de un sillón de una sede
+    // a la que no entras se ve exactamente igual que uno que no existe.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const res = await replaceEduChairSchedule(cctx, params.id, await eduReadJson(request));
     return NextResponse.json({ ok: true, id: res.id, slots: res.slots });
   } catch (err) {
     return eduApiError(err, "PUT /api/instituto/sillones/[id]/horario");

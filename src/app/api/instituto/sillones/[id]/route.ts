@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { updateEduChair } from "@/lib/edu/sillones";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if ("response" in g) return g.response;
 
   try {
-    const updated = await updateEduChair(g.ctx, params.id, await eduReadJson(request));
+    // 🔴 Ola 11 · el ctx que llega al módulo de datos lleva LA SEDE. Sin
+    // esto, el endpoint devolvería (o tocaría) los sillones de todas las
+    // sedes aunque quien pregunta solo entre a una — y la pantalla, que sí
+    // filtra, no se enteraría de la diferencia.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const updated = await updateEduChair(cctx, params.id, await eduReadJson(request));
     return NextResponse.json({ ok: true, id: updated.id });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/sillones/[id]");

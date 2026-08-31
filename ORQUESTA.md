@@ -27842,3 +27842,198 @@ existen. Todo lo que se comprobó son las funciones puras y la forma de los `whe
 5. **Ir clasificando los casos abiertos** con su procedimiento principal (pestaña Casos de la
    ficha). Los que se abrieron antes de esta ola no lo traen, y sin él no cuentan para ningún
    requisito que pida uno.
+
+---
+
+## [Institucional Ola 11] — Las SEDES: la sede es una división DENTRO de la escuela, "sin filas de acceso" significa TODAS, y la de una cita se DERIVA de su sillón ✅ (2026-08-30) · rama `feat/edu-ola-11`
+
+Un instituto ya no es una clínica. Una universidad real tiene campus norte y campus sur, o una
+clínica de pregrado y una de posgrado: cada una con sus sillones, su horario y su gente. Esta ola
+mete esa división en el producto **sin tocar el aislamiento entre escuelas**, que es la parte que
+se rompe si se lee mal.
+
+### Las cinco decisiones que son la ola
+
+**1. 🔴 La sede NO sustituye al instituto.** `institutionId` sigue siendo el aislamiento DURO entre
+escuelas y no se toca: sale de `getEduContext()` y filtra TODA consulta del vertical. La sede es una
+división DENTRO de una escuela. Por eso `campus-core.ts` **nunca devuelve un filtro de sede suelto**
+— devuelve una lista de ids que el llamador SUMA al `where` que ya lleva el `institutionId`—, por
+eso las dos tablas nuevas llevan `institutionId` como todas las olas anteriores, y por eso el
+`institutionId` se repite DENTRO de la relación del sillón (`chair: { institutionId, campusId }`).
+Filtrar por `campusId` como si fuera el tenant dejaría la puerta abierta entre institutos —dos
+escuelas pueden tener las dos una sede "NORTE" y los ids son opacos— y el bug se vería exactamente
+igual que "funciona".
+
+**2. 🔴 Sin filas de acceso = entra a TODAS las sedes.** Es al revés de lo que sugiere una tabla de
+permisos, y es lo único que hace que aplicar esta ola no deje a nadie fuera: el día que se corre el
+`.sql`, NADIE tiene filas en `edu_user_campus_access`. Con filas, solo a esas.
+
+Y el filo que muerde, que está probado y comentado en los tres sitios donde se puede confundir: **una
+lista resuelta VACÍA no es lo mismo que "sin filas"**. Quien tiene filas y todas apuntan a sedes que
+ya no existen debe ver **ninguna** sede, no todas. En el `where` eso es la diferencia entre
+`campusIds: []` (→ `{ in: [] }`, cero filas) y `campusIds: null` (→ sin filtro, el instituto entero).
+Se escriben casi igual y uno de los dos es una fuga; por eso se comprueba con `Array.isArray` y nunca
+con un `if (campusIds?.length)`, que trata el arreglo vacío como ausente.
+
+**3. 🔴 La sede de una CITA se DERIVA de su sillón; la de un COBRO se SELLA.** No hay
+`edu_appointments."campusId"` y no es un olvido: una columna copiada se desincroniza el día que un
+sillón cambia de edificio, y entonces la agenda de la sede nueva no tendría las citas que ya estaban
+agendadas en ese sillón. Se filtra con `chair: { campusId: { in } }`, y mudar un sillón se lleva sus
+citas —que es lo que la escuela espera—. El **cobro** sí lleva columna propia
+(`edu_charges."campusId"`) y por la razón contraria: no es copia de nada, es un HECHO del cobro
+—dónde estaba el mostrador— y por eso no se puede desincronizar. Se sella al emitir, jamás sale del
+body.
+
+**4. 🔴 Lo ACADÉMICO no se divide.** Alumnos, generaciones y especialidades no tienen sede: un alumno
+ROTA entre sedes y su padrón es UNO solo. Si el alumno colgara de una sede, rotar sería darlo de baja
+y volverlo a inscribir, y su expediente se partiría en dos mitades que nadie vuelve a juntar. Lo
+mismo con pacientes y casos: `eduPatientScopeWhere`, `eduCaseScopeWhere` y `eduStudentScopeWhere` NO
+aceptan sede, y hay una prueba que se pone roja si algún día alguien se la agrega.
+
+**5. 🔴 Con UNA sola sede el selector no se pinta.** Nadie elige entre una opción. Una escuela de un
+edificio —que son casi todas— no se entera nunca de que esta ola existe: no ve el selector, no ve la
+sede en la columna de la agenda, no ve el campo "sede" al dar de alta un sillón. La decisión la toma
+el servidor (`scope.showPicker`) y el componente lleva su propio cinturón.
+
+### El acceso por sede NO es un permiso
+
+Los permisos dicen **qué** puede hacer una persona; la sede dice **dónde**. Un docente con
+`agenda.view` y acceso solo al campus norte ve la agenda —el permiso está encendido— pero solo la del
+norte.
+
+Consecuencia directa y deliberada: **cambiar de sede no exige ninguna key**. Ni el selector de la
+barra superior, ni el filtro de la agenda, ni el de caja. Si hicieran falta, el día que se aplicara la
+ola todo el mundo se quedaría sin poder mirar su propia agenda hasta que alguien encendiera un
+interruptor. Las dos keys nuevas —`sedes.view` y `sedes.manage`, **solo DIRECCION**— son para
+ADMINISTRAR: abrir un campus, cerrarlo y repartir quién entra a cuál.
+
+### La compatibilidad hacia atrás, que es medio archivo `.sql`
+
+Sin backfill, aplicar esta ola deja la agenda VACÍA: los sillones que ya existen no tendrían sede y
+un sillón sin sede no sale en ninguna. `sql/edu-ola-11.sql` lo resuelve **en el mismo archivo**, en
+tres pasos idempotentes:
+
+1. una sede **"Sede principal"** para cada instituto que ya exista, heredando su ciudad, su estado,
+   su teléfono y su **zona horaria** (es literalmente el mismo edificio);
+2. todos sus **sillones** colgados de ella —y con ellos todas sus citas—;
+3. todos sus **cobros** también, porque filtrar la caja por sede escondería el histórico entero y
+   desde el mostrador se vería igual que si se hubiera borrado.
+
+No es una suposición: hoy un instituto **es** una clínica, así que todo lo que tiene está, por
+definición, en el único edificio que tiene. El `NOT NULL` de `edu_chairs."campusId"` se pone DESPUÉS
+del backfill, y si por lo que fuera quedara un sillón suelto el archivo aborta con un mensaje que se
+entiende en vez de un "column contains null values".
+
+Y para las personas: nadie tiene filas de acceso, así que **todo el mundo sigue entrando a todo** hasta
+que la dirección decida lo contrario, una persona a la vez, desde `/instituto/sedes`.
+
+### El único DROP del archivo, y por qué
+
+El número del sillón pasa a ser único **por sede** en vez de por instituto:
+`edu_chairs_institutionId_number_key` se suelta después de crear `edu_chairs_sede_numero_key`. Es de
+una **restricción, no de datos** —no se borra ni una fila— y lo único que cambia es que a partir de
+ahí se permite algo que antes no. Tiene que ser así: el número existe para que la clínica pueda decir
+"pásalo al 7" y es **el que está pintado en la pared**; el campus norte y el campus sur tienen cada
+uno su "Sillón 1". Manteniendo el único por instituto, el segundo campus tendría que numerar del 21
+al 40 y el número dejaría de ser el de la pared, que es para lo único que sirve. Se intentan las dos
+formas de soltarlo (`DROP CONSTRAINT` y `DROP INDEX`) porque puede existir de las dos maneras según se
+haya creado con el `.sql` de la Ola 2 o con un `prisma db push`.
+
+### La zona horaria es de la SEDE
+
+Una universidad puede tener un campus en Tijuana y otro en Mérida: dos husos. `EduCampus.timezone`
+manda sobre la del instituto, que queda como respaldo. Con una sede elegida, la agenda se pinta **y se
+guarda** con la suya; en la vista consolidada se cae a la del instituto y **la pantalla lo dice** —
+pintar dos husos en la misma rejilla es mentir, y las 9:00 de una sede y las 9:00 de la otra no son el
+mismo instante. Al escribir una cita, la hora se interpreta con la zona de la **sede del sillón** y no
+con la del selector: el horario de un sillón está en la hora de PARED de su edificio. Y mudar un
+sillón de sede se lleva su horario **tal cual, sin convertir**: si abría a las 8, sigue abriendo a las
+8 en la hora de allá — nadie muda un sillón a Tijuana para que abra a las 6 de la mañana.
+
+### Números y estructura
+
+**2 tablas** (`edu_campuses`, `edu_user_campus_access`) · **2 columnas nuevas**
+(`edu_chairs."campusId"` NOT NULL con backfill, `edu_charges."campusId"` opcional con backfill) ·
+**7 índices** (3 únicos) · **6 llaves foráneas** · **1 restricción única que se suelta** · **0 enums** ·
+**1 pantalla** (`/instituto/sedes`) · **4 endpoints** (`/api/instituto/sedes`, `…/[id]`,
+`…/[id]/acceso`, `…/elegir`) · **2 keys** (`sedes.view`, `sedes.manage`, las dos de DIRECCION) ·
+**1 módulo puro** (`campus-core.ts`) + **1 de servidor** (`campus.ts`), con el `where` viviendo donde
+siempre (`visibility.ts`, sección 4 nueva).
+
+La FK `edu_chairs."campusId"` va en **RESTRICT** y es la única del vertical: con CASCADE, borrar una
+sede se llevaría sus sillones y con ellos todas sus citas y su historia. Una sede tampoco se borra
+desde el producto, y aquí hay una razón extra que no está en las otras tablas: los accesos cuelgan de
+la sede en CASCADE, y "sin filas" significa "entra a TODAS" — **borrar una sede le abriría el
+instituto entero a quien solo entraba ahí**. La pantalla lo dice y `setEduCampusAccess` devuelve
+`abrioTodas` para avisarlo en el momento en que se le quita a alguien su última sede.
+
+### Verificación de esta rama
+
+`npm run build` ✅ (exit 0, completo y sin pipe; 1 pantalla y 4 rutas de API nuevas registradas) ·
+`npx prisma generate` ✅ · `npx tsc --noEmit` ✅ para el vertical (siguen los 6 errores ajenos de
+`src/lib/barber/__tests__/`, preexistentes en `origin/main`) · **560 pruebas del vertical en verde**,
+de ellas **44 nuevas** (`edu-sedes`) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅ (33 propios,
+1 compartido declarado, 0 prohibidos).
+
+De las 44 pruebas nuevas, **10 son de que las reglas VIEJAS siguen valiendo**: la matriz rol × recurso
+completa, la vigencia del docente que rota, "caja no ve casos", "el dinero no es de docentes ni de
+alumnos" (con sede puesta y sin ella), el caso TRANSFERRED de la Ola 6 y el `institutionId`
+obligatorio en los siete helpers. Ampliar el punto único es la forma más fácil de romper algo sin
+darse cuenta, y si algo de esa mitad se pone rojo es esa mitad —no la nueva— la que tiene pacientes
+detrás.
+
+### Lo que NO se probó
+
+Ninguna escritura corrió contra Postgres: **`sql/edu-ola-11.sql` no se aplicó** (la orden lo prohibía)
+y no se abrió un navegador. Sin aplicar el `.sql`, `/instituto/sedes` truena al consultar tablas que
+no existen — pero **el resto del panel no**: `getEduCampusScope` atrapa el error, avisa por consola y
+devuelve "sin sedes", que se comporta exactamente como antes de esta ola. Eso es deliberado: lo llama
+el LAYOUT, y un throw ahí dejaría en blanco TODAS las pantallas del vertical si el código llegara a
+producción antes que el `.sql`.
+
+Todo lo comprobado son funciones puras y la forma de los `where`. En particular **no** se verificó
+contra base de datos: el backfill de las tres secciones, el `SET NOT NULL`, el cambio del índice único
+del sillón, ni que `gen_random_uuid()` esté disponible en el Supabase de destino (lo está desde
+Postgres 13, pero no se corrió).
+
+### Lo que se dejó fuera a propósito
+
+- **El TURNO de caja sigue siendo del INSTITUTO, no de la sede.** Con dos mostradores cobrando en el
+  mismo turno abierto, el corte los mezcla. Partir el turno por sede es reescribir el corte de la Ola
+  5 —`openEduCashSession`, `getEduCorte`, el invariante de "un solo turno abierto"— y no cabía en esta
+  ola con las Olas 7 a 10 corriendo en paralelo sobre los mismos archivos. Lo que esta ola sí deja es
+  el dato para hacerlo: cada cobro ya sabe de qué sede fue.
+- **Pagar y cancelar un cobro NO se cierran por sede.** El recorte de sede filtra lo que se VE en las
+  cuatro pantallas y cierra la ESCRITURA en la agenda y en los sillones (agendar en un sillón de una
+  sede a la que no entras da 403). Un cobro ya emitido se puede liquidar desde el otro mostrador a
+  propósito: bloquearlo dejaría un saldo atorado hasta que el paciente volviera al edificio correcto.
+- **`/mi-dia` NO se filtra por sede.** Mi día es TODO mi día, aunque hoy rote entre dos campus. La
+  ficha del paciente y su historial de citas, igual: partir un expediente por edificio es exactamente
+  lo que esta ola no hace.
+- **Los 4 hallazgos de la auditoría del PR #135** (`docs/audits/EDU_AUDIT.md`) siguen sin arreglar.
+  Esta rama toca `agenda/page.tsx`, que es uno de los archivos del P1-4 (manda el padrón completo al
+  navegador de quien no ve ni una fila), y **no lo arregló**: es un cambio en la misma línea que otra
+  ola en vuelo podría estar tocando, y mezclarlo con las sedes habría hecho el diff imposible de
+  revisar.
+
+### Al desplegar
+
+1. **`sql/edu-ola-11.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/2/5.sql`. Idempotente. Trae el **único DROP** del vertical y es de una restricción: se
+   explica en su sección 5.
+2. Comprobar el backfill con el primer SELECT de la sección 10: las tres columnas de la derecha
+   (sedes sin crear, sillones sin sede, cobros sin sede) tienen que dar **0**.
+3. El **backfill del override** (sección 9), solo si hay usuarios con `permissionsOverride` no vacío:
+   el override REEMPLAZA al default, así que las dos keys no le llegan solas a quien ya tenga uno. Es
+   **un solo bloque** y es de DIRECCION: nadie más lleva estas keys, y el selector no necesita
+   ninguna.
+4. **Renombrar la sede por defecto** en `/instituto/sedes` con el nombre que use la escuela ("Campus
+   CU", "Clínica de Posgrado"). Nace llamándose "Sede principal" con clave `PRINCIPAL`.
+5. **Dar de alta la segunda sede** y, si está en otro huso, ponerle SU zona horaria: la agenda de esa
+   sede se pintará y se guardará con ella.
+6. **Mudarle sus sillones** desde `/instituto/sillones` (Editar → Sede). Ojo: se llevan sus citas
+   futuras y su horario tal cual.
+7. **Repartir el acceso** en `/instituto/sedes` → "Quién entra". Y tenerlo presente al hacerlo: quien
+   no tiene NINGUNA sede marcada entra a todas, y quitarle a alguien la última se las abre todas otra
+   vez. La pantalla lo avisa en el momento.
