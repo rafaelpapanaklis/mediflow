@@ -266,7 +266,7 @@ test("🔴 P0-2 · agendar ENGANCHA la cita a su caso, y las dos escrituras usan
   // Y el texto que defiende la invariante vive en UN solo sitio: dos copias
   // son dos sitios donde discrepar.
   assert.equal(
-    src.split("Ese caso es de otro alumno.").length - 1,
+    src.split("Ese caso es de otro estudiante.").length - 1,
     1,
     "la comprobación del dueño del caso está duplicada",
   );

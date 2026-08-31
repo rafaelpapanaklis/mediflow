@@ -34,7 +34,7 @@ export default async function InstitutoDocentesPage() {
     return (
       <EduDenied
         permission="docentes.view"
-        what="Aquí se ve quién da clase en el instituto y cuántos alumnos supervisa cada quien."
+        what="Aquí se ve quién da clase en el instituto y cuántos estudiantes supervisa cada quien."
       />
     );
   }

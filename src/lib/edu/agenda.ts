@@ -504,7 +504,7 @@ async function assertNoClash(
     select: { id: true },
   });
   if (elAlumno) {
-    throw new EduPadronError("Ese alumno ya tiene otra cita a esa hora.", 409);
+    throw new EduPadronError("Ese estudiante ya tiene otra cita a esa hora.", 409);
   }
 }
 
@@ -552,9 +552,9 @@ async function resolveParties(
         select: { id: true, status: true },
       })
     : null;
-  if (!student) throw new EduPadronError("Elige un alumno de este instituto.", 400);
+  if (!student) throw new EduPadronError("Elige un estudiante de este instituto.", 400);
   if (student.status !== "ACTIVE") {
-    throw new EduPadronError("Ese alumno no está activo en el padrón. No se le pueden agendar pacientes.");
+    throw new EduPadronError("Ese estudiante no está activo en el padrón. No se le pueden agendar pacientes.");
   }
 
   const chair = chairId
@@ -673,7 +673,7 @@ async function resolveAppointmentCaseId(
       throw new EduPadronError("Ese caso es de otro paciente.");
     }
     if (!eduCaseFitsAppointment(caso, cita)) {
-      throw new EduPadronError("Ese caso es de otro alumno.");
+      throw new EduPadronError("Ese caso es de otro estudiante.");
     }
     return caso.id;
   }

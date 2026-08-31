@@ -203,13 +203,13 @@ export function eduScopeIsEmpty(scope: EduVisibilityScope): boolean {
 /** Texto que se le pinta a quien abrió una pantalla y no le toca nada. */
 export const EDU_VISIBILITY_NONE_DETAIL: Record<EduVisibilityResource, string> = {
   patients:
-    "Tu rol no lista pacientes. Los ven la dirección y caja (todos), los docentes (los de sus alumnos vigentes) y cada alumno (los suyos).",
+    "Tu rol no lista pacientes. Los ven la dirección y caja (todos), los docentes (los de sus estudiantes vigentes) y cada estudiante (los suyos).",
   appointments:
-    "Tu rol no lista citas. La agenda completa la ven la dirección y caja; un docente ve la de sus alumnos vigentes y un alumno la suya.",
+    "Tu rol no lista citas. La agenda completa la ven la dirección y caja; un docente ve la de sus estudiantes vigentes y un estudiante la suya.",
   cases:
     "Tu rol no lista casos clínicos. Caja no los ve a propósito: recibe y cobra, no abre expediente. Si necesitas verlos, pídele a la dirección que revise tu rol.",
   charges:
-    "Tu rol no ve dinero: ni precios, ni cobros, ni saldos. Los ven la dirección y caja. Un docente y un alumno no, y no es un permiso que se pueda encender: en el piso clínico se atiende, y en el mostrador se cobra.",
+    "Tu rol no ve dinero: ni precios, ni cobros, ni saldos. Los ven la dirección y caja. Un docente y un estudiante no, y no es un permiso que se pueda encender: en el piso clínico se atiende, y en el mostrador se cobra.",
 };
 
 // ═══════════════════════════════════════════════════════════════════════

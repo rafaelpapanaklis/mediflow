@@ -640,7 +640,7 @@ function EditarCupo({ cupo, onClose }: { cupo: EduIaCupo; onClose: () => void })
           autoComplete="off"
         />
         <span className="edu-field__hint">
-          Se le enseña al alumno DENTRO del mensaje de &quot;se acabó el cupo&quot;. Un alumno con el
+          Se le enseña al estudiante DENTRO del mensaje de &quot;se acabó el cupo&quot;. Un estudiante con el
           micrófono muerto y sin saber a quién preguntarle abre un ticket.
         </span>
       </div>

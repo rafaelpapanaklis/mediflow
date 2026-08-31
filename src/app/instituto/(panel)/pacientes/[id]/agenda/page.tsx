@@ -77,7 +77,7 @@ export default async function PacienteAgendaPage({ params }: { params: { id: str
     return (
       <EduDenied
         permission="agenda.view"
-        what="Las citas de este paciente: cuándo viene, con qué alumno y en qué sillón."
+        what="Las citas de este paciente: cuándo viene, con qué estudiante y en qué sillón."
       />
     );
   }
@@ -110,7 +110,7 @@ export default async function PacienteAgendaPage({ params }: { params: { id: str
     <div className="edu-stack">
       {scope.kind !== "all" && citas.length > 0 && (
         <p className="edu-note">
-          Ves las citas que te tocan. Si este paciente tiene otras con otro alumno, no salen
+          Ves las citas que te tocan. Si este paciente tiene otras con otro estudiante, no salen
           aquí.
         </p>
       )}

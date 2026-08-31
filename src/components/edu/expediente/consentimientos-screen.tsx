@@ -128,7 +128,7 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
         <div className="edu-empty">
           <p className="edu-empty__title">Este paciente no tiene un caso abierto tuyo</p>
           <p className="edu-empty__detail">
-            La carta tiene que decir QUÉ alumno va a atender y QUÉ docente responde, y eso sale del
+            La carta tiene que decir QUÉ estudiante va a atender y QUÉ docente responde, y eso sale del
             caso: no se teclea a mano. El caso se abre en el tamizaje, y su docente responsable se
             asigna desde la ficha del caso.
           </p>
@@ -140,7 +140,7 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
           <p className="edu-empty__title">Todavía no hay consentimientos</p>
           <p className="edu-empty__detail">
             Aquí van las cartas de consentimiento informado (NOM-004). El paciente las firma desde su
-            teléfono con una liga, y las contrafirman el alumno que lo va a atender y su docente
+            teléfono con una liga, y las contrafirman el estudiante que lo va a atender y su docente
             responsable.
           </p>
         </div>
@@ -180,7 +180,7 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
               </dd>
             </div>
             <div>
-              <dt>Alumno</dt>
+              <dt>Estudiante</dt>
               <dd>{c.studentSignedAt ? "Contrafirmada" : "Pendiente"}</dd>
             </div>
             <div>
@@ -232,7 +232,7 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
                 onClick={() => setFirmar({ row: c, comoDocente: false })}
               >
                 <PenLine size={15} />
-                Contrafirmar como alumno
+                Contrafirmar como estudiante
               </button>
             )}
             {c.puedeContrafirmarComoDocente && (
@@ -425,9 +425,9 @@ function CartaNueva({
 
       <div className="edu-banner">
         <div>
-          <p className="edu-banner__title">La carta dice que te va a atender un alumno</p>
+          <p className="edu-banner__title">La carta dice que te va a atender un estudiante</p>
           <p className="edu-banner__detail">
-            El primer bloque del texto nombra al alumno, su especialidad y al docente que responde
+            El primer bloque del texto nombra al estudiante, su especialidad y al docente que responde
             del acto. Es lo que más le importa saber a quien firma en una clínica de enseñanza, así
             que va antes que nada y no en un anexo.
           </p>
@@ -456,7 +456,7 @@ function CartaNueva({
           ))}
         </select>
         <span className="edu-field__hint">
-          De aquí salen el alumno que atiende y el docente responsable. No se teclean.
+          De aquí salen el estudiante que atiende y el docente responsable. No se teclean.
         </span>
       </div>
 
@@ -701,7 +701,7 @@ function Contrafirmar({
 
   return (
     <EduModal
-      title={comoDocente ? "Contrafirmar como docente responsable" : "Contrafirmar como alumno"}
+      title={comoDocente ? "Contrafirmar como docente responsable" : "Contrafirmar como estudiante"}
       subtitle={row.procedure}
       onClose={onClose}
       busy={busy}

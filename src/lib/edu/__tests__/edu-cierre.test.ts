@@ -157,11 +157,12 @@ test("cierre-2 · el reparto del recurso 'patients' es exactamente la decisión"
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// 3 · "PADRÓN" SE LEE "ALUMNOS" (las rutas y las keys no se renombran)
+// 3 · "PADRÓN" SE LEE "ESTUDIANTES" (las rutas y las keys no se renombran;
+//     fue "Alumnos" hasta que el dueño del producto pidió "Estudiante")
 // ═════════════════════════════════════════════════════════════════════
 
-test("cierre-3 · el menú dice Alumnos y la ruta sigue siendo /instituto/padron", () => {
-  assert.equal(EDU_NAV_LABELS.padron, "Alumnos");
+test("cierre-3 · el menú dice Estudiantes y la ruta sigue siendo /instituto/padron", () => {
+  assert.equal(EDU_NAV_LABELS.padron, "Estudiantes");
   // El grupo de la pantalla de permisos tampoco dice "Padrón".
   const grupo = EDU_PERMISSION_GROUPS.find((g) => g.keys.includes("padron.view"));
   assert.ok(grupo, "padron.view tiene que seguir en un grupo");

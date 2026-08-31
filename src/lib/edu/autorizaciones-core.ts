@@ -503,7 +503,7 @@ export function eduCaseGateVerdict(
         // no firmar), el docente (que firma y no pide) y la dirección. Un
         // "mándala tú" le diría al docente que haga algo que su rol no puede
         // hacer, y quien lo leyera concluiría que el sistema está roto.
-        detail: `Ya está pedida y falta la firma del docente. Si el paciente no puede esperar, el alumno puede reenviarla marcada como urgencia: queda constancia y no se le impide seguir.`,
+        detail: `Ya está pedida y falta la firma del docente. Si el paciente no puede esperar, el estudiante puede reenviarla marcada como urgencia: queda constancia y no se le impide seguir.`,
       };
     }
     if (rechazada) {
@@ -523,7 +523,7 @@ export function eduCaseGateVerdict(
     return {
       ok: false,
       viaEmergency: false,
-      detail: `Falta la autorización de ${EDU_APPROVAL_STAGE_LABELS[stage].toLowerCase()}. El alumno la manda desde la ficha del caso y su docente supervisor la firma desde el teléfono.`,
+      detail: `Falta la autorización de ${EDU_APPROVAL_STAGE_LABELS[stage].toLowerCase()}. El estudiante la manda desde la ficha del caso y su docente supervisor la firma desde el teléfono.`,
     };
   }
 
@@ -602,7 +602,7 @@ export const EDU_APPROVAL_BATCH_SKIP_LABELS: Record<EduApprovalBatchSkip, string
   urgencia:
     "Es una urgencia: ya ocurrió sin firma previa. Ésas se leen y se firman una por una.",
   cambio:
-    "El alumno la editó después de mandarla. Lee lo que dice ahora antes de firmarla.",
+    "El estudiante la editó después de mandarla. Lee lo que dice ahora antes de firmarla.",
   propia:
     "La mandaste tú. Una firma sobre la propia petición no es una firma: que la revise otro docente.",
   "no-pendiente": "Ya no está esperando firma: alguien la decidió mientras mirabas la lista.",
@@ -826,4 +826,4 @@ export function eduGroupApprovalsByStudent(rows: EduApprovalRow[]): EduApprovalG
 
 /** Lo que se le pinta a quien abrió la bandeja y no le toca nada. */
 export const EDU_APPROVAL_NONE_DETAIL =
-  "Tu rol no ve autorizaciones. Caja no las ve a propósito: cobra, no autoriza actos clínicos. Las ven la dirección (todas), los docentes (las de sus alumnos vigentes) y cada alumno (las suyas).";
+  "Tu rol no ve autorizaciones. Caja no las ve a propósito: cobra, no autoriza actos clínicos. Las ven la dirección (todas), los docentes (las de sus estudiantes vigentes) y cada estudiante (las suyas).";

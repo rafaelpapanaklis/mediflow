@@ -217,7 +217,7 @@ function AgendarCita({
 
   async function guardar() {
     setError(null);
-    if (!studentId) return setError("Elige al alumno que va a atender.");
+    if (!studentId) return setError("Elige al estudiante que va a atender.");
     if (!chairId) return setError("Elige el sillón.");
     if (!day) return setError("Elige la fecha.");
     if (!hora) return setError("Elige la hora.");
@@ -247,7 +247,7 @@ function AgendarCita({
   return (
     <EduModal
       title="Agendar cita"
-      subtitle={`Para ${patientName}. El caso se engancha solo en el servidor cuando el alumno tiene uno vivo con este paciente.`}
+      subtitle={`Para ${patientName}. El caso se engancha solo en el servidor cuando el estudiante tiene uno vivo con este paciente.`}
       onClose={onClose}
       busy={busy}
       footer={
@@ -269,7 +269,7 @@ function AgendarCita({
 
       <div className="edu-field">
         <label className="edu-field__label" htmlFor="edu-acc-alumno">
-          Alumno
+          Estudiante
         </label>
         <select
           id="edu-acc-alumno"
@@ -402,7 +402,7 @@ function AgendarCita({
             ))}
         </select>
         <span className="edu-field__hint">
-          Se propone solo el titular vigente del alumno al elegirlo.
+          Se propone solo el titular vigente del estudiante al elegirlo.
         </span>
       </div>
 
@@ -465,7 +465,7 @@ function AbrirCaso({
 
   async function guardar() {
     setError(null);
-    if (!studentId) return setError("Elige al alumno responsable.");
+    if (!studentId) return setError("Elige al estudiante responsable.");
     if (!programId) return setError("Elige la especialidad del caso.");
     setBusy(true);
     try {
@@ -483,7 +483,7 @@ function AbrirCaso({
   return (
     <EduModal
       title="Abrir caso"
-      subtitle={`${patientName} queda asignado a un alumno en una especialidad. El docente responsable se toma del titular vigente del alumno.`}
+      subtitle={`${patientName} queda asignado a un estudiante en una especialidad. El docente responsable se toma del titular vigente del estudiante.`}
       onClose={onClose}
       busy={busy}
       footer={
@@ -505,7 +505,7 @@ function AbrirCaso({
 
       <div className="edu-field">
         <label className="edu-field__label" htmlFor="edu-caso-alumno">
-          Alumno responsable
+          Estudiante responsable
         </label>
         <select
           id="edu-caso-alumno"

@@ -67,7 +67,7 @@ export default async function InstitutoAgendaPage({
     return (
       <EduDenied
         permission="agenda.view"
-        what="La agenda de la clínica: qué paciente está citado, con qué alumno, en qué sillón y a qué hora."
+        what="La agenda de la clínica: qué paciente está citado, con qué estudiante, en qué sillón y a qué hora."
       />
     );
   }

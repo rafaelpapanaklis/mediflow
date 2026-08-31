@@ -41,27 +41,27 @@ import type { EduRole } from "@/lib/edu/types";
  */
 export const EDU_ALL_PERMISSIONS = {
   "inicio.view": "Entrar al panel del instituto",
-  // La pantalla se LEE "Alumnos" desde la ola de cierre ("Padrón" no lo
-  // entendía ni el dueño del producto); las keys no se renombran — un
-  // override guardado en la base con "padron.view" tiene que seguir
+  // La pantalla se LEE "Estudiantes" (fue "Padrón", luego "Alumnos"; el
+  // dueño del producto prefiere "Estudiante"); las keys no se renombran —
+  // un override guardado en la base con "padron.view" tiene que seguir
   // valiendo.
-  "padron.view": "Ver la lista de alumnos",
-  "padron.manage": "Dar de alta y de baja alumnos, especialidades y generaciones",
+  "padron.view": "Ver la lista de estudiantes",
+  "padron.manage": "Dar de alta y de baja estudiantes, especialidades y generaciones",
   "docentes.view": "Ver la lista de docentes",
-  "supervision.assign": "Asignar alumnos a un docente supervisor",
+  "supervision.assign": "Asignar estudiantes a un docente supervisor",
   // ── Ola 2 · el piso clínico ──────────────────────────────────────────
   // Cada una la EXIGE una pantalla y un endpoint que ya existen; la prueba
   // de __tests__/edu-permissions.test.ts falla si alguna se queda sin
   // lector de servidor.
   "pacientes.view": "Ver los pacientes de la clínica",
   "pacientes.manage": "Registrar y editar la ficha de un paciente",
-  "pacientes.origen": "Marcar CUÁL alumno trajo al paciente",
+  "pacientes.origen": "Marcar CUÁL estudiante trajo al paciente",
   "agenda.view": "Ver la agenda de la clínica",
   "agenda.manage": "Agendar, reagendar y cancelar citas",
   "sillones.view": "Ver las unidades dentales y su horario",
   "sillones.manage": "Dar de alta sillones y capturar su horario",
   "casos.view": "Ver los casos clínicos",
-  "casos.assign": "Asignar un paciente a un alumno y abrir su caso",
+  "casos.assign": "Asignar un paciente a un estudiante y abrir su caso",
   // ── Ola 3 · el expediente clínico ────────────────────────────────────
   // Las seis las EXIGE una pantalla y un endpoint que ya existen (la
   // prueba de __tests__/edu-permissions.test.ts falla si alguna se queda
@@ -180,7 +180,7 @@ export const EDU_ALL_PERMISSIONS = {
   "requisitos.manage": "Capturar los requisitos del plan de estudios",
   "evaluacion.view": "Ver el avance académico y las calificaciones",
   "evaluacion.grade": "Calificar un caso con una rúbrica",
-  "traspaso.manage": "Traspasar los casos de un alumno a otro",
+  "traspaso.manage": "Traspasar los casos de un estudiante a otro",
   // ── Ola 11 · las sedes ───────────────────────────────────────────────
   // DOS keys, y las dos tienen dueño de SERVIDOR (la prueba de
   // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
@@ -336,9 +336,9 @@ export const EDU_ALL_PERMISSION_KEYS = Object.keys(
 export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[] = [
   { title: "Panel", keys: ["inicio.view"] },
   {
-    // "Alumnos" y no "Padrón académico": es el nombre que la pantalla lleva
-    // desde la ola de cierre, y el grupo se lee en la pantalla de permisos.
-    title: "Alumnos y docentes",
+    // "Estudiantes" y no "Padrón académico": es el nombre que lleva la
+    // pantalla, y el grupo se lee en la pantalla de permisos.
+    title: "Estudiantes y docentes",
     keys: ["padron.view", "padron.manage", "docentes.view", "supervision.assign"],
   },
   {

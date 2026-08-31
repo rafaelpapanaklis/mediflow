@@ -30449,3 +30449,69 @@ recibo impreso (@media print) no se vieron pintados. Nadie ha cobrado una mensua
    junto con él.
 2. Los dos SELECT de comprobación del final del .sql deben dar 2 y 3.
 3. Nada de env nuevas, nada de cron nuevo, cero keys de permiso nuevas.
+---
+
+## [Institucional · TEXTOS] — El nombre de la escuela ya no se corta a media palabra, y "Alumno" se lee "Estudiante" en todo el vertical ✅ (2026-08-31) · rama `fix/edu-textos`
+
+**Qué era.** Dos arreglos de interfaz, cero lógica: (1) el sidebar cortaba el nombre del
+instituto a un renglón con ellipsis ("Institute Odontológico de Esp…") y no había forma de
+leerlo completo; (2) el dueño del producto prefiere "Estudiante" sobre "Alumno" en todo el
+texto visible.
+
+**El nombre (edu-shell.tsx + edu-theme.css).** El nombre envuelve ahora hasta DOS renglones
+cortando por palabra (`-webkit-line-clamp: 2`) y solo entonces trunca — el ellipsis del
+line-clamp cae en frontera de palabra, nunca a media palabra — con el nombre completo
+siempre en el `title`. En los DOS sitios donde se pinta: la clase nueva
+`.edu-sidebar__school` (sidebar/cajón; antes estilos inline con `nowrap`) y
+`.edu-topbar__name` (topbar móvil, donde no hay hover que rescate un title — por eso ahí
+también dos renglones y no solo un ellipsis "limpio"). El encabezado del panel (tarjeta
+"Instituto" de Inicio, `edu-card__value`) ya envolvía sin truncar; solo ganó
+`overflow-wrap: break-word` para el nombre-palabra patológico.
+
+**Alumno → Estudiante (264 reemplazos en 61 archivos: 252 por lista de líneas aprobadas +
+12 a mano).** Todo el texto visible: el menú ("Alumnos" → "Estudiantes": nav, `<h1>` y el
+`<title>` de la pestaña), la etiqueta del rol (EDU_ROLE_LABELS y EDU_ROLE_DESCRIPTIONS:
+chip del usuario, alta de cuentas, selector de rol), las 7 descripciones de permiso y el
+grupo "Estudiantes y docentes" del editor de permisos, los estados vacíos, los mensajes de
+"tu rol no ve esto" (padron-core, expediente-core, recetas-core, autorizaciones-core,
+visibility), los errores de EduPadronError, los placeholders (incluido el ejemplo CSV del
+alta masiva), la carta de consentimiento NOM-004 ("estudiante en formación" — solo cartas
+NUEVAS: las ya firmadas conservan el texto con el que se firmaron, como debe ser), el PDF
+de receta ("Estudiante de la especialidad"), los CSV de dirección y de bitácora
+(encabezados de columna y secciones "ESTUDIANTES ATRASADOS" / "ESTUDIANTES CON MÁS
+ACTIVIDAD"), el nombre de archivo `bitacora-estudiante-*.csv` y el prompt del análisis de
+IA (para que la respuesta generada tampoco escriba "alumno").
+
+**Lo que NO se renombró, a propósito.** El enum EduRole sigue siendo ALUMNO; las rutas
+(`/instituto/padron`), el modelo EduStudent, las keys de permiso (`padron.*`), las keys de
+drilldown de dirección (`cobrado-alumno`, `pacientes-sin-alumno`, `alumnos-sin-docente` —
+solo cambió su etiqueta), el query param `?alumno=`, los ids de DOM (`edu-ac-alumno`…),
+las clases CSS (`.edu-dir-alumno*`), los slots de contrafirma (`"alumno" | "docente"`) y
+todos los identificadores (alumnoId, esAlumno…). El parser del alta masiva sigue aceptando
+"alumno", "alumna" y "residente" como sinónimos de entrada — "estudiante" ya estaba.
+
+**Quedan 4 textos SIN cambiar, con motivo.** Cuatro mensajes de error en
+`src/app/api/instituto` (evaluacion, evaluacion/[id]/export, traspasos, calificaciones:
+"Ese alumno no es de este instituto." / "Dime de qué alumno (?alumno=).") viven FUERA de
+las carpetas permitidas de esta tarea y la guardia los rebota; dos de ellos además nombran
+el param `?alumno=`, que no se renombra. Van en una tarea que pueda tocar api/instituto.
+
+**Pruebas: 847/847 en verde.** SEIS aserciones de texto se actualizaron con la intención
+intacta: el conteo de copias de "Ese caso es de otro estudiante." (auditoría — sigue
+exigiendo UNA sola), `EDU_NAV_LABELS.padron === "Estudiantes"` (cierre-3), los motivos
+"N estudiantes medibles", las dos filas CONTROL del CSV de dirección, el bloque
+"ESTUDIANTES ATRASADOS" y `bitacora-estudiante-*.csv`. La de facturación con "Endodoncia
+(tarifa de alumno)" NO se tocó: es un fixture que verifica el copiado literal de conceptos
+del cobro al CFDI, no un texto del producto.
+
+**Gates.** `npm run build` exit 0 COMPLETO (461/461 páginas; único warning: el
+preexistente de file-type en ai-wallet). `npx tsc --noEmit` solo con los 6 errores
+PREEXISTENTES de `src/lib/barber/__tests__` (ambos comandos con
+`NODE_OPTIONS=--max-old-space-size=8192`). Guardia limpia con
+`EDU_GUARD_SHARED="ORQUESTA.md"`: 67 archivos del vertical + este reporte. Barrido
+anti-mojibake limpio (el único "RodrÃ­guez" del árbol es el ejemplo INTENCIONAL del
+comentario de eduCsvRow, idéntico en main).
+
+**Lo que no se vio.** Sin navegador ni base en esta sesión: el clamp de dos renglones está
+compilado y razonado contra el CSS real, no visto en Chrome con un nombre largo de verdad.
+PR contra `main`, SIN mergear.

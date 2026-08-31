@@ -593,5 +593,5 @@ test("el nombre del archivo sale sin acentos ni espacios", () => {
     eduCsvFileName("A-01 María Rodríguez", "2026-03-01"),
     "bitacora-a-01-maria-rodriguez-2026-03-01.csv",
   );
-  assert.equal(eduCsvFileName("", "2026-03-01"), "bitacora-alumno-2026-03-01.csv");
+  assert.equal(eduCsvFileName("", "2026-03-01"), "bitacora-estudiante-2026-03-01.csv");
 });

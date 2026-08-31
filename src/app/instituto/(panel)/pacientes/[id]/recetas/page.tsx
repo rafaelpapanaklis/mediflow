@@ -33,7 +33,7 @@ export default async function PacienteRecetasPage({ params }: { params: { id: st
     return (
       <EduDenied
         permission="recetas.view"
-        what="Las recetas del paciente: las que el alumno propone y las que el docente ya expidió con su cédula."
+        what="Las recetas del paciente: las que el estudiante propone y las que el docente ya expidió con su cédula."
       />
     );
   }

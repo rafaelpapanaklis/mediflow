@@ -783,7 +783,7 @@ export async function getEduDireccionPanel(
   }
   if (evaluacion.truncated) {
     avisos.push(
-      "El instituto tiene más alumnos de los que cabe medir de una vez; el avance por especialidad se calculó con los primeros. Filtra por especialidad para verlos todos.",
+      "El instituto tiene más estudiantes de los que cabe medir de una vez; el avance por especialidad se calculó con los primeros. Filtra por especialidad para verlos todos.",
     );
   }
   if (programId) {
@@ -1008,7 +1008,7 @@ export async function getEduDireccionPanel(
       const f = fichaAlumno.get(studentId);
       return {
         studentId,
-        studentName: f?.studentName ?? "Alumno fuera de la lista",
+        studentName: f?.studentName ?? "Estudiante fuera de la lista",
         matricula: f?.matricula ?? "—",
         programName: f?.programName ?? "—",
         pacientes: acc.pacientes.size,
@@ -1233,7 +1233,7 @@ export async function getEduDireccionDetalle(
         sub: p.phone ? `Tel. ${p.phone}` : "Sin teléfono capturado",
         campos: [
           { k: "Citas en el periodo", v: String(p._count.appointments) },
-          { k: "Origen", v: p.referredByStudentId ? "Lo trajo un alumno" : "Llegó solo" },
+          { k: "Origen", v: p.referredByStudentId ? "Lo trajo un estudiante" : "Llegó solo" },
         ],
         href: `/instituto/pacientes/${p.id}`,
         semaforo: "NEUTRO",
@@ -1405,7 +1405,7 @@ export async function getEduDireccionDetalle(
           { k: "Saldo", v: eduMoney(c.balanceCents) },
           {
             k: "Origen del paciente",
-            v: c.patient.referredByStudentId ? "Lo trajo un alumno" : "Llegó solo",
+            v: c.patient.referredByStudentId ? "Lo trajo un estudiante" : "Llegó solo",
           },
         ],
         href: `/instituto/pacientes/${c.patientId}`,
@@ -1489,7 +1489,7 @@ export async function getEduDireccionDetalle(
         sub: p.phone ? `Tel. ${p.phone}` : "Sin teléfono capturado",
         campos: [
           { k: "Registrado", v: fecha(p.createdAt, tz) },
-          { k: "Origen", v: p.referredByStudentId ? "Lo trajo un alumno" : "Llegó solo" },
+          { k: "Origen", v: p.referredByStudentId ? "Lo trajo un estudiante" : "Llegó solo" },
           { k: "Estado", v: EDU_PATIENT_STATUS_LABELS[p.status as EduPatientStatus] },
         ],
         href: `/instituto/pacientes/${p.id}`,

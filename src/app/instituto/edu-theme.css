@@ -196,13 +196,19 @@ body:has(.edu-auth) {
   color: var(--edu-300);
 }
 
+/* El nombre del instituto NO se corta a media palabra: envuelve hasta dos
+   renglones y solo entonces pone puntos suspensivos (line-clamp corta en
+   frontera de palabra). En el teléfono no hay hover que rescate un title,
+   así que el nombre tiene que leerse en la propia barra. */
 .edu-topbar__name {
   font-size: 14.5px;
   font-weight: 650;
   letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 /* Solo en el cajón: en escritorio el <aside> no se cierra y su botón de
@@ -293,6 +299,23 @@ body:has(.edu-auth) {
   color: var(--edu-500);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* El nombre de la escuela, bajo la marca. Dos renglones cortando por
+   palabra y ellipsis limpio al final del segundo si ni así cabe; el title
+   del elemento lleva siempre el nombre completo. Un renglón con nowrap
+   dejaba "Institute Odontológico de Esp…" sin forma de leerse. */
+.edu-sidebar__school {
+  padding: 0 8px 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--edu-text-2);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: break-word;
 }
 
 .edu-nav {
@@ -485,6 +508,9 @@ body:has(.edu-auth) {
   font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1.3;
+  /* La tarjeta "Instituto" pinta el nombre completo de la escuela: que un
+     nombre-palabra muy largo envuelva en vez de desbordar la tarjeta. */
+  overflow-wrap: break-word;
 }
 
 .edu-card__note {

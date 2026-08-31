@@ -285,7 +285,7 @@ function FormularioSede({
   return (
     <EduModal
       title={sede ? sede.name : "Nueva sede"}
-      subtitle="Una sede es un edificio de la escuela: tiene sus propios sillones y su propia hora local. Los alumnos, en cambio, son los mismos en todas."
+      subtitle="Una sede es un edificio de la escuela: tiene sus propios sillones y su propia hora local. Los estudiantes, en cambio, son los mismos en todas."
       onClose={onClose}
       busy={busy}
       footer={

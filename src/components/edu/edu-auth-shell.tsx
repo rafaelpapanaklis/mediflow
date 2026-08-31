@@ -37,7 +37,7 @@ export function EduAuthShell({ children }: { children: React.ReactNode }) {
           </li>
           <li>
             <ShieldCheck size={18} aria-hidden="true" />
-            El expediente del paciente, con el alumno que lo atendió.
+            El expediente del paciente, con el estudiante que lo atendió.
           </li>
         </ul>
         <p style={{ fontSize: 12.5, color: "rgba(226,233,246,0.6)", margin: 0 }}>

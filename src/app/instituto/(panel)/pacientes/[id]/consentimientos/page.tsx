@@ -58,7 +58,7 @@ export default async function PacienteConsentimientosPage({
         <p className="edu-empty__title">Aquí no hay consentimientos que mostrarte</p>
         <p className="edu-empty__detail">
           Tu rol no lista pacientes, así que tampoco sus cartas. Los ven la dirección y caja (todos),
-          los docentes (los de sus alumnos vigentes) y cada alumno (los suyos).
+          los docentes (los de sus estudiantes vigentes) y cada estudiante (los suyos).
         </p>
       </div>
     );

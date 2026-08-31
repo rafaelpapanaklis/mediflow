@@ -122,10 +122,10 @@ async function resolveDestino(
         },
       })
     : null;
-  if (!alumno) throw new EduPadronError("Elige un alumno de este instituto.", 404);
+  if (!alumno) throw new EduPadronError("Elige un estudiante de este instituto.", 404);
   if (alumno.status !== "ACTIVE") {
     throw new EduPadronError(
-      "Ese alumno no está activo en el padrón: no se le pueden traspasar casos.",
+      "Ese estudiante no está activo en el padrón: no se le pueden traspasar casos.",
     );
   }
   return {
@@ -272,14 +272,14 @@ async function traspasarUno(
     );
   }
   if (caso.studentId === destino.id) {
-    throw new EduPadronError("Ese caso ya es de ese alumno.", 409);
+    throw new EduPadronError("Ese caso ya es de ese estudiante.", 409);
   }
   if (caso.programId !== destino.programId) {
     // Un caso de Endodoncia no se le pasa a un alumno de Ortodoncia: la
     // especialidad del caso es la del alumno que lo lleva, y cruzarlas
     // dejaría un requisito contando en el plan equivocado.
     throw new EduPadronError(
-      "Ese alumno es de otra especialidad. Un caso se traspasa dentro de la misma especialidad.",
+      "Ese estudiante es de otra especialidad. Un caso se traspasa dentro de la misma especialidad.",
     );
   }
 
