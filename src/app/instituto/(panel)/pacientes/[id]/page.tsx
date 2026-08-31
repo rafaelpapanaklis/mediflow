@@ -5,120 +5,167 @@ import { notFound, redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
-import { formatEduDate } from "@/lib/edu/pacientes-core";
-import { EDU_PATIENT_STATUS_LABELS, EDU_SEX_LABELS } from "@/lib/edu/types";
+import { getEduPatientResumen } from "@/lib/edu/resumen";
+import { eduMoney } from "@/lib/edu/dinero-core";
+import { EDU_CASE_STATUS_LABELS } from "@/lib/edu/types";
 
 /**
- * Pestaña DATOS de la ficha del paciente.
+ * Pestaña RESUMEN — la portada de la ficha desde la Ola 12.
  *
- * Es de LECTURA a propósito. La edición ya existe —y funciona— en el modal
- * de /instituto/pacientes (Ola 2), con su permiso `pacientes.manage` y su
- * endpoint aparte para el ORIGEN, que decide el precio. Volver a
- * escribirla aquí habría dado dos formularios para la misma ficha, y el
- * día que alguien agregue un campo lo agregaría a uno de los dos.
+ * Lo que un alumno (o recepción, o un docente) necesita al abrir la ficha
+ * de pie, con guantes: cuántas veces ha venido, cuándo fue la última vez y
+ * con quién, si tiene próxima cita —y si NO la tiene, que se note—, sus
+ * casos abiertos, su saldo y los avisos que piden acción.
  *
- * El botón de abajo lleva a esa lista. Es un paso más, y se prefiere a la
- * duplicación: esta pestaña se abre cien veces al día para MIRAR y unas
- * pocas para corregir un teléfono.
+ * 🔴 CADA BLOQUE SE RECORTA (O NI SE CONSULTA) SEGÚN QUIEN MIRA — eso lo
+ * decide src/lib/edu/resumen.ts con los alcances de visibility.ts:
+ *   · ALUMNO/DOCENTE → sus citas y sus casos; el bloque de DINERO no se
+ *     consulta (no viaja ni en el payload).
+ *   · CAJA → citas y saldo completos; NADA clínico: ni casos ni avisos.
+ * Y encima del alcance, el PERMISO: el bloque de casos solo se pinta con
+ * "casos.view" y el de saldo con "caja.view" — el alcance decide las
+ * filas, el permiso decide la pantalla, y aquí se respetan los dos.
  */
-export default async function PacienteDatosPage({ params }: { params: { id: string } }) {
+export default async function PacienteResumenPage({ params }: { params: { id: string } }) {
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   // El layout ya exigió pacientes.view; se vuelve a comprobar porque una
-  // página no puede DEPENDER de que su layout la protegió: si un día el
-  // layout cambia, el que se queda abierto es este archivo.
+  // página no puede depender de que su layout la protegió.
   if (!hasEduPermission(permUser, "pacientes.view")) notFound();
 
   const p = await getEduPatient(ctx, params.id);
   if (!p) notFound();
 
-  const canManage = hasEduPermission(permUser, "pacientes.manage");
+  const r = await getEduPatientResumen(ctx, p.id, ctx.institution.timezone);
+  if (!r) notFound();
+
+  const veCasos = r.casos !== null && hasEduPermission(permUser, "casos.view");
+  const veSaldo = r.saldo !== null && hasEduPermission(permUser, "caja.view");
+  const base = `/instituto/pacientes/${p.id}`;
 
   return (
     <div className="edu-stack">
-      <section className="edu-section">
-        <div className="edu-section__head">
-          <h2 className="edu-section__title">Datos del paciente</h2>
-        </div>
-
-        <div className="edu-kv edu-kv--2">
-          <div>
-            <span className="edu-kv__k">Teléfono</span>
-            <span className="edu-kv__v">{p.phone ?? "—"}</span>
-          </div>
-          <div>
-            <span className="edu-kv__k">Correo</span>
-            <span className="edu-kv__v">{p.email ?? "—"}</span>
-          </div>
-          <div>
-            <span className="edu-kv__k">Nacimiento</span>
-            <span className="edu-kv__v">
-              {/* Fecha de CALENDARIO: se formatea en UTC. En la zona local
-                  un nacimiento del 1 de enero saldría "31 de diciembre". */}
-              {p.birthDate ? formatEduDate(p.birthDate) : "—"}
-            </span>
-          </div>
-          <div>
-            <span className="edu-kv__k">Sexo</span>
-            <span className="edu-kv__v">{EDU_SEX_LABELS[p.sex]}</span>
-          </div>
-          <div>
-            <span className="edu-kv__k">Estado</span>
-            <span className="edu-kv__v">{EDU_PATIENT_STATUS_LABELS[p.status]}</span>
-          </div>
-          <div>
-            <span className="edu-kv__k">Registrado</span>
-            <span className="edu-kv__v">{formatEduDate(p.createdAt)}</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="edu-section">
-        <div className="edu-section__head">
-          <h2 className="edu-section__title">Origen</h2>
-        </div>
-        <div className="edu-kv">
-          <div>
-            <span className="edu-kv__k">Lo trajo</span>
-            <span className="edu-kv__v">
-              {p.origin.studentName
-                ? `${p.origin.studentMatricula} · ${p.origin.studentName}`
-                : "Llegó solo a la clínica"}
-            </span>
-          </div>
-          {p.origin.setByName && (
-            <div>
-              <span className="edu-kv__k">Lo marcó</span>
-              <span className="edu-kv__v">
-                {p.origin.setByName}
-                {p.origin.setAt ? ` · ${formatEduDate(p.origin.setAt)}` : ""}
-              </span>
+      {/* ── Los avisos van PRIMERO: son lo que pide acción ─────────────── */}
+      {r.avisos.length > 0 && (
+        <div className="edu-stack edu-stack--tight" role="list" aria-label="Avisos del paciente">
+          {r.avisos.map((a, i) => (
+            <div key={`${a.kind}-${i}`} className="edu-banner edu-banner--warn" role="listitem">
+              <div>
+                <p className="edu-banner__title">{a.text}</p>
+              </div>
             </div>
-          )}
+          ))}
         </div>
+      )}
+
+      {/* ── Cuántas veces, la última y la próxima ──────────────────────── */}
+      <section className="edu-section">
+        <div className="edu-section__head">
+          <h2 className="edu-section__title">Sus visitas</h2>
+          {r.recortado && <span className="edu-count">las que te tocan</span>}
+        </div>
+        <div className="edu-kpis">
+          <div className="edu-kpi">
+            <span className="edu-kpi__label">Veces que ha venido</span>
+            <span className="edu-kpi__value">{r.visitas}</span>
+          </div>
+          <div className="edu-kpi">
+            <span className="edu-kpi__label">Última visita</span>
+            <span className="edu-kpi__value edu-kpi__value--texto">
+              {r.ultimaVisita ? r.ultimaVisita.label : "Nunca ha venido"}
+            </span>
+            {r.ultimaVisita && (
+              <span className="edu-kpi__sub">
+                con {r.ultimaVisita.studentMatricula} · {r.ultimaVisita.studentName}
+              </span>
+            )}
+          </div>
+          <div className={`edu-kpi ${r.proximaCita ? "" : "edu-kpi--alerta"}`}>
+            <span className="edu-kpi__label">Próxima cita</span>
+            <span className="edu-kpi__value edu-kpi__value--texto">
+              {r.proximaCita ? r.proximaCita.label : "No tiene"}
+            </span>
+            <span className="edu-kpi__sub">
+              {r.proximaCita
+                ? [
+                    r.proximaCita.chairName,
+                    r.proximaCita.campusName,
+                    `${r.proximaCita.studentMatricula} · ${r.proximaCita.studentName}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : "Nadie lo tiene agendado: se le agenda desde aquí arriba o se le pierde la pista."}
+            </span>
+          </div>
+        </div>
+        <p className="edu-note">
+          <Link href={`${base}/agenda`} className="edu-link">
+            Ver toda su agenda
+          </Link>
+        </p>
       </section>
 
-      {p.notes && (
+      {/* ── Sus casos abiertos (solo quien ve expediente) ──────────────── */}
+      {veCasos && (
         <section className="edu-section">
           <div className="edu-section__head">
-            <h2 className="edu-section__title">Notas de recepción</h2>
+            <h2 className="edu-section__title">Casos abiertos</h2>
+            <span className="edu-count">{r.casos!.length}</span>
           </div>
-          {/* Notas de RECEPCIÓN, no clínicas. Las clínicas están en la
-              pestaña Expediente y tienen autor, estado y firma. */}
-          <p className="edu-note" style={{ whiteSpace: "pre-wrap" }}>
-            {p.notes}
+          {r.casos!.length === 0 ? (
+            <p className="edu-note">
+              No tiene casos abiertos que te toquen. Un caso se abre en el tamizaje — o con el
+              botón «Abrir caso» de arriba, si te corresponde.
+            </p>
+          ) : (
+            <div className="edu-stack edu-stack--tight">
+              {r.casos!.map((c) => (
+                <div key={c.id} className="edu-assign">
+                  <span>
+                    <strong>{c.programName}</strong> · {c.studentMatricula} · {c.studentName}
+                    {c.supervisorName ? ` · supervisa ${c.supervisorName}` : " · sin docente en el caso"}
+                    {` · desde ${c.abiertoLabel}`}
+                  </span>
+                  <span className="edu-tag edu-tag--ok">{EDU_CASE_STATUS_LABELS[c.status]}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="edu-note">
+            <Link href={`${base}/casos`} className="edu-link">
+              Ver los casos con su detalle
+            </Link>
           </p>
         </section>
       )}
 
-      {canManage && (
-        <p>
-          <Link href="/instituto/pacientes" className="edu-btn edu-btn--ghost edu-btn--sm">
-            Editar en la lista de pacientes
-          </Link>
-        </p>
+      {/* ── El dinero (solo quien ve dinero: caja y dirección) ─────────── */}
+      {veSaldo && (
+        <section className="edu-section">
+          <div className="edu-section__head">
+            <h2 className="edu-section__title">Saldo</h2>
+            <span className="edu-count">
+              {r.saldo!.cobros} {r.saldo!.cobros === 1 ? "cobro" : "cobros"}
+            </span>
+          </div>
+          <div className="edu-kpis">
+            <div className="edu-kpi">
+              <span className="edu-kpi__label">Pagado</span>
+              <span className="edu-kpi__value">{eduMoney(r.saldo!.cobradoCents)}</span>
+            </div>
+            <div className={`edu-kpi ${r.saldo!.pendienteCents > 0 ? "edu-kpi--alerta" : ""}`}>
+              <span className="edu-kpi__label">Pendiente</span>
+              <span className="edu-kpi__value">{eduMoney(r.saldo!.pendienteCents)}</span>
+            </div>
+          </div>
+          <p className="edu-note">
+            <Link href={`/instituto/caja?q=${encodeURIComponent(p.folio)}&ver=todos`} className="edu-link">
+              Ver sus cobros en caja
+            </Link>
+          </p>
+        </section>
       )}
     </div>
   );

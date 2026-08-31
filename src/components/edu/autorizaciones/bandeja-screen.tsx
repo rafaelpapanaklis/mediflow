@@ -52,6 +52,14 @@ export interface EduBandejaScreenProps {
   truncated: boolean;
   maxRows: number;
   canDecide: boolean;
+  /**
+   * Ola 14. Decidir una RECETA exige además "recetas.issue": expedirla
+   * pone la cédula del firmante en el papel. Sin esta llave, la tarjeta
+   * de una receta no pinta botones (el endpoint la rebotaría igual).
+   */
+  canIssueRecetas: boolean;
+  /** La cédula guardada del firmante, para PREllenar el campo al expedir. */
+  issueCedula: string | null;
   viewerRole: EduRole;
 }
 
@@ -74,6 +82,8 @@ export function EduBandejaScreen({
   truncated,
   maxRows,
   canDecide,
+  canIssueRecetas,
+  issueCedula,
   viewerRole,
 }: EduBandejaScreenProps) {
   const router = useRouter();
@@ -85,24 +95,37 @@ export function EduBandejaScreen({
   /** Qué tarjeta tiene el campo de motivo abierto, y para qué decisión. */
   const [abierta, setAbierta] = useState<{ id: string; decision: EduApprovalDecision } | null>(null);
   const [nota, setNota] = useState("");
+  /**
+   * Ola 14. La cédula con la que se EXPIDE una receta. Se abre como campo
+   * (prellenado con la guardada) en vez de mandarse invisible: lo que sale
+   * impreso en el papel es lo que el docente tuvo delante al firmar.
+   */
+  const [cedula, setCedula] = useState("");
 
   function cerrar() {
     setAbierta(null);
     setNota("");
   }
 
-  async function decidir(row: EduApprovalRow, decision: EduApprovalDecision, note?: string) {
+  async function decidir(
+    row: EduApprovalRow,
+    decision: EduApprovalDecision,
+    note?: string,
+    cedulaFirma?: string,
+  ) {
     setError(null);
     setSkipped([]);
     setBusyId(row.id);
     try {
       await eduRequest(`/api/instituto/autorizaciones/${row.id}`, {
         method: "PATCH",
-        body: { decision, note },
+        body: { decision, note, cedula: cedulaFirma },
       });
       setFlash(
         decision === "APPROVED"
-          ? `Autorizado: ${row.stageLabel.toLowerCase()} de ${row.patientName}.`
+          ? row.stage === "PRESCRIPTION"
+            ? `Receta de ${row.patientName} expedida con tu cédula. Ya se puede imprimir desde su ficha.`
+            : `Autorizado: ${row.stageLabel.toLowerCase()} de ${row.patientName}.`
           : decision === "CHANGES_REQUESTED"
             ? `Se le pidieron cambios a ${row.studentName}.`
             : `Rechazado: ${row.stageLabel.toLowerCase()} de ${row.patientName}.`,
@@ -152,9 +175,27 @@ export function EduBandejaScreen({
     void decidir(row, abierta!.decision, texto);
   }
 
+  /** Ola 14. Expedir la receta: la cédula viaja con la firma. */
+  function confirmarExpedir(row: EduApprovalRow) {
+    const c = cedula.trim();
+    if (c.length < 5) {
+      setError(
+        "Escribe tu cédula profesional. La receta sale impresa con ella y con tu nombre — es lo que hace que exista.",
+      );
+      return;
+    }
+    void decidir(row, "APPROVED", undefined, c);
+  }
+
   function tarjeta(row: EduApprovalRow) {
     const abiertaAqui = abierta?.id === row.id;
     const ocupada = busyId === row.id;
+    // Ola 14. Una RECETA se decide con la segunda llave (recetas.issue):
+    // expedirla pone la cédula del firmante en el papel. Sin la llave no
+    // se pintan los botones — el endpoint los rebotaría igual; esto solo
+    // evita ofrecer un botón que va a fallar.
+    const esReceta = row.stage === "PRESCRIPTION";
+    const puedeDecidirEsta = canDecide && (!esReceta || canIssueRecetas);
 
     return (
       <article
@@ -211,15 +252,33 @@ export function EduBandejaScreen({
           </Link>
         </p>
 
-        {canDecide && !abiertaAqui && (
+        {canDecide && esReceta && !canIssueRecetas && (
+          <p className="edu-auth-card__aviso">
+            Decidir una receta exige el permiso de expedirla (sale con tu cédula). Pídele a la
+            dirección que revise tus permisos.
+          </p>
+        )}
+
+        {puedeDecidirEsta && !abiertaAqui && (
           <div className="edu-auth-card__acciones">
             <button
               type="button"
               className="edu-btn edu-btn--primary edu-auth-btn"
-              onClick={() => decidir(row, "APPROVED")}
+              onClick={() => {
+                if (esReceta) {
+                  // La receta NO se firma de un clic: se abre el campo de
+                  // la cédula (prellenado con la guardada) y se confirma
+                  // viéndola — es lo que va a salir impreso.
+                  setError(null);
+                  setCedula(issueCedula ?? "");
+                  setAbierta({ id: row.id, decision: "APPROVED" });
+                } else {
+                  void decidir(row, "APPROVED");
+                }
+              }}
               disabled={ocupada}
             >
-              {EDU_APPROVAL_DECISION_LABELS.APPROVED}
+              {esReceta ? "Expedir" : EDU_APPROVAL_DECISION_LABELS.APPROVED}
             </button>
             <button
               type="button"
@@ -248,7 +307,47 @@ export function EduBandejaScreen({
           </div>
         )}
 
-        {canDecide && abiertaAqui && (
+        {puedeDecidirEsta && abiertaAqui && abierta.decision === "APPROVED" && (
+          <div className="edu-auth-card__motivo">
+            <label className="edu-field__label" htmlFor={`cedula-${row.id}`}>
+              Tu cédula profesional (sale impresa en la receta)
+            </label>
+            <input
+              id={`cedula-${row.id}`}
+              className="edu-input"
+              value={cedula}
+              autoFocus
+              onChange={(e) => setCedula(e.target.value)}
+              placeholder="Ej.: 1234567"
+              inputMode="text"
+              autoComplete="off"
+            />
+            <p className="edu-field__hint">
+              Expedirla la deja lista para imprimir, con tu nombre y esta cédula. Queda guardada
+              para la próxima firma.
+            </p>
+            <div className="edu-auth-card__acciones">
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary edu-auth-btn"
+                onClick={() => confirmarExpedir(row)}
+                disabled={ocupada}
+              >
+                Expedir con esta cédula
+              </button>
+              <button
+                type="button"
+                className="edu-btn edu-btn--quiet edu-auth-btn"
+                onClick={cerrar}
+                disabled={ocupada}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {puedeDecidirEsta && abiertaAqui && abierta.decision !== "APPROVED" && (
           <div className="edu-auth-card__motivo">
             <label className="edu-field__label" htmlFor={`motivo-${row.id}`}>
               {abierta.decision === "REJECTED"
@@ -410,7 +509,8 @@ export function EduBandejaScreen({
                 {canDecide && g.batchIds.length < g.rows.length && (
                   <p className="edu-auth-grupo__nota">
                     {g.rows.length - g.batchIds.length} de este alumno no entran en el lote: son
-                    urgencias, cambiaron después de mandarse o las mandaste tú. Se firman leyéndolas.
+                    urgencias o recetas, cambiaron después de mandarse o las mandaste tú. Se firman
+                    leyéndolas.
                   </p>
                 )}
 

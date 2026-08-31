@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getEduContext, eduUserDisplayName } from "@/lib/edu-auth";
 import { hasEduPermission, type EduPermissionKey } from "@/lib/edu/permissions";
+import { eduVisibility } from "@/lib/edu/visibility";
 import {
   EDU_BRAND,
   EDU_NAV_ITEMS,
@@ -66,7 +67,23 @@ export default async function InstitutoPanelLayout({
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
 
+  // ── Ola 12 · AGENDA vs. MI AGENDA: cada quien la suya ─────────────────
+  // La parrilla por sillón ("Agenda") es la herramienta de quien piensa en
+  // "¿qué sillón está libre?" — caja y dirección, que ven el día ENTERO. A
+  // un alumno esa parrilla le sale llena de columnas "Sin citas" que no son
+  // suyas, y a un docente tampoco le sirve: lo suyo es el día de sus
+  // alumnos. Por eso el menú reparte por ALCANCE, no por una key nueva:
+  //   · alcance "all" (caja, dirección)      → ve "Agenda", no "Mi agenda"
+  //   · alcance recortado (alumno, docente)  → ve "Mi agenda", no "Agenda"
+  // Se decide por alcance y no por rol suelto para que un override raro no
+  // deje a nadie con una pantalla que le miente. Y no es solo el menú: la
+  // PANTALLA de agenda redirige a /mi-dia a quien llega recortado — el
+  // item escondido nunca es el candado.
+  const apptScope = eduVisibility(ctx, "appointments");
+
   const items: EduNavItem[] = EDU_NAV_ITEMS.filter((item) => {
+    if (item.key === "agenda" && apptScope.kind !== "all") return false;
+    if (item.key === "mi-dia" && apptScope.kind === "all") return false;
     if (!item.permission) return true;
     return hasEduPermission(permUser, item.permission as EduPermissionKey);
   }).map((item) => ({

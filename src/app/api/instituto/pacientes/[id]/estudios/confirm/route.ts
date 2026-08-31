@@ -13,7 +13,9 @@ export const maxDuration = 60;
  * fila del expediente.
  *
  * POST /api/instituto/pacientes/[id]/estudios/confirm
- *   body: { path, name, caseId?, notes? }  → { id, alreadyRegistered }
+ *   body: { path, name, caseId?, notes?, kind? }  → { id, alreadyRegistered }
+ *   (`kind` solo corrige radiografía↔foto sobre una IMAGEN; para todo lo
+ *   demás se ignora y manda la extensión — ver eduResolveStudyKind)
  *
  * 🔴 NO SE CREE NADA DE LO QUE DIGA EL CLIENTE:
  *   · el `path` debe caer EXACTAMENTE en la carpeta de este instituto y

@@ -6,13 +6,13 @@ import { eduRequest } from "@/components/edu/edu-http";
 import { EduModal } from "@/components/edu/edu-modal";
 import {
   EDU_APPROVAL_EMERGENCY_REASON_MIN,
+  EDU_APPROVAL_REQUESTABLE_STAGES,
   eduApprovalTargetForStage,
   type EduApprovalRow,
   type EduApprovalTargetOption,
   type EduGateVerdict,
 } from "@/lib/edu/autorizaciones-core";
 import {
-  EDU_APPROVAL_STAGES,
   EDU_APPROVAL_STAGE_DESCRIPTIONS,
   EDU_APPROVAL_STAGE_LABELS,
   EDU_APPROVAL_STATUS_LABELS,
@@ -263,7 +263,10 @@ export function EduCasoAutorizaciones({
                 setTargetId("");
               }}
             >
-              {EDU_APPROVAL_STAGES.map((s) => (
+              {/* Ola 14: las etapas PEDIBLES, no todas. La RECETA no está
+                  aquí — se manda desde la pestaña Recetas, porque mandarla
+                  también la mueve a PENDIENTE. */}
+              {EDU_APPROVAL_REQUESTABLE_STAGES.map((s) => (
                 <option key={s} value={s}>
                   {EDU_APPROVAL_STAGE_LABELS[s]}
                 </option>

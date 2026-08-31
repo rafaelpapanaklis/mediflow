@@ -458,11 +458,13 @@ test("cada motivo de exclusión tiene un texto que se le puede enseñar a una pe
     assert.ok(v.length > 20, `el motivo "${k}" no explica nada: ${v}`);
     assert.notEqual(v, k);
   }
-  // Los cuatro motivos existen, incluido el de "la mandaste tú".
+  // Los cinco motivos existen, incluido el de "la mandaste tú" y el de la
+  // RECETA (Ola 14: se expide leyéndola, nunca en lote).
   assert.deepEqual(Object.keys(EDU_APPROVAL_BATCH_SKIP_LABELS).sort(), [
     "cambio",
     "no-pendiente",
     "propia",
+    "receta",
     "urgencia",
   ]);
 });

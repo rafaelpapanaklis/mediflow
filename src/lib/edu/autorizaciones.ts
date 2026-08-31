@@ -74,6 +74,7 @@ import {
   type EduGateVerdict,
 } from "@/lib/edu/autorizaciones-core";
 import { eduApprovalHash } from "@/lib/edu/autorizaciones-hash";
+import { eduRecetaCleanCedula, eduRecetaSnapshot } from "@/lib/edu/recetas-core";
 import { EDU_SOAP_LABELS } from "@/lib/edu/expediente-core";
 import {
   EDU_APPOINTMENT_TYPE_LABELS,
@@ -191,9 +192,39 @@ const APPOINTMENT_TARGET_SELECT = {
   chair: { select: { name: true, number: true } },
 } satisfies Prisma.EduAppointmentSelect;
 
+/**
+ * Ola 14. Los renglones van EN SU ORDEN del documento (`orden` y, a
+ * empate, el id): el orden entra al hash, así que leerlo distinto aquí y
+ * en recetas.ts produciría dos hashes del mismo papel.
+ */
+const PRESCRIPTION_TARGET_SELECT = {
+  id: true,
+  caseId: true,
+  patientId: true,
+  status: true,
+  diagnosis: true,
+  indications: true,
+  items: {
+    orderBy: [{ orden: "asc" as const }, { id: "asc" as const }],
+    select: {
+      drug: true,
+      presentation: true,
+      dose: true,
+      route: true,
+      frequency: true,
+      duration: true,
+      quantity: true,
+      notes: true,
+    },
+  },
+} satisfies Prisma.EduPrescriptionSelect;
+
 type RecordTarget = Prisma.EduRecordGetPayload<{ select: typeof RECORD_TARGET_SELECT }>;
 type AppointmentTarget = Prisma.EduAppointmentGetPayload<{
   select: typeof APPOINTMENT_TARGET_SELECT;
+}>;
+type PrescriptionTarget = Prisma.EduPrescriptionGetPayload<{
+  select: typeof PRESCRIPTION_TARGET_SELECT;
 }>;
 
 function recordSnapshot(r: RecordTarget): EduApprovalSnapshot {
@@ -239,6 +270,64 @@ function recordSummary(r: RecordTarget): EduApprovalSummary {
   }
   return {
     title: r.diagnostico ? r.diagnostico.trim() : "Nota clínica sin diagnóstico escrito",
+    lines,
+  };
+}
+
+/**
+ * Ola 14 · El resumen de una RECETA para la bandeja.
+ *
+ * Se pintan TODOS los renglones, no un "3 medicamentos": el docente firma
+ * con su cédula lo que lee en esta tarjeta, y una receta resumida a un
+ * número es una receta firmada sin leer. Los campos son VarChar cortos,
+ * así que quince renglones caben en un teléfono sin el recorte de
+ * RESUMEN_MAX (que aun así protege el diagnóstico y las indicaciones).
+ */
+function prescriptionSummary(p: PrescriptionTarget): EduApprovalSummary {
+  const lines: { label: string; text: string }[] = [];
+
+  if (p.diagnosis && p.diagnosis.trim()) {
+    const { text, cut } = recorta(p.diagnosis);
+    lines.push({ label: "Diagnóstico", text: cut ? `${text} (recortado)` : text });
+  }
+
+  p.items.forEach((it, i) => {
+    const posologia = [
+      it.presentation,
+      it.dose,
+      it.route,
+      it.frequency,
+      it.duration,
+      it.quantity ? `surtir ${it.quantity}` : null,
+    ]
+      .filter((x): x is string => Boolean(x && x.trim()))
+      .join(" · ");
+    lines.push({
+      label: `${i + 1}. ${it.drug}`,
+      text: `${posologia || "Sin posología escrita"}${it.notes ? ` — ${it.notes}` : ""}`,
+    });
+  });
+
+  if (p.items.length === 0) {
+    lines.push({
+      label: "Ojo",
+      text: "La receta no trae ni un medicamento. Expedir una receta vacía no ordena nada: devuélvela pidiendo cambios.",
+    });
+  }
+
+  if (p.indications && p.indications.trim()) {
+    const { text, cut } = recorta(p.indications);
+    lines.push({ label: "Indicaciones", text: cut ? `${text} (recortado)` : text });
+  }
+
+  lines.push({
+    label: "Ojo",
+    text: "Firmarla la EXPIDE: sale en papel con tu nombre y tu cédula, y tú respondes por ella. Por eso no entra al lote — se lee completa.",
+  });
+
+  const titulo = p.diagnosis && p.diagnosis.trim() ? p.diagnosis.trim().slice(0, 80) : null;
+  return {
+    title: titulo ? `Receta · ${titulo}` : "Receta",
     lines,
   };
 }
@@ -293,12 +382,14 @@ async function loadTargets(
 ): Promise<Map<string, TargetInfo>> {
   const recordIds = new Set<string>();
   const apptIds = new Set<string>();
+  const recetaIds = new Set<string>();
   for (const r of refs) {
     if (r.targetType === "EduRecord") recordIds.add(r.targetId);
     else if (r.targetType === "EduAppointment") apptIds.add(r.targetId);
+    else if (r.targetType === "EduPrescription") recetaIds.add(r.targetId);
   }
 
-  const [records, appts] = await Promise.all([
+  const [records, appts, recetas] = await Promise.all([
     recordIds.size > 0
       ? db.eduRecord.findMany({
           where: { institutionId, id: { in: Array.from(recordIds) } },
@@ -311,6 +402,12 @@ async function loadTargets(
           select: APPOINTMENT_TARGET_SELECT,
         })
       : Promise.resolve([] as AppointmentTarget[]),
+    recetaIds.size > 0
+      ? db.eduPrescription.findMany({
+          where: { institutionId, id: { in: Array.from(recetaIds) } },
+          select: PRESCRIPTION_TARGET_SELECT,
+        })
+      : Promise.resolve([] as PrescriptionTarget[]),
   ]);
 
   const SIN_RESUMEN: EduApprovalSummary = { title: "", lines: [] };
@@ -328,6 +425,16 @@ async function loadTargets(
       hash: eduApprovalHash(appointmentSnapshot(a)),
       summary: conResumen ? appointmentSummary(a, timeZone) : SIN_RESUMEN,
       patientId: a.patientId,
+    });
+  }
+  for (const p of recetas) {
+    out.set(claveTarget("EduPrescription", p.id), {
+      // Ola 14. El snapshot se arma con el MISMO constructor que usa
+      // recetas.ts al enviar (eduRecetaSnapshot): dos armados distintos
+      // son dos hashes distintos del mismo papel.
+      hash: eduApprovalHash(eduRecetaSnapshot(p)),
+      summary: conResumen ? prescriptionSummary(p) : SIN_RESUMEN,
+      patientId: p.patientId,
     });
   }
   return out;
@@ -449,7 +556,13 @@ function toRow(
     contentChanged,
     batchSkip: propia
       ? "propia"
-      : eduApprovalBatchSkipReason({ status, isEmergency: a.isEmergency, contentChanged }),
+      : eduApprovalBatchSkipReason({
+          status,
+          isEmergency: a.isEmergency,
+          contentChanged,
+          // Ola 14: una RECETA nunca entra al lote — se expide leyéndola.
+          stage: a.stage,
+        }),
 
     summary: target.summary,
   };
@@ -719,6 +832,17 @@ export async function requestEduApproval(
   const stage = parseEduApprovalStage(input.stage);
   if (!stage) throw new EduPadronError("Elige qué le estás mandando a autorizar.");
 
+  // Ola 14. La RECETA no se pide por aquí y no es un capricho de ruta:
+  // mandarla a firma también la mueve (BORRADOR → PENDIENTE), y las dos
+  // cosas tienen que pasar en UNA transacción o queda una receta que dice
+  // "borrador" con una petición viva en la bandeja. Ese envío vive en
+  // sendEduRecetaToApproval (src/lib/edu/recetas.ts).
+  if (stage === "PRESCRIPTION") {
+    throw new EduPadronError(
+      "Una receta se manda a autorización desde la propia receta, en la pestaña Recetas de la ficha del paciente.",
+    );
+  }
+
   // El tipo lo DECIDE la etapa. Si el cliente manda uno, tiene que coincidir:
   // aceptar el suyo dejaría que un PLAN apuntara a una cita y el gate del
   // caso buscaría firmas donde no hay contenido clínico que firmar.
@@ -830,9 +954,42 @@ export interface EduApprovalDecisionInput {
   note?: unknown;
   /** El trazo de la firma, si la escuela lo captura. Path de Storage. */
   signatureUrl?: unknown;
+  /**
+   * Ola 14. La cédula profesional con la que se EXPIDE una receta. Solo
+   * se lee cuando la etapa es PRESCRIPTION y la decisión es autorizar;
+   * si falta, se usa la que el docente ya tiene guardada — y si tampoco
+   * hay, la decisión se rebota con qué hacer.
+   */
+  cedula?: unknown;
   /** De la PETICIÓN HTTP, nunca del body. */
   ip?: string | null;
   userAgent?: string | null;
+}
+
+/**
+ * Ola 14 · La ETAPA de una autorización, para que el endpoint sepa QUÉ
+ * permiso exigir antes de decidir: una receta pide "recetas.issue" además
+ * de "autorizaciones.decide" — expedirla pone la cédula de quien firma en
+ * un documento, y ésa es una llave aparte.
+ *
+ * ⚠️ Deliberadamente NO recorta por alcance: solo elige el permiso que se
+ * exige, nunca abre nada — la decisión de verdad (decideEduApproval)
+ * vuelve a buscar la fila DENTRO del alcance y contesta 404 si no toca.
+ * Recortar aquí convertiría "no te toca" en "sin permiso", que confirma
+ * que la fila existe.
+ */
+export async function getEduApprovalStage(
+  ctx: EduClinicaContext,
+  approvalId: string,
+): Promise<EduApprovalStage | null> {
+  const institutionId = requireInstitution(ctx);
+  const id = eduCleanId(approvalId);
+  if (!id) return null;
+  const row = await prisma.eduCaseApproval.findFirst({
+    where: { institutionId, id },
+    select: { stage: true },
+  });
+  return row ? (row.stage as EduApprovalStage) : null;
 }
 
 /** Lo que se escribe al decidir, compartido por la decisión suelta y el lote. */
@@ -896,6 +1053,7 @@ export async function decideEduApproval(
     select: {
       id: true,
       status: true,
+      stage: true,
       targetType: true,
       targetId: true,
       requestedById: true,
@@ -960,15 +1118,105 @@ export async function decideEduApproval(
       ? input.signatureUrl.trim()
       : undefined;
 
-  await prisma.eduCaseApproval.update({
-    where: { id: actual.id },
-    data: datosDeDecision(decision, ctx, now, {
-      note,
-      hash,
-      ip: input.ip ?? null,
-      userAgent: input.userAgent ?? null,
-      signatureUrl,
-    }),
+  // ── Ola 14 · LA RECETA SE MUEVE CON LA DECISIÓN, en la misma transacción ──
+  //
+  // Autorizar una etapa PRESCRIPTION no solo firma la petición: EXPIDE el
+  // documento. Si la autorización y la receta se escribieran en dos
+  // transacciones, un corte a media red dejaría una firma sin receta —o una
+  // receta expedida que ninguna firma respalda—, y las dos son exactamente
+  // lo que este vertical no puede producir.
+  const esReceta = actual.stage === "PRESCRIPTION";
+  let recetaData: Prisma.EduPrescriptionUncheckedUpdateInput | null = null;
+  let cedulaParaGuardar: string | null = null;
+
+  if (esReceta && decision === "APPROVED") {
+    // El nombre y la cédula del que firma se CONGELAN en la receta. El id
+    // sale de la sesión; el nombre, de su fila — jamás del body.
+    const firmante = await prisma.eduUser.findFirst({
+      where: { id: ctx.eduUserId, institutionId },
+      select: { firstName: true, lastName: true, email: true, cedulaProfesional: true },
+    });
+    if (!firmante) throw new EduPadronError("Sesión de instituto no válida.", 401);
+
+    const cedulaEscrita = typeof input.cedula === "string" ? input.cedula.trim() : "";
+    let cedula: string | null;
+    if (cedulaEscrita) {
+      cedula = eduRecetaCleanCedula(cedulaEscrita);
+      if (!cedula) {
+        throw new EduPadronError(
+          "Esa cédula no se ve como una cédula profesional. Escríbela como está en tu documento (números, y letras si el formato viejo las traía).",
+        );
+      }
+    } else {
+      cedula = eduRecetaCleanCedula(firmante.cedulaProfesional);
+      if (!cedula) {
+        throw new EduPadronError(
+          "Para expedir una receta hace falta TU cédula profesional: sale impresa en el documento y tú respondes por él. Escríbela al firmar — queda guardada para la próxima.",
+          409,
+        );
+      }
+    }
+    // Se guarda para la próxima firma SOLO si cambió: así corregirla una
+    // vez la corrige en todos lados menos en lo ya expedido, que la
+    // conserva congelada.
+    cedulaParaGuardar = cedula === eduRecetaCleanCedula(firmante.cedulaProfesional) ? null : cedula;
+
+    recetaData = {
+      status: "EXPEDIDA",
+      issuedByUserId: ctx.eduUserId,
+      issuedByName: personName(firmante),
+      issuedByCedula: cedula,
+      issuedAt: now,
+      // La MISMA cifra que queda en la autorización: el documento es
+      // autosuficiente y se puede cotejar sin abrir la Ola 4.
+      issuedHash: hash ?? null,
+      issuedIp: input.ip ?? null,
+      issuedUserAgent: input.userAgent ?? null,
+    };
+  } else if (esReceta && decision === "CHANGES_REQUESTED") {
+    // Vuelve al borrador para que el alumno corrija y re-mande. El motivo
+    // no se copia: vive en la autorización, que ES el historial.
+    recetaData = { status: "BORRADOR" };
+  } else if (esReceta && decision === "REJECTED") {
+    recetaData = { status: "RECHAZADA" };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.eduCaseApproval.update({
+      where: { id: actual.id },
+      data: datosDeDecision(decision, ctx, now, {
+        note,
+        hash,
+        ip: input.ip ?? null,
+        userAgent: input.userAgent ?? null,
+        signatureUrl,
+      }),
+    });
+
+    if (esReceta && recetaData) {
+      // `updateMany` acotado a PENDIENTE: si la receta ya no está
+      // esperando (un reenvío en el mismo instante, una fila tocada por
+      // SQL), la firma NO cae sobre otro estado.
+      const moved = await tx.eduPrescription.updateMany({
+        where: { institutionId, id: actual.targetId, status: "PENDIENTE" },
+        data: recetaData,
+      });
+      if (moved.count === 0 && decision === "APPROVED") {
+        // El throw deshace también la firma de arriba: no queda una
+        // autorización APPROVED sobre una receta que no se expidió.
+        throw new EduPadronError(
+          "Esa receta ya no está esperando firma: el alumno la re-mandó o alguien la movió. Refresca la bandeja y decide sobre la versión nueva.",
+          409,
+        );
+      }
+
+      if (decision === "APPROVED" && cedulaParaGuardar) {
+        await tx.eduUser.update({
+          where: { id: ctx.eduUserId },
+          data: { cedulaProfesional: cedulaParaGuardar },
+        });
+      }
+    }
   });
 
   return { id: actual.id, status: decision };
@@ -1028,6 +1276,7 @@ export async function decideEduApprovalBatch(
     select: {
       id: true,
       status: true,
+      stage: true,
       contentHash: true,
       isEmergency: true,
       targetType: true,
@@ -1062,6 +1311,10 @@ export async function decideEduApprovalBatch(
       status,
       isEmergency: f.isEmergency,
       contentChanged,
+      // Ola 14: la RECETA no se firma en lote — expedirla pone la cédula
+      // del firmante en el papel, y eso se lee completo, una por una. El
+      // filtro de la pantalla dice lo mismo; éste es el que cierra.
+      stage: f.stage,
     });
     if (razon) {
       skipped.push({ id: f.id, reason: razon });

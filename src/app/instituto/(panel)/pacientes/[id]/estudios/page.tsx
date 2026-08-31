@@ -8,8 +8,25 @@ import { getEduClinicalPatient, listEduPatientCaseOptions } from "@/lib/edu/expe
 import { listEduPatientStudies } from "@/lib/edu/estudios";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
 import { eduIaEstadoActual } from "@/lib/edu/ia-cupo";
+import { getDict } from "@/i18n/dictionaries";
+import type { Dictionary } from "@/i18n/t";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduEstudiosScreen } from "@/components/edu/expediente/estudios-screen";
+
+/**
+ * Ola 12 — el TROZO de diccionario que necesita el visor de mallas 3D del
+ * dental (Model3DViewer lee sus textos con useT). Se recorta AQUÍ, en el
+ * servidor, para que al navegador viaje solo `patients.models3d` y no el
+ * diccionario entero del panel dental. Siempre en español: el vertical no
+ * está en i18n (feedback_i18n_solo_en_dashboard).
+ */
+function dictModelos3d(): Dictionary {
+  const dict = getDict("es");
+  const patients = dict.patients;
+  const models3d =
+    patients && typeof patients === "object" ? (patients as Dictionary).models3d : undefined;
+  return { patients: { models3d: models3d && typeof models3d === "object" ? models3d : {} } };
+}
 
 /**
  * /instituto/pacientes/[id]/estudios — radiografías, tomografías, fotos y
@@ -21,7 +38,13 @@ import { EduEstudiosScreen } from "@/components/edu/expediente/estudios-screen";
  * son FIRMADAS y caducan. Una página cacheada serviría enlaces muertos, y
  * lo peor es que se verían como "el archivo se perdió".
  */
-export default async function PacienteEstudiosPage({ params }: { params: { id: string } }) {
+export default async function PacienteEstudiosPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 
@@ -65,6 +88,10 @@ export default async function PacienteEstudiosPage({ params }: { params: { id: s
       canUpload={hasEduPermission(permUser, "estudios.upload")}
       iaAnalisis={iaAnalisis}
       canAnalyze={hasEduPermission(permUser, "estudios.analyze")}
+      dict3d={dictModelos3d()}
+      // El botón "Subir estudio" de la ficha llega con ?subir=1 y el modal
+      // se abre solo. El permiso manda igual: sin estudios.upload se ignora.
+      abrirSubida={searchParams?.subir === "1"}
     />
   );
 }
