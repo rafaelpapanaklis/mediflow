@@ -52,7 +52,6 @@ import { eduRequiredText, eduParseInt } from "@/lib/edu/padron-core";
 import { eduPatientFullName } from "@/lib/edu/pacientes-core";
 import {
   EDU_MAX_PRICE_CENTS,
-  EDU_CAJA_MAX_ROWS,
   normalizeEduKey,
   normalizeEduProcedureCode,
   parseEduFeeRule,
@@ -750,6 +749,18 @@ export async function getEduTarifaDePaciente(
 // Lecturas: exigen "tarifarios.view" en el endpoint. Escrituras:
 // "tarifarios.manage". Aquí solo se comprueba la PERTENENCIA al instituto,
 // que es lo que un permiso no puede saber.
+//
+// ⚠️ P2-7 · EL CATÁLOGO NO LLEVA EL CANDADO DEL DINERO, Y ES DELIBERADO.
+// La auditoría pedía el segundo candado en "las cuatro lecturas del
+// tarifario"; se puso en las que enseñan PRECIOS (listEduFeeSchedules y
+// getEduTarifario, más getEduTarifaDePaciente que ya lo tenía). Ésta no lo
+// lleva porque no enseña un peso: EduProcedure guarda clave, nombre,
+// categoría y duración — el precio vive en EduFeeScheduleItem, que sigue
+// cerrado. Y la lee un flujo CLÍNICO: la pantalla de casos la carga para
+// que un DOCENTE (casos.assign) clasifique el procedimiento del caso, que
+// es lo que hace contable un requisito. Cerrarla con "charges" dejaría a
+// los docentes sin poder clasificar — y abrir los nombres del catálogo no
+// es abrir el tarifario, como ya explica pacientes/[id]/casos/page.tsx.
 // ═══════════════════════════════════════════════════════════════════════
 
 export async function listEduProcedures(
@@ -910,6 +921,14 @@ export async function listEduFeeSchedules(
   ctx: EduClinicaContext,
 ): Promise<EduFeeScheduleRow[]> {
   const institutionId = requireInstitution(ctx);
+  // 🔴 P2-7 · EL SEGUNDO CANDADO. El endpoint ya exige "tarifarios.view";
+  // esto es el ALCANCE, que es la otra cerradura que permissions.ts promete
+  // para todo el dinero: encenderle la key a un alumno por error sigue sin
+  // enseñarle las listas con las que la escuela cobra. Mismo throw que
+  // getEduTarifaDePaciente, que lo tuvo desde la Ola 5.
+  if (eduScopeIsEmpty(eduVisibility(ctx, "charges"))) {
+    throw new EduPadronError("Tu rol no ve precios ni cobros.", 403);
+  }
   const rows = await prisma.eduFeeSchedule.findMany({
     where: { institutionId },
     orderBy: [{ orderIndex: "asc" }, { key: "asc" }],
@@ -1103,6 +1122,14 @@ export async function updateEduFeeSchedule(
  */
 export async function getEduTarifario(ctx: EduClinicaContext): Promise<EduTarifario> {
   const institutionId = requireInstitution(ctx);
+  // 🔴 P2-7 · EL SEGUNDO CANDADO, aquí con más razón que en ningún otro
+  // sitio: esta es LA tabla de precios completa, celda por celda.
+  // `listEduFeeSchedules` (abajo en el Promise.all) ya lanza lo mismo, pero
+  // no se depende de eso: si mañana alguien reescribe esta función leyendo
+  // las listas a mano, el candado tiene que seguir aquí.
+  if (eduScopeIsEmpty(eduVisibility(ctx, "charges"))) {
+    throw new EduPadronError("Tu rol no ve precios ni cobros.", 403);
+  }
 
   const [schedules, procedimientos, items] = await Promise.all([
     listEduFeeSchedules(ctx),
@@ -1189,6 +1216,15 @@ export async function setEduProcedurePrices(
   const id = eduCleanId(procedureId);
   if (!id) throw new EduPadronError("Ese procedimiento no es válido.", 400);
   if (!Array.isArray(precios)) throw new EduPadronError("No mandaste precios.");
+  // P3-17: sin este tope, un cliente podía mandar el mismo renglón diez mil
+  // veces y forzar diez mil upserts dentro de la transacción. No puede
+  // haber más renglones legítimos que listas de precios; los repetidos se
+  // rebotan más abajo, renglón por renglón.
+  if (precios.length > EDU_MAX_FEE_SCHEDULES) {
+    throw new EduPadronError(
+      `Llegaron ${precios.length} renglones de precio y el instituto admite ${EDU_MAX_FEE_SCHEDULES} listas como mucho. Recarga la pantalla e intenta de nuevo.`,
+    );
+  }
 
   const procedimiento = await prisma.eduProcedure.findFirst({
     where: { id, institutionId },
@@ -1204,12 +1240,22 @@ export async function setEduProcedurePrices(
 
   const aEscribir: { feeScheduleId: string; priceCents: number }[] = [];
   const aBorrar: string[] = [];
+  // P3-17: la otra mitad del tope de arriba. Dos renglones con la misma
+  // lista son un bug del cliente (¿cuál de los dos precios vale?), y
+  // quedarse con "el último" en silencio guardaría uno de los dos al azar.
+  const vistos = new Set<string>();
 
   for (const p of precios) {
     const feeScheduleId = eduCleanId(p?.feeScheduleId);
     if (!feeScheduleId || !validas.has(feeScheduleId)) {
       throw new EduPadronError("Esa lista de precios no es de este instituto.", 404);
     }
+    if (vistos.has(feeScheduleId)) {
+      throw new EduPadronError(
+        "La misma lista de precios llegó dos veces en la captura. Recarga la pantalla e intenta de nuevo.",
+      );
+    }
+    vistos.add(feeScheduleId);
     if (p?.priceCents === null || p?.priceCents === undefined || p?.priceCents === "") {
       aBorrar.push(feeScheduleId);
       continue;
@@ -1248,16 +1294,9 @@ export async function setEduProcedurePrices(
   return { id, escritos: aEscribir.length, borrados: aBorrar.length };
 }
 
-/** Procedimientos activos para un `<select>`, sin precio (lo pone el server). */
-export async function listEduProcedureOptions(
-  ctx: EduClinicaContext,
-): Promise<{ id: string; code: string; name: string; category: string | null }[]> {
-  const institutionId = requireInstitution(ctx);
-  const rows = await prisma.eduProcedure.findMany({
-    where: { institutionId, isActive: true },
-    orderBy: [{ orderIndex: "asc" }, { code: "asc" }],
-    take: EDU_CAJA_MAX_ROWS,
-    select: { id: true, code: true, name: true, category: true },
-  });
-  return rows;
-}
+// ⚠️ Aquí vivía `listEduProcedureOptions` ("procedimientos activos para un
+// <select>"). Se retiró en la ola de cierre: no la llamaba NADIE — la caja
+// arma su desplegable con getEduTarifaDePaciente, que además trae el precio
+// resuelto — y era la única lectura de esta sección sin dueño. Una función
+// sin llamadores no es una reserva: es la puerta que la siguiente pantalla
+// usa sin pasar por el candado.

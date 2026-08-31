@@ -73,6 +73,14 @@ export default async function InstitutoPacientesPage({
 
   const [page, alumnos] = await Promise.all([
     listEduPatients(ctx, filters, now),
+    // 🔴 CIERRE · era el último sitio donde la lista completa de alumnos
+    // viajaba al navegador (la auditoría lo dejó anotado en el P1-4: aquí
+    // alimenta el filtro VISIBLE "¿lo trajo algún alumno?" y recortarla era
+    // una decisión de producto). La decisión quedó tomada y vive DENTRO de
+    // listEduStudentOptions (agenda.ts), no en esta página: un alumno se ve
+    // solo a sí mismo, un docente a sus alumnos vigentes, caja y dirección
+    // a todos. El filtro sigue funcionando igual para quien agenda; al
+    // alumno le ofrece su única opción legítima: "los que traje yo".
     listEduStudentOptions(ctx, now),
   ]);
 

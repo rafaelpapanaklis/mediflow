@@ -698,7 +698,7 @@ function AltaCita({
         <span className="edu-field__hint">
           {alumno?.supervisorName
             ? `Se propone el titular vigente de ${alumno.matricula}: ${alumno.supervisorName}.`
-            : "Este alumno no tiene titular vigente. Asígnale uno en el Padrón si hace falta."}
+            : "Este alumno no tiene titular vigente. Asígnale uno en Alumnos si hace falta."}
         </span>
       </div>
 

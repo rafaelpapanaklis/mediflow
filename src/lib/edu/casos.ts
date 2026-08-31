@@ -211,6 +211,73 @@ export async function getEduCase(
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
+ * Engancha a UN caso las citas SUELTAS (`caseId: null`) de ese paciente con
+ * ese alumno. Devuelve cuántas enganchó.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 CIERRE · ES LA MISMA REGLA EN LOS DOS MOMENTOS EN QUE UN CASO "RECOGE"
+ * SUS CITAS, Y POR ESO ES UNA SOLA FUNCIÓN:
+ *
+ *   · al ABRIR el caso (createEduCase, abajo) — el orden NORMAL del
+ *     producto es agendar primero y abrir el caso cuando el paciente llega,
+ *     así que la cita casi siempre es ANTERIOR al caso. El arreglo del P0-2
+ *     enganchaba al agendar, al reagendar y al traspasar… y ninguna de esas
+ *     tres corre cuando el caso nace DESPUÉS de la cita: la fila se quedaba
+ *     con `caseId: null` para siempre, no contaba para la etapa SESSION del
+ *     gate de la Ola 4, y en el traspaso no se iba con el alumno entrante.
+ *
+ *   · al TRASPASAR (traspasos.ts) — las citas sueltas del alumno saliente
+ *     con ese paciente se cuelgan del caso que entrega (que en ese instante
+ *     ya quedó TRANSFERRED), para que una cita huérfana no le conserve la
+ *     ficha del paciente que acaba de entregar.
+ *
+ * Si esto fuera un `updateMany` copiado en los dos sitios, tarde o temprano
+ * uno de los dos filtraría distinto — y el que filtrara mal funcionaría
+ * perfectamente, para todo el mundo.
+ *
+ * ⚠️ `includeTamizaje` distingue los dos momentos y no es decorativo:
+ *   · al ABRIR, el TAMIZAJE se queda fuera — es la valoración ANTERIOR al
+ *     caso y el caso engancha LA SUYA por su lado (`screeningAppointmentId`);
+ *     otra cita de tamizaje suelta del par es una valoración pendiente que
+ *     no pertenece a este caso.
+ *   · al TRASPASAR entra todo: una cita suelta —del tipo que sea— es una
+ *     llave suelta igual. (Es la misma pareja de reglas que las secciones
+ *     1 y 2 de sql/edu-fix-auditoria.sql, que repara lo histórico.)
+ *
+ * ⚠️ QUIEN LLAMA DECIDE SI EL CASO ES INEQUÍVOCO. Esta función engancha lo
+ * que le digan; la regla de "solo si este caso es el ÚNICO vivo del par"
+ * (adivinar entre dos casos mueve una sesión al expediente equivocado) vive
+ * en `createEduCase`, porque en el traspaso la pregunta ni se plantea: las
+ * sueltas del saliente se cuelgan del caso que entrega, haya o no otro vivo
+ * — quitar la llave manda sobre clasificar perfecto, y así quedó decidido
+ * en el arreglo del P0-2.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function eduAttachLooseAppointments(
+  tx: Prisma.TransactionClient,
+  args: {
+    institutionId: string;
+    patientId: string;
+    studentId: string;
+    caseId: string;
+    /** true = también las de TAMIZAJE (solo el traspaso). */
+    includeTamizaje: boolean;
+  },
+): Promise<number> {
+  const res = await tx.eduAppointment.updateMany({
+    where: {
+      institutionId: args.institutionId,
+      patientId: args.patientId,
+      studentId: args.studentId,
+      caseId: null,
+      ...(args.includeTamizaje ? {} : { type: { not: "TAMIZAJE" } }),
+    },
+    data: { caseId: args.caseId },
+  });
+  return res.count;
+}
+
+/**
  * El titular VIGENTE de un alumno, o null.
  *
  * Se usa para rellenar solo el supervisor del caso al abrirlo. Si hubiera
@@ -412,6 +479,51 @@ export async function createEduCase(
       await tx.eduAppointment.updateMany({
         where: { id: screeningAppointmentId, institutionId, caseId: null },
         data: { caseId: caso.id },
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔴 CIERRE · LAS CITAS AGENDADAS ANTES DE ABRIR EL CASO SE ENGANCHAN
+    // AL ABRIRLO.
+    //
+    // El orden NORMAL del producto es exactamente ése: recepción agenda,
+    // el paciente llega y ENTONCES el tamizaje abre el caso. El arreglo del
+    // P0-2 enganchaba al agendar (el caso ya existía), al reagendar y al
+    // traspasar — pero cuando el caso nace DESPUÉS de la cita, ninguno de
+    // esos tres momentos vuelve a mirarla: la fila se quedaba con
+    // `caseId: null` para siempre. Ese hueco se vio en producción: la cita
+    // no contaba para la etapa SESSION del gate y, al traspasar, no se iba
+    // con el alumno entrante.
+    //
+    // Solo si este caso queda como el ÚNICO vivo del par (paciente,
+    // alumno): con dos casos vivos —dos especialidades— no hay forma de
+    // saber de cuál es cada cita suelta, y adivinar mueve una sesión al
+    // expediente equivocado. Es la MISMA regla que resolveAppointmentCaseId
+    // (agenda.ts) aplica al agendar, y la del paso 1 del .sql que repara
+    // las filas históricas (sql/edu-cierre.sql).
+    //
+    // El conteo va DENTRO de la transacción y después del create: se
+    // pregunta por "otros" casos vivos con el recién nacido ya visible,
+    // así que la respuesta no puede cambiar entre la cuenta y el enganche.
+    // ═══════════════════════════════════════════════════════════════════
+    const otrosVivos = await tx.eduCase.count({
+      where: {
+        institutionId,
+        patientId: partes.patientId,
+        studentId: partes.studentId,
+        status: { notIn: EDU_CASE_CLOSED_STATUSES },
+        NOT: { id: caso.id },
+      },
+    });
+    if (otrosVivos === 0) {
+      await eduAttachLooseAppointments(tx, {
+        institutionId,
+        patientId: partes.patientId,
+        studentId: partes.studentId,
+        caseId: caso.id,
+        // El tamizaje se queda fuera: es la valoración ANTERIOR al caso, y
+        // la que abrió ESTE caso ya se enganchó arriba por su id.
+        includeTamizaje: false,
       });
     }
 

@@ -63,6 +63,21 @@ export default async function InstitutoPanelLayout({
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 
+  // ── 🔴 P2-9 · LA CONTRASEÑA TEMPORAL NO SE QUEDA PARA SIEMPRE ────────
+  // Cuando el sistema GENERA la contraseña (el alta de equipo), quien dio
+  // de alta la CONOCIÓ. Para un expediente clínico no basta pedir de
+  // palabra que la cambien: hasta que la persona define la suya, el panel
+  // no se usa. La bandera se escribía desde la Ola 1B y nadie la leía —
+  // este es el lector. Corre en CADA render del panel (force-dynamic) con
+  // la base en la mano, así que no se salta navegando directo.
+  //
+  // La pantalla vive FUERA del grupo (panel) —/instituto/cambiar-contrasena,
+  // hermana del login— a propósito: si viviera dentro, este redirect la
+  // alcanzaría a ella misma y sería un bucle. Es el espejo del gate del
+  // dental (dashboard/layout.tsx), con la salida resuelta por ubicación en
+  // vez de por comparación de pathname.
+  if (ctx.user.mustChangePassword) redirect("/instituto/cambiar-contrasena");
+
   const sede = await getEduCampusScope(ctx);
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };

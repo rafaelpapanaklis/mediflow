@@ -389,6 +389,34 @@ export interface EduChargeInput {
   notes?: unknown;
   /** Pago inmediato, que es lo normal en un mostrador. Opcional. */
   payment?: EduPaymentInput;
+  /** P2-10. La clave de idempotencia del cliente: dos POST con la misma
+   *  clave son UN cobro. Opcional — un POST sin clave cobra igual. */
+  idempotencyKey?: unknown;
+}
+
+/**
+ * P2-10 · La clave de idempotencia, validada.
+ *
+ * `undefined`/null/"" = no mandaron (legítimo: los clientes viejos no la
+ * traen). Mandarla MAL sí rebota: una clave de tres letras chocaría con la
+ * de otro cobro del instituto por puro azar, y el "duplicado" devolvería el
+ * cobro de OTRO paciente — silenciarlo sería peor que el doble cobro que
+ * esto viene a cerrar. 16 como mínimo porque la pantalla manda un UUID (36)
+ * y cualquier cliente serio genera algo de ese tamaño.
+ */
+function parseIdempotencyKey(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw !== "string") {
+    throw new EduPadronError("La clave de idempotencia no es válida.", 400);
+  }
+  const v = raw.trim();
+  if (v.length < 16 || v.length > 80 || !/^[A-Za-z0-9_-]+$/.test(v)) {
+    throw new EduPadronError(
+      "La clave de idempotencia no es válida (de 16 a 80 caracteres: letras, números, guion y guion bajo).",
+      400,
+    );
+  }
+  return v;
 }
 
 /**
@@ -453,8 +481,29 @@ export async function createEduCharge(
     campusId?: string | null;
   } = {},
   now: Date = new Date(),
-): Promise<{ id: string; folio: string; descartados: number }> {
+): Promise<{ id: string; folio: string; descartados: number; duplicado: boolean }> {
   const institutionId = requireDinero(ctx);
+
+  // ── 🔴 P2-10 · LA IDEMPOTENCIA, ANTES DE COTIZAR NADA ────────────────
+  // Dos peticiones idénticas emitían dos cobros con dos folios, los dos con
+  // su pago: el bucle de reintentos de abajo resuelve la colisión de FOLIO,
+  // no la duplicación. La pantalla tapaba el doble clic (botón `busy`), pero
+  // un reintento de red, un Enter en dos pestañas o cualquier cliente que
+  // no sea esa pantalla cobraban dos veces. La subida de estudios ya era
+  // idempotente y lo explicaba (estudios.ts); la caja no había heredado la
+  // lección.
+  //
+  // Si la clave ya está guardada, se devuelve el cobro EXISTENTE con
+  // `duplicado: true` y no se toca nada — ni el folio, ni el pago, ni una
+  // línea. `descartados: 0` porque en ESTA petición no se cotizó nada.
+  const idempotencyKey = parseIdempotencyKey(input.idempotencyKey);
+  if (idempotencyKey) {
+    const previo = await prisma.eduCharge.findFirst({
+      where: { institutionId, idempotencyKey },
+      select: { id: true, folio: true },
+    });
+    if (previo) return { ...previo, descartados: 0, duplicado: true };
+  }
 
   // El paciente tiene que estar dentro del alcance de quien cobra. Caja los
   // ve todos, así que en la práctica esto solo cierra el tenant — pero lo
@@ -531,6 +580,10 @@ export async function createEduCharge(
     // ni del sillón: es dónde estaba el mostrador cuando entró el dinero, y
     // por eso no se puede desincronizar de nada.
     campusId: options.campusId ?? null,
+    // P2-10. Con esto puesto, el índice único (institutionId,
+    // idempotencyKey) convierte la carrera de dos POST simultáneos en un
+    // P2002 que abajo se traduce en "devuélvele el que ganó".
+    idempotencyKey,
   };
 
   // Tres intentos por el folio automático: si dos cajas cobran en el mismo
@@ -581,10 +634,34 @@ export async function createEduCharge(
         return cobro;
       });
 
-      return { ...creado, descartados };
+      return { ...creado, descartados, duplicado: false };
     } catch (err) {
       const code = (err as { code?: string })?.code;
-      if (code !== "P2002" || intento === 2) throw err;
+      if (code !== "P2002") throw err;
+
+      // P2-10 · ¿Qué índice único rebotó? Prisma lo dice en meta.target
+      // (las columnas, o el nombre `map` del índice, según versión). Si fue
+      // la CLAVE, otro POST idéntico ganó la carrera hace un instante: se
+      // devuelve SU cobro en vez de reintentar — reintentar con otra clave
+      // sería exactamente el doble cobro que esto cierra. Si fue el FOLIO,
+      // se recalcula y se reintenta, como siempre.
+      //
+      // ⚠️ La clave se mira ANTES de rendirse por intentos: la colisión de
+      // clave puede caer en el TERCER intento (dos choques de folio y
+      // después el duplicado), y ahí también hay que contestar el cobro
+      // ganador, no un 500.
+      const target = String(
+        ((err as { meta?: { target?: unknown } })?.meta?.target as unknown) ?? "",
+      );
+      if (idempotencyKey && /idempotencyKey|idem_key/i.test(target)) {
+        const ganador = await prisma.eduCharge.findFirst({
+          where: { institutionId, idempotencyKey },
+          select: { id: true, folio: true },
+        });
+        if (ganador) return { ...ganador, descartados: 0, duplicado: true };
+        throw err;
+      }
+      if (intento === 2) throw err;
     }
   }
   throw new EduPadronError("No se pudo asignar un folio de cobro. Intenta de nuevo.", 409);
@@ -677,6 +754,36 @@ export async function addEduPayment(
   const sesion = await getEduOpenCashSession(ctx);
 
   const resultado = await prisma.$transaction(async (tx) => {
+    // ── 🔴 P2-10 (la ventana del tope) · EL TOPE SE RECLAMA AQUÍ DENTRO ──
+    // El tope de arriba se leyó FUERA de la transacción: dos pagos
+    // simultáneos podían pasarlo los dos y dejar `paidCents` por encima del
+    // total. Este updateMany condicional lo cierra de verdad: solo pasa si
+    // a la fila TODAVÍA le cabe el monto, y el decremento toma el candado
+    // de la fila — el segundo pago simultáneo se queda esperando y, cuando
+    // el primero confirma, su condición se reevalúa contra el valor ya
+    // escrito y rebota si ya no cabe.
+    //
+    // El decremento es PROVISIONAL a propósito: veinte líneas más abajo el
+    // recálculo desde los pagos reales reescribe las dos columnas con la
+    // verdad. Lo que este update compra no es el número — es el candado y
+    // la condición.
+    const cabe = await tx.eduCharge.updateMany({
+      where: pago.isRefund
+        ? { id, institutionId, status: { not: "CANCELLED" }, paidCents: { gte: pago.amountCents } }
+        : { id, institutionId, status: { not: "CANCELLED" }, balanceCents: { gte: pago.amountCents } },
+      data: pago.isRefund
+        ? { paidCents: { decrement: pago.amountCents } }
+        : { balanceCents: { decrement: pago.amountCents } },
+    });
+    if (cabe.count === 0) {
+      throw new EduPadronError(
+        pago.isRefund
+          ? "Ese cobro cambió mientras devolvías (otro movimiento entró antes). Recarga y revisa lo pagado."
+          : "Ese cobro cambió mientras cobrabas (otro pago entró antes). Recarga y revisa el saldo.",
+        409,
+      );
+    }
+
     const creado = await tx.eduPayment.create({
       data: {
         institutionId,
@@ -771,8 +878,12 @@ export async function cancelEduCharge(
     );
   }
 
-  await prisma.eduCharge.update({
-    where: { id },
+  // P2-10 (la misma familia): condicionado a que SIGA sin dinero y sin
+  // cancelar. Sin la condición, un pago que entrara entre la lectura de
+  // arriba y este update dejaría un cobro CANCELADO con dinero dentro — el
+  // pago quedaría sin cobro al que pertenecer y el corte no cuadraría.
+  const res = await prisma.eduCharge.updateMany({
+    where: { id, institutionId, status: { not: "CANCELLED" }, paidCents: 0 },
     data: {
       status: "CANCELLED",
       // 🔴 CERO. Un cobro anulado no se le debe a nadie.
@@ -782,6 +893,12 @@ export async function cancelEduCharge(
       cancelReason: eduOptionalText(input.reason, 300) ?? null,
     },
   });
+  if (res.count === 0) {
+    throw new EduPadronError(
+      "Ese cobro cambió mientras lo cancelabas (entró un pago o alguien lo canceló antes). Recarga la pantalla.",
+      409,
+    );
+  }
   return { id };
 }
 

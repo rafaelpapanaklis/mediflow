@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimitKey } from "@/lib/rate-limit";
 import { eduApiError, eduApiGuard } from "@/lib/edu/api-guard";
 import { transcribeEduDictado } from "@/lib/edu/ia";
 
@@ -44,6 +45,24 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
+
+  // ── 🔴 P2-12 · EL FRENO POR SESIÓN, ANTES DE LEER EL AUDIO ───────────
+  // El cupo mensual (Ola 8) protege el presupuesto del INSTITUTO; sin este
+  // freno, una sola sesión en bucle podía comerse el cupo de toda la
+  // escuela en una tarde — y el cupo agotado apaga el micrófono de TODOS.
+  // Por eduUserId y no por IP: la clínica entera sale por la misma IP, y un
+  // tope por IP frenaría al piso clínico completo por culpa de uno.
+  //
+  // 10 por minuto es generoso a propósito: nadie dicta más de diez tramos
+  // en sesenta segundos con un paciente enfrente. Es el rateLimit en
+  // memoria del repo — por instancia serverless, suficiente como freno de
+  // bucle; el candado del dinero sigue siendo el cupo.
+  if (!rateLimitKey(`edu-ia-dictado:${g.ctx.eduUserId}`, 10)) {
+    return NextResponse.json(
+      { error: "Demasiados dictados seguidos. Espera un momento y vuelve a intentar." },
+      { status: 429 },
+    );
+  }
 
   let formData: FormData;
   try {

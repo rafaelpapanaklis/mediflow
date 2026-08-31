@@ -719,7 +719,9 @@ const PUBLIC_SELECT = {
   revokedAt: true,
   revokedReason: true,
   patient: { select: { firstName: true, lastName: true } },
-  institution: { select: { name: true, phone: true } },
+  // `timezone` para P2-14: la fecha de firma viaja YA formateada en la zona
+  // del instituto — nunca la formatea el navegador del paciente.
+  institution: { select: { name: true, phone: true, timezone: true } },
 } satisfies Prisma.EduConsentSelect;
 
 /**
@@ -787,6 +789,10 @@ export async function getEduConsentPublic(
     puedeFirmar: eduConsentSePuedeFirmar(c, now),
 
     signedAt: iso(c.signedAt),
+    // P2-14: formateada AQUÍ, con la zona del instituto — igual que toRow
+    // hace para el panel. Era la única fecha del vertical que formateaba el
+    // navegador, y en el peor sitio posible: un documento legal.
+    signedLabel: stampLabel(c.signedAt, c.institution.timezone),
     signerName: c.signerName,
     signerRelation: c.signerRelation,
     signatureUrl: firma || null,

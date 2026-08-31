@@ -260,7 +260,7 @@ export function EduPadronScreen({
       {rows.length === 0 ? (
         <div className="edu-empty">
           <p className="edu-empty__title">
-            {hayFiltros ? "Ningún alumno coincide" : "Todavía no hay alumnos en el padrón"}
+            {hayFiltros ? "Ningún alumno coincide" : "Todavía no hay alumnos inscritos"}
           </p>
           <p className="edu-empty__detail">
             {hayFiltros
@@ -358,7 +358,7 @@ export function EduPadronScreen({
           onClose={() => setAbriendoAlta(false)}
           onDone={(nombre) => {
             setAbriendoAlta(false);
-            recargar(`${nombre} quedó inscrito en el padrón.`);
+            recargar(`${nombre} quedó inscrito como alumno.`);
           }}
         />
       )}

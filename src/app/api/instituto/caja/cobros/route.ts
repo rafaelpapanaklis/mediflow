@@ -68,9 +68,19 @@ export async function POST(request: Request) {
       canRefund,
       campusId: donde.campusId,
     });
+    // P2-10: `duplicado` = este POST traía una clave de idempotencia ya
+    // usada y se devolvió el cobro que YA existía — 200 y no 201, porque no
+    // se creó nada. El folio es el del cobro original, que es lo que la
+    // pantalla debe enseñar.
     return NextResponse.json(
-      { ok: true, id: created.id, folio: created.folio, descartados: created.descartados },
-      { status: 201 },
+      {
+        ok: true,
+        id: created.id,
+        folio: created.folio,
+        descartados: created.descartados,
+        duplicado: created.duplicado,
+      },
+      { status: created.duplicado ? 200 : 201 },
     );
   } catch (err) {
     return eduApiError(err, "POST /api/instituto/caja/cobros");

@@ -17,12 +17,17 @@ import { EduDenied } from "@/components/edu/edu-denied";
 import { EduPadronScreen } from "@/components/edu/padron/padron-screen";
 
 export const metadata: Metadata = {
-  title: "Padrón · DaleControl Institucional",
+  title: "Alumnos · DaleControl Institucional",
   robots: { index: false, follow: false },
 };
 
 /**
- * /instituto/padron — el padrón de alumnos.
+ * /instituto/padron — la lista de alumnos.
+ *
+ * ⚠️ Cierre: la pantalla se LEE "Alumnos" ("Padrón" hacía que hasta el
+ * dueño del producto preguntara qué era), pero la RUTA, las keys
+ * (padron.view/manage) y los nombres internos no se renombran — romper los
+ * enlaces guardados de una escuela por un sinónimo no es un trato justo.
  *
  * EXIGE "padron.view" AQUÍ, no solo en el menú: esconder el item del
  * sidebar no cierra ninguna puerta, basta con teclear la URL.
@@ -50,7 +55,7 @@ export default async function InstitutoPadronPage({
     return (
       <EduDenied
         permission="padron.view"
-        what="El padrón lista a los alumnos del instituto con su generación, su semestre y el docente que los supervisa."
+        what="La lista de alumnos del instituto, con su generación, su semestre y el docente que los supervisa."
       />
     );
   }
@@ -81,7 +86,7 @@ export default async function InstitutoPadronPage({
     <div className="edu-page">
       <header className="edu-pagehead">
         <div>
-          <h1 className="edu-page__title">Padrón</h1>
+          <h1 className="edu-page__title">Alumnos</h1>
           <p className="edu-page__lead">
             {page.scope.kind === "supervised"
               ? "Los alumnos que supervisas hoy. Cuando la dirección te asigne o te quite alguno, esta lista lo refleja sola."

@@ -145,8 +145,12 @@ export function EduConsentimientoPublico({
 
         {vista.estado === "FIRMADO" && (
           <div className="edu-alert edu-alert--ok" role="status">
+            {/* P2-14: la fecha llega YA formateada del servidor, en la zona
+                del instituto. Formatearla aquí con toLocaleString rompía la
+                hidratación (el servidor pinta en SU zona) y decía otra hora
+                que la de la escuela — en un documento legal. */}
             <CheckCircle2 size={16} aria-hidden /> Firmado
-            {vista.signedAt ? ` el ${new Date(vista.signedAt).toLocaleString("es-MX")}` : ""}
+            {vista.signedLabel ? ` el ${vista.signedLabel}` : ""}
             {vista.signerName ? ` por ${vista.signerName} (${vista.signerRelation ?? "—"})` : ""}.
             Esta es tu copia: guárdala o pide una impresa.
           </div>
@@ -177,10 +181,8 @@ export function EduConsentimientoPublico({
           <p className="edu-kv__k">Firmas</p>
           <ul>
             <li>
-              Paciente:{" "}
-              {vista.signedAt
-                ? `firmado el ${new Date(vista.signedAt).toLocaleString("es-MX")}`
-                : "pendiente"}
+              {/* P2-14: misma etiqueta del servidor que el aviso de arriba. */}
+              Paciente: {vista.signedLabel ? `firmado el ${vista.signedLabel}` : "pendiente"}
             </li>
             <li>Alumno: {vista.studentSignedAt ? "contrafirmado" : "pendiente"}</li>
             <li>Docente responsable: {vista.supervisorSignedAt ? "contrafirmado" : "pendiente"}</li>

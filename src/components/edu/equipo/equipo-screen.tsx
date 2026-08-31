@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Search, UserPlus, Users, X } from "lucide-react";
+import { Check, Copy, Search, SlidersHorizontal, UserPlus, Users, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
@@ -11,6 +11,15 @@ import {
   EDU_ROLE_LABELS,
   type EduRole,
 } from "@/lib/edu/types";
+// P2-8: el catálogo de permisos es client-safe (módulo puro) y de aquí
+// salen los grupos, las descripciones y el cálculo de "qué tiene hoy".
+import {
+  EDU_ALL_PERMISSIONS,
+  EDU_PERMISSION_GROUPS,
+  EDU_ROLE_DEFAULTS,
+  getEduEffectivePermissions,
+  type EduPermissionKey,
+} from "@/lib/edu/permissions";
 import {
   EDU_TEAM_BULK_CHUNK,
   eduTeamCredentialsText,
@@ -198,6 +207,8 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
   const [navigating, startNav] = useTransition();
   const [q, setQ] = useState(filters.q ?? "");
   const [alta, setAlta] = useState<"individual" | "masiva" | null>(null);
+  // P2-8: la persona cuyos permisos se están editando.
+  const [permisosDe, setPermisosDe] = useState<EduTeamRow | null>(null);
   const [credenciales, setCredenciales] = useState<EduTeamAltaResult[] | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -399,7 +410,7 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
             <span>Persona</span>
             <span>Correo</span>
             <span>Rol</span>
-            <span>Padrón</span>
+            <span>Matrícula</span>
             <span>Estado</span>
             <span />
           </div>
@@ -420,10 +431,16 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
               <div className="edu-cell">
                 <span className="edu-cell__label">Rol</span>
                 <span className={`edu-tag ${TAG_BY_ROLE[p.role]}`}>{EDU_ROLE_LABELS[p.role]}</span>
+                {/* P2-8: la fila DICE cuando alguien no usa el default del
+                    rol — un override invisible es cómo la dirección olvida
+                    quién tiene qué. */}
+                {p.permissionsOverride.length > 0 && (
+                  <span className="edu-cell__sub">Permisos personalizados</span>
+                )}
               </div>
 
               <div className="edu-cell">
-                <span className="edu-cell__label">Padrón</span>
+                <span className="edu-cell__label">Matrícula</span>
                 {p.role !== "ALUMNO" ? (
                   <span className="edu-cell__sub">No aplica</span>
                 ) : p.hasStudentProfile ? (
@@ -441,6 +458,28 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
               </div>
 
               <div className="edu-cell__actions">
+                {/* P2-8: los permisos se editan por persona. Deshabilitado
+                    para uno mismo — el servidor lo rebota igual; así, quien
+                    edita conserva siempre su equipo.manage y el instituto
+                    no se queda sin administrador por una casilla. */}
+                <button
+                  type="button"
+                  className="edu-btn edu-btn--ghost edu-btn--sm"
+                  onClick={() => {
+                    setFlash(null);
+                    setError(null);
+                    setPermisosDe(p);
+                  }}
+                  disabled={busyId === p.id || p.isSelf}
+                  title={
+                    p.isSelf
+                      ? "No puedes editar tus propios permisos."
+                      : "Qué puede ver y hacer esta cuenta, casilla por casilla."
+                  }
+                >
+                  <SlidersHorizontal size={15} />
+                  Permisos
+                </button>
                 <button
                   type="button"
                   className={`edu-btn edu-btn--sm ${p.isActive ? "edu-btn--ghost" : "edu-btn--primary"}`}
@@ -469,7 +508,185 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
         <ModalAlta onClose={() => setAlta(null)} onDone={alCrear} />
       )}
       {alta === "masiva" && <ModalMasiva onClose={() => setAlta(null)} onDone={alCrear} />}
+      {permisosDe && (
+        <ModalPermisos
+          persona={permisosDe}
+          onClose={() => setPermisosDe(null)}
+          onDone={(mensaje) => {
+            setPermisosDe(null);
+            setError(null);
+            setFlash(mensaje);
+            startNav(() => router.refresh());
+          }}
+        />
+      )}
     </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PERMISOS (P2-8) — la pantalla que el catálogo prometía desde la Ola 0
+//
+// EDU_PERMISSION_GROUPS y sanitizeEduPermissionKeys existían "para la
+// pantalla de permisos del instituto" y ninguna tenía un llamador: el
+// override solo se podía escribir por SQL, y todas las mitigaciones del
+// estilo "se le enciende por override desde la pantalla de permisos" eran
+// teóricas. Éste es el editor. Vive aquí y no en una pantalla propia
+// porque los permisos son UN atributo de la cuenta, igual que el estado:
+// quien administra el equipo los ve a un botón de distancia de la persona,
+// no en otra sección del menú.
+// ═══════════════════════════════════════════════════════════════════════
+
+function ModalPermisos({
+  persona,
+  onClose,
+  onDone,
+}: {
+  persona: EduTeamRow;
+  onClose: () => void;
+  onDone: (mensaje: string) => void;
+}) {
+  // Arranca de lo EFECTIVO (override si hay; si no, el default del rol):
+  // es lo que la persona puede hacer HOY, que es de donde se parte para
+  // encender o apagar algo.
+  const permUser = { role: persona.role, permissionsOverride: persona.permissionsOverride };
+  const [keys, setKeys] = useState<Set<EduPermissionKey>>(
+    () => new Set(getEduEffectivePermissions(permUser)),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const tieneOverride = persona.permissionsOverride.length > 0;
+  const defaults = useMemo(
+    () => new Set(EDU_ROLE_DEFAULTS[persona.role] ?? []),
+    [persona.role],
+  );
+  // ¿Lo marcado es EXACTAMENTE el default? Entonces guardar como override
+  // no aporta nada (y congelaría a la persona fuera de las keys que ganen
+  // los roles en olas futuras): se guarda como "restaurar el rol".
+  const igualAlDefault = useMemo(() => {
+    if (keys.size !== defaults.size) return false;
+    let igual = true;
+    keys.forEach((k) => {
+      if (!defaults.has(k)) igual = false;
+    });
+    return igual;
+  }, [keys, defaults]);
+
+  function alternar(key: EduPermissionKey) {
+    setKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  async function guardar(restaurar: boolean) {
+    setError(null);
+    setBusy(true);
+    try {
+      await eduRequest(`/api/instituto/equipo/${persona.id}`, {
+        method: "PATCH",
+        body: {
+          // null = restaurar el rol. También cuando lo marcado ES el
+          // default: un override idéntico al rol solo serviría para que la
+          // persona no reciba las keys que su rol gane en olas futuras.
+          permissionsOverride: restaurar || igualAlDefault ? null : Array.from(keys),
+        },
+      });
+      onDone(
+        restaurar || igualAlDefault
+          ? `${persona.name} vuelve a los permisos de su rol (${EDU_ROLE_LABELS[persona.role]}).`
+          : `Los permisos de ${persona.name} quedaron personalizados. La fila lo marca, para que no se olvide.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron guardar los permisos.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <EduModal
+      title={`Permisos de ${persona.name}`}
+      subtitle={`${EDU_ROLE_LABELS[persona.role]} · ${
+        tieneOverride ? "con permisos personalizados" : "con los permisos de su rol"
+      }`}
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          {tieneOverride && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost"
+              onClick={() => guardar(true)}
+              disabled={busy}
+              title="Borra la personalización: la cuenta vuelve a lo que diga su rol, hoy y en lo que gane mañana."
+            >
+              Restaurar el rol
+            </button>
+          )}
+          <button
+            type="button"
+            className="edu-btn edu-btn--primary"
+            onClick={() => guardar(false)}
+            disabled={busy || keys.size === 0}
+          >
+            {busy ? "Guardando…" : "Guardar"}
+          </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="edu-alert" role="alert">
+          {error}
+        </div>
+      )}
+
+      <p className="edu-note">
+        Lo marcado REEMPLAZA a los permisos del rol: si personalizas, esta cuenta deja de recibir
+        en automático lo que su rol gane después — la fila queda marcada para que se recuerde. Y
+        una casilla de más no abre datos cerrados por diseño: el dinero, el expediente para caja y
+        el panel de dirección tienen un segundo candado que no está aquí.
+      </p>
+      {keys.size === 0 && (
+        <div className="edu-alert" role="alert">
+          Sin ninguna casilla no hay permisos que guardar. Para cerrarle el panel a alguien, dale
+          de baja; para dejarlo como su rol, usa «Restaurar el rol».
+        </div>
+      )}
+
+      {EDU_PERMISSION_GROUPS.map((grupo) => (
+        <fieldset className="edu-field" key={grupo.title}>
+          <legend className="edu-field__label">{grupo.title}</legend>
+          {grupo.keys.map((key) => (
+            <label
+              key={key}
+              style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "3px 0" }}
+            >
+              <input
+                type="checkbox"
+                checked={keys.has(key)}
+                onChange={() => alternar(key)}
+                disabled={busy}
+                style={{ marginTop: 3 }}
+              />
+              <span style={{ minWidth: 0 }}>
+                <span className="edu-cell__value">{EDU_ALL_PERMISSIONS[key]}</span>{" "}
+                <span className="edu-cell__sub">
+                  {key}
+                  {defaults.has(key) ? "" : " · fuera del rol"}
+                </span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      ))}
+    </EduModal>
   );
 }
 
@@ -624,7 +841,7 @@ function ModalAlta({
       {role === "ALUMNO" && (
         <p className="edu-note">
           Crear la cuenta no lo inscribe: después hay que darle matrícula, especialidad y generación
-          desde el Padrón.
+          desde Alumnos.
         </p>
       )}
     </EduModal>

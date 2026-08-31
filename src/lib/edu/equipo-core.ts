@@ -92,6 +92,13 @@ export interface EduTeamRow {
   isActive: boolean;
   /** Es la cuenta de quien está mirando: no se puede dar de baja a sí mismo. */
   isSelf: boolean;
+  /**
+   * P2-8 · El override de permisos GUARDADO (vacío = usa el default del
+   * rol). Viaja a la pantalla de equipo —que solo abre quien tiene
+   * equipo.manage— para que el editor de permisos arranque de lo que de
+   * verdad hay, y para pintar la marca "personalizado" en la fila.
+   */
+  permissionsOverride: string[];
   /** Ya tiene ficha académica (solo los ALUMNO la tienen). */
   hasStudentProfile: boolean;
   matricula: string | null;

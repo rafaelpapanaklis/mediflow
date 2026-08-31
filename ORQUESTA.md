@@ -29783,3 +29783,174 @@ propuesto ni expedido una receta real desde el producto.
 2. Si hay usuarios con `permissionsOverride` no vacío, descomentar los TRES bloques del
    backfill (dirección/docente/alumno — caja no recibe nada).
 3. Los tres SELECT de comprobación de la sección 8 tienen que dar 0 filas.
+
+---
+
+## [Institucional · CIERRE] — La cita agendada ANTES de abrir el caso se quedaba suelta PARA SIEMPRE (el P0-2 por la otra puerta), la lista de alumnos deja de viajar completa al navegador, "Padrón" se lee "Alumnos", y doce de los catorce P2/P3 de la auditoría ✅ (2026-08-31) · rama `fix/edu-cierre`
+
+### El bug que encontramos probando (punto 1)
+
+Reproducido en producción: recepción agenda → el paciente llega → el tamizaje abre el caso —
+y la cita se queda con `caseId = null` para siempre. El arreglo del PR #141 enganchaba al
+AGENDAR, al REAGENDAR y al TRASPASAR; ninguno corre cuando el caso nace DESPUÉS de la cita,
+que es el orden NORMAL del producto. Sin el enlace, la cita no cuenta para la etapa SESSION
+del gate (Ola 4) y el traspaso no se la lleva con el alumno entrante.
+
+- **Dónde se cerró: donde se ABRE el caso.** `createEduCase` (`casos.ts`) — que es por donde
+  pasan el tamizaje CON cita, el "valorar sin cita" y cualquier alta de caso — engancha al
+  final de su transacción las citas SUELTAS de ese paciente con ese alumno.
+- **Sin escribir otra función**: el enganche del traspaso (el 3-bis del #141) se EXTRAJO a
+  `eduAttachLooseAppointments` (exportada en `casos.ts`, sin ciclo de imports) y ahora los
+  DOS momentos llaman la misma. Diferencia deliberada y parametrizada: al abrir, el TAMIZAJE
+  queda fuera (es la valoración ANTERIOR al caso; la suya la engancha
+  `screeningAppointmentId`); al traspasar entra todo (una llave suelta es una llave suelta).
+- **Con la regla de siempre**: solo si el caso recién abierto queda como el ÚNICO vivo del
+  par (paciente, alumno) — el conteo corre DENTRO de la transacción, con el recién nacido ya
+  visible. Con dos casos vivos (dos especialidades), adivinar mueve una sesión al expediente
+  equivocado, así que se deja suelta: misma decisión que `resolveAppointmentCaseId`.
+- **Las filas viejas**: `sql/edu-cierre.sql` sección 2 — el MISMO update del paso 1 de
+  `edu-fix-auditoria.sql` (par con UN caso vivo, sin tamizaje). Si aquél ya corrió, éste solo
+  alcanza a las sueltas nuevas; ninguno de los dos está aplicado.
+- Prueba pedida por el encargo (agendar → abrir caso → enganchada): son dos escrituras de
+  Prisma en una transacción, no hay Postgres en la suite — quedó como prueba de FUENTE
+  (`edu-cierre.test.ts`): que `createEduCase` llama al enganche con `includeTamizaje: false`
+  y condicionado a "único caso vivo", y que el traspaso usa LA MISMA función. La prueba vieja
+  del 3-bis (`edu-auditoria.test.ts`) se actualizó al mecanismo compartido — su intención
+  ("engancha ANTES de mover las futuras, mismo paciente y mismo alumno") no cambió.
+
+### El padrón al navegador (punto 2) — la decisión, tomada y en el punto único
+
+`/instituto/pacientes` mandaba `listEduStudentOptions` COMPLETO al cliente, y el ALUMNO tiene
+`pacientes.view`. La decisión del encargo se implementó DENTRO de la función (`agenda.ts`),
+no página por página: el recorte es `eduStudentScopeWhere` con `eduVisibility(ctx,
+"patients")` — el helper de siempre, cero ifs a mano. Reparto: alumno → él mismo (su única
+opción legítima en "¿lo trajo…?"), docente → sus alumnos VIGENTES, caja y dirección → todos.
+Cae en las CINCO páginas que la llaman, lo que de paso cerró una fuga hermana que la
+auditoría no listó: el TAMIZAJE mandaba los alumnos de TODOS los docentes al navegador de
+cualquier DOCENTE (misma familia que el P1-4 de /docentes). Consecuencia deliberada y
+documentada en el código: un DOCENTE con `traspaso.manage` ahora solo ve como destino a sus
+propios alumnos vigentes — reparte dentro de su grupo; cruzar de grupo es de dirección.
+
+### "Padrón" → "Alumnos" (punto 3)
+
+Solo lo que se LEE: menú (`EDU_NAV_LABELS`), título y lead de la pantalla, EduDenied,
+mensajes de inscripción, ayudas en docentes/evaluación/bitácora/agenda/tamizaje/equipo (la
+columna "Padrón" de equipo ahora dice "Matrícula", que es lo que enseña), la descripción del
+rol DIRECCION, y el catálogo de permisos ("Ver la lista de alumnos"; el grupo dice "Alumnos y
+docentes" porque la pantalla nueva de permisos lo hace visible). Las rutas
+(`/instituto/padron`), las keys (`padron.view/manage`), los modelos y las funciones NO se
+renombraron — un enlace guardado o un override en la base tienen que seguir valiendo.
+
+### Los P2/P3 de la auditoría — doce de catorce, cada uno con su «Cómo quedó» en EDU_AUDIT.md
+
+- **P2-10 doble cobro ✅** — `EduCharge.idempotencyKey` (+ índice único
+  `(institutionId, idempotencyKey)`, schema aditivo + DDL en el .sql), `createEduCharge`
+  devuelve el cobro existente con `duplicado: true` (y resuelve por `meta.target` si el
+  P2002 fue de la clave o del folio), la pantalla de caja manda un UUID estable por apertura
+  del diálogo. Y el paréntesis del hallazgo: el tope de `addEduPayment` se reclama DENTRO de
+  la transacción (updateMany condicional + decrement = candado de fila; el recálculo real
+  reescribe después), y `cancelEduCharge` quedó condicionado a `paidCents: 0`.
+- **P2-13 el alumno firmaba su propia nota ✅** — la key se partió: `expediente.write`
+  escribe/ENTREGA/devuelve, `expediente.sign` (nueva; DOCENTE y DIRECCIÓN, nunca ALUMNO)
+  cierra la FIRMADA. La puerta vive en `updateEduRecord` (el route la resuelve como
+  `canSign`, patrón `canManage`), la pantalla le ofrece al alumno "Entregar". Quien tiene
+  sign firma también lo suyo (responsabilidad, no autoría — como `recetas.issue`). Backfill
+  de overrides en el .sql, VIVO y no comentado: sin él, un docente con override que incluía
+  write PERDÍA la firma en silencio (regresión, no statu quo). Las notas ya firmadas por
+  alumnos quedan como están (NOM-004).
+- **P2-14 fecha de firma en el navegador ✅** — `EduConsentPublicView.signedLabel` formateado
+  en el servidor con la zona del instituto (mismo `stampLabel` del panel); `toLocaleString`
+  desapareció del componente público y una prueba vigila que no vuelva.
+- **P2-12 IA sin freno ✅ (media la había cerrado la Ola 8)** — el cupo por instituto ya
+  existía (`requireEduIaCupo`); faltaba el freno POR SESIÓN para que una sola cuenta en bucle
+  no se comiera el cupo del MES de toda la escuela: `rateLimitKey` por `eduUserId` (dictado
+  10/min, análisis 5/min). Por sesión y no por IP — la clínica entera sale por la misma IP.
+- **P2-7 segundo candado del tarifario ✅ con matiz** — el candado de "charges" se puso donde
+  hay PRECIOS (`listEduFeeSchedules`, `getEduTarifario`); `listEduProcedures` NO lo lleva a
+  propósito (es el catálogo SIN precios y lo lee el flujo clínico: un docente clasifica el
+  procedimiento del caso — cerrarlo rompía la pantalla de casos); `listEduProcedureOptions`
+  no se candó: se RETIRÓ (cero llamadores). Y para que el 403 del candado no tire la página
+  al error boundary en el caso del override anómalo, /instituto/tarifarios explica con el
+  vacío estándar de "charges" y /instituto/procedimientos pinta el catálogo con cero listas.
+- **P2-8 pantalla de permisos ✅** — botón «Permisos» por fila en /instituto/equipo, editor
+  por grupos (`EDU_PERMISSION_GROUPS`), PATCH que pasa TODO por `sanitizeEduPermissionKeys`.
+  Reglas del mecanismo: nadie se edita a sí mismo (quien edita conserva su `equipo.manage` →
+  la escuela nunca se queda sin administrador), lista vacía REBOTA (por la semántica del
+  override, vacío = default: guardarla mentiría), marcar exactamente el default se guarda
+  como "restaurar el rol", y la fila marca "Permisos personalizados".
+- **P2-9 mustChangePassword ✅** — `/instituto/cambiar-contrasena` (FUERA del grupo (panel):
+  el redirect del layout no puede ser bucle), gate en cada render del panel, POST
+  `/api/instituto/auth/cambiar-contrasena` (nada del body salvo la contraseña; `scorePassword`
+  importado del criterio común; Auth primero, Prisma después; levanta la marca en TODAS las
+  filas edu de la cuenta y NO toca la del dental), y enlace "Cambiar contraseña" en el pie
+  del sidebar para el cambio voluntario.
+- **P2-5 el rango de semestres ✅ decidido** — el rango es CUÁNDO SE EXIGE, no qué casos
+  cuentan: la expectativa del semáforo (`eduRequirementExpectedRaw`) es 0 antes de
+  `semesterFrom`, total después de `semesterTo`, proporcional dentro; `eduAtrasoVerdict` suma
+  por requisito (sin rangos da EXACTAMENTE la cuenta de antes — con `expectedRaw` sin
+  redondear, porque redondear por requisito y sumar inflaría la expectativa). Un caso hecho
+  antes del rango SIGUE contando (el semestre del caso no se registra; invalidar trabajo
+  calificado obligaría a repetir procedimientos en pacientes). La pantalla dice "Se exige de
+  3º a 5º" y la captura explica qué decide el rango.
+- **P2-11 horas autorreportadas ✅ corrigiendo la propuesta** — el "una línea con
+  `startsAt > now`" habría rebotado al paciente que llega temprano; quedó
+  `eduClinicalStatusTooEarly` (puro, agenda-core): estados CLÍNICOS solo hasta 24 h antes de
+  la cita; cancelar/no-show pasan siempre. Para la del mes que viene marcada COMPLETED hoy —
+  que fabricaba horas de acreditación — 409 con el motivo.
+- **P3-16 ✅** índices GIN de trigramas sobre `searchIndex` (pacientes/alumnos/equipo) en el
+  .sql — SOLO en el .sql: expresarlos en Prisma exigiría el preview de extensiones para todo
+  el repo (tocar la config del dental), y la diferencia queda documentada en el propio .sql.
+- **P3-17 ✅** `take` en `listEduTransferableCases`; `setEduProcedurePrices` rebota más
+  renglones que listas y el mismo `feeScheduleId` repetido.
+- **P3-18 ✅** `mapEduCurrentGrades` retirada (cero llamadores, y además aceptaba
+  `institutionId` suelto — la firma que la regla de oro prohíbe) y `listEduProcedureOptions`
+  cayó con ella.
+
+**Los dos que quedaron FUERA, anotados en EDU_AUDIT.md con el motivo (no marcados como
+arreglados):**
+
+- **P2-6** (la pantalla de evaluación sin techo): un `take` a secas no acota — FALSIFICA las
+  horas de acreditación de algún alumno al azar y sin señal. El arreglo real es el filtro por
+  GENERACIÓN que la cabecera de `evaluacion.ts` ya planea, con su semántica de producto; hoy
+  el costo está acotado (300 alumnos, selects mínimos, ninguna escuela con dos generaciones).
+- **P3-15** (los scripts `test:edu*`): viven en `package.json`, que NO es archivo del
+  vertical — la guardia solo indulta `schema.prisma` y `ORQUESTA.md`. Es un cambio de repo,
+  no de una ola del instituto. La suite se corre a mano, como siempre.
+
+**Ninguno de los catorce resultó falso.** Dos estaban ya parcialmente cerrados por olas
+posteriores a la auditoría y se dice en su «Cómo quedó»: la mitad "cuota por instituto" del
+P2-12 la puso la Ola 8, y del P2-7 la premisa "cuatro lecturas del dinero" era en realidad
+dos con precios + un catálogo clínico deliberadamente abierto + una función muerta.
+
+### Qué se probó
+
+`npx prisma generate` limpio (v5.22.0, sin EPERM). **847/847 pruebas edu en verde**
+(`npx tsx --test src/lib/edu/__tests__/*.test.ts`), incluidas las 23 nuevas de
+`edu-cierre.test.ts` (enganche compartido, reparto del recorte de alumnos, candados del
+tarifario, idempotencia, freno de 24 h, expediente.sign, signedLabel, expectativa por rango,
+permisos, contraseña, topes). DOS pruebas viejas se actualizaron con su intención intacta:
+la del 3-bis del traspaso (ahora verifica la función compartida) y el helper `progreso()` de
+evaluación (construía el avance con fracción 0.5 fija y un test lo contradecía con 0 — ahora
+progreso y veredicto usan la misma fracción, que es lo que hacen los llamadores reales).
+`npm run build` **exit 0 completo** y `npx tsc --noEmit` solo con los 6 errores
+PREEXISTENTES de `src/lib/barber/__tests__` (ambos con `NODE_OPTIONS=--max-old-space-size=8192`).
+Guardia limpia con `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`.
+
+### Lo que NO se probó
+
+Nada corrió contra Postgres: `sql/edu-cierre.sql` NO se aplicó y no se conectó a ninguna
+base. El flujo completo "agendar → abrir caso → cita enganchada" está cubierto por fuente y
+por la lógica pura, no ejecutado contra base real. No se abrió navegador: el editor de
+permisos, la pantalla de contraseña, el botón "Entregar" del alumno y el desplegable
+recortado están compilados y razonados, no vistos. El backfill de `expediente.sign` y los
+índices GIN son SQL sin ejecutar. La idempotencia del cobro no se ejercitó con dos POST
+reales simultáneos.
+
+### Al desplegar
+
+1. `sql/edu-cierre.sql` en Supabase **ANTES del deploy** (la sección 1 es la columna
+   `idempotencyKey`: sin ella, TODO cobro nuevo truena al escribir — misma lección de
+   "columna nueva rompe lecturas", ahora en escritura). Secciones 2–4 idempotentes; la 3
+   (backfill de sign) va viva a propósito. Comprobaciones en la sección 5.
+2. Los SQL de olas anteriores siguen SIN aplicar (7–12, 14, fix-auditoria) — el orden vive
+   en sus memorias; éste va al final.

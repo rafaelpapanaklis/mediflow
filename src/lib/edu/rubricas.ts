@@ -44,7 +44,6 @@ import {
   EDU_RUBRIC_NAME_MAX,
   EDU_RUBRIC_NOTES_MAX,
   eduComputeFinalScore,
-  eduCurrentGrade,
   eduEvalBoolean,
   eduEvalInt,
   eduEvalOptionalText,
@@ -839,51 +838,11 @@ export async function createEduGrade(
   return { id: created.id, finalScoreX100 };
 }
 
-/**
- * La calificación VIGENTE de una lista de casos, para pintar la columna
- * "Calificación" sin una consulta por caso.
- *
- * Devuelve un mapa caseId → calificación vigente. La vigencia se calcula
- * con eduCurrentGrade (módulo puro): la fila que nadie corrige.
- */
-export async function mapEduCurrentGrades(
-  institutionId: string,
-  caseIds: string[],
-): Promise<Map<string, { id: string; finalScoreX100: number; scaleMax: number }>> {
-  const out = new Map<string, { id: string; finalScoreX100: number; scaleMax: number }>();
-  const ids = (caseIds ?? []).filter((v): v is string => typeof v === "string" && v.length > 0);
-  if (ids.length === 0) return out;
-
-  const rows = await prisma.eduCaseGrade.findMany({
-    where: { institutionId, caseId: { in: ids } },
-    orderBy: [{ gradedAt: "desc" }],
-    select: {
-      id: true,
-      caseId: true,
-      correctsId: true,
-      finalScoreX100: true,
-      scaleMax: true,
-    },
-  });
-
-  const porCaso = new Map<string, typeof rows>();
-  for (const r of rows) {
-    const lista = porCaso.get(r.caseId);
-    if (lista) lista.push(r);
-    else porCaso.set(r.caseId, [r]);
-  }
-
-  // `forEach` y no `for…of`: el `target` de tsconfig no baja los
-  // iteradores de Map, y un `for…of` sobre un Map no compila en este repo.
-  porCaso.forEach((lista, caseId) => {
-    const vigente = eduCurrentGrade<(typeof rows)[number]>(lista);
-    if (vigente) {
-      out.set(caseId, {
-        id: vigente.id,
-        finalScoreX100: vigente.finalScoreX100,
-        scaleMax: vigente.scaleMax,
-      });
-    }
-  });
-  return out;
-}
+// ⚠️ Aquí vivía `mapEduCurrentGrades` (mapa caseId → calificación vigente
+// para pintar una columna sin una consulta por caso). Se retiró en la ola
+// de cierre (P3-18): no la llamaba nadie — la bitácora resuelve la vigencia
+// con `eduCurrentGrade` sobre las calificaciones que ya leyó, y ninguna
+// otra pantalla la necesitó. Además era la única función del archivo que
+// aceptaba `institutionId` suelto en vez del contexto de sesión: justo la
+// firma que la regla de oro del vertical dice que no debe existir. Si una
+// ola futura la necesita, se reescribe recibiendo `ctx`, no se resucita.

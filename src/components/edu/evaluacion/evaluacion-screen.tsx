@@ -118,7 +118,7 @@ export function EduEvaluacionScreen({
           {esAlumno
             ? "Cuando la dirección capture los requisitos de tu especialidad, aquí verás cuántos llevas y cuántos te faltan."
             : canManagePlan
-              ? "Da de alta alumnos en el Padrón y captura los requisitos de cada especialidad en Requisitos. El avance se cuenta solo: no hay nada que teclear."
+              ? "Da de alta alumnos en Alumnos y captura los requisitos de cada especialidad en Requisitos. El avance se cuenta solo: no hay nada que teclear."
               : "Todavía no tienes alumnos asignados. Cuando la dirección te asigne un grupo, aparecerá aquí."}
         </p>
       </div>

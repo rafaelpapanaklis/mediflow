@@ -129,7 +129,7 @@ export function EduRequisitosScreen({
             <span>Especialidad</span>
             <span>Qué cuenta</span>
             <span>Cuántos</span>
-            <span>Semestres</span>
+            <span>Se exige</span>
             <span />
           </div>
 
@@ -162,10 +162,14 @@ export function EduRequisitosScreen({
               </div>
 
               <div className="edu-cell">
-                <span className="edu-cell__label">Semestres</span>
+                <span className="edu-cell__label">Se exige</span>
+                {/* P2-5: "Se exige de 3º a 5º" y no "3º – 5º" a secas — el
+                    rango decide desde cuándo lo espera el semáforo, no qué
+                    casos cuentan, y la etiqueta tiene que leerse como lo
+                    que hace. */}
                 <span className="edu-cell__value">
                   {r.semesterFrom || r.semesterTo
-                    ? `${r.semesterFrom ?? 1}º – ${r.semesterTo ?? "fin"}`
+                    ? `De ${r.semesterFrom ?? 1}º a ${r.semesterTo ? `${r.semesterTo}º` : "fin del plan"}`
                     : "Todo el plan"}
                 </span>
                 {!r.isActive && <span className="edu-tag edu-tag--muted">Desactivado</span>}
@@ -396,6 +400,16 @@ function EditorRequisito({
           />
         </div>
       </div>
+
+      {/* P2-5: el rango por fin hace algo, y la captura tiene que decir QUÉ
+          — sin esta frase, quien captura "5º–6º" cree que un caso de 1º
+          dejará de contar, y no es eso lo que decide. */}
+      <p className="edu-field__hint">
+        El rango marca CUÁNDO se le exige al alumno: antes del semestre inicial el semáforo no se
+        lo cuenta como pendiente, y dentro del rango la expectativa crece semestre a semestre. Un
+        caso hecho antes del rango sí cuenta — lo que se acota es cuándo se espera, no cuándo se
+        hizo.
+      </p>
 
       <div className="edu-field">
         <label className="edu-field__label" htmlFor="edu-req-modo">
