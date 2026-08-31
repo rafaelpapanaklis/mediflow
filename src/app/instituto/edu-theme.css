@@ -5384,3 +5384,153 @@ button.edu-dir-money__fila:hover {
 .edu-table--facturas {
   --edu-cols: minmax(104px, 0.9fr) minmax(170px, 1.8fr) 104px 116px 124px 108px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OLA 14 · RECETAS
+
+   Bloque ADITIVO al final del archivo: no reordena ni pisa nada de las
+   olas anteriores. La pestaña y la bandeja reutilizan tal cual .edu-nota,
+   .edu-tag, .edu-btn, .edu-field, .edu-auth-card__motivo y el modal; lo
+   de aquí es solo lo que ninguna ola tenía — la lista de medicamentos,
+   la fila de la firma con cédula y la cuadrícula del renglón del
+   formulario.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* El diagnóstico, arriba de los medicamentos, como en el papel. */
+.edu-receta__dx {
+  margin: 8px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* La lista numerada de medicamentos. Números visibles a propósito: el
+   orden ES contenido (entra al hash) y "el 2º" es como se habla de él. */
+.edu-receta__meds {
+  margin: 6px 0 4px;
+  padding-left: 22px;
+  display: grid;
+  gap: 5px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.edu-receta__meds li {
+  overflow-wrap: anywhere;
+}
+
+.edu-receta__mednotas {
+  color: var(--edu-text-3);
+}
+
+.edu-receta__indicaciones {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+/* La fila de la firma: quién expidió y con qué cédula. Verde suave — es
+   la línea que convierte la propuesta en documento. */
+.edu-receta__firma {
+  margin: 8px 0 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(21, 128, 61, 0.08);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.edu-receta__anulada {
+  margin: 8px 0 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--edu-danger-soft);
+  color: var(--edu-danger);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.edu-receta__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Un renglón del formulario. fieldset con borde propio para que quince
+   medicamentos no se lean como un solo formulario sin fondo. */
+.edu-receta-item {
+  margin: 0 0 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+}
+
+.edu-receta-item__num {
+  padding: 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--edu-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* MÓVIL PRIMERO: una columna; en pantallas anchas, dos. El medicamento y
+   sus indicaciones ocupan la fila entera siempre. */
+.edu-receta-itemgrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px 10px;
+}
+
+@media (min-width: 560px) {
+  .edu-receta-itemgrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .edu-receta-itemgrid--full {
+    grid-column: 1 / -1;
+  }
+}
+
+/* El bloque de recetas dentro de la tarjeta del caso (pestaña Casos).
+   Compacto y solo lectura: se trabaja en la pestaña Recetas. */
+.edu-caso-recetas {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--edu-line);
+}
+
+.edu-caso-recetas__title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+.edu-caso-recetas__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+
+.edu-caso-recetas__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.edu-caso-recetas__meta {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

@@ -266,6 +266,30 @@ export const EDU_ALL_PERMISSIONS = {
   "facturacion.emit": "Facturar un cobro (timbrar el CFDI)",
   "facturacion.cancel": "Cancelar una factura ante el SAT con su motivo",
   "facturacion.config": "Capturar los datos fiscales del instituto y decidir si timbra en pruebas o en vivo",
+  // ── Ola 14 · recetas ─────────────────────────────────────────────────
+  // Cuatro keys, y las cuatro tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   recetas.view    → /instituto/pacientes/[id]/recetas, su GET y el PDF
+  //   recetas.propose → POST de la receta, PATCH del borrador y .../enviar
+  //   recetas.issue   → PATCH /api/instituto/autorizaciones/[id] cuando la
+  //                     etapa es RECETA (además de autorizaciones.decide)
+  //   recetas.void    → POST /api/instituto/recetas/[id]/anular
+  //
+  // 🔴 PROPONER Y EXPEDIR SON DOS KEYS DISTINTAS, y ésa es toda la ola: un
+  // alumno de especialidad NO tiene cédula profesional, así que arma la
+  // receta y la manda — y quien la EXPIDE (y cuya cédula sale impresa) es
+  // el docente. Si fueran una sola key, el alumno se expediría a sí mismo
+  // y el papel saldría sin nadie que responda por él.
+  //
+  // ⚠️ "recetas.issue" se exige ADEMÁS de "autorizaciones.decide" en el
+  // mismo endpoint: decidir una receta no es solo autorizar un avance, es
+  // poner tu cédula en un documento. Un docente al que la escuela le quite
+  // "recetas.issue" por override sigue firmando planes y sesiones — y deja
+  // de expedir recetas.
+  "recetas.view": "Ver las recetas del paciente",
+  "recetas.propose": "Armar una receta y mandarla a que el docente la expida",
+  "recetas.issue": "Expedir una receta con su cédula profesional",
+  "recetas.void": "Anular una receta expedida, con motivo",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -416,6 +440,17 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
       "facturacion.cancel",
       "facturacion.config",
     ],
+  },
+  {
+    // Ola 14. Grupo PROPIO y no un renglón del expediente: es la única
+    // parte del vertical donde un documento sale de la escuela con la
+    // CÉDULA de alguien encima, y la dirección tiene que poder leer de un
+    // vistazo la separación que importa — el alumno propone
+    // (recetas.propose) y el docente expide (recetas.issue). CAJA no
+    // tiene ninguna casilla: una receta es un documento clínico, no un
+    // cobro.
+    title: "Recetas",
+    keys: ["recetas.view", "recetas.propose", "recetas.issue", "recetas.void"],
   },
 ];
 
@@ -725,6 +760,15 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "facturacion.emit",
     "facturacion.cancel",
     "facturacion.config",
+    // ── Ola 14 ──────────────────────────────────────────────────────────
+    // Las cuatro, incluida "propose": un caso cuyo alumno se dio de baja
+    // necesita que ALGUIEN pueda armar la receta — misma razón que el
+    // "autorizaciones.request" de la Ola 4. Y como allá, proponer no le
+    // deja firmarse a sí misma: nadie decide su propia petición.
+    "recetas.view",
+    "recetas.propose",
+    "recetas.issue",
+    "recetas.void",
   ],
   DOCENTE: [
     "inicio.view",
@@ -753,6 +797,13 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "evaluacion.view",
     "evaluacion.grade",
     "traspaso.manage",
+    // Ola 14. TODO: ve, propone (para desatorar un caso sin alumno),
+    // EXPIDE con su cédula y anula. Es el único rol al que "issue" le
+    // llega por default junto con dirección — la cédula es suya.
+    "recetas.view",
+    "recetas.propose",
+    "recetas.issue",
+    "recetas.void",
   ],
   ALUMNO: [
     "inicio.view",
@@ -775,6 +826,11 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // Ola 6. VE su evaluación y no la escribe: es toda la ola en una
     // línea. Lo que ve está recortado a lo suyo por el alcance.
     "evaluacion.view",
+    // Ola 14. PROPONE y no expide: no tiene cédula profesional — es
+    // exactamente la razón de que la receta pase por el gate. Si llevara
+    // "issue", el papel saldría sin nadie que responda por él.
+    "recetas.view",
+    "recetas.propose",
   ],
   CAJA: [
     "inicio.view",

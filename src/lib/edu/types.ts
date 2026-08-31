@@ -42,6 +42,7 @@
 //   /instituto/requisitos   → el plan de estudios, en números      Ola 6  ✓
 //   /instituto/sedes        → las sedes y quién entra a cada una  Ola 11 ✓
 //   /instituto/ia           → el consumo de IA del mes y el CUPO  Ola 8  ✓
+//   /instituto/pacientes/[id]/recetas → recetas del paciente      Ola 14 ✓
 // PÚBLICA (SIN sesión — vive FUERA del grupo (panel), igual que /login):
 //   /instituto/consentimiento/[token] → el paciente lee y firma    Ola 3B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
@@ -120,6 +121,12 @@
 //   PATCH /api/instituto/ia   → lo que la ESCUELA decide del cupo:
 //                               encender/apagar, permitir excedente y su
 //                               tope. NUNCA lo que incluye el contrato     Ola 8 ✓
+//   GET·POST /api/instituto/pacientes/[id]/recetas → recetas / proponer   Ola 14 ✓
+//   PATCH /api/instituto/recetas/[id]         → editar el borrador        Ola 14 ✓
+//   POST  /api/instituto/recetas/[id]/enviar  → mandarla a autorización   Ola 14 ✓
+//   POST  /api/instituto/recetas/[id]/anular  → anular una EXPEDIDA       Ola 14 ✓
+//   GET   /api/instituto/recetas/[id]/pdf     → el PDF (solo EXPEDIDA
+//                                               o ANULADA: el gate)       Ola 14 ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -563,13 +570,21 @@ export const EDU_CASH_METHOD: EduPaymentMethod = "CASH";
  * (PLAN abre IN_TREATMENT, DISCHARGE abre COMPLETED) y los otros dos dejan
  * constancia de que el docente lo vio antes de que ocurriera.
  */
-export type EduApprovalStage = "PLAN" | "PROCEDURE" | "SESSION" | "DISCHARGE";
+export type EduApprovalStage =
+  | "PLAN"
+  | "PROCEDURE"
+  | "SESSION"
+  | "DISCHARGE"
+  // Ola 14. La receta que el alumno PROPONE y el docente con cédula
+  // EXPIDE. No abre ninguna puerta del caso: lo que abre es la receta.
+  | "PRESCRIPTION";
 
 export const EDU_APPROVAL_STAGES: EduApprovalStage[] = [
   "PLAN",
   "PROCEDURE",
   "SESSION",
   "DISCHARGE",
+  "PRESCRIPTION",
 ];
 
 export const EDU_APPROVAL_STAGE_LABELS: Record<EduApprovalStage, string> = {
@@ -577,6 +592,7 @@ export const EDU_APPROVAL_STAGE_LABELS: Record<EduApprovalStage, string> = {
   PROCEDURE: "Procedimiento",
   SESSION: "Sesión",
   DISCHARGE: "Alta del caso",
+  PRESCRIPTION: "Receta",
 };
 
 export const EDU_APPROVAL_STAGE_DESCRIPTIONS: Record<EduApprovalStage, string> = {
@@ -584,6 +600,8 @@ export const EDU_APPROVAL_STAGE_DESCRIPTIONS: Record<EduApprovalStage, string> =
   PROCEDURE: "Un acto concreto que se va a hacer hoy. No mueve el caso: deja escrito que el docente lo vio antes.",
   SESSION: "Esta sesión, en esta hora y en este sillón. Si se reagenda, la firma deja de valer.",
   DISCHARGE: "Dar por terminado el caso. Sin esto autorizado, no se cierra.",
+  PRESCRIPTION:
+    "La receta que el alumno propone. La firma del docente ES la expedición: sale con su cédula, y sin ella no se imprime.",
 };
 
 /**
@@ -1039,4 +1057,79 @@ export const EDU_AI_UNITS: EduAiUnit[] = ["TOKEN", "SECOND"];
 export const EDU_AI_UNIT_LABELS: Record<EduAiUnit, string> = {
   TOKEN: "Token",
   SECOND: "Segundo de audio",
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// Ola 14 · RECETAS — el estado de la receta.
+//
+// Espejo 1:1 del enum EduPrescriptionStatus de Prisma, escrito como unión
+// de strings para poder importarlo desde componentes "use client" sin
+// arrastrar el runtime de Prisma al navegador — igual que todos los
+// anteriores. El candado de que no se desincronicen es un chequeo de
+// TIPOS en src/lib/edu/__tests__/edu-recetas.test.ts (lo verifica
+// `tsc --noEmit`).
+//
+// Y la regla de siempre: la UI JAMÁS pinta el valor del enum.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * En qué va la receta.
+ *
+ * 🔴 EXPEDIDA congela el contenido para siempre: una receta expedida no
+ * se edita ni se borra — se ANULA con motivo y se hace otra. Y una
+ * PENDIENTE o RECHAZADA no se imprime, no se manda y no se descarga: sin
+ * la firma del docente no hay cédula que la respalde, y ése es el gate.
+ */
+export type EduPrescriptionStatus =
+  | "BORRADOR"
+  | "PENDIENTE"
+  | "EXPEDIDA"
+  | "RECHAZADA"
+  | "ANULADA";
+
+export const EDU_PRESCRIPTION_STATUSES: EduPrescriptionStatus[] = [
+  "BORRADOR",
+  "PENDIENTE",
+  "EXPEDIDA",
+  "RECHAZADA",
+  "ANULADA",
+];
+
+export const EDU_PRESCRIPTION_STATUS_LABELS: Record<EduPrescriptionStatus, string> = {
+  BORRADOR: "Borrador",
+  PENDIENTE: "Esperando firma",
+  EXPEDIDA: "Expedida",
+  RECHAZADA: "Rechazada",
+  ANULADA: "Anulada",
+};
+
+export const EDU_PRESCRIPTION_STATUS_DESCRIPTIONS: Record<EduPrescriptionStatus, string> = {
+  BORRADOR: "La estás armando. Todavía se puede cambiar todo.",
+  PENDIENTE:
+    "Mandada a autorización. No se puede imprimir ni entregar: falta la firma del docente con cédula.",
+  EXPEDIDA: "Firmada por el docente. Queda congelada con su cédula; se imprime y se entrega.",
+  RECHAZADA: "El docente dijo que no, y dejó escrito por qué. No se imprime.",
+  ANULADA:
+    "Se anuló después de expedida, con motivo. No se borra: el documento existió y sale marcado.",
+};
+
+/**
+ * A qué estados puede pasar una receta desde donde está.
+ *
+ * EXPEDIDA solo lleva a ANULADA, y ANULADA y RECHAZADA no llevan a ningún
+ * lado: la regla "una expedida se anula y se hace otra" escrita como dato
+ * en vez de como un `if` que alguien puede olvidar en el segundo endpoint.
+ * PENDIENTE → BORRADOR es la vuelta que da el docente al pedir cambios;
+ * PENDIENTE → EXPEDIDA / RECHAZADA son su firma y su no, y las tres las
+ * escribe la MISMA transacción que decide la autorización de la Ola 4.
+ */
+export const EDU_PRESCRIPTION_TRANSITIONS: Record<
+  EduPrescriptionStatus,
+  EduPrescriptionStatus[]
+> = {
+  BORRADOR: ["PENDIENTE"],
+  PENDIENTE: ["EXPEDIDA", "RECHAZADA", "BORRADOR"],
+  EXPEDIDA: ["ANULADA"],
+  RECHAZADA: [],
+  ANULADA: [],
 };

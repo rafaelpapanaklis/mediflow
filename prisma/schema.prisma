@@ -12437,6 +12437,10 @@ model EduInstitution {
   fiscalConfig       EduFiscalConfig?
   patientTaxProfiles EduPatientTaxProfile[]
   invoices           EduInvoice[]
+  // Ola 14 · recetas. Bloque ADITIVO al final de las relaciones: los
+  // modelos viven al FINAL del archivo, con su propio encabezado.
+  prescriptions      EduPrescription[]
+  prescriptionItems  EduPrescriptionItem[]
 
   @@map("edu_institutions")
 }
@@ -12545,6 +12549,20 @@ model EduUser {
   taxProfilesSet     EduPatientTaxProfile[] @relation("EduTaxProfileBy")
   invoicesIssued     EduInvoice[]           @relation("EduInvoiceBy")
   invoicesCancelled  EduInvoice[]           @relation("EduInvoiceCancelledBy")
+
+  /// Ola 14 · recetas. La cédula profesional de un DOCENTE (o de quien
+  /// dirige, si también expide). Opcional: un alumno no tiene, y ésa es
+  /// exactamente la razón de que la receta pase por el gate. Se captura al
+  /// EXPEDIR la primera receta (y se puede corregir ahí mismo); cada
+  /// receta expedida CONGELA la cédula con la que salió, así que corregir
+  /// esta columna mañana no reescribe ningún documento de ayer.
+  cedulaProfesional  String? @db.VarChar(30)
+  /// Las tres puntas de una receta: quién la PROPUSO (el alumno), quién la
+  /// EXPIDIÓ (el docente con cédula) y quién la ANULÓ. Tres columnas de
+  /// autoría; ninguna decide visibilidad.
+  prescriptionsProposed EduPrescription[] @relation("EduRecetaProposedBy")
+  prescriptionsIssued   EduPrescription[] @relation("EduRecetaIssuedBy")
+  prescriptionsVoided   EduPrescription[] @relation("EduRecetaVoidedBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12901,6 +12919,9 @@ model EduPatient {
   /// donde nadie lo pidió. Ver el encabezado de EduPatientTaxProfile.
   taxProfile   EduPatientTaxProfile?
   invoices     EduInvoice[]
+  /// Ola 14: sus recetas. Se leen con el alcance CLÍNICO ("cases"), no con
+  /// el del paciente: una receta es un documento clínico y caja no la ve.
+  prescriptions EduPrescription[]
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -13096,6 +13117,10 @@ model EduCase {
   /// No hay columna con el gasto del caso: se cuenta contando estas filas,
   /// igual que el avance de la Ola 6.
   aiUsages        EduAiUsage[]
+  /// Ola 14: las recetas del caso. La receta CUELGA del caso porque quien
+  /// la firma es el docente que responde por ese caso; no hay columna
+  /// "tiene receta" — se cuenta contando estas filas, como todo lo demás.
+  prescriptions   EduPrescription[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
@@ -13887,6 +13912,13 @@ enum EduApprovalStage {
   /// El alta. Es el que abre la puerta de COMPLETED: un caso no se cierra
   /// solo porque el alumno crea que terminó.
   DISCHARGE
+  /// Ola 14 · LA RECETA. Un alumno de especialidad NO tiene cédula
+  /// profesional, así que en una escuela la receta no la expide él: la
+  /// PROPONE, y el docente con cédula la firma y responde por ella. Esta
+  /// etapa no abre ninguna puerta del caso — lo que abre es la propia
+  /// receta (EduPrescription pasa a EXPEDIDA al firmarse). No entra al
+  /// lote: una receta se expide leyéndola completa, una por una.
+  PRESCRIPTION
 }
 
 /// En qué va una autorización.
@@ -15460,4 +15492,186 @@ model EduInvoice {
   @@index([institutionId, chargeId], map: "edu_invoices_charge_idx")
   @@index([institutionId, patientId], map: "edu_invoices_patient_idx")
   @@map("edu_invoices")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 14 · RECETAS.
+//
+// Dos tablas: la receta (EduPrescription) y sus renglones
+// (EduPrescriptionItem). Y un valor nuevo del enum EduApprovalStage:
+// PRESCRIPTION.
+//
+// 🔴 EL PROBLEMA DE FONDO, Y ES EL DISEÑO ENTERO: un alumno de
+// especialidad NO tiene cédula profesional, y en México la receta la
+// expide un profesional con cédula. Así que aquí la receta no funciona
+// como en el dental (donde el doctor la emite y ya): el alumno la
+// PROPONE, queda PENDIENTE, y el DOCENTE con cédula la revisa, la firma y
+// ahí queda EXPEDIDA — con LOS DOS nombres en el documento y la cédula
+// del docente congelada.
+//
+// 🔴 LA RECETA NACE DENTRO DEL GATE DE LA OLA 4, no al lado. Mandarla a
+// autorización crea una fila de EduCaseApproval con la etapa nueva
+// PRESCRIPTION apuntando a esta tabla (targetType "EduPrescription"), con
+// su contentHash, su bandeja y su "nadie firma su propia petición" — el
+// mecanismo que ya existe, sin inventar otro. La decisión del docente
+// (autorizar / pedir cambios / rechazar) mueve la receta (EXPEDIDA /
+// BORRADOR / RECHAZADA) en la MISMA transacción que decide la
+// autorización.
+//
+// 🔴 Una receta PENDIENTE o RECHAZADA no se imprime, no se manda y no se
+// descarga. Si se pudiera, el gate no existiría: el candado vive en
+// src/lib/edu/recetas.ts (el PDF solo sale EXPEDIDA o ANULADA) y no hay
+// ningún otro camino que la renderice.
+//
+// 🔴 institutionId está en las DOS tablas, igual que en todas las olas
+// anteriores y por la misma razón: toda consulta filtra por el
+// institutionId de la SESIÓN, y un filtro que necesita un JOIN para
+// existir es un filtro que alguien va a olvidar. Ojo Prisma: un
+// institutionId undefined BORRA el filtro y devuelve las filas de TODOS
+// los institutos.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-14.sql y hay que
+// aplicarlo a mano en Supabase (DESPUÉS de sql/edu-ola-4.sql: el ALTER
+// TYPE necesita que el enum exista).
+// ═══════════════════════════════════════════════════════════════════════
+
+/// En qué va la receta.
+///
+/// 🔴 EXPEDIDA es un estado FINAL en cuanto a contenido: una receta
+/// expedida NUNCA se edita ni se borra — se ANULA (con motivo y
+/// constancia) y se hace otra. Si se pudiera reescribir, la cédula del
+/// docente quedaría firmando un texto que él no leyó.
+enum EduPrescriptionStatus {
+  /// La está armando el alumno. Se puede editar todo.
+  BORRADOR
+  /// Mandada a autorización. NO se imprime, NO se entrega: todavía no la
+  /// respalda ninguna cédula.
+  PENDIENTE
+  /// El docente la firmó. Queda congelada con su cédula y su evidencia.
+  EXPEDIDA
+  /// El docente dijo que no. No se expide y no se imprime; se lee su
+  /// motivo en la autorización que la rechazó.
+  RECHAZADA
+  /// Se anuló DESPUÉS de expedida, con motivo. La fila no se borra: el
+  /// documento existió y el PDF sale marcado "ANULADA".
+  ANULADA
+}
+
+/// LA RECETA de un caso: propuesta por el alumno, expedida por el docente.
+///
+/// 🔴 TODAS LAS PERSONAS VAN CON EL NOMBRE CONGELADO al lado de un id
+/// opcional con SetNull — el mismo criterio que EduConsent y que
+/// consent_forms del dental: un documento expedido tiene que seguir
+/// diciendo QUIÉN lo propuso y QUIÉN respondió aunque esa persona se dé
+/// de baja o cambie de nombre. Y la CÉDULA del docente se congela aquí
+/// al expedir: corregirla en su perfil mañana no reescribe este papel.
+///
+/// ⚠️ El estado NO se deriva (a diferencia del consentimiento): PENDIENTE
+/// y EXPEDIDA son actos con hora y autor, no funciones del reloj. Lo que
+/// SÍ se deriva es la vigencia de la firma del gate — eso vive en
+/// EduCaseApproval con su contentHash, como todo lo de la Ola 4.
+model EduPrescription {
+  id            String                @id @default(cuid())
+  institutionId String
+  caseId        String
+  /// Se guarda ADEMÁS del caso para listar "las recetas de este paciente"
+  /// sin un JOIN — mismo criterio que EduInvoice.patientId.
+  patientId     String
+  status        EduPrescriptionStatus @default(BORRADOR)
+
+  /// Diagnóstico que sale impreso en la receta (opcional, como en el
+  /// dental: el doctor decide si lo incluye).
+  diagnosis   String? @db.Text
+  /// Indicaciones GENERALES al paciente (dieta, reposo, alarma). Las de
+  /// cada medicamento van en su renglón.
+  indications String? @db.Text
+
+  /// Quién la PROPUSO (el alumno) y su matrícula, congelados.
+  proposedByUserId    String?
+  proposedByName      String  @db.VarChar(160)
+  proposedByMatricula String? @db.VarChar(30)
+
+  /// Quién la EXPIDIÓ (el docente responsable), su cédula y la evidencia
+  /// de la firma — como en los consentimientos: hash del texto canónico
+  /// que tenía delante, cuándo, desde qué IP y con qué navegador. Nulos
+  /// hasta que se expide; se escriben TODOS juntos en la transacción que
+  /// decide la autorización.
+  issuedByUserId  String?
+  issuedByName    String?   @db.VarChar(160)
+  issuedByCedula  String?   @db.VarChar(30)
+  issuedAt        DateTime? @db.Timestamptz(3)
+  /// sha256 del texto canónico al expedir (la receta de qué entra vive en
+  /// src/lib/edu/autorizaciones-core.ts, versionada DENTRO del texto). Es
+  /// la misma cifra que queda en la EduCaseApproval que la autorizó; se
+  /// congela TAMBIÉN aquí para que el documento sea autosuficiente.
+  issuedHash      String?   @db.VarChar(64)
+  issuedIp        String?   @db.VarChar(60)
+  issuedUserAgent String?   @db.VarChar(300)
+
+  /// La anulación. NO borra nada: deja constancia con motivo.
+  voidedAt       DateTime? @db.Timestamptz(3)
+  voidedByUserId String?
+  voidedByName   String?   @db.VarChar(160)
+  voidReason     String?   @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  case        EduCase        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  proposedBy  EduUser?       @relation("EduRecetaProposedBy", fields: [proposedByUserId], references: [id], onDelete: SetNull)
+  issuedBy    EduUser?       @relation("EduRecetaIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+  voidedBy    EduUser?       @relation("EduRecetaVoidedBy", fields: [voidedByUserId], references: [id], onDelete: SetNull)
+  items       EduPrescriptionItem[]
+
+  // · paciente → la pestaña Recetas de su ficha, más recientes primero.
+  // · caso     → la lista del caso y el loadTargets del gate.
+  // · status   → "las pendientes del instituto", si un día se pregunta.
+  @@index([institutionId, patientId, createdAt], map: "edu_prescriptions_patient_idx")
+  @@index([institutionId, caseId], map: "edu_prescriptions_case_idx")
+  @@index([institutionId, status], map: "edu_prescriptions_status_idx")
+  @@map("edu_prescriptions")
+}
+
+/// UN RENGLÓN de la receta: un medicamento con su posología completa.
+///
+/// ⚠️ Texto LIBRE a propósito, sin FK a un catálogo: el dental tiene el
+/// CUMS (CumsItem) pero ese catálogo es una tabla del dental con su
+/// propio ciclo de carga, y encadenar la escuela a él acoplaría los dos
+/// productos por la columna más delicada (qué se le da a un paciente).
+/// Lo que el alumno escribe es lo que el docente LEE y firma — el gate es
+/// la validación.
+model EduPrescriptionItem {
+  id             String @id @default(cuid())
+  institutionId  String
+  prescriptionId String
+  /// Posición en el documento. El orden de los medicamentos ES contenido
+  /// (entra al hash): "1º amoxicilina, 2º ibuprofeno" es lo que se firmó.
+  orden          Int    @default(0)
+
+  /// Medicamento (denominación genérica o comercial, como se escriba).
+  drug         String  @db.VarChar(200)
+  /// Presentación: "tabletas 500 mg", "suspensión 250 mg/5 ml".
+  presentation String? @db.VarChar(160)
+  /// Dosis: "1 tableta", "10 ml".
+  dose         String  @db.VarChar(120)
+  /// Vía de administración: "oral", "tópica bucal".
+  route        String? @db.VarChar(80)
+  /// Frecuencia: "cada 8 horas".
+  frequency    String? @db.VarChar(120)
+  /// Duración: "por 7 días".
+  duration     String? @db.VarChar(120)
+  /// Cantidad a surtir: "1 caja (21 tabletas)".
+  quantity     String? @db.VarChar(60)
+  /// Indicaciones de ESTE medicamento: "con alimentos, no suspender".
+  notes        String? @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+
+  institution  EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  prescription EduPrescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@index([institutionId, prescriptionId], map: "edu_prescription_items_receta_idx")
+  @@map("edu_prescription_items")
 }

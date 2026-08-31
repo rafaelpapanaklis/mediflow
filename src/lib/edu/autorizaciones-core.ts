@@ -65,7 +65,7 @@ import {
  * libre en una tabla de firmas, que es la definición de un dato en el que no
  * se puede confiar.
  */
-export const EDU_APPROVAL_TARGETS = ["EduRecord", "EduAppointment"] as const;
+export const EDU_APPROVAL_TARGETS = ["EduRecord", "EduAppointment", "EduPrescription"] as const;
 
 export type EduApprovalTarget = (typeof EDU_APPROVAL_TARGETS)[number];
 
@@ -91,12 +91,31 @@ export const EDU_APPROVAL_STAGE_TARGET: Record<EduApprovalStage, EduApprovalTarg
   PROCEDURE: "EduRecord",
   SESSION: "EduAppointment",
   DISCHARGE: "EduRecord",
+  // Ola 14. La receta apunta a SU tabla: no es una nota (tiene renglones
+  // estructurados con posología) ni cabe en una — y firmarla EXPIDE un
+  // documento con la cédula del docente, no solo autoriza un avance.
+  PRESCRIPTION: "EduPrescription",
 };
 
 /** Qué tipo de fila admite esta etapa. */
 export function eduApprovalTargetForStage(stage: EduApprovalStage): EduApprovalTarget {
   return EDU_APPROVAL_STAGE_TARGET[stage];
 }
+
+/**
+ * Ola 14 · Las etapas que se piden desde "Enviar a autorización" de la
+ * ficha del caso. La RECETA no está y no es un olvido: mandarla a firma
+ * también la mueve (BORRADOR → PENDIENTE), así que su envío vive en la
+ * propia receta (src/lib/edu/recetas.ts) — el desplegable genérico no
+ * puede hacer las dos cosas en una transacción. `requestEduApproval` la
+ * rebota con el mismo texto por si alguien arma el POST a mano.
+ */
+export const EDU_APPROVAL_REQUESTABLE_STAGES: EduApprovalStage[] = [
+  "PLAN",
+  "PROCEDURE",
+  "SESSION",
+  "DISCHARGE",
+];
 
 export function parseEduApprovalStage(raw: unknown): EduApprovalStage | null {
   if (typeof raw !== "string") return null;
@@ -201,9 +220,40 @@ export interface EduApprovalAppointmentSnapshot {
   type: string;
 }
 
+/**
+ * Ola 14 · Lo que se resume de una RECETA: el diagnóstico, las
+ * indicaciones generales y CADA renglón con su posología completa, en su
+ * orden — el orden es contenido: "1º amoxicilina, 2º ibuprofeno" es lo
+ * que el docente firmó.
+ *
+ * ⚠️ El `status` NO entra, por lo mismo de siempre: expedirla (PENDIENTE
+ * → EXPEDIDA, que es el acto del docente) no cambia una letra del texto y
+ * no puede invalidar la firma que la expidió. Tampoco entran los sellos
+ * ni los nombres congelados: se escriben AL firmar, y si entraran, la
+ * firma se vencería a sí misma en el mismo UPDATE.
+ */
+export interface EduApprovalPrescriptionItemSnapshot {
+  drug: string | null;
+  presentation: string | null;
+  dose: string | null;
+  route: string | null;
+  frequency: string | null;
+  duration: string | null;
+  quantity: string | null;
+  notes: string | null;
+}
+
+export interface EduApprovalPrescriptionSnapshot {
+  kind: "EduPrescription";
+  diagnosis: string | null;
+  indications: string | null;
+  items: EduApprovalPrescriptionItemSnapshot[];
+}
+
 export type EduApprovalSnapshot =
   | EduApprovalRecordSnapshot
-  | EduApprovalAppointmentSnapshot;
+  | EduApprovalAppointmentSnapshot
+  | EduApprovalPrescriptionSnapshot;
 
 /**
  * Normaliza un texto antes de resumirlo.
@@ -255,6 +305,32 @@ export function eduApprovalCanonicalText(snapshot: EduApprovalSnapshot): string 
       campo("endsAt", snapshot.endsAtISO),
       campo("chairId", snapshot.chairId),
       campo("type", snapshot.type),
+    ].join(SEP_LINEA);
+  }
+
+  if (snapshot.kind === "EduPrescription") {
+    // Ola 14. Rama NUEVA del texto canónico: no toca ni un byte de las dos
+    // anteriores, así que ningún hash ya firmado cambia. Cada renglón se
+    // serializa completo y EN SU ORDEN — reordenar los medicamentos
+    // produce otro documento y por tanto otro hash, a propósito.
+    const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+    return [
+      EDU_APPROVAL_HASH_VERSION,
+      "EduPrescription",
+      campo("diagnosis", snapshot.diagnosis),
+      campo("indications", snapshot.indications),
+      ...items.map((it, i) =>
+        [
+          campo(`item${i}.drug`, it?.drug),
+          campo(`item${i}.presentation`, it?.presentation),
+          campo(`item${i}.dose`, it?.dose),
+          campo(`item${i}.route`, it?.route),
+          campo(`item${i}.frequency`, it?.frequency),
+          campo(`item${i}.duration`, it?.duration),
+          campo(`item${i}.quantity`, it?.quantity),
+          campo(`item${i}.notes`, it?.notes),
+        ].join(SEP_LINEA),
+      ),
     ].join(SEP_LINEA);
   }
 
@@ -520,7 +596,7 @@ export const EDU_APPROVAL_NOTE_MIN = 8;
  *  · las que pidió UNO MISMO — nadie firma su propia petición;
  *  · las que dejaron de estar pendientes mientras miraba la lista.
  */
-export type EduApprovalBatchSkip = "urgencia" | "cambio" | "propia" | "no-pendiente";
+export type EduApprovalBatchSkip = "urgencia" | "cambio" | "propia" | "no-pendiente" | "receta";
 
 export const EDU_APPROVAL_BATCH_SKIP_LABELS: Record<EduApprovalBatchSkip, string> = {
   urgencia:
@@ -530,18 +606,28 @@ export const EDU_APPROVAL_BATCH_SKIP_LABELS: Record<EduApprovalBatchSkip, string
   propia:
     "La mandaste tú. Una firma sobre la propia petición no es una firma: que la revise otro docente.",
   "no-pendiente": "Ya no está esperando firma: alguien la decidió mientras mirabas la lista.",
+  // Ola 14. Firmar una receta pone TU cédula en un papel que ordena
+  // medicamentos. Eso no entra en un botonazo de cuarenta.
+  receta:
+    "Es una receta: expedirla pone tu cédula en el documento. Se lee completa y se firma una por una.",
 };
 
 export interface EduApprovalBatchCandidate {
   status: EduApprovalStatus;
   isEmergency: boolean;
   contentChanged: boolean;
+  /** Ola 14. Solo hace falta para dejar las RECETAS fuera del lote. */
+  stage?: EduApprovalStage;
 }
 
 export function eduApprovalBatchSkipReason(
   r: EduApprovalBatchCandidate,
 ): EduApprovalBatchSkip | null {
   if (!r || r.status !== "PENDING") return "no-pendiente";
+  // Ola 14. ANTES que la urgencia: una receta urgente sigue siendo una
+  // receta, y el motivo que se le pinta al docente tiene que ser el que
+  // explica por qué ni el lote ni la prisa le quitan la lectura.
+  if (r.stage === "PRESCRIPTION") return "receta";
   if (r.isEmergency) return "urgencia";
   if (r.contentChanged) return "cambio";
   return null;

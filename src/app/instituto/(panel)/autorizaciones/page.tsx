@@ -70,6 +70,14 @@ export default async function InstitutoAutorizacionesPage() {
   }
 
   const canDecide = hasEduPermission(permUser, "autorizaciones.decide");
+  // ── Ola 14 · recetas en la misma bandeja ─────────────────────────────
+  // Decidir una RECETA exige además "recetas.issue" (expedirla pone la
+  // cédula del firmante en el papel); la pantalla lo recibe para no pintar
+  // botones que el endpoint va a rebotar. Y la cédula guardada viaja para
+  // PREllenar el campo al expedir — el valor con el que se firma es el que
+  // el docente ve y confirma en ese momento, nunca uno invisible.
+  const canIssueRecetas = hasEduPermission(permUser, "recetas.issue");
+  const issueCedula = ctx.user.cedulaProfesional ?? null;
   const page = await listEduApprovalInbox(ctx, ctx.institution.timezone);
   // El agrupado es PURO y corre en el servidor: la pantalla recibe los
   // grupos hechos y no tiene que decidir nada sobre el orden. Que las
@@ -97,6 +105,8 @@ export default async function InstitutoAutorizacionesPage() {
         truncated={page.truncated}
         maxRows={EDU_APPROVAL_MAX_ROWS}
         canDecide={canDecide}
+        canIssueRecetas={canIssueRecetas}
+        issueCedula={issueCedula}
         viewerRole={ctx.role}
       />
     </div>

@@ -29496,3 +29496,136 @@ comportamiento del backfill sobre volumen real.
 3. Comprobar con los tres SELECT de después: las tres cuentas tienen que dar **0**.
 4. Revisar a mano los pares ambiguos que liste el último SELECT (dos casos vivos del mismo paciente
    con el mismo alumno). En una escuela normal son cero.
+
+## [Institucional Ola 14] — Recetas: el alumno NO tiene cédula, así que la receta se PROPONE y es el docente quien la EXPIDE — dentro del gate de la Ola 4, no al lado ✅ (2026-08-31) · rama `feat/edu-ola-14`
+
+### El problema de fondo, y es el diseño entero
+
+En México la receta la expide un profesional con cédula, y un alumno de especialidad no la
+tiene todavía. Así que aquí la receta no funciona como en el dental (donde el doctor emite y
+ya): el alumno la ARMA y la manda a autorización, queda **PENDIENTE** (y una pendiente **no se
+imprime, no se manda y no se descarga**), y el DOCENTE la revisa desde su bandeja y la firma —
+ahí queda **EXPEDIDA**, con LOS DOS nombres en el papel y la **cédula del docente** congelada.
+
+### Cómo se enganchó al gate de la Ola 4 (lo que hay que saber antes de tocar esto)
+
+- **Una etapa nueva, no un mecanismo nuevo.** `EduApprovalStage` ganó `PRESCRIPTION` y
+  `EDU_APPROVAL_TARGETS` ganó `"EduPrescription"`. Mandar la receta crea una
+  `EduCaseApproval` normal (contentHash, bandeja, índice único parcial de la Ola 4, "nadie
+  firma su propia petición") — todo eso vino gratis.
+- **El envío NO pasa por `requestEduApproval`** y ese camino la REBOTA con un texto que dice a
+  dónde ir: mandar una receta también la mueve (BORRADOR → PENDIENTE), y las dos escrituras
+  van en UNA transacción (`sendEduRecetaToApproval`, src/lib/edu/recetas.ts). Por lo mismo el
+  desplegable del caso usa `EDU_APPROVAL_REQUESTABLE_STAGES` (las cuatro de siempre) y no la
+  lista completa.
+- **La decisión del docente mueve la receta EN LA MISMA transacción** (`decideEduApproval`):
+  autorizar → EXPEDIDA (con issuedBy*, cédula, hash, IP y user-agent congelados en la fila,
+  como en los consentimientos) · pedir cambios → BORRADOR · rechazar → RECHAZADA. El
+  `updateMany` va acotado a `status: "PENDIENTE"`: si un reenvío ganó la carrera, la firma NO
+  cae sobre otro estado (409 y se deshace todo).
+- **La cédula se captura AL EXPEDIR**, en la propia tarjeta de la bandeja (prellenada con
+  `EduUser.cedulaProfesional`, columna nueva), y se guarda para la próxima. Cada receta
+  congela la SUYA (`issuedByCedula`): corregir el perfil mañana no reescribe el papel de ayer.
+- **Doble llave en el endpoint de decidir**: si la fila es de etapa RECETA, el PATCH de
+  `/api/instituto/autorizaciones/[id]` exige `recetas.issue` ADEMÁS de
+  `autorizaciones.decide` (la etapa se lee antes con `getEduApprovalStage`, que a propósito NO
+  recorta por alcance: solo elige el permiso; el 404 de "no te toca" lo sigue dando
+  `decideEduApproval`).
+- **La receta NUNCA entra al lote.** Motivo nuevo `"receta"` en el skip del batch (gana
+  incluso a "urgencia"), cerrado en los DOS lados: `toRow` (la pantalla no la ofrece) y
+  `decideEduApprovalBatch` (el servidor la salta aunque se la manden a mano). Expedirla pone
+  tu cédula en un papel — eso se lee completo, una por una.
+- **El hash es la MISMA maquinaria**: rama nueva `EduPrescription` en
+  `eduApprovalCanonicalText` (diagnóstico + indicaciones + CADA renglón EN SU ORDEN — el
+  orden es contenido). No toca un byte de las ramas de nota/cita, así que ningún hash ya
+  firmado cambió. El snapshot se arma SOLO con `eduRecetaSnapshot` (recetas-core), que usan
+  el envío Y el `loadTargets` del gate — dos armados serían dos hashes del mismo papel.
+- **Editar una PENDIENTE está permitido** (solo a quien la propuso): la bandeja marca "la
+  editó después de mandarla" sola (hash), y lo que queda firmado es lo que el docente LEYÓ al
+  expedir (el hash se recalcula al firmar, regla de la Ola 4). Una EXPEDIDA no se toca jamás:
+  se ANULA con motivo (constancia con nombre y hora; el PDF sale marcado "ANULADA") y se hace
+  otra. RECHAZADA y ANULADA son terminales.
+
+### Qué se construyó
+
+- **Schema** (aditivo): enum `EduPrescriptionStatus` (BORRADOR|PENDIENTE|EXPEDIDA|RECHAZADA|
+  ANULADA), modelos `EduPrescription` + `EduPrescriptionItem` (renglones de texto LIBRE, sin
+  FK al CUMS del dental a propósito: no se encadena la escuela al catálogo del otro
+  producto), `EduUser.cedulaProfesional`, valor `PRESCRIPTION` en `EduApprovalStage`.
+- **Alcance**: las recetas se leen con el CLÍNICO (`eduClinicalScope` = recurso `"cases"`),
+  como el expediente. CAJA no ve NINGUNA aunque le enciendan `recetas.view` por error — una
+  receta es un documento clínico, no un cobro. El alumno ve las de SUS casos; el docente, las
+  de sus alumnos vigentes. El paciente de la pestaña se resuelve con `eduPatientScopeWhere` +
+  alcance de "cases" (el mismo patrón del expediente, con su comentario).
+- **Permisos** (4): `recetas.view` · `recetas.propose` (armar/editar/mandar) ·
+  `recetas.issue` (expedir con cédula) · `recetas.void`. Defaults: ALUMNO view+propose ·
+  DOCENTE y DIRECCION las cuatro · CAJA ninguna. Grupo propio "Recetas" en la pantalla de
+  permisos. El backfill del override son TRES bloques comentados en el SQL (dirección,
+  docente, alumno) — caja no recibe nada.
+- **Pantallas**: pestaña **Recetas** en la ficha (`/instituto/pacientes/[id]/recetas`):
+  lista con estado, formulario de renglones (medicamento y dosis obligatorios; presentación,
+  vía, frecuencia, duración, cantidad e indicaciones opcionales; tope 15), enviar, anular con
+  motivo en la tarjeta, y "Abrir el PDF" SOLO en EXPEDIDA/ANULADA. **La lista del caso** en
+  la pestaña Casos (bloque compacto `EduCasoRecetas`, solo lectura, con enlace). **La
+  bandeja**: las recetas salen junto a lo demás con su etapa "Receta", el resumen pinta TODOS
+  los renglones (se firma lo que se lee), y "Expedir" abre el campo de la cédula en la
+  tarjeta.
+- **PDF** (`/api/instituto/recetas/[id]/pdf`, @react-pdf/renderer como el dental): el
+  instituto, el paciente, el diagnóstico, los renglones numerados, y las DOS firmas — 
+  "Propuso: [alumno] · Matrícula X" y "Expide y responde: [docente] · Cédula profesional Y" —
+  más el sha256 corto de integridad. La ANULADA sale con franja roja y su motivo.
+  `getEduRecetaPdfData` ES el gate: PENDIENTE/RECHAZADA/BORRADOR contestan 409 con el porqué,
+  y no existe ningún otro camino que renderice el documento.
+- **SQL**: `sql/edu-ola-14.sql`, idempotente, estilo Ola 10. **SIN APLICAR**, como todos.
+  ⚠️ Va DESPUÉS de `edu-ola-4.sql` (el `ALTER TYPE` necesita el enum). El valor nuevo del
+  enum no se usa en el propio script, así que corre en la transacción implícita del editor
+  sin bronca (PG 12+).
+
+### Qué se probó
+
+`npm run build` **exit 0** (✓ 460/460 páginas, tabla de rutas completa con las 5 APIs y la
+pestaña nuevas; warnings preexistentes de `file-type` y el spam esperado de
+`DATABASE_URL` sin `.env`). `npx tsc --noEmit` limpio salvo los 6 errores PREEXISTENTES de
+`src/lib/barber/__tests__` (documentados desde la integración). **797/797 pruebas edu en
+verde** (`npx tsx --test src/lib/edu/__tests__/*.test.ts`), incluidas las ~30 nuevas de
+`edu-recetas.test.ts`: el candado de tipos del enum, que editar UNA letra o REORDENAR
+medicamentos vence la firma (y CRLF/NFC no), que receta y nota jamás colisionan de hash, que
+la receta queda fuera del lote incluso urgente, que el papel solo sale EXPEDIDA/ANULADA, la
+validación de renglones y cédula, y el reparto de permisos (el alumno propone y NO expide).
+UNA prueba vieja se actualizó (la lista literal de motivos del lote ganó `"receta"`); su
+intención — "cada motivo tiene texto legible" — no cambió. Guardia limpia con
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`.
+
+### Lo que NO se probó
+
+Nada corrió contra Postgres: `sql/edu-ola-14.sql` NO se aplicó y ninguna transacción
+(enviar, expedir, anular) se ejecutó contra base real. No se abrió un navegador: la pestaña,
+el modal de renglones, el campo de la cédula en la bandeja y el PDF renderizado están
+razonados y compilados, no vistos. El PDF nunca se generó de verdad (renderToBuffer corre
+solo en runtime con datos); el patrón es el mismo del dental, que sí está vivo. Nadie ha
+propuesto ni expedido una receta real desde el producto.
+
+### Lo que se quiso tocar y NO se tocó
+
+- **El dental**: ni `Prescription`, ni `CumsItem`, ni `src/lib/pdf/*`. El PDF del vertical es
+  propio (mismo motor, otro documento — el del dental asume UNA firma y branding de Clinic).
+- **La ficha del paciente más allá de lo imprescindible** (Ola 12 la está rehaciendo): UNA
+  entrada al FINAL de `definicion` en el layout (la pestaña, que por eso quedó tras WhatsApp
+  y no junto a Consentimientos donde iría por afinidad), y un bloque aditivo al final de la
+  tarjeta del caso en `casos/page.tsx`. Nada se reordenó.
+- **WhatsApp**: NO se construyó envío de recetas (la Ola 9 manda carta y recibo; la receta ni
+  siquiera tiene tipo en `EduWhatsappKind`), así que "una pendiente no se manda" se cumple
+  por ausencia total del camino, no por un `if`.
+- **Un folio consecutivo de receta** (tipo "R-0001"): el documento usa fecha + id corto.
+  Meter un MAX+1 con su carrera no cabía en la ola; si la escuela lo pide, es una decisión
+  de producto.
+
+### Al desplegar
+
+1. `sql/edu-ola-14.sql` en Supabase (DESPUÉS de `edu-ola-4.sql`; idempotente, CERO DROP).
+   ⚠️ Hasta que corra, `getEduContext` va a fallar en CUALQUIER pantalla del vertical
+   (el cliente nuevo pide `edu_users."cedulaProfesional"` en cada SELECT) — es el mismo
+   trato que la `searchIndex` de la Ola 1B: el SQL va ANTES del deploy o junto con él.
+2. Si hay usuarios con `permissionsOverride` no vacío, descomentar los TRES bloques del
+   backfill (dirección/docente/alumno — caja no recibe nada).
+3. Los tres SELECT de comprobación de la sección 8 tienen que dar 0 filas.
