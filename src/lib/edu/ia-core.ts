@@ -530,7 +530,7 @@ const DETALLE_SIN_LLAVE: Record<EduAiFeature, string> = {
  * ⚠️ SÍ, ESTO LE ENSEÑA UNA CIFRA A UN ALUMNO, y hay que decir por qué no
  * contradice la regla de la Ola 5 ("un alumno no ve dinero"). Lo que
  * aquella regla cierra es el dinero de los PACIENTES —precios, cobros,
- * saldos—, porque un residente que sabe cuánto pagó su paciente sabe
+ * saldos—, porque un alumno que sabe cuánto pagó su paciente sabe
  * cuánto vale su propia lista de espera, y ése es el incentivo que la
  * escuela no quiere crear. Esto es otra cosa: es el presupuesto de una
  * HERRAMIENTA de la escuela, y es exactamente el dato que convierte "el
