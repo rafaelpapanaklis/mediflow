@@ -18,6 +18,7 @@ import type { Prisma } from "@prisma/client";
 import type { EduPatientStatus, EduSex } from "@/lib/edu/types";
 import { EDU_PATIENT_STATUSES, EDU_SEXES } from "@/lib/edu/types";
 import { eduSearchInput, eduSearchTokens } from "@/lib/edu/padron-core";
+import { eduNormalizeSearch } from "@/lib/edu/search";
 
 /** El buscador y el saneo de texto se REUSAN del padrón en vez de
  *  escribirse otra vez: dos saneadores de búsqueda en el mismo vertical es
@@ -204,6 +205,9 @@ export interface EduPatientRow {
   notes: string | null;
   status: EduPatientStatus;
   origin: EduPatientOrigin;
+  /** Ola de Casos: los antecedentes médicos, siempre presentes en la fila
+   *  — la ficha los pinta como chips en TODAS las pestañas. */
+  antecedentes: EduAntecedentes;
   /** Casos abiertos (no cerrados). Lo pinta la lista como "2 casos". */
   openCases: number;
   /** Total de casos, abiertos y cerrados. */
@@ -263,4 +267,322 @@ export function eduPatientSearchAnd(
     and.push({ OR: or });
   }
   return and;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 4 · ANTECEDENTES MÉDICOS (ola de Casos) — ES SEGURIDAD, NO ESTÉTICA
+//
+// Un alumno a punto de infiltrar anestesia tiene que poder ver que el
+// paciente es cardiópata SIN abrir nada: los chips de alerta se pintan en
+// el ENCABEZADO de la ficha, arriba de todas las pestañas.
+//
+// 🔴 EL ESTADO ES TRI-ESTADO, y confundir dos de ellos es como se mata a
+// alguien:
+//   · SIN_REGISTRAR — nadie ha preguntado. `[]` es el default de la fila,
+//     NO una respuesta. La ficha lo AVISA en ámbar.
+//   · NO_REFIERE    — se le preguntó y no refiere nada. Chip verde.
+//   · CON_DATOS     — hay alergias/padecimientos/medicamentos capturados.
+// Lo que separa el primero de los otros dos es `historyRecordedAt`: null =
+// nadie los capturó; con fecha = alguien los revisó (y quedó quién).
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Los ocho grupos ABO/Rh. El servidor NO acepta texto libre aquí: un
+ *  "0+" (cero) tecleado donde debía decir "O+" es exactamente la clase de
+ *  dato que no puede vivir en un campo de seguridad. */
+export const EDU_BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
+export type EduBloodType = (typeof EDU_BLOOD_TYPES)[number];
+
+/** Tope de renglones por lista y de largo por renglón. Una "lista" de 200
+ *  alergias no es una historia clínica, es un pegado accidental. */
+export const EDU_ANTECEDENTES_MAX_ITEMS = 30;
+export const EDU_ANTECEDENTES_MAX_ITEM_LENGTH = 120;
+
+export interface EduAntecedentes {
+  bloodType: string | null;
+  allergies: string[];
+  chronicConditions: string[];
+  currentMedications: string[];
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  emergencyContactRelation: string | null;
+  /** null = nadie los ha capturado (la ficha lo AVISA). */
+  recordedAt: string | null;
+  recordedByName: string | null;
+}
+
+export type EduAntecedentesEstado = "SIN_REGISTRAR" | "NO_REFIERE" | "CON_DATOS";
+
+export function eduAntecedentesEstado(a: {
+  allergies: string[];
+  chronicConditions: string[];
+  currentMedications: string[];
+  recordedAt: string | Date | null;
+}): EduAntecedentesEstado {
+  const vacio =
+    a.allergies.length === 0 &&
+    a.chronicConditions.length === 0 &&
+    a.currentMedications.length === 0;
+  // 🔴 LOS DATOS MANDAN SOBRE LA FECHA. Una fila con alergias capturadas
+  // pero sin fecha de revisión (un import a mano, una escritura vieja) es
+  // CON_DATOS: pintarle "sin antecedentes registrados" ESCONDERÍA una
+  // alergia que sí está en la base — el único error peor que confundir
+  // los otros dos estados.
+  if (!vacio) return "CON_DATOS";
+  // Y con las tres listas vacías, la fecha es lo ÚNICO que separa "nadie
+  // ha preguntado" (null) de "se le preguntó y no refiere" (con fecha):
+  // en la base se ven idénticas.
+  return a.recordedAt ? "NO_REFIERE" : "SIN_REGISTRAR";
+}
+
+export type EduAlertChipKind =
+  | "sin-registrar"
+  | "no-refiere"
+  | "alergia"
+  | "padecimiento"
+  | "medicamento"
+  | "sangre"
+  | "mas";
+
+export interface EduAlertChip {
+  kind: EduAlertChipKind;
+  /** El tono es el del sistema de tags del vertical (edu-tag--*). */
+  tone: "danger" | "warn" | "info" | "ok" | "muted";
+  text: string;
+  /** Lo que no cupo en el chip "+N", para el title. */
+  detail?: string;
+}
+
+/** Cuántos padecimientos/medicamentos se pintan antes del "+N". Las
+ *  ALERGIAS no se recortan nunca: esconder la cuarta alergia detrás de un
+ *  "+1" es esconder justo la que iba a importar. */
+const CHIP_CAP = 3;
+
+/**
+ * Los chips del encabezado de la ficha, derivados de los antecedentes.
+ *
+ * Rojo = contraindica (alergias). Ámbar = a tener en cuenta
+ * (padecimientos) y el aviso de "sin registrar". Info = medicamentos y
+ * tipo de sangre. Verde = revisado y sin hallazgos.
+ */
+export function eduAntecedentesChips(a: EduAntecedentes): EduAlertChip[] {
+  const estado = eduAntecedentesEstado(a);
+
+  if (estado === "SIN_REGISTRAR") {
+    // 🔴 CON ESTAS PALABRAS. "Sin antecedentes registrados" ≠ "sin
+    // alergias": lo primero es una tarea pendiente, lo segundo una
+    // respuesta clínica. Pintar aquí un chip verde mataría a alguien.
+    return [{ kind: "sin-registrar", tone: "warn", text: "Sin antecedentes registrados" }];
+  }
+
+  const chips: EduAlertChip[] = [];
+
+  for (const al of a.allergies) {
+    chips.push({ kind: "alergia", tone: "danger", text: `Alergia: ${al}` });
+  }
+
+  for (const c of a.chronicConditions.slice(0, CHIP_CAP)) {
+    chips.push({ kind: "padecimiento", tone: "warn", text: c });
+  }
+  if (a.chronicConditions.length > CHIP_CAP) {
+    chips.push({
+      kind: "mas",
+      tone: "warn",
+      text: `+${a.chronicConditions.length - CHIP_CAP} padecimientos`,
+      detail: a.chronicConditions.slice(CHIP_CAP).join(", "),
+    });
+  }
+
+  for (const m of a.currentMedications.slice(0, CHIP_CAP)) {
+    chips.push({ kind: "medicamento", tone: "info", text: m });
+  }
+  if (a.currentMedications.length > CHIP_CAP) {
+    chips.push({
+      kind: "mas",
+      tone: "info",
+      text: `+${a.currentMedications.length - CHIP_CAP} medicamentos`,
+      detail: a.currentMedications.slice(CHIP_CAP).join(", "),
+    });
+  }
+
+  if (estado === "NO_REFIERE") {
+    chips.push({
+      kind: "no-refiere",
+      tone: "ok",
+      text: "Revisado: no refiere alergias ni padecimientos",
+    });
+  }
+
+  if (a.bloodType) {
+    chips.push({ kind: "sangre", tone: "muted", text: `Sangre ${a.bloodType}` });
+  }
+
+  return chips;
+}
+
+export interface EduAntecedentesInput {
+  bloodType?: unknown;
+  allergies?: unknown;
+  chronicConditions?: unknown;
+  currentMedications?: unknown;
+  emergencyContactName?: unknown;
+  emergencyContactPhone?: unknown;
+  emergencyContactRelation?: unknown;
+}
+
+export interface EduAntecedentesData {
+  bloodType: string | null;
+  allergies: string[];
+  chronicConditions: string[];
+  currentMedications: string[];
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  emergencyContactRelation: string | null;
+}
+
+/**
+ * El resultado del saneo, al estilo de EduGateVerdict: TODOS los campos
+ * siempre presentes, nada de unión discriminada. Este repo compila con
+ * `strict: false` y ahí `if (!r.ok)` NO estrecha la unión — el código que
+ * la usara "bien" no compilaría, y el arreglo obvio (un cast) escondería
+ * justo el error que el tipo existía para atrapar.
+ *
+ * Con ok=false, `error` trae el motivo y `data` viene NEUTRA (no usarla).
+ * Con ok=true, `error` es "".
+ */
+export interface EduAntecedentesParse {
+  ok: boolean;
+  error: string;
+  data: EduAntecedentesData;
+}
+
+const ANTECEDENTES_NEUTROS: EduAntecedentesData = {
+  bloodType: null,
+  allergies: [],
+  chronicConditions: [],
+  currentMedications: [],
+  emergencyContactName: null,
+  emergencyContactPhone: null,
+  emergencyContactRelation: null,
+};
+
+function antecedentesError(error: string): EduAntecedentesParse {
+  return { ok: false, error, data: ANTECEDENTES_NEUTROS };
+}
+
+interface ListaParse {
+  ok: boolean;
+  error: string;
+  value: string[];
+}
+
+/** Una lista del formulario: acepta arreglo de strings o texto con comas
+ *  (el patrón del dental), recorta, descarta vacíos y deduplica sin
+ *  distinguir mayúsculas ni acentos — "Penicilina" y "penicilina" son la
+ *  misma alergia, no dos. */
+function parseLista(raw: unknown, nombre: string): ListaParse {
+  let items: string[];
+  if (raw === undefined || raw === null || raw === "") items = [];
+  else if (typeof raw === "string") items = raw.split(",");
+  else if (Array.isArray(raw)) {
+    if (raw.some((x) => typeof x !== "string")) {
+      return { ok: false, error: `La lista de ${nombre} trae algo que no es texto.`, value: [] };
+    }
+    items = raw as string[];
+  } else {
+    return { ok: false, error: `La lista de ${nombre} no tiene forma de lista.`, value: [] };
+  }
+
+  const vistos = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const v = item.trim().replace(/\s+/g, " ");
+    if (!v) continue;
+    if (v.length > EDU_ANTECEDENTES_MAX_ITEM_LENGTH) {
+      return {
+        ok: false,
+        error: `Un renglón de ${nombre} pasa de ${EDU_ANTECEDENTES_MAX_ITEM_LENGTH} caracteres. Escribe el nombre, no la historia completa.`,
+        value: [],
+      };
+    }
+    // La llave de dedupe reusa el normalizador del buscador (minúsculas,
+    // sin acentos): "Penicilina" y "penicilina" son la misma alergia.
+    const llave = eduNormalizeSearch(v);
+    if (vistos.has(llave)) continue;
+    vistos.add(llave);
+    out.push(v);
+  }
+  if (out.length > EDU_ANTECEDENTES_MAX_ITEMS) {
+    return {
+      ok: false,
+      error: `Son demasiados renglones de ${nombre} (máximo ${EDU_ANTECEDENTES_MAX_ITEMS}).`,
+      value: [],
+    };
+  }
+  return { ok: true, error: "", value: out };
+}
+
+function parseTextoOpcional(raw: unknown, max: number): string | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string") return null;
+  const v = raw.trim();
+  if (!v) return null;
+  return v.slice(0, max);
+}
+
+/**
+ * Sanea el bloque COMPLETO de antecedentes. Es un REEMPLAZO, no un merge:
+ * guardar antecedentes significa "revisé el bloque entero hoy", y por eso
+ * el servidor estampa `historyRecordedAt`/`historyRecordedById` juntos en
+ * la misma escritura. Un merge campo por campo dejaría una fecha de
+ * revisión sobre datos que nadie revisó.
+ */
+export function parseEduAntecedentes(input: EduAntecedentesInput): EduAntecedentesParse {
+  const alergias = parseLista(input.allergies, "alergias");
+  if (!alergias.ok) return antecedentesError(alergias.error);
+  const padecimientos = parseLista(input.chronicConditions, "padecimientos");
+  if (!padecimientos.ok) return antecedentesError(padecimientos.error);
+  const medicamentos = parseLista(input.currentMedications, "medicamentos");
+  if (!medicamentos.ok) return antecedentesError(medicamentos.error);
+
+  let bloodType: string | null = null;
+  if (input.bloodType !== undefined && input.bloodType !== null && input.bloodType !== "") {
+    if (typeof input.bloodType !== "string") {
+      return antecedentesError("Ese tipo de sangre no existe.");
+    }
+    const v = input.bloodType.trim().toUpperCase();
+    if (!(EDU_BLOOD_TYPES as readonly string[]).includes(v)) {
+      // La letra es O (de la palabra), no cero — el dedazo clásico.
+      return antecedentesError("Ese tipo de sangre no existe. Son A, B, AB u O, con + o −.");
+    }
+    bloodType = v;
+  }
+
+  const emergencyContactName = parseTextoOpcional(input.emergencyContactName, 120);
+
+  let emergencyContactPhone: string | null = null;
+  if (
+    input.emergencyContactPhone !== undefined &&
+    input.emergencyContactPhone !== null &&
+    input.emergencyContactPhone !== ""
+  ) {
+    const v = normalizeEduPhone(input.emergencyContactPhone);
+    if (!v) return antecedentesError("El teléfono de emergencia no tiene números suficientes.");
+    emergencyContactPhone = v;
+  }
+
+  const emergencyContactRelation = parseTextoOpcional(input.emergencyContactRelation, 60);
+
+  return {
+    ok: true,
+    error: "",
+    data: {
+      bloodType,
+      allergies: alergias.value,
+      chronicConditions: padecimientos.value,
+      currentMedications: medicamentos.value,
+      emergencyContactName,
+      emergencyContactPhone,
+      emergencyContactRelation,
+    },
+  };
 }

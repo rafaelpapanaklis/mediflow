@@ -7,6 +7,11 @@ import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
 import { getEduPatientResumen } from "@/lib/edu/resumen";
 import { eduMoney } from "@/lib/edu/dinero-core";
+import { EDU_CASO_ESPERA_TAG } from "@/lib/edu/casos-core";
+import {
+  EDU_RESUMEN_TIMELINE_KIND_LABELS,
+  EDU_RESUMEN_TIMELINE_TAB,
+} from "@/lib/edu/resumen-core";
 import { EDU_CASE_STATUS_LABELS } from "@/lib/edu/types";
 
 /**
@@ -128,7 +133,14 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
                     {c.supervisorName ? ` · supervisa ${c.supervisorName}` : " · sin docente en el caso"}
                     {` · desde ${c.abiertoLabel}`}
                   </span>
-                  <span className="edu-tag edu-tag--ok">{EDU_CASE_STATUS_LABELS[c.status]}</span>
+                  <span className="edu-fichacaso__tags">
+                    <span className="edu-tag edu-tag--ok">{EDU_CASE_STATUS_LABELS[c.status]}</span>
+                    {/* Ola de Casos: en qué va y qué le falta FIRMAR, con la
+                        misma derivación que la pantalla global de casos. */}
+                    <span className={`edu-tag ${EDU_CASO_ESPERA_TAG[c.espera.kind]}`}>
+                      {c.espera.label}
+                    </span>
+                  </span>
                 </div>
               ))}
             </div>
@@ -136,6 +148,83 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
           <p className="edu-note">
             <Link href={`${base}/casos`} className="edu-link">
               Ver los casos con su detalle
+            </Link>
+          </p>
+        </section>
+      )}
+
+      {/* ── Ola de Casos · la historia clínica reciente, en orden ──────────
+          Notas, estudios, consentimientos y recetas mezclados del más
+          reciente al más viejo, cada uno con QUIÉN lo hizo. Para caja
+          `timeline` es null: el bloque no existe (ni se consultó). */}
+      {r.timeline !== null && (
+        <section className="edu-section">
+          <div className="edu-section__head">
+            <h2 className="edu-section__title">Historia reciente</h2>
+            {r.recortado && <span className="edu-count">lo que te toca</span>}
+          </div>
+          {r.timeline.length === 0 ? (
+            <p className="edu-note">
+              Sin actividad clínica registrada todavía: ni notas, ni estudios, ni cartas, ni
+              recetas que te toquen.
+            </p>
+          ) : (
+            <ol className="edu-linea" aria-label="Historia clínica reciente">
+              {r.timeline.map((t, i) => (
+                <li key={`${t.kind}-${t.atISO}-${i}`} className="edu-linea__item">
+                  <span className={`edu-linea__punto edu-linea__punto--${t.kind}`} aria-hidden />
+                  <div className="edu-linea__cuerpo">
+                    <p className="edu-linea__titulo">
+                      <Link
+                        href={`${base}/${EDU_RESUMEN_TIMELINE_TAB[t.kind]}`}
+                        className="edu-link"
+                      >
+                        {t.title}
+                      </Link>
+                    </p>
+                    <p className="edu-linea__meta">
+                      {t.whenLabel} · {t.who} ·{" "}
+                      {EDU_RESUMEN_TIMELINE_KIND_LABELS[t.kind]}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
+
+      {/* ── Ola de Casos · los últimos estudios, con miniatura ───────────── */}
+      {r.estudios !== null && r.estudios.length > 0 && (
+        <section className="edu-section">
+          <div className="edu-section__head">
+            <h2 className="edu-section__title">Últimos estudios</h2>
+            <span className="edu-count">{r.estudios.length}</span>
+          </div>
+          <div className="edu-minis">
+            {r.estudios.map((e) => (
+              <Link key={e.id} href={`${base}/estudios`} className="edu-mini">
+                {e.thumbUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- URL
+                  // firmada de Storage que caduca: next/image la cachearía.
+                  <img src={e.thumbUrl} alt={e.name} className="edu-mini__img" loading="lazy" />
+                ) : (
+                  <span className="edu-mini__tipo" aria-hidden>
+                    {e.kindLabel}
+                  </span>
+                )}
+                <span className="edu-mini__pie">
+                  <span className="edu-mini__nombre">{e.name}</span>
+                  <span className="edu-mini__meta">
+                    {e.whenLabel} · {e.byName}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+          <p className="edu-note">
+            <Link href={`${base}/estudios`} className="edu-link">
+              Ver todos sus estudios
             </Link>
           </p>
         </section>

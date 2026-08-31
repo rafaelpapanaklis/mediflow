@@ -1770,8 +1770,11 @@ select.edu-input {
   --edu-cols: 84px minmax(140px, 1.2fr) minmax(180px, 2fr) 96px 160px;
 }
 
+/* Ola de Casos: la pantalla global /instituto/casos la reclamó (estaba
+   definida desde la Ola 2 y ningún componente la usaba). SIETE columnas:
+   paciente · alumno · docente · especialidad · abierto · estado · esperando. */
 .edu-table--casos {
-  --edu-cols: minmax(150px, 1.5fr) minmax(140px, 1.3fr) minmax(120px, 1fr) minmax(120px, 1fr) 128px 96px;
+  --edu-cols: minmax(150px, 1.5fr) minmax(140px, 1.3fr) minmax(120px, 1fr) minmax(130px, 1.1fr) 108px 118px minmax(170px, 1.3fr);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -6049,4 +6052,261 @@ button.edu-dir-money__fila:hover {
   color: var(--edu-text-2);
   overflow-wrap: anywhere;
   min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OLA DE CASOS — antecedentes médicos en el encabezado de la ficha, la
+   línea de tiempo del resumen, las miniaturas de estudios y las acciones
+   del caso. MÓVIL PRIMERO, tokens del vertical, todo en px.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Los chips de alerta del encabezado ─────────────────────────────────
+   Debajo del nombre y ARRIBA de las pestañas: se ven en TODAS. Los tonos
+   son los .edu-tag--* de siempre (contrastes ya medidos ahí); aquí solo
+   se acomodan. */
+.edu-fichaalertas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 2px;
+}
+
+.edu-fichaalertas .edu-tag {
+  white-space: normal; /* una alergia larga se parte, no se desborda */
+}
+
+/* El enlace a capturar/editar antecedentes, al final de los chips. */
+.edu-fichaalertas__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px dashed var(--edu-line-strong);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--edu-text-2);
+  text-decoration: none;
+}
+
+.edu-fichaalertas__link:hover {
+  border-color: var(--edu-500);
+  color: var(--edu-700);
+  background: var(--edu-50);
+}
+
+/* Los dos tags de un caso en el resumen (estado + qué espera). */
+.edu-fichacaso__tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+/* ── La línea de tiempo del resumen ─────────────────────────────────────
+   Lista con un riel a la izquierda; cada punto lleva el color de su
+   clase de renglón. Nada de librerías: es un <ol>. */
+.edu-linea {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0;
+}
+
+.edu-linea__item {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 8px 0 8px 2px;
+}
+
+.edu-linea__item + .edu-linea__item {
+  border-top: 1px solid var(--edu-line);
+}
+
+.edu-linea__punto {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--edu-400);
+}
+
+.edu-linea__punto--nota {
+  background: var(--edu-600);
+}
+
+.edu-linea__punto--estudio {
+  background: var(--edu-amber-500, #d97706);
+}
+
+.edu-linea__punto--consentimiento {
+  background: #15803d; /* el verde de --ok, sólido para un punto de 9px */
+}
+
+.edu-linea__punto--receta {
+  background: #8c1d18; /* el granate de --danger-soft, como punto */
+}
+
+.edu-linea__cuerpo {
+  min-width: 0;
+}
+
+.edu-linea__titulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.edu-linea__meta {
+  margin: 1px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+}
+
+/* ── Las miniaturas de estudios del resumen ─────────────────────────────
+   Tarjetas chicas; en el teléfono van una por fila. La imagen es una URL
+   FIRMADA que caduca: si no carga, el pie sigue diciendo qué es. */
+.edu-minis {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .edu-minis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.edu-mini {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-mini:hover {
+  border-color: var(--edu-line-brand);
+}
+
+.edu-mini__img {
+  display: block;
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  background: var(--edu-surface-2);
+}
+
+/* Sin imagen (tomografía, PDF, malla): el tipo del estudio, centrado. */
+.edu-mini__tipo {
+  display: grid;
+  place-items: center;
+  height: 110px;
+  background: var(--edu-surface-2);
+  color: var(--edu-text-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.edu-mini__pie {
+  display: grid;
+  gap: 1px;
+  padding: 8px 10px;
+}
+
+.edu-mini__nombre {
+  font-size: 12.5px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.edu-mini__meta {
+  font-size: 11.5px;
+  color: var(--edu-text-3);
+}
+
+/* ── Las acciones del caso, en su ficha ─────────────────────────────────
+   Un bloque al final de la tarjeta del caso: firmar lo pendiente, mover
+   el estado (el gate), registrar sesión y traspasar. */
+.edu-caso-acciones {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--edu-line);
+}
+
+.edu-caso-acciones__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.edu-caso-acciones__confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+}
+
+/* Las pendientes firmables desde el caso. */
+.edu-caso-firmas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.edu-caso-firmas__item {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--edu-amber-300, rgba(180, 83, 9, 0.35));
+  border-radius: 10px;
+  background: var(--edu-amber-50, #fffbeb);
+}
+
+.edu-caso-firmas__que {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-caso-firmas__detalle {
+  display: block;
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+.edu-caso-firmas__decidir {
+  display: grid;
+  gap: 6px;
+}
+
+/* Botonera de un formulario en línea (sin modal): a la derecha en
+   pantallas anchas, apilable en el teléfono. */
+.edu-form-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }

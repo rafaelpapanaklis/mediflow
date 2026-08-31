@@ -43,6 +43,8 @@
 //   /instituto/sedes        → las sedes y quién entra a cada una  Ola 11 ✓
 //   /instituto/ia           → el consumo de IA del mes y el CUPO  Ola 8  ✓
 //   /instituto/pacientes/[id]/recetas → recetas del paciente      Ola 14 ✓
+//   /instituto/casos        → TODOS los casos: filtros, buscador y
+//                             export; recortado por alcance     Ola Casos ✓
 // PÚBLICA (SIN sesión — vive FUERA del grupo (panel), igual que /login):
 //   /instituto/consentimiento/[token] → el paciente lee y firma    Ola 3B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
@@ -127,6 +129,10 @@
 //   POST  /api/instituto/recetas/[id]/anular  → anular una EXPEDIDA       Ola 14 ✓
 //   GET   /api/instituto/recetas/[id]/pdf     → el PDF (solo EXPEDIDA
 //                                               o ANULADA: el gate)       Ola 14 ✓
+//   GET   /api/instituto/casos/export → la pantalla de casos en CSV
+//                                       (mismo permiso, alcance y filtros) Ola Casos ✓
+//   PATCH /api/instituto/pacientes/[id]/antecedentes → antecedentes médicos
+//                                       (pacientes.manage O expediente.write) Ola Casos ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -760,6 +766,23 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     permission: "pacientes.view",
   },
   {
+    // ── Ola de Casos · la clínica entera en una tabla ─────────────────
+    // Va pegado a Pacientes: son las dos caras de la misma operación (la
+    // persona / su tratamiento). Hasta esta ola un caso solo se veía
+    // entrando al paciente, y la dirección no podía contestar "¿cuántos
+    // están atorados en firma?" sin abrir fichas una por una.
+    //
+    // ⚠️ CAJA no lo ve — y no solo por esta línea: no trae "casos.view"
+    // por default, el layout además lo esconde con alcance "none", y la
+    // pantalla y la API vuelven a cerrar. El item escondido nunca es el
+    // candado.
+    key: "casos",
+    href: "/instituto/casos",
+    icon: "folder-open",
+    section: "operacion",
+    permission: "casos.view",
+  },
+  {
     key: "padron",
     href: "/instituto/padron",
     icon: "users",
@@ -958,6 +981,7 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   autorizaciones: "Autorizaciones",
   agenda: "Agenda",
   pacientes: "Pacientes",
+  casos: "Casos",
   // Cierre: era "Padrón" y el dueño del producto tuvo que preguntar qué
   // significaba — si él dudó, una escuela también. Se renombra SOLO lo que
   // se lee: la ruta sigue siendo /instituto/padron (renombrarla rompería

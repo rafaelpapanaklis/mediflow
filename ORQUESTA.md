@@ -30144,3 +30144,172 @@ la panorámica de 1364 px de borde a borde. Eso es "mismo tamaño, cuadrados, al
 - **Gestos dentro de la panorámica**: en el lienzo del trazado, con el dedo se pueden **añadir**
   puntos (el navegador sintetiza el clic) pero no **arrastrarlos**. El camino normal es
   "Auto-detectar", que no necesita el dedo; corregir la curva a mano sigue siendo cosa de ratón.
+## [Institucional Ola de Casos] — Antecedentes médicos que se VEN antes de infiltrar, y la pantalla de casos que la dirección no tenía: "[]" NO significa "sin alergias" ✅ (2026-08-31) · rama `feat/edu-casos`
+
+### El problema de fondo, y por qué era de seguridad
+
+`EduPatient` no guardaba alergias, padecimientos, medicamentos, tipo de sangre ni
+contacto de emergencia: un alumno a punto de infiltrar anestesia NO TENÍA FORMA de
+saber que el paciente es cardiópata, en una clínica que ya opera. Y el arreglo fácil
+—copiar el HeroCard del dental— habría copiado su bug: el dental pinta un chip verde
+("Sin alergias registradas") cuando `allergies.length === 0`, que es el DEFAULT de
+una fila que nadie revisó. Un paciente al que nadie le preguntó y uno que no refiere
+se veían idénticos. Esta ola separa los TRES estados con una columna
+(`historyRecordedAt`): null = "Sin antecedentes registrados" (chip ÁMBAR, tarea
+pendiente), con fecha y listas vacías = "Revisado: no refiere" (verde), con datos =
+los chips (alergias en ROJO, todas, sin tope — la cuarta es justo la que importa).
+Y si un import dejara datos SIN fecha, los datos mandan: jamás se esconde una
+alergia capturada detrás de un "sin registrar".
+
+### Las decisiones que no se leen del código
+
+- **Los chips viven en el LAYOUT de la ficha**, no en una pestaña: se ven en las
+  DIEZ pestañas. CAJA también los ve (ella los captura): cuelgan de
+  `pacientes.view`, no del alcance clínico. El encabezado además ganó sexo,
+  teléfono y correo — lo que antes obligaba a abrir "Datos" para llamar al
+  paciente.
+- **CERO keys de permiso nuevas.** Capturar antecedentes abre con DOS llaves
+  existentes —`pacientes.manage` (recepción) O `expediente.write` (la historia
+  clínica la completa el alumno con el paciente en el sillón)— por su propio
+  endpoint, con el patrón del WhatsApp de la ficha. Una key nueva no llega a nadie
+  con `permissionsOverride` guardado y habría exigido backfill en SQL. El paciente
+  se busca dentro del alcance de "patients": un alumno captura los de SUS
+  pacientes; el de otro contesta 404.
+- **Guardar es REEMPLAZAR el bloque y estampar `historyRecordedAt` +
+  `historyRecordedById` JUNTOS**: "revisé los antecedentes hoy, y quedó quién".
+  Guardar todo VACÍO es un dato válido — así se registra "no refiere". El único
+  formulario está en la pestaña Datos (el modal de la lista NO lo lleva: un campo,
+  un formulario). El saneo deduplica sin mayúsculas ni acentos ("Penicilina" y
+  "penicilina" son una), y el tipo de sangre solo acepta los 8 grupos ABO/Rh — el
+  "0+" con cero, el dedazo clásico, rebota con texto.
+- **El tipo de sangre y el resto son LOS MISMOS campos y tipos que el `Patient`
+  del dental** a propósito (comparables un día), pero en SU tabla: los dos
+  productos no comparten ni una fila. Del dental no se editó nada.
+- **/instituto/casos reusa TODO lo que ya existía**: el permiso `casos.view`, el
+  recorte `eduCaseScopeWhere` (alumno: los suyos, incluidos TRANSFERRED — su
+  historia; docente: sus vigentes; dirección: todos; caja: none dos veces), la
+  clase `.edu-table--casos` (definida desde la Ola 2 y sin un solo uso — esta ola
+  la reclamó, a 7 columnas) y los helpers de CSV de la Ola 6. La columna "QUÉ
+  ESPERA" se deriva de las autorizaciones guardadas (`eduCasoEsperando`,
+  casos-core): PENDING gana y nombra la etapa; "plan firmado: puede iniciar";
+  "falta mandar el plan" — la fila que dirección busca cuando un caso lleva un mes
+  quieto. La MISMA derivación pinta la ficha y el resumen: dos divergirían.
+- **El export CSV es LEER**: mismo guard, mismo alcance, MISMOS filtros (la query
+  string del enlace es la de la pantalla). Con la lista truncada (>300) el export
+  se NIEGA con 413 y texto — un CSV recortado en silencio es un reporte falso.
+- **Las OPCIONES de los filtros se recortan en el server (P1-4)**: a un docente le
+  viajan SUS alumnos vigentes (`listEduCurrentAssignments`), no el padrón; a un
+  alumno, ninguna lista. Filtro de docente solo con alcance completo.
+- **Las acciones del caso existen por primera vez.** El gate de la Ola 4 estaba
+  cableado en `updateEduCase` y NINGUNA pantalla mandaba `{status}` (hueco
+  documentado en la auditoría): los casos morían en "Asignado". Ahora la ficha del
+  caso trae: INICIAR TRATAMIENTO / DAR DE ALTA (el botón solo se pinta ACTIVO con
+  la puerta firmada; si falta, se DICE qué falta — nada de botones que rebotan),
+  PAUSAR/REANUDAR/ABANDONADO (sin firma, a propósito), FIRMAR una pendiente ahí
+  mismo (lo propio no se ofrece — `batchSkip === "propia"` viene del server; la
+  RECETA se firma en la bandeja, que tiene el campo de la cédula), REGISTRAR
+  SESIÓN (nota SOAP que nace BORRADOR, NOM-004) y TRASPASAR (destino recortado por
+  alcance; el server exige misma especialidad).
+- **El resumen subió de densidad sin abrirle nada a caja**: línea de tiempo
+  clínica (notas + estudios + consentimientos + recetas, mezclados desc, con QUIÉN
+  — un consentimiento revocado lo dice EN el título), estado+espera por caso, y
+  los últimos 3 estudios con miniatura FIRMADA solo si son imagen (3 firmas de
+  Storage como tope, nunca una por estudio). Para caja `timeline` y `estudios` son
+  null: NO SE CONSULTARON (la lección del P1-4). Alumno/docente siguen sin ver un
+  peso (recurso "charges", lista blanca).
+
+### Qué se construyó
+
+- **Schema (aditivo)**: 9 columnas en `EduPatient` (bloodType, allergies,
+  chronicConditions, currentMedications, emergencyContact×3, historyRecordedAt,
+  historyRecordedById) + relación `historyRecordedBy` (SetNull: perder el nombre
+  es aceptable, perder los antecedentes no).
+- **SQL**: `sql/edu-casos.sql` — idempotente, CERO DROP, sin backfill A PROPÓSITO
+  (ponerle fecha de revisión a mil filas que nadie revisó sería fabricar la
+  constancia que la columna existe para dar).
+- **Lib**: `casos-core.ts` (nuevo, puro: espera, filtros URL, CSV) ·
+  `listEduCasosPanel` en casos.ts · antecedentes en pacientes-core/pacientes.ts ·
+  timeline/estudios/espera en resumen-core/resumen.ts.
+- **APIs**: `PATCH /api/instituto/pacientes/[id]/antecedentes` ·
+  `GET /api/instituto/casos/export`.
+- **Pantallas**: `/instituto/casos` (server + `casos-screen.tsx`, filtros en la
+  URL como la agenda) · chips y encabezado en el layout de la ficha · tarjeta de
+  antecedentes en Datos · línea de tiempo y miniaturas en Resumen ·
+  `caso-acciones.tsx` en la pestaña Casos · item "Casos" en el menú (escondido a
+  caja también por alcance, como Agenda/Mi agenda).
+- **CSS**: sección nueva al final de edu-theme.css + `.edu-table--casos` a 7
+  columnas (estaba huérfana).
+
+### Qué se probó
+
+⚠️ **La ola se REBASÓ sobre el cierre (PR #146), que aterrizó en main a media
+tarea.** Receta de siempre (diff3): git auto-fusionó 5 de los 6 compartidos
+(schema, ORQUESTA, layout del panel, edu-shell, casos.ts) y el ÚNICO conflicto
+fue `types.ts` — de los del §2, con BASE no vacía: el cierre renombró
+`padron: "Padrón"` → `"Alumnos"` y esta ola insertó `casos: "Casos"` encima; la
+resolución son LOS DOS cambios. El candado de los dos diffs dio 2+2 líneas,
+todas explicadas (mis fusiones de imports en casos.ts; sus renombres pisando mi
+texto viejo). `prisma generate` INMEDIATO tras el schema (trampa del cliente
+viejo al revés: el cierre trajo `EduCharge.idempotencyKey`, verificado con grep
+en el .d.ts junto a `historyRecordedAt`). TODOS los gates se re-corrieron sobre
+el árbol rebasado:
+
+`npm run build` **exit 0** (✓ 462/462 páginas, tabla de rutas completa con
+`/instituto/casos`, `/api/instituto/casos/export` y
+`/api/instituto/pacientes/[id]/antecedentes` — más las del cierre; lanzado FUERA
+del job del tool vía WMI con marcador — el bg del tool lo mataba a medias;
+warnings preexistentes y el spam esperado de `DATABASE_URL` sin `.env`).
+`npx tsc --noEmit` limpio salvo los
+6 errores PREEXISTENTES de `src/lib/barber/__tests__` (documentados desde la
+integración) — la primera pasada cazó dos MÍOS: el tipo casero del mapa de iconos
+(se cambió a `LucideIcon`) y la unión discriminada del parse de antecedentes, que
+con el `strict: false` de este repo no se estrecha
+(se refactorizó al estilo veredicto de `EduGateVerdict`, campos siempre
+presentes). **881/881 pruebas edu en verde** (824 base + 23 del cierre + 34 de
+esta ola, `npx tsx --test src/lib/edu/__tests__/*.test.ts`), las 34 nuevas en
+`edu-casos.test.ts`: el tri-estado (incluido "los datos mandan sobre la fecha"),
+los chips (alergias sin tope, "+N" con detail, las palabras exactas del ámbar), el
+saneo (dedupe sin acentos, los 8 grupos de sangre, teléfono, todo-vacío válido),
+la espera del caso (PENDING gana, rechazado/vencido no cuentan como firmados), los
+filtros (roundtrip query↔parse, tenant jamás filtrable, rango al revés fuera), el
+CSV (BOM, anti-fórmula, comillas) y CANDADOS DE FUENTE al estilo de la auditoría
+(el export pasa por el guard y los mismos filtros; el PATCH exige una de las dos
+llaves; `updateEduPatientAntecedentes` busca dentro del alcance y estampa fecha y
+autor juntos; `listEduCasosPanel` recorta con `eduCaseScopeWhere`). Guardia limpia
+con `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`.
+
+### Lo que NO se probó
+
+Nada corrió contra Postgres: `sql/edu-casos.sql` NO se aplicó y ningún guardado de
+antecedentes, movimiento de caso, firma, sesión ni traspaso se ejecutó contra base
+real. No se abrió un navegador: los chips, la pantalla de casos, los modales y las
+miniaturas firmadas están razonados y compilados, no vistos. El CSV nunca se
+descargó de verdad. Las miniaturas dependen de `eduSignRead` contra el bucket
+`edu-files`, que jamás se ha tocado con un objeto real. Nadie ha capturado un
+antecedente real desde el producto.
+
+### Lo que se quiso tocar y NO se tocó
+
+- **El dental**: ni `Patient`, ni el HeroCard, ni `health-questionnaire`. El
+  patrón visual de los chips se REIMPLEMENTÓ en `edu-*` (importarlo arrastraría
+  su i18n y su bug de estado).
+- **El modal de la lista de pacientes**: NO ganó campos de antecedentes — el
+  formulario único vive en la ficha, donde está quien los captura.
+- **`listEduStudentOptions`**: se usa tal cual para dirección; su recorte para
+  docentes lo trae el cierre (PR #146, ya en main tras el rebase) y no se
+  duplicó aquí — para docentes esta ola usa `listEduCurrentAssignments`, que ya
+  venía recortada. Tras el rebase conviven sin pisarse.
+- **El tamizaje**: no captura antecedentes (abre el caso, no levanta historia).
+  Cabría un aviso "sin antecedentes" en su tarjeta; se dejó para no pisar
+  `tamizaje-screen.tsx`, que el cierre tocó en esta misma ventana.
+- **Firmar RECETAS desde la ficha del caso**: pide cédula; la bandeja ya tiene
+  ese campo y duplicarlo aquí era duplicar la validación de la Ola 14.
+
+### Al desplegar
+
+1. `sql/edu-casos.sql` en Supabase (después de `edu-ola-0.sql` y `edu-ola-2.sql`;
+   idempotente, CERO DROP). ⚠️ VA ANTES DEL DEPLOY O JUNTO CON ÉL: el cliente
+   nuevo pide las 9 columnas en CUALQUIER SELECT de `edu_patients` — sin ellas,
+   toda lectura de pacientes revienta (mismo trato que la searchIndex de la 1B).
+2. NO trae backfill de permisos: cero keys nuevas.
+3. Los dos SELECT de comprobación del final del .sql tienen que dar 9 y 1.

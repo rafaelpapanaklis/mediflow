@@ -3,18 +3,31 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  ClipboardList,
+  Droplet,
+  HeartPulse,
+  Pill,
+  type LucideIcon,
+} from "lucide-react";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission, type EduPermissionKey } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
-import { eduPatientFullName } from "@/lib/edu/pacientes-core";
+import {
+  eduAntecedentesChips,
+  eduPatientFullName,
+  type EduAlertChipKind,
+} from "@/lib/edu/pacientes-core";
 import { listEduStudentOptions, listEduSupervisorOptions } from "@/lib/edu/agenda";
 import { listEduChairOptions } from "@/lib/edu/sillones";
 import { listEduPrograms } from "@/lib/edu/padron";
 import { eduTodayISO } from "@/lib/edu/agenda-core";
 import { getEduCampusScope } from "@/lib/edu/campus";
 import { eduWithCampus } from "@/lib/edu/campus-core";
-import { EDU_PATIENT_STATUS_LABELS } from "@/lib/edu/types";
+import { EDU_PATIENT_STATUS_LABELS, EDU_SEX_LABELS } from "@/lib/edu/types";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduPacienteTabs, type EduPacienteTab } from "@/components/edu/expediente/paciente-tabs";
 import { EduPacienteAcciones } from "@/components/edu/expediente/paciente-acciones";
@@ -22,6 +35,19 @@ import { EduPacienteAcciones } from "@/components/edu/expediente/paciente-accion
 export const metadata: Metadata = {
   title: "Paciente · DaleControl Institucional",
   robots: { index: false, follow: false },
+};
+
+/** Icono por clase de chip de alerta. Rojo = contraindica (alergias);
+ *  ámbar = a tener en cuenta (padecimientos, y el aviso de "sin
+ *  registrar"); info = medicamentos; gota = tipo de sangre. */
+const ALERT_ICONS: Record<EduAlertChipKind, LucideIcon> = {
+  "sin-registrar": AlertTriangle,
+  "no-refiere": Check,
+  alergia: AlertTriangle,
+  padecimiento: HeartPulse,
+  medicamento: Pill,
+  sangre: Droplet,
+  mas: HeartPulse,
 };
 
 /**
@@ -206,16 +232,56 @@ export default async function InstitutoPacienteLayout({
           <span className="edu-fichahead__folio">Folio {paciente.folio}</span>
           <h1 className="edu-fichahead__name">{eduPatientFullName(paciente)}</h1>
           <p className="edu-fichahead__meta">
-            {paciente.ageYears !== null ? `${paciente.ageYears} años` : "Sin fecha de nacimiento"} ·{" "}
-            {EDU_PATIENT_STATUS_LABELS[paciente.status]}
-            {paciente.openCases > 0
-              ? ` · ${paciente.openCases} caso${paciente.openCases === 1 ? "" : "s"} abierto${
-                  paciente.openCases === 1 ? "" : "s"
-                }`
-              : ""}
+            {/* Ola de Casos: edad, sexo, teléfono y correo — lo que antes
+                obligaba a abrir la pestaña Datos para llamar al paciente. */}
+            {[
+              paciente.ageYears !== null ? `${paciente.ageYears} años` : "Sin fecha de nacimiento",
+              paciente.sex !== "UNSPECIFIED" ? EDU_SEX_LABELS[paciente.sex] : null,
+              paciente.phone,
+              paciente.email,
+              EDU_PATIENT_STATUS_LABELS[paciente.status],
+              paciente.openCases > 0
+                ? `${paciente.openCases} caso${paciente.openCases === 1 ? "" : "s"} abierto${
+                    paciente.openCases === 1 ? "" : "s"
+                  }`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         </div>
       </header>
+
+      {/* ── Ola de Casos · LAS ALERTAS MÉDICAS ─────────────────────────────
+          Viven en el LAYOUT a propósito: se ven en TODAS las pestañas, no
+          escondidas en "Datos". Un alumno a punto de infiltrar anestesia
+          tiene que ver "Alergia: lidocaína" esté donde esté de la ficha.
+
+          🔴 "Sin antecedentes registrados" NO es "sin alergias": el chip
+          ámbar de abajo es una tarea pendiente, no una respuesta clínica —
+          la distinción la deriva eduAntecedentesChips de historyRecordedAt
+          y confundirlas es como se mata a alguien. CAJA también las ve
+          (ella las captura): este bloque cuelga de pacientes.view, no del
+          alcance clínico. */}
+      <div className="edu-fichaalertas" role="group" aria-label="Alertas médicas del paciente">
+        {eduAntecedentesChips(paciente.antecedentes).map((chip, i) => {
+          const Icon = ALERT_ICONS[chip.kind] ?? AlertTriangle;
+          return (
+            <span
+              key={`${chip.kind}-${i}`}
+              className={`edu-tag edu-tag--${chip.tone}`}
+              title={chip.detail}
+            >
+              <Icon size={12} strokeWidth={1.75} aria-hidden />
+              {chip.text}
+            </span>
+          );
+        })}
+        <Link href={`${base}/datos#antecedentes`} className="edu-fichaalertas__link">
+          <ClipboardList size={12} strokeWidth={1.75} aria-hidden />
+          Antecedentes
+        </Link>
+      </div>
 
       <EduPacienteAcciones
         patientId={paciente.id}

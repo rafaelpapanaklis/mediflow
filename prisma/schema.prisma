@@ -12493,6 +12493,7 @@ model EduUser {
   casesSupervised        EduCase[]        @relation("EduCaseSupervisor")
   appointmentsSupervised EduAppointment[] @relation("EduApptSupervisor")
   patientOriginsSet      EduPatient[]     @relation("EduPatientOriginSetBy")
+  patientHistoriesSet    EduPatient[]     @relation("EduPatientHistoryBy")
 
   /// Ola 3. NOM-004: el AUTOR de una nota clínica siempre es identificable,
   /// y es un EduUser (no un EduStudent) porque también escribe el docente.
@@ -12894,12 +12895,44 @@ model EduPatient {
   originSetById       String?
   originSetAt         DateTime?
 
+  /// ── ANTECEDENTES MÉDICOS (ola de Casos) — ES SEGURIDAD, NO ESTÉTICA ──
+  /// Un alumno a punto de infiltrar anestesia tiene que poder ver que el
+  /// paciente es cardiópata SIN abrir nada. Mismos campos y tipos que el
+  /// `Patient` del dental (allergies/chronicConditions/currentMedications/
+  /// bloodType/emergencyContact*) a propósito, para poderlos comparar un
+  /// día — pero en SU tabla: los dos productos no comparten ni una fila.
+  ///
+  /// 🔴 ARREGLO VACÍO ≠ "SIN ALERGIAS". `[]` es el default de una fila que
+  /// NADIE ha revisado. Lo que distingue "sin antecedentes registrados" de
+  /// "se le preguntó y no refiere" es `historyRecordedAt`: null = nadie los
+  /// ha capturado (la ficha lo AVISA), con fecha = alguien los revisó (y
+  /// quedó quién). Confundir esos dos estados es como se mata a alguien.
+  ///
+  /// Columnas reales en sql/edu-casos.sql (ADD COLUMN IF NOT EXISTS).
+  /// APLICARLO ANTES del deploy: si Prisma las lee sin que existan,
+  /// cualquier lectura de edu_patients revienta
+  /// (mismo trato que la searchIndex de la Ola 1B).
+  bloodType          String?
+  allergies          String[] @default([])
+  chronicConditions  String[] @default([])
+  currentMedications String[] @default([])
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+  /// Cuándo se capturaron/revisaron por última vez y quién. Se escriben
+  /// JUNTOS en cada guardado de antecedentes; nunca por separado.
+  historyRecordedAt   DateTime?
+  historyRecordedById String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   institution      EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   referredByStudent EduStudent?   @relation("EduPatientReferrer", fields: [referredByStudentId], references: [id], onDelete: SetNull)
   originSetBy       EduUser?      @relation("EduPatientOriginSetBy", fields: [originSetById], references: [id], onDelete: SetNull)
+  /// Ola de Casos: quién capturó los antecedentes. SetNull — perder el
+  /// nombre es aceptable, perder los antecedentes no.
+  historyRecordedBy EduUser?      @relation("EduPatientHistoryBy", fields: [historyRecordedById], references: [id], onDelete: SetNull)
   cases        EduCase[]
   appointments EduAppointment[]
   /// Ola 3 · el expediente. El ODONTOGRAMA y los ESTUDIOS cuelgan del

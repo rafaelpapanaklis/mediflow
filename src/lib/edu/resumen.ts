@@ -33,18 +33,30 @@ import {
   eduAppointmentScopeWhere,
   eduCaseScopeWhere,
   eduChargeScopeWhere,
+  eduPatientScopeWhere,
   eduScopeIsEmpty,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
 import {
   eduResumenAvisos,
   eduResumenScopes,
+  eduResumenTimeline,
   eduResumenVeClinico,
   eduResumenVeDinero,
   type EduPatientResumenData,
   type EduResumenCita,
+  type EduResumenEstudio,
+  type EduResumenTimelineItem,
 } from "@/lib/edu/resumen-core";
-import { EDU_CASE_CLOSED_STATUSES } from "@/lib/edu/types";
+// Ola de Casos: la derivación de "qué espera el caso" es la MISMA de la
+// pantalla global — dos derivaciones divergirían en un mes.
+import { eduCasoEsperando } from "@/lib/edu/casos-core";
+import { eduSignRead } from "@/lib/edu/storage";
+import {
+  EDU_CASE_CLOSED_STATUSES,
+  EDU_PRESCRIPTION_STATUS_LABELS,
+  EDU_STUDY_KIND_LABELS,
+} from "@/lib/edu/types";
 
 export type { EduPatientResumenData } from "@/lib/edu/resumen-core";
 
@@ -201,23 +213,107 @@ export async function getEduPatientResumen(
     prisma.eduCampus.count({ where: { institutionId } }).catch(() => 0),
   ]);
 
+  const multiSede = sedes > 1;
+  const tz = eduSafeTimeZone(timeZone);
+
+  // ── Segundo lote (solo con alcance clínico): lo que alimenta los ──────
+  // avisos, la LÍNEA DE TIEMPO, la espera de cada caso y los estudios.
+  // Cinco consultas y no más (la regla del Promise.all corto sigue).
+  //
+  // · Las NOTAS y las RECETAS se recortan por el CASO (`case: casosWhere`):
+  //   es el mismo alcance de sus pestañas.
+  // · Los ESTUDIOS cuelgan del paciente, así que su recorte es la puerta
+  //   clínica sobre el PACIENTE (eduPatientScopeWhere con el scope de
+  //   "cases") — el criterio de la Ola 3: quien abre el expediente ve
+  //   TODOS los estudios de la boca.
+  // · Los CONSENTIMIENTOS son del paciente entero, como en su pestaña
+  //   (Ola 3B): la carta de atención general no cuelga de ningún caso.
+  const openIds = casos.map((c) => c.id);
+  const [consents, approvals, notas, estudios, recetas] = veClinico
+    ? await Promise.all([
+        prisma.eduConsent.findMany({
+          where: { institutionId, patientId: id },
+          orderBy: [{ createdAt: "desc" }],
+          select: {
+            id: true,
+            caseId: true,
+            procedure: true,
+            createdAt: true,
+            createdByName: true,
+            signedAt: true,
+            revokedAt: true,
+          },
+        }),
+        openIds.length > 0
+          ? prisma.eduCaseApproval.findMany({
+              // PENDING para el aviso y la espera; APPROVED solo para la
+              // espera ("plan firmado: puede iniciar"). Los demás estados
+              // no cambian ninguna de las dos.
+              where: {
+                institutionId,
+                caseId: { in: openIds },
+                status: { in: ["PENDING", "APPROVED"] },
+              },
+              select: { caseId: true, stage: true, status: true },
+            })
+          : Promise.resolve([]),
+        prisma.eduRecord.findMany({
+          where: { institutionId, patientId: id, case: casosWhere },
+          orderBy: [{ createdAt: "desc" }],
+          take: 6,
+          select: {
+            id: true,
+            createdAt: true,
+            author: { select: { firstName: true, lastName: true, email: true } },
+            case: { select: { program: { select: { name: true } } } },
+          },
+        }),
+        prisma.eduStudy.findMany({
+          where: {
+            institutionId,
+            patientId: id,
+            patient: eduPatientScopeWhere({ institutionId, scope: scopes.clinico, now }),
+          },
+          orderBy: [{ createdAt: "desc" }],
+          take: 6,
+          select: {
+            id: true,
+            kind: true,
+            name: true,
+            mimeType: true,
+            storagePath: true,
+            createdAt: true,
+            uploadedBy: { select: { firstName: true, lastName: true, email: true } },
+          },
+        }),
+        prisma.eduPrescription.findMany({
+          where: { institutionId, patientId: id, case: casosWhere },
+          orderBy: [{ createdAt: "desc" }],
+          take: 6,
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            proposedByName: true,
+            case: { select: { program: { select: { name: true } } } },
+          },
+        }),
+      ])
+    : [[], [], [], [], []];
+
   // ── Los avisos: consentimientos y autorizaciones de ESOS casos ────────
   let avisos: EduPatientResumenData["avisos"] = [];
+  const approvalsPorCaso = new Map<string, { stage: (typeof approvals)[number]["stage"]; status: (typeof approvals)[number]["status"] }[]>();
+  for (const a of approvals) {
+    const lista = approvalsPorCaso.get(a.caseId) ?? [];
+    lista.push({ stage: a.stage, status: a.status });
+    approvalsPorCaso.set(a.caseId, lista);
+  }
   if (veClinico && casos.length > 0) {
-    const ids = casos.map((c) => c.id);
-    const [consents, pendientes] = await Promise.all([
-      prisma.eduConsent.findMany({
-        where: { institutionId, caseId: { in: ids } },
-        select: { caseId: true, signedAt: true, revokedAt: true },
-      }),
-      prisma.eduCaseApproval.findMany({
-        where: { institutionId, caseId: { in: ids }, status: "PENDING" },
-        select: { caseId: true },
-      }),
-    ]);
     const pendientesPorCaso: Record<string, number> = {};
-    for (const p of pendientes) {
-      pendientesPorCaso[p.caseId] = (pendientesPorCaso[p.caseId] ?? 0) + 1;
+    for (const a of approvals) {
+      if (a.status !== "PENDING") continue;
+      pendientesPorCaso[a.caseId] = (pendientesPorCaso[a.caseId] ?? 0) + 1;
     }
     avisos = eduResumenAvisos(
       casos.map((c) => ({
@@ -232,8 +328,70 @@ export async function getEduPatientResumen(
     );
   }
 
-  const multiSede = sedes > 1;
-  const tz = eduSafeTimeZone(timeZone);
+  // ── La línea de tiempo: cuatro orígenes, un orden ─────────────────────
+  let timeline: EduResumenTimelineItem[] | null = null;
+  let estudiosResumen: EduResumenEstudio[] | null = null;
+  if (veClinico) {
+    const items: EduResumenTimelineItem[] = [];
+    for (const n of notas) {
+      items.push({
+        kind: "nota",
+        atISO: n.createdAt.toISOString(),
+        whenLabel: stampLabel(n.createdAt, tz),
+        title: `Nota clínica · ${n.case.program.name}`,
+        who: personName(n.author),
+      });
+    }
+    for (const e of estudios) {
+      items.push({
+        kind: "estudio",
+        atISO: e.createdAt.toISOString(),
+        whenLabel: stampLabel(e.createdAt, tz),
+        title: `${EDU_STUDY_KIND_LABELS[e.kind] ?? e.kind} · ${e.name}`,
+        who: personName(e.uploadedBy),
+      });
+    }
+    for (const c of consents.slice(0, 6)) {
+      // El estado va EN el título: un consentimiento revocado que se lea
+      // como uno más es cómo alguien acaba tratando a quien dijo que no.
+      const estado = c.revokedAt ? " (revocado)" : c.signedAt ? "" : " (sin firmar)";
+      items.push({
+        kind: "consentimiento",
+        atISO: c.createdAt.toISOString(),
+        whenLabel: stampLabel(c.createdAt, tz),
+        title: `Consentimiento · ${c.procedure}${estado}`,
+        who: c.createdByName,
+      });
+    }
+    for (const r of recetas) {
+      items.push({
+        kind: "receta",
+        atISO: r.createdAt.toISOString(),
+        whenLabel: stampLabel(r.createdAt, tz),
+        title: `Receta · ${r.case.program.name} (${(EDU_PRESCRIPTION_STATUS_LABELS[r.status] ?? r.status).toLowerCase()})`,
+        who: r.proposedByName,
+      });
+    }
+    timeline = eduResumenTimeline(items);
+
+    // Los últimos 3 estudios, con miniatura FIRMADA solo si son imagen
+    // (una tomografía comprimida no tiene miniatura barata). Tres firmas
+    // como mucho — nunca una por cada estudio del paciente.
+    const top = estudios.slice(0, 3);
+    const thumbs = await Promise.all(
+      top.map((e) =>
+        e.mimeType.startsWith("image/") ? eduSignRead(e.storagePath, 600) : Promise.resolve(""),
+      ),
+    );
+    estudiosResumen = top.map((e, i) => ({
+      id: e.id,
+      kindLabel: EDU_STUDY_KIND_LABELS[e.kind] ?? e.kind,
+      name: e.name,
+      whenLabel: stampLabel(e.createdAt, tz),
+      byName: personName(e.uploadedBy),
+      thumbUrl: thumbs[i] ? thumbs[i] : null,
+    }));
+  }
 
   return {
     visitas,
@@ -249,6 +407,7 @@ export async function getEduPatientResumen(
           studentMatricula: c.student.matricula,
           supervisorName: c.supervisor ? personName(c.supervisor) : null,
           abiertoLabel: eduFormatDayShort(eduUtcToZoned(c.openedAt, tz).dayISO),
+          espera: eduCasoEsperando(c.status, approvalsPorCaso.get(c.id) ?? []),
         }))
       : null,
     saldo: dinero
@@ -259,5 +418,7 @@ export async function getEduPatientResumen(
         }
       : null,
     avisos,
+    timeline,
+    estudios: estudiosResumen,
   };
 }

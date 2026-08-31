@@ -11,6 +11,7 @@ import {
   Calendar,
   ClipboardList,
   Contact,
+  FolderOpen,
   Gauge,
   GraduationCap,
   Home,
@@ -66,6 +67,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   calendar: Calendar,
   contact: Contact,
   chair: Armchair,
+  // Ola de Casos — la pantalla global de casos.
+  "folder-open": FolderOpen,
   // Ola 5 — tarifarios y caja.
   banknote: Banknote,
   tags: Tags,
