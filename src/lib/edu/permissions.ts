@@ -174,6 +174,29 @@ export const EDU_ALL_PERMISSIONS = {
   // necesita tocar esta pantalla.
   "sedes.view": "Ver las sedes del instituto",
   "sedes.manage": "Dar de alta sedes y decidir quién entra a cada una",
+  // ── Ola 7 · el panel de dirección ────────────────────────────────────
+  // UNA sola key, y la exigen /instituto/direccion y los tres endpoints de
+  // /api/instituto/direccion (la prueba de
+  // __tests__/edu-permissions.test.ts falla si se queda sin lector de
+  // servidor).
+  //
+  // 🔴 NO SE PARTE EN "view" + "export". Lo que se exporta es EXACTAMENTE
+  // lo que se ve: un interruptor que dejara mirar el tablero y no
+  // descargarlo no cerraría nada —quien lo ve puede teclearlo— y el
+  // catálogo de este vertical no admite interruptores que no cierren una
+  // puerta.
+  //
+  // 🔴 Y NO SE LE DA A NADIE MÁS QUE A DIRECCIÓN, ni siquiera al docente
+  // que coordina. Este tablero cruza el dinero de la escuela con el avance
+  // de cada alumno: es la foto completa del negocio y de las personas. Si
+  // una escuela quiere que su coordinador la vea, se le enciende por
+  // override desde la pantalla de permisos — a sabiendas y una por una.
+  //
+  // ⚠️ El permiso abre la pantalla; el ALCANCE la cierra otra vez. Con
+  // esta key encendida sobre un DOCENTE, src/lib/edu/direccion.ts se niega
+  // a pintar el tablero: sus cuatro recursos no devuelven "all" y un total
+  // recortado presentado como el total de la clínica sería un dato falso.
+  "direccion.panel": "Abrir el panel de dirección del instituto",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -279,6 +302,16 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
     // pareciera "darlo de baja".
     title: "Sedes",
     keys: ["sedes.view", "sedes.manage"],
+  },
+  {
+    // Ola 7. Grupo PROPIO y de una sola casilla, y va al final: es la única
+    // del catálogo que no abre una parcela del producto sino la FOTO
+    // COMPLETA —el dinero de la escuela cruzado con el avance de cada
+    // alumno—. Metida dentro de "Evaluación académica" se tildaría de
+    // pasada al darle el bloque a un coordinador, que es exactamente lo
+    // que no debe ocurrir sin querer.
+    title: "Dirección",
+    keys: ["direccion.panel"],
   },
 ];
 
@@ -459,6 +492,26 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  *
  * `sedes.view` y `sedes.manage` son para ADMINISTRAR: dar de alta un
  * campus, cerrarlo y repartir quién entra a cuál.
+ *
+ * ── Ola 7 · el panel de dirección ───────────────────────────────────────
+ * UNA key, "direccion.panel", y la lleva SOLO DIRECCION — como
+ * "equipo.manage", "padron.manage", "supervision.assign",
+ * "sillones.manage", "tarifarios.manage", "rubricas.manage" y
+ * "requisitos.manage". Lo que SÍ es nuevo es otra cosa, y es la línea de
+ * la ola:
+ *
+ * 🔴 ES LA PRIMERA KEY CUYO ALCANCE NIEGA EN VEZ DE RECORTAR. En las seis
+ * olas anteriores, "el permiso abre la pantalla y el alcance decide las
+ * filas" permitía darle la misma key a tres roles sin que vieran lo mismo.
+ * Este tablero no admite ese reparto, porque su contenido ES el total: "la
+ * clínica ahora", "cobrado del periodo", "ocupación promedio". Un docente
+ * con esta key vería los sillones de sus alumnos bajo el título "La
+ * clínica ahora" y leería un número falso.
+ *
+ * Por eso el alcance no lo RECORTA aquí: lo NIEGA. src/lib/edu/direccion.ts
+ * comprueba que los cuatro recursos devuelvan "all" y se niega a pintar el
+ * tablero si no. Encenderle la casilla a alguien por error no le enseña
+ * media escuela: no le enseña nada, y le dice por qué.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
   DIRECCION: [
@@ -518,6 +571,11 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // override desde la pantalla de permisos — a sabiendas.
     "sedes.view",
     "sedes.manage",
+    // ── Ola 7 ───────────────────────────────────────────────────────────
+    // SOLO dirección, como las otras siete keys de administración. Ver el
+    // tablero es ver la escuela entera: el dinero, la ocupación de los
+    // sillones y quién va atrasado, todo en la misma pantalla.
+    "direccion.panel",
   ],
   DOCENTE: [
     "inicio.view",

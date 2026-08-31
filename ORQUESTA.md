@@ -28037,3 +28037,236 @@ Postgres 13, pero no se corrió).
 7. **Repartir el acceso** en `/instituto/sedes` → "Quién entra". Y tenerlo presente al hacerlo: quien
    no tiene NINGUNA sede marcada entra a todas, y quitarle a alguien la última se las abre todas otra
    vez. La pantalla lo avisa en el momento.
+## DaleControl INSTITUCIONAL — Ola 7 · EL PANEL DE DIRECCIÓN (rama `feat/edu-ola-7`)
+
+**Una pantalla nueva, `/instituto/direccion`, y un permiso nuevo, `direccion.panel`.** Es lo
+que el director de la escuela abre para ver cómo va su clínica: no una lista de problemas, sino
+lo que está pasando. Cero tablas nuevas.
+
+### 🔴 Lo primero, porque era la decisión de la ola: NO hay «alumnos conectados»
+
+El contrato pedía cuatro cifras en vivo, y dos de ellas —**alumnos conectados** y **docentes en
+piso**— no son derivables: el producto **no registra presencia**. Nadie ficha al entrar a la
+clínica, y ninguna de las siete olas guardó nunca un `lastSeenAt`.
+
+Se podía resolver de dos formas. Se eligió **la segunda: no pintarlas, y poner en su lugar dos
+cifras que sí son ciertas.** El latido —una columna que la sesión del panel toca cada pocos
+minutos— se descartó por una razón de producto, no de esfuerzo: **un latido cuenta pestañas
+abiertas, no gente.** El alumno que está tratando a un paciente con el teléfono en el bolsillo
+contaría cero; una sesión olvidada en la computadora de recepción contaría uno toda la tarde.
+Proyectado en la pared de una junta, «23 conectados» se lee como «23 alumnos en la clínica», y
+sería falso exactamente cuando importa. Además cuesta: 120 alumnos son 120 `UPDATE` cada pocos
+minutos sobre `edu_users`, todo el día, para un número sobre el que nadie puede actuar.
+
+Las dos que se pintan en su lugar salen de las citas de HOY y son exactas:
+
+- **Pacientes en la clínica** — los que están en `CHECKED_IN`, `IN_CHAIR` o `IN_PROGRESS`:
+  llegaron y no se han ido. Incluye a los que esperan en recepción, que es media respuesta a
+  «¿cuánta gente hay dentro?».
+- **Docentes responsables** — los docentes distintos que responden AHORA por lo que hay en los
+  sillones: el `supervisorUserId` de la cita y, cuando la cita no lo trae (que es lo normal), el
+  titular **vigente** del alumno. Y con ella sale gratis la que de verdad hay que mirar: **cuántos
+  sillones ocupados no tienen a nadie que responda por ellos**, que pone la tarjeta en rojo.
+
+Las otras dos del contrato se quedaron como estaban: **atendiendo ahora** (alumnos con paciente
+en el sillón) y **sillones en uso (x/total)**. `CHECKED_IN` **no** ocupa sillón — el paciente
+llegó a recepción y todavía no se sentó—, y esa distinción es justo la que hace útil la cifra:
+es la que decide si caben más pacientes.
+
+La pantalla **lo dice en voz alta**, no lo esconde en un comentario: *«No decimos ‘alumnos
+conectados’ porque el producto no registra presencia — nadie ficha al entrar a la clínica—, y un
+número de sesiones abiertas no es gente en el piso.»*
+
+### La regla que gobierna todo lo demás: ningún número inventado
+
+Un tablero de dirección se proyecta y se lee en voz alta; un número aproximado ahí no es «una
+aproximación», es una decisión tomada sobre un dato falso. De esa regla salieron cinco negativas
+concretas, y las cinco están probadas:
+
+1. **La variación no inventa un porcentaje cuando el periodo anterior fue CERO.** No hay
+   «+100 %» ni «+∞ %»: dice *«antes no hubo ninguno (0 → 7)»*.
+2. **Un sillón sin horario capturado no tiene ocupación.** «Siempre abierto» (regla de la Ola 2)
+   no es un denominador: esos sillones quedan **fuera** de la media y la pantalla dice cuántos
+   son y dónde capturarlo. Y la ocupación **se topa en 100 %**: un «137 %» proyectado en una
+   junta es una pregunta que nadie puede contestar.
+3. **El dinero que no se puede atribuir a una especialidad no se reparte a ojo.** Un cobro solo
+   tiene especialidad si trae caso, y caja cobra sin abrir expediente: lo que queda fuera sale
+   en su propia fila, con la acción que lo arregla.
+4. **El semáforo académico no se recalcula**: sale de la Ola 6 (`listEduEvaluacion` →
+   `eduAtrasoVerdict`), con su motivo y su umbral **importado, no copiado**. Una segunda cuenta
+   del mismo número es cómo se llega a que Evaluación diga 5 y Dirección diga 6.
+5. **Cuando el periodo es más grande que el tope de memoria, se dice.** No hay un total que se
+   quedó corto sin avisar.
+
+### 🔴 El desglose del dinero es un CONTROL, no una curiosidad
+
+La tarifa de **paciente de alumno** es más barata que la de público general, y la regla que la
+aplica es automática (`EduFeeSchedule.rule = REFERRED_BY_STUDENT`, Ola 5). El bloque de dinero
+**cruza dos cosas que hasta hoy nadie había cruzado**: la lista de precios que se **aplicó**
+contra el **origen real** del paciente (`EduPatient.referredByStudentId`). De ahí salen dos
+filas que son el control:
+
+- 🔴 **Tarifa de alumno a paciente que llegó solo** — roja en cuanto hay una. O falta marcar
+  quién trajo a ese paciente, o se cobró de menos.
+- ⚠️ **Paciente de alumno cobrado con la lista general** — ámbar. Al revés: o se le cobró de
+  más, o el origen se marcó después del cobro.
+
+Y una tercera, honesta: los cobros **sin lista guardada** no se pueden clasificar, así que no
+cuentan como correctos **ni** como incorrectos — se enseñan aparte.
+
+### Cada cifra abre la lista que hay detrás
+
+Un número que no se puede abrir no sirve para decidir: «7 casos esperando firma» no es
+accionable, «estos siete, y el más viejo lleva dos horas» sí. **Las 15 listas** viven en un
+catálogo (`EDU_DIR_DETALLE_KEYS`) y una prueba mecánica falla si una key se queda sin su `case`
+en el servidor o sin nadie que la abra en la pantalla — el mismo candado que
+`edu-permissions.test.ts` le pone a los permisos muertos.
+
+**Las listas que el panel ya tiene en memoria** (la rejilla de sillones, la tabla por
+especialidad, los alumnos, el sillón a sillón) se abren **sin pedirle nada al servidor**. Las de
+registros se piden **al abrirlas**: cargar quince listas por si acaso sería una pantalla de ocho
+segundos, y un tablero de ocho segundos deja de abrirse a la semana.
+
+### El semáforo significa siempre lo mismo, y por eso hay tan poco color
+
+**Rojo = alguien tiene que actuar · ámbar = vigilar · verde = va bien · gris = es un dato, no un
+juicio.** Las tarjetas de actividad (pacientes atendidos, tamizajes, cobrado) van en **gris a
+propósito**: teñirlas de verde enseñaría a ignorar el verde. La leyenda está impresa en la
+pantalla, arriba, para que nadie tenga que adivinarlo. Un sillón **libre** es gris y no rojo: a
+las siete de la tarde están todos libres.
+
+El único umbral inventado de la ola tiene nombre y vive en un solo sitio:
+`EDU_DIR_ESPERA_ROJA_MIN = 15` — a partir de quince minutos esperando una firma, el sillón pasa
+de ámbar a rojo. Sin umbral, un sillón se pondría rojo el segundo en que el alumno manda la
+autorización, y la dirección dejaría de mirar el tablero en una semana.
+
+### Rendimiento: el presupuesto de consultas es parte del diseño
+
+El tablero cruza casi todas las tablas del vertical, así que la regla fue **una consulta por
+tabla y por ventana, nunca una por fila**:
+
+- **Bloque en vivo** (el que se refresca solo): **4 consultas**, en dos grupos de 2. Es su propio
+  endpoint —no el panel entero— porque refrescar todo cada 25 s volvería a cruzar casos, cobros,
+  pagos y requisitos para actualizar cuatro cifras que caben en una consulta de citas de hoy.
+- **Panel del periodo**: **14 consultas** en tres grupos de **6, 6 y 2** (la regla del repo es
+  menos de 7 por `Promise.all`), más las 4 internas de `listEduEvaluacion`.
+- La página llama a los dos **en secuencia**, no en paralelo: encadenar dos bloques de seis
+  dejaría doce conexiones simultáneas contra el mismo pool.
+- Lo que se puede sumar en Postgres se suma allí (`groupBy` de los pagos, `aggregate` de las
+  autorizaciones) para no traer filas que solo se iban a sumar.
+- El latido del cliente **se para con la pestaña oculta**: un tablero proyectado y olvidado no
+  tiene por qué consultar la base toda la tarde.
+
+**Cuatro índices nuevos**, y los cuatro tienen una consulta concreta detrás:
+`edu_cases_abierto_idx` y `edu_cases_cerrado_idx` (los rangos de «tratamientos iniciados» y
+«terminados» — `edu_cases` no tenía ninguno por fecha), `edu_appointments_estado_idx` (el bloque
+en vivo, que corre cada 25 s) y `edu_students_program_idx` (el filtro de especialidad, que se
+toca en cada fila de la tabla comparativa).
+
+### 🔴 El alcance aquí NIEGA, no recorta — y es la primera vez en el vertical
+
+En las seis olas anteriores, «el permiso abre la pantalla y el alcance decide las filas» permitía
+darle la misma key a tres roles sin que vieran lo mismo. **Este tablero no admite ese reparto,**
+porque su contenido *es* el total: «la clínica ahora», «cobrado del periodo», «ocupación
+promedio». Un docente con `direccion.panel` encendido por error vería los sillones de sus
+alumnos bajo el título «La clínica ahora» y leería un número falso.
+
+Así que `src/lib/edu/direccion.ts` comprueba que **los cuatro recursos** de `visibility.ts`
+(`patients`, `appointments`, `cases`, `charges`) devuelvan alcance **completo**, y si no,
+contesta 403 con el motivo escrito para una persona. Encenderle la casilla a alguien por error
+no le enseña media escuela: no le enseña nada, y le dice por qué. (`direccion.panel` la lleva
+**solo DIRECCION**, como las otras siete keys de administración del catálogo.)
+
+### El papel, por dos caminos y no por tres
+
+En una acreditación esto se pide impreso, y se resolvió así:
+
+- **CSV** (`/api/instituto/direccion/export`) para lo que hay que **sumar** — se pega en una hoja
+  de cálculo y se cuadra. Reusa el escapado de la Ola 6, incluido el apóstrofo que impide que una
+  celda preparada («`=SUM(A1:A9)`» como nombre de especialidad) se convierta en fórmula de Excel,
+  y el BOM que evita que «Rodríguez» salga «RodrÃ­guez».
+- **`@media print`** sobre la propia pantalla para lo que hay que **enseñar**: el tablero tal
+  como se ve, sin el chrome del panel, con saltos de página por bloque y el color del semáforo
+  forzado (`print-color-adjust: exact`) — aunque el color nunca es la única señal: cada estado
+  lleva su texto al lado.
+
+Un PDF generado aparte habría sido una **tercera** versión del mismo tablero, que es como se
+acaba con tres cifras distintas del mismo mes. Y el CSV **sale de las mismas funciones que la
+pantalla**, no de una consulta «para exportar».
+
+### Diseño
+
+Móvil primero, como todo el vertical, pero con la segunda lectura encima: **se proyecta**. De ahí
+las cifras en `clamp()` (crecen con la ventana), los **números tabulares** —una columna de cifras
+que baila no se puede comparar de un vistazo— y el contraste alto. El ancho sube a 1440 px en
+pantallas grandes con una clase propia (`.edu-page--ancha`): el resto del vertical mide 1100
+porque son formularios, y aquí lo que se compara son columnas.
+
+Todo con clases `edu-` en `edu-theme.css`, reusando lo que ya existía (`.edu-seg`, `.edu-table`,
+`.edu-tag`, `.edu-progreso`, `.edu-modal`, `.edu-kpi`). Lo nuevo es la familia `edu-dir-*`: la
+rejilla de sillones, la cifra grande con su franja de semáforo y la hoja impresa.
+
+**Pendientes va SEXTO y del mismo tamaño que los demás**, no arriba y en rojo: un bloque de
+quejas gigante convierte el tablero en una lista de quejas, se mira dos semanas y se deja de
+abrir.
+
+### Números y estructura
+
+**1 pantalla** (`/instituto/direccion`) · **4 endpoints** (`GET /api/instituto/direccion`,
+`…/ahora`, `…/detalle`, `…/export`) · **1 módulo puro** (`direccion-core.ts`) + **1 de servidor**
+(`direccion.ts`) · **1 componente cliente** (`direccion-screen.tsx`) · **1 permiso**
+(`direccion.panel`) · **15 listas** de detalle · **4 índices** · **0 tablas, 0 columnas, 0 enums,
+0 llaves foráneas**.
+
+**Verificación de esta rama:** `npm run build` ✅ (455/455 páginas; `/instituto/direccion` y las
+4 rutas de API nuevas registradas) · `npx tsc --noEmit` ✅ para el vertical (los mismos **6
+errores ajenos de barber** preexistentes en `origin/main`) · **564 pruebas del vertical en
+verde**, de ellas **48 nuevas** (`edu-direccion` **41**, `edu-permissions` pasa de 40 a **47**) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅ (15 propios,
+1 compartido declarado, 0 prohibidos).
+
+**Verificación visual:** se renderizó el marcado del tablero contra `edu-theme.css` en Chrome, a
+1440 px y a 390 px, y **encontró tres cosas que se arreglaron**: la etiqueta del periodo salía
+«Últimos 7 **D**ías · 25 **A**go» por un `text-transform: capitalize` heredado de la agenda; la
+rejilla de sillones se caía a **una** columna en un teléfono de 390 px (por ocho píxeles), y el
+tablero dejaba un tercio de la pared en blanco con el ancho de 1100 px del resto del vertical.
+
+**Lo que NO se probó, y hay que probar con base de datos:** ninguna consulta corrió contra
+Postgres — `sql/edu-ola-7.sql` **no se aplicó** (la orden lo prohibía) y este worktree no tiene
+`DATABASE_URL`. En concreto, **sin datos reales no se comprobó**: que las 14 consultas del panel
+devuelvan lo que se espera, el rendimiento real con un instituto lleno, el refresco automático
+del bloque en vivo, la descarga del CSV, la hoja impresa desde el navegador, ni las 15 listas de
+detalle. Todo lo comprobado son las **funciones puras** (ventana, variación, ocupación, semáforo,
+CSV) y **la forma** de los `where`.
+
+**Al desplegar:**
+
+1. **`sql/edu-ola-7.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/1b/2/3/3b/4/5/6.sql`. Idempotente, cero DROP, cero tablas: son **4 índices** y
+   tres `COMMENT ON`.
+2. El **backfill del override** (sección 3 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío: el override **reemplaza** al default, así que `direccion.panel`
+   no le llega sola a quien ya tenga uno guardado. Es **un** solo bloque: la key la lleva
+   únicamente DIRECCION.
+3. **Comprobar que los sillones tienen horario** (`/instituto/sillones`). Sin él, la ocupación
+   sale «sin calcular» — a propósito, pero con la mitad del bloque de uso apagada.
+4. **Comprobar que las generaciones tienen `endDate`** (`/instituto/padron/estructura`), por lo
+   mismo que en la Ola 6: sin fechas, el avance por especialidad sale «sin calcular».
+5. **Colgarle el caso a los cobros** que se puedan (ficha del paciente). Un cobro sin caso no se
+   puede atribuir a una especialidad — el tablero lo dice, pero la fila «sin caso» se encoge en
+   cuanto se empieza a hacer.
+
+**Deuda conocida que esta ola NO tocó:** los **2 P0 y 2 P1** de `docs/audits/EDU_AUDIT.md`
+(PR #135) siguen abiertos. Ninguno vive en el código de esta ola y ninguno se agravó con ella —
+el panel de dirección solo LEE, y lee con alcance completo por definición.
+
+Pero **uno de ellos cambió cómo se escribió el bloque en vivo**, y conviene que quede escrito:
+el **P0-2** dice que la agenda nunca manda `caseId`, así que casi ninguna cita está enganchada a
+su caso. La versión obvia de «esperando docente» —pedir las autorizaciones PENDIENTES de los
+`caseId` de las citas que hay en los sillones— habría funcionado en una demo y **casi nunca se
+habría encendido en producción**, que es la peor clase de bug: uno que se ve exactamente igual
+que «hoy nadie está esperando». La rejilla empareja por **dos claves**: por `caseId` cuando la
+cita lo trae, y por **(paciente + alumno)** cuando no, sobre las pendientes del instituto —que
+son pocas, es la bandeja del docente— y descartando los casos cerrados. Cuesta la misma consulta
+y el mismo viaje. Cuando el P0-2 se arregle, el primer camino cubrirá todo y el segundo se
+quedará como cinturón.

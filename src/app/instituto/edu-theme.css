@@ -4247,3 +4247,796 @@ select.edu-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   16 · Ola 7 · EL PANEL DE DIRECCIÓN
+
+   Se lee en DOS sitios que no se parecen en nada, y las dos lecturas
+   mandan sobre el diseño:
+
+   1. PROYECTADO EN UNA JUNTA, a tres metros de la pared. De ahí las cifras
+      grandes (clamp: crecen con la ventana), los números TABULARES —una
+      columna de cifras que baila se lee mal y se compara peor— y el
+      contraste alto: nada de gris claro sobre blanco para un dato.
+   2. EN UN TELÉFONO, de pie, como todo el vertical. Móvil primero: una
+      columna, y el escritorio se pide con min-width.
+
+   🔴 EL COLOR NUNCA ADORNA. Solo hay tres colores con significado y
+   significan lo mismo en toda la pantalla:
+      rojo  → alguien tiene que actuar
+      ámbar → vigilar
+      verde → va bien
+   Una cifra que no puede ponerse roja por ninguna razón va en gris. Por
+   eso las tarjetas de actividad (pacientes atendidos, tamizajes, cobrado)
+   NO llevan color: son un dato, no un juicio.
+
+   ⚠️ Se reusa todo lo que ya existe (.edu-card, .edu-kpi, .edu-seg,
+   .edu-table, .edu-tag, .edu-progreso, .edu-modal). Aquí abajo solo está
+   lo que no tenía dónde vivir: la rejilla de sillones, la cifra grande y
+   la hoja impresa.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── El ancho ────────────────────────────────────────────────────────
+   El resto del vertical mide 1100 px porque son formularios y listas: más
+   ancho, un renglón de texto se vuelve incómodo de leer. Este tablero es
+   lo contrario — se PROYECTA, y lo que se compara son columnas de cifras,
+   así que en una pantalla grande gana ancho en vez de dejar un tercio de
+   la pared en blanco. Solo esta pantalla lleva la clase. */
+@media (min-width: 1280px) {
+  .edu-page--ancha {
+    max-width: 1440px;
+  }
+}
+
+/* ── La barra de filtros ─────────────────────────────────────────────── */
+.edu-dir-filtros {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-dir-filtros__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.edu-dir-filtros__sep {
+  flex: 1 1 auto;
+}
+
+.edu-dir-rango {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.edu-dir-rango .edu-field {
+  min-width: 150px;
+}
+
+.edu-dir-ventana {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-dir-ventana__label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--edu-text-1);
+  /* ⚠️ SIN `text-transform: capitalize`, al revés que .edu-daybar__label de
+     la agenda. Aquí la etiqueta ya empieza en mayúscula ("Últimos 7 días",
+     "Hoy") y capitalizar cada palabra la dejaba en "Últimos 7 Días · 25
+     Ago – 31 Ago", que en español está mal. */
+}
+
+/* ── Un bloque del tablero ───────────────────────────────────────────── */
+.edu-dir-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edu-dir-bloque__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.edu-dir-bloque__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.edu-dir-bloque__lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+  max-width: 78ch;
+}
+
+/* ── La cifra grande ─────────────────────────────────────────────────── */
+.edu-dir-cifras {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 720px) {
+  .edu-dir-cifras {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+}
+
+.edu-dir-cifra {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  /* La franja de la izquierda es donde vive el semáforo: se ve de lejos y
+     no obliga a teñir el fondo, que es lo que haría ilegible el número. */
+  border-left: 4px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* Cuando la cifra ABRE una lista es un <button> de verdad: con teclado se
+   tabula y con lector de pantalla se anuncia como botón. */
+button.edu-dir-cifra {
+  cursor: pointer;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+button.edu-dir-cifra:hover {
+  border-color: var(--edu-line-brand);
+  box-shadow: var(--edu-shadow-2);
+}
+
+.edu-dir-cifra--actuar {
+  border-left-color: var(--edu-danger);
+}
+
+.edu-dir-cifra--vigilar {
+  border-left-color: var(--edu-amber-700);
+}
+
+.edu-dir-cifra--ok {
+  border-left-color: var(--edu-ok);
+}
+
+.edu-dir-cifra__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-dir-cifra__n {
+  /* Crece con la ventana: en un teléfono cabe, y proyectado se lee. */
+  font-size: clamp(28px, 5.2vw, 42px);
+  line-height: 1.05;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  /* 🔴 Sin esto, una columna de cifras se desalinea al cambiar de dígito y
+     comparar dos periodos deja de ser posible de un vistazo. */
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-dir-cifra__n--dinero {
+  font-size: clamp(22px, 3.8vw, 32px);
+}
+
+.edu-dir-cifra__note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-2);
+}
+
+.edu-dir-cifra__var {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  /* 🔴 La variación NO se pinta de color: subir no siempre es bueno (citas
+     perdidas) y bajar no siempre es malo. La flecha dice la dirección; el
+     juicio lo pone quien lee. */
+  color: var(--edu-text-2);
+}
+
+/* La segunda cifra de la misma tarjeta ("iniciados · terminados"). */
+.edu-dir-cifra__sub {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--edu-line);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  cursor: pointer;
+}
+
+.edu-dir-cifra__sub:hover .edu-dir-cifra__subn {
+  text-decoration: underline;
+}
+
+.edu-dir-cifra__subn {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-dir-cifra__sublabel {
+  font-size: 12px;
+  color: var(--edu-text-2);
+}
+
+/* ── El pulso de "en vivo" ───────────────────────────────────────────── */
+.edu-dir-vivo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-dir-vivo__punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--edu-ok);
+  animation: edu-dir-latido 2.4s ease-in-out infinite;
+}
+
+.edu-dir-vivo__punto--parado {
+  background: var(--edu-text-3);
+  animation: none;
+}
+
+@keyframes edu-dir-latido {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edu-dir-vivo__punto {
+    animation: none;
+  }
+}
+
+/* ── La rejilla de sillones ──────────────────────────────────────────── */
+.edu-dir-sillones {
+  display: grid;
+  /* 🔴 DOS MEDIDAS, Y LA DEL TELÉFONO ES LA QUE MANDA. Con un mínimo de
+     176 px, en una pantalla de 390 px no caben DOS columnas por ocho
+     píxeles y la rejilla se cae a UNA: dieciocho sillones, uno debajo de
+     otro, es un scroll que nadie hace de pie en el piso clínico. Con 150
+     caben dos y se estiran a ~175 px cada una. */
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+@media (min-width: 720px) {
+  /* Con sitio de sobra, columnas más anchas: "María Fernanda Rodríguez" y
+     "Esperando docente · 1 h 12 min" caben en dos renglones en vez de
+     cuatro, y la rejilla se lee de un vistazo — que es lo único que esta
+     rejilla tiene que hacer. */
+  .edu-dir-sillones {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  }
+}
+
+.edu-dir-sillon {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-top: 3px solid var(--edu-line-strong);
+  border-radius: 10px;
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* Libre: gris. Un sillón vacío a las siete de la tarde no es un problema,
+   y pintarlo de rojo enseñaría a ignorar el rojo. */
+.edu-dir-sillon--libre {
+  background: var(--edu-surface-2);
+  border-top-color: var(--edu-line);
+}
+
+.edu-dir-sillon--atendiendo {
+  border-top-color: var(--edu-ok);
+}
+
+.edu-dir-sillon--espera {
+  border-top-color: var(--edu-amber-700);
+  background: var(--edu-amber-50);
+}
+
+.edu-dir-sillon--espera-larga {
+  border-top-color: var(--edu-danger);
+  background: var(--edu-danger-soft);
+}
+
+.dark .edu-dir-sillon--espera {
+  background: rgba(180, 83, 9, 0.18);
+}
+
+.edu-dir-sillon__n {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-dir-sillon__quien {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.edu-dir-sillon__meta {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-dir-sillon__estado {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-dir-sillon--espera .edu-dir-sillon__estado {
+  color: var(--edu-amber-700);
+}
+
+.edu-dir-sillon--espera-larga .edu-dir-sillon__estado {
+  color: var(--edu-danger);
+}
+
+.edu-dir-sillon--atendiendo .edu-dir-sillon__estado {
+  color: var(--edu-ok);
+}
+
+.edu-dir-sillon--libre .edu-dir-sillon__estado {
+  color: var(--edu-text-3);
+}
+
+/* ── La leyenda del semáforo ─────────────────────────────────────────── */
+.edu-dir-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 8px 10px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--edu-text-2);
+}
+
+.edu-dir-leyenda__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edu-dir-punto {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--edu-text-3);
+  flex: 0 0 auto;
+}
+
+.edu-dir-punto--actuar {
+  background: var(--edu-danger);
+}
+
+.edu-dir-punto--vigilar {
+  background: var(--edu-amber-700);
+}
+
+.edu-dir-punto--ok {
+  background: var(--edu-ok);
+}
+
+/* ── Las tablas de esta pantalla ─────────────────────────────────────── */
+.edu-table--especialidades {
+  --edu-cols: minmax(150px, 1.6fr) 84px 104px 92px 116px minmax(160px, 1.4fr) 116px;
+}
+
+.edu-table--usosillones {
+  --edu-cols: minmax(140px, 1.4fr) 80px 116px 124px minmax(140px, 1fr);
+}
+
+.edu-table--diralumnos {
+  --edu-cols: 104px minmax(150px, 1.5fr) minmax(120px, 1fr) 88px 80px 96px 116px;
+}
+
+/* Una fila que se puede tocar para filtrar el tablero entero. */
+.edu-dir-fila-click {
+  cursor: pointer;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  padding: 0;
+}
+
+.edu-dir-fila-click:hover .edu-row,
+.edu-dir-fila-click:focus-visible .edu-row {
+  background: var(--edu-hover);
+}
+
+/* ── El dinero ───────────────────────────────────────────────────────── */
+.edu-dir-money {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+  overflow: hidden;
+}
+
+.edu-dir-money__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--edu-line);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+button.edu-dir-money__fila {
+  cursor: pointer;
+}
+
+button.edu-dir-money__fila:hover {
+  background: var(--edu-hover);
+}
+
+.edu-dir-money__fila:last-child {
+  border-bottom: 0;
+}
+
+.edu-dir-money__k {
+  font-size: 13.5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.edu-dir-money__v {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.edu-dir-money__nota {
+  flex: 1 0 100%;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-2);
+}
+
+/* 🔴 LA FILA DE CONTROL. Es la única del bloque de dinero que puede ponerse
+   roja, y solo cuando hay algo que revisar: la tarifa barata aplicada a
+   alguien que llegó solo a la clínica. */
+.edu-dir-money__fila--control {
+  background: var(--edu-danger-soft);
+}
+
+.edu-dir-money__fila--control .edu-dir-money__v,
+.edu-dir-money__fila--control .edu-dir-money__k {
+  color: var(--edu-danger);
+  font-weight: 700;
+}
+
+.edu-dir-money__fila--vigilar {
+  background: var(--edu-amber-50);
+}
+
+.dark .edu-dir-money__fila--vigilar {
+  background: rgba(180, 83, 9, 0.16);
+}
+
+.edu-dir-money__fila--vigilar .edu-dir-money__v {
+  color: var(--edu-amber-700);
+}
+
+.edu-dir-money__fila--fuerte {
+  background: var(--edu-surface-2);
+}
+
+.edu-dir-money__fila--fuerte .edu-dir-money__v {
+  font-size: 19px;
+}
+
+/* ── El detalle que hay detrás de una cifra ──────────────────────────── */
+.edu-dir-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-dir-detalle__fila {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-left: 3px solid var(--edu-line);
+  border-radius: 10px;
+}
+
+.edu-dir-detalle__fila--actuar {
+  border-left-color: var(--edu-danger);
+}
+
+.edu-dir-detalle__fila--vigilar {
+  border-left-color: var(--edu-amber-700);
+}
+
+.edu-dir-detalle__titulo {
+  font-size: 14px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.edu-dir-detalle__sub {
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-dir-detalle__campos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-dir-detalle__campo b {
+  font-weight: 700;
+}
+
+.edu-dir-detalle__campo span {
+  color: var(--edu-text-3);
+}
+
+/* ── Los alumnos ─────────────────────────────────────────────────────── */
+.edu-dir-alumnos {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 1024px) {
+  .edu-dir-alumnos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.edu-dir-alumno {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-dir-alumno:last-child {
+  border-bottom: 0;
+}
+
+.edu-dir-alumno__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.edu-dir-alumno__name {
+  font-size: 14px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.edu-dir-alumno__meta {
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 🔴 El motivo va SIEMPRE visible, nunca en un tooltip: es la frase que la
+   dirección lee en voz alta delante del alumno. */
+.edu-dir-alumno__motivo {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+}
+
+.edu-dir-caja {
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+  overflow: hidden;
+}
+
+.edu-dir-caja__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 14px;
+  background: var(--edu-surface-2);
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-dir-caja__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.edu-dir-caja__lead {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+}
+
+/* ── La barra de avance de una especialidad ──────────────────────────── */
+.edu-dir-avance {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.edu-dir-avance__cifra {
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL PAPEL
+
+   En una acreditación este tablero se pide impreso. La exportación en CSV
+   sirve para lo que hay que SUMAR; esto sirve para lo que hay que ENSEÑAR:
+   el tablero tal como se ve. Se apaga el chrome del panel (menú, barra
+   superior, botones) y se dejan pasar los saltos de página por bloque, que
+   es como se lee un informe.
+   ═══════════════════════════════════════════════════════════════════════ */
+@media print {
+  .edu-sidebar,
+  .edu-topbar,
+  .edu-scrim,
+  .edu-dir-noprint {
+    display: none !important;
+  }
+
+  .edu-shell,
+  .edu-body,
+  .edu-main {
+    display: block;
+    padding: 0;
+    margin: 0;
+    background: #ffffff;
+  }
+
+  .edu-page {
+    gap: 14px;
+    padding: 0;
+  }
+
+  .edu-dir-bloque {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .edu-dir-cifra,
+  .edu-dir-sillon,
+  .edu-dir-money,
+  .edu-dir-caja,
+  .edu-row {
+    box-shadow: none;
+  }
+
+  /* El semáforo tiene que sobrevivir a la impresora: en una hoja en blanco
+     y negro el color se pierde, así que la franja se imprime igual (los
+     navegadores respetan esto con `print-color-adjust`) y además cada
+     estado lleva su TEXTO al lado — el color nunca es la única señal. */
+  .edu-dir-cifra,
+  .edu-dir-sillon,
+  .edu-dir-money__fila,
+  .edu-dir-detalle__fila {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .edu-dir-sillones {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .edu-dir-cifras {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .edu-dir-cifra__n {
+    font-size: 26px;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+}

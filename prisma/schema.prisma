@@ -12656,6 +12656,9 @@ model EduStudent {
   @@unique([institutionId, matricula])
   @@index([institutionId, status])
   @@index([institutionId, cohortId, status])
+  // Ola 7: la tabla "por especialidad" del panel de dirección y el filtro
+  // de especialidad de todo el tablero cuelgan de esta combinación.
+  @@index([institutionId, programId, status], map: "edu_students_program_idx")
   @@map("edu_students")
 }
 
@@ -13055,6 +13058,11 @@ model EduCase {
   // traspasos hacia atrás sin recorrer la tabla.
   @@index([institutionId, procedureId, status], map: "edu_cases_procedure_idx")
   @@index([transferredFromCaseId], map: "edu_cases_transfer_idx")
+  // Ola 7: el panel de dirección cuenta "tratamientos iniciados" y
+  // "terminados" del periodo, que son rangos sobre estas dos columnas. Sin
+  // ellos, cada carga del tablero recorre la tabla entera de casos.
+  @@index([institutionId, openedAt], map: "edu_cases_abierto_idx")
+  @@index([institutionId, closedAt], map: "edu_cases_cerrado_idx")
   @@map("edu_cases")
 }
 
@@ -13115,6 +13123,11 @@ model EduAppointment {
   @@index([institutionId, studentId, startsAt], map: "edu_appointments_student_idx")
   @@index([institutionId, patientId, startsAt], map: "edu_appointments_patient_idx")
   @@index([institutionId, caseId], map: "edu_appointments_case_idx")
+  // Ola 7: el bloque EN VIVO del panel de dirección pregunta cada 25
+  // segundos por las citas de HOY en CHECKED_IN / IN_CHAIR / IN_PROGRESS.
+  // Con el índice de día solo, esa consulta recorre todas las citas de la
+  // jornada para quedarse con tres.
+  @@index([institutionId, status, startsAt], map: "edu_appointments_estado_idx")
   @@map("edu_appointments")
 }
 

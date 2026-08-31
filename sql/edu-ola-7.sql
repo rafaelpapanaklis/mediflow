@@ -1,0 +1,303 @@
+-- ═══════════════════════════════════════════════════════════════════════
+-- DaleControl INSTITUCIONAL — Ola 7 · EL PANEL DE DIRECCIÓN.
+--
+-- Va DESPUÉS de sql/edu-ola-0.sql, 1, 1b, 2, 3, 3b, 4, 5 y 6. Producto
+-- SEPARADO del dental, que está VIVO en producción: este archivo NO toca
+-- ni una tabla, ni una columna, ni una fila del dental, de barbería ni de
+-- inmuebles.
+--
+-- Idempotente: cada bloque comprueba existencia antes de crear, así que
+-- correrlo varias veces no produce errores ni duplicados. CERO DROP.
+--
+-- Contenido:
+--   0 enums    · ninguno
+--   0 tablas   · ninguna
+--   0 columnas · ninguna
+--   4 índices  · todos de consulta, sobre tablas que ya existen
+--   0 llaves foráneas
+--
+-- Cómo aplicarlo: Supabase → SQL Editor → pegar → Run.
+--
+-- ═══════════════════════════════════════════════════════════════════════
+-- 🔴 LO QUE NO ESTÁ EN ESTE ARCHIVO, Y ES LA OLA ENTERA
+--
+-- ESTA OLA NO AGREGA NI UNA TABLA. Un panel de dirección es la tentación
+-- más grande que tiene un producto de crearse tablas de resumen —"totales
+-- del día", "ocupación por sillón", "presencia de alumnos"— y ninguna
+-- existe aquí, por tres razones distintas:
+--
+-- 1. NO HAY TABLA DE TOTALES. Cada cifra se CUENTA al preguntarla, de las
+--    mismas filas que ve el resto del producto. Es la misma decisión de la
+--    Ola 6 con el avance académico: un total guardado se desincroniza el
+--    día que una escritura falle a la mitad o que alguien corrija un cobro
+--    por SQL, y el número que se proyecta en una junta es justamente ése.
+--
+-- 2. 🔴 NO HAY COLUMNA DE PRESENCIA — ni "lastSeenAt", ni "online", ni un
+--    latido. Se consideró agregar una (que la sesión del panel tocara una
+--    columna cada pocos minutos, para poder decir "23 alumnos conectados")
+--    y se decidió QUE NO. Un latido cuenta PESTAÑAS ABIERTAS, no gente: el
+--    alumno que está tratando a un paciente con el teléfono en el bolsillo
+--    contaría cero, y una sesión olvidada en una computadora de la escuela
+--    contaría uno toda la tarde. Proyectado en una pared, "23 conectados"
+--    se lee como "23 alumnos en la clínica" — y sería falso justo cuando
+--    importa. En su lugar el tablero enseña dos cifras EXACTAS que salen
+--    de las citas de hoy:
+--       · PACIENTES EN LA CLÍNICA → CHECKED_IN + IN_CHAIR + IN_PROGRESS.
+--       · DOCENTES RESPONSABLES   → los docentes distintos que responden
+--         ahora por lo que hay en los sillones (el supervisor guardado en
+--         la cita y, si no lo trae, el titular VIGENTE del alumno).
+--    Además de ser verdad, cuestan cero escrituras: un latido de 120
+--    alumnos son 120 UPDATE cada pocos minutos, todo el día, sobre la
+--    tabla de usuarios.
+--
+-- 3. NO HAY VISTA MATERIALIZADA. Refrescarla necesitaría un cron, y el día
+--    que el cron fallara el tablero enseñaría los números de anteayer con
+--    cara de estar al día. El panel prefiere tardar 300 ms más.
+--
+-- Lo único que hacía falta de verdad son ÍNDICES: el tablero cruza casi
+-- todas las tablas del vertical y hace tres consultas por RANGO DE FECHAS
+-- que hasta hoy no tenían por dónde entrar.
+--
+-- 🔴 NOTA SOBRE LOS NOMBRES: las columnas van en camelCase ENTRECOMILLADO
+-- porque así las escribe Prisma; sin comillas Postgres las bajaría a
+-- minúsculas y el cliente dejaría de encontrarlas.
+-- ═══════════════════════════════════════════════════════════════════════
+
+
+-- ── 1. Índices ─────────────────────────────────────────────────────────
+-- Los cuatro están también en prisma/schema.prisma (con el mismo `map`),
+-- así que un `prisma migrate diff` contra esta base no propone nada.
+
+-- "Tratamientos iniciados" del periodo: un rango sobre "openedAt". Hasta
+-- esta ola, edu_cases solo tenía índices por status, alumno, paciente,
+-- programa y procedimiento — ninguno servía para "los casos abiertos entre
+-- el 1 y el 31", que es la pregunta que hace la segunda tarjeta del
+-- tablero. Sin él, cada carga recorre la tabla entera de casos.
+CREATE INDEX IF NOT EXISTS "edu_cases_abierto_idx"
+  ON "edu_cases" ("institutionId", "openedAt");
+
+-- "Tratamientos terminados": el mismo rango sobre "closedAt". Va aparte y
+-- no como una segunda columna del índice de arriba porque las dos
+-- preguntas son independientes: un caso abierto en marzo puede cerrarse en
+-- agosto, y un índice compuesto solo serviría para la primera.
+--
+-- ⚠️ "closedAt" es NULLABLE (un caso vivo no lo tiene). Postgres indexa los
+-- NULL en un B-tree, así que el índice no es parcial a propósito: un
+-- `WHERE "closedAt" IS NOT NULL` lo dejaría inservible para el día que
+-- alguien pregunte por los casos sin cerrar.
+CREATE INDEX IF NOT EXISTS "edu_cases_cerrado_idx"
+  ON "edu_cases" ("institutionId", "closedAt");
+
+-- 🔴 EL MÁS IMPORTANTE DE LOS CUATRO. El bloque EN VIVO del tablero
+-- pregunta CADA 25 SEGUNDOS por las citas de HOY que están en CHECKED_IN,
+-- IN_CHAIR o IN_PROGRESS — que en una clínica de cuarenta sillones son
+-- treinta filas de entre varios cientos. Con "edu_appointments_dia_idx"
+-- (institutionId, startsAt) esa consulta lee la jornada completa para
+-- quedarse con treinta, y lo hace todo el día por cada director que tenga
+-- el tablero abierto.
+CREATE INDEX IF NOT EXISTS "edu_appointments_estado_idx"
+  ON "edu_appointments" ("institutionId", "status", "startsAt");
+
+-- La tabla "por especialidad" y el filtro de especialidad de TODO el
+-- tablero. edu_students ya tenía (institutionId, status) y
+-- (institutionId, cohortId, status), pero ninguno por programa — y la
+-- especialidad es el segundo filtro de esta pantalla, el que se toca en
+-- cada fila de la tabla comparativa.
+CREATE INDEX IF NOT EXISTS "edu_students_program_idx"
+  ON "edu_students" ("institutionId", "programId", "status");
+
+
+-- ── 2. Documentación en la propia base ─────────────────────────────────
+-- COMMENT ON reemplaza el comentario anterior: es idempotente por sí solo.
+-- Van sobre las tres COLUMNAS que esta ola empezó a consultar por rango,
+-- para que quien mire la base entienda por qué aparecieron sus índices.
+
+COMMENT ON COLUMN "edu_cases"."openedAt" IS
+  'Cuándo se abrió el caso. Desde la Ola 7 se consulta por RANGO (tratamientos iniciados en el periodo), de ahí edu_cases_abierto_idx.';
+COMMENT ON COLUMN "edu_cases"."closedAt" IS
+  'Se DERIVA del status (COMPLETED, TRANSFERRED, ABANDONED): no se captura. Desde la Ola 7 se consulta por RANGO (tratamientos terminados en el periodo), de ahí edu_cases_cerrado_idx.';
+COMMENT ON COLUMN "edu_appointments"."status" IS
+  'Dónde va la cita HOY. CHECKED_IN es "llegó a recepción" (NO ocupa sillón), IN_CHAIR es "ya se sentó" e IN_PROGRESS es "ya se le trabaja". El panel de dirección lee esos tres cada 25 segundos: edu_appointments_estado_idx.';
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- 3. BACKFILL DEL OVERRIDE DE PERMISOS  ← LÉELO ANTES DE CERRAR EL ARCHIVO
+--
+-- 🔴 "permissionsOverride" REEMPLAZA al default del rol, no se suma. A
+-- quien YA tenga un override guardado, la key de esta ola
+-- ("direccion.panel") NO le llega sola: entrará al panel, no verá
+-- "Dirección" en el menú, y desde fuera parecerá que la ola no se aplicó.
+--
+-- Quien tenga el override VACÍO (el caso normal) no necesita nada: cae al
+-- default del rol y ya trae lo que le toca.
+--
+-- Para ver a quién le falta:
+--
+-- SELECT "email", "role", "permissionsOverride"
+-- FROM "edu_users"
+-- WHERE cardinality("permissionsOverride") > 0;
+--
+-- ⚠️ ES UN SOLO BLOQUE Y NO CUATRO: esta key la lleva ÚNICAMENTE
+-- DIRECCION, como las otras siete de administración (padron.manage,
+-- supervision.assign, sillones.manage, tarifarios.manage, equipo.manage,
+-- rubricas.manage y requisitos.manage). El tablero cruza el dinero de la
+-- escuela con el avance de cada alumno: es la foto completa del negocio y
+-- de las personas.
+--
+-- 🔴 Y NO SE LA "ARREGLES" A UN DOCENTE ENCENDIÉNDOLE LA CASILLA. Aunque
+-- se la des, la pantalla NO se pinta: src/lib/edu/direccion.ts comprueba
+-- que los cuatro recursos de visibility.ts devuelvan alcance COMPLETO y
+-- contesta 403 con el motivo. No es una traba burocrática — un tablero que
+-- dice "La clínica ahora" enseñando solo los sillones de los alumnos de
+-- ese docente es un número falso, y las decisiones se toman con él.
+--
+-- -- DIRECCION: la única key de esta ola.
+-- UPDATE "edu_users"
+-- SET "permissionsOverride" = ARRAY(
+--       SELECT DISTINCT unnest(
+--         "permissionsOverride" || ARRAY['direccion.panel']::TEXT[]
+--       )
+--     )
+-- WHERE "role" = 'DIRECCION'
+--   AND cardinality("permissionsOverride") > 0;
+-- ═══════════════════════════════════════════════════════════════════════
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- 4. COMPROBACIONES — las mismas cuentas del tablero, escritas en SQL
+--
+-- Todo lo de aquí abajo está COMENTADO: es para verificar, no parte de la
+-- migración. Si un número de estos no coincide con la pantalla, el
+-- sospechoso está anotado debajo de cada uno.
+--
+-- Sustituye 'ieo' por el slug del instituto.
+--
+-- ── LA CLÍNICA AHORA ───────────────────────────────────────────────────
+-- Los sillones ocupados en este momento. La pantalla enseña lo mismo, pero
+-- solo con las citas de HOY (día de calendario del INSTITUTO, no del
+-- servidor): si aquí sale una cita de anteayer en IN_CHAIR, es una que
+-- nadie cerró.
+--
+-- SELECT ch."number", ch."name", a."status",
+--        p."firstName" || ' ' || p."lastName" AS paciente,
+--        u."firstName" || ' ' || u."lastName" AS alumno,
+--        a."startsAt"
+-- FROM "edu_appointments" a
+-- JOIN "edu_institutions" i ON i."id" = a."institutionId"
+-- JOIN "edu_chairs" ch      ON ch."id" = a."chairId"
+-- JOIN "edu_patients" p     ON p."id" = a."patientId"
+-- JOIN "edu_students" s     ON s."id" = a."studentId"
+-- JOIN "edu_users" u        ON u."id" = s."userId"
+-- WHERE i."slug" = 'ieo'
+--   AND a."status" IN ('CHECKED_IN', 'IN_CHAIR', 'IN_PROGRESS')
+-- ORDER BY ch."number";
+--
+-- ── ESPERANDO DOCENTE ──────────────────────────────────────────────────
+-- Cuánto lleva esperando una firma cada caso que está en un sillón. Es lo
+-- que pinta de ámbar (o de rojo, pasados 15 minutos) la rejilla.
+--
+-- SELECT ap."stage", ap."requestedAt",
+--        now() - ap."requestedAt" AS lleva,
+--        p."folio"
+-- FROM "edu_case_approvals" ap
+-- JOIN "edu_institutions" i ON i."id" = ap."institutionId"
+-- JOIN "edu_cases" c        ON c."id" = ap."caseId"
+-- JOIN "edu_patients" p     ON p."id" = c."patientId"
+-- WHERE i."slug" = 'ieo' AND ap."status" = 'PENDING'
+-- ORDER BY ap."requestedAt";
+--
+-- ── 🔴 EL CONTROL DEL DINERO ───────────────────────────────────────────
+-- La tarifa de PACIENTE DE ALUMNO aplicada a alguien que llegó SOLO a la
+-- clínica. Es la fila roja del bloque de dinero, y la razón de que ese
+-- desglose exista: o falta marcar quién trajo al paciente, o se cobró de
+-- menos.
+--
+-- SELECT ch."folio", ch."chargedAt", ch."totalCents", ch."feeScheduleLabel",
+--        p."folio" AS paciente
+-- FROM "edu_charges" ch
+-- JOIN "edu_institutions" i  ON i."id" = ch."institutionId"
+-- JOIN "edu_patients" p      ON p."id" = ch."patientId"
+-- JOIN "edu_fee_schedules" f ON f."id" = ch."feeScheduleId"
+-- WHERE i."slug" = 'ieo'
+--   AND ch."status" <> 'CANCELLED'
+--   AND f."rule" = 'REFERRED_BY_STUDENT'
+--   AND p."referredByStudentId" IS NULL
+-- ORDER BY ch."chargedAt" DESC;
+--
+-- Y el caso inverso (ámbar): al paciente sí lo trajo un alumno y se le
+-- cobró con la lista general.
+--
+-- SELECT ch."folio", ch."totalCents", ch."feeScheduleLabel"
+-- FROM "edu_charges" ch
+-- JOIN "edu_institutions" i  ON i."id" = ch."institutionId"
+-- JOIN "edu_patients" p      ON p."id" = ch."patientId"
+-- JOIN "edu_fee_schedules" f ON f."id" = ch."feeScheduleId"
+-- WHERE i."slug" = 'ieo'
+--   AND ch."status" <> 'CANCELLED'
+--   AND f."rule" <> 'REFERRED_BY_STUDENT'
+--   AND p."referredByStudentId" IS NOT NULL;
+--
+-- ── COBRADO DEL PERIODO ────────────────────────────────────────────────
+-- Pagos MENOS devoluciones, por la fecha del PAGO (no la del cobro): un
+-- cobro de ayer que se liquida hoy entra en el dinero de hoy, porque el
+-- dinero está en la caja de hoy.
+--
+-- SELECT sum(CASE WHEN pa."isRefund" THEN -pa."amountCents"
+--                 ELSE pa."amountCents" END) AS cobrado_centavos
+-- FROM "edu_payments" pa
+-- JOIN "edu_institutions" i ON i."id" = pa."institutionId"
+-- WHERE i."slug" = 'ieo'
+--   AND pa."paidAt" >= now() - interval '30 days';
+--
+-- ── OCUPACIÓN DE UN SILLÓN ─────────────────────────────────────────────
+-- ⚠️ Este SELECT es una APROXIMACIÓN: la aplicación además recorta cada
+-- cita a 8 horas y separa lo real de lo estimado (el mismo
+-- `eduAppointmentMinutes` de la Ola 6). La cuenta buena vive en
+-- src/lib/edu/evaluacion-core.ts, que es donde se puede probar.
+--
+-- Y un sillón SIN filas en edu_chair_schedules está "siempre abierto"
+-- (regla de la Ola 2): no tiene capacidad conocida, así que el panel lo
+-- deja FUERA de la ocupación y dice cuántos son. Si la ocupación sale
+-- "sin calcular", el sospechoso número uno es éste:
+--
+-- SELECT ch."number", ch."name"
+-- FROM "edu_chairs" ch
+-- JOIN "edu_institutions" i ON i."id" = ch."institutionId"
+-- WHERE i."slug" = 'ieo' AND ch."isActive"
+--   AND NOT EXISTS (SELECT 1 FROM "edu_chair_schedules" s
+--                   WHERE s."chairId" = ch."id");
+--
+-- ── PACIENTES SIN ALUMNO ───────────────────────────────────────────────
+-- Registrados, sin caso abierto y sin cita próxima: todavía no son de
+-- nadie, y por eso no los ve ningún alumno ni ningún docente.
+--
+-- SELECT p."folio", p."firstName", p."lastName", p."createdAt"
+-- FROM "edu_patients" p
+-- JOIN "edu_institutions" i ON i."id" = p."institutionId"
+-- WHERE i."slug" = 'ieo'
+--   AND p."status" IN ('NEW', 'ACTIVE')
+--   AND NOT EXISTS (SELECT 1 FROM "edu_cases" c
+--                   WHERE c."patientId" = p."id"
+--                     AND c."status" NOT IN ('COMPLETED','TRANSFERRED','ABANDONED'))
+--   AND NOT EXISTS (SELECT 1 FROM "edu_appointments" a
+--                   WHERE a."patientId" = p."id"
+--                     AND a."startsAt" >= now()
+--                     AND a."status" NOT IN ('CANCELLED','NO_SHOW'))
+-- ORDER BY p."createdAt" DESC;
+--
+-- ── ALUMNOS SIN DOCENTE ────────────────────────────────────────────────
+-- Sin asignación VIGENTE (startsAt <= ahora y endsAt nulo o futuro), nadie
+-- les puede firmar una autorización.
+--
+-- SELECT s."matricula", u."firstName", u."lastName"
+-- FROM "edu_students" s
+-- JOIN "edu_institutions" i ON i."id" = s."institutionId"
+-- JOIN "edu_users" u        ON u."id" = s."userId"
+-- WHERE i."slug" = 'ieo' AND s."status" = 'ACTIVE'
+--   AND NOT EXISTS (
+--     SELECT 1 FROM "edu_supervisor_assignments" sa
+--     WHERE sa."studentId" = s."id"
+--       AND sa."startsAt" <= now()
+--       AND (sa."endsAt" IS NULL OR sa."endsAt" > now()))
+-- ORDER BY s."matricula";
+-- ═══════════════════════════════════════════════════════════════════════
