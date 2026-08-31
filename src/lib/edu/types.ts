@@ -40,6 +40,7 @@
 //   /instituto/evaluacion/[id] → LA BITÁCORA ACADÉMICA del alumno  Ola 6  ✓
 //   /instituto/rubricas     → rúbricas y sus criterios             Ola 6  ✓
 //   /instituto/requisitos   → el plan de estudios, en números      Ola 6  ✓
+//   /instituto/ia           → el consumo de IA del mes y el CUPO  Ola 8  ✓
 // PÚBLICA (SIN sesión — vive FUERA del grupo (panel), igual que /login):
 //   /instituto/consentimiento/[token] → el paciente lee y firma    Ola 3B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
@@ -109,6 +110,10 @@
 //   GET  /api/instituto/evaluacion/[id]/export → la bitácora en CSV Ola 6 ✓
 //   POST /api/instituto/traspasos           → traspasar UN caso     Ola 6 ✓
 //   POST /api/instituto/traspasos/lote      → traspasar EN LOTE     Ola 6 ✓
+//   GET   /api/instituto/ia   → el consumo del mes, el cupo y las tarifas Ola 8 ✓
+//   PATCH /api/instituto/ia   → lo que la ESCUELA decide del cupo:
+//                               encender/apagar, permitir excedente y su
+//                               tope. NUNCA lo que incluye el contrato     Ola 8 ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -805,6 +810,23 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "equipo.manage",
   },
+  // ── Ola 8 · la cartera de IA ─────────────────────────────────────────
+  {
+    // Va en ADMINISTRACIÓN, al final: es dinero del contrato, no operación
+    // del día. Se abre cuando alguien pregunta "¿por qué se apagó el
+    // micrófono?" o "¿en qué se nos fue el cupo?", no cada mañana.
+    //
+    // ⚠️ Solo lo ve DIRECCIÓN, y no por dónde está en el menú sino por el
+    // permiso: "ia.view" no lo trae ningún otro rol por defecto. Y aunque
+    // se lo encendieran a un alumno por override, el ALCANCE del gasto
+    // (visibility.ts, recurso "charges") le devuelve "none" — el mismo
+    // doble candado del dinero de la Ola 5.
+    key: "ia",
+    href: "/instituto/ia",
+    icon: "sparkles",
+    section: "administracion",
+    permission: "ia.view",
+  },
 ];
 
 /** Etiqueta de cada sección del menú (las vacías no se pintan). */
@@ -844,6 +866,11 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   evaluacion: "Evaluación",
   rubricas: "Rúbricas",
   requisitos: "Requisitos",
+  // Ola 8. "Consumo de IA" y no "IA" a secas: la pantalla no configura la
+  // inteligencia artificial, contesta en qué se está yendo el cupo. Un
+  // item que dijera "IA" haría que quien busca "por qué se apagó el
+  // micrófono" no supiera que es aquí.
+  ia: "Consumo de IA",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────
@@ -886,3 +913,52 @@ export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[
   // paciente en el sillón. Se llega desde Pacientes, que sí está en el
   // menú.
 ];
+
+// ═══════════════════════════════════════════════════════════════════════
+// Ola 8 · LA CARTERA DE IA — los dos enums del cupo.
+//
+// Espejo 1:1 de los enums EduAiFeature y EduAiUnit de Prisma, escritos
+// como uniones de strings para poder importarlos desde componentes
+// "use client" sin arrastrar el runtime de Prisma al navegador — igual que
+// EduRole y los cinco de la Ola 2. El candado de que no se desincronicen
+// es un chequeo de TIPOS en src/lib/edu/__tests__/edu-ia.test.ts (lo
+// verifica `tsc --noEmit`).
+//
+// Y la regla de siempre: la UI JAMÁS pinta el valor del enum. "ANALISIS"
+// en mayúsculas y sin tilde no es lo que un alumno espera leer.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Las dos funciones de IA que consumen cupo. */
+export type EduAiFeature = "DICTADO" | "ANALISIS";
+
+export const EDU_AI_FEATURES: EduAiFeature[] = ["DICTADO", "ANALISIS"];
+
+export const EDU_AI_FEATURE_LABELS: Record<EduAiFeature, string> = {
+  DICTADO: "Dictado por voz",
+  ANALISIS: "Análisis radiográfico con IA",
+};
+
+/** Qué es cada una, en una línea. Se lee en el desglose del consumo. */
+export const EDU_AI_FEATURE_DESCRIPTIONS: Record<EduAiFeature, string> = {
+  DICTADO:
+    "El micrófono de la nota clínica: se dicta y se transcribe. Se cobra por segundo de audio.",
+  ANALISIS:
+    "La lectura de apoyo sobre una radiografía. Es apoyo, no diagnóstico. Se cobra por token.",
+};
+
+/**
+ * En qué se mide lo que consumió una llamada.
+ *
+ * Existe porque las dos funciones NO se cobran igual: el análisis por
+ * tokens y el dictado por segundos de audio. Una tarifa que solo supiera
+ * de tokens no podría ponerle precio al dictado, y el cupo de la escuela
+ * se lo estaría comiendo gratis.
+ */
+export type EduAiUnit = "TOKEN" | "SECOND";
+
+export const EDU_AI_UNITS: EduAiUnit[] = ["TOKEN", "SECOND"];
+
+export const EDU_AI_UNIT_LABELS: Record<EduAiUnit, string> = {
+  TOKEN: "Token",
+  SECOND: "Segundo de audio",
+};

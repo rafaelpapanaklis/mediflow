@@ -2,9 +2,10 @@
  * DaleControl INSTITUCIONAL — la IA del vertical contra los proveedores y
  * contra la base de datos.
  *
- * SERVIDOR: importa prisma, Storage y las llaves de API. Lo puro (la
- * bandera, los topes, los textos y la forma que viaja a la pantalla) vive
- * en ia-core.ts.
+ * SERVIDOR: importa prisma, Storage y las llaves de API. Lo puro (el
+ * estado de cada función, los topes, los textos y la forma que viaja a la
+ * pantalla) vive en ia-core.ts, y todo lo del CUPO —leerlo, decidir si
+ * alcanza y escribir el renglón del gasto— en ia-cupo.ts.
  *
  * ═══════════════════════════════════════════════════════════════════════
  * QUÉ SE REUSA DEL DENTAL Y QUÉ SE ESCRIBE AQUÍ — el detalle largo está en
@@ -23,10 +24,25 @@
  *     `addAiTokens(clinicId)` y `prisma.xrayAnalysis` (clinicId NOT NULL).
  *     No hay nada que importar.
  *
- * 🔴 LAS DOS FUNCIONES ESTÁN APAGADAS POR DEFECTO. `eduIaEntornoActual()`
- * lee EDU_IA_ENABLED y, mientras no esté encendida, los dos endpoints
- * contestan 503 con el motivo escrito para una persona. No un 401, no un
- * 500: un "esto todavía no está conectado y aquí está por qué".
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA 8 — LAS DOS FUNCIONES YA ESTÁN ENCENDIDAS, Y AHORA SE COBRAN.
+ *
+ * La Ola 3B las dejó detrás de una bandera de entorno porque el instituto
+ * no tenía cartera. Ya la tiene, y no se parece a la del dental: es un
+ * CUPO MENSUAL incluido en el contrato (ver ia-cupo.ts). Lo que cambió
+ * aquí, y nada más:
+ *
+ *   · antes de gastar → `requireEduIaCupo(...)`, que lanza con el motivo
+ *     escrito para una persona (402 si se acabó el cupo, 503 si falta
+ *     configurar algo). Sustituye al viejo `requireIa(feature)`.
+ *   · después de gastar → un renglón en `EduAiUsage` con el costo REAL,
+ *     calculado con la TARIFA de la base (nunca con una constante).
+ *
+ * Lo que NO cambió: ni una línea de cómo se llama al proveedor, ni el
+ * prompt, ni la normalización, ni la regla de que el análisis es APOYO y
+ * jamás entra solo en una nota. Esta ola cablea el cobro; no reescribe lo
+ * que ya estaba hecho y probado.
+ * ═══════════════════════════════════════════════════════════════════════
  *
  * ── POR QUÉ `fetch` Y NO EL SDK DE ANTHROPIC ───────────────────────────
  * Los ocho sitios del repo que llaman a la API de mensajes lo hacen con
@@ -60,15 +76,20 @@ import {
   eduAnalisisRecomendaciones,
   eduAnalisisMimeOk,
   eduDictadoMimeOk,
-  eduIaCostoUsdMicros,
-  eduIaEstado,
+  eduIaCosto,
+  eduIaRestanteUsdMicros,
+  EDU_DICTADO_MAX_SECONDS,
+  EDU_IA_MODELOS,
   type EduAnalisisRow,
-  type EduIaEntorno,
-  type EduIaEstado,
-  type EduIaFeature,
 } from "@/lib/edu/ia-core";
+import {
+  eduIaNombreDeSesion,
+  recordEduAiUsage,
+  recordEduAiUsageSafe,
+  requireEduIaCupo,
+} from "@/lib/edu/ia-cupo";
 import { eduStorageConfigured, eduStorageDownload } from "@/lib/edu/storage";
-import { eduPatientScopeWhere, eduScopeIsEmpty, type EduClinicaContext } from "@/lib/edu/visibility";
+import { eduCaseScopeWhere, eduPatientScopeWhere, eduScopeIsEmpty, eduVisibility, type EduClinicaContext } from "@/lib/edu/visibility";
 
 export { EduPadronError as EduIaError };
 
@@ -84,46 +105,28 @@ export { EduPadronError as EduIaError };
  * usa el modelo más capaz disponible a propósito: quien lee esta respuesta
  * es un alumno en formación, que tiene menos criterio para detectar un
  * hallazgo inventado que un doctor con veinte años de placas. Si algún día
- * hay que igualarlos, se cambia esta línea y el precio de ia-core.ts.
+ * hay que igualarlos, se cambia esta línea — y la TARIFA se cambia en la
+ * tabla `edu_ai_prices`, no en el código: aquí no queda ningún precio.
+ *
+ * 🔴 Y hay una consecuencia de la Ola 8 que hay que tener presente al
+ * tocar esta línea: si se cambia el modelo y NO se le da de alta su tarifa,
+ * el análisis se apaga solo con el motivo "falta configurar la tarifa".
+ * Es a propósito — es preferible a correr sin poder descontar del cupo.
  */
-const EDU_ANALISIS_MODEL = "claude-opus-5";
+const EDU_ANALISIS_MODEL = EDU_IA_MODELOS.ANALISIS.model;
 
 /** Techo de salida. Con pensamiento adaptativo hace falta holgura. */
 const EDU_ANALISIS_MAX_TOKENS = 6000;
 
-// ═══════════════════════════════════════════════════════════════════════
-// EL ENTORNO Y LA BANDERA
-// ═══════════════════════════════════════════════════════════════════════
-
 /**
- * Lee el entorno UNA vez por petición.
- *
- * `EDU_IA_ENABLED` se considera encendida con "1", "true" o "on" (sin
- * distinguir mayúsculas). Cualquier otra cosa —vacía, ausente, "false",
- * "no", un dedazo— deja la IA apagada: en una bandera que abre el grifo
- * del gasto, lo ambiguo se interpreta como "no".
+ * El modelo del dictado. Es el que `transcribeAudio` le manda a OpenAI
+ * (src/lib/integrations/whisper.ts), y se declara en `EDU_IA_MODELOS`
+ * porque es la CLAVE con la que se busca su tarifa: si aquel envoltorio
+ * cambia de modelo y ese mapa no, el dictado se apaga con "falta la
+ * tarifa" en vez de cobrar con el precio del modelo viejo — que es
+ * exactamente cómo se quiere que falle.
  */
-export function eduIaEntornoActual(): EduIaEntorno {
-  const raw = String(process.env.EDU_IA_ENABLED ?? "").trim().toLowerCase();
-  return {
-    habilitada: raw === "1" || raw === "true" || raw === "on",
-    openaiConfigurado: Boolean(process.env.OPENAI_API_KEY),
-    anthropicConfigurado: Boolean(process.env.ANTHROPIC_API_KEY),
-  };
-}
-
-/** El estado de una función, ya resuelto contra el entorno de este proceso. */
-export function eduIaEstadoActual(feature: EduIaFeature): EduIaEstado {
-  return eduIaEstado(feature, eduIaEntornoActual());
-}
-
-/** Lanza el 503 explicativo si la función no está disponible. */
-function requireIa(feature: EduIaFeature): void {
-  const estado = eduIaEstadoActual(feature);
-  if (!estado.disponible) {
-    throw new EduPadronError(`${estado.titulo}. ${estado.detalle}`, 503);
-  }
-}
+const EDU_DICTADO_MODEL = EDU_IA_MODELOS.DICTADO.model;
 
 function requireInstitution(ctx: EduClinicaContext): string {
   const id = ctx?.institutionId;
@@ -146,6 +149,47 @@ function stampLabel(d: Date, timeZone: string): string {
 export interface EduDictadoResult {
   text: string;
   duration: number | null;
+  /** Lo que costó esta transcripción, en millonésimas de dólar. */
+  costUsdMicros: number;
+  /** Lo que queda del cupo del mes DESPUÉS de este dictado. */
+  restanteUsdMicros: number;
+}
+
+/**
+ * El caso al que se imputa el dictado, buscado DENTRO del alcance.
+ *
+ * 🔴 El `caseId` llega del cuerpo de la petición y por eso NO se guarda
+ * tal cual: se busca con `eduCaseScopeWhere`, y si no aparece se guarda
+ * `null`. Un id de otro instituto (o del caso de otro alumno) escrito en
+ * el libro de gasto no filtra nada por sí solo, pero convertiría el
+ * detalle del consumo en algo que no se puede creer — y el desglose de en
+ * qué se fue el cupo solo sirve si es verdad.
+ *
+ * ⚠️ Que no haya caso NO impide dictar: la nota de un paciente en tamizaje
+ * todavía no tiene caso, y ése es justo el momento en que más se dicta.
+ */
+async function casoParaElDictado(
+  ctx: EduClinicaContext,
+  caseIdCrudo: string | null,
+  now: Date,
+): Promise<{ caseId: string | null; label: string | null }> {
+  const id = eduCleanId(caseIdCrudo);
+  if (!id) return { caseId: null, label: null };
+
+  const scope = eduVisibility(ctx, "cases");
+  if (eduScopeIsEmpty(scope)) return { caseId: null, label: null };
+
+  const caso = await prisma.eduCase.findFirst({
+    where: { ...eduCaseScopeWhere({ institutionId: ctx.institutionId, scope, now }), id },
+    select: { id: true, patient: { select: { firstName: true, lastName: true } } },
+  });
+  if (!caso) return { caseId: null, label: null };
+
+  const paciente = [caso.patient?.firstName, caso.patient?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return { caseId: caso.id, label: paciente ? `Nota de ${paciente}` : "Nota clínica" };
 }
 
 /**
@@ -157,16 +201,23 @@ export interface EduDictadoResult {
  * archivo de audio con la voz de un paciente contando su motivo de
  * consulta es un dato personal sensible que nadie pidió conservar.
  *
- * Lo que sí se valida antes de gastar un centavo: la sesión (el endpoint),
- * el permiso (`expediente.write`, el endpoint), la bandera de IA, el
- * tamaño y el formato.
+ * Lo que sí se valida antes de gastar un centavo, en orden de más barato a
+ * más caro: la sesión (el endpoint), el permiso `expediente.write` (el
+ * endpoint), el tamaño y el formato —que son columnas que ya tenemos— y
+ * solo entonces el CUPO, que cuesta dos consultas.
+ *
+ * 🔴 EL CUPO SE MIRA DESPUÉS DEL FORMATO A PROPÓSITO. Rechazar un .zip por
+ * "se acabó el cupo" mandaría a la dirección a mirar un presupuesto que no
+ * tiene nada que ver con el problema.
  */
 export async function transcribeEduDictado(
   ctx: EduClinicaContext,
   audio: Blob & { name?: string },
+  timeZone: string,
+  caseIdCrudo: string | null = null,
+  now: Date = new Date(),
 ): Promise<EduDictadoResult> {
   requireInstitution(ctx);
-  requireIa("dictado");
 
   if (!audio || typeof audio !== "object" || typeof audio.size !== "number" || audio.size === 0) {
     throw new EduPadronError('Falta el audio de la grabación.', 400);
@@ -177,6 +228,9 @@ export async function transcribeEduDictado(
   if (!eduDictadoMimeOk(audio.type)) {
     throw new EduPadronError("Ese formato de audio no se puede transcribir.", 415);
   }
+
+  // La puerta del gasto. Lanza con el motivo escrito para una persona.
+  const permiso = await requireEduIaCupo(ctx, "DICTADO", timeZone, now);
 
   const esMp4 = String(audio.type || "").startsWith("audio/mp4") ||
     String(audio.type || "").startsWith("video/mp4");
@@ -190,10 +244,10 @@ export async function transcribeEduDictado(
   });
 
   if (result.mock) {
-    // No debería pasar: `requireIa` ya comprobó la llave. Se contesta
-    // igual porque la llave puede desaparecer entre las dos líneas (un
-    // despliegue a media petición) y un `text: ""` silencioso se vería
-    // como "no te entendí nada".
+    // No debería pasar: `requireEduIaCupo` ya comprobó la llave. Se
+    // contesta igual porque la llave puede desaparecer entre las dos
+    // líneas (un despliegue a media petición) y un `text: ""` silencioso
+    // se vería como "no te entendí nada".
     throw new EduPadronError("La transcripción no está configurada en este entorno.", 503);
   }
   if (result.error) {
@@ -201,9 +255,52 @@ export async function transcribeEduDictado(
     throw new EduPadronError("No se pudo transcribir el audio. Intenta de nuevo.", 502);
   }
 
+  // ── Lo que se cobra ────────────────────────────────────────────────────
+  // Whisper devuelve la duración en SEGUNDOS con `verbose_json`. Si no
+  // viniera, se cobra el TOPE de una grabación y la fila queda MARCADA
+  // como estimada. Cobrar cero sería regalar la llamada y dejar el cupo
+  // mintiendo; cobrar de más en el único caso en que no sabemos es el
+  // error que no cuesta dinero, y la pantalla lo señala.
+  const duracionReal =
+    typeof result.duration === "number" && Number.isFinite(result.duration) && result.duration > 0
+      ? result.duration
+      : null;
+  const segundos = Math.ceil(duracionReal ?? EDU_DICTADO_MAX_SECONDS);
+  const costUsdMicros = eduIaCosto(permiso.precio, segundos, 0) ?? 0;
+
+  const destino = await casoParaElDictado(ctx, caseIdCrudo, now);
+
+  // 🔴 `...Safe`: si esta escritura falla, el dinero YA se gastó y el texto
+  // ya existe. Reventar aquí le quitaría a la persona el dictado sin
+  // devolverle el gasto — se perderían las dos cosas en vez de una. Queda
+  // en el log del servidor lo que no quedó en la tabla.
+  await recordEduAiUsageSafe(ctx, {
+    feature: "DICTADO",
+    model: EDU_DICTADO_MODEL,
+    unit: permiso.precio.unit,
+    inputUnits: segundos,
+    outputUnits: 0,
+    costUsdMicros,
+    isEstimated: duracionReal === null,
+    periodKey: permiso.periodKey,
+    userName: await eduIaNombreDeSesion(ctx),
+    caseId: destino.caseId,
+    targetLabel: destino.label,
+  });
+
   return {
     text: (result.text || "").trim(),
-    duration: typeof result.duration === "number" ? result.duration : null,
+    duration: duracionReal,
+    costUsdMicros,
+    // Lo que quedaba MENOS lo que se acaba de gastar. La resta la hace la
+    // función pura de ia-core; aquí solo se le pasa el consumo ya sumado.
+    // Se calcula así en vez de volver a consultar: la suma se hizo hace
+    // tres líneas y preguntarla otra vez costaría una consulta para el
+    // mismo número.
+    restanteUsdMicros: eduIaRestanteUsdMicros({
+      ...permiso.cupo,
+      consumidoUsdMicros: permiso.cupo.consumidoUsdMicros + costUsdMicros,
+    }),
   };
 }
 
@@ -338,10 +435,17 @@ export interface EduAnalisisResult {
  * Le pide al modelo que mire la imagen.
  *
  * El orden de las comprobaciones es de más barato a más caro, y no es
- * casualidad: primero la bandera (gratis), después el alcance (una
- * consulta), después el formato y el tamaño (columnas que ya tenemos),
- * después el freno de doble clic (una consulta) y solo al final la
- * descarga de los bytes y la llamada que cuesta dinero.
+ * casualidad: primero el alcance (una consulta), después el formato y el
+ * tamaño (columnas que ya tenemos), después el freno de doble clic (una
+ * consulta), después el CUPO (dos consultas) y solo al final la descarga
+ * de los bytes y la llamada que cuesta dinero.
+ *
+ * 🔴 EL CUPO SE MIRA DESPUÉS DEL FRENO DE DOBLE CLIC, y ese orden importa:
+ * un segundo toque devuelve la lectura recién hecha SIN gastar nada, así
+ * que negárselo por cupo agotado sería negar algo que no cuesta. Un alumno
+ * al que se le apaga el botón justo cuando la escuela se quedó sin cupo,
+ * y que ni siquiera puede volver a ver lo que acaba de pedir, no entiende
+ * qué pasó.
  *
  * 🔴 EL TAMAÑO SE LEE DE LA FILA, que es el que Storage midió cuando se
  * confirmó la subida (nunca el que declaró un cliente). Sin esa
@@ -355,7 +459,6 @@ export async function analyzeEduStudy(
   now: Date = new Date(),
 ): Promise<EduAnalisisResult> {
   const institutionId = requireInstitution(ctx);
-  requireIa("analisis");
 
   const estudio = await getEstudioEnAlcance(ctx, studyId, now);
   if (!estudio) throw new EduPadronError("Ese estudio no existe o no te toca.", 404);
@@ -390,6 +493,9 @@ export async function analyzeEduStudy(
     select: ANALISIS_SELECT,
   });
   if (reciente) return { row: toRow(reciente, timeZone), reutilizado: true };
+
+  // La puerta del gasto. Lanza con el motivo escrito para una persona.
+  const permiso = await requireEduIaCupo(ctx, "ANALISIS", timeZone, now);
 
   if (!eduStorageConfigured()) {
     throw new EduPadronError(
@@ -511,27 +617,67 @@ export async function analyzeEduStudy(
       ? input.confidence
       : promedio(hallazgos.map((h) => h.confidence));
 
-  const created = await prisma.eduStudyAnalysis.create({
-    data: {
-      institutionId,
-      studyId: estudio.id,
-      summary: typeof input.summary === "string" ? input.summary.trim() : "",
-      // Se guarda lo NORMALIZADO y no el JSON crudo del modelo: la fila es
-      // lo que va a leer una pantalla dentro de un año, y un campo con
-      // otra forma la dejaría en blanco sin explicación.
-      findings: hallazgos as unknown as Prisma.InputJsonValue,
-      recommendations: eduAnalisisRecomendaciones(
-        input.recommendations,
-      ) as unknown as Prisma.InputJsonValue,
-      severity,
-      confidence,
-      modelUsed: EDU_ANALISIS_MODEL,
-      tokensUsed: totalTokens,
-      costUsdMicros: eduIaCostoUsdMicros(EDU_ANALISIS_MODEL, inputTokens, outputTokens),
-      requestedByUserId: ctx.eduUserId,
-      requestedByName: await nombreDeSesion(ctx),
-    },
-    select: ANALISIS_SELECT,
+  // ── Lo que se cobra ────────────────────────────────────────────────────
+  // Si el proveedor no devolvió `usage` (no debería, pero la respuesta es
+  // suya y no nuestra), se cobra el TOPE de la respuesta y la fila queda
+  // MARCADA como estimada. Misma regla que el dictado: regalar la llamada
+  // dejaría el cupo mintiendo, y cobrar de más en el único caso en que no
+  // sabemos es el error que no cuesta dinero.
+  const sinMedicion = totalTokens <= 0;
+  const inputCobrados = sinMedicion ? 0 : inputTokens;
+  const outputCobrados = sinMedicion ? EDU_ANALISIS_MAX_TOKENS : outputTokens;
+  const costUsdMicros = eduIaCosto(permiso.precio, inputCobrados, outputCobrados) ?? 0;
+
+  const nombre = await eduIaNombreDeSesion(ctx);
+
+  // 🔴 LA LECTURA Y SU RENGLÓN DE GASTO SE ESCRIBEN JUNTOS O NO SE ESCRIBE
+  // NINGUNO. Si se guardara solo el análisis, la escuela tendría una
+  // lectura que nadie le descontó del cupo; si se guardara solo el
+  // renglón, un cargo sin nada que enseñar. Las dos filas cuentan la misma
+  // llamada, así que viven o mueren juntas.
+  const created = await prisma.$transaction(async (tx) => {
+    const fila = await tx.eduStudyAnalysis.create({
+      data: {
+        institutionId,
+        studyId: estudio.id,
+        summary: typeof input.summary === "string" ? input.summary.trim() : "",
+        // Se guarda lo NORMALIZADO y no el JSON crudo del modelo: la fila es
+        // lo que va a leer una pantalla dentro de un año, y un campo con
+        // otra forma la dejaría en blanco sin explicación.
+        findings: hallazgos as unknown as Prisma.InputJsonValue,
+        recommendations: eduAnalisisRecomendaciones(
+          input.recommendations,
+        ) as unknown as Prisma.InputJsonValue,
+        severity,
+        confidence,
+        modelUsed: EDU_ANALISIS_MODEL,
+        tokensUsed: totalTokens,
+        costUsdMicros,
+        requestedByUserId: ctx.eduUserId,
+        requestedByName: nombre,
+      },
+      select: ANALISIS_SELECT,
+    });
+
+    await recordEduAiUsage(
+      ctx,
+      {
+        feature: "ANALISIS",
+        model: EDU_ANALISIS_MODEL,
+        unit: permiso.precio.unit,
+        inputUnits: inputCobrados,
+        outputUnits: outputCobrados,
+        costUsdMicros,
+        isEstimated: sinMedicion,
+        periodKey: permiso.periodKey,
+        userName: nombre,
+        studyId: estudio.id,
+        targetLabel: `Estudio: ${estudio.name}`,
+      },
+      tx,
+    );
+
+    return fila;
   });
 
   return { row: toRow(created, timeZone), reutilizado: false };
@@ -554,12 +700,7 @@ function promedio(valores: (number | null)[]): number {
   return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100;
 }
 
-/** El nombre de quien está en la sesión, congelado en la fila. */
-async function nombreDeSesion(ctx: EduClinicaContext): Promise<string> {
-  const u = await prisma.eduUser.findFirst({
-    where: { id: ctx.eduUserId, institutionId: ctx.institutionId },
-    select: { firstName: true, lastName: true, email: true },
-  });
-  if (!u) return "Sin nombre";
-  return [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || "Sin nombre";
-}
+// El nombre de quien está en la sesión (congelado en cada fila) vive en
+// ia-cupo.ts desde la Ola 8: lo necesitan el análisis y el renglón de
+// gasto, y dos copias del mismo `findFirst` es cómo se acaba con dos
+// formas de escribir "Sin nombre".

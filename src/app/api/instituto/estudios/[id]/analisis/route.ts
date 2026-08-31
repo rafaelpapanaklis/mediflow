@@ -36,17 +36,24 @@ export async function GET(request: Request, { params }: { params: { id: string }
 /**
  * POST /api/instituto/estudios/[id]/analisis — pide una lectura nueva.
  *
- * ⚠️ ESTA LLAMADA CUESTA DINERO. Lo que la protege, en orden:
+ * ⚠️ ESTA LLAMADA CUESTA DINERO. Lo que la protege, en orden de más barato
+ * a más caro:
  *   1. el permiso `estudios.analyze` (default: ALUMNO, DOCENTE, DIRECCION;
  *      caja NO);
- *   2. la bandera EDU_IA_ENABLED — apagada, contesta 503 explicando que
- *      falta conectar el cobro de IA del instituto;
- *   3. el ALCANCE del expediente: un estudio de otro alumno no existe
+ *   2. el ALCANCE del expediente: un estudio de otro alumno no existe
  *      desde aquí (404, igual que uno que no existe);
- *   4. el formato y el tamaño, leídos de la fila (los midió Storage al
+ *   3. el formato y el tamaño, leídos de la fila (los midió Storage al
  *      confirmar la subida, no el cliente);
- *   5. un freno de 90 segundos contra el doble toque, que devuelve el
- *      análisis recién hecho en vez de pedir otro.
+ *   4. un freno de 90 segundos contra el doble toque, que devuelve el
+ *      análisis recién hecho en vez de pedir otro;
+ *   5. y el CUPO DE IA del instituto (Ola 8): si se acabó, contesta 402
+ *      diciendo cuánto se lleva consumido y a quién pedirle más; si falta
+ *      configurarlo —sin cupo en el contrato, sin tarifa o sin llave—,
+ *      contesta 503 con el motivo escrito para una persona.
+ *
+ * 🔴 EL CUPO VA DESPUÉS DEL FRENO DE DOBLE TOQUE, y ese orden importa: un
+ * segundo toque devuelve la lectura recién hecha SIN gastar nada, así que
+ * negárselo por cupo agotado sería negar algo que no cuesta.
  *
  * 🔴 EL RESULTADO NO ENTRA EN NINGUNA NOTA. Se guarda en su propia tabla y
  * la pantalla lo pinta aparte, con el aviso de que es APOYO y no

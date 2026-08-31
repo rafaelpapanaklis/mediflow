@@ -545,6 +545,42 @@ export function eduPaymentScopeWhere({
   return { institutionId };
 }
 
+// ── El gasto de IA (Ola 8) ──────────────────────────────────────────────
+
+/**
+ * El consumo de IA que le toca ver a quien pregunta: todo, o nada.
+ *
+ * 🔴 LA OLA 8 NO AGREGÓ UN QUINTO RECURSO, Y ESO ES LO IMPORTANTE. El
+ * gasto de IA se lee con el recurso "charges" —el del DINERO— y no con uno
+ * propio. La razón es la misma por la que la Ola 3 no inventó un recurso
+ * para el expediente: un recurso nuevo que dijera lo mismo solo habría
+ * dado un segundo sitio donde equivocarse.
+ *
+ * Y decir lo mismo es exactamente lo que hace falta aquí: "charges" es una
+ * LISTA BLANCA (DIRECCION y CAJA; cualquier otro rol, incluido uno que no
+ * exista todavía, cae en "none") y se resuelve ANTES del switch de roles.
+ * Eso da el segundo candado del gasto de IA: si alguien le enciende
+ * "ia.view" a un alumno desde la pantalla de permisos, el alcance sigue
+ * devolviendo "none" y no ve un dólar. El permiso abre la pantalla; el
+ * alcance decide las filas.
+ *
+ * ⚠️ CAJA cae en "all" por venir de "charges", y no pasa nada: caja no
+ * lleva "ia.view" en su default, así que no abre la pantalla. Si un día
+ * una escuela se lo enciende a propósito, lo que verá es el consumo de IA
+ * del instituto — que es dinero, que es lo suyo. Lo que NO puede es
+ * tocarlo: eso es "ia.manage", que es otra key.
+ *
+ * No lleva `now`: el gasto no caduca ni depende de la vigencia de nadie.
+ */
+export function eduAiUsageScopeWhere({
+  institutionId,
+  scope,
+}: EduChargeScopeInput): Prisma.EduAiUsageWhereInput {
+  requireInstitutionId(institutionId, "eduAiUsageScopeWhere");
+  if (!scope || scope.kind !== "all") return nada(institutionId);
+  return { institutionId };
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 3 · ESCRITURAS: ¿PUEDO TOCAR ESTA FILA?
 //

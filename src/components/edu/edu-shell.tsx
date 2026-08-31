@@ -17,6 +17,7 @@ import {
   LogOut,
   Menu,
   Ruler,
+  Sparkles,
   Stamp,
   Sun,
   Tags,
@@ -70,6 +71,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   gauge: Gauge,
   ruler: Ruler,
   "list-checks": ListChecks,
+  // Ola 8 - la cartera de IA.
+  sparkles: Sparkles,
 };
 
 export interface EduShellProps {

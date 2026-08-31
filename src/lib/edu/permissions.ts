@@ -154,6 +154,26 @@ export const EDU_ALL_PERMISSIONS = {
   "evaluacion.view": "Ver el avance académico y las calificaciones",
   "evaluacion.grade": "Calificar un caso con una rúbrica",
   "traspaso.manage": "Traspasar los casos de un alumno a otro",
+  // ── Ola 8 · la cartera de IA ─────────────────────────────────────────
+  // DOS keys, y las dos tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   ia.view   → /instituto/ia + GET  /api/instituto/ia
+  //   ia.manage → PATCH /api/instituto/ia
+  //
+  // 🔴 VER Y EDITAR SON DOS KEYS, y no es simetría decorativa: lo que
+  // `ia.manage` toca es dinero que se gasta de una cuenta de API que no es
+  // de la escuela. Quien consulta "¿en qué se nos fue el cupo?" no es
+  // necesariamente quien puede autorizar gastar de más.
+  //
+  // ⚠️ Y hay una tercera cosa que NO es una key y por eso no está aquí: lo
+  // que INCLUYE el contrato no se edita desde el panel con ningún permiso.
+  // No existe interruptor que lo abra — ver src/lib/edu/ia-cupo.ts.
+  //
+  // ⚠️ Las funciones de IA en sí NO llevan key nueva: el dictado sigue
+  // siendo `expediente.write` y el análisis `estudios.analyze`, los dos de
+  // la Ola 3B. Tener cupo no es un permiso, es un contrato.
+  "ia.view": "Ver el consumo de IA del instituto y su cupo",
+  "ia.manage": "Encender o apagar la IA y autorizar gastar de más del cupo",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -249,6 +269,17 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
       "evaluacion.grade",
       "traspaso.manage",
     ],
+  },
+  {
+    // Ola 8. Grupo PROPIO y no un renglón dentro de "Expediente clínico",
+    // donde vive `estudios.analyze`. La diferencia es qué se abre con cada
+    // casilla: `estudios.analyze` deja PEDIR una lectura, estas dos dejan
+    // ver y decidir CUÁNTO DINERO se gasta en todas las lecturas del
+    // instituto. Mezclarlas haría que "darle el expediente a alguien"
+    // arrastrara "dejarle autorizar gasto", que es exactamente el error
+    // que un grupo de permisos existe para evitar.
+    title: "Consumo de IA",
+    keys: ["ia.view", "ia.manage"],
   },
 ];
 
@@ -403,6 +434,30 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * decisión académica. Y aunque un docente lo tenga, solo puede traspasar
  * lo que VE — los casos de sus alumnos vigentes.
  *
+ * ── Ola 8 · la cartera de IA ────────────────────────────────────────────
+ * SOLO DIRECCION, las dos. Es el reparto más estrecho del vertical junto
+ * con "equipo.manage", y por la misma clase de razón: lo que se decide
+ * aquí no es qué se ve, es cuánto dinero se gasta.
+ *
+ *   DIRECCION "ia.view" + "ia.manage". Administra el contrato del
+ *             instituto, así que administra lo que ese contrato incluye.
+ *   DOCENTE   ninguna. Usa la IA (dicta y analiza) y no decide el
+ *             presupuesto de nadie.
+ *   ALUMNO    ninguna, por lo mismo.
+ *   CAJA      ninguna. Y ésta es la que parece discutible y no lo es: caja
+ *             sí ve DINERO (es la única con "caja.view" además de
+ *             dirección), pero el dinero de caja es el que la escuela
+ *             COBRA a sus pacientes. El cupo de IA es un renglón del
+ *             contrato con DaleControl: no entra al corte, no se cobra en
+ *             el mostrador y no cuadra con nada de lo que caja concilia.
+ *
+ * 🔴 Y como con el dinero de la Ola 5, no basta con no dárselas: el
+ * consumo de IA se lee con el ALCANCE de "charges" (visibility.ts), que
+ * devuelve "none" para DOCENTE y ALUMNO pase lo que pase. Encenderle
+ * "ia.view" a un alumno por error le abre una pantalla vacía, no el gasto
+ * de la escuela. Dos candados, y el segundo no se abre desde la pantalla
+ * de permisos.
+ *
  * ⚠️ El ALUMNO sí lleva "consentimientos.revoke". Es deliberado y es la
  * decisión menos obvia de la ola: revocar no es autorizar, es REGISTRAR
  * que el paciente se retractó, y el paciente se retracta delante del
@@ -462,6 +517,11 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "evaluacion.view",
     "evaluacion.grade",
     "traspaso.manage",
+    // ── Ola 8 ───────────────────────────────────────────────────────────
+    // SOLO dirección. Quien administra el contrato del instituto es quien
+    // decide si se gasta de más del cupo que ese contrato incluye.
+    "ia.view",
+    "ia.manage",
   ],
   DOCENTE: [
     "inicio.view",

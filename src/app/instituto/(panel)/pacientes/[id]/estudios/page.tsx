@@ -7,7 +7,7 @@ import { EDU_CLINICAL_NONE_DETAIL, eduClinicalScope } from "@/lib/edu/expediente
 import { getEduClinicalPatient, listEduPatientCaseOptions } from "@/lib/edu/expediente";
 import { listEduPatientStudies } from "@/lib/edu/estudios";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
-import { eduIaEstadoActual } from "@/lib/edu/ia";
+import { eduIaEstadoActual } from "@/lib/edu/ia-cupo";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduEstudiosScreen } from "@/components/edu/expediente/estudios-screen";
 
@@ -47,9 +47,14 @@ export default async function PacienteEstudiosPage({ params }: { params: { id: s
   const paciente = await getEduClinicalPatient(ctx, params.id);
   if (!paciente) notFound();
 
-  const [rows, cases] = await Promise.all([
+  const [rows, cases, iaAnalisis] = await Promise.all([
     listEduPatientStudies(ctx, paciente.id, ctx.institution.timezone),
     listEduPatientCaseOptions(ctx, paciente.id),
+    // El estado de la IA lo resuelve el SERVIDOR (Ola 3B), y desde la Ola 8
+    // mira además el CUPO del instituto: cuánto se lleva del mes y si
+    // queda. El navegador no tiene por qué saber el presupuesto de la
+    // escuela — recibe el estado ya decidido, con el motivo escrito.
+    eduIaEstadoActual(ctx, "ANALISIS", ctx.institution.timezone),
   ]);
 
   return (
@@ -58,9 +63,7 @@ export default async function PacienteEstudiosPage({ params }: { params: { id: s
       rows={rows}
       cases={cases}
       canUpload={hasEduPermission(permUser, "estudios.upload")}
-      // Ola 3B. El estado de la IA lo resuelve el SERVIDOR: EDU_IA_ENABLED
-      // no lleva prefijo NEXT_PUBLIC_ y en el navegador no existe.
-      iaAnalisis={eduIaEstadoActual("analisis")}
+      iaAnalisis={iaAnalisis}
       canAnalyze={hasEduPermission(permUser, "estudios.analyze")}
     />
   );

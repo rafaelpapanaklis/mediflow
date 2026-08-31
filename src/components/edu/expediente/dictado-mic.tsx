@@ -32,8 +32,10 @@ import { EDU_DICTADO_MAX_SECONDS, type EduIaEstado } from "@/lib/edu/ia-core";
  *   · los errores se pintan INLINE y no con `react-hot-toast`: en el piso
  *     clínico el teléfono está en la mano y un toast en la esquina se
  *     pierde;
- *   · no hay aviso de tokens gastados, porque en el instituto todavía no
- *     hay cupo de IA que descontar. Cuando lo haya, aquí va.
+ *   · desde la Ola 8 el dictado CONSUME el cupo de IA del instituto, así
+ *     que un 402 ("se acabó el cupo") o un 503 ("no hay cupo configurado")
+ *     se pintan con el texto del servidor y NO se reintentan: el audio se
+ *     descarta en vez de ofrecer un botón que va a volver a fallar.
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -48,6 +50,14 @@ export interface EduDictadoMicProps {
   disabled?: boolean;
   /** El estado de la IA, resuelto en el SERVIDOR (ver ia-core.ts). */
   estado: EduIaEstado;
+  /**
+   * Ola 8 — a qué CASO se le imputa este gasto en el libro de consumo de
+   * IA. Es solo atribución: no cambia lo que se transcribe, y el servidor
+   * lo vuelve a comprobar dentro del alcance antes de guardarlo (un id de
+   * fuera se guarda como null). Puede venir vacío: una nota de tamizaje
+   * todavía no tiene caso y se dicta igual.
+   */
+  caseId?: string | null;
 }
 
 function mimeSoportado(): string {
@@ -85,7 +95,7 @@ function reloj(segundos: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function EduDictadoMic({ onText, disabled, estado }: EduDictadoMicProps) {
+export function EduDictadoMic({ onText, disabled, estado, caseId }: EduDictadoMicProps) {
   const [fase, setFase] = useState<Fase>("idle");
   const [segundos, setSegundos] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -271,6 +281,9 @@ export function EduDictadoMic({ onText, disabled, estado }: EduDictadoMicProps) 
     try {
       const form = new FormData();
       form.append("audio", blob, filename);
+      // Ola 8: a qué caso se le imputa el gasto. No va cuando la nota
+      // todavía no tiene caso elegido, y el servidor lo trata como null.
+      if (caseId) form.append("caso", caseId);
       // Sin `eduRequest`: eso manda JSON y esto es multipart. El manejo de
       // error se repite adrede en vez de generalizar aquel helper — es la
       // única llamada del vertical que sube un archivo desde el servidor.
@@ -283,10 +296,19 @@ export function EduDictadoMic({ onText, disabled, estado }: EduDictadoMicProps) 
           data && typeof data === "object" && typeof (data as { error?: unknown }).error === "string"
             ? (data as { error: string }).error
             : "No se pudo transcribir el audio.";
-        // 503 y 403 no se arreglan reintentando: falta la bandera de IA o
-        // el permiso. Se descarta el audio para no ofrecer un botón que
-        // siempre va a fallar.
-        if (res.status === 503 || res.status === 403 || res.status === 401) {
+        // Ninguno de estos se arregla reintentando, y por eso el audio se
+        // DESCARTA en vez de ofrecer un botón que va a volver a fallar:
+        //   402 = se acabó el cupo de IA del mes (Ola 8);
+        //   503 = no hay cupo configurado, falta tarifa o falta la llave;
+        //   403 = no tiene el permiso; 401 = se cayó la sesión.
+        // El mensaje que se pinta es el del SERVIDOR, que ya viene escrito
+        // para una persona y dice cuánto se consumió y a quién pedirle más.
+        if (
+          res.status === 402 ||
+          res.status === 503 ||
+          res.status === 403 ||
+          res.status === 401
+        ) {
           reintentoRef.current = null;
           setFase("idle");
         } else {
@@ -297,10 +319,8 @@ export function EduDictadoMic({ onText, disabled, estado }: EduDictadoMicProps) 
         return;
       }
 
-      const texto =
-        data && typeof data === "object" && typeof (data as { text?: unknown }).text === "string"
-          ? (data as { text: string }).text.trim()
-          : "";
+      const cuerpo = (data ?? {}) as { text?: unknown; restanteUsdMicros?: unknown };
+      const texto = typeof cuerpo.text === "string" ? cuerpo.text.trim() : "";
       reintentoRef.current = null;
       setFase("idle");
       if (!texto) {
@@ -308,6 +328,17 @@ export function EduDictadoMic({ onText, disabled, estado }: EduDictadoMicProps) 
         return;
       }
       onText(texto);
+
+      // Ola 8 — AVISAR EN EL MISMO MOMENTO en que el cupo se acaba, no en
+      // el siguiente intento. El servidor devuelve lo que queda DESPUÉS de
+      // esta transcripción: si es cero, este dictado fue el último del mes,
+      // y decirlo aquí ahorra el "¿por qué dejó de funcionar de repente?".
+      // No hay ningún umbral inventado: solo se avisa en cero.
+      if (typeof cuerpo.restanteUsdMicros === "number" && cuerpo.restanteUsdMicros <= 0) {
+        setError(
+          "Ese fue el último dictado: se acabó el cupo de IA del instituto de este mes. Tu texto ya quedó en la nota; el micrófono se apaga hasta que la dirección amplíe el cupo.",
+        );
+      }
     } catch {
       if (!montadoRef.current) return;
       reintentoRef.current = { blob, filename };
