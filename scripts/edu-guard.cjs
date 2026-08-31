@@ -54,8 +54,15 @@ function matchesOwnPattern(p) {
 
 // COMPARTIDO: solo pasan si aparecen en EDU_GUARD_SHARED. La lista es
 // CORTA a propósito — cada renglón nuevo aquí es un pedazo del dental que
-// el vertical se permite tocar.
-const SHARED_FILES = ["prisma/schema.prisma", "src/middleware.ts", "ORQUESTA.md"];
+// el vertical se permite tocar. (EDU_AUDIT.md no es dental: es el informe
+// de la auditoría del propio vertical, pero vive fuera de sus carpetas y
+// por eso se declara por corrida, como los otros tres.)
+const SHARED_FILES = [
+  "prisma/schema.prisma",
+  "src/middleware.ts",
+  "ORQUESTA.md",
+  "docs/audits/EDU_AUDIT.md",
+];
 
 function isOwn(p) {
   if (OWN_FILES.includes(p)) return true;
