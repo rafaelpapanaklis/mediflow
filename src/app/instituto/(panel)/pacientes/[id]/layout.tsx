@@ -173,6 +173,16 @@ export default async function InstitutoPacienteLayout({
         permission: null,
         permissionAny: ["consentimientos.view", "caja.view"],
       },
+      {
+        // Ola 14. Documento clínico: CAJA no la ve (ni por permiso ni por
+        // alcance — se lee con "cases", que para caja es "none"). Aquí el
+        // alumno PROPONE la receta; quien la expide con su cédula es el
+        // docente, desde su bandeja de autorizaciones.
+        key: "recetas",
+        href: `${base}/recetas`,
+        label: "Recetas",
+        permission: "recetas.view",
+      },
     ];
 
   const tabs: EduPacienteTab[] = definicion

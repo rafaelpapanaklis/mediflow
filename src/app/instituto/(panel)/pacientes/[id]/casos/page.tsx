@@ -18,6 +18,8 @@ import { listEduProcedures } from "@/lib/edu/tarifas";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduCasoAutorizaciones } from "@/components/edu/autorizaciones/caso-autorizaciones";
 import { EduCasoProcedimiento } from "@/components/edu/evaluacion/caso-procedimiento";
+import { EduCasoRecetas } from "@/components/edu/recetas/caso-recetas";
+import { listEduCaseRecetas } from "@/lib/edu/recetas";
 
 /**
  * Pestaña CASOS: los casos del paciente y sus últimas citas.
@@ -86,6 +88,16 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
   const puedeClasificar = hasEduPermission(permUser, "casos.assign");
   const procedimientos = puedeClasificar
     ? await listEduProcedures(ctx, { soloActivos: true })
+    : [];
+
+  // ── Ola 14 · las recetas de CADA caso ────────────────────────────────
+  // Mismo trato que las autorizaciones de arriba: dos o tres consultas en
+  // paralelo (un paciente tiene un caso por especialidad), solo para quien
+  // puede verlas. Aquí solo se LISTAN — proponer y anular viven en la
+  // pestaña Recetas, a donde lleva el enlace del bloque.
+  const veRecetas = hasEduPermission(permUser, "recetas.view");
+  const recetasPorCaso = veRecetas
+    ? await Promise.all(casos.map((c) => listEduCaseRecetas(ctx, c.id, ctx.institution.timezone)))
     : [];
 
   return (
@@ -165,6 +177,12 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
                       rows={auth.rows}
                       canRequest={puedePedir && !cerrado}
                     />
+                  )}
+
+                  {/* Ola 14 · la lista de recetas del caso: en qué va cada
+                      una y el enlace a la pestaña donde se trabajan. */}
+                  {veRecetas && recetasPorCaso[i] && recetasPorCaso[i].length > 0 && (
+                    <EduCasoRecetas patientId={p.id} rows={recetasPorCaso[i]} />
                   )}
                 </div>
               );
