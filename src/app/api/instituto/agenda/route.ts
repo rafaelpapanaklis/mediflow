@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { parseEduAgendaQuery } from "@/lib/edu/agenda-core";
 import { createEduAppointment, listEduAgenda } from "@/lib/edu/agenda";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +27,13 @@ export async function GET(request: Request) {
     url.searchParams.forEach((value, key) => {
       params[key] = value;
     });
-    const tz = g.ctx.institution.timezone;
-    const page = await listEduAgenda(g.ctx, parseEduAgendaQuery(params, tz), tz);
+    // 🔴 Ola 11 · LA SEDE y su zona. La hora de la agenda es la de la sede
+    // que se está viendo, no la del instituto: una universidad puede tener
+    // un campus en Tijuana y otro en Mérida.
+    const sede = await getEduCampusScope(g.ctx);
+    const cctx = eduWithCampus(g.ctx, sede);
+    const tz = sede.timezone;
+    const page = await listEduAgenda(cctx, parseEduAgendaQuery(params, tz), tz);
     return NextResponse.json({ rows: page.rows, days: page.days, truncated: page.truncated });
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/agenda");
@@ -51,10 +58,16 @@ export async function POST(request: Request) {
   if ("response" in g) return g.response;
 
   try {
+    // 🔴 Ola 11 · el ctx lleva LA SEDE, y por eso agendar en un sillón de
+    // una sede a la que no entras se rebota con 403 (resolveParties, en
+    // agenda.ts). La zona del `timeZone` que se pasa aquí es solo el
+    // respaldo: la hora se interpreta con la de la SEDE DEL SILLÓN, que es
+    // donde está la pared que dice a qué hora abre.
+    const sede = await getEduCampusScope(g.ctx);
     const created = await createEduAppointment(
-      g.ctx,
+      eduWithCampus(g.ctx, sede),
       await eduReadJson(request),
-      g.ctx.institution.timezone,
+      sede.timezone,
     );
     return NextResponse.json({ ok: true, id: created.id }, { status: 201 });
   } catch (err) {

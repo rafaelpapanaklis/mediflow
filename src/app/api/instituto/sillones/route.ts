@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { createEduChair, listEduChairs } from "@/lib/edu/sillones";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +18,12 @@ export async function GET() {
   if ("response" in g) return g.response;
 
   try {
-    return NextResponse.json({ rows: await listEduChairs(g.ctx) });
+    // 🔴 Ola 11 · el ctx que llega al módulo de datos lleva LA SEDE. Sin
+    // esto, el endpoint devolvería (o tocaría) los sillones de todas las
+    // sedes aunque quien pregunta solo entre a una — y la pantalla, que sí
+    // filtra, no se enteraría de la diferencia.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    return NextResponse.json({ rows: await listEduChairs(cctx) });
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/sillones");
   }
@@ -33,7 +40,12 @@ export async function POST(request: Request) {
   if ("response" in g) return g.response;
 
   try {
-    const created = await createEduChair(g.ctx, await eduReadJson(request));
+    // 🔴 Ola 11 · el ctx que llega al módulo de datos lleva LA SEDE. Sin
+    // esto, el endpoint devolvería (o tocaría) los sillones de todas las
+    // sedes aunque quien pregunta solo entre a una — y la pantalla, que sí
+    // filtra, no se enteraría de la diferencia.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const created = await createEduChair(cctx, await eduReadJson(request));
     return NextResponse.json({ ok: true, id: created.id }, { status: 201 });
   } catch (err) {
     return eduApiError(err, "POST /api/instituto/sillones");

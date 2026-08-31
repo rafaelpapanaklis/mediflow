@@ -225,7 +225,16 @@ function chargesWhere(
   sessionId: string | null,
 ): Prisma.EduChargeWhereInput {
   const institutionId = requireDinero(ctx);
-  const where = eduChargeScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") });
+  // 🔴 Ola 11 · LA SEDE. Aquí NO se deriva de nada: `EduCharge.campusId` se
+  // SELLÓ al emitir el cobro (dónde estaba el mostrador). Un cobro sin sede
+  // —los de antes de esta ola que el .sql no alcanzara a rellenar— no sale
+  // bajo ningún filtro de sede y sí sale en la vista consolidada, que es lo
+  // honesto: no se sabe dónde se cobró.
+  const where = eduChargeScopeWhere({
+    institutionId,
+    scope: eduVisibility(ctx, "charges"),
+    campusIds: ctx.campusIds,
+  });
 
   const and: Prisma.EduChargeWhereInput[] = [];
   if (filters.status) and.push({ status: filters.status });
@@ -429,7 +438,20 @@ async function resolverCaso(
 export async function createEduCharge(
   ctx: EduClinicaContext,
   input: EduChargeInput,
-  options: { canRefund?: boolean } = {},
+  options: {
+    canRefund?: boolean;
+    /**
+     * 🔴 Ola 11 · EN QUÉ SEDE SE ESTÁ COBRANDO. Lo resuelve el endpoint con
+     * eduCampusForCharge (campus-core.ts) a partir del selector de la barra
+     * superior, y NUNCA sale del body: un campusId del navegador podría
+     * apuntar el cobro a la sede que quisiera y descuadrar el reporte de
+     * las dos.
+     *
+     * `null` = el instituto todavía no tiene sedes. El cobro sale igual: el
+     * dinero no se detiene por una columna de infraestructura.
+     */
+    campusId?: string | null;
+  } = {},
   now: Date = new Date(),
 ): Promise<{ id: string; folio: string; descartados: number }> {
   const institutionId = requireDinero(ctx);
@@ -505,6 +527,10 @@ export async function createEduCharge(
     chargedByUserId: ctx.eduUserId,
     chargedAt: now,
     cashSessionId: sesion?.id ?? null,
+    // 🔴 Ola 11 · LA SEDE, SELLADA. No se deduce del paciente ni del caso
+    // ni del sillón: es dónde estaba el mostrador cuando entró el dinero, y
+    // por eso no se puede desincronizar de nada.
+    campusId: options.campusId ?? null,
   };
 
   // Tres intentos por el folio automático: si dos cajas cobran en el mismo

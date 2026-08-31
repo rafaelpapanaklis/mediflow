@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 import { updateEduAppointment } from "@/lib/edu/agenda";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +22,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if ("response" in g) return g.response;
 
   try {
+    // 🔴 Ola 11 · el ctx lleva LA SEDE (mover una cita a un sillón de una
+    // sede ajena se rebota) y la zona con la que se lee la hora es la de la
+    // SEDE DEL SILLÓN de destino, no la del instituto.
+    const sede = await getEduCampusScope(g.ctx);
     const updated = await updateEduAppointment(
-      g.ctx,
+      eduWithCampus(g.ctx, sede),
       params.id,
       await eduReadJson(request),
-      g.ctx.institution.timezone,
+      sede.timezone,
     );
     return NextResponse.json({ ok: true, id: updated.id });
   } catch (err) {

@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Clock3 } from "lucide-react";
+import { Building2, Clock3 } from "lucide-react";
 import { getEduContext, eduUserDisplayName } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import {
@@ -15,6 +15,7 @@ import {
   EDU_ROLE_LABELS,
   EDU_UPCOMING_AREAS,
 } from "@/lib/edu/types";
+import { getEduCampusScope, listEduCampusToday } from "@/lib/edu/campus";
 
 export const metadata: Metadata = {
   title: "Inicio · DaleControl Institucional",
@@ -58,6 +59,12 @@ export default async function InstitutoInicioPage() {
       </div>
     );
   }
+
+  // 🔴 Ola 11 · LAS SEDES. El bloque de abajo solo existe cuando hay más de
+  // una: en una escuela de un edificio, un resumen "por sede" con una sola
+  // fila no le dice nada a nadie y ocupa la mitad de la pantalla de inicio.
+  const sede = await getEduCampusScope(ctx);
+  const porSede = sede.showPicker ? await listEduCampusToday(ctx, sede) : [];
 
   const nombre = eduUserDisplayName(ctx.user);
   const rol = EDU_ROLE_LABELS[ctx.role] ?? ctx.role;
@@ -107,7 +114,64 @@ export default async function InstitutoInicioPage() {
           <p className="edu-card__value">{rol}</p>
           <p className="edu-card__note">{EDU_ROLE_DESCRIPTIONS[ctx.role] ?? ""}</p>
         </section>
+
+        {sede.active && (
+          <section className="edu-card">
+            <p className="edu-card__label">Sede que estás viendo</p>
+            <p className="edu-card__value">{sede.active.name}</p>
+            <p className="edu-card__note">
+              Hora local: {sede.timezone}. La agenda, los sillones y la caja de abajo están
+              recortados a esta sede.
+            </p>
+          </section>
+        )}
       </div>
+
+      {/* ── Cómo va hoy cada sede ───────────────────────────────────────
+          🔴 "HOY" ES DISTINTO EN CADA SEDE cuando están en husos distintos,
+          y por eso cada renglón trae su propia fecha: contar las dos con la
+          misma ventana le pondría a una las citas de la madrugada de la
+          otra. Solo se pinta con más de una sede. */}
+      {porSede.length > 0 && (
+        <section>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <h2 className="edu-page__title" style={{ fontSize: 18 }}>
+              Tus sedes hoy
+            </h2>
+            <span className="edu-chip">
+              <Building2 size={12} aria-hidden="true" />
+              {porSede.length}
+            </span>
+          </div>
+          <p className="edu-page__lead" style={{ marginBottom: 14 }}>
+            {sede.active
+              ? `Estás filtrando por ${sede.active.name}. Cambia arriba para ver otra, o vuelve a "${sede.allLabel}".`
+              : `Estás viendo ${sede.allLabel.toLowerCase()}. Elige una arriba para recortar la agenda, los sillones y la caja.`}
+          </p>
+          <div className="edu-grid">
+            {porSede.map((s) => (
+              <article
+                key={s.id}
+                className="edu-card"
+                aria-current={s.id === sede.activeId ? "true" : undefined}
+              >
+                <p className="edu-card__label">
+                  {s.code}
+                  {s.isActive ? "" : " · cerrada"}
+                </p>
+                <p className="edu-card__value">{s.name}</p>
+                <p className="edu-card__note">
+                  {s.appointments} {s.appointments === 1 ? "cita hoy" : "citas hoy"} ·{" "}
+                  {s.chairs} {s.chairs === 1 ? "sillón activo" : "sillones activos"}
+                </p>
+                <p className="edu-card__note">
+                  Su hoy: {s.dayISO} ({s.timezone})
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* El bloque entero desaparece cuando no queda ningún área anunciada
           —y desde la Ola 6 no queda ninguna—. Un encabezado

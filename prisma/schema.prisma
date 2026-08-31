@@ -12409,6 +12409,14 @@ model EduInstitution {
   caseGrades       EduCaseGrade[]
   caseGradeItems   EduCaseGradeItem[]
   requirements     EduRequirement[]
+  // Ola 11 · las SEDES. Bloque ADITIVO al final de las relaciones: los
+  // modelos viven al FINAL del archivo, con su propio encabezado.
+  //
+  // 🔴 La sede NO sustituye al instituto: institutionId sigue siendo el
+  // aislamiento duro entre escuelas y la sede es una división DENTRO de
+  // una. Por eso EduCampus cuelga de aquí, como todo lo demás.
+  campuses         EduCampus[]
+  campusAccess     EduUserCampusAccess[]
 
   @@map("edu_institutions")
 }
@@ -12493,6 +12501,13 @@ model EduUser {
   /// Las dos son columnas de autoría; ninguna decide visibilidad.
   gradesGiven      EduCaseGrade[] @relation("EduGradeBy")
   transfersMade    EduCase[]      @relation("EduCaseTransferBy")
+
+  /// Ola 11. A qué SEDES entra esta persona.
+  ///
+  /// 🔴 SIN FILAS = ENTRA A TODAS las sedes de su instituto. No es un
+  /// descuido: es lo que hace que aplicar la ola no deje fuera a nadie de
+  /// los que ya existen. Con filas, solo a esas.
+  campusAccess     EduUserCampusAccess[]
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12856,8 +12871,17 @@ model EduPatient {
 model EduChair {
   id            String  @id @default(cuid())
   institutionId String
+  /// Ola 11. LA SEDE en la que está físicamente esta unidad. NOT NULL: un
+  /// sillón está en un edificio o no está en ninguno, y uno sin sede
+  /// desaparecería de la agenda en cuanto alguien filtrara por sede.
+  /// sql/edu-ola-11.sql crea una sede por defecto para cada instituto que
+  /// ya existe y le cuelga sus sillones ANTES de poner el NOT NULL.
+  campusId      String
   name          String  @db.VarChar(60)
-  /// El número que está pintado en la pared. Único dentro del instituto.
+  /// El número que está pintado en la pared. Único dentro de la SEDE y no
+  /// del instituto (Ola 11): el campus norte y el campus sur tienen cada
+  /// uno su "Sillón 1" pintado en su pared, y obligar al segundo a numerar
+  /// del 21 al 40 rompe justo lo que esta columna existe para conservar.
   number        Int
   isActive      Boolean @default(true)
   /// Orden en que se pintan las columnas de la agenda. Empata con `number`
@@ -12868,11 +12892,15 @@ model EduChair {
   updatedAt DateTime @updatedAt
 
   institution  EduInstitution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  campus       EduCampus          @relation(fields: [campusId], references: [id], onDelete: Restrict)
   schedules    EduChairSchedule[]
   appointments EduAppointment[]
 
-  @@unique([institutionId, number])
+  /// 🔴 Ola 11: el número es único dentro de la SEDE, no del instituto. El
+  /// .sql crea este índice ANTES de soltar el viejo.
+  @@unique([institutionId, campusId, number], map: "edu_chairs_sede_numero_key")
   @@index([institutionId, isActive, orderIndex], map: "edu_chairs_orden_idx")
+  @@index([institutionId, campusId, isActive, orderIndex], map: "edu_chairs_sede_idx")
   @@map("edu_chairs")
 }
 
@@ -13573,6 +13601,19 @@ model EduCharge {
   /// abierto (se permite: el corte es una herramienta, no un peaje).
   cashSessionId String?
 
+  /// Ola 11. EN QUÉ SEDE se cobró. Se SELLA al emitir, con la sede que
+  /// tenía elegida quien cobró; no se deduce de nada.
+  ///
+  /// 🔴 No es una copia de la sede de otra fila —un cobro no cuelga de
+  /// ningún sillón—: es un hecho del cobro, dónde estaba el mostrador. Por
+  /// eso esta columna no se puede desincronizar de nada.
+  ///
+  /// Opcional para que el dinero NUNCA se detenga por una columna de
+  /// infraestructura. sql/edu-ola-11.sql rellena los cobros que ya existen
+  /// con la sede por defecto de su instituto (que hoy es la única que hay,
+  /// así que no es una suposición).
+  campusId      String?
+
   /// Anulación. Se guarda quién y cuándo porque es dinero.
   cancelledAt      DateTime? @db.Timestamptz(3)
   cancelledByUserId String?
@@ -13588,6 +13629,7 @@ model EduCharge {
   chargedBy   EduUser         @relation("EduChargeBy", fields: [chargedByUserId], references: [id], onDelete: Cascade)
   cancelledBy EduUser?        @relation("EduChargeCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   cashSession EduCashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  campus      EduCampus?      @relation(fields: [campusId], references: [id], onDelete: SetNull)
   items       EduChargeItem[]
   payments    EduPayment[]
 
@@ -13596,6 +13638,7 @@ model EduCharge {
   @@index([institutionId, patientId, chargedAt], map: "edu_charges_patient_idx")
   @@index([institutionId, status], map: "edu_charges_status_idx")
   @@index([institutionId, cashSessionId], map: "edu_charges_session_idx")
+  @@index([institutionId, campusId, chargedAt], map: "edu_charges_sede_idx")
   @@map("edu_charges")
 }
 
@@ -14373,4 +14416,132 @@ model EduRequirement {
   @@index([institutionId, programId, isActive, orderIndex], map: "edu_requirements_plan_idx")
   @@index([institutionId, procedureId], map: "edu_requirements_procedure_idx")
   @@map("edu_requirements")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 11 · LAS SEDES (multi-campus).
+//
+// Dos tablas: la SEDE (EduCampus) y a qué sedes entra cada persona
+// (EduUserCampusAccess).
+//
+// 🔴 LA SEDE NO SUSTITUYE AL INSTITUTO. Ésta es LA línea de la ola y la
+// que más fácil se rompe: `institutionId` sigue siendo el aislamiento duro
+// entre escuelas, y la sede es una división DENTRO de una escuela.
+// Filtrar por `campusId` en vez de por `institutionId` dejaría la puerta
+// abierta entre institutos y el bug se vería exactamente igual que
+// "funciona" — por eso las dos tablas llevan institutionId, igual que
+// todas las olas anteriores, y ninguna consulta del vertical usa campusId
+// como si fuera el tenant.
+//
+// 🔴 QUÉ CUELGA DE UNA SEDE, Y QUÉ NO:
+//   · SÍ  → los SILLONES (EduChair.campusId) y, por lo tanto, las CITAS,
+//           que se filtran POR SU SILLÓN y no por una columna copiada.
+//           Una copia se desincroniza el día que un sillón cambia de
+//           edificio; el sillón es el que sabe dónde está.
+//   · SÍ  → el COBRO (EduCharge.campusId), y no por la misma razón: no es
+//           una copia de nada, es dónde estaba el mostrador. Se SELLA al
+//           emitir.
+//   · NO  → lo ACADÉMICO. Alumnos, generaciones y especialidades no tienen
+//           sede: un alumno ROTA entre sedes y su padrón es UNO solo. Si
+//           el alumno colgara de una sede, rotar significaría darlo de
+//           baja y volverlo a inscribir, y su historial se partiría en
+//           dos.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-11.sql y hay que
+// aplicarlo a mano en Supabase. Trae el BACKFILL: crea una sede por
+// defecto para cada instituto que ya existe y le cuelga sus sillones y sus
+// cobros. Sin ese backfill, al aplicar la ola la agenda se queda vacía.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// UNA SEDE del instituto: el campus norte, el campus sur, la clínica de
+/// posgrado. Nombre, clave corta, dirección y ZONA HORARIA PROPIA.
+///
+/// 🔴 LA ZONA HORARIA ES DE LA SEDE Y NO DEL INSTITUTO, y no es un adorno:
+/// una universidad puede tener un campus en Tijuana y otro en Mérida, que
+/// son dos husos distintos. La agenda de una sede se pinta y se guarda con
+/// LA DE ESA SEDE (src/lib/edu/campus.ts resuelve cuál toca); la del
+/// instituto queda como el respaldo para la vista consolidada y para las
+/// sedes que no la cambiaron.
+///
+/// ⚠️ UNA SEDE NO SE BORRA: se DESACTIVA (isActive), como los sillones y
+/// las especialidades. Y hay una razón extra en esta tabla: los permisos
+/// de acceso (EduUserCampusAccess) cuelgan de la sede en CASCADE, así que
+/// borrarla se llevaría por delante las filas de acceso de quien solo
+/// entraba ahí — y "sin filas" significa "entra a TODAS las sedes". Borrar
+/// una sede le abriría el instituto entero a esa persona. Por eso el
+/// producto no tiene un botón de borrar sede, y por eso EduChair apunta
+/// aquí con Restrict: una sede con sillones no se va ni por accidente.
+model EduCampus {
+  id            String  @id @default(cuid())
+  institutionId String
+  name          String  @db.VarChar(80)
+  /// La clave corta que la escuela ya usa en sus papeles ("NORTE", "CU").
+  /// Única DENTRO del instituto: dos escuelas pueden tener las dos su
+  /// sede "NORTE".
+  code          String  @db.VarChar(20)
+  address       String? @db.VarChar(200)
+  city          String? @db.VarChar(80)
+  state         String? @db.VarChar(80)
+  phone         String? @db.VarChar(30)
+  /// Zona horaria DE ESTA SEDE. El default empata con el de
+  /// EduInstitution porque el caso normal es que coincidan; cambiar este
+  /// default NO reescribe las filas que ya existen.
+  timezone      String  @default("America/Mexico_City") @db.VarChar(60)
+  isActive      Boolean @default(true)
+  /// Orden en que se listan y en que se pintan en el selector.
+  orderIndex    Int     @default(0)
+  notes         String? @db.VarChar(300)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  chairs      EduChair[]
+  access      EduUserCampusAccess[]
+  charges     EduCharge[]
+
+  @@unique([institutionId, code], map: "edu_campuses_code_key")
+  @@index([institutionId, isActive, orderIndex], map: "edu_campuses_orden_idx")
+  @@map("edu_campuses")
+}
+
+/// A QUÉ SEDES ENTRA UNA PERSONA.
+///
+/// 🔴 SIN FILAS = ENTRA A TODAS LAS SEDES DE SU INSTITUTO. Es la regla más
+/// importante de esta tabla y es al revés de lo que sugiere una tabla de
+/// permisos, así que está escrita aquí, en el schema, en el .sql y en
+/// src/lib/edu/campus-core.ts:
+///
+///   · sin filas → todas las sedes del instituto (compatibilidad hacia
+///     atrás: los usuarios que ya existen no se pueden quedar fuera el día
+///     que se aplica esta ola);
+///   · con filas → SOLO esas.
+///
+/// La consecuencia que hay que tener en la cabeza al programar: una lista
+/// resuelta VACÍA no es lo mismo que "sin filas". Si alguien tiene filas y
+/// todas apuntan a sedes que ya no existen, lo correcto es que no vea
+/// NINGUNA sede, no que las vea todas. En Prisma eso es
+/// `campusId: { in: [] }` (cero filas) y JAMÁS un filtro ausente (que
+/// devuelve todo).
+///
+/// ⚠️ Esto NO es un permiso: los permisos (EduUser.permissionsOverride)
+/// dicen QUÉ puede hacer una persona, y esto dice DÓNDE. Un docente con
+/// agenda.view y acceso solo al campus norte ve la agenda —el permiso está
+/// encendido— pero solo la del norte.
+model EduUserCampusAccess {
+  id            String @id @default(cuid())
+  institutionId String
+  userId        String
+  campusId      String
+
+  createdAt DateTime @default(now())
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user        EduUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus      EduCampus      @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campusId], map: "edu_user_campus_key")
+  @@index([institutionId, campusId], map: "edu_user_campus_sede_idx")
+  @@index([institutionId, userId], map: "edu_user_campus_persona_idx")
+  @@map("edu_user_campus_access")
 }

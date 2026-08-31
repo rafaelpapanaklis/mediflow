@@ -679,6 +679,15 @@ export interface EduChairRow {
   schedules: EduChairScheduleRow[];
   /** Citas futuras que ya tiene. Lo lee el botón de desactivar. */
   upcoming: number;
+  /** Ola 11 · en qué SEDE está esta unidad. */
+  campusId: string;
+  campusName: string;
+  /**
+   * La zona horaria de SU sede. Viaja con el sillón porque el horario de
+   * un sillón está en la hora de PARED de su edificio: "abre a las 8" no
+   * significa lo mismo en Tijuana que en Mérida.
+   */
+  campusTimezone: string;
 }
 
 export interface EduChairOption {
@@ -686,6 +695,16 @@ export interface EduChairOption {
   name: string;
   number: number;
   isActive: boolean;
+  /**
+   * Ola 11. Viaja SIEMPRE, aunque el instituto tenga una sola sede: la
+   * pantalla decide si lo pinta contando cuántas sedes distintas hay en la
+   * lista, y para eso el dato tiene que estar. Con dos sedes hay dos
+   * "Sillón 1" —el número es único DENTRO de la sede, porque es el que está
+   * pintado en cada pared— y sin el nombre de la sede la agenda tendría dos
+   * columnas idénticas.
+   */
+  campusId: string;
+  campusName: string;
 }
 
 export interface EduAppointmentRow {
