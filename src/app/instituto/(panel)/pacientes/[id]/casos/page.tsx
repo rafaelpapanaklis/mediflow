@@ -5,7 +5,8 @@ import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
 import { listEduPatientCases } from "@/lib/edu/casos";
-import { listEduPatientAppointments } from "@/lib/edu/agenda";
+import { listEduPatientAppointments, listEduStudentOptions } from "@/lib/edu/agenda";
+import { listEduCurrentAssignments } from "@/lib/edu/padron";
 import { eduFormatDayShort } from "@/lib/edu/agenda-core";
 import { eduVisibility } from "@/lib/edu/visibility";
 import { getEduCaseApprovalState } from "@/lib/edu/autorizaciones";
@@ -17,6 +18,7 @@ import {
 import { listEduProcedures } from "@/lib/edu/tarifas";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduCasoAutorizaciones } from "@/components/edu/autorizaciones/caso-autorizaciones";
+import { EduCasoAcciones } from "@/components/edu/casos/caso-acciones";
 import { EduCasoProcedimiento } from "@/components/edu/evaluacion/caso-procedimiento";
 import { EduCasoRecetas } from "@/components/edu/recetas/caso-recetas";
 import { listEduCaseRecetas } from "@/lib/edu/recetas";
@@ -44,7 +46,7 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
     return (
       <EduDenied
         permission="casos.view"
-        what="Los casos clínicos del paciente: qué especialidad, qué alumno y en qué van."
+        what="Los casos clínicos del paciente: qué especialidad, qué estudiante y en qué van."
       />
     );
   }
@@ -53,10 +55,32 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
   if (!p) notFound();
 
   const scope = eduVisibility(ctx, "cases");
-  const [casos, citas] = await Promise.all([
+
+  // ── Ola de Casos · qué puede HACER quien mira, derivado en el server ──
+  // Mover el estado es del MISMO permiso que el PATCH (casos.assign);
+  // registrar sesión, del expediente; traspasar y firmar, de los suyos. A
+  // nadie se le pinta un botón que va a rebotar con 403.
+  const canMoverEstado = hasEduPermission(permUser, "casos.assign");
+  const canRegistrarSesion = hasEduPermission(permUser, "expediente.write");
+  const canTraspasar = hasEduPermission(permUser, "traspaso.manage");
+  const canFirmar = hasEduPermission(permUser, "autorizaciones.decide");
+
+  const [casos, citas, alumnosDestino] = await Promise.all([
     listEduPatientCases(ctx, p.id),
     hasEduPermission(permUser, "agenda.view")
       ? listEduPatientAppointments(ctx, p.id, ctx.institution.timezone)
+      : Promise.resolve([]),
+    // El destino del traspaso, por ALCANCE (la lección del P1-4: el padrón
+    // completo no viaja al navegador de quien no lo ve): un DOCENTE recibe
+    // SOLO sus alumnos vigentes; dirección, los activos del instituto.
+    canTraspasar
+      ? scope.kind === "all"
+        ? listEduStudentOptions(ctx).then((rows) =>
+            rows.map((a) => ({ id: a.id, matricula: a.matricula, name: a.name })),
+          )
+        : listEduCurrentAssignments(ctx, new Date(), ctx.eduUserId).then((rows) =>
+            rows.map((a) => ({ id: a.studentId, matricula: a.matricula, name: a.name })),
+          )
       : Promise.resolve([]),
   ]);
 
@@ -111,7 +135,7 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
         {scope.kind !== "all" && casos.length > 0 && (
           <p className="edu-note">
             Ves los casos que te tocan. Si este paciente tiene otros con otra especialidad y otro
-            alumno, no salen aquí.
+            estudiante, no salen aquí.
           </p>
         )}
 
@@ -119,8 +143,8 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
           <div className="edu-empty">
             <p className="edu-empty__title">Sin casos que mostrarte</p>
             <p className="edu-empty__detail">
-              Un caso se abre en el tamizaje: es lo que le pone alumno y especialidad al paciente. Si
-              este paciente ya tiene casos con otros alumnos, no te tocan.
+              Un caso se abre en el tamizaje: es lo que le pone estudiante y especialidad al paciente. Si
+              este paciente ya tiene casos con otros estudiantes, no te tocan.
             </p>
           </div>
         ) : (
@@ -184,6 +208,29 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
                   {veRecetas && recetasPorCaso[i] && recetasPorCaso[i].length > 0 && (
                     <EduCasoRecetas patientId={p.id} rows={recetasPorCaso[i]} />
                   )}
+
+                  {/* Ola de Casos · LAS ACCIONES: iniciar/alta (el gate),
+                      pausar, firmar lo pendiente, registrar sesión y
+                      traspasar — todo desde aquí, sin ir a otra pantalla. */}
+                  <EduCasoAcciones
+                    caseId={c.id}
+                    patientId={p.id}
+                    caseLabel={`${c.programName} · ${c.patientName}`}
+                    status={c.status}
+                    cerrado={cerrado}
+                    gatePlanOk={
+                      auth?.gates.find((g) => g.stage === "PLAN")?.verdict.ok ?? false
+                    }
+                    gateAltaOk={
+                      auth?.gates.find((g) => g.stage === "DISCHARGE")?.verdict.ok ?? false
+                    }
+                    canMoverEstado={canMoverEstado}
+                    canRegistrarSesion={canRegistrarSesion}
+                    canTraspasar={canTraspasar}
+                    canFirmar={canFirmar}
+                    pendientes={(auth?.rows ?? []).filter((r) => r.status === "PENDING")}
+                    alumnosDestino={alumnosDestino}
+                  />
                 </div>
               );
             })}

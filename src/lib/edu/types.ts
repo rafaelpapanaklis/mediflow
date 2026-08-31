@@ -43,6 +43,11 @@
 //   /instituto/sedes        → las sedes y quién entra a cada una  Ola 11 ✓
 //   /instituto/ia           → el consumo de IA del mes y el CUPO  Ola 8  ✓
 //   /instituto/pacientes/[id]/recetas → recetas del paciente      Ola 14 ✓
+//   /instituto/casos        → TODOS los casos: filtros, buscador y
+//                             export; recortado por alcance     Ola Casos ✓
+//   /instituto/caja/planes  → pagos a meses: planes y vencimientos Pagos ✓
+//   /instituto/caja/planes/[id]/recibo → recibo imprimible del plan Pagos ✓
+//   /instituto/pacientes/[id]/pagos → sus mensualidades y su saldo Pagos ✓
 // PÚBLICA (SIN sesión — vive FUERA del grupo (panel), igual que /login):
 //   /instituto/consentimiento/[token] → el paciente lee y firma    Ola 3B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
@@ -127,6 +132,14 @@
 //   POST  /api/instituto/recetas/[id]/anular  → anular una EXPEDIDA       Ola 14 ✓
 //   GET   /api/instituto/recetas/[id]/pdf     → el PDF (solo EXPEDIDA
 //                                               o ANULADA: el gate)       Ola 14 ✓
+//   GET   /api/instituto/casos/export → la pantalla de casos en CSV
+//                                       (mismo permiso, alcance y filtros) Ola Casos ✓
+//   PATCH /api/instituto/pacientes/[id]/antecedentes → antecedentes médicos
+//                                       (pacientes.manage O expediente.write) Ola Casos ✓
+//   POST  /api/instituto/caja/cobros/[id]/plan → pagar a meses un cobro   Pagos ✓
+//   GET   /api/instituto/caja/planes           → los planes de pago       Pagos ✓
+//   POST  /api/instituto/caja/planes/[id]/cancelar → cancelar un plan     Pagos ✓
+//   POST  /api/instituto/caja/mensualidades/[id]/pagar → cobrar UNA       Pagos ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -147,7 +160,7 @@ export const EDU_ROLES: EduRole[] = ["DIRECCION", "DOCENTE", "ALUMNO", "CAJA"];
 export const EDU_ROLE_LABELS: Record<EduRole, string> = {
   DIRECCION: "Dirección",
   DOCENTE: "Docente",
-  ALUMNO: "Alumno",
+  ALUMNO: "Estudiante",
   CAJA: "Caja",
 };
 
@@ -155,14 +168,15 @@ export const EDU_ROLE_LABELS: Record<EduRole, string> = {
  * Una línea que explica qué hace ese rol; se usa en el panel y en las altas
  * de /instituto/equipo.
  *
- * ⚠️ Aquí NO se dice "residente" (Ola 1B). El producto le dice ALUMNO en
- * todas sus pantallas, y llamarle de dos maneras distintas obliga a quien
- * da de alta a preguntarse si son dos cosas.
+ * ⚠️ Aquí NO se dice "residente" (Ola 1B). El producto le dice ESTUDIANTE
+ * en todas sus pantallas (antes decía "alumno"; el enum sigue siendo
+ * ALUMNO), y llamarle de dos maneras distintas obliga a quien da de alta a
+ * preguntarse si son dos cosas.
  */
 export const EDU_ROLE_DESCRIPTIONS: Record<EduRole, string> = {
-  DIRECCION: "Dirige el instituto: alumnos, docentes, contrato y reportes.",
-  DOCENTE: "Supervisa a los alumnos y autoriza los procedimientos.",
-  ALUMNO: "Alumno en formación: atiende pacientes y pide autorización.",
+  DIRECCION: "Dirige el instituto: estudiantes, docentes, contrato y reportes.",
+  DOCENTE: "Supervisa a los estudiantes y autoriza los procedimientos.",
+  ALUMNO: "Estudiante en formación: atiende pacientes y pide autorización.",
   CAJA: "Cobra a los pacientes y hace los cortes del día.",
 };
 
@@ -287,11 +301,11 @@ export const EDU_CASE_STATUS_LABELS: Record<EduCaseStatus, string> = {
 
 export const EDU_CASE_STATUS_DESCRIPTIONS: Record<EduCaseStatus, string> = {
   SCREENING: "Se abrió en el tamizaje y todavía no se decide el tratamiento.",
-  ASSIGNED: "Ya tiene alumno responsable; falta empezar.",
+  ASSIGNED: "Ya tiene estudiante responsable; falta empezar.",
   IN_TREATMENT: "Ya se le está trabajando al paciente.",
   ON_HOLD: "Pausado: falta un estudio, un pago o que el paciente vuelva.",
   COMPLETED: "Terminó. No se borra: la historia queda.",
-  TRANSFERRED: "Pasó a otro alumno o a otra especialidad.",
+  TRANSFERRED: "Pasó a otro estudiante o a otra especialidad.",
   ABANDONED: "El paciente dejó de venir y el caso se cerró así.",
 };
 
@@ -323,7 +337,7 @@ export const EDU_APPOINTMENT_TYPE_LABELS: Record<EduAppointmentType, string> = {
 };
 
 export const EDU_APPOINTMENT_TYPE_DESCRIPTIONS: Record<EduAppointmentType, string> = {
-  TAMIZAJE: "Valoración inicial. Es la que asigna el paciente a un alumno y abre el caso.",
+  TAMIZAJE: "Valoración inicial. Es la que asigna el paciente a un estudiante y abre el caso.",
   TRATAMIENTO: "Sesión de trabajo en el sillón.",
   CONTROL: "Revisión posterior, sin tratamiento nuevo.",
 };
@@ -496,14 +510,14 @@ export const EDU_FEE_RULES: EduFeeRule[] = ["MANUAL", "REFERRED_BY_STUDENT"];
 
 export const EDU_FEE_RULE_LABELS: Record<EduFeeRule, string> = {
   MANUAL: "Se elige a mano",
-  REFERRED_BY_STUDENT: "Paciente que trajo un alumno",
+  REFERRED_BY_STUDENT: "Paciente que trajo un estudiante",
 };
 
 export const EDU_FEE_RULE_DESCRIPTIONS: Record<EduFeeRule, string> = {
   MANUAL:
     "No se aplica sola. Sirve para convenios, campañas y personal: al cobrar se elige a mano.",
   REFERRED_BY_STUDENT:
-    "Se aplica sola cuando al paciente lo trajo un alumno (el origen que marca recepción con el permiso pacientes.origen).",
+    "Se aplica sola cuando al paciente lo trajo un estudiante (el origen que marca recepción con el permiso pacientes.origen).",
 };
 
 /** En qué va el cobro. Se DERIVA de (total, pagado, cancelado). */
@@ -607,12 +621,12 @@ export const EDU_APPROVAL_STAGE_LABELS: Record<EduApprovalStage, string> = {
 };
 
 export const EDU_APPROVAL_STAGE_DESCRIPTIONS: Record<EduApprovalStage, string> = {
-  PLAN: "Lo que el alumno propone hacerle al paciente. Sin esto autorizado, el caso no pasa a tratamiento.",
+  PLAN: "Lo que el estudiante propone hacerle al paciente. Sin esto autorizado, el caso no pasa a tratamiento.",
   PROCEDURE: "Un acto concreto que se va a hacer hoy. No mueve el caso: deja escrito que el docente lo vio antes.",
   SESSION: "Esta sesión, en esta hora y en este sillón. Si se reagenda, la firma deja de valer.",
   DISCHARGE: "Dar por terminado el caso. Sin esto autorizado, no se cierra.",
   PRESCRIPTION:
-    "La receta que el alumno propone. La firma del docente ES la expedición: sale con su cédula, y sin ella no se imprime.",
+    "La receta que el estudiante propone. La firma del docente ES la expedición: sale con su cédula, y sin ella no se imprime.",
 };
 
 /**
@@ -758,6 +772,23 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     icon: "contact",
     section: "operacion",
     permission: "pacientes.view",
+  },
+  {
+    // ── Ola de Casos · la clínica entera en una tabla ─────────────────
+    // Va pegado a Pacientes: son las dos caras de la misma operación (la
+    // persona / su tratamiento). Hasta esta ola un caso solo se veía
+    // entrando al paciente, y la dirección no podía contestar "¿cuántos
+    // están atorados en firma?" sin abrir fichas una por una.
+    //
+    // ⚠️ CAJA no lo ve — y no solo por esta línea: no trae "casos.view"
+    // por default, el layout además lo esconde con alcance "none", y la
+    // pantalla y la API vuelven a cerrar. El item escondido nunca es el
+    // candado.
+    key: "casos",
+    href: "/instituto/casos",
+    icon: "folder-open",
+    section: "operacion",
+    permission: "casos.view",
   },
   {
     key: "padron",
@@ -958,13 +989,15 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   autorizaciones: "Autorizaciones",
   agenda: "Agenda",
   pacientes: "Pacientes",
+  casos: "Casos",
   // Cierre: era "Padrón" y el dueño del producto tuvo que preguntar qué
-  // significaba — si él dudó, una escuela también. Se renombra SOLO lo que
-  // se lee: la ruta sigue siendo /instituto/padron (renombrarla rompería
-  // los enlaces guardados), el modelo sigue siendo EduStudent y las keys
-  // siguen siendo padron.view / padron.manage. Misma regla que
-  // "Especialidades" un renglón más abajo.
-  padron: "Alumnos",
+  // significaba — si él dudó, una escuela también. Después pidió
+  // "Estudiantes" en vez de "Alumnos". Se renombra SOLO lo que se lee: la
+  // ruta sigue siendo /instituto/padron (renombrarla rompería los enlaces
+  // guardados), el modelo sigue siendo EduStudent y las keys siguen siendo
+  // padron.view / padron.manage. Misma regla que "Especialidades" un
+  // renglón más abajo.
+  padron: "Estudiantes",
   // Ola 1B: la escuela les dice ESPECIALIDADES, no "programas". El modelo
   // sigue llamándose EduProgram y la ruta sigue siendo /padron/estructura —
   // solo cambia lo que se LEE. Renombrar el modelo obligaría a migrar
@@ -1153,4 +1186,65 @@ export const EDU_PRESCRIPTION_TRANSITIONS: Record<
   EXPEDIDA: ["ANULADA"],
   RECHAZADA: [],
   ANULADA: [],
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// PAGOS A MESES — el plan de pagos de un cobro.
+//
+// EduPaymentPlanStatus es espejo 1:1 del enum de Prisma, escrito como
+// unión de strings para poder importarlo desde componentes "use client"
+// sin arrastrar el runtime de Prisma al navegador — igual que todos los
+// anteriores. El candado de que no se desincronicen es un chequeo de
+// TIPOS en src/lib/edu/__tests__/edu-pagos.test.ts (lo verifica
+// `tsc --noEmit`).
+//
+// Y la regla de siempre: la UI JAMÁS pinta el valor del enum.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * En qué va el plan. LIQUIDADO lo escribe la MISMA transacción que
+ * registra el pago de la última mensualidad; CANCELADO es un acto con
+ * autor y motivo. No hay más estados: "vencido" no es del plan sino de
+ * cada mensualidad — y ése ni siquiera se guarda (ver abajo).
+ */
+export type EduPaymentPlanStatus = "ACTIVO" | "LIQUIDADO" | "CANCELADO";
+
+export const EDU_PAYMENT_PLAN_STATUSES: EduPaymentPlanStatus[] = [
+  "ACTIVO",
+  "LIQUIDADO",
+  "CANCELADO",
+];
+
+export const EDU_PAYMENT_PLAN_STATUS_LABELS: Record<EduPaymentPlanStatus, string> = {
+  ACTIVO: "Activo",
+  LIQUIDADO: "Liquidado",
+  CANCELADO: "Cancelado",
+};
+
+export const EDU_PAYMENT_PLAN_STATUS_DESCRIPTIONS: Record<EduPaymentPlanStatus, string> = {
+  ACTIVO: "Tiene mensualidades por cobrar.",
+  LIQUIDADO: "Todas sus mensualidades están pagadas.",
+  CANCELADO: "Se canceló con motivo. El saldo del cobro vuelve a cobrarse normal.",
+};
+
+/**
+ * 🔴 El estado de UNA mensualidad. NO es un enum de Prisma y no es un
+ * olvido: en la base solo se guardan los HECHOS (el pago que la liquidó y
+ * su fecha de vencimiento) y esto se DERIVA en cada lectura con
+ * eduInstallmentStatus (pagos-core.ts). Una columna "VENCIDA" necesitaría
+ * un cron que la escriba — y un cron que falla deja toda la cartera
+ * diciendo "al corriente".
+ */
+export type EduInstallmentStatus = "PENDIENTE" | "PAGADA" | "VENCIDA";
+
+export const EDU_INSTALLMENT_STATUS_LABELS: Record<EduInstallmentStatus, string> = {
+  PENDIENTE: "Pendiente",
+  PAGADA: "Pagada",
+  VENCIDA: "Vencida",
+};
+
+export const EDU_INSTALLMENT_STATUS_DESCRIPTIONS: Record<EduInstallmentStatus, string> = {
+  PENDIENTE: "Todavía no llega su fecha. El día del vencimiento sigue pendiente: vence hoy, no ayer.",
+  PAGADA: "Tiene su pago registrado. El recibo dice cuándo y quién lo recibió.",
+  VENCIDA: "Pasó su fecha sin pago. Lo dice el calendario en cada lectura, no un proceso nocturno.",
 };

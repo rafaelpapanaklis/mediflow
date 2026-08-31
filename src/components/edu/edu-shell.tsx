@@ -11,6 +11,7 @@ import {
   Calendar,
   ClipboardList,
   Contact,
+  FolderOpen,
   Gauge,
   GraduationCap,
   Home,
@@ -66,6 +67,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   calendar: Calendar,
   contact: Contact,
   chair: Armchair,
+  // Ola de Casos — la pantalla global de casos.
+  "folder-open": FolderOpen,
   // Ola 5 — tarifarios y caja.
   banknote: Banknote,
   tags: Tags,
@@ -236,18 +239,12 @@ export function EduShell({
           </button>
         </div>
 
-        <div
-          style={{
-            padding: "0 8px 10px",
-            fontSize: 13,
-            fontWeight: 650,
-            color: "var(--edu-text-2)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={institutionName}
-        >
+        {/* El nombre de la escuela es lo primero que se lee al entrar, y una
+            escuela se llama como se llama: cabe en dos renglones cortando
+            por palabra (.edu-sidebar__school) y solo después se trunca — con
+            el nombre completo siempre en el title. Antes era un renglón con
+            ellipsis y "Institute Odontológico de Esp…" no se podía leer. */}
+        <div className="edu-sidebar__school" title={institutionName}>
           {institutionName}
         </div>
 

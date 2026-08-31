@@ -806,7 +806,7 @@ export function buildEduBitacoraCsv(page: EduBitacoraPage): string {
   const filas: string[] = [];
 
   filas.push(eduCsvRow(["BITÁCORA ACADÉMICA"]));
-  filas.push(eduCsvRow(["Alumno", page.studentName]));
+  filas.push(eduCsvRow(["Estudiante", page.studentName]));
   filas.push(eduCsvRow(["Matrícula", page.matricula]));
   filas.push(eduCsvRow(["Especialidad", page.programName]));
   filas.push(eduCsvRow(["Generación", page.cohortName]));

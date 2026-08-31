@@ -533,7 +533,7 @@ export function eduDirEstadoAgregado(input: EduDirAgregadoInput): EduDirAgregado
     avance,
     esperado: Math.min(1, esperados / totalesMedibles),
     motivo: `A esta altura del ciclo se esperan ${Math.round(esperados)} de ${totalesMedibles} y llevan ${hechosMedibles}${
-      medibles === 1 ? " (1 alumno medible)" : ` (${medibles} alumnos medibles)`
+      medibles === 1 ? " (1 estudiante medible)" : ` (${medibles} estudiantes medibles)`
     }.`,
   };
 }
@@ -913,13 +913,13 @@ export const EDU_DIR_DETALLE_TITULOS: Record<EduDirDetalleKey, string> = {
   "calificaciones-pendientes": "Casos terminados sin calificar",
   cobros: "Cobros emitidos",
   "cobrado-publico": "Cobros a pacientes que llegaron solos",
-  "cobrado-alumno": "Cobros a pacientes que trajo un alumno",
-  "control-tarifa": "Tarifa de alumno a paciente que llegó solo",
-  "control-inverso": "Paciente de alumno cobrado con la lista general",
+  "cobrado-alumno": "Cobros a pacientes que trajo un estudiante",
+  "control-tarifa": "Tarifa de estudiante a paciente que llegó solo",
+  "control-inverso": "Paciente de estudiante cobrado con la lista general",
   "pendiente-cobro": "Cobros con saldo",
   "firmas-pendientes": "Casos esperando firma",
-  "pacientes-sin-alumno": "Pacientes sin alumno",
-  "alumnos-sin-docente": "Alumnos sin docente",
+  "pacientes-sin-alumno": "Pacientes sin estudiante",
+  "alumnos-sin-docente": "Estudiantes sin docente",
 };
 
 /** Lo que se lee bajo el título del detalle: qué es exactamente esta lista. */
@@ -930,25 +930,25 @@ export const EDU_DIR_DETALLE_DETALLES: Record<EduDirDetalleKey, string> = {
   tamizajes: "Las valoraciones iniciales terminadas en el periodo: por ahí entra un paciente nuevo.",
   "citas-perdidas":
     "Citas canceladas y pacientes que no llegaron. Un hueco que se pudo haber usado.",
-  "casos-abiertos": "Casos que se abrieron dentro del periodo, con su especialidad y su alumno.",
+  "casos-abiertos": "Casos que se abrieron dentro del periodo, con su especialidad y su estudiante.",
   "casos-cerrados": "Casos que se cerraron como terminados dentro del periodo.",
   "calificaciones-pendientes":
     "Casos terminados en el periodo que todavía no tienen calificación vigente. Es trabajo del docente que falta cerrar.",
   cobros: "Los tickets emitidos en el periodo, con lo que se cobró y lo que queda debiendo.",
   "cobrado-publico":
-    "Cobros de pacientes SIN alumno de origen: llegaron solos a la clínica.",
-  "cobrado-alumno": "Cobros de pacientes que trajo un alumno.",
+    "Cobros de pacientes SIN estudiante de origen: llegaron solos a la clínica.",
+  "cobrado-alumno": "Cobros de pacientes que trajo un estudiante.",
   "control-tarifa":
-    "El control que importa: se aplicó una lista de precios de PACIENTE DE ALUMNO a alguien que llegó solo a la clínica. O falta marcar quién lo trajo, o se cobró de menos.",
+    "El control que importa: se aplicó una lista de precios de PACIENTE DE ESTUDIANTE a alguien que llegó solo a la clínica. O falta marcar quién lo trajo, o se cobró de menos.",
   "control-inverso":
-    "Al revés: el paciente sí lo trajo un alumno y se le cobró con la lista general. O se le cobró de más, o el origen se marcó después del cobro.",
+    "Al revés: el paciente sí lo trajo un estudiante y se le cobró con la lista general. O se le cobró de más, o el origen se marcó después del cobro.",
   "pendiente-cobro": "Cobros del periodo que todavía tienen saldo.",
   "firmas-pendientes":
     "Autorizaciones que un docente todavía no ha decidido, de la más vieja a la más nueva.",
   "pacientes-sin-alumno":
-    "Registrados y sin caso abierto ni cita próxima: no son de nadie todavía, y por eso no los ve ningún alumno ni ningún docente.",
+    "Registrados y sin caso abierto ni cita próxima: no son de nadie todavía, y por eso no los ve ningún estudiante ni ningún docente.",
   "alumnos-sin-docente":
-    "Alumnos activos sin ninguna asignación de supervisor VIGENTE. Nadie puede firmarles una autorización.",
+    "Estudiantes activos sin ninguna asignación de supervisor VIGENTE. Nadie puede firmarles una autorización.",
 };
 
 /** Una fila de detalle: genérica a propósito, para que el modal sea UNO. */
@@ -1023,7 +1023,7 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
     filas.push(eduCsvRow(["LA CLÍNICA AHORA", `corte de las ${ahora.horaLabel}`]));
     filas.push(eduCsvRow(["Concepto", "Valor"]));
     filas.push(eduCsvRow(["Pacientes en la clínica", ahora.pacientesEnClinica]));
-    filas.push(eduCsvRow(["Alumnos atendiendo", ahora.alumnosAtendiendo]));
+    filas.push(eduCsvRow(["Estudiantes atendiendo", ahora.alumnosAtendiendo]));
     filas.push(
       eduCsvRow(["Sillones en uso", `${ahora.sillonesEnUso} de ${ahora.sillonesTotal}`]),
     );
@@ -1033,7 +1033,7 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
 
     filas.push(eduCsvRow(["SILLONES"]));
     filas.push(
-      eduCsvRow(["Sillón", "Estado", "Paciente", "Alumno", "Especialidad", "Desde", "Espera"]),
+      eduCsvRow(["Sillón", "Estado", "Paciente", "Estudiante", "Especialidad", "Desde", "Espera"]),
     );
     for (const s of ahora.sillones) {
       filas.push(
@@ -1072,7 +1072,7 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
   filas.push(
     eduCsvRow([
       "Especialidad",
-      "Alumnos",
+      "Estudiantes",
       "En clínica hoy",
       "Pacientes",
       "Cobrado",
@@ -1114,8 +1114,8 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
   }
   filas.push(eduCsvRow([]));
 
-  filas.push(eduCsvRow(["ALUMNOS ATRASADOS"]));
-  filas.push(eduCsvRow(["Matrícula", "Alumno", "Especialidad", "Estado", "Motivo"]));
+  filas.push(eduCsvRow(["ESTUDIANTES ATRASADOS"]));
+  filas.push(eduCsvRow(["Matrícula", "Estudiante", "Especialidad", "Estado", "Motivo"]));
   for (const a of panel.atrasados) {
     filas.push(
       eduCsvRow([a.matricula, a.studentName, a.programName, eduDirAtrasoLabel(a.estado), a.motivo]),
@@ -1123,8 +1123,8 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
   }
   filas.push(eduCsvRow([]));
 
-  filas.push(eduCsvRow(["ALUMNOS CON MÁS ACTIVIDAD"]));
-  filas.push(eduCsvRow(["Matrícula", "Alumno", "Especialidad", "Pacientes", "Citas", "Horas"]));
+  filas.push(eduCsvRow(["ESTUDIANTES CON MÁS ACTIVIDAD"]));
+  filas.push(eduCsvRow(["Matrícula", "Estudiante", "Especialidad", "Pacientes", "Citas", "Horas"]));
   for (const a of panel.masActivos) {
     filas.push(
       eduCsvRow([a.matricula, a.studentName, a.programName, a.pacientes, a.citas, a.horasLabel]),
@@ -1139,17 +1139,17 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
   filas.push(eduCsvRow(["Emitido (tickets del periodo)", eduMoney(d.emitidoCents), d.cobros]));
   filas.push(eduCsvRow(["Pendiente de cobro", eduMoney(d.pendienteCents), ""]));
   filas.push(eduCsvRow(["Emitido · llegaron solos", eduMoney(d.publicoCents), ""]));
-  filas.push(eduCsvRow(["Emitido · los trajo un alumno", eduMoney(d.alumnoCents), ""]));
+  filas.push(eduCsvRow(["Emitido · los trajo un estudiante", eduMoney(d.alumnoCents), ""]));
   filas.push(
     eduCsvRow([
-      "CONTROL · tarifa de alumno a paciente que llegó solo",
+      "CONTROL · tarifa de estudiante a paciente que llegó solo",
       eduMoney(d.controlCents),
       d.controlCount,
     ]),
   );
   filas.push(
     eduCsvRow([
-      "CONTROL · paciente de alumno con lista general",
+      "CONTROL · paciente de estudiante con lista general",
       eduMoney(d.inversoCents),
       d.inversoCount,
     ]),
@@ -1182,11 +1182,11 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
         : `el más viejo lleva ${eduDirEsperaLabel(panel.pendientes.firmaMasViejaMin)}`,
     ]),
   );
-  filas.push(eduCsvRow(["Pacientes sin alumno", panel.pendientes.pacientesSinAlumno, ""]));
+  filas.push(eduCsvRow(["Pacientes sin estudiante", panel.pendientes.pacientesSinAlumno, ""]));
   filas.push(
     eduCsvRow(["Calificaciones sin registrar", panel.pendientes.calificacionesSinRegistrar, ""]),
   );
-  filas.push(eduCsvRow(["Alumnos sin docente", panel.pendientes.alumnosSinDocente, ""]));
+  filas.push(eduCsvRow(["Estudiantes sin docente", panel.pendientes.alumnosSinDocente, ""]));
   filas.push(eduCsvRow([]));
 
   filas.push(eduCsvRow(["USO DE LA CLÍNICA"]));

@@ -379,11 +379,11 @@ test("🔴 un alumno con la generación sin fechas NO arrastra a su especialidad
   assert.ok(Math.abs((conLasDosMitades.avance ?? 0) - 100 / 140) < 1e-9);
 });
 
-test("el motivo dice con cuántos alumnos se midió la especialidad", () => {
+test("el motivo dice con cuántos estudiantes se midió la especialidad", () => {
   const v = agregadoUniforme(50, 80, 100, 7);
-  assert.match(v.motivo, /7 alumnos medibles/);
+  assert.match(v.motivo, /7 estudiantes medibles/);
   const uno = agregadoUniforme(50, 80, 100, 1);
-  assert.match(uno.motivo, /1 alumno medible/);
+  assert.match(uno.motivo, /1 estudiante medible/);
 });
 
 test("al principio del ciclo no se espera nada todavía, y sale AL_DIA con su motivo", () => {
@@ -683,7 +683,7 @@ test("el CSV lleva BOM y el tablero entero, bloque por bloque", () => {
     "SILLONES",
     "ACTIVIDAD DEL PERIODO",
     "POR ESPECIALIDAD",
-    "ALUMNOS ATRASADOS",
+    "ESTUDIANTES ATRASADOS",
     "DINERO",
     "PENDIENTES",
     "USO DE LA CLÍNICA",
@@ -696,8 +696,8 @@ test("el CSV lleva BOM y el tablero entero, bloque por bloque", () => {
 
 test("🔴 el CSV lleva las DOS filas de control del dinero, con su importe y cuántas son", () => {
   const csv = buildEduDireccionCsv(panelDePrueba(), null);
-  assert.match(csv, /CONTROL · tarifa de alumno a paciente que llegó solo/);
-  assert.match(csv, /CONTROL · paciente de alumno con lista general/);
+  assert.match(csv, /CONTROL · tarifa de estudiante a paciente que llegó solo/);
+  assert.match(csv, /CONTROL · paciente de estudiante con lista general/);
   // El importe formateado del control (90.00) y su cuenta (2).
   assert.ok(csv.includes("$90.00"), "el importe del control no salió en el CSV");
 });

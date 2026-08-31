@@ -47,7 +47,7 @@ export default async function InstitutoEvaluacionPage({
     return (
       <EduDenied
         permission="evaluacion.view"
-        what="El avance académico: qué requisitos lleva cada alumno, cuántas horas clínicas y cómo va contra lo esperado."
+        what="El avance académico: qué requisitos lleva cada estudiante, cuántas horas clínicas y cómo va contra lo esperado."
       />
     );
   }
@@ -101,7 +101,7 @@ export default async function InstitutoEvaluacionPage({
           <p className="edu-page__lead">
             {esAlumno
               ? "Lo que llevas y lo que te falta para cerrar, contra lo que se espera a esta altura del ciclo. Los números salen de tus casos: no los teclea nadie."
-              : "Cada alumno contra lo que se espera a esta altura del ciclo, y por qué. El avance se cuenta de sus casos —no hay ningún contador guardado que se pueda desincronizar."}
+              : "Cada estudiante contra lo que se espera a esta altura del ciclo, y por qué. El avance se cuenta de sus casos —no hay ningún contador guardado que se pueda desincronizar."}
           </p>
         </div>
       </header>

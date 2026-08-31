@@ -1079,7 +1079,7 @@ export async function decideEduApproval(
   // supervisor al alumno, que es lo que le faltaba de todos modos.
   if (actual.requestedById === ctx.eduUserId) {
     throw new EduPadronError(
-      "No puedes decidir lo que tú mismo mandaste: una firma sobre la propia petición no es una firma. Que la revise el docente que supervisa a ese alumno; si no tiene supervisor vigente, asígnaselo desde Docentes y él la firma.",
+      "No puedes decidir lo que tú mismo mandaste: una firma sobre la propia petición no es una firma. Que la revise el docente que supervisa a ese estudiante; si no tiene supervisor vigente, asígnaselo desde Docentes y él la firma.",
       409,
     );
   }
@@ -1092,7 +1092,7 @@ export async function decideEduApproval(
       EDU_APPROVAL_NOTE_MAX,
       decision === "CHANGES_REQUESTED"
         ? "Escribe QUÉ hay que cambiar. Devolverlo sin decir qué es devolverlo dos veces."
-        : "Escribe por qué lo rechazas. El alumno tiene que poder aprender algo de esto.",
+        : "Escribe por qué lo rechazas. El estudiante tiene que poder aprender algo de esto.",
     );
   } else if (typeof input.note === "string" && input.note.trim().length > 0) {
     note = input.note.trim().slice(0, EDU_APPROVAL_NOTE_MAX);
@@ -1205,7 +1205,7 @@ export async function decideEduApproval(
         // El throw deshace también la firma de arriba: no queda una
         // autorización APPROVED sobre una receta que no se expidió.
         throw new EduPadronError(
-          "Esa receta ya no está esperando firma: el alumno la re-mandó o alguien la movió. Refresca la bandeja y decide sobre la versión nueva.",
+          "Esa receta ya no está esperando firma: el estudiante la re-mandó o alguien la movió. Refresca la bandeja y decide sobre la versión nueva.",
           409,
         );
       }

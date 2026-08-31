@@ -24,14 +24,27 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
-import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
+import { eduCurrentAssignmentWhere, eduSearchTokens } from "@/lib/edu/padron-core";
 import {
   EDU_CLINICA_MAX_ROWS,
   eduCleanId,
+  eduDayRange,
+  eduFormatDayShort,
   eduOptionalText,
+  eduSafeTimeZone,
+  eduUtcToZoned,
   parseEduCaseStatus,
   type EduCaseRow,
 } from "@/lib/edu/agenda-core";
+// Ola de Casos · la pantalla global. Lo puro (filtros, la columna
+// "esperando", el CSV) vive en casos-core.ts; aquí solo la consulta.
+import { eduPhoneSearchToken } from "@/lib/edu/pacientes-core";
+import {
+  eduCasoEsperando,
+  type EduCasosPanelFilters,
+  type EduCasosPanelPage,
+  type EduCasosPanelRow,
+} from "@/lib/edu/casos-core";
 import {
   eduCaseScopeWhere,
   eduScopeIsEmpty,
@@ -41,7 +54,11 @@ import {
 // Ola 4 · el gate. Se importa aquí y no al revés: `autorizaciones.ts` no
 // sabe nada de este archivo, así que no hay ciclo.
 import { eduCaseGateCheck } from "@/lib/edu/autorizaciones";
-import { EDU_CASE_CLOSED_STATUSES, type EduCaseStatus } from "@/lib/edu/types";
+import {
+  EDU_CASE_CLOSED_STATUSES,
+  EDU_CASE_STATUS_LABELS,
+  type EduCaseStatus,
+} from "@/lib/edu/types";
 
 export type { EduCaseRow } from "@/lib/edu/agenda-core";
 
@@ -319,9 +336,9 @@ async function resolveCaseParties(
         select: { id: true, status: true, programId: true },
       })
     : null;
-  if (!student) throw new EduPadronError("Elige un alumno de este instituto.", 400);
+  if (!student) throw new EduPadronError("Elige un estudiante de este instituto.", 400);
   if (student.status !== "ACTIVE") {
-    throw new EduPadronError("Ese alumno no está activo en el padrón. No se le puede asignar un paciente.");
+    throw new EduPadronError("Ese estudiante no está activo en el padrón. No se le puede asignar un paciente.");
   }
 
   const program = programId
@@ -768,4 +785,151 @@ export async function runEduTamizaje(
     now,
   );
   return { id: caso.id, patientId };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LA PANTALLA GLOBAL DE CASOS (ola de Casos)
+// ═══════════════════════════════════════════════════════════════════════
+
+export type {
+  EduCasosPanelFilters,
+  EduCasosPanelPage,
+  EduCasosPanelRow,
+} from "@/lib/edu/casos-core";
+
+/**
+ * TODOS los casos que le tocan a quien pregunta, con lo que la lista
+ * global necesita y `EduCaseRow` no trae: la GENERACIÓN del alumno y QUÉ
+ * ESTÁ ESPERANDO el caso (derivado de sus autorizaciones).
+ *
+ * Es una función APARTE de `listEduCases` a propósito: aquélla alimenta la
+ * ficha y la agenda con una fila más ligera, y ensancharla habría hecho
+ * viajar las autorizaciones de cada caso a pantallas que no las piden.
+ *
+ * 🔴 El recorte es el de SIEMPRE (`eduCaseScopeWhere`): el ALUMNO ve los
+ * suyos —incluidos los TRANSFERRED, que son su historia académica—, el
+ * DOCENTE los de sus alumnos vigentes, DIRECCIÓN todos y CAJA ninguno
+ * (alcance "none", aunque alguien le encienda "casos.view" por error).
+ *
+ * 🔴 El buscador solo mira los DOS searchIndex de la Ola 1B (el del
+ * paciente: folio+nombre+teléfono+correo; el del alumno: la matrícula) —
+ * ya en minúsculas, sin acentos y con los comodines de LIKE quitados por
+ * eduSearchTokens. Buscar "Rodriguez" encuentra a "Rodríguez".
+ */
+export async function listEduCasosPanel(
+  ctx: EduClinicaContext,
+  filters: EduCasosPanelFilters,
+  timeZone: string,
+  now: Date = new Date(),
+): Promise<EduCasosPanelPage> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "cases");
+  if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
+
+  const where: Prisma.EduCaseWhereInput = {
+    ...eduCaseScopeWhere({
+      institutionId,
+      scope,
+      now,
+      studentExtra: filters.studentId ? { id: filters.studentId } : undefined,
+    }),
+  };
+
+  if (filters.status) where.status = filters.status;
+  else if (!filters.incluirCerrados) where.status = { notIn: EDU_CASE_CLOSED_STATUSES };
+  if (filters.programId) where.programId = filters.programId;
+  if (filters.supervisorUserId) where.supervisorUserId = filters.supervisorUserId;
+
+  const tz = eduSafeTimeZone(timeZone);
+  const and: Prisma.EduCaseWhereInput[] = [];
+
+  // Las fechas son días de CALENDARIO del instituto: se convierten a
+  // instantes con eduDayRange (extremo derecho EXCLUSIVO — un caso abierto
+  // a las 23:59 del "hasta" cuenta; uno de las 00:00 del día siguiente no).
+  if (filters.desdeISO) {
+    const r = eduDayRange(filters.desdeISO, tz);
+    if (r) and.push({ openedAt: { gte: r.from } });
+  }
+  if (filters.hastaISO) {
+    const r = eduDayRange(filters.hastaISO, tz);
+    if (r) and.push({ openedAt: { lt: r.to } });
+  }
+
+  // El buscador: cada palabra tiene que aparecer en el índice del paciente
+  // O en el del alumno (la matrícula). El AND entre palabras es lo que hace
+  // que "maria lopez" no traiga a todas las Marías.
+  for (const token of eduSearchTokens(filters.q)) {
+    const or: Prisma.EduCaseWhereInput[] = [
+      { patient: { searchIndex: { contains: token } } },
+      { student: { searchIndex: { contains: token } } },
+    ];
+    const digits = eduPhoneSearchToken(token);
+    if (digits && digits !== token) {
+      or.push({ patient: { searchIndex: { contains: digits } } });
+    }
+    and.push({ OR: or });
+  }
+
+  if (and.length > 0) where.AND = and;
+
+  const rows = await prisma.eduCase.findMany({
+    where,
+    orderBy: [{ openedAt: "desc" }],
+    take: EDU_CLINICA_MAX_ROWS + 1,
+    select: {
+      id: true,
+      status: true,
+      openedAt: true,
+      closedAt: true,
+      supervisorUserId: true,
+      patient: { select: { id: true, folio: true, firstName: true, lastName: true } },
+      student: {
+        select: {
+          id: true,
+          matricula: true,
+          semester: true,
+          user: { select: { firstName: true, lastName: true, email: true } },
+          cohort: { select: { name: true } },
+        },
+      },
+      program: { select: { name: true } },
+      supervisor: { select: { firstName: true, lastName: true, email: true } },
+      // Solo lo que la columna "esperando" necesita: PENDING y APPROVED.
+      // Las CHANGES_REQUESTED/REJECTED/EXPIRED no cambian la espera y
+      // engordarían el payload de cada fila.
+      approvals: {
+        where: { status: { in: ["PENDING", "APPROVED"] } },
+        select: { stage: true, status: true },
+      },
+    },
+  });
+
+  const toPanelRow = (c: (typeof rows)[number]): EduCasosPanelRow => {
+    const abierto = eduUtcToZoned(c.openedAt, tz).dayISO;
+    return {
+      id: c.id,
+      status: c.status,
+      statusLabel: EDU_CASE_STATUS_LABELS[c.status] ?? c.status,
+      patientId: c.patient.id,
+      patientName:
+        [c.patient.firstName, c.patient.lastName].filter(Boolean).join(" ").trim() || "Sin nombre",
+      patientFolio: c.patient.folio,
+      studentId: c.student.id,
+      studentName: personName(c.student.user),
+      studentMatricula: c.student.matricula,
+      supervisorName: c.supervisor ? personName(c.supervisor) : null,
+      programName: c.program.name,
+      cohortName: c.student.cohort?.name ?? null,
+      semester: c.student.semester,
+      openedISO: abierto,
+      openedLabel: eduFormatDayShort(abierto),
+      closedLabel: c.closedAt ? eduFormatDayShort(eduUtcToZoned(c.closedAt, tz).dayISO) : null,
+      espera: eduCasoEsperando(c.status, c.approvals),
+    };
+  };
+
+  return {
+    truncated: rows.length > EDU_CLINICA_MAX_ROWS,
+    rows: rows.slice(0, EDU_CLINICA_MAX_ROWS).map(toPanelRow),
+  };
 }

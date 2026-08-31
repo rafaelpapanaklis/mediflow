@@ -197,7 +197,7 @@ export function EduRecetaDocument({ data }: { data: EduRecetaPdfData }) {
             <Text style={s.signRole}>Propuso</Text>
             <Text style={s.signName}>{data.proposedByName}</Text>
             <Text style={s.signMeta}>
-              Alumno de la especialidad
+              Estudiante de la especialidad
               {data.proposedByMatricula ? ` · Matrícula ${data.proposedByMatricula}` : ""}
             </Text>
           </View>

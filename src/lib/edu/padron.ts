@@ -599,7 +599,7 @@ export async function createEduStudent(
     : null;
   if (!user) throw new EduPadronError("Esa persona no es de este instituto.", 404);
   if (user.role !== "ALUMNO") {
-    throw new EduPadronError("Solo se puede inscribir a una persona con rol Alumno.");
+    throw new EduPadronError("Solo se puede inscribir a una persona con rol Estudiante.");
   }
   if (user.studentProfile) {
     throw new EduPadronError("Esa persona ya está inscrita en el padrón.", 409);
@@ -647,7 +647,7 @@ export async function updateEduStudent(
     where: { id: studentId, institutionId },
     select: { id: true, programId: true, cohortId: true, status: true, graduatedAt: true },
   });
-  if (!current) throw new EduPadronError("Ese alumno no es de este instituto.", 404);
+  if (!current) throw new EduPadronError("Ese estudiante no es de este instituto.", 404);
 
   const data: {
     matricula?: string;
@@ -729,7 +729,7 @@ export async function assignEduSupervisor(
   const student = studentId
     ? await prisma.eduStudent.findFirst({ where: { id: studentId, institutionId }, select: { id: true } })
     : null;
-  if (!student) throw new EduPadronError("Ese alumno no es de este instituto.", 404);
+  if (!student) throw new EduPadronError("Ese estudiante no es de este instituto.", 404);
 
   const supervisor = supervisorUserId
     ? await prisma.eduUser.findFirst({
@@ -742,7 +742,7 @@ export async function assignEduSupervisor(
     throw new EduPadronError("Solo se puede asignar como supervisor a alguien con rol Docente.");
   }
   if (!supervisor.isActive) {
-    throw new EduPadronError("Ese docente está dado de baja. Reactívalo antes de asignarle alumnos.");
+    throw new EduPadronError("Ese docente está dado de baja. Reactívalo antes de asignarle estudiantes.");
   }
 
   const yaLoLleva = await prisma.eduSupervisorAssignment.findFirst({
@@ -754,7 +754,7 @@ export async function assignEduSupervisor(
     },
     select: { id: true },
   });
-  if (yaLoLleva) throw new EduPadronError("Ese docente ya supervisa a este alumno.", 409);
+  if (yaLoLleva) throw new EduPadronError("Ese docente ya supervisa a este estudiante.", 409);
 
   const created = await prisma.$transaction(async (tx) => {
     if (isPrimary) {

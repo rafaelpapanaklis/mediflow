@@ -662,7 +662,7 @@ export const EDU_ATRASO_LABELS: Record<EduAtrasoEstado, string> = {
 export const EDU_ATRASO_DESCRIPTIONS: Record<EduAtrasoEstado, string> = {
   AL_DIA: "Lleva cumplido lo que se espera a esta altura del ciclo, o más.",
   VIGILAR: "Va por debajo de lo esperado, pero todavía alcanza si no se descuida.",
-  ATRASADO: "Va muy por debajo de lo esperado a esta altura. Hay que hablar con el alumno.",
+  ATRASADO: "Va muy por debajo de lo esperado a esta altura. Hay que hablar con el estudiante.",
 };
 
 /**
@@ -898,7 +898,7 @@ export function eduCsvFileName(base: string, dayISO: string): string {
     .replace(/^-+|-+$/g, "")
     .toLowerCase()
     .slice(0, 60);
-  return `bitacora-${limpio || "alumno"}-${dayISO}.csv`;
+  return `bitacora-${limpio || "estudiante"}-${dayISO}.csv`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════

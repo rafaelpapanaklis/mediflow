@@ -218,7 +218,7 @@ export function EduPacientesScreen({
           <p className="edu-empty__detail">
             {hayFiltros
               ? "Prueba con menos filtros o revisa el folio que buscaste."
-              : "Aquí aparecen los pacientes que la clínica registra en recepción. Un paciente se ve para un alumno o un docente cuando tiene una cita o un caso con él."}
+              : "Aquí aparecen los pacientes que la clínica registra en recepción. Un paciente se ve para un estudiante o un docente cuando tiene una cita o un caso con él."}
           </p>
         </div>
       ) : (
@@ -558,7 +558,7 @@ function OrigenField({
   return (
     <div className="edu-field">
       <label className="edu-field__label" htmlFor={id}>
-        ¿Lo trajo algún alumno?
+        ¿Lo trajo algún estudiante?
       </label>
       <select
         id={id}
@@ -822,7 +822,7 @@ function FichaPaciente({
           <p className="edu-note">Cargando…</p>
         ) : (data?.cases.length ?? 0) === 0 ? (
           <p className="edu-note">
-            Sin casos. Un caso se abre en el tamizaje, y es lo que le pone alumno y
+            Sin casos. Un caso se abre en el tamizaje, y es lo que le pone estudiante y
             especialidad al paciente.
           </p>
         ) : (

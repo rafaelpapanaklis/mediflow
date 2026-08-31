@@ -112,14 +112,14 @@ export function EduEvaluacionScreen({
     return (
       <div className="edu-empty">
         <p className="edu-empty__title">
-          {esAlumno ? "Todavía no hay nada que medirte" : "Todavía no hay alumnos que medir"}
+          {esAlumno ? "Todavía no hay nada que medirte" : "Todavía no hay estudiantes que medir"}
         </p>
         <p className="edu-empty__detail">
           {esAlumno
             ? "Cuando la dirección capture los requisitos de tu especialidad, aquí verás cuántos llevas y cuántos te faltan."
             : canManagePlan
-              ? "Da de alta alumnos en Alumnos y captura los requisitos de cada especialidad en Requisitos. El avance se cuenta solo: no hay nada que teclear."
-              : "Todavía no tienes alumnos asignados. Cuando la dirección te asigne un grupo, aparecerá aquí."}
+              ? "Da de alta estudiantes en Estudiantes y captura los requisitos de cada especialidad en Requisitos. El avance se cuenta solo: no hay nada que teclear."
+              : "Todavía no tienes estudiantes asignados. Cuando la dirección te asigne un grupo, aparecerá aquí."}
         </p>
       </div>
     );
@@ -215,7 +215,7 @@ export function EduEvaluacionScreen({
 
           <div className="edu-field">
             <label className="edu-field__label" htmlFor="edu-ev-est">
-              Estado del alumno
+              Estado del estudiante
             </label>
             <select
               id="edu-ev-est"
@@ -251,7 +251,7 @@ export function EduEvaluacionScreen({
         <span className="edu-count">
           {navigating
             ? "Calculando…"
-            : `${rows.length} ${rows.length === 1 ? "alumno" : "alumnos"}${
+            : `${rows.length} ${rows.length === 1 ? "estudiante" : "estudiantes"}${
                 truncated ? ` (se muestran los primeros ${maxRows})` : ""
               }`}
         </span>
@@ -259,13 +259,13 @@ export function EduEvaluacionScreen({
 
       {rows.length === 0 ? (
         <div className="edu-empty">
-          <p className="edu-empty__title">Ningún alumno coincide</p>
+          <p className="edu-empty__title">Ningún estudiante coincide</p>
           <p className="edu-empty__detail">Prueba con menos filtros.</p>
         </div>
       ) : (
         <div className="edu-table edu-table--evaluacion">
           <div className="edu-rowhead" aria-hidden="true">
-            <span>Alumno</span>
+            <span>Estudiante</span>
             <span>Especialidad</span>
             <span>Cómo va</span>
             <span>Avance</span>
@@ -277,7 +277,7 @@ export function EduEvaluacionScreen({
           {rows.map((r) => (
             <div key={r.studentId} className="edu-row">
               <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Alumno</span>
+                <span className="edu-cell__label">Estudiante</span>
                 <span className="edu-cell__value edu-cell__value--strong">{r.studentName}</span>
                 <span className="edu-cell__sub">
                   {r.matricula} · {r.semester}º semestre ·{" "}

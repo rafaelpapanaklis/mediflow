@@ -44,7 +44,7 @@ export default async function InstitutoBitacoraPage({
     return (
       <EduDenied
         permission="evaluacion.view"
-        what="La bitácora académica de un alumno: sus casos, sus calificaciones, sus horas y lo que le falta."
+        what="La bitácora académica de un estudiante: sus casos, sus calificaciones, sus horas y lo que le falta."
       />
     );
   }
@@ -93,7 +93,7 @@ export default async function InstitutoBitacoraPage({
           </Link>
           <h1 className="edu-page__title">Bitácora académica</h1>
           <p className="edu-page__lead">
-            Todo lo que este alumno ha hecho en la clínica de la escuela, en una pantalla y en un
+            Todo lo que este estudiante ha hecho en la clínica de la escuela, en una pantalla y en un
             archivo. Generada el {page.generatedLabel}.
           </p>
         </div>

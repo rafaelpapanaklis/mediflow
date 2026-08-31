@@ -203,13 +203,13 @@ export function eduScopeIsEmpty(scope: EduVisibilityScope): boolean {
 /** Texto que se le pinta a quien abrió una pantalla y no le toca nada. */
 export const EDU_VISIBILITY_NONE_DETAIL: Record<EduVisibilityResource, string> = {
   patients:
-    "Tu rol no lista pacientes. Los ven la dirección y caja (todos), los docentes (los de sus alumnos vigentes) y cada alumno (los suyos).",
+    "Tu rol no lista pacientes. Los ven la dirección y caja (todos), los docentes (los de sus estudiantes vigentes) y cada estudiante (los suyos).",
   appointments:
-    "Tu rol no lista citas. La agenda completa la ven la dirección y caja; un docente ve la de sus alumnos vigentes y un alumno la suya.",
+    "Tu rol no lista citas. La agenda completa la ven la dirección y caja; un docente ve la de sus estudiantes vigentes y un estudiante la suya.",
   cases:
     "Tu rol no lista casos clínicos. Caja no los ve a propósito: recibe y cobra, no abre expediente. Si necesitas verlos, pídele a la dirección que revise tu rol.",
   charges:
-    "Tu rol no ve dinero: ni precios, ni cobros, ni saldos. Los ven la dirección y caja. Un docente y un alumno no, y no es un permiso que se pueda encender: en el piso clínico se atiende, y en el mostrador se cobra.",
+    "Tu rol no ve dinero: ni precios, ni cobros, ni saldos. Los ven la dirección y caja. Un docente y un estudiante no, y no es un permiso que se pueda encender: en el piso clínico se atiende, y en el mostrador se cobra.",
 };
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -604,6 +604,45 @@ export function eduPaymentScopeWhere({
   scope,
 }: EduChargeScopeInput): Prisma.EduPaymentWhereInput {
   requireInstitutionId(institutionId, "eduPaymentScopeWhere");
+  if (!scope || scope.kind !== "all") return nada(institutionId);
+  return { institutionId };
+}
+
+// ── Pagos a meses ───────────────────────────────────────────────────────
+
+/**
+ * Los PLANES DE PAGO que le tocan a quien pregunta: todos, o ninguno.
+ *
+ * Un plan es DINERO —el calendario de lo que un paciente debe— así que se
+ * lee con el mismo alcance de "charges" que el cobro del que cuelga: lista
+ * blanca (DIRECCION y CAJA), todo o nada. Un ALUMNO no ve el plan de su
+ * propio paciente por la misma razón por la que no ve su saldo.
+ *
+ * ⚠️ No se recorta por SEDE y no es un olvido: la sede vive SELLADA en el
+ * COBRO (dónde estaba el mostrador al emitir); el plan es un acuerdo sobre
+ * ese cobro y una mensualidad se puede pagar en cualquier mostrador — su
+ * corte es el del turno que la cobró, como todo pago.
+ */
+export function eduPaymentPlanScopeWhere({
+  institutionId,
+  scope,
+}: EduChargeScopeInput): Prisma.EduPaymentPlanWhereInput {
+  requireInstitutionId(institutionId, "eduPaymentPlanScopeWhere");
+  if (!scope || scope.kind !== "all") return nada(institutionId);
+  return { institutionId };
+}
+
+/**
+ * Lo mismo para las MENSUALIDADES, que se consultan sueltas en "qué vence
+ * esta semana". Existe aparte por lo de siempre: el `where` de Prisma es de
+ * OTRO modelo, y `{ institutionId }` a mano es el atajo que deja una
+ * consulta de dinero fuera del punto único.
+ */
+export function eduInstallmentScopeWhere({
+  institutionId,
+  scope,
+}: EduChargeScopeInput): Prisma.EduInstallmentWhereInput {
+  requireInstitutionId(institutionId, "eduInstallmentScopeWhere");
   if (!scope || scope.kind !== "all") return nada(institutionId);
   return { institutionId };
 }

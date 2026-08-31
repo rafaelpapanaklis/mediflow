@@ -244,7 +244,7 @@ function nombreDelAlumno(p: EduPacienteTarifaData): string {
   const mat = p.referredByStudentMatricula;
   if (nombre && mat) return `${nombre} (${mat})`;
   if (nombre) return nombre;
-  return "un alumno";
+  return "un estudiante";
 }
 
 /**
@@ -275,7 +275,7 @@ function elegirLista(
     // caja "llegó solo a la clínica" cuando SÍ lo trajo un alumno, solo
     // porque la escuela no ha creado esa lista, es mentirle al que cobra.
     const reason = paciente.referredByStudentId
-      ? `Lo trajo ${nombreDelAlumno(paciente)}, pero no hay una lista activa para pacientes de alumno`
+      ? `Lo trajo ${nombreDelAlumno(paciente)}, pero no hay una lista activa para pacientes de estudiante`
       : "Llegó solo a la clínica";
     return match(porDefecto[0], reason, true);
   }

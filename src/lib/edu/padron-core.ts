@@ -104,7 +104,7 @@ export function eduPadronScope(ctx: { role: EduRole; eduUserId: string }): EduPa
 /** Texto que se le pinta a quien abrió la lista de alumnos y no le toca
  *  ninguna fila. */
 export const EDU_SCOPE_NONE_DETAIL =
-  "Tu rol no lista alumnos. La lista la ven la dirección (todos) y los docentes (los suyos). Si necesitas verla, pídele a la dirección que revise tu rol.";
+  "Tu rol no lista estudiantes. La lista la ven la dirección (todos) y los docentes (los suyos). Si necesitas verla, pídele a la dirección que revise tu rol.";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 2 · VIGENCIA — el docente rota a media generación

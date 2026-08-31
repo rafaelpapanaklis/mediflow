@@ -325,4 +325,4 @@ export interface EduRecetaCaseOption {
 
 /** Lo que se le pinta a quien abrió la pestaña y no le toca nada. */
 export const EDU_RECETA_NONE_DETAIL =
-  "Tu rol no ve recetas. Caja no las ve a propósito: una receta es un documento clínico, no un cobro. Las ven la dirección (todas), los docentes (las de sus alumnos vigentes) y cada alumno (las suyas).";
+  "Tu rol no ve recetas. Caja no las ve a propósito: una receta es un documento clínico, no un cobro. Las ven la dirección (todas), los docentes (las de sus estudiantes vigentes) y cada estudiante (las suyas).";

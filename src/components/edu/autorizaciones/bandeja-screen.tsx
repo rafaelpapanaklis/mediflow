@@ -167,7 +167,7 @@ export function EduBandejaScreen({
     if (texto.length < EDU_APPROVAL_NOTE_MIN) {
       setError(
         abierta?.decision === "REJECTED"
-          ? "Escribe por qué lo rechazas. El alumno tiene que poder aprender algo de esto."
+          ? "Escribe por qué lo rechazas. El estudiante tiene que poder aprender algo de esto."
           : "Escribe QUÉ hay que cambiar. Devolverlo sin decir qué es devolverlo dos veces.",
       );
       return;
@@ -207,7 +207,7 @@ export function EduBandejaScreen({
         {row.isEmergency && (
           <p className="edu-auth-card__urgencia">
             <strong>Urgencia · ya se hizo sin firma.</strong>{" "}
-            {row.emergencyReason ?? "El alumno no escribió el motivo."}
+            {row.emergencyReason ?? "El estudiante no escribió el motivo."}
           </p>
         )}
 
@@ -441,7 +441,7 @@ export function EduBandejaScreen({
                 : `${emergencies} urgencias esperando tu firma`}
             </p>
             <p className="edu-banner__detail">
-              Una urgencia ya ocurrió: el alumno procedió sin firma previa y quedó constancia. Van
+              Una urgencia ya ocurrió: el estudiante procedió sin firma previa y quedó constancia. Van
               primero y no entran en el lote — ésas se leen.
             </p>
           </div>
@@ -467,7 +467,7 @@ export function EduBandejaScreen({
           </p>
           <p className="edu-empty__detail">
             {canDecide
-              ? "Cuando un alumno tuyo mande un plan o un procedimiento a autorización, aparecerá aquí con su paciente, su especialidad y cuánto lleva esperando."
+              ? "Cuando un estudiante tuyo mande un plan o un procedimiento a autorización, aparecerá aquí con su paciente, su especialidad y cuánto lleva esperando."
               : "Lo que mandes a autorización desde la ficha del caso aparecerá aquí hasta que tu docente lo firme."}
           </p>
         </div>
@@ -475,7 +475,7 @@ export function EduBandejaScreen({
         <>
           <p className="edu-note">
             {total === 1 ? "1 petición" : `${total} peticiones`} ·{" "}
-            {groups.length === 1 ? "1 alumno" : `${groups.length} alumnos`}
+            {groups.length === 1 ? "1 estudiante" : `${groups.length} estudiantes`}
             {viewerRole === "DIRECCION" ? " · ves las de todo el instituto" : ""}
           </p>
 
@@ -508,7 +508,7 @@ export function EduBandejaScreen({
 
                 {canDecide && g.batchIds.length < g.rows.length && (
                   <p className="edu-auth-grupo__nota">
-                    {g.rows.length - g.batchIds.length} de este alumno no entran en el lote: son
+                    {g.rows.length - g.batchIds.length} de este estudiante no entran en el lote: son
                     urgencias o recetas, cambiaron después de mandarse o las mandaste tú. Se firman
                     leyéndolas.
                   </p>

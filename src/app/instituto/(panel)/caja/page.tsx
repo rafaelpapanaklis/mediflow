@@ -123,8 +123,8 @@ export default async function InstitutoCajaPage({
         <div>
           <h1 className="edu-page__title">Caja</h1>
           <p className="edu-page__lead">
-            Eliges al paciente y el sistema pone su tarifa: si lo trajo un alumno, paga la lista de
-            alumno, y lo dice con el nombre de quien lo trajo. Aquí no se teclean precios.
+            Eliges al paciente y el sistema pone su tarifa: si lo trajo un estudiante, paga la lista de
+            estudiante, y lo dice con el nombre de quien lo trajo. Aquí no se teclean precios.
             {sede.active
               ? ` Estás viendo los cobros de ${sede.active.name}.`
               : sede.showPicker

@@ -53,13 +53,13 @@ export default async function InstitutoEstructuraPage() {
         <div>
           <h1 className="edu-page__title">Especialidades y generaciones</h1>
           <p className="edu-page__lead">
-            El esqueleto de la lista de alumnos: primero la especialidad, luego la generación, y ya
+            El esqueleto de la lista de estudiantes: primero la especialidad, luego la generación, y ya
             con eso se puede inscribir a alguien. Nada de aquí se borra — se activa y se desactiva.
           </p>
         </div>
         <div className="edu-pagehead__actions">
           <Link href="/instituto/padron" className="edu-btn edu-btn--ghost edu-btn--sm">
-            Ir a Alumnos
+            Ir a Estudiantes
           </Link>
         </div>
       </header>
