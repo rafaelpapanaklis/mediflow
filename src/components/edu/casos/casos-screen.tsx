@@ -151,7 +151,7 @@ export function EduCasosScreen({
         {alumnos.length > 0 && (
           <div className="edu-field">
             <label className="edu-field__label" htmlFor="edu-casos-alumno">
-              Alumno
+              Estudiante
             </label>
             <select
               id="edu-casos-alumno"
@@ -289,14 +289,14 @@ export function EduCasosScreen({
           <p className="edu-empty__detail">
             {hayFiltros
               ? "Prueba con menos filtros, o elige «También cerrados» si buscas uno terminado o transferido."
-              : "Un caso se abre en el tamizaje: es lo que le pone alumno y especialidad a un paciente. En cuanto exista uno que te toque, sale aquí."}
+              : "Un caso se abre en el tamizaje: es lo que le pone estudiante y especialidad a un paciente. En cuanto exista uno que te toque, sale aquí."}
           </p>
         </div>
       ) : (
         <div className="edu-table edu-table--casos">
           <div className="edu-rowhead" aria-hidden="true">
             <span>Paciente</span>
-            <span>Alumno</span>
+            <span>Estudiante</span>
             <span>Docente</span>
             <span>Especialidad</span>
             <span>Abierto</span>
@@ -321,7 +321,7 @@ export function EduCasosScreen({
                 </div>
 
                 <div className="edu-cell">
-                  <span className="edu-cell__label">Alumno</span>
+                  <span className="edu-cell__label">Estudiante</span>
                   <span className="edu-cell__value">{c.studentName}</span>
                   <span className="edu-cell__sub">{c.studentMatricula}</span>
                 </div>

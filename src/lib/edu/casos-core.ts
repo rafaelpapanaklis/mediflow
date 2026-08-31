@@ -320,7 +320,7 @@ export function buildEduCasosCsv(rows: EduCasosPanelRow[]): string {
       "Folio",
       "Paciente",
       "Matrícula",
-      "Alumno",
+      "Estudiante",
       "Docente del caso",
       "Especialidad",
       "Generación",

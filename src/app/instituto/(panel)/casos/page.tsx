@@ -55,7 +55,7 @@ export default async function InstitutoCasosPage({
     return (
       <EduDenied
         permission="casos.view"
-        what="Los casos clínicos de la escuela: qué paciente, con qué alumno, en qué especialidad y qué está esperando cada uno."
+        what="Los casos clínicos de la escuela: qué paciente, con qué estudiante, en qué especialidad y qué está esperando cada uno."
       />
     );
   }
@@ -111,7 +111,7 @@ export default async function InstitutoCasosPage({
               ? "Todos los casos de la clínica, con qué está esperando cada uno: una firma, un alta, o nada. Es la vista de la clínica entera."
               : scope.kind === "own"
                 ? "Tus casos, incluidos los que ya entregaste: son tu historia académica."
-                : "Los casos de tus alumnos vigentes. Cuando la dirección te asigne o te quite alguno, esta lista lo refleja sola."}
+                : "Los casos de tus estudiantes vigentes. Cuando la dirección te asigne o te quite alguno, esta lista lo refleja sola."}
           </p>
         </div>
       </header>

@@ -133,7 +133,7 @@ export function EduAntecedentesCard({ patientId, antecedentes, canEdit }: EduAnt
               Eso NO significa que no tenga: significa que no se sabe.
               {canEdit
                 ? " Captúralos — guardar el formulario vacío también cuenta: registra que se le preguntó y no refiere."
-                : " Pídele a recepción o al alumno del caso que los capture."}
+                : " Pídele a recepción o al estudiante del caso que los capture."}
             </p>
           </div>
         </div>

@@ -30515,3 +30515,136 @@ comentario de eduCsvRow, idéntico en main).
 **Lo que no se vio.** Sin navegador ni base en esta sesión: el clamp de dos renglones está
 compilado y razonado contra el CSS real, no visto en Chrome con un nombre largo de verdad.
 PR contra `main`, SIN mergear.
+
+## [Institucional · INTEGRACIÓN 3] — Visor, Casos, Pagos a meses y Textos en una sola rama: cuatro ramas que no se pisaron en el código, pero sí en el idioma ✅ (2026-08-31) · rama `edu/integracion3`
+
+### Qué es
+
+Las cuatro ramas terminadas del vertical, fusionadas en `edu/integracion3` sobre `origin/main`
+(`da4ce2ee`), en este orden y con merge normal (sin rebase):
+
+| # | Rama | HEAD | Qué trae |
+|---|------|------|----------|
+| 1 | `feat/edu-visor` | `09695cba` | La PANORÁMICA que el DICOM no trae (se calcula), paneles cuadrados medidos en JS, la hoja a pantalla completa y gestos táctiles. |
+| 2 | `feat/edu-casos` | `d497bc45` | Antecedentes médicos con TRI-ESTADO (`"[]"` ≠ "sin alergias"), chips en el layout de la ficha, `/instituto/casos` con filtros/buscador/CSV, y el gate de la Ola 4 con botones. |
+| 3 | `feat/edu-pagos` | `e5f7353d` | Pagos a meses: el residuo de los centavos ENTERO en la 1ª mensualidad, "vencida" la dice el CALENDARIO (sin cron), y el saldo se sigue derivando de los pagos. |
+| 4 | `fix/edu-textos` | `d6dd1d08` | TODO lo visible dice "Estudiante" (el enum sigue `ALUMNO`; rutas, keys y params intactos) y el nombre de la escuela cabe en dos renglones. |
+
+`fix/edu-textos` va AL FINAL a propósito: es la rama que renombra, y las otras tres escriben
+texto nuevo. Aun así el orden no basta — ver el barrido, más abajo.
+
+### Los conflictos, y cómo se resolvieron
+
+Solo dos archivos conflictuaron, los dos en el merge de `feat/edu-pagos`, y los dos del tipo
+"las dos ramas agregaron al FINAL". En ninguno se borró un lado:
+
+- 🔴 **`src/app/instituto/edu-theme.css`** — casos y pagos abrieron cada uno su sección al pie
+  del archivo con el MISMO banner (`/* ═══…`), así que git tomó esa línea como contexto común
+  y dejó los dos bloques enfrentados con la llave de cierre del archivo FUERA del conflicto.
+  Un "quedarse con los dos" literal habría dejado `.edu-form-acciones` sin cerrar y la llave
+  final cerrando el `@media print` de pagos. Se resolvió reconstruyendo el archivo como
+  `main + visor + casos` COMPLETO (con su llave) seguido del bloque íntegro que pagos agrega
+  al final (121 líneas, banner incluido): 6 433 líneas, las dos secciones enteras.
+- **`src/lib/edu/types.ts`** — dos bloques de comentario-índice (rutas y APIs) donde casos y
+  pagos apilaron sus líneas. Se conservaron los dos juegos, casos primero y pagos después.
+
+Auto-mergeados sin conflicto pero VERIFICADOS uno por uno (cada línea que la rama agregaba,
+comprobada en el árbol resultante):
+
+- `prisma/schema.prisma` — casos añade 9 columnas y 1 relación a `EduPatient`/`EduUser`; pagos
+  añade el enum `EduPaymentPlanStatus` y los modelos `EduPaymentPlan` y `EduInstallment`. Los
+  dos bloques presentes, cero pérdidas.
+- `ORQUESTA.md` — los tres reportes (visor, casos, pagos) completos y en orden.
+- `src/lib/edu/casos.ts`, `resumen-core.ts`, `pacientes.ts`, `visibility.ts`,
+  `src/components/edu/edu-shell.tsx`, `src/app/instituto/(panel)/pacientes/[id]/casos/page.tsx`,
+  `src/lib/edu/__tests__/edu-cierre.test.ts` — el renombre de textos se aplicó sobre el código
+  nuevo de casos/pagos sin perder ninguna de las dos partes.
+
+### El barrido de "alumno" → "Estudiante" (lo que el orden de merge NO arregla)
+
+`feat/edu-casos` se escribió ANTES que `fix/edu-textos`, así que reintrodujo "alumno" en texto
+visible. Mergear textos al final no lo toca: git no renombra lo que no existía cuando la rama
+se escribió. **17 cadenas visibles** cambiadas, en 5 archivos, todas de la rama de casos:
+
+- `src/components/edu/casos/caso-acciones.tsx` (9) — el error de "elige a quién recibe el caso",
+  el aviso del traspaso, el motivo mínimo del rechazo, el "Firmado…", los dos avisos del gate
+  (plan y alta), las dos frases del modal de traspaso y el `<option>` vacío del desplegable.
+- `src/components/edu/casos/casos-screen.tsx` (4) — la etiqueta del filtro, el vacío del
+  tamizaje y las dos cabeceras de la columna (la del `edu-rowhead` y la del `edu-cell__label`).
+- `src/app/instituto/(panel)/casos/page.tsx` (2) — el `what` de `EduDenied` y el lead del
+  DOCENTE.
+- `src/components/edu/expediente/antecedentes-card.tsx` (1) — el "pídele a recepción o al
+  estudiante del caso que los capture" del banner ámbar.
+- `src/lib/edu/casos-core.ts` (1) — la cabecera de la columna en el **CSV** de
+  `buildEduCasosCsv`. Fuera de las dos carpetas del barrido, pero es la misma columna de la
+  tabla que sí se renombró, y todas las demás cabeceras CSV del vertical (`direccion-core.ts`,
+  `evaluacion.ts`) ya decían "Estudiante".
+
+**Lo que NO se tocó, a propósito:** el enum `EduRole` y el valor `ALUMNO`, las keys de permiso,
+las rutas, el query-param `?alumno=` de agenda y casos, los ids de `<label for>`/`<select id>`
+(`edu-casos-alumno`, `edu-acc-alumno`…), las props y variables (`alumnos`, `alumnosDestino`,
+`elegirAlumno`, `esAlumno`, `FilaAlumno`…), los campos de base, las keys de los tableros de
+dirección (`cobrado-alumno`, `pacientes-sin-alumno`, `alumnos-sin-docente`), el sinónimo de
+import de equipo (`parseEduTeamRole("Alumno") → "ALUMNO"`, con test que lo fija) y los
+comentarios de código. El barrido se hizo con un script que ignora comentarios y exige que
+cada cadena aparezca EXACTAMENTE una vez antes de sustituirla.
+
+`feat/edu-visor` y `feat/edu-pagos` se revisaron igual: sus únicos "alumno" están en
+comentarios de código. Cero cambios ahí.
+
+**Pendiente conocido, NO tocado** (fuera de `src/app/instituto` y `src/components/edu`, y
+anterior a esta integración): cuatro mensajes de error en `src/app/api/instituto/` siguen
+diciendo "alumno" — `evaluacion/route.ts:33`, `evaluacion/[id]/export/route.ts:35`
+("Ese alumno no es de este instituto."), `traspasos/route.ts:23` y `calificaciones/route.ts:37`
+("Dime de qué alumno (?alumno=)."). Son los cuatro que ya venían anotados como deuda de
+`fix/edu-textos`; se dejan para una pasada propia porque comparten línea con el nombre del
+query-param, que no se renombra.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
+  `prisma generate` corrió limpio (sin EPERM), 463/463 páginas generadas, tabla de rutas
+  entera. Las seis rutas nuevas están en ella: `/instituto/casos`, `/instituto/caja/planes`,
+  `/instituto/caja/planes/[id]/recibo`, `/instituto/pacientes/[id]/pagos`,
+  `/api/instituto/casos/export` y `/api/instituto/pacientes/[id]/antecedentes` (más
+  `/api/instituto/caja/{cobros/[id]/plan, planes, planes/[id]/cancelar,
+  mensualidades/[id]/pagar}`). Los únicos warnings son los PREEXISTENTES y ajenos al vertical:
+  el `Critical dependency` de `file-type` en `api/ai-wallet/spei/topup` y dos clases ambiguas
+  de Tailwind en marketplace/onboarding. El spam de `Environment variable not found:
+  DATABASE_URL` es el de siempre (worktree sin `.env`) y no afecta el exit.
+- **Los 28 tests del vertical, uno por uno** (`npx tsx --test src/lib/edu/__tests__/<archivo>`):
+  **929 pass, 0 fail**. Ninguno tuvo que tocarse por el barrido — el rename no cruzó ninguna
+  aserción.
+- **Guardia:** `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs`
+  → **exit 0**. 107 archivos cambiados vs `origin/main`: 105 propios del vertical y los 2
+  compartidos declarados. Cero prohibidos: ni una línea del dental, de barbería o de
+  inmuebles.
+- **Raíz del repo limpia:** el único archivo de raíz que cambia es `ORQUESTA.md`. Los `.log` y
+  `.sql` sueltos que hay ahí (`install-integ-final.log`, `mediflow-create-tables.sql`,
+  `migration_*.sql`) ya venían en `origin/main` y no son de esta integración.
+
+### El SQL, en orden de aplicación
+
+Ninguno de los dos está aplicado todavía, y ninguno depende del otro. **Los dos son
+OBLIGATORIOS antes del deploy** — el cliente Prisma nuevo ya pide sus columnas y tablas.
+
+1. **`sql/edu-casos.sql`** — 9 columnas de antecedentes en `edu_patients` + la FK
+   `historyRecordedById → edu_users` (SET NULL). Asume aplicados `sql/edu-ola-0.sql`
+   (`edu_users`) y `sql/edu-ola-2.sql` (`edu_patients`). Sin él, CUALQUIER `SELECT` de
+   `edu_patients` revienta con "column does not exist". No trae backfill a propósito: la fecha
+   de revisión en NULL es justamente lo que significa "nadie los ha capturado".
+2. **`sql/edu-pagos.sql`** — el enum `EduPaymentPlanStatus`, las tablas `edu_payment_plans` y
+   `edu_installments`, 7 índices y 8 FKs. Asume aplicado `sql/edu-ola-5.sql` (`edu_charges`,
+   `edu_payments`, `edu_patients`, `edu_users`, `edu_institutions`) y, por el orden general del
+   vertical, va DESPUÉS de `sql/edu-cierre.sql`. Cero backfill de permisos: el plan reusa
+   `caja.view` / `caja.charge` / `caja.refund`.
+
+Los dos son idempotentes (comprueban existencia antes de crear, CERO `DROP`), así que correrlos
+dos veces no rompe nada. `feat/edu-visor` y `fix/edu-textos` no traen SQL.
+
+### Lo que no se vio
+
+Sin navegador ni base de datos en esta sesión: la panorámica del visor, la tabla de planes, el
+recibo imprimible y los chips de antecedentes están compilados y con sus tests de lógica en
+verde, pero no vistos en Chrome contra datos reales. Tampoco se aplicó ni se probó el SQL
+—esta rama no toca la base—. PR contra `main`, SIN mergear.

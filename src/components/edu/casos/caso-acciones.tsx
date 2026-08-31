@@ -145,7 +145,7 @@ export function EduCasoAcciones({
   async function traspasar() {
     setError(null);
     if (!destino) {
-      setError("Elige al alumno que recibe el caso.");
+      setError("Elige al estudiante que recibe el caso.");
       return;
     }
     setBusy(true);
@@ -156,7 +156,7 @@ export function EduCasoAcciones({
       });
       setModalTraspaso(false);
       setFlash(
-        "Caso traspasado: éste queda como Transferido y el alumno nuevo abre el suyo con el mismo paciente.",
+        "Caso traspasado: éste queda como Transferido y el estudiante nuevo abre el suyo con el mismo paciente.",
       );
       startNav(() => router.refresh());
     } catch (err) {
@@ -172,7 +172,7 @@ export function EduCasoAcciones({
       setError(
         "Escribe el motivo (mínimo " +
           EDU_APPROVAL_NOTE_MIN +
-          " caracteres): un rechazo sin motivo deja al alumno adivinando.",
+          " caracteres): un rechazo sin motivo deja al estudiante adivinando.",
       );
       return;
     }
@@ -186,7 +186,7 @@ export function EduCasoAcciones({
       setNota("");
       setFlash(
         decision === "APPROVED"
-          ? "Firmado. El alumno ya puede avanzar con lo autorizado."
+          ? "Firmado. El estudiante ya puede avanzar con lo autorizado."
           : "Decisión registrada con tu motivo.",
       );
       startNav(() => router.refresh());
@@ -320,7 +320,7 @@ export function EduCasoAcciones({
                 </button>
               ) : (
                 <span className="edu-note">
-                  Para iniciar el tratamiento falta el plan autorizado — el alumno lo manda con
+                  Para iniciar el tratamiento falta el plan autorizado — el estudiante lo manda con
                   «Enviar a autorización», aquí arriba.
                 </span>
               )}
@@ -342,7 +342,7 @@ export function EduCasoAcciones({
                 </button>
               ) : (
                 <span className="edu-note">
-                  Para dar de alta falta la autorización del alta — el alumno la manda con
+                  Para dar de alta falta la autorización del alta — el estudiante la manda con
                   «Enviar a autorización», aquí arriba.
                 </span>
               )}
@@ -544,8 +544,8 @@ export function EduCasoAcciones({
           }
         >
           <p className="edu-note">
-            Esto NO reasigna: cierra este caso como TRANSFERIDO y abre uno nuevo con el alumno
-            destino (misma especialidad — el servidor lo exige). El alumno que entrega pierde el
+            Esto NO reasigna: cierra este caso como TRANSFERIDO y abre uno nuevo con el estudiante
+            destino (misma especialidad — el servidor lo exige). El estudiante que entrega pierde el
             acceso al paciente en el mismo acto; su expediente se queda donde ocurrió.
           </p>
           <div className="edu-field">
@@ -558,7 +558,7 @@ export function EduCasoAcciones({
               value={destino}
               onChange={(e) => setDestino(e.target.value)}
             >
-              <option value="">Elige un alumno…</option>
+              <option value="">Elige un estudiante…</option>
               {alumnosDestino.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.matricula} · {a.name}
