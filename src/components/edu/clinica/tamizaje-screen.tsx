@@ -317,7 +317,7 @@ function FormularioTamizaje({
         </select>
         <span className="edu-field__hint">
           {alumno?.supervisorName
-            ? `Se propone el titular vigente de ${alumno.matricula}: ${alumno.supervisorName}. Queda guardado como el responsable del caso en este momento; quién ve el caso lo sigue decidiendo la asignación vigente del padrón.`
+            ? `Se propone el titular vigente de ${alumno.matricula}: ${alumno.supervisorName}. Queda guardado como el responsable del caso en este momento; quién ve el caso lo sigue decidiendo la asignación vigente alumno–docente.`
             : "Este alumno no tiene titular vigente. El caso se puede abrir igual y el docente se pone después."}
         </span>
       </div>

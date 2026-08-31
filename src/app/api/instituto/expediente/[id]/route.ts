@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
+import { hasEduPermission } from "@/lib/edu/permissions";
 import { updateEduRecord } from "@/lib/edu/expediente";
 
 export const dynamic = "force-dynamic";
@@ -23,13 +24,25 @@ export const dynamic = "force-dynamic";
  *
  * El caso y el paciente de una nota NO se cambian nunca: una nota escrita
  * en el caso equivocado se anula con una corrección, igual que en papel.
+ *
+ * 🔴 CIERRE (P2-13) · FIRMAR exige ADEMÁS "expediente.sign". El guard de
+ * arriba abre la puerta de ESCRIBIR (editar, entregar, devolver); pasar una
+ * nota a FIRMADA lo decide `canSign`, que se resuelve aquí y se comprueba
+ * dentro de updateEduRecord — el mismo reparto que la agenda hace con
+ * `canManage`. El ALUMNO (write sin sign) entrega; firma quien responde.
  */
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
 
   try {
-    const updated = await updateEduRecord(g.ctx, params.id, await eduReadJson(request));
+    const canSign = hasEduPermission(
+      { role: g.ctx.role, permissionsOverride: g.ctx.user.permissionsOverride },
+      "expediente.sign",
+    );
+    const updated = await updateEduRecord(g.ctx, params.id, await eduReadJson(request), {
+      canSign,
+    });
     return NextResponse.json({ ok: true, id: updated.id, status: updated.status });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/expediente/[id]");

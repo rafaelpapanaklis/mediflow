@@ -160,7 +160,7 @@ export const EDU_ROLE_LABELS: Record<EduRole, string> = {
  * da de alta a preguntarse si son dos cosas.
  */
 export const EDU_ROLE_DESCRIPTIONS: Record<EduRole, string> = {
-  DIRECCION: "Dirige el instituto: padrón, docentes, contrato y reportes.",
+  DIRECCION: "Dirige el instituto: alumnos, docentes, contrato y reportes.",
   DOCENTE: "Supervisa a los alumnos y autoriza los procedimientos.",
   ALUMNO: "Alumno en formación: atiende pacientes y pide autorización.",
   CAJA: "Cobra a los pacientes y hace los cortes del día.",
@@ -958,7 +958,13 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   autorizaciones: "Autorizaciones",
   agenda: "Agenda",
   pacientes: "Pacientes",
-  padron: "Padrón",
+  // Cierre: era "Padrón" y el dueño del producto tuvo que preguntar qué
+  // significaba — si él dudó, una escuela también. Se renombra SOLO lo que
+  // se lee: la ruta sigue siendo /instituto/padron (renombrarla rompería
+  // los enlaces guardados), el modelo sigue siendo EduStudent y las keys
+  // siguen siendo padron.view / padron.manage. Misma regla que
+  // "Especialidades" un renglón más abajo.
+  padron: "Alumnos",
   // Ola 1B: la escuela les dice ESPECIALIDADES, no "programas". El modelo
   // sigue llamándose EduProgram y la ruta sigue siendo /padron/estructura —
   // solo cambia lo que se LEE. Renombrar el modelo obligaría a migrar

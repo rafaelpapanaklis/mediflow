@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rateLimitKey } from "@/lib/rate-limit";
 import { eduApiError, eduApiGuard } from "@/lib/edu/api-guard";
 import { analyzeEduStudy, listEduStudyAnalyses } from "@/lib/edu/ia";
 
@@ -64,6 +65,21 @@ export async function GET(request: Request, { params }: { params: { id: string }
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const g = await eduApiGuard("estudios.analyze");
   if ("response" in g) return g.response;
+
+  // ── 🔴 P2-12 · EL FRENO POR SESIÓN ───────────────────────────────────
+  // El freno de 90 s del punto 4 es POR ESTUDIO: nada impedía recorrer N
+  // estudios en bucle y comerse el cupo del instituto entero (que al
+  // agotarse apaga la IA de TODA la escuela). Por eduUserId y no por IP —
+  // la clínica entera sale por la misma IP. 5 por minuto: leer una placa
+  // toma más de doce segundos a cualquier persona real; solo un bucle va
+  // más rápido. Es el rateLimit en memoria del repo (por instancia); el
+  // candado del dinero sigue siendo el cupo de la Ola 8.
+  if (!rateLimitKey(`edu-ia-analisis:${g.ctx.eduUserId}`, 5)) {
+    return NextResponse.json(
+      { error: "Demasiados análisis seguidos. Espera un minuto y vuelve a intentar." },
+      { status: 429 },
+    );
+  }
 
   try {
     const out = await analyzeEduStudy(g.ctx, params.id, g.ctx.institution.timezone);

@@ -14,6 +14,7 @@ import {
   Gauge,
   GraduationCap,
   Home,
+  KeyRound,
   Layers,
   ListChecks,
   LogOut,
@@ -308,6 +309,19 @@ export function EduShell({
               <div className="edu-whoami__role">{roleLabel}</div>
             </div>
           </div>
+          {/* P2-9: hasta la ola de cierre no había forma de cambiar la
+              contraseña desde el producto — quien te daba de alta se
+              quedaba con la temporal para siempre. La pantalla vive FUERA
+              del grupo (panel) porque el layout redirige ahí a quien trae
+              la marca mustChangePassword, y dentro del grupo sería un
+              bucle. */}
+          <Link
+            href="/instituto/cambiar-contrasena"
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+          >
+            <KeyRound size={15} />
+            <span>Cambiar contraseña</span>
+          </Link>
           <button
             type="button"
             onClick={handleLogout}

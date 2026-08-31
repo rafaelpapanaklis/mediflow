@@ -418,6 +418,15 @@ export async function createEduRecord(
  * que un expediente que se puede reescribir deja de ser un registro de lo
  * que pasó.
  *
+ * 🔴 CIERRE (P2-13) · FIRMAR EXIGE "expediente.sign", Y SE COMPRUEBA AQUÍ.
+ * `canSign` llega resuelto del endpoint (como `canManage` en la agenda),
+ * pero la puerta vive en ESTA función y no en el route: todo camino que
+ * mueva una nota pasa por aquí, y el segundo endpoint que lo haga —el de
+ * una ola futura— nacería sin la puerta y firmaría perfectamente. Para
+ * todo el mundo. El alumno (write, sin sign) escribe, ENTREGA y devuelve;
+ * la FIRMADA la pone quien responde. Quien tiene sign puede firmar una
+ * nota propia: la separación es por responsabilidad, no por autoría.
+ *
  * El caso y el paciente de la nota NO se cambian nunca. Una nota escrita en
  * el caso equivocado se anula con una corrección, igual que en papel.
  */
@@ -425,6 +434,7 @@ export async function updateEduRecord(
   ctx: EduClinicaContext,
   recordId: string,
   input: EduRecordInput & { status?: unknown },
+  options: { canSign: boolean },
   now: Date = new Date(),
 ): Promise<{ id: string; status: EduRecordStatus }> {
   const institutionId = requireInstitution(ctx);
@@ -507,6 +517,16 @@ export async function updateEduRecord(
         throw new EduPadronError(
           `Una nota ${actual.status.toLowerCase()} no puede pasar a ${st.toLowerCase()}.`,
           409,
+        );
+      }
+
+      // 🔴 P2-13 · FIRMAR ES DE QUIEN RESPONDE. Sin esto, "ENVIADA" era
+      // decorativo: el alumno escribía, se firmaba y cerraba sin que su
+      // docente viera la nota nunca.
+      if (st === "FIRMADA" && !options.canSign) {
+        throw new EduPadronError(
+          "Firmar una nota necesita el permiso expediente.sign. Entrégala (ENVIADA) y la firma tu docente.",
+          403,
         );
       }
 

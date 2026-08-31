@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { listEduFeeSchedules, listEduProcedures } from "@/lib/edu/tarifas";
+import { eduScopeIsEmpty, eduVisibility } from "@/lib/edu/visibility";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduProcedimientosScreen } from "@/components/edu/dinero/procedimientos-screen";
 
@@ -39,9 +40,15 @@ export default async function InstitutoProcedimientosPage() {
   }
 
   const canManage = hasEduPermission(permUser, "tarifarios.manage");
+  // P2-7: las LISTAS de precios llevan el candado del dinero
+  // (listEduFeeSchedules lanza 403 con alcance "none"). El CATÁLOGO no lo
+  // lleva — sin precios, y lo lee también el flujo clínico —, así que a un
+  // rol sin dinero con `tarifarios.view` por override se le pinta el
+  // catálogo con cero listas, en vez de tirar la página al error boundary.
+  const veDinero = !eduScopeIsEmpty(eduVisibility(ctx, "charges"));
   const [rows, schedules] = await Promise.all([
     listEduProcedures(ctx),
-    listEduFeeSchedules(ctx),
+    veDinero ? listEduFeeSchedules(ctx) : Promise.resolve([]),
   ]);
 
   return (

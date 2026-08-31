@@ -357,11 +357,79 @@ export interface EduRequirementProgress {
   met: boolean;
   /** Cuántos se esperaban A ESTA ALTURA del ciclo (ver eduAtrasoVerdict). */
   expectedCount: number;
+  /**
+   * P2-5 · Lo mismo que `expectedCount` pero SIN redondear. Es lo que suma
+   * el semáforo: redondear requisito por requisito y sumar después
+   * inflaría la expectativa (ocho requisitos de 3 al 50 % del ciclo darían
+   * 8 × round(1.5) = 16 esperados donde el plan entero, medido junto,
+   * espera 12) — y ese sesgo pondría en rojo a alumnos que van bien.
+   */
+  expectedRaw: number;
   /** En una frase, para la pantalla del alumno. */
   detail: string;
   onlyCompleted: boolean;
   semesterFrom: number | null;
   semesterTo: number | null;
+}
+
+/**
+ * P2-5 · Cuántos casos se esperan A ESTA ALTURA, sin redondear.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 CIERRE · AQUÍ ES DONDE EL RANGO DE SEMESTRES POR FIN HACE ALGO.
+ *
+ * `semesterFrom`/`semesterTo` se capturaban, se guardaban y se pintaban
+ * ("3º – fin") y no filtraban nada: la escuela leía la restricción en la
+ * pantalla y la restricción no existía. La decisión, tomada y explícita:
+ *
+ *   · EL RANGO ES *CUÁNDO SE EXIGE*, NO QUÉ CASOS CUENTAN. Un caso hecho
+ *     ANTES del rango sigue contando — el semestre en que se abrió un caso
+ *     no se registra en ningún sitio (EduStudent.semester es el ACTUAL), y
+ *     además invalidar trabajo ya hecho y calificado obligaría a repetir
+ *     procedimientos en pacientes reales: la falla en la dirección cara.
+ *   · Lo que el rango decide es la EXPECTATIVA del semáforo, contra el
+ *     semestre ACTUAL del alumno:
+ *       – antes de `semesterFrom`  → se esperan 0 (aún no se le exige, y
+ *         el semáforo deja de poner ATRASADO a un alumno de 1º por un
+ *         requisito de 5º);
+ *       – después de `semesterTo`  → se espera el total;
+ *       – dentro del rango         → proporcional al semestre, si el rango
+ *         está cerrado por los dos lados ("3º–5º" y va en 4º → 2/3). Con
+ *         inicio abierto se asume 1º, que es lo que la pantalla ya pinta.
+ *   · "3º – fin" (sin `semesterTo`): exigible desde 3º, y el RITMO lo
+ *     sigue marcando el ciclo de la generación — el "fin" es la duración
+ *     de la especialidad, que este módulo puro no conoce y no va a
+ *     adivinar.
+ *
+ * Sin rango, o sin saber el semestre del alumno, todo queda EXACTAMENTE
+ * como estaba: `required × fracción del ciclo`.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduRequirementExpectedRaw(
+  req: Pick<EduRequirementSpec, "semesterFrom" | "semesterTo">,
+  required: number,
+  fraccionDelCiclo: number | null,
+  studentSemester: number | null,
+): number {
+  const s =
+    typeof studentSemester === "number" && Number.isFinite(studentSemester)
+      ? studentSemester
+      : null;
+  const from = req.semesterFrom;
+  const to = req.semesterTo;
+
+  if (s !== null && (from !== null || to !== null)) {
+    if (from !== null && s < from) return 0;
+    if (to !== null && s > to) return required;
+    if (to !== null) {
+      const ini = from ?? 1;
+      const span = Math.max(1, to - ini + 1);
+      const cursado = Math.min(span, Math.max(0, s - ini + 1));
+      return (required * cursado) / span;
+    }
+    // from puesto y to abierto: ya es exigible; sigue el ritmo del ciclo.
+  }
+  return fraccionDelCiclo === null ? 0 : required * clamp01(fraccionDelCiclo);
 }
 
 /**
@@ -371,19 +439,24 @@ export interface EduRequirementProgress {
  * decide cuántos se ESPERAN a esta altura. Se pasa desde fuera —lo calcula
  * eduCycleFraction con las fechas de EduCohort— para que esta función siga
  * siendo pura y comprobable sin reloj.
+ *
+ * `studentSemester` (P2-5) afina esa expectativa con el rango de semestres
+ * del requisito — ver eduRequirementExpectedRaw. `null` = no se sabe, y
+ * todo queda como antes.
  */
 export function eduRequirementProgress(
   req: EduRequirementSpec,
   casos: EduCountableCase[],
   fraccionDelCiclo: number | null,
+  studentSemester: number | null = null,
 ): EduRequirementProgress {
   const done = (casos ?? []).filter((c) => eduCaseCountsFor(req, c)).length;
   const required = Math.max(0, req.requiredCount);
   const missing = Math.max(0, required - done);
   const met = done >= required;
 
-  const expected =
-    fraccionDelCiclo === null ? 0 : Math.round(required * clamp01(fraccionDelCiclo));
+  const expectedRaw = eduRequirementExpectedRaw(req, required, fraccionDelCiclo, studentSemester);
+  const expected = Math.round(expectedRaw);
 
   const queCuenta = req.procedureId
     ? "de ese procedimiento"
@@ -392,9 +465,19 @@ export function eduRequirementProgress(
       : "de la especialidad";
   const comoCuenta = req.onlyCompleted ? "casos terminados" : "casos abiertos o terminados";
 
+  // P2-5: si el requisito todavía no es exigible para el semestre del
+  // alumno, el detalle lo DICE en vez de regañar con un "te faltan N".
+  const aunNoExigible =
+    !met &&
+    studentSemester !== null &&
+    req.semesterFrom !== null &&
+    studentSemester < req.semesterFrom;
+
   const detail = met
     ? `Cumplido: ${done} de ${required} ${comoCuenta} ${queCuenta}.`
-    : `Te faltan ${missing} de ${required}. Llevas ${done} ${comoCuenta} ${queCuenta}.`;
+    : aunNoExigible
+      ? `Se exige a partir de ${req.semesterFrom}º semestre. Llevas ${done} de ${required} ${comoCuenta} ${queCuenta}.`
+      : `Te faltan ${missing} de ${required}. Llevas ${done} ${comoCuenta} ${queCuenta}.`;
 
   return {
     requirementId: req.id,
@@ -404,6 +487,7 @@ export function eduRequirementProgress(
     missingCount: missing,
     met,
     expectedCount: expected,
+    expectedRaw,
     detail,
     onlyCompleted: req.onlyCompleted,
     semesterFrom: req.semesterFrom,
@@ -708,7 +792,20 @@ export function eduAtrasoVerdict(
   }
 
   const f = clamp01(fraccion);
-  const esperados = totales * f;
+  // P2-5: se suma la expectativa DE CADA requisito (que ya trae aplicado su
+  // rango de semestres) en vez de `totales × fracción`. Para un plan sin
+  // rangos las dos cuentas dan lo mismo (Σ required × f); con rangos, un
+  // requisito de 5º deja de contar como "esperado" para el alumno de 1º.
+  // El respaldo `requiredCount × f` cubre un progreso armado a mano sin el
+  // campo (pruebas viejas): mejor la cuenta de siempre que un NaN.
+  const esperados = lista.reduce(
+    (s, p) =>
+      s +
+      (typeof p.expectedRaw === "number" && Number.isFinite(p.expectedRaw)
+        ? p.expectedRaw
+        : p.requiredCount * f),
+    0,
+  );
   const pct = Math.round(f * 100);
 
   if (esperados <= 0) {

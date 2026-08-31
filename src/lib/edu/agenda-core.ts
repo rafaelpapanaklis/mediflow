@@ -508,6 +508,47 @@ export function eduStatusNeedsManage(status: EduAppointmentStatus): boolean {
 }
 
 /**
+ * P2-11 · Cuánto ANTES de su hora se le puede poner un estado clínico a una
+ * cita. 24 horas, y el número está elegido, no heredado:
+ *
+ *   · tiene que dejar pasar TODO lo legítimo — el paciente que llega una
+ *     hora antes, el mostrador que registra la llegada de la tarde desde la
+ *     mañana, y el desfase de zona horaria entre sedes;
+ *   · y tiene que parar lo que la auditoría señaló: la cita del mes que
+ *     viene marcada COMPLETED hoy, que fabrica horas clínicas de una sesión
+ *     que no ha ocurrido — y esas horas son la métrica que la escuela
+ *     enseña en una acreditación.
+ */
+export const EDU_CLINICAL_STATUS_EARLY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * P2-11 · ¿Este cambio de estado está llegando DEMASIADO PRONTO?
+ *
+ * Solo frena los estados CLÍNICOS ("ya llegó", "ya está en el sillón", "ya
+ * terminó"): describen algo que está pasando en el edificio, y no puede
+ * estar pasando si la cita es de pasado mañana. Cancelar y "no llegó"
+ * (administrativos) no pasan por aquí — cancelar una cita futura es
+ * exactamente para lo que existe cancelar.
+ *
+ * Es un predicado puro para poderlo probar sin base: las horas de
+ * acreditación las produce el propio alumno (el endpoint pide agenda.view,
+ * y es deliberado — tiene que poder marcar su día), así que la única
+ * defensa contra "completar el futuro" es esta comprobación del servidor.
+ * Una fecha ilegible NO frena: mejor dejar pasar un estado que romper el
+ * mostrador por una fila vieja con basura.
+ */
+export function eduClinicalStatusTooEarly(
+  status: EduAppointmentStatus,
+  startsAt: Date | string,
+  now: Date,
+): boolean {
+  if (!EDU_APPOINTMENT_CLINICAL_STATUSES.includes(status)) return false;
+  const t = (startsAt instanceof Date ? startsAt : new Date(startsAt)).getTime();
+  if (!Number.isFinite(t)) return false;
+  return t - now.getTime() > EDU_CLINICAL_STATUS_EARLY_MS;
+}
+
+/**
  * Las marcas de tiempo que hay que escribir al llegar a un estado.
  *
  * Se DERIVAN del estado y no se capturan: así no puede existir una cita

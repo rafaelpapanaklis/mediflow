@@ -37,8 +37,14 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
-import { eduCleanId } from "@/lib/edu/agenda-core";
+import { EDU_CLINICA_MAX_ROWS, eduCleanId } from "@/lib/edu/agenda-core";
 import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
+// El enganche de citas sueltas es UNA función (vive con el caso, que es
+// quien las recoge): la usa el traspaso aquí y la usa createEduCase al
+// abrir un caso sobre citas ya agendadas. Dos copias del mismo updateMany
+// habrían filtrado distinto tarde o temprano. Sin ciclo: casos.ts no
+// importa nada de este archivo.
+import { eduAttachLooseAppointments } from "@/lib/edu/casos";
 import { EDU_CASE_CLOSED_STATUSES } from "@/lib/edu/types";
 import {
   eduCaseScopeWhere,
@@ -358,15 +364,18 @@ async function traspasarUno(
     // el alumno nuevo sin escribir una sola condición más. Ese era el otro
     // daño del mismo hueco — el martes que viene el paciente llegaba a la
     // cita de alguien que ya no lleva su caso.
+    //
+    // El enganche es la MISMA función que usa createEduCase al abrir un
+    // caso sobre citas ya agendadas (la ola de cierre): una sola regla, dos
+    // llamadores. Aquí `includeTamizaje: true` — una cita suelta, del tipo
+    // que sea, es una llave suelta igual.
     // ═════════════════════════════════════════════════════════════════════
-    await tx.eduAppointment.updateMany({
-      where: {
-        institutionId,
-        patientId: caso.patientId,
-        studentId: caso.studentId,
-        caseId: null,
-      },
-      data: { caseId: caso.id },
+    await eduAttachLooseAppointments(tx, {
+      institutionId,
+      patientId: caso.patientId,
+      studentId: caso.studentId,
+      caseId: caso.id,
+      includeTamizaje: true,
     });
 
     // 4 · Las citas FUTURAS pasan al alumno nuevo, con su caso y su
@@ -436,6 +445,11 @@ export async function listEduTransferableCases(
       status: { notIn: EDU_CASE_CLOSED_STATUSES },
     },
     orderBy: [{ openedAt: "asc" }],
+    // P3-17: era la única findMany de lectura del vertical sin tope. Un
+    // alumno no llega a tener 300 casos ABIERTOS, así que el techo no
+    // recorta a nadie real — está para que una consulta rota no se traiga
+    // la tabla, igual que en todas las demás lecturas.
+    take: EDU_CLINICA_MAX_ROWS,
     select: {
       id: true,
       status: true,

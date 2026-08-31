@@ -507,7 +507,10 @@ export async function listEduEvaluacion(
     const specs = (requisitosPorPrograma.get(a.programId) ?? []).map(toSpec);
     const suyos = (casosPorAlumno.get(a.id) ?? []).map(toCountable);
     const fraccion = eduCycleFraction(a.cohort, now);
-    const progresos = specs.map((r) => eduRequirementProgress(r, suyos, fraccion));
+    // P2-5: el semestre ACTUAL del alumno afina la expectativa de los
+    // requisitos con rango — un requisito "de 5º a 6º" ya no pone en rojo
+    // al alumno de 1º. Ver eduRequirementExpectedRaw (evaluacion-core.ts).
+    const progresos = specs.map((r) => eduRequirementProgress(r, suyos, fraccion, a.semester));
     const verdict = eduAtrasoVerdict(progresos, fraccion);
     const horas = eduClinicalHours(citasPorAlumno.get(a.id) ?? []);
 
@@ -657,7 +660,11 @@ export async function getEduBitacora(
 
   const fraccion = eduCycleFraction(alumno.cohort, now);
   const contables = casos.map(toCountable);
-  const progresos = requisitos.map((r) => eduRequirementProgress(toSpec(r), contables, fraccion));
+  // P2-5: mismo afinado por semestre que la lista de evaluación — la
+  // bitácora y el semáforo no pueden discrepar sobre cuánto se le espera.
+  const progresos = requisitos.map((r) =>
+    eduRequirementProgress(toSpec(r), contables, fraccion, alumno.semester),
+  );
   const verdict = eduAtrasoVerdict(progresos, fraccion);
   const horas = eduClinicalHours(citas);
 

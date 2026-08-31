@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { EDU_MAX_PROCEDURES, getEduTarifario } from "@/lib/edu/tarifas";
+import { EDU_VISIBILITY_NONE_DETAIL, eduScopeIsEmpty, eduVisibility } from "@/lib/edu/visibility";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduTarifariosScreen } from "@/components/edu/dinero/tarifarios-screen";
 
@@ -34,6 +35,25 @@ export default async function InstitutoTarifariosPage() {
         permission="tarifarios.view"
         what="Las listas de precios del instituto y el precio de cada procedimiento en cada una."
       />
+    );
+  }
+
+  // P2-7 · EL SEGUNDO CANDADO, con salida legible: getEduTarifario ya lanza
+  // 403 si el alcance de dinero es "none" (un ALUMNO con tarifarios.view
+  // encendido por override), pero desde una página ese throw cae al error
+  // boundary genérico. Aquí se comprueba ANTES y se explica — el mismo
+  // trato que /instituto/pacientes le da a su alcance.
+  if (eduScopeIsEmpty(eduVisibility(ctx, "charges"))) {
+    return (
+      <div className="edu-page">
+        <header>
+          <h1 className="edu-page__title">Tarifarios</h1>
+        </header>
+        <div className="edu-empty">
+          <p className="edu-empty__title">Aquí no hay precios que mostrarte</p>
+          <p className="edu-empty__detail">{EDU_VISIBILITY_NONE_DETAIL.charges}</p>
+        </div>
+      </div>
     );
   }
 

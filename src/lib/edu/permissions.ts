@@ -41,7 +41,11 @@ import type { EduRole } from "@/lib/edu/types";
  */
 export const EDU_ALL_PERMISSIONS = {
   "inicio.view": "Entrar al panel del instituto",
-  "padron.view": "Ver el padrón de alumnos",
+  // La pantalla se LEE "Alumnos" desde la ola de cierre ("Padrón" no lo
+  // entendía ni el dueño del producto); las keys no se renombran — un
+  // override guardado en la base con "padron.view" tiene que seguir
+  // valiendo.
+  "padron.view": "Ver la lista de alumnos",
   "padron.manage": "Dar de alta y de baja alumnos, especialidades y generaciones",
   "docentes.view": "Ver la lista de docentes",
   "supervision.assign": "Asignar alumnos a un docente supervisor",
@@ -63,13 +67,36 @@ export const EDU_ALL_PERMISSIONS = {
   // prueba de __tests__/edu-permissions.test.ts falla si alguna se queda
   // sin lector de SERVIDOR):
   //   expediente.view    → /instituto/pacientes/[id]/expediente + su GET
-  //   expediente.write   → POST de notas y PATCH de estado (enviar/firmar)
+  //   expediente.write   → POST de notas y PATCH de estado (enviar/devolver)
+  //   expediente.sign    → el MISMO PATCH cuando el destino es FIRMADA
   //   odontograma.view   → /instituto/pacientes/[id]/odontograma + su GET
   //   odontograma.edit   → PUT y PATCH del odontograma
   //   estudios.view      → /instituto/pacientes/[id]/estudios + su GET
   //   estudios.upload    → /sign y /confirm de la subida directa
+  //
+  // ═══ CIERRE (P2-13) · ESCRIBIR Y FIRMAR SON DOS KEYS ═══════════════════
+  // La Ola 3 dejó "expediente.write" cubriendo también la FIRMA, y era la
+  // decisión que más chirriaba con el resto del vertical: el alumno podía
+  // escribir, firmarse su propia nota y cerrarla sin que su docente la
+  // viera nunca — el estado ENVIADA era decorativo. Contrastaba con las dos
+  // separaciones que el vertical sí defiende con dureza: nadie firma su
+  // propia autorización (Ola 4) y el alumno propone la receta que el
+  // docente expide (Ola 14). La NOM-004 pide que el expediente de una
+  // clínica ESCUELA lo cierre quien responde por él.
+  //
+  // Ahora "write" escribe, entrega (ENVIADA) y devuelve; "sign" cierra
+  // (FIRMADA). El ALUMNO lleva write y NO lleva sign: entrega, y firma su
+  // docente. Quien tiene sign SÍ puede firmar una nota PROPIA (el docente
+  // que escribe y cierra en un solo acto es el flujo normal de un
+  // profesional): la separación es por responsabilidad, no por autoría —
+  // igual que recetas.issue.
+  //
+  // ⚠️ Las notas que un alumno ya FIRMÓ antes de este cambio quedan como
+  // están: una nota firmada no se reabre ni se invalida (NOM-004); lo que
+  // cambia es lo que se puede firmar desde hoy.
   "expediente.view": "Leer las notas clínicas del expediente",
-  "expediente.write": "Escribir, enviar y firmar notas clínicas",
+  "expediente.write": "Escribir, entregar y devolver notas clínicas",
+  "expediente.sign": "Firmar una nota clínica y dejarla cerrada",
   "odontograma.view": "Ver el odontograma del paciente",
   "odontograma.edit": "Marcar hallazgos en el odontograma",
   "estudios.view": "Ver las radiografías, tomografías y fotos del paciente",
@@ -299,15 +326,19 @@ export const EDU_ALL_PERMISSION_KEYS = Object.keys(
 ) as EduPermissionKey[];
 
 /**
- * Agrupación visual para la pantalla de permisos del instituto (la
- * construye la ola de Equipo). Cada key del catálogo va en EXACTAMENTE un
+ * Agrupación visual para la pantalla de permisos del instituto — el editor
+ * "Permisos" de /instituto/equipo (la construyó la ola de CIERRE, P2-8:
+ * hasta entonces esta constante no tenía un solo llamador y el override
+ * solo se escribía por SQL). Cada key del catálogo va en EXACTAMENTE un
  * grupo: si se queda fuera, nadie puede encenderla ni apagarla y el
  * interruptor existe solo en la base de datos.
  */
 export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[] = [
   { title: "Panel", keys: ["inicio.view"] },
   {
-    title: "Padrón académico",
+    // "Alumnos" y no "Padrón académico": es el nombre que la pantalla lleva
+    // desde la ola de cierre, y el grupo se lee en la pantalla de permisos.
+    title: "Alumnos y docentes",
     keys: ["padron.view", "padron.manage", "docentes.view", "supervision.assign"],
   },
   {
@@ -327,6 +358,10 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
     keys: [
       "expediente.view",
       "expediente.write",
+      // Cierre (P2-13): al lado de "write" a propósito, para que la
+      // dirección lea de un vistazo la separación que importa — el alumno
+      // escribe y entrega; firma quien responde.
+      "expediente.sign",
       "odontograma.view",
       "odontograma.edit",
       "estudios.view",
@@ -501,7 +536,10 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * deshabilitado.
  *
  * ── Ola 3 · el expediente clínico ───────────────────────────────────────
- * DIRECCION, DOCENTE y ALUMNO llevan las SEIS keys. CAJA, NINGUNA — y ésta
+ * DIRECCION y DOCENTE llevan las SIETE keys; el ALUMNO lleva seis — todas
+ * MENOS "expediente.sign", que es la separación que la ola de cierre partió
+ * de "write" (P2-13): el alumno escribe y ENTREGA su nota, y la FIRMA su
+ * docente. CAJA, NINGUNA — y ésta
  * es la línea del contrato que más fácil se rompe, así que está cerrada en
  * DOS sitios, no en uno:
  *
@@ -694,6 +732,7 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "casos.assign",
     "expediente.view",
     "expediente.write",
+    "expediente.sign",
     "odontograma.view",
     "odontograma.edit",
     "estudios.view",
@@ -781,6 +820,9 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "casos.assign",
     "expediente.view",
     "expediente.write",
+    // Cierre (P2-13): el docente FIRMA — la suya en un solo acto, y la que
+    // su alumno le entrega. Es la misma línea que recetas.issue.
+    "expediente.sign",
     "odontograma.view",
     "odontograma.edit",
     "estudios.view",
@@ -811,6 +853,10 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "pacientes.view",
     "casos.view",
     "expediente.view",
+    // Cierre (P2-13): escribe, ENTREGA y corrige — y NO lleva
+    // "expediente.sign". Su nota la cierra el docente que responde por él,
+    // igual que su receta la expide quien tiene cédula. Si llevara las dos,
+    // ENVIADA sería decorativo y el docente podría no ver una nota nunca.
     "expediente.write",
     "odontograma.view",
     "odontograma.edit",

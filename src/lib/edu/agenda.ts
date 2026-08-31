@@ -24,6 +24,7 @@ import {
   EDU_CLINICA_MAX_ROWS,
   eduAppointmentCanTransition,
   eduAppointmentStamps,
+  eduClinicalStatusTooEarly,
   eduCaseFitsAppointment,
   eduCleanId,
   eduDayRange,
@@ -51,6 +52,7 @@ import {
   eduAppointmentScopeWhere,
   eduCampusCovers,
   eduScopeIsEmpty,
+  eduStudentScopeWhere,
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
@@ -299,24 +301,53 @@ export async function listEduPatientAppointments(
 }
 
 /**
- * Los alumnos a los que se les puede agendar, con su titular VIGENTE.
+ * Los alumnos que se le pueden OFRECER en un desplegable a quien pregunta,
+ * con su titular VIGENTE.
  *
  * El titular viaja para que el formulario lo proponga solo: si hubiera que
  * elegirlo a mano en cada cita, la mitad de las citas acabarían sin
  * supervisor y la otra mitad con el que no era.
  *
- * ⚠️ Esta lista NO está recortada por el alcance del padrón: quien agenda
- * (caja o dirección) necesita ver a TODOS los alumnos activos del
- * instituto, incluidos los que no supervisa nadie todavía. Lo que sí se
- * cierra es el tenant y el estado: un alumno de baja no sale.
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 CIERRE · LA LISTA VA RECORTADA POR EL ALCANCE DE "patients", DENTRO
+ * DE LA FUNCIÓN Y NO EN CADA PÁGINA.
+ *
+ * Hasta la ola de cierre esta lista devolvía a TODOS los alumnos activos, y
+ * eran las páginas las que decidían (o se olvidaban de decidir) a quién
+ * mandársela — así llegó el padrón completo al navegador de un ALUMNO en
+ * /instituto/pacientes, y los alumnos de TODOS los docentes al navegador de
+ * cualquier DOCENTE en el tamizaje. Cinco páginas, cinco oportunidades de
+ * olvidarlo: la sexta habría nacido sin el recorte y funcionado
+ * perfectamente, para todo el mundo.
+ *
+ * El recurso es "patients" y no "cases" a propósito: esta lista contesta
+ * "¿qué alumnos pueden aparecer colgados de un paciente?" —el filtro de
+ * "¿quién lo trajo?", el alta de cita, el tamizaje— y CAJA, que agenda y
+ * marca el origen, necesita verlos a todos. Con "cases" caja se quedaría
+ * sin poder agendar. El reparto queda:
+ *
+ *   DIRECCION y CAJA → todos los alumnos activos (agendan y filtran);
+ *   DOCENTE          → sus alumnos VIGENTES (a ésos les abre caso, les
+ *                      agenda y por ellos filtra — "nada de otros
+ *                      docentes", como en todo el vertical);
+ *   ALUMNO           → él mismo. Es su única opción legítima en el filtro
+ *                      de pacientes, y no ve ni un nombre de su generación.
+ *
+ * Consecuencia deliberada en el TRASPASO: un DOCENTE con traspaso.manage
+ * solo ve como destino a sus propios alumnos vigentes — reparte DENTRO de
+ * su grupo. Cruzar un caso al alumno de otro docente cambia la carga de ese
+ * colega, y eso es de DIRECCIÓN, que sigue viendo a todos.
+ * ═══════════════════════════════════════════════════════════════════════
  */
 export async function listEduStudentOptions(
   ctx: EduClinicaContext,
   now: Date = new Date(),
 ): Promise<EduStudentOption[]> {
   const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "patients");
+  if (eduScopeIsEmpty(scope)) return [];
   const rows = await prisma.eduStudent.findMany({
-    where: { institutionId, status: "ACTIVE" },
+    where: { ...eduStudentScopeWhere({ institutionId, scope, now }), status: "ACTIVE" },
     orderBy: [{ matricula: "asc" }],
     take: EDU_CLINICA_MAX_ROWS,
     select: {
@@ -963,6 +994,7 @@ export async function setEduAppointmentStatus(
     select: {
       id: true,
       status: true,
+      startsAt: true,
       checkedInAt: true,
       startedAt: true,
       completedAt: true,
@@ -973,6 +1005,20 @@ export async function setEduAppointmentStatus(
   if (!eduAppointmentCanTransition(current.status, status)) {
     throw new EduPadronError(
       `Una cita en "${current.status}" no puede pasar a "${status}".`,
+      409,
+    );
+  }
+
+  // 🔴 P2-11 · EL FUTURO NO SE MARCA COMO OCURRIDO. Los sellos de tiempo se
+  // derivan de `now` al mover el estado, y esas horas son la métrica que la
+  // escuela enseña en una acreditación — sin esta línea, una cita del mes
+  // que viene se podía dar por COMPLETED hoy y fabricar horas clínicas de
+  // una sesión que no existió. La ventana de 24 h deja pasar todo lo
+  // legítimo (llegar temprano, otra sede en otro huso); cancelar y "no
+  // llegó" no pasan por aquí — cancelar el futuro es justo cancelar.
+  if (eduClinicalStatusTooEarly(status, current.startsAt, now)) {
+    throw new EduPadronError(
+      "Esa cita todavía no llega: es de más de un día en el futuro. El estado se marca cuando el paciente esté aquí; si la cita ya no va, cancélala o reagéndala.",
       409,
     );
   }

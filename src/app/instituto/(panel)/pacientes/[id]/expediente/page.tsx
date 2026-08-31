@@ -74,6 +74,9 @@ export default async function PacienteExpedientePage({ params }: { params: { id:
       rows={rows}
       cases={cases}
       canWrite={hasEduPermission(permUser, "expediente.write")}
+      // P2-13: firmar es otra key. El alumno (write sin sign) entrega; la
+      // nota la cierra su docente. El endpoint lo vuelve a exigir.
+      canSign={hasEduPermission(permUser, "expediente.sign")}
       meUserId={ctx.eduUserId}
       iaDictado={iaDictado}
     />

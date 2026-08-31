@@ -46,6 +46,13 @@ export interface EduExpedienteScreenProps {
   rows: EduRecordRow[];
   cases: EduCaseOption[];
   canWrite: boolean;
+  /**
+   * Cierre (P2-13): ¿puede FIRMAR (expediente.sign)? El alumno escribe y
+   * ENTREGA; la firma es de su docente. Esconder el botón es cortesía —
+   * quien cierra de verdad es el servidor, que rebota la FIRMADA sin la
+   * key aunque la petición se fabrique a mano.
+   */
+  canSign: boolean;
   /** El id del EduUser de la sesión, para saber qué notas escribió. */
   meUserId: string;
   /**
@@ -87,6 +94,7 @@ export function EduExpedienteScreen({
   rows,
   cases,
   canWrite,
+  canSign,
   meUserId,
   iaDictado,
 }: EduExpedienteScreenProps) {
@@ -305,7 +313,10 @@ export function EduExpedienteScreen({
                     </button>
                   )}
 
-                  {eduRecordCanTransition(n.status, "FIRMADA") && (
+                  {/* P2-13: firmar solo quien tiene expediente.sign. Al
+                      alumno la pantalla le ofrece "Entregar" — su nota la
+                      cierra el docente que responde por él. */}
+                  {canSign && eduRecordCanTransition(n.status, "FIRMADA") && (
                     <button
                       type="button"
                       className="edu-btn edu-btn--primary edu-btn--sm"
@@ -358,6 +369,7 @@ export function EduExpedienteScreen({
       {editar && (
         <NotaEditar
           nota={editar}
+          canSign={canSign}
           iaDictado={iaDictado}
           onClose={() => setEditar(null)}
           onDone={(msg) => {
@@ -625,11 +637,13 @@ function NotaNueva({
 
 function NotaEditar({
   nota,
+  canSign,
   iaDictado,
   onClose,
   onDone,
 }: {
   nota: EduRecordRow;
+  canSign: boolean;
   iaDictado: EduIaEstado;
   onClose: () => void;
   onDone: (mensaje: string) => void;
@@ -683,20 +697,26 @@ function NotaEditar({
           </button>
           <button
             type="button"
-            className="edu-btn edu-btn--ghost"
+            className={`edu-btn ${canSign ? "edu-btn--ghost" : "edu-btn--primary"}`}
             onClick={() => guardar(false)}
             disabled={busy}
           >
             {busy ? "Guardando…" : "Guardar"}
           </button>
-          <button
-            type="button"
-            className="edu-btn edu-btn--primary"
-            onClick={() => guardar(true)}
-            disabled={busy || !tieneAlgo(draft)}
-          >
-            Guardar y firmar
-          </button>
+          {/* P2-13: "Guardar y firmar" solo con expediente.sign. El texto y
+              la firma van juntos en la MISMA petición (ver guardar). Sin la
+              key, "Guardar" pasa a ser el botón primario y la nota se
+              entrega con "Entregar" desde la lista. */}
+          {canSign && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--primary"
+              onClick={() => guardar(true)}
+              disabled={busy || !tieneAlgo(draft)}
+            >
+              Guardar y firmar
+            </button>
+          )}
         </>
       }
     >
@@ -706,8 +726,9 @@ function NotaEditar({
         </div>
       )}
       <p className="edu-note">
-        Al firmar, esta nota queda cerrada: no se vuelve a editar ni a borrar. Si después hay algo
-        que corregir, se escribe una nota nueva que apunte a ésta.
+        {canSign
+          ? "Al firmar, esta nota queda cerrada: no se vuelve a editar ni a borrar. Si después hay algo que corregir, se escribe una nota nueva que apunte a ésta."
+          : "Cuando esté lista, entrégala desde la lista de notas: la firma tu docente, y firmada ya no se edita."}
       </p>
       <CamposSoap
         draft={draft}

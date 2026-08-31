@@ -239,7 +239,7 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
                   )}
                   {canAssign && (
                     <p className="edu-note">
-                      Para asignarle un alumno nuevo, entra al padrón, abre la ficha del alumno y
+                      Para asignarle un alumno nuevo, entra a Alumnos, abre la ficha del alumno y
                       elige al docente ahí: la asignación se hace desde el alumno, que es donde se
                       ve con quién más la comparte.
                     </p>

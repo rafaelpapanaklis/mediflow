@@ -50,6 +50,10 @@ import {
   type EduTeamFilters,
   type EduTeamRow,
 } from "@/lib/edu/equipo-core";
+// P2-8: el saneador del catálogo, que existía desde la Ola 0 esperando a la
+// pantalla de permisos. TODO lo que venga del cliente pasa por él antes de
+// guardarse en permissionsOverride — una key inventada no se guarda.
+import { sanitizeEduPermissionKeys } from "@/lib/edu/permissions";
 
 /** El error con status HTTP del vertical, otra vez el MISMO: `eduApiError`
  *  lo mapea tal cual y un error propio saldría como 500 genérico. */
@@ -222,6 +226,7 @@ export async function listEduTeam(
       phone: true,
       role: true,
       isActive: true,
+      permissionsOverride: true,
       lastLogin: true,
       createdAt: true,
       studentProfile: { select: { matricula: true } },
@@ -240,6 +245,9 @@ export async function listEduTeam(
       role: u.role as EduRole,
       isActive: u.isActive,
       isSelf: u.id === ctx.eduUserId,
+      // P2-8: para el editor de permisos. Esta pantalla exige equipo.manage,
+      // así que quien lo recibe es quien puede escribirlo.
+      permissionsOverride: u.permissionsOverride ?? [],
       hasStudentProfile: Boolean(u.studentProfile),
       matricula: u.studentProfile?.matricula ?? null,
       lastLogin: iso(u.lastLogin),
@@ -372,11 +380,10 @@ export async function createEduTeamMember(
         // cuenta no se marca, porque esa persona ya eligió su contraseña y
         // obligarla a cambiarla la sacaría de su otro producto.
         //
-        // ⚠️ HOY EL PANEL DEL INSTITUTO NO LEE ESTA BANDERA: no existe
-        // /instituto/cambiar-contrasena. Se escribe desde ya para que el
-        // dato esté cuando esa pantalla se construya, y está anotado en
-        // ORQUESTA.md como lo que falta. Mientras tanto, la contraseña
-        // temporal sigue siendo válida hasta que la persona la cambie.
+        // Desde la ola de cierre (P2-9) esta bandera POR FIN tiene lector:
+        // el layout del panel manda a /instituto/cambiar-contrasena a quien
+        // la traiga encendida, y no deja pasar hasta que la persona define
+        // la suya (POST /api/instituto/auth/cambiar-contrasena la levanta).
         mustChangePassword: !reused,
       },
       select: { id: true },
@@ -517,4 +524,84 @@ export async function setEduTeamMemberActive(
 
   await prisma.eduUser.update({ where: { id: persona.id }, data: { isActive } });
   return { id: persona.id, isActive };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 · LOS PERMISOS (P2-8) — el override por fin se escribe desde el panel
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Guarda (o restaura) el override de permisos de una persona.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 CIERRE (P2-8) · LA PANTALLA DE PERMISOS QUE EL CATÁLOGO PROMETÍA.
+ *
+ * permissions.ts describía desde la Ola 0 una pantalla de permisos que
+ * nunca se construyó: EDU_PERMISSION_GROUPS y sanitizeEduPermissionKeys no
+ * tenían UN solo llamador, y todos los "si un día alguien le enciende X por
+ * override desde la pantalla de permisos" eran teóricos — el único camino
+ * real era SQL a mano. Esta función (y el editor en la pantalla de equipo)
+ * los cablea.
+ *
+ * LAS REGLAS, y por qué:
+ *
+ *   · `keys: null` = RESTAURAR el rol (override vacío). Es distinto de
+ *     mandar una lista vacía, que REBOTA: por la semántica del override
+ *     (getEduEffectivePermissions), una lista vacía CAE al default del rol
+ *     — así que "sin ninguna casilla" no existe como estado. Guardarla en
+ *     silencio le diría a la dirección "le quité todo" cuando en realidad
+ *     le devolvió todo. Para dejar a alguien sin panel se le da de baja.
+ *
+ *   · 🔴 NADIE SE EDITA SUS PROPIOS PERMISOS. Es la misma regla que "nadie
+ *     se da de baja a sí mismo", y con una consecuencia extra que importa:
+ *     como quien edita conserva SIEMPRE su equipo.manage, el instituto no
+ *     puede quedarse sin nadie que administre por una tarde de casillas.
+ *
+ *   · Las keys pasan por sanitizeEduPermissionKeys: lo inventado y lo
+ *     repetido se descarta ANTES de tocar la base.
+ *
+ * ⚠️ Lo que un override NO puede abrir sigue cerrado por el ALCANCE: el
+ * dinero, el expediente para caja, el tablero de dirección — los dos
+ * candados de siempre. Encender una casilla de más enseña una pantalla
+ * vacía, no los datos. Es exactamente el diseño que el catálogo describe.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function setEduTeamMemberPermissions(
+  ctx: EduTeamContext,
+  memberId: string,
+  rawKeys: unknown,
+): Promise<{ id: string; permissionsOverride: string[] }> {
+  const institutionId = requireInstitution(ctx);
+
+  const persona = await prisma.eduUser.findFirst({
+    where: { id: memberId, institutionId },
+    select: { id: true },
+  });
+  if (!persona) throw new EduPadronError("Esa persona no es de este instituto.", 404);
+
+  if (persona.id === ctx.eduUserId) {
+    throw new EduPadronError(
+      "No puedes editar tus propios permisos. Pídeselo a otra persona de dirección.",
+    );
+  }
+
+  let override: string[];
+  if (rawKeys === null) {
+    override = [];
+  } else if (Array.isArray(rawKeys)) {
+    override = sanitizeEduPermissionKeys(rawKeys);
+    if (override.length === 0) {
+      throw new EduPadronError(
+        "No quedó ninguna casilla válida. Sin casillas no hay permisos personalizados: usa «Restaurar el rol», o da de baja la cuenta si lo que quieres es cerrarle el panel.",
+      );
+    }
+  } else {
+    throw new EduPadronError("Manda la lista de permisos, o null para restaurar el rol.", 400);
+  }
+
+  await prisma.eduUser.update({
+    where: { id: persona.id },
+    data: { permissionsOverride: override },
+  });
+  return { id: persona.id, permissionsOverride: override };
 }

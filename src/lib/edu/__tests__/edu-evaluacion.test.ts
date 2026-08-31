@@ -439,11 +439,16 @@ test("fuera del ciclo, la fracción se queda entre 0 y 1", () => {
   assert.equal(eduCycleFraction(cohort, new Date("2030-01-01T00:00:00.000Z")), 1);
 });
 
-function progreso(done: number, required: number, name = "R") {
+// Desde la ola de cierre (P2-5), el veredicto suma la expectativa POR
+// requisito (`expectedRaw`, que ya trae aplicado el rango de semestres) en
+// vez de `totales × fracción`. Consecuencia para estas pruebas: el progreso
+// y el veredicto tienen que construirse con la MISMA fracción — que es
+// exactamente lo que hacen los dos llamadores reales (evaluacion.ts).
+function progreso(done: number, required: number, name = "R", fraccion = 0.5) {
   return eduRequirementProgress(
     { ...req({ requiredCount: required, name }), id: name },
     Array.from({ length: done }, (_, i) => caso({ id: `${name}${i}` })),
-    0.5,
+    fraccion,
   );
 }
 
@@ -520,7 +525,7 @@ test("un alumno sin requisitos capturados sale AL DÍA y lo explica", () => {
 });
 
 test("al principio del ciclo no se le espera nada", () => {
-  const v = eduAtrasoVerdict([progreso(0, 8)], 0);
+  const v = eduAtrasoVerdict([progreso(0, 8, "R", 0)], 0);
   assert.equal(v.estado, "AL_DIA");
   assert.match(v.motivo, /apenas empieza/);
 });

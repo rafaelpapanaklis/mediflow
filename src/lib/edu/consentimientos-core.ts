@@ -501,6 +501,15 @@ export interface EduConsentPublicView {
   puedeFirmar: boolean;
 
   signedAt: string | null;
+  /**
+   * P2-14 · La fecha de firma YA FORMATEADA, en la zona del INSTITUTO.
+   * Era la única fecha del vertical que formateaba el navegador
+   * (`toLocaleString` en un componente server-rendereado): el servidor la
+   * pintaba en SU zona (UTC en Vercel) y el navegador en la del paciente —
+   * hydration mismatch en un documento legal, y una hora que no era la de
+   * la escuela. Como todo lo demás: la etiqueta la hace el servidor.
+   */
+  signedLabel: string | null;
   signerName: string | null;
   signerRelation: string | null;
   /** URL firmada de la imagen, generada al leer. Nunca se guarda. */

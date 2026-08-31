@@ -27,7 +27,23 @@ ningún caso»* (PR contra `main`).
 | **P0-2** | ✅ arreglado | `src/lib/edu/agenda.ts` (la cita se engancha sola a su caso) · `src/lib/edu/traspasos.ts` (el traspaso engancha las sueltas) · `src/lib/edu/visibility.ts` (una cita suelta no abre la ficha de un paciente entregado) · `sql/edu-fix-auditoria.sql` (las filas viejas) |
 | **P1-3** | ✅ arreglado | `src/lib/edu/agenda.ts` — `updateEduAppointment` revalida el caso cuando cambia el alumno |
 | **P1-4** | ✅ arreglado | `src/app/instituto/(panel)/agenda/page.tsx` · `.../docentes/page.tsx` · **y también** `src/app/api/instituto/docentes/route.ts`, que tenía la misma fuga a un `fetch` de distancia |
-| **P2-5 … P3-18** | ⏳ pendientes | Sin tocar, a propósito: esta rama arregla solo los cuatro graves |
+| **P2-5 … P3-18** | ver abajo | La **ola de cierre** (rama `fix/edu-cierre`, 2026-08-31) arregló **doce de los catorce** — cada sección lleva su bloque «Cómo quedó». Fuera, con motivo escrito: **P2-6** (acotar la pantalla de evaluación) y **P3-15** (los scripts de prueba, que viven en `package.json`, fuera de los archivos del vertical) |
+
+> 🔴 **ACTUALIZACIÓN 2026-08-31 — LA OLA DE CIERRE.** Además de los P2/P3,
+> probar el producto en producción con los tres roles encontró un hueco que
+> esta auditoría no listó: **el P0-2 entrando por otra puerta**. El arreglo
+> del PR #141 engancha la cita a su caso al AGENDAR, al REAGENDAR y al
+> TRASPASAR — pero el orden NORMAL del producto es el contrario: primero se
+> agenda y el caso se abre cuando el paciente llega. Cuando el caso nacía
+> DESPUÉS de la cita, ninguno de los tres momentos volvía a mirarla y la
+> fila se quedaba con `caseId: null` para siempre — no contaba para la
+> etapa SESSION del gate de la Ola 4 y, al traspasar, no se iba con el
+> alumno entrante. Cerrado en `createEduCase` (src/lib/edu/casos.ts):
+> abrir un caso engancha las citas sueltas de ese paciente con ese alumno
+> — con la MISMA función que usa el traspaso (`eduAttachLooseAppointments`)
+> y la misma regla de siempre (solo si el caso recién abierto es el ÚNICO
+> vivo del par; el TAMIZAJE fuera). Las filas históricas las repara
+> `sql/edu-cierre.sql` (sección 2). Prueba: `edu-cierre.test.ts`.
 
 Los hallazgos NO se borran: se marcan. Cada uno lleva abajo, al final de su
 sección, un bloque **«Cómo quedó»** con lo que se hizo y lo que
@@ -468,6 +484,32 @@ captura y de la pantalla. Un dato que se enseña y no hace nada es peor que no
 tenerlo — es la misma regla que el catálogo de permisos se aplica a sí mismo
 (`permissions.ts:20-27`).
 
+#### ✅ Cómo quedó (ola de cierre)
+
+Se APLICA el rango, con la decisión escrita y en la dirección que no rompe
+nada hecho: **el rango es *cuándo se exige*, no qué casos cuentan.**
+
+- La EXPECTATIVA del semáforo se calcula contra el semestre ACTUAL del
+  alumno (`eduRequirementExpectedRaw`, `evaluacion-core.ts`): antes de
+  `semesterFrom` se esperan **0** (un alumno de 1º deja de salir ATRASADO
+  por un requisito de 5º), después de `semesterTo` se espera el total, y
+  dentro del rango crece semestre a semestre. `eduAtrasoVerdict` suma ahora
+  la expectativa POR requisito (sin rangos, la cuenta da exactamente lo
+  mismo que antes).
+- **Un caso hecho ANTES del rango sigue contando**, y es deliberado: el
+  semestre en que se abrió un caso no se registra en ningún sitio
+  (`EduStudent.semester` es el actual), y además invalidar trabajo ya hecho
+  y calificado obligaría a repetir procedimientos en pacientes reales — la
+  falla en la dirección cara. La pantalla de requisitos ahora dice «Se
+  exige de 3º a 5º» (no «3º – 5º» a secas) y la captura explica qué decide
+  el rango, para que nadie vuelva a leerlo como un filtro de casos.
+- Con `semesterFrom` y sin `semesterTo` («3º – fin»), el fin es la duración
+  de la especialidad, que el módulo puro no conoce: desde 3º es exigible y
+  el ritmo lo sigue marcando el ciclo de la generación.
+
+Pruebas puras en `edu-cierre.test.ts` (expectativa antes/dentro/después del
+rango, y que el semáforo deja de regañar a 1º).
+
 ### P2-6 · La pantalla de evaluación crece sin techo
 
 `listEduEvaluacion` (`evaluacion.ts:474-499`) lee hasta 300 alumnos
@@ -490,6 +532,21 @@ Hoy no duele; con la primera escuela que lleve dos generaciones dentro, sí.
 **Arreglo:** filtrar por generación/ciclo en las tres consultas, o al menos
 acotar las citas por rango de fechas del `cohort` y ponerles `take`.
 
+#### ⏳ Cómo quedó (ola de cierre): FUERA, a propósito
+
+Es uno de los dos que la ola de cierre NO arregló, y el motivo merece
+quedar escrito para que nadie lo "arregle" mal después: **un `take` a secas
+aquí no acota — FALSIFICA.** Las tres consultas alimentan las horas
+clínicas y el avance que la escuela enseña en una acreditación; un tope
+global truncaría las filas de ALGÚN alumno al azar y sus horas saldrían
+menores sin ninguna señal. Eso es peor que el costo actual, que está
+acotado por otro lado (máximo 300 alumnos por pantalla, selects mínimos, y
+la primera escuela todavía no llega a dos generaciones). El arreglo real es
+el que la cabecera de `evaluacion.ts` ya planea — un filtro por GENERACIÓN
+en la pantalla, con su semántica de producto (¿cuál es el default? ¿las
+cerradas cuentan?) — y esa decisión no se toma de pasada en una ola de
+cierre. Sigue pendiente.
+
 ### P2-7 · El dinero está cerrado una vez, no dos
 
 `permissions.ts:80-87` promete, con todas sus letras, que el dinero está
@@ -511,6 +568,30 @@ completa. Con el segundo candado no vería nada.
 **Arreglo:** añadir el mismo `if (eduScopeIsEmpty(eduVisibility(ctx,
 "charges"))) throw …` que ya tiene `getEduTarifaDePaciente` a las cuatro
 lecturas del tarifario. Son cuatro líneas.
+
+#### ✅ Cómo quedó (ola de cierre) — con un matiz que la auditoría no vio
+
+El candado se puso donde hay PRECIOS: `listEduFeeSchedules` y
+`getEduTarifario` (que es la tabla completa, celda por celda). El repro de
+esta auditoría —un ALUMNO con `tarifarios.view` encendido viendo
+`/instituto/tarifarios`— ya rebota con 403.
+
+**Pero no fueron "las cuatro", y no es un recorte del arreglo:**
+
+- `listEduProcedures` NO lleva el candado, deliberadamente. Es el CATÁLOGO
+  (clave, nombre, categoría, duración — sin un solo precio; `pricedIn` es
+  un conteo) y lo lee un flujo CLÍNICO: la pantalla de casos lo carga para
+  que un DOCENTE con `casos.assign` clasifique el procedimiento del caso —
+  la propia página lo documenta ("abrir los nombres del catálogo no es
+  abrir el dinero"). Cerrarlo con "charges" habría roto la clasificación de
+  casos para todos los docentes.
+- `listEduProcedureOptions` no se candó: **se RETIRÓ.** No tenía un solo
+  llamador (la caja arma su desplegable con `getEduTarifaDePaciente`, que
+  ya trae el precio resuelto y su candado) — y una lectura muerta sin
+  candado es la puerta que la siguiente pantalla usa sin pasar por él.
+
+Prueba: `edu-cierre.test.ts` verifica el candado en las dos lecturas con
+precios (y en `getEduTarifaDePaciente`) y que la muerta ya no existe.
 
 ### P2-8 · La pantalla de permisos no existe
 
@@ -536,6 +617,32 @@ la pantalla de permisos — a sabiendas y una por una").
 escritos y probados) o retirar el andamiaje y decir en el catálogo que hoy el
 rol es lo único que decide.
 
+#### ✅ Cómo quedó (ola de cierre)
+
+Se CONSTRUYÓ, con los dos helpers que llevaban ocho olas esperando: el
+botón «Permisos» de cada fila de `/instituto/equipo` abre un editor por
+grupos (`EDU_PERMISSION_GROUPS`) y el PATCH de `/api/instituto/equipo/[id]`
+acepta `permissionsOverride`, que pasa SIEMPRE por
+`sanitizeEduPermissionKeys` antes de guardarse
+(`setEduTeamMemberPermissions`, `equipo.ts`). Con esto, todas las
+mitigaciones del catálogo que hablaban de "encenderlo por override desde la
+pantalla de permisos" dejaron de ser teóricas.
+
+Las reglas que la pantalla trajo consigo, porque el mecanismo las exige:
+
+- **Nadie edita sus propios permisos** (misma familia que "nadie se da de
+  baja a sí mismo") — y con una consecuencia estructural: quien edita
+  conserva siempre su `equipo.manage`, así que el instituto no puede
+  quedarse sin administrador por una tarde de casillas.
+- Una lista que quede VACÍA tras sanear REBOTA en vez de guardarse: por la
+  semántica del override (vacío = default del rol), "sin ninguna casilla"
+  no existe como estado, y guardarla diría "le quité todo" cuando en
+  realidad le devolvió todo. Para cerrar el panel se da de baja.
+- Marcar EXACTAMENTE el default se guarda como «restaurar el rol» (override
+  vacío): un override idéntico al rol solo serviría para que la persona no
+  reciba las keys que su rol gane en olas futuras. Y la fila lo DICE
+  («Permisos personalizados») cuando alguien no usa el default.
+
 ### P2-9 · La contraseña temporal no caduca nunca
 
 `createEduTeamMember` genera una contraseña temporal, se la enseña a quien da
@@ -553,6 +660,25 @@ no tiene forma de cambiarla desde el producto.
 
 **Arreglo:** una pantalla `/instituto/cambiar-contrasena` + el check en
 `(panel)/layout.tsx`, espejo de `dashboard/layout.tsx:110`.
+
+#### ✅ Cómo quedó (ola de cierre)
+
+Las dos piezas, más el camino voluntario:
+
+- `(panel)/layout.tsx` redirige a `/instituto/cambiar-contrasena` a quien
+  traiga la marca, en cada render y con la base en la mano. La pantalla
+  vive FUERA del grupo (panel) —hermana del login— para que el redirect no
+  pueda ser un bucle (el dental lo resuelve comparando pathname; aquí lo
+  resuelve la ubicación).
+- `POST /api/instituto/auth/cambiar-contrasena` cambia la contraseña de LA
+  SESIÓN (nada del body salvo la contraseña), con el mismo criterio de
+  fuerza del resto de DaleControl (`scorePassword`, importado, no
+  reescrito), el tope de 72 de bcrypt, la comprobación best-effort de "es
+  la misma de antes", y el orden Auth PRIMERO / Prisma después. La marca se
+  levanta en TODAS las filas edu de esa cuenta (la contraseña es de la
+  cuenta, no del instituto); la fila del dental no se toca.
+- Y el menú ganó «Cambiar contraseña» (pie del sidebar): cambiarla sin
+  estar obligado era la otra mitad de lo que faltaba.
 
 ### P2-10 · Dos peticiones idénticas emiten dos cobros
 
@@ -580,6 +706,25 @@ milisegundos.)*
 único `(institutionId, idempotencyKey)`, devolviendo el cobro existente —
 mismo patrón que `confirmEduStudyUpload`.
 
+#### ✅ Cómo quedó (ola de cierre)
+
+Exactamente el arreglo propuesto, con la carrera cerrada por la base:
+
+- `EduCharge.idempotencyKey` (opcional) + índice único
+  `(institutionId, idempotencyKey)` (`sql/edu-cierre.sql`, sección 1 — el
+  DDL va ANTES del deploy). `createEduCharge` devuelve el cobro existente
+  con `duplicado: true` cuando la clave ya está; si dos POST simultáneos
+  llegan a la vez, el índice rebota al segundo y se le devuelve el del
+  primero. La pantalla de caja genera una clave por apertura del diálogo,
+  estable entre reintentos.
+- **Y el paréntesis del hallazgo también:** el tope de `addEduPayment` se
+  reclama ahora DENTRO de la transacción con un `updateMany` condicional +
+  `decrement` (que toma el candado de la fila y serializa dos pagos
+  simultáneos), y el recálculo desde los pagos reales reescribe después las
+  columnas con la verdad. `cancelEduCharge` quedó igual de condicionado
+  (`paidCents: 0` en el `where`): un pago que entre a media cancelación ya
+  no puede dejar un cobro CANCELADO con dinero dentro.
+
 ### P2-11 · Las horas que mira una acreditación las teclea el alumno
 
 `PATCH /api/instituto/agenda/[id]/estado` exige **`agenda.view`**
@@ -605,6 +750,21 @@ Un alumno marca IN_CHAIR a las 8:00 y COMPLETED a las 16:00 y su cita vale 8 h
 la bitácora las citas cuyos sellos los puso el propio alumno, como ya se marca
 lo estimado (`hours.estimatedMinutes`).
 
+#### ✅ Cómo quedó (ola de cierre) — con una corrección a la propuesta
+
+La "una línea" propuesta (`startsAt > now` a secas) habría roto el
+mostrador real: el paciente que llega una hora ANTES de su cita se registra
+antes de `startsAt`, y eso es lo legítimo de todos los días. El predicado
+que quedó (`eduClinicalStatusTooEarly`, agenda-core, puro y probado) frena
+los estados CLÍNICOS solo cuando la cita empieza a **más de 24 horas** —
+deja pasar llegar temprano y el desfase entre sedes en husos distintos, y
+para lo que la auditoría señaló: la cita del mes que viene marcada
+COMPLETED hoy, fabricando horas de acreditación de una sesión que no
+existió. Cancelar y "no llegó" no pasan por el freno: cancelar el futuro es
+exactamente para lo que existe cancelar. El marcado en bitácora de "sellos
+puestos por el propio alumno" queda como estaba: opcional, si una escuela
+lo pide.
+
 ### P2-12 · Los dos endpoints que gastan dinero no tienen freno
 
 - `POST /api/instituto/ai/dictado` — **sin rate limit**. Cualquiera con
@@ -624,6 +784,20 @@ Que se puede: la ruta pública de consentimientos sí usa `rateLimit`
 
 **Arreglo:** `rateLimit` por sesión en los dos, y una cuota por instituto
 antes de encender la bandera.
+
+#### ✅ Cómo quedó (ola de cierre — y media la había cerrado la Ola 8)
+
+La mitad "cuota por instituto" la resolvió la **Ola 8** después de esta
+auditoría: los dos endpoints pasan por `requireEduIaCupo` (cupo mensual del
+contrato, 402 al agotarse) y cada gasto queda en `EduAiUsage` con su costo
+real. Lo que seguía abierto era el freno POR SESIÓN — sin él, una sola
+cuenta en bucle se comía el cupo del MES de toda la escuela (y el cupo
+agotado apaga la IA de todos). La ola de cierre lo puso en los dos
+endpoints con `rateLimitKey` por `eduUserId` (dictado 10/min, análisis
+5/min): por sesión y no por IP, porque la clínica entera sale por la misma
+IP y un tope por IP frenaría al piso completo por culpa de uno. Es el
+limitador en memoria del repo (por instancia serverless): suficiente como
+freno de bucle — el candado del dinero sigue siendo el cupo.
 
 ### P2-13 · El alumno firma su propia nota
 
@@ -647,6 +821,30 @@ decisión de la Ola 3 que más chirría con el resto del vertical y con la
 NOM-004, y merece una revisión consciente —partir la key en
 `expediente.write` / `expediente.sign`— antes de que una escuela la audite.
 
+#### ✅ Cómo quedó (ola de cierre)
+
+La revisión consciente se hizo y la decisión se REVIRTIÓ: la key se partió.
+`expediente.write` escribe, ENTREGA (ENVIADA) y devuelve;
+`expediente.sign` — nueva, default de DOCENTE y DIRECCIÓN, nunca del
+ALUMNO — es la única que cierra una nota como FIRMADA. La puerta vive en
+`updateEduRecord` (no solo en el endpoint, que la resuelve y la pasa como
+`canSign` — el mismo reparto que `canManage` en la agenda), la pantalla le
+ofrece al alumno «Entregar» donde antes le ofrecía «Firmar», y con esto
+ENVIADA deja de ser decorativo: es el paso por el que la nota LLEGA al
+docente. Tres decisiones de borde, tomadas y escritas:
+
+- **Quien tiene sign firma también su PROPIA nota** (el docente que escribe
+  y cierra en un solo acto es el flujo normal de un profesional): la
+  separación es por responsabilidad, no por autoría — igual que
+  `recetas.issue`.
+- **Las notas que un alumno ya firmó antes del cambio quedan como están**:
+  una FIRMADA no se reabre ni se invalida (NOM-004). Lo que cambia es lo
+  que se puede firmar desde hoy.
+- El backfill de overrides va en `sql/edu-cierre.sql` (sección 3) y va VIVO
+  —no comentado como en olas anteriores— porque no correrlo no es "quedarse
+  como antes": un docente con override que incluía `expediente.write` PODÍA
+  firmar, y sin backfill dejaría de poder en silencio.
+
 ### P2-14 · La única fecha del vertical que formatea el navegador
 
 `src/components/edu/consentimiento-publico.tsx:149` y `:182`:
@@ -668,6 +866,18 @@ diría otra hora".
 **Arreglo:** que `getEduConsentPublic` (`consentimientos.ts:734-802`)
 devuelva `signedLabel` ya formateado con la zona del instituto, como hace
 `toRow` para el panel (`consentimientos.ts:223`).
+
+#### ✅ Cómo quedó (ola de cierre)
+
+Exactamente eso: `EduConsentPublicView` ganó `signedLabel`,
+`getEduConsentPublic` lo formatea con el MISMO `stampLabel` del panel y la
+zona del instituto (el `select` público ganó `institution.timezone`), y el
+componente pinta la etiqueta en sus dos sitios (el aviso «Firmado el …» y
+la lista de firmas). `toLocaleString` desapareció del componente — la
+prueba de `edu-cierre.test.ts` lo vigila para que no vuelva. `signedAt`
+(ISO) se conserva en la vista como dato, que es lo que un dato es; lo que
+ya no existe es un navegador decidiendo cómo se lee la fecha de un
+documento legal.
 
 ---
 
@@ -697,6 +907,32 @@ valida cada `feeScheduleId` contra las listas del instituto pero no rechaza
 repetidos, así que un cliente puede mandar el mismo id 10 000 veces y forzar
 10 000 `upsert` dentro de una transacción. Ninguno es explotable con la UI.
 
+#### Cómo quedaron los cuatro (ola de cierre)
+
+- **P3-15 · ⏳ FUERA, por el guard y no por pereza:** los scripts viven en
+  `package.json`, que NO es un archivo del vertical (la guardia
+  institucional solo indulta `prisma/schema.prisma` y `ORQUESTA.md` como
+  compartidos). Tocarlo desde una ola del instituto es exactamente lo que
+  el guard existe para impedir. La suite se corre a mano
+  (`npx tsx --test src/lib/edu/__tests__/*.test.ts`) y el script `test:edu`
+  queda para un cambio de repo fuera del vertical. Sigue pendiente.
+- **P3-16 · ✅** `sql/edu-cierre.sql` (sección 4) crea los tres índices GIN
+  de trigramas sobre `searchIndex` (pacientes, alumnos y equipo), que es lo
+  que un `contains` con comodín inicial puede usar. Viven SOLO en el .sql y
+  no en el schema, a propósito: expresar `gin_trgm_ops` en Prisma exigiría
+  encender el preview de extensiones para TODO el repo — tocar la config
+  del dental por un índice del instituto. La diferencia queda documentada
+  en el propio .sql.
+- **P3-17 · ✅** `listEduTransferableCases` ganó su `take`
+  (`EDU_CLINICA_MAX_ROWS`), y `setEduProcedurePrices` rebota tanto una
+  lista más larga que `EDU_MAX_FEE_SCHEDULES` como el mismo
+  `feeScheduleId` repetido (quedarse con "el último" en silencio guardaría
+  uno de los dos precios al azar).
+- **P3-18 · ✅** `mapEduCurrentGrades` se retiró — y `listEduProcedureOptions`
+  (encontrada igual de muerta al cablear el P2-7) con ella. Ninguna tenía
+  un llamador, y la primera además aceptaba `institutionId` suelto en vez
+  del contexto: justo la firma que la regla de oro del vertical prohíbe.
+
 ---
 
 ## Qué arreglar primero
@@ -717,19 +953,28 @@ repetidos, así que un cliente puede mandar el mismo id 10 000 veces y forzar
    para las citas nuevas.
 4. ✅ **P1-3** — ~~una decisión y tres líneas en `updateEduAppointment`.~~
    **Hecho**: se resuelve el caso en vez de rebotar el cambio de alumno.
-5. **P2-7** — cuatro líneas, cierra la promesa que el catálogo ya hace por
-   escrito.
-6. **P2-9 + P2-8** — la pantalla de contraseña y la de permisos. Son las dos
-   pantallas que faltan para que el vertical se administre solo; hasta que
-   existan, dirección conserva contraseñas y los overrides se escriben por SQL.
-7. **P2-5** — decidir: aplicar el semestre o quitarlo de la pantalla. No
-   dejarlo como está.
-8. **P2-11 + P2-10** — un `if` en `setEduAppointmentStatus` y una clave de
-   idempotencia en el cobro.
-9. **P3-15** — los scripts de prueba. Cuesta tres minutos y es lo que hace
-   que los ocho arreglos de arriba no se rompan solos.
-10. El resto (**P2-6, P2-12, P2-13, P2-14, P3-16..18**) cuando toque la ola
-    correspondiente.
+5. ✅ **P2-7** — ~~cuatro líneas, cierra la promesa que el catálogo ya hace por
+   escrito.~~ **Hecho** en las lecturas con PRECIOS; el catálogo de
+   procedimientos queda abierto a los flujos clínicos a propósito (ver su
+   «Cómo quedó»).
+6. ✅ **P2-9 + P2-8** — ~~la pantalla de contraseña y la de permisos.~~
+   **Hechas las dos**: el vertical ya se administra solo — la contraseña
+   temporal caduca en el primer render del panel y los overrides se
+   escriben desde /instituto/equipo, saneados.
+7. ✅ **P2-5** — ~~decidir: aplicar el semestre o quitarlo de la pantalla.~~
+   **Decidido y aplicado**: el rango es CUÁNDO se exige (expectativa del
+   semáforo), no qué casos cuentan.
+8. ✅ **P2-11 + P2-10** — **hechos**: el freno de 24 h a los estados
+   clínicos del futuro, y la clave de idempotencia del cobro (más el tope
+   del pago reclamado dentro de la transacción).
+9. ⏳ **P3-15** — los scripts de prueba. Sigue pendiente: `package.json`
+   está fuera de los archivos del vertical y la guardia lo rebota — es un
+   cambio de repo, no de una ola del instituto.
+10. Del resto: ✅ **P2-12, P2-13, P2-14, P3-16, P3-17 y P3-18** cayeron en
+    la ola de cierre (cada uno con su «Cómo quedó»). ⏳ **P2-6** queda
+    fuera con motivo escrito: un `take` a secas falsificaría las horas de
+    acreditación; el arreglo real es el filtro por generación que la
+    cabecera de `evaluacion.ts` ya planea.
 
 ---
 

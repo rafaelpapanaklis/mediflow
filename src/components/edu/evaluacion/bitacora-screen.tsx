@@ -887,7 +887,7 @@ function Traspasar({
         <p className="edu-field__hint">
           {programaIds.length > 1
             ? `Elegiste casos de ${programaIds.length} especialidades (${programaNombres.join(", ")}). Un caso se traspasa dentro de su especialidad: hazlo en dos tandas.`
-            : `Tiene que ser de la misma especialidad${programaNombres[0] ? ` (${programaNombres[0]})` : ""} y estar ACTIVO en el padrón.`}
+            : `Tiene que ser de la misma especialidad${programaNombres[0] ? ` (${programaNombres[0]})` : ""} y seguir ACTIVO como alumno.`}
         </p>
       </div>
 

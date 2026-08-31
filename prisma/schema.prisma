@@ -13715,6 +13715,16 @@ model EduCharge {
   cancelledByUserId String?
   cancelReason     String?   @db.VarChar(300)
 
+  /// Cierre (P2-10). Clave de idempotencia que manda el CLIENTE al emitir:
+  /// dos POST con la misma clave son UN cobro (el segundo devuelve el que
+  /// ya existe, con su folio). Cierra el doble cobro por reintento de red o
+  /// petición repetida — el doble clic ya lo tapaba la pantalla, pero la
+  /// pantalla no es la única que puede llamar. Opcional: un cobro sin clave
+  /// se emite igual (los POST viejos no traían ninguna), y NULL no choca
+  /// con NULL en el índice único de Postgres. Mismo patrón que la subida de
+  /// estudios (índice único sobre storagePath).
+  idempotencyKey   String?   @db.VarChar(80)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -13735,6 +13745,7 @@ model EduCharge {
   invoices    EduInvoice[]
 
   @@unique([institutionId, folio])
+  @@unique([institutionId, idempotencyKey], map: "edu_charges_idem_key")
   @@index([institutionId, chargedAt], map: "edu_charges_fecha_idx")
   @@index([institutionId, patientId, chargedAt], map: "edu_charges_patient_idx")
   @@index([institutionId, status], map: "edu_charges_status_idx")

@@ -285,8 +285,21 @@ test("🔴 P0-2 · el traspaso engancha las citas SUELTAS antes de mover las fut
   );
 
   // Se enganchan a un caso que en este mismo instante quedó TRANSFERRED, y
-  // solo las del MISMO paciente y el MISMO alumno.
-  assert.match(src, /patientId:\s*caso\.patientId,\s*studentId:\s*caso\.studentId,\s*caseId:\s*null/);
+  // solo las del MISMO paciente y el MISMO alumno. Desde la ola de cierre
+  // el enganche es una función COMPARTIDA con createEduCase
+  // (eduAttachLooseAppointments, casos.ts): la misma regla corre al abrir
+  // un caso sobre citas ya agendadas y al traspasar — dos copias del mismo
+  // updateMany habrían filtrado distinto tarde o temprano.
+  assert.match(
+    src,
+    /eduAttachLooseAppointments\(tx,\s*\{\s*institutionId,\s*patientId:\s*caso\.patientId,\s*studentId:\s*caso\.studentId,/,
+  );
+  assert.match(src, /includeTamizaje:\s*true/);
+  assert.match(
+    fuente("src", "lib", "edu", "casos.ts"),
+    /caseId:\s*null,?\s*\.\.\.\(args\.includeTamizaje/,
+    "la función compartida solo toca citas SUELTAS (caseId null)",
+  );
   assert.match(src, /data:\s*\{\s*status:\s*"TRANSFERRED"/);
 });
 

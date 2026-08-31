@@ -648,6 +648,26 @@ function Cobrar({
     setLibre(false);
   }
 
+  // ── 🔴 P2-10 · LA CLAVE DE IDEMPOTENCIA ──────────────────────────────
+  // Una por APERTURA del diálogo, estable mientras viva: si el POST sale y
+  // la respuesta se pierde (red), el reintento manda LA MISMA clave y el
+  // servidor devuelve el cobro que ya emitió en vez de emitir otro. Un
+  // diálogo nuevo es una intención nueva y estrena clave. `randomUUID` no
+  // existe en http sin certificado — ahí se arma una equivalente a mano.
+  const [idemKey] = useState(() => {
+    try {
+      // Acceso defensivo: el tipo Crypto de un lib.dom viejo no declara
+      // randomUUID, y en http sin certificado tampoco existe en runtime.
+      const uuid = (
+        globalThis.crypto as { randomUUID?: () => string } | undefined
+      )?.randomUUID?.();
+      if (uuid) return uuid;
+    } catch {
+      /* cae al método de abajo */
+    }
+    return `idem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}-${Math.random().toString(36).slice(2, 12)}`;
+  });
+
   async function cobrar() {
     if (!tarifa) return;
     setError(null);
@@ -659,6 +679,7 @@ function Cobrar({
           method: "POST",
           body: {
             patientId: tarifa.patientId,
+            idempotencyKey: idemKey,
             notes: notas.trim() || null,
             items: lineas.map((l) => ({
               procedureId: l.procedureId ?? undefined,
