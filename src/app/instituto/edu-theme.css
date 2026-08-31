@@ -6310,3 +6310,124 @@ button.edu-dir-money__fila:hover {
   gap: 8px;
   margin-top: 4px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PAGOS A MESES — la tabla de planes y el recibo imprimible del plan.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-table--planes {
+  --edu-cols: 88px minmax(150px, 1.5fr) minmax(120px, 1fr) minmax(110px, 1fr) minmax(130px, 1.1fr) 104px 168px;
+}
+
+/* El recibo del plan: un DOCUMENTO, no un tablero. En pantalla es una hoja
+   angosta y centrada; en papel es lo único que sale. */
+.edu-planrecibo {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.edu-planrecibo__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--edu-line);
+  padding-bottom: 10px;
+}
+
+.edu-planrecibo__escuela {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.edu-planrecibo__doc {
+  font-size: 12px;
+  color: var(--edu-text-2);
+}
+
+.edu-planrecibo__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.edu-planrecibo__tabla th,
+.edu-planrecibo__tabla td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--edu-line);
+  vertical-align: baseline;
+}
+
+.edu-planrecibo__tabla th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--edu-text-2);
+}
+
+.edu-planrecibo__num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.edu-planrecibo__firmas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 26px;
+}
+
+.edu-planrecibo__firma {
+  border-top: 1px solid var(--edu-line-strong);
+  padding-top: 6px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--edu-text-2);
+}
+
+.edu-planrecibo__sello {
+  border: 1.5px solid currentColor;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+@media print {
+  /* El chrome del panel ya lo apaga el bloque de EL PAPEL; aquí se apagan
+     las piezas propias de esta pantalla que no son documento. */
+  .edu-pagos-noprint {
+    display: none !important;
+  }
+
+  .edu-planrecibo {
+    border: none;
+    border-radius: 0;
+    max-width: none;
+    padding: 0;
+  }
+
+  .edu-planrecibo__tabla tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .edu-planrecibo__tabla th,
+  .edu-planrecibo__tabla td {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

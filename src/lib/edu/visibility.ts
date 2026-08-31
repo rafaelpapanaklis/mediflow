@@ -608,6 +608,45 @@ export function eduPaymentScopeWhere({
   return { institutionId };
 }
 
+// ── Pagos a meses ───────────────────────────────────────────────────────
+
+/**
+ * Los PLANES DE PAGO que le tocan a quien pregunta: todos, o ninguno.
+ *
+ * Un plan es DINERO —el calendario de lo que un paciente debe— así que se
+ * lee con el mismo alcance de "charges" que el cobro del que cuelga: lista
+ * blanca (DIRECCION y CAJA), todo o nada. Un ALUMNO no ve el plan de su
+ * propio paciente por la misma razón por la que no ve su saldo.
+ *
+ * ⚠️ No se recorta por SEDE y no es un olvido: la sede vive SELLADA en el
+ * COBRO (dónde estaba el mostrador al emitir); el plan es un acuerdo sobre
+ * ese cobro y una mensualidad se puede pagar en cualquier mostrador — su
+ * corte es el del turno que la cobró, como todo pago.
+ */
+export function eduPaymentPlanScopeWhere({
+  institutionId,
+  scope,
+}: EduChargeScopeInput): Prisma.EduPaymentPlanWhereInput {
+  requireInstitutionId(institutionId, "eduPaymentPlanScopeWhere");
+  if (!scope || scope.kind !== "all") return nada(institutionId);
+  return { institutionId };
+}
+
+/**
+ * Lo mismo para las MENSUALIDADES, que se consultan sueltas en "qué vence
+ * esta semana". Existe aparte por lo de siempre: el `where` de Prisma es de
+ * OTRO modelo, y `{ institutionId }` a mano es el atajo que deja una
+ * consulta de dinero fuera del punto único.
+ */
+export function eduInstallmentScopeWhere({
+  institutionId,
+  scope,
+}: EduChargeScopeInput): Prisma.EduInstallmentWhereInput {
+  requireInstitutionId(institutionId, "eduInstallmentScopeWhere");
+  if (!scope || scope.kind !== "all") return nada(institutionId);
+  return { institutionId };
+}
+
 // ── El gasto de IA (Ola 8) ──────────────────────────────────────────────
 
 /**

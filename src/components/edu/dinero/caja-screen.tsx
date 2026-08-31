@@ -18,6 +18,11 @@ import {
   type EduTarifaMatch,
 } from "@/lib/edu/dinero-core";
 import {
+  EDU_PLAN_MAX_MONTHS,
+  EDU_PLAN_MIN_MONTHS,
+  eduPlanSplitCents,
+} from "@/lib/edu/pagos-core";
+import {
   EDU_CHARGE_STATUSES,
   EDU_CHARGE_STATUS_LABELS,
   EDU_PAYMENT_METHODS,
@@ -268,19 +273,24 @@ export function EduCajaScreen({
                 truncated ? ` (se muestran los primeros ${maxRows})` : ""
               }`}
         </span>
-        {canCharge && (
-          <button
-            type="button"
-            className="edu-btn edu-btn--primary edu-btn--sm"
-            onClick={() => {
-              setFlash(null);
-              setCobrando(true);
-            }}
-          >
-            <Plus size={16} />
-            Cobrar
-          </button>
-        )}
+        <span className="edu-actions">
+          <Link href="/instituto/caja/planes" className="edu-btn edu-btn--ghost edu-btn--sm">
+            Pagos a meses
+          </Link>
+          {canCharge && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--primary edu-btn--sm"
+              onClick={() => {
+                setFlash(null);
+                setCobrando(true);
+              }}
+            >
+              <Plus size={16} />
+              Cobrar
+            </button>
+          )}
+        </span>
       </div>
 
       {rows.length > 0 && (
@@ -411,16 +421,12 @@ export function EduCajaScreen({
               startNav(() => router.replace("/instituto/caja", { scroll: false }));
             }
           }}
-          onDone={(folio, descartados) => {
+          onDone={(mensaje) => {
             setCobrando(false);
             if (cobrarPreseleccion) {
               startNav(() => router.replace("/instituto/caja", { scroll: false }));
             }
-            recargar(
-              descartados > 0
-                ? `Cobro ${folio} emitido. Ojo: ${descartados} ${descartados === 1 ? "concepto salió" : "conceptos salieron"} con el precio del servidor porque el de la pantalla estaba viejo.`
-                : `Cobro ${folio} emitido.`,
-            );
+            recargar(mensaje);
           }}
         />
       )}
@@ -480,7 +486,8 @@ function Cobrar({
   /** Ola 12: el paciente que ya viene decidido desde la ficha, o null. */
   preseleccion: PacienteBusqueda | null;
   onClose: () => void;
-  onDone: (folio: string, descartados: number) => void;
+  /** El mensaje ya escrito: este modal sabe si emitió simple o a meses. */
+  onDone: (mensaje: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [buscando, setBuscando] = useState(false);
@@ -491,11 +498,18 @@ function Cobrar({
   const [libre, setLibre] = useState(false);
   const [libreDesc, setLibreDesc] = useState("");
   const [librePrecio, setLibrePrecio] = useState("");
-  const [conPago, setConPago] = useState(true);
+  // "ahora" = el pago inmediato de siempre; "despues" = queda con saldo;
+  // "meses" = se emite y se difiere el saldo en un plan de pagos.
+  const [pagoModo, setPagoModo] = useState<"ahora" | "despues" | "meses">("ahora");
   const [metodo, setMetodo] = useState<EduPaymentMethod>("CASH");
   const [monto, setMonto] = useState("");
   const [referencia, setReferencia] = useState("");
   const [notas, setNotas] = useState("");
+  // El plan, cuando el modo es "meses".
+  const [meses, setMeses] = useState("3");
+  const [diaCorte, setDiaCorte] = useState("");
+  const [conEnganche, setConEnganche] = useState(false);
+  const [engancheMonto, setEngancheMonto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -522,6 +536,31 @@ function Cobrar({
   useEffect(() => {
     if (!montoTocado) setMonto(eduMoneyInputValue(totals.totalCents));
   }, [totals.totalCents, montoTocado]);
+
+  // La VISTA PREVIA del plan, con LA MISMA función pura que usará el
+  // servidor (eduPlanSplitCents): si aquí dice $333.34 + 2 × $333.33, el
+  // servidor va a decir exactamente eso, porque es el mismo código. La
+  // pantalla no inventa el reparto — lo enseña.
+  const planPreview = useMemo(() => {
+    if (pagoModo !== "meses") return null;
+    const m = Number(meses.trim());
+    if (!Number.isInteger(m)) return null;
+    const enganche = conEnganche ? centavosDe(engancheMonto) : 0;
+    if (conEnganche && enganche <= 0) return null;
+    if (enganche >= totals.totalCents) return null;
+    const dia = diaCorte.trim() === "" ? null : Number(diaCorte.trim());
+    if (dia !== null && (!Number.isInteger(dia) || dia < 1 || dia > 31)) return null;
+    const montos = eduPlanSplitCents(totals.totalCents - enganche, m);
+    if (!montos) return null;
+    return {
+      m,
+      dia,
+      enganche,
+      restante: totals.totalCents - enganche,
+      base: montos[montos.length - 1],
+      primera: montos[0],
+    };
+  }, [pagoModo, meses, diaCorte, conEnganche, engancheMonto, totals.totalCents]);
 
   // ═══════════════════════════════════════════════════════════════════
   // 🔴 EL BUSCADOR FILTRA MIENTRAS SE TECLEA.
@@ -670,10 +709,11 @@ function Cobrar({
 
   async function cobrar() {
     if (!tarifa) return;
+    if (pagoModo === "meses" && !planPreview) return;
     setError(null);
     setBusy(true);
     try {
-      const res = await eduRequest<{ folio: string; descartados: number }>(
+      const res = await eduRequest<{ id: string; folio: string; descartados: number }>(
         "/api/instituto/caja/cobros",
         {
           method: "POST",
@@ -692,7 +732,7 @@ function Cobrar({
               discountCents: l.discount.trim() || undefined,
             })),
             payment:
-              conPago && totals.totalCents > 0
+              pagoModo === "ahora" && totals.totalCents > 0
                 ? {
                     method: metodo,
                     amountCents: monto,
@@ -702,7 +742,56 @@ function Cobrar({
           },
         },
       );
-      onDone(res.folio, res.descartados ?? 0);
+      const aviso =
+        (res.descartados ?? 0) > 0
+          ? ` Ojo: ${res.descartados} ${res.descartados === 1 ? "concepto salió" : "conceptos salieron"} con el precio del servidor porque el de la pantalla estaba viejo.`
+          : "";
+
+      if (pagoModo === "meses" && planPreview) {
+        // 🔴 EL PLAN, EN UNA SEGUNDA PETICIÓN. El enganche viaja DENTRO
+        // del plan para que enganche + calendario sean UNA transacción en
+        // el servidor. Si esta segunda llamada falla, el cobro ya existe
+        // (con su clave de idempotencia): volver a apretar "Cobrar" NO lo
+        // duplica — el servidor devuelve el mismo folio y solo reintenta
+        // el plan.
+        try {
+          const plan = await eduRequest<{
+            months: number;
+            installmentCents: number;
+            firstCents: number;
+          }>(`/api/instituto/caja/cobros/${res.id}/plan`, {
+            method: "POST",
+            body: {
+              months: planPreview.m,
+              dueDay: planPreview.dia,
+              enganche:
+                conEnganche && planPreview.enganche > 0
+                  ? {
+                      method: metodo,
+                      amountCents: engancheMonto,
+                      reference: referencia.trim() || null,
+                    }
+                  : undefined,
+            },
+          });
+          onDone(
+            `Cobro ${res.folio} emitido a ${plan.months} meses: mensualidades de ${eduMoney(plan.installmentCents)}${
+              plan.firstCents !== plan.installmentCents
+                ? ` y la primera de ${eduMoney(plan.firstCents)}`
+                : ""
+            }.${aviso}`,
+          );
+        } catch (err) {
+          setError(
+            `El cobro ${res.folio} quedó emitido, pero el plan no: ${
+              err instanceof Error ? err.message : "no se pudo crear."
+            } Vuelve a apretar "Emitir" (no se duplica el cobro) o ábrelo después desde su recibo → "Pagar a meses".`,
+          );
+        }
+        return;
+      }
+
+      onDone(`Cobro ${res.folio} emitido.${aviso}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cobrar.");
     } finally {
@@ -710,7 +799,8 @@ function Cobrar({
     }
   }
 
-  const listo = Boolean(tarifa) && lineas.length > 0;
+  const listo =
+    Boolean(tarifa) && lineas.length > 0 && (pagoModo !== "meses" || planPreview !== null);
 
   return (
     <EduModal
@@ -729,7 +819,13 @@ function Cobrar({
             onClick={cobrar}
             disabled={busy || !listo}
           >
-            {busy ? "Cobrando…" : `Cobrar ${eduMoney(totals.totalCents)}`}
+            {busy
+              ? "Cobrando…"
+              : pagoModo === "meses"
+                ? planPreview
+                  ? `Emitir a ${planPreview.m} meses`
+                  : "Emitir a meses"
+                : `Cobrar ${eduMoney(totals.totalCents)}`}
           </button>
         </>
       }
@@ -1020,22 +1116,29 @@ function Cobrar({
                 </div>
               </div>
 
-              <label className="edu-check">
-                <input
-                  type="checkbox"
-                  checked={conPago}
-                  onChange={(e) => setConPago(e.target.checked)}
-                />
-                <span className="edu-check__body">
-                  <span className="edu-check__label">Registrar el pago ahora</span>
-                  <span className="edu-check__hint">
-                    Quítalo si el paciente va a pagar después: el cobro queda con saldo y se
-                    liquida desde su recibo.
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-pago-modo">
+                  ¿Cómo paga?
+                </label>
+                <select
+                  id="edu-pago-modo"
+                  className="edu-input"
+                  value={pagoModo}
+                  onChange={(e) => setPagoModo(e.target.value as "ahora" | "despues" | "meses")}
+                >
+                  <option value="ahora">Paga ahora</option>
+                  <option value="despues">Queda a deber (paga después)</option>
+                  <option value="meses">A meses (plan de pagos)</option>
+                </select>
+                {pagoModo === "despues" && (
+                  <span className="edu-field__hint">
+                    El cobro queda con saldo y se liquida desde su recibo — o se difiere a meses
+                    más tarde.
                   </span>
-                </span>
-              </label>
+                )}
+              </div>
 
-              {conPago && (
+              {pagoModo === "ahora" && (
                 <div className="edu-formgrid edu-formgrid--2">
                   <div className="edu-field">
                     <label className="edu-field__label" htmlFor="edu-pago-metodo">
@@ -1085,20 +1188,170 @@ function Cobrar({
                       autoComplete="off"
                     />
                   </div>
-                  <div className="edu-field">
-                    <label className="edu-field__label" htmlFor="edu-cobro-notas">
-                      Nota del cobro (opcional)
-                    </label>
-                    <input
-                      id="edu-cobro-notas"
-                      className="edu-input"
-                      value={notas}
-                      onChange={(e) => setNotas(e.target.value)}
-                      autoComplete="off"
-                    />
-                  </div>
                 </div>
               )}
+
+              {pagoModo === "meses" && (
+                <>
+                  {/* 🔴 Aquí no se teclea NINGÚN monto de mensualidad: se
+                      eligen los meses y el reparto lo enseña la vista
+                      previa con la MISMA función pura del servidor. */}
+                  <div className="edu-formgrid edu-formgrid--2">
+                    <div className="edu-field">
+                      <label className="edu-field__label" htmlFor="edu-plan-meses">
+                        ¿En cuántos meses?
+                      </label>
+                      <input
+                        id="edu-plan-meses"
+                        className="edu-input"
+                        type="number"
+                        min={EDU_PLAN_MIN_MONTHS}
+                        max={EDU_PLAN_MAX_MONTHS}
+                        value={meses}
+                        onChange={(e) => setMeses(e.target.value)}
+                      />
+                      <span className="edu-field__hint">
+                        De {EDU_PLAN_MIN_MONTHS} a {EDU_PLAN_MAX_MONTHS}. El sistema crea las
+                        mensualidades solo, con sus fechas.
+                      </span>
+                    </div>
+                    <div className="edu-field">
+                      <label className="edu-field__label" htmlFor="edu-plan-corte">
+                        Día de corte (opcional)
+                      </label>
+                      <input
+                        id="edu-plan-corte"
+                        className="edu-input"
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={diaCorte}
+                        onChange={(e) => setDiaCorte(e.target.value)}
+                        placeholder="El día de hoy"
+                      />
+                      <span className="edu-field__hint">
+                        La primera vence el mes que entra. Si a un mes no le alcanza el día (el
+                        31 en febrero), se recorta a su último día.
+                      </span>
+                    </div>
+                  </div>
+
+                  <label className="edu-check">
+                    <input
+                      type="checkbox"
+                      checked={conEnganche}
+                      onChange={(e) => setConEnganche(e.target.checked)}
+                    />
+                    <span className="edu-check__body">
+                      <span className="edu-check__label">Cobrar un enganche ahora</span>
+                      <span className="edu-check__hint">
+                        Se cobra en este momento, con su método. A meses se va lo que queda.
+                      </span>
+                    </span>
+                  </label>
+
+                  {conEnganche && (
+                    <div className="edu-formgrid edu-formgrid--2">
+                      <div className="edu-field">
+                        <label className="edu-field__label" htmlFor="edu-eng-metodo">
+                          Método del enganche
+                        </label>
+                        <select
+                          id="edu-eng-metodo"
+                          className="edu-input"
+                          value={metodo}
+                          onChange={(e) => setMetodo(e.target.value as EduPaymentMethod)}
+                        >
+                          {EDU_PAYMENT_METHODS.map((m) => (
+                            <option key={m} value={m}>
+                              {EDU_PAYMENT_METHOD_LABELS[m]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="edu-field">
+                        <label className="edu-field__label" htmlFor="edu-eng-monto">
+                          Enganche
+                        </label>
+                        <input
+                          id="edu-eng-monto"
+                          className="edu-input"
+                          inputMode="decimal"
+                          value={engancheMonto}
+                          onChange={(e) => setEngancheMonto(e.target.value)}
+                          placeholder="0.00"
+                        />
+                        <span className="edu-field__hint">
+                          Menos que el total: algo tiene que quedar para diferir.
+                        </span>
+                      </div>
+                      <div className="edu-field">
+                        <label className="edu-field__label" htmlFor="edu-eng-ref">
+                          Referencia (opcional)
+                        </label>
+                        <input
+                          id="edu-eng-ref"
+                          className="edu-input"
+                          value={referencia}
+                          onChange={(e) => setReferencia(e.target.value)}
+                          placeholder="Autorización de la terminal"
+                          autoComplete="off"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {planPreview ? (
+                    <div className="edu-totales">
+                      {planPreview.enganche > 0 && (
+                        <div className="edu-totales__fila">
+                          <span>Enganche, se cobra ahora</span>
+                          <span className="edu-precio">{eduMoney(planPreview.enganche)}</span>
+                        </div>
+                      )}
+                      <div className="edu-totales__fila">
+                        <span>Se difiere a meses</span>
+                        <span className="edu-precio">{eduMoney(planPreview.restante)}</span>
+                      </div>
+                      <div className="edu-totales__fila edu-totales__fila--fuerte">
+                        <span>
+                          {planPreview.m} mensualidades de {eduMoney(planPreview.base)}
+                          {planPreview.primera !== planPreview.base
+                            ? ` — la primera de ${eduMoney(planPreview.primera)}`
+                            : ""}
+                        </span>
+                        <span className="edu-precio">{eduMoney(planPreview.restante)}</span>
+                      </div>
+                      {planPreview.primera !== planPreview.base && (
+                        <p className="edu-note">
+                          El total no divide exacto: la diferencia va completa en la primera
+                          mensualidad, no repartida en decimales. La suma da el saldo, centavo
+                          por centavo.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="edu-note">
+                      Revisa los meses ({EDU_PLAN_MIN_MONTHS} a {EDU_PLAN_MAX_MONTHS}), el día de
+                      corte (1 a 31) y el enganche: tiene que ser menor que el total y dejar al
+                      menos un centavo por mensualidad.
+                    </p>
+                  )}
+                </>
+              )}
+
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-cobro-notas">
+                  Nota del cobro (opcional)
+                </label>
+                <input
+                  id="edu-cobro-notas"
+                  className="edu-input"
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
             </>
           )}
         </>
@@ -1138,16 +1391,84 @@ function Recibo({
   onClose: () => void;
   onDone: (mensaje: string) => void;
 }) {
-  const [modo, setModo] = useState<"ver" | "pago" | "devolucion" | "cancelar">("ver");
+  const [modo, setModo] = useState<"ver" | "pago" | "devolucion" | "cancelar" | "plan">("ver");
   const [metodo, setMetodo] = useState<EduPaymentMethod>("CASH");
   const [monto, setMonto] = useState(eduMoneyInputValue(charge.balanceCents));
   const [referencia, setReferencia] = useState("");
   const [motivo, setMotivo] = useState("");
+  // Pagar a meses, desde un cobro YA emitido con saldo.
+  const [meses, setMeses] = useState("3");
+  const [diaCorte, setDiaCorte] = useState("");
+  const [conEnganche, setConEnganche] = useState(false);
+  const [engancheMonto, setEngancheMonto] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const cancelado = charge.status === "CANCELLED";
   const liquidado = charge.balanceCents <= 0;
+  // El cobro ya tiene su plan: los pagos van por sus mensualidades y este
+  // recibo solo enlaza. El servidor rebota los pagos sueltos igual — esto
+  // evita ofrecer un botón que siempre contesta que no.
+  const conPlan = charge.activePlanId !== null && !cancelado;
+
+  // El MISMO reparto que hará el servidor, sobre el saldo vivo del cobro.
+  const planPreview = useMemo(() => {
+    if (modo !== "plan") return null;
+    const m = Number(meses.trim());
+    if (!Number.isInteger(m)) return null;
+    const enganche = conEnganche ? centavosDe(engancheMonto) : 0;
+    if (conEnganche && enganche <= 0) return null;
+    if (enganche >= charge.balanceCents) return null;
+    const dia = diaCorte.trim() === "" ? null : Number(diaCorte.trim());
+    if (dia !== null && (!Number.isInteger(dia) || dia < 1 || dia > 31)) return null;
+    const montos = eduPlanSplitCents(charge.balanceCents - enganche, m);
+    if (!montos) return null;
+    return {
+      m,
+      dia,
+      enganche,
+      restante: charge.balanceCents - enganche,
+      base: montos[montos.length - 1],
+      primera: montos[0],
+    };
+  }, [modo, meses, diaCorte, conEnganche, engancheMonto, charge.balanceCents]);
+
+  async function pagarAMeses() {
+    if (!planPreview) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await eduRequest<{ months: number; installmentCents: number; firstCents: number }>(
+        `/api/instituto/caja/cobros/${charge.id}/plan`,
+        {
+          method: "POST",
+          body: {
+            months: planPreview.m,
+            dueDay: planPreview.dia,
+            enganche:
+              conEnganche && planPreview.enganche > 0
+                ? {
+                    method: metodo,
+                    amountCents: engancheMonto,
+                    reference: referencia.trim() || null,
+                  }
+                : undefined,
+          },
+        },
+      );
+      onDone(
+        `Cobro ${charge.folio} diferido a ${res.months} meses: mensualidades de ${eduMoney(res.installmentCents)}${
+          res.firstCents !== res.installmentCents
+            ? ` y la primera de ${eduMoney(res.firstCents)}`
+            : ""
+        }.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo crear el plan.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function registrar(isRefund: boolean) {
     setError(null);
@@ -1296,7 +1617,25 @@ function Recibo({
         </div>
       )}
 
-      {!cancelado && modo === "ver" && (
+      {conPlan && (
+        <div className="edu-banner">
+          <div>
+            <p className="edu-banner__title">Este cobro se paga a meses</p>
+            <p className="edu-banner__detail">
+              Su saldo vive en un plan de pagos: se cobra por mensualidades, no con pagos
+              sueltos. Para moverlo libre, cancela primero el plan (permiso caja.refund).
+            </p>
+          </div>
+          <Link
+            href={`/instituto/caja/planes/${charge.activePlanId}/recibo`}
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+          >
+            Ver el plan
+          </Link>
+        </div>
+      )}
+
+      {!cancelado && !conPlan && modo === "ver" && (
         <div className="edu-actions">
           {canCharge && !liquidado && (
             <button
@@ -1308,6 +1647,15 @@ function Recibo({
               }}
             >
               Registrar pago
+            </button>
+          )}
+          {canCharge && !liquidado && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              onClick={() => setModo("plan")}
+            >
+              Pagar a meses
             </button>
           )}
           {canRefund && charge.paidCents > 0 && (
@@ -1332,6 +1680,172 @@ function Recibo({
             </button>
           )}
         </div>
+      )}
+
+      {modo === "plan" && (
+        <>
+          {/* 🔴 El mismo formulario que el de Cobrar → "A meses": meses,
+              día de corte y enganche opcional. El reparto de abajo lo
+              calcula la MISMA función pura que usará el servidor. */}
+          <div className="edu-formgrid edu-formgrid--2">
+            <div className="edu-field">
+              <label className="edu-field__label" htmlFor="edu-rec-meses">
+                ¿En cuántos meses?
+              </label>
+              <input
+                id="edu-rec-meses"
+                className="edu-input"
+                type="number"
+                min={EDU_PLAN_MIN_MONTHS}
+                max={EDU_PLAN_MAX_MONTHS}
+                value={meses}
+                onChange={(e) => setMeses(e.target.value)}
+              />
+              <span className="edu-field__hint">
+                Se difiere el saldo: {eduMoney(charge.balanceCents)}. De {EDU_PLAN_MIN_MONTHS} a{" "}
+                {EDU_PLAN_MAX_MONTHS} meses.
+              </span>
+            </div>
+            <div className="edu-field">
+              <label className="edu-field__label" htmlFor="edu-rec-corte">
+                Día de corte (opcional)
+              </label>
+              <input
+                id="edu-rec-corte"
+                className="edu-input"
+                type="number"
+                min={1}
+                max={31}
+                value={diaCorte}
+                onChange={(e) => setDiaCorte(e.target.value)}
+                placeholder="El día de hoy"
+              />
+              <span className="edu-field__hint">
+                La primera vence el mes que entra; si al mes no le alcanza el día, se recorta a
+                su último.
+              </span>
+            </div>
+          </div>
+
+          <label className="edu-check">
+            <input
+              type="checkbox"
+              checked={conEnganche}
+              onChange={(e) => setConEnganche(e.target.checked)}
+            />
+            <span className="edu-check__body">
+              <span className="edu-check__label">Cobrar un enganche ahora</span>
+              <span className="edu-check__hint">
+                Se cobra en este momento, con su método. A meses se va lo que queda.
+              </span>
+            </span>
+          </label>
+
+          {conEnganche && (
+            <div className="edu-formgrid edu-formgrid--2">
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-rec-eng-metodo">
+                  Método del enganche
+                </label>
+                <select
+                  id="edu-rec-eng-metodo"
+                  className="edu-input"
+                  value={metodo}
+                  onChange={(e) => setMetodo(e.target.value as EduPaymentMethod)}
+                >
+                  {EDU_PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {EDU_PAYMENT_METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-rec-eng-monto">
+                  Enganche
+                </label>
+                <input
+                  id="edu-rec-eng-monto"
+                  className="edu-input"
+                  inputMode="decimal"
+                  value={engancheMonto}
+                  onChange={(e) => setEngancheMonto(e.target.value)}
+                  placeholder="0.00"
+                />
+                <span className="edu-field__hint">
+                  Menos que el saldo: algo tiene que quedar para diferir.
+                </span>
+              </div>
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-rec-eng-ref">
+                  Referencia (opcional)
+                </label>
+                <input
+                  id="edu-rec-eng-ref"
+                  className="edu-input"
+                  value={referencia}
+                  onChange={(e) => setReferencia(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          )}
+
+          {planPreview ? (
+            <div className="edu-totales">
+              {planPreview.enganche > 0 && (
+                <div className="edu-totales__fila">
+                  <span>Enganche, se cobra ahora</span>
+                  <span className="edu-precio">{eduMoney(planPreview.enganche)}</span>
+                </div>
+              )}
+              <div className="edu-totales__fila edu-totales__fila--fuerte">
+                <span>
+                  {planPreview.m} mensualidades de {eduMoney(planPreview.base)}
+                  {planPreview.primera !== planPreview.base
+                    ? ` — la primera de ${eduMoney(planPreview.primera)}`
+                    : ""}
+                </span>
+                <span className="edu-precio">{eduMoney(planPreview.restante)}</span>
+              </div>
+              {planPreview.primera !== planPreview.base && (
+                <p className="edu-note">
+                  El saldo no divide exacto: la diferencia va completa en la primera
+                  mensualidad. La suma da el saldo, centavo por centavo.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="edu-note">
+              Revisa los meses ({EDU_PLAN_MIN_MONTHS} a {EDU_PLAN_MAX_MONTHS}), el día de corte
+              (1 a 31) y el enganche: menor que el saldo y con al menos un centavo por
+              mensualidad.
+            </p>
+          )}
+
+          <div className="edu-actions">
+            <button
+              type="button"
+              className="edu-btn edu-btn--primary edu-btn--sm"
+              onClick={pagarAMeses}
+              disabled={busy || !planPreview}
+            >
+              {busy
+                ? "Creando el plan…"
+                : planPreview
+                  ? `Diferir a ${planPreview.m} meses`
+                  : "Diferir a meses"}
+            </button>
+            <button
+              type="button"
+              className="edu-btn edu-btn--quiet edu-btn--sm"
+              onClick={() => setModo("ver")}
+              disabled={busy}
+            >
+              Volver
+            </button>
+          </div>
+        </>
       )}
 
       {(modo === "pago" || modo === "devolucion") && (

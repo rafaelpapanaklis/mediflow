@@ -45,6 +45,9 @@
 //   /instituto/pacientes/[id]/recetas → recetas del paciente      Ola 14 ✓
 //   /instituto/casos        → TODOS los casos: filtros, buscador y
 //                             export; recortado por alcance     Ola Casos ✓
+//   /instituto/caja/planes  → pagos a meses: planes y vencimientos Pagos ✓
+//   /instituto/caja/planes/[id]/recibo → recibo imprimible del plan Pagos ✓
+//   /instituto/pacientes/[id]/pagos → sus mensualidades y su saldo Pagos ✓
 // PÚBLICA (SIN sesión — vive FUERA del grupo (panel), igual que /login):
 //   /instituto/consentimiento/[token] → el paciente lee y firma    Ola 3B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
@@ -133,6 +136,10 @@
 //                                       (mismo permiso, alcance y filtros) Ola Casos ✓
 //   PATCH /api/instituto/pacientes/[id]/antecedentes → antecedentes médicos
 //                                       (pacientes.manage O expediente.write) Ola Casos ✓
+//   POST  /api/instituto/caja/cobros/[id]/plan → pagar a meses un cobro   Pagos ✓
+//   GET   /api/instituto/caja/planes           → los planes de pago       Pagos ✓
+//   POST  /api/instituto/caja/planes/[id]/cancelar → cancelar un plan     Pagos ✓
+//   POST  /api/instituto/caja/mensualidades/[id]/pagar → cobrar UNA       Pagos ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -1177,4 +1184,65 @@ export const EDU_PRESCRIPTION_TRANSITIONS: Record<
   EXPEDIDA: ["ANULADA"],
   RECHAZADA: [],
   ANULADA: [],
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// PAGOS A MESES — el plan de pagos de un cobro.
+//
+// EduPaymentPlanStatus es espejo 1:1 del enum de Prisma, escrito como
+// unión de strings para poder importarlo desde componentes "use client"
+// sin arrastrar el runtime de Prisma al navegador — igual que todos los
+// anteriores. El candado de que no se desincronicen es un chequeo de
+// TIPOS en src/lib/edu/__tests__/edu-pagos.test.ts (lo verifica
+// `tsc --noEmit`).
+//
+// Y la regla de siempre: la UI JAMÁS pinta el valor del enum.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * En qué va el plan. LIQUIDADO lo escribe la MISMA transacción que
+ * registra el pago de la última mensualidad; CANCELADO es un acto con
+ * autor y motivo. No hay más estados: "vencido" no es del plan sino de
+ * cada mensualidad — y ése ni siquiera se guarda (ver abajo).
+ */
+export type EduPaymentPlanStatus = "ACTIVO" | "LIQUIDADO" | "CANCELADO";
+
+export const EDU_PAYMENT_PLAN_STATUSES: EduPaymentPlanStatus[] = [
+  "ACTIVO",
+  "LIQUIDADO",
+  "CANCELADO",
+];
+
+export const EDU_PAYMENT_PLAN_STATUS_LABELS: Record<EduPaymentPlanStatus, string> = {
+  ACTIVO: "Activo",
+  LIQUIDADO: "Liquidado",
+  CANCELADO: "Cancelado",
+};
+
+export const EDU_PAYMENT_PLAN_STATUS_DESCRIPTIONS: Record<EduPaymentPlanStatus, string> = {
+  ACTIVO: "Tiene mensualidades por cobrar.",
+  LIQUIDADO: "Todas sus mensualidades están pagadas.",
+  CANCELADO: "Se canceló con motivo. El saldo del cobro vuelve a cobrarse normal.",
+};
+
+/**
+ * 🔴 El estado de UNA mensualidad. NO es un enum de Prisma y no es un
+ * olvido: en la base solo se guardan los HECHOS (el pago que la liquidó y
+ * su fecha de vencimiento) y esto se DERIVA en cada lectura con
+ * eduInstallmentStatus (pagos-core.ts). Una columna "VENCIDA" necesitaría
+ * un cron que la escriba — y un cron que falla deja toda la cartera
+ * diciendo "al corriente".
+ */
+export type EduInstallmentStatus = "PENDIENTE" | "PAGADA" | "VENCIDA";
+
+export const EDU_INSTALLMENT_STATUS_LABELS: Record<EduInstallmentStatus, string> = {
+  PENDIENTE: "Pendiente",
+  PAGADA: "Pagada",
+  VENCIDA: "Vencida",
+};
+
+export const EDU_INSTALLMENT_STATUS_DESCRIPTIONS: Record<EduInstallmentStatus, string> = {
+  PENDIENTE: "Todavía no llega su fecha. El día del vencimiento sigue pendiente: vence hoy, no ayer.",
+  PAGADA: "Tiene su pago registrado. El recibo dice cuándo y quién lo recibió.",
+  VENCIDA: "Pasó su fecha sin pago. Lo dice el calendario en cada lectura, no un proceso nocturno.",
 };

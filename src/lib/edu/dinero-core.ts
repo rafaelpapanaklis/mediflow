@@ -549,6 +549,12 @@ export interface EduChargeRow {
   cancelReason: string | null;
   items: EduChargeItemRow[];
   payments: EduPaymentRow[];
+  /**
+   * Pagos a meses: el plan ACTIVO del cobro, si hay (a lo sumo uno). Con
+   * esto el recibo enlaza al plan y esconde el pago suelto — que el
+   * servidor rebotaría igual: un cobro diferido se cobra por mensualidad.
+   */
+  activePlanId: string | null;
 }
 
 export interface EduChargesPage {
