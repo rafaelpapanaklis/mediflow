@@ -1,6 +1,6 @@
 "use client";
 
-import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
+import { doctorColorFor, doctorInitials, readableTextOn } from "@/lib/agenda/doctor-color";
 import type { AgendaColumnDescriptor } from "@/app/dashboard/agenda/agenda-page-client";
 import styles from "./agenda.module.css";
 
@@ -19,7 +19,11 @@ export function AgendaColumnHeader({ column }: { column: AgendaColumnDescriptor 
         {column.type === "doctor" && (
           <div
             className={styles.columnHeaderAvatar}
-            style={{ background: accent ?? "var(--brand)" }}
+            style={{
+              background: accent ?? "var(--brand)",
+              // users.color es libre: negro o blanco según luminancia.
+              color: readableTextOn(accent ?? ""),
+            }}
             aria-hidden
           >
             {doctorInitials(column.title)}

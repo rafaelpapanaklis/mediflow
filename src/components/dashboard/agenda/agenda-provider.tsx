@@ -8,6 +8,7 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
   type Dispatch,
   type ReactNode,
 } from "react";
@@ -17,17 +18,21 @@ import {
   buildInitialState,
   defaultColumnMode,
   loadStoredColumnMode,
+  loadStoredDensity,
   loadStoredViewMode,
   persistColumnMode,
+  persistDensity,
   persistViewMode,
   type AgendaAction,
 } from "@/lib/agenda/store";
 import { viewRangeISO } from "@/lib/agenda/date-ranges";
 import { todayInTz } from "@/lib/agenda/time-utils";
+import { slotHeightFor } from "@/lib/agenda/slot-metrics";
 import type {
   AgendaAppointmentDTO,
   AgendaColumnMode,
   AgendaDayResponse,
+  AgendaDensity,
   AgendaFilters,
   AgendaModalKey,
   AgendaStoreState,
@@ -55,6 +60,20 @@ interface AgendaContextValue {
   setDay: (dayISO: string) => void;
   setViewMode: (mode: AgendaViewMode) => void;
   setColumnMode: (mode: AgendaColumnMode) => void;
+  setDensity: (density: AgendaDensity) => void;
+  /**
+   * Alto ACTUAL de un slot en px — la única fuente de la métrica vertical.
+   * Las vistas Día/Semana lo escriben como `--mf-agenda-slot-h` inline (de
+   * ahí sale TODA la geometría CSS) y los consumidores de píxeles en JS
+   * (recomputeTimes del drop, badge de hora del drag) leen este mismo
+   * número. No leer la variable CSS ni cablear 30 en ningún lado.
+   */
+  slotHpx: number;
+  /**
+   * Ref para el scroller vertical de la grilla (Día o Semana — solo una
+   * vive a la vez). Su alto medido alimenta la densidad "fit".
+   */
+  viewportRef: (el: HTMLElement | null) => void;
   setSearchQuery: (q: string) => void;
   selectAppointment: (id: string | null) => void;
   openModal: (key: AgendaModalKey) => void;
@@ -116,8 +135,46 @@ export function AgendaProvider({
         initialPayload.resources,
       );
       const storedView = loadStoredViewMode();
-      return { ...base, columnMode, viewMode: storedView ?? "day" };
+      const storedDensity = loadStoredDensity();
+      return {
+        ...base,
+        columnMode,
+        viewMode: storedView ?? "day",
+        density: storedDensity ?? "fit",
+      };
     },
+  );
+
+  // ── Métrica vertical (densidad) ─────────────────────────────────────
+  // Medimos el alto del scroller de la grilla con ResizeObserver; con él y
+  // la densidad elegida derivamos slotHpx (ver slot-metrics.ts). Cambiar
+  // slotHpx solo re-estira la grilla hacia ABAJO (children), nunca el alto
+  // del scroller (viene de arriba: flex 1 de contenedores de alto fijo),
+  // así que no hay bucle de ResizeObserver.
+  const [viewportH, setViewportH] = useState<number | null>(null);
+  const resizeObsRef = useRef<ResizeObserver | null>(null);
+  const viewportRef = useCallback((el: HTMLElement | null) => {
+    resizeObsRef.current?.disconnect();
+    resizeObsRef.current = null;
+    if (!el) {
+      setViewportH(null);
+      return;
+    }
+    setViewportH(Math.round(el.clientHeight));
+    if (typeof ResizeObserver === "undefined") return;
+    const obs = new ResizeObserver(() => {
+      setViewportH(Math.round(el.clientHeight));
+    });
+    obs.observe(el);
+    resizeObsRef.current = obs;
+  }, []);
+  useEffect(() => () => resizeObsRef.current?.disconnect(), []);
+
+  const baseSlotsTotal =
+    ((state.dayEnd - state.dayStart) * 60) / state.slotMinutes;
+  const slotHpx = useMemo(
+    () => slotHeightFor(state.density, viewportH, baseSlotsTotal),
+    [state.density, viewportH, baseSlotsTotal],
   );
 
   useEffect(() => {
@@ -273,6 +330,11 @@ export function AgendaProvider({
     dispatch({ type: "SET_COLUMN_MODE", mode });
   }, []);
 
+  const setDensity = useCallback((density: AgendaDensity) => {
+    persistDensity(density);
+    dispatch({ type: "SET_DENSITY", density });
+  }, []);
+
   const setSearchQuery = useCallback((q: string) => {
     dispatch({ type: "SET_SEARCH", query: q });
   }, []);
@@ -322,13 +384,14 @@ export function AgendaProvider({
   const ctx = useMemo<AgendaContextValue>(
     () => ({
       state, dispatch, permissions,
-      setDay, setViewMode, setColumnMode,
+      setDay, setViewMode, setColumnMode, setDensity,
+      slotHpx, viewportRef,
       setSearchQuery, selectAppointment,
       openModal, closeModal, toggleWaitlist, togglePendingPanel,
       setFilters, clearFilters, prefetchView,
       invalidateRangeCache,
     }),
-    [state, permissions, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView, invalidateRangeCache],
+    [state, permissions, setDay, setViewMode, setColumnMode, setDensity, slotHpx, viewportRef, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView, invalidateRangeCache],
   );
 
   return <AgendaContext.Provider value={ctx}>{children}</AgendaContext.Provider>;

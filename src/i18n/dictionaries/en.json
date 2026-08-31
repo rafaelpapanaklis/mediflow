@@ -1289,6 +1289,13 @@
       "apptsThisMonth": " appointments this month",
       "viewLabel": "View",
       "groupBy": "Group by",
+      "density": "Zoom",
+      "densityFit": "Full day",
+      "densityFitTitle": "The whole working day fits on screen, no scrolling",
+      "densityMedium": "Medium",
+      "densityMediumTitle": "More detail; vertical scrolling may appear",
+      "densitySpacious": "Spacious",
+      "densitySpaciousTitle": "Maximum detail, best for days packed with short appointments",
       "apptsToday": {
         "one": " appointment today",
         "other": " appointments today"

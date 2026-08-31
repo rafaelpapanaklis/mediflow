@@ -1289,6 +1289,13 @@
       "apptsThisMonth": " citas en el mes",
       "viewLabel": "Vista",
       "groupBy": "Agrupar por",
+      "density": "Zoom",
+      "densityFit": "Todo el día",
+      "densityFitTitle": "El horario completo cabe en pantalla, sin scroll",
+      "densityMedium": "Media",
+      "densityMediumTitle": "Más detalle; puede aparecer scroll vertical",
+      "densitySpacious": "Amplia",
+      "densitySpaciousTitle": "Detalle máximo, ideal para días llenos de citas cortas",
       "apptsToday": {
         "one": " cita hoy",
         "other": " citas hoy"

@@ -2,6 +2,7 @@ import type {
   AgendaAppointmentDTO,
   AgendaColumnMode,
   AgendaDayResponse,
+  AgendaDensity,
   AgendaFilters,
   AgendaModalKey,
   AgendaStoreState,
@@ -16,6 +17,7 @@ export type AgendaAction =
   | { type: "SET_DAY"; dayISO: string }
   | { type: "SET_VIEW_MODE"; viewMode: AgendaViewMode }
   | { type: "SET_COLUMN_MODE"; mode: AgendaColumnMode }
+  | { type: "SET_DENSITY"; density: AgendaDensity }
   | { type: "SET_FILTERS"; filters: AgendaFilters }
   | { type: "SET_SEARCH"; query: string }
   | { type: "SET_SELECTED"; id: string | null }
@@ -44,6 +46,7 @@ export function buildInitialState(payload: AgendaDayResponse, dayISO: string): A
     dayISO,
     viewMode: "day",
     columnMode: "doctor",
+    density: "fit",
     filters: { doctorIds: [], resourceIds: [], statuses: [] },
     appointments: payload.appointments,
     pendingValidation: payload.pendingValidation,
@@ -98,6 +101,8 @@ export function agendaReducer(
       return { ...state, viewMode: action.viewMode };
     case "SET_COLUMN_MODE":
       return { ...state, columnMode: action.mode };
+    case "SET_DENSITY":
+      return { ...state, density: action.density };
     case "SET_FILTERS":
       return { ...state, filters: action.filters };
     case "SET_APPOINTMENTS":
@@ -202,6 +207,7 @@ export function agendaReducer(
 
 const COLUMN_MODE_KEY = "agenda-column-mode";
 const VIEW_MODE_KEY = "agenda-view-mode";
+const DENSITY_KEY = "agenda-density";
 
 export function loadStoredColumnMode(): AgendaColumnMode | null {
   if (typeof window === "undefined") return null;
@@ -238,6 +244,26 @@ export function persistViewMode(mode: AgendaViewMode): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(VIEW_MODE_KEY, mode);
+  } catch {
+    /* noop */
+  }
+}
+
+export function loadStoredDensity(): AgendaDensity | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = window.localStorage.getItem(DENSITY_KEY);
+    if (v === "fit" || v === "medium" || v === "spacious") return v;
+  } catch {
+    /* noop */
+  }
+  return null;
+}
+
+export function persistDensity(density: AgendaDensity): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DENSITY_KEY, density);
   } catch {
     /* noop */
   }

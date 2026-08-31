@@ -6,16 +6,24 @@ import {
 import type { AgendaAppointmentDTO } from "./types";
 
 /**
- * Altura en píxeles de un slot único en la grid del día.
- * Definido en agenda.module.css como `--mf-agenda-slot-h: 30px`.
- * Si cambia el CSS, actualiza este valor.
+ * Convierte un delta vertical de píxeles en slots, redondeando al slot más
+ * cercano. `slotHpx` es el alto ACTUAL de un slot y debe venir de la misma
+ * fuente que pinta la grilla (el `slotHpx` del provider, que también escribe
+ * `--mf-agenda-slot-h`); aquí no existe ningún alto por defecto a propósito:
+ * un valor cableado desviaría la hora del drop en silencio en cuanto la
+ * densidad de la grilla cambiara.
  */
-export const SLOT_HPX = 30;
+export function deltaYToSlots(deltaY: number, slotHpx: number): number {
+  if (!Number.isFinite(slotHpx) || slotHpx <= 0) return 0;
+  return Math.round(deltaY / slotHpx);
+}
 
 export interface DragSnapInput {
   appt: AgendaAppointmentDTO;
   /** Pixel delta vertical desde el inicio del drag. */
   deltaY: number;
+  /** Alto actual de un slot en px (misma fuente que `--mf-agenda-slot-h`). */
+  slotHpx: number;
   slotMinutes: number;
   dayStart: number;
   dayEnd: number;
@@ -40,7 +48,7 @@ export interface DragSnapResult {
  * rango operativo del día [dayStart, dayEnd].
  */
 export function recomputeTimes(input: DragSnapInput): DragSnapResult {
-  const { appt, deltaY, slotMinutes, dayStart, dayEnd, fromDayISO, toDayISO, timezone } = input;
+  const { appt, deltaY, slotHpx, slotMinutes, dayStart, dayEnd, fromDayISO, toDayISO, timezone } = input;
   const config: ClinicTimeConfig = { timezone, slotMinutes, dayStart, dayEnd };
 
   const startMs = new Date(appt.startsAt).getTime();
@@ -54,7 +62,7 @@ export function recomputeTimes(input: DragSnapInput): DragSnapResult {
   const originalSlotRaw = timeToSlotIndex(appt.startsAt, fromDayISO, config);
   const originalSlot = originalSlotRaw < 0 ? 0 : originalSlotRaw;
 
-  const deltaSlots = Math.round(deltaY / SLOT_HPX);
+  const deltaSlots = deltaYToSlots(deltaY, slotHpx);
   const rawSlot = originalSlot + deltaSlots;
   const newSlot = Math.max(0, Math.min(totalSlots - durationSlots, rawSlot));
 

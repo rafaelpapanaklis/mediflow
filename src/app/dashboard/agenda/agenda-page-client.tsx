@@ -230,69 +230,13 @@ const AGX_CSS = `
 /* Sub-toolbar: contadores tabulares */
 .agx-agenda > header + div strong { font-variant-numeric: tabular-nums; }
 
-/* ── Chips de cita: color POR ESTADO (decisión 14-jul) ──
-   La card ya expone --mf-status-color con el token fuerte por estado
-   (SCHEDULED→warning · CONFIRMED→info · CHECKED_IN→brand ·
-   IN_PROGRESS→success · COMPLETED→text-3 · CANCELLED→text-4 ·
-   NO_SHOW→danger). Fondo soft derivado con color-mix (equivale a los
-   tokens -soft: 10-12% del fuerte sobre --bg-elev, y adapta dark) +
-   borde IZQUIERDO 2px sólido. El module conserva past/selected/
-   in-progress/pending/sillón por especificidad. */
-:where(.agx-agenda) [data-appt-id] {
-  background: color-mix(in srgb, var(--mf-status-color, var(--brand)) 12%, var(--bg-elev));
-  border-color: var(--border-soft);
-  border-left-width: 2px;
-  border-left-color: var(--mf-status-color, var(--brand));
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-1);
-}
-:where(.agx-agenda) [data-appt-id]:not([data-selected="true"]):hover { box-shadow: var(--shadow-2); }
-
-/* Hora 10.5/700 con el color fuerte del estado; el 22% de --text-1 lo
-   oscurece en claro y lo aclara en oscuro → contraste AA en ambos temas */
-:where(.agx-agenda) [data-appt-id] > div:first-of-type > :nth-child(1 of span:not([aria-hidden])) {
-  color: color-mix(in srgb, var(--mf-status-color, var(--text-1)) 78%, var(--text-1));
-  font-size: 10.5px;
-}
-:where(.agx-agenda) [data-appt-id] > div:first-of-type > span:last-child {
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-/* Avatar del doctor → PUNTO de color 8px con borde de superficie
-   (conserva el background --mf-doc-color que ya pinta el module) */
-:where(.agx-agenda) [data-appt-id] > div > span[aria-hidden] {
-  order: 3;
-  width: 8px;
-  height: 8px;
-  min-width: 8px;
-  border-radius: 99px;
-  border: 1.5px solid var(--bg-elev);
-  font-size: 0;
-  line-height: 0;
-  color: transparent;
-  overflow: hidden;
-}
-
-/* Línea 2 (tratamiento): texto plano --text-2, sin chip color-doctor */
-:where(.agx-agenda) [data-appt-id] > div + div > span {
-  background: transparent;
-  padding: 0;
-  color: var(--text-2);
-  font-size: 10.5px;
-  font-weight: 500;
-}
-
-/* CANCELLED (prototipo .appt.cancelled): nombre en itálica --text-3 y hora
-   --text-4. La card expone data-status; mayor especificidad que las reglas
-   base de hora/nombre de arriba → gana sin !important. */
-:where(.agx-agenda) [data-appt-id][data-status="CANCELLED"] > div:first-of-type > span:last-child {
-  font-style: italic;
-  color: var(--text-3);
-}
-:where(.agx-agenda) [data-appt-id][data-status="CANCELLED"] > div:first-of-type > :nth-child(1 of span:not([aria-hidden])) {
-  color: var(--text-4);
-}
+/* ── Cards de cita: reglas MOVIDAS al module (Agenda-Legible, 31-ago) ──
+   El piloto del 14-jul pintaba la card por ESTADO (fondo 12% + borde 2px)
+   y reducía al doctor a un punto de 8px: en un día real todas las citas
+   confirmadas se veían idénticas. La decisión nueva (doctor = superficie
+   [banda 4px + tinte 22% + chip de iniciales], estado = punto compacto +
+   modificadores) vive ahora en agenda.module.css como única fuente; aquí
+   ya no se pisa nada de la card. */
 
 /* Vista Lista: mismo mapa por estado (la fila ya expone --mf-status-color) */
 :where(.agx-agenda) [role="listitem"] {
@@ -307,13 +251,12 @@ const AGX_CSS = `
 
 @media (prefers-reduced-motion: reduce) {
   .agx-agenda [role="tab"],
-  .agx-agenda > header button,
-  .agx-agenda [data-appt-id] { transition: none; }
+  .agx-agenda > header button { transition: none; }
 }
 `;
 
 function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | null; clinicTaxMode: string | null }) {
-  const { state, dispatch, permissions, setDay, invalidateRangeCache } = useAgenda();
+  const { state, dispatch, permissions, setDay, invalidateRangeCache, slotHpx, viewportRef } = useAgenda();
   const router = useRouter();
   const t = useT();
   const { open: openNewAppointment } = useNewAppointmentDialog();
@@ -371,6 +314,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       const result = recomputeTimes({
         appt: original,
         deltaY: delta.y,
+        slotHpx,
         slotMinutes: state.slotMinutes,
         dayStart: state.dayStart,
         dayEnd: state.dayEnd,
@@ -393,7 +337,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
         mode: conflict ? "conflict" : "ok",
       });
     },
-    [state.appointments, state.dayISO, state.dayEnd, state.dayStart, state.slotMinutes, state.timezone],
+    [state.appointments, state.dayISO, state.dayEnd, state.dayStart, state.slotMinutes, state.timezone, slotHpx],
   );
 
   const handleDragEnd = useCallback(
@@ -492,6 +436,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       const result = recomputeTimes({
         appt: original,
         deltaY: delta.y,
+        slotHpx,
         slotMinutes: state.slotMinutes,
         dayStart: state.dayStart,
         dayEnd: state.dayEnd,
@@ -542,6 +487,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       state.slotMinutes,
       state.timezone,
       state.doctors,
+      slotHpx,
       permissions.canCreate,
       permissions.canEdit,
       openNewAppointment,
@@ -646,6 +592,9 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
             style={
               {
                 "--mf-agenda-cols": columns.length,
+                // Misma fuente que recomputeTimes/badge de drag: el slotHpx
+                // del provider. El 30px del module queda solo como fallback SSR.
+                "--mf-agenda-slot-h": `${slotHpx}px`,
                 "--mf-agenda-slot-min": state.slotMinutes,
                 "--mf-agenda-day-start": state.dayStart,
                 "--mf-agenda-day-end": state.dayEnd,
@@ -674,6 +623,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
               </div>
             </div>
             <div
+              ref={viewportRef}
               style={{
                 flex: "1 1 0%",
                 minHeight: 0,

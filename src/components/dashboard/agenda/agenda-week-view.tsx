@@ -53,7 +53,7 @@ function buildWeekDays(refISO: string): WeekDay[] {
 }
 
 export function AgendaWeekView() {
-  const { state, setDay, setViewMode } = useAgenda();
+  const { state, setDay, setViewMode, slotHpx, viewportRef } = useAgenda();
   const t = useT();
 
   const days = useMemo(() => buildWeekDays(state.dayISO), [state.dayISO]);
@@ -77,6 +77,8 @@ export function AgendaWeekView() {
         style={
           {
             "--mf-agenda-cols": days.length,
+            // Misma fuente que recomputeTimes/badge de drag (provider.slotHpx).
+            "--mf-agenda-slot-h": `${slotHpx}px`,
             "--mf-agenda-slot-min": state.slotMinutes,
             "--mf-agenda-day-start": state.dayStart,
             "--mf-agenda-day-end": state.dayEnd,
@@ -124,6 +126,7 @@ export function AgendaWeekView() {
           </div>
         </div>
         <div
+          ref={viewportRef}
           style={{
             flex: "1 1 0%",
             minHeight: 0,

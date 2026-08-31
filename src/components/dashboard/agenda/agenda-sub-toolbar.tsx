@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
 import { calendarDayISO } from "@/lib/agenda/date-ranges";
-import type { AgendaColumnMode } from "@/lib/agenda/types";
+import type { AgendaColumnMode, AgendaDensity } from "@/lib/agenda/types";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./agenda.module.css";
 
@@ -12,9 +12,15 @@ const COLUMN_MODE_OPTIONS: Array<{ value: AgendaColumnMode; labelKey: string }> 
   { value: "doctor",   labelKey: "agenda.subToolbar.doctors" },
 ];
 
+const DENSITY_OPTIONS: Array<{ value: AgendaDensity; labelKey: string; titleKey: string }> = [
+  { value: "fit",      labelKey: "agenda.subToolbar.densityFit",      titleKey: "agenda.subToolbar.densityFitTitle" },
+  { value: "medium",   labelKey: "agenda.subToolbar.densityMedium",   titleKey: "agenda.subToolbar.densityMediumTitle" },
+  { value: "spacious", labelKey: "agenda.subToolbar.densitySpacious", titleKey: "agenda.subToolbar.densitySpaciousTitle" },
+];
+
 export function AgendaSubToolbar() {
   const t = useT();
-  const { state, setColumnMode, togglePendingPanel } = useAgenda();
+  const { state, setColumnMode, setDensity, togglePendingPanel } = useAgenda();
 
   const isDayView = state.viewMode === "day";
 
@@ -108,6 +114,26 @@ export function AgendaSubToolbar() {
                   aria-selected={state.columnMode === opt.value}
                   className={`${styles.segmentBtn} ${state.columnMode === opt.value ? styles.active : ""}`}
                   onClick={() => setColumnMode(opt.value)}
+                >
+                  {t(opt.labelKey)}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {(isDayView || isWeekView) && (
+          <>
+            <span className={styles.subToolbarLabel}>{t("agenda.subToolbar.density")}</span>
+            <div role="tablist" aria-label={t("agenda.subToolbar.density")} className={styles.segment}>
+              {DENSITY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={state.density === opt.value}
+                  className={`${styles.segmentBtn} ${state.density === opt.value ? styles.active : ""}`}
+                  onClick={() => setDensity(opt.value)}
+                  title={t(opt.titleKey)}
                 >
                   {t(opt.labelKey)}
                 </button>

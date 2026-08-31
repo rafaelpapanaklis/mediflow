@@ -10,9 +10,11 @@ import { useAgenda } from "./agenda-provider";
 import { AgendaStatusPopover } from "./agenda-status-popover";
 import { timeToSlotIndex } from "@/lib/agenda/time-utils";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
-import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
+import { doctorColorFor, doctorInitials, readableTextOn } from "@/lib/agenda/doctor-color";
+import { deltaYToSlots } from "@/lib/agenda/drag-utils";
+import { CARD_TWO_ROW_MIN_PX } from "@/lib/agenda/slot-metrics";
 import { batchValidateAppointments, patchAppointmentStatus } from "@/lib/agenda/mutations";
-import { nextLogicalStatus } from "@/lib/agenda/status-pipeline";
+import { nextLogicalStatus, STATUS_LABELS } from "@/lib/agenda/status-pipeline";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
@@ -62,9 +64,8 @@ export function AgendaAppointmentCard({
   lane = 0,
   laneCount = 1,
   columnMode,
-  resourceColor,
 }: Props) {
-  const { state, permissions, selectAppointment, dispatch } = useAgenda();
+  const { state, permissions, selectAppointment, dispatch, slotHpx } = useAgenda();
   const t = useT();
   const [pendingNext, setPendingNext] = useState(false);
 
@@ -91,22 +92,19 @@ export function AgendaAppointmentCard({
       disabled: dragDisabled,
     });
 
-  // Hora target durante el drag. Se calcula a partir del transform.y
-  // dividido por la altura de un slot (CSS var --mf-agenda-slot-h).
+  // Hora target durante el drag, con el MISMO slotHpx del provider que usa
+  // recomputeTimes en el drop — así el badge nunca promete una hora
+  // distinta de la que el drop aplica. (Antes leía la var CSS desde
+  // documentElement, donde no está definida, y caía a un 30 cableado.)
   // Solo se calcula mientras isDragging para no recomputar en cada render.
   const dragTargetTime = useMemo(() => {
     if (!isDragging || !transform) return null;
-    if (typeof window === "undefined") return null;
-    const slotHeightStr = getComputedStyle(document.documentElement)
-      .getPropertyValue("--mf-agenda-slot-h")
-      .trim();
-    const slotHeightPx = parseFloat(slotHeightStr) || 30;
-    const deltaSlots = Math.round(transform.y / slotHeightPx);
+    const deltaSlots = deltaYToSlots(transform.y, slotHpx);
     const minutesDelta = deltaSlots * slotMinutes;
     const originalDate = new Date(appointment.startsAt);
     const newDate = new Date(originalDate.getTime() + minutesDelta * 60_000);
     return formatTimeInTz(newDate.toISOString(), timezone);
-  }, [isDragging, transform, appointment.startsAt, slotMinutes, timezone]);
+  }, [isDragging, transform, slotHpx, appointment.startsAt, slotMinutes, timezone]);
 
   // -1 = día calendario distinto en tz (cita ajena a esta columna).
   // Slots negativos = mismo día pero antes del agendaDayStart → los
@@ -135,7 +133,9 @@ export function AgendaAppointmentCard({
   const endSlot = Math.min(totalSlotsInDay, rawEndSlot);
   const slotsSpan = Math.max(1, endSlot - startSlot);
 
-  const compact = slotsSpan <= 1.5;
+  // Segunda fila solo si el ALTO REAL de la card lo permite; con slot
+  // dinámico, el corte por slots (`span <= 1.5`) ya no significaba píxeles.
+  const compact = slotsSpan * slotHpx < CARD_TWO_ROW_MIN_PX;
 
   // Estado temporal: pasada (endsAt < now), en curso (start <= now < end),
   // futura (resto). Se actualiza con el tiempo via state.dayISO change y
@@ -235,11 +235,10 @@ export function AgendaAppointmentCard({
 
   const treatment = appointment.reason ?? t("agenda.apptCard.consultationFallback");
 
-  // Cuando la columna es "resource" y conocemos el color del Resource,
-  // exponemos un CSS var adicional para que el border-left herede ese tono.
-  // En modo doctor/unified queda undefined y CSS cae al statusColor default.
-  const resourceColorVar =
-    columnMode === "resource" && resourceColor ? resourceColor : undefined;
+  // (La banda izquierda es SIEMPRE del doctor — en modo "Por sillón" el
+  // Resource ya lo dice la columna entera, así que el viejo override de
+  // --mf-resource-color se retiró junto con su regla CSS. resourceColor se
+  // conserva en las props por compatibilidad de call sites.)
 
   return (
     <div
@@ -254,8 +253,11 @@ export function AgendaAppointmentCard({
           "--mf-slot-start": startSlot,
           "--mf-slot-span": slotsSpan,
           "--mf-doc-color": docColor,
+          // Tinta de las iniciales sobre el chip sólido del doctor: negro o
+          // blanco según luminancia (users.color es libre; blanco fijo era
+          // ilegible sobre colores claros).
+          "--mf-doc-ink": readableTextOn(docColor),
           "--mf-status-color": statusColor,
-          ...(resourceColorVar ? { "--mf-resource-color": resourceColorVar } : {}),
           "--mf-lane-index": lane,
           "--mf-lane-count": laneCount,
           minHeight: 22,
@@ -341,6 +343,12 @@ export function AgendaAppointmentCard({
           </span>
         )}
         <span className={styles.apptName}>{appointment.patient.name}</span>
+        <span
+          className={styles.apptStatusDot}
+          title={STATUS_LABELS[appointment.status]}
+          aria-label={STATUS_LABELS[appointment.status]}
+          role="img"
+        />
       </div>
       {!compact && (
         <div className={styles.apptRow2}>

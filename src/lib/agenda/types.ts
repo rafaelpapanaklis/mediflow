@@ -65,6 +65,15 @@ export type AgendaColumnMode = "doctor" | "resource" | "unified";
 
 export type AgendaViewMode = "day" | "week" | "month" | "list";
 
+/**
+ * Densidad vertical de la grilla Día/Semana:
+ *  - "fit": el horario configurado de la clínica cabe completo en el alto
+ *    disponible, sin scroll (default — la queja original era "no cabe").
+ *  - "medium" / "spacious": alturas fijas por slot para ver más detalle
+ *    (spacious = la densidad única que existía antes). Ver slot-metrics.ts.
+ */
+export type AgendaDensity = "fit" | "medium" | "spacious";
+
 export type AgendaModalKey = "team" | "resources" | "validate" | null;
 
 export interface AgendaAppointmentDTO extends HomeAppointmentDTO {
@@ -229,6 +238,7 @@ export interface AgendaStoreState {
   dayISO: string;
   viewMode: AgendaViewMode;
   columnMode: AgendaColumnMode;
+  density: AgendaDensity;
   filters: AgendaFilters;
   appointments: AgendaAppointmentDTO[];
   pendingValidation: AgendaAppointmentDTO[];
