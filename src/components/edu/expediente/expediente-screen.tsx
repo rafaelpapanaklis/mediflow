@@ -49,11 +49,12 @@ export interface EduExpedienteScreenProps {
   /** El id del EduUser de la sesión, para saber qué notas escribió. */
   meUserId: string;
   /**
-   * Ola 3B — si el dictado por voz está disponible, y si no, POR QUÉ. Lo
-   * resuelve el SERVIDOR (eduIaEstadoActual): la bandera EDU_IA_ENABLED es
-   * una variable de entorno sin prefijo NEXT_PUBLIC_, así que en el
-   * navegador no existe y preguntarla aquí devolvería "apagado" siempre —
-   * que es peor que un error, porque parece un dato.
+   * Si el dictado por voz está disponible, y si no, POR QUÉ. Lo resuelve
+   * el SERVIDOR (eduIaEstadoActual), y desde la Ola 8 eso incluye leer el
+   * CUPO de IA del instituto y lo que lleva consumido del mes. El
+   * navegador no puede decidirlo: ni ve `process.env` ni tiene por qué
+   * consultar el presupuesto de la escuela. Llega ya decidido, con el
+   * motivo escrito para una persona.
    */
   iaDictado: EduIaEstado;
 }
@@ -394,12 +395,20 @@ function CamposSoap({
   disabled,
   idPrefix,
   iaDictado,
+  caseId,
 }: {
   draft: SoapDraft;
   setDraft: (d: SoapDraft) => void;
   disabled: boolean;
   idPrefix: string;
   iaDictado: EduIaEstado;
+  /**
+   * Ola 8: a qué CASO se le imputa el gasto del dictado. Viaja solo para
+   * el libro de consumo de IA —no cambia lo que se transcribe— y el
+   * servidor lo vuelve a comprobar dentro del alcance antes de guardarlo.
+   * null en una nota que todavía no tiene caso elegido: se dicta igual.
+   */
+  caseId: string | null;
 }) {
   return (
     <>
@@ -410,6 +419,7 @@ function CamposSoap({
           </label>
           <EduDictadoMic
             estado={iaDictado}
+            caseId={caseId}
             disabled={disabled}
             onText={(t) =>
               setDraft({
@@ -441,6 +451,7 @@ function CamposSoap({
             </label>
             <EduDictadoMic
               estado={iaDictado}
+              caseId={caseId}
               disabled={disabled}
               onText={(t) =>
                 setDraft({ ...draft, [f]: agregarDictado(draft[f], t, EDU_RECORD_TEXT_MAX) })
@@ -596,7 +607,14 @@ function NotaNueva({
         </div>
       )}
 
-      <CamposSoap draft={draft} setDraft={setDraft} disabled={busy} idPrefix="edu-nueva" iaDictado={iaDictado} />
+      <CamposSoap
+        draft={draft}
+        setDraft={setDraft}
+        disabled={busy}
+        idPrefix="edu-nueva"
+        iaDictado={iaDictado}
+        caseId={casoFijo ?? caseId ?? null}
+      />
     </EduModal>
   );
 }
@@ -691,7 +709,14 @@ function NotaEditar({
         Al firmar, esta nota queda cerrada: no se vuelve a editar ni a borrar. Si después hay algo
         que corregir, se escribe una nota nueva que apunte a ésta.
       </p>
-      <CamposSoap draft={draft} setDraft={setDraft} disabled={busy} idPrefix="edu-editar" iaDictado={iaDictado} />
+      <CamposSoap
+        draft={draft}
+        setDraft={setDraft}
+        disabled={busy}
+        idPrefix="edu-editar"
+        iaDictado={iaDictado}
+        caseId={nota.caseId ?? null}
+      />
     </EduModal>
   );
 }

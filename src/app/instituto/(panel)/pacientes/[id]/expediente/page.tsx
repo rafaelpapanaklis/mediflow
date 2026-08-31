@@ -14,7 +14,7 @@ import {
   listEduPatientRecords,
 } from "@/lib/edu/expediente";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
-import { eduIaEstadoActual } from "@/lib/edu/ia";
+import { eduIaEstadoActual } from "@/lib/edu/ia-cupo";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduExpedienteScreen } from "@/components/edu/expediente/expediente-screen";
 
@@ -56,9 +56,15 @@ export default async function PacienteExpedientePage({ params }: { params: { id:
   const paciente = await getEduClinicalPatient(ctx, params.id);
   if (!paciente) notFound();
 
-  const [rows, cases] = await Promise.all([
+  const [rows, cases, iaDictado] = await Promise.all([
     listEduPatientRecords(ctx, paciente.id, ctx.institution.timezone),
     listEduPatientCaseOptions(ctx, paciente.id),
+    // 🔴 Se resuelve AQUÍ, en el servidor, y desde la Ola 8 mira además el
+    // CUPO del instituto (una fila de EduAiQuota + la suma del mes). El
+    // navegador no puede decidirlo: ni ve `process.env` ni tiene por qué
+    // saber cuánto le queda de presupuesto a la escuela. Llega ya decidido
+    // y con el motivo escrito para una persona.
+    eduIaEstadoActual(ctx, "DICTADO", ctx.institution.timezone),
   ]);
 
   return (
@@ -69,11 +75,7 @@ export default async function PacienteExpedientePage({ params }: { params: { id:
       cases={cases}
       canWrite={hasEduPermission(permUser, "expediente.write")}
       meUserId={ctx.eduUserId}
-      // 🔴 Se resuelve AQUÍ, en el servidor. EDU_IA_ENABLED no lleva
-      // prefijo NEXT_PUBLIC_ (una bandera que abre el grifo del gasto no
-      // se anuncia al navegador), así que el componente cliente no puede
-      // preguntarla: la recibe ya decidida, con el motivo escrito.
-      iaDictado={eduIaEstadoActual("dictado")}
+      iaDictado={iaDictado}
     />
   );
 }

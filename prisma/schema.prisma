@@ -12417,6 +12417,14 @@ model EduInstitution {
   // una. Por eso EduCampus cuelga de aquí, como todo lo demás.
   campuses         EduCampus[]
   campusAccess     EduUserCampusAccess[]
+  // Ola 8 · la cartera de IA. Bloque ADITIVO al final de las relaciones:
+  // los modelos viven al FINAL del archivo, con su propio encabezado.
+  //
+  // 🔴 `aiQuota` es 1:1 y OPCIONAL, y esa opcionalidad ES el interruptor:
+  // un instituto SIN fila de cupo tiene la IA apagada y el panel dice por
+  // qué. No hay ninguna bandera de entorno que la encienda por instituto.
+  aiQuota          EduAiQuota?
+  aiUsages         EduAiUsage[]
 
   @@map("edu_institutions")
 }
@@ -12508,6 +12516,13 @@ model EduUser {
   /// descuido: es lo que hace que aplicar la ola no deje fuera a nadie de
   /// los que ya existen. Con filas, solo a esas.
   campusAccess     EduUserCampusAccess[]
+
+  /// Ola 8. Cada uso de IA que esta persona pidió. Es una columna de
+  /// AUDITORÍA del gasto: /instituto/ia contesta "quién se está gastando
+  /// el cupo" agrupando por aquí. Opcional con SetNull —dar de baja a
+  /// alguien no puede borrar lo que ya se gastó— y el NOMBRE va congelado
+  /// en la fila, que es lo que de verdad se lee después.
+  aiUsages         EduAiUsage[]   @relation("EduAiUsageBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -13049,6 +13064,10 @@ model EduCase {
   transferredFrom EduCase?       @relation("EduCaseTransfer", fields: [transferredFromCaseId], references: [id], onDelete: SetNull)
   transferredTo   EduCase[]      @relation("EduCaseTransfer")
   transferredBy   EduUser?       @relation("EduCaseTransferBy", fields: [transferredByUserId], references: [id], onDelete: SetNull)
+  /// Ola 8: los usos de IA imputados a ESTE caso (el dictado de una nota).
+  /// No hay columna con el gasto del caso: se cuenta contando estas filas,
+  /// igual que el avance de la Ola 6.
+  aiUsages        EduAiUsage[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
@@ -13353,6 +13372,11 @@ model EduStudy {
   /// no uno: en una escuela el alumno pide el suyo y el docente quiere ver
   /// exactamente lo que el alumno vio (ver EduStudyAnalysis).
   analyses    EduStudyAnalysis[]
+  /// Ola 8: los usos de IA imputados a ESTE estudio (el análisis
+  /// radiográfico). Van aparte de `analyses` a propósito: una lectura que
+  /// se pagó y no se pudo guardar no existe como análisis y sí existe como
+  /// gasto, y el cupo tiene que reflejar lo que de verdad se gastó.
+  aiUsages    EduAiUsage[]
 
   // Un path solo puede estar registrado UNA vez. Es lo que hace idempotente
   // al /confirm: un reintento del cliente devuelve la fila que ya existe en
@@ -14557,4 +14581,305 @@ model EduUserCampusAccess {
   @@index([institutionId, campusId], map: "edu_user_campus_sede_idx")
   @@index([institutionId, userId], map: "edu_user_campus_persona_idx")
   @@map("edu_user_campus_access")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 8 · LA CARTERA DE IA DEL INSTITUTO.
+//
+// Tres tablas: el CUPO del instituto (EduAiQuota, 1:1), el RENGLÓN de cada
+// uso (EduAiUsage) y la TARIFA de cada modelo (EduAiPrice).
+//
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 POR QUÉ ESTO NO ES UNA CARTERA QUE SE RECARGA
+//
+// La Ola 3B dejó el dictado y el análisis radiográfico APAGADOS tras una
+// bandera de entorno porque el instituto no tenía a qué cargarle los
+// tokens: el cobro del dental descuenta contra Clinic.aiTokensLimit, y un
+// usuario de instituto no tiene fila de clínica.
+//
+// La respuesta NO es copiar la cartera del dental. El instituto no paga
+// con Stripe: paga por CONTRATO ANUAL (EduInstitution.contractStartsAt /
+// contractEndsAt), y en un contrato la IA es un CUPO MENSUAL INCLUIDO, no
+// un saldo que alguien recarga con una tarjeta. Por eso aquí no hay
+// "balance", no hay "recarga" y no hay "método de pago": hay un techo al
+// mes, la decisión de la escuela sobre si se puede rebasar, y un renglón
+// por cada uso para poder contestar en qué se fue.
+//
+// 🔴 QUIÉN EDITA QUÉ — es la línea de esta ola, y está cerrada en el
+// SERVIDOR (src/lib/edu/ia-cupo.ts), no en la pantalla:
+//
+//   · "monthlyUsdCents" (lo que trae el contrato) NO se edita desde el
+//     panel. Lo escribe DaleControl con el contrato, igual que
+//     contractEndsAt, que el panel también solo PINTA. La cuenta de API
+//     que se consume es la de DaleControl: un formulario que dejara
+//     subirlo convertiría "lo que incluye tu contrato" en "lo que alguien
+//     tecleó", y quien paga la factura no estaría en la conversación.
+//   · "allowOverage", "hardCapUsdCents", "isEnabled" y "contactNote" SÍ
+//     los edita la dirección del instituto (permiso "ia.manage"). Es lo
+//     que la ESCUELA decide: si se puede pasar del cupo incluido, hasta
+//     dónde, y si hoy quiere la IA apagada. Ninguno de los cuatro puede
+//     ampliar lo incluido.
+//
+// 🔴 DOS UNIDADES DE DINERO, Y CADA UNA TIENE SU RAZÓN:
+//   · el PRESUPUESTO va en CENTAVOS de dólar enteros ("monthlyUsdCents",
+//     "hardCapUsdCents"). Es lo que una persona teclea, y en INTEGER el
+//     techo queda en 21 millones de dólares al mes en vez de 2 147 — que
+//     es lo que daría un INTEGER de millonésimas.
+//   · el MEDIDOR va en MILLONÉSIMAS de dólar ("costUsdMicros"), porque una
+//     sola llamada cuesta fracciones de centavo y redondearla a centavos
+//     la dejaría en cero. Es la misma columna y la misma unidad que ya usa
+//     EduStudyAnalysis.costUsdMicros desde la Ola 3B.
+// Ni float ni Decimal en ninguna de las dos: en coma flotante 0,1 + 0,2 no
+// da 0,3 y un reporte de gasto que no cuadra es un reporte en el que nadie
+// confía. La conversión centavos↔millonésimas vive en UN solo sitio
+// (src/lib/edu/ia-core.ts).
+//
+// 🔴 LO QUE NO ESTÁ AQUÍ, Y ES DELIBERADO:
+//   · NO hay columna "consumido este mes". El consumo se CUENTA sumando
+//     edu_ai_usage cada vez que alguien pregunta, exactamente como el
+//     avance académico de la Ola 6 y por la misma razón: un contador
+//     guardado se desincroniza el día que una escritura falle a la mitad,
+//     y entonces o se apaga la IA de una escuela que sí tenía cupo, o se
+//     le regala el que ya gastó.
+//   · NO hay columna "estado del cupo". "Agotado" depende de la HORA (el
+//     mes cambia): una columna guardada mentiría desde el segundo
+//     siguiente a escribirla, igual que el estado del consentimiento de la
+//     Ola 3B.
+//   · NO hay precio escrito en el código. Los precios viven en
+//     edu_ai_prices y la pantalla los LEE de ahí. Si no hay fila de precio
+//     para el modelo que una función usa, esa función NO corre: cobrar
+//     cero por algo que cuesta dinero es la forma de que el cupo mienta.
+//
+// 🔴 institutionId está en las DOS tablas de datos (cupo y uso), igual que
+// en todas las olas anteriores: toda consulta filtra por el institutionId
+// de la SESIÓN, y un filtro que necesita un JOIN para existir es un filtro
+// que alguien va a olvidar. Ojo Prisma: un institutionId undefined BORRA
+// el filtro y devuelve las filas de TODOS los institutos.
+//
+// ⚠️ LA TERCERA TABLA (edu_ai_prices) NO LLEVA institutionId, y es la
+// única del vertical que no lo lleva. No es un olvido: no es dato de un
+// inquilino sino la TARIFA DEL PROVEEDOR, y el proveedor cobra lo mismo
+// llame quien llame — la cuenta de API es una sola. Lo que sí varía por
+// escuela es el CUPO, que es donde vive esa variación. Ponerle un
+// institutionId habría creado una segunda cosa que mantener sincronizada
+// y la pregunta "¿y si dos escuelas tienen precios distintos para el mismo
+// modelo?", que no tiene respuesta buena.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-8.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Las dos funciones de IA del vertical. Espejo 1:1 de la unión
+/// EduAiFeature de src/lib/edu/types.ts (el candado de que no se
+/// desincronicen es un chequeo de TIPOS en edu-ia.test.ts).
+enum EduAiFeature {
+  /// Dictado por voz sobre la nota clínica (Whisper). Se cobra por SEGUNDO.
+  DICTADO
+  /// Análisis radiográfico de apoyo (Claude con visión). Se cobra por TOKEN.
+  ANALISIS
+}
+
+/// En qué se mide lo que consumió una llamada. Existe porque las dos
+/// funciones NO se cobran igual: el análisis por tokens, el dictado por
+/// segundos de audio. Una tabla de precios que solo supiera de tokens no
+/// podría ponerle precio al dictado, y el cupo de la escuela se lo estaría
+/// comiendo gratis.
+enum EduAiUnit {
+  TOKEN
+  SECOND
+}
+
+/// EL CUPO DE IA DEL INSTITUTO. 1:1 — un instituto, un cupo.
+///
+/// 🔴 QUE ESTA FILA EXISTA ES EL INTERRUPTOR. Un instituto sin fila de
+/// cupo tiene las dos funciones de IA apagadas, y la pantalla lo dice con
+/// todas sus letras ("tu contrato todavía no incluye IA") en vez de
+/// enseñar un micrófono muerto. Es el reemplazo de la bandera de entorno
+/// EDU_IA_ENABLED de la Ola 3B, que era global y no distinguía escuelas.
+model EduAiQuota {
+  id            String @id @default(cuid())
+  /// @unique: 1:1 con el instituto. Dos filas de cupo para la misma
+  /// escuela serían dos respuestas a "¿cuánto te queda?".
+  institutionId String @unique
+
+  /// Lo que el CONTRATO incluye cada mes, en centavos de dólar. NO se
+  /// edita desde el panel (ver el encabezado del bloque).
+  monthlyUsdCents Int @default(0)
+
+  /// ¿La escuela autoriza seguir usando IA después de agotar lo incluido?
+  /// Nace en false: lo seguro es parar, y quien decide gastar de más tiene
+  /// que decirlo a propósito.
+  allowOverage Boolean @default(false)
+
+  /// El TOPE DURO cuando se permite excedente, en centavos de dólar.
+  /// Obligatorio si allowOverage está en true —lo exige el servidor, no la
+  /// base—: "permitido excederse, sin tope" es exactamente la fuga que la
+  /// Ola 3B se negó a abrir. Se ignora cuando allowOverage es false.
+  hardCapUsdCents Int?
+
+  /// El apagador de la escuela. Nace encendido. Apagarlo NO borra el cupo:
+  /// es para el día que la dirección quiera parar la IA sin perder lo que
+  /// tiene configurado.
+  isEnabled Boolean @default(true)
+
+  /// A quién pedirle más cupo, escrito por la escuela ("Coordinación
+  /// académica, ext. 214"). Se pinta DENTRO del mensaje de cupo agotado:
+  /// un alumno con el micrófono muerto y sin saber a quién preguntarle
+  /// abre un ticket.
+  contactNote String? @db.VarChar(300)
+
+  /// QUIÉN tocó esto por última vez y cuándo. Guarda el ÚLTIMO cambio, no
+  /// la historia: si algún día hace falta la historia del cupo, es una
+  /// tabla aparte y no una columna más.
+  updatedByUserId String?
+  updatedByName   String? @db.VarChar(160)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@map("edu_ai_quotas")
+}
+
+/// UN RENGLÓN POR USO DE IA. Es el libro mayor del gasto: el consumo del
+/// mes se CUENTA sumando estas filas, no se lee de ningún contador.
+///
+/// 🔴 SE ESCRIBE DESPUÉS DE GASTAR, NUNCA ANTES. El cupo se comprueba
+/// antes de llamar al proveedor (y ahí es donde se dice que no), pero el
+/// renglón se escribe con el costo REAL que devolvió la llamada. La
+/// consecuencia hay que decirla: la ÚLTIMA llamada de un mes puede rebasar
+/// el techo por lo que cueste esa llamada, porque nadie sabe cuánto va a
+/// costar hasta que termina. El techo frena las llamadas que EMPIEZAN, no
+/// aborta una en vuelo.
+model EduAiUsage {
+  id            String       @id @default(cuid())
+  institutionId String
+  feature       EduAiFeature
+
+  /// QUIÉN lo pidió. El id es opcional y con SetNull —dar de baja a una
+  /// persona no puede borrar el gasto que hizo— y el NOMBRE y el ROL van
+  /// congelados al lado: el desglose "por alumno y por docente" tiene que
+  /// seguir diciendo lo que esa persona era cuando gastó, aunque hoy sea
+  /// otra cosa o ya no esté.
+  userId   String?
+  userName String  @db.VarChar(160)
+  userRole EduRole
+
+  /// A QUÉ se aplicó. Los dos son opcionales y solo uno se llena: el
+  /// análisis cuelga de un estudio, el dictado de un caso (y de ninguno si
+  /// se dictó una nota que todavía no tiene caso).
+  studyId String?
+  caseId  String?
+  /// Cómo se llama eso, congelado ("Estudio: pano-2026.jpg"). Se guarda el
+  /// texto además del id por lo mismo que el nombre de arriba: el detalle
+  /// del gasto se tiene que poder leer sin JOIN y sin depender de que la
+  /// fila de destino siga existiendo.
+  targetLabel String? @db.VarChar(200)
+
+  /// QUÉ se consumió. `model` es el modelo real que atendió la llamada
+  /// (whisper-1, claude-opus-5): dentro de un año hay que poder contestar
+  /// con qué se generó este gasto, y la constante del código ya será otra.
+  model       String    @db.VarChar(80)
+  unit        EduAiUnit
+  /// Unidades de ENTRADA y de SALIDA. En el análisis son tokens (la
+  /// entrada incluye lo escrito en caché y lo leído de caché); en el
+  /// dictado, `inputUnits` son los SEGUNDOS de audio y `outputUnits` es 0.
+  inputUnits  Int       @default(0)
+  outputUnits Int       @default(0)
+
+  /// Lo que costó, en MILLONÉSIMAS de dólar enteras, calculado con la
+  /// tarifa VIGENTE en el momento de la llamada. Queda congelado: cambiar
+  /// mañana el precio del modelo no puede reescribir lo que se gastó ayer,
+  /// igual que el precio congelado de un cobro en la Ola 5.
+  costUsdMicros Int @default(0)
+
+  /// true = el proveedor no dijo cuánto había consumido y se cobró el TOPE
+  /// de la operación. Se marca en vez de cobrar cero: regalar la llamada
+  /// dejaría el cupo mintiendo, y cobrar de más en el único caso en que no
+  /// sabemos es el error que no cuesta dinero. La pantalla lo señala.
+  isEstimated Boolean @default(false)
+
+  /// El mes al que se IMPUTA el gasto, "2026-08", calculado con la zona
+  /// horaria del instituto en el momento de escribirlo.
+  ///
+  /// ⚠️ Esto NO es un contador guardado —lo que la Ola 6 prohíbe— sino una
+  /// ETIQUETA inmutable sobre una fila inmutable: el total se sigue
+  /// contando sumando filas. Existe para que "lo de este mes" sea un
+  /// índice y no una cuenta de zonas horarias dentro del SQL, y para que
+  /// el renglón diga por sí mismo a qué mes se cargó.
+  periodKey String @db.VarChar(7)
+
+  createdAt DateTime @default(now())
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user        EduUser?       @relation("EduAiUsageBy", fields: [userId], references: [id], onDelete: SetNull)
+  study       EduStudy?      @relation(fields: [studyId], references: [id], onDelete: SetNull)
+  case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  /// El índice del cupo: sumar el gasto del mes de un instituto.
+  @@index([institutionId, periodKey], map: "edu_ai_usage_periodo_idx")
+  /// El del desglose: quién y en qué función se lo gastó, dentro del mes.
+  @@index([institutionId, periodKey, userId], map: "edu_ai_usage_persona_idx")
+  @@index([institutionId, periodKey, feature], map: "edu_ai_usage_funcion_idx")
+  /// El del detalle, que se lee del más nuevo al más viejo.
+  @@index([institutionId, createdAt], map: "edu_ai_usage_reciente_idx")
+  @@index([institutionId, studyId], map: "edu_ai_usage_study_idx")
+  @@index([institutionId, caseId], map: "edu_ai_usage_case_idx")
+  @@map("edu_ai_usage")
+}
+
+/// LA TARIFA DE UN MODELO. Es la tabla que existe para que NO haya un solo
+/// precio escrito en el código.
+///
+/// 🔴 SIN FILA NO HAY FUNCIÓN. Si el modelo que una función usa no tiene
+/// tarifa aquí, esa función se apaga con su motivo. La alternativa —correr
+/// y registrar costo cero— haría que el cupo de la escuela nunca bajara
+/// mientras la factura del proveedor sí sube, que es el error caro.
+///
+/// 🔴 NO LLEVA institutionId (ver el encabezado del bloque): es lo que
+/// cobra el proveedor, y el proveedor cobra lo mismo llame quien llame.
+///
+/// ⚠️ Cambiar un precio afecta a lo que se cobre A PARTIR de ese momento.
+/// Lo ya gastado vive congelado en EduAiUsage.costUsdMicros y no se
+/// recalcula nunca — subir la tarifa mañana no puede agotar el cupo de un
+/// mes que ya se cerró.
+model EduAiPrice {
+  id      String       @id @default(cuid())
+  feature EduAiFeature
+  /// El identificador EXACTO del modelo, tal como se le manda al
+  /// proveedor: "whisper-1", "claude-opus-5".
+  model   String       @db.VarChar(80)
+  unit    EduAiUnit
+
+  /// Precio en MILLONÉSIMAS de dólar por MILLÓN de unidades de entrada y
+  /// de salida. La unidad la dice `unit`.
+  ///
+  /// Por qué "por millón" y no "por unidad": un token de entrada de
+  /// claude-opus-5 cuesta 5 millonésimas de dólar y uno de salida 25 — en
+  /// enteros por unidad eso se podría escribir, pero un modelo más barato
+  /// (0,25 USD por millón de tokens = 0,25 millonésimas por token) se
+  /// redondearía a cero. Con el factor de un millón, la tarifa pública del
+  /// proveedor se copia tal cual: "5 USD por millón" son 5 000 000.
+  ///
+  /// El dictado se cobra por SEGUNDO y solo usa la entrada: Whisper cuesta
+  /// 0,006 USD por minuto = 100 millonésimas por segundo = 100 000 000 por
+  /// millón de segundos, y la salida va en cero.
+  inUsdMicrosPerMillion  Int @default(0)
+  outUsdMicrosPerMillion Int @default(0)
+
+  /// De dónde salió el número, para que quien lo revise dentro de un año
+  /// sepa contra qué compararlo ("Tarifa pública de Anthropic, ago-2026").
+  source String? @db.VarChar(200)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Un modelo tiene UNA tarifa por función. Dos filas serían dos precios
+  /// para la misma llamada, y quien las leyera tendría que desempatar.
+  @@unique([feature, model], map: "edu_ai_prices_modelo_key")
+  @@index([feature, isActive], map: "edu_ai_prices_funcion_idx")
+  @@map("edu_ai_prices")
 }

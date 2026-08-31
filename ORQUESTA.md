@@ -28270,3 +28270,377 @@ cita lo trae, y por **(paciente + alumno)** cuando no, sobre las pendientes del 
 son pocas, es la bandeja del docente— y descartando los casos cerrados. Cuesta la misma consulta
 y el mismo viaje. Cuando el P0-2 se arregle, el primer camino cubrirá todo y el segundo se
 quedará como cinturón.
+
+---
+
+## [Institucional Ola 8] — La cartera de IA: el instituto no paga con tarjeta, paga por contrato, así que su IA es un CUPO MENSUAL — y el número que ese cupo incluye NO se edita desde el panel ✅ (2026-08-30) · rama `feat/edu-ola-8`
+
+Rama `feat/edu-ola-8`, basada en `origin/main` (c4dd7228, Ola 6). **Tres tablas nuevas, dos
+enums, dos endpoints, una pantalla, y las dos funciones de IA de la Ola 3B ENCENDIDAS.**
+Ni una línea del dental, de barbería ni de inmuebles:
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` → 20
+propios, 1 compartido declarado, **0 prohibidos**.
+
+---
+
+### 1. El problema, y por qué la respuesta no es copiar la cartera del dental
+
+La Ola 3B dejó el dictado por voz y el análisis radiográfico **construidos, probados y
+APAGADOS** detrás de `EDU_IA_ENABLED`, porque el instituto no tenía a qué cargarle los
+tokens: el cobro del dental descuenta contra `Clinic.aiTokensLimit` y un usuario de
+instituto no tiene fila de clínica. Aquella ola lo dijo con todas sus letras — *"escribir
+la tabla es la forma más rápida de que la decisión comercial quede tomada por accidente"*.
+
+Esta ola toma esa decisión, y **no copiando `AiWallet`**:
+
+| | dental | instituto |
+|---|---|---|
+| cómo paga | Stripe, cartera que se **recarga** | **contrato anual** (`EduInstitution.contractStartsAt/EndsAt`) |
+| qué es la IA | saldo | **cupo mensual INCLUIDO** en el contrato |
+| quién sube el techo | el cliente, con su tarjeta | **DaleControl, al firmar o renovar** |
+
+Por eso aquí no hay `balance`, ni `recarga`, ni `método de pago`. Hay un **techo al mes**,
+la decisión de la escuela sobre si se puede rebasar, y **un renglón por cada uso** para
+poder contestar en qué se fue.
+
+---
+
+### 2. 🔴 QUIÉN EDITA EL CUPO — la decisión de la ola, y está cerrada en el servidor
+
+El cupo tiene **dos mitades y no se editan igual**:
+
+**a) Lo que INCLUYE el contrato (`monthlyUsdCents`) NO se edita desde el panel. Con ningún
+permiso. No existe el campo.**
+
+No es jerarquía: **la cuenta de API que se consume es la de DaleControl**. Un formulario
+que dejara subir ese número convertiría *"lo que incluye tu contrato"* en *"lo que alguien
+tecleó"*, y quien paga la factura no estaría en la conversación. Es exactamente el mismo
+trato que `contractEndsAt`, que el panel también solo **pinta**.
+
+Y se cierra en tres sitios, no en uno:
+
+1. la pantalla no trae el campo;
+2. `PATCH /api/instituto/ia` **rechaza `monthlyUsdCents` con un 400 y un mensaje que
+   explica por qué** — *no lo ignora en silencio*, que dejaría a la dirección creyendo que
+   se guardó;
+3. una prueba recorre el catálogo de permisos y **falla si aparece cualquier key con
+   `monthly`/`mensual`/`contrato`/`incluido` en el nombre**, para que la ola que un día
+   quiera abrir esa puerta tenga que pararse a pensar.
+
+**Y la fila no se CREA desde el panel tampoco.** Un instituto sin cupo recibe 409:
+crearla obligaría a elegir un `monthlyUsdCents`, que es justo lo que el panel no decide. Se
+da de alta con el contrato — sección 8 de `sql/edu-ola-8.sql`, comentada a propósito.
+
+**b) Lo que decide la ESCUELA sí se edita, con `ia.manage`:** encender/apagar la IA,
+autorizar gastar de más del cupo incluido, hasta cuánto, y a quién pedirle más. Ninguna de
+las cuatro puede **ampliar** lo incluido: solo autorizar excedente por encima, con techo, a
+sabiendas y con su nombre en la fila.
+
+Las **dos reglas del excedente** viven en una función PURA (`eduIaValidarCupo`) y no
+pegadas al `update`, por una razón concreta: una regla que solo se puede comprobar con una
+base de datos delante es una regla que se rompe en el primer refactor.
+
+- 🔴 **permitir excederse EXIGE tope.** *"Permitido, sin tope"* es literalmente la fuga que
+  la Ola 3B se negó a abrir: 120 alumnos con el micrófono abierto y una factura que nadie
+  puede contestar.
+- 🔴 **el tope tiene que ser MAYOR que lo incluido.** Un tope por debajo haría que marcar
+  "permitir gastar de más" **redujera** el cupo, que es lo contrario de lo que dice la
+  casilla.
+
+---
+
+### 3. 🔴 PRECIOS: no queda ni uno escrito en el código
+
+La Ola 3B tenía una tabla de tarifas a mano en `ia-core.ts`
+(`EDU_IA_PRECIO_USD_POR_MTOK`). **Se fue.** Los precios viven en `edu_ai_prices` y la
+pantalla los **lee de ahí**; `eduIaCosto(precio, entrada, salida)` recibe la tarifa como
+**dato**, nunca como constante.
+
+**Y la consecuencia importante: sin tarifa, la función NO corre.** Si el modelo que una
+función usa no tiene fila, se apaga con el motivo *"falta configurar la tarifa de este
+modelo"*. La alternativa —correr y registrar costo cero— haría que el cupo de la escuela
+nunca bajara mientras la factura del proveedor sí sube. Ése es el error caro.
+
+**La tarifa se busca por MODELO EXACTO, no por función**, y ésa es la trampa que hay que
+ver: buscarla solo por función haría que una fila vieja —la del modelo barato del año
+pasado— siguiera cobrando por el modelo nuevo, y el cupo bajaría a un quinto de lo que de
+verdad se gasta. `EDU_IA_MODELOS` declara qué modelo llama cada función y en qué se mide, y
+hay una prueba que **lee `ia.ts` y `whisper.ts`** y falla si alguien cambia el modelo sin
+tocar el mapa.
+
+⚠️ `edu_ai_prices` es **la única tabla del vertical sin `institutionId`**, y no es un
+olvido: no es dato de un inquilino sino la **tarifa del proveedor**, y el proveedor cobra
+lo mismo llame quien llame — la cuenta de API es una sola. Lo que sí varía por escuela es
+el **cupo**, que es donde vive esa variación.
+
+**La sección 7 del `.sql` NO está comentada** — es la única que se ejecuta de verdad además
+de las tablas. Sin tarifa no hay función, así que forma parte de la migración. Lo que sí va
+comentado es el cupo del instituto (sección 8): ese número sale del contrato de cada
+escuela y no hay un valor por defecto honesto.
+
+---
+
+### 4. 🔴 CUÁNDO SE ACABA EL CUPO: 402, y el mensaje dice las tres cosas
+
+Nada de 500. Nada de micrófono muerto sin explicación.
+
+```
+Se acabó el cupo de IA de este mes. El instituto lleva consumidos 50.00 USD de los
+50.00 USD de IA de agosto de 2026, así que esta función se apaga hasta el mes que
+viene. La dirección puede autorizar pasar del cupo incluido —con un tope— desde la
+pantalla de Consumo de IA. A quién pedirle más: Coordinación académica, ext. 214.
+Mientras tanto, la nota se escribe a mano: no se pierde nada de lo que llevas.
+```
+
+**Cuánto se consumió · de cuánto · a quién pedirle.** Sin las tres, un alumno con el
+micrófono muerto abre un ticket — y ese ticket cuesta más que el cupo que se acabó. El
+contacto lo escribe la propia escuela.
+
+**Y el código HTTP separa dos conversaciones que se ven iguales desde fuera:**
+
+- **402** = se acabó el cupo. El despliegue está bien; lo que se acabó es el presupuesto.
+  Una gráfica de 402s dice *"hay escuelas quedándose sin cupo"* → conversación comercial.
+- **503** = falta configurar algo (sin cupo en el contrato, sin tarifa, sin llave) o la
+  escuela la apagó. Una gráfica de 503s dice *"hay algo mal montado"* → conversación de
+  ingeniería.
+
+Con un solo código, ninguna de las dos empezaría.
+
+**Y el aviso llega en el momento, no en el intento siguiente:** el endpoint del dictado
+devuelve lo que queda DESPUÉS de esa transcripción, y si es cero el micrófono lo dice ahí
+mismo —*"ése fue el último dictado"*— en vez de dejar que el siguiente clic falle de
+repente. Sin umbral inventado: solo se avisa en cero.
+
+---
+
+### 5. El interruptor cambió de sitio (y de sentido)
+
+`EDU_IA_ENABLED` **deja de ser la puerta**. Lo que enciende la IA de un instituto es tener
+**cupo configurado** — una fila de `EduAiQuota`—, que es un dato **por escuela**. La
+bandera global no sabía distinguir a la escuela que contrató IA de la que no.
+
+La variable sigue existiendo pero **invertida**: nace **encendida** y solo sirve para
+cerrar — `EDU_IA_ENABLED=0` apaga la IA de todas las escuelas de golpe, para una incidencia
+(el proveedor caído, una factura rara, un abuso). Y lo ambiguo ahora se interpreta como
+"encendida", al revés que en la Ola 3B, porque ya no es la bandera la que abre el grifo del
+gasto: el techo lo pone el cupo, que no se puede confundir con un dedazo en un `.env`.
+
+**El orden en que se comprueban los seis motivos ES parte del diseño**, no una casualidad
+del `if`. Va de *"esta escuela no puede usar esto nunca"* a *"no puede usarlo ahora mismo"*:
+
+```
+1. freno global     → no es asunto de la escuela
+2. sin cupo         → falta un renglón del CONTRATO
+3. apagada          → lo arregla la dirección en un clic
+4. sin tarifa       → falta configurar el producto
+5. sin llave        → falta configurar el entorno
+6. cupo agotado     → lo único que depende del mes en curso
+```
+
+Si el cupo agotado se comprobara antes que la llave, un entorno a medio desplegar diría
+*"pide más cupo"* cuando pedir más cupo no arreglaría nada. Y si la llave se comprobara
+antes que el cupo, una escuela sin contrato de IA mandaría a su director a buscar a un
+ingeniero.
+
+---
+
+### 6. Lo que NO tiene el schema, y es la mitad de la ola
+
+- **NO hay columna "consumido este mes".** El consumo se **cuenta** sumando
+  `edu_ai_usage` cada vez que alguien pregunta — exactamente como el avance académico de la
+  Ola 6, y por la misma razón: un contador guardado se desincroniza el día que una
+  escritura falle a la mitad, y entonces o se le apaga la IA a una escuela que sí tenía
+  cupo, o se le regala el que ya gastó.
+- **NO hay columna "estado del cupo".** *Agotado* depende de la HORA (el mes cambia): una
+  columna guardada mentiría desde el segundo siguiente a escribirla, igual que el estado
+  del consentimiento de la Ola 3B.
+- **NO hay historial del cupo.** `updatedBy*` guarda el ÚLTIMO cambio. Si un día hace falta
+  la historia, es una tabla aparte y no una columna más.
+
+⚠️ `periodKey` (`"2026-08"`) **no contradice lo anterior**: no es un contador sino una
+**etiqueta inmutable sobre una fila inmutable** — el total se sigue contando sumando filas.
+Existe porque el mes se decide en la **zona del instituto**: un dictado a las 23:30 del 31
+de agosto en Tijuana son las 06:30 del 1 de septiembre en UTC, y agrupar por mes con la
+zona del servidor le comería a la escuela cupo del mes que no era.
+
+**Dos unidades de dinero, y cada una tiene su razón:** el **presupuesto** en centavos de
+dólar (lo que teclea una persona; en `INTEGER` el techo queda en 21 millones al mes en vez
+de 2 147, que es lo que daría un entero de millonésimas) y el **medidor** en millonésimas
+(una llamada cuesta fracciones de centavo y en centavos redondearía a cero). La conversión
+vive en UN sitio.
+
+---
+
+### 7. El orden del gasto, y lo que ese orden NO puede garantizar
+
+```
+1. se comprueba el cupo ANTES de llamar al proveedor  ← aquí es donde se dice que no
+2. se llama al proveedor
+3. se escribe el renglón con el costo REAL
+```
+
+**Consecuencia que hay que decir en voz alta: la ÚLTIMA llamada de un mes puede rebasar el
+techo por lo que cueste esa llamada**, porque nadie sabe cuánto va a costar hasta que
+termina. El techo frena las llamadas que **empiezan**; no aborta una en vuelo. El rebase
+está acotado por el costo de UNA operación (céntimos), y la alternativa —cobrar por
+adelantado un estimado y ajustar después— habría metido dos escrituras por llamada y un
+estado intermedio que se queda colgado cuando el proveedor falla.
+
+**El análisis y su renglón de gasto se escriben en UNA transacción.** Si se guardara solo
+el análisis, la escuela tendría una lectura que nadie le descontó; si solo el renglón, un
+cargo sin nada que enseñar.
+
+**El dictado no.** Y es deliberado: si esa escritura falla, el dinero **ya se gastó** y el
+texto ya existe. Reventar ahí le quitaría a la persona el dictado **sin devolverle el
+gasto** — se perderían las dos cosas en vez de una. Se registra el fallo en el log del
+servidor con lo que se iba a cobrar.
+
+**Si el proveedor no dice cuánto consumió**, se cobra el TOPE de la operación y la fila
+queda marcada `isEstimated`. Regalar la llamada dejaría el cupo mintiendo; cobrar de más en
+el único caso en que no sabemos es el error que no cuesta dinero, y la pantalla lo señala.
+El `.sql` trae la consulta para vigilar que esas filas sean cero o casi.
+
+---
+
+### 8. Los permisos, y el segundo candado
+
+Dos keys nuevas: **`ia.view`** y **`ia.manage`**. Defaults: **DIRECCION las dos, el resto
+ninguna.**
+
+**CAJA no las lleva, y es la que parece discutible.** Caja sí ve dinero —es la única con
+`caja.view` además de dirección— pero el dinero de caja es el que la escuela **cobra a sus
+pacientes**. El cupo de IA es un renglón del contrato con DaleControl: no entra al corte,
+no se cobra en el mostrador y no cuadra con nada de lo que caja concilia.
+
+🔴 **Y como el dinero de la Ola 5, está cerrado DOS veces.** El consumo de IA se lee con el
+alcance de **`"charges"`** — el del dinero, **no un recurso nuevo**. La Ola 8 no agregó un
+quinto recurso a `visibility.ts` por lo mismo que la Ola 3 no agregó uno para el
+expediente: un recurso nuevo que dijera lo mismo solo da un segundo sitio donde
+equivocarse. Y `"charges"` tiene justo la propiedad que hace falta: es una **lista blanca**
+que se resuelve **antes** del switch de roles, así que un rol nuevo, un `as any` o un
+permiso encendido por error caen en `none`.
+
+Encenderle `ia.view` a un alumno por override **no le enseña un dólar**: `getEduIaPanel`
+corta con 403 antes de leer nada — y corta antes a propósito, porque un panel vacío
+seguiría trayendo el CUPO (cuánto incluye el contrato, cuánto se lleva gastado), que es lo
+que ese alumno no tiene por qué leer.
+
+⚠️ **Tener cupo NO es un permiso.** El dictado sigue siendo `expediente.write` y el
+análisis `estudios.analyze`, los dos de la Ola 3B. Si `ia.view` gateara el dictado,
+encender el cupo obligaría a repartirle a 120 alumnos el permiso de ver en qué se gasta el
+dinero de la escuela.
+
+**Sí hay una cifra que un alumno ve, y hay que decirlo:** el mensaje de cupo agotado lleva
+*"llevas X de Y"*. Eso lo pide el encargo y no contradice la regla de la Ola 5 («un alumno
+no ve dinero»): aquella cierra el dinero de los **pacientes** —precios, cobros, saldos—
+porque un residente que sabe cuánto pagó su paciente sabe cuánto vale su propia lista de
+espera. Esto es el presupuesto de una **herramienta**, y es exactamente el dato que
+convierte *"el micrófono no funciona"* en *"ya se gastó el cupo, habla con fulano"*. El
+desglose de **quién** se lo gastó sí queda cerrado detrás de `ia.view`.
+
+---
+
+### 9. `/instituto/ia` — móvil primero
+
+Seis bloques, en el orden en que se leen las preguntas que traen a alguien a esta pantalla:
+
+1. **el cupo del mes** — barra con lo consumido, lo que queda, y la **marca** de lo que
+   incluye el contrato cuando hay excedente autorizado (sin esa marca, media barra no dice
+   si lo gastado ya se salió de lo contratado, que es la única pregunta que la barra tenía
+   que contestar). En rojo cuando se agotó: un cupo agotado no es *"vas por el 100 %"*, es
+   un micrófono que no funciona;
+2. **las dos funciones**, cada una con su estado y el motivo exacto si está apagada;
+3. **en qué se fue, por función** (dictado vs análisis) con las unidades en lo que una
+   persona entiende — *"1 h 12 min de audio"*, no *"4 320 segundos"*;
+4. **quién lo está usando**, por persona y con el rol **congelado** al momento del gasto;
+5. **las tarifas**, leídas de la tabla — con el modelo y de dónde salió el número;
+6. **el detalle**, un renglón por uso.
+
+Reusa `.edu-req` (la tarjeta del requisito de la Ola 6) y `.edu-progreso`; añade tres
+rejillas y una variante de la barra. **Móvil primero**, como todo el panel: la dirección
+abre esto desde el teléfono cuando un docente le escribe *"a mis alumnos no les funciona el
+micrófono"*.
+
+Y pinta el **total del mes anterior** en una línea. Es barato y evita el susto del día 1,
+cuando la pantalla está casi vacía y parece que se perdieron los datos.
+
+⚠️ **Solo el mes en curso, sin selector.** No es un olvido: el cupo que se pinta arriba es
+el que está configurado HOY, y enseñarlo junto al consumo de marzo diría *"te pasaste del
+cupo"* comparando contra un techo que en marzo era otro.
+
+---
+
+### 10. Lo que se ENCENDIÓ, y lo que NO se tocó de la Ola 3B
+
+**Encendido y cableado al cobro:** el micrófono de dictado en la nota clínica (por campo
+del SOAP) y el análisis radiográfico sobre los estudios.
+
+**NO se reescribió ni una línea** de cómo se llama a los proveedores, ni el prompt, ni la
+normalización de la respuesta, ni el freno de 90 segundos contra el doble toque, ni el
+componente del micrófono. Esta ola **cablea el cobro**; lo demás ya estaba hecho y probado.
+
+🔴 **Y lo que no se puede romper sigue intacto:** el análisis es **APOYO, no diagnóstico**;
+el aviso va arriba, entero y sin poder cerrarse; `EduStudyAnalysis` **no tiene ninguna
+relación con `EduRecord`** y no hay ningún camino en el producto que escriba el resultado
+dentro de una nota. Lo único que ofrece la pantalla sigue siendo **Copiar**, y el texto
+copiado **lleva el aviso dentro** — con la prueba que lo fija.
+
+Lo único que se le añadió al dictado: manda el **caso** al que se imputa el gasto. Y ese id
+llega del cliente, así que **el servidor lo vuelve a buscar dentro del alcance**
+(`eduCaseScopeWhere`) antes de guardarlo; un id de fuera se guarda como `null`. El detalle
+de en qué se fue el cupo solo sirve si es verdad. Que no haya caso **no impide dictar**: en
+el tamizaje todavía no existe, y ése es justo el momento en que más se dicta.
+
+---
+
+### 11. Qué se probó
+
+**570 pruebas del vertical, 17 archivos, 0 fallos.** Dos archivos nuevos/reescritos:
+
+- `edu-ia.test.ts` (37) — el interruptor con sus seis motivos y su ORDEN, el costo con
+  tarifa de la base (y `null`, **nunca 0**, cuando no hay tarifa), y el candado de TIPOS que
+  ata `EduAiFeature`/`EduAiUnit` de `types.ts` a los enums de Prisma;
+- `edu-ia-cupo.test.ts` (45) — la aritmética del cupo, las dos reglas del excedente, quién
+  edita qué, el alcance del gasto, el periodo por zona horaria, las dos unidades de dinero,
+  y tres pruebas que **leen archivos**: que `ia.ts` siga sacando sus modelos del mapa, que
+  `whisper.ts` siga mandando el modelo que declaramos, y que el `.sql` dé de alta las dos
+  tarifas **sin comentar** y el cupo del instituto **comentado**.
+
+```
+npx tsx --test src/lib/edu/__tests__/<archivo>.test.ts     (no hay script npm: package.json es del dental)
+NODE_OPTIONS="--max-old-space-size=8192" npx tsc --noEmit  → limpio
+NODE_OPTIONS="--max-old-space-size=8192" npm run build     → exit 0, 455/455 páginas
+EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs → 0 prohibidos
+```
+
+**Lo que NO se probó, y hay que probar con base de datos:** ninguna escritura corrió contra
+Postgres — `sql/edu-ola-8.sql` **no se aplicó** (la orden lo prohibía) y no se abrió un
+navegador. Sin aplicar el `.sql`, `/instituto/ia` y las dos funciones de IA truenan al
+consultar tablas que no existen. Tampoco se llamó a ningún proveedor: **nadie ha gastado
+todavía un dólar real de IA desde el instituto**, así que el costo por llamada está
+calculado contra la tarifa publicada y no contra una factura.
+
+---
+
+### 12. Al desplegar
+
+1. **`sql/edu-ola-8.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/2/3.sql`. Idempotente, cero DROP. **Ojo:** su sección 7 (las dos tarifas)
+   **sí se ejecuta** — no está comentada, y sin ella las dos funciones nacen apagadas con
+   *"falta configurar la tarifa"*.
+2. **El cupo del instituto** (sección 8, comentada): descoméntala, pon el número que dice
+   el contrato y córrela. **Es el único sitio donde se escribe `monthlyUsdCents`** — el
+   panel no lo edita con ningún permiso. Sin esta fila, la IA sigue apagada y la pantalla
+   dice por qué. Para orientarse: un análisis ronda 0,05 USD y un minuto de dictado 0,006;
+   una escuela de 120 alumnos con 10 placas y 60 minutos al mes cada uno consume ~103 USD.
+   **Arranca sin excedente el primer mes** y mira la pantalla: es más fácil subir el cupo
+   que explicar una factura.
+3. El **backfill del override** (sección 6), solo si hay usuarios con `permissionsOverride`
+   no vacío: el override **reemplaza** al default, así que las dos keys no le llegan solas a
+   quien ya tenga uno guardado. **Un solo bloque, y solo DIRECCION.**
+4. **Comprobar que `OPENAI_API_KEY` y `ANTHROPIC_API_KEY` están puestas.** Si falta una, esa
+   función se apaga sola con el motivo, pero es una vuelta de más.
+5. **`EDU_IA_ENABLED` ya no hay que ponerla.** Si existe con valor `0`/`false`/`off`, la IA
+   queda apagada en TODAS las escuelas: bórrala o ponla en `1`. Ojo, porque el despliegue de
+   la Ola 3B pudo dejarla apagada — y ahora ese valor significa lo contrario de lo que
+   significaba.

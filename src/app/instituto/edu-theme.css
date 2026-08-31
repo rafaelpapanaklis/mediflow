@@ -5040,3 +5040,33 @@ button.edu-dir-money__fila:hover {
     content: "";
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OLA 8 · LA CARTERA DE IA — /instituto/ia
+
+   Tres rejillas y una variante de la barra. Nada nuevo de fondo: la
+   tarjeta del cupo reusa .edu-req (la del requisito de la Ola 6, que ya
+   era "nombre + número + barra + explicación"), el desglose por función
+   reusa .edu-lista, y las tres tablas siguen el patrón de siempre —
+   tarjetas apiladas en móvil, rejilla en >=1180 px, con --edu-cols leída
+   por el encabezado Y por la fila para que no se puedan desalinear.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-table--iapersonas {
+  --edu-cols: minmax(160px, 1.8fr) 110px 80px 118px minmax(120px, 1fr);
+}
+
+.edu-table--iaprecios {
+  --edu-cols: minmax(160px, 1.6fr) minmax(140px, 1.2fr) minmax(150px, 1.2fr) minmax(150px, 1.2fr);
+}
+
+.edu-table--iausos {
+  --edu-cols: 124px minmax(150px, 1.4fr) minmax(130px, 1.2fr) minmax(150px, 1.4fr) 110px 118px;
+}
+
+/* La barra del cupo cuando ya no queda nada. Es la MISMA barra de la Ola 6
+   con el relleno en rojo: un cupo agotado no es "vas por el 100 %", es un
+   micrófono que no funciona, y en verde se lee como si estuviera bien. */
+.edu-progreso--agotado .edu-progreso__bar {
+  background: var(--edu-danger);
+}
