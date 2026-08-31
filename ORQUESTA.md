@@ -29954,3 +29954,140 @@ reales simultáneos.
    (backfill de sign) va viva a propósito. Comprobaciones en la sección 5.
 2. Los SQL de olas anteriores siguen SIN aplicar (7–12, 14, fix-auditoria) — el orden vive
    en sus memorias; éste va al final.
+
+
+## [Institucional · PAGOS A MESES] — El saldo de un cobro se parte en mensualidades ENTERAS (el residuo va completo en la PRIMERA), "vencida" la dice el CALENDARIO y no un cron, y el saldo se sigue derivando de los pagos ✅ (2026-08-31) · rama `feat/edu-pagos`
+
+### Qué es
+
+En una escuela el pago a plazos es la norma: el paciente eligió la clínica JUSTAMENTE porque es
+más barata. Hasta hoy un cobro se pagaba de una vez o quedaba con saldo suelto. Ahora un
+`EduCharge` con saldo se DIFIERE: `EduPaymentPlan` (meses, mensualidad pareja, día de corte,
+enganche congelado, estado, autor) + `EduInstallment` (número, monto, vencimiento, y el pago
+que la liquidó). El método de pago existente NO se tocó: pagar una mensualidad ES un
+`EduPayment` normal — mismo método, mismo turno, mismo corte.
+
+### Las tres decisiones que sostienen la caja
+
+- 🔴 **Los centavos no se pierden ni se inventan.** `eduPlanSplitCents` (pagos-core.ts, puro)
+  reparte el piso de la división y la diferencia ENTERA cae en la PRIMERA mensualidad:
+  $1,000.00 entre 3 son $333.34 + $333.33 + $333.33 — la suma da EXACTAMENTE el saldo. En la
+  primera y no en la última a propósito: se paga con el plan fresco, y si el plan se cancela a
+  la mitad, lo ya cobrado nunca fue "de más". Probado con totales que no dividen (incluido el
+  tope de un Int4).
+- 🔴 **VENCIDA no se guarda: se calcula.** En la base viven los HECHOS (`dueDate`, y
+  `paymentId` o su ausencia); `eduInstallmentStatus` deriva el estado EN CADA LECTURA contra
+  el hoy del INSTITUTO (`eduTodayISO`, su zona — a las 23:30 de México un hoy en UTC ya va en
+  mañana). "Vence hoy" sigue PENDIENTE todo el día (mismo criterio que el contrato). No hay
+  cron: no hay nada que pueda fallar y dejar la cartera diciendo "al corriente".
+- 🔴 **Nadie teclea un saldo ni un monto.** El saldo del plan se deriva de las mensualidades
+  sin pago; el del cobro se sigue derivando de los pagos reales. Pagar una mensualidad manda
+  MÉTODO y referencia — el monto es el congelado de la fila. Lo único guardado del plan son
+  los TÉRMINOS pactados (meses, mensualidad, corte, enganche), congelados al crear: acuerdo,
+  no acumuladores.
+
+### Cómo quedó armado
+
+- **Crear el plan** (`createEduPaymentPlan`, pagos.ts): UNA transacción — el candado de "un
+  solo plan ACTIVO por cobro" (dentro de la transacción, como el único turno abierto), la FOTO
+  del saldo reclamada con un `updateMany` condicional (si otro pago entró en medio, 409 y no
+  un calendario que no suma), el ENGANCHE opcional como pago normal, y el reparto + las
+  fechas. La primera mensualidad SIEMPRE vence el mes siguiente en el día de corte (default:
+  el día de hoy), y el corte se RECORTA al mes que lo aguante — corte 31 vence el 28 en
+  febrero (29 si el bisiesto alcanza) y en marzo vuelve a ser 31; correrlo pondría dos
+  mensualidades en el mismo mes.
+- **Pagar una mensualidad** (`payEduInstallment`): EN ORDEN (la más vieja sin pagar; pagada la
+  3 con la 1 vencida, "al corriente" y "vencida" serían verdad a la vez). El pago pasa por
+  `eduApplyEduPaymentInTx` — EXTRAÍDO de `addEduPayment` (#146): una función, dos llamadores,
+  para que el pago suelto y la mensualidad no puedan recalcular distinto — y la fila se
+  RECLAMA (`updateMany` con `paymentId: null`; si otra caja la cobró hace un instante, la
+  transacción entera se revierte). Si era la última, LIQUIDADO + `settledAt` en la MISMA
+  transacción.
+- **Cancelar** (`cancelEduPaymentPlan`, permiso `caja.refund`): con autor y motivo. Lo pagado
+  SE QUEDA (son pagos reales, están en su corte); el saldo vuelve a cobrarse normal o a
+  diferirse en un plan nuevo.
+- **Los candados nuevos en caja.ts**: un cobro con plan ACTIVO NO acepta pagos sueltos ni
+  devoluciones (un abono libre encima del plan dejaría el cobro en PAID con mensualidades
+  "pendientes" que nadie debe — dos verdades sobre el mismo dinero) ni se cancela por encima
+  del plan. Primero se cancela el plan; el mensaje lo dice. `CHARGE_SELECT` gana
+  `activePlanId` para que el recibo enlace al plan en vez de ofrecer botones que siempre
+  contestan que no.
+- **Pantallas** (móvil primero, clases edu-\*): `/instituto/caja/planes` (KPIs, VENCIDAS, "
+  vencen esta semana" [hoy, hoy+7) con las funciones puras, la tabla y el detalle con cobrar/
+  cancelar), `/instituto/caja/planes/[id]/recibo` (imprimible con `window.print()` como el
+  tablero de dirección: términos, calendario completo, firmas; instantes formateados en el
+  SERVIDOR en la zona del instituto), y `/instituto/pacientes/[id]/pagos` (sus mensualidades,
+  lo que debe y cuándo). En Caja, el modal Cobrar gana "¿Cómo paga?" → "A meses" (meses, día
+  de corte, enganche opcional, y la vista previa del reparto con LA MISMA función pura del
+  servidor), y el Recibo de un cobro con saldo gana "Pagar a meses". El flujo del modal son
+  DOS peticiones (cobro → plan): si la segunda falla, el cobro ya existe con su clave de
+  idempotencia (#146) y reintentar NO duplica — el mensaje lo explica.
+
+### Permisos: CERO keys nuevas
+
+`caja.view` abre las pantallas, `caja.charge` crea el plan y cobra mensualidades, `caja.refund`
+cancela. Una "planes.create" solo habría dado un segundo interruptor que apagar mal. La segunda
+cerradura es el ALCANCE (`eduPaymentPlanScopeWhere` / `eduInstallmentScopeWhere` en
+visibility.ts, recurso "charges": lista blanca DIRECCION/CAJA, todo o nada): 🔴 el ALUMNO no ve
+NADA de esto — ni el plan de su propio paciente — aunque le enciendan `caja.view` a mano.
+Probado por rol y por endpoint (el test recorre los cuatro route handlers y exige la key).
+
+### SQL
+
+`sql/edu-pagos.sql`, idempotente, **SIN APLICAR** como todos: 1 enum (`EduPaymentPlanStatus`),
+2 tablas (`edu_payment_plans`, `edu_installments`), 7 índices (2 únicos: `[planId, number]` y
+`paymentId` — un pago liquida UNA mensualidad), 8 FKs. CERO backfill de overrides: no hay keys
+nuevas. Va DESPUÉS de `edu-ola-5.sql`; en el orden general, al FINAL (tras `edu-cierre.sql`).
+
+### Qué se probó
+
+`npm run build` **exit 0** (✓ 462/462 páginas, tabla de rutas completa con las 4 APIs y las 3
+pantallas nuevas; "Compiled with warnings" por los preexistentes de `file-type` y el spam
+esperado de `DATABASE_URL` sin `.env`). `npx tsc --noEmit` limpio salvo los 6 PREEXISTENTES de
+`src/lib/barber/__tests__`. **873/873 pruebas edu en verde** (847 del cierre + 26 nuevas de
+`edu-pagos.test.ts`): el reparto con totales que NO dividen (suma exacta, residuo en la
+primera, parejas el resto), el recorte del día de corte (febrero, bisiesto, cruce de año),
+"vence hoy es hoy" y que el estado cambia con el hoy sin nada guardado, el resumen derivado,
+la ventana [hoy, hoy+7) con extremo EXCLUSIVO, el candado de tipos del enum, el alcance por
+rol (alumno: `id IN ()`), y las keys de los cuatro endpoints. La prueba
+P2-10 de `edu-cierre.test.ts` se actualizó CON LA INTENCIÓN INTACTA: el claim con `decrement`
+vive ahora en `eduApplyEduPaymentInTx` y la prueba exige además que `addEduPayment` PASE por
+él. De paso, la prueba nueva de fechas descubrió que `eduPlanDueDates` aceptaba "2026-13-01" y
+lo normalizaba en silencio (mes 13 → enero); se cierra en el módulo puro. Guardia limpia
+(20 propios + `prisma/schema.prisma` declarado).
+
+### Lo que NO se probó
+
+Nada corrió contra Postgres: `sql/edu-pagos.sql` NO se aplicó y ninguna transacción (crear
+plan, enganche, pagar mensualidad, liquidar, cancelar) se ejecutó contra base real — los
+claims condicionales y el candado de "un ACTIVO por cobro" están razonados y compilados, no
+ejercitados con concurrencia real. No se abrió un navegador: las pantallas, los modales y el
+recibo impreso (@media print) no se vieron pintados. Nadie ha cobrado una mensualidad real.
+
+### Lo que se quiso tocar y NO se tocó
+
+- **La ficha del paciente**: `/instituto/pacientes/[id]/pagos` es un ARCHIVO NUEVO que hereda
+  el layout (encabezado + pestañas), pero la lista `definicion` del layout NO se tocó — la
+  están rehaciendo las olas paralelas (visor/casos) y este encargo tenía prohibida la ficha.
+  Se llega desde Caja → Pagos a meses ("Ver al paciente") y por URL. La pestaña es UNA línea
+  al final de `definicion` (key "pagos", `permission: "caja.view"`) cuando toque integrar.
+- **El dental**: ni `PaymentPlan` ni `PlanPayment` (se leyeron como referencia — y como
+  contraejemplo: allá el monto es Float y el estado OVERDUE se guarda; aquí centavos enteros y
+  estado derivado).
+- **El corte de caja**: las mensualidades entran solas (son `EduPayment` con su
+  `cashSessionId`); ninguna suma del corte se modificó.
+- **Recordatorios de WhatsApp de mensualidades**: la Ola 9 manda carta/recibo/recordatorio de
+  CITA; avisar "te vence el día 15" es producto nuevo y no cabía sin tocar su cron.
+- **El folio propio del plan**: el recibo se identifica por el folio del COBRO (C-0012), como
+  la Ola 14 con la receta — un MAX+1 más con su carrera no pagaba su precio.
+
+### Al desplegar
+
+1. `sql/edu-pagos.sql` en Supabase (idempotente, CERO DROP), DESPUÉS de `edu-ola-5.sql` y en
+   el orden general al FINAL (tras `edu-cierre.sql`). ⚠️ Hasta que corra, TODA la caja del
+   vertical truena al leer cobros: `CHARGE_SELECT` ahora incluye `paymentPlans` y Prisma va a
+   pedir una tabla que no existe — es el mismo trato que la `searchIndex` de la Ola 1B y la
+   `cedulaProfesional` de la Ola 14, ahora en versión tabla. El SQL va ANTES del deploy o
+   junto con él.
+2. Los dos SELECT de comprobación del final del .sql deben dar 2 y 3.
+3. Nada de env nuevas, nada de cron nuevo, cero keys de permiso nuevas.
