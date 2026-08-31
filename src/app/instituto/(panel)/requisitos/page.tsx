@@ -35,7 +35,7 @@ export default async function InstitutoRequisitosPage() {
     return (
       <EduDenied
         permission="requisitos.manage"
-        what="Los requisitos del plan de estudios: cuántos casos de cada cosa necesita un alumno para cerrar."
+        what="Los requisitos del plan de estudios: cuántos casos de cada cosa necesita un estudiante para cerrar."
       />
     );
   }
@@ -64,7 +64,7 @@ export default async function InstitutoRequisitosPage() {
         <div>
           <h1 className="edu-page__title">Requisitos</h1>
           <p className="edu-page__lead">
-            Cuántos casos de cada cosa necesita un alumno para cerrar. Cuántos lleva NO se captura
+            Cuántos casos de cada cosa necesita un estudiante para cerrar. Cuántos lleva NO se captura
             aquí ni en ningún lado: se cuenta de sus casos cada vez que alguien pregunta.
           </p>
         </div>

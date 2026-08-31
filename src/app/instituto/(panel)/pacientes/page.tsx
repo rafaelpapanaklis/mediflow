@@ -94,7 +94,7 @@ export default async function InstitutoPacientesPage({
               ? "Todos los pacientes de la clínica. Quién trajo a cada uno se marca aquí, y de ese dato depende la tarifa que le pone caja."
               : scope.kind === "own"
                 ? "Los pacientes que atiendes: los de tus casos y los de tus citas."
-                : "Los pacientes de los alumnos que supervisas hoy. Cuando la dirección te asigne o te quite alguno, esta lista lo refleja sola."}
+                : "Los pacientes de los estudiantes que supervisas hoy. Cuando la dirección te asigne o te quite alguno, esta lista lo refleja sola."}
           </p>
         </div>
       </header>

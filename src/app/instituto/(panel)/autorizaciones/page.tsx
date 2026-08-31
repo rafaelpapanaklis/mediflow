@@ -49,7 +49,7 @@ export default async function InstitutoAutorizacionesPage() {
     return (
       <EduDenied
         permission="autorizaciones.view"
-        what="La bandeja de autorizaciones: lo que los alumnos mandaron a firmar y sigue esperando."
+        what="La bandeja de autorizaciones: lo que los estudiantes mandaron a firmar y sigue esperando."
       />
     );
   }
@@ -92,7 +92,7 @@ export default async function InstitutoAutorizacionesPage() {
           <h1 className="edu-page__title">Autorizaciones</h1>
           <p className="edu-page__lead">
             {canDecide
-              ? "Lo que tus alumnos mandaron a firmar, agrupado por alumno y en orden de llegada. Las urgencias van primero: ésas ya ocurrieron y hay que leerlas."
+              ? "Lo que tus estudiantes mandaron a firmar, agrupado por estudiante y en orden de llegada. Las urgencias van primero: ésas ya ocurrieron y hay que leerlas."
               : "Lo que mandaste a autorización y sigue esperando la firma de tu docente."}
           </p>
         </div>

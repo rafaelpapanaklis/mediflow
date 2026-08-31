@@ -29954,3 +29954,697 @@ reales simultáneos.
    (backfill de sign) va viva a propósito. Comprobaciones en la sección 5.
 2. Los SQL de olas anteriores siguen SIN aplicar (7–12, 14, fix-auditoria) — el orden vive
    en sus memorias; éste va al final.
+
+## [Institucional · EL VISOR] — Le faltaba la panorámica (que el DICOM no trae: hay que calcularla), los cuadros no eran cuadrados, y el modal de ancho fijo dejaba media pantalla en negro ✅ (2026-08-31) · rama `feat/edu-visor`
+
+### El problema de fondo
+
+Cuando el laboratorio entrega un CBCT, su propio visor dibuja la curva del arco y los cortes
+transversales. **Esas líneas no viajan dentro del DICOM** — son del software del lab —, así que
+la única forma de tenerlas en el nuestro es CALCULARLAS. Sin eso, el usuario compara los dos
+visores y ve que al nuestro le falta la mitad. Encima el visor vivía en una hoja de 1160 px con
+paneles de tamaños distintos y desalineados: en un monitor de 27" se veía como una maqueta.
+
+Nada de esto era código nuevo que escribir. El dental ya lo tiene resuelto y probado.
+
+### 1 · La panorámica: se IMPORTÓ TAL CUAL, sin adaptador de acoples
+
+Las tres piezas entran directas desde `src/components/patient-3d/`:
+
+| pieza | qué hace |
+| --- | --- |
+| `PanoramicPane.tsx` | los dos lienzos: el axial donde se traza la arcada y la panorámica del reslice, con slab MIP/promedio y la longitud de arco en mm reales |
+| `arch-autodetect.ts` | detecta la curva sola (MIP de la banda dental, Otsu, morfología, línea central polar) — se dispara desde dentro de PanoramicPane |
+| `panoramic-reslice.ts` | el recorte curvo del volumen |
+
+**NO hicieron falta adaptadores de datos, y eso se comprobó, no se supuso**: las tres son puras
+—ni un `/api/`, ni `patientId`, ni `fileId`, ni `fetch(`, ni `prisma`—, y solo reciben el
+volumen que el visor ya tiene en memoria (`slices`, `scale`) para devolver píxeles. Hay una
+prueba que lo vigila (`edu-visor.test.ts`): el día que el dental le meta un fetch a una de
+ellas, la suite se pone roja **antes** de que el instituto reciba un 401 en producción.
+
+Lo único que se escribió es un **anfitrión de TAMAÑO**, no de datos:
+`src/components/edu/estudios/panoramica-pane.tsx`. Existe porque `PanoramicPane` fija el alto de
+sus lienzos con un estilo **en línea** de 380 px — correcto en el modal del dental, corto aquí,
+donde el visor usa la ventana entera. Como ese archivo no se edita, el alto se sube **desde
+fuera** con la variable `--edu-pano-h` que `edu-theme.css` aplica con `!important` (un
+`!important` de hoja de estilos sí le gana a un estilo en línea). Si ese árbol cambiara, la
+regla deja de casar y la panorámica se queda en sus 380 px de siempre: no se rompe.
+
+### 2 · La rejilla: cuadrados del mismo lado, y el reparto lo decide MEDIR
+
+Cinco vistas. Los **cuatro** paneles de corte y volumen son cuadrados idénticos y **caben
+siempre en la pantalla sin desplazar**; la **panorámica va en su propia fila, de borde a borde**.
+
+**Por qué la panorámica no es un cuadrado más:** un arco dental mide ~150 mm de largo por ~60 de
+alto. Meter eso en un cuadrado es tirar media caja. Y encima `PanoramicPane` no es UN lienzo:
+son dos (el axial de trazado y el resultado) uno al lado del otro. La fila ancha es su forma.
+
+**Por qué no hay un corte fijo de columnas en el CSS.** `visor-medidas.ts` prueba 1, 2 y 4
+columnas con el ancho y el alto REALES y se queda con el reparto que hace los paneles **más
+grandes**, con la condición de que los cuatro quepan sin desplazar. Un `@media` no puede hacer
+esa cuenta, y por eso el resultado es tan distinto:
+
+| ventana útil | antes (2 columnas fijas) | ahora | lo que se gana |
+| --- | --- | --- | --- |
+| 1920×950 | 321 px de lado, 979 px usados de 1834 | **4 col · 465 px**, 1884 px usados | el ancho entero |
+| 1440×780 | 274 px | **4 col · 345 px** | |
+| 1366×1024 (iPad Pro horizontal) | 359 px | **2 col · 359 px** | con alto de sobra, gana el 2×2 |
+| 768×1024 (iPad vertical) | 359 px | **2 col · 359 px** | el 2×2 de siempre |
+| 2752×927 | 310 px | **4 col · 629 px** | el doble |
+
+Se descartó 3 columnas a propósito: el cuarto panel se queda solo en la segunda fila dejando dos
+huecos, y **nunca gana** — necesita las mismas dos filas que el 2×2 con columnas más estrechas.
+
+Que sean cuadrados no es un `aspect-ratio` sobre la imagen: el lado se le pasa a `MprPane` como
+`heightPx = lado − 34`, donde 34 px es **exactamente** el alto de la regleta del corte que
+`MprPane` pinta debajo. Así la **tarjeta entera** mide `lado × lado`, no solo su parte negra. Ese
+34 es la constante `EDU_PANEL_CHROME`, es el mismo número que el `height` de
+`.edu-visor3d-pane__barra` en el CSS, y **hay una prueba que falla si se separan** — porque si se
+separan no se rompe nada: solo se ve mal, que es la peor forma de fallar.
+
+El panel del volumen no necesitó medir su barra de Sólido/MIP/Densidad/Umbral (que se parte o no
+según el ancho): una regla convierte la raíz de `Dicom3DVolume` en una rejilla de dos filas
+—lienzo elástico y barra al natural— y se le pasa `height="100%"`.
+
+### 3 · La pantalla: la hoja del visor, no el modal del vertical
+
+- **`EduModal` no se tocó.** Lo usan ~20 pantallas del vertical y su forma es la correcta para
+  formularios y fichas. El CBCT y las mallas abren en `visor-shell.tsx`, una hoja propia:
+  `100dvh` (no `100vh`: en el móvil la barra del navegador aparece y desaparece, y el pie del
+  visor se quedaría bajo el borde), `scrollbar-gutter: stable` para que la barra de
+  desplazamiento no cambie el ancho y la rejilla no oscile, y las mismas reglas de siempre —
+  Escape cierra, el foco vuelve a quien abrió, el fondo no se desplaza, `role="dialog"` +
+  `aria-modal` + `aria-labelledby`. Las imágenes y los PDF siguen en `EduModal`.
+- **Pantalla completa DE VERDAD**, la del sistema, sobre esa hoja. En el iPhone el botón **no se
+  pinta** (WebKit solo deja pantalla completa al vídeo) y no hay nada que explicar: la hoja ya
+  ocupa la ventana entera. Ahí Escape sale de pantalla completa **sin** cerrar el visor.
+- **Maximizar un panel** ahora usa el hueco REAL de la hoja (`--edu-max-h`) en vez del tope de
+  78vh que `MprPane` trae pensado para el modal del dental. Y **oculta** los demás paneles en vez
+  de desmontarlos.
+- **iPad**: el reparto sale de la ventana, no del aparato, así que el giro reparte de nuevo sin
+  tocar el volumen. `@media` y ni una consulta de contenedor — el visor a pantalla completa es
+  `fixed` y un `@container` lo ataría al ancho de su columna (misma razón que el cajón del menú).
+- **iPhone**: una vista a la vez con selector de cinco. Y ahí "maximizar" hace lo único que tiene
+  sentido en 600 px de alto: **quitar las barras de encima** y dejar el corte solo.
+- **Gestos táctiles** (`visor-gestos.ts`). `MprPane` está escrito para el ratón y no se edita, así
+  que los gestos se montan desde fuera y se traducen a lo que ese archivo **ya entiende**:
+  - un dedo con la CRUZ → navega cortes (lo maneja el contenedor, que es quien tiene `cross`),
+  - un dedo con medir/sonda/mover → se reenvían `mousedown`/`mousemove`/`mouseup`, para que con
+    el dedo se pueda medir, que es para lo que se abre un CBCT,
+  - **pellizcar** → `wheel` con `ctrlKey`, que es literalmente el zoom de `MprPane`,
+  - **dos dedos** → arrastre con el **botón central**, que `MprPane` ya trata como paneo con
+    cualquier herramienta,
+  - un toque seco no se toca: al no llamar a `preventDefault`, el navegador sintetiza el clic y
+    la cruz se mueve sola.
+
+### Lo que este trabajo ALCANZA del dental sin editarlo (cuatro cosas, y cómo degradan)
+
+| qué | para qué | si deja de casar |
+| --- | --- | --- |
+| `.edu-visor3d-vol > div` (CSS, sin `!important`) | el lienzo 3D se estira al hueco que deja su propia barra | el panel del volumen sale más alto que los otros |
+| `.edu-visor3d-pano .relative.w-full` + `canvas` (CSS, `!important`) | subir los 380 px en línea de la panorámica | la panorámica se queda en 380 px |
+| `.edu-visor3d-celda--activa … .select-none` (CSS, `!important`) | el panel maximizado usa el hueco real y no 78vh | maximizado aprovecha algo menos |
+| `viewport.style.touchAction = "none"` (JS, en caliente, se restaura) | que el navegador no se lleve el arrastre | los gestos no se activan y el visor queda como estaba |
+
+Ninguna revienta nada: todas degradan a lo que había.
+
+### Lo que NO se rompió (y está probado)
+
+El aviso de que **el CBCT no entrega unidades Hounsfield reales** sigue textual. Siguen los
+presets **Auto/Hueso/Tejido/Aire**, el **umbral** del volumen, la **cruz sincronizada en mm**, el
+**contador de cortes**, el juicio de geometría (`GeometryWarning`) y el bloque **Apoyo de IA**
+(que se sigue pintando también apagado, porque su primer trabajo es decir por qué lo está). El
+freno del estudio pesado sigue existiendo y sigue mirando la **memoria** del aparato — nunca el
+tamaño de la ventana.
+
+**Rendimiento — el candado.** El volumen (668 cortes, 296 MB) vive en `slices`, y ese estado solo
+lo llena el efecto de carga, cuyas dependencias son la clave del estudio, su URL y la clase de
+memoria. Girar el iPad, maximizar, entrar a pantalla completa o pasar de 2 a 4 columnas son CSS y
+números. Hay **una prueba que falla** si alguien mete `compacto`, `maximizada` o el lado del panel
+en esa lista. Y por eso maximizar **oculta** en vez de desmontar (desmontar re-detectaría la
+arcada de cero al volver) y la rama "compacto" mira el **lado menor** de la ventana, que es el
+mismo antes y después del giro. Al 3D se le pasa `height="100%"`: el alto no está entre las
+dependencias que reconstruyen su textura.
+
+### Un cambio de comportamiento, y es a mejor
+
+Antes, en cualquier aparato táctil un CBCT de más de 32 MB era un **bloqueo duro**. Sigue siéndolo
+en el teléfono (ahí la recarga de la pestaña es casi segura), pero en pantalla de tablet ahora se
+ofrece **"Intentar abrirlo aquí de todas formas"**: el freno es una precaución de memoria, no una
+certeza, y un iPad reciente suele poder. La decisión queda en quien tiene el aparato en la mano.
+
+### Qué se probó
+
+`npm run build` **exit 0** (✓ 460/460 páginas; los warnings de `file-type` y de Tailwind son
+preexistentes, y el spam de `DATABASE_URL` es el esperado sin `.env`). `npx tsc --noEmit` limpio
+salvo los **6 errores PREEXISTENTES** de `src/lib/barber/__tests__`. `npx next lint` sobre las dos
+carpetas tocadas: sin avisos. **846/846 pruebas edu en verde**, incluidas las **22 nuevas** de
+`edu-visor.test.ts`: los dos números que tienen que coincidir entre CSS y JS, que no hay ni un
+`@container`, que la panorámica se importa y no está copiada, que las tres piezas del dental
+siguen puras, que `DicomSetViewer` sigue fuera del vertical, que el efecto de decodificar no
+depende del tamaño, y el reparto de columnas (que los cuatro cuadrados quepan siempre en el alto,
+en seis ventanas reales y raras).
+
+**La rejilla se midió en un navegador de verdad.** Como sin base de datos no hay estudio que
+abrir, se generó un banco estático que **recorta el CSS real de `edu-theme.css`** y reproduce la
+estructura que pinta `MprPane`, y se le pidieron sus rectángulos a Chrome en nueve ventanas. De
+ahí salen los números de la tabla de arriba. En 1400×820, por ejemplo: cuatro celdas de 335×336,
+335×336, 335×336 y 335×335, todas en `y=180`, separadas exactamente 343 px (335 + 8 de hueco), y
+la panorámica de 1364 px de borde a borde. Eso es "mismo tamaño, cuadrados, alineados", medido.
+
+### Lo que NO se probó
+
+- **Ningún CBCT real.** No hay base ni URL firmada en este entorno: la decodificación, la
+  auto-detección de la arcada, el reslice y el volumen 3D están razonados y compilados, **no
+  vistos con un estudio**. En particular no se cronometró cuánto tarda `autoDetectArch` sobre un
+  volumen de 668 cortes (cede el hilo con doble `rAF` y pinta su propio "Detectando arcada…",
+  pero el número no se midió).
+- **Ningún gesto táctil se hizo con un dedo.** No hubo aparato táctil: el reenvío de eventos está
+  escrito contra el código de `MprPane` que sí se leyó línea por línea, pero nadie lo tocó.
+- **No se verificó el re-medido en vivo** (ResizeObserver / `resize` / giro). La pestaña que
+  maneja el navegador automatizado corre en segundo plano y Chrome le congela `requestAnimationFrame`
+  y los ResizeObserver; el cálculo sí se ejecutó a mano en cada tamaño. El giro real de un iPad
+  no se ha visto.
+- **Pantalla completa nunca se activó**: la API requiere un gesto del usuario.
+- Nada corrió contra Postgres. **No hubo SQL** — esta rama no toca el esquema ni añade un
+  endpoint, y por eso no hay `sql/edu-visor.sql`.
+
+### Lo que se quiso tocar y NO se tocó
+
+- **El dental**: ni una línea. `PanoramicPane`, `arch-autodetect`, `panoramic-reslice`, `MprPane`,
+  `Dicom3DVolume`, `GeometryWarning` y `cbct-mpr-shared` se importan tal cual.
+- **`EduModal`**: se dejó exactamente como estaba, incluida su prop `wide` — que a partir de ahora
+  **no la usa nadie** (el visor era su único cliente). Quitarla habría sido tocar un archivo
+  compartido por medio vertical para borrar tres líneas muertas.
+- **La agenda, los casos, el padrón y los P2 de la auditoría**: son de `fix/edu-cierre`, que
+  corría en paralelo. Ni un archivo suyo se abrió.
+- **El binario "lite" de móvil**: sigue sin existir, sigue exigiendo un generador de servidor que
+  el instituto no tiene, y la pantalla lo sigue diciendo.
+- **Gestos dentro de la panorámica**: en el lienzo del trazado, con el dedo se pueden **añadir**
+  puntos (el navegador sintetiza el clic) pero no **arrastrarlos**. El camino normal es
+  "Auto-detectar", que no necesita el dedo; corregir la curva a mano sigue siendo cosa de ratón.
+## [Institucional Ola de Casos] — Antecedentes médicos que se VEN antes de infiltrar, y la pantalla de casos que la dirección no tenía: "[]" NO significa "sin alergias" ✅ (2026-08-31) · rama `feat/edu-casos`
+
+### El problema de fondo, y por qué era de seguridad
+
+`EduPatient` no guardaba alergias, padecimientos, medicamentos, tipo de sangre ni
+contacto de emergencia: un alumno a punto de infiltrar anestesia NO TENÍA FORMA de
+saber que el paciente es cardiópata, en una clínica que ya opera. Y el arreglo fácil
+—copiar el HeroCard del dental— habría copiado su bug: el dental pinta un chip verde
+("Sin alergias registradas") cuando `allergies.length === 0`, que es el DEFAULT de
+una fila que nadie revisó. Un paciente al que nadie le preguntó y uno que no refiere
+se veían idénticos. Esta ola separa los TRES estados con una columna
+(`historyRecordedAt`): null = "Sin antecedentes registrados" (chip ÁMBAR, tarea
+pendiente), con fecha y listas vacías = "Revisado: no refiere" (verde), con datos =
+los chips (alergias en ROJO, todas, sin tope — la cuarta es justo la que importa).
+Y si un import dejara datos SIN fecha, los datos mandan: jamás se esconde una
+alergia capturada detrás de un "sin registrar".
+
+### Las decisiones que no se leen del código
+
+- **Los chips viven en el LAYOUT de la ficha**, no en una pestaña: se ven en las
+  DIEZ pestañas. CAJA también los ve (ella los captura): cuelgan de
+  `pacientes.view`, no del alcance clínico. El encabezado además ganó sexo,
+  teléfono y correo — lo que antes obligaba a abrir "Datos" para llamar al
+  paciente.
+- **CERO keys de permiso nuevas.** Capturar antecedentes abre con DOS llaves
+  existentes —`pacientes.manage` (recepción) O `expediente.write` (la historia
+  clínica la completa el alumno con el paciente en el sillón)— por su propio
+  endpoint, con el patrón del WhatsApp de la ficha. Una key nueva no llega a nadie
+  con `permissionsOverride` guardado y habría exigido backfill en SQL. El paciente
+  se busca dentro del alcance de "patients": un alumno captura los de SUS
+  pacientes; el de otro contesta 404.
+- **Guardar es REEMPLAZAR el bloque y estampar `historyRecordedAt` +
+  `historyRecordedById` JUNTOS**: "revisé los antecedentes hoy, y quedó quién".
+  Guardar todo VACÍO es un dato válido — así se registra "no refiere". El único
+  formulario está en la pestaña Datos (el modal de la lista NO lo lleva: un campo,
+  un formulario). El saneo deduplica sin mayúsculas ni acentos ("Penicilina" y
+  "penicilina" son una), y el tipo de sangre solo acepta los 8 grupos ABO/Rh — el
+  "0+" con cero, el dedazo clásico, rebota con texto.
+- **El tipo de sangre y el resto son LOS MISMOS campos y tipos que el `Patient`
+  del dental** a propósito (comparables un día), pero en SU tabla: los dos
+  productos no comparten ni una fila. Del dental no se editó nada.
+- **/instituto/casos reusa TODO lo que ya existía**: el permiso `casos.view`, el
+  recorte `eduCaseScopeWhere` (alumno: los suyos, incluidos TRANSFERRED — su
+  historia; docente: sus vigentes; dirección: todos; caja: none dos veces), la
+  clase `.edu-table--casos` (definida desde la Ola 2 y sin un solo uso — esta ola
+  la reclamó, a 7 columnas) y los helpers de CSV de la Ola 6. La columna "QUÉ
+  ESPERA" se deriva de las autorizaciones guardadas (`eduCasoEsperando`,
+  casos-core): PENDING gana y nombra la etapa; "plan firmado: puede iniciar";
+  "falta mandar el plan" — la fila que dirección busca cuando un caso lleva un mes
+  quieto. La MISMA derivación pinta la ficha y el resumen: dos divergirían.
+- **El export CSV es LEER**: mismo guard, mismo alcance, MISMOS filtros (la query
+  string del enlace es la de la pantalla). Con la lista truncada (>300) el export
+  se NIEGA con 413 y texto — un CSV recortado en silencio es un reporte falso.
+- **Las OPCIONES de los filtros se recortan en el server (P1-4)**: a un docente le
+  viajan SUS alumnos vigentes (`listEduCurrentAssignments`), no el padrón; a un
+  alumno, ninguna lista. Filtro de docente solo con alcance completo.
+- **Las acciones del caso existen por primera vez.** El gate de la Ola 4 estaba
+  cableado en `updateEduCase` y NINGUNA pantalla mandaba `{status}` (hueco
+  documentado en la auditoría): los casos morían en "Asignado". Ahora la ficha del
+  caso trae: INICIAR TRATAMIENTO / DAR DE ALTA (el botón solo se pinta ACTIVO con
+  la puerta firmada; si falta, se DICE qué falta — nada de botones que rebotan),
+  PAUSAR/REANUDAR/ABANDONADO (sin firma, a propósito), FIRMAR una pendiente ahí
+  mismo (lo propio no se ofrece — `batchSkip === "propia"` viene del server; la
+  RECETA se firma en la bandeja, que tiene el campo de la cédula), REGISTRAR
+  SESIÓN (nota SOAP que nace BORRADOR, NOM-004) y TRASPASAR (destino recortado por
+  alcance; el server exige misma especialidad).
+- **El resumen subió de densidad sin abrirle nada a caja**: línea de tiempo
+  clínica (notas + estudios + consentimientos + recetas, mezclados desc, con QUIÉN
+  — un consentimiento revocado lo dice EN el título), estado+espera por caso, y
+  los últimos 3 estudios con miniatura FIRMADA solo si son imagen (3 firmas de
+  Storage como tope, nunca una por estudio). Para caja `timeline` y `estudios` son
+  null: NO SE CONSULTARON (la lección del P1-4). Alumno/docente siguen sin ver un
+  peso (recurso "charges", lista blanca).
+
+### Qué se construyó
+
+- **Schema (aditivo)**: 9 columnas en `EduPatient` (bloodType, allergies,
+  chronicConditions, currentMedications, emergencyContact×3, historyRecordedAt,
+  historyRecordedById) + relación `historyRecordedBy` (SetNull: perder el nombre
+  es aceptable, perder los antecedentes no).
+- **SQL**: `sql/edu-casos.sql` — idempotente, CERO DROP, sin backfill A PROPÓSITO
+  (ponerle fecha de revisión a mil filas que nadie revisó sería fabricar la
+  constancia que la columna existe para dar).
+- **Lib**: `casos-core.ts` (nuevo, puro: espera, filtros URL, CSV) ·
+  `listEduCasosPanel` en casos.ts · antecedentes en pacientes-core/pacientes.ts ·
+  timeline/estudios/espera en resumen-core/resumen.ts.
+- **APIs**: `PATCH /api/instituto/pacientes/[id]/antecedentes` ·
+  `GET /api/instituto/casos/export`.
+- **Pantallas**: `/instituto/casos` (server + `casos-screen.tsx`, filtros en la
+  URL como la agenda) · chips y encabezado en el layout de la ficha · tarjeta de
+  antecedentes en Datos · línea de tiempo y miniaturas en Resumen ·
+  `caso-acciones.tsx` en la pestaña Casos · item "Casos" en el menú (escondido a
+  caja también por alcance, como Agenda/Mi agenda).
+- **CSS**: sección nueva al final de edu-theme.css + `.edu-table--casos` a 7
+  columnas (estaba huérfana).
+
+### Qué se probó
+
+⚠️ **La ola se REBASÓ sobre el cierre (PR #146), que aterrizó en main a media
+tarea.** Receta de siempre (diff3): git auto-fusionó 5 de los 6 compartidos
+(schema, ORQUESTA, layout del panel, edu-shell, casos.ts) y el ÚNICO conflicto
+fue `types.ts` — de los del §2, con BASE no vacía: el cierre renombró
+`padron: "Padrón"` → `"Alumnos"` y esta ola insertó `casos: "Casos"` encima; la
+resolución son LOS DOS cambios. El candado de los dos diffs dio 2+2 líneas,
+todas explicadas (mis fusiones de imports en casos.ts; sus renombres pisando mi
+texto viejo). `prisma generate` INMEDIATO tras el schema (trampa del cliente
+viejo al revés: el cierre trajo `EduCharge.idempotencyKey`, verificado con grep
+en el .d.ts junto a `historyRecordedAt`). TODOS los gates se re-corrieron sobre
+el árbol rebasado:
+
+`npm run build` **exit 0** (✓ 462/462 páginas, tabla de rutas completa con
+`/instituto/casos`, `/api/instituto/casos/export` y
+`/api/instituto/pacientes/[id]/antecedentes` — más las del cierre; lanzado FUERA
+del job del tool vía WMI con marcador — el bg del tool lo mataba a medias;
+warnings preexistentes y el spam esperado de `DATABASE_URL` sin `.env`).
+`npx tsc --noEmit` limpio salvo los
+6 errores PREEXISTENTES de `src/lib/barber/__tests__` (documentados desde la
+integración) — la primera pasada cazó dos MÍOS: el tipo casero del mapa de iconos
+(se cambió a `LucideIcon`) y la unión discriminada del parse de antecedentes, que
+con el `strict: false` de este repo no se estrecha
+(se refactorizó al estilo veredicto de `EduGateVerdict`, campos siempre
+presentes). **881/881 pruebas edu en verde** (824 base + 23 del cierre + 34 de
+esta ola, `npx tsx --test src/lib/edu/__tests__/*.test.ts`), las 34 nuevas en
+`edu-casos.test.ts`: el tri-estado (incluido "los datos mandan sobre la fecha"),
+los chips (alergias sin tope, "+N" con detail, las palabras exactas del ámbar), el
+saneo (dedupe sin acentos, los 8 grupos de sangre, teléfono, todo-vacío válido),
+la espera del caso (PENDING gana, rechazado/vencido no cuentan como firmados), los
+filtros (roundtrip query↔parse, tenant jamás filtrable, rango al revés fuera), el
+CSV (BOM, anti-fórmula, comillas) y CANDADOS DE FUENTE al estilo de la auditoría
+(el export pasa por el guard y los mismos filtros; el PATCH exige una de las dos
+llaves; `updateEduPatientAntecedentes` busca dentro del alcance y estampa fecha y
+autor juntos; `listEduCasosPanel` recorta con `eduCaseScopeWhere`). Guardia limpia
+con `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`.
+
+### Lo que NO se probó
+
+Nada corrió contra Postgres: `sql/edu-casos.sql` NO se aplicó y ningún guardado de
+antecedentes, movimiento de caso, firma, sesión ni traspaso se ejecutó contra base
+real. No se abrió un navegador: los chips, la pantalla de casos, los modales y las
+miniaturas firmadas están razonados y compilados, no vistos. El CSV nunca se
+descargó de verdad. Las miniaturas dependen de `eduSignRead` contra el bucket
+`edu-files`, que jamás se ha tocado con un objeto real. Nadie ha capturado un
+antecedente real desde el producto.
+
+### Lo que se quiso tocar y NO se tocó
+
+- **El dental**: ni `Patient`, ni el HeroCard, ni `health-questionnaire`. El
+  patrón visual de los chips se REIMPLEMENTÓ en `edu-*` (importarlo arrastraría
+  su i18n y su bug de estado).
+- **El modal de la lista de pacientes**: NO ganó campos de antecedentes — el
+  formulario único vive en la ficha, donde está quien los captura.
+- **`listEduStudentOptions`**: se usa tal cual para dirección; su recorte para
+  docentes lo trae el cierre (PR #146, ya en main tras el rebase) y no se
+  duplicó aquí — para docentes esta ola usa `listEduCurrentAssignments`, que ya
+  venía recortada. Tras el rebase conviven sin pisarse.
+- **El tamizaje**: no captura antecedentes (abre el caso, no levanta historia).
+  Cabría un aviso "sin antecedentes" en su tarjeta; se dejó para no pisar
+  `tamizaje-screen.tsx`, que el cierre tocó en esta misma ventana.
+- **Firmar RECETAS desde la ficha del caso**: pide cédula; la bandeja ya tiene
+  ese campo y duplicarlo aquí era duplicar la validación de la Ola 14.
+
+### Al desplegar
+
+1. `sql/edu-casos.sql` en Supabase (después de `edu-ola-0.sql` y `edu-ola-2.sql`;
+   idempotente, CERO DROP). ⚠️ VA ANTES DEL DEPLOY O JUNTO CON ÉL: el cliente
+   nuevo pide las 9 columnas en CUALQUIER SELECT de `edu_patients` — sin ellas,
+   toda lectura de pacientes revienta (mismo trato que la searchIndex de la 1B).
+2. NO trae backfill de permisos: cero keys nuevas.
+3. Los dos SELECT de comprobación del final del .sql tienen que dar 9 y 1.
+
+## [Institucional · PAGOS A MESES] — El saldo de un cobro se parte en mensualidades ENTERAS (el residuo va completo en la PRIMERA), "vencida" la dice el CALENDARIO y no un cron, y el saldo se sigue derivando de los pagos ✅ (2026-08-31) · rama `feat/edu-pagos`
+
+### Qué es
+
+En una escuela el pago a plazos es la norma: el paciente eligió la clínica JUSTAMENTE porque es
+más barata. Hasta hoy un cobro se pagaba de una vez o quedaba con saldo suelto. Ahora un
+`EduCharge` con saldo se DIFIERE: `EduPaymentPlan` (meses, mensualidad pareja, día de corte,
+enganche congelado, estado, autor) + `EduInstallment` (número, monto, vencimiento, y el pago
+que la liquidó). El método de pago existente NO se tocó: pagar una mensualidad ES un
+`EduPayment` normal — mismo método, mismo turno, mismo corte.
+
+### Las tres decisiones que sostienen la caja
+
+- 🔴 **Los centavos no se pierden ni se inventan.** `eduPlanSplitCents` (pagos-core.ts, puro)
+  reparte el piso de la división y la diferencia ENTERA cae en la PRIMERA mensualidad:
+  $1,000.00 entre 3 son $333.34 + $333.33 + $333.33 — la suma da EXACTAMENTE el saldo. En la
+  primera y no en la última a propósito: se paga con el plan fresco, y si el plan se cancela a
+  la mitad, lo ya cobrado nunca fue "de más". Probado con totales que no dividen (incluido el
+  tope de un Int4).
+- 🔴 **VENCIDA no se guarda: se calcula.** En la base viven los HECHOS (`dueDate`, y
+  `paymentId` o su ausencia); `eduInstallmentStatus` deriva el estado EN CADA LECTURA contra
+  el hoy del INSTITUTO (`eduTodayISO`, su zona — a las 23:30 de México un hoy en UTC ya va en
+  mañana). "Vence hoy" sigue PENDIENTE todo el día (mismo criterio que el contrato). No hay
+  cron: no hay nada que pueda fallar y dejar la cartera diciendo "al corriente".
+- 🔴 **Nadie teclea un saldo ni un monto.** El saldo del plan se deriva de las mensualidades
+  sin pago; el del cobro se sigue derivando de los pagos reales. Pagar una mensualidad manda
+  MÉTODO y referencia — el monto es el congelado de la fila. Lo único guardado del plan son
+  los TÉRMINOS pactados (meses, mensualidad, corte, enganche), congelados al crear: acuerdo,
+  no acumuladores.
+
+### Cómo quedó armado
+
+- **Crear el plan** (`createEduPaymentPlan`, pagos.ts): UNA transacción — el candado de "un
+  solo plan ACTIVO por cobro" (dentro de la transacción, como el único turno abierto), la FOTO
+  del saldo reclamada con un `updateMany` condicional (si otro pago entró en medio, 409 y no
+  un calendario que no suma), el ENGANCHE opcional como pago normal, y el reparto + las
+  fechas. La primera mensualidad SIEMPRE vence el mes siguiente en el día de corte (default:
+  el día de hoy), y el corte se RECORTA al mes que lo aguante — corte 31 vence el 28 en
+  febrero (29 si el bisiesto alcanza) y en marzo vuelve a ser 31; correrlo pondría dos
+  mensualidades en el mismo mes.
+- **Pagar una mensualidad** (`payEduInstallment`): EN ORDEN (la más vieja sin pagar; pagada la
+  3 con la 1 vencida, "al corriente" y "vencida" serían verdad a la vez). El pago pasa por
+  `eduApplyEduPaymentInTx` — EXTRAÍDO de `addEduPayment` (#146): una función, dos llamadores,
+  para que el pago suelto y la mensualidad no puedan recalcular distinto — y la fila se
+  RECLAMA (`updateMany` con `paymentId: null`; si otra caja la cobró hace un instante, la
+  transacción entera se revierte). Si era la última, LIQUIDADO + `settledAt` en la MISMA
+  transacción.
+- **Cancelar** (`cancelEduPaymentPlan`, permiso `caja.refund`): con autor y motivo. Lo pagado
+  SE QUEDA (son pagos reales, están en su corte); el saldo vuelve a cobrarse normal o a
+  diferirse en un plan nuevo.
+- **Los candados nuevos en caja.ts**: un cobro con plan ACTIVO NO acepta pagos sueltos ni
+  devoluciones (un abono libre encima del plan dejaría el cobro en PAID con mensualidades
+  "pendientes" que nadie debe — dos verdades sobre el mismo dinero) ni se cancela por encima
+  del plan. Primero se cancela el plan; el mensaje lo dice. `CHARGE_SELECT` gana
+  `activePlanId` para que el recibo enlace al plan en vez de ofrecer botones que siempre
+  contestan que no.
+- **Pantallas** (móvil primero, clases edu-\*): `/instituto/caja/planes` (KPIs, VENCIDAS, "
+  vencen esta semana" [hoy, hoy+7) con las funciones puras, la tabla y el detalle con cobrar/
+  cancelar), `/instituto/caja/planes/[id]/recibo` (imprimible con `window.print()` como el
+  tablero de dirección: términos, calendario completo, firmas; instantes formateados en el
+  SERVIDOR en la zona del instituto), y `/instituto/pacientes/[id]/pagos` (sus mensualidades,
+  lo que debe y cuándo). En Caja, el modal Cobrar gana "¿Cómo paga?" → "A meses" (meses, día
+  de corte, enganche opcional, y la vista previa del reparto con LA MISMA función pura del
+  servidor), y el Recibo de un cobro con saldo gana "Pagar a meses". El flujo del modal son
+  DOS peticiones (cobro → plan): si la segunda falla, el cobro ya existe con su clave de
+  idempotencia (#146) y reintentar NO duplica — el mensaje lo explica.
+
+### Permisos: CERO keys nuevas
+
+`caja.view` abre las pantallas, `caja.charge` crea el plan y cobra mensualidades, `caja.refund`
+cancela. Una "planes.create" solo habría dado un segundo interruptor que apagar mal. La segunda
+cerradura es el ALCANCE (`eduPaymentPlanScopeWhere` / `eduInstallmentScopeWhere` en
+visibility.ts, recurso "charges": lista blanca DIRECCION/CAJA, todo o nada): 🔴 el ALUMNO no ve
+NADA de esto — ni el plan de su propio paciente — aunque le enciendan `caja.view` a mano.
+Probado por rol y por endpoint (el test recorre los cuatro route handlers y exige la key).
+
+### SQL
+
+`sql/edu-pagos.sql`, idempotente, **SIN APLICAR** como todos: 1 enum (`EduPaymentPlanStatus`),
+2 tablas (`edu_payment_plans`, `edu_installments`), 7 índices (2 únicos: `[planId, number]` y
+`paymentId` — un pago liquida UNA mensualidad), 8 FKs. CERO backfill de overrides: no hay keys
+nuevas. Va DESPUÉS de `edu-ola-5.sql`; en el orden general, al FINAL (tras `edu-cierre.sql`).
+
+### Qué se probó
+
+`npm run build` **exit 0** (✓ 462/462 páginas, tabla de rutas completa con las 4 APIs y las 3
+pantallas nuevas; "Compiled with warnings" por los preexistentes de `file-type` y el spam
+esperado de `DATABASE_URL` sin `.env`). `npx tsc --noEmit` limpio salvo los 6 PREEXISTENTES de
+`src/lib/barber/__tests__`. **873/873 pruebas edu en verde** (847 del cierre + 26 nuevas de
+`edu-pagos.test.ts`): el reparto con totales que NO dividen (suma exacta, residuo en la
+primera, parejas el resto), el recorte del día de corte (febrero, bisiesto, cruce de año),
+"vence hoy es hoy" y que el estado cambia con el hoy sin nada guardado, el resumen derivado,
+la ventana [hoy, hoy+7) con extremo EXCLUSIVO, el candado de tipos del enum, el alcance por
+rol (alumno: `id IN ()`), y las keys de los cuatro endpoints. La prueba
+P2-10 de `edu-cierre.test.ts` se actualizó CON LA INTENCIÓN INTACTA: el claim con `decrement`
+vive ahora en `eduApplyEduPaymentInTx` y la prueba exige además que `addEduPayment` PASE por
+él. De paso, la prueba nueva de fechas descubrió que `eduPlanDueDates` aceptaba "2026-13-01" y
+lo normalizaba en silencio (mes 13 → enero); se cierra en el módulo puro. Guardia limpia
+(20 propios + `prisma/schema.prisma` declarado).
+
+### Lo que NO se probó
+
+Nada corrió contra Postgres: `sql/edu-pagos.sql` NO se aplicó y ninguna transacción (crear
+plan, enganche, pagar mensualidad, liquidar, cancelar) se ejecutó contra base real — los
+claims condicionales y el candado de "un ACTIVO por cobro" están razonados y compilados, no
+ejercitados con concurrencia real. No se abrió un navegador: las pantallas, los modales y el
+recibo impreso (@media print) no se vieron pintados. Nadie ha cobrado una mensualidad real.
+
+### Lo que se quiso tocar y NO se tocó
+
+- **La ficha del paciente**: `/instituto/pacientes/[id]/pagos` es un ARCHIVO NUEVO que hereda
+  el layout (encabezado + pestañas), pero la lista `definicion` del layout NO se tocó — la
+  están rehaciendo las olas paralelas (visor/casos) y este encargo tenía prohibida la ficha.
+  Se llega desde Caja → Pagos a meses ("Ver al paciente") y por URL. La pestaña es UNA línea
+  al final de `definicion` (key "pagos", `permission: "caja.view"`) cuando toque integrar.
+- **El dental**: ni `PaymentPlan` ni `PlanPayment` (se leyeron como referencia — y como
+  contraejemplo: allá el monto es Float y el estado OVERDUE se guarda; aquí centavos enteros y
+  estado derivado).
+- **El corte de caja**: las mensualidades entran solas (son `EduPayment` con su
+  `cashSessionId`); ninguna suma del corte se modificó.
+- **Recordatorios de WhatsApp de mensualidades**: la Ola 9 manda carta/recibo/recordatorio de
+  CITA; avisar "te vence el día 15" es producto nuevo y no cabía sin tocar su cron.
+- **El folio propio del plan**: el recibo se identifica por el folio del COBRO (C-0012), como
+  la Ola 14 con la receta — un MAX+1 más con su carrera no pagaba su precio.
+
+### Al desplegar
+
+1. `sql/edu-pagos.sql` en Supabase (idempotente, CERO DROP), DESPUÉS de `edu-ola-5.sql` y en
+   el orden general al FINAL (tras `edu-cierre.sql`). ⚠️ Hasta que corra, TODA la caja del
+   vertical truena al leer cobros: `CHARGE_SELECT` ahora incluye `paymentPlans` y Prisma va a
+   pedir una tabla que no existe — es el mismo trato que la `searchIndex` de la Ola 1B y la
+   `cedulaProfesional` de la Ola 14, ahora en versión tabla. El SQL va ANTES del deploy o
+   junto con él.
+2. Los dos SELECT de comprobación del final del .sql deben dar 2 y 3.
+3. Nada de env nuevas, nada de cron nuevo, cero keys de permiso nuevas.
+---
+
+## [Institucional · TEXTOS] — El nombre de la escuela ya no se corta a media palabra, y "Alumno" se lee "Estudiante" en todo el vertical ✅ (2026-08-31) · rama `fix/edu-textos`
+
+**Qué era.** Dos arreglos de interfaz, cero lógica: (1) el sidebar cortaba el nombre del
+instituto a un renglón con ellipsis ("Institute Odontológico de Esp…") y no había forma de
+leerlo completo; (2) el dueño del producto prefiere "Estudiante" sobre "Alumno" en todo el
+texto visible.
+
+**El nombre (edu-shell.tsx + edu-theme.css).** El nombre envuelve ahora hasta DOS renglones
+cortando por palabra (`-webkit-line-clamp: 2`) y solo entonces trunca — el ellipsis del
+line-clamp cae en frontera de palabra, nunca a media palabra — con el nombre completo
+siempre en el `title`. En los DOS sitios donde se pinta: la clase nueva
+`.edu-sidebar__school` (sidebar/cajón; antes estilos inline con `nowrap`) y
+`.edu-topbar__name` (topbar móvil, donde no hay hover que rescate un title — por eso ahí
+también dos renglones y no solo un ellipsis "limpio"). El encabezado del panel (tarjeta
+"Instituto" de Inicio, `edu-card__value`) ya envolvía sin truncar; solo ganó
+`overflow-wrap: break-word` para el nombre-palabra patológico.
+
+**Alumno → Estudiante (264 reemplazos en 61 archivos: 252 por lista de líneas aprobadas +
+12 a mano).** Todo el texto visible: el menú ("Alumnos" → "Estudiantes": nav, `<h1>` y el
+`<title>` de la pestaña), la etiqueta del rol (EDU_ROLE_LABELS y EDU_ROLE_DESCRIPTIONS:
+chip del usuario, alta de cuentas, selector de rol), las 7 descripciones de permiso y el
+grupo "Estudiantes y docentes" del editor de permisos, los estados vacíos, los mensajes de
+"tu rol no ve esto" (padron-core, expediente-core, recetas-core, autorizaciones-core,
+visibility), los errores de EduPadronError, los placeholders (incluido el ejemplo CSV del
+alta masiva), la carta de consentimiento NOM-004 ("estudiante en formación" — solo cartas
+NUEVAS: las ya firmadas conservan el texto con el que se firmaron, como debe ser), el PDF
+de receta ("Estudiante de la especialidad"), los CSV de dirección y de bitácora
+(encabezados de columna y secciones "ESTUDIANTES ATRASADOS" / "ESTUDIANTES CON MÁS
+ACTIVIDAD"), el nombre de archivo `bitacora-estudiante-*.csv` y el prompt del análisis de
+IA (para que la respuesta generada tampoco escriba "alumno").
+
+**Lo que NO se renombró, a propósito.** El enum EduRole sigue siendo ALUMNO; las rutas
+(`/instituto/padron`), el modelo EduStudent, las keys de permiso (`padron.*`), las keys de
+drilldown de dirección (`cobrado-alumno`, `pacientes-sin-alumno`, `alumnos-sin-docente` —
+solo cambió su etiqueta), el query param `?alumno=`, los ids de DOM (`edu-ac-alumno`…),
+las clases CSS (`.edu-dir-alumno*`), los slots de contrafirma (`"alumno" | "docente"`) y
+todos los identificadores (alumnoId, esAlumno…). El parser del alta masiva sigue aceptando
+"alumno", "alumna" y "residente" como sinónimos de entrada — "estudiante" ya estaba.
+
+**Quedan 4 textos SIN cambiar, con motivo.** Cuatro mensajes de error en
+`src/app/api/instituto` (evaluacion, evaluacion/[id]/export, traspasos, calificaciones:
+"Ese alumno no es de este instituto." / "Dime de qué alumno (?alumno=).") viven FUERA de
+las carpetas permitidas de esta tarea y la guardia los rebota; dos de ellos además nombran
+el param `?alumno=`, que no se renombra. Van en una tarea que pueda tocar api/instituto.
+
+**Pruebas: 847/847 en verde.** SEIS aserciones de texto se actualizaron con la intención
+intacta: el conteo de copias de "Ese caso es de otro estudiante." (auditoría — sigue
+exigiendo UNA sola), `EDU_NAV_LABELS.padron === "Estudiantes"` (cierre-3), los motivos
+"N estudiantes medibles", las dos filas CONTROL del CSV de dirección, el bloque
+"ESTUDIANTES ATRASADOS" y `bitacora-estudiante-*.csv`. La de facturación con "Endodoncia
+(tarifa de alumno)" NO se tocó: es un fixture que verifica el copiado literal de conceptos
+del cobro al CFDI, no un texto del producto.
+
+**Gates.** `npm run build` exit 0 COMPLETO (461/461 páginas; único warning: el
+preexistente de file-type en ai-wallet). `npx tsc --noEmit` solo con los 6 errores
+PREEXISTENTES de `src/lib/barber/__tests__` (ambos comandos con
+`NODE_OPTIONS=--max-old-space-size=8192`). Guardia limpia con
+`EDU_GUARD_SHARED="ORQUESTA.md"`: 67 archivos del vertical + este reporte. Barrido
+anti-mojibake limpio (el único "RodrÃ­guez" del árbol es el ejemplo INTENCIONAL del
+comentario de eduCsvRow, idéntico en main).
+
+**Lo que no se vio.** Sin navegador ni base en esta sesión: el clamp de dos renglones está
+compilado y razonado contra el CSS real, no visto en Chrome con un nombre largo de verdad.
+PR contra `main`, SIN mergear.
+
+## [Institucional · INTEGRACIÓN 3] — Visor, Casos, Pagos a meses y Textos en una sola rama: cuatro ramas que no se pisaron en el código, pero sí en el idioma ✅ (2026-08-31) · rama `edu/integracion3`
+
+### Qué es
+
+Las cuatro ramas terminadas del vertical, fusionadas en `edu/integracion3` sobre `origin/main`
+(`da4ce2ee`), en este orden y con merge normal (sin rebase):
+
+| # | Rama | HEAD | Qué trae |
+|---|------|------|----------|
+| 1 | `feat/edu-visor` | `09695cba` | La PANORÁMICA que el DICOM no trae (se calcula), paneles cuadrados medidos en JS, la hoja a pantalla completa y gestos táctiles. |
+| 2 | `feat/edu-casos` | `d497bc45` | Antecedentes médicos con TRI-ESTADO (`"[]"` ≠ "sin alergias"), chips en el layout de la ficha, `/instituto/casos` con filtros/buscador/CSV, y el gate de la Ola 4 con botones. |
+| 3 | `feat/edu-pagos` | `e5f7353d` | Pagos a meses: el residuo de los centavos ENTERO en la 1ª mensualidad, "vencida" la dice el CALENDARIO (sin cron), y el saldo se sigue derivando de los pagos. |
+| 4 | `fix/edu-textos` | `d6dd1d08` | TODO lo visible dice "Estudiante" (el enum sigue `ALUMNO`; rutas, keys y params intactos) y el nombre de la escuela cabe en dos renglones. |
+
+`fix/edu-textos` va AL FINAL a propósito: es la rama que renombra, y las otras tres escriben
+texto nuevo. Aun así el orden no basta — ver el barrido, más abajo.
+
+### Los conflictos, y cómo se resolvieron
+
+Solo dos archivos conflictuaron, los dos en el merge de `feat/edu-pagos`, y los dos del tipo
+"las dos ramas agregaron al FINAL". En ninguno se borró un lado:
+
+- 🔴 **`src/app/instituto/edu-theme.css`** — casos y pagos abrieron cada uno su sección al pie
+  del archivo con el MISMO banner (`/* ═══…`), así que git tomó esa línea como contexto común
+  y dejó los dos bloques enfrentados con la llave de cierre del archivo FUERA del conflicto.
+  Un "quedarse con los dos" literal habría dejado `.edu-form-acciones` sin cerrar y la llave
+  final cerrando el `@media print` de pagos. Se resolvió reconstruyendo el archivo como
+  `main + visor + casos` COMPLETO (con su llave) seguido del bloque íntegro que pagos agrega
+  al final (121 líneas, banner incluido): 6 433 líneas, las dos secciones enteras.
+- **`src/lib/edu/types.ts`** — dos bloques de comentario-índice (rutas y APIs) donde casos y
+  pagos apilaron sus líneas. Se conservaron los dos juegos, casos primero y pagos después.
+
+Auto-mergeados sin conflicto pero VERIFICADOS uno por uno (cada línea que la rama agregaba,
+comprobada en el árbol resultante):
+
+- `prisma/schema.prisma` — casos añade 9 columnas y 1 relación a `EduPatient`/`EduUser`; pagos
+  añade el enum `EduPaymentPlanStatus` y los modelos `EduPaymentPlan` y `EduInstallment`. Los
+  dos bloques presentes, cero pérdidas.
+- `ORQUESTA.md` — los tres reportes (visor, casos, pagos) completos y en orden.
+- `src/lib/edu/casos.ts`, `resumen-core.ts`, `pacientes.ts`, `visibility.ts`,
+  `src/components/edu/edu-shell.tsx`, `src/app/instituto/(panel)/pacientes/[id]/casos/page.tsx`,
+  `src/lib/edu/__tests__/edu-cierre.test.ts` — el renombre de textos se aplicó sobre el código
+  nuevo de casos/pagos sin perder ninguna de las dos partes.
+
+### El barrido de "alumno" → "Estudiante" (lo que el orden de merge NO arregla)
+
+`feat/edu-casos` se escribió ANTES que `fix/edu-textos`, así que reintrodujo "alumno" en texto
+visible. Mergear textos al final no lo toca: git no renombra lo que no existía cuando la rama
+se escribió. **17 cadenas visibles** cambiadas, en 5 archivos, todas de la rama de casos:
+
+- `src/components/edu/casos/caso-acciones.tsx` (9) — el error de "elige a quién recibe el caso",
+  el aviso del traspaso, el motivo mínimo del rechazo, el "Firmado…", los dos avisos del gate
+  (plan y alta), las dos frases del modal de traspaso y el `<option>` vacío del desplegable.
+- `src/components/edu/casos/casos-screen.tsx` (4) — la etiqueta del filtro, el vacío del
+  tamizaje y las dos cabeceras de la columna (la del `edu-rowhead` y la del `edu-cell__label`).
+- `src/app/instituto/(panel)/casos/page.tsx` (2) — el `what` de `EduDenied` y el lead del
+  DOCENTE.
+- `src/components/edu/expediente/antecedentes-card.tsx` (1) — el "pídele a recepción o al
+  estudiante del caso que los capture" del banner ámbar.
+- `src/lib/edu/casos-core.ts` (1) — la cabecera de la columna en el **CSV** de
+  `buildEduCasosCsv`. Fuera de las dos carpetas del barrido, pero es la misma columna de la
+  tabla que sí se renombró, y todas las demás cabeceras CSV del vertical (`direccion-core.ts`,
+  `evaluacion.ts`) ya decían "Estudiante".
+
+**Lo que NO se tocó, a propósito:** el enum `EduRole` y el valor `ALUMNO`, las keys de permiso,
+las rutas, el query-param `?alumno=` de agenda y casos, los ids de `<label for>`/`<select id>`
+(`edu-casos-alumno`, `edu-acc-alumno`…), las props y variables (`alumnos`, `alumnosDestino`,
+`elegirAlumno`, `esAlumno`, `FilaAlumno`…), los campos de base, las keys de los tableros de
+dirección (`cobrado-alumno`, `pacientes-sin-alumno`, `alumnos-sin-docente`), el sinónimo de
+import de equipo (`parseEduTeamRole("Alumno") → "ALUMNO"`, con test que lo fija) y los
+comentarios de código. El barrido se hizo con un script que ignora comentarios y exige que
+cada cadena aparezca EXACTAMENTE una vez antes de sustituirla.
+
+`feat/edu-visor` y `feat/edu-pagos` se revisaron igual: sus únicos "alumno" están en
+comentarios de código. Cero cambios ahí.
+
+**Pendiente conocido, NO tocado** (fuera de `src/app/instituto` y `src/components/edu`, y
+anterior a esta integración): cuatro mensajes de error en `src/app/api/instituto/` siguen
+diciendo "alumno" — `evaluacion/route.ts:33`, `evaluacion/[id]/export/route.ts:35`
+("Ese alumno no es de este instituto."), `traspasos/route.ts:23` y `calificaciones/route.ts:37`
+("Dime de qué alumno (?alumno=)."). Son los cuatro que ya venían anotados como deuda de
+`fix/edu-textos`; se dejan para una pasada propia porque comparten línea con el nombre del
+query-param, que no se renombra.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
+  `prisma generate` corrió limpio (sin EPERM), 463/463 páginas generadas, tabla de rutas
+  entera. Las seis rutas nuevas están en ella: `/instituto/casos`, `/instituto/caja/planes`,
+  `/instituto/caja/planes/[id]/recibo`, `/instituto/pacientes/[id]/pagos`,
+  `/api/instituto/casos/export` y `/api/instituto/pacientes/[id]/antecedentes` (más
+  `/api/instituto/caja/{cobros/[id]/plan, planes, planes/[id]/cancelar,
+  mensualidades/[id]/pagar}`). Los únicos warnings son los PREEXISTENTES y ajenos al vertical:
+  el `Critical dependency` de `file-type` en `api/ai-wallet/spei/topup` y dos clases ambiguas
+  de Tailwind en marketplace/onboarding. El spam de `Environment variable not found:
+  DATABASE_URL` es el de siempre (worktree sin `.env`) y no afecta el exit.
+- **Los 28 tests del vertical, uno por uno** (`npx tsx --test src/lib/edu/__tests__/<archivo>`):
+  **929 pass, 0 fail**. Ninguno tuvo que tocarse por el barrido — el rename no cruzó ninguna
+  aserción.
+- **Guardia:** `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs`
+  → **exit 0**. 107 archivos cambiados vs `origin/main`: 105 propios del vertical y los 2
+  compartidos declarados. Cero prohibidos: ni una línea del dental, de barbería o de
+  inmuebles.
+- **Raíz del repo limpia:** el único archivo de raíz que cambia es `ORQUESTA.md`. Los `.log` y
+  `.sql` sueltos que hay ahí (`install-integ-final.log`, `mediflow-create-tables.sql`,
+  `migration_*.sql`) ya venían en `origin/main` y no son de esta integración.
+
+### El SQL, en orden de aplicación
+
+Ninguno de los dos está aplicado todavía, y ninguno depende del otro. **Los dos son
+OBLIGATORIOS antes del deploy** — el cliente Prisma nuevo ya pide sus columnas y tablas.
+
+1. **`sql/edu-casos.sql`** — 9 columnas de antecedentes en `edu_patients` + la FK
+   `historyRecordedById → edu_users` (SET NULL). Asume aplicados `sql/edu-ola-0.sql`
+   (`edu_users`) y `sql/edu-ola-2.sql` (`edu_patients`). Sin él, CUALQUIER `SELECT` de
+   `edu_patients` revienta con "column does not exist". No trae backfill a propósito: la fecha
+   de revisión en NULL es justamente lo que significa "nadie los ha capturado".
+2. **`sql/edu-pagos.sql`** — el enum `EduPaymentPlanStatus`, las tablas `edu_payment_plans` y
+   `edu_installments`, 7 índices y 8 FKs. Asume aplicado `sql/edu-ola-5.sql` (`edu_charges`,
+   `edu_payments`, `edu_patients`, `edu_users`, `edu_institutions`) y, por el orden general del
+   vertical, va DESPUÉS de `sql/edu-cierre.sql`. Cero backfill de permisos: el plan reusa
+   `caja.view` / `caja.charge` / `caja.refund`.
+
+Los dos son idempotentes (comprueban existencia antes de crear, CERO `DROP`), así que correrlos
+dos veces no rompe nada. `feat/edu-visor` y `fix/edu-textos` no traen SQL.
+
+### Lo que no se vio
+
+Sin navegador ni base de datos en esta sesión: la panorámica del visor, la tabla de planes, el
+recibo imprimible y los chips de antecedentes están compilados y con sus tests de lógica en
+verde, pero no vistos en Chrome contra datos reales. Tampoco se aplicó ni se probó el SQL
+—esta rama no toca la base—. PR contra `main`, SIN mergear.

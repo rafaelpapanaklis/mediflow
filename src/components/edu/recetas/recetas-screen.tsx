@@ -434,7 +434,7 @@ export function EduRecetasScreen({
           <div className="edu-empty">
             <p className="edu-empty__title">Sin recetas que mostrarte</p>
             <p className="edu-empty__detail">
-              Aquí el alumno propone la receta y el docente con cédula la expide: hasta esa firma no
+              Aquí el estudiante propone la receta y el docente con cédula la expide: hasta esa firma no
               hay papel que entregar. Las que te toquen de este paciente saldrán aquí con su estado.
             </p>
           </div>
@@ -446,7 +446,7 @@ export function EduRecetasScreen({
       {editor && (
         <EduModal
           title={editor.recetaId ? "Editar receta" : "Nueva receta"}
-          subtitle="El alumno propone; el docente con cédula la expide desde su bandeja."
+          subtitle="El estudiante propone; el docente con cédula la expide desde su bandeja."
           busy={guardando}
           onClose={() => setEditor(null)}
           footer={

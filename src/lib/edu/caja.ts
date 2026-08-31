@@ -155,6 +155,15 @@ const CHARGE_SELECT = {
       receivedBy: { select: { firstName: true, lastName: true, email: true } },
     },
   },
+  // Pagos a meses: el plan ACTIVO, si hay (a lo sumo uno — lo garantiza la
+  // transacción que crea planes). Con esto el recibo puede decir "este
+  // cobro se paga a meses" y esconder el pago suelto que el servidor
+  // rebotaría de todos modos.
+  paymentPlans: {
+    where: { status: "ACTIVO" },
+    take: 1,
+    select: { id: true },
+  },
 } satisfies Prisma.EduChargeSelect;
 
 type ChargePayload = Prisma.EduChargeGetPayload<{ select: typeof CHARGE_SELECT }>;
@@ -200,6 +209,7 @@ function toChargeRow(c: ChargePayload): EduChargeRow {
       paidAt: p.paidAt.toISOString(),
       receivedByName: persona(p.receivedBy),
     })),
+    activePlanId: c.paymentPlans[0]?.id ?? null,
   };
 }
 
@@ -705,16 +715,143 @@ function parsePago(input: EduPaymentInput, maxCents: number, canRefund?: boolean
 }
 
 /**
+ * APLICA un pago (o una devolución) dentro de una transacción YA abierta:
+ * reclama el tope, crea la fila y recalcula el cobro desde los pagos
+ * reales. Es el ÚNICO camino por el que un pago toca `paidCents`.
+ *
+ * Existe con esta forma porque tiene DOS llamadores que no pueden
+ * discrepar en un centavo: `addEduPayment` (el pago suelto del mostrador)
+ * y `payEduInstallment` (src/lib/edu/pagos.ts — la mensualidad de un plan,
+ * que además engancha la fila y quizá liquida el plan EN LA MISMA
+ * transacción). Dos copias de este bloque son dos formas de recalcular un
+ * saldo, y esa es exactamente la clase de par que un día no cuadra.
+ *
+ * Lo que NO hace: permisos, alcance ni validación del monto. Eso es del
+ * llamador, ANTES de abrir la transacción.
+ */
+export interface EduPagoAplicar {
+  institutionId: string;
+  chargeId: string;
+  method: EduPaymentMethod;
+  /** Centavos POSITIVOS, ya validados contra su tope por el llamador. */
+  amountCents: number;
+  isRefund: boolean;
+  reference: string | null;
+  notes: string | null;
+  paidAt: Date;
+  receivedByUserId: string;
+  /** El turno ABIERTO AL PAGAR (o null): lo consulta el llamador. */
+  cashSessionId: string | null;
+}
+
+export async function eduApplyEduPaymentInTx(
+  tx: Prisma.TransactionClient,
+  pago: EduPagoAplicar,
+): Promise<{ paymentId: string; status: string; balanceCents: number; paidCents: number }> {
+  const { institutionId, chargeId: id } = pago;
+
+  // ── 🔴 P2-10 (la ventana del tope) · EL TOPE SE RECLAMA AQUÍ DENTRO ──
+  // El tope que validó el llamador se leyó FUERA de la transacción: dos
+  // pagos simultáneos podían pasarlo los dos y dejar `paidCents` por encima
+  // del total. Este updateMany condicional lo cierra de verdad: solo pasa
+  // si a la fila TODAVÍA le cabe el monto, y el decremento toma el candado
+  // de la fila — el segundo pago simultáneo se queda esperando y, cuando
+  // el primero confirma, su condición se reevalúa contra el valor ya
+  // escrito y rebota si ya no cabe.
+  //
+  // El decremento es PROVISIONAL a propósito: veinte líneas más abajo el
+  // recálculo desde los pagos reales reescribe las dos columnas con la
+  // verdad. Lo que este update compra no es el número — es el candado y
+  // la condición.
+  const cabe = await tx.eduCharge.updateMany({
+    where: pago.isRefund
+      ? { id, institutionId, status: { not: "CANCELLED" }, paidCents: { gte: pago.amountCents } }
+      : { id, institutionId, status: { not: "CANCELLED" }, balanceCents: { gte: pago.amountCents } },
+    data: pago.isRefund
+      ? { paidCents: { decrement: pago.amountCents } }
+      : { balanceCents: { decrement: pago.amountCents } },
+  });
+  if (cabe.count === 0) {
+    throw new EduPadronError(
+      pago.isRefund
+        ? "Ese cobro cambió mientras devolvías (otro movimiento entró antes). Recarga y revisa lo pagado."
+        : "Ese cobro cambió mientras cobrabas (otro pago entró antes). Recarga y revisa el saldo.",
+      409,
+    );
+  }
+
+  const creado = await tx.eduPayment.create({
+    data: {
+      institutionId,
+      chargeId: id,
+      method: pago.method,
+      amountCents: pago.amountCents,
+      isRefund: pago.isRefund,
+      reference: pago.reference,
+      notes: pago.notes,
+      paidAt: pago.paidAt,
+      receivedByUserId: pago.receivedByUserId,
+      cashSessionId: pago.cashSessionId,
+    },
+    select: { id: true },
+  });
+
+  const pagos = await tx.eduPayment.findMany({
+    where: { institutionId, chargeId: id },
+    select: { amountCents: true, isRefund: true },
+  });
+
+  let paidCents = 0;
+  let hasRefund = false;
+  for (const p of pagos) {
+    if (p.isRefund) {
+      paidCents -= p.amountCents;
+      hasRefund = true;
+    } else {
+      paidCents += p.amountCents;
+    }
+  }
+  paidCents = Math.max(0, paidCents);
+
+  const actual = await tx.eduCharge.findUniqueOrThrow({
+    where: { id },
+    select: { totalCents: true },
+  });
+  const status = eduChargeStatusFor({
+    cancelled: false,
+    totalCents: actual.totalCents,
+    paidCents,
+    hasRefund,
+  });
+  const balanceCents = Math.max(0, actual.totalCents - paidCents);
+
+  await tx.eduCharge.update({
+    where: { id },
+    data: { paidCents, balanceCents, status },
+  });
+
+  return { paymentId: creado.id, status, balanceCents, paidCents };
+}
+
+/**
  * Registra un pago o una devolución y recalcula el cobro.
  *
  * 🔴 El recálculo va DENTRO de la transacción y a partir de los pagos
  * REALES, no sumándole el monto nuevo a la columna. Sumar sobre la columna
  * es cómo dos pagos simultáneos acaban contando uno solo: los dos leen
- * 0, los dos escriben 500, y el paciente pagó 1000.
+ * 0, los dos escriben 500, y el paciente pagó 1000. Todo eso vive en
+ * `eduApplyEduPaymentInTx`, que comparte con el pago de una mensualidad.
  *
  * 🔴 El turno que se estampa es el del PAGO, no el del cobro. Un cobro de
  * ayer que se liquida hoy entra en el corte de HOY, porque el dinero está
  * en la caja de hoy.
+ *
+ * 🔴 UN COBRO CON PLAN DE PAGOS ACTIVO NO ACEPTA PAGOS SUELTOS. Sus
+ * mensualidades son el único camino (pagos.ts): un abono libre encima del
+ * plan dejaría el cobro en PAID con mensualidades "pendientes" que ya no
+ * se le deben a nadie — dos verdades sobre el mismo dinero. Ni
+ * devoluciones: primero se cancela el plan (caja.refund, el mismo permiso)
+ * y el cobro vuelve a moverse normal.
  */
 export async function addEduPayment(
   ctx: EduClinicaContext,
@@ -754,87 +891,37 @@ export async function addEduPayment(
   const sesion = await getEduOpenCashSession(ctx);
 
   const resultado = await prisma.$transaction(async (tx) => {
-    // ── 🔴 P2-10 (la ventana del tope) · EL TOPE SE RECLAMA AQUÍ DENTRO ──
-    // El tope de arriba se leyó FUERA de la transacción: dos pagos
-    // simultáneos podían pasarlo los dos y dejar `paidCents` por encima del
-    // total. Este updateMany condicional lo cierra de verdad: solo pasa si
-    // a la fila TODAVÍA le cabe el monto, y el decremento toma el candado
-    // de la fila — el segundo pago simultáneo se queda esperando y, cuando
-    // el primero confirma, su condición se reevalúa contra el valor ya
-    // escrito y rebota si ya no cabe.
-    //
-    // El decremento es PROVISIONAL a propósito: veinte líneas más abajo el
-    // recálculo desde los pagos reales reescribe las dos columnas con la
-    // verdad. Lo que este update compra no es el número — es el candado y
-    // la condición.
-    const cabe = await tx.eduCharge.updateMany({
-      where: pago.isRefund
-        ? { id, institutionId, status: { not: "CANCELLED" }, paidCents: { gte: pago.amountCents } }
-        : { id, institutionId, status: { not: "CANCELLED" }, balanceCents: { gte: pago.amountCents } },
-      data: pago.isRefund
-        ? { paidCents: { decrement: pago.amountCents } }
-        : { balanceCents: { decrement: pago.amountCents } },
+    // 🔴 El candado del plan, DENTRO de la transacción: un plan creado un
+    // instante antes también cuenta. Se pregunta aquí y no en el helper
+    // porque el pago de una MENSUALIDAD paga precisamente un cobro con
+    // plan activo — para él esto no es un error, es el caso normal.
+    const plan = await tx.eduPaymentPlan.findFirst({
+      where: { institutionId, chargeId: id, status: "ACTIVO" },
+      select: { id: true },
     });
-    if (cabe.count === 0) {
+    if (plan) {
       throw new EduPadronError(
         pago.isRefund
-          ? "Ese cobro cambió mientras devolvías (otro movimiento entró antes). Recarga y revisa lo pagado."
-          : "Ese cobro cambió mientras cobrabas (otro pago entró antes). Recarga y revisa el saldo.",
+          ? "Ese cobro tiene un plan de pagos activo. Cancela primero el plan (pide el mismo permiso) y después devuelve el dinero."
+          : "Ese cobro se paga a meses: cóbralo por sus mensualidades, en Caja → Pagos a meses. Si el plan ya no va, cancélalo y el saldo vuelve a cobrarse normal.",
         409,
       );
     }
 
-    const creado = await tx.eduPayment.create({
-      data: {
-        institutionId,
-        chargeId: id,
-        method: pago.method,
-        amountCents: pago.amountCents,
-        isRefund: pago.isRefund,
-        reference: pago.reference,
-        notes: pago.notes,
-        paidAt: now,
-        receivedByUserId: ctx.eduUserId,
-        cashSessionId: sesion?.id ?? null,
-      },
-      select: { id: true },
+    const aplicado = await eduApplyEduPaymentInTx(tx, {
+      institutionId,
+      chargeId: id,
+      method: pago.method,
+      amountCents: pago.amountCents,
+      isRefund: pago.isRefund,
+      reference: pago.reference,
+      notes: pago.notes,
+      paidAt: now,
+      receivedByUserId: ctx.eduUserId,
+      cashSessionId: sesion?.id ?? null,
     });
 
-    const pagos = await tx.eduPayment.findMany({
-      where: { institutionId, chargeId: id },
-      select: { amountCents: true, isRefund: true },
-    });
-
-    let paidCents = 0;
-    let hasRefund = false;
-    for (const p of pagos) {
-      if (p.isRefund) {
-        paidCents -= p.amountCents;
-        hasRefund = true;
-      } else {
-        paidCents += p.amountCents;
-      }
-    }
-    paidCents = Math.max(0, paidCents);
-
-    const actual = await tx.eduCharge.findUniqueOrThrow({
-      where: { id },
-      select: { totalCents: true },
-    });
-    const status = eduChargeStatusFor({
-      cancelled: false,
-      totalCents: actual.totalCents,
-      paidCents,
-      hasRefund,
-    });
-    const balanceCents = Math.max(0, actual.totalCents - paidCents);
-
-    await tx.eduCharge.update({
-      where: { id },
-      data: { paidCents, balanceCents, status },
-    });
-
-    return { id: creado.id, status, balanceCents };
+    return { id: aplicado.paymentId, status: aplicado.status, balanceCents: aplicado.balanceCents };
   });
 
   return resultado;
@@ -878,12 +965,35 @@ export async function cancelEduCharge(
     );
   }
 
+  // Pagos a meses: un cobro con plan ACTIVO no se cancela por encima del
+  // plan — quedaría un calendario vivo cobrando mensualidades de un cobro
+  // que ya no existe. Primero se cancela el plan (mismo permiso,
+  // caja.refund), después el cobro.
+  const plan = await prisma.eduPaymentPlan.findFirst({
+    where: { institutionId, chargeId: id, status: "ACTIVO" },
+    select: { id: true },
+  });
+  if (plan) {
+    throw new EduPadronError(
+      "Ese cobro tiene un plan de pagos activo. Cancela primero el plan y después el cobro.",
+      409,
+    );
+  }
+
   // P2-10 (la misma familia): condicionado a que SIGA sin dinero y sin
   // cancelar. Sin la condición, un pago que entrara entre la lectura de
   // arriba y este update dejaría un cobro CANCELADO con dinero dentro — el
   // pago quedaría sin cobro al que pertenecer y el corte no cuadraría.
+  // Y `paymentPlans: none ACTIVO` por lo mismo: la lectura del plan de
+  // arriba también fue fuera de la transacción.
   const res = await prisma.eduCharge.updateMany({
-    where: { id, institutionId, status: { not: "CANCELLED" }, paidCents: 0 },
+    where: {
+      id,
+      institutionId,
+      status: { not: "CANCELLED" },
+      paidCents: 0,
+      paymentPlans: { none: { status: "ACTIVO" } },
+    },
     data: {
       status: "CANCELLED",
       // 🔴 CERO. Un cobro anulado no se le debe a nadie.
@@ -895,7 +1005,7 @@ export async function cancelEduCharge(
   });
   if (res.count === 0) {
     throw new EduPadronError(
-      "Ese cobro cambió mientras lo cancelabas (entró un pago o alguien lo canceló antes). Recarga la pantalla.",
+      "Ese cobro cambió mientras lo cancelabas (entró un pago, un plan de pagos, o alguien lo canceló antes). Recarga la pantalla.",
       409,
     );
   }

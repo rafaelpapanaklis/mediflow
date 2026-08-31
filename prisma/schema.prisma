@@ -12441,6 +12441,10 @@ model EduInstitution {
   // modelos viven al FINAL del archivo, con su propio encabezado.
   prescriptions      EduPrescription[]
   prescriptionItems  EduPrescriptionItem[]
+  // Pagos a meses. Bloque ADITIVO al final de las relaciones: los
+  // modelos viven al FINAL del archivo, con su propio encabezado.
+  paymentPlans       EduPaymentPlan[]
+  installments       EduInstallment[]
 
   @@map("edu_institutions")
 }
@@ -12493,6 +12497,7 @@ model EduUser {
   casesSupervised        EduCase[]        @relation("EduCaseSupervisor")
   appointmentsSupervised EduAppointment[] @relation("EduApptSupervisor")
   patientOriginsSet      EduPatient[]     @relation("EduPatientOriginSetBy")
+  patientHistoriesSet    EduPatient[]     @relation("EduPatientHistoryBy")
 
   /// Ola 3. NOM-004: el AUTOR de una nota clínica siempre es identificable,
   /// y es un EduUser (no un EduStudent) porque también escribe el docente.
@@ -12563,6 +12568,12 @@ model EduUser {
   prescriptionsProposed EduPrescription[] @relation("EduRecetaProposedBy")
   prescriptionsIssued   EduPrescription[] @relation("EduRecetaIssuedBy")
   prescriptionsVoided   EduPrescription[] @relation("EduRecetaVoidedBy")
+
+  /// Pagos a meses. Dos columnas de AUTORÍA del dinero, como las de la
+  /// Ola 5: quién armó el plan y quién lo canceló. Ninguna decide
+  /// visibilidad.
+  paymentPlansCreated   EduPaymentPlan[] @relation("EduPlanCreatedBy")
+  paymentPlansCancelled EduPaymentPlan[] @relation("EduPlanCancelledBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12894,12 +12905,44 @@ model EduPatient {
   originSetById       String?
   originSetAt         DateTime?
 
+  /// ── ANTECEDENTES MÉDICOS (ola de Casos) — ES SEGURIDAD, NO ESTÉTICA ──
+  /// Un alumno a punto de infiltrar anestesia tiene que poder ver que el
+  /// paciente es cardiópata SIN abrir nada. Mismos campos y tipos que el
+  /// `Patient` del dental (allergies/chronicConditions/currentMedications/
+  /// bloodType/emergencyContact*) a propósito, para poderlos comparar un
+  /// día — pero en SU tabla: los dos productos no comparten ni una fila.
+  ///
+  /// 🔴 ARREGLO VACÍO ≠ "SIN ALERGIAS". `[]` es el default de una fila que
+  /// NADIE ha revisado. Lo que distingue "sin antecedentes registrados" de
+  /// "se le preguntó y no refiere" es `historyRecordedAt`: null = nadie los
+  /// ha capturado (la ficha lo AVISA), con fecha = alguien los revisó (y
+  /// quedó quién). Confundir esos dos estados es como se mata a alguien.
+  ///
+  /// Columnas reales en sql/edu-casos.sql (ADD COLUMN IF NOT EXISTS).
+  /// APLICARLO ANTES del deploy: si Prisma las lee sin que existan,
+  /// cualquier lectura de edu_patients revienta
+  /// (mismo trato que la searchIndex de la Ola 1B).
+  bloodType          String?
+  allergies          String[] @default([])
+  chronicConditions  String[] @default([])
+  currentMedications String[] @default([])
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+  /// Cuándo se capturaron/revisaron por última vez y quién. Se escriben
+  /// JUNTOS en cada guardado de antecedentes; nunca por separado.
+  historyRecordedAt   DateTime?
+  historyRecordedById String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   institution      EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   referredByStudent EduStudent?   @relation("EduPatientReferrer", fields: [referredByStudentId], references: [id], onDelete: SetNull)
   originSetBy       EduUser?      @relation("EduPatientOriginSetBy", fields: [originSetById], references: [id], onDelete: SetNull)
+  /// Ola de Casos: quién capturó los antecedentes. SetNull — perder el
+  /// nombre es aceptable, perder los antecedentes no.
+  historyRecordedBy EduUser?      @relation("EduPatientHistoryBy", fields: [historyRecordedById], references: [id], onDelete: SetNull)
   cases        EduCase[]
   appointments EduAppointment[]
   /// Ola 3 · el expediente. El ODONTOGRAMA y los ESTUDIOS cuelgan del
@@ -12922,6 +12965,9 @@ model EduPatient {
   /// Ola 14: sus recetas. Se leen con el alcance CLÍNICO ("cases"), no con
   /// el del paciente: una receta es un documento clínico y caja no la ve.
   prescriptions EduPrescription[]
+  /// Pagos a meses: sus planes de pago. Se leen con el alcance del DINERO
+  /// ("charges"), como los cobros de los que cuelgan.
+  paymentPlans  EduPaymentPlan[]
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -13743,6 +13789,12 @@ model EduCharge {
   /// facturar. Que solo haya UNA viva a la vez lo garantiza el índice
   /// único de EduInvoice sobre "activeChargeId", no esta relación.
   invoices    EduInvoice[]
+  /// Pagos a meses: sus planes. LISTA por la misma razón que las
+  /// facturas: un plan CANCELADO se queda en la tabla y el cobro se puede
+  /// volver a diferir. Que solo haya UN ACTIVO a la vez lo garantiza la
+  /// aplicación dentro de la transacción que crea el plan (mismo criterio
+  /// que el único turno de caja abierto).
+  paymentPlans EduPaymentPlan[]
 
   @@unique([institutionId, folio])
   @@unique([institutionId, idempotencyKey], map: "edu_charges_idem_key")
@@ -13828,6 +13880,9 @@ model EduPayment {
   charge      EduCharge       @relation(fields: [chargeId], references: [id], onDelete: Cascade)
   receivedBy  EduUser         @relation("EduPaymentBy", fields: [receivedByUserId], references: [id], onDelete: Cascade)
   cashSession EduCashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  /// Pagos a meses: la mensualidad que ESTE pago liquidó, si fue el pago
+  /// de una. Back-relation obligatoria; la FK vive en EduInstallment.
+  installment EduInstallment?
 
   @@index([institutionId, chargeId], map: "edu_payments_charge_idx")
   @@index([institutionId, paidAt], map: "edu_payments_fecha_idx")
@@ -15691,4 +15746,156 @@ model EduPrescriptionItem {
 
   @@index([institutionId, prescriptionId], map: "edu_prescription_items_receta_idx")
   @@map("edu_prescription_items")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — PAGOS A MESES · EL PLAN DE PAGOS DE UN COBRO.
+//
+// DOS tablas y UN enum. Un EduCharge con saldo se puede DIFERIR: el saldo
+// se parte en N mensualidades ENTERAS con su fecha de vencimiento, y cada
+// una se liquida con un EduPayment NORMAL (el mismo que registra caja, con
+// su método, su turno y su corte — nada nuevo que cuadrar).
+//
+// 🔴 LO QUE NO SE GUARDA ES LA MITAD DEL DISEÑO:
+//   · NO hay columna "saldo del plan": se DERIVA de las mensualidades sin
+//     pago. Un saldo guardado y editable a mano es la forma más fácil de
+//     que una caja no cuadre.
+//   · NO hay estado "VENCIDA" en la mensualidad: en la base viven los
+//     HECHOS (su fecha, y el pago que la liquidó — o su ausencia) y el
+//     estado se calcula en cada lectura contra el hoy del instituto
+//     (src/lib/edu/pagos-core.ts). Una columna VENCIDA necesitaría un cron
+//     que la escriba, y el día que ese cron falle toda la cartera diría
+//     "al corriente".
+//   · Lo que SÍ se guarda son los TÉRMINOS pactados, congelados al crear:
+//     cuántos meses, de cuánto la mensualidad pareja, qué día de corte y
+//     cuánto se enganchó. Términos, no acumuladores: nada los recalcula.
+//
+// 🔴 institutionId está en las DOS tablas, como en todo el vertical: TODA
+// consulta filtra por el institutionId de la SESIÓN, y un filtro que
+// necesita un JOIN para existir es un filtro que alguien va a olvidar.
+//
+// 🔴 QUIÉN VE ESTO — es DINERO. Se lee con el recurso "charges" de
+// src/lib/edu/visibility.ts (lista blanca: DIRECCION y CAJA; todo o nada).
+// Un ALUMNO no ve ni el plan ni sus fechas, aunque el plan sea de SU
+// paciente: es la misma asimetría de la Ola 5.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// En qué va el plan.
+///
+/// LIQUIDADO lo escribe la MISMA transacción que registra el pago de la
+/// última mensualidad; CANCELADO es un acto con autor y motivo. No hay
+/// estado "vencido": vencida está una MENSUALIDAD, y ni siquiera se
+/// guarda — se deriva del calendario en cada lectura.
+enum EduPaymentPlanStatus {
+  /// Tiene mensualidades por cobrar.
+  ACTIVO
+  /// Todas sus mensualidades están pagadas.
+  LIQUIDADO
+  /// Se canceló con motivo. Lo ya pagado se queda pagado (son EduPayment
+  /// reales); el saldo del cobro vuelve a cobrarse normal.
+  CANCELADO
+}
+
+/// EL PLAN DE PAGOS de un cobro: el acuerdo de partir su saldo en meses.
+///
+/// Cuelga del COBRO (no del paciente a secas): lo que se difiere es el
+/// saldo de UN cobro concreto, y el `patientId` se guarda además solo para
+/// listar "los planes de este paciente" sin un JOIN — mismo criterio que
+/// EduInvoice.patientId y EduPrescription.patientId.
+///
+/// ⚠️ Que solo haya UN plan ACTIVO por cobro lo garantiza la aplicación
+/// DENTRO de la transacción que lo crea (mismo criterio que el único turno
+/// de caja abierto). La relación es lista porque un plan CANCELADO se
+/// queda en la tabla y el cobro se puede volver a diferir.
+model EduPaymentPlan {
+  id            String               @id @default(cuid())
+  institutionId String
+  chargeId      String
+  patientId     String
+  status        EduPaymentPlanStatus @default(ACTIVO)
+
+  /// Cuántas mensualidades se pactaron. De 2 a 48; lo acota pagos-core.
+  months           Int
+  /// La mensualidad "pareja", congelada al crear. 🔴 La PRIMERA puede ser
+  /// mayor: si el saldo no divide exacto, la diferencia ENTERA va en ella
+  /// (eduPlanSplitCents) — jamás repartida en decimales que no suman.
+  installmentCents Int
+  /// Lo que el cobro tenía PAGADO al crear el plan (el enganche, si lo
+  /// hubo, más cualquier abono anterior). Congelado e informativo: el
+  /// saldo vivo se sigue derivando de los pagos reales.
+  downPaymentCents Int                  @default(0)
+  /// El día de corte pactado (1-31). Si el mes no lo tiene, la fecha se
+  /// RECORTA al último día de ese mes (corte 31 vence el 28 en febrero) —
+  /// nunca se corre al mes siguiente.
+  dueDay           Int
+
+  /// Quién lo armó y cuándo. Dinero: siempre con autor.
+  createdByUserId String
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  /// La cancelación. NO borra nada: deja constancia con motivo, y las
+  /// mensualidades ya pagadas se quedan (sus pagos son reales).
+  cancelledAt       DateTime? @db.Timestamptz(3)
+  cancelledByUserId String?
+  cancelReason      String?   @db.VarChar(300)
+
+  /// Cuándo se liquidó. Lo escribe la MISMA transacción que registra el
+  /// pago de la última mensualidad, nunca un proceso aparte.
+  settledAt DateTime? @db.Timestamptz(3)
+
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  charge      EduCharge      @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy   EduUser        @relation("EduPlanCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  cancelledBy EduUser?       @relation("EduPlanCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  installments EduInstallment[]
+
+  // · status   → "los planes activos", que es la pantalla de caja.
+  // · charge   → el candado de UN activo por cobro, y el recibo del cobro.
+  // · patient  → la ficha del paciente, más recientes primero.
+  @@index([institutionId, status], map: "edu_payment_plans_status_idx")
+  @@index([institutionId, chargeId], map: "edu_payment_plans_cobro_idx")
+  @@index([institutionId, patientId, createdAt], map: "edu_payment_plans_patient_idx")
+  @@map("edu_payment_plans")
+}
+
+/// UNA MENSUALIDAD del plan: número, monto y vencimiento, congelados al
+/// crear el plan.
+///
+/// 🔴 AQUÍ NO HAY COLUMNA DE ESTADO, y es la línea que importa:
+///   · PAGADA   = `paymentId` apunta al EduPayment que la liquidó (un
+///     hecho con fila propia, con método, turno y quién lo recibió).
+///   · VENCIDA  = sin pago y con la fecha estrictamente pasada. Lo dice el
+///     CALENDARIO en cada lectura (eduInstallmentStatus), no un cron.
+///   · El monto NO se teclea al pagar: se cobra EXACTAMENTE `amountCents`.
+model EduInstallment {
+  id            String @id @default(cuid())
+  institutionId String
+  planId        String
+  /// 1-based. La número 1 es la que carga los centavos del residuo.
+  number        Int
+  amountCents   Int
+  /// Fecha de CALENDARIO a medianoche UTC (como las fechas del contrato
+  /// del instituto): un día pactado no tiene zona horaria, y compararlo
+  /// se hace por su "AAAA-MM-DD" contra el hoy del instituto.
+  dueDate       DateTime
+
+  /// El pago que la liquidó. Null = sin pagar. @unique: un pago liquida
+  /// UNA mensualidad — el pago de dos meses son dos pagos.
+  paymentId String? @unique
+
+  createdAt DateTime @default(now())
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  plan        EduPaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  payment     EduPayment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  /// Un plan no puede tener dos mensualidades con el mismo número.
+  @@unique([planId, number], map: "edu_installments_numero_key")
+  @@index([institutionId, planId], map: "edu_installments_plan_idx")
+  // "Qué vence esta semana" del instituto entero, sin recorrer plan por plan.
+  @@index([institutionId, dueDate], map: "edu_installments_vence_idx")
+  @@map("edu_installments")
 }

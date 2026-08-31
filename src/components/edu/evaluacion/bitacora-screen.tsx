@@ -736,7 +736,7 @@ function Calificar({
 
               <div className="edu-field">
                 <label className="edu-field__label" htmlFor="edu-cal-com">
-                  Comentario para el alumno
+                  Comentario para el estudiante
                 </label>
                 <textarea
                   id="edu-cal-com"
@@ -804,7 +804,7 @@ function Traspasar({
         }
       }
       onDone(
-        `Se traspasaron ${res.traspasados.length} ${res.traspasados.length === 1 ? "caso" : "casos"}. ${desde} deja de ver a esos pacientes; el alumno que los recibe empieza a verlos.`,
+        `Se traspasaron ${res.traspasados.length} ${res.traspasados.length === 1 ? "caso" : "casos"}. ${desde} deja de ver a esos pacientes; el estudiante que los recibe empieza a verlos.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo traspasar.");
@@ -829,7 +829,7 @@ function Traspasar({
   return (
     <EduModal
       title="Traspasar casos"
-      subtitle="El caso viejo se cierra y se abre uno nuevo con el alumno que entra. El expediente se queda donde ocurrió."
+      subtitle="El caso viejo se cierra y se abre uno nuevo con el estudiante que entra. El expediente se queda donde ocurrió."
       onClose={onClose}
       busy={busy}
       footer={
@@ -860,9 +860,9 @@ function Traspasar({
         <div>
           <p className="edu-banner__title">{desde} pierde el acceso a estos pacientes</p>
           <p className="edu-banner__detail">
-            Y el alumno que los recibe lo gana, en el mismo acto. Sus notas, sus estudios y sus
+            Y el estudiante que los recibe lo gana, en el mismo acto. Sus notas, sus estudios y sus
             calificaciones NO se mueven: quedan donde ocurrieron, con su nombre. Las citas futuras
-            sí pasan al alumno nuevo, para que el paciente no quede a medias.
+            sí pasan al estudiante nuevo, para que el paciente no quede a medias.
           </p>
         </div>
       </div>
@@ -877,7 +877,7 @@ function Traspasar({
           value={toStudentId}
           onChange={(e) => setToStudentId(e.target.value)}
         >
-          <option value="">Elige al alumno que los recibe</option>
+          <option value="">Elige al estudiante que los recibe</option>
           {destinosVisibles.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name} · {d.matricula}
@@ -887,7 +887,7 @@ function Traspasar({
         <p className="edu-field__hint">
           {programaIds.length > 1
             ? `Elegiste casos de ${programaIds.length} especialidades (${programaNombres.join(", ")}). Un caso se traspasa dentro de su especialidad: hazlo en dos tandas.`
-            : `Tiene que ser de la misma especialidad${programaNombres[0] ? ` (${programaNombres[0]})` : ""} y seguir ACTIVO como alumno.`}
+            : `Tiene que ser de la misma especialidad${programaNombres[0] ? ` (${programaNombres[0]})` : ""} y seguir ACTIVO como estudiante.`}
         </p>
       </div>
 

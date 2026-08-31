@@ -95,10 +95,16 @@ export default async function InstitutoPanelLayout({
   // PANTALLA de agenda redirige a /mi-dia a quien llega recortado — el
   // item escondido nunca es el candado.
   const apptScope = eduVisibility(ctx, "appointments");
+  // Ola de Casos: a CAJA el recurso "cases" le devuelve "none" SIEMPRE
+  // (aunque un override le encienda casos.view por error) — el item se
+  // esconde también por alcance, como Agenda/Mi agenda. Y como siempre, el
+  // item escondido no es el candado: la pantalla y la API vuelven a cerrar.
+  const caseScope = eduVisibility(ctx, "cases");
 
   const items: EduNavItem[] = EDU_NAV_ITEMS.filter((item) => {
     if (item.key === "agenda" && apptScope.kind !== "all") return false;
     if (item.key === "mi-dia" && apptScope.kind === "all") return false;
+    if (item.key === "casos" && caseScope.kind === "none") return false;
     if (!item.permission) return true;
     return hasEduPermission(permUser, item.permission as EduPermissionKey);
   }).map((item) => ({

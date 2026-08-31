@@ -546,7 +546,7 @@ function BloqueAhora({
       </div>
       <p className="edu-dir-bloque__lead">
         Estas cuatro cifras salen de las citas de hoy: quién llegó, quién está sentado en un
-        sillón y quién responde por él. No decimos &laquo;alumnos conectados&raquo; porque el
+        sillón y quién responde por él. No decimos &laquo;estudiantes conectados&raquo; porque el
         producto no registra presencia — nadie ficha al entrar a la clínica—, y un número de
         sesiones abiertas no es gente en el piso.
       </p>
@@ -590,11 +590,11 @@ function BloqueAhora({
         <CifraViva
           label="Atendiendo ahora"
           value={ahora.alumnosAtendiendo}
-          note="Alumnos con un paciente en el sillón."
+          note="Estudiantes con un paciente en el sillón."
           onAbrir={() =>
             abrirLocal(
               "Atendiendo ahora",
-              "Los alumnos que tienen un paciente en el sillón en este momento.",
+              "Los estudiantes que tienen un paciente en el sillón en este momento.",
               ocupados.map((s) => ({
                 id: `a-${s.chairId}`,
                 titulo: s.studentName ?? "—",
@@ -628,12 +628,12 @@ function BloqueAhora({
           onAbrir={() =>
             abrirLocal(
               "Docentes responsables",
-              "Los docentes que responden ahora mismo por lo que hay en los sillones. Sale del supervisor guardado en la cita y, si la cita no lo trae, del titular vigente del alumno. No es presencia física: el producto no la registra.",
+              "Los docentes que responden ahora mismo por lo que hay en los sillones. Sale del supervisor guardado en la cita y, si la cita no lo trae, del titular vigente del estudiante. No es presencia física: el producto no la registra.",
               ahora.docentes.map((d) => ({
                 id: d.userId,
                 titulo: d.name,
                 sub: d.porTitularidad
-                  ? "Responde por ser el titular vigente de su alumno"
+                  ? "Responde por ser el titular vigente de su estudiante"
                   : "Figura como supervisor en la cita",
                 campos: [{ k: "Sillones", v: String(d.sillones) }],
                 href: "/instituto/docentes",
@@ -734,7 +734,7 @@ function BloqueEspecialidades({
       </div>
       <p className="edu-dir-bloque__lead">
         Tocar una fila filtra el tablero entero a esa especialidad. Los pacientes se cuentan por
-        la especialidad del <strong>alumno</strong> que los atendió; el dinero, por la del{" "}
+        la especialidad del <strong>estudiante</strong> que los atendió; el dinero, por la del{" "}
         <strong>caso</strong> al que se colgó el cobro — que es la única forma de atribuirlo, y
         por eso hay cobros que no se pueden atribuir a ninguna.
       </p>
@@ -743,7 +743,7 @@ function BloqueEspecialidades({
         <div className="edu-empty">
           <p className="edu-empty__title">Todavía no hay especialidades</p>
           <p className="edu-empty__detail">
-            Se dan de alta en Especialidades y generaciones. Sin ellas no hay alumnos que medir
+            Se dan de alta en Especialidades y generaciones. Sin ellas no hay estudiantes que medir
             ni casos que abrir.
           </p>
         </div>
@@ -751,7 +751,7 @@ function BloqueEspecialidades({
         <div className="edu-table edu-table--especialidades">
           <div className="edu-rowhead" aria-hidden="true">
             <span>Especialidad</span>
-            <span>Alumnos</span>
+            <span>Estudiantes</span>
             <span>En clínica hoy</span>
             <span>Pacientes</span>
             <span>Cobrado</span>
@@ -772,7 +772,7 @@ function BloqueEspecialidades({
                   <span className="edu-cell__value edu-cell__value--strong">{e.programName}</span>
                 </span>
                 <span className="edu-cell">
-                  <span className="edu-cell__label">Alumnos</span>
+                  <span className="edu-cell__label">Estudiantes</span>
                   <span className="edu-cell__value">{e.alumnos}</span>
                 </span>
                 <span className="edu-cell">
@@ -860,14 +860,14 @@ function BloqueAlumnos({ panel }: { panel: EduDirPanel }) {
   return (
     <section className="edu-dir-bloque">
       <div className="edu-dir-bloque__head">
-        <h2 className="edu-dir-bloque__title">Alumnos</h2>
+        <h2 className="edu-dir-bloque__title">Estudiantes</h2>
         <Link href="/instituto/evaluacion" className="edu-btn edu-btn--quiet edu-btn--sm">
           Ver todos
         </Link>
       </div>
       <p className="edu-dir-bloque__lead">
         El atraso y su motivo salen de Evaluación: es la misma cuenta, no una segunda. El motivo
-        va siempre visible porque es la frase que se lee en voz alta delante del alumno.
+        va siempre visible porque es la frase que se lee en voz alta delante del estudiante.
       </p>
 
       <div className="edu-dir-alumnos">
@@ -878,7 +878,7 @@ function BloqueAlumnos({ panel }: { panel: EduDirPanel }) {
           </div>
           {panel.masActivos.length === 0 ? (
             <p className="edu-note" style={{ padding: "12px 14px" }}>
-              Ningún alumno terminó una cita en este periodo.
+              Ningún estudiante terminó una cita en este periodo.
             </p>
           ) : (
             panel.masActivos.map((a) => <FilaAlumno key={a.studentId} a={a} conMotivo={false} />)
@@ -968,7 +968,7 @@ function BloqueDinero({
 
       <h3 className="edu-dir-caja__title">El desglose que es un control</h3>
       <p className="edu-dir-bloque__lead">
-        La tarifa de <strong>paciente de alumno</strong> es más barata que la de público general.
+        La tarifa de <strong>paciente de estudiante</strong> es más barata que la de público general.
         Estas cuatro filas cruzan la lista de precios que se APLICÓ con el origen REAL del
         paciente: si la barata se está aplicando a gente que llegó sola a la clínica, aquí se ve.
       </p>
@@ -980,23 +980,23 @@ function BloqueDinero({
           onAbrir={() => abrir("cobrado-publico")}
         />
         <FilaMoney
-          k="Emitido · lo trajo un alumno"
+          k="Emitido · lo trajo un estudiante"
           v={eduMoney(d.alumnoCents)}
           onAbrir={() => abrir("cobrado-alumno")}
         />
         <FilaMoney
-          k={`Tarifa de alumno a paciente que llegó solo (${d.controlCount})`}
+          k={`Tarifa de estudiante a paciente que llegó solo (${d.controlCount})`}
           v={eduMoney(d.controlCents)}
           tono={d.controlCount > 0 ? "control" : undefined}
           nota={
             d.controlCount > 0
               ? "O falta marcar quién trajo a esos pacientes, o se cobró de menos. Ábrelo y revisa uno por uno."
-              : "Ninguno: la tarifa barata solo se aplicó a pacientes que trajo un alumno."
+              : "Ninguno: la tarifa barata solo se aplicó a pacientes que trajo un estudiante."
           }
           onAbrir={() => abrir("control-tarifa")}
         />
         <FilaMoney
-          k={`Paciente de alumno cobrado con la lista general (${d.inversoCount})`}
+          k={`Paciente de estudiante cobrado con la lista general (${d.inversoCount})`}
           v={eduMoney(d.inversoCents)}
           tono={d.inversoCount > 0 ? "vigilar" : undefined}
           nota={
@@ -1112,10 +1112,10 @@ function BloquePendientes({
           onAbrir={() => abrir("firmas-pendientes")}
         />
         <CifraViva
-          label="Pacientes sin alumno"
+          label="Pacientes sin estudiante"
           value={p.pacientesSinAlumno}
           semaforo={p.pacientesSinAlumno === 0 ? "OK" : "VIGILAR"}
-          note="Registrados, sin caso abierto y sin cita próxima: no los ve ningún alumno ni ningún docente. No depende de la especialidad — un paciente sin caso no tiene ninguna."
+          note="Registrados, sin caso abierto y sin cita próxima: no los ve ningún estudiante ni ningún docente. No depende de la especialidad — un paciente sin caso no tiene ninguna."
           onAbrir={() => abrir("pacientes-sin-alumno")}
         />
         <CifraViva
@@ -1126,7 +1126,7 @@ function BloquePendientes({
           onAbrir={() => abrir("calificaciones-pendientes")}
         />
         <CifraViva
-          label="Alumnos sin docente"
+          label="Estudiantes sin docente"
           value={p.alumnosSinDocente}
           semaforo={p.alumnosSinDocente === 0 ? "OK" : "ACTUAR"}
           note="Sin asignación vigente, nadie les puede firmar una autorización."

@@ -41,8 +41,10 @@ import {
   normalizeEduEmail,
   normalizeEduFolio,
   normalizeEduPhone,
+  parseEduAntecedentes,
   parseEduPatientStatus,
   parseEduSex,
+  type EduAntecedentesInput,
   type EduPatientFilters,
   type EduPatientOption,
   type EduPatientRow,
@@ -106,6 +108,19 @@ const PATIENT_SELECT = {
   createdAt: true,
   referredByStudentId: true,
   originSetAt: true,
+  // Ola de Casos: los antecedentes médicos viajan SIEMPRE con la fila —
+  // los chips de alerta se pintan en el encabezado de la ficha, y un
+  // encabezado que a veces no los trae es un encabezado que un día calla
+  // una alergia.
+  bloodType: true,
+  allergies: true,
+  chronicConditions: true,
+  currentMedications: true,
+  emergencyContactName: true,
+  emergencyContactPhone: true,
+  emergencyContactRelation: true,
+  historyRecordedAt: true,
+  historyRecordedBy: { select: { firstName: true, lastName: true, email: true } },
   referredByStudent: {
     select: {
       id: true,
@@ -142,6 +157,17 @@ function toRow(p: PatientPayload, now: Date): EduPatientRow {
       studentMatricula: p.referredByStudent?.matricula ?? null,
       setByName: p.originSetBy ? personName(p.originSetBy) : null,
       setAt: iso(p.originSetAt),
+    },
+    antecedentes: {
+      bloodType: p.bloodType,
+      allergies: p.allergies,
+      chronicConditions: p.chronicConditions,
+      currentMedications: p.currentMedications,
+      emergencyContactName: p.emergencyContactName,
+      emergencyContactPhone: p.emergencyContactPhone,
+      emergencyContactRelation: p.emergencyContactRelation,
+      recordedAt: iso(p.historyRecordedAt),
+      recordedByName: p.historyRecordedBy ? personName(p.historyRecordedBy) : null,
     },
     openCases: abiertos,
     totalCases: p.cases.length,
@@ -311,12 +337,12 @@ async function resolveOriginStudent(
 ): Promise<string | null> {
   if (raw === null || raw === undefined || raw === "") return null;
   const id = eduCleanId(raw);
-  if (!id) throw new EduPadronError("Ese alumno no es válido.");
+  if (!id) throw new EduPadronError("Ese estudiante no es válido.");
   const student = await prisma.eduStudent.findFirst({
     where: { id, institutionId },
     select: { id: true },
   });
-  if (!student) throw new EduPadronError("Ese alumno no es de este instituto.", 404);
+  if (!student) throw new EduPadronError("Ese estudiante no es de este instituto.", 404);
   return student.id;
 }
 
@@ -595,4 +621,63 @@ export async function setEduPatientOrigin(
     },
   });
   return { id };
+}
+
+/**
+ * Guarda los ANTECEDENTES MÉDICOS del paciente (ola de Casos).
+ *
+ * Función aparte de `updateEduPatient` a propósito, como el origen: los
+ * escriben personas distintas por permisos distintos. La ficha general es
+ * de `pacientes.manage` (caja y dirección); los antecedentes los captura
+ * TAMBIÉN quien hace la historia clínica —el alumno con el paciente en el
+ * sillón y su docente— con `expediente.write`. El endpoint decide con cuál
+ * de las dos llaves entró; aquí solo se comprueba la PERTENENCIA.
+ *
+ * 🔴 El paciente se busca DENTRO DEL ALCANCE de "patients" (a diferencia
+ * de `updateEduPatient`, cuyo endpoint solo lo tiene caja/dirección, con
+ * alcance completo): un alumno solo puede capturar los antecedentes de SUS
+ * pacientes, y el de otro alumno se ve igual que uno que no existe.
+ *
+ * 🔴 ES UN REEMPLAZO DEL BLOQUE COMPLETO, y `historyRecordedAt` +
+ * `historyRecordedById` se estampan JUNTOS en la misma escritura: guardar
+ * significa "revisé los antecedentes hoy". Por eso también un guardado con
+ * todo vacío ES un dato — "se le preguntó y no refiere" — y no un no-op:
+ * es exactamente el estado que separa a este vertical del chip verde
+ * mentiroso del dental.
+ *
+ * ⚠️ No toca `searchIndex`: los antecedentes no se buscan por texto y el
+ * índice solo se alimenta de folio/nombre/teléfono/correo (Ola 1B).
+ */
+export async function updateEduPatientAntecedentes(
+  ctx: EduClinicaContext,
+  patientId: string,
+  input: EduAntecedentesInput,
+  now: Date = new Date(),
+): Promise<{ id: string }> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "patients");
+  if (eduScopeIsEmpty(scope)) {
+    throw new EduPadronError("Ese paciente no es de este instituto.", 404);
+  }
+  const id = eduCleanId(patientId);
+  if (!id) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
+
+  const current = await prisma.eduPatient.findFirst({
+    where: { ...eduPatientScopeWhere({ institutionId, scope, now }), id },
+    select: { id: true },
+  });
+  if (!current) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
+
+  const parsed = parseEduAntecedentes(input);
+  if (!parsed.ok) throw new EduPadronError(parsed.error);
+
+  await prisma.eduPatient.update({
+    where: { id: current.id },
+    data: {
+      ...parsed.data,
+      historyRecordedAt: now,
+      historyRecordedById: ctx.eduUserId,
+    },
+  });
+  return { id: current.id };
 }

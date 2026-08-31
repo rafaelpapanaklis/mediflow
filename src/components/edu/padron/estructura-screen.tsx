@@ -111,7 +111,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
               <span>Clave</span>
               <span>Duración</span>
               <span>Generaciones</span>
-              <span>Alumnos</span>
+              <span>Estudiantes</span>
               <span>Estado</span>
               <span />
             </div>
@@ -135,7 +135,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
                   <span className="edu-cell__value">{p.cohorts}</span>
                 </div>
                 <div className="edu-cell">
-                  <span className="edu-cell__label">Alumnos</span>
+                  <span className="edu-cell__label">Estudiantes</span>
                   <span className="edu-cell__value">{p.students}</span>
                 </div>
                 <div className="edu-cell">
@@ -200,7 +200,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
             <p className="edu-empty__detail">
               {programs.filter((p) => p.isActive).length === 0
                 ? "Antes hace falta una especialidad activa."
-                : "Una generación es la promoción que entra junta: 2026-A. Los alumnos se inscriben a una."}
+                : "Una generación es la promoción que entra junta: 2026-A. Los estudiantes se inscriben a una."}
             </p>
           </div>
         ) : (
@@ -210,7 +210,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
               <span>Especialidad</span>
               <span>Inicio</span>
               <span>Fin</span>
-              <span>Alumnos</span>
+              <span>Estudiantes</span>
               <span>Estado</span>
               <span />
             </div>
@@ -237,7 +237,7 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
                   </span>
                 </div>
                 <div className="edu-cell">
-                  <span className="edu-cell__label">Alumnos</span>
+                  <span className="edu-cell__label">Estudiantes</span>
                   <span className="edu-cell__value">{c.students}</span>
                 </div>
                 <div className="edu-cell">
@@ -424,7 +424,7 @@ function ProgramaModal({
       {program && program.students > 0 && (
         <p className="edu-note">
           Esta especialidad tiene {program.students}{" "}
-          {program.students === 1 ? "alumno inscrito" : "alumnos inscritos"}. Cambiarle el nombre o
+          {program.students === 1 ? "estudiante inscrito" : "estudiantes inscritos"}. Cambiarle el nombre o
           la clave no los mueve de sitio.
         </p>
       )}
@@ -524,7 +524,7 @@ function GeneracionModal({
             ))}
           </select>
           <span className="edu-field__hint">
-            La especialidad de una generación no se cambia después: los alumnos ya inscritos
+            La especialidad de una generación no se cambia después: los estudiantes ya inscritos
             quedarían en una que no cursaron.
           </span>
         </div>

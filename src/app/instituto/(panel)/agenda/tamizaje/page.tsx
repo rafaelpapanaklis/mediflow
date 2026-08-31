@@ -41,7 +41,7 @@ export default async function InstitutoTamizajePage() {
     return (
       <EduDenied
         permission="casos.assign"
-        what="El tamizaje es la valoración inicial: decide a qué alumno se le asigna el paciente y abre su caso clínico."
+        what="El tamizaje es la valoración inicial: decide a qué estudiante se le asigna el paciente y abre su caso clínico."
       />
     );
   }
@@ -64,7 +64,7 @@ export default async function InstitutoTamizajePage() {
           <h1 className="edu-page__title">Tamizaje</h1>
           <p className="edu-page__lead">
             La valoración inicial. Aquí el paciente deja de ser &quot;el señor que
-            llegó&quot; y pasa a ser el caso de alguien: se le asigna un alumno, una
+            llegó&quot; y pasa a ser el caso de alguien: se le asigna un estudiante, una
             especialidad y un docente responsable.
           </p>
         </div>

@@ -108,7 +108,7 @@ export function EduTarifariosScreen({
             <h2 className="edu-section__title">Listas de precios</h2>
             <p className="edu-section__lead">
               Son las que quieras. El instituto arranca con dos —público general y paciente de
-              alumno— y mañana agrega convenios, personal o campañas sin tocar nada más.
+              estudiante— y mañana agrega convenios, personal o campañas sin tocar nada más.
             </p>
           </div>
           {canManage && (
@@ -131,8 +131,8 @@ export function EduTarifariosScreen({
             <p className="edu-empty__title">Todavía no hay listas de precios</p>
             <p className="edu-empty__detail">
               Crea al menos dos: una predeterminada (&quot;Público general&quot;) y una con la regla
-              &quot;paciente que trajo un alumno&quot;. Esa segunda es la que hace que el paciente
-              que trae un alumno pague distinto, sin que nadie tenga que acordarse en el
+              &quot;paciente que trajo un estudiante&quot;. Esa segunda es la que hace que el paciente
+              que trae un estudiante pague distinto, sin que nadie tenga que acordarse en el
               mostrador.
             </p>
           </div>
@@ -342,7 +342,7 @@ function FormLista({
   return (
     <EduModal
       title={actual ? "Editar lista de precios" : "Nueva lista de precios"}
-      subtitle="Las listas son las que quieras: público, alumno, convenios, personal, campañas."
+      subtitle="Las listas son las que quieras: público, estudiante, convenios, personal, campañas."
       onClose={onClose}
       busy={busy}
       footer={
@@ -377,7 +377,7 @@ function FormLista({
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoComplete="off"
-          placeholder="Paciente de alumno"
+          placeholder="Paciente de estudiante"
         />
         <span className="edu-field__hint">
           Es lo que se imprime en el recibo del paciente. Que se entienda.
@@ -394,7 +394,7 @@ function FormLista({
           value={key}
           onChange={(e) => setKey(e.target.value)}
           autoComplete="off"
-          placeholder="alumno"
+          placeholder="estudiante"
         />
         <span className="edu-field__hint">
           Corta y estable: es la que sale en los reportes y la que NO cambia si mañana renombras la
@@ -463,7 +463,7 @@ function FormLista({
           rows={2}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Pacientes que trae un alumno de la escuela."
+          placeholder="Pacientes que trae un estudiante de la escuela."
         />
       </div>
     </EduModal>

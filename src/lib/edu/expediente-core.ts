@@ -54,7 +54,7 @@ export function eduClinicalScope(actor: EduVisibilityActor): EduVisibilityScope 
 
 /** Lo que se le pinta a quien abrió un expediente que no le toca. */
 export const EDU_CLINICAL_NONE_DETAIL =
-  "Tu rol no abre expedientes clínicos. Caja no los ve a propósito: recibe, agenda y cobra. Los ven la dirección (todos), los docentes (los de sus alumnos vigentes) y cada alumno (los de sus casos).";
+  "Tu rol no abre expedientes clínicos. Caja no los ve a propósito: recibe, agenda y cobra. Los ven la dirección (todos), los docentes (los de sus estudiantes vigentes) y cada estudiante (los de sus casos).";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 2 · LA NOTA

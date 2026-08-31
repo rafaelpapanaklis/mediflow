@@ -941,7 +941,7 @@ export function eduAnalisisComoTexto(a: EduAnalisisRow): string {
  */
 export const EDU_ANALISIS_SYSTEM_EXTRA = `
 CONTEXTO INSTITUCIONAL — LÉELO ANTES DE RESPONDER.
-Quien va a leer tu respuesta es un ALUMNO de una especialidad odontológica, en formación, dentro de una clínica universitaria, y su docente responsable la revisará después. No es el diagnóstico: es apoyo para que el alumno mire mejor la imagen.
+Quien va a leer tu respuesta es un ESTUDIANTE de una especialidad odontológica, en formación, dentro de una clínica universitaria, y su docente responsable la revisará después. No es el diagnóstico: es apoyo para que el estudiante mire mejor la imagen.
 Por eso:
 - No des por cerrado nada. Cuando un hallazgo admita más de una explicación, dilo en la descripción.
 - Cuando la proyección, el encuadre o el contraste no permitan sostener un hallazgo, dilo y recomiéndale la proyección que sí lo permitiría, en vez de bajar la confianza sin explicar.

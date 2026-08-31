@@ -157,11 +157,12 @@ test("cierre-2 · el reparto del recurso 'patients' es exactamente la decisión"
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// 3 · "PADRÓN" SE LEE "ALUMNOS" (las rutas y las keys no se renombran)
+// 3 · "PADRÓN" SE LEE "ESTUDIANTES" (las rutas y las keys no se renombran;
+//     fue "Alumnos" hasta que el dueño del producto pidió "Estudiante")
 // ═════════════════════════════════════════════════════════════════════
 
-test("cierre-3 · el menú dice Alumnos y la ruta sigue siendo /instituto/padron", () => {
-  assert.equal(EDU_NAV_LABELS.padron, "Alumnos");
+test("cierre-3 · el menú dice Estudiantes y la ruta sigue siendo /instituto/padron", () => {
+  assert.equal(EDU_NAV_LABELS.padron, "Estudiantes");
   // El grupo de la pantalla de permisos tampoco dice "Padrón".
   const grupo = EDU_PERMISSION_GROUPS.find((g) => g.keys.includes("padron.view"));
   assert.ok(grupo, "padron.view tiene que seguir en un grupo");
@@ -216,13 +217,19 @@ test("🔴 P2-10 · createEduCharge es idempotente por clave del cliente", () =>
 });
 
 test("P2-10 · el tope del pago se reclama DENTRO de la transacción", () => {
+  // Pagos a meses movió el claim a eduApplyEduPaymentInTx — UNA función,
+  // DOS llamadores (el pago suelto y la mensualidad de un plan) — para
+  // que ninguno de los dos pueda recalcular distinto. La intención de
+  // esta prueba no cambió: el updateMany condicional con decrement sigue
+  // siendo lo que serializa dos pagos simultáneos, y addEduPayment tiene
+  // que PASAR por él — el claim que nadie llama no serializa nada.
   const src = fuente("src", "lib", "edu", "caja.ts");
-  const cuerpo = cuerpoDe(src, "addEduPayment");
   assert.match(
-    cuerpo,
+    cuerpoDe(src, "eduApplyEduPaymentInTx"),
     /decrement/,
     "el updateMany condicional con decrement es lo que serializa dos pagos simultáneos",
   );
+  assert.match(cuerpoDe(src, "addEduPayment"), /eduApplyEduPaymentInTx\(/);
 });
 
 // ═════════════════════════════════════════════════════════════════════
