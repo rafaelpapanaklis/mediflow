@@ -691,8 +691,13 @@ test("🔴 SOLO DIRECCION lleva direccion.panel por defecto", () => {
  * lista pasó de ocho a diez, y hubo que decidir a mano que `sedes.view` y
  * `sedes.manage` son de dirección y de nadie más. Eso es exactamente para
  * lo que existe: dos olas que se cruzan no se ponen de acuerdo solas.
+ *
+ * Y volvió a cobrar en la integración de las olas 8, 9 y 10: pasó de diez
+ * a dieciséis, porque el cupo de IA, la conexión de WhatsApp y las dos
+ * llaves duras de facturación (cancelar y configurar) son decisiones del
+ * contrato o del SAT — de dirección y de nadie más, cada una por su ola.
  */
-test("las keys de UN SOLO rol son todas de DIRECCION, y son estas diez", () => {
+test("las keys de UN SOLO rol son todas de DIRECCION, y son estas dieciséis", () => {
   const cuantosRoles = (k: EduPermissionKey) =>
     EDU_ROLES.filter((r) => EDU_ROLE_DEFAULTS[r].includes(k)).length;
 
@@ -715,11 +720,25 @@ test("las keys de UN SOLO rol son todas de DIRECCION, y son estas diez", () => {
       "sedes.manage",
       // Ola 7 · el tablero de dirección.
       "direccion.panel",
+      // Ola 8 · el cupo de IA del contrato: verlo y administrarlo es de
+      // quien administra el contrato. El alumno ve SU consumo por otra vía.
+      "ia.view",
+      "ia.manage",
+      // Ola 9 · conectar el WhatsApp del instituto y sus plantillas. Son de
+      // CONFIGURAR, no de mandar: mandar se abre con el permiso del
+      // documento.
+      "whatsapp.view",
+      "whatsapp.manage",
+      // Ola 10 · cancelar ante el SAT y capturar los datos fiscales. Las
+      // otras dos de facturación (view/emit) las comparte con CAJA y por
+      // eso no aparecen aquí.
+      "facturacion.cancel",
+      "facturacion.config",
     ],
     `cambió la lista de keys de un solo rol: ${deUnoSolo.join(", ")}`,
   );
 
-  // Y ese único rol es DIRECCION en las diez: si mañana una de ellas
+  // Y ese único rol es DIRECCION en las dieciséis: si mañana una de ellas
   // quedara solo en manos del docente, sería otro producto.
   for (const k of deUnoSolo) {
     assert.equal(hasEduPermission({ role: "DIRECCION" }, k), true, `${k} no es de dirección`);
