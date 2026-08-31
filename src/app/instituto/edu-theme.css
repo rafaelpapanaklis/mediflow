@@ -5364,3 +5364,23 @@ button.edu-dir-money__fila:hover {
   line-height: 1.45;
   color: var(--edu-text-3);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OLA 10 · FACTURACIÓN CFDI
+
+   Bloque ADITIVO al final del archivo: no reordena ni pisa nada de las
+   olas anteriores. Es UNA regla y ni una más — la pantalla de facturas
+   reutiliza tal cual las etiquetas, los banners, los KPI, las listas de
+   conceptos y el modal que ya existían. Una hoja de estilos que crece una
+   sección por pantalla es cómo se llega a que dos tablas del mismo
+   producto no se parezcan.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* La tabla de facturas. Seis columnas, en el mismo orden en que se lee un
+   comprobante: qué es, a nombre de quién, de qué cobro salió, cuánto y
+   cómo está. En móvil la cuadrícula se apila sola (lo hace .edu-table), y
+   por eso cada celda lleva su .edu-cell__label: en el teléfono la
+   cabecera no existe y el dato tiene que decir de qué es. */
+.edu-table--facturas {
+  --edu-cols: minmax(104px, 0.9fr) minmax(170px, 1.8fr) 104px 116px 124px 108px;
+}

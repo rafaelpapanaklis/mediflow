@@ -58,6 +58,13 @@ export interface EduCajaScreenProps {
   canCharge: boolean;
   canRefund: boolean;
   canCorte: boolean;
+  /**
+   * Ola 10. true = esta persona puede facturar ("facturacion.emit").
+   * El botón lleva a /instituto/facturacion con el cobro puesto: el
+   * modal de timbrado vive allá y no se duplica aquí — dos copias del
+   * mismo formulario fiscal es cómo una de las dos se queda vieja.
+   */
+  canInvoice: boolean;
 }
 
 /**
@@ -87,6 +94,7 @@ export function EduCajaScreen({
   canCharge,
   canRefund,
   canCorte,
+  canInvoice,
 }: EduCajaScreenProps) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
@@ -364,6 +372,17 @@ export function EduCajaScreen({
                 >
                   Recibo
                 </button>
+                {/* Ola 10. Un cobro CANCELADO no se factura, así que ni
+                    se ofrece: un botón que siempre contesta que no es
+                    peor que no tenerlo. */}
+                {canInvoice && c.status !== "CANCELLED" && (
+                  <Link
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    href={`/instituto/facturacion?cobro=${c.id}`}
+                  >
+                    Facturar
+                  </Link>
+                )}
               </div>
             </div>
           ))}

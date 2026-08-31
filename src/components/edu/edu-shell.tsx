@@ -19,6 +19,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Receipt,
   Ruler,
   Sparkles,
   Stamp,
@@ -84,6 +85,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   sparkles: Sparkles,
   // Ola 9 — WhatsApp y recordatorios.
   "message-circle": MessageCircle,
+  // Ola 10 — facturación CFDI.
+  receipt: Receipt,
 };
 
 export interface EduShellProps {

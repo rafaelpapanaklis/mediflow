@@ -882,6 +882,23 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "whatsapp.view",
   },
+  // ── Ola 10 · facturación CFDI ────────────────────────────────────────
+  {
+    // Va en OPERACIÓN y pegada a Caja, no en Administración: el paciente
+    // pide su factura EN EL MOSTRADOR, mientras paga. Enterrarla entre los
+    // tarifarios y las rúbricas sería mandar a quien cobra a buscar en la
+    // sección que no abre nunca, con el paciente esperando.
+    //
+    // Los DATOS FISCALES del instituto cuelgan de aquí
+    // (/instituto/facturacion/datos-fiscales) y no llevan item propio, por
+    // lo mismo que el corte de caja: se llega desde la pantalla donde uno
+    // está cuando descubre que faltan.
+    key: "facturacion",
+    href: "/instituto/facturacion",
+    icon: "receipt",
+    section: "operacion",
+    permission: "facturacion.view",
+  },
 ];
 
 /** Etiqueta de cada sección del menú (las vacías no se pintan). */
@@ -931,6 +948,7 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   // micrófono" no supiera que es aquí.
   ia: "Consumo de IA",
   whatsapp: "WhatsApp",
+  facturacion: "Facturación",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────
