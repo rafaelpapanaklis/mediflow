@@ -32,6 +32,9 @@ import {
 } from "@/lib/edu/visibility";
 import type { EduCaseStatus } from "@/lib/edu/types";
 import { EDU_CASE_CLOSED_STATUSES } from "@/lib/edu/types";
+// Ola de Casos: la columna "qué espera" se deriva en UN solo sitio
+// (casos-core) y el resumen la reusa — dos derivaciones divergirían.
+import type { EduCasoEspera } from "@/lib/edu/casos-core";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · LOS TRES ALCANCES DEL RESUMEN, DECIDIDOS EN UN SOLO SITIO
@@ -190,6 +193,9 @@ export interface EduResumenCasoRow {
   studentMatricula: string;
   supervisorName: string | null;
   abiertoLabel: string;
+  /** Ola de Casos: en qué va y qué le falta firmar, derivado de sus
+   *  autorizaciones (eduCasoEsperando). */
+  espera: EduCasoEspera;
 }
 
 export interface EduResumenCita {
@@ -209,6 +215,70 @@ export interface EduResumenSaldo {
   cobros: number;
 }
 
+// ── Ola de Casos · la línea de tiempo clínica ───────────────────────────
+
+export type EduResumenTimelineKind = "nota" | "estudio" | "consentimiento" | "receta";
+
+export const EDU_RESUMEN_TIMELINE_KIND_LABELS: Record<EduResumenTimelineKind, string> = {
+  nota: "Nota clínica",
+  estudio: "Estudio",
+  consentimiento: "Consentimiento",
+  receta: "Receta",
+};
+
+/** A qué pestaña de la ficha lleva cada clase de renglón. */
+export const EDU_RESUMEN_TIMELINE_TAB: Record<EduResumenTimelineKind, string> = {
+  nota: "expediente",
+  estudio: "estudios",
+  consentimiento: "consentimientos",
+  receta: "recetas",
+};
+
+export interface EduResumenTimelineItem {
+  kind: EduResumenTimelineKind;
+  /** El instante, en ISO UTC. Solo se usa para ORDENAR. */
+  atISO: string;
+  /** "lun 31 ago 09:30", ya formateado en la zona del instituto. */
+  whenLabel: string;
+  /** Qué pasó: "Nota clínica · Endodoncia", "Radiografía · panoramica.jpg"… */
+  title: string;
+  /** Quién lo hizo. Congelado al leer: es la respuesta a "¿quién?". */
+  who: string;
+}
+
+/** Cuántos renglones pinta la línea de tiempo del resumen. */
+export const EDU_RESUMEN_TIMELINE_MAX = 8;
+
+/**
+ * Mezcla los cuatro orígenes en UNA línea de tiempo, del más reciente al
+ * más viejo, y recorta. Puro: los insumos ya vienen recortados por el
+ * alcance clínico — esta función jamás decide quién ve qué.
+ *
+ * El orden compara los ISO como texto: son UTC con el mismo formato, así
+ * que el orden lexicográfico ES el cronológico (y no hay `new Date()`
+ * escondido que una prueba no pueda fijar).
+ */
+export function eduResumenTimeline(
+  items: EduResumenTimelineItem[],
+  max: number = EDU_RESUMEN_TIMELINE_MAX,
+): EduResumenTimelineItem[] {
+  return [...items]
+    .sort((a, b) => (a.atISO < b.atISO ? 1 : a.atISO > b.atISO ? -1 : 0))
+    .slice(0, Math.max(0, max));
+}
+
+/** Un estudio reciente, con su miniatura si es imagen. */
+export interface EduResumenEstudio {
+  id: string;
+  kindLabel: string;
+  name: string;
+  whenLabel: string;
+  byName: string;
+  /** URL FIRMADA de lectura, solo para imágenes; null = se pinta el tipo
+   *  como texto (una tomografía no tiene miniatura barata). */
+  thumbUrl: string | null;
+}
+
 export interface EduPatientResumenData {
   /** Citas COMPLETADAS dentro del alcance de quien mira. */
   visitas: number;
@@ -222,4 +292,9 @@ export interface EduPatientResumenData {
   /** null = quien mira NO ve dinero (alumno/docente): NO SE CONSULTÓ. */
   saldo: EduResumenSaldo | null;
   avisos: EduResumenAviso[];
+  /** Ola de Casos. null = sin alcance clínico (caja): NO SE CONSULTÓ. */
+  timeline: EduResumenTimelineItem[] | null;
+  /** Ola de Casos. Los últimos estudios, con miniatura si son imagen.
+   *  null = sin alcance clínico (caja). */
+  estudios: EduResumenEstudio[] | null;
 }

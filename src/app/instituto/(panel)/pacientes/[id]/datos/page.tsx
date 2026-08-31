@@ -7,6 +7,7 @@ import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
 import { formatEduDate } from "@/lib/edu/pacientes-core";
 import { EDU_PATIENT_STATUS_LABELS, EDU_SEX_LABELS } from "@/lib/edu/types";
+import { EduAntecedentesCard } from "@/components/edu/expediente/antecedentes-card";
 
 /**
  * Pestaña DATOS de la ficha del paciente.
@@ -25,6 +26,15 @@ import { EDU_PATIENT_STATUS_LABELS, EDU_SEX_LABELS } from "@/lib/edu/types";
  * El botón de abajo lleva a esa lista. Es un paso más, y se prefiere a la
  * duplicación: esta pestaña se abre cien veces al día para MIRAR y unas
  * pocas para corregir un teléfono.
+ *
+ * ── Ola de Casos · LA EXCEPCIÓN: LOS ANTECEDENTES ───────────────────────
+ * Los ANTECEDENTES MÉDICOS sí se capturan AQUÍ, y no rompe la regla de
+ * arriba porque su único formulario es ÉSTE (el modal de la lista no los
+ * tiene ni los tendrá). No podían vivir en ese modal: lo abre solo
+ * `pacientes.manage` (caja/dirección) y la historia clínica la completa
+ * también el ALUMNO con el paciente en el sillón — su llave es
+ * `expediente.write`, por su propio endpoint. Mismo criterio que el
+ * origen: campo con dueño distinto, puerta distinta.
  */
 export default async function PacienteDatosPage({ params }: { params: { id: string } }) {
   const ctx = await getEduContext();
@@ -40,9 +50,23 @@ export default async function PacienteDatosPage({ params }: { params: { id: stri
   if (!p) notFound();
 
   const canManage = hasEduPermission(permUser, "pacientes.manage");
+  // Ola de Casos: los antecedentes los captura recepción (pacientes.manage)
+  // Y quien hace la historia clínica (expediente.write) — dos llaves, una
+  // puerta (el endpoint /antecedentes comprueba las mismas dos).
+  const canAntecedentes =
+    canManage || hasEduPermission(permUser, "expediente.write");
 
   return (
     <div className="edu-stack">
+      {/* ── Ola de Casos · ANTECEDENTES, PRIMERO ───────────────────────────
+          Van arriba de los datos de contacto: en esta pestaña lo que puede
+          matar a alguien es una alergia sin capturar, no un teléfono. */}
+      <EduAntecedentesCard
+        patientId={p.id}
+        antecedentes={p.antecedentes}
+        canEdit={canAntecedentes}
+      />
+
       <section className="edu-section">
         <div className="edu-section__head">
           <h2 className="edu-section__title">Datos del paciente</h2>
