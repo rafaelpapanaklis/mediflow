@@ -100,7 +100,17 @@ export default async function InstitutoAgendaPage({
   const [page, sillones, alumnos, docentes, programas, pacientes] = await Promise.all([
     listEduAgenda(cctx, query, tz, now),
     listEduChairOptions(cctx),
-    listEduStudentOptions(ctx, now),
+    // 🔴 P1-4 DE LA AUDITORÍA — EL PADRÓN NO VIAJA AL NAVEGADOR DE QUIEN NO
+    // LISTA ALUMNOS. `listEduStudentOptions` devuelve a TODOS los alumnos
+    // activos del instituto con su id, su nombre y su matrícula; como es
+    // prop de un componente cliente, iba entero en el payload RSC de
+    // cualquiera con `agenda.view` — el ALUMNO incluido, que por alcance no
+    // lista ni una fila de su generación (padron-core.ts, eduPadronScope).
+    // Solo se pinta bajo `canManage` (el alta y el reagendar), así que
+    // llevaba el mismo `canManage ? … : []` que sus dos vecinas de abajo
+    // desde el primer día. De ahí salían, además, los ids que hacían
+    // trivial el P0-1.
+    canManage ? listEduStudentOptions(ctx, now) : Promise.resolve([]),
     canManage ? listEduSupervisorOptions(ctx) : Promise.resolve([]),
     listEduPrograms(ctx),
     canManage ? listEduPatientOptions(ctx, now) : Promise.resolve([]),

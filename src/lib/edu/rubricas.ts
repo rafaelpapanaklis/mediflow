@@ -31,6 +31,7 @@ import { eduCleanId } from "@/lib/edu/agenda-core";
 import {
   eduCaseScopeWhere,
   eduScopeIsEmpty,
+  eduStudentScopeWhere,
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
@@ -596,18 +597,52 @@ export async function listEduCaseGrades(
   return marcarVigentes(rows, timeZone);
 }
 
-/** Las calificaciones de UN ALUMNO (la bitácora). */
+/**
+ * Las calificaciones de UN ALUMNO (la bitácora).
+ *
+ * 🔴 P0-1 DE LA AUDITORÍA — EL ALUMNO SE BUSCA DENTRO DEL ALCANCE, y ésta
+ * era la única lectura del vertical que no lo hacía. Con un `where` de
+ * `{ institutionId, studentId }` a secas,
+ * `GET /api/instituto/calificaciones?alumno=<id de un compañero>` le
+ * contestaba a CUALQUIERA con "evaluacion.view" —el ALUMNO la tiene por
+ * defecto— el expediente académico entero del compañero: cada criterio con
+ * su comentario, quién lo calificó y, lo que de verdad duele, el nombre y
+ * el FOLIO de los pacientes que atendió.
+ *
+ * El recorte no se escribe a mano aquí: se pide el mismo helper de siempre
+ * (`eduStudentScopeWhere`, del recurso "cases") y se resuelve al alumno
+ * ANTES de leer sus notas, exactamente como `getEduBitacora`
+ * (evaluacion.ts). Un alumno que no le toca a quien pregunta se ve igual
+ * que uno que no existe: lista vacía.
+ *
+ * Reparto: ALUMNO → las suyas; DOCENTE → las de sus alumnos con asignación
+ * VIGENTE; DIRECCION → todas; CAJA → ninguna (cobrar no es evaluar).
+ *
+ * ⚠️ `getEduBitacora` ya resolvió al alumno con este mismo `where` antes de
+ * llamar aquí, así que en esa ruta la consulta se repite. Es un `findFirst`
+ * por id y se paga a gusto: el precio de que el recorte viva DENTRO de la
+ * función es que ninguna llamada futura pueda olvidárselo.
+ */
 export async function listEduStudentGrades(
   ctx: EduClinicaContext,
   studentId: string,
   timeZone: string,
+  now: Date = new Date(),
 ): Promise<EduGradeRow[]> {
   const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "cases");
+  if (eduScopeIsEmpty(scope)) return [];
   const id = eduCleanId(studentId);
   if (!id) return [];
 
+  const alumno = await prisma.eduStudent.findFirst({
+    where: { ...eduStudentScopeWhere({ institutionId, scope, now }), id },
+    select: { id: true },
+  });
+  if (!alumno) return [];
+
   const rows = await prisma.eduCaseGrade.findMany({
-    where: { institutionId, studentId: id },
+    where: { institutionId, studentId: alumno.id },
     orderBy: [{ gradedAt: "desc" }],
     take: EDU_EVALUACION_MAX_ROWS,
     select: GRADE_SELECT,

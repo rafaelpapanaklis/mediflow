@@ -333,6 +333,42 @@ async function traspasarUno(
       });
     }
 
+    // ═════════════════════════════════════════════════════════════════════
+    // 3-bis · 🔴 P0-2 DE LA AUDITORÍA — TODAS LAS CITAS SUELTAS DEL
+    // SALIENTE CON ESTE PACIENTE SE ENGANCHAN AL CASO QUE ENTREGA.
+    //
+    // El paso 3 de arriba solo rescataba UNA cita: la de tamizaje que abrió
+    // el caso. Pero hasta este arreglo la agenda no mandaba `caseId` nunca,
+    // así que las citas de TRATAMIENTO y de CONTROL del saliente con este
+    // paciente están casi todas sueltas — y una cita suelta le sigue
+    // abriendo la ficha, el expediente, el odontograma y las radiografías
+    // del paciente que acaba de entregar (la rama de citas de
+    // `eduPatientScopeWhere`). El traspaso "funcionaba" y el que se iba se
+    // quedaba con la llave.
+    //
+    // Engancharlas al caso VIEJO —el que en este mismo instante quedó
+    // TRANSFERRED— cierra esa puerta sin borrar nada: la cita sigue siendo
+    // del alumno que la atendió (sus horas clínicas se cuentan por
+    // `EduAppointment.studentId`, no por el caso) y sigue saliendo en su
+    // agenda. Lo que deja de dar es acceso al PACIENTE, que es exactamente
+    // lo que un traspaso significa.
+    //
+    // Va ANTES del paso 4 a propósito: las que además sean FUTURAS ya
+    // colgarán de `caso.id` cuando el paso 4 las busque, así que se van con
+    // el alumno nuevo sin escribir una sola condición más. Ese era el otro
+    // daño del mismo hueco — el martes que viene el paciente llegaba a la
+    // cita de alguien que ya no lleva su caso.
+    // ═════════════════════════════════════════════════════════════════════
+    await tx.eduAppointment.updateMany({
+      where: {
+        institutionId,
+        patientId: caso.patientId,
+        studentId: caso.studentId,
+        caseId: null,
+      },
+      data: { caseId: caso.id },
+    });
+
     // 4 · Las citas FUTURAS pasan al alumno nuevo, con su caso y su
     // supervisor. Es la mitad de "sin que el paciente quede a medias": si
     // no se movieran, el martes que viene el paciente llegaría a una cita

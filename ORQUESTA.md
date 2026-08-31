@@ -28037,3 +28037,216 @@ Postgres 13, pero no se corrió).
 7. **Repartir el acceso** en `/instituto/sedes` → "Quién entra". Y tenerlo presente al hacerlo: quien
    no tiene NINGUNA sede marcada entra a todas, y quitarle a alguien la última se las abre todas otra
    vez. La pantalla lo avisa en el momento.
+
+---
+
+## [Institucional · AUDITORÍA] — Los cuatro hallazgos graves: las calificaciones del compañero se leían sin alcance, y el que entrega un caso conserva la llave porque su cita no cuelga de ningún caso ✅ (2026-08-31) · rama `fix/edu-auditoria`
+
+Arregla **P0-1, P0-2, P1-3 y P1-4** de `docs/audits/EDU_AUDIT.md` (la auditoría del PR #135).
+Los P2 y P3 **no se tocaron**: son de otra pasada y mezclarlos habría hecho el diff imposible de
+revisar con cuatro olas (7, 8, 9 y 10) esperando merge sobre los mismos archivos.
+
+**15 archivos, ninguno compartido.** No se tocó `prisma/schema.prisma` — este arreglo no necesita
+una sola columna nueva— ni `src/middleware.ts`. Cero conflicto de schema para las olas en vuelo.
+
+### La frase que explica los cuatro
+
+La auditoría dejó una observación que vale más que los hallazgos: **ninguno de los cuatro habría
+puesto roja la suite**, y por una razón que se puede nombrar. Las pruebas del vertical comprueban
+los módulos PUROS (`visibility.ts`, `*-core.ts`) y ahí no había nada roto. Lo que fallaba estaba en
+la capa que CONSUME esos módulos — un `findMany` que se olvidó de llamar al helper, un `page.tsx`
+que mandó al navegador lo que el helper habría recortado, un `update` que no revalidó y un cliente
+que nunca mandó un campo opcional. **Un `where` correcto que nadie llama es exactamente igual de
+inseguro que uno equivocado.**
+
+Por eso la prueba nueva (`edu-auditoria.test.ts`, 15 pruebas) hace las dos cosas: comprueba lo puro
+Y **lee los archivos** para verificar que la llamada al helper está puesta — el mismo truco que ya
+usa `edu-caja.test.ts` para que ningún endpoint lea el `institutionId` de un body.
+
+### P0-1 · Un alumno leía las calificaciones —y los pacientes— de sus compañeros
+
+`GET /api/instituto/calificaciones?alumno=<id de un compañero>` leía por `studentId` crudo. Era la
+ÚNICA lectura del vertical que no pasaba por el alcance, y devolvía el expediente académico entero
+del otro: cada criterio con su comentario, quién calificó, y el **nombre y el folio de los pacientes
+que atendió**. La key `evaluacion.view` la tienen DIRECCION, DOCENTE y ALUMNO por defecto.
+
+`listEduStudentGrades` (`rubricas.ts`) ahora pide `eduVisibility(ctx, "cases")`, corta en seco si el
+alcance es "none" (caja) y busca al alumno con `eduStudentScopeWhere` **antes** de leer nada. Un id
+que no le toca a quien pregunta se ve exactamente igual que uno que no existe: lista vacía.
+
+**No se borró la rama `?alumno=`**, que era la otra opción propuesta. Borrarla habría cerrado esta
+puerta dejando la regla sin dueño: la siguiente pantalla que necesitara las calificaciones de un
+alumno la habría vuelto a abrir igual de rota.
+
+La función ganó un cuarto parámetro `now` opcional y `getEduBitacora` le pasa el suyo (un solo `now`
+por pantalla, como todo el vertical). En esa ruta el alumno se resuelve dos veces —la bitácora ya lo
+había hecho— y se paga a gusto: un `findFirst` por id a cambio de que ninguna llamada futura pueda
+olvidarse del recorte.
+
+### P0-2 · El traspaso no quitaba la llave, porque casi ninguna cita tenía caso
+
+El más caro de los cuatro. `eduPatientScopeWhere` decide que un paciente es "mío" también por mis
+CITAS y descarta las que cuelgan de un caso TRANSFERRED — pero la excepción `{ caseId: null }`,
+pensada para la cita de TAMIZAJE (que es anterior al caso), en la práctica era la REGLA: la pantalla
+de agenda no mandaba `caseId` nunca. El alumno que entregaba un caso seguía abriendo la ficha, el
+expediente, el odontograma y las radiografías de su ex paciente. **La mitad invisible de la Ola 6 no
+funcionaba.**
+
+Se cerró por los **tres** lados, porque el dato y el `where` se protegen mutuamente:
+
+1. **La cita se engancha sola.** `resolveAppointmentCaseId` (`agenda.ts`) es una sola función que
+   usan el alta y el reagendar: si el cliente no manda `caseId`, se busca el caso VIVO de ese
+   paciente con ese alumno y se engancha. Con cero (todavía no hay caso) o con dos (dos
+   especialidades) se deja suelta — adivinar entre dos casos mueve una sesión al expediente
+   equivocado. El TAMIZAJE nace suelto a propósito: es la valoración que ABRE el caso.
+2. **El traspaso engancha las que ya estaban sueltas.** `traspasarUno` (`traspasos.ts`), **antes**
+   de mover las futuras, engancha todas las citas sin caso del saliente con ese paciente al caso que
+   en ese mismo instante quedó TRANSFERRED. Como ese paso va antes, las que además son futuras se
+   van con el alumno nuevo sin escribir una condición más — que era el otro daño del mismo hueco: el
+   martes siguiente el paciente llegaba a la cita de alguien que ya no llevaba su caso.
+3. **Y el `where` deja de depender de que los datos estén bien.** La rama de citas de
+   `eduPatientScopeWhere` lleva ahora `cases: { none: { …, status: "TRANSFERRED" } }`: una cita
+   suelta no abre la ficha de un paciente al que ya le entregué un caso. Es lo único que protege a
+   las filas de los traspasos que ya ocurrieron, sin depender de que nadie corra el `.sql`.
+
+**Lo que NO se hizo, y por qué.** La auditoría proponía un `<select>` de casos en el modal de la
+agenda. No se hizo: quien agenda es **CAJA**, y *caja no ve casos* — es la línea del contrato del
+vertical. Un desplegable de casos abiertos le pondría en el navegador la especialidad y el
+procedimiento de cada paciente, que es exactamente lo que el alcance le niega. Resolverlo en el
+servidor además no se puede olvidar.
+
+**Tampoco se estrechó `{ caseId: null }` a `type: "TAMIZAJE"`**, que era la otra propuesta, y este
+es el razonamiento que más se pagó: el modal de alta propone **TRATAMIENTO** por defecto, así que la
+primerísima cita de un paciente —la que se agenda antes de que exista ningún caso— casi nunca es de
+tipo TAMIZAJE. Estrecharlo así habría dejado al alumno sin poder abrir la ficha del paciente que
+tiene enfrente, que es justo lo que esa rama existe para evitar. Habría cambiado una fuga por un
+bloqueo.
+
+**Falso negativo conocido y aceptado:** si a un alumno le vuelven a agendar al paciente que entregó
+SIN abrirle un caso nuevo, no verá su ficha hasta que se le abra. Falla del lado cerrado. Y para un
+DOCENTE, el descarte no distingue *cuál* de sus alumnos entregó el caso: Prisma no correlaciona dos
+`some` hermanos sobre relaciones distintas.
+
+**De regalo**: la etapa `SESSION` del gate de la Ola 4 queda desbloqueada. `requestEduApproval`
+exige `caseId = caso.id` en la cita y el mensaje de error decía "engánchala primero desde la
+agenda", cosa que la agenda no ofrecía. Ahora lo hace sola.
+
+### P1-3 · Reagendar dejaba la cita colgada del caso de otro alumno
+
+El POST defendía la invariante desde el primer día ("Ese caso es de otro alumno"); el PATCH no la
+miraba. La fila quedaba diciendo que B atendió el caso de A.
+
+**No se rebota con un throw**, que era lo que la auditoría llamaba "lo más consistente": mover una
+cita a otro alumno es lo que hace caja cuando alguien falta, y prohibirlo dejaría sin salida a la
+única persona que puede resolverlo un martes a las nueve. Se **resuelve**: el caso pasa a ser el del
+alumno nuevo (su caso vivo con ese paciente, si lo tiene) o se suelta — con la misma función que usa
+el alta.
+
+El detalle que costó razonar: la comparación es contra el alumno **resultante**
+(`studentId !== current.studentId`), no contra la presencia de `input.studentId`. La pantalla de
+reagendar manda el alumno SIEMPRE, también cuando no lo cambia, y volver a derivar en cada
+movimiento habría soltado el caso de una cita cuyo caso ya se cerró: reescribir el pasado por mover
+una hora.
+
+El predicado puro vive en `agenda-core.ts` (`eduCaseFitsAppointment`) para que las dos escrituras
+defiendan la invariante con la MISMA línea y se pueda probar sin base de datos.
+
+### P1-4 · El padrón completo viajaba al navegador de quien no lista ni una fila
+
+`eduPadronScope` es tajante: ALUMNO → ninguna fila ("un residente no lista a su generación"),
+DOCENTE → solo los suyos vigentes. Dos pantallas se lo saltaban, y de ahí salían los ids que hacían
+trivial el P0-1.
+
+- **`/instituto/agenda`**: `listEduStudentOptions` va detrás del mismo
+  `canManage ? … : Promise.resolve([])` que ya tenían sus dos vecinas. Son tres. La lista solo se
+  pinta bajo `canManage` (el alta y el reagendar), así que no se pierde nada.
+- **`/instituto/docentes`**: el recorte no se escribe con un `if (role !== "DIRECCION")` sino que se
+  le pide a **`eduPadronScope`**, el helper que ya decide esto. Un `if` suelto es una segunda regla
+  que el día que aparezca un rol nuevo dirá algo distinto de la primera; y con el helper, un ALUMNO
+  o una CAJA con `docentes.view` por override reciben cero filas de verdad, en vez de depender de
+  que su id no aparezca como supervisor de nadie.
+- **Y `GET /api/instituto/docentes?detalle=1`**, que la auditoría no lista porque leyó pantallas,
+  tenía la MISMA fuga llamando a la misma función. Arreglar solo la pantalla habría sido cerrar la
+  puerta dejando la ventana abierta.
+
+El **conteo agregado** por docente (`listEduTeachers`) no se toca: "cuántos alumnos lleva cada quien
+hoy" es para lo que existe la pantalla, y es un número, no una identidad. Como consecuencia un
+docente puede ver "3" en un colega y una lista vacía al desplegarla — la nota de la pantalla lo dice
+ahora con esas palabras, en vez de pedirle que recargue eternamente.
+
+### El SQL
+
+`sql/edu-fix-auditoria.sql` — **idempotente, SIN DDL, CERO DROP, y NO SE APLICÓ** (la orden lo
+prohibía). Solo repara datos, y solo la columna `"caseId"` de `edu_appointments`:
+
+1. las citas sueltas de TRATAMIENTO/CONTROL cuyo par (paciente, alumno) tiene UN caso vivo;
+2. **la del P0-2**: las citas sueltas de un par que ya se traspasó, al caso TRANSFERRED;
+3. **la del P1-3**: las citas colgadas del caso de otro alumno o de otro paciente — se repuntan al
+   caso correcto y, si no lo hay, se sueltan (una cita sin caso es un dato incompleto; una colgada
+   del caso de otro es un dato FALSO, y de los dos hay que quitar el falso).
+
+Trae los SELECT de antes y de después, y el que lista los pares ambiguos (dos casos vivos) que hay
+que mirar a mano. **Aunque no se aplique, el agujero está cerrado**: el `where` ya no le abre la
+ficha a quien entregó el caso. El `.sql` es lo que deja los datos diciendo la verdad.
+
+### Verificación de esta rama
+
+`npx prisma generate` ✅ (v5.22.0) · `npm run build` ✅ **exit 0, completo y sin pipe**
+(`Generating static pages (455/455)`, 64 rutas `/api/instituto/*` y 28 pantallas `/instituto/*`,
+todas `ƒ (Dynamic)`) · `npx tsc --noEmit` ✅ para el vertical (siguen los **mismos 6 errores ajenos**
+de `src/lib/barber/__tests__/`, preexistentes en `origin/main`; esta rama no toca un solo archivo de
+barbería) · **575 pruebas del vertical en verde**, de ellas **15 nuevas** (`edu-auditoria`) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅ (15 propios,
+**0 compartidos**, 0 prohibidos).
+
+Los dos ruidos del build son los de siempre y no son de esta rama: `Critical dependency` de
+`node_modules/file-type` (lo arrastra `/api/ai-wallet/spei/topup`), las clases Tailwind ambiguas, y
+el spam de `Environment variable not found: DATABASE_URL` durante "Generating static pages",
+esperado en un worktree sin `.env`.
+
+Tres pruebas VIEJAS de `edu-traspaso.test.ts` se actualizaron —y solo tres— porque contaban
+literales del `where` de pacientes (`userId` dos veces, `startsAt` dos veces, `status` con dos
+condiciones) y ahora hay una condición más. Su intención no cambió: siguen comprobando que el
+recorte cuelga del alumno y que TRANSFERRED es el único estado que quita el acceso.
+
+### Lo que NO se probó
+
+Nada corrió contra Postgres: **`sql/edu-fix-auditoria.sql` no se aplicó** y ninguna de las tres
+escrituras nuevas (el enganche al agendar, el del reagendar y el del traspaso) se ejecutó contra una
+base real. Todo lo verde son funciones puras, la forma de los `where` y la lectura del código
+fuente. **No se abrió un navegador**: que la agenda siga agendando y que la pantalla de docentes se
+pinte sin la lista nominal está razonado, no visto.
+
+En particular no se comprobó con datos: que el `NOT EXISTS` que Prisma genera para
+`cases: { none: … }` use `edu_cases_patient_idx` (debería: es `(institutionId, patientId)`), ni el
+comportamiento del backfill sobre volumen real.
+
+### Lo que se dejó fuera a propósito
+
+- **Los 10 P2 y los 4 P3 de la auditoría**, por orden explícita.
+- **`/instituto/pacientes` (`page.tsx:76`) también manda `listEduStudentOptions` completo**, y el
+  ALUMNO sí tiene `pacientes.view`. Es la misma familia que el P1-4 y la auditoría no lo lista. No
+  se arregló porque ahí el padrón alimenta un filtro **visible** ("¿lo trajo algún alumno?"): no es
+  mover una línea, es decidir qué ve un alumno en ese desplegable, y eso es producto. Queda anotado
+  aquí en vez de resuelto a medias. Lo mismo, en menor grado, con
+  `/instituto/agenda/tamizaje` y `/instituto/evaluacion/[id]`, que sí están detrás de permisos que
+  el ALUMNO no tiene (`casos.assign`, `traspaso.manage`).
+- **El alumno GRADUATED que conserva `EduUser.isActive`** y por tanto sus llaves si nadie le
+  traspasa los casos. Lo menciona el P0-2 de la auditoría como "el caso peor", pero es una decisión
+  de producto (¿graduarse cierra la sesión?) y no un `where` mal escrito.
+- **`docs/audits/EDU_AUDIT.md` no estaba en `main`** cuando se hizo esta rama: vive en
+  `origin/audit/edu-vertical` (PR #135, abierto). Se copió **byte a byte** y se le añadieron las
+  marcas de arreglado, así que si el #135 entra primero el conflicto es trivial (quedarse con esta
+  versión). `scripts/edu-guard.cjs` ganó el patrón `docs/audits/EDU_*.md` como PROPIO del vertical —
+  es prosa sobre el instituto y no toca una línea del dental—, que es exactamente lo que el aviso
+  del propio guard pide hacer con cualquier ruta nueva del vertical.
+
+### Al desplegar
+
+1. El código no necesita nada: no hay columnas nuevas ni migración.
+2. **`sql/edu-fix-auditoria.sql`** en Supabase → SQL Editor → Run, **con respaldo previo** (son
+   `UPDATE` sobre datos existentes, no `CREATE`). Correr antes el primer SELECT de la sección 5 para
+   ver cuántas filas va a tocar.
+3. Comprobar con los tres SELECT de después: las tres cuentas tienen que dar **0**.
+4. Revisar a mano los pares ambiguos que liste el último SELECT (dos casos vivos del mismo paciente
+   con el mismo alumno). En una escuela normal son cero.

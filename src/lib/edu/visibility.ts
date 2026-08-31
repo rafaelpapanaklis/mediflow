@@ -328,6 +328,24 @@ export interface EduPatientScopeInput {
  * traspaso "funciona" perfectamente sin esto, solo que el alumno saliente
  * se queda con la llave— y por eso vive aquí, en el punto único, y no en
  * la función que traspasa.
+ *
+ * 🔴 P0-2 DE LA AUDITORÍA — Y LA RAMA DE LAS CITAS TENÍA UN AGUJERO DEL
+ * TAMAÑO DE LA OLA 6. El `{ caseId: null }` de abajo existe para la cita
+ * de TAMIZAJE (que es anterior al caso), pero en la práctica CASI NINGUNA
+ * cita traía caso, así que esa opción no era la excepción: era la regla, y
+ * el descarte del caso TRANSFERRED de al lado no se aplicaba a nada. El
+ * alumno que entregaba un caso seguía abriendo la ficha, el expediente, el
+ * odontograma y las radiografías de su ex paciente.
+ *
+ * Se cierra por los dos lados, porque uno solo no basta:
+ *   · EL DATO — la cita queda enganchada a su caso cuando lo hay: al
+ *     agendarla y al reagendarla (agenda.ts) y, para lo que ya existía,
+ *     al traspasar (traspasos.ts engancha las citas sueltas del saliente
+ *     con ese paciente al caso que entrega).
+ *   · EL `where` — y aun así, una cita suelta NO abre la ficha de un
+ *     paciente al que ya le entregué un caso. Es la línea `cases: { none:
+ *     … TRANSFERRED }` de abajo, y es la que protege a las filas viejas,
+ *     las de los traspasos que ocurrieron ANTES de este arreglo.
  */
 export function eduPatientScopeWhere({
   institutionId,
@@ -361,6 +379,25 @@ export function eduPatientScopeWhere({
             OR: [{ caseId: null }, { case: { status: { not: EDU_CASE_TRANSFERRED } } }],
           },
         },
+        // 🔴 …Y QUE NO SEA UN PACIENTE QUE YA ENTREGUÉ. Sin esta línea, la
+        // opción `{ caseId: null }` de arriba es una puerta abierta: basta
+        // UNA cita suelta —y las de antes de este arreglo lo son casi
+        // todas— para que el alumno saliente conserve la ficha completa.
+        //
+        // Aquí sí se usa la forma negativa, y no contradice el comentario
+        // de arriba: `none` sobre una relación uno-a-MUCHOS es "ninguna
+        // fila cumple" y no tiene ambigüedad. Lo que no se escribe con un
+        // NOT es la relación uno-a-uno NULA (`case`), que es donde el ORM
+        // decide por ti.
+        //
+        // ⚠️ Falso negativo conocido y aceptado: si a un alumno le vuelven
+        // a agendar al paciente que entregó SIN abrirle un caso nuevo, no
+        // verá su ficha hasta que se le abra. Falla del lado cerrado, se
+        // arregla abriendo el caso (que es lo que hay que hacer de todos
+        // modos) y es preferible a la alternativa — dejar la llave puesta.
+        // Para un DOCENTE el descarte no distingue CUÁL de sus alumnos
+        // entregó el caso: Prisma no correlaciona dos `some` hermanos.
+        cases: { none: { institutionId, student, status: EDU_CASE_TRANSFERRED } },
       },
     ],
   };
