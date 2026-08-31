@@ -107,7 +107,9 @@ const APPOINTMENT_SELECT = {
       program: { select: { name: true } },
     },
   },
-  chair: { select: { id: true, name: true, number: true } },
+  // Ola 12: la SEDE viaja con la cita (derivada del sillón, como todo lo
+  // de la Ola 11) para que la agenda del paciente pueda decir dónde es.
+  chair: { select: { id: true, name: true, number: true, campus: { select: { name: true } } } },
   supervisor: { select: { firstName: true, lastName: true, email: true } },
   case: { select: { status: true, program: { select: { name: true } } } },
 } satisfies Prisma.EduAppointmentSelect;
@@ -147,6 +149,7 @@ function toRow(a: AppointmentPayload, timeZone: string): EduAppointmentRow {
     chairId: a.chair.id,
     chairName: a.chair.name,
     chairNumber: a.chair.number,
+    chairCampusName: a.chair.campus.name,
 
     supervisorUserId: a.supervisorUserId,
     supervisorName: a.supervisor ? personName(a.supervisor) : null,

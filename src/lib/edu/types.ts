@@ -424,8 +424,16 @@ export const EDU_RECORD_TRANSITIONS: Record<EduRecordStatus, EduRecordStatus[]> 
   FIRMADA: [],
 };
 
-/** Qué es el archivo que se subió al expediente. */
-export type EduStudyKind = "RADIOGRAFIA" | "TOMOGRAFIA" | "FOTO" | "PDF" | "OTRO";
+/** Qué es el archivo que se subió al expediente.
+ *  Ola 12: gana MODELO_3D (mallas STL/PLY/OBJ), que hasta entonces caían
+ *  en OTRO y la galería no podía ofrecerles el visor 3D sin adivinar. */
+export type EduStudyKind =
+  | "RADIOGRAFIA"
+  | "TOMOGRAFIA"
+  | "FOTO"
+  | "PDF"
+  | "OTRO"
+  | "MODELO_3D";
 
 export const EDU_STUDY_KINDS: EduStudyKind[] = [
   "RADIOGRAFIA",
@@ -433,6 +441,7 @@ export const EDU_STUDY_KINDS: EduStudyKind[] = [
   "FOTO",
   "PDF",
   "OTRO",
+  "MODELO_3D",
 ];
 
 export const EDU_STUDY_KIND_LABELS: Record<EduStudyKind, string> = {
@@ -441,6 +450,7 @@ export const EDU_STUDY_KIND_LABELS: Record<EduStudyKind, string> = {
   FOTO: "Fotografía",
   PDF: "Documento",
   OTRO: "Otro archivo",
+  MODELO_3D: "Modelo 3D",
 };
 
 export const EDU_STUDY_KIND_DESCRIPTIONS: Record<EduStudyKind, string> = {
@@ -449,6 +459,7 @@ export const EDU_STUDY_KIND_DESCRIPTIONS: Record<EduStudyKind, string> = {
   FOTO: "Fotografía intraoral o extraoral.",
   PDF: "Reporte, interconsulta o cualquier papel escaneado.",
   OTRO: "Un archivo que no encaja en los anteriores.",
+  MODELO_3D: "Malla de escáner intraoral: STL, PLY u OBJ. Se abre en el visor 3D.",
 };
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -921,7 +932,11 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   // Ola 7. "Dirección" y no "Tablero" ni "Panel": la escuela le dice así a
   // quien la dirige, y el item solo lo ve esa persona.
   direccion: "Dirección",
-  "mi-dia": "Mi día",
+  // Ola 12: era "Mi día". Se renombra porque la pantalla ganó la vista de
+  // SEMANA — un alumno necesita saber qué trae el jueves, no solo lo de
+  // esta tarde. La ruta sigue siendo /instituto/mi-dia: renombrarla
+  // rompería los enlaces guardados, igual que con /padron/estructura.
+  "mi-dia": "Mi agenda",
   autorizaciones: "Autorizaciones",
   agenda: "Agenda",
   pacientes: "Pacientes",

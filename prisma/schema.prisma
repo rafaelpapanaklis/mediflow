@@ -13234,6 +13234,12 @@ enum EduStudyKind {
   FOTO
   PDF
   OTRO
+  /// Ola 12: malla de escáner intraoral (STL/PLY/OBJ). Antes caían en OTRO
+  /// y la galería no podía ofrecer el visor 3D sin adivinar por extensión.
+  /// Se AGREGA al final del enum (aditivo): en Postgres es un
+  /// `ALTER TYPE ... ADD VALUE` (sql/edu-ola-12.sql) y ningún valor viejo
+  /// se toca.
+  MODELO_3D
 }
 
 /// LA NOTA CLÍNICA (SOAP) de una sesión.

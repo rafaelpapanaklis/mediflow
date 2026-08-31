@@ -6,6 +6,7 @@ import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { EDU_CAJA_MAX_ROWS, parseEduChargeFilters } from "@/lib/edu/dinero-core";
 import { getEduOpenCashSession, listEduCharges } from "@/lib/edu/caja";
+import { getEduPatient } from "@/lib/edu/pacientes";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { eduSafeTimeZone } from "@/lib/edu/agenda-core";
 import { getEduCampusScope } from "@/lib/edu/campus";
@@ -82,6 +83,18 @@ export default async function InstitutoCajaPage({
   const sede = await getEduCampusScope(ctx);
   const cctx = eduWithCampus(ctx, sede);
   const filters = parseEduChargeFilters(searchParams);
+
+  // ── Ola 12 · ?cobrar=<pacienteId> — el botón "Cobrar" de la ficha ─────
+  // Llega con el paciente YA decidido: el modal de cobro se abre con él
+  // puesto, sin volver a buscarlo. Se resuelve AQUÍ (getEduPatient, con el
+  // alcance de "patients" — que para caja es todo) para que a la pantalla
+  // viaje solo {id, folio, nombre}: un id inventado en la URL simplemente
+  // no encuentra paciente y la caja abre normal.
+  const cobrarParam = searchParams?.cobrar;
+  const cobrarId = Array.isArray(cobrarParam) ? cobrarParam[0] : cobrarParam;
+  const pacienteACobrar =
+    canCharge && cobrarId ? await getEduPatient(ctx, cobrarId) : null;
+
   const [page, turno] = await Promise.all([
     listEduCharges(cctx, filters),
     getEduOpenCashSession(ctx),
@@ -130,6 +143,11 @@ export default async function InstitutoCajaPage({
         canRefund={canRefund}
         canCorte={canCorte}
         canInvoice={canInvoice}
+        cobrarPreseleccion={
+          pacienteACobrar
+            ? { id: pacienteACobrar.id, folio: pacienteACobrar.folio, name: pacienteACobrar.name }
+            : null
+        }
       />
     </div>
   );

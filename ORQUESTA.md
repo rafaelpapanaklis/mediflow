@@ -29496,3 +29496,157 @@ comportamiento del backfill sobre volumen real.
 3. Comprobar con los tres SELECT de después: las tres cuentas tienen que dar **0**.
 4. Revisar a mano los pares ambiguos que liste el último SELECT (dos casos vivos del mismo paciente
    con el mismo alumno). En una escuela normal son cero.
+
+## [Institucional Ola 12] — La ficha del paciente COMPLETA y el día del alumno: el alumno entra a SU agenda, la ficha gana resumen y acciones, y el visor 3D del dental se IMPORTA (no se copia) ✅ (2026-08-31) · rama `feat/edu-ola-12`
+
+**Qué es.** Las doce olas anteriores construyeron los módulos; ésta construye las dos pantallas donde
+se vive el día: la FICHA del paciente (que era 6 pestañas de solo lectura y un botón) y la entrada
+del ALUMNO al piso clínico (que era una bienvenida con tres tarjetas). PR contra `main` desde
+`feat/edu-ola-12`. `sql/edu-ola-12.sql` **NO aplicado** (un solo valor de enum + backfill comentado).
+
+### 1 · El alumno entra a SU agenda, no a "Inicio"
+
+- `/instituto` redirige al **ALUMNO** a `/instituto/mi-dia`; los otros tres roles conservan Inicio
+  (ahí viven el aviso del contrato y sus accesos).
+- "Mi día" pasa a llamarse **"Mi agenda"** (solo la etiqueta: la ruta `/mi-dia` no se renombra —
+  los enlaces guardados no se rompen, mismo criterio que `/padron/estructura`).
+- Gana **vista de SEMANA**: los siete días de un golpe, con paciente, hora, sillón, docente y **en
+  qué va el caso** (`caseStatus` ya viajaba en la fila; ahora se pinta). La semana es la MISMA
+  consulta con el MISMO recorte (`listEduAgenda` con `view: "semana"`) — no hay pantalla nueva que
+  pueda recortar distinto. Sin botones de estado en la semana: nadie marca "llegó" el jueves desde
+  el lunes.
+- Navegación por enlaces (`?vista=semana&dia=`) y no useState: se comparte y sobrevive al refresh.
+
+### 2 · La parrilla por sillón es de quien ve el día ENTERO
+
+- El menú reparte por **ALCANCE**, no por una key nueva: alcance `all` (caja, dirección) ve
+  "Agenda" y no "Mi agenda"; alcance recortado (alumno, docente) ve "Mi agenda" y no "Agenda".
+  Se decide por alcance y no por rol para que un override raro no deje a nadie con una pantalla
+  que le miente.
+- Y no es solo menú: **la PANTALLA `/instituto/agenda` redirige** a `/mi-dia` a quien llega con
+  alcance `own`/`supervised`. El item escondido nunca es el candado. Cero CSS involucrado.
+
+### 3 · La ficha del paciente, completa
+
+- **RESUMEN** (pestaña nueva, la primera, en la ruta base): cuántas veces ha venido (citas
+  COMPLETADAS), última visita (cuándo y con qué alumno), próxima cita — y si NO hay, la tarjeta
+  se pinta en ámbar y lo dice con todas sus letras—, casos abiertos (alumno, especialidad,
+  estado), saldo (pagado/pendiente) y AVISOS. La pestaña "Datos" (la portada anterior) se movió
+  intacta a `/datos`.
+- **El resumen respeta el reparto del vertical, bloque por bloque** (`resumen-core.ts` +
+  `resumen.ts`): ALUMNO/DOCENTE ven sus citas y sus casos y el bloque de dinero **NO SE CONSULTA**
+  (no viaja ni en el payload RSC — lección del P1-4); CAJA ve citas y saldo completos y **nada
+  clínico** (ni casos ni avisos: los tres avisos nacen de los casos). Encima del alcance, el
+  permiso: casos solo con `casos.view`, saldo solo con `caja.view`.
+- **Los tres avisos** (todo probado con datos a mano): caso EN TRATAMIENTO sin carta de
+  consentimiento firmada (una REVOCADA no cuenta — Ola 3B); caso abierto sin responsable NI
+  titular vigente; autorizaciones PENDING esperando firma. Solo sobre los casos que quien mira
+  puede ver.
+- **ACCIONES** (la ficha deja de ser de lectura): *Agendar cita* (`agenda.manage`, modal aquí
+  mismo contra `POST /api/instituto/agenda` — el caso se engancha SOLO en el servidor, P0-2),
+  *Abrir caso* (`casos.assign`, modal contra `POST /api/instituto/casos`, especialidad propuesta
+  = la del alumno, docente = su titular vigente), *Subir estudio* (`estudios.upload`, enlace a
+  Estudios con `?subir=1` que abre el modal existente — no se duplicó el formulario de subida) y
+  *Cobrar* (`caja.charge`, enlace a `/instituto/caja?cobrar=<id>`: la caja abre el modal de cobro
+  con el paciente YA elegido y la tarifa preguntada al servidor, igual que siempre). Los
+  desplegables (alumnos, sillones, docentes, especialidades) **solo se consultan y solo viajan**
+  cuando quien mira puede usar la acción.
+- **AGENDA del paciente** (pestaña nueva, `agenda.view`): sus citas futuras y pasadas con alumno,
+  sillón, **sede** (solo cuando las filas cruzan más de una — regla de la Ola 11) y estado.
+  `EduAppointmentRow` ganó `chairCampusName` (aditivo, derivado del sillón como todo lo de sedes).
+- La ficha sigue SIN filtrarse por sede (decisión explícita de la Ola 11).
+
+### 4 · El visor 3D: qué se importó tal cual y qué necesitó adaptador
+
+- **Mallas (STL/PLY/OBJ)** — `Model3DViewer` del dental se importa **TAL CUAL** (medición en mm,
+  marcas, vistas rápidas, GLB/BVH, render on-demand: cero copias) a través del adaptador
+  `src/components/edu/estudios/modelo-3d-viewer.tsx`, que resuelve sus DOS únicos acoples:
+  (1) monta un `I18nProvider` con el trozo `patients.models3d` del diccionario en español —
+  `useT()` LANZA sin provider y ese provider solo existe bajo /dashboard—, recortado en el
+  SERVIDOR para que no viaje el diccionario entero; (2) **no le pasa `patientId`/`fileId`**, con
+  lo que `canPersist` queda en false, el panel de notas no se pinta y su único fetch de escritura
+  (`PATCH /api/patients/**/models-3d/**`, del dental) es INALCANZABLE. Hay prueba que fija las
+  dos cosas.
+- **CBCT (.zip de cortes DICOM, .dcm suelto)** — `DicomSetViewer` del dental **NO se pudo
+  envolver**: sus acoples no son props sino *fetch internos* con rutas escritas dentro
+  (`POST /api/patients/{id}/dicom-set/{id}/lite` para generar el binario reducido de móvil y
+  `PATCH .../models-3d/{id}` para notas), y un adaptador no puede redirigir un fetch interno —
+  con ids del instituto contestan 401/404, el móvil quedaría en error permanente y el botón de
+  notas rompería siempre. Se aplicó el MISMO criterio que el odontograma de la Ola 3: las piezas
+  puras se importan tal cual y el CONTENEDOR es del vertical
+  (`src/components/edu/estudios/cbct-viewer.tsx`, ~340 líneas de orquestación). Importado sin
+  tocar: `MprPane` (planos con cruz sincronizada en mm, medición, sonda), `Dicom3DVolume`
+  (volumen three.js), `dicom-decode-core` + `dicom-decode.worker` (decodificación DICOM con
+  códecs, fuera del hilo), `cbct-mpr-shared` (orden por geometría real, series mezcladas, escala
+  física, ventanas — TODA la corrección de geometría del PR #126 llega sola), `GeometryWarning` y
+  `@/lib/dicom-cache` (IndexedDB). Hay prueba de que el contenedor no menciona `/api/patients/`.
+- **Móvil, honesto:** el instituto no tiene el generador del binario "lite", así que en un
+  teléfono un .zip de más de **32 MB no se intenta** (descomprimirlo recarga la pestaña en iOS
+  sin avisar) — la pantalla ofrece la descarga y dice por qué. Por debajo del tope: una vista a
+  la vez y el 3D bajo demanda, como el dental. Un `.dcm` suelto se decodifica directo (si viene
+  comprimido con códec, se avisa y se descarga: los códecs viven en el worker, que espera zip).
+- Los dos visores entran por `dynamic(ssr:false)`: three.js/jszip solo los paga quien abre un 3D.
+- El modal del vertical ganó la variante ANCHA (`wide`): un corte axial de 560 px no le sirve a
+  nadie.
+
+### 5 · "Estudios" se parte como el dental — en UNA pestaña con filtros
+
+- Filtros **Todos · Radiografías · Fotos · Archivos · Modelos 3D** (con cuenta cada uno) en la
+  misma pestaña, no cuatro pestañas nuevas: esta pantalla se usa en un teléfono, de pie, y la
+  ficha ya tiene nueve pestañas. El CBCT vive en "Modelos 3D" junto a las mallas — igual que en
+  el dental — porque los dos se abren en visor 3D.
+- `EduStudyKind` gana **MODELO_3D** (stl/ply/obj dejan de caer en OTRO). El modal de subida
+  pregunta **¿radiografía o fotografía?** solo para imágenes — es la ÚNICA corrección que el
+  servidor le acepta al cliente (`eduResolveStudyKind`): sobre un .zip o una malla se ignora y
+  manda la extensión del path que compuso el servidor, como siempre.
+
+### SQL
+
+`sql/edu-ola-12.sql` — **NO aplicado**. Un `ALTER TYPE "EduStudyKind" ADD VALUE IF NOT EXISTS
+'MODELO_3D'` y un backfill de las mallas ya subidas que va **COMENTADO a propósito**: Postgres no
+deja usar un valor de enum en la misma transacción que lo creó, así que el UPDATE se corre en una
+SEGUNDA ejecución (el archivo lo explica con el SELECT de comprobación). Sin keys nuevas de
+permisos → **sin backfill de overrides** esta vez.
+
+### Pruebas y gates
+
+- **805/805 pruebas del vertical en verde** (eran 778; `edu-resumen.test.ts` agrega 27: el
+  contrato del resumen por rol, los avisos con sus esquinas, el resolutor de tipos y ocho
+  candados de FUENTE al estilo de la auditoría — que el resumen use los `where` del punto único,
+  que los desplegables de la ficha no viajen sin permiso, que la parrilla redirija, que el visor
+  de mallas no reciba ids del dental, que el contenedor CBCT no hable con `/api/patients/`).
+  `edu-expediente.test.ts` actualizado (6 tipos, stl→MODELO_3D).
+- `npx prisma generate` limpio (el cliente conoce MODELO_3D). `npm run build` completo en verde.
+  `npx tsc --noEmit` con SOLO los 6 errores preexistentes de barber (los de siempre, vienen de
+  main). Guardia institucional limpia con `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`.
+- El primer `tsc`/build tronó por el heap por defecto de Node (exit 134, el OOM conocido): se
+  relanzó con `NODE_OPTIONS=--max-old-space-size=8192`. No es del código.
+
+### Lo que se dejó fuera a propósito
+
+- **La vista PANORÁMICA del CBCT** (reslice curvo): `PanoramicPane` es puro e importable, pero su
+  UI de trazado de arcada no se puede verificar sin navegador con un estudio real. El contenedor
+  quedó listo para sumarla en una ola corta.
+- **El binario "lite" de móvil**: exige un generador de SERVIDOR (el del dental escribe en
+  `PatientFile`). Mientras no exista, el tope de 32 MB en teléfono es la verdad y se dice.
+- **Las notas DENTRO del visor 3D**: `EduStudy.notes` ya existe y se ve en el visor de la
+  galería; duplicarlas dentro del visor exigiría un endpoint nuevo de escritura que esta ola no
+  pide.
+- **Recetas**: Ola 14, corre en paralelo. No se tocó.
+- Los 10 P2 y 4 P3 de la auditoría siguen pendientes (orden explícita).
+
+### Al desplegar
+
+1. `sql/edu-ola-12.sql` en Supabase (sección 1; luego descomentar y correr la sección 2 en una
+   segunda ejecución). Sin él, el código COMPILA y corre, pero subir una malla fallaría al
+   escribir `kind: MODELO_3D` (el enum de la base no lo conoce) — el `.sql` va ANTES del deploy,
+   como la Ola 1B.
+2. Nada más: sin columnas nuevas, sin keys nuevas, sin envs nuevas.
+
+### Sin verificar
+
+Nada de esta ola se abrió en un navegador con base real (la base del vertical sigue sin
+aplicarse — nadie ha iniciado sesión jamás en `/instituto`). En particular: el visor CBCT propio
+y el visor de mallas compilan y sus piezas puras traen las pruebas del dental, pero NO se han
+abierto con un estudio real; el flujo `?cobrar=` y `?subir=1` tampoco. Está anotado arriba de
+todo lo demás porque es la clase de cosa que solo un navegador confirma.

@@ -131,9 +131,41 @@ export function eduStudyKindForExt(ext: string): EduStudyKind {
       return "TOMOGRAFIA";
     case "pdf":
       return "PDF";
+    // Ola 12: las mallas dejan de caer en OTRO. Con su propio tipo, la
+    // galería puede filtrar "Modelos 3D" y ofrecer el visor sin adivinar
+    // por extensión — y el filtro no depende de re-parsear el nombre.
+    case "stl":
+    case "ply":
+    case "obj":
+      return "MODELO_3D";
     default:
       return "OTRO";
   }
+}
+
+/**
+ * Ola 12 — el `kind` FINAL de un estudio, con la corrección del cliente
+ * SOLO donde la extensión no alcanza a decidir.
+ *
+ * Una imagen (jpg/png/webp) puede ser una radiografía exportada o una foto
+ * intraoral, y no hay forma de distinguirlas por el archivo: ahí (y SOLO
+ * ahí) se acepta lo que eligió la persona en el formulario. Para todo lo
+ * demás manda la extensión del path que compuso el servidor: aceptar
+ * "FOTO" sobre un .zip de 600 MB haría que la galería intentara pintarlo
+ * con un <img>, que es exactamente lo que esta función existe para
+ * impedir. Un valor desconocido o incompatible se IGNORA en silencio y
+ * gana la extensión: rebotar la subida entera por un radio mal tocado
+ * sería castigar a quien ya esperó los megas.
+ */
+const EDU_IMAGE_KINDS: EduStudyKind[] = ["RADIOGRAFIA", "FOTO"];
+
+export function eduResolveStudyKind(ext: string, rawKind: unknown): EduStudyKind {
+  const porExtension = eduStudyKindForExt(ext);
+  if (porExtension !== "RADIOGRAFIA") return porExtension;
+  if (typeof rawKind !== "string") return porExtension;
+  return (EDU_IMAGE_KINDS as string[]).includes(rawKind)
+    ? (rawKind as EduStudyKind)
+    : porExtension;
 }
 
 /** Content-Type que se le pone al objeto y se guarda en la fila. */
@@ -155,6 +187,10 @@ export function eduMimeForExt(ext: string, fallback = ""): string {
       return "application/dicom";
     case "stl":
       return "model/stl";
+    case "ply":
+      // Ola 12: tenía que caer al fallback octet-stream. Con tipo propio,
+      // el visor y las descargas dicen qué es sin mirar la extensión.
+      return "model/ply";
     case "obj":
       return "model/obj";
     default:

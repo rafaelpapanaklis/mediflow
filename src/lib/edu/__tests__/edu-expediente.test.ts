@@ -651,11 +651,16 @@ test("el TIPO sale de la extensión, no del cliente", () => {
   assert.equal(eduStudyKindForExt("jpg"), "RADIOGRAFIA");
   assert.equal(eduStudyKindForExt("png"), "RADIOGRAFIA");
   assert.equal(eduStudyKindForExt("pdf"), "PDF");
-  assert.equal(eduStudyKindForExt("stl"), "OTRO");
+  // Ola 12: las mallas ganaron su propio tipo (antes caían en OTRO). La
+  // única corrección que se le acepta al cliente —radiografía↔foto sobre
+  // una imagen— se prueba en edu-resumen.test.ts.
+  assert.equal(eduStudyKindForExt("stl"), "MODELO_3D");
 });
 
-test("los cinco tipos tienen etiqueta y explicación en español", () => {
-  assert.equal(EDU_STUDY_KINDS.length, 5);
+test("los seis tipos tienen etiqueta y explicación en español", () => {
+  // Eran cinco hasta la Ola 12 (MODELO_3D). Si esto vuelve a fallar es que
+  // alguien agregó un valor al enum sin darle etiqueta — o sin backfill.
+  assert.equal(EDU_STUDY_KINDS.length, 6);
   for (const k of EDU_STUDY_KINDS) {
     assert.ok(EDU_STUDY_KIND_LABELS[k], `falta la etiqueta de ${k}`);
     assert.notEqual(EDU_STUDY_KIND_LABELS[k], k, `${k} se pinta con el valor del enum`);
@@ -669,8 +674,9 @@ test("solo las imágenes y los PDF se pintan dentro de la página", () => {
   assert.equal(eduStudyIsImage(eduMimeForExt("zip")), false);
   assert.equal(eduStudyIsPdf(eduMimeForExt("pdf")), true);
   assert.equal(eduStudyIsPdf(eduMimeForExt("dcm")), false);
-  // Una tomografía NO se pinta: se descarga. El visor CBCT del dental está
-  // acoplado a sus tablas y no se puede reutilizar (ver estudio-viewer.tsx).
+  // Una tomografía NO se pinta con <img>: desde la Ola 12 la abre el
+  // visor CBCT propio (cbct-viewer.tsx), que decodifica el DICOM — pero
+  // sigue sin ser una imagen del navegador, y eso es lo que fija esta línea.
   assert.equal(eduStudyIsImage(eduMimeForExt("dcm")), false);
   assert.equal(eduStudyIsPdf(eduMimeForExt("zip")), false);
 });

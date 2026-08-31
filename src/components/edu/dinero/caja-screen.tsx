@@ -65,6 +65,13 @@ export interface EduCajaScreenProps {
    * mismo formulario fiscal es cómo una de las dos se queda vieja.
    */
   canInvoice: boolean;
+  /**
+   * Ola 12. El botón "Cobrar" de la ficha llega con ?cobrar=<id> y el
+   * SERVIDOR resuelve al paciente (caja/page.tsx): el modal de cobro se
+   * abre solo, con él ya elegido, y se salta la búsqueda. `null` = caja
+   * normal. Solo llega cuando canCharge — sin el permiso no viaja nada.
+   */
+  cobrarPreseleccion: { id: string; folio: string; name: string } | null;
 }
 
 /**
@@ -95,11 +102,15 @@ export function EduCajaScreen({
   canRefund,
   canCorte,
   canInvoice,
+  cobrarPreseleccion,
 }: EduCajaScreenProps) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
   const [q, setQ] = useState(filters.q ?? "");
-  const [cobrando, setCobrando] = useState(false);
+  // Con preselección (el "Cobrar" de la ficha) el modal llega ABIERTO.
+  // Solo el estado inicial: cerrar y volver a abrir queda en manos de la
+  // persona, como siempre.
+  const [cobrando, setCobrando] = useState(Boolean(cobrarPreseleccion && canCharge));
   const [recibo, setRecibo] = useState<EduChargeRow | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -391,9 +402,20 @@ export function EduCajaScreen({
 
       {cobrando && (
         <Cobrar
-          onClose={() => setCobrando(false)}
+          preseleccion={cobrarPreseleccion}
+          onClose={() => {
+            setCobrando(false);
+            // Si el modal llegó abierto por ?cobrar=, se limpia la URL: un
+            // refresh del teléfono no debe volver a abrirlo.
+            if (cobrarPreseleccion) {
+              startNav(() => router.replace("/instituto/caja", { scroll: false }));
+            }
+          }}
           onDone={(folio, descartados) => {
             setCobrando(false);
+            if (cobrarPreseleccion) {
+              startNav(() => router.replace("/instituto/caja", { scroll: false }));
+            }
             recargar(
               descartados > 0
                 ? `Cobro ${folio} emitido. Ojo: ${descartados} ${descartados === 1 ? "concepto salió" : "conceptos salieron"} con el precio del servidor porque el de la pantalla estaba viejo.`
@@ -451,9 +473,12 @@ interface LineaUI {
 }
 
 function Cobrar({
+  preseleccion,
   onClose,
   onDone,
 }: {
+  /** Ola 12: el paciente que ya viene decidido desde la ficha, o null. */
+  preseleccion: PacienteBusqueda | null;
   onClose: () => void;
   onDone: (folio: string, descartados: number) => void;
 }) {
@@ -568,6 +593,18 @@ function Cobrar({
       setBusy(false);
     }
   }
+
+  // Ola 12 · el paciente preseleccionado (el "Cobrar" de la ficha) se
+  // elige SOLO, una vez, al montar: la tarifa se pregunta igual que si lo
+  // hubiera tocado la persona — la preselección se salta la búsqueda, no
+  // la cotización del servidor.
+  const preseleccionAplicada = useRef(false);
+  useEffect(() => {
+    if (!preseleccion || preseleccionAplicada.current) return;
+    preseleccionAplicada.current = true;
+    void elegirPaciente(preseleccion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preseleccion]);
 
   function agregar(procedureId: string) {
     const precio = tarifa?.prices.find((p) => p.procedureId === procedureId);

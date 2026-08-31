@@ -1,0 +1,60 @@
+-- ═══════════════════════════════════════════════════════════════════════
+-- DaleControl INSTITUCIONAL — Ola 12 · LA FICHA DEL PACIENTE Y EL DÍA
+-- DEL ALUMNO.
+--
+-- Va DESPUÉS de sql/edu-ola-3.sql (necesita el enum "EduStudyKind" y la
+-- tabla "edu_studies"). Producto SEPARADO del dental, que está VIVO en
+-- producción: este archivo NO toca ni una tabla, ni una columna, ni una
+-- fila del dental, de barbería ni de inmuebles.
+--
+-- Esta ola casi no toca la base: la ficha nueva, "Mi agenda" y el visor 3D
+-- leen tablas que ya existen. Lo ÚNICO nuevo es un valor de enum:
+--
+--   1 valor de enum · 'MODELO_3D' en "EduStudyKind" (mallas STL/PLY/OBJ,
+--                     que hasta hoy caían en 'OTRO')
+--   1 BACKFILL      · re-clasificar las mallas ya subidas (sección 2,
+--                     COMENTADA: se corre en una SEGUNDA ejecución)
+--
+-- Cómo aplicarlo: Supabase → SQL Editor → pegar → Run. Es la ÚNICA fuente
+-- de verdad del SQL del vertical; el mismo enum está en
+-- prisma/schema.prisma, así que un `prisma db push` no se lo lleva.
+--
+-- IDEMPOTENTE: `ADD VALUE IF NOT EXISTS` no falla si el valor ya está, y
+-- el backfill solo toca filas que siguen mal clasificadas.
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ── 1 · El valor nuevo del enum ─────────────────────────────────────────
+-- Las mallas de escáner intraoral (.stl/.ply/.obj) tienen visor 3D desde
+-- esta ola, y la galería filtra por "Modelos 3D": necesitan su propio
+-- valor. Se AGREGA AL FINAL del enum; ningún valor existente se toca, así
+-- que ninguna fila vieja cambia de significado.
+ALTER TYPE "EduStudyKind" ADD VALUE IF NOT EXISTS 'MODELO_3D';
+
+-- ── 2 · BACKFILL de las mallas ya subidas — COMENTADO A PROPÓSITO ──────
+-- 🔴 Postgres no deja USAR un valor de enum en la MISMA transacción que lo
+-- creó ("unsafe use of new value"). Si este UPDATE corriera junto con el
+-- ALTER de arriba en una sola ejecución del SQL Editor, fallaría entero.
+-- Por eso va comentado: primero se corre la sección 1, y en una SEGUNDA
+-- ejecución se descomenta y se corre esto.
+--
+-- Solo re-clasifica lo que el servidor guardó como 'OTRO' por ser malla
+-- (el `kind` siempre lo dedujo el servidor de la extensión del path, así
+-- que el sufijo del path es confiable). Idempotente: una fila ya
+-- re-clasificada no vuelve a coincidir con el WHERE.
+--
+-- UPDATE "edu_studies"
+--    SET "kind" = 'MODELO_3D'
+--  WHERE "kind" = 'OTRO'
+--    AND (
+--          "storagePath" LIKE '%.stl'
+--       OR "storagePath" LIKE '%.ply'
+--       OR "storagePath" LIKE '%.obj'
+--        );
+
+-- ── 3 · Comprobación ────────────────────────────────────────────────────
+-- Después de las dos ejecuciones, esto tiene que devolver 0:
+--
+-- SELECT COUNT(*) FROM "edu_studies"
+--  WHERE "kind" = 'OTRO'
+--    AND ("storagePath" LIKE '%.stl' OR "storagePath" LIKE '%.ply'
+--         OR "storagePath" LIKE '%.obj');

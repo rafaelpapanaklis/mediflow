@@ -758,6 +758,9 @@ export interface EduAppointmentRow {
   chairId: string;
   chairName: string;
   chairNumber: number;
+  /** Ola 12: la sede del sillón. La pantalla la pinta SOLO cuando las
+   *  filas cruzan más de una sede — con una sola es ruido (Ola 11). */
+  chairCampusName: string;
 
   supervisorUserId: string | null;
   supervisorName: string | null;
