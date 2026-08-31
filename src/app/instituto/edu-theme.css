@@ -3670,3 +3670,367 @@ select.edu-input {
   color: var(--edu-text-3);
   text-align: center;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Ola 6 · EVALUACIÓN ACADÉMICA
+
+   MÓVIL PRIMERO, como todo el vertical: en el teléfono cada fila es una
+   tarjeta apilada (lo hace .edu-row de arriba) y las rejillas de abajo
+   solo entran a partir de 1180 px, que es donde .edu-table se vuelve
+   tabla de verdad. Aquí no hay ni un `if` de tamaño: solo la variable
+   --edu-cols que lee el encabezado y la fila, para que no se puedan
+   desalinear.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-table--evaluacion {
+  --edu-cols: minmax(160px, 1.6fr) minmax(130px, 1.2fr) 108px 132px 96px 116px 118px;
+}
+
+.edu-table--bitacora {
+  --edu-cols: minmax(150px, 1.6fr) minmax(130px, 1.2fr) 118px 128px 104px 150px;
+}
+
+.edu-table--rubricas {
+  --edu-cols: minmax(160px, 1.5fr) minmax(130px, 1.1fr) 92px minmax(150px, 1.4fr) 122px 158px;
+}
+
+.edu-table--requisitos {
+  --edu-cols: minmax(160px, 1.6fr) minmax(120px, 1fr) minmax(140px, 1.3fr) 88px 112px 158px;
+}
+
+/* El PORQUÉ del semáforo. Va dentro de la fila y siempre visible: un
+   tooltip lo dejaría sin leer justo cuando hace falta —al hablar con el
+   alumno—, que es lo contrario de para lo que existe. */
+.edu-motivo {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--edu-line-brand);
+  border-radius: 0 8px 8px 0;
+  background: var(--edu-surface-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+}
+
+/* ── Un requisito y su barra ─────────────────────────────────────────── */
+.edu-req {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-req--ok {
+  border-color: rgba(21, 128, 61, 0.35);
+}
+
+.edu-req__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.edu-req__name {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-req__num {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--edu-text-1);
+  white-space: nowrap;
+}
+
+.edu-req__detail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+}
+
+.edu-progreso {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  overflow: hidden;
+}
+
+.edu-progreso__bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--edu-500);
+  transition: width 160ms ease-out;
+}
+
+.edu-req--ok .edu-progreso__bar {
+  background: var(--edu-ok);
+}
+
+/* La marca de lo ESPERADO a esta altura del ciclo. Sin ella la barra dice
+   "vas por la mitad" y no dice si media barra a mitad de ciclo está bien
+   o está mal — que es la única pregunta que la barra tenía que contestar. */
+.edu-progreso__meta {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--edu-text-1);
+  opacity: 0.55;
+}
+
+/* ── Una calificación ────────────────────────────────────────────────── */
+.edu-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-left: 3px solid var(--edu-500);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* Una calificación corregida NO se borra: se apaga. Verla es la prueba de
+   que nadie la reescribió en silencio. */
+.edu-cal--vieja {
+  background: var(--edu-surface-2);
+  border-left-color: var(--edu-line-strong);
+  opacity: 0.82;
+}
+
+.edu-cal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.edu-cal__quien {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-cal__folio {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--edu-text-3);
+}
+
+.edu-cal__meta {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-cal__nota {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.edu-cal__valor {
+  font-size: 26px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-1);
+  line-height: 1;
+}
+
+.edu-cal__escala {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--edu-text-3);
+}
+
+.edu-cal__aviso {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--edu-amber-50);
+  color: var(--edu-amber-900);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.edu-cal__campos {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edu-cal__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 10px;
+  border-left: 2px solid var(--edu-line);
+}
+
+.edu-cal__campodt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-cal__peso {
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--edu-text-2);
+}
+
+.edu-cal__campodd {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-cal__comentario {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--edu-surface-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+/* ── Un criterio, al capturar la rúbrica y al calificar ──────────────── */
+.edu-crit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+}
+
+.edu-crit__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edu-crit__name {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-crit__peso {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-2);
+  white-space: nowrap;
+}
+
+.edu-crit__desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+}
+
+.edu-crit__campos {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 560px) {
+  .edu-crit__campos {
+    grid-template-columns: 1fr 1.4fr;
+  }
+}
+
+/* ── Un traspaso, en la bitácora ─────────────────────────────────────── */
+.edu-traspaso {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+}
+
+.edu-traspaso__linea {
+  margin: 0;
+  font-size: 14px;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-traspaso__meta {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-traspaso__motivo {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--edu-text-3);
+}
+
+/* Un dato que falta se pinta como lo que es: un hueco, no un cero. */
+.edu-sin {
+  font-style: normal;
+  color: var(--edu-text-3);
+}
+
+/* Suma de pesos que no cierra, y un caso del lote que no se pudo
+   traspasar. Los dos son errores de captura, no fallos del sistema. */
+.edu-totales__fila--mal {
+  color: var(--edu-danger);
+}
+
+.edu-check--mal {
+  border-color: rgba(179, 38, 30, 0.4);
+  background: var(--edu-danger-soft);
+}
+
+.edu-check__error {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-danger);
+}
+
+/* La lupa que ya NO es un botón. Desde la Ola 6, el buscador de paciente
+   del cobro filtra mientras se teclea, así que el icono se queda como
+   pista de qué es el campo y deja de invitar a un clic que no hace nada:
+   un cursor de mano sobre algo inerte es una promesa que no se cumple. */
+.edu-reveal--pista {
+  cursor: default;
+  pointer-events: none;
+}

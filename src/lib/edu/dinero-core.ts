@@ -315,6 +315,22 @@ export interface EduChargeFilters {
   patientId: string | null;
   /** true = solo lo del turno abierto; false = todo lo que se pueda ver. */
   soloTurno: boolean;
+  /**
+   * ¿Lo PIDIÓ la persona, o es el default?
+   *
+   * 🔴 Es la columna que arregla el fallo que se vio en producción: se
+   * cobraba, el recibo se emitía… y la lista salía vacía, porque el
+   * default es "solo el turno abierto" y no había ningún turno abierto.
+   * Desde fuera se veía como que el cobro no se había guardado.
+   *
+   * Con esta bandera se distinguen dos cosas que antes eran la misma:
+   *   · nadie tocó el selector → si no hay turno, se enseña el HISTÓRICO
+   *     (con su aviso), porque lo que la persona quiere ver es el cobro
+   *     que acaba de hacer;
+   *   · la persona ELIGIÓ "solo el turno abierto" → se respeta y sale
+   *     vacío, porque eso fue exactamente lo que pidió.
+   */
+  turnoExplicito: boolean;
   q: string | null;
 }
 
@@ -322,6 +338,7 @@ export const EDU_CHARGE_EMPTY_FILTERS: EduChargeFilters = {
   status: null,
   patientId: null,
   soloTurno: true,
+  turnoExplicito: false,
   q: null,
 };
 
@@ -351,18 +368,60 @@ export function parseEduChargeFilters(
 ): EduChargeFilters {
   const sp = searchParams ?? {};
   const busqueda = firstParam(sp.q);
+  const ver = firstParam(sp.ver);
   return {
     status: parseEduChargeStatus(firstParam(sp.estado)),
     patientId: cleanId(sp.paciente),
     // El default es el TURNO: quien abre caja quiere ver lo de su turno,
-    // no el histórico del instituto.
-    soloTurno: firstParam(sp.ver) !== "todos",
+    // no el histórico del instituto. Pero solo mientras HAYA turno —lo
+    // resuelve eduResolveChargeView con ese dato en la mano.
+    soloTurno: ver !== "todos",
+    turnoExplicito: ver === "todos" || ver === "turno",
     q: busqueda && busqueda.trim() ? busqueda.trim().slice(0, 60) : null,
   };
 }
 
 export function eduHasChargeFilters(f: EduChargeFilters): boolean {
-  return Boolean(f.status || f.patientId || f.q || !f.soloTurno);
+  // El selector cuenta como filtro cuando la persona LO TOCÓ, no cuando el
+  // sistema cayó al histórico por no haber turno: si contara, el botón de
+  // "Limpiar" aparecería en una pantalla que nadie filtró.
+  return Boolean(f.status || f.patientId || f.q || f.turnoExplicito);
+}
+
+/**
+ * QUÉ SE LISTA DE VERDAD, con el turno ya consultado.
+ *
+ * 🔴 EL FALLO QUE ARREGLA, tal como se vio en producción: recepción cobra,
+ * el recibo sale, y la lista de /instituto/caja aparece VACÍA. No es que
+ * el cobro no se guardara — es que el filtro por defecto era "solo el
+ * turno abierto" y no había ninguno abierto, así que el `where` pedía
+ * `cashSessionId = "__sin_turno__"` y no devolvía nada. Desde el mostrador
+ * se ve exactamente igual que un cobro perdido.
+ *
+ * La regla, en dos líneas:
+ *   · sin turno abierto y sin que nadie tocara el selector → HISTÓRICO,
+ *     con un aviso que explica por qué;
+ *   · con el selector puesto a mano en "solo el turno abierto" → se
+ *     respeta aunque salga vacío. Lo pidió una persona.
+ *
+ * Es puro (recibe si hay turno, no lo consulta) para poder probarlo sin
+ * base de datos.
+ */
+export interface EduChargeView {
+  /** Lo que hay que aplicar en el `where`. */
+  soloTurno: boolean;
+  /** true = se cayó al histórico porque no hay turno. La pantalla lo dice. */
+  fallbackSinTurno: boolean;
+}
+
+export function eduResolveChargeView(
+  filters: EduChargeFilters,
+  hayTurnoAbierto: boolean,
+): EduChargeView {
+  if (!filters.soloTurno) return { soloTurno: false, fallbackSinTurno: false };
+  if (hayTurnoAbierto) return { soloTurno: true, fallbackSinTurno: false };
+  if (filters.turnoExplicito) return { soloTurno: true, fallbackSinTurno: false };
+  return { soloTurno: false, fallbackSinTurno: true };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -497,6 +556,13 @@ export interface EduChargesPage {
   truncated: boolean;
   /** Suma de lo cobrado y lo pendiente de las filas devueltas. */
   totals: { totalCents: number; paidCents: number; balanceCents: number };
+  /**
+   * QUÉ SE LISTÓ de verdad. La pantalla pinta el selector y el vacío con
+   * ESTO y no con los filtros de la URL: si leyera los filtros, el
+   * selector diría "solo el turno abierto" mientras la tabla enseña el
+   * histórico, y nadie entendería qué está viendo.
+   */
+  applied: EduChargeView;
 }
 
 /** Un renglón del corte: cuánto entró por cada método. */

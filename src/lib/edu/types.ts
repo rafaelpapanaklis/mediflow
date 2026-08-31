@@ -36,6 +36,10 @@
 //   /instituto/equipo       → altas y bajas de cuentas             Ola 1B ✓
 //   /instituto/autorizaciones → LA BANDEJA DEL DOCENTE             Ola 4  ✓
 //   /instituto/pacientes/[id]/consentimientos → cartas NOM-004     Ola 3B ✓
+//   /instituto/evaluacion   → avance de cada alumno y su semáforo  Ola 6  ✓
+//   /instituto/evaluacion/[id] → LA BITÁCORA ACADÉMICA del alumno  Ola 6  ✓
+//   /instituto/rubricas     → rúbricas y sus criterios             Ola 6  ✓
+//   /instituto/requisitos   → el plan de estudios, en números      Ola 6  ✓
 // PÚBLICA (SIN sesión — vive FUERA del grupo (panel), igual que /login):
 //   /instituto/consentimiento/[token] → el paciente lee y firma    Ola 3B ✓
 // Las olas que siguen cuelgan sus pantallas de /instituto/<área> y su
@@ -96,6 +100,15 @@
 //   POST  /api/instituto/consentimientos/[id]/contrafirma          Ola 3B ✓
 //   GET·POST /api/instituto/consentimientos/publico/[token]  ← SIN SESIÓN
 //                                            el token ES la credencial Ola 3B ✓
+//   GET·POST  /api/instituto/rubricas       → rúbricas + criterios  Ola 6 ✓
+//   PATCH     /api/instituto/rubricas/[id]  → editar / desactivar   Ola 6 ✓
+//   GET·POST  /api/instituto/requisitos     → el plan de estudios   Ola 6 ✓
+//   PATCH     /api/instituto/requisitos/[id]                        Ola 6 ✓
+//   GET·POST  /api/instituto/calificaciones → calificar y corregir  Ola 6 ✓
+//   GET  /api/instituto/evaluacion          → avance de los alumnos Ola 6 ✓
+//   GET  /api/instituto/evaluacion/[id]/export → la bitácora en CSV Ola 6 ✓
+//   POST /api/instituto/traspasos           → traspasar UN caso     Ola 6 ✓
+//   POST /api/instituto/traspasos/lote      → traspasar EN LOTE     Ola 6 ✓
 // ═══════════════════════════════════════════════════════════════════════
 
 // ── Enums ───────────────────────────────────────────────────────────────
@@ -746,6 +759,39 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "tarifarios.view",
   },
+  // ── Ola 6 · evaluación académica ─────────────────────────────────────
+  {
+    // Va en ACADÉMICO y justo después del padrón: la pregunta que abre
+    // esta pantalla ("¿quién va atrasado?") es la misma que se hace quien
+    // acaba de mirar la lista de alumnos.
+    //
+    // ⚠️ Lo abre el ALUMNO también, y ahí ve UNA fila: la suya. No hace
+    // falta una pantalla aparte para él — la recorta el alcance, igual que
+    // en la bandeja de autorizaciones de la Ola 4.
+    key: "evaluacion",
+    href: "/instituto/evaluacion",
+    icon: "gauge",
+    section: "academico",
+    permission: "evaluacion.view",
+  },
+  {
+    // Rúbricas y requisitos van en ADMINISTRACIÓN y no en Académico a
+    // propósito: son configuración —se capturan al arrancar el ciclo y
+    // casi no se vuelven a tocar—, igual que los tarifarios. Lo académico
+    // del día a día es la pantalla de arriba.
+    key: "rubricas",
+    href: "/instituto/rubricas",
+    icon: "ruler",
+    section: "administracion",
+    permission: "rubricas.manage",
+  },
+  {
+    key: "requisitos",
+    href: "/instituto/requisitos",
+    icon: "list-checks",
+    section: "administracion",
+    permission: "requisitos.manage",
+  },
   // ── Ola 1B · las cuentas ─────────────────────────────────────────────
   {
     // Va en ADMINISTRACIÓN y no en ACADÉMICO a propósito: aquí se dan de
@@ -795,6 +841,9 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   tarifarios: "Tarifarios",
   procedimientos: "Procedimientos",
   equipo: "Equipo",
+  evaluacion: "Evaluación",
+  rubricas: "Rúbricas",
+  requisitos: "Requisitos",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────
@@ -815,11 +864,18 @@ export const EDU_BRAND = {
  */
 export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[] = [
   // "padron" salió de esta lista en la Ola 1A, "agenda" en la Ola 2,
-  // "expediente" en la Ola 3, "caja" en la Ola 5 y "autorizaciones" en la
-  // Ola 4, cada una en el mismo commit en que se entregó. Es la regla: un
-  // área está en el menú o está aquí, nunca en las dos ni en ninguna. (El
-  // candado es la prueba "un área entregada sale de 'Próximamente'" de
-  // edu-permissions.test.ts.)
+  // "expediente" en la Ola 3, "caja" en la Ola 5, "autorizaciones" en la
+  // Ola 4 y "evaluacion" en la Ola 6, cada una en el mismo commit en que
+  // se entregó. Es la regla: un área está en el menú o está aquí, nunca en
+  // las dos ni en ninguna. (El candado es la prueba "un área entregada
+  // sale de 'Próximamente'" de edu-permissions.test.ts.)
+  //
+  // 🔴 LA LISTA SE QUEDÓ VACÍA CON LA OLA 6, y eso es exactamente lo que
+  // tenía que pasar: ya no hay ninguna área anunciada que no exista. La
+  // pantalla de Inicio deja de pintar el bloque "Próximamente" entero
+  // cuando esto está vacío — un encabezado con nada debajo se lee como una
+  // app rota, que es justo lo que esta lista existía para evitar. Si una
+  // ola futura anuncia algo, se agrega aquí y el bloque vuelve solo.
   //
   // ⚠️ EL EXPEDIENTE ES LA EXCEPCIÓN A "ni en ninguna de las dos", y es a
   // propósito: no tiene item de menú porque no es una pantalla suelta —
@@ -829,9 +885,4 @@ export const EDU_UPCOMING_AREAS: { key: string; title: string; detail: string }[
   // paciente?", y eso es un paso de más en un teléfono, de pie, con el
   // paciente en el sillón. Se llega desde Pacientes, que sí está en el
   // menú.
-  {
-    key: "evaluacion",
-    title: "Evaluación",
-    detail: "Rúbricas, requisitos cumplidos y avance de cada alumno.",
-  },
 ];

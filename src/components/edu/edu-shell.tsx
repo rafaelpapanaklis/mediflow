@@ -9,11 +9,14 @@ import {
   Calendar,
   ClipboardList,
   Contact,
+  Gauge,
   GraduationCap,
   Home,
   Layers,
+  ListChecks,
   LogOut,
   Menu,
+  Ruler,
   Stamp,
   Sun,
   Tags,
@@ -63,6 +66,10 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "user-plus": UserPlus,
   // Ola 4 — el gate de autorización.
   stamp: Stamp,
+  // Ola 6 — evaluación académica.
+  gauge: Gauge,
+  ruler: Ruler,
+  "list-checks": ListChecks,
 };
 
 export interface EduShellProps {

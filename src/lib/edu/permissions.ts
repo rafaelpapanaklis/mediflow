@@ -134,6 +134,26 @@ export const EDU_ALL_PERMISSIONS = {
   "consentimientos.view": "Ver las cartas de consentimiento informado",
   "consentimientos.create": "Emitir una carta de consentimiento y contrafirmarla",
   "consentimientos.revoke": "Dejar constancia de que el paciente revocó su consentimiento",
+  // ── Ola 6 · evaluación académica ─────────────────────────────────────
+  // Cinco keys, y las cinco tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   rubricas.manage    → /instituto/rubricas y sus dos endpoints
+  //   requisitos.manage  → /instituto/requisitos y sus dos endpoints
+  //   evaluacion.view    → /instituto/evaluacion, la bitácora y su export
+  //   evaluacion.grade   → POST /api/instituto/calificaciones
+  //   traspaso.manage    → POST /api/instituto/traspasos y .../lote
+  //
+  // 🔴 VER Y CALIFICAR SON DOS KEYS DISTINTAS, y ésa es la línea de la
+  // ola. El ALUMNO lleva "evaluacion.view" y NO lleva "evaluacion.grade":
+  // ve su calificación, sus comentarios y lo que le falta, y no puede
+  // tocarla. Si fueran una sola key, o el alumno no vería su propia
+  // evaluación —que es justo lo que la hace servir para algo— o se la
+  // podría escribir.
+  "rubricas.manage": "Crear y editar las rúbricas de evaluación",
+  "requisitos.manage": "Capturar los requisitos del plan de estudios",
+  "evaluacion.view": "Ver el avance académico y las calificaciones",
+  "evaluacion.grade": "Calificar un caso con una rúbrica",
+  "traspaso.manage": "Traspasar los casos de un alumno a otro",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -215,6 +235,20 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
     // tildan juntas es request + decide sobre la misma persona.
     title: "Autorizaciones",
     keys: ["autorizaciones.request", "autorizaciones.view", "autorizaciones.decide"],
+  },
+  {
+    // Ola 6. Grupo PROPIO: es lo ACADÉMICO, que no se parece a lo clínico
+    // ni a lo administrativo. Las cinco juntas para que la dirección pueda
+    // leer de un vistazo la única separación que importa aquí — que
+    // "evaluacion.view" la tienen los cuatro y "evaluacion.grade" no.
+    title: "Evaluación académica",
+    keys: [
+      "rubricas.manage",
+      "requisitos.manage",
+      "evaluacion.view",
+      "evaluacion.grade",
+      "traspaso.manage",
+    ],
   },
 ];
 
@@ -343,6 +377,32 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * "none". Aunque alguien le encendiera la casilla, no encontraría un
  * estudio que analizar.
  *
+ * ── Ola 6 · evaluación académica ────────────────────────────────────────
+ * Los CUATRO roles llevan "evaluacion.view"… menos CAJA, que no lleva
+ * ninguna de las cinco. Y el reparto de las otras cuatro es la ola:
+ *
+ *   DIRECCION las cinco. Diseña las rúbricas, captura el plan de estudios,
+ *             califica y traspasa.
+ *   DOCENTE   "evaluacion.view" + "evaluacion.grade" + "traspaso.manage".
+ *             Califica a sus alumnos y reparte sus casos cuando rotan. NO
+ *             lleva "rubricas.manage" ni "requisitos.manage": el plan de
+ *             estudios lo fija la escuela, no cada docente — si cada uno
+ *             pudiera editar la rúbrica con la que se le mide, la rúbrica
+ *             dejaría de ser un criterio compartido.
+ *   ALUMNO    "evaluacion.view" y NADA MÁS. Ve SU calificación, SUS
+ *             comentarios y lo que le falta —recortado a lo suyo por el
+ *             alcance— y no puede escribir una sola de esas cosas.
+ *   CAJA      ninguna. Cobrar no es evaluar.
+ *
+ * 🔴 Que ALUMNO y DOCENTE compartan "evaluacion.view" NO significa que
+ * vean lo mismo, igual que en las cuatro olas anteriores: el ALCANCE
+ * (visibility.ts, recurso "cases") le da al alumno lo suyo y al docente lo
+ * de los alumnos que supervisa HOY.
+ *
+ * ⚠️ "traspaso.manage" al DOCENTE y no al alumno: repartir casos es una
+ * decisión académica. Y aunque un docente lo tenga, solo puede traspasar
+ * lo que VE — los casos de sus alumnos vigentes.
+ *
  * ⚠️ El ALUMNO sí lleva "consentimientos.revoke". Es deliberado y es la
  * decisión menos obvia de la ola: revocar no es autorizar, es REGISTRAR
  * que el paciente se retractó, y el paciente se retracta delante del
@@ -396,6 +456,12 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "consentimientos.view",
     "consentimientos.create",
     "consentimientos.revoke",
+    // ── Ola 6 ───────────────────────────────────────────────────────────
+    "rubricas.manage",
+    "requisitos.manage",
+    "evaluacion.view",
+    "evaluacion.grade",
+    "traspaso.manage",
   ],
   DOCENTE: [
     "inicio.view",
@@ -419,6 +485,11 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "consentimientos.view",
     "consentimientos.create",
     "consentimientos.revoke",
+    // Ola 6. Califica y reparte casos; NO diseña la rúbrica con la que
+    // mide ni el plan de estudios contra el que se mide a su alumno.
+    "evaluacion.view",
+    "evaluacion.grade",
+    "traspaso.manage",
   ],
   ALUMNO: [
     "inicio.view",
@@ -438,6 +509,9 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "consentimientos.view",
     "consentimientos.create",
     "consentimientos.revoke",
+    // Ola 6. VE su evaluación y no la escribe: es toda la ola en una
+    // línea. Lo que ve está recortado a lo suyo por el alcance.
+    "evaluacion.view",
   ],
   CAJA: [
     "inicio.view",

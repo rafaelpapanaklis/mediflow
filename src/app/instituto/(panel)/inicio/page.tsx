@@ -109,30 +109,37 @@ export default async function InstitutoInicioPage() {
         </section>
       </div>
 
-      <section>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-          <h2 className="edu-page__title" style={{ fontSize: 18 }}>
-            Próximamente
-          </h2>
-          <span className="edu-chip">
-            <Clock3 size={12} aria-hidden="true" />
-            En construcción
-          </span>
-        </div>
-        <p className="edu-page__lead" style={{ marginBottom: 14 }}>
-          Estas áreas todavía no existen. Aparecerán en el menú de la izquierda cuando se
-          entreguen — no antes, para que nadie las busque y no las encuentre.
-        </p>
-        <div className="edu-grid">
-          {EDU_UPCOMING_AREAS.map((area) => (
-            <article key={area.key} className="edu-soon">
-              <span className="edu-chip">Pronto</span>
-              <h3 className="edu-soon__title">{area.title}</h3>
-              <p className="edu-soon__detail">{area.detail}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+      {/* El bloque entero desaparece cuando no queda ningún área anunciada
+          —y desde la Ola 6 no queda ninguna—. Un encabezado
+          "Próximamente" con nada debajo se lee como una app rota, que es
+          justo lo contrario de para lo que existía esta lista. Si una ola
+          futura anuncia algo, vuelve solo. */}
+      {EDU_UPCOMING_AREAS.length > 0 && (
+        <section>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <h2 className="edu-page__title" style={{ fontSize: 18 }}>
+              Próximamente
+            </h2>
+            <span className="edu-chip">
+              <Clock3 size={12} aria-hidden="true" />
+              En construcción
+            </span>
+          </div>
+          <p className="edu-page__lead" style={{ marginBottom: 14 }}>
+            Estas áreas todavía no existen. Aparecerán en el menú de la izquierda cuando se
+            entreguen — no antes, para que nadie las busque y no las encuentre.
+          </p>
+          <div className="edu-grid">
+            {EDU_UPCOMING_AREAS.map((area) => (
+              <article key={area.key} className="edu-soon">
+                <span className="edu-chip">Pronto</span>
+                <h3 className="edu-soon__title">{area.title}</h3>
+                <p className="edu-soon__detail">{area.detail}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <p style={{ fontSize: 12.5, color: "var(--edu-text-3)", margin: 0 }}>
         Zona horaria del instituto: {ctx.institution.timezone}

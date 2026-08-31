@@ -38,6 +38,12 @@
  * o un permiso encendido por error acaben devolviendo "own" o "supervised"
  * sobre dinero.
  *
+ * Y desde la Ola 6, EL TRASPASO DE CASO: cuando un alumno rota o se
+ * gradúa, sus casos abiertos pasan a otro alumno, y el saliente PIERDE el
+ * acceso al paciente en el mismo acto en que el entrante lo GANA. Eso se
+ * decide en `eduPatientScopeWhere` (abajo) y en ningún otro sitio: la
+ * función que traspasa no sabe nada de visibilidad.
+ *
  * 🔴 UNA ASIGNACIÓN VENCIDA NO DA ACCESO. El docente ROTA a media
  * generación (por eso la Ola 1A guarda vigencia en vez de sobrescribir):
  * el día que entrega su grupo deja de ver a esos pacientes, y el que entra
@@ -57,7 +63,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 import type { Prisma } from "@prisma/client";
-import type { EduRole } from "@/lib/edu/types";
+import type { EduCaseStatus, EduRole } from "@/lib/edu/types";
 import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -251,6 +257,36 @@ function eduStudentScopeFilter(
   return null;
 }
 
+// ── Ola 6 · el traspaso de caso ─────────────────────────────────────────
+
+/**
+ * 🔴 UN CASO TRANSFERIDO YA NO ES DE QUIEN LO ENTREGÓ.
+ *
+ * Cuando un alumno rota o se gradúa, sus casos abiertos se TRASPASAN: el
+ * viejo se cierra como TRANSFERRED y se abre uno nuevo con el alumno
+ * nuevo, conservando paciente y especialidad (src/lib/edu/traspasos.ts).
+ * A partir de ese momento el saliente PIERDE el acceso al paciente y el
+ * entrante lo GANA, y eso se decide AQUÍ y en ningún otro sitio.
+ *
+ * Por qué hace falta escribirlo: sin esta condición, el caso viejo sigue
+ * teniendo el `studentId` del saliente —y tiene que seguir teniéndolo, es
+ * la respuesta a "¿quién lo atendía en marzo?"— así que el `where` de
+ * pacientes lo seguiría encontrando y el traspaso no traspasaría nada. El
+ * alumno que se fue seguiría abriendo la ficha, el expediente, el
+ * odontograma y las radiografías de un paciente que ya no atiende.
+ *
+ * ⚠️ ABANDONED no entra aquí y no es un olvido: un caso abandonado no
+ * cambió de manos, se acabó. El alumno que lo llevó sigue siendo el que
+ * puede contestar por él.
+ *
+ * ⚠️ Lo que ESTO no toca: la AGENDA. Las citas pasadas del saliente siguen
+ * siendo suyas —ocurrieron, y son su registro de asistencia—; lo que el
+ * traspaso mueve son las citas FUTURAS, que cambian de alumno en la misma
+ * transacción. Lo que se cierra aquí es el PACIENTE: su ficha y su
+ * expediente.
+ */
+const EDU_CASE_TRANSFERRED: EduCaseStatus = "TRANSFERRED";
+
 /**
  * `where` que no devuelve NADA, con el tenant puesto igual.
  *
@@ -284,6 +320,13 @@ export interface EduPatientScopeInput {
  * Consecuencia buscada: un paciente que caja acaba de registrar, sin cita
  * y sin caso, NO lo ve ningún alumno ni ningún docente. Todavía no es de
  * nadie.
+ *
+ * 🔴 OLA 6 — Y UN PACIENTE TRASPASADO DEJA DE SER MÍO. Las dos ramas
+ * descartan lo que quedó atrás en un traspaso: el caso TRANSFERRED y las
+ * citas que colgaban de él. Es la mitad de la Ola 6 que no se ve —el
+ * traspaso "funciona" perfectamente sin esto, solo que el alumno saliente
+ * se queda con la llave— y por eso vive aquí, en el punto único, y no en
+ * la función que traspasa.
  */
 export function eduPatientScopeWhere({
   institutionId,
@@ -300,8 +343,24 @@ export function eduPatientScopeWhere({
   return {
     institutionId,
     OR: [
-      { cases: { some: { institutionId, student } } },
-      { appointments: { some: { institutionId, student } } },
+      // Un caso mío que NO entregué.
+      { cases: { some: { institutionId, student, status: { not: EDU_CASE_TRANSFERRED } } } },
+      // Una cita mía que no cuelga de un caso que entregué. El `caseId:
+      // null` de la primera opción es la cita de TAMIZAJE anterior al
+      // caso, que es la razón de que esta rama exista; se escribe como un
+      // OR explícito y no con un `NOT` sobre la relación porque el `NOT`
+      // de una relación uno-a-uno NULA es exactamente el sitio donde un
+      // ORM decide por ti — y aquí decidir mal significa dejar la puerta
+      // abierta.
+      {
+        appointments: {
+          some: {
+            institutionId,
+            student,
+            OR: [{ caseId: null }, { case: { status: { not: EDU_CASE_TRANSFERRED } } }],
+          },
+        },
+      },
     ],
   };
 }
@@ -370,6 +429,13 @@ export interface EduCaseScopeInput {
  * responsable cuando el caso se abrió —para poder contestarlo dentro de un
  * año— y si la visibilidad se calculara con ella, un docente que ya rotó
  * seguiría leyendo el caso para siempre.
+ *
+ * 🔴 OLA 6 — AQUÍ NO SE DESCARTA EL CASO TRANSFERIDO, y es deliberado.
+ * `eduPatientScopeWhere` sí lo descarta (el saliente pierde al PACIENTE);
+ * la LISTA DE CASOS del alumno lo conserva, porque es su historia
+ * académica: la bitácora tiene que poder decir "llevó este caso de marzo a
+ * julio y lo entregó". Lo que se cierra es la puerta al expediente vivo de
+ * una persona que ya no atiende, no el registro de lo que hizo.
  */
 export function eduCaseScopeWhere({
   institutionId,
@@ -389,6 +455,49 @@ export function eduCaseScopeWhere({
   const where: Prisma.EduCaseWhereInput = { institutionId };
   if (Object.keys(student).length > 0) where.student = student;
   return where;
+}
+
+// ── Alumnos (Ola 6) ─────────────────────────────────────────────────────
+
+export interface EduStudentScopeInput {
+  institutionId: string;
+  scope: EduVisibilityScope;
+  now?: Date;
+}
+
+/**
+ * Los ALUMNOS que le tocan a quien pregunta.
+ *
+ * Existe porque la Ola 6 lista una cosa que ninguna ola anterior listaba
+ * con este alcance: alumnos. Y la diferencia con el padrón (padron-core.ts,
+ * eduPadronScope) es exactamente UNA fila y es la que importa:
+ *
+ *   · el PADRÓN de un alumno son CERO filas — un residente no lista a su
+ *     generación;
+ *   · su EVALUACIÓN es UNA fila, la suya. Ver su propio avance es la mitad
+ *     de para qué existe la ola: si no la viera, "te faltan 3 de 8" no se
+ *     lo diría nadie hasta el día que no se gradúa.
+ *
+ * Por eso NO se reusa eduPadronScope aquí y sí se reusa el alcance de
+ * "cases" —que es el que ya sabe decir "lo tuyo"—: el alumno se filtra por
+ * su propio `userId` y el docente por sus asignaciones VIGENTES, con el
+ * mismo predicado de vigencia que todo lo demás.
+ *
+ * ⚠️ CAJA cae en "none", como en el resto del expediente: cobrar no es
+ * evaluar.
+ */
+export function eduStudentScopeWhere({
+  institutionId,
+  scope,
+  now = new Date(),
+}: EduStudentScopeInput): Prisma.EduStudentWhereInput {
+  requireInstitutionId(institutionId, "eduStudentScopeWhere");
+  if (eduScopeIsEmpty(scope)) return nada(institutionId);
+  if (scope.kind === "all") return { institutionId };
+
+  const student = eduStudentScopeFilter(scope, institutionId, now);
+  if (!student) return nada(institutionId);
+  return student;
 }
 
 // ── Dinero (Ola 5) ──────────────────────────────────────────────────────

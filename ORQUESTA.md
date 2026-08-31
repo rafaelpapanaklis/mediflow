@@ -27689,3 +27689,156 @@ barber, preexistentes en `origin/main`) · **314 pruebas del vertical en verde**
    por instituto. **Esa es la decisión que falta.**
 4. Para que un caso pueda emitir consentimientos necesita **docente responsable asignado**.
    Sin él, la pantalla lo dice antes de dejar emitir y el servidor rebota con 409.
+
+
+---
+
+## [Institucional Ola 6] — Evaluación académica: el avance NO se guarda (se cuenta), el semáforo DICE por qué, y un traspaso le quita la llave al que se va ✅ (2026-08-30) · rama `feat/edu-ola-6`
+
+**Lo que se entregó**, en una línea cada cosa: rúbricas reusables con pesos que suman 100 ·
+calificación de un caso que **no se edita en silencio** · requisitos del plan de estudios cuyo
+avance se **cuenta**, nunca se guarda · horas clínicas **derivadas** de las citas terminadas ·
+semáforo de alumno atrasado que **explica el porqué en una frase leíble en voz alta** ·
+traspaso de caso (uno y en lote) que **mueve el acceso al paciente de un alumno a otro** ·
+bitácora académica exportable a CSV · y los **dos arreglos** de caja que se vieron en
+producción.
+
+### Las cuatro decisiones que sostienen la ola
+
+**1. El avance NO se guarda: se CUENTA.** No existe en todo el vertical una columna
+"requisitos cumplidos". Cada vez que alguien abre `/instituto/evaluacion` se cuentan los casos
+que encajan con cada requisito (`src/lib/edu/evaluacion.ts`). Es más caro que leer un contador
+y es la **única** forma de que el número sea verdad: un contador se desincroniza el día que
+una escritura falle a la mitad o que alguien cierre un caso por SQL — y el número que se
+enseña en una acreditación es justamente ése. Mismo criterio para las **horas clínicas**, que
+salen de las citas COMPLETADAS del alumno y no tienen captura manual, y para la
+**calificación vigente**, que es la fila que nadie corrige y no una bandera en el caso (igual
+que en la Ola 4 el estado del gate se lee de las autorizaciones).
+
+**2. Una calificación guardada NO se edita.** No hay `PATCH` de calificaciones y esa ausencia
+es la regla: corregir es **insertar** una fila nueva que apunta a la anterior (`correctsId`),
+exactamente como la nota firmada del expediente de la Ola 3. Las dos quedan visibles, con
+quién las puso y a qué hora, y la vieja se pinta apagada con su aviso. Y lo que se congela en
+cada calificación —nombre de la rúbrica, escala, nombre y peso de cada criterio— es lo que
+impide que renombrar la rúbrica o subir la escala de 10 a 100 en noviembre reprube a alguien
+que sacó un 8 en octubre. Mismo patrón que `EduCharge.feeScheduleLabel` de la Ola 5.
+
+**3. 🔴 EL TRASPASO LE QUITA LA LLAVE AL QUE SE VA, Y ESO NO SE DECIDE EN LA FUNCIÓN QUE
+TRASPASA.** Un traspaso no reescribe el `studentId` del caso —eso borraría la respuesta a
+"¿quién lo atendía en marzo?"—: cierra el viejo como `TRANSFERRED` y abre uno nuevo que apunta
+a él. Consecuencia inmediata: el alumno saliente **sigue teniendo un caso con su id encima**, y
+si el `where` de pacientes no lo descartara, el traspaso "funcionaría" perfectamente mientras
+el que se fue conserva el expediente, el odontograma y las radiografías del paciente que
+entregó. Por eso el descarte vive en `src/lib/edu/visibility.ts` —el punto único— y no en
+`traspasos.ts`: si viviera ahí, el segundo camino que traspase un caso nacería sin él.
+La prueba `edu-traspaso.test.ts` fija **las dos direcciones**: el saliente pierde (casos
+`TRANSFERRED` y las citas que colgaban de ellos), el entrante gana (sin ninguna regla nueva).
+Y una asimetría deliberada: la **lista de casos** SÍ conserva el transferido, porque es la
+historia académica del alumno; lo que se cierra es la puerta al expediente vivo de alguien a
+quien ya no atiende.
+
+**4. Un semáforo rojo sin explicación no sirve para hablar con nadie.** `eduAtrasoVerdict`
+devuelve, además del color, la frase: *"Con 50 % del ciclo transcurrido se esperan 6 de 12 y
+lleva 1. Lo que más le falta: Endodoncias (1 de 8) · Prótesis (0 de 4)."* Se calcula en el
+servidor y se pinta tal cual, dentro de la tarjeta y siempre visible — un tooltip lo dejaría
+sin leer justo cuando hace falta. Dos detalles que costaría descubrir en producción: lo
+cumplido se **topa por requisito** (veinte endodoncias de las ocho que pedía el plan **no**
+compensan cero prótesis), y sin fechas en la generación el semáforo dice **"sin calcular"** con
+el motivo en vez de inventar una duración — un rojo por un dato que la escuela nunca capturó
+es un rojo que alguien le enseñaría a un alumno.
+
+### Lo que hubo que agregarle al piso clínico (y por qué)
+
+`EduCase` gana **`procedureId`** (el procedimiento principal, del catálogo de la Ola 5). Sin
+esa columna un requisito solo podría decir "N casos de la especialidad", y una escuela cuenta
+por procedimiento. Es opcional a propósito —el caso nace en el tamizaje, donde todavía no se
+sabe qué se le va a hacer al paciente— y **un caso sin procedimiento no cuenta**, cosa que la
+pantalla del alumno **dice** en vez de dejar el cero sin explicar. Lo captura el **docente**
+desde la pestaña Casos de la ficha (permiso `casos.assign`): dejárselo al alumno sería dejarle
+firmar su propio avance. El catálogo se le carga aunque no tenga `tarifarios.view` y eso no
+abre el dinero — `EduProcedure` no guarda precio; el precio vive en la lista de precios.
+
+Y `createEduCase` ahora **engancha la cita de tamizaje al caso que abrió** (`caseId`). Hasta
+esta ola el enlace existía en una sola dirección, y eso dejaba un agujero exactamente en el
+traspaso: la visibilidad del alumno mira sus citas además de sus casos, así que una cita
+huérfana de caso le habría seguido dando acceso al paciente después de entregarlo. El traspaso
+además repara ese enlace en los casos abiertos antes de la Ola 6.
+
+### Los dos arreglos de lo ya probado en producción
+
+**a) El buscador del modal COBRAR ahora filtra mientras se teclea.** Exigía apretar "Buscar", y
+lo que pasaba en el mostrador es lo que tenía que pasar: recepción escribía el nombre y se
+quedaba esperando sin que ocurriera nada — el botón seguía ahí, pero nadie mira un botón
+mientras teclea un nombre. Con **retardo de 250 ms** (sin él, "María Rodríguez" son quince
+consultas para pintar una lista de tres) y con **número de petición**, porque dos búsquedas en
+vuelo pueden volver al revés y dejar en pantalla los resultados de lo que ya no está escrito.
+La lupa se queda como pista y deja de ser un botón.
+
+**b) Un cobro recién emitido ya no desaparece cuando no hay turno abierto.** El filtro por
+defecto era "solo el turno abierto"; sin turno, el `where` pedía `cashSessionId =
+"__sin_turno__"` y la lista salía **vacía** justo después de cobrar. Desde el mostrador se veía
+igual que un cobro perdido. Ahora `eduResolveChargeView` (puro, probado sin base) distingue dos
+cosas que antes eran la misma: **nadie tocó el selector** → sin turno se enseña el histórico,
+con su aviso en el banner; **la persona ELIGIÓ "solo el turno abierto"** → se respeta aunque
+salga vacío, porque eso fue lo que pidió. Para poder distinguirlas, el selector ahora manda
+`ver=turno` explícito en la URL en vez de quitar el parámetro.
+
+### Permisos (cinco keys nuevas)
+
+`rubricas.manage` · `requisitos.manage` · `evaluacion.view` · `evaluacion.grade` ·
+`traspaso.manage`. **La línea de la ola es que VER y CALIFICAR son dos keys distintas:** el
+ALUMNO lleva `evaluacion.view` y **nada más** —ve su calificación, sus comentarios y lo que le
+falta, y no puede escribir ninguna de esas cosas—. Si fueran una sola key, o el alumno no
+vería su propia evaluación (que es lo que la hace servir para algo) o se la podría escribir.
+El DOCENTE califica y traspasa pero **no diseña la rúbrica con la que se le mide a su alumno
+ni el plan contra el que se le mide**; la DIRECCIÓN lleva las cinco; **CAJA ninguna**. Y una
+tercera cerradura que no depende de ningún permiso: **nadie califica su propio caso**
+(`createEduGrade` lo rebota con 403).
+
+### Números y estructura
+
+**5 tablas** (`edu_rubrics`, `edu_rubric_criteria`, `edu_case_grades`,
+`edu_case_grade_items`, `edu_requirements`) · **4 columnas nuevas en `edu_cases`**
+(`procedureId`, `transferredFromCaseId`, `transferReason`, `transferredByUserId`) ·
+**16 índices** · **20 llaves foráneas** · **0 enums** (los tres estados del semáforo se
+calculan) · **4 pantallas** (`/instituto/evaluacion`, `…/evaluacion/[id]`,
+`/instituto/rubricas`, `/instituto/requisitos`) · **9 endpoints** · **3 módulos de servidor**
+(`rubricas.ts`, `evaluacion.ts`, `traspasos.ts`) sobre **un módulo puro**
+(`evaluacion-core.ts`). Las calificaciones van en **enteros ×100** (un 8,75 es 875) por lo
+mismo que el dinero va en centavos.
+
+Con esta ola **`EDU_UPCOMING_AREAS` se quedó vacía**: ya no hay ninguna área anunciada que no
+exista, y la pantalla de Inicio deja de pintar el bloque "Próximamente" entero — un encabezado
+con nada debajo se lee como una app rota.
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0; 4 páginas y 9 rutas de API nuevas
+registradas) · `npx tsc --noEmit` ✅ para el vertical (6 errores ajenos de barber,
+preexistentes en `origin/main`) · **516 pruebas del vertical en verde**, de ellas **67 nuevas**
+(`edu-evaluacion` **54**, `edu-traspaso` **13**) más 5 nuevas en `edu-caja` (el arreglo del
+turno) y 8 en `edu-permissions` (el reparto de las cinco keys) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(39 propios, 1 compartido declarado, 0 prohibidos).
+
+**Lo que NO se probó, y hay que probar con base de datos:** ninguna escritura corrió contra
+Postgres — `sql/edu-ola-6.sql` **no se aplicó** (la orden lo prohibía) y no se abrió un
+navegador. Sin aplicar el `.sql`, `/instituto/evaluacion` truena al consultar tablas que no
+existen. Todo lo que se comprobó son las funciones puras y la forma de los `where`.
+
+**Al desplegar:**
+
+1. **`sql/edu-ola-6.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/2/5.sql`. Idempotente, cero DROP.
+2. El **backfill del override** (sección 6 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío: el override **reemplaza** al default, así que las cinco keys
+   no le llegan solas a quien ya tenga uno guardado. Son **tres** bloques y son **distintos** —
+   copiarle al alumno el del docente le daría `evaluacion.grade`, que es exactamente la línea
+   que la ola existe para sostener. Caja no recibe ninguna.
+3. **Capturar los requisitos** de cada especialidad en `/instituto/requisitos` y al menos una
+   rúbrica en `/instituto/rubricas`. Sin requisitos, la pantalla de Evaluación no puede decirle
+   a nadie cuánto le falta; sin rúbrica no se puede calificar.
+4. **Comprobar que las generaciones tienen `endDate`** (`/instituto/padron/estructura`). Sin
+   fecha de fin no se puede calcular cuánto del ciclo ha transcurrido y el semáforo sale
+   "sin calcular" — a propósito, pero con la mitad de la pantalla apagada.
+5. **Ir clasificando los casos abiertos** con su procedimiento principal (pestaña Casos de la
+   ficha). Los que se abrieron antes de esta ola no lo traen, y sin él no cuentan para ningún
+   requisito que pida uno.

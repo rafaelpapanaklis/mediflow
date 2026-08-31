@@ -753,6 +753,24 @@ export interface EduCaseRow {
 
   /** Citas que cuelgan del caso. La ficha lo pinta como "3 sesiones". */
   appointments: number;
+
+  // ── Ola 6 · evaluación académica ──────────────────────────────────────
+
+  /**
+   * El procedimiento PRINCIPAL del caso, del catálogo de la Ola 5.
+   *
+   * 🔴 Es lo que hace contable un requisito del plan de estudios. Un caso
+   * sin procedimiento no cuenta para ningún requisito que pida uno — y la
+   * pantalla lo DICE en vez de dejarlo en cero sin explicación.
+   */
+  procedureId: string | null;
+  procedureName: string | null;
+  procedureCategory: string | null;
+
+  /** De qué caso viene, si nació de un traspaso. */
+  transferredFromCaseId: string | null;
+  /** Por qué se traspasó. Va en el caso NUEVO: es su razón de existir. */
+  transferReason: string | null;
 }
 
 /** Lo MÍNIMO que necesita un <select> del navegador. No se manda la fila
