@@ -560,6 +560,223 @@ test("Evaluación va en ACADÉMICO; rúbricas y requisitos en ADMINISTRACIÓN", 
   assert.equal(item("requisitos")?.permission, "requisitos.manage");
 });
 
+
+// ─────────────────────────────────────────────────────────────────────
+// 1g · Las dos keys de la Ola 9 (WhatsApp y recordatorios)
+//
+// La línea de esta ola: CONFIGURAR no es MANDAR. Las dos keys son de la
+// conexión del instituto —entregar un token que manda en su nombre,
+// encender un gasto que Meta le cobra a su tarjeta— y solo las tiene la
+// dirección. Mandarle un documento a un paciente se abre con el permiso
+// DEL DOCUMENTO: la carta con "consentimientos.view" (la tienen los
+// cuatro roles) y el recibo con "caja.view" más el alcance del dinero.
+// ─────────────────────────────────────────────────────────────────────
+
+const KEYS_OLA_9: EduPermissionKey[] = ["whatsapp.view", "whatsapp.manage"];
+
+test("las dos keys de la Ola 9 están en el catálogo, descritas en español", () => {
+  for (const k of KEYS_OLA_9) {
+    assert.ok(k in EDU_ALL_PERMISSIONS, `falta ${k} en el catálogo`);
+    const desc = EDU_ALL_PERMISSIONS[k];
+    assert.ok(desc && desc.length > 8, `${k} sin descripción usable: ${desc}`);
+    assert.notEqual(desc, k, `${k} se describe con su propia key`);
+  }
+});
+
+test("las dos keys de WhatsApp son SOLO de la dirección", () => {
+  for (const k of KEYS_OLA_9) {
+    assert.equal(
+      hasEduPermission({ role: "DIRECCION", permissionsOverride: [] }, k),
+      true,
+      `la dirección necesita ${k}`,
+    );
+    for (const rol of ["DOCENTE", "ALUMNO", "CAJA"] as EduRole[]) {
+      assert.equal(
+        hasEduPermission({ role: rol, permissionsOverride: [] }, k),
+        false,
+        `${rol} no puede llevar ${k}: conectar la cuenta del instituto y encender un gasto que Meta le cobra a la escuela es una decisión de dirección`,
+      );
+    }
+  }
+});
+
+/**
+ * 🔴 LA DECISIÓN DE LA OLA, EN UNA PRUEBA. Si mandar exigiera
+ * "whatsapp.manage", caja no podría entregar un recibo y el alumno no
+ * podría mandarle al paciente la carta que va a firmar en el sillón — que
+ * es justo para lo que sirve. Por eso el permiso de mandar es el del
+ * DOCUMENTO y no el de la conexión.
+ */
+test("CAJA y ALUMNO pueden mandar documentos sin tener ninguna key de WhatsApp", () => {
+  const caja = { role: "CAJA" as EduRole, permissionsOverride: [] };
+  const alumno = { role: "ALUMNO" as EduRole, permissionsOverride: [] };
+
+  // Caja entrega el recibo en el mostrador: lleva caja.view.
+  assert.equal(hasEduPermission(caja, "caja.view"), true);
+  assert.equal(hasEduPermission(caja, "whatsapp.manage"), false);
+
+  // El alumno explica y manda la carta en el sillón: lleva
+  // consentimientos.view. Y NO lleva caja.view — no manda nada de dinero.
+  assert.equal(hasEduPermission(alumno, "consentimientos.view"), true);
+  assert.equal(hasEduPermission(alumno, "caja.view"), false);
+  assert.equal(hasEduPermission(alumno, "whatsapp.view"), false);
+
+  // Los cuatro roles pueden mandar la carta; solo dos pueden mandar dinero.
+  const conCarta = EDU_ROLES.filter((r) =>
+    hasEduPermission({ role: r, permissionsOverride: [] }, "consentimientos.view"),
+  );
+  assert.deepEqual([...conCarta].sort(), ["ALUMNO", "CAJA", "DIRECCION", "DOCENTE"]);
+  const conRecibo = EDU_ROLES.filter((r) =>
+    hasEduPermission({ role: r, permissionsOverride: [] }, "caja.view"),
+  );
+  assert.deepEqual([...conRecibo].sort(), ["CAJA", "DIRECCION"]);
+});
+
+test("WhatsApp va en ADMINISTRACIÓN, con su propio grupo de permisos", () => {
+  const item = EDU_NAV_ITEMS.find((i) => i.key === "whatsapp");
+  assert.ok(item, "falta el item de menú de WhatsApp");
+  assert.equal(item?.section, "administracion");
+  assert.equal(item?.permission, "whatsapp.view");
+  assert.equal(EDU_NAV_LABELS.whatsapp, "WhatsApp");
+
+  const grupo = EDU_PERMISSION_GROUPS.find((g) => g.title === "WhatsApp");
+  assert.ok(grupo, "las dos keys tienen que poder encenderse desde la pantalla de permisos");
+  assert.deepEqual([...(grupo?.keys ?? [])].sort(), ["whatsapp.manage", "whatsapp.view"]);
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 1i · La key de la Ola 7 (el panel de dirección)
+//
+//      🔴 Es la PRIMERA key del catálogo que lleva UN SOLO rol, y estas
+//      pruebas existen para que siga siéndolo: el día que alguien le
+//      agregue "direccion.panel" al default del docente "para que el
+//      coordinador lo vea", esto se pone rojo.
+// ─────────────────────────────────────────────────────────────────────
+
+test("la key de la Ola 7 está en el catálogo, descrita en español", () => {
+  assert.ok("direccion.panel" in EDU_ALL_PERMISSIONS, "falta direccion.panel en el catálogo");
+  const desc = EDU_ALL_PERMISSIONS["direccion.panel"];
+  assert.ok(desc && desc.length > 8, `direccion.panel sin descripción usable: ${desc}`);
+  assert.notEqual(desc, "direccion.panel");
+});
+
+test("direccion.panel vive en un grupo PROPIO (no se tilda de pasada con otro bloque)", () => {
+  const grupos = EDU_PERMISSION_GROUPS.filter((g) => g.keys.includes("direccion.panel"));
+  assert.equal(grupos.length, 1, "direccion.panel tiene que estar en exactamente un grupo");
+  assert.deepEqual(
+    grupos[0].keys,
+    ["direccion.panel"],
+    "el grupo de dirección es de UNA sola casilla: metida dentro de otro bloque se encendería sin querer",
+  );
+});
+
+test("🔴 SOLO DIRECCION lleva direccion.panel por defecto", () => {
+  assert.equal(hasEduPermission({ role: "DIRECCION" }, "direccion.panel"), true);
+  for (const rol of ["DOCENTE", "ALUMNO", "CAJA"] as EduRole[]) {
+    assert.equal(
+      hasEduPermission({ role: rol }, "direccion.panel"),
+      false,
+      `${rol} no debería ver el tablero de dirección`,
+    );
+  }
+});
+
+/**
+ * Las keys que lleva UN SOLO rol son las que deciden quién manda en la
+ * escuela, y todas son de DIRECCION. La lista va escrita a mano a
+ * propósito: agregar una más es una decisión de producto, no un descuido,
+ * y esta prueba obliga a escribirla aquí.
+ *
+ * Ya cobró una pieza: al rebasar esta ola sobre la Ola 11 (las sedes) la
+ * lista pasó de ocho a diez, y hubo que decidir a mano que `sedes.view` y
+ * `sedes.manage` son de dirección y de nadie más. Eso es exactamente para
+ * lo que existe: dos olas que se cruzan no se ponen de acuerdo solas.
+ *
+ * Y volvió a cobrar en la integración de las olas 8, 9 y 10: pasó de diez
+ * a dieciséis, porque el cupo de IA, la conexión de WhatsApp y las dos
+ * llaves duras de facturación (cancelar y configurar) son decisiones del
+ * contrato o del SAT — de dirección y de nadie más, cada una por su ola.
+ */
+test("las keys de UN SOLO rol son todas de DIRECCION, y son estas dieciséis", () => {
+  const cuantosRoles = (k: EduPermissionKey) =>
+    EDU_ROLES.filter((r) => EDU_ROLE_DEFAULTS[r].includes(k)).length;
+
+  const deUnoSolo = EDU_ALL_PERMISSION_KEYS.filter((k) => cuantosRoles(k) === 1);
+  assert.deepEqual(
+    deUnoSolo,
+    [
+      "padron.manage",
+      "supervision.assign",
+      "sillones.manage",
+      "tarifarios.manage",
+      "equipo.manage",
+      "rubricas.manage",
+      "requisitos.manage",
+      // Ola 11 · administrar las sedes: darlas de alta y repartir quién
+      // entra a cada una. Ojo: NO hacen falta para USAR las sedes ni para
+      // cambiar de sede en la barra superior — eso lo decide el ACCESO, que
+      // no es un permiso.
+      "sedes.view",
+      "sedes.manage",
+      // Ola 7 · el tablero de dirección.
+      "direccion.panel",
+      // Ola 8 · el cupo de IA del contrato: verlo y administrarlo es de
+      // quien administra el contrato. El alumno ve SU consumo por otra vía.
+      "ia.view",
+      "ia.manage",
+      // Ola 9 · conectar el WhatsApp del instituto y sus plantillas. Son de
+      // CONFIGURAR, no de mandar: mandar se abre con el permiso del
+      // documento.
+      "whatsapp.view",
+      "whatsapp.manage",
+      // Ola 10 · cancelar ante el SAT y capturar los datos fiscales. Las
+      // otras dos de facturación (view/emit) las comparte con CAJA y por
+      // eso no aparecen aquí.
+      "facturacion.cancel",
+      "facturacion.config",
+    ],
+    `cambió la lista de keys de un solo rol: ${deUnoSolo.join(", ")}`,
+  );
+
+  // Y ese único rol es DIRECCION en las dieciséis: si mañana una de ellas
+  // quedara solo en manos del docente, sería otro producto.
+  for (const k of deUnoSolo) {
+    assert.equal(hasEduPermission({ role: "DIRECCION" }, k), true, `${k} no es de dirección`);
+  }
+});
+
+test("el item «Dirección» está en el menú, exige su key y va en OPERACIÓN", () => {
+  const item = EDU_NAV_ITEMS.find((i) => i.key === "direccion");
+  assert.ok(item, "falta el item de menú de dirección");
+  assert.equal(item?.permission, "direccion.panel");
+  // Operación y no Administración: es lo que el director abre cada mañana,
+  // no algo que se toca una vez al año.
+  assert.equal(item?.section, "operacion");
+  assert.equal(item?.href, "/instituto/direccion");
+  assert.ok(EDU_NAV_LABELS.direccion, "el item de dirección no tiene etiqueta");
+  assert.equal(
+    EDU_UPCOMING_AREAS.some((a) => a.key === "direccion"),
+    false,
+    "el panel de dirección ya existe y no puede seguir anunciado como Próximamente",
+  );
+});
+
+test("el item «Dirección» va SEGUNDO, justo después de Inicio", () => {
+  // La posición no es decorativa: es la pantalla que se abre primero y la
+  // que se proyecta en la junta. Enterrada abajo se abriría el día que
+  // alguien la buscara.
+  assert.equal(EDU_NAV_ITEMS[0]?.key, "inicio");
+  assert.equal(EDU_NAV_ITEMS[1]?.key, "direccion");
+});
+
+test("un permiso NUEVO no le llega solo a quien ya tiene override (también el de la Ola 7)", () => {
+  const conOverrideViejo = {
+    role: "DIRECCION" as EduRole,
+    permissionsOverride: ["inicio.view", "evaluacion.view"],
+  };
+  assert.equal(hasEduPermission(conOverrideViejo, "direccion.panel"), false);
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // 2 · Semántica del override
 // ─────────────────────────────────────────────────────────────────────

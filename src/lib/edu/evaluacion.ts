@@ -649,7 +649,10 @@ export async function getEduBitacora(
       where: { institutionId, studentId: alumno.id, status: "COMPLETED" },
       select: APPOINTMENT_FOR_HOURS_SELECT,
     }),
-    listEduStudentGrades(ctx, alumno.id, zona),
+    // El MISMO `now` que el resto de la pantalla: la bitácora y el recorte
+    // de calificaciones no pueden discrepar sobre una asignación que se
+    // cerró entre una consulta y la otra.
+    listEduStudentGrades(ctx, alumno.id, zona, now),
   ]);
 
   const fraccion = eduCycleFraction(alumno.cohort, now);

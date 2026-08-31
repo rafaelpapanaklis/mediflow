@@ -12417,6 +12417,26 @@ model EduInstitution {
   // una. Por eso EduCampus cuelga de aquí, como todo lo demás.
   campuses         EduCampus[]
   campusAccess     EduUserCampusAccess[]
+  // Ola 8 · la cartera de IA. Bloque ADITIVO al final de las relaciones:
+  // los modelos viven al FINAL del archivo, con su propio encabezado.
+  //
+  // 🔴 `aiQuota` es 1:1 y OPCIONAL, y esa opcionalidad ES el interruptor:
+  // un instituto SIN fila de cupo tiene la IA apagada y el panel dice por
+  // qué. No hay ninguna bandera de entorno que la encienda por instituto.
+  aiQuota          EduAiQuota?
+  aiUsages         EduAiUsage[]
+  // Ola 9 · WhatsApp y recordatorios. Bloque ADITIVO al final de las
+  // relaciones: los modelos viven al FINAL del archivo, con su encabezado.
+  // La conexión es 1:1 (cada instituto conecta SU propia WhatsApp; no hay
+  // una compartida porque Meta le cobra las plantillas a la tarjeta de esa
+  // WABA y no se puede mandar en nombre de otra cuenta).
+  whatsappConfig   EduWhatsappConfig?
+  whatsappMessages EduWhatsappMessage[]
+  // Ola 10 · facturación CFDI. Bloque ADITIVO al final de las relaciones:
+  // los modelos viven al FINAL del archivo, con su propio encabezado.
+  fiscalConfig       EduFiscalConfig?
+  patientTaxProfiles EduPatientTaxProfile[]
+  invoices           EduInvoice[]
 
   @@map("edu_institutions")
 }
@@ -12508,6 +12528,23 @@ model EduUser {
   /// descuido: es lo que hace que aplicar la ola no deje fuera a nadie de
   /// los que ya existen. Con filas, solo a esas.
   campusAccess     EduUserCampusAccess[]
+
+  /// Ola 8. Cada uso de IA que esta persona pidió. Es una columna de
+  /// AUDITORÍA del gasto: /instituto/ia contesta "quién se está gastando
+  /// el cupo" agrupando por aquí. Opcional con SetNull —dar de baja a
+  /// alguien no puede borrar lo que ya se gastó— y el NOMBRE va congelado
+  /// en la fila, que es lo que de verdad se lee después.
+  aiUsages         EduAiUsage[]   @relation("EduAiUsageBy")
+
+  /// Ola 10 · facturación. Cuatro columnas de AUTORÍA, ninguna de ellas
+  /// decide visibilidad: quién dejó los datos fiscales del instituto,
+  /// quién capturó los de un paciente, quién emitió una factura y quién
+  /// la canceló. Emitir y cancelar son dos permisos distintos, así que
+  /// también son dos columnas distintas.
+  fiscalConfigsSet   EduFiscalConfig[]      @relation("EduFiscalConfigBy")
+  taxProfilesSet     EduPatientTaxProfile[] @relation("EduTaxProfileBy")
+  invoicesIssued     EduInvoice[]           @relation("EduInvoiceBy")
+  invoicesCancelled  EduInvoice[]           @relation("EduInvoiceCancelledBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -12656,6 +12693,9 @@ model EduStudent {
   @@unique([institutionId, matricula])
   @@index([institutionId, status])
   @@index([institutionId, cohortId, status])
+  // Ola 7: la tabla "por especialidad" del panel de dirección y el filtro
+  // de especialidad de todo el tablero cuelgan de esta combinación.
+  @@index([institutionId, programId, status], map: "edu_students_program_idx")
   @@map("edu_students")
 }
 
@@ -12855,6 +12895,12 @@ model EduPatient {
   charges      EduCharge[]
   /// Ola 3B: sus cartas de consentimiento informado.
   consents     EduConsent[]
+  /// Ola 10 · facturación. Los DATOS FISCALES del paciente viven en su
+  /// propia tabla (uno a uno) y NO en columnas de aquí: esta fila la leen
+  /// la agenda, el buscador y la ficha, y un RFC de más viaja a pantallas
+  /// donde nadie lo pidió. Ver el encabezado de EduPatientTaxProfile.
+  taxProfile   EduPatientTaxProfile?
+  invoices     EduInvoice[]
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -13046,6 +13092,10 @@ model EduCase {
   transferredFrom EduCase?       @relation("EduCaseTransfer", fields: [transferredFromCaseId], references: [id], onDelete: SetNull)
   transferredTo   EduCase[]      @relation("EduCaseTransfer")
   transferredBy   EduUser?       @relation("EduCaseTransferBy", fields: [transferredByUserId], references: [id], onDelete: SetNull)
+  /// Ola 8: los usos de IA imputados a ESTE caso (el dictado de una nota).
+  /// No hay columna con el gasto del caso: se cuenta contando estas filas,
+  /// igual que el avance de la Ola 6.
+  aiUsages        EduAiUsage[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
@@ -13055,6 +13105,11 @@ model EduCase {
   // traspasos hacia atrás sin recorrer la tabla.
   @@index([institutionId, procedureId, status], map: "edu_cases_procedure_idx")
   @@index([transferredFromCaseId], map: "edu_cases_transfer_idx")
+  // Ola 7: el panel de dirección cuenta "tratamientos iniciados" y
+  // "terminados" del periodo, que son rangos sobre estas dos columnas. Sin
+  // ellos, cada carga del tablero recorre la tabla entera de casos.
+  @@index([institutionId, openedAt], map: "edu_cases_abierto_idx")
+  @@index([institutionId, closedAt], map: "edu_cases_cerrado_idx")
   @@map("edu_cases")
 }
 
@@ -13115,6 +13170,11 @@ model EduAppointment {
   @@index([institutionId, studentId, startsAt], map: "edu_appointments_student_idx")
   @@index([institutionId, patientId, startsAt], map: "edu_appointments_patient_idx")
   @@index([institutionId, caseId], map: "edu_appointments_case_idx")
+  // Ola 7: el bloque EN VIVO del panel de dirección pregunta cada 25
+  // segundos por las citas de HOY en CHECKED_IN / IN_CHAIR / IN_PROGRESS.
+  // Con el índice de día solo, esa consulta recorre todas las citas de la
+  // jornada para quedarse con tres.
+  @@index([institutionId, status, startsAt], map: "edu_appointments_estado_idx")
   @@map("edu_appointments")
 }
 
@@ -13340,6 +13400,11 @@ model EduStudy {
   /// no uno: en una escuela el alumno pide el suyo y el docente quiere ver
   /// exactamente lo que el alumno vio (ver EduStudyAnalysis).
   analyses    EduStudyAnalysis[]
+  /// Ola 8: los usos de IA imputados a ESTE estudio (el análisis
+  /// radiográfico). Van aparte de `analyses` a propósito: una lectura que
+  /// se pagó y no se pudo guardar no existe como análisis y sí existe como
+  /// gasto, y el cupo tiene que reflejar lo que de verdad se gastó.
+  aiUsages    EduAiUsage[]
 
   // Un path solo puede estar registrado UNA vez. Es lo que hace idempotente
   // al /confirm: un reintento del cliente devuelve la fila que ya existe en
@@ -13632,6 +13697,11 @@ model EduCharge {
   campus      EduCampus?      @relation(fields: [campusId], references: [id], onDelete: SetNull)
   items       EduChargeItem[]
   payments    EduPayment[]
+  /// Ola 10: sus facturas. Es una LISTA y no un uno-a-uno a propósito: un
+  /// CFDI cancelado se queda en la tabla y el cobro se puede volver a
+  /// facturar. Que solo haya UNA viva a la vez lo garantiza el índice
+  /// único de EduInvoice sobre "activeChargeId", no esta relación.
+  invoices    EduInvoice[]
 
   @@unique([institutionId, folio])
   @@index([institutionId, chargedAt], map: "edu_charges_fecha_idx")
@@ -14544,4 +14614,850 @@ model EduUserCampusAccess {
   @@index([institutionId, campusId], map: "edu_user_campus_sede_idx")
   @@index([institutionId, userId], map: "edu_user_campus_persona_idx")
   @@map("edu_user_campus_access")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 8 · LA CARTERA DE IA DEL INSTITUTO.
+//
+// Tres tablas: el CUPO del instituto (EduAiQuota, 1:1), el RENGLÓN de cada
+// uso (EduAiUsage) y la TARIFA de cada modelo (EduAiPrice).
+//
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 POR QUÉ ESTO NO ES UNA CARTERA QUE SE RECARGA
+//
+// La Ola 3B dejó el dictado y el análisis radiográfico APAGADOS tras una
+// bandera de entorno porque el instituto no tenía a qué cargarle los
+// tokens: el cobro del dental descuenta contra Clinic.aiTokensLimit, y un
+// usuario de instituto no tiene fila de clínica.
+//
+// La respuesta NO es copiar la cartera del dental. El instituto no paga
+// con Stripe: paga por CONTRATO ANUAL (EduInstitution.contractStartsAt /
+// contractEndsAt), y en un contrato la IA es un CUPO MENSUAL INCLUIDO, no
+// un saldo que alguien recarga con una tarjeta. Por eso aquí no hay
+// "balance", no hay "recarga" y no hay "método de pago": hay un techo al
+// mes, la decisión de la escuela sobre si se puede rebasar, y un renglón
+// por cada uso para poder contestar en qué se fue.
+//
+// 🔴 QUIÉN EDITA QUÉ — es la línea de esta ola, y está cerrada en el
+// SERVIDOR (src/lib/edu/ia-cupo.ts), no en la pantalla:
+//
+//   · "monthlyUsdCents" (lo que trae el contrato) NO se edita desde el
+//     panel. Lo escribe DaleControl con el contrato, igual que
+//     contractEndsAt, que el panel también solo PINTA. La cuenta de API
+//     que se consume es la de DaleControl: un formulario que dejara
+//     subirlo convertiría "lo que incluye tu contrato" en "lo que alguien
+//     tecleó", y quien paga la factura no estaría en la conversación.
+//   · "allowOverage", "hardCapUsdCents", "isEnabled" y "contactNote" SÍ
+//     los edita la dirección del instituto (permiso "ia.manage"). Es lo
+//     que la ESCUELA decide: si se puede pasar del cupo incluido, hasta
+//     dónde, y si hoy quiere la IA apagada. Ninguno de los cuatro puede
+//     ampliar lo incluido.
+//
+// 🔴 DOS UNIDADES DE DINERO, Y CADA UNA TIENE SU RAZÓN:
+//   · el PRESUPUESTO va en CENTAVOS de dólar enteros ("monthlyUsdCents",
+//     "hardCapUsdCents"). Es lo que una persona teclea, y en INTEGER el
+//     techo queda en 21 millones de dólares al mes en vez de 2 147 — que
+//     es lo que daría un INTEGER de millonésimas.
+//   · el MEDIDOR va en MILLONÉSIMAS de dólar ("costUsdMicros"), porque una
+//     sola llamada cuesta fracciones de centavo y redondearla a centavos
+//     la dejaría en cero. Es la misma columna y la misma unidad que ya usa
+//     EduStudyAnalysis.costUsdMicros desde la Ola 3B.
+// Ni float ni Decimal en ninguna de las dos: en coma flotante 0,1 + 0,2 no
+// da 0,3 y un reporte de gasto que no cuadra es un reporte en el que nadie
+// confía. La conversión centavos↔millonésimas vive en UN solo sitio
+// (src/lib/edu/ia-core.ts).
+//
+// 🔴 LO QUE NO ESTÁ AQUÍ, Y ES DELIBERADO:
+//   · NO hay columna "consumido este mes". El consumo se CUENTA sumando
+//     edu_ai_usage cada vez que alguien pregunta, exactamente como el
+//     avance académico de la Ola 6 y por la misma razón: un contador
+//     guardado se desincroniza el día que una escritura falle a la mitad,
+//     y entonces o se apaga la IA de una escuela que sí tenía cupo, o se
+//     le regala el que ya gastó.
+//   · NO hay columna "estado del cupo". "Agotado" depende de la HORA (el
+//     mes cambia): una columna guardada mentiría desde el segundo
+//     siguiente a escribirla, igual que el estado del consentimiento de la
+//     Ola 3B.
+//   · NO hay precio escrito en el código. Los precios viven en
+//     edu_ai_prices y la pantalla los LEE de ahí. Si no hay fila de precio
+//     para el modelo que una función usa, esa función NO corre: cobrar
+//     cero por algo que cuesta dinero es la forma de que el cupo mienta.
+//
+// 🔴 institutionId está en las DOS tablas de datos (cupo y uso), igual que
+// en todas las olas anteriores: toda consulta filtra por el institutionId
+// de la SESIÓN, y un filtro que necesita un JOIN para existir es un filtro
+// que alguien va a olvidar. Ojo Prisma: un institutionId undefined BORRA
+// el filtro y devuelve las filas de TODOS los institutos.
+//
+// ⚠️ LA TERCERA TABLA (edu_ai_prices) NO LLEVA institutionId, y es la
+// única del vertical que no lo lleva. No es un olvido: no es dato de un
+// inquilino sino la TARIFA DEL PROVEEDOR, y el proveedor cobra lo mismo
+// llame quien llame — la cuenta de API es una sola. Lo que sí varía por
+// escuela es el CUPO, que es donde vive esa variación. Ponerle un
+// institutionId habría creado una segunda cosa que mantener sincronizada
+// y la pregunta "¿y si dos escuelas tienen precios distintos para el mismo
+// modelo?", que no tiene respuesta buena.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-8.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Las dos funciones de IA del vertical. Espejo 1:1 de la unión
+/// EduAiFeature de src/lib/edu/types.ts (el candado de que no se
+/// desincronicen es un chequeo de TIPOS en edu-ia.test.ts).
+enum EduAiFeature {
+  /// Dictado por voz sobre la nota clínica (Whisper). Se cobra por SEGUNDO.
+  DICTADO
+  /// Análisis radiográfico de apoyo (Claude con visión). Se cobra por TOKEN.
+  ANALISIS
+}
+
+/// En qué se mide lo que consumió una llamada. Existe porque las dos
+/// funciones NO se cobran igual: el análisis por tokens, el dictado por
+/// segundos de audio. Una tabla de precios que solo supiera de tokens no
+/// podría ponerle precio al dictado, y el cupo de la escuela se lo estaría
+/// comiendo gratis.
+enum EduAiUnit {
+  TOKEN
+  SECOND
+}
+
+/// EL CUPO DE IA DEL INSTITUTO. 1:1 — un instituto, un cupo.
+///
+/// 🔴 QUE ESTA FILA EXISTA ES EL INTERRUPTOR. Un instituto sin fila de
+/// cupo tiene las dos funciones de IA apagadas, y la pantalla lo dice con
+/// todas sus letras ("tu contrato todavía no incluye IA") en vez de
+/// enseñar un micrófono muerto. Es el reemplazo de la bandera de entorno
+/// EDU_IA_ENABLED de la Ola 3B, que era global y no distinguía escuelas.
+model EduAiQuota {
+  id            String @id @default(cuid())
+  /// @unique: 1:1 con el instituto. Dos filas de cupo para la misma
+  /// escuela serían dos respuestas a "¿cuánto te queda?".
+  institutionId String @unique
+
+  /// Lo que el CONTRATO incluye cada mes, en centavos de dólar. NO se
+  /// edita desde el panel (ver el encabezado del bloque).
+  monthlyUsdCents Int @default(0)
+
+  /// ¿La escuela autoriza seguir usando IA después de agotar lo incluido?
+  /// Nace en false: lo seguro es parar, y quien decide gastar de más tiene
+  /// que decirlo a propósito.
+  allowOverage Boolean @default(false)
+
+  /// El TOPE DURO cuando se permite excedente, en centavos de dólar.
+  /// Obligatorio si allowOverage está en true —lo exige el servidor, no la
+  /// base—: "permitido excederse, sin tope" es exactamente la fuga que la
+  /// Ola 3B se negó a abrir. Se ignora cuando allowOverage es false.
+  hardCapUsdCents Int?
+
+  /// El apagador de la escuela. Nace encendido. Apagarlo NO borra el cupo:
+  /// es para el día que la dirección quiera parar la IA sin perder lo que
+  /// tiene configurado.
+  isEnabled Boolean @default(true)
+
+  /// A quién pedirle más cupo, escrito por la escuela ("Coordinación
+  /// académica, ext. 214"). Se pinta DENTRO del mensaje de cupo agotado:
+  /// un alumno con el micrófono muerto y sin saber a quién preguntarle
+  /// abre un ticket.
+  contactNote String? @db.VarChar(300)
+
+  /// QUIÉN tocó esto por última vez y cuándo. Guarda el ÚLTIMO cambio, no
+  /// la historia: si algún día hace falta la historia del cupo, es una
+  /// tabla aparte y no una columna más.
+  updatedByUserId String?
+  updatedByName   String? @db.VarChar(160)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@map("edu_ai_quotas")
+}
+
+/// UN RENGLÓN POR USO DE IA. Es el libro mayor del gasto: el consumo del
+/// mes se CUENTA sumando estas filas, no se lee de ningún contador.
+///
+/// 🔴 SE ESCRIBE DESPUÉS DE GASTAR, NUNCA ANTES. El cupo se comprueba
+/// antes de llamar al proveedor (y ahí es donde se dice que no), pero el
+/// renglón se escribe con el costo REAL que devolvió la llamada. La
+/// consecuencia hay que decirla: la ÚLTIMA llamada de un mes puede rebasar
+/// el techo por lo que cueste esa llamada, porque nadie sabe cuánto va a
+/// costar hasta que termina. El techo frena las llamadas que EMPIEZAN, no
+/// aborta una en vuelo.
+model EduAiUsage {
+  id            String       @id @default(cuid())
+  institutionId String
+  feature       EduAiFeature
+
+  /// QUIÉN lo pidió. El id es opcional y con SetNull —dar de baja a una
+  /// persona no puede borrar el gasto que hizo— y el NOMBRE y el ROL van
+  /// congelados al lado: el desglose "por alumno y por docente" tiene que
+  /// seguir diciendo lo que esa persona era cuando gastó, aunque hoy sea
+  /// otra cosa o ya no esté.
+  userId   String?
+  userName String  @db.VarChar(160)
+  userRole EduRole
+
+  /// A QUÉ se aplicó. Los dos son opcionales y solo uno se llena: el
+  /// análisis cuelga de un estudio, el dictado de un caso (y de ninguno si
+  /// se dictó una nota que todavía no tiene caso).
+  studyId String?
+  caseId  String?
+  /// Cómo se llama eso, congelado ("Estudio: pano-2026.jpg"). Se guarda el
+  /// texto además del id por lo mismo que el nombre de arriba: el detalle
+  /// del gasto se tiene que poder leer sin JOIN y sin depender de que la
+  /// fila de destino siga existiendo.
+  targetLabel String? @db.VarChar(200)
+
+  /// QUÉ se consumió. `model` es el modelo real que atendió la llamada
+  /// (whisper-1, claude-opus-5): dentro de un año hay que poder contestar
+  /// con qué se generó este gasto, y la constante del código ya será otra.
+  model       String    @db.VarChar(80)
+  unit        EduAiUnit
+  /// Unidades de ENTRADA y de SALIDA. En el análisis son tokens (la
+  /// entrada incluye lo escrito en caché y lo leído de caché); en el
+  /// dictado, `inputUnits` son los SEGUNDOS de audio y `outputUnits` es 0.
+  inputUnits  Int       @default(0)
+  outputUnits Int       @default(0)
+
+  /// Lo que costó, en MILLONÉSIMAS de dólar enteras, calculado con la
+  /// tarifa VIGENTE en el momento de la llamada. Queda congelado: cambiar
+  /// mañana el precio del modelo no puede reescribir lo que se gastó ayer,
+  /// igual que el precio congelado de un cobro en la Ola 5.
+  costUsdMicros Int @default(0)
+
+  /// true = el proveedor no dijo cuánto había consumido y se cobró el TOPE
+  /// de la operación. Se marca en vez de cobrar cero: regalar la llamada
+  /// dejaría el cupo mintiendo, y cobrar de más en el único caso en que no
+  /// sabemos es el error que no cuesta dinero. La pantalla lo señala.
+  isEstimated Boolean @default(false)
+
+  /// El mes al que se IMPUTA el gasto, "2026-08", calculado con la zona
+  /// horaria del instituto en el momento de escribirlo.
+  ///
+  /// ⚠️ Esto NO es un contador guardado —lo que la Ola 6 prohíbe— sino una
+  /// ETIQUETA inmutable sobre una fila inmutable: el total se sigue
+  /// contando sumando filas. Existe para que "lo de este mes" sea un
+  /// índice y no una cuenta de zonas horarias dentro del SQL, y para que
+  /// el renglón diga por sí mismo a qué mes se cargó.
+  periodKey String @db.VarChar(7)
+
+  createdAt DateTime @default(now())
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user        EduUser?       @relation("EduAiUsageBy", fields: [userId], references: [id], onDelete: SetNull)
+  study       EduStudy?      @relation(fields: [studyId], references: [id], onDelete: SetNull)
+  case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  /// El índice del cupo: sumar el gasto del mes de un instituto.
+  @@index([institutionId, periodKey], map: "edu_ai_usage_periodo_idx")
+  /// El del desglose: quién y en qué función se lo gastó, dentro del mes.
+  @@index([institutionId, periodKey, userId], map: "edu_ai_usage_persona_idx")
+  @@index([institutionId, periodKey, feature], map: "edu_ai_usage_funcion_idx")
+  /// El del detalle, que se lee del más nuevo al más viejo.
+  @@index([institutionId, createdAt], map: "edu_ai_usage_reciente_idx")
+  @@index([institutionId, studyId], map: "edu_ai_usage_study_idx")
+  @@index([institutionId, caseId], map: "edu_ai_usage_case_idx")
+  @@map("edu_ai_usage")
+}
+
+/// LA TARIFA DE UN MODELO. Es la tabla que existe para que NO haya un solo
+/// precio escrito en el código.
+///
+/// 🔴 SIN FILA NO HAY FUNCIÓN. Si el modelo que una función usa no tiene
+/// tarifa aquí, esa función se apaga con su motivo. La alternativa —correr
+/// y registrar costo cero— haría que el cupo de la escuela nunca bajara
+/// mientras la factura del proveedor sí sube, que es el error caro.
+///
+/// 🔴 NO LLEVA institutionId (ver el encabezado del bloque): es lo que
+/// cobra el proveedor, y el proveedor cobra lo mismo llame quien llame.
+///
+/// ⚠️ Cambiar un precio afecta a lo que se cobre A PARTIR de ese momento.
+/// Lo ya gastado vive congelado en EduAiUsage.costUsdMicros y no se
+/// recalcula nunca — subir la tarifa mañana no puede agotar el cupo de un
+/// mes que ya se cerró.
+model EduAiPrice {
+  id      String       @id @default(cuid())
+  feature EduAiFeature
+  /// El identificador EXACTO del modelo, tal como se le manda al
+  /// proveedor: "whisper-1", "claude-opus-5".
+  model   String       @db.VarChar(80)
+  unit    EduAiUnit
+
+  /// Precio en MILLONÉSIMAS de dólar por MILLÓN de unidades de entrada y
+  /// de salida. La unidad la dice `unit`.
+  ///
+  /// Por qué "por millón" y no "por unidad": un token de entrada de
+  /// claude-opus-5 cuesta 5 millonésimas de dólar y uno de salida 25 — en
+  /// enteros por unidad eso se podría escribir, pero un modelo más barato
+  /// (0,25 USD por millón de tokens = 0,25 millonésimas por token) se
+  /// redondearía a cero. Con el factor de un millón, la tarifa pública del
+  /// proveedor se copia tal cual: "5 USD por millón" son 5 000 000.
+  ///
+  /// El dictado se cobra por SEGUNDO y solo usa la entrada: Whisper cuesta
+  /// 0,006 USD por minuto = 100 millonésimas por segundo = 100 000 000 por
+  /// millón de segundos, y la salida va en cero.
+  inUsdMicrosPerMillion  Int @default(0)
+  outUsdMicrosPerMillion Int @default(0)
+
+  /// De dónde salió el número, para que quien lo revise dentro de un año
+  /// sepa contra qué compararlo ("Tarifa pública de Anthropic, ago-2026").
+  source String? @db.VarChar(200)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Un modelo tiene UNA tarifa por función. Dos filas serían dos precios
+  /// para la misma llamada, y quien las leyera tendría que desempatar.
+  @@unique([feature, model], map: "edu_ai_prices_modelo_key")
+  @@index([feature, isActive], map: "edu_ai_prices_funcion_idx")
+  @@map("edu_ai_prices")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 9 · WHATSAPP Y RECORDATORIOS.
+//
+// Dos tablas: la CONEXIÓN de cada instituto con Meta (EduWhatsappConfig) y
+// el REGISTRO DE CADA ENVÍO con su resultado (EduWhatsappMessage).
+//
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 CADA INSTITUTO CONECTA SU PROPIA WHATSAPP. NO HAY UNA COMPARTIDA.
+//
+// No es una decisión de arquitectura, es cómo funciona Meta: cada plantilla
+// que sale se le COBRA a la tarjeta de la WABA desde la que salió, y no se
+// puede mandar "en nombre de" otra cuenta. Un número de DaleControl
+// compartido por veinte escuelas significaría que DaleControl paga los
+// recordatorios de las veinte, y que el paciente de la Escuela A recibe un
+// mensaje de un remitente que no reconoce.
+//
+// Consecuencia directa, y es la que más se ve en pantalla: si la WABA del
+// instituto NO tiene método de pago válido, Meta rechaza el envío con el
+// código 131042. Eso NO es un fallo del panel y el panel no puede
+// arreglarlo — se detecta, se marca aquí ("billingOk" a false) y se dice
+// con esas palabras: SIN MÉTODO DE PAGO.
+//
+// 🔴 LA VENTANA DE 24 h SE CONSIDERA SIEMPRE CERRADA EN ESTE VERTICAL.
+//
+// Meta deja mandar texto libre durante las 24 h siguientes al último
+// mensaje DEL PACIENTE. Saber si esa ventana está abierta exige INGERIR los
+// mensajes que entran (webhook + bandeja), y este vertical no los ingiere:
+// no hay Inbox del instituto, ni webhook propio, ni nadie que conteste. Así
+// que la respuesta honesta es la conservadora — la ventana está cerrada
+// siempre y TODO sale por plantilla aprobada, o no sale.
+//
+// Y de ahí la regla que sostiene la ola: SIN PLANTILLA APROBADA PARA UN
+// TIPO DE MENSAJE, ESE AVISO NO SE INTENTA. No se encola para fallar
+// después: se dice en la pantalla, con el nombre del tipo que falta. Un
+// intento que Meta rechaza gasta la llamada, deja una fila roja que nadie
+// sabe leer y —lo peor— se puede confundir con "ya salió".
+//
+// 🔴 institutionId ESTÁ EN LAS DOS TABLAS, igual que en las seis olas
+// anteriores: toda consulta del vertical filtra por el institutionId de la
+// SESIÓN. Ojo Prisma: un institutionId `undefined` BORRA el filtro y
+// devuelve las filas de TODOS los institutos.
+//
+// ⚠️ POR QUÉ EduWhatsappMessage NO DECLARA RELACIONES CON EduPatient,
+// EduAppointment, EduConsent NI EduCharge, y eso es a propósito:
+//
+//   1. Lo que el registro tiene que contestar dentro de un año es "¿qué se
+//      le mandó a quién y qué contestó Meta?", y eso se contesta con datos
+//      CONGELADOS en la propia fila ("toName", "toPhone", "body"), igual
+//      que EduChargeItem congela el precio y EduCaseGrade el nombre de la
+//      rúbrica. Un JOIN devolvería el nombre de HOY, no el del día del
+//      envío, y un paciente borrado se llevaría por delante la prueba de
+//      que se le avisó.
+//   2. Las cuatro columnas son filtros ESCALARES ("¿hay ya un recordatorio
+//      de esta cita?") y para eso no hace falta relación.
+//
+// Las llaves foráneas SÍ existen en la base (sql/edu-ola-9.sql), en SET
+// NULL: borrar un paciente no puede borrar la constancia del aviso.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-9.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Qué clase de mensaje es. NO es texto libre: cada tipo tiene su plantilla
+/// aprobada, su interruptor y su permiso.
+enum EduWhatsappKind {
+  /// Recordatorio de cita. Lo manda el CRON, nadie más.
+  RECORDATORIO
+  /// La carta de consentimiento informado, con su liga por token.
+  CONSENTIMIENTO
+  /// El resumen del recibo de un cobro.
+  RECIBO
+}
+
+/// En qué acabó un envío.
+///
+/// 🔴 PENDING EXISTE PORQUE LA FILA SE ESCRIBE ANTES DE LLAMAR A META. Si
+/// se escribiera después, un proceso que muere a mitad de la llamada dejaría
+/// un mensaje entregado y ninguna constancia — y al siguiente tick se
+/// mandaría otra vez. Escribir primero convierte ese caso en una fila
+/// PENDING, que es incómoda pero VERDADERA.
+///
+/// BLOCKED no es un fallo de Meta: es una decisión nuestra tomada ANTES de
+/// gastar la llamada (sin plantilla aprobada, sin teléfono, sin conexión).
+enum EduWhatsappStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+  BLOCKED
+}
+
+/// La conexión de UN instituto con la Cloud API de Meta. Una fila por
+/// instituto (institutionId es único).
+model EduWhatsappConfig {
+  id            String @id @default(cuid())
+  institutionId String @unique
+
+  /// Credenciales de la WABA del instituto.
+  ///
+  /// 🔴 phoneNumberId es ÚNICO en toda la tabla: dos institutos con el
+  /// mismo número serían dos escuelas mandando desde el mismo remitente, y
+  /// el día que este vertical ingiera mensajes entrantes no habría forma de
+  /// decidir de quién es la conversación.
+  phoneNumberId     String? @unique
+  businessAccountId String?
+  /// CIFRADO en reposo con el envelope de la app ("v1:…"). Un token de
+  /// WhatsApp en claro es la cuenta de Meta entera del instituto.
+  accessToken       String?
+  /// El número tal como se lee ("+52 55 1234 5678"). Solo para pintarlo:
+  /// nunca se manda con él, se manda con phoneNumberId.
+  displayPhone      String? @db.VarChar(40)
+  /// Cómo se conectó: "manual" (se pegan las credenciales) es lo único que
+  /// existe hoy. "embedded" y "coexistence" quedan escritas porque son los
+  /// dos caminos que Meta ofrece y el día que se implementen esta columna
+  /// ya distingue las filas viejas.
+  connMethod        String? @db.VarChar(20)
+
+  /// ¿Hay conexión utilizable? Se apaga sola ante un 190 / HTTP 401 (token
+  /// revocado), igual que waConnected en el dental: sin esto, el cron
+  /// seguiría intentando con un token muerto en cada tick y la escuela
+  /// creería que sus recordatorios salen.
+  connected      Boolean   @default(false)
+  connectedAt    DateTime?
+  /// Último error de Meta que se vio, para poder pintarlo tal cual.
+  lastErrorCode  Int?
+  lastErrorMsg   String?   @db.VarChar(500)
+  lastErrorAt    DateTime?
+
+  /// 🔴 ¿La WABA tiene método de pago válido? Meta le cobra a ELLA cada
+  /// plantilla. Sin tarjeta, el envío falla con 131042 y esto se pone en
+  /// false; con el primer envío aceptado vuelve a true. La pantalla lo dice
+  /// con esas palabras ("sin método de pago") para que no parezca un bug
+  /// del panel: el panel no lo puede arreglar, se arregla en Meta.
+  billingOk        Boolean   @default(false)
+  billingCheckedAt DateTime?
+
+  /// Plantillas aprobadas por TIPO de mensaje:
+  /// { "RECORDATORIO": { "name": "edu_recordatorio_cita", "lang": "es_MX",
+  ///   "status": "APPROVED" }, … }. La clave es un EduWhatsappKind.
+  /// Se lee con eduParseWaTemplates (src/lib/edu/whatsapp-core.ts), que
+  /// DESCARTA lo que venga mal formado: mandarle a Meta un nombre inválido
+  /// gasta un intento y devuelve un código que no explica nada.
+  templates      Json?
+
+  /// ── Qué avisos están encendidos ────────────────────────────────────
+  /// Los tres nacen APAGADOS. Un producto que empieza a mandarle WhatsApp a
+  /// pacientes reales el día que se aplica el .sql —sin que nadie lo haya
+  /// pedido y con cargo a la tarjeta de la escuela— no es una función, es
+  /// un accidente.
+  remindersEnabled Boolean @default(false)
+  /// CUÁNTAS HORAS ANTES sale el recordatorio. Una sola anticipación y no
+  /// dos como el dental: cada plantilla que sale se le cobra al instituto,
+  /// y "24 h y además 2 h" es duplicar la factura de la escuela sin que
+  /// nadie lo haya pedido. Si un día hacen falta dos, se agrega la segunda
+  /// columna — no se agrega ahora "por si acaso".
+  reminderHoursBefore Int  @default(24)
+  consentEnabled   Boolean @default(false)
+  receiptEnabled   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@map("edu_whatsapp_configs")
+}
+
+/// UN envío: lo que se mandó, a quién, y qué contestó Meta.
+///
+/// 🔴 UN RECORDATORIO QUE SE CREE ENVIADO Y NO SALIÓ ES PEOR QUE NINGUNO.
+/// Por eso la fila se escribe ANTES de llamar a Meta (status PENDING), se
+/// sella con el wamid si Meta acepta, y guarda el CÓDIGO del error si no —
+/// el texto de Meta cambia de redacción y de idioma, el número no.
+model EduWhatsappMessage {
+  id            String            @id @default(cuid())
+  institutionId String
+  kind          EduWhatsappKind
+  status        EduWhatsappStatus @default(PENDING)
+
+  /// A quién se le mandó, CONGELADO. El nombre es el de ese día: si el
+  /// paciente cambia de apellido o se da de baja, la constancia sigue
+  /// diciendo a quién se le avisó.
+  patientId String?
+  toName    String  @db.VarChar(160)
+  /// Normalizado a 10 dígitos nacionales. Meta lo recibe con el 52 delante
+  /// (lo pone normalizeMxWhatsAppPhone al enviar).
+  toPhone   String  @db.VarChar(20)
+
+  /// De qué es este aviso. Solo uno de los tres viene lleno.
+  appointmentId String?
+  consentId     String?
+  chargeId      String?
+
+  /// El texto que la persona LEE, con la plantilla ya pintada. No es el
+  /// texto libre que se habría mandado dentro de la ventana: guardar ése
+  /// sería enseñarle al instituto algo que nadie recibió.
+  body         String  @db.Text
+  templateName String? @db.VarChar(80)
+  templateLang String? @db.VarChar(12)
+
+  /// 🔴 LA LLAVE DE IDEMPOTENCIA DEL RECORDATORIO, Y LLEVA DENTRO LA HORA
+  /// DE LA CITA: "<citaId>:<horasAntes>:<startsAt ISO>". Si la cita se
+  /// mueve, la llave CAMBIA, así que el recordatorio de la hora nueva no lo
+  /// bloquea la fila de la hora vieja. En el dental la llave no lleva la
+  /// hora y ése es justamente el bug: la fila vieja tapa el aviso bueno y
+  /// no es que llegue tarde, es que no llega nunca.
+  /// Null en los documentos: reenviar una carta a mano es legítimo.
+  dedupeKey String? @db.VarChar(200)
+
+  /// Cuándo TENÍA que salir (el recordatorio) y cuándo salió de verdad.
+  scheduledFor DateTime? @db.Timestamptz(3)
+  sentAt       DateTime? @db.Timestamptz(3)
+
+  /// Lo que contestó Meta.
+  wamid     String? @db.VarChar(120)
+  errorCode Int?
+  errorMsg  String? @db.VarChar(500)
+  /// Cuántas veces se ha intentado. Un fallo se reintenta unas pocas veces
+  /// (una tarjeta que se arregla, un 500 de Meta) y luego se deja en paz:
+  /// reintentar una plantilla rechazada cada quince minutos es pegarle a
+  /// Meta toda la vida.
+  attempts  Int     @default(0)
+
+  /// Quién lo mandó. Null = el CRON (un cron no tiene usuario).
+  sentByUserId String?
+  sentByName   String? @db.VarChar(160)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, dedupeKey], map: "edu_whatsapp_messages_dedupe_key")
+  @@index([institutionId, createdAt], map: "edu_whatsapp_messages_fecha_idx")
+  @@index([institutionId, patientId, createdAt], map: "edu_whatsapp_messages_patient_idx")
+  @@index([institutionId, appointmentId], map: "edu_whatsapp_messages_appt_idx")
+  @@index([institutionId, status, scheduledFor], map: "edu_whatsapp_messages_cola_idx")
+  @@map("edu_whatsapp_messages")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Ola 10 · FACTURACIÓN CFDI DEL INSTITUTO
+//
+// Se factura sobre el COBRO de la Ola 5 (EduCharge). No hay un segundo
+// documento de venta: si la factura tuviera sus propios conceptos y sus
+// propios importes, existirían dos verdades sobre lo mismo y tarde o
+// temprano no coincidirían.
+//
+// 🔴 LOS IMPORTES SALEN DEL COBRO CONGELADO. EduInvoice copia el subtotal,
+// el descuento, el total y las LÍNEAS tal como estaban al emitir el cobro
+// (EduChargeItem ya guarda el precio congelado). Jamás se recalculan
+// contra el tarifario vigente: subir la lista de precios en marzo no puede
+// cambiar lo que dice un CFDI de enero.
+//
+// 🔴 EL AMBIENTE SE LEE DE LA CONFIGURACIÓN, NO DE UNA CONSTANTE. El
+// timbrado del dental decide PRUEBAS/LIVE con la variable FACTURAPI_ENV,
+// que es una sola para todo el despliegue. Un instituto puede estar
+// probando mientras el dental factura de verdad, así que aquí el ambiente
+// vive en EduFiscalConfig.environment y CADA factura guarda en cuál se
+// timbró — un CFDI de pruebas y uno fiscal no se pueden mezclar en una
+// lista sin decir cuál es cuál.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Ambiente de timbrado del instituto.
+///
+/// TEST = Facturapi timbra con SUS certificados de prueba: el documento se
+/// ve igual, tiene UUID y se descarga, y NO llega al SAT ni tiene validez
+/// fiscal. LIVE = se timbra ante el SAT con el CSD de la escuela.
+enum EduFiscalEnv {
+  TEST
+  LIVE
+}
+
+/// Estado de una factura del instituto.
+///
+/// 🔴 STAMPING no es decoración: es la RESERVA. La fila se crea ANTES de
+/// llamar a Facturapi, y el índice único sobre "activeChargeId" hace que
+/// el segundo clic choque contra la base en vez de producir un segundo
+/// timbre. Ver el encabezado de EduInvoice.
+enum EduInvoiceStatus {
+  /// Reservada: se está timbrando ahora mismo, o se quedó a medias.
+  STAMPING
+  /// Timbrada. Tiene UUID.
+  VALID
+  /// Cancelada ante el SAT (o en pruebas). No se borra NUNCA.
+  CANCELLED
+  /// Facturapi rechazó el timbrado. No hay UUID y el cobro se puede
+  /// volver a intentar.
+  FAILED
+}
+
+/// Cómo se timbra el IVA de los conceptos.
+///
+/// EXENTO es el default y no es un capricho: los servicios de medicina y
+/// odontología prestados por profesionales están exentos (art. 15 LIVA), y
+/// sin `taxes` explícitos Facturapi desglosa IVA 16 % por su cuenta — el
+/// mismo bug que ya se pagó en el dental.
+///
+/// El valor es un ENUM y no un string a propósito: en el dental conviven
+/// "exempt" (columna de la clínica) y "exento" (modal), y un refactor que
+/// mezcle los dos timbra con IVA algo que debía salir exento.
+enum EduTaxMode {
+  EXENTO
+  IVA16
+}
+
+/// LOS DATOS FISCALES DEL INSTITUTO. Una fila por instituto.
+///
+/// 🔴 Es la ÚNICA fuente de "¿esto es de pruebas o es fiscal?". Ninguna
+/// pantalla del vertical lee FACTURAPI_ENV: leen esta tabla, y por eso el
+/// aviso de la interfaz no puede quedarse viejo respecto de la realidad.
+///
+/// `facturapiOrgId` es la organización del instituto DENTRO de la cuenta
+/// de Facturapi de DaleControl (multi-RFC), igual que hace el dental con
+/// Clinic.facturApiOrgId. `facturapiLiveKey` guarda cifrada la Live Secret
+/// Key, que Facturapi solo devuelve UNA vez (PUT /apikeys/live) y no se
+/// puede volver a leer.
+model EduFiscalConfig {
+  id            String @id @default(cuid())
+  institutionId String @unique
+
+  /// RFC del emisor, en MAYÚSCULAS y sin espacios ni guiones.
+  rfc       String @db.VarChar(13)
+  /// Razón social EXACTA como está en la Constancia de Situación Fiscal.
+  legalName String @db.VarChar(200)
+  /// Clave del régimen fiscal (c_RegimenFiscal): "601", "603", "612"…
+  taxRegime String @db.VarChar(6)
+  /// Código postal del domicilio fiscal. Cinco dígitos, y va en el CFDI.
+  zipCode   String @db.VarChar(5)
+
+  /// 🔴 PRUEBAS o EN VIVO. Nace en TEST siempre: encender el timbrado
+  /// fiscal es una decisión que se toma a mano, con el CSD cargado.
+  environment EduFiscalEnv @default(TEST)
+  /// Interruptor maestro. En false no se timbra nada, ni en pruebas: es
+  /// lo que deja al instituto capturar sus datos antes de facturar.
+  isEnabled   Boolean      @default(false)
+
+  facturapiOrgId   String?
+  /// Cifrada con el envelope de src/lib/crypto/envelope.ts. NUNCA sale de
+  /// esta tabla hacia el navegador.
+  facturapiLiveKey String?
+  /// Cuándo se subió el CSD por última vez. Es informativo: la verdad de
+  /// si la organización puede timbrar en vivo la tiene Facturapi
+  /// (is_production_ready / pending_steps) y se consulta al abrir la
+  /// pantalla, no se cachea en una bandera que se queda vieja.
+  csdUploadedAt    DateTime?
+
+  /// Default de impuestos de la escuela. Se puede cambiar por factura.
+  taxMode           EduTaxMode @default(EXENTO)
+  /// Uso del CFDI que se propone (c_UsoCFDI). D01 = honorarios médicos y
+  /// dentales, que es lo que pide un paciente que va a deducir.
+  defaultUsoCfdi    String     @default("D01") @db.VarChar(5)
+  /// Clave del producto/servicio del SAT (c_ClaveProdServ) con la que
+  /// salen los conceptos. 85121600 = servicios médicos especializados.
+  defaultProductKey String     @default("85121600") @db.VarChar(8)
+  /// Prefijo del folio interno de las facturas del instituto ("F-0001").
+  /// No es el folio fiscal: ése es el UUID que devuelve el SAT.
+  folioPrefix       String     @default("F") @db.VarChar(6)
+
+  updatedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  updatedBy   EduUser?       @relation("EduFiscalConfigBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("edu_fiscal_configs")
+}
+
+/// LOS DATOS FISCALES DEL PACIENTE. Tabla APARTE, uno a uno con EduPatient.
+///
+/// 🔴 POR QUÉ NO SON COLUMNAS DE EduPatient, que era la otra opción:
+///
+///  1. La fila del paciente la leen la agenda, el buscador, la ficha, el
+///     tamizaje y el modal de caja, muchas veces sin `select` explícito.
+///     Un RFC y una razón social ahí dentro viajan a pantallas que nunca
+///     los pidieron —incluidas las de un ALUMNO— y ése es exactamente el
+///     tipo de fuga que ya costó un incidente en el dental (la fila
+///     completa de Clinic yéndose al navegador).
+///  2. Son datos que la mayoría de los pacientes NO tienen: en una clínica
+///     de escuela, factura uno de cada diez. Cinco columnas nulas en la
+///     tabla más consultada del vertical, para el 10 % de las filas.
+///  3. Se llenan y se corrigen en un momento distinto (el mostrador, al
+///     pedir la factura) y por gente distinta de la que registra al
+///     paciente. Separarlos deja auditar quién los tocó sin ensuciar
+///     `updatedAt` de la ficha clínica.
+///
+/// Lo que se pierde es un JOIN, y solo cuando se factura.
+model EduPatientTaxProfile {
+  id            String @id @default(cuid())
+  institutionId String
+  patientId     String @unique
+
+  rfc       String  @db.VarChar(13)
+  legalName String  @db.VarChar(200)
+  taxRegime String  @db.VarChar(6)
+  zipCode   String  @db.VarChar(5)
+  /// A dónde manda Facturapi el CFDI. Opcional: puede no tener correo.
+  email     String? @db.VarChar(160)
+  /// Uso del CFDI que este receptor pide siempre (c_UsoCFDI).
+  usoCfdi   String  @default("D01") @db.VarChar(5)
+
+  /// Quién capturó o corrigió estos datos por última vez.
+  updatedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  updatedBy   EduUser?       @relation("EduTaxProfileBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, rfc], map: "edu_patient_tax_rfc_idx")
+  @@map("edu_patient_tax_profiles")
+}
+
+/// LA FACTURA DE UN COBRO.
+///
+/// ═══════════════════════════════════════════════════════════════════════
+/// 🔴 UN COBRO NO SE FACTURA DOS VECES, Y EL CANDADO ESTÁ EN LA BASE
+///
+/// No basta con deshabilitar el botón: dos clics rápidos son dos requests
+/// que corren a la vez, y los dos ven "este cobro no tiene factura".
+///
+/// El candado real es la columna `activeChargeId` con su índice único
+/// (institutionId, activeChargeId):
+///
+///   · al empezar a facturar se INSERTA la fila con status STAMPING y
+///     activeChargeId = chargeId, ANTES de llamar a Facturapi;
+///   · el segundo clic choca con el índice único (P2002) y se le contesta
+///     409 "este cobro ya se está facturando" — sin haber pedido un
+///     segundo timbre;
+///   · al CANCELAR, activeChargeId se pone en NULL. Postgres considera
+///     los NULL distintos entre sí, así que un cobro puede tener varias
+///     facturas canceladas y COMO MUCHO una viva. Es lo que permite
+///     re-facturar un cobro cuyo CFDI se canceló sin borrar historia.
+///
+/// Si Facturapi rechaza el timbrado, la fila queda FAILED con
+/// activeChargeId en NULL (no hubo timbre: se puede reintentar). Si la
+/// llamada se corta a media red, la fila se QUEDA en STAMPING a propósito:
+/// no sabemos si el SAT timbró, y liberar el cobro ahí sería la forma de
+/// producir el segundo timbre que esta tabla existe para evitar.
+/// ═══════════════════════════════════════════════════════════════════════
+model EduInvoice {
+  id            String @id @default(cuid())
+  institutionId String
+
+  /// El cobro facturado. SIEMPRE presente: es de dónde salen los importes.
+  chargeId String
+  /// 🔴 EL CANDADO. Igual a chargeId mientras la factura vive; NULL en
+  /// cuanto se cancela o falla. Ver el encabezado.
+  activeChargeId String?
+
+  /// Se guarda ADEMÁS del cobro para poder listar "las facturas de este
+  /// paciente" sin un JOIN, y porque el receptor puede no ser el paciente.
+  patientId String
+
+  /// Folio INTERNO del instituto ("F-0001"). No es el folio fiscal.
+  folio  String           @db.VarChar(30)
+  status EduInvoiceStatus @default(STAMPING)
+
+  /// 🔴 EN QUÉ AMBIENTE SE TIMBRÓ ESTA FACTURA, congelado. La escuela
+  /// puede pasar de pruebas a vivo, y lo que se timbró en pruebas NO se
+  /// vuelve fiscal por eso. La lista lo pinta factura por factura.
+  environment EduFiscalEnv
+
+  // ── El RECEPTOR, congelado ──────────────────────────────────────────
+  // Copiado del perfil fiscal del paciente al timbrar. Si mañana corrige
+  // su RFC, este CFDI sigue diciendo a nombre de quién se emitió.
+  receptorRfc       String  @db.VarChar(13)
+  receptorLegalName String  @db.VarChar(200)
+  receptorTaxRegime String  @db.VarChar(6)
+  receptorZip       String  @db.VarChar(5)
+  receptorEmail     String? @db.VarChar(160)
+
+  /// Uso del CFDI (c_UsoCFDI) y forma de pago (c_FormaPago), congelados.
+  usoCfdi     String     @db.VarChar(5)
+  paymentForm String     @db.VarChar(2)
+  taxMode     EduTaxMode
+
+  // ── Los IMPORTES, copiados del COBRO ────────────────────────────────
+  // En CENTAVOS, como todo el dinero del vertical. No se recalculan.
+  subtotalCents Int
+  discountCents Int @default(0)
+  totalCents    Int
+  /// Las líneas EXACTAS que se mandaron a timbrar, congeladas. Sirven
+  /// para reimprimir el detalle sin depender de que el cobro (o el
+  /// catálogo) siga como estaba.
+  conceptos     Json
+
+  // ── El timbre ───────────────────────────────────────────────────────
+  /// Id del documento en Facturapi (con él se descargan PDF y XML).
+  facturapiId String?
+  /// Folio fiscal del SAT. Único dentro del instituto: si se recupera una
+  /// factura a mano, no se puede registrar dos veces el mismo timbre.
+  uuid        String?   @db.VarChar(40)
+  stampedAt   DateTime? @db.Timestamptz(3)
+  /// El XML COMPLETO, guardado aquí. Es el documento fiscal de verdad y
+  /// pesa unos pocos kilobytes; el PDF no se guarda porque es una
+  /// representación que Facturapi vuelve a generar cuando se pida, y
+  /// meter megabytes de PDF en Postgres es cómo se mata una base.
+  xml         String?
+  xmlUrl      String?
+  pdfUrl      String?
+
+  /// Quién la emitió y cuándo se pidió (stampedAt es cuándo respondió el
+  /// SAT; pueden diferir si el timbrado tarda o falla).
+  issuedByUserId String
+  issuedAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  // ── La cancelación ──────────────────────────────────────────────────
+  // No borra NADA. La fila se queda con su UUID y su XML.
+  cancelledAt       DateTime? @db.Timestamptz(3)
+  cancelledByUserId String?
+  /// Clave del motivo del SAT (c_MotivoCancelacion): "02", "03", "04".
+  cancelMotive      String?   @db.VarChar(2)
+  /// Lo que escribió quien canceló, con sus palabras.
+  cancelReason      String?   @db.VarChar(300)
+
+  /// Lo que contestó Facturapi cuando el timbrado falló. Se guarda para
+  /// poder decirle a la escuela QUÉ pasó en vez de "error al timbrar".
+  errorMessage String? @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  charge      EduCharge      @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  issuedBy    EduUser        @relation("EduInvoiceBy", fields: [issuedByUserId], references: [id], onDelete: Cascade)
+  cancelledBy EduUser?       @relation("EduInvoiceCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+
+  /// 🔴 EL CANDADO CONTRA LA DOBLE FACTURA. Ver el encabezado del modelo.
+  @@unique([institutionId, activeChargeId], map: "edu_invoices_activo_key")
+  /// El mismo timbre no se registra dos veces.
+  @@unique([institutionId, uuid], map: "edu_invoices_uuid_key")
+  @@unique([institutionId, folio], map: "edu_invoices_folio_key")
+  @@index([institutionId, issuedAt], map: "edu_invoices_fecha_idx")
+  @@index([institutionId, status], map: "edu_invoices_status_idx")
+  @@index([institutionId, chargeId], map: "edu_invoices_charge_idx")
+  @@index([institutionId, patientId], map: "edu_invoices_patient_idx")
+  @@map("edu_invoices")
 }

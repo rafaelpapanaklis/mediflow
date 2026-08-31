@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   Armchair,
   Banknote,
   Building2,
@@ -17,7 +18,10 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  MessageCircle,
+  Receipt,
   Ruler,
+  Sparkles,
   Stamp,
   Sun,
   Tags,
@@ -69,12 +73,20 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "user-plus": UserPlus,
   // Ola 4 — el gate de autorización.
   stamp: Stamp,
+  // Ola 7 — el panel de dirección.
+  activity: Activity,
   // Ola 6 — evaluación académica.
   gauge: Gauge,
   ruler: Ruler,
   "list-checks": ListChecks,
   // Ola 11 — las sedes.
   building: Building2,
+  // Ola 8 - la cartera de IA.
+  sparkles: Sparkles,
+  // Ola 9 — WhatsApp y recordatorios.
+  "message-circle": MessageCircle,
+  // Ola 10 — facturación CFDI.
+  receipt: Receipt,
 };
 
 export interface EduShellProps {

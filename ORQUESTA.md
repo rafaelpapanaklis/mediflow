@@ -28037,3 +28037,1462 @@ Postgres 13, pero no se corrió).
 7. **Repartir el acceso** en `/instituto/sedes` → "Quién entra". Y tenerlo presente al hacerlo: quien
    no tiene NINGUNA sede marcada entra a todas, y quitarle a alguien la última se las abre todas otra
    vez. La pantalla lo avisa en el momento.
+## DaleControl INSTITUCIONAL — Ola 7 · EL PANEL DE DIRECCIÓN (rama `feat/edu-ola-7`)
+
+**Una pantalla nueva, `/instituto/direccion`, y un permiso nuevo, `direccion.panel`.** Es lo
+que el director de la escuela abre para ver cómo va su clínica: no una lista de problemas, sino
+lo que está pasando. Cero tablas nuevas.
+
+### 🔴 Lo primero, porque era la decisión de la ola: NO hay «alumnos conectados»
+
+El contrato pedía cuatro cifras en vivo, y dos de ellas —**alumnos conectados** y **docentes en
+piso**— no son derivables: el producto **no registra presencia**. Nadie ficha al entrar a la
+clínica, y ninguna de las siete olas guardó nunca un `lastSeenAt`.
+
+Se podía resolver de dos formas. Se eligió **la segunda: no pintarlas, y poner en su lugar dos
+cifras que sí son ciertas.** El latido —una columna que la sesión del panel toca cada pocos
+minutos— se descartó por una razón de producto, no de esfuerzo: **un latido cuenta pestañas
+abiertas, no gente.** El alumno que está tratando a un paciente con el teléfono en el bolsillo
+contaría cero; una sesión olvidada en la computadora de recepción contaría uno toda la tarde.
+Proyectado en la pared de una junta, «23 conectados» se lee como «23 alumnos en la clínica», y
+sería falso exactamente cuando importa. Además cuesta: 120 alumnos son 120 `UPDATE` cada pocos
+minutos sobre `edu_users`, todo el día, para un número sobre el que nadie puede actuar.
+
+Las dos que se pintan en su lugar salen de las citas de HOY y son exactas:
+
+- **Pacientes en la clínica** — los que están en `CHECKED_IN`, `IN_CHAIR` o `IN_PROGRESS`:
+  llegaron y no se han ido. Incluye a los que esperan en recepción, que es media respuesta a
+  «¿cuánta gente hay dentro?».
+- **Docentes responsables** — los docentes distintos que responden AHORA por lo que hay en los
+  sillones: el `supervisorUserId` de la cita y, cuando la cita no lo trae (que es lo normal), el
+  titular **vigente** del alumno. Y con ella sale gratis la que de verdad hay que mirar: **cuántos
+  sillones ocupados no tienen a nadie que responda por ellos**, que pone la tarjeta en rojo.
+
+Las otras dos del contrato se quedaron como estaban: **atendiendo ahora** (alumnos con paciente
+en el sillón) y **sillones en uso (x/total)**. `CHECKED_IN` **no** ocupa sillón — el paciente
+llegó a recepción y todavía no se sentó—, y esa distinción es justo la que hace útil la cifra:
+es la que decide si caben más pacientes.
+
+La pantalla **lo dice en voz alta**, no lo esconde en un comentario: *«No decimos ‘alumnos
+conectados’ porque el producto no registra presencia — nadie ficha al entrar a la clínica—, y un
+número de sesiones abiertas no es gente en el piso.»*
+
+### La regla que gobierna todo lo demás: ningún número inventado
+
+Un tablero de dirección se proyecta y se lee en voz alta; un número aproximado ahí no es «una
+aproximación», es una decisión tomada sobre un dato falso. De esa regla salieron cinco negativas
+concretas, y las cinco están probadas:
+
+1. **La variación no inventa un porcentaje cuando el periodo anterior fue CERO.** No hay
+   «+100 %» ni «+∞ %»: dice *«antes no hubo ninguno (0 → 7)»*.
+2. **Un sillón sin horario capturado no tiene ocupación.** «Siempre abierto» (regla de la Ola 2)
+   no es un denominador: esos sillones quedan **fuera** de la media y la pantalla dice cuántos
+   son y dónde capturarlo. Y la ocupación **se topa en 100 %**: un «137 %» proyectado en una
+   junta es una pregunta que nadie puede contestar.
+3. **El dinero que no se puede atribuir a una especialidad no se reparte a ojo.** Un cobro solo
+   tiene especialidad si trae caso, y caja cobra sin abrir expediente: lo que queda fuera sale
+   en su propia fila, con la acción que lo arregla.
+4. **El semáforo académico no se recalcula**: sale de la Ola 6 (`listEduEvaluacion` →
+   `eduAtrasoVerdict`), con su motivo y su umbral **importado, no copiado**. Una segunda cuenta
+   del mismo número es cómo se llega a que Evaluación diga 5 y Dirección diga 6.
+5. **Cuando el periodo es más grande que el tope de memoria, se dice.** No hay un total que se
+   quedó corto sin avisar.
+
+### 🔴 El desglose del dinero es un CONTROL, no una curiosidad
+
+La tarifa de **paciente de alumno** es más barata que la de público general, y la regla que la
+aplica es automática (`EduFeeSchedule.rule = REFERRED_BY_STUDENT`, Ola 5). El bloque de dinero
+**cruza dos cosas que hasta hoy nadie había cruzado**: la lista de precios que se **aplicó**
+contra el **origen real** del paciente (`EduPatient.referredByStudentId`). De ahí salen dos
+filas que son el control:
+
+- 🔴 **Tarifa de alumno a paciente que llegó solo** — roja en cuanto hay una. O falta marcar
+  quién trajo a ese paciente, o se cobró de menos.
+- ⚠️ **Paciente de alumno cobrado con la lista general** — ámbar. Al revés: o se le cobró de
+  más, o el origen se marcó después del cobro.
+
+Y una tercera, honesta: los cobros **sin lista guardada** no se pueden clasificar, así que no
+cuentan como correctos **ni** como incorrectos — se enseñan aparte.
+
+### Cada cifra abre la lista que hay detrás
+
+Un número que no se puede abrir no sirve para decidir: «7 casos esperando firma» no es
+accionable, «estos siete, y el más viejo lleva dos horas» sí. **Las 15 listas** viven en un
+catálogo (`EDU_DIR_DETALLE_KEYS`) y una prueba mecánica falla si una key se queda sin su `case`
+en el servidor o sin nadie que la abra en la pantalla — el mismo candado que
+`edu-permissions.test.ts` le pone a los permisos muertos.
+
+**Las listas que el panel ya tiene en memoria** (la rejilla de sillones, la tabla por
+especialidad, los alumnos, el sillón a sillón) se abren **sin pedirle nada al servidor**. Las de
+registros se piden **al abrirlas**: cargar quince listas por si acaso sería una pantalla de ocho
+segundos, y un tablero de ocho segundos deja de abrirse a la semana.
+
+### El semáforo significa siempre lo mismo, y por eso hay tan poco color
+
+**Rojo = alguien tiene que actuar · ámbar = vigilar · verde = va bien · gris = es un dato, no un
+juicio.** Las tarjetas de actividad (pacientes atendidos, tamizajes, cobrado) van en **gris a
+propósito**: teñirlas de verde enseñaría a ignorar el verde. La leyenda está impresa en la
+pantalla, arriba, para que nadie tenga que adivinarlo. Un sillón **libre** es gris y no rojo: a
+las siete de la tarde están todos libres.
+
+El único umbral inventado de la ola tiene nombre y vive en un solo sitio:
+`EDU_DIR_ESPERA_ROJA_MIN = 15` — a partir de quince minutos esperando una firma, el sillón pasa
+de ámbar a rojo. Sin umbral, un sillón se pondría rojo el segundo en que el alumno manda la
+autorización, y la dirección dejaría de mirar el tablero en una semana.
+
+### Rendimiento: el presupuesto de consultas es parte del diseño
+
+El tablero cruza casi todas las tablas del vertical, así que la regla fue **una consulta por
+tabla y por ventana, nunca una por fila**:
+
+- **Bloque en vivo** (el que se refresca solo): **4 consultas**, en dos grupos de 2. Es su propio
+  endpoint —no el panel entero— porque refrescar todo cada 25 s volvería a cruzar casos, cobros,
+  pagos y requisitos para actualizar cuatro cifras que caben en una consulta de citas de hoy.
+- **Panel del periodo**: **14 consultas** en tres grupos de **6, 6 y 2** (la regla del repo es
+  menos de 7 por `Promise.all`), más las 4 internas de `listEduEvaluacion`.
+- La página llama a los dos **en secuencia**, no en paralelo: encadenar dos bloques de seis
+  dejaría doce conexiones simultáneas contra el mismo pool.
+- Lo que se puede sumar en Postgres se suma allí (`groupBy` de los pagos, `aggregate` de las
+  autorizaciones) para no traer filas que solo se iban a sumar.
+- El latido del cliente **se para con la pestaña oculta**: un tablero proyectado y olvidado no
+  tiene por qué consultar la base toda la tarde.
+
+**Cuatro índices nuevos**, y los cuatro tienen una consulta concreta detrás:
+`edu_cases_abierto_idx` y `edu_cases_cerrado_idx` (los rangos de «tratamientos iniciados» y
+«terminados» — `edu_cases` no tenía ninguno por fecha), `edu_appointments_estado_idx` (el bloque
+en vivo, que corre cada 25 s) y `edu_students_program_idx` (el filtro de especialidad, que se
+toca en cada fila de la tabla comparativa).
+
+### 🔴 El alcance aquí NIEGA, no recorta — y es la primera vez en el vertical
+
+En las seis olas anteriores, «el permiso abre la pantalla y el alcance decide las filas» permitía
+darle la misma key a tres roles sin que vieran lo mismo. **Este tablero no admite ese reparto,**
+porque su contenido *es* el total: «la clínica ahora», «cobrado del periodo», «ocupación
+promedio». Un docente con `direccion.panel` encendido por error vería los sillones de sus
+alumnos bajo el título «La clínica ahora» y leería un número falso.
+
+Así que `src/lib/edu/direccion.ts` comprueba que **los cuatro recursos** de `visibility.ts`
+(`patients`, `appointments`, `cases`, `charges`) devuelvan alcance **completo**, y si no,
+contesta 403 con el motivo escrito para una persona. Encenderle la casilla a alguien por error
+no le enseña media escuela: no le enseña nada, y le dice por qué. (`direccion.panel` la lleva
+**solo DIRECCION**, como las otras siete keys de administración del catálogo.)
+
+### El papel, por dos caminos y no por tres
+
+En una acreditación esto se pide impreso, y se resolvió así:
+
+- **CSV** (`/api/instituto/direccion/export`) para lo que hay que **sumar** — se pega en una hoja
+  de cálculo y se cuadra. Reusa el escapado de la Ola 6, incluido el apóstrofo que impide que una
+  celda preparada («`=SUM(A1:A9)`» como nombre de especialidad) se convierta en fórmula de Excel,
+  y el BOM que evita que «Rodríguez» salga «RodrÃ­guez».
+- **`@media print`** sobre la propia pantalla para lo que hay que **enseñar**: el tablero tal
+  como se ve, sin el chrome del panel, con saltos de página por bloque y el color del semáforo
+  forzado (`print-color-adjust: exact`) — aunque el color nunca es la única señal: cada estado
+  lleva su texto al lado.
+
+Un PDF generado aparte habría sido una **tercera** versión del mismo tablero, que es como se
+acaba con tres cifras distintas del mismo mes. Y el CSV **sale de las mismas funciones que la
+pantalla**, no de una consulta «para exportar».
+
+### Diseño
+
+Móvil primero, como todo el vertical, pero con la segunda lectura encima: **se proyecta**. De ahí
+las cifras en `clamp()` (crecen con la ventana), los **números tabulares** —una columna de cifras
+que baila no se puede comparar de un vistazo— y el contraste alto. El ancho sube a 1440 px en
+pantallas grandes con una clase propia (`.edu-page--ancha`): el resto del vertical mide 1100
+porque son formularios, y aquí lo que se compara son columnas.
+
+Todo con clases `edu-` en `edu-theme.css`, reusando lo que ya existía (`.edu-seg`, `.edu-table`,
+`.edu-tag`, `.edu-progreso`, `.edu-modal`, `.edu-kpi`). Lo nuevo es la familia `edu-dir-*`: la
+rejilla de sillones, la cifra grande con su franja de semáforo y la hoja impresa.
+
+**Pendientes va SEXTO y del mismo tamaño que los demás**, no arriba y en rojo: un bloque de
+quejas gigante convierte el tablero en una lista de quejas, se mira dos semanas y se deja de
+abrir.
+
+### Números y estructura
+
+**1 pantalla** (`/instituto/direccion`) · **4 endpoints** (`GET /api/instituto/direccion`,
+`…/ahora`, `…/detalle`, `…/export`) · **1 módulo puro** (`direccion-core.ts`) + **1 de servidor**
+(`direccion.ts`) · **1 componente cliente** (`direccion-screen.tsx`) · **1 permiso**
+(`direccion.panel`) · **15 listas** de detalle · **4 índices** · **0 tablas, 0 columnas, 0 enums,
+0 llaves foráneas**.
+
+**Verificación de esta rama:** `npm run build` ✅ (455/455 páginas; `/instituto/direccion` y las
+4 rutas de API nuevas registradas) · `npx tsc --noEmit` ✅ para el vertical (los mismos **6
+errores ajenos de barber** preexistentes en `origin/main`) · **564 pruebas del vertical en
+verde**, de ellas **48 nuevas** (`edu-direccion` **41**, `edu-permissions` pasa de 40 a **47**) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅ (15 propios,
+1 compartido declarado, 0 prohibidos).
+
+**Verificación visual:** se renderizó el marcado del tablero contra `edu-theme.css` en Chrome, a
+1440 px y a 390 px, y **encontró tres cosas que se arreglaron**: la etiqueta del periodo salía
+«Últimos 7 **D**ías · 25 **A**go» por un `text-transform: capitalize` heredado de la agenda; la
+rejilla de sillones se caía a **una** columna en un teléfono de 390 px (por ocho píxeles), y el
+tablero dejaba un tercio de la pared en blanco con el ancho de 1100 px del resto del vertical.
+
+**Lo que NO se probó, y hay que probar con base de datos:** ninguna consulta corrió contra
+Postgres — `sql/edu-ola-7.sql` **no se aplicó** (la orden lo prohibía) y este worktree no tiene
+`DATABASE_URL`. En concreto, **sin datos reales no se comprobó**: que las 14 consultas del panel
+devuelvan lo que se espera, el rendimiento real con un instituto lleno, el refresco automático
+del bloque en vivo, la descarga del CSV, la hoja impresa desde el navegador, ni las 15 listas de
+detalle. Todo lo comprobado son las **funciones puras** (ventana, variación, ocupación, semáforo,
+CSV) y **la forma** de los `where`.
+
+**Al desplegar:**
+
+1. **`sql/edu-ola-7.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/1b/2/3/3b/4/5/6.sql`. Idempotente, cero DROP, cero tablas: son **4 índices** y
+   tres `COMMENT ON`.
+2. El **backfill del override** (sección 3 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío: el override **reemplaza** al default, así que `direccion.panel`
+   no le llega sola a quien ya tenga uno guardado. Es **un** solo bloque: la key la lleva
+   únicamente DIRECCION.
+3. **Comprobar que los sillones tienen horario** (`/instituto/sillones`). Sin él, la ocupación
+   sale «sin calcular» — a propósito, pero con la mitad del bloque de uso apagada.
+4. **Comprobar que las generaciones tienen `endDate`** (`/instituto/padron/estructura`), por lo
+   mismo que en la Ola 6: sin fechas, el avance por especialidad sale «sin calcular».
+5. **Colgarle el caso a los cobros** que se puedan (ficha del paciente). Un cobro sin caso no se
+   puede atribuir a una especialidad — el tablero lo dice, pero la fila «sin caso» se encoge en
+   cuanto se empieza a hacer.
+
+**Deuda conocida que esta ola NO tocó:** los **2 P0 y 2 P1** de `docs/audits/EDU_AUDIT.md`
+(PR #135) siguen abiertos. Ninguno vive en el código de esta ola y ninguno se agravó con ella —
+el panel de dirección solo LEE, y lee con alcance completo por definición.
+
+Pero **uno de ellos cambió cómo se escribió el bloque en vivo**, y conviene que quede escrito:
+el **P0-2** dice que la agenda nunca manda `caseId`, así que casi ninguna cita está enganchada a
+su caso. La versión obvia de «esperando docente» —pedir las autorizaciones PENDIENTES de los
+`caseId` de las citas que hay en los sillones— habría funcionado en una demo y **casi nunca se
+habría encendido en producción**, que es la peor clase de bug: uno que se ve exactamente igual
+que «hoy nadie está esperando». La rejilla empareja por **dos claves**: por `caseId` cuando la
+cita lo trae, y por **(paciente + alumno)** cuando no, sobre las pendientes del instituto —que
+son pocas, es la bandeja del docente— y descartando los casos cerrados. Cuesta la misma consulta
+y el mismo viaje. Cuando el P0-2 se arregle, el primer camino cubrirá todo y el segundo se
+quedará como cinturón.
+
+---
+
+## [Institucional Ola 8] — La cartera de IA: el instituto no paga con tarjeta, paga por contrato, así que su IA es un CUPO MENSUAL — y el número que ese cupo incluye NO se edita desde el panel ✅ (2026-08-30) · rama `feat/edu-ola-8`
+
+Rama `feat/edu-ola-8`, basada en `origin/main` (c4dd7228, Ola 6). **Tres tablas nuevas, dos
+enums, dos endpoints, una pantalla, y las dos funciones de IA de la Ola 3B ENCENDIDAS.**
+Ni una línea del dental, de barbería ni de inmuebles:
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` → 20
+propios, 1 compartido declarado, **0 prohibidos**.
+
+---
+
+### 1. El problema, y por qué la respuesta no es copiar la cartera del dental
+
+La Ola 3B dejó el dictado por voz y el análisis radiográfico **construidos, probados y
+APAGADOS** detrás de `EDU_IA_ENABLED`, porque el instituto no tenía a qué cargarle los
+tokens: el cobro del dental descuenta contra `Clinic.aiTokensLimit` y un usuario de
+instituto no tiene fila de clínica. Aquella ola lo dijo con todas sus letras — *"escribir
+la tabla es la forma más rápida de que la decisión comercial quede tomada por accidente"*.
+
+Esta ola toma esa decisión, y **no copiando `AiWallet`**:
+
+| | dental | instituto |
+|---|---|---|
+| cómo paga | Stripe, cartera que se **recarga** | **contrato anual** (`EduInstitution.contractStartsAt/EndsAt`) |
+| qué es la IA | saldo | **cupo mensual INCLUIDO** en el contrato |
+| quién sube el techo | el cliente, con su tarjeta | **DaleControl, al firmar o renovar** |
+
+Por eso aquí no hay `balance`, ni `recarga`, ni `método de pago`. Hay un **techo al mes**,
+la decisión de la escuela sobre si se puede rebasar, y **un renglón por cada uso** para
+poder contestar en qué se fue.
+
+---
+
+### 2. 🔴 QUIÉN EDITA EL CUPO — la decisión de la ola, y está cerrada en el servidor
+
+El cupo tiene **dos mitades y no se editan igual**:
+
+**a) Lo que INCLUYE el contrato (`monthlyUsdCents`) NO se edita desde el panel. Con ningún
+permiso. No existe el campo.**
+
+No es jerarquía: **la cuenta de API que se consume es la de DaleControl**. Un formulario
+que dejara subir ese número convertiría *"lo que incluye tu contrato"* en *"lo que alguien
+tecleó"*, y quien paga la factura no estaría en la conversación. Es exactamente el mismo
+trato que `contractEndsAt`, que el panel también solo **pinta**.
+
+Y se cierra en tres sitios, no en uno:
+
+1. la pantalla no trae el campo;
+2. `PATCH /api/instituto/ia` **rechaza `monthlyUsdCents` con un 400 y un mensaje que
+   explica por qué** — *no lo ignora en silencio*, que dejaría a la dirección creyendo que
+   se guardó;
+3. una prueba recorre el catálogo de permisos y **falla si aparece cualquier key con
+   `monthly`/`mensual`/`contrato`/`incluido` en el nombre**, para que la ola que un día
+   quiera abrir esa puerta tenga que pararse a pensar.
+
+**Y la fila no se CREA desde el panel tampoco.** Un instituto sin cupo recibe 409:
+crearla obligaría a elegir un `monthlyUsdCents`, que es justo lo que el panel no decide. Se
+da de alta con el contrato — sección 8 de `sql/edu-ola-8.sql`, comentada a propósito.
+
+**b) Lo que decide la ESCUELA sí se edita, con `ia.manage`:** encender/apagar la IA,
+autorizar gastar de más del cupo incluido, hasta cuánto, y a quién pedirle más. Ninguna de
+las cuatro puede **ampliar** lo incluido: solo autorizar excedente por encima, con techo, a
+sabiendas y con su nombre en la fila.
+
+Las **dos reglas del excedente** viven en una función PURA (`eduIaValidarCupo`) y no
+pegadas al `update`, por una razón concreta: una regla que solo se puede comprobar con una
+base de datos delante es una regla que se rompe en el primer refactor.
+
+- 🔴 **permitir excederse EXIGE tope.** *"Permitido, sin tope"* es literalmente la fuga que
+  la Ola 3B se negó a abrir: 120 alumnos con el micrófono abierto y una factura que nadie
+  puede contestar.
+- 🔴 **el tope tiene que ser MAYOR que lo incluido.** Un tope por debajo haría que marcar
+  "permitir gastar de más" **redujera** el cupo, que es lo contrario de lo que dice la
+  casilla.
+
+---
+
+### 3. 🔴 PRECIOS: no queda ni uno escrito en el código
+
+La Ola 3B tenía una tabla de tarifas a mano en `ia-core.ts`
+(`EDU_IA_PRECIO_USD_POR_MTOK`). **Se fue.** Los precios viven en `edu_ai_prices` y la
+pantalla los **lee de ahí**; `eduIaCosto(precio, entrada, salida)` recibe la tarifa como
+**dato**, nunca como constante.
+
+**Y la consecuencia importante: sin tarifa, la función NO corre.** Si el modelo que una
+función usa no tiene fila, se apaga con el motivo *"falta configurar la tarifa de este
+modelo"*. La alternativa —correr y registrar costo cero— haría que el cupo de la escuela
+nunca bajara mientras la factura del proveedor sí sube. Ése es el error caro.
+
+**La tarifa se busca por MODELO EXACTO, no por función**, y ésa es la trampa que hay que
+ver: buscarla solo por función haría que una fila vieja —la del modelo barato del año
+pasado— siguiera cobrando por el modelo nuevo, y el cupo bajaría a un quinto de lo que de
+verdad se gasta. `EDU_IA_MODELOS` declara qué modelo llama cada función y en qué se mide, y
+hay una prueba que **lee `ia.ts` y `whisper.ts`** y falla si alguien cambia el modelo sin
+tocar el mapa.
+
+⚠️ `edu_ai_prices` es **la única tabla del vertical sin `institutionId`**, y no es un
+olvido: no es dato de un inquilino sino la **tarifa del proveedor**, y el proveedor cobra
+lo mismo llame quien llame — la cuenta de API es una sola. Lo que sí varía por escuela es
+el **cupo**, que es donde vive esa variación.
+
+**La sección 7 del `.sql` NO está comentada** — es la única que se ejecuta de verdad además
+de las tablas. Sin tarifa no hay función, así que forma parte de la migración. Lo que sí va
+comentado es el cupo del instituto (sección 8): ese número sale del contrato de cada
+escuela y no hay un valor por defecto honesto.
+
+---
+
+### 4. 🔴 CUÁNDO SE ACABA EL CUPO: 402, y el mensaje dice las tres cosas
+
+Nada de 500. Nada de micrófono muerto sin explicación.
+
+```
+Se acabó el cupo de IA de este mes. El instituto lleva consumidos 50.00 USD de los
+50.00 USD de IA de agosto de 2026, así que esta función se apaga hasta el mes que
+viene. La dirección puede autorizar pasar del cupo incluido —con un tope— desde la
+pantalla de Consumo de IA. A quién pedirle más: Coordinación académica, ext. 214.
+Mientras tanto, la nota se escribe a mano: no se pierde nada de lo que llevas.
+```
+
+**Cuánto se consumió · de cuánto · a quién pedirle.** Sin las tres, un alumno con el
+micrófono muerto abre un ticket — y ese ticket cuesta más que el cupo que se acabó. El
+contacto lo escribe la propia escuela.
+
+**Y el código HTTP separa dos conversaciones que se ven iguales desde fuera:**
+
+- **402** = se acabó el cupo. El despliegue está bien; lo que se acabó es el presupuesto.
+  Una gráfica de 402s dice *"hay escuelas quedándose sin cupo"* → conversación comercial.
+- **503** = falta configurar algo (sin cupo en el contrato, sin tarifa, sin llave) o la
+  escuela la apagó. Una gráfica de 503s dice *"hay algo mal montado"* → conversación de
+  ingeniería.
+
+Con un solo código, ninguna de las dos empezaría.
+
+**Y el aviso llega en el momento, no en el intento siguiente:** el endpoint del dictado
+devuelve lo que queda DESPUÉS de esa transcripción, y si es cero el micrófono lo dice ahí
+mismo —*"ése fue el último dictado"*— en vez de dejar que el siguiente clic falle de
+repente. Sin umbral inventado: solo se avisa en cero.
+
+---
+
+### 5. El interruptor cambió de sitio (y de sentido)
+
+`EDU_IA_ENABLED` **deja de ser la puerta**. Lo que enciende la IA de un instituto es tener
+**cupo configurado** — una fila de `EduAiQuota`—, que es un dato **por escuela**. La
+bandera global no sabía distinguir a la escuela que contrató IA de la que no.
+
+La variable sigue existiendo pero **invertida**: nace **encendida** y solo sirve para
+cerrar — `EDU_IA_ENABLED=0` apaga la IA de todas las escuelas de golpe, para una incidencia
+(el proveedor caído, una factura rara, un abuso). Y lo ambiguo ahora se interpreta como
+"encendida", al revés que en la Ola 3B, porque ya no es la bandera la que abre el grifo del
+gasto: el techo lo pone el cupo, que no se puede confundir con un dedazo en un `.env`.
+
+**El orden en que se comprueban los seis motivos ES parte del diseño**, no una casualidad
+del `if`. Va de *"esta escuela no puede usar esto nunca"* a *"no puede usarlo ahora mismo"*:
+
+```
+1. freno global     → no es asunto de la escuela
+2. sin cupo         → falta un renglón del CONTRATO
+3. apagada          → lo arregla la dirección en un clic
+4. sin tarifa       → falta configurar el producto
+5. sin llave        → falta configurar el entorno
+6. cupo agotado     → lo único que depende del mes en curso
+```
+
+Si el cupo agotado se comprobara antes que la llave, un entorno a medio desplegar diría
+*"pide más cupo"* cuando pedir más cupo no arreglaría nada. Y si la llave se comprobara
+antes que el cupo, una escuela sin contrato de IA mandaría a su director a buscar a un
+ingeniero.
+
+---
+
+### 6. Lo que NO tiene el schema, y es la mitad de la ola
+
+- **NO hay columna "consumido este mes".** El consumo se **cuenta** sumando
+  `edu_ai_usage` cada vez que alguien pregunta — exactamente como el avance académico de la
+  Ola 6, y por la misma razón: un contador guardado se desincroniza el día que una
+  escritura falle a la mitad, y entonces o se le apaga la IA a una escuela que sí tenía
+  cupo, o se le regala el que ya gastó.
+- **NO hay columna "estado del cupo".** *Agotado* depende de la HORA (el mes cambia): una
+  columna guardada mentiría desde el segundo siguiente a escribirla, igual que el estado
+  del consentimiento de la Ola 3B.
+- **NO hay historial del cupo.** `updatedBy*` guarda el ÚLTIMO cambio. Si un día hace falta
+  la historia, es una tabla aparte y no una columna más.
+
+⚠️ `periodKey` (`"2026-08"`) **no contradice lo anterior**: no es un contador sino una
+**etiqueta inmutable sobre una fila inmutable** — el total se sigue contando sumando filas.
+Existe porque el mes se decide en la **zona del instituto**: un dictado a las 23:30 del 31
+de agosto en Tijuana son las 06:30 del 1 de septiembre en UTC, y agrupar por mes con la
+zona del servidor le comería a la escuela cupo del mes que no era.
+
+**Dos unidades de dinero, y cada una tiene su razón:** el **presupuesto** en centavos de
+dólar (lo que teclea una persona; en `INTEGER` el techo queda en 21 millones al mes en vez
+de 2 147, que es lo que daría un entero de millonésimas) y el **medidor** en millonésimas
+(una llamada cuesta fracciones de centavo y en centavos redondearía a cero). La conversión
+vive en UN sitio.
+
+---
+
+### 7. El orden del gasto, y lo que ese orden NO puede garantizar
+
+```
+1. se comprueba el cupo ANTES de llamar al proveedor  ← aquí es donde se dice que no
+2. se llama al proveedor
+3. se escribe el renglón con el costo REAL
+```
+
+**Consecuencia que hay que decir en voz alta: la ÚLTIMA llamada de un mes puede rebasar el
+techo por lo que cueste esa llamada**, porque nadie sabe cuánto va a costar hasta que
+termina. El techo frena las llamadas que **empiezan**; no aborta una en vuelo. El rebase
+está acotado por el costo de UNA operación (céntimos), y la alternativa —cobrar por
+adelantado un estimado y ajustar después— habría metido dos escrituras por llamada y un
+estado intermedio que se queda colgado cuando el proveedor falla.
+
+**El análisis y su renglón de gasto se escriben en UNA transacción.** Si se guardara solo
+el análisis, la escuela tendría una lectura que nadie le descontó; si solo el renglón, un
+cargo sin nada que enseñar.
+
+**El dictado no.** Y es deliberado: si esa escritura falla, el dinero **ya se gastó** y el
+texto ya existe. Reventar ahí le quitaría a la persona el dictado **sin devolverle el
+gasto** — se perderían las dos cosas en vez de una. Se registra el fallo en el log del
+servidor con lo que se iba a cobrar.
+
+**Si el proveedor no dice cuánto consumió**, se cobra el TOPE de la operación y la fila
+queda marcada `isEstimated`. Regalar la llamada dejaría el cupo mintiendo; cobrar de más en
+el único caso en que no sabemos es el error que no cuesta dinero, y la pantalla lo señala.
+El `.sql` trae la consulta para vigilar que esas filas sean cero o casi.
+
+---
+
+### 8. Los permisos, y el segundo candado
+
+Dos keys nuevas: **`ia.view`** y **`ia.manage`**. Defaults: **DIRECCION las dos, el resto
+ninguna.**
+
+**CAJA no las lleva, y es la que parece discutible.** Caja sí ve dinero —es la única con
+`caja.view` además de dirección— pero el dinero de caja es el que la escuela **cobra a sus
+pacientes**. El cupo de IA es un renglón del contrato con DaleControl: no entra al corte,
+no se cobra en el mostrador y no cuadra con nada de lo que caja concilia.
+
+🔴 **Y como el dinero de la Ola 5, está cerrado DOS veces.** El consumo de IA se lee con el
+alcance de **`"charges"`** — el del dinero, **no un recurso nuevo**. La Ola 8 no agregó un
+quinto recurso a `visibility.ts` por lo mismo que la Ola 3 no agregó uno para el
+expediente: un recurso nuevo que dijera lo mismo solo da un segundo sitio donde
+equivocarse. Y `"charges"` tiene justo la propiedad que hace falta: es una **lista blanca**
+que se resuelve **antes** del switch de roles, así que un rol nuevo, un `as any` o un
+permiso encendido por error caen en `none`.
+
+Encenderle `ia.view` a un alumno por override **no le enseña un dólar**: `getEduIaPanel`
+corta con 403 antes de leer nada — y corta antes a propósito, porque un panel vacío
+seguiría trayendo el CUPO (cuánto incluye el contrato, cuánto se lleva gastado), que es lo
+que ese alumno no tiene por qué leer.
+
+⚠️ **Tener cupo NO es un permiso.** El dictado sigue siendo `expediente.write` y el
+análisis `estudios.analyze`, los dos de la Ola 3B. Si `ia.view` gateara el dictado,
+encender el cupo obligaría a repartirle a 120 alumnos el permiso de ver en qué se gasta el
+dinero de la escuela.
+
+**Sí hay una cifra que un alumno ve, y hay que decirlo:** el mensaje de cupo agotado lleva
+*"llevas X de Y"*. Eso lo pide el encargo y no contradice la regla de la Ola 5 («un alumno
+no ve dinero»): aquella cierra el dinero de los **pacientes** —precios, cobros, saldos—
+porque un residente que sabe cuánto pagó su paciente sabe cuánto vale su propia lista de
+espera. Esto es el presupuesto de una **herramienta**, y es exactamente el dato que
+convierte *"el micrófono no funciona"* en *"ya se gastó el cupo, habla con fulano"*. El
+desglose de **quién** se lo gastó sí queda cerrado detrás de `ia.view`.
+
+---
+
+### 9. `/instituto/ia` — móvil primero
+
+Seis bloques, en el orden en que se leen las preguntas que traen a alguien a esta pantalla:
+
+1. **el cupo del mes** — barra con lo consumido, lo que queda, y la **marca** de lo que
+   incluye el contrato cuando hay excedente autorizado (sin esa marca, media barra no dice
+   si lo gastado ya se salió de lo contratado, que es la única pregunta que la barra tenía
+   que contestar). En rojo cuando se agotó: un cupo agotado no es *"vas por el 100 %"*, es
+   un micrófono que no funciona;
+2. **las dos funciones**, cada una con su estado y el motivo exacto si está apagada;
+3. **en qué se fue, por función** (dictado vs análisis) con las unidades en lo que una
+   persona entiende — *"1 h 12 min de audio"*, no *"4 320 segundos"*;
+4. **quién lo está usando**, por persona y con el rol **congelado** al momento del gasto;
+5. **las tarifas**, leídas de la tabla — con el modelo y de dónde salió el número;
+6. **el detalle**, un renglón por uso.
+
+Reusa `.edu-req` (la tarjeta del requisito de la Ola 6) y `.edu-progreso`; añade tres
+rejillas y una variante de la barra. **Móvil primero**, como todo el panel: la dirección
+abre esto desde el teléfono cuando un docente le escribe *"a mis alumnos no les funciona el
+micrófono"*.
+
+Y pinta el **total del mes anterior** en una línea. Es barato y evita el susto del día 1,
+cuando la pantalla está casi vacía y parece que se perdieron los datos.
+
+⚠️ **Solo el mes en curso, sin selector.** No es un olvido: el cupo que se pinta arriba es
+el que está configurado HOY, y enseñarlo junto al consumo de marzo diría *"te pasaste del
+cupo"* comparando contra un techo que en marzo era otro.
+
+---
+
+### 10. Lo que se ENCENDIÓ, y lo que NO se tocó de la Ola 3B
+
+**Encendido y cableado al cobro:** el micrófono de dictado en la nota clínica (por campo
+del SOAP) y el análisis radiográfico sobre los estudios.
+
+**NO se reescribió ni una línea** de cómo se llama a los proveedores, ni el prompt, ni la
+normalización de la respuesta, ni el freno de 90 segundos contra el doble toque, ni el
+componente del micrófono. Esta ola **cablea el cobro**; lo demás ya estaba hecho y probado.
+
+🔴 **Y lo que no se puede romper sigue intacto:** el análisis es **APOYO, no diagnóstico**;
+el aviso va arriba, entero y sin poder cerrarse; `EduStudyAnalysis` **no tiene ninguna
+relación con `EduRecord`** y no hay ningún camino en el producto que escriba el resultado
+dentro de una nota. Lo único que ofrece la pantalla sigue siendo **Copiar**, y el texto
+copiado **lleva el aviso dentro** — con la prueba que lo fija.
+
+Lo único que se le añadió al dictado: manda el **caso** al que se imputa el gasto. Y ese id
+llega del cliente, así que **el servidor lo vuelve a buscar dentro del alcance**
+(`eduCaseScopeWhere`) antes de guardarlo; un id de fuera se guarda como `null`. El detalle
+de en qué se fue el cupo solo sirve si es verdad. Que no haya caso **no impide dictar**: en
+el tamizaje todavía no existe, y ése es justo el momento en que más se dicta.
+
+---
+
+### 11. Qué se probó
+
+**570 pruebas del vertical, 17 archivos, 0 fallos.** Dos archivos nuevos/reescritos:
+
+- `edu-ia.test.ts` (37) — el interruptor con sus seis motivos y su ORDEN, el costo con
+  tarifa de la base (y `null`, **nunca 0**, cuando no hay tarifa), y el candado de TIPOS que
+  ata `EduAiFeature`/`EduAiUnit` de `types.ts` a los enums de Prisma;
+- `edu-ia-cupo.test.ts` (45) — la aritmética del cupo, las dos reglas del excedente, quién
+  edita qué, el alcance del gasto, el periodo por zona horaria, las dos unidades de dinero,
+  y tres pruebas que **leen archivos**: que `ia.ts` siga sacando sus modelos del mapa, que
+  `whisper.ts` siga mandando el modelo que declaramos, y que el `.sql` dé de alta las dos
+  tarifas **sin comentar** y el cupo del instituto **comentado**.
+
+```
+npx tsx --test src/lib/edu/__tests__/<archivo>.test.ts     (no hay script npm: package.json es del dental)
+NODE_OPTIONS="--max-old-space-size=8192" npx tsc --noEmit  → limpio
+NODE_OPTIONS="--max-old-space-size=8192" npm run build     → exit 0, 455/455 páginas
+EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs → 0 prohibidos
+```
+
+**Lo que NO se probó, y hay que probar con base de datos:** ninguna escritura corrió contra
+Postgres — `sql/edu-ola-8.sql` **no se aplicó** (la orden lo prohibía) y no se abrió un
+navegador. Sin aplicar el `.sql`, `/instituto/ia` y las dos funciones de IA truenan al
+consultar tablas que no existen. Tampoco se llamó a ningún proveedor: **nadie ha gastado
+todavía un dólar real de IA desde el instituto**, así que el costo por llamada está
+calculado contra la tarifa publicada y no contra una factura.
+
+---
+
+### 12. Al desplegar
+
+1. **`sql/edu-ola-8.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/2/3.sql`. Idempotente, cero DROP. **Ojo:** su sección 7 (las dos tarifas)
+   **sí se ejecuta** — no está comentada, y sin ella las dos funciones nacen apagadas con
+   *"falta configurar la tarifa"*.
+2. **El cupo del instituto** (sección 8, comentada): descoméntala, pon el número que dice
+   el contrato y córrela. **Es el único sitio donde se escribe `monthlyUsdCents`** — el
+   panel no lo edita con ningún permiso. Sin esta fila, la IA sigue apagada y la pantalla
+   dice por qué. Para orientarse: un análisis ronda 0,05 USD y un minuto de dictado 0,006;
+   una escuela de 120 alumnos con 10 placas y 60 minutos al mes cada uno consume ~103 USD.
+   **Arranca sin excedente el primer mes** y mira la pantalla: es más fácil subir el cupo
+   que explicar una factura.
+3. El **backfill del override** (sección 6), solo si hay usuarios con `permissionsOverride`
+   no vacío: el override **reemplaza** al default, así que las dos keys no le llegan solas a
+   quien ya tenga uno guardado. **Un solo bloque, y solo DIRECCION.**
+4. **Comprobar que `OPENAI_API_KEY` y `ANTHROPIC_API_KEY` están puestas.** Si falta una, esa
+   función se apaga sola con el motivo, pero es una vuelta de más.
+5. **`EDU_IA_ENABLED` ya no hay que ponerla.** Si existe con valor `0`/`false`/`off`, la IA
+   queda apagada en TODAS las escuelas: bórrala o ponla en `1`. Ojo, porque el despliegue de
+   la Ola 3B pudo dejarla apagada — y ahora ese valor significa lo contrario de lo que
+   significaba.
+
+## [Institucional Ola 9] — WhatsApp: cada instituto paga el suyo, sin plantilla aprobada el aviso NO se intenta, y reagendar cancela el recordatorio viejo ✅ (2026-08-30) · rama `feat/edu-ola-9`
+
+**Lo que se entregó**, en una línea cada cosa: conexión de WhatsApp **por instituto** (token cifrado,
+WABA propia) · detección del **131042** con la pantalla diciendo *"sin método de pago"* con esas
+palabras · **plantillas por tipo de mensaje** con su estado consultable a Meta · cron **propio del
+vertical** que recorre `EduAppointment` y manda el recordatorio · **reagendar y cancelar cancelan el
+recordatorio viejo**, cerrado por tres sitios distintos · mandar desde la ficha del paciente la
+**carta de consentimiento** (la liga por token de la Ola 3B) y el **recibo de un cobro** (Ola 5) ·
+y el **registro de cada envío con su resultado**, escrito ANTES de llamar a Meta.
+
+### Las cinco decisiones que sostienen la ola
+
+**1. 🔴 CADA INSTITUTO CONECTA SU PROPIA WHATSAPP. No es arquitectura, es cómo cobra Meta.** Cada
+plantilla que sale se le carga a la tarjeta de la WABA desde la que salió, y no se puede mandar "en
+nombre de" otra cuenta. Un número de DaleControl compartido por veinte escuelas significaría que
+DaleControl paga los recordatorios de las veinte y que el paciente de la Escuela A recibe un mensaje
+de un remitente que no reconoce. Consecuencia directa y la que más se va a ver: **si la WABA no
+tiene método de pago, Meta rechaza con 131042**. Eso no es un fallo del panel y el panel no lo puede
+arreglar — se detecta en el envío (`sendEduWhatsapp`), se marca en `billingOk`, y la pantalla lo
+dice con esas palabras y manda al Administrador comercial de Meta. Si se pintara como un fallo
+genérico, la escuela abriría un ticket contra DaleControl por algo que solo puede resolver ella. Y
+vuelve solo: el primer envío que Meta ACEPTA pone `billingOk` en true — es la única señal fiable que
+existe, Meta no expone un endpoint que lo pregunte.
+
+**2. 🔴 LA VENTANA DE 24 h SE CONSIDERA SIEMPRE CERRADA, y de ahí sale todo lo demás.** Meta deja
+mandar texto libre durante las 24 h siguientes al último mensaje DEL PACIENTE; saber si esa ventana
+está abierta exige INGERIR los mensajes que entran (webhook + bandeja), y **este vertical no los
+ingiere**: no hay Inbox del instituto, ni webhook propio, ni nadie que conteste. La respuesta
+honesta es la conservadora: **todo sale por plantilla aprobada, o no sale**. Suponer lo contrario es
+exactamente cómo se llega a un panel que dice "Enviado" sobre un mensaje que Meta rechazó con
+131047 — el fallo mudo que el dental ya pagó (M-09). En `whatsapp-core.ts` **no existe un modo
+"texto libre"**, y hay una prueba que lo fija.
+
+De ahí la regla operativa: **sin plantilla aprobada para un tipo, ese aviso NO se intenta.** No se
+encola para fallar después. Se comprueba UNA vez por instituto en el barrido (no una por cita: no es
+un problema de un paciente, es de configuración) y la pantalla lo dice con el nombre del tipo que
+falta. Además, **un interruptor no se puede encender si su aviso no puede salir**: intentarlo se
+rebota con el motivo. Un interruptor en verde sobre algo que no funciona es la peor pantalla
+posible — la escuela cree que sus pacientes reciben recordatorios y no los recibe nadie.
+
+**3. 🔴 REAGENDAR O CANCELAR CANCELA EL RECORDATORIO VIEJO, Y ESTÁ CERRADO POR TRES SITIOS.** En el
+dental esto es un bug conocido y abierto, así que aquí no bastaba con arreglarlo una vez. El texto
+del recordatorio se pinta al encolarlo, con la fecha y la hora congeladas DENTRO; si la cita se
+mueve y su aviso sigue en cola, al paciente le llega la hora vieja y viene un día antes, o no viene.
+
+  1. **La escritura.** `applyEduReminderCancel` se llama desde `src/lib/edu/agenda.ts` en cuanto la
+     cita cambia de hora (`updateEduAppointment`) o se cierra (`setEduAppointmentStatus` →
+     CANCELLED / NO_SHOW / COMPLETED). Lo que estaba en cola pasa a CANCELLED; **lo ya enviado NO se
+     toca**, es la constancia.
+  2. **La llave.** `eduReminderDedupeKey` lleva dentro el `startsAt` de la cita, así que mover la
+     cita produce una llave NUEVA y el recordatorio de la hora buena pasa aunque el primer mecanismo
+     hubiera fallado. **En el dental la llave no lleva la hora, y ése es justamente el bug**: la fila
+     vieja tapa el aviso correcto — no es que llegue tarde, es que no llega nunca.
+  3. **La caducidad.** El barrido cancela lo que quedó en cola fuera de tiempo en vez de mandarlo
+     tarde. Es el cinturón para los caminos que este código no controla: una cita cerrada por SQL,
+     un aviso apagado a media tarde, un cron caído medio día.
+
+Y una simetría que la prueba fija a propósito: **los estados "vivos" del barrido son EXACTAMENTE el
+complemento de los tres terminales**. Si no lo fueran, quedaría un estado en el que ni se manda ni
+se cancela y la fila diría "en curso" para siempre.
+
+**4. 🔴 LA CONSTANCIA SE ESCRIBE ANTES DE LLAMAR A META.** Un recordatorio que se cree enviado y no
+salió es peor que ninguno. Si la fila se escribiera después, un proceso que muere a mitad de la
+llamada dejaría un mensaje entregado y ninguna constancia — y al siguiente tick se mandaría otra
+vez. Escribir primero convierte ese caso en una fila PENDING: incómoda, pero VERDADERA. Se guarda el
+**código** del error de Meta y no solo el texto (el texto cambia de redacción y de idioma, el número
+no) y el cuerpo **ya pintado** que la persona leyó. Y en la pantalla el estado se llama **"Entregado
+a WhatsApp"**, no "Entregado": sin acuses de entrega —que este vertical no ingiere— lo único que
+sabemos es que Meta lo aceptó.
+
+**5. MANDAR NO ES CONFIGURAR, y por eso las dos keys nuevas no son las de mandar.** `whatsapp.view`
+y `whatsapp.manage` son de la CONFIGURACIÓN —conectar la cuenta, registrar plantillas, encender
+avisos que Meta le cobra a la escuela— y son **solo de DIRECCION**. Pero mandarle un documento a un
+paciente no es eso: **caja** entrega el recibo en el mostrador y el **alumno** manda la carta de
+consentimiento con el paciente en el sillón. Si mandar exigiera `whatsapp.manage`, o solo la
+dirección mandaría algo, o habría que darle a caja la llave de la conexión entera. Así que cada
+documento se cierra con el permiso **de su documento**: la carta con `consentimientos.view` (la
+tienen los cuatro roles desde la Ola 3B) y el recibo con `caja.view` **más el alcance** de
+`charges`, que para docente y alumno no devuelve ni una fila. Dos cerraduras, como en la Ola 5.
+
+### La trampa que costaba más cara, y dónde se cerró
+
+El cuerpo de un aviso de RECIBO dice **el folio, el total y el saldo**. Si el registro de envíos se
+recortara SOLO por paciente, un ALUMNO abriría la pestaña de WhatsApp de su propio paciente y leería
+cuánto pagó — que es exactamente lo que la Ola 5 cerró por partida doble y el incentivo que la
+escuela no quiere crear. Por eso `eduWhatsappScopeWhere` (en `visibility.ts`, el punto único) hace
+**dos** cosas y no una: recorta por paciente **y descarta el tipo RECIBO** cuando el alcance del
+dinero no es "all".
+
+Y una decisión de diseño que va con eso: **no se agregó un quinto recurso a `eduVisibility`.** Un
+mensaje de WhatsApp no es una cosa nueva que ver, es la SOMBRA de la cosa de la que habla — igual
+que el expediente de la Ola 3 se lee con "cases" aunque cuelgue del paciente. El recordatorio y el
+consentimiento se leen con el alcance de `patients` (así se leía ya el consentimiento desde la Ola
+3B) y el recibo con el de `charges`.
+
+### Lo que NO se hizo, y por qué
+
+- **NO hay webhook ni Inbox del instituto.** Sin él no hay ventana de 24 h (ver decisión 2) ni
+  acuses de entrega. Es la deuda más grande que deja esta ola y está escrita en la pantalla, no
+  escondida: "SENT" dice *"WhatsApp lo aceptó. No sabemos si el teléfono ya lo abrió"*.
+- **NO se dan de alta las plantillas desde el panel** (el equivalente de `provision-templates.ts`
+  del dental). Se registran los nombres que Meta ya aprobó y hay un botón **"Revisar en Meta"** que
+  trae el estado real. Crear plantillas dentro de la WABA de la escuela con su token es posible y
+  cabe en una ola futura; hoy el manual está en el `.sql` con los textos exactos.
+- **NO se manda el recibo como PDF ni como liga pública.** Va el RESUMEN (folio, total, saldo). Un
+  adjunto exigiría una plantilla de Meta con cabecera de documento; una liga pública sería una URL
+  permanente con el nombre del paciente y su cuenta, y no hace falta: lo que el paciente necesita del
+  recibo cabe en el mensaje, y lo demás está en el panel. La carta de consentimiento sí va como
+  **liga**, porque la liga por token de la Ola 3B ya existe y es lo que permite firmar.
+- **NO hay segunda anticipación** (el dental tiene 24 h y 1 h). Una sola columna,
+  `reminderHoursBefore`, entre 1 y 168 horas: cada plantilla que sale se le cobra al instituto y
+  "24 h y además 2 h" duplica su factura sin que nadie lo haya pedido.
+- **NO se tocó `src/lib/whatsapp.ts` ni un carácter** (ni ningún otro archivo del dental). Del núcleo
+  compartido solo se IMPORTAN funciones, igual que hicieron barbería e inmuebles.
+- **NO se tocó `vercel.json`** — está prohibido para este vertical. La línea exacta está abajo.
+
+### Permisos (dos keys nuevas)
+
+`whatsapp.view` · `whatsapp.manage`. **Las dos son SOLO de DIRECCION** y ninguna de las dos hace
+falta para mandar un documento (ver decisión 5). Caja y alumno siguen mandando lo suyo sin tocar una
+casilla nueva — lo comprueba una prueba, porque es la parte que más fácil se "arregla" mal.
+
+### Números y estructura
+
+**2 tablas** (`edu_whatsapp_configs`, `edu_whatsapp_messages`) · **2 enums** (`EduWhatsappKind`,
+`EduWhatsappStatus`) · **7 índices** (3 únicos) · **8 llaves foráneas** · **0 columnas nuevas en
+tablas de olas anteriores** · **2 pantallas** (`/instituto/whatsapp` y la pestaña WhatsApp de la
+ficha del paciente) · **6 endpoints** · **2 módulos de servidor** (`whatsapp.ts`,
+`recordatorios.ts`) sobre **un módulo puro** (`whatsapp-core.ts`) · **1 cron propio**.
+
+Tres detalles que costaría descubrir en producción y que van escritos en el código:
+
+- El token se guarda **cifrado** con el envelope de la app, y `saveEduWaConnection` se rebota con un
+  mensaje legible si falta `DATA_ENCRYPTION_KEY` — guardar el token en claro no es una alternativa.
+- La ventana del barrido **nunca mira hacia el pasado**: con la anticipación en 1 h y dos horas de
+  gracia, el despeje se iba una hora atrás y habría mandado "le recordamos su cita" una hora DESPUÉS
+  de que empezara. Un recordatorio tarde no es tarde, es falso.
+- Un envío **BLOQUEADO se vuelve a mirar** en cada tick. Un bloqueo no es un fallo: es una condición
+  que puede dejar de ser verdad (el motivo típico es "el teléfono de la ficha no tiene 10 dígitos" y
+  recepción lo corrige a media mañana), y volver a mirarlo no cuesta una llamada a Meta porque el
+  bloqueo se decide ANTES de la red. Se ACTUALIZA la misma fila, no se crea una nueva: si no, un
+  paciente sin teléfono llenaría el registro con noventa y seis renglones al día.
+
+### 🔴 LA LÍNEA QUE FALTA EN `vercel.json` (hay que pegarla A MANO)
+
+`vercel.json` está **fuera** del vertical (`scripts/edu-guard.cjs` lo marca prohibido) y esta rama no
+lo toca. Dentro del array `"crons"`, al final, hay que agregar:
+
+```json
+    {
+      "path": "/api/instituto/cron/recordatorios",
+      "schedule": "*/15 * * * *"
+    }
+```
+
+Cada 15 minutos, igual que los dos crones de WhatsApp del dental. **Mientras no esté, no sale ningún
+recordatorio automático**; el botón "Correr el barrido ahora" de `/instituto/whatsapp` hace
+exactamente lo mismo para UN instituto y sirve para probarlo.
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0; 2 páginas y 6 rutas de API nuevas
+registradas) · `npx tsc --noEmit` ✅ para el vertical (6 errores ajenos de barber, preexistentes en
+`origin/main`) · **569 pruebas del vertical en verde**, de ellas **53 nuevas** (`edu-whatsapp` **49**,
+`edu-permissions` **4**) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(23 propios, 1 compartido declarado, 0 prohibidos).
+
+**Lo que NO se probó, y hay que probar con base de datos y con Meta:** ninguna escritura corrió
+contra Postgres — `sql/edu-ola-9.sql` **no se aplicó** (la orden lo prohibía) y no se abrió un
+navegador. **NADIE ha mandado todavía un WhatsApp real desde este vertical**, así que del camino de
+red solo está comprobado que compila: no se ha visto un 131042 de verdad, ni un token revocado, ni
+una respuesta de `message_templates`. Todo lo verificado son las funciones puras y la forma de los
+`where`.
+
+**Al desplegar:**
+
+1. **`sql/edu-ola-9.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/2/3b/5.sql`. Idempotente, cero DROP.
+2. El **backfill del override** (sección 6 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío: es **UN** bloque y solo para DIRECCION. Caja, docente y alumno no
+   reciben ninguna key nueva — y eso no les quita nada, porque mandar documentos se abre con el
+   permiso del documento.
+3. **Agregar el cron a `vercel.json`** con el bloque de arriba y desplegar.
+4. **Dar de alta las tres plantillas en Meta** con los textos exactos de la sección 7 del `.sql`
+   (categoría UTILITY, idioma `es_MX`), en la WABA **de cada instituto**. Sin ellas no sale ningún
+   aviso — a propósito, y la pantalla lo dice.
+5. **Conectar el WhatsApp del instituto** en `/instituto/whatsapp` (phone number ID, WABA ID y un
+   token **permanente**, no uno temporal de 24 h), registrar los nombres de las plantillas, apretar
+   **"Revisar en Meta"** y encender los avisos uno por uno.
+6. **Comprobar que la WABA tiene método de pago** antes de encender nada. Si no lo tiene, el primer
+   envío fallará con 131042 y la pantalla dirá "sin método de pago" — que es correcto, pero es mejor
+   descubrirlo antes que con un paciente esperando.
+
+## [Institucional Ola 10] — Facturación CFDI: el candado contra la doble factura vive en Postgres, y la pantalla DICE si el timbre es de pruebas ✅ (2026-08-30) · rama `feat/edu-ola-10`
+
+Se factura sobre el **cobro de la Ola 5** (`EduCharge`). No hay un segundo documento de venta:
+si la factura tuviera sus propios conceptos y sus propios importes, existirían dos verdades
+sobre lo mismo y tarde o temprano no coincidirían. Desde un cobro emitido → «Facturar» → se
+piden (o se reusan) los datos fiscales del paciente → se timbra → el XML queda guardado y el
+cobro queda ligado a su CFDI. Cancelación con motivo del SAT, sin borrar nada.
+
+### Las cuatro decisiones que sostienen la ola
+
+**1. 🔴 UN COBRO NO SE FACTURA DOS VECES, Y EL CANDADO ESTÁ EN LA BASE.** Un botón
+deshabilitado no sirve: dos clics rápidos son dos peticiones que corren a la vez y las dos leen
+«este cobro no tiene factura». El candado es la columna `EduInvoice.activeChargeId` con su
+índice único `(institutionId, activeChargeId)`:
+
+- al empezar a facturar se **INSERTA la fila** con `status = STAMPING` y
+  `activeChargeId = chargeId`, **antes** de llamar a Facturapi;
+- el segundo clic choca contra el índice (P2002) y sale con **409 «ya se está facturando»**,
+  sin haber pedido un segundo timbre. Postgres es el único árbitro sin condiciones de carrera;
+- al **cancelar**, `activeChargeId` pasa a `NULL`. Postgres considera los `NULL` distintos entre
+  sí, así que un cobro puede acumular varias facturas canceladas y **como mucho una viva** — que
+  es lo que permite re-facturar un cobro cuyo CFDI se canceló, sin borrar historia.
+
+Es un índice único **normal**, no uno parcial con `WHERE`: un parcial diría lo mismo pero Prisma
+no lo sabe expresar, y schema y base quedarían distintos.
+
+**Y la mitad que casi nunca se piensa: qué pasa si la llamada se corta.** Si Facturapi
+*responde* un error, no hubo timbre → la factura queda `FAILED` y el cobro **se libera**. Si la
+llamada **se cae por red**, no se sabe si el SAT timbró → la fila **se queda en `STAMPING` y el
+cobro NO se libera**, a propósito: liberarlo sería exactamente cómo se produce el CFDI duplicado
+que todo esto existe para evitar. Como eso dejaría un cobro bloqueado para siempre, hay salida:
+`POST /api/instituto/facturacion/[id]/resolver` (key `facturacion.config`), donde una persona
+mira Facturapi y **pega el UUID** que encontró, o declara que no había nada y libera el cobro.
+El servidor no lo adivina: buscar por RFC y fecha y confundirse de comprobante es peor.
+
+**2. 🔴 LOS IMPORTES SALEN DEL COBRO CONGELADO, y se cuadran antes de gastar un timbre.**
+`EduInvoice` copia subtotal, descuento, total y las **líneas** tal como estaban (las
+`EduChargeItem` ya congelan precio y descripción desde la Ola 5). Nunca se consulta el
+tarifario. Y antes de llamar a Facturapi, `eduCuadreDelCobro` exige que la suma de las líneas
+dé **exactamente** el total del cobro: aritmética entera, **cero tolerancia**. Si no cuadra, se
+rechaza con 409 diciendo los dos importes — un CFDI por un monto distinto del cobrado no se
+emite.
+
+**3. 🔴 EL AMBIENTE ES UN DATO DEL INSTITUTO, NO UNA CONSTANTE.** El dental decide PRUEBAS/LIVE
+con `process.env.FACTURAPI_ENV`, **una sola variable para todo el despliegue**. Aquí vive en
+`EduFiscalConfig.environment`, y **cada factura guarda en cuál se timbró**
+(`EduInvoice.environment`). Sin esa segunda columna, encender el timbrado fiscal reetiquetaría
+como fiscales todos los comprobantes de prueba anteriores y la pantalla los enseñaría como
+válidos. Una prueba del vertical falla si `facturacion.ts` o `facturacion-core.ts` llegan a
+mencionar `FACTURAPI_ENV`, `facturapi-env` o `isFacturapiLive` fuera de un comentario.
+
+**Lo que la interfaz dice, porque hoy el timbrado corre en PRUEBAS:** el aviso se pinta arriba
+de la lista, otra vez dentro del modal justo encima del botón de timbrar, y **una vez por
+factura** como etiqueta. El texto de pruebas dice, con esas palabras, que **NO tiene validez
+fiscal**, que no llega al SAT y que no se le puede entregar al paciente como comprobante
+deducible — y explica por qué engaña: el documento se ve idéntico a uno real, con folio fiscal,
+PDF y XML. Nada de eso sale de una constante: sale de la columna.
+
+**4. 🔴 LOS DATOS FISCALES DEL PACIENTE VAN EN TABLA APARTE** (`edu_patient_tax_profiles`, uno a
+uno con `edu_patients`) y no en columnas de la ficha. Tres razones, en orden: (a) la fila del
+paciente la leen la agenda, el buscador, el tamizaje y el modal de caja, muchas veces sin lista
+de columnas explícita, y un RFC ahí dentro viaja a pantallas que nunca lo pidieron —incluidas
+las de un ALUMNO—, que es el tipo de fuga que ya costó un incidente en el dental; (b) en una
+clínica de escuela factura uno de cada diez pacientes: serían cinco columnas nulas en la tabla
+más consultada del vertical; (c) se capturan en otro momento y por otra gente, y separarlos deja
+auditar quién los tocó sin ensuciar el `updatedAt` de la ficha clínica. Lo que se pierde es un
+JOIN, y solo al facturar.
+
+### Lo que se reusa del dental, y lo único que no
+
+`@/lib/facturapi` se importa **tal cual** para crear la organización, mandar sus datos legales,
+crear el cliente receptor, timbrar, cancelar, validar el RFC contra la lista negra EFOS y bajar
+PDF/XML — todas esas funciones reciben la llave como argumento y no opinan del ambiente.
+Los catálogos del SAT vienen de `@/lib/cfdi-catalogs` (client-safe). **Lo único que el vertical
+escribe por su cuenta es la resolución de la llave de la organización**, porque `getOrgApiKey`
+del dental mira la variable global; aquí se pide la de pruebas o se genera la de producción
+según la columna del instituto, y la Live Secret Key se guarda **cifrada** con el mismo envelope
+(`@/lib/crypto/envelope`). **Ni un archivo del dental se editó.**
+
+### El XML se guarda; el PDF no
+
+El XML es el documento fiscal y pesa unos kilobytes: se baja al timbrar y queda en la columna
+`xml`, para que el histórico no dependa de que Facturapi siga en pie. El PDF es una
+representación que se puede regenerar y pesa megabytes — se pide bajo demanda. Las descargas van
+por un **proxy** (`/api/instituto/facturacion/[id]/archivo/[formato]`) y no por un enlace
+directo: mandar la llave secreta de la organización al navegador para ahorrar un salto sería
+regalar la capacidad de timbrar a nombre del instituto. Y se descargan con la llave del
+**ambiente en que se timbró**, no del actual: un CFDI vive donde nació.
+
+### Permisos (cuatro keys nuevas)
+
+`facturacion.view` · `facturacion.emit` · `facturacion.cancel` · `facturacion.config`.
+
+**La línea de la ola es que EMITIR y CANCELAR son dos keys distintas.** CAJA lleva `view` +
+`emit`: el paciente pide su factura en el mostrador mientras paga, y hacerlo pasar por dirección
+sería mandarlo a esperar. **No lleva `cancel`** —cancelar un CFDI timbrado ante el SAT no se
+deshace: es un trámite con motivo, plazo y, desde 2022, con derecho del receptor a rechazarlo—
+**ni `config`**, porque desde esa pantalla se decide si la escuela timbra en pruebas o ante el
+SAT, y eso no es una preferencia de turno. DIRECCIÓN lleva las cuatro. **DOCENTE y ALUMNO,
+ninguna.**
+
+Y como en la Ola 5, el dinero está cerrado **dos veces**: además del permiso, todas las
+funciones de `facturacion.ts` —lecturas incluidas— pasan por `requireDinero`, que consulta el
+ALCANCE (`visibility.ts`, recurso `charges`). Encenderle `facturacion.view` a un alumno por
+error sigue sin enseñarle una factura. **No se inventó un recurso `invoices`**: facturar *es*
+ver dinero, y un segundo recurso que dijera lo mismo solo sería un segundo sitio donde
+equivocarse.
+
+### Números y estructura
+
+**3 tablas** (`edu_fiscal_configs`, `edu_patient_tax_profiles`, `edu_invoices`) · **3 enums**
+(`EduFiscalEnv`, `EduInvoiceStatus`, `EduTaxMode`) · **9 índices** (4 únicos) · **11 llaves
+foráneas** · **2 pantallas** (`/instituto/facturacion` y `/instituto/facturacion/datos-fiscales`,
+que no lleva item de menú propio: se llega desde Facturación, igual que el corte de caja) ·
+**7 endpoints** · **2 módulos** (`facturacion.ts` de servidor sobre `facturacion-core.ts`
+puro). Un item de menú nuevo, **Facturación**, en *Operación* y pegado a Caja: el paciente pide
+la factura en el mostrador, no en una oficina. En Caja, cada cobro no cancelado gana un botón
+**«Facturar»** que lleva a la pantalla con el cobro ya elegido — el modal de timbrado vive en un
+solo sitio, porque dos copias del mismo formulario fiscal es cómo una de las dos se queda vieja.
+
+El dinero sigue en **centavos enteros** y solo se convierte a pesos en el payload de Facturapi.
+Los conceptos van con `taxes` **explícitos** (exento por el art. 15 de la LIVA, o IVA 16 % con
+`tax_included: true` para que el total siga siendo lo que pagó el paciente): sin `taxes`,
+Facturapi desglosa IVA 16 % por su cuenta, que es el bug que ya se pagó en el dental.
+
+### Decisiones que se apartan de lo obvio (para que la integración no las revierta)
+
+- **El motivo de cancelación «01» no se ofrece.** Exige el UUID del CFDI que *sustituye* al
+  cancelado, y ese CFDI todavía no existe cuando alguien pulsa «Cancelar»: sería un botón que el
+  SAT rechaza siempre. Para corregir una factura con errores se cancela con **02** y se emite
+  otra — el cobro queda libre en cuanto se cancela.
+- **La forma de pago del SAT NO se adivina.** Se *sugiere* del último pago real (efectivo → 01,
+  transferencia → 03, tarjeta → 04 proponiendo crédito, que el modal deja cambiar) y el método
+  «Otro» **no se traduce**: puede ser un vale, una beca o una compensación. Sin sugerencia, el
+  selector sale vacío y el servidor rechaza sin ella. Es el dato con el que el SAT cruza el
+  comprobante contra el depósito; un default silencioso es un dato falso en un documento fiscal.
+- **Pasar a EN VIVO no se guarda si Facturapi no lo confirma.** El servidor pregunta
+  `is_production_ready` y rechaza el cambio enumerando lo que falta (CSD, Carta Manifiesto,
+  logo). Encenderlo «a ver si jala» es descubrir que no jala con el paciente enfrente y un
+  timbre gastado. En cambio, **los datos fiscales sí se guardan aunque Facturapi esté caído** y
+  se avisa: la escuela tiene que poder capturar su RFC.
+- **La facturación nace APAGADA y en PRUEBAS** (`isEnabled = false`, `environment = TEST`). Las
+  dos son decisiones que se toman a mano.
+- **Corregir los datos fiscales de un paciente no toca ninguna factura ya emitida:** el receptor
+  se congela en el CFDI. Un comprobante dice a nombre de quién se emitió, no a nombre de quién
+  se emitiría hoy.
+- **Ni el XML ni la llave de Facturapi viajan al navegador.** La forma que llega al cliente
+  solo dice `hasXml: boolean` y `hasOrg: boolean`; hay una prueba que falla si alguien mete un
+  secreto en ella.
+
+### Archivos que se quisieron tocar y NO se tocaron
+
+- **`src/lib/facturapi.ts`** (dental). Habría bastado exportar su `getTestOrgApiKey` y aceptar un
+  ambiente por argumento en `getOrgApiKey` para no reescribir ~60 líneas de resolución de llave.
+  Es un archivo del producto que está VIVO en producción: el vertical trae su propia resolución
+  y le importa todo lo demás.
+- **`package.json`.** Sigue sin haber `npm run test:edu*`. Es un archivo del dental; cuando el
+  vertical se integre a `main` es UNA línea.
+- **`prisma/schema.prisma`** se tocó SOLO de forma aditiva: los tres modelos y los tres enums al
+  final del archivo, y las relaciones inversas al final de la lista de cada modelo Edu
+  (`EduInstitution`, `EduUser`, `EduPatient`, `EduCharge`). Cero reordenamientos.
+- **La ficha del paciente** no gana pestaña de facturas. Se decidió no abrir una pantalla más
+  antes de que alguien haya timbrado una factura de verdad; el histórico por paciente ya se puede
+  buscar desde `/instituto/facturacion`.
+
+### Qué se probó y qué NO
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0; las 2 páginas y las 7 rutas de API
+nuevas quedan registradas) · `npx tsc --noEmit` ✅ para el vertical (los 6 errores de
+`src/lib/barber/__tests__` son ajenos y **preexistentes en `origin/main`**, comprobado con
+`git show origin/main:…`) · **564 pruebas del vertical en verde**, de ellas **48 nuevas**
+(`edu-facturacion`) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(21 propios, 1 compartido declarado, 0 prohibidos).
+
+Las 48 pruebas nuevas cubren, además de la aritmética y las validaciones: que el **índice único
+del candado** esté declarado en el schema **y** creado por el `.sql`; que la **reserva se
+inserte antes** de llamar a Facturapi (si alguien invierte el orden, falla); que la rama de
+fallo de red **no** libere el cobro; que cancelar **no** borre el UUID ni el XML; que **toda**
+función exportada del módulo de servidor pase por `requireDinero`; que ninguna acepte un
+`institutionId` suelto; y que el módulo **no lea** la variable de ambiente del dental.
+
+**Lo que NO se probó, y hay que probar:**
+
+- **Ninguna escritura corrió contra Postgres.** `sql/edu-ola-10.sql` **no se aplicó** (la orden
+  lo prohibía). Sin aplicarlo, `/instituto/facturacion` truena al consultar tablas que no
+  existen.
+- **NO se timbró ni un CFDI, ni siquiera de prueba.** No hay credenciales de Facturapi en este
+  entorno, así que **todo el camino de red está sin ejercitar**: crear la organización, subir
+  los datos legales, crear el receptor, timbrar, bajar el XML y cancelar. Lo que está probado es
+  la **forma** del payload y el **orden** de las escrituras, no la respuesta del proveedor.
+- **El candado no se probó con dos peticiones reales simultáneas.** Depende del índice único de
+  Postgres, que existe en el `.sql` y en el schema, pero la carrera de verdad solo se puede
+  observar contra una base.
+- **No se abrió un navegador:** ni la pantalla de facturas, ni el modal, ni la de datos
+  fiscales se vieron pintadas.
+
+### Cómo aplicarlo (en este orden)
+
+1. **`sql/edu-ola-10.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/2/5.sql` (necesita `edu_charges`). Idempotente, cero `DROP`, no toca ni una
+   tabla del dental — en particular **no toca** `cfdi_records`, `cfdi_usage` ni `invoices`.
+2. **Envs en el servidor**: `FACTURAPI_USER_KEY` (obligatoria: sin ella no se timbra ni en
+   pruebas) y `DATA_ENCRYPTION_KEY` (recomendada: sin ella la Live Secret Key se guarda **sin
+   cifrar** y se avisa en el log). **No hace falta `FACTURAPI_ENV`**: el instituto lleva su
+   propio ambiente en la base.
+3. **El backfill del override** (sección 5 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío: el override **reemplaza** al default, así que las cuatro keys
+   no le llegan solas a quien ya tenga uno guardado. Son **dos** bloques —DIRECCIÓN y CAJA— y
+   son **distintos**: copiarle a caja el de dirección le daría `facturacion.cancel` y
+   `facturacion.config`, que es exactamente la línea que la ola existe para sostener. Docente y
+   alumno no reciben ninguna.
+4. **Capturar los datos fiscales** en `/instituto/facturacion/datos-fiscales`. Ese guardado es
+   el que **crea la organización en Facturapi**; el `INSERT` comentado del `.sql` deja los datos
+   pero no la organización, así que no sustituye a la pantalla.
+5. **Dejarla en PRUEBAS y encender «Facturación encendida».** Timbrar dos o tres cobros reales
+   de la escuela y comprobar que el PDF y el XML se descargan y que el total del CFDI es
+   **idéntico** al del cobro.
+6. **Para pasar a EN VIVO**, en el panel de Facturapi y con la cuenta de DaleControl: subir el
+   **CSD** (.cer y .key del SAT) de la escuela, firmar la **Carta Manifiesto** con su e.firma y
+   subir el **logo**. Después, en la pantalla, cambiar a «En vivo (SAT)» — el guardado se
+   rechaza si Facturapi todavía no la da por lista, y dice qué falta.
+7. **Vigilar las que se quedan en «Timbrando»**: `SELECT "folio","issuedAt","errorMessage" FROM
+   "edu_invoices" WHERE "status" = 'STAMPING'`. Cada una es un cobro bloqueado a propósito y se
+   resuelve desde el botón «Resolver» del detalle, después de mirar Facturapi.
+
+---
+
+## [Institucional · AUDITORÍA] — Cuatro agujeros reales en 43 000 líneas: un endpoint que enseña las calificaciones y los pacientes del compañero, y un traspaso que no quita la llave porque casi ninguna cita tiene caso ✅ (2026-08-30) · rama `audit/edu-vertical`
+
+**Esta rama NO cambia una sola línea de código.** El entregable es
+`docs/audits/EDU_AUDIT.md` (nuevo) y este reporte. Nada más — corrían cinco olas en
+paralelo y cualquier arreglo habría chocado. Todo lo de abajo está documentado con ruta y
+línea para que otra ola lo corrija con la lista en la mano.
+
+**Lo leído:** `src/app/instituto` (32 archivos), `src/app/api/instituto` (61 route
+handlers), `src/components/edu` (38 componentes), `src/lib/edu` (38 módulos + 16 de
+prueba), `src/lib/edu-auth.ts` y los 29 modelos `Edu*` del schema. **~43 000 líneas.**
+
+### El resultado en una línea
+
+**2 P0 · 2 P1 · 10 P2 · 4 P3.** Y —esto importa tanto como lo anterior— **ninguna fuga
+entre institutos**, **ningún texto con "Ola", "residente" ni "programa"**, **ninguna
+pantalla blanca**, **el antifraude del precio funciona**, y **las 516 pruebas del
+vertical pasan**.
+
+### 🔴 Los dos P0
+
+**P0-1 · El único endpoint del vertical que no pasa por el alcance.**
+`src/lib/edu/rubricas.ts:600-616` — `listEduStudentGrades` consulta
+`{ institutionId, studentId: id }` y **nada más**: ni `eduStudentScopeWhere` ni
+`eduCaseScopeWhere`. Lo expone `GET /api/instituto/calificaciones?alumno=`
+(`route.ts:32-35`), que exige `evaluacion.view` — key que **el ALUMNO tiene por
+defecto**. La cabecera de ese mismo route jura, cuatro líneas más arriba, que «lo que
+cada quien ve lo decide el ALCANCE, no este endpoint». Para esa rama es falso.
+
+Y lo que sale no son solo notas: `GRADE_SELECT` (`rubricas.ts:469-504`) trae el nombre y
+el **folio de los pacientes** de cada caso calificado, más la puntuación de cada criterio
+con sus comentarios. Un alumno lee el expediente académico de su compañero y de paso la
+identidad de pacientes que no atiende. Un docente que ya rotó sigue leyendo el de los
+alumnos que entregó, porque el `where` tampoco mira la vigencia.
+
+Los ids para explotarlo se los da el propio producto (ver P1-4), y el arreglo son dos
+líneas — o borrar la rama, porque **ninguna pantalla la usa**. Lo que lo hace fácil de
+pasar por alto es que el endpoint gemelo, `GET /api/instituto/evaluacion?alumno=`, sí lo
+hace bien (`evaluacion.ts:621-634`): son casi idénticos y uno de los dos recorta.
+
+**P0-2 · El traspaso no quita la llave, porque la agenda nunca manda el caso.**
+La Ola 6 puso la mitad invisible en el sitio correcto —`eduPatientScopeWhere`
+(`visibility.ts:344-362`) descarta el caso TRANSFERRED y las citas que colgaban de él— y
+la prueba que lo verifica pasa. Lo que la prueba no puede ver es que
+`agenda-screen.tsx:473-486` **no manda `caseId`** al agendar, y el modal ni siquiera
+tiene selector de caso: la ficha de la cita lo dice sola, "Sin caso"
+(`agenda-screen.tsx:843-847`). Así que en producción **casi toda cita tiene
+`caseId: null`**, y la rama `{ caseId: null }` del `where` —que existe para el
+tamizaje— le sigue abriendo la puerta al que se fue.
+
+Reproducir: caja agenda una cita de tratamiento del paciente P con el alumno A → se
+traspasa el caso de A a B → **A sigue viendo a P**, y abre expediente, odontograma,
+estudios y consentimientos. Si esa cita era futura, tampoco se movió a B
+(`traspasos.ts:345-357` filtra por `caseId: caso.id`): el martes que viene el paciente
+llega a la cita de alguien que ya no lleva su caso, que es justo lo que el comentario de
+esas líneas dice que evita. Y un alumno marcado `GRADUATED` conserva `isActive`, así que
+sigue entrando con esas llaves.
+
+De regalo, el mismo hueco explica por qué la etapa `SESSION` del gate de la Ola 4 es
+inalcanzable: `requestEduApproval` exige una cita con `caseId = caso.id`
+(`autorizaciones.ts:754-763`) y el error dice "engánchala primero desde la agenda", cosa
+que la agenda no ofrece.
+
+### 🟠 Los dos P1
+
+**P1-3 · El PATCH rompe la invariante que el POST defiende.** `createEduAppointment`
+rechaza explícitamente una cita cuyo caso sea de otro alumno (`agenda.ts:566-568`).
+`updateEduAppointment` cambia `data.studentId` (`agenda.ts:661`) y **nunca vuelve a mirar
+el `caseId`**: ni lo revalida ni lo limpia. Reagendar a otro alumno deja la cita colgada
+del caso del anterior, que es literalmente el daño que el comentario del POST describe
+("se podría colgar una cita de la señora del caso del señor").
+
+**P1-4 · El padrón se filtra por dos pantallas.** `eduPadronScope` es tajante: un ALUMNO
+lista **cero** alumnos. Pero `agenda/page.tsx:89` llama a `listEduStudentOptions` **sin
+condición** y lo pasa como prop a un componente `"use client"` (línea 124): el payload RSC
+de `/instituto/agenda` lleva el `EduStudent.id`, el nombre, la matrícula, la especialidad y
+el docente titular de **todos los alumnos activos** a cualquiera con `agenda.view`. Lo
+revelador es que sus dos vecinos de línea, `supervisors` y `patients`, **sí** están detrás
+de `canManage ? … : Promise.resolve([])` — y `students` solo se pinta bajo `canManage`, así
+que el arreglo es copiar el ternario de al lado.
+
+Lo mismo en `/instituto/docentes`: `docentes/page.tsx:49` llama a
+`listEduCurrentAssignments` sin el tercer parámetro `supervisorUserId`, que la función
+acepta justo para acotar; cualquier docente ve por nombre a los alumnos de todos sus
+colegas. El conteo agregado sí es legítimo; la lista nominal no.
+
+Estas dos pantallas son la fuente de los ids que hacen trivial P0-1.
+
+### 🟡 Los diez P2, en una línea cada uno
+
+- **P2-5** El rango de semestres de un requisito se captura, se guarda y **se pinta**
+  ("3º – fin"), y `eduCaseCountsFor` (`evaluacion-core.ts:332-347`) no lo mira nunca.
+- **P2-6** `/instituto/evaluacion` lee hasta 300 alumnos y luego **tres `findMany` sin
+  `take`**: todos sus casos, **todas** sus citas completadas y todas sus calificaciones
+  (`evaluacion.ts:474-499`). La cabecera del archivo ya adelanta el arreglo.
+- **P2-7** El "segundo candado" del dinero que `permissions.ts:80-87` promete por escrito
+  **no existe para el tarifario**: `listEduProcedures`, `listEduFeeSchedules`,
+  `getEduTarifario` y `listEduProcedureOptions` solo llaman a `requireInstitution`.
+  Cuatro líneas de arreglo.
+- **P2-8** **No hay pantalla de permisos.** `EDU_PERMISSION_GROUPS` y
+  `sanitizeEduPermissionKeys` no tienen un solo llamador y ningún endpoint escribe
+  `permissionsOverride`. Todas las mitigaciones del catálogo que dicen "si mañana alguien
+  se lo enciende desde la pantalla de permisos" hablan de una pantalla que no existe.
+- **P2-9** `mustChangePassword` se escribe (`equipo.ts:380`) y **nadie lo lee**; no hay
+  `/instituto/cambiar-contrasena` y `/api/auth/change-password` es del dental (un
+  `EduUser` recibe 401). Dirección se queda con la contraseña de todos, para siempre.
+- **P2-10** `createEduCharge` no tiene clave de idempotencia: dos peticiones idénticas
+  emiten dos cobros. La UI lo tapa con `busy`; un reintento de red no. Notable porque la
+  subida de estudios **sí** es idempotente y lo explica.
+- **P2-11** Las horas de acreditación las produce el propio alumno: mueve los estados
+  clínicos con `agenda.view` (correcto y deliberado), los sellos se derivan de `now`, y
+  **nada comprueba que la cita ya haya ocurrido** — se puede marcar completada una del mes
+  que viene. El tope de 8 h por cita es lo único que limita.
+- **P2-12** Los dos endpoints que cuestan dinero no tienen freno por usuario: `/ai/dictado`
+  **sin rate limit**, y el análisis solo con un dedupe de 90 s **por estudio**. Que se
+  puede lo demuestra la ruta pública de consentimientos, que sí usa `rateLimit`.
+- **P2-13** El ALUMNO firma su propia nota clínica (`BORRADOR → FIRMADA` directo), así que
+  el estado "ENVIADA" no lo exige nadie. **Lo marco como decisión a revisar, no como bug**:
+  la descripción de la key lo dice ("Escribir, enviar **y firmar**"). Pero chirría con las
+  dos separaciones de funciones que el vertical sí defiende a muerte.
+- **P2-14** La única fecha del vertical que formatea el navegador
+  (`consentimiento-publico.tsx:149, 182`): hydration mismatch en un documento legal y una
+  hora que no es la del instituto.
+
+### ⚪ Los cuatro P3
+
+Las **16 pruebas del vertical no tienen ningún script** en `package.json` (ninguna gate
+las corre) · el buscador usa `contains` sobre `searchIndex` y ninguno de los tres modelos
+tiene índice en esa columna · `listEduTransferableCases` sin `take` y el array `precios`
+sin tope · `mapEduCurrentGrades` sin llamadores.
+
+### Lo que se buscó y NO apareció
+
+Vale tanto como lo anterior, así que va explícito:
+
+- **Cero fuga entre institutos.** Recorrí las **259** llamadas a Prisma del vertical.
+  Ninguna toma `institutionId` del body, del query ni de un parámetro de ruta. Las cinco
+  funciones de `where` **lanzan** si les llega vacío, y `padron-core.ts` y `tarifas.ts`
+  hacen lo mismo. Las 41 llamadas sin `institutionId` literal operan sobre un `id` que
+  salió de una lectura ya recortada, o son catálogos de instituto. Los tres `findUnique`
+  sin tenant son sobre `EduConsent.token`, que es la credencial y es globalmente único.
+- **Cero textos con "Ola", "residente" o "programa".** Barrido quitando comentarios: los
+  únicos aciertos son identificadores internos y dos strings que no ve nadie (el
+  vocabulario de Whisper y el mapa de alias para pegar una lista de personas).
+- **Cero pantalla blanca.** `(panel)/error.tsx` cubre las 25 pantallas del grupo y
+  `src/app/error.tsx` cubre lo de fuera **y** un throw del propio layout del panel, que su
+  `error.tsx` hermano no atraparía. El único `JSON.parse` es un clon en memoria.
+  `getEduContext` nunca propaga.
+- **El antifraude del precio funciona.** El `unitPriceCents` del cliente se descarta, se
+  guarda para auditarlo y se registra en el log; el precio y el nombre de la lista quedan
+  congelados en la línea. **Todo el dinero en enteros de centavos, cero `float`**; las
+  calificaciones en enteros ×100 por la misma razón.
+- **Ningún `Promise.all` llega a 7** (máximo 6) y **no hay N+1**: las 7 llamadas dentro de
+  un bucle son bucles acotados (3 reintentos de folio, ≤20 criterios, ≤N listas).
+
+### Verificación
+
+**`npm run build` COMPLETO, sin pipe: VERDE.** `exit 0` · `prisma generate` limpio
+(v5.22.0) · type-check completo · `Generating static pages (454/454)` · tabla de rutas
+entera, con las 61 rutas `/api/instituto/*` y las 25 pantallas `/instituto/*` como
+`ƒ (Dynamic)`. Corrido con `NODE_OPTIONS=--max-old-space-size=8192`.
+
+Tres ruidos que **no son de esta rama** —que no cambia una línea de código— y ya estaban
+en `main`: `⚠ Compiled with warnings` por el `Critical dependency` de
+`node_modules/file-type` (lo arrastra `/api/ai-wallet/spei/topup`), tres warnings de
+clases Tailwind ambiguas, y el spam de `prisma:error … DATABASE_URL` durante "Generating
+static pages", esperado en un worktree sin `.env`.
+
+**Pruebas del vertical: 516 / 516 en verde, 0 fallos.** Corridas a mano con
+`npx tsx --test` porque **no hay script** (P3-15): 103 (`edu-visibility`,
+`edu-permissions`, `edu-padron`, `edu-contract`) + 234 (`edu-agenda`,
+`edu-autorizaciones`, `edu-caja`, `edu-consentimientos`, `edu-equipo`, `edu-evaluacion`)
++ 179 (`edu-expediente`, `edu-ia`, `edu-pacientes`, `edu-search`, `edu-tarifas`,
+`edu-traspaso`).
+
+**Y el dato incómodo:** la suite es buena y **ninguno de los cuatro hallazgos graves la
+habría hecho fallar**, por una razón que se puede nombrar. Las pruebas cubren los módulos
+PUROS (`visibility.ts`, `*-core.ts`) y ahí no hay nada roto. Lo que falla está en la capa
+que los **consume**: un `findMany` que se olvidó de llamar al helper (P0-1), un
+`page.tsx` que manda al cliente lo que el helper habría recortado (P1-4), un `update` que
+no revalida (P1-3) y un cliente que no manda un campo opcional (P0-2).
+`edu-traspaso.test.ts` verifica el `where` correcto de la Ola 6 y pasa; lo que no puede
+ver es que en producción casi ninguna cita tenga `caseId`.
+
+Si hay que agregar UN tipo de prueba, es la que recorra los route handlers y compruebe que
+toda lectura con un id de fuera pase por un helper de `visibility.ts` — el mismo truco que
+`edu-permissions.test.ts` ya usa para que ninguna key se quede sin dueño de servidor.
+
+### Qué arreglar primero
+
+1. **P0-1** — dos líneas, o borrar la rama `?alumno=`. El más barato y el más grave.
+2. **P1-4** — un ternario en `agenda/page.tsx:89` y un parámetro en `docentes/page.tsx:49`.
+   Corta la fuente de ids de P0-1 y cierra dos fugas del padrón por su cuenta.
+3. **P0-2** — el más caro: toca UI (selector de caso), `traspasos.ts` y quizá
+   `visibility.ts`. De paso desbloquea la etapa `SESSION` del gate de la Ola 4.
+4. **P1-3** — una decisión y tres líneas en `updateEduAppointment`.
+5. **P2-7** — cuatro líneas; cierra la promesa que el catálogo ya hace por escrito.
+6. **P2-9 + P2-8** — las dos pantallas que faltan para que el vertical se administre solo.
+7. **P2-5** — decidir: aplicar el semestre o quitarlo de la pantalla. No dejarlo así.
+8. **P2-11 + P2-10** — un `if` y una clave de idempotencia.
+9. **P3-15** — los scripts de prueba: tres minutos, y es lo que impide que los ocho
+   arreglos de arriba se rompan solos.
+
+### Lo que NO alcancé a revisar
+
+**Sin base de datos y sin navegador**: nada se ejecutó contra Postgres y no se abrió una
+sola pantalla. Los cuatro hallazgos graves están confirmados leyendo **las dos puntas** (el
+`where` y quien lo llama), pero el `curl` que lo demuestra no se corrió · **los `.sql` de
+las olas** no se auditaron contra el schema: no comprobé que los índices y backfills que
+declara cada ola estén aplicados en producción (schema y código sí cuadran entre sí) ·
+**los cinco componentes más grandes** (`caja-screen` 1370 líneas, `agenda-screen` 1016,
+`bitacora-screen` 948, `padron-screen` 889, `pacientes-screen` 870) se barrieron buscando
+throws, textos prohibidos y `fetch`, pero no se auditó a fondo su lógica de estado ·
+**accesibilidad, i18n y responsive**: fuera del alcance pedido · **concurrencia real**: las
+tres ventanas de carrera que anoto están documentadas en el propio código como asumidas, no
+las medí.
+
+El detalle completo, con reproducción y arreglo propuesto por hallazgo, en
+**`docs/audits/EDU_AUDIT.md`**.
+
+---
+
+## [Institucional · AUDITORÍA] — Los cuatro hallazgos graves: las calificaciones del compañero se leían sin alcance, y el que entrega un caso conserva la llave porque su cita no cuelga de ningún caso ✅ (2026-08-31) · rama `fix/edu-auditoria`
+
+Arregla **P0-1, P0-2, P1-3 y P1-4** de `docs/audits/EDU_AUDIT.md` (la auditoría del PR #135).
+Los P2 y P3 **no se tocaron**: son de otra pasada y mezclarlos habría hecho el diff imposible de
+revisar con cuatro olas (7, 8, 9 y 10) esperando merge sobre los mismos archivos.
+
+**15 archivos, ninguno compartido.** No se tocó `prisma/schema.prisma` — este arreglo no necesita
+una sola columna nueva— ni `src/middleware.ts`. Cero conflicto de schema para las olas en vuelo.
+
+### La frase que explica los cuatro
+
+La auditoría dejó una observación que vale más que los hallazgos: **ninguno de los cuatro habría
+puesto roja la suite**, y por una razón que se puede nombrar. Las pruebas del vertical comprueban
+los módulos PUROS (`visibility.ts`, `*-core.ts`) y ahí no había nada roto. Lo que fallaba estaba en
+la capa que CONSUME esos módulos — un `findMany` que se olvidó de llamar al helper, un `page.tsx`
+que mandó al navegador lo que el helper habría recortado, un `update` que no revalidó y un cliente
+que nunca mandó un campo opcional. **Un `where` correcto que nadie llama es exactamente igual de
+inseguro que uno equivocado.**
+
+Por eso la prueba nueva (`edu-auditoria.test.ts`, 15 pruebas) hace las dos cosas: comprueba lo puro
+Y **lee los archivos** para verificar que la llamada al helper está puesta — el mismo truco que ya
+usa `edu-caja.test.ts` para que ningún endpoint lea el `institutionId` de un body.
+
+### P0-1 · Un alumno leía las calificaciones —y los pacientes— de sus compañeros
+
+`GET /api/instituto/calificaciones?alumno=<id de un compañero>` leía por `studentId` crudo. Era la
+ÚNICA lectura del vertical que no pasaba por el alcance, y devolvía el expediente académico entero
+del otro: cada criterio con su comentario, quién calificó, y el **nombre y el folio de los pacientes
+que atendió**. La key `evaluacion.view` la tienen DIRECCION, DOCENTE y ALUMNO por defecto.
+
+`listEduStudentGrades` (`rubricas.ts`) ahora pide `eduVisibility(ctx, "cases")`, corta en seco si el
+alcance es "none" (caja) y busca al alumno con `eduStudentScopeWhere` **antes** de leer nada. Un id
+que no le toca a quien pregunta se ve exactamente igual que uno que no existe: lista vacía.
+
+**No se borró la rama `?alumno=`**, que era la otra opción propuesta. Borrarla habría cerrado esta
+puerta dejando la regla sin dueño: la siguiente pantalla que necesitara las calificaciones de un
+alumno la habría vuelto a abrir igual de rota.
+
+La función ganó un cuarto parámetro `now` opcional y `getEduBitacora` le pasa el suyo (un solo `now`
+por pantalla, como todo el vertical). En esa ruta el alumno se resuelve dos veces —la bitácora ya lo
+había hecho— y se paga a gusto: un `findFirst` por id a cambio de que ninguna llamada futura pueda
+olvidarse del recorte.
+
+### P0-2 · El traspaso no quitaba la llave, porque casi ninguna cita tenía caso
+
+El más caro de los cuatro. `eduPatientScopeWhere` decide que un paciente es "mío" también por mis
+CITAS y descarta las que cuelgan de un caso TRANSFERRED — pero la excepción `{ caseId: null }`,
+pensada para la cita de TAMIZAJE (que es anterior al caso), en la práctica era la REGLA: la pantalla
+de agenda no mandaba `caseId` nunca. El alumno que entregaba un caso seguía abriendo la ficha, el
+expediente, el odontograma y las radiografías de su ex paciente. **La mitad invisible de la Ola 6 no
+funcionaba.**
+
+Se cerró por los **tres** lados, porque el dato y el `where` se protegen mutuamente:
+
+1. **La cita se engancha sola.** `resolveAppointmentCaseId` (`agenda.ts`) es una sola función que
+   usan el alta y el reagendar: si el cliente no manda `caseId`, se busca el caso VIVO de ese
+   paciente con ese alumno y se engancha. Con cero (todavía no hay caso) o con dos (dos
+   especialidades) se deja suelta — adivinar entre dos casos mueve una sesión al expediente
+   equivocado. El TAMIZAJE nace suelto a propósito: es la valoración que ABRE el caso.
+2. **El traspaso engancha las que ya estaban sueltas.** `traspasarUno` (`traspasos.ts`), **antes**
+   de mover las futuras, engancha todas las citas sin caso del saliente con ese paciente al caso que
+   en ese mismo instante quedó TRANSFERRED. Como ese paso va antes, las que además son futuras se
+   van con el alumno nuevo sin escribir una condición más — que era el otro daño del mismo hueco: el
+   martes siguiente el paciente llegaba a la cita de alguien que ya no llevaba su caso.
+3. **Y el `where` deja de depender de que los datos estén bien.** La rama de citas de
+   `eduPatientScopeWhere` lleva ahora `cases: { none: { …, status: "TRANSFERRED" } }`: una cita
+   suelta no abre la ficha de un paciente al que ya le entregué un caso. Es lo único que protege a
+   las filas de los traspasos que ya ocurrieron, sin depender de que nadie corra el `.sql`.
+
+**Lo que NO se hizo, y por qué.** La auditoría proponía un `<select>` de casos en el modal de la
+agenda. No se hizo: quien agenda es **CAJA**, y *caja no ve casos* — es la línea del contrato del
+vertical. Un desplegable de casos abiertos le pondría en el navegador la especialidad y el
+procedimiento de cada paciente, que es exactamente lo que el alcance le niega. Resolverlo en el
+servidor además no se puede olvidar.
+
+**Tampoco se estrechó `{ caseId: null }` a `type: "TAMIZAJE"`**, que era la otra propuesta, y este
+es el razonamiento que más se pagó: el modal de alta propone **TRATAMIENTO** por defecto, así que la
+primerísima cita de un paciente —la que se agenda antes de que exista ningún caso— casi nunca es de
+tipo TAMIZAJE. Estrecharlo así habría dejado al alumno sin poder abrir la ficha del paciente que
+tiene enfrente, que es justo lo que esa rama existe para evitar. Habría cambiado una fuga por un
+bloqueo.
+
+**Falso negativo conocido y aceptado:** si a un alumno le vuelven a agendar al paciente que entregó
+SIN abrirle un caso nuevo, no verá su ficha hasta que se le abra. Falla del lado cerrado. Y para un
+DOCENTE, el descarte no distingue *cuál* de sus alumnos entregó el caso: Prisma no correlaciona dos
+`some` hermanos sobre relaciones distintas.
+
+**De regalo**: la etapa `SESSION` del gate de la Ola 4 queda desbloqueada. `requestEduApproval`
+exige `caseId = caso.id` en la cita y el mensaje de error decía "engánchala primero desde la
+agenda", cosa que la agenda no ofrecía. Ahora lo hace sola.
+
+### P1-3 · Reagendar dejaba la cita colgada del caso de otro alumno
+
+El POST defendía la invariante desde el primer día ("Ese caso es de otro alumno"); el PATCH no la
+miraba. La fila quedaba diciendo que B atendió el caso de A.
+
+**No se rebota con un throw**, que era lo que la auditoría llamaba "lo más consistente": mover una
+cita a otro alumno es lo que hace caja cuando alguien falta, y prohibirlo dejaría sin salida a la
+única persona que puede resolverlo un martes a las nueve. Se **resuelve**: el caso pasa a ser el del
+alumno nuevo (su caso vivo con ese paciente, si lo tiene) o se suelta — con la misma función que usa
+el alta.
+
+El detalle que costó razonar: la comparación es contra el alumno **resultante**
+(`studentId !== current.studentId`), no contra la presencia de `input.studentId`. La pantalla de
+reagendar manda el alumno SIEMPRE, también cuando no lo cambia, y volver a derivar en cada
+movimiento habría soltado el caso de una cita cuyo caso ya se cerró: reescribir el pasado por mover
+una hora.
+
+El predicado puro vive en `agenda-core.ts` (`eduCaseFitsAppointment`) para que las dos escrituras
+defiendan la invariante con la MISMA línea y se pueda probar sin base de datos.
+
+### P1-4 · El padrón completo viajaba al navegador de quien no lista ni una fila
+
+`eduPadronScope` es tajante: ALUMNO → ninguna fila ("un residente no lista a su generación"),
+DOCENTE → solo los suyos vigentes. Dos pantallas se lo saltaban, y de ahí salían los ids que hacían
+trivial el P0-1.
+
+- **`/instituto/agenda`**: `listEduStudentOptions` va detrás del mismo
+  `canManage ? … : Promise.resolve([])` que ya tenían sus dos vecinas. Son tres. La lista solo se
+  pinta bajo `canManage` (el alta y el reagendar), así que no se pierde nada.
+- **`/instituto/docentes`**: el recorte no se escribe con un `if (role !== "DIRECCION")` sino que se
+  le pide a **`eduPadronScope`**, el helper que ya decide esto. Un `if` suelto es una segunda regla
+  que el día que aparezca un rol nuevo dirá algo distinto de la primera; y con el helper, un ALUMNO
+  o una CAJA con `docentes.view` por override reciben cero filas de verdad, en vez de depender de
+  que su id no aparezca como supervisor de nadie.
+- **Y `GET /api/instituto/docentes?detalle=1`**, que la auditoría no lista porque leyó pantallas,
+  tenía la MISMA fuga llamando a la misma función. Arreglar solo la pantalla habría sido cerrar la
+  puerta dejando la ventana abierta.
+
+El **conteo agregado** por docente (`listEduTeachers`) no se toca: "cuántos alumnos lleva cada quien
+hoy" es para lo que existe la pantalla, y es un número, no una identidad. Como consecuencia un
+docente puede ver "3" en un colega y una lista vacía al desplegarla — la nota de la pantalla lo dice
+ahora con esas palabras, en vez de pedirle que recargue eternamente.
+
+### El SQL
+
+`sql/edu-fix-auditoria.sql` — **idempotente, SIN DDL, CERO DROP, y NO SE APLICÓ** (la orden lo
+prohibía). Solo repara datos, y solo la columna `"caseId"` de `edu_appointments`:
+
+1. las citas sueltas de TRATAMIENTO/CONTROL cuyo par (paciente, alumno) tiene UN caso vivo;
+2. **la del P0-2**: las citas sueltas de un par que ya se traspasó, al caso TRANSFERRED;
+3. **la del P1-3**: las citas colgadas del caso de otro alumno o de otro paciente — se repuntan al
+   caso correcto y, si no lo hay, se sueltan (una cita sin caso es un dato incompleto; una colgada
+   del caso de otro es un dato FALSO, y de los dos hay que quitar el falso).
+
+Trae los SELECT de antes y de después, y el que lista los pares ambiguos (dos casos vivos) que hay
+que mirar a mano. **Aunque no se aplique, el agujero está cerrado**: el `where` ya no le abre la
+ficha a quien entregó el caso. El `.sql` es lo que deja los datos diciendo la verdad.
+
+### Verificación de esta rama
+
+`npx prisma generate` ✅ (v5.22.0) · `npm run build` ✅ **exit 0, completo y sin pipe**
+(`Generating static pages (455/455)`, 64 rutas `/api/instituto/*` y 28 pantallas `/instituto/*`,
+todas `ƒ (Dynamic)`) · `npx tsc --noEmit` ✅ para el vertical (siguen los **mismos 6 errores ajenos**
+de `src/lib/barber/__tests__/`, preexistentes en `origin/main`; esta rama no toca un solo archivo de
+barbería) · **575 pruebas del vertical en verde**, de ellas **15 nuevas** (`edu-auditoria`) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅ (15 propios,
+**0 compartidos**, 0 prohibidos).
+
+Los dos ruidos del build son los de siempre y no son de esta rama: `Critical dependency` de
+`node_modules/file-type` (lo arrastra `/api/ai-wallet/spei/topup`), las clases Tailwind ambiguas, y
+el spam de `Environment variable not found: DATABASE_URL` durante "Generating static pages",
+esperado en un worktree sin `.env`.
+
+Tres pruebas VIEJAS de `edu-traspaso.test.ts` se actualizaron —y solo tres— porque contaban
+literales del `where` de pacientes (`userId` dos veces, `startsAt` dos veces, `status` con dos
+condiciones) y ahora hay una condición más. Su intención no cambió: siguen comprobando que el
+recorte cuelga del alumno y que TRANSFERRED es el único estado que quita el acceso.
+
+### Lo que NO se probó
+
+Nada corrió contra Postgres: **`sql/edu-fix-auditoria.sql` no se aplicó** y ninguna de las tres
+escrituras nuevas (el enganche al agendar, el del reagendar y el del traspaso) se ejecutó contra una
+base real. Todo lo verde son funciones puras, la forma de los `where` y la lectura del código
+fuente. **No se abrió un navegador**: que la agenda siga agendando y que la pantalla de docentes se
+pinte sin la lista nominal está razonado, no visto.
+
+En particular no se comprobó con datos: que el `NOT EXISTS` que Prisma genera para
+`cases: { none: … }` use `edu_cases_patient_idx` (debería: es `(institutionId, patientId)`), ni el
+comportamiento del backfill sobre volumen real.
+
+### Lo que se dejó fuera a propósito
+
+- **Los 10 P2 y los 4 P3 de la auditoría**, por orden explícita.
+- **`/instituto/pacientes` (`page.tsx:76`) también manda `listEduStudentOptions` completo**, y el
+  ALUMNO sí tiene `pacientes.view`. Es la misma familia que el P1-4 y la auditoría no lo lista. No
+  se arregló porque ahí el padrón alimenta un filtro **visible** ("¿lo trajo algún alumno?"): no es
+  mover una línea, es decidir qué ve un alumno en ese desplegable, y eso es producto. Queda anotado
+  aquí en vez de resuelto a medias. Lo mismo, en menor grado, con
+  `/instituto/agenda/tamizaje` y `/instituto/evaluacion/[id]`, que sí están detrás de permisos que
+  el ALUMNO no tiene (`casos.assign`, `traspaso.manage`).
+- **El alumno GRADUATED que conserva `EduUser.isActive`** y por tanto sus llaves si nadie le
+  traspasa los casos. Lo menciona el P0-2 de la auditoría como "el caso peor", pero es una decisión
+  de producto (¿graduarse cierra la sesión?) y no un `where` mal escrito.
+- **`docs/audits/EDU_AUDIT.md` no estaba en `main`** cuando se hizo esta rama: vive en
+  `origin/audit/edu-vertical` (PR #135, abierto). Se copió **byte a byte** y se le añadieron las
+  marcas de arreglado, así que si el #135 entra primero el conflicto es trivial (quedarse con esta
+  versión). `scripts/edu-guard.cjs` ganó el patrón `docs/audits/EDU_*.md` como PROPIO del vertical —
+  es prosa sobre el instituto y no toca una línea del dental—, que es exactamente lo que el aviso
+  del propio guard pide hacer con cualquier ruta nueva del vertical.
+
+### Al desplegar
+
+1. El código no necesita nada: no hay columnas nuevas ni migración.
+2. **`sql/edu-fix-auditoria.sql`** en Supabase → SQL Editor → Run, **con respaldo previo** (son
+   `UPDATE` sobre datos existentes, no `CREATE`). Correr antes el primer SELECT de la sección 5 para
+   ver cuántas filas va a tocar.
+3. Comprobar con los tres SELECT de después: las tres cuentas tienen que dar **0**.
+4. Revisar a mano los pares ambiguos que liste el último SELECT (dos casos vivos del mismo paciente
+   con el mismo alumno). En una escuela normal son cero.

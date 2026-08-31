@@ -328,6 +328,24 @@ export interface EduPatientScopeInput {
  * traspaso "funciona" perfectamente sin esto, solo que el alumno saliente
  * se queda con la llave— y por eso vive aquí, en el punto único, y no en
  * la función que traspasa.
+ *
+ * 🔴 P0-2 DE LA AUDITORÍA — Y LA RAMA DE LAS CITAS TENÍA UN AGUJERO DEL
+ * TAMAÑO DE LA OLA 6. El `{ caseId: null }` de abajo existe para la cita
+ * de TAMIZAJE (que es anterior al caso), pero en la práctica CASI NINGUNA
+ * cita traía caso, así que esa opción no era la excepción: era la regla, y
+ * el descarte del caso TRANSFERRED de al lado no se aplicaba a nada. El
+ * alumno que entregaba un caso seguía abriendo la ficha, el expediente, el
+ * odontograma y las radiografías de su ex paciente.
+ *
+ * Se cierra por los dos lados, porque uno solo no basta:
+ *   · EL DATO — la cita queda enganchada a su caso cuando lo hay: al
+ *     agendarla y al reagendarla (agenda.ts) y, para lo que ya existía,
+ *     al traspasar (traspasos.ts engancha las citas sueltas del saliente
+ *     con ese paciente al caso que entrega).
+ *   · EL `where` — y aun así, una cita suelta NO abre la ficha de un
+ *     paciente al que ya le entregué un caso. Es la línea `cases: { none:
+ *     … TRANSFERRED }` de abajo, y es la que protege a las filas viejas,
+ *     las de los traspasos que ocurrieron ANTES de este arreglo.
  */
 export function eduPatientScopeWhere({
   institutionId,
@@ -361,6 +379,25 @@ export function eduPatientScopeWhere({
             OR: [{ caseId: null }, { case: { status: { not: EDU_CASE_TRANSFERRED } } }],
           },
         },
+        // 🔴 …Y QUE NO SEA UN PACIENTE QUE YA ENTREGUÉ. Sin esta línea, la
+        // opción `{ caseId: null }` de arriba es una puerta abierta: basta
+        // UNA cita suelta —y las de antes de este arreglo lo son casi
+        // todas— para que el alumno saliente conserve la ficha completa.
+        //
+        // Aquí sí se usa la forma negativa, y no contradice el comentario
+        // de arriba: `none` sobre una relación uno-a-MUCHOS es "ninguna
+        // fila cumple" y no tiene ambigüedad. Lo que no se escribe con un
+        // NOT es la relación uno-a-uno NULA (`case`), que es donde el ORM
+        // decide por ti.
+        //
+        // ⚠️ Falso negativo conocido y aceptado: si a un alumno le vuelven
+        // a agendar al paciente que entregó SIN abrirle un caso nuevo, no
+        // verá su ficha hasta que se le abra. Falla del lado cerrado, se
+        // arregla abriendo el caso (que es lo que hay que hacer de todos
+        // modos) y es preferible a la alternativa — dejar la llave puesta.
+        // Para un DOCENTE el descarte no distingue CUÁL de sus alumnos
+        // entregó el caso: Prisma no correlaciona dos `some` hermanos.
+        cases: { none: { institutionId, student, status: EDU_CASE_TRANSFERRED } },
       },
     ],
   };
@@ -571,6 +608,42 @@ export function eduPaymentScopeWhere({
   return { institutionId };
 }
 
+// ── El gasto de IA (Ola 8) ──────────────────────────────────────────────
+
+/**
+ * El consumo de IA que le toca ver a quien pregunta: todo, o nada.
+ *
+ * 🔴 LA OLA 8 NO AGREGÓ UN QUINTO RECURSO, Y ESO ES LO IMPORTANTE. El
+ * gasto de IA se lee con el recurso "charges" —el del DINERO— y no con uno
+ * propio. La razón es la misma por la que la Ola 3 no inventó un recurso
+ * para el expediente: un recurso nuevo que dijera lo mismo solo habría
+ * dado un segundo sitio donde equivocarse.
+ *
+ * Y decir lo mismo es exactamente lo que hace falta aquí: "charges" es una
+ * LISTA BLANCA (DIRECCION y CAJA; cualquier otro rol, incluido uno que no
+ * exista todavía, cae en "none") y se resuelve ANTES del switch de roles.
+ * Eso da el segundo candado del gasto de IA: si alguien le enciende
+ * "ia.view" a un alumno desde la pantalla de permisos, el alcance sigue
+ * devolviendo "none" y no ve un dólar. El permiso abre la pantalla; el
+ * alcance decide las filas.
+ *
+ * ⚠️ CAJA cae en "all" por venir de "charges", y no pasa nada: caja no
+ * lleva "ia.view" en su default, así que no abre la pantalla. Si un día
+ * una escuela se lo enciende a propósito, lo que verá es el consumo de IA
+ * del instituto — que es dinero, que es lo suyo. Lo que NO puede es
+ * tocarlo: eso es "ia.manage", que es otra key.
+ *
+ * No lleva `now`: el gasto no caduca ni depende de la vigencia de nadie.
+ */
+export function eduAiUsageScopeWhere({
+  institutionId,
+  scope,
+}: EduChargeScopeInput): Prisma.EduAiUsageWhereInput {
+  requireInstitutionId(institutionId, "eduAiUsageScopeWhere");
+  if (!scope || scope.kind !== "all") return nada(institutionId);
+  return { institutionId };
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 3 · ESCRITURAS: ¿PUEDO TOCAR ESTA FILA?
 //
@@ -740,4 +813,96 @@ export function eduCampusCovers(
   if (!Array.isArray(campusIds)) return true;
   if (!campusId) return false;
   return campusIds.includes(campusId);
+}
+
+// ── WhatsApp (Ola 9) ────────────────────────────────────────────────────
+
+export interface EduWhatsappScopeInput {
+  institutionId: string;
+  /** El alcance de "patients": de quién puedo ver avisos. */
+  patientScope: EduVisibilityScope;
+  /** El alcance de "charges": si NO es "all", el dinero no se ve. */
+  chargeScope: EduVisibilityScope;
+  now?: Date;
+}
+
+/**
+ * Los AVISOS de WhatsApp que le tocan a quien pregunta.
+ *
+ * 🔴 NO HAY UN QUINTO RECURSO EN `eduVisibility`, Y ESO ES LO IMPORTANTE.
+ *
+ * Un mensaje de WhatsApp no es una cosa nueva que ver: es la SOMBRA de la
+ * cosa de la que habla. Así que se lee con el alcance de esa cosa, igual
+ * que el expediente de la Ola 3 se lee con "cases" aunque cuelgue del
+ * paciente:
+ *
+ *   · el recordatorio y el consentimiento → alcance de "patients" (el
+ *     consentimiento ya se leía así desde la Ola 3B: la carta se imprime y
+ *     se entrega en el mostrador, así que CAJA la ve);
+ *   · el recibo                            → alcance de "charges", que es
+ *     TODO o NADA y para DOCENTE y ALUMNO es NADA.
+ *
+ * 🔴 Y AQUÍ ESTÁ LA TRAMPA QUE ESTA FUNCIÓN EXISTE PARA CERRAR. El cuerpo
+ * del aviso de un recibo dice el folio, el total y el saldo. Si la lista de
+ * avisos de un paciente se recortara SOLO por "patients", un ALUMNO abriría
+ * la ficha de su propio paciente y leería cuánto pagó — que es exactamente
+ * lo que la Ola 5 cerró por partida doble y lo que la escuela no quiere que
+ * sepa. Por eso el tipo RECIBO se descarta cuando el alcance de dinero no
+ * es "all", y por eso esta decisión vive en el punto único y no en la
+ * pantalla que lista.
+ *
+ * ⚠️ Los mensajes NO cuelgan de una relación con EduPatient en Prisma (ver
+ * la nota del modelo): el recorte por paciente se aplica con la lista de
+ * ids que el llamador ya resolvió con `eduPatientScopeWhere`. Por eso
+ * `patientIds` es un parámetro y no un `where` anidado — y por eso
+ * `allPatients` existe: sin él, "todos los pacientes" y "ningún paciente"
+ * se escribirían igual (`{ patientId: { in: undefined } }` BORRA el filtro,
+ * que es el error que no puede pasar).
+ */
+export function eduWhatsappScopeWhere(
+  input: EduWhatsappScopeInput & {
+    /** true = sin recorte por paciente (dirección y caja). */
+    allPatients: boolean;
+    /** Los pacientes visibles, cuando `allPatients` es false. */
+    patientIds?: string[];
+  },
+): Prisma.EduWhatsappMessageWhereInput {
+  requireInstitutionId(input.institutionId, "eduWhatsappScopeWhere");
+  if (eduScopeIsEmpty(input.patientScope)) return nada(input.institutionId);
+
+  const where: Prisma.EduWhatsappMessageWhereInput = { institutionId: input.institutionId };
+
+  if (!input.allPatients) {
+    // Lista VACÍA incluida a propósito: `in: []` no devuelve ninguna fila,
+    // que es lo correcto para quien no tiene ni un paciente a la vista.
+    where.patientId = { in: input.patientIds ?? [] };
+  }
+
+  // El dinero, otra vez, se decide fuera del recorte de pacientes.
+  if (!input.chargeScope || input.chargeScope.kind !== "all") {
+    where.kind = { not: "RECIBO" };
+  }
+
+  return where;
+}
+
+/**
+ * ¿Puede esta persona MANDAR este tipo de aviso?
+ *
+ * El permiso abre la pantalla; esto decide el tipo. Se separa del permiso a
+ * propósito, y con la misma asimetría de siempre: DOCENTE y ALUMNO comparten
+ * "consentimientos.view" con CAJA y los tres pueden mandar la carta, pero el
+ * RECIBO solo lo manda quien VE dinero. Es la segunda cerradura del mismo
+ * candado que la Ola 5 puso en el permiso — un "caja.view" encendido por
+ * error a un alumno sigue sin dejarle mandar un peso.
+ *
+ * El RECORDATORIO no está en esta lista porque no lo manda nadie: lo manda
+ * el cron, que no tiene sesión.
+ */
+export function eduCanSendWhatsappKind(
+  kind: "CONSENTIMIENTO" | "RECIBO",
+  chargeScope: EduVisibilityScope,
+): boolean {
+  if (kind === "RECIBO") return !!chargeScope && chargeScope.kind === "all";
+  return true;
 }

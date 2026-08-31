@@ -49,6 +49,13 @@ const OWN_FILES = ["src/lib/edu-auth.ts", "scripts/edu-guard.cjs"];
 function matchesOwnPattern(p) {
   // sql/edu-*.sql
   if (p.startsWith("sql/edu-") && p.endsWith(".sql")) return true;
+  // docs/audits/EDU_*.md — la auditoría del vertical y sus marcas de
+  // arreglado. Es prosa SOBRE el instituto y no toca una línea del dental;
+  // se agrega aquí, que es lo que el aviso de arriba pide hacer con
+  // cualquier ruta nueva del vertical, en vez de declararla "compartida"
+  // (la lista de compartidos es corta a propósito: cada renglón suyo es un
+  // pedazo del dental que el vertical se permite tocar, y esto no lo es).
+  if (p.startsWith("docs/audits/EDU_") && p.endsWith(".md")) return true;
   return false;
 }
 

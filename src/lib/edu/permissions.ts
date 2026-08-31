@@ -174,6 +174,98 @@ export const EDU_ALL_PERMISSIONS = {
   // necesita tocar esta pantalla.
   "sedes.view": "Ver las sedes del instituto",
   "sedes.manage": "Dar de alta sedes y decidir quién entra a cada una",
+  // ── Ola 7 · el panel de dirección ────────────────────────────────────
+  // UNA sola key, y la exigen /instituto/direccion y los tres endpoints de
+  // /api/instituto/direccion (la prueba de
+  // __tests__/edu-permissions.test.ts falla si se queda sin lector de
+  // servidor).
+  //
+  // 🔴 NO SE PARTE EN "view" + "export". Lo que se exporta es EXACTAMENTE
+  // lo que se ve: un interruptor que dejara mirar el tablero y no
+  // descargarlo no cerraría nada —quien lo ve puede teclearlo— y el
+  // catálogo de este vertical no admite interruptores que no cierren una
+  // puerta.
+  //
+  // 🔴 Y NO SE LE DA A NADIE MÁS QUE A DIRECCIÓN, ni siquiera al docente
+  // que coordina. Este tablero cruza el dinero de la escuela con el avance
+  // de cada alumno: es la foto completa del negocio y de las personas. Si
+  // una escuela quiere que su coordinador la vea, se le enciende por
+  // override desde la pantalla de permisos — a sabiendas y una por una.
+  //
+  // ⚠️ El permiso abre la pantalla; el ALCANCE la cierra otra vez. Con
+  // esta key encendida sobre un DOCENTE, src/lib/edu/direccion.ts se niega
+  // a pintar el tablero: sus cuatro recursos no devuelven "all" y un total
+  // recortado presentado como el total de la clínica sería un dato falso.
+  "direccion.panel": "Abrir el panel de dirección del instituto",
+  // ── Ola 8 · la cartera de IA ─────────────────────────────────────────
+  // DOS keys, y las dos tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   ia.view   → /instituto/ia + GET  /api/instituto/ia
+  //   ia.manage → PATCH /api/instituto/ia
+  //
+  // 🔴 VER Y EDITAR SON DOS KEYS, y no es simetría decorativa: lo que
+  // `ia.manage` toca es dinero que se gasta de una cuenta de API que no es
+  // de la escuela. Quien consulta "¿en qué se nos fue el cupo?" no es
+  // necesariamente quien puede autorizar gastar de más.
+  //
+  // ⚠️ Y hay una tercera cosa que NO es una key y por eso no está aquí: lo
+  // que INCLUYE el contrato no se edita desde el panel con ningún permiso.
+  // No existe interruptor que lo abra — ver src/lib/edu/ia-cupo.ts.
+  //
+  // ⚠️ Las funciones de IA en sí NO llevan key nueva: el dictado sigue
+  // siendo `expediente.write` y el análisis `estudios.analyze`, los dos de
+  // la Ola 3B. Tener cupo no es un permiso, es un contrato.
+  "ia.view": "Ver el consumo de IA del instituto y su cupo",
+  "ia.manage": "Encender o apagar la IA y autorizar gastar de más del cupo",
+  // ── Ola 9 · WhatsApp y recordatorios ─────────────────────────────────
+  // DOS keys, y las dos tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   whatsapp.view   → /instituto/whatsapp + GET /api/instituto/whatsapp
+  //   whatsapp.manage → PATCH /api/instituto/whatsapp, la conexión y las
+  //                     plantillas
+  //
+  // 🔴 ESTAS DOS KEYS SON DE LA CONFIGURACIÓN, NO DE MANDAR. Es la
+  // distinción de la ola y se equivoca fácil: conectar la WhatsApp del
+  // instituto —o apagar los recordatorios de toda la escuela— es un acto de
+  // dirección, y por eso las dos son SOLO de DIRECCION. Pero MANDARLE un
+  // documento a un paciente no lo es: caja manda el recibo en el mostrador y
+  // el alumno manda la carta de consentimiento en el sillón. Si mandar
+  // exigiera "whatsapp.manage", o nadie más que la dirección mandaría nada,
+  // o habría que darle a caja la llave de la conexión entera.
+  //
+  // Por eso mandar se cierra con el permiso del DOCUMENTO —
+  // "consentimientos.view" para la carta, "caja.view" para el recibo— más el
+  // ALCANCE (src/lib/edu/visibility.ts), que para el dinero devuelve "none"
+  // a docente y alumno pase lo que pase.
+  "whatsapp.view": "Ver la conexión de WhatsApp del instituto y sus envíos",
+  "whatsapp.manage": "Conectar WhatsApp, registrar plantillas y encender los avisos",
+  // ── Ola 10 · facturación CFDI ────────────────────────────────────────
+  // Cuatro keys, y las cuatro tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   facturacion.view   → /instituto/facturacion, su GET y las descargas
+  //   facturacion.emit   → POST /api/instituto/facturacion (el timbrado)
+  //   facturacion.cancel → POST /api/instituto/facturacion/[id]/cancelar
+  //   facturacion.config → /instituto/facturacion/datos-fiscales y su PUT
+  //
+  // 🔴 EMITIR Y CANCELAR SON DOS KEYS DISTINTAS, y ésa es la línea de la
+  // ola. Cancelar un CFDI timbrado ante el SAT no se deshace: es un
+  // trámite fiscal con motivo, no un botón de deshacer. Quien cobra en el
+  // mostrador emite todo el día; quien cancela responde por ello.
+  //
+  // 🔴 Y "facturacion.config" es aparte de las otras tres porque desde esa
+  // pantalla se decide si el instituto timbra EN PRUEBAS o EN VIVO ante el
+  // SAT. No es una preferencia: es la diferencia entre un papel que no
+  // vale nada y un comprobante fiscal.
+  //
+  // ⚠️ Como en la Ola 5, el dinero está cerrado DOS veces: aquí y en el
+  // ALCANCE (src/lib/edu/visibility.ts, recurso "charges"). Encenderle
+  // "facturacion.view" a un alumno por error sigue sin enseñarle una sola
+  // factura — src/lib/edu/facturacion.ts pasa por `requireDinero` incluso
+  // en las lecturas.
+  "facturacion.view": "Ver las facturas del instituto y descargar su XML y su PDF",
+  "facturacion.emit": "Facturar un cobro (timbrar el CFDI)",
+  "facturacion.cancel": "Cancelar una factura ante el SAT con su motivo",
+  "facturacion.config": "Capturar los datos fiscales del instituto y decidir si timbra en pruebas o en vivo",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -257,6 +349,15 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
     keys: ["autorizaciones.request", "autorizaciones.view", "autorizaciones.decide"],
   },
   {
+    // Ola 9. Grupo PROPIO y de DOS casillas: es la única parte del panel
+    // que gasta dinero de la escuela FUERA del panel. Meta le cobra cada
+    // plantilla a la tarjeta de la WABA del instituto, así que quien tenga
+    // "whatsapp.manage" puede encender un gasto recurrente — y eso no se
+    // lee igual escondido dentro de "Administración".
+    title: "WhatsApp",
+    keys: ["whatsapp.view", "whatsapp.manage"],
+  },
+  {
     // Ola 6. Grupo PROPIO: es lo ACADÉMICO, que no se parece a lo clínico
     // ni a lo administrativo. Las cinco juntas para que la dirección pueda
     // leer de un vistazo la única separación que importa aquí — que
@@ -279,6 +380,42 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
     // pareciera "darlo de baja".
     title: "Sedes",
     keys: ["sedes.view", "sedes.manage"],
+  },
+  {
+    // Ola 7. Grupo PROPIO y de una sola casilla, y va al final: es la única
+    // del catálogo que no abre una parcela del producto sino la FOTO
+    // COMPLETA —el dinero de la escuela cruzado con el avance de cada
+    // alumno—. Metida dentro de "Evaluación académica" se tildaría de
+    // pasada al darle el bloque a un coordinador, que es exactamente lo
+    // que no debe ocurrir sin querer.
+    title: "Dirección",
+    keys: ["direccion.panel"],
+  },
+  {
+    // Ola 8. Grupo PROPIO y no un renglón dentro de "Expediente clínico",
+    // donde vive `estudios.analyze`. La diferencia es qué se abre con cada
+    // casilla: `estudios.analyze` deja PEDIR una lectura, estas dos dejan
+    // ver y decidir CUÁNTO DINERO se gasta en todas las lecturas del
+    // instituto. Mezclarlas haría que "darle el expediente a alguien"
+    // arrastrara "dejarle autorizar gasto", que es exactamente el error
+    // que un grupo de permisos existe para evitar.
+    title: "Consumo de IA",
+    keys: ["ia.view", "ia.manage"],
+  },
+  {
+    // Ola 10. Grupo APARTE del de "Tarifarios y caja" a propósito: cobrar
+    // y facturar no son lo mismo y la escuela los reparte distinto. Caja
+    // cobra y emite todo el día; cancelar un CFDI y decidir si el
+    // instituto timbra ante el SAT son de dirección. Mezclarlos en el
+    // grupo del dinero haría que apagarle a caja la cancelación fuera
+    // buscar una casilla entre diez.
+    title: "Facturación",
+    keys: [
+      "facturacion.view",
+      "facturacion.emit",
+      "facturacion.cancel",
+      "facturacion.config",
+    ],
   },
 ];
 
@@ -433,6 +570,30 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  * decisión académica. Y aunque un docente lo tenga, solo puede traspasar
  * lo que VE — los casos de sus alumnos vigentes.
  *
+ * ── Ola 8 · la cartera de IA ────────────────────────────────────────────
+ * SOLO DIRECCION, las dos. Es el reparto más estrecho del vertical junto
+ * con "equipo.manage", y por la misma clase de razón: lo que se decide
+ * aquí no es qué se ve, es cuánto dinero se gasta.
+ *
+ *   DIRECCION "ia.view" + "ia.manage". Administra el contrato del
+ *             instituto, así que administra lo que ese contrato incluye.
+ *   DOCENTE   ninguna. Usa la IA (dicta y analiza) y no decide el
+ *             presupuesto de nadie.
+ *   ALUMNO    ninguna, por lo mismo.
+ *   CAJA      ninguna. Y ésta es la que parece discutible y no lo es: caja
+ *             sí ve DINERO (es la única con "caja.view" además de
+ *             dirección), pero el dinero de caja es el que la escuela
+ *             COBRA a sus pacientes. El cupo de IA es un renglón del
+ *             contrato con DaleControl: no entra al corte, no se cobra en
+ *             el mostrador y no cuadra con nada de lo que caja concilia.
+ *
+ * 🔴 Y como con el dinero de la Ola 5, no basta con no dárselas: el
+ * consumo de IA se lee con el ALCANCE de "charges" (visibility.ts), que
+ * devuelve "none" para DOCENTE y ALUMNO pase lo que pase. Encenderle
+ * "ia.view" a un alumno por error le abre una pantalla vacía, no el gasto
+ * de la escuela. Dos candados, y el segundo no se abre desde la pantalla
+ * de permisos.
+ *
  * ⚠️ El ALUMNO sí lleva "consentimientos.revoke". Es deliberado y es la
  * decisión menos obvia de la ola: revocar no es autorizar, es REGISTRAR
  * que el paciente se retractó, y el paciente se retracta delante del
@@ -459,6 +620,26 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
  *
  * `sedes.view` y `sedes.manage` son para ADMINISTRAR: dar de alta un
  * campus, cerrarlo y repartir quién entra a cuál.
+ *
+ * ── Ola 7 · el panel de dirección ───────────────────────────────────────
+ * UNA key, "direccion.panel", y la lleva SOLO DIRECCION — como
+ * "equipo.manage", "padron.manage", "supervision.assign",
+ * "sillones.manage", "tarifarios.manage", "rubricas.manage" y
+ * "requisitos.manage". Lo que SÍ es nuevo es otra cosa, y es la línea de
+ * la ola:
+ *
+ * 🔴 ES LA PRIMERA KEY CUYO ALCANCE NIEGA EN VEZ DE RECORTAR. En las seis
+ * olas anteriores, "el permiso abre la pantalla y el alcance decide las
+ * filas" permitía darle la misma key a tres roles sin que vieran lo mismo.
+ * Este tablero no admite ese reparto, porque su contenido ES el total: "la
+ * clínica ahora", "cobrado del periodo", "ocupación promedio". Un docente
+ * con esta key vería los sillones de sus alumnos bajo el título "La
+ * clínica ahora" y leería un número falso.
+ *
+ * Por eso el alcance no lo RECORTA aquí: lo NIEGA. src/lib/edu/direccion.ts
+ * comprueba que los cuatro recursos devuelvan "all" y se niega a pintar el
+ * tablero si no. Encenderle la casilla a alguien por error no le enseña
+ * media escuela: no le enseña nada, y le dice por qué.
  */
 export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
   DIRECCION: [
@@ -518,6 +699,32 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // override desde la pantalla de permisos — a sabiendas.
     "sedes.view",
     "sedes.manage",
+    // ── Ola 7 ───────────────────────────────────────────────────────────
+    // SOLO dirección, como las otras siete keys de administración. Ver el
+    // tablero es ver la escuela entera: el dinero, la ocupación de los
+    // sillones y quién va atrasado, todo en la misma pantalla.
+    "direccion.panel",
+    // ── Ola 8 ───────────────────────────────────────────────────────────
+    // SOLO dirección. Quien administra el contrato del instituto es quien
+    // decide si se gasta de más del cupo que ese contrato incluye.
+    "ia.view",
+    "ia.manage",
+    // ── Ola 9 ───────────────────────────────────────────────────────────
+    // SOLO dirección, las dos. Conectar la cuenta de WhatsApp del instituto
+    // es entregar un token que puede mandar mensajes en su nombre, y
+    // encender un aviso es abrir un gasto que Meta le cobra a la tarjeta de
+    // la escuela. Ninguna de las dos cosas es una decisión de mostrador ni
+    // de piso clínico. Caja y alumno siguen pudiendo MANDAR sus documentos:
+    // eso lo abre el permiso del documento, no éste.
+    "whatsapp.view",
+    "whatsapp.manage",
+    // ── Ola 10 ──────────────────────────────────────────────────────────
+    // Las cuatro. Incluye "facturacion.config", que NADIE más lleva:
+    // decidir si la escuela timbra ante el SAT es de quien la dirige.
+    "facturacion.view",
+    "facturacion.emit",
+    "facturacion.cancel",
+    "facturacion.config",
   ],
   DOCENTE: [
     "inicio.view",
@@ -587,6 +794,14 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // se recoge firmada en el mostrador. Ver, y nada más — ni emitir, ni
     // revocar, ni analizar una placa.
     "consentimientos.view",
+    // ── Ola 10 ──────────────────────────────────────────────────────────
+    // VE y EMITE. No cancela y no configura: quien está en el mostrador
+    // factura al paciente que lo pide —es su trabajo, y hacerlo pasar por
+    // dirección sería mandar al paciente a esperar—, pero cancelar un CFDI
+    // timbrado es un trámite ante el SAT que no se deshace, y encender el
+    // timbrado fiscal es una decisión de la escuela, no del turno.
+    "facturacion.view",
+    "facturacion.emit",
   ],
 };
 

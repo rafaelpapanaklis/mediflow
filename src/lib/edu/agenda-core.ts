@@ -540,6 +540,31 @@ export function eduAppointmentStamps(
   return out;
 }
 
+/**
+ * 🔴 UNA CITA Y SU CASO SON DEL MISMO PACIENTE Y DEL MISMO ALUMNO.
+ *
+ * La invariante que el POST de la agenda ya defendía y que el PATCH se
+ * saltaba (P1-3 de la auditoría): reagendar cambiaba el `studentId` de la
+ * cita y dejaba el `caseId` del alumno ANTERIOR. La fila quedaba diciendo
+ * que B atendió el caso de A — con eso, las horas clínicas se cuentan por
+ * un lado, el caso pertenece a otro, y la etapa SESSION del gate de la Ola
+ * 4 firmaría una sesión que nadie dio.
+ *
+ * Vive aquí, en lo puro, para que la comprueben LAS DOS escrituras con la
+ * misma línea: dos copias de una regla son dos sitios donde discrepar.
+ *
+ * Un caso ausente (`null`) devuelve `false` a propósito: quien pregunta
+ * está decidiendo si ENGANCHA algo, y "no hay caso" no es "encaja".
+ */
+export function eduCaseFitsAppointment(
+  caso: { patientId: string; studentId: string } | null | undefined,
+  cita: { patientId: string; studentId: string },
+): boolean {
+  if (typeof caso !== "object" || caso === null) return false;
+  if (typeof cita !== "object" || cita === null) return false;
+  return caso.patientId === cita.patientId && caso.studentId === cita.studentId;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 8 · SANEO DE LO QUE ENTRA POR UN ENDPOINT
 // ═══════════════════════════════════════════════════════════════════════
