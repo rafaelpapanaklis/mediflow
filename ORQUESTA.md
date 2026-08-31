@@ -27842,3 +27842,229 @@ existen. Todo lo que se comprobó son las funciones puras y la forma de los `whe
 5. **Ir clasificando los casos abiertos** con su procedimiento principal (pestaña Casos de la
    ficha). Los que se abrieron antes de esta ola no lo traen, y sin él no cuentan para ningún
    requisito que pida uno.
+
+## [Institucional Ola 10] — Facturación CFDI: el candado contra la doble factura vive en Postgres, y la pantalla DICE si el timbre es de pruebas ✅ (2026-08-30) · rama `feat/edu-ola-10`
+
+Se factura sobre el **cobro de la Ola 5** (`EduCharge`). No hay un segundo documento de venta:
+si la factura tuviera sus propios conceptos y sus propios importes, existirían dos verdades
+sobre lo mismo y tarde o temprano no coincidirían. Desde un cobro emitido → «Facturar» → se
+piden (o se reusan) los datos fiscales del paciente → se timbra → el XML queda guardado y el
+cobro queda ligado a su CFDI. Cancelación con motivo del SAT, sin borrar nada.
+
+### Las cuatro decisiones que sostienen la ola
+
+**1. 🔴 UN COBRO NO SE FACTURA DOS VECES, Y EL CANDADO ESTÁ EN LA BASE.** Un botón
+deshabilitado no sirve: dos clics rápidos son dos peticiones que corren a la vez y las dos leen
+«este cobro no tiene factura». El candado es la columna `EduInvoice.activeChargeId` con su
+índice único `(institutionId, activeChargeId)`:
+
+- al empezar a facturar se **INSERTA la fila** con `status = STAMPING` y
+  `activeChargeId = chargeId`, **antes** de llamar a Facturapi;
+- el segundo clic choca contra el índice (P2002) y sale con **409 «ya se está facturando»**,
+  sin haber pedido un segundo timbre. Postgres es el único árbitro sin condiciones de carrera;
+- al **cancelar**, `activeChargeId` pasa a `NULL`. Postgres considera los `NULL` distintos entre
+  sí, así que un cobro puede acumular varias facturas canceladas y **como mucho una viva** — que
+  es lo que permite re-facturar un cobro cuyo CFDI se canceló, sin borrar historia.
+
+Es un índice único **normal**, no uno parcial con `WHERE`: un parcial diría lo mismo pero Prisma
+no lo sabe expresar, y schema y base quedarían distintos.
+
+**Y la mitad que casi nunca se piensa: qué pasa si la llamada se corta.** Si Facturapi
+*responde* un error, no hubo timbre → la factura queda `FAILED` y el cobro **se libera**. Si la
+llamada **se cae por red**, no se sabe si el SAT timbró → la fila **se queda en `STAMPING` y el
+cobro NO se libera**, a propósito: liberarlo sería exactamente cómo se produce el CFDI duplicado
+que todo esto existe para evitar. Como eso dejaría un cobro bloqueado para siempre, hay salida:
+`POST /api/instituto/facturacion/[id]/resolver` (key `facturacion.config`), donde una persona
+mira Facturapi y **pega el UUID** que encontró, o declara que no había nada y libera el cobro.
+El servidor no lo adivina: buscar por RFC y fecha y confundirse de comprobante es peor.
+
+**2. 🔴 LOS IMPORTES SALEN DEL COBRO CONGELADO, y se cuadran antes de gastar un timbre.**
+`EduInvoice` copia subtotal, descuento, total y las **líneas** tal como estaban (las
+`EduChargeItem` ya congelan precio y descripción desde la Ola 5). Nunca se consulta el
+tarifario. Y antes de llamar a Facturapi, `eduCuadreDelCobro` exige que la suma de las líneas
+dé **exactamente** el total del cobro: aritmética entera, **cero tolerancia**. Si no cuadra, se
+rechaza con 409 diciendo los dos importes — un CFDI por un monto distinto del cobrado no se
+emite.
+
+**3. 🔴 EL AMBIENTE ES UN DATO DEL INSTITUTO, NO UNA CONSTANTE.** El dental decide PRUEBAS/LIVE
+con `process.env.FACTURAPI_ENV`, **una sola variable para todo el despliegue**. Aquí vive en
+`EduFiscalConfig.environment`, y **cada factura guarda en cuál se timbró**
+(`EduInvoice.environment`). Sin esa segunda columna, encender el timbrado fiscal reetiquetaría
+como fiscales todos los comprobantes de prueba anteriores y la pantalla los enseñaría como
+válidos. Una prueba del vertical falla si `facturacion.ts` o `facturacion-core.ts` llegan a
+mencionar `FACTURAPI_ENV`, `facturapi-env` o `isFacturapiLive` fuera de un comentario.
+
+**Lo que la interfaz dice, porque hoy el timbrado corre en PRUEBAS:** el aviso se pinta arriba
+de la lista, otra vez dentro del modal justo encima del botón de timbrar, y **una vez por
+factura** como etiqueta. El texto de pruebas dice, con esas palabras, que **NO tiene validez
+fiscal**, que no llega al SAT y que no se le puede entregar al paciente como comprobante
+deducible — y explica por qué engaña: el documento se ve idéntico a uno real, con folio fiscal,
+PDF y XML. Nada de eso sale de una constante: sale de la columna.
+
+**4. 🔴 LOS DATOS FISCALES DEL PACIENTE VAN EN TABLA APARTE** (`edu_patient_tax_profiles`, uno a
+uno con `edu_patients`) y no en columnas de la ficha. Tres razones, en orden: (a) la fila del
+paciente la leen la agenda, el buscador, el tamizaje y el modal de caja, muchas veces sin lista
+de columnas explícita, y un RFC ahí dentro viaja a pantallas que nunca lo pidieron —incluidas
+las de un ALUMNO—, que es el tipo de fuga que ya costó un incidente en el dental; (b) en una
+clínica de escuela factura uno de cada diez pacientes: serían cinco columnas nulas en la tabla
+más consultada del vertical; (c) se capturan en otro momento y por otra gente, y separarlos deja
+auditar quién los tocó sin ensuciar el `updatedAt` de la ficha clínica. Lo que se pierde es un
+JOIN, y solo al facturar.
+
+### Lo que se reusa del dental, y lo único que no
+
+`@/lib/facturapi` se importa **tal cual** para crear la organización, mandar sus datos legales,
+crear el cliente receptor, timbrar, cancelar, validar el RFC contra la lista negra EFOS y bajar
+PDF/XML — todas esas funciones reciben la llave como argumento y no opinan del ambiente.
+Los catálogos del SAT vienen de `@/lib/cfdi-catalogs` (client-safe). **Lo único que el vertical
+escribe por su cuenta es la resolución de la llave de la organización**, porque `getOrgApiKey`
+del dental mira la variable global; aquí se pide la de pruebas o se genera la de producción
+según la columna del instituto, y la Live Secret Key se guarda **cifrada** con el mismo envelope
+(`@/lib/crypto/envelope`). **Ni un archivo del dental se editó.**
+
+### El XML se guarda; el PDF no
+
+El XML es el documento fiscal y pesa unos kilobytes: se baja al timbrar y queda en la columna
+`xml`, para que el histórico no dependa de que Facturapi siga en pie. El PDF es una
+representación que se puede regenerar y pesa megabytes — se pide bajo demanda. Las descargas van
+por un **proxy** (`/api/instituto/facturacion/[id]/archivo/[formato]`) y no por un enlace
+directo: mandar la llave secreta de la organización al navegador para ahorrar un salto sería
+regalar la capacidad de timbrar a nombre del instituto. Y se descargan con la llave del
+**ambiente en que se timbró**, no del actual: un CFDI vive donde nació.
+
+### Permisos (cuatro keys nuevas)
+
+`facturacion.view` · `facturacion.emit` · `facturacion.cancel` · `facturacion.config`.
+
+**La línea de la ola es que EMITIR y CANCELAR son dos keys distintas.** CAJA lleva `view` +
+`emit`: el paciente pide su factura en el mostrador mientras paga, y hacerlo pasar por dirección
+sería mandarlo a esperar. **No lleva `cancel`** —cancelar un CFDI timbrado ante el SAT no se
+deshace: es un trámite con motivo, plazo y, desde 2022, con derecho del receptor a rechazarlo—
+**ni `config`**, porque desde esa pantalla se decide si la escuela timbra en pruebas o ante el
+SAT, y eso no es una preferencia de turno. DIRECCIÓN lleva las cuatro. **DOCENTE y ALUMNO,
+ninguna.**
+
+Y como en la Ola 5, el dinero está cerrado **dos veces**: además del permiso, todas las
+funciones de `facturacion.ts` —lecturas incluidas— pasan por `requireDinero`, que consulta el
+ALCANCE (`visibility.ts`, recurso `charges`). Encenderle `facturacion.view` a un alumno por
+error sigue sin enseñarle una factura. **No se inventó un recurso `invoices`**: facturar *es*
+ver dinero, y un segundo recurso que dijera lo mismo solo sería un segundo sitio donde
+equivocarse.
+
+### Números y estructura
+
+**3 tablas** (`edu_fiscal_configs`, `edu_patient_tax_profiles`, `edu_invoices`) · **3 enums**
+(`EduFiscalEnv`, `EduInvoiceStatus`, `EduTaxMode`) · **9 índices** (4 únicos) · **11 llaves
+foráneas** · **2 pantallas** (`/instituto/facturacion` y `/instituto/facturacion/datos-fiscales`,
+que no lleva item de menú propio: se llega desde Facturación, igual que el corte de caja) ·
+**7 endpoints** · **2 módulos** (`facturacion.ts` de servidor sobre `facturacion-core.ts`
+puro). Un item de menú nuevo, **Facturación**, en *Operación* y pegado a Caja: el paciente pide
+la factura en el mostrador, no en una oficina. En Caja, cada cobro no cancelado gana un botón
+**«Facturar»** que lleva a la pantalla con el cobro ya elegido — el modal de timbrado vive en un
+solo sitio, porque dos copias del mismo formulario fiscal es cómo una de las dos se queda vieja.
+
+El dinero sigue en **centavos enteros** y solo se convierte a pesos en el payload de Facturapi.
+Los conceptos van con `taxes` **explícitos** (exento por el art. 15 de la LIVA, o IVA 16 % con
+`tax_included: true` para que el total siga siendo lo que pagó el paciente): sin `taxes`,
+Facturapi desglosa IVA 16 % por su cuenta, que es el bug que ya se pagó en el dental.
+
+### Decisiones que se apartan de lo obvio (para que la integración no las revierta)
+
+- **El motivo de cancelación «01» no se ofrece.** Exige el UUID del CFDI que *sustituye* al
+  cancelado, y ese CFDI todavía no existe cuando alguien pulsa «Cancelar»: sería un botón que el
+  SAT rechaza siempre. Para corregir una factura con errores se cancela con **02** y se emite
+  otra — el cobro queda libre en cuanto se cancela.
+- **La forma de pago del SAT NO se adivina.** Se *sugiere* del último pago real (efectivo → 01,
+  transferencia → 03, tarjeta → 04 proponiendo crédito, que el modal deja cambiar) y el método
+  «Otro» **no se traduce**: puede ser un vale, una beca o una compensación. Sin sugerencia, el
+  selector sale vacío y el servidor rechaza sin ella. Es el dato con el que el SAT cruza el
+  comprobante contra el depósito; un default silencioso es un dato falso en un documento fiscal.
+- **Pasar a EN VIVO no se guarda si Facturapi no lo confirma.** El servidor pregunta
+  `is_production_ready` y rechaza el cambio enumerando lo que falta (CSD, Carta Manifiesto,
+  logo). Encenderlo «a ver si jala» es descubrir que no jala con el paciente enfrente y un
+  timbre gastado. En cambio, **los datos fiscales sí se guardan aunque Facturapi esté caído** y
+  se avisa: la escuela tiene que poder capturar su RFC.
+- **La facturación nace APAGADA y en PRUEBAS** (`isEnabled = false`, `environment = TEST`). Las
+  dos son decisiones que se toman a mano.
+- **Corregir los datos fiscales de un paciente no toca ninguna factura ya emitida:** el receptor
+  se congela en el CFDI. Un comprobante dice a nombre de quién se emitió, no a nombre de quién
+  se emitiría hoy.
+- **Ni el XML ni la llave de Facturapi viajan al navegador.** La forma que llega al cliente
+  solo dice `hasXml: boolean` y `hasOrg: boolean`; hay una prueba que falla si alguien mete un
+  secreto en ella.
+
+### Archivos que se quisieron tocar y NO se tocaron
+
+- **`src/lib/facturapi.ts`** (dental). Habría bastado exportar su `getTestOrgApiKey` y aceptar un
+  ambiente por argumento en `getOrgApiKey` para no reescribir ~60 líneas de resolución de llave.
+  Es un archivo del producto que está VIVO en producción: el vertical trae su propia resolución
+  y le importa todo lo demás.
+- **`package.json`.** Sigue sin haber `npm run test:edu*`. Es un archivo del dental; cuando el
+  vertical se integre a `main` es UNA línea.
+- **`prisma/schema.prisma`** se tocó SOLO de forma aditiva: los tres modelos y los tres enums al
+  final del archivo, y las relaciones inversas al final de la lista de cada modelo Edu
+  (`EduInstitution`, `EduUser`, `EduPatient`, `EduCharge`). Cero reordenamientos.
+- **La ficha del paciente** no gana pestaña de facturas. Se decidió no abrir una pantalla más
+  antes de que alguien haya timbrado una factura de verdad; el histórico por paciente ya se puede
+  buscar desde `/instituto/facturacion`.
+
+### Qué se probó y qué NO
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0; las 2 páginas y las 7 rutas de API
+nuevas quedan registradas) · `npx tsc --noEmit` ✅ para el vertical (los 6 errores de
+`src/lib/barber/__tests__` son ajenos y **preexistentes en `origin/main`**, comprobado con
+`git show origin/main:…`) · **564 pruebas del vertical en verde**, de ellas **48 nuevas**
+(`edu-facturacion`) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(21 propios, 1 compartido declarado, 0 prohibidos).
+
+Las 48 pruebas nuevas cubren, además de la aritmética y las validaciones: que el **índice único
+del candado** esté declarado en el schema **y** creado por el `.sql`; que la **reserva se
+inserte antes** de llamar a Facturapi (si alguien invierte el orden, falla); que la rama de
+fallo de red **no** libere el cobro; que cancelar **no** borre el UUID ni el XML; que **toda**
+función exportada del módulo de servidor pase por `requireDinero`; que ninguna acepte un
+`institutionId` suelto; y que el módulo **no lea** la variable de ambiente del dental.
+
+**Lo que NO se probó, y hay que probar:**
+
+- **Ninguna escritura corrió contra Postgres.** `sql/edu-ola-10.sql` **no se aplicó** (la orden
+  lo prohibía). Sin aplicarlo, `/instituto/facturacion` truena al consultar tablas que no
+  existen.
+- **NO se timbró ni un CFDI, ni siquiera de prueba.** No hay credenciales de Facturapi en este
+  entorno, así que **todo el camino de red está sin ejercitar**: crear la organización, subir
+  los datos legales, crear el receptor, timbrar, bajar el XML y cancelar. Lo que está probado es
+  la **forma** del payload y el **orden** de las escrituras, no la respuesta del proveedor.
+- **El candado no se probó con dos peticiones reales simultáneas.** Depende del índice único de
+  Postgres, que existe en el `.sql` y en el schema, pero la carrera de verdad solo se puede
+  observar contra una base.
+- **No se abrió un navegador:** ni la pantalla de facturas, ni el modal, ni la de datos
+  fiscales se vieron pintadas.
+
+### Cómo aplicarlo (en este orden)
+
+1. **`sql/edu-ola-10.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/1/2/5.sql` (necesita `edu_charges`). Idempotente, cero `DROP`, no toca ni una
+   tabla del dental — en particular **no toca** `cfdi_records`, `cfdi_usage` ni `invoices`.
+2. **Envs en el servidor**: `FACTURAPI_USER_KEY` (obligatoria: sin ella no se timbra ni en
+   pruebas) y `DATA_ENCRYPTION_KEY` (recomendada: sin ella la Live Secret Key se guarda **sin
+   cifrar** y se avisa en el log). **No hace falta `FACTURAPI_ENV`**: el instituto lleva su
+   propio ambiente en la base.
+3. **El backfill del override** (sección 5 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío: el override **reemplaza** al default, así que las cuatro keys
+   no le llegan solas a quien ya tenga uno guardado. Son **dos** bloques —DIRECCIÓN y CAJA— y
+   son **distintos**: copiarle a caja el de dirección le daría `facturacion.cancel` y
+   `facturacion.config`, que es exactamente la línea que la ola existe para sostener. Docente y
+   alumno no reciben ninguna.
+4. **Capturar los datos fiscales** en `/instituto/facturacion/datos-fiscales`. Ese guardado es
+   el que **crea la organización en Facturapi**; el `INSERT` comentado del `.sql` deja los datos
+   pero no la organización, así que no sustituye a la pantalla.
+5. **Dejarla en PRUEBAS y encender «Facturación encendida».** Timbrar dos o tres cobros reales
+   de la escuela y comprobar que el PDF y el XML se descargan y que el total del CFDI es
+   **idéntico** al del cobro.
+6. **Para pasar a EN VIVO**, en el panel de Facturapi y con la cuenta de DaleControl: subir el
+   **CSD** (.cer y .key del SAT) de la escuela, firmar la **Carta Manifiesto** con su e.firma y
+   subir el **logo**. Después, en la pantalla, cambiar a «En vivo (SAT)» — el guardado se
+   rechaza si Facturapi todavía no la da por lista, y dice qué falta.
+7. **Vigilar las que se quedan en «Timbrando»**: `SELECT "folio","issuedAt","errorMessage" FROM
+   "edu_invoices" WHERE "status" = 'STAMPING'`. Cada una es un cobro bloqueado a propósito y se
+   resuelve desde el botón «Resolver» del detalle, después de mirar Facturapi.

@@ -65,6 +65,10 @@ export default async function InstitutoCajaPage({
   const canCharge = hasEduPermission(permUser, "caja.charge");
   const canRefund = hasEduPermission(permUser, "caja.refund");
   const canCorte = hasEduPermission(permUser, "caja.corte");
+  // Ola 10: quien puede facturar ve el botón "Facturar" en cada cobro.
+  // La pantalla de Facturación vuelve a exigir la key en su propio
+  // guard — esto solo decide si se PINTA el atajo.
+  const canInvoice = hasEduPermission(permUser, "facturacion.emit");
 
   const filters = parseEduChargeFilters(searchParams);
   const [page, turno] = await Promise.all([
@@ -109,6 +113,7 @@ export default async function InstitutoCajaPage({
         canCharge={canCharge}
         canRefund={canRefund}
         canCorte={canCorte}
+        canInvoice={canInvoice}
       />
     </div>
   );

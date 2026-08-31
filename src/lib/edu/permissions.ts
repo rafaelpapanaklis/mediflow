@@ -154,6 +154,33 @@ export const EDU_ALL_PERMISSIONS = {
   "evaluacion.view": "Ver el avance académico y las calificaciones",
   "evaluacion.grade": "Calificar un caso con una rúbrica",
   "traspaso.manage": "Traspasar los casos de un alumno a otro",
+  // ── Ola 10 · facturación CFDI ────────────────────────────────────────
+  // Cuatro keys, y las cuatro tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   facturacion.view   → /instituto/facturacion, su GET y las descargas
+  //   facturacion.emit   → POST /api/instituto/facturacion (el timbrado)
+  //   facturacion.cancel → POST /api/instituto/facturacion/[id]/cancelar
+  //   facturacion.config → /instituto/facturacion/datos-fiscales y su PUT
+  //
+  // 🔴 EMITIR Y CANCELAR SON DOS KEYS DISTINTAS, y ésa es la línea de la
+  // ola. Cancelar un CFDI timbrado ante el SAT no se deshace: es un
+  // trámite fiscal con motivo, no un botón de deshacer. Quien cobra en el
+  // mostrador emite todo el día; quien cancela responde por ello.
+  //
+  // 🔴 Y "facturacion.config" es aparte de las otras tres porque desde esa
+  // pantalla se decide si el instituto timbra EN PRUEBAS o EN VIVO ante el
+  // SAT. No es una preferencia: es la diferencia entre un papel que no
+  // vale nada y un comprobante fiscal.
+  //
+  // ⚠️ Como en la Ola 5, el dinero está cerrado DOS veces: aquí y en el
+  // ALCANCE (src/lib/edu/visibility.ts, recurso "charges"). Encenderle
+  // "facturacion.view" a un alumno por error sigue sin enseñarle una sola
+  // factura — src/lib/edu/facturacion.ts pasa por `requireDinero` incluso
+  // en las lecturas.
+  "facturacion.view": "Ver las facturas del instituto y descargar su XML y su PDF",
+  "facturacion.emit": "Facturar un cobro (timbrar el CFDI)",
+  "facturacion.cancel": "Cancelar una factura ante el SAT con su motivo",
+  "facturacion.config": "Capturar los datos fiscales del instituto y decidir si timbra en pruebas o en vivo",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -248,6 +275,21 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
       "evaluacion.view",
       "evaluacion.grade",
       "traspaso.manage",
+    ],
+  },
+  {
+    // Ola 10. Grupo APARTE del de "Tarifarios y caja" a propósito: cobrar
+    // y facturar no son lo mismo y la escuela los reparte distinto. Caja
+    // cobra y emite todo el día; cancelar un CFDI y decidir si el
+    // instituto timbra ante el SAT son de dirección. Mezclarlos en el
+    // grupo del dinero haría que apagarle a caja la cancelación fuera
+    // buscar una casilla entre diez.
+    title: "Facturación",
+    keys: [
+      "facturacion.view",
+      "facturacion.emit",
+      "facturacion.cancel",
+      "facturacion.config",
     ],
   },
 ];
@@ -462,6 +504,13 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "evaluacion.view",
     "evaluacion.grade",
     "traspaso.manage",
+    // ── Ola 10 ──────────────────────────────────────────────────────────
+    // Las cuatro. Incluye "facturacion.config", que NADIE más lleva:
+    // decidir si la escuela timbra ante el SAT es de quien la dirige.
+    "facturacion.view",
+    "facturacion.emit",
+    "facturacion.cancel",
+    "facturacion.config",
   ],
   DOCENTE: [
     "inicio.view",
@@ -531,6 +580,14 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // se recoge firmada en el mostrador. Ver, y nada más — ni emitir, ni
     // revocar, ni analizar una placa.
     "consentimientos.view",
+    // ── Ola 10 ──────────────────────────────────────────────────────────
+    // VE y EMITE. No cancela y no configura: quien está en el mostrador
+    // factura al paciente que lo pide —es su trabajo, y hacerlo pasar por
+    // dirección sería mandar al paciente a esperar—, pero cancelar un CFDI
+    // timbrado es un trámite ante el SAT que no se deshace, y encender el
+    // timbrado fiscal es una decisión de la escuela, no del turno.
+    "facturacion.view",
+    "facturacion.emit",
   ],
 };
 

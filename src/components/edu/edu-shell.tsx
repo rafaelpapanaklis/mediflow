@@ -16,6 +16,7 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  Receipt,
   Ruler,
   Stamp,
   Sun,
@@ -70,6 +71,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   gauge: Gauge,
   ruler: Ruler,
   "list-checks": ListChecks,
+  // Ola 10 — facturación CFDI.
+  receipt: Receipt,
 };
 
 export interface EduShellProps {
