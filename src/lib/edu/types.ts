@@ -670,6 +670,24 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "operacion",
     permission: "inicio.view",
   },
+  // ── Ola 7 · el panel de dirección ────────────────────────────────────
+  {
+    // Va SEGUNDO, pegado a Inicio, y solo lo ve la dirección (nadie más
+    // lleva "direccion.panel"). La posición no es un capricho: es la
+    // pantalla que el director abre PRIMERO cada mañana y la que proyecta
+    // en la junta. Enterrada en "Administración" —donde están las cosas
+    // que se tocan una vez al año— se abriría el día que alguien la
+    // buscara.
+    //
+    // ⚠️ Para los otros tres roles este item NO EXISTE: el layout filtra
+    // por permiso, así que el sidebar de un docente sigue empezando en
+    // "Mi día".
+    key: "direccion",
+    href: "/instituto/direccion",
+    icon: "activity",
+    section: "operacion",
+    permission: "direccion.panel",
+  },
   {
     // Va justo después de Inicio y antes de la agenda completa a
     // propósito: es la pantalla del ALUMNO, que llega al piso clínico con
@@ -847,6 +865,9 @@ export const EDU_NAV_SECTION_ORDER: EduNavSection[] = [
 /** Etiqueta de menú de cada item (español; el vertical no está en i18n). */
 export const EDU_NAV_LABELS: Record<string, string> = {
   inicio: "Inicio",
+  // Ola 7. "Dirección" y no "Tablero" ni "Panel": la escuela le dice así a
+  // quien la dirige, y el item solo lo ve esa persona.
+  direccion: "Dirección",
   "mi-dia": "Mi día",
   autorizaciones: "Autorizaciones",
   agenda: "Agenda",

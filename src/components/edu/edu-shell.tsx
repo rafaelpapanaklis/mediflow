@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   Armchair,
   Banknote,
   Building2,
@@ -69,6 +70,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "user-plus": UserPlus,
   // Ola 4 — el gate de autorización.
   stamp: Stamp,
+  // Ola 7 — el panel de dirección.
+  activity: Activity,
   // Ola 6 — evaluación académica.
   gauge: Gauge,
   ruler: Ruler,

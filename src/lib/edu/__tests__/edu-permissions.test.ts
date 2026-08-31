@@ -561,6 +561,120 @@ test("Evaluación va en ACADÉMICO; rúbricas y requisitos en ADMINISTRACIÓN", 
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// 1i · La key de la Ola 7 (el panel de dirección)
+//
+//      🔴 Es la PRIMERA key del catálogo que lleva UN SOLO rol, y estas
+//      pruebas existen para que siga siéndolo: el día que alguien le
+//      agregue "direccion.panel" al default del docente "para que el
+//      coordinador lo vea", esto se pone rojo.
+// ─────────────────────────────────────────────────────────────────────
+
+test("la key de la Ola 7 está en el catálogo, descrita en español", () => {
+  assert.ok("direccion.panel" in EDU_ALL_PERMISSIONS, "falta direccion.panel en el catálogo");
+  const desc = EDU_ALL_PERMISSIONS["direccion.panel"];
+  assert.ok(desc && desc.length > 8, `direccion.panel sin descripción usable: ${desc}`);
+  assert.notEqual(desc, "direccion.panel");
+});
+
+test("direccion.panel vive en un grupo PROPIO (no se tilda de pasada con otro bloque)", () => {
+  const grupos = EDU_PERMISSION_GROUPS.filter((g) => g.keys.includes("direccion.panel"));
+  assert.equal(grupos.length, 1, "direccion.panel tiene que estar en exactamente un grupo");
+  assert.deepEqual(
+    grupos[0].keys,
+    ["direccion.panel"],
+    "el grupo de dirección es de UNA sola casilla: metida dentro de otro bloque se encendería sin querer",
+  );
+});
+
+test("🔴 SOLO DIRECCION lleva direccion.panel por defecto", () => {
+  assert.equal(hasEduPermission({ role: "DIRECCION" }, "direccion.panel"), true);
+  for (const rol of ["DOCENTE", "ALUMNO", "CAJA"] as EduRole[]) {
+    assert.equal(
+      hasEduPermission({ role: rol }, "direccion.panel"),
+      false,
+      `${rol} no debería ver el tablero de dirección`,
+    );
+  }
+});
+
+/**
+ * Las keys que lleva UN SOLO rol son las que deciden quién manda en la
+ * escuela, y todas son de DIRECCION. La lista va escrita a mano a
+ * propósito: agregar una más es una decisión de producto, no un descuido,
+ * y esta prueba obliga a escribirla aquí.
+ *
+ * Ya cobró una pieza: al rebasar esta ola sobre la Ola 11 (las sedes) la
+ * lista pasó de ocho a diez, y hubo que decidir a mano que `sedes.view` y
+ * `sedes.manage` son de dirección y de nadie más. Eso es exactamente para
+ * lo que existe: dos olas que se cruzan no se ponen de acuerdo solas.
+ */
+test("las keys de UN SOLO rol son todas de DIRECCION, y son estas diez", () => {
+  const cuantosRoles = (k: EduPermissionKey) =>
+    EDU_ROLES.filter((r) => EDU_ROLE_DEFAULTS[r].includes(k)).length;
+
+  const deUnoSolo = EDU_ALL_PERMISSION_KEYS.filter((k) => cuantosRoles(k) === 1);
+  assert.deepEqual(
+    deUnoSolo,
+    [
+      "padron.manage",
+      "supervision.assign",
+      "sillones.manage",
+      "tarifarios.manage",
+      "equipo.manage",
+      "rubricas.manage",
+      "requisitos.manage",
+      // Ola 11 · administrar las sedes: darlas de alta y repartir quién
+      // entra a cada una. Ojo: NO hacen falta para USAR las sedes ni para
+      // cambiar de sede en la barra superior — eso lo decide el ACCESO, que
+      // no es un permiso.
+      "sedes.view",
+      "sedes.manage",
+      // Ola 7 · el tablero de dirección.
+      "direccion.panel",
+    ],
+    `cambió la lista de keys de un solo rol: ${deUnoSolo.join(", ")}`,
+  );
+
+  // Y ese único rol es DIRECCION en las diez: si mañana una de ellas
+  // quedara solo en manos del docente, sería otro producto.
+  for (const k of deUnoSolo) {
+    assert.equal(hasEduPermission({ role: "DIRECCION" }, k), true, `${k} no es de dirección`);
+  }
+});
+
+test("el item «Dirección» está en el menú, exige su key y va en OPERACIÓN", () => {
+  const item = EDU_NAV_ITEMS.find((i) => i.key === "direccion");
+  assert.ok(item, "falta el item de menú de dirección");
+  assert.equal(item?.permission, "direccion.panel");
+  // Operación y no Administración: es lo que el director abre cada mañana,
+  // no algo que se toca una vez al año.
+  assert.equal(item?.section, "operacion");
+  assert.equal(item?.href, "/instituto/direccion");
+  assert.ok(EDU_NAV_LABELS.direccion, "el item de dirección no tiene etiqueta");
+  assert.equal(
+    EDU_UPCOMING_AREAS.some((a) => a.key === "direccion"),
+    false,
+    "el panel de dirección ya existe y no puede seguir anunciado como Próximamente",
+  );
+});
+
+test("el item «Dirección» va SEGUNDO, justo después de Inicio", () => {
+  // La posición no es decorativa: es la pantalla que se abre primero y la
+  // que se proyecta en la junta. Enterrada abajo se abriría el día que
+  // alguien la buscara.
+  assert.equal(EDU_NAV_ITEMS[0]?.key, "inicio");
+  assert.equal(EDU_NAV_ITEMS[1]?.key, "direccion");
+});
+
+test("un permiso NUEVO no le llega solo a quien ya tiene override (también el de la Ola 7)", () => {
+  const conOverrideViejo = {
+    role: "DIRECCION" as EduRole,
+    permissionsOverride: ["inicio.view", "evaluacion.view"],
+  };
+  assert.equal(hasEduPermission(conOverrideViejo, "direccion.panel"), false);
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // 2 · Semántica del override
 // ─────────────────────────────────────────────────────────────────────
 
