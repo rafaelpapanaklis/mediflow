@@ -1,73 +1,81 @@
 "use client";
 
 import { useState } from "react";
-import { Download, ZoomIn, ZoomOut } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Download, Loader2, ZoomIn, ZoomOut } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { EDU_STUDY_KIND_LABELS } from "@/lib/edu/types";
 import type { EduStudyRow } from "@/lib/edu/estudios-core";
 import type { EduIaEstado } from "@/lib/edu/ia-core";
+import type { Dictionary } from "@/i18n/t";
 import { EduAnalisisIa } from "@/components/edu/expediente/analisis-ia";
+import { EduModelo3DViewer } from "@/components/edu/estudios/modelo-3d-viewer";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
- * VISOR MÍNIMO DEL VERTICAL — y por qué es MÍNIMO a propósito.
+ * EL VISOR DEL VERTICAL — desde la Ola 12, con 3D de verdad.
  *
- * El dental tiene un visor CBCT de verdad
- * (src/components/patient-3d/DicomSetViewer.tsx): descomprime el .zip,
- * decodifica los cortes DICOM en un worker y pinta una rejilla 2×2 con
- * axial, coronal, sagital y volumen 3D, con cruz sincronizada en mm.
+ * Qué abre cada cosa:
+ *   · imágenes (jpg/png/webp)   → aquí dentro, con zoom (Ola 3)
+ *   · PDF                       → aquí dentro (Ola 3)
+ *   · MALLAS (.stl .ply .obj)   → el visor de modelos del DENTAL
+ *     (src/components/patient-3d/Model3DViewer.tsx), IMPORTADO tal cual a
+ *     través de un adaptador propio (src/components/edu/estudios/
+ *     modelo-3d-viewer.tsx) que le monta el i18n que necesita y NO le pasa
+ *     patientId/fileId — así su única escritura (un PATCH a las tablas del
+ *     dental) queda inalcanzable. Cero copias.
+ *   · CBCT (.zip de cortes, .dcm)→ un contenedor PROPIO
+ *     (src/components/edu/estudios/cbct-viewer.tsx) que importa las piezas
+ *     puras del visor del dental (MprPane, Dicom3DVolume, el worker de
+ *     decodificación y toda la matemática de geometría). El contenedor del
+ *     dental (DicomSetViewer) NO se importa: sus fetch internos apuntan a
+ *     /api/patients/** y con ids del instituto contestan 401/404 — un
+ *     adaptador no puede redirigir un fetch escrito dentro.
  *
- * 🔴 ESE VISOR **NO SE PUEDE IMPORTAR** AQUÍ, y no se copió.
- *
- * No es puro: su contenedor llama a `/api/patients/{patientId}/dicom-set/
- * {fileId}/lite` para generar el CBCT reducido de móvil y a
- * `PATCH /api/patients/{patientId}/models-3d/{fileId}` para guardar las
- * notas del visor. Esas dos rutas resuelven contra el `Patient` y el
- * `PatientFile` del DENTAL, con la sesión del dental: un id del instituto
- * ahí dentro no existe. Lo mismo `DicomViewer2D`.
- *
- * Copiarlo entero habría significado arrastrar ~2 400 líneas (visor + MPR
- * + volumen + panorámica + worker de decodificación) y su deuda: dos
- * copias del mismo visor que empiezan iguales y terminan distintas, y la
- * corrección de geometría que el dental acaba de pagar (una letra INVERTIDA
- * sobre la imagen de un paciente, commit c668f54f) tendría que aplicarse
- * dos veces o quedarse a medias en una de las dos. En una imagen clínica,
- * eso no es un detalle estético.
- *
- * LO QUE SÍ HACE ESTA OLA, y se dice claro en la pantalla:
- *   · imágenes (jpg/png/webp)  → se ven aquí dentro, con zoom
- *   · PDF                      → se lee aquí dentro
- *   · DICOM / .zip CBCT / mallas → se DESCARGAN. El archivo está completo
- *     y firmado; lo que no hay todavía es visor 3D del vertical.
- *
- * Las piezas PURAS del dental (`cbct-mpr-shared.ts`, `dicom-decode-core.ts`,
- * `MprPane.tsx`, `Dicom3DVolume.tsx` — ninguna importa "@/" ni llama a
- * ninguna API) sí son reutilizables tal cual el día que el vertical tenga
- * su propio contenedor. Queda anotado en ORQUESTA.md como la Ola siguiente,
- * no como un pendiente escondido.
+ * Los dos visores 3D entran por dynamic(ssr:false): three.js, jszip y el
+ * worker pesan, y solo los paga quien abre un estudio 3D.
  * ═══════════════════════════════════════════════════════════════════════
  */
+const EduCbctViewer = dynamic(
+  () => import("@/components/edu/estudios/cbct-viewer").then((m) => m.EduCbctViewer),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="edu-visor3d-cargando" role="status">
+        <Loader2 className="edu-girando" size={18} /> Preparando el visor CBCT…
+      </div>
+    ),
+  },
+);
+
 export function EduEstudioViewer({
   estudio,
   onClose,
   iaAnalisis,
   canAnalyze,
+  dict3d,
 }: {
   estudio: EduStudyRow;
   onClose: () => void;
   /** Ola 3B: si el apoyo de IA está disponible, y si no, por qué. */
   iaAnalisis: EduIaEstado;
   canAnalyze: boolean;
+  /** Ola 12: el trozo de diccionario que necesita el visor de mallas. */
+  dict3d: Dictionary;
 }) {
   const [zoom, setZoom] = useState(false);
 
   const sinUrl = !estudio.url;
+  const esMalla = estudio.kind === "MODELO_3D";
+  const esCbct = estudio.kind === "TOMOGRAFIA";
+  const es3d = esMalla || esCbct;
 
   return (
     <EduModal
       title={estudio.name}
       subtitle={`${EDU_STUDY_KIND_LABELS[estudio.kind]} · ${estudio.sizeLabel} · subió ${estudio.uploadedByName}`}
       onClose={onClose}
+      wide={es3d && !sinUrl}
       footer={
         <>
           <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose}>
@@ -119,18 +127,22 @@ export function EduEstudioViewer({
               Tu navegador no puede abrir el PDF aquí dentro. Descárgalo con el botón de abajo.
             </p>
           </object>
+        ) : esMalla ? (
+          <EduModelo3DViewer url={estudio.url} name={estudio.name} dict3d={dict3d} />
+        ) : esCbct ? (
+          <EduCbctViewer
+            url={estudio.url}
+            name={estudio.name}
+            sizeBytes={estudio.sizeBytes}
+            cacheKey={estudio.id}
+          />
         ) : (
           <div className="edu-banner">
             <div>
-              <p className="edu-banner__title">
-                Este archivo se descarga: todavía no hay visor 3D en el vertical
-              </p>
+              <p className="edu-banner__title">Este archivo se descarga</p>
               <p className="edu-banner__detail">
-                Las tomografías (.zip de cortes DICOM, .dcm sueltos) y las mallas de escáner
-                intraoral se guardan completas y se descargan con el botón de abajo. El visor CBCT
-                del panel dental no se puede reutilizar aquí porque va a buscar el estudio a las
-                tablas de ese otro producto; el visor propio del instituto está por construirse.
-                Mientras tanto el archivo está íntegro y a un clic.
+                No es una imagen, un PDF, una tomografía ni una malla 3D, así que no hay
+                visor que lo pinte aquí dentro. El archivo está íntegro y a un clic.
               </p>
             </div>
           </div>

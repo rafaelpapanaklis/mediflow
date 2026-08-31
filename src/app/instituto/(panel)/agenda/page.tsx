@@ -73,6 +73,19 @@ export default async function InstitutoAgendaPage({
   }
 
   const scope = eduVisibility(ctx, "appointments");
+
+  // ── Ola 12 · LA PARRILLA ES DE QUIEN VE EL DÍA ENTERO ────────────────
+  // A un ALUMNO esta pantalla le salía como columnas por sillón llenas de
+  // "Sin citas" que no eran suyas — ruido, no una agenda. Y a un DOCENTE
+  // tampoco le sirve: lo suyo es el día de sus alumnos. Quien llega con el
+  // alcance recortado se va a SU pantalla (/mi-dia, "Mi agenda"), que
+  // enseña lo mismo con la forma correcta. No es un castigo ni un permiso:
+  // los DATOS que vería aquí son exactamente los que ve allá — el recorte
+  // lo hace el mismo helper en las dos.
+  if (scope.kind === "own" || scope.kind === "supervised") {
+    redirect("/instituto/mi-dia");
+  }
+
   if (scope.kind === "none") {
     return (
       <div className="edu-page">
@@ -122,11 +135,10 @@ export default async function InstitutoAgendaPage({
         <div>
           <h1 className="edu-page__title">Agenda</h1>
           <p className="edu-page__lead">
-            {scope.kind === "all"
-              ? "Las citas de la clínica, por sillón."
-              : scope.kind === "own"
-                ? "Tus citas. Marca aquí cuando el paciente llegue y cuando lo sientes en el sillón."
-                : "Las citas de los alumnos que supervisas hoy."}{" "}
+            {/* Ola 12: a esta pantalla solo llega quien ve el día ENTERO
+                (alcance "all") — los alcances recortados se redirigieron a
+                /mi-dia más arriba, así que aquí ya no hay copys por rol. */}
+            Las citas de la clínica, por sillón.{" "}
             {sede.active
               ? `Estás viendo ${sede.active.name}; las horas están en su hora local (${sede.timezone}).`
               : `Las horas están en la hora del instituto (${sede.timezone}).`}

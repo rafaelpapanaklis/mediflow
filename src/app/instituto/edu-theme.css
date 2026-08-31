@@ -5384,3 +5384,253 @@ button.edu-dir-money__fila:hover {
 .edu-table--facturas {
   --edu-cols: minmax(104px, 0.9fr) minmax(170px, 1.8fr) 104px 116px 124px 108px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OLA 12 · LA FICHA DEL PACIENTE Y MI AGENDA
+
+   Bloque ADITIVO al final del archivo: no reordena ni pisa nada de las
+   olas anteriores. El resumen, la agenda del paciente y la vista de
+   semana reutilizan tal cual las tarjetas, los KPI, los banners y las
+   etiquetas que ya existían; lo nuevo de verdad son los filtros de la
+   galería, la barra de acciones, la hoja ANCHA del modal (los visores 3D
+   no caben en 560 px) y el poco chrome del visor CBCT propio.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Un enlace de texto dentro de una nota ("Ver toda su agenda"). */
+.edu-link {
+  color: var(--edu-500);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dark .edu-link {
+  color: var(--edu-300);
+}
+
+/* KPI con texto (una fecha, no un número) y KPI en alerta (sin próxima
+   cita, saldo pendiente). El sub es la línea de contexto de abajo. */
+.edu-kpi__value--texto {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.edu-kpi__sub {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--edu-text-3);
+  overflow-wrap: anywhere;
+}
+
+/* El mismo ámbar del banner de aviso: "sin próxima cita" y "saldo
+   pendiente" tienen que llamar la vista sin gritar en rojo. */
+.edu-kpi--alerta {
+  border-color: rgba(180, 83, 9, 0.35);
+  background: var(--edu-amber-50);
+}
+
+.dark .edu-kpi--alerta {
+  background: rgba(180, 83, 9, 0.18);
+}
+
+/* La barra de ACCIONES de la ficha: los cuatro botones, envueltos. */
+.edu-acciones-ficha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* Filtros de la galería de estudios (y el radio radiografía/foto del
+   modal de subida): píldoras que se arrastran con el pulgar. */
+.edu-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.edu-filtro {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--edu-line);
+  background: var(--edu-surface);
+  color: var(--edu-text-2);
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.edu-filtro--on {
+  background: var(--edu-600);
+  border-color: var(--edu-600);
+  color: #fff;
+}
+
+.edu-filtro__n {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+/* Mi agenda · la SEMANA: siete bloques apilados en el teléfono, rejilla
+   en escritorio. El día de hoy lleva el borde de acento. */
+.edu-semana {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 900px) {
+  .edu-semana {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.edu-semana__dia {
+  border: 1px solid var(--edu-line);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--edu-surface);
+}
+
+.edu-semana__dia--hoy {
+  border-color: var(--edu-500);
+  box-shadow: 0 0 0 1px var(--edu-500) inset;
+}
+
+/* La hoja ANCHA del modal: los visores 3D no caben en 560 px. En el
+   teléfono no cambia nada (la hoja ya es de ancho completo). */
+@media (min-width: 640px) {
+  .edu-modal__card--wide {
+    max-width: min(1160px, 96vw);
+  }
+}
+
+/* El visor CBCT propio (cbct-viewer.tsx). Las VISTAS en sí (MprPane,
+   Dicom3DVolume) traen su propio lienzo del dental; esto es solo el
+   chrome de alrededor: barras, rejilla y avisos. */
+.edu-visor3d {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edu-visor3d-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  background: var(--edu-surface-2);
+}
+
+.edu-visor3d-grupo {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.edu-visor3d-slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 160px;
+  min-width: 150px;
+  color: var(--edu-text-2);
+}
+
+.edu-visor3d-slider input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--edu-500);
+}
+
+.edu-visor3d-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .edu-visor3d-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.edu-visor3d-pila {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-visor3d-vol {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--edu-surface);
+}
+
+.edu-visor3d-vol__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--edu-line);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.edu-visor3d-vol__head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edu-visor3d-aviso {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--edu-amber-700);
+}
+
+.dark .edu-visor3d-aviso {
+  color: var(--edu-amber-300);
+}
+
+.edu-visor3d-cargando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 180px;
+  color: var(--edu-text-2);
+  font-size: 13px;
+}
+
+/* El spinner de "preparando el visor": la única animación del bloque, y
+   respeta la preferencia de menos movimiento. */
+.edu-girando {
+  animation: edu-girar 0.9s linear infinite;
+}
+
+@keyframes edu-girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edu-girando {
+    animation: none;
+  }
+}

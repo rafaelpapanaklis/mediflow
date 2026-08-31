@@ -52,10 +52,10 @@ import {
   eduFormatBytes,
   eduIsStudyExt,
   eduMimeForExt,
+  eduResolveStudyKind,
   eduSafeStudyFileName,
   eduStudyIsImage,
   eduStudyIsPdf,
-  eduStudyKindForExt,
   eduStudyPathBelongsTo,
   eduStudyStoragePath,
   type EduStudyRow,
@@ -387,8 +387,11 @@ export async function confirmEduStudyUpload(
       // 🔴 El `kind` lo decide la EXTENSIÓN del path que compuso el
       // servidor, no el cliente: si viniera del navegador, un .zip de 600
       // MB podría registrarse como "FOTO" y la galería intentaría pintarlo
-      // con un <img>.
-      kind: eduStudyKindForExt(ext),
+      // con un <img>. Ola 12 — la ÚNICA corrección que se le acepta al
+      // cliente es radiografía↔foto sobre una IMAGEN, porque ahí la
+      // extensión no alcanza a decidir; todo lo demás lo sigue mandando el
+      // path (ver eduResolveStudyKind).
+      kind: eduResolveStudyKind(ext, input.kind),
       name: nombre,
       storagePath: path,
       mimeType: eduMimeForExt(ext),
