@@ -43,7 +43,7 @@ const OWN_PREFIXES = [
 ];
 
 // PROPIO del vertical: archivos exactos.
-const OWN_FILES = ["src/lib/edu-auth.ts", "scripts/edu-guard.cjs"];
+const OWN_FILES = ["src/lib/edu-auth.ts", "scripts/edu-guard.cjs", "scripts/edu-tests.cjs"];
 
 // PROPIO del vertical: patrones especiales.
 function matchesOwnPattern(p) {
@@ -62,7 +62,19 @@ function matchesOwnPattern(p) {
 // COMPARTIDO: solo pasan si aparecen en EDU_GUARD_SHARED. La lista es
 // CORTA a propósito — cada renglón nuevo aquí es un pedazo del dental que
 // el vertical se permite tocar.
-const SHARED_FILES = ["prisma/schema.prisma", "src/middleware.ts", "ORQUESTA.md"];
+//
+// `package.json` entra aquí al cerrar el P3-15 de la auditoría: el script
+// `test:edu` que corre las pruebas del vertical no puede vivir en ningún
+// otro lado. Va de COMPARTIDO y no de PROPIO a propósito — es el manifiesto
+// de TODO el repo, y una ola del instituto que lo toque sin decirlo sigue
+// siendo un fallo. Declarándolo, el guard obliga a que el cambio se vea:
+//   EDU_GUARD_SHARED="package.json" node scripts/edu-guard.cjs
+const SHARED_FILES = [
+  "prisma/schema.prisma",
+  "src/middleware.ts",
+  "ORQUESTA.md",
+  "package.json",
+];
 
 function isOwn(p) {
   if (OWN_FILES.includes(p)) return true;

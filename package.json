@@ -73,7 +73,9 @@
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
     "test:quote-invoice": "tsx --test src/lib/quotes/__tests__/invoice-from-quote-core.test.ts",
     "//test:cbct-geometry": "Necesita el tsconfig de pruebas: el test importa GeometryWarning.tsx (JSX) y el tsconfig de la app deja jsx en 'preserve' para que lo resuelva Next.",
-    "test:cbct-geometry": "tsx --tsconfig tsconfig.test.json --test src/components/patient-3d/__tests__/dicom-geometry.test.ts"
+    "test:cbct-geometry": "tsx --tsconfig tsconfig.test.json --test src/components/patient-3d/__tests__/dicom-geometry.test.ts",
+    "//test:edu": "NO listar los archivos a mano como test:billing: una lista fija se pudre en la primera ola del instituto y las pruebas nuevas dejan de correrse en silencio. Tampoco un glob: `tsx --test` con un patrón que no encuentra nada sale con código 0 ('tests 0, fail 0'), y además lee los corchetes de una ruta como patrón y se salta el archivo. El runner descubre, FALLA si descubre cero, y propaga el exit code.",
+    "test:edu": "node scripts/edu-tests.cjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -27,7 +27,7 @@ ningún caso»* (PR contra `main`).
 | **P0-2** | ✅ arreglado | `src/lib/edu/agenda.ts` (la cita se engancha sola a su caso) · `src/lib/edu/traspasos.ts` (el traspaso engancha las sueltas) · `src/lib/edu/visibility.ts` (una cita suelta no abre la ficha de un paciente entregado) · `sql/edu-fix-auditoria.sql` (las filas viejas) |
 | **P1-3** | ✅ arreglado | `src/lib/edu/agenda.ts` — `updateEduAppointment` revalida el caso cuando cambia el alumno |
 | **P1-4** | ✅ arreglado | `src/app/instituto/(panel)/agenda/page.tsx` · `.../docentes/page.tsx` · **y también** `src/app/api/instituto/docentes/route.ts`, que tenía la misma fuga a un `fetch` de distancia |
-| **P2-5 … P3-18** | ver abajo | La **ola de cierre** (rama `fix/edu-cierre`, 2026-08-31) arregló **doce de los catorce** — cada sección lleva su bloque «Cómo quedó». Fuera, con motivo escrito: **P2-6** (acotar la pantalla de evaluación) y **P3-15** (los scripts de prueba, que viven en `package.json`, fuera de los archivos del vertical) |
+| **P2-5 … P3-18** | ver abajo | La **ola de cierre** (rama `fix/edu-cierre`, 2026-08-31) arregló **doce de los catorce** — cada sección lleva su bloque «Cómo quedó». **P3-15 se cerró después**, en la rama `feat/edu-tests` (2026-08-31): ya existe `npm run test:edu`. Fuera queda **uno solo**, con motivo escrito: **P2-6** (acotar la pantalla de evaluación) |
 
 > 🔴 **ACTUALIZACIÓN 2026-08-31 — LA OLA DE CIERRE.** Además de los P2/P3,
 > probar el producto en producción con los tres roles encontró un hueco que
@@ -64,7 +64,7 @@ era quién lo llamaba.
 | 🔴 **P0** ✅ | **2** | Un endpoint sin recorte que le enseña a un alumno las calificaciones y los pacientes de sus compañeros · el alumno que entrega un caso NO pierde la llave del paciente — **los dos arreglados** (ver arriba) |
 | 🟠 **P1** ✅ | **2** | Reagendar deja la cita colgada del caso de OTRO alumno · el padrón completo viaja al navegador de quien no debe verlo — **los dos arreglados** (ver arriba) |
 | 🟡 **P2** | **10** | Un dato que se captura y no filtra nada, el historial entero en una consulta, el "segundo candado" del dinero que no existe, la pantalla de permisos que nunca se construyó, `mustChangePassword` que nadie lee, doble cobro por doble petición, las horas de acreditación que se autorreportan, la IA sin freno, el alumno firmando su propia nota, la fecha de firma calculada en el navegador |
-| ⚪ **P3** | **4** | Las pruebas sin script, el buscador sin índice, dos consultas sin tope, código muerto |
+| ⚪ **P3** ✅ | **4** | Las pruebas sin script, el buscador sin índice, dos consultas sin tope, código muerto — **los cuatro cerrados**: tres en la ola de cierre y P3-15 en `feat/edu-tests` |
 
 ### Lo que se buscó y NO apareció
 
@@ -885,7 +885,7 @@ documento legal.
 
 | id | ruta:línea | qué pasa |
 |---|---|---|
-| **P3-15** | `package.json` | Los 16 archivos de prueba del vertical no tienen ningún script `test:edu*`. Ninguna gate los corre |
+| **P3-15** ✅ | `package.json` | Los 16 archivos de prueba del vertical no tienen ningún script `test:edu*`. Ninguna gate los corre — **cerrado**: `npm run test:edu` (los archivos ya son 28) |
 | **P3-16** | `search.ts:155` · `padron-core.ts:328-336` · `caja.ts:248-255` | El buscador usa `contains` (`LIKE '%…%'`) sobre `searchIndex`, y ninguno de los tres modelos tiene índice en esa columna |
 | **P3-17** | `traspasos.ts:397` · `tarifas.ts:1191` | Dos entradas sin tope: `listEduTransferableCases` sin `take`, y el array `precios` de `setEduProcedurePrices` sin límite de longitud |
 | **P3-18** | `rubricas.ts:814-854` | `mapEduCurrentGrades` no tiene un solo llamador |
@@ -894,6 +894,11 @@ documento legal.
 nadie las va a correr: el gate del repo es el build, y el build no las toca.
 Bastan tres líneas en `package.json` (`test:edu`, `test:edu-dinero`,
 `test:edu-clinica`, o una sola con los 16 archivos).
+
+> ✅ **CERRADO** (rama `feat/edu-tests`, 2026-08-31). Ver «Cómo quedó P3-15»
+> abajo. La receta de este párrafo —«una sola con los 16 archivos»— resultó
+> ser justo lo que NO había que hacer: una lista fija se pudre en la primera
+> ola nueva y el hallazgo vuelve. Los 16 de la auditoría ya son 28.
 
 **P3-16.** Es inherente a `contains` con comodín inicial: ningún B-tree lo
 usa. Hoy da igual (una escuela son cientos de filas y hay `take: 300`); con
@@ -909,13 +914,13 @@ repetidos, así que un cliente puede mandar el mismo id 10 000 veces y forzar
 
 #### Cómo quedaron los cuatro (ola de cierre)
 
-- **P3-15 · ⏳ FUERA, por el guard y no por pereza:** los scripts viven en
-  `package.json`, que NO es un archivo del vertical (la guardia
-  institucional solo indulta `prisma/schema.prisma` y `ORQUESTA.md` como
-  compartidos). Tocarlo desde una ola del instituto es exactamente lo que
-  el guard existe para impedir. La suite se corre a mano
-  (`npx tsx --test src/lib/edu/__tests__/*.test.ts`) y el script `test:edu`
-  queda para un cambio de repo fuera del vertical. Sigue pendiente.
+- **P3-15 · ✅ cerrado después, en `feat/edu-tests` (2026-08-31).** La ola de
+  cierre lo dejó fuera porque los scripts viven en `package.json`, que NO es
+  un archivo del vertical. Eso era cierto y sigue siéndolo: por eso se cerró
+  en una rama aparte, declarando el archivo compartido —
+  `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node scripts/edu-guard.cjs`,
+  exit 0 — en vez de colarlo en una ola del instituto. Ver «Cómo quedó
+  P3-15» abajo.
 - **P3-16 · ✅** `sql/edu-cierre.sql` (sección 4) crea los tres índices GIN
   de trigramas sobre `searchIndex` (pacientes, alumnos y equipo), que es lo
   que un `contains` con comodín inicial puede usar. Viven SOLO en el .sql y
@@ -932,6 +937,68 @@ repetidos, así que un cliente puede mandar el mismo id 10 000 veces y forzar
   (encontrada igual de muerta al cablear el P2-7) con ella. Ninguna tenía
   un llamador, y la primera además aceptaba `institutionId` suelto en vez
   del contexto: justo la firma que la regla de oro del vertical prohíbe.
+
+#### ✅ Cómo quedó P3-15 (rama `feat/edu-tests`, 2026-08-31)
+
+**El script.** Dos renglones en `package.json` (más su `//` de comentario,
+como los demás casos raros del repo):
+
+```json
+"test:edu": "node scripts/edu-tests.cjs"
+```
+
+**Cómo se descubre la lista.** No se lista nada a mano. `scripts/edu-tests.cjs`
+lee el disco: barre **en profundidad** las cuatro raíces que
+`scripts/edu-guard.cjs` llama «propias del vertical» —`src/lib/edu`,
+`src/components/edu`, `src/app/instituto`, `src/app/api/instituto`— y se
+queda con todo `*.test.ts(x)`. Hoy eso da los **28** archivos de
+`src/lib/edu/__tests__/`; la ola que ponga su prueba al lado de su
+componente queda cubierta sin tocar el runner. Una lista fija —el patrón de
+`test:billing`— era justo lo que hacía volver este hallazgo en la primera
+ola nueva; los «16 archivos» de la auditoría ya eran 28 al cerrarlo.
+
+**Por qué un runner y no un glob.** Porque el glob de tres palabras miente,
+y de las dos maneras se comprobaron en node v24.13.1:
+
+1. `tsx --test "…/*.test.ts"` con un patrón que **no encuentra nada** imprime
+   `tests 0 / fail 0` y sale con **código 0**. El día que alguien mueva la
+   carpeta, la gate deja de probar el vertical y sigue en verde.
+2. `--test` lee los **corchetes** de la ruta como patrón: un archivo bajo
+   `(panel)/[id]/` se salta **en silencio**, otra vez con exit 0 — la misma
+   trampa que ya documentan `test:landing` y `test:campo-edicion`. El runner
+   los corre sin `--test`, uno por uno (mismo rodeo, exit code intacto).
+
+El runner tapa los dos: **cero archivos descubiertos → exit 1** con el motivo
+escrito, porque una gate que pasa porque no corrió nada es peor que no tener
+gate.
+
+**Qué se probó** (las dos direcciones, no solo la verde):
+
+| prueba | resultado |
+|---|---|
+| `npm run test:edu` | **28 archivos · 929 pruebas · 0 fallos · exit 0** |
+| Una aserción rota a propósito (`edu-visibility.test.ts:219`) | **exit 1**, `929 tests / 928 pass / 1 fail`, con el nombre de la prueba, el archivo y la línea. Revertida con `git checkout --` |
+| El runner corrido donde no hay ninguna raíz | **exit 1**: «no se descubrió NI UN archivo de prueba» |
+| `npm run build` completo, sin pipes | **exit 0** |
+| `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node scripts/edu-guard.cjs` | **exit 0** |
+
+**Sobre la guardia.** El motivo por el que la ola de cierre lo dejó fuera era
+correcto: `package.json` no es del vertical. Por eso esto no viajó dentro de
+una ola del instituto sino en su propia rama, declarando el archivo como
+compartido. `scripts/edu-tests.cjs` sí es propio y se agregó a `OWN_FILES`
+de `scripts/edu-guard.cjs`, como pide el aviso de ese archivo.
+
+Con una corrección que hubo que hacerle a la guardia y conviene dejar
+escrita: `package.json` **no estaba en `SHARED_FILES`**, así que no caía en
+«compartido sin declarar» sino directamente en **PROHIBIDO** — y declararlo
+en `EDU_GUARD_SHARED` no servía de nada, porque el guard solo consulta lo
+declarado para los archivos que ya están en esa lista. O sea: hasta ahora
+**no existía manera de tocar `package.json` desde el vertical**, ni siquiera
+diciéndolo en voz alta. Eso es lo que hacía a P3-15 irresoluble, más que el
+guard en sí. Ahora `package.json` es COMPARTIDO, no propio: sigue siendo un
+fallo tocarlo **sin declararlo** —verificado: `EDU_GUARD_SHARED="ORQUESTA.md"`
+con este cambio en el árbol sale **exit 1**—, pero ya se puede declarar. La
+guardia no se aflojó; se le puso la puerta que le faltaba.
 
 ---
 
@@ -967,9 +1034,12 @@ repetidos, así que un cliente puede mandar el mismo id 10 000 veces y forzar
 8. ✅ **P2-11 + P2-10** — **hechos**: el freno de 24 h a los estados
    clínicos del futuro, y la clave de idempotencia del cobro (más el tope
    del pago reclamado dentro de la transacción).
-9. ⏳ **P3-15** — los scripts de prueba. Sigue pendiente: `package.json`
+9. ✅ **P3-15** — ~~los scripts de prueba. Sigue pendiente: `package.json`
    está fuera de los archivos del vertical y la guardia lo rebota — es un
-   cambio de repo, no de una ola del instituto.
+   cambio de repo, no de una ola del instituto.~~ **Hecho** exactamente así:
+   un cambio de repo en su propia rama (`feat/edu-tests`), con
+   `package.json` declarado como compartido ante la guardia.
+   `npm run test:edu` → **28 archivos, 929 pruebas, 0 fallos.**
 10. Del resto: ✅ **P2-12, P2-13, P2-14, P3-16, P3-17 y P3-18** cayeron en
     la ola de cierre (cada uno con su «Cómo quedó»). ⏳ **P2-6** queda
     fuera con motivo escrito: un `take` a secas falsificaría las horas de

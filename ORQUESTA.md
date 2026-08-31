@@ -30850,3 +30850,104 @@ Sin navegador ni base de datos en esta sesión: la panorámica del visor, la tab
 recibo imprimible y los chips de antecedentes están compilados y con sus tests de lógica en
 verde, pero no vistos en Chrome contra datos reales. Tampoco se aplicó ni se probó el SQL
 —esta rama no toca la base—. PR contra `main`, SIN mergear.
+
+---
+
+## [Institucional · P3-15] — Las 929 pruebas del vertical ya tienen quién las corra, y la lista se descubre sola para que el hallazgo no vuelva ✅ (2026-08-31) · rama `feat/edu-tests`
+
+**Qué era.** El último hallazgo abierto de `docs/audits/EDU_AUDIT.md` junto con P2-6: los
+archivos de prueba del vertical existían, pasaban, y **no los corría nadie**. No había un
+solo script `test:edu*` en `package.json`; el gate del repo es el build, y el build no toca
+las pruebas. Se ejecutaban cuando alguien se acordaba a mano. La ola de cierre lo dejó fuera
+con un motivo correcto —`package.json` no es un archivo del vertical y la guardia
+institucional lo rebota—, así que esto va en su propia rama, como cambio de repo, con el
+archivo declarado compartido ante la guardia.
+
+**Lo que quedó.** Dos renglones en `package.json` (más su `//` de comentario, como los demás
+casos raros del repo) y un runner propio del vertical:
+
+```json
+"test:edu": "node scripts/edu-tests.cjs"
+```
+
+**El descubrimiento, no una lista.** `scripts/edu-tests.cjs` lee el disco: barre **en
+profundidad** las cuatro raíces que `scripts/edu-guard.cjs` ya llama «propias del vertical»
+—`src/lib/edu`, `src/components/edu`, `src/app/instituto`, `src/app/api/instituto`— y se
+queda con todo `*.test.ts(x)`. Hoy son los **28** de `src/lib/edu/__tests__/`; la ola que
+ponga su prueba al lado de su componente queda cubierta sin tocar el runner. El patrón de
+`test:billing` (los archivos escritos a mano en el script) se descartó a propósito: una lista
+fija se pudre en la primera ola nueva y el hallazgo vuelve — que es exactamente lo que
+estamos cerrando. La auditoría hablaba de «16 archivos» y ya eran 28 antes de arreglarlo.
+
+**Por qué un runner y no un glob de tres palabras.** Porque el glob miente, de dos maneras
+que se comprobaron en node v24.13.1 antes de escribir una línea:
+
+1. `tsx --test "src/lib/edu/__tests__/*.test.ts"` con un patrón que **no encuentra nada**
+   imprime `tests 0 / fail 0` y sale con **código 0**. El día que alguien mueva o renombre la
+   carpeta, la gate deja de probar el vertical y **nadie se entera, porque sigue en verde**.
+2. `--test` interpreta los **corchetes** de la ruta como patrón. Un archivo bajo
+   `(panel)/[id]/` se salta **en silencio**, otra vez con exit 0. Es la misma trampa que ya
+   documentan los `//` de `test:landing` y `test:campo-edicion` para `src/app/[slug]/`, y
+   sigue viva en node 24 — se verificó con un archivo de prueba desechable.
+
+El runner tapa las dos: **cero archivos descubiertos → exit 1** con el motivo escrito (una
+gate que pasa porque no corrió nada es peor que no tener gate), y los archivos con corchetes
+los corre sin `--test`, uno por uno — el mismo rodeo que ya usa `test:landing`, con el exit
+code intacto (verificado: pasa → 0, falla → 1). Hoy no hay ninguno; el día que lo haya, se
+corre en vez de desaparecer.
+
+**Verificación — las dos direcciones, no solo la verde.**
+
+| qué | resultado |
+|---|---|
+| `npm run test:edu` | **28 archivos · `tests 929 / pass 929 / fail 0` · exit 0.** El total cuadra con los 929 que ORQUESTA registró corriendo los 28 uno por uno en la integración 3 |
+| Una aserción rota a propósito (`edu-visibility.test.ts:219`, `eduScopeIsEmpty({kind:"all"})` de `false` a `true`) | **exit 1** · `tests 929 / pass 928 / fail 1` · nombra la prueba, el archivo y la línea, con el diff `false !== true`. Y el mensaje final del runner: «PRUEBAS DEL INSTITUTO: ROJO» |
+| Revertir esa rotura | `git checkout -- src/lib/edu/__tests__/edu-visibility.test.ts` → `git diff` de ese archivo **vacío**; `git status` solo muestra `package.json`, `scripts/edu-guard.cjs` y `scripts/edu-tests.cjs` |
+| El runner donde no existe ninguna raíz | **exit 1**: «no se descubrió NI UN archivo de prueba», listando dónde buscó |
+| `npm run build` completo, **sin pipes** | **exit 0** |
+| `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node scripts/edu-guard.cjs` | **exit 0** |
+
+**La guardia, y el hallazgo que salió al correrla.** `scripts/edu-tests.cjs` **sí** es propio
+del vertical y se agregó a `OWN_FILES` de `scripts/edu-guard.cjs` —como pide el aviso de ese
+mismo archivo—; `docs/audits/EDU_AUDIT.md` ya estaba indultado por patrón.
+
+Pero el comando del encargo, `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node
+scripts/edu-guard.cjs`, **daba exit 1**, y por una razón que vale la pena dejar escrita:
+`package.json` **no estaba en `SHARED_FILES`**, así que no caía en «compartido sin declarar»
+sino directamente en **PROHIBIDO** — y declararlo en `EDU_GUARD_SHARED` no hacía nada, porque
+el guard solo mira lo declarado para archivos que ya están en esa lista. Dicho de otro modo:
+**no existía manera de tocar `package.json` desde el vertical, ni siquiera diciéndolo en voz
+alta.** Eso es lo que hacía a P3-15 irresoluble más que el guard en sí, y explica por qué la
+ola de cierre lo dejó fuera «por el guard y no por pereza».
+
+Arreglado en `scripts/edu-guard.cjs` (archivo propio, editable): `package.json` entra a
+`SHARED_FILES` — **COMPARTIDO, no propio**, con el comentario que explica por qué. La guardia
+**no se aflojó**: tocarlo sin declararlo sigue siendo un fallo, y se verificó en las dos
+direcciones con este mismo cambio en el árbol — `EDU_GUARD_SHARED="ORQUESTA.md"` → **exit 1**
+señalando `package.json` e imprimiendo el comando exacto para declararlo;
+`EDU_GUARD_SHARED="package.json,ORQUESTA.md"` → **exit 0**, 5 archivos: 3 propios y 2
+compartidos declarados, cero prohibidos. Se le puso la puerta que le faltaba, no se quitó la
+pared.
+
+**La auditoría.** P3-15 marcado cerrado en sus cinco sitios: la tabla de estado de arriba (que
+lo daba «fuera, con motivo escrito» junto a P2-6 — ahora fuera queda **uno solo**), el renglón
+⚪ P3 del resumen (los cuatro cerrados), la fila de la tabla P3, el párrafo del hallazgo y el
+punto 9 de «Qué arreglar primero», más un bloque «Cómo quedó P3-15» con el script, cómo se
+descubre la lista y lo que se probó. **P2-6 no se tocó y sigue abierto** con su motivo escrito.
+
+**Lo que NO se hizo — y conviene que alguien decida.** **16 de los 28** archivos de prueba
+llevan en su cabecera un comentario que este cambio acaba de dejar falso: «No hay
+`npm run test:edu-…`: package.json es un archivo del producto dental y esta ola no lo toca.
+Cuando el vertical se integre a main, es UNA línea». Ahora sí hay script. Es prosa —no cambia
+una aserción ni un exit code— y son archivos propios del vertical, así que arreglarlo es
+legítimo y barato; **se dejó fuera por no ensanchar el encargo**, y porque tocar 16 cabeceras
+en la misma rama en la que hay que demostrar que una rotura a propósito quedó revertida
+enturbia justo esa verificación. Queda anotado como barrido de una línea para quien siga.
+
+Tampoco se enganchó `test:edu` a ningún hook ni a CI, y no por olvido: **el repo no tiene
+pipeline** (`.github/` y `.husky/` no existen), así que no hay dónde colgarlo. El script queda
+listo para el día que lo haya — hoy la gate es que un humano la corra, que es exactamente un
+escalón más arriba de donde estaba.
+
+Sin navegador ni base de datos: esta rama no toca una línea de producto. PR contra `main`,
+SIN mergear.
