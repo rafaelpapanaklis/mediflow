@@ -24,6 +24,7 @@ import {
   EDU_CLINICA_MAX_ROWS,
   eduAppointmentCanTransition,
   eduAppointmentStamps,
+  eduCaseFitsAppointment,
   eduCleanId,
   eduDayRange,
   eduFormatTime,
@@ -59,7 +60,11 @@ import {
 // esta función solo escribe. Es best-effort a propósito — mover una cita no
 // puede fallar porque el registro de WhatsApp esté caído.
 import { applyEduReminderCancel } from "@/lib/edu/recordatorios";
-import type { EduAppointmentStatus, EduAppointmentType } from "@/lib/edu/types";
+import {
+  EDU_CASE_CLOSED_STATUSES,
+  type EduAppointmentStatus,
+  type EduAppointmentType,
+} from "@/lib/edu/types";
 
 export type {
   EduAgendaPage,
@@ -578,6 +583,85 @@ export interface EduAppointmentInput {
   notes?: unknown;
 }
 
+/**
+ * EL CASO DEL QUE CUELGA UNA CITA. Se resuelve SIEMPRE aquí — al agendar y
+ * al reagendar— y por eso es una sola función y no dos bloques parecidos.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 P0-2 DE LA AUDITORÍA — LA CITA SE ENGANCHA SOLA CUANDO HAY CASO.
+ *
+ * Hasta ahora el `caseId` solo se ponía si el CLIENTE lo mandaba, y la
+ * pantalla de agenda no lo manda nunca (no tiene selector de caso). En la
+ * práctica eso significaba que casi todas las citas del producto nacían
+ * con `caseId: null`, y una cita suelta le seguía abriendo al alumno la
+ * ficha del paciente después de entregar el caso: la mitad de la Ola 6 no
+ * funcionaba (ver el bloque largo de visibility.ts).
+ *
+ * Se resuelve en el SERVIDOR y no con un `<select>` en el modal, por dos
+ * razones que se sostienen solas:
+ *   1. quien agenda es CAJA, y caja NO VE CASOS — es la línea del contrato
+ *      del vertical. Un desplegable de casos abiertos en el modal de alta
+ *      le pondría en el navegador la especialidad y el procedimiento de
+ *      cada paciente, que es exactamente lo que el alcance le niega;
+ *   2. un campo que el cliente PUEDE olvidar es un campo que el cliente VA
+ *      a olvidar. Aquí no hay forma de agendar sin enganchar.
+ *
+ * Reglas, en orden:
+ *   · si el cliente manda `caseId`, manda el cliente — pero se valida
+ *     contra el MISMO paciente y el MISMO alumno (eduCaseFitsAppointment);
+ *   · una cita de TAMIZAJE nace suelta a propósito: es la valoración que
+ *     abre el caso, así que es anterior a él. Es la única excepción, y es
+ *     la razón de que `{ caseId: null }` exista en el `where` de pacientes;
+ *   · si no, se busca el caso VIVO de ese paciente con ese alumno. Si hay
+ *     exactamente uno, se engancha. Si hay cero (todavía no se abre) o más
+ *     de uno (dos especialidades), se deja suelta: adivinar entre dos casos
+ *     es peor que no enganchar, y para eso está el `caseId` explícito.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+async function resolveAppointmentCaseId(
+  institutionId: string,
+  cita: { patientId: string; studentId: string; type: EduAppointmentType },
+  rawCaseId: unknown,
+): Promise<string | null> {
+  // 1 · El que mandó el cliente. Sin esto se podría colgar una cita de la
+  // señora del caso del señor, y el expediente de los dos quedaría mal para
+  // siempre.
+  if (rawCaseId !== undefined && rawCaseId !== null && rawCaseId !== "") {
+    const id = eduCleanId(rawCaseId);
+    const caso = id
+      ? await prisma.eduCase.findFirst({
+          where: { id, institutionId },
+          select: { id: true, patientId: true, studentId: true },
+        })
+      : null;
+    if (!caso) throw new EduPadronError("Ese caso no es de este instituto.", 404);
+    if (caso.patientId !== cita.patientId) {
+      throw new EduPadronError("Ese caso es de otro paciente.");
+    }
+    if (!eduCaseFitsAppointment(caso, cita)) {
+      throw new EduPadronError("Ese caso es de otro alumno.");
+    }
+    return caso.id;
+  }
+
+  // 2 · El tamizaje es anterior al caso: nace suelto.
+  if (cita.type === "TAMIZAJE") return null;
+
+  // 3 · El caso vivo de ese paciente con ese alumno, si es UNO solo.
+  const abiertos = await prisma.eduCase.findMany({
+    where: {
+      institutionId,
+      patientId: cita.patientId,
+      studentId: cita.studentId,
+      status: { notIn: EDU_CASE_CLOSED_STATUSES },
+    },
+    // Dos bastan para saber que hay más de uno; no hace falta traerlos todos.
+    take: 2,
+    select: { id: true },
+  });
+  return abiertos.length === 1 ? abiertos[0].id : null;
+}
+
 export async function createEduAppointment(
   ctx: EduClinicaContext,
   input: EduAppointmentInput,
@@ -601,27 +685,14 @@ export async function createEduAppointment(
     : parseEduAppointmentType(input.type);
   if (!type) throw new EduPadronError("Ese tipo de cita no existe.");
 
-  // El caso, si viene: tiene que ser del MISMO paciente y del MISMO alumno.
-  // Sin esto se podría colgar una cita de la señora del caso del señor, y
-  // el expediente de los dos quedaría mal para siempre.
-  let caseId: string | null = null;
-  if (input.caseId !== undefined && input.caseId !== null && input.caseId !== "") {
-    const id = eduCleanId(input.caseId);
-    const caso = id
-      ? await prisma.eduCase.findFirst({
-          where: { id, institutionId },
-          select: { id: true, patientId: true, studentId: true },
-        })
-      : null;
-    if (!caso) throw new EduPadronError("Ese caso no es de este instituto.", 404);
-    if (caso.patientId !== partes.patientId) {
-      throw new EduPadronError("Ese caso es de otro paciente.");
-    }
-    if (caso.studentId !== partes.studentId) {
-      throw new EduPadronError("Ese caso es de otro alumno.");
-    }
-    caseId = caso.id;
-  }
+  // El caso: el que mande el cliente (comprobado contra el mismo paciente y
+  // el mismo alumno) o, si no manda ninguno, el caso VIVO de ese paciente
+  // con ese alumno. Ver resolveAppointmentCaseId — es el P0-2.
+  const caseId = await resolveAppointmentCaseId(
+    institutionId,
+    { patientId: partes.patientId, studentId: partes.studentId, type },
+    input.caseId,
+  );
 
   // Cinturón contra el dedazo del año: una cita a más de un año vista casi
   // siempre es un "2206" en vez de "2026", y una vez guardada nadie la ve
@@ -662,6 +733,10 @@ export async function createEduAppointment(
  * 🔴 Una cita ya terminada, cancelada o marcada como "no llegó" NO se
  * mueve. Reagendar una cita terminada reescribiría algo que ya ocurrió; lo
  * que se hace es agendar otra.
+ *
+ * 🔴 Y SI CAMBIA EL ALUMNO, SE REVALIDA EL CASO. Ver el bloque del P1-3 más
+ * abajo: una cita cuyo `caseId` es de otro alumno es una fila que miente
+ * sobre quién atendió a quién.
  */
 export async function updateEduAppointment(
   ctx: EduClinicaContext,
@@ -679,6 +754,7 @@ export async function updateEduAppointment(
     select: {
       id: true,
       status: true,
+      type: true,
       patientId: true,
       studentId: true,
       chairId: true,
@@ -768,6 +844,41 @@ export async function updateEduAppointment(
   }
   if (input.notes !== undefined) {
     data.notes = eduOptionalText(input.notes, 1000) ?? null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 P1-3 DE LA AUDITORÍA — SI LA CITA CAMBIA DE ALUMNO, EL CASO NO SE
+  // QUEDA COMO ESTABA.
+  //
+  // El POST defiende esta invariante desde el primer día ("Ese caso es de
+  // otro alumno") y el PATCH no la miraba: reagendar cambiaba `studentId` y
+  // dejaba intacto un `caseId` cuyo dueño es OTRO. La fila quedaba diciendo
+  // que B atendió el caso de A — y con eso las horas clínicas se cuentan
+  // por `EduAppointment.studentId` mientras el caso pertenece a otro, la
+  // etapa SESSION del gate de la Ola 4 firmaría una sesión que nadie dio, y
+  // la bitácora enseña un par caso↔cita que no cuadra.
+  //
+  // No se rebota con un throw y es a propósito: mover una cita a otro
+  // alumno es lo que hace caja cuando alguien falta, y prohibirlo dejaría
+  // sin salida a la única persona que puede resolverlo un martes a las 9. Se
+  // RESUELVE: el caso pasa a ser el del alumno nuevo (si tiene uno vivo con
+  // ese paciente) o se suelta.
+  //
+  // ⚠️ Se compara el alumno RESULTANTE contra el que había, no la presencia
+  // de `input.studentId`: la pantalla de reagendar manda el alumno siempre,
+  // también cuando no lo cambia, y volver a derivar en cada movimiento
+  // soltaría el caso de una cita cuyo caso se cerró (COMPLETED) — es decir,
+  // reescribiría el pasado por mover una hora.
+  // ═══════════════════════════════════════════════════════════════════════
+  const alumnoCambio = studentId !== current.studentId;
+  if (alumnoCambio || input.caseId !== undefined) {
+    const tipo = (data.type as EduAppointmentType | undefined) ?? (current.type as EduAppointmentType);
+    const caseId = await resolveAppointmentCaseId(
+      institutionId,
+      { patientId: current.patientId, studentId, type: tipo },
+      input.caseId,
+    );
+    if (caseId !== current.caseId) data.caseId = caseId;
   }
 
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");

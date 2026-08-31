@@ -13,12 +13,40 @@
 
 ---
 
+## ✅ Estado de los arreglos — 2026-08-31
+
+**Los cuatro hallazgos graves (P0-1, P0-2, P1-3 y P1-4) están ARREGLADOS**
+en la rama `fix/edu-auditoria`, commit
+*«fix(instituto): las calificaciones del compañero se leían sin alcance, y
+el alumno que entrega un caso conserva la llave porque su cita no cuelga de
+ningún caso»* (PR contra `main`).
+
+| id | estado | dónde se arregló |
+|---|---|---|
+| **P0-1** | ✅ arreglado | `src/lib/edu/rubricas.ts` — `listEduStudentGrades` resuelve al alumno con `eduStudentScopeWhere` antes de leer |
+| **P0-2** | ✅ arreglado | `src/lib/edu/agenda.ts` (la cita se engancha sola a su caso) · `src/lib/edu/traspasos.ts` (el traspaso engancha las sueltas) · `src/lib/edu/visibility.ts` (una cita suelta no abre la ficha de un paciente entregado) · `sql/edu-fix-auditoria.sql` (las filas viejas) |
+| **P1-3** | ✅ arreglado | `src/lib/edu/agenda.ts` — `updateEduAppointment` revalida el caso cuando cambia el alumno |
+| **P1-4** | ✅ arreglado | `src/app/instituto/(panel)/agenda/page.tsx` · `.../docentes/page.tsx` · **y también** `src/app/api/instituto/docentes/route.ts`, que tenía la misma fuga a un `fetch` de distancia |
+| **P2-5 … P3-18** | ⏳ pendientes | Sin tocar, a propósito: esta rama arregla solo los cuatro graves |
+
+Los hallazgos NO se borran: se marcan. Cada uno lleva abajo, al final de su
+sección, un bloque **«Cómo quedó»** con lo que se hizo y lo que
+deliberadamente no.
+
+Prueba nueva: `src/lib/edu/__tests__/edu-auditoria.test.ts` (15 pruebas).
+Comprueba lo puro **y lee los archivos** para verificar que la llamada al
+helper está puesta — porque, como dice el cierre de esta auditoría, ninguno
+de los cuatro habría puesto roja la suite: lo que fallaba no era un `where`,
+era quién lo llamaba.
+
+---
+
 ## Resumen en una pantalla
 
 | Gravedad | Cuántos | Qué son |
 |---|---|---|
-| 🔴 **P0** | **2** | Un endpoint sin recorte que le enseña a un alumno las calificaciones y los pacientes de sus compañeros · el alumno que entrega un caso NO pierde la llave del paciente |
-| 🟠 **P1** | **2** | Reagendar deja la cita colgada del caso de OTRO alumno · el padrón completo viaja al navegador de quien no debe verlo |
+| 🔴 **P0** ✅ | **2** | Un endpoint sin recorte que le enseña a un alumno las calificaciones y los pacientes de sus compañeros · el alumno que entrega un caso NO pierde la llave del paciente — **los dos arreglados** (ver arriba) |
+| 🟠 **P1** ✅ | **2** | Reagendar deja la cita colgada del caso de OTRO alumno · el padrón completo viaja al navegador de quien no debe verlo — **los dos arreglados** (ver arriba) |
 | 🟡 **P2** | **10** | Un dato que se captura y no filtra nada, el historial entero en una consulta, el "segundo candado" del dinero que no existe, la pantalla de permisos que nunca se construyó, `mustChangePassword` que nadie lee, doble cobro por doble petición, las horas de acreditación que se autorreportan, la IA sin freno, el alumno firmando su propia nota, la fecha de firma calculada en el navegador |
 | ⚪ **P3** | **4** | Las pruebas sin script, el buscador sin índice, dos consultas sin tope, código muerto |
 
@@ -71,12 +99,12 @@ Vale tanto como lo que sí apareció, así que va explícito:
 
 ---
 
-## 🔴 P0 — se explota hoy
+## 🔴 P0 — se explota hoy · ✅ LOS DOS ARREGLADOS
 
-| id | ruta:línea | qué pasa |
-|---|---|---|
-| **P0-1** | `src/lib/edu/rubricas.ts:600-616` | `GET /api/instituto/calificaciones?alumno=` devuelve las calificaciones **de cualquier alumno del instituto**, con los nombres y folios de sus pacientes |
-| **P0-2** | `src/lib/edu/visibility.ts:344-362` + `src/components/edu/clinica/agenda-screen.tsx:473-486` | El alumno que entrega un caso **conserva** el expediente del paciente. La mitad invisible de la Ola 6 no funciona en la práctica |
+| id | ruta:línea | qué pasa | estado |
+|---|---|---|---|
+| **P0-1** | `src/lib/edu/rubricas.ts:600-616` | `GET /api/instituto/calificaciones?alumno=` devuelve las calificaciones **de cualquier alumno del instituto**, con los nombres y folios de sus pacientes | ✅ |
+| **P0-2** | `src/lib/edu/visibility.ts:344-362` + `src/components/edu/clinica/agenda-screen.tsx:473-486` | El alumno que entrega un caso **conserva** el expediente del paciente. La mitad invisible de la Ola 6 no funciona en la práctica | ✅ |
 
 ### P0-1 · El único endpoint del vertical que no pasa por el alcance
 
@@ -132,6 +160,26 @@ borrar la rama `?alumno=` directamente: **ninguna pantalla la usa** (la
 bitácora recibe sus calificaciones del servidor, `evaluacion.ts:652`, y el
 único `fetch` a `/api/instituto/calificaciones` del cliente es el POST de
 `bitacora-screen.tsx:579`).
+
+#### ✅ Cómo quedó
+
+Se tomó la primera opción: **resolver al alumno dentro del alcance**, y no
+borrar la rama `?alumno=`. Borrarla habría cerrado esta puerta y dejado la
+regla sin dueño — la siguiente pantalla que necesite las calificaciones de
+un alumno la habría vuelto a abrir igual de rota.
+
+`listEduStudentGrades` (`rubricas.ts`) ahora pide `eduVisibility(ctx,
+"cases")`, corta en seco si el alcance es "none" (caja), busca al alumno con
+`eduStudentScopeWhere` + el id de fuera y lee las calificaciones del alumno
+**ya resuelto**. Un id que no le toca a quien pregunta se ve exactamente
+igual que uno que no existe: lista vacía.
+
+La función ganó un cuarto parámetro `now` (opcional) y `getEduBitacora` le
+pasa el suyo, para que la bitácora y su recorte no discrepen sobre una
+asignación cerrada entre una consulta y la otra. En esa ruta el alumno se
+resuelve dos veces —`getEduBitacora` ya lo había hecho— y se paga a gusto:
+un `findFirst` por id a cambio de que ninguna llamada futura pueda
+olvidarse del recorte.
 
 ---
 
@@ -197,14 +245,69 @@ Y el caso peor: un alumno marcado `GRADUATED` (`padron.ts:680-688`) conserva
    Complementariamente, `traspasarUno` debería re-enganchar (o pasar a B) las
    citas sin caso del saliente con ese paciente.
 
+#### ✅ Cómo quedó
+
+Se cerró por los **tres** lados, porque el dato y el `where` se protegen
+mutuamente:
+
+1. **La cita se engancha sola** (`agenda.ts`, `resolveAppointmentCaseId`).
+   Al agendar y al reagendar, si el cliente no manda `caseId` se busca el
+   caso VIVO de ese paciente con ese alumno y se engancha. Con cero (todavía
+   no hay caso) o con dos (dos especialidades) se deja suelta: adivinar
+   entre dos casos mueve una sesión al expediente equivocado.
+2. **El traspaso engancha las que ya estaban sueltas** (`traspasos.ts`).
+   Antes de mover las futuras, todas las citas sin caso del saliente con ese
+   paciente pasan a colgar del caso que acaba de quedar `TRANSFERRED`. Como
+   ese paso va ANTES, las que además son futuras se van con el alumno nuevo
+   sin escribir una condición más — que era el otro daño del mismo hueco.
+3. **Y el `where` no depende de que los datos estén bien**
+   (`visibility.ts`). La rama de citas lleva ahora
+   `cases: { none: { …, status: "TRANSFERRED" } }`: una cita suelta no abre
+   la ficha de un paciente al que ya le entregué un caso. Es lo que protege
+   a las filas de los traspasos que ocurrieron **antes** de este arreglo,
+   sin depender del `.sql`.
+
+**No se hizo el selector de caso en el modal de la agenda**, y es una
+decisión, no un olvido: quien agenda es CAJA, y *caja no ve casos* — es la
+línea del contrato del vertical. Un desplegable de casos abiertos le pondría
+en el navegador la especialidad y el procedimiento de cada paciente, que es
+exactamente lo que el alcance le niega. Resolverlo en el servidor además no
+se puede olvidar.
+
+**Tampoco se estrechó `{ caseId: null }` a `type: "TAMIZAJE"`**, que era la
+opción 2 propuesta, y conviene decir por qué: el modal de alta propone
+**TRATAMIENTO** por defecto, así que la primerísima cita de un paciente
+—la que se agenda antes de que exista ningún caso— casi nunca es de tipo
+TAMIZAJE. Estrecharlo así habría dejado al alumno sin poder abrir la ficha
+del paciente que tiene enfrente, que es justo lo que esa rama existe para
+evitar. El descarte por "paciente entregado" cierra el agujero sin cerrar
+esa puerta.
+
+**Las filas viejas**: `sql/edu-fix-auditoria.sql` (idempotente, sin DDL, **no
+aplicado**) engancha las citas sueltas históricas a su caso vivo o, si el
+par ya se traspasó, al caso transferido.
+
+**Falso negativo conocido y aceptado**: si a un alumno le vuelven a agendar
+al paciente que entregó **sin** abrirle un caso nuevo, no verá su ficha
+hasta que se le abra. Falla del lado cerrado y se resuelve abriendo el caso
+—que es lo que hay que hacer de todos modos—. Para un DOCENTE, el descarte
+no distingue *cuál* de sus alumnos entregó el caso: Prisma no correlaciona
+dos `some` hermanos sobre relaciones distintas.
+
+**Lo que NO cambia** (la asimetría deliberada de la Ola 6): la lista de
+CASOS del saliente conserva el transferido (es su historia académica) y sus
+CITAS PASADAS siguen siendo suyas (ocurrieron, y son su registro de
+asistencia y sus horas clínicas). Lo que se cierra es el expediente vivo del
+paciente.
+
 ---
 
-## 🟠 P1 — rompe un flujo
+## 🟠 P1 — rompe un flujo · ✅ LOS DOS ARREGLADOS
 
-| id | ruta:línea | qué pasa |
-|---|---|---|
-| **P1-3** | `src/lib/edu/agenda.ts:644-664, 718` | Reagendar cambia el alumno de la cita y deja el `caseId` del alumno anterior |
-| **P1-4** | `(panel)/agenda/page.tsx:89,124` · `(panel)/docentes/page.tsx:49,67` | El padrón completo viaja al navegador de quien, por alcance, no debe ver ni una fila |
+| id | ruta:línea | qué pasa | estado |
+|---|---|---|---|
+| **P1-3** | `src/lib/edu/agenda.ts:644-664, 718` | Reagendar cambia el alumno de la cita y deja el `caseId` del alumno anterior | ✅ |
+| **P1-4** | `(panel)/agenda/page.tsx:89,124` · `(panel)/docentes/page.tsx:49,67` | El padrón completo viaja al navegador de quien, por alcance, no debe ver ni una fila | ✅ |
 
 ### P1-3 · El PATCH rompe la invariante que el POST defiende
 
@@ -234,6 +337,29 @@ la señora del caso del señor").
 revalidar que el caso siga siendo del alumno nuevo, o poner
 `data.caseId = null` y decirlo en la respuesta. Un `throw` con el mismo texto
 que el POST es lo más consistente.
+
+#### ✅ Cómo quedó
+
+**No** con un `throw`, y esa fue la única decisión de fondo: mover una cita a
+otro alumno es lo que hace caja cuando alguien falta, y rebotarla dejaría sin
+salida a la única persona que puede resolverlo un martes a las nueve. Se
+**resuelve**: el `caseId` pasa a ser el del alumno nuevo (su caso vivo con
+ese paciente, si tiene uno) o se suelta. Lo hace la misma función que usa el
+alta, `resolveAppointmentCaseId`, así que las dos escrituras defienden la
+invariante con la misma línea. El predicado puro vive en
+`agenda-core.ts` (`eduCaseFitsAppointment`) y se puede probar sin base de
+datos.
+
+Un detalle que se pagó caro razonar: la comparación es contra el alumno
+**resultante** (`studentId !== current.studentId`), no contra la presencia de
+`input.studentId`. La pantalla de reagendar manda el alumno **siempre**,
+también cuando no lo cambia, y volver a derivar en cada movimiento habría
+soltado el caso de una cita cuyo caso ya se cerró (`COMPLETED`) — es decir,
+habría reescrito el pasado por mover una hora.
+
+Si el cliente manda `caseId` explícitamente, se valida contra el mismo
+paciente y el mismo alumno, igual que en el POST. Las filas ya corruptas las
+repara `sql/edu-fix-auditoria.sql` (sección 3).
 
 ---
 
@@ -273,6 +399,37 @@ los `EduStudent.id` que hacen trivial **P0-1**.
 mismo `canManage ? … : Promise.resolve([])` que ya tienen sus dos vecinos. En
 docentes, pasar `ctx.eduUserId` como `supervisorUserId` cuando el rol no es
 DIRECCION.
+
+#### ✅ Cómo quedó
+
+Las dos cosas propuestas, con un matiz y una tercera:
+
+- **Agenda**: `listEduStudentOptions` va detrás del mismo
+  `canManage ? … : Promise.resolve([])` que sus dos vecinas. Son tres.
+- **Docentes**: el recorte no se escribe a mano con un
+  `if (role !== "DIRECCION")` sino que se le pide a **`eduPadronScope`**, el
+  helper que ya decide esto para el padrón. Un `if` suelto es una segunda
+  regla que el día que aparezca un rol nuevo dirá algo distinto de la
+  primera; y además, con `eduPadronScope` un ALUMNO o una CAJA con
+  `docentes.view` por override reciben **cero filas** de verdad, en vez de
+  depender de que su id no aparezca como supervisor de nadie.
+- **Y `GET /api/instituto/docentes?detalle=1`** (que la auditoría no lista
+  porque leyó pantallas) tenía la MISMA fuga, llamando a la misma función:
+  arreglar solo la pantalla habría sido cerrar la puerta dejando la ventana
+  abierta. Lleva el mismo recorte.
+
+El **conteo agregado** (`listEduTeachers`) no se toca: "cuántos alumnos lleva
+cada quien hoy" es para lo que existe la pantalla, y es un número, no una
+identidad. Como consecuencia, un docente puede ver "3" en un colega y una
+lista vacía al desplegarla; la nota de la pantalla lo dice ahora con esas
+palabras en vez de pedirle que recargue.
+
+**Lo que NO se arregló y es la misma familia**: `/instituto/pacientes`
+(`page.tsx:76`) también manda `listEduStudentOptions` completo, y el ALUMNO
+sí tiene `pacientes.view`. Ahí el padrón alimenta un filtro **visible** ("¿lo
+trajo algún alumno?"), así que recortarlo no es mover una línea: es decidir
+qué ve un alumno en ese desplegable. Queda anotado como pendiente en vez de
+resuelto a medias.
 
 ---
 
@@ -544,15 +701,22 @@ repetidos, así que un cliente puede mandar el mismo id 10 000 veces y forzar
 
 ## Qué arreglar primero
 
-1. **P0-1** — dos líneas en `rubricas.ts:609` (meter el alcance) o borrar la
-   rama `?alumno=` del route. Es el arreglo más barato y el más grave.
-2. **P1-4** — un `canManage ?` en `agenda/page.tsx:89` y pasar
+1. ✅ **P0-1** — ~~dos líneas en `rubricas.ts:609` (meter el alcance) o borrar la
+   rama `?alumno=` del route. Es el arreglo más barato y el más grave.~~
+   **Hecho** (se metió el alcance; la rama `?alumno=` se conservó).
+2. ✅ **P1-4** — ~~un `canManage ?` en `agenda/page.tsx:89` y pasar
    `ctx.eduUserId` en `docentes/page.tsx:49`. Corta la fuente de ids de P0-1 y
-   cierra dos fugas del padrón por su cuenta.
-3. **P0-2** — el más caro de los cuatro, porque toca UI (selector de caso en
+   cierra dos fugas del padrón por su cuenta.~~ **Hecho**, con `eduPadronScope`
+   en vez de un `if` a mano, y también en el route `?detalle=1`.
+3. ✅ **P0-2** — ~~el más caro de los cuatro, porque toca UI (selector de caso en
    la agenda) + `traspasos.ts` + posiblemente `visibility.ts`. Hacerlo
-   completo: de paso desbloquea la etapa `SESSION` del gate de la Ola 4.
-4. **P1-3** — una decisión y tres líneas en `updateEduAppointment`.
+   completo: de paso desbloquea la etapa `SESSION` del gate de la Ola 4.~~
+   **Hecho** sin tocar la UI: la cita se engancha en el SERVIDOR (caja no
+   puede ver casos), el traspaso engancha las sueltas y el `where` deja de
+   depender de que los datos estén bien. La etapa `SESSION` queda desbloqueada
+   para las citas nuevas.
+4. ✅ **P1-3** — ~~una decisión y tres líneas en `updateEduAppointment`.~~
+   **Hecho**: se resuelve el caso en vez de rebotar el cambio de alumno.
 5. **P2-7** — cuatro líneas, cierra la promesa que el catálogo ya hace por
    escrito.
 6. **P2-9 + P2-8** — la pantalla de contraseña y la de permisos. Son las dos

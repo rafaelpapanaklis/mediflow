@@ -16,9 +16,14 @@ import type { EduAssignmentRow, EduTeacherRow } from "@/lib/edu/padron-core";
  * años seguiría apareciendo con doce alumnos y la dirección repartiría mal
  * la carga — que es justo lo que esta pantalla existe para evitar.
  *
- * Las asignaciones llegan TODAS de una consulta y se agrupan aquí; pedir
- * una consulta por docente serían veinte viajes a la base para pintar una
- * lista que cabe en una pantalla.
+ * Las asignaciones llegan en UNA sola consulta y se agrupan aquí; pedir una
+ * consulta por docente serían veinte viajes a la base para pintar una lista
+ * que cabe en una pantalla.
+ *
+ * 🔴 Y llegan YA RECORTADAS por el alcance del padrón (el servidor las pide
+ * con `eduPadronScope`): la dirección recibe todas y un docente solo las
+ * suyas. Por eso el detalle de un colega puede salir vacío con el conteo en
+ * tres — el número es un agregado, los nombres no.
  */
 export interface EduDocentesScreenProps {
   teachers: EduTeacherRow[];
@@ -204,8 +209,9 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
                 <div className="edu-detail">
                   {alumnos.length === 0 ? (
                     <p className="edu-note">
-                      Sin alumnos vigentes. (Si el número de arriba no dice cero, recarga la
-                      pantalla: la lista se armó hace un momento.)
+                      Aquí no hay alumnos que mostrarte. Si el número de arriba no dice cero,
+                      esa lista no te toca: los NOMBRES de los alumnos de otro docente los ve
+                      la dirección. El conteo sí es el real.
                     </p>
                   ) : (
                     <ul className="edu-chiplist">

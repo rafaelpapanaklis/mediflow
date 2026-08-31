@@ -131,7 +131,9 @@ test("🔴 lo mismo para el DOCENTE: el caso que su alumno entregó deja de cont
     "un docente seguiría viendo al paciente por un caso que su alumno ya entregó",
   );
   // Y sigue colgando de la asignación VIGENTE, que es la regla de la Ola 1A.
-  assert.deepEqual(valoresDe(where, "startsAt"), [{ lte: AHORA }, { lte: AHORA }]);
+  // Tres veces: la rama de casos, la de citas y —desde el arreglo del P0-2—
+  // el descarte de "pacientes que este docente ya vio entregar".
+  assert.deepEqual(valoresDe(where, "startsAt"), [{ lte: AHORA }, { lte: AHORA }, { lte: AHORA }]);
 });
 
 test("DIRECCIÓN y CAJA no pierden nada: para ellos el `where` no recorta por caso", () => {
@@ -158,7 +160,11 @@ test("🔴 el `where` del ENTRANTE lo filtra por SU userId, y por nada más", ()
   const where = eduPatientScopeWhere({ institutionId: INST, scope, now: AHORA });
 
   const userIds = valoresDe(where, "userId");
-  assert.deepEqual(userIds, [ENTRANTE, ENTRANTE], "las dos ramas cuelgan del alumno");
+  assert.deepEqual(
+    userIds,
+    [ENTRANTE, ENTRANTE, ENTRANTE],
+    "las dos ramas —y el descarte del P0-2— cuelgan del alumno",
+  );
   assert.equal(
     JSON.stringify(where).includes(SALIENTE),
     false,
@@ -177,14 +183,14 @@ test("el estado del caso NO entra en el recorte del entrante salvo por el descar
   const scope = eduVisibility(actor("ALUMNO", ENTRANTE), "patients");
   const where = eduPatientScopeWhere({ institutionId: INST, scope, now: AHORA });
   const statuses = valoresDe(where, "status");
-  for (const s of statuses) {
-    assert.deepEqual(
-      s,
-      { not: "TRANSFERRED" },
-      "ningún otro estado puede aparecer en el recorte de pacientes",
-    );
-  }
-  assert.equal(statuses.length, 2, "una condición por rama, ni más ni menos");
+  assert.deepEqual(
+    statuses,
+    // Una por rama (el caso propio y la cita), más la tercera del arreglo
+    // del P0-2: la que dice "y este paciente no es uno que YO entregué".
+    // TRANSFERRED es el único literal que aparece en las tres.
+    [{ not: "TRANSFERRED" }, { not: "TRANSFERRED" }, "TRANSFERRED"],
+    "ningún otro estado puede aparecer en el recorte de pacientes",
+  );
 });
 
 test("TRANSFERRED existe en el enum de casos (si se renombra, esta ola se rompe en silencio)", () => {
