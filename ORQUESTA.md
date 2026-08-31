@@ -27842,3 +27842,195 @@ existen. Todo lo que se comprobó son las funciones puras y la forma de los `whe
 5. **Ir clasificando los casos abiertos** con su procedimiento principal (pestaña Casos de la
    ficha). Los que se abrieron antes de esta ola no lo traen, y sin él no cuentan para ningún
    requisito que pida uno.
+
+## [Institucional Ola 9] — WhatsApp: cada instituto paga el suyo, sin plantilla aprobada el aviso NO se intenta, y reagendar cancela el recordatorio viejo ✅ (2026-08-30) · rama `feat/edu-ola-9`
+
+**Lo que se entregó**, en una línea cada cosa: conexión de WhatsApp **por instituto** (token cifrado,
+WABA propia) · detección del **131042** con la pantalla diciendo *"sin método de pago"* con esas
+palabras · **plantillas por tipo de mensaje** con su estado consultable a Meta · cron **propio del
+vertical** que recorre `EduAppointment` y manda el recordatorio · **reagendar y cancelar cancelan el
+recordatorio viejo**, cerrado por tres sitios distintos · mandar desde la ficha del paciente la
+**carta de consentimiento** (la liga por token de la Ola 3B) y el **recibo de un cobro** (Ola 5) ·
+y el **registro de cada envío con su resultado**, escrito ANTES de llamar a Meta.
+
+### Las cinco decisiones que sostienen la ola
+
+**1. 🔴 CADA INSTITUTO CONECTA SU PROPIA WHATSAPP. No es arquitectura, es cómo cobra Meta.** Cada
+plantilla que sale se le carga a la tarjeta de la WABA desde la que salió, y no se puede mandar "en
+nombre de" otra cuenta. Un número de DaleControl compartido por veinte escuelas significaría que
+DaleControl paga los recordatorios de las veinte y que el paciente de la Escuela A recibe un mensaje
+de un remitente que no reconoce. Consecuencia directa y la que más se va a ver: **si la WABA no
+tiene método de pago, Meta rechaza con 131042**. Eso no es un fallo del panel y el panel no lo puede
+arreglar — se detecta en el envío (`sendEduWhatsapp`), se marca en `billingOk`, y la pantalla lo
+dice con esas palabras y manda al Administrador comercial de Meta. Si se pintara como un fallo
+genérico, la escuela abriría un ticket contra DaleControl por algo que solo puede resolver ella. Y
+vuelve solo: el primer envío que Meta ACEPTA pone `billingOk` en true — es la única señal fiable que
+existe, Meta no expone un endpoint que lo pregunte.
+
+**2. 🔴 LA VENTANA DE 24 h SE CONSIDERA SIEMPRE CERRADA, y de ahí sale todo lo demás.** Meta deja
+mandar texto libre durante las 24 h siguientes al último mensaje DEL PACIENTE; saber si esa ventana
+está abierta exige INGERIR los mensajes que entran (webhook + bandeja), y **este vertical no los
+ingiere**: no hay Inbox del instituto, ni webhook propio, ni nadie que conteste. La respuesta
+honesta es la conservadora: **todo sale por plantilla aprobada, o no sale**. Suponer lo contrario es
+exactamente cómo se llega a un panel que dice "Enviado" sobre un mensaje que Meta rechazó con
+131047 — el fallo mudo que el dental ya pagó (M-09). En `whatsapp-core.ts` **no existe un modo
+"texto libre"**, y hay una prueba que lo fija.
+
+De ahí la regla operativa: **sin plantilla aprobada para un tipo, ese aviso NO se intenta.** No se
+encola para fallar después. Se comprueba UNA vez por instituto en el barrido (no una por cita: no es
+un problema de un paciente, es de configuración) y la pantalla lo dice con el nombre del tipo que
+falta. Además, **un interruptor no se puede encender si su aviso no puede salir**: intentarlo se
+rebota con el motivo. Un interruptor en verde sobre algo que no funciona es la peor pantalla
+posible — la escuela cree que sus pacientes reciben recordatorios y no los recibe nadie.
+
+**3. 🔴 REAGENDAR O CANCELAR CANCELA EL RECORDATORIO VIEJO, Y ESTÁ CERRADO POR TRES SITIOS.** En el
+dental esto es un bug conocido y abierto, así que aquí no bastaba con arreglarlo una vez. El texto
+del recordatorio se pinta al encolarlo, con la fecha y la hora congeladas DENTRO; si la cita se
+mueve y su aviso sigue en cola, al paciente le llega la hora vieja y viene un día antes, o no viene.
+
+  1. **La escritura.** `applyEduReminderCancel` se llama desde `src/lib/edu/agenda.ts` en cuanto la
+     cita cambia de hora (`updateEduAppointment`) o se cierra (`setEduAppointmentStatus` →
+     CANCELLED / NO_SHOW / COMPLETED). Lo que estaba en cola pasa a CANCELLED; **lo ya enviado NO se
+     toca**, es la constancia.
+  2. **La llave.** `eduReminderDedupeKey` lleva dentro el `startsAt` de la cita, así que mover la
+     cita produce una llave NUEVA y el recordatorio de la hora buena pasa aunque el primer mecanismo
+     hubiera fallado. **En el dental la llave no lleva la hora, y ése es justamente el bug**: la fila
+     vieja tapa el aviso correcto — no es que llegue tarde, es que no llega nunca.
+  3. **La caducidad.** El barrido cancela lo que quedó en cola fuera de tiempo en vez de mandarlo
+     tarde. Es el cinturón para los caminos que este código no controla: una cita cerrada por SQL,
+     un aviso apagado a media tarde, un cron caído medio día.
+
+Y una simetría que la prueba fija a propósito: **los estados "vivos" del barrido son EXACTAMENTE el
+complemento de los tres terminales**. Si no lo fueran, quedaría un estado en el que ni se manda ni
+se cancela y la fila diría "en curso" para siempre.
+
+**4. 🔴 LA CONSTANCIA SE ESCRIBE ANTES DE LLAMAR A META.** Un recordatorio que se cree enviado y no
+salió es peor que ninguno. Si la fila se escribiera después, un proceso que muere a mitad de la
+llamada dejaría un mensaje entregado y ninguna constancia — y al siguiente tick se mandaría otra
+vez. Escribir primero convierte ese caso en una fila PENDING: incómoda, pero VERDADERA. Se guarda el
+**código** del error de Meta y no solo el texto (el texto cambia de redacción y de idioma, el número
+no) y el cuerpo **ya pintado** que la persona leyó. Y en la pantalla el estado se llama **"Entregado
+a WhatsApp"**, no "Entregado": sin acuses de entrega —que este vertical no ingiere— lo único que
+sabemos es que Meta lo aceptó.
+
+**5. MANDAR NO ES CONFIGURAR, y por eso las dos keys nuevas no son las de mandar.** `whatsapp.view`
+y `whatsapp.manage` son de la CONFIGURACIÓN —conectar la cuenta, registrar plantillas, encender
+avisos que Meta le cobra a la escuela— y son **solo de DIRECCION**. Pero mandarle un documento a un
+paciente no es eso: **caja** entrega el recibo en el mostrador y el **alumno** manda la carta de
+consentimiento con el paciente en el sillón. Si mandar exigiera `whatsapp.manage`, o solo la
+dirección mandaría algo, o habría que darle a caja la llave de la conexión entera. Así que cada
+documento se cierra con el permiso **de su documento**: la carta con `consentimientos.view` (la
+tienen los cuatro roles desde la Ola 3B) y el recibo con `caja.view` **más el alcance** de
+`charges`, que para docente y alumno no devuelve ni una fila. Dos cerraduras, como en la Ola 5.
+
+### La trampa que costaba más cara, y dónde se cerró
+
+El cuerpo de un aviso de RECIBO dice **el folio, el total y el saldo**. Si el registro de envíos se
+recortara SOLO por paciente, un ALUMNO abriría la pestaña de WhatsApp de su propio paciente y leería
+cuánto pagó — que es exactamente lo que la Ola 5 cerró por partida doble y el incentivo que la
+escuela no quiere crear. Por eso `eduWhatsappScopeWhere` (en `visibility.ts`, el punto único) hace
+**dos** cosas y no una: recorta por paciente **y descarta el tipo RECIBO** cuando el alcance del
+dinero no es "all".
+
+Y una decisión de diseño que va con eso: **no se agregó un quinto recurso a `eduVisibility`.** Un
+mensaje de WhatsApp no es una cosa nueva que ver, es la SOMBRA de la cosa de la que habla — igual
+que el expediente de la Ola 3 se lee con "cases" aunque cuelgue del paciente. El recordatorio y el
+consentimiento se leen con el alcance de `patients` (así se leía ya el consentimiento desde la Ola
+3B) y el recibo con el de `charges`.
+
+### Lo que NO se hizo, y por qué
+
+- **NO hay webhook ni Inbox del instituto.** Sin él no hay ventana de 24 h (ver decisión 2) ni
+  acuses de entrega. Es la deuda más grande que deja esta ola y está escrita en la pantalla, no
+  escondida: "SENT" dice *"WhatsApp lo aceptó. No sabemos si el teléfono ya lo abrió"*.
+- **NO se dan de alta las plantillas desde el panel** (el equivalente de `provision-templates.ts`
+  del dental). Se registran los nombres que Meta ya aprobó y hay un botón **"Revisar en Meta"** que
+  trae el estado real. Crear plantillas dentro de la WABA de la escuela con su token es posible y
+  cabe en una ola futura; hoy el manual está en el `.sql` con los textos exactos.
+- **NO se manda el recibo como PDF ni como liga pública.** Va el RESUMEN (folio, total, saldo). Un
+  adjunto exigiría una plantilla de Meta con cabecera de documento; una liga pública sería una URL
+  permanente con el nombre del paciente y su cuenta, y no hace falta: lo que el paciente necesita del
+  recibo cabe en el mensaje, y lo demás está en el panel. La carta de consentimiento sí va como
+  **liga**, porque la liga por token de la Ola 3B ya existe y es lo que permite firmar.
+- **NO hay segunda anticipación** (el dental tiene 24 h y 1 h). Una sola columna,
+  `reminderHoursBefore`, entre 1 y 168 horas: cada plantilla que sale se le cobra al instituto y
+  "24 h y además 2 h" duplica su factura sin que nadie lo haya pedido.
+- **NO se tocó `src/lib/whatsapp.ts` ni un carácter** (ni ningún otro archivo del dental). Del núcleo
+  compartido solo se IMPORTAN funciones, igual que hicieron barbería e inmuebles.
+- **NO se tocó `vercel.json`** — está prohibido para este vertical. La línea exacta está abajo.
+
+### Permisos (dos keys nuevas)
+
+`whatsapp.view` · `whatsapp.manage`. **Las dos son SOLO de DIRECCION** y ninguna de las dos hace
+falta para mandar un documento (ver decisión 5). Caja y alumno siguen mandando lo suyo sin tocar una
+casilla nueva — lo comprueba una prueba, porque es la parte que más fácil se "arregla" mal.
+
+### Números y estructura
+
+**2 tablas** (`edu_whatsapp_configs`, `edu_whatsapp_messages`) · **2 enums** (`EduWhatsappKind`,
+`EduWhatsappStatus`) · **7 índices** (3 únicos) · **8 llaves foráneas** · **0 columnas nuevas en
+tablas de olas anteriores** · **2 pantallas** (`/instituto/whatsapp` y la pestaña WhatsApp de la
+ficha del paciente) · **6 endpoints** · **2 módulos de servidor** (`whatsapp.ts`,
+`recordatorios.ts`) sobre **un módulo puro** (`whatsapp-core.ts`) · **1 cron propio**.
+
+Tres detalles que costaría descubrir en producción y que van escritos en el código:
+
+- El token se guarda **cifrado** con el envelope de la app, y `saveEduWaConnection` se rebota con un
+  mensaje legible si falta `DATA_ENCRYPTION_KEY` — guardar el token en claro no es una alternativa.
+- La ventana del barrido **nunca mira hacia el pasado**: con la anticipación en 1 h y dos horas de
+  gracia, el despeje se iba una hora atrás y habría mandado "le recordamos su cita" una hora DESPUÉS
+  de que empezara. Un recordatorio tarde no es tarde, es falso.
+- Un envío **BLOQUEADO se vuelve a mirar** en cada tick. Un bloqueo no es un fallo: es una condición
+  que puede dejar de ser verdad (el motivo típico es "el teléfono de la ficha no tiene 10 dígitos" y
+  recepción lo corrige a media mañana), y volver a mirarlo no cuesta una llamada a Meta porque el
+  bloqueo se decide ANTES de la red. Se ACTUALIZA la misma fila, no se crea una nueva: si no, un
+  paciente sin teléfono llenaría el registro con noventa y seis renglones al día.
+
+### 🔴 LA LÍNEA QUE FALTA EN `vercel.json` (hay que pegarla A MANO)
+
+`vercel.json` está **fuera** del vertical (`scripts/edu-guard.cjs` lo marca prohibido) y esta rama no
+lo toca. Dentro del array `"crons"`, al final, hay que agregar:
+
+```json
+    {
+      "path": "/api/instituto/cron/recordatorios",
+      "schedule": "*/15 * * * *"
+    }
+```
+
+Cada 15 minutos, igual que los dos crones de WhatsApp del dental. **Mientras no esté, no sale ningún
+recordatorio automático**; el botón "Correr el barrido ahora" de `/instituto/whatsapp` hace
+exactamente lo mismo para UN instituto y sirve para probarlo.
+
+**Verificación de esta rama:** `npm run build` ✅ (exit 0; 2 páginas y 6 rutas de API nuevas
+registradas) · `npx tsc --noEmit` ✅ para el vertical (6 errores ajenos de barber, preexistentes en
+`origin/main`) · **569 pruebas del vertical en verde**, de ellas **53 nuevas** (`edu-whatsapp` **49**,
+`edu-permissions` **4**) ·
+`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs` ✅
+(23 propios, 1 compartido declarado, 0 prohibidos).
+
+**Lo que NO se probó, y hay que probar con base de datos y con Meta:** ninguna escritura corrió
+contra Postgres — `sql/edu-ola-9.sql` **no se aplicó** (la orden lo prohibía) y no se abrió un
+navegador. **NADIE ha mandado todavía un WhatsApp real desde este vertical**, así que del camino de
+red solo está comprobado que compila: no se ha visto un 131042 de verdad, ni un token revocado, ni
+una respuesta de `message_templates`. Todo lo verificado son las funciones puras y la forma de los
+`where`.
+
+**Al desplegar:**
+
+1. **`sql/edu-ola-9.sql`** en Supabase → SQL Editor → Run. Va **después** de
+   `edu-ola-0/2/3b/5.sql`. Idempotente, cero DROP.
+2. El **backfill del override** (sección 6 del `.sql`), solo si hay usuarios con
+   `permissionsOverride` no vacío: es **UN** bloque y solo para DIRECCION. Caja, docente y alumno no
+   reciben ninguna key nueva — y eso no les quita nada, porque mandar documentos se abre con el
+   permiso del documento.
+3. **Agregar el cron a `vercel.json`** con el bloque de arriba y desplegar.
+4. **Dar de alta las tres plantillas en Meta** con los textos exactos de la sección 7 del `.sql`
+   (categoría UTILITY, idioma `es_MX`), en la WABA **de cada instituto**. Sin ellas no sale ningún
+   aviso — a propósito, y la pantalla lo dice.
+5. **Conectar el WhatsApp del instituto** en `/instituto/whatsapp` (phone number ID, WABA ID y un
+   token **permanente**, no uno temporal de 24 h), registrar los nombres de las plantillas, apretar
+   **"Revisar en Meta"** y encender los avisos uno por uno.
+6. **Comprobar que la WABA tiene método de pago** antes de encender nada. Si no lo tiene, el primer
+   envío fallará con 131042 y la pantalla dirá "sin método de pago" — que es correcto, pero es mejor
+   descubrirlo antes que con un paciente esperando.

@@ -52,6 +52,12 @@ import {
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
+// Ola 9. El recordatorio de WhatsApp de una cita que se MUEVE o se CIERRA
+// hay que cancelarlo: lleva la hora vieja congelada dentro del texto. La
+// decisión de qué se cancela y qué no vive en whatsapp-core.ts (puro), y
+// esta función solo escribe. Es best-effort a propósito — mover una cita no
+// puede fallar porque el registro de WhatsApp esté caído.
+import { applyEduReminderCancel } from "@/lib/edu/recordatorios";
 import type { EduAppointmentStatus, EduAppointmentType } from "@/lib/edu/types";
 
 export type {
@@ -716,6 +722,26 @@ export async function updateEduAppointment(
   }
 
   await prisma.eduAppointment.update({ where: { id: current.id }, data });
+
+  // 🔴 REAGENDAR CANCELA EL RECORDATORIO VIEJO.
+  //
+  // El texto del recordatorio se pinta al encolarlo, con la fecha y la hora
+  // DENTRO. Si la cita se mueve y su aviso sigue en cola, al paciente le
+  // llega la hora vieja — y viene un día antes, o no viene. En el dental
+  // esto es un bug conocido y abierto; aquí se cierra en el mismo acto que
+  // mueve la cita.
+  //
+  // Solo cuando cambia la HORA: mover el sillón o el supervisor no cambia
+  // ni una palabra de lo que el paciente va a leer, y cancelar por eso
+  // costaría una plantilla más (que Meta le cobra al instituto).
+  if (data.startsAt !== undefined) {
+    await applyEduReminderCancel({
+      institutionId,
+      appointmentId: current.id,
+      reason: "Se canceló porque la cita se reagendó: el aviso llevaba la hora vieja.",
+    });
+  }
+
   return { id: current.id };
 }
 
@@ -786,6 +812,21 @@ export async function setEduAppointmentStatus(
       ...eduAppointmentStamps(status, current, now),
     },
   });
+
+  // 🔴 CANCELAR (O CERRAR) TAMBIÉN CANCELA EL RECORDATORIO.
+  //
+  // Los tres estados terminales por la misma razón: a una cita cancelada,
+  // a una en la que el paciente no llegó y a una ya terminada NO se les
+  // manda un "le recordamos su cita". El barrido tampoco las encontraría
+  // (filtra por los estados vivos), pero la fila en cola se quedaría en
+  // "en curso" para siempre y la pantalla diría algo que no va a pasar.
+  if (status === "CANCELLED" || status === "NO_SHOW" || status === "COMPLETED") {
+    await applyEduReminderCancel({
+      institutionId,
+      appointmentId: current.id,
+      reason: "Se canceló porque la cita se cerró antes de que saliera el aviso.",
+    });
+  }
 
   return { id: current.id, status };
 }

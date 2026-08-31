@@ -16,6 +16,7 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  MessageCircle,
   Ruler,
   Stamp,
   Sun,
@@ -70,6 +71,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   gauge: Gauge,
   ruler: Ruler,
   "list-checks": ListChecks,
+  // Ola 9 — WhatsApp y recordatorios.
+  "message-circle": MessageCircle,
 };
 
 export interface EduShellProps {

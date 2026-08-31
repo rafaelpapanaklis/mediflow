@@ -560,6 +560,90 @@ test("Evaluación va en ACADÉMICO; rúbricas y requisitos en ADMINISTRACIÓN", 
   assert.equal(item("requisitos")?.permission, "requisitos.manage");
 });
 
+
+// ─────────────────────────────────────────────────────────────────────
+// 1g · Las dos keys de la Ola 9 (WhatsApp y recordatorios)
+//
+// La línea de esta ola: CONFIGURAR no es MANDAR. Las dos keys son de la
+// conexión del instituto —entregar un token que manda en su nombre,
+// encender un gasto que Meta le cobra a su tarjeta— y solo las tiene la
+// dirección. Mandarle un documento a un paciente se abre con el permiso
+// DEL DOCUMENTO: la carta con "consentimientos.view" (la tienen los
+// cuatro roles) y el recibo con "caja.view" más el alcance del dinero.
+// ─────────────────────────────────────────────────────────────────────
+
+const KEYS_OLA_9: EduPermissionKey[] = ["whatsapp.view", "whatsapp.manage"];
+
+test("las dos keys de la Ola 9 están en el catálogo, descritas en español", () => {
+  for (const k of KEYS_OLA_9) {
+    assert.ok(k in EDU_ALL_PERMISSIONS, `falta ${k} en el catálogo`);
+    const desc = EDU_ALL_PERMISSIONS[k];
+    assert.ok(desc && desc.length > 8, `${k} sin descripción usable: ${desc}`);
+    assert.notEqual(desc, k, `${k} se describe con su propia key`);
+  }
+});
+
+test("las dos keys de WhatsApp son SOLO de la dirección", () => {
+  for (const k of KEYS_OLA_9) {
+    assert.equal(
+      hasEduPermission({ role: "DIRECCION", permissionsOverride: [] }, k),
+      true,
+      `la dirección necesita ${k}`,
+    );
+    for (const rol of ["DOCENTE", "ALUMNO", "CAJA"] as EduRole[]) {
+      assert.equal(
+        hasEduPermission({ role: rol, permissionsOverride: [] }, k),
+        false,
+        `${rol} no puede llevar ${k}: conectar la cuenta del instituto y encender un gasto que Meta le cobra a la escuela es una decisión de dirección`,
+      );
+    }
+  }
+});
+
+/**
+ * 🔴 LA DECISIÓN DE LA OLA, EN UNA PRUEBA. Si mandar exigiera
+ * "whatsapp.manage", caja no podría entregar un recibo y el alumno no
+ * podría mandarle al paciente la carta que va a firmar en el sillón — que
+ * es justo para lo que sirve. Por eso el permiso de mandar es el del
+ * DOCUMENTO y no el de la conexión.
+ */
+test("CAJA y ALUMNO pueden mandar documentos sin tener ninguna key de WhatsApp", () => {
+  const caja = { role: "CAJA" as EduRole, permissionsOverride: [] };
+  const alumno = { role: "ALUMNO" as EduRole, permissionsOverride: [] };
+
+  // Caja entrega el recibo en el mostrador: lleva caja.view.
+  assert.equal(hasEduPermission(caja, "caja.view"), true);
+  assert.equal(hasEduPermission(caja, "whatsapp.manage"), false);
+
+  // El alumno explica y manda la carta en el sillón: lleva
+  // consentimientos.view. Y NO lleva caja.view — no manda nada de dinero.
+  assert.equal(hasEduPermission(alumno, "consentimientos.view"), true);
+  assert.equal(hasEduPermission(alumno, "caja.view"), false);
+  assert.equal(hasEduPermission(alumno, "whatsapp.view"), false);
+
+  // Los cuatro roles pueden mandar la carta; solo dos pueden mandar dinero.
+  const conCarta = EDU_ROLES.filter((r) =>
+    hasEduPermission({ role: r, permissionsOverride: [] }, "consentimientos.view"),
+  );
+  assert.deepEqual([...conCarta].sort(), ["ALUMNO", "CAJA", "DIRECCION", "DOCENTE"]);
+  const conRecibo = EDU_ROLES.filter((r) =>
+    hasEduPermission({ role: r, permissionsOverride: [] }, "caja.view"),
+  );
+  assert.deepEqual([...conRecibo].sort(), ["CAJA", "DIRECCION"]);
+});
+
+test("WhatsApp va en ADMINISTRACIÓN, con su propio grupo de permisos", () => {
+  const item = EDU_NAV_ITEMS.find((i) => i.key === "whatsapp");
+  assert.ok(item, "falta el item de menú de WhatsApp");
+  assert.equal(item?.section, "administracion");
+  assert.equal(item?.permission, "whatsapp.view");
+  assert.equal(EDU_NAV_LABELS.whatsapp, "WhatsApp");
+
+  const grupo = EDU_PERMISSION_GROUPS.find((g) => g.title === "WhatsApp");
+  assert.ok(grupo, "las dos keys tienen que poder encenderse desde la pantalla de permisos");
+  assert.deepEqual([...(grupo?.keys ?? [])].sort(), ["whatsapp.manage", "whatsapp.view"]);
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // 2 · Semántica del override
 // ─────────────────────────────────────────────────────────────────────

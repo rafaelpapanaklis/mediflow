@@ -61,7 +61,19 @@ export default async function InstitutoPacienteLayout({
   if (!paciente) notFound();
 
   const base = `/instituto/pacientes/${paciente.id}`;
-  const definicion: { key: string; href: string; label: string; permission: EduPermissionKey | null }[] =
+  // `permission` cierra la pestaña con UNA key; `permissionAny` la abre con
+  // CUALQUIERA de varias. La segunda forma la estrenó la Ola 9 y hacía falta:
+  // la pestaña de WhatsApp la usan dos personas distintas por dos motivos
+  // distintos —el alumno manda la carta de consentimiento, caja manda el
+  // recibo— y ninguna de las dos keys sirve para las dos. Con una sola habría
+  // que elegir a quién dejar fuera.
+  const definicion: {
+    key: string;
+    href: string;
+    label: string;
+    permission: EduPermissionKey | null;
+    permissionAny?: EduPermissionKey[];
+  }[] =
     [
       { key: "datos", href: base, label: "Datos", permission: null },
       { key: "casos", href: `${base}/casos`, label: "Casos", permission: "casos.view" },
@@ -88,10 +100,27 @@ export default async function InstitutoPacienteLayout({
         label: "Consentimientos",
         permission: "consentimientos.view",
       },
+      {
+        // Ola 9. Va después de Consentimientos y con DOS permisos
+        // alternativos, que es la forma nueva: aquí se le
+        // manda al paciente su carta para firmar (consentimientos.view) o el
+        // recibo de un cobro (caja.view), y son dos trabajos de dos personas
+        // distintas. NO exige "whatsapp.view" —que solo tiene la dirección—
+        // porque esa key es la de CONFIGURAR la conexión del instituto, no la
+        // de mandarle un documento a un paciente.
+        key: "whatsapp",
+        href: `${base}/whatsapp`,
+        label: "WhatsApp",
+        permission: null,
+        permissionAny: ["consentimientos.view", "caja.view"],
+      },
     ];
 
   const tabs: EduPacienteTab[] = definicion
-    .filter((t) => t.permission === null || hasEduPermission(permUser, t.permission))
+    .filter((t) => {
+      if (t.permissionAny) return t.permissionAny.some((k) => hasEduPermission(permUser, k));
+      return t.permission === null || hasEduPermission(permUser, t.permission);
+    })
     .map(({ key, href, label }) => ({ key, href, label }));
 
   return (

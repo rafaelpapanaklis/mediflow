@@ -154,6 +154,28 @@ export const EDU_ALL_PERMISSIONS = {
   "evaluacion.view": "Ver el avance académico y las calificaciones",
   "evaluacion.grade": "Calificar un caso con una rúbrica",
   "traspaso.manage": "Traspasar los casos de un alumno a otro",
+  // ── Ola 9 · WhatsApp y recordatorios ─────────────────────────────────
+  // DOS keys, y las dos tienen dueño de SERVIDOR (la prueba de
+  // __tests__/edu-permissions.test.ts falla si alguna se queda sin él):
+  //   whatsapp.view   → /instituto/whatsapp + GET /api/instituto/whatsapp
+  //   whatsapp.manage → PATCH /api/instituto/whatsapp, la conexión y las
+  //                     plantillas
+  //
+  // 🔴 ESTAS DOS KEYS SON DE LA CONFIGURACIÓN, NO DE MANDAR. Es la
+  // distinción de la ola y se equivoca fácil: conectar la WhatsApp del
+  // instituto —o apagar los recordatorios de toda la escuela— es un acto de
+  // dirección, y por eso las dos son SOLO de DIRECCION. Pero MANDARLE un
+  // documento a un paciente no lo es: caja manda el recibo en el mostrador y
+  // el alumno manda la carta de consentimiento en el sillón. Si mandar
+  // exigiera "whatsapp.manage", o nadie más que la dirección mandaría nada,
+  // o habría que darle a caja la llave de la conexión entera.
+  //
+  // Por eso mandar se cierra con el permiso del DOCUMENTO —
+  // "consentimientos.view" para la carta, "caja.view" para el recibo— más el
+  // ALCANCE (src/lib/edu/visibility.ts), que para el dinero devuelve "none"
+  // a docente y alumno pase lo que pase.
+  "whatsapp.view": "Ver la conexión de WhatsApp del instituto y sus envíos",
+  "whatsapp.manage": "Conectar WhatsApp, registrar plantillas y encender los avisos",
 } as const;
 
 export type EduPermissionKey = keyof typeof EDU_ALL_PERMISSIONS;
@@ -235,6 +257,15 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
     // tildan juntas es request + decide sobre la misma persona.
     title: "Autorizaciones",
     keys: ["autorizaciones.request", "autorizaciones.view", "autorizaciones.decide"],
+  },
+  {
+    // Ola 9. Grupo PROPIO y de DOS casillas: es la única parte del panel
+    // que gasta dinero de la escuela FUERA del panel. Meta le cobra cada
+    // plantilla a la tarjeta de la WABA del instituto, así que quien tenga
+    // "whatsapp.manage" puede encender un gasto recurrente — y eso no se
+    // lee igual escondido dentro de "Administración".
+    title: "WhatsApp",
+    keys: ["whatsapp.view", "whatsapp.manage"],
   },
   {
     // Ola 6. Grupo PROPIO: es lo ACADÉMICO, que no se parece a lo clínico
@@ -462,6 +493,15 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "evaluacion.view",
     "evaluacion.grade",
     "traspaso.manage",
+    // ── Ola 9 ───────────────────────────────────────────────────────────
+    // SOLO dirección, las dos. Conectar la cuenta de WhatsApp del instituto
+    // es entregar un token que puede mandar mensajes en su nombre, y
+    // encender un aviso es abrir un gasto que Meta le cobra a la tarjeta de
+    // la escuela. Ninguna de las dos cosas es una decisión de mostrador ni
+    // de piso clínico. Caja y alumno siguen pudiendo MANDAR sus documentos:
+    // eso lo abre el permiso del documento, no éste.
+    "whatsapp.view",
+    "whatsapp.manage",
   ],
   DOCENTE: [
     "inicio.view",
