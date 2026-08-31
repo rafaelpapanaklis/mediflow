@@ -27842,3 +27842,224 @@ existen. Todo lo que se comprobó son las funciones puras y la forma de los `whe
 5. **Ir clasificando los casos abiertos** con su procedimiento principal (pestaña Casos de la
    ficha). Los que se abrieron antes de esta ola no lo traen, y sin él no cuentan para ningún
    requisito que pida uno.
+
+---
+
+## [Institucional · AUDITORÍA] — Cuatro agujeros reales en 43 000 líneas: un endpoint que enseña las calificaciones y los pacientes del compañero, y un traspaso que no quita la llave porque casi ninguna cita tiene caso ✅ (2026-08-30) · rama `audit/edu-vertical`
+
+**Esta rama NO cambia una sola línea de código.** El entregable es
+`docs/audits/EDU_AUDIT.md` (nuevo) y este reporte. Nada más — corrían cinco olas en
+paralelo y cualquier arreglo habría chocado. Todo lo de abajo está documentado con ruta y
+línea para que otra ola lo corrija con la lista en la mano.
+
+**Lo leído:** `src/app/instituto` (32 archivos), `src/app/api/instituto` (61 route
+handlers), `src/components/edu` (38 componentes), `src/lib/edu` (38 módulos + 16 de
+prueba), `src/lib/edu-auth.ts` y los 29 modelos `Edu*` del schema. **~43 000 líneas.**
+
+### El resultado en una línea
+
+**2 P0 · 2 P1 · 10 P2 · 4 P3.** Y —esto importa tanto como lo anterior— **ninguna fuga
+entre institutos**, **ningún texto con "Ola", "residente" ni "programa"**, **ninguna
+pantalla blanca**, **el antifraude del precio funciona**, y **las 516 pruebas del
+vertical pasan**.
+
+### 🔴 Los dos P0
+
+**P0-1 · El único endpoint del vertical que no pasa por el alcance.**
+`src/lib/edu/rubricas.ts:600-616` — `listEduStudentGrades` consulta
+`{ institutionId, studentId: id }` y **nada más**: ni `eduStudentScopeWhere` ni
+`eduCaseScopeWhere`. Lo expone `GET /api/instituto/calificaciones?alumno=`
+(`route.ts:32-35`), que exige `evaluacion.view` — key que **el ALUMNO tiene por
+defecto**. La cabecera de ese mismo route jura, cuatro líneas más arriba, que «lo que
+cada quien ve lo decide el ALCANCE, no este endpoint». Para esa rama es falso.
+
+Y lo que sale no son solo notas: `GRADE_SELECT` (`rubricas.ts:469-504`) trae el nombre y
+el **folio de los pacientes** de cada caso calificado, más la puntuación de cada criterio
+con sus comentarios. Un alumno lee el expediente académico de su compañero y de paso la
+identidad de pacientes que no atiende. Un docente que ya rotó sigue leyendo el de los
+alumnos que entregó, porque el `where` tampoco mira la vigencia.
+
+Los ids para explotarlo se los da el propio producto (ver P1-4), y el arreglo son dos
+líneas — o borrar la rama, porque **ninguna pantalla la usa**. Lo que lo hace fácil de
+pasar por alto es que el endpoint gemelo, `GET /api/instituto/evaluacion?alumno=`, sí lo
+hace bien (`evaluacion.ts:621-634`): son casi idénticos y uno de los dos recorta.
+
+**P0-2 · El traspaso no quita la llave, porque la agenda nunca manda el caso.**
+La Ola 6 puso la mitad invisible en el sitio correcto —`eduPatientScopeWhere`
+(`visibility.ts:344-362`) descarta el caso TRANSFERRED y las citas que colgaban de él— y
+la prueba que lo verifica pasa. Lo que la prueba no puede ver es que
+`agenda-screen.tsx:473-486` **no manda `caseId`** al agendar, y el modal ni siquiera
+tiene selector de caso: la ficha de la cita lo dice sola, "Sin caso"
+(`agenda-screen.tsx:843-847`). Así que en producción **casi toda cita tiene
+`caseId: null`**, y la rama `{ caseId: null }` del `where` —que existe para el
+tamizaje— le sigue abriendo la puerta al que se fue.
+
+Reproducir: caja agenda una cita de tratamiento del paciente P con el alumno A → se
+traspasa el caso de A a B → **A sigue viendo a P**, y abre expediente, odontograma,
+estudios y consentimientos. Si esa cita era futura, tampoco se movió a B
+(`traspasos.ts:345-357` filtra por `caseId: caso.id`): el martes que viene el paciente
+llega a la cita de alguien que ya no lleva su caso, que es justo lo que el comentario de
+esas líneas dice que evita. Y un alumno marcado `GRADUATED` conserva `isActive`, así que
+sigue entrando con esas llaves.
+
+De regalo, el mismo hueco explica por qué la etapa `SESSION` del gate de la Ola 4 es
+inalcanzable: `requestEduApproval` exige una cita con `caseId = caso.id`
+(`autorizaciones.ts:754-763`) y el error dice "engánchala primero desde la agenda", cosa
+que la agenda no ofrece.
+
+### 🟠 Los dos P1
+
+**P1-3 · El PATCH rompe la invariante que el POST defiende.** `createEduAppointment`
+rechaza explícitamente una cita cuyo caso sea de otro alumno (`agenda.ts:566-568`).
+`updateEduAppointment` cambia `data.studentId` (`agenda.ts:661`) y **nunca vuelve a mirar
+el `caseId`**: ni lo revalida ni lo limpia. Reagendar a otro alumno deja la cita colgada
+del caso del anterior, que es literalmente el daño que el comentario del POST describe
+("se podría colgar una cita de la señora del caso del señor").
+
+**P1-4 · El padrón se filtra por dos pantallas.** `eduPadronScope` es tajante: un ALUMNO
+lista **cero** alumnos. Pero `agenda/page.tsx:89` llama a `listEduStudentOptions` **sin
+condición** y lo pasa como prop a un componente `"use client"` (línea 124): el payload RSC
+de `/instituto/agenda` lleva el `EduStudent.id`, el nombre, la matrícula, la especialidad y
+el docente titular de **todos los alumnos activos** a cualquiera con `agenda.view`. Lo
+revelador es que sus dos vecinos de línea, `supervisors` y `patients`, **sí** están detrás
+de `canManage ? … : Promise.resolve([])` — y `students` solo se pinta bajo `canManage`, así
+que el arreglo es copiar el ternario de al lado.
+
+Lo mismo en `/instituto/docentes`: `docentes/page.tsx:49` llama a
+`listEduCurrentAssignments` sin el tercer parámetro `supervisorUserId`, que la función
+acepta justo para acotar; cualquier docente ve por nombre a los alumnos de todos sus
+colegas. El conteo agregado sí es legítimo; la lista nominal no.
+
+Estas dos pantallas son la fuente de los ids que hacen trivial P0-1.
+
+### 🟡 Los diez P2, en una línea cada uno
+
+- **P2-5** El rango de semestres de un requisito se captura, se guarda y **se pinta**
+  ("3º – fin"), y `eduCaseCountsFor` (`evaluacion-core.ts:332-347`) no lo mira nunca.
+- **P2-6** `/instituto/evaluacion` lee hasta 300 alumnos y luego **tres `findMany` sin
+  `take`**: todos sus casos, **todas** sus citas completadas y todas sus calificaciones
+  (`evaluacion.ts:474-499`). La cabecera del archivo ya adelanta el arreglo.
+- **P2-7** El "segundo candado" del dinero que `permissions.ts:80-87` promete por escrito
+  **no existe para el tarifario**: `listEduProcedures`, `listEduFeeSchedules`,
+  `getEduTarifario` y `listEduProcedureOptions` solo llaman a `requireInstitution`.
+  Cuatro líneas de arreglo.
+- **P2-8** **No hay pantalla de permisos.** `EDU_PERMISSION_GROUPS` y
+  `sanitizeEduPermissionKeys` no tienen un solo llamador y ningún endpoint escribe
+  `permissionsOverride`. Todas las mitigaciones del catálogo que dicen "si mañana alguien
+  se lo enciende desde la pantalla de permisos" hablan de una pantalla que no existe.
+- **P2-9** `mustChangePassword` se escribe (`equipo.ts:380`) y **nadie lo lee**; no hay
+  `/instituto/cambiar-contrasena` y `/api/auth/change-password` es del dental (un
+  `EduUser` recibe 401). Dirección se queda con la contraseña de todos, para siempre.
+- **P2-10** `createEduCharge` no tiene clave de idempotencia: dos peticiones idénticas
+  emiten dos cobros. La UI lo tapa con `busy`; un reintento de red no. Notable porque la
+  subida de estudios **sí** es idempotente y lo explica.
+- **P2-11** Las horas de acreditación las produce el propio alumno: mueve los estados
+  clínicos con `agenda.view` (correcto y deliberado), los sellos se derivan de `now`, y
+  **nada comprueba que la cita ya haya ocurrido** — se puede marcar completada una del mes
+  que viene. El tope de 8 h por cita es lo único que limita.
+- **P2-12** Los dos endpoints que cuestan dinero no tienen freno por usuario: `/ai/dictado`
+  **sin rate limit**, y el análisis solo con un dedupe de 90 s **por estudio**. Que se
+  puede lo demuestra la ruta pública de consentimientos, que sí usa `rateLimit`.
+- **P2-13** El ALUMNO firma su propia nota clínica (`BORRADOR → FIRMADA` directo), así que
+  el estado "ENVIADA" no lo exige nadie. **Lo marco como decisión a revisar, no como bug**:
+  la descripción de la key lo dice ("Escribir, enviar **y firmar**"). Pero chirría con las
+  dos separaciones de funciones que el vertical sí defiende a muerte.
+- **P2-14** La única fecha del vertical que formatea el navegador
+  (`consentimiento-publico.tsx:149, 182`): hydration mismatch en un documento legal y una
+  hora que no es la del instituto.
+
+### ⚪ Los cuatro P3
+
+Las **16 pruebas del vertical no tienen ningún script** en `package.json` (ninguna gate
+las corre) · el buscador usa `contains` sobre `searchIndex` y ninguno de los tres modelos
+tiene índice en esa columna · `listEduTransferableCases` sin `take` y el array `precios`
+sin tope · `mapEduCurrentGrades` sin llamadores.
+
+### Lo que se buscó y NO apareció
+
+Vale tanto como lo anterior, así que va explícito:
+
+- **Cero fuga entre institutos.** Recorrí las **259** llamadas a Prisma del vertical.
+  Ninguna toma `institutionId` del body, del query ni de un parámetro de ruta. Las cinco
+  funciones de `where` **lanzan** si les llega vacío, y `padron-core.ts` y `tarifas.ts`
+  hacen lo mismo. Las 41 llamadas sin `institutionId` literal operan sobre un `id` que
+  salió de una lectura ya recortada, o son catálogos de instituto. Los tres `findUnique`
+  sin tenant son sobre `EduConsent.token`, que es la credencial y es globalmente único.
+- **Cero textos con "Ola", "residente" o "programa".** Barrido quitando comentarios: los
+  únicos aciertos son identificadores internos y dos strings que no ve nadie (el
+  vocabulario de Whisper y el mapa de alias para pegar una lista de personas).
+- **Cero pantalla blanca.** `(panel)/error.tsx` cubre las 25 pantallas del grupo y
+  `src/app/error.tsx` cubre lo de fuera **y** un throw del propio layout del panel, que su
+  `error.tsx` hermano no atraparía. El único `JSON.parse` es un clon en memoria.
+  `getEduContext` nunca propaga.
+- **El antifraude del precio funciona.** El `unitPriceCents` del cliente se descarta, se
+  guarda para auditarlo y se registra en el log; el precio y el nombre de la lista quedan
+  congelados en la línea. **Todo el dinero en enteros de centavos, cero `float`**; las
+  calificaciones en enteros ×100 por la misma razón.
+- **Ningún `Promise.all` llega a 7** (máximo 6) y **no hay N+1**: las 7 llamadas dentro de
+  un bucle son bucles acotados (3 reintentos de folio, ≤20 criterios, ≤N listas).
+
+### Verificación
+
+**`npm run build` COMPLETO, sin pipe: VERDE.** `exit 0` · `prisma generate` limpio
+(v5.22.0) · type-check completo · `Generating static pages (454/454)` · tabla de rutas
+entera, con las 61 rutas `/api/instituto/*` y las 25 pantallas `/instituto/*` como
+`ƒ (Dynamic)`. Corrido con `NODE_OPTIONS=--max-old-space-size=8192`.
+
+Tres ruidos que **no son de esta rama** —que no cambia una línea de código— y ya estaban
+en `main`: `⚠ Compiled with warnings` por el `Critical dependency` de
+`node_modules/file-type` (lo arrastra `/api/ai-wallet/spei/topup`), tres warnings de
+clases Tailwind ambiguas, y el spam de `prisma:error … DATABASE_URL` durante "Generating
+static pages", esperado en un worktree sin `.env`.
+
+**Pruebas del vertical: 516 / 516 en verde, 0 fallos.** Corridas a mano con
+`npx tsx --test` porque **no hay script** (P3-15): 103 (`edu-visibility`,
+`edu-permissions`, `edu-padron`, `edu-contract`) + 234 (`edu-agenda`,
+`edu-autorizaciones`, `edu-caja`, `edu-consentimientos`, `edu-equipo`, `edu-evaluacion`)
++ 179 (`edu-expediente`, `edu-ia`, `edu-pacientes`, `edu-search`, `edu-tarifas`,
+`edu-traspaso`).
+
+**Y el dato incómodo:** la suite es buena y **ninguno de los cuatro hallazgos graves la
+habría hecho fallar**, por una razón que se puede nombrar. Las pruebas cubren los módulos
+PUROS (`visibility.ts`, `*-core.ts`) y ahí no hay nada roto. Lo que falla está en la capa
+que los **consume**: un `findMany` que se olvidó de llamar al helper (P0-1), un
+`page.tsx` que manda al cliente lo que el helper habría recortado (P1-4), un `update` que
+no revalida (P1-3) y un cliente que no manda un campo opcional (P0-2).
+`edu-traspaso.test.ts` verifica el `where` correcto de la Ola 6 y pasa; lo que no puede
+ver es que en producción casi ninguna cita tenga `caseId`.
+
+Si hay que agregar UN tipo de prueba, es la que recorra los route handlers y compruebe que
+toda lectura con un id de fuera pase por un helper de `visibility.ts` — el mismo truco que
+`edu-permissions.test.ts` ya usa para que ninguna key se quede sin dueño de servidor.
+
+### Qué arreglar primero
+
+1. **P0-1** — dos líneas, o borrar la rama `?alumno=`. El más barato y el más grave.
+2. **P1-4** — un ternario en `agenda/page.tsx:89` y un parámetro en `docentes/page.tsx:49`.
+   Corta la fuente de ids de P0-1 y cierra dos fugas del padrón por su cuenta.
+3. **P0-2** — el más caro: toca UI (selector de caso), `traspasos.ts` y quizá
+   `visibility.ts`. De paso desbloquea la etapa `SESSION` del gate de la Ola 4.
+4. **P1-3** — una decisión y tres líneas en `updateEduAppointment`.
+5. **P2-7** — cuatro líneas; cierra la promesa que el catálogo ya hace por escrito.
+6. **P2-9 + P2-8** — las dos pantallas que faltan para que el vertical se administre solo.
+7. **P2-5** — decidir: aplicar el semestre o quitarlo de la pantalla. No dejarlo así.
+8. **P2-11 + P2-10** — un `if` y una clave de idempotencia.
+9. **P3-15** — los scripts de prueba: tres minutos, y es lo que impide que los ocho
+   arreglos de arriba se rompan solos.
+
+### Lo que NO alcancé a revisar
+
+**Sin base de datos y sin navegador**: nada se ejecutó contra Postgres y no se abrió una
+sola pantalla. Los cuatro hallazgos graves están confirmados leyendo **las dos puntas** (el
+`where` y quien lo llama), pero el `curl` que lo demuestra no se corrió · **los `.sql` de
+las olas** no se auditaron contra el schema: no comprobé que los índices y backfills que
+declara cada ola estén aplicados en producción (schema y código sí cuadran entre sí) ·
+**los cinco componentes más grandes** (`caja-screen` 1370 líneas, `agenda-screen` 1016,
+`bitacora-screen` 948, `padron-screen` 889, `pacientes-screen` 870) se barrieron buscando
+throws, textos prohibidos y `fetch`, pero no se auditó a fondo su lógica de estado ·
+**accesibilidad, i18n y responsive**: fuera del alcance pedido · **concurrencia real**: las
+tres ventanas de carrera que anoto están documentadas en el propio código como asumidas, no
+las medí.
+
+El detalle completo, con reproducción y arreglo propuesto por hallazgo, en
+**`docs/audits/EDU_AUDIT.md`**.
