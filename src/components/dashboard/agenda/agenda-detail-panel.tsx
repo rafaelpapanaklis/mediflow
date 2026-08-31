@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import * as Popover from "@radix-ui/react-popover";
@@ -120,6 +121,16 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
       </aside>
     );
   }
+
+  // ÚNICA ruta al expediente del panel: la usan el nombre/avatar de arriba y
+  // el botón "Expediente" de abajo. `patient.id` llega en null cuando el
+  // paciente está restringido para este usuario (la cita se ve, el nombre se
+  // enmascara — ver maskedPatient): sin id no hay a dónde ir, así que el
+  // nombre se queda como texto y el botón deshabilitado en vez de navegar a
+  // /dashboard/patients/null.
+  const patientHref = appt.patient.id
+    ? `/dashboard/patients/${appt.patient.id}`
+    : null;
 
   const doctorMeta = appt.doctor
     ? state.doctors.find((d) => d.id === appt.doctor!.id) ?? null
@@ -295,6 +306,26 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
     selectAppointment(null);
   }
 
+  // El nombre va DENTRO del enlace, así que el aria-label lo repite antes del
+  // propósito: con solo "Abrir expediente del paciente" el lector de pantalla
+  // no diría de QUIÉN es el expediente.
+  const patientLinkLabel = `${appt.patient.name} — ${t("agenda.detailPanel.recordTitle")}`;
+
+  // Mismo bloque con y sin enlace: la única diferencia es si va envuelto.
+  const patientHeader = (
+    <>
+      <div className={styles.detailAvatar} aria-hidden>
+        {patientInitials(appt.patient.name)}
+      </div>
+      <div>
+        <div className={styles.detailName}>{appt.patient.name}</div>
+        <div className={styles.detailSub}>
+          {appt.requiresValidation ? t("agenda.detailPanel.pendingValidation") : t("agenda.detailPanel.patient")}
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <aside
       className={styles.detailPanel}
@@ -311,15 +342,18 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
           <X size={14} />
         </button>
         <div className={styles.detailPatientRow}>
-          <div className={styles.detailAvatar} aria-hidden>
-            {patientInitials(appt.patient.name)}
-          </div>
-          <div>
-            <div className={styles.detailName}>{appt.patient.name}</div>
-            <div className={styles.detailSub}>
-              {appt.requiresValidation ? t("agenda.detailPanel.pendingValidation") : t("agenda.detailPanel.patient")}
-            </div>
-          </div>
+          {patientHref ? (
+            <Link
+              href={patientHref}
+              className={styles.detailPatientLink}
+              title={t("agenda.detailPanel.recordTitle")}
+              aria-label={patientLinkLabel}
+            >
+              {patientHeader}
+            </Link>
+          ) : (
+            patientHeader
+          )}
         </div>
       </div>
 
@@ -411,8 +445,10 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
           const label = t(def.labelKey);
           const Icon = def.icon;
           const isPrimary = def.variant === "primary";
-          // Cuando se inicia consulta (IN_PROGRESS), navegamos al
-          // expediente con ?appointment=... para abrir SOAP editor.
+          // Cuando se inicia consulta (IN_PROGRESS), navegamos a la ficha
+          // con ?appointment=... — ese parámetro es la INTENCIÓN "consulta
+          // en curso"; qué pantalla abre lo decide la ficha según la clínica
+          // (ver consult-landing.ts), no esta ruta.
           // SOLO si la transición se aplicó OK (changeStatus → true).
           // Antes navegaba aún si el server rechazaba con 409 → user
           // veía cambio de página pero status real intacto.
@@ -441,7 +477,8 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
         <button
           type="button"
           className={styles.detailAction}
-          onClick={() => router.push(`/dashboard/patients/${appt.patient.id}`)}
+          onClick={() => { if (patientHref) router.push(patientHref); }}
+          disabled={!patientHref}
           title={t("agenda.detailPanel.recordTitle")}
         >
           <FileText size={12} aria-hidden /> {t("agenda.detailPanel.record")}

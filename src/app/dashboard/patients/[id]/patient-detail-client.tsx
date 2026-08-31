@@ -16,6 +16,10 @@ import { buildPatientNavItems } from "@/components/dashboard/patient-detail/pati
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
+import {
+  CONSULT_FORM_TAB,
+  consultLandingTab,
+} from "@/components/dashboard/patient-detail/consult-landing";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
@@ -258,6 +262,12 @@ interface Props {
    *  de implantes (NOM-024 — firma legal del responsable de la cirugía). */
   currentUser:  { id: string; firstName: string; lastName: string; cedulaProfesional?: string | null; role?: string };
   specialty:    string;
+  /**
+   * `Clinic.category`. Solo decide DÓNDE cae una consulta recién iniciada
+   * (ver consult-landing.ts): en las categorías no clínicas la sesión sigue
+   * abriéndose sobre el editor SOAP. No gatea ninguna pestaña.
+   */
+  clinicCategory?: string | null;
   treatments:   any[];
   portalUrl?:   string | null;
   /** Estado del portal con CUENTA REAL del paciente (independiente del link
@@ -393,7 +403,7 @@ interface Props {
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices: initialInvoices,
-  doctors, currentUser, specialty, treatments, portalUrl, clinicTaxMode,
+  doctors, currentUser, specialty, clinicCategory, treatments, portalUrl, clinicTaxMode,
   portalAccountStatus = "none",
   pediatricsData,
   pediatricsModuleActive = false,
@@ -461,7 +471,10 @@ export function PatientDetailClient({
     return [...items.filter((i) => !i.disabled), ...items.filter((i) => i.disabled)];
   }, [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics, canViewBilling, canViewConsents, canViewXrays, canViewPrescriptions]);
   const tabFromUrl = searchParams.get("tab");
-  const initialTab =
+  // Especialidades OCULTAS del menú (HIDDEN_SPECIALTY_IDS) pero alcanzables
+  // por enlace profundo desde /dashboard/specialties/*: no están en `tabs`,
+  // así que se resuelven contra su propio gate.
+  const deepLinkTab =
     tabFromUrl === "pediatria" && showPediatrics
       ? "pediatria"
       : tabFromUrl === "periodoncia" && showPeriodontics
@@ -472,11 +485,23 @@ export function PatientDetailClient({
             ? "implantes"
             : tabFromUrl === "ortodoncia" && showOrthodontics
               ? "ortodoncia"
-              : tabFromUrl === "facturacion" && canViewBilling
-                ? "facturacion"
-                : tabFromUrl === "consentimientos" && canViewConsents
-                  ? "consentimientos"
-                  : "resumen";
+              : null;
+  // Cualquier pestaña que el menú de ESTE usuario muestre y no esté
+  // deshabilitada. Antes la lista estaba escrita a mano con siete ids, así
+  // que `?tab=expediente` (y `?tab=odontograma`, `?tab=fotos`…) caían
+  // silenciosamente en Resumen.
+  const menuTab =
+    tabFromUrl && tabs.some((i) => i.id === tabFromUrl && !i.disabled)
+      ? tabFromUrl
+      : null;
+  // Sin `?tab=` que mande: una consulta recién iniciada (`?appointment=`)
+  // abre la pantalla con la que la clínica ATIENDE — "Nueva consulta" donde
+  // hay formulario clínico, el editor SOAP de siempre donde no lo hay.
+  // El porqué (y por qué era SOAP hasta ahora) está en consult-landing.ts.
+  const consultTab = searchParams.get("appointment")
+    ? consultLandingTab(clinicCategory)
+    : null;
+  const initialTab = deepLinkTab ?? menuTab ?? consultTab ?? "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
@@ -1030,6 +1055,25 @@ export function PatientDetailClient({
   );
   const isConsultActive = activeAppointment !== null;
 
+  // Al ACTIVARSE la consulta, la ficha se planta en la pantalla con la que se
+  // atiende. Hace falta un efecto además del `initialTab` porque los dos
+  // "Iniciar consulta" de la propia ficha (hero y Ortodoncia) solo empujan
+  // `?appointment=` sin remontar el componente, así que el estado inicial de
+  // `tab` ya pasó. Con `?tab=` explícito en la URL manda la URL.
+  const activeApptId = activeAppointment?.id ?? null;
+  const consultLanding = consultLandingTab(clinicCategory);
+  const landedForApptRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeApptId) {
+      landedForApptRef.current = null;
+      return;
+    }
+    if (landedForApptRef.current === activeApptId) return;
+    landedForApptRef.current = activeApptId;
+    if (tabFromUrl || !consultLanding) return;
+    setTab(consultLanding);
+  }, [activeApptId, tabFromUrl, consultLanding]);
+
   const [clinicalNoteId, setClinicalNoteId] = useState<string | null>(null);
   const [soapDraft, setSoapDraft] = useState<SoapDraft>({
     subjective: "",
@@ -1443,20 +1487,30 @@ export function PatientDetailClient({
                 onComplete={handleEndConsult}
                 onClose={handleEndConsult}
               />
-              <SoapEditorInline
-                appointment={{
-                  id: activeAppointment.id,
-                  patientName: fullName,
-                  type: activeAppointment.type,
-                }}
-                initialDraft={soapDraft}
-                onSaveDraft={handleSaveDraft}
-                onComplete={async (d) => {
-                  setSoapDraft(d);
-                  await handleEndConsult();
-                }}
-                onAttach={handleAttach}
-              />
+              {/* En "Nueva consulta" el editor de la consulta ES el
+                  formulario de especialidad de abajo (odontograma, HEA,
+                  antecedentes, signos, IA): apilarle el SOAP encima era lo
+                  que ponía la pantalla equivocada delante. Se OCULTA, no se
+                  desmonta: su autoguardado tiene 1.5s de debounce y
+                  desmontarlo a media frase perdería lo tecleado. En
+                  cualquier otra pestaña sigue siendo la superficie de la
+                  sesión, tal cual. */}
+              <div style={{ display: tab === CONSULT_FORM_TAB ? "none" : undefined }}>
+                <SoapEditorInline
+                  appointment={{
+                    id: activeAppointment.id,
+                    patientName: fullName,
+                    type: activeAppointment.type,
+                  }}
+                  initialDraft={soapDraft}
+                  onSaveDraft={handleSaveDraft}
+                  onComplete={async (d) => {
+                    setSoapDraft(d);
+                    await handleEndConsult();
+                  }}
+                  onAttach={handleAttach}
+                />
+              </div>
             </>
           )}
 

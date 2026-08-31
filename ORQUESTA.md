@@ -29954,3 +29954,206 @@ reales simultáneos.
    (backfill de sign) va viva a propósito. Comprobaciones en la sección 5.
 2. Los SQL de olas anteriores siguen SIN aplicar (7–12, 14, fix-auditoria) — el orden vive
    en sus memorias; éste va al final.
+
+
+## [Agenda · Legible II] — El eje pinta el horario REAL de la clínica y se abre solo para la cita que se salió, el nombre del paciente ES el enlace a su ficha, e "Iniciar consulta" cae en Nueva consulta ✅ (2026-08-31) · rama `feat/agenda-legible`
+
+Tres puntos de producción sobre la ola anterior (`ef46a995`). Todo es presentación y
+navegación: **cero cambios en cómo se crean, se mueven o se validan las citas**.
+
+### 1. El horario real: se dibujaban 12 horas para 9 de trabajo
+
+La clínica abre 09:00–18:00 (`ClinicSchedule`, lo que edita Ajustes) pero el eje pintaba
+08:00–20:00. Tres de doce horas de rejilla vacía —25 % del alto— que son justo las que
+hacían que el día no cupiera. El propio sistema ya lo sabía: guardar a las 8 avisa "empieza
+antes de la apertura (09:00)" y a las 19:00 avisa "termina después del cierre (18:00)".
+
+**Por qué era ancho, y por qué no se toca esa parte.** `effectiveAgendaWindow`
+(clinic-hours.ts, P1-13) devuelve la UNIÓN de `Clinic.agendaDayStart/End` (8–20, no editable
+desde ninguna UI) con el horario de Ajustes, con una justificación explícita: "nunca más
+angosto que hoy, ninguna cita vieja fuera de ventana desaparece del grid". Esa ventana no
+solo pinta: **`dayRangeUtc` la usa como rango de LECTURA** de `GET /api/appointments`
+(`startsAt >= dayStart AND < dayEnd`) y de ahí sale la rejilla de horas del alta
+(`slot-grid-picker`). Estrechar `effectiveAgendaWindow` habría dejado de LEER las citas fuera
+de horario y habría recortado las horas elegibles al crear una cita. Así que sigue intacta,
+comentada como lo que es: lo que lee y lo que valida.
+
+**Lo que cambia es lo que se DIBUJA.** Función nueva y pura, `paintedAgendaWindow`
+(clinic-hours.ts), con dos reglas:
+
+1. **Base = horario configurado de los días VISIBLES.** Uno en vista Día (el weekday de
+   `dayISO` en la tz de la clínica), los siete en Semana → unión de los habilitados. Si el
+   día visible está CERRADO (un domingo con una cita), el lienzo es el horario general de la
+   clínica, no el 8–20. Sin `ClinicSchedule` utilizable (filas ausentes, `close <= open`,
+   horas basura) devuelve `fallback` = exactamente la ventana de siempre.
+2. **La base se ENSANCHA hasta cubrir cada cita del lote.** Esta es la respuesta a "las citas
+   fuera de horario EXISTEN": no se esconden ni se clampean, el eje se abre por ellas. Un día
+   09:00–18:00 con una cita a las 8:00 pinta 8–18; con una a las 19:00 pinta 9–20; con las
+   dos, 8–20 (el de antes, porque ese día de verdad lo necesita). Redondeo a hora entera:
+   `floor` en la apertura, `ceil` en el cierre (18:30 → 19). Cita que cruza medianoche → 24.
+
+Las alternativas se descartaron por mentirosas: clampear al slot 0 (lo que hace hoy
+`agenda-appointment-card` con slots negativos) pinta la cita de las 8:00 sobre la línea de
+las 9:00, y "extender la columna hacia abajo" (lo que hace `agenda-column`) no existe en la
+vista Semana, donde las columnas tienen alto fijo y la cita de las 19:00 quedaría recortada.
+Con el eje ensanchado ninguno de esos dos caminos se dispara ya.
+
+**Dónde se calcula.** En el `AgendaProvider`, con un `useMemo` sobre el estado ya reducido, y
+el contexto expone el estado con esa ventana escrita encima. Así los ocho consumidores de
+`state.dayStart/dayEnd` (eje horario, columnas, cards, alto de la grilla, badge y drop del
+drag, click en hueco) hablan del mismo día sin tocar ni uno, y —lo importante— no hay forma
+de que se desincronice por olvidar un `case` del reducer: sus entradas cambian con `LOAD_DAY`,
+`SET_APPOINTMENTS`, el cambio de vista y cada mutación optimista que mueve una cita. El
+reducer conserva la ventana del payload como suelo.
+
+La SSR (`/dashboard/agenda/page.tsx`) manda ya la ventana pintada de ese día para que el
+primer render tenga la altura correcta, más las filas de `ClinicSchedule` en el payload
+(`schedules`: solo `dayOfWeek/enabled/openTime/closeTime` — el horario de atención, que ya es
+público en la página de reserva de la clínica; **nunca** la fila `Clinic`, [[feedback_clinic_full_row_leaks]]).
+Con eso el cliente recalcula al cambiar de día, de vista o al llegar citas nuevas sin volver
+al servidor. Los endpoints siguen mandando la ventana EFECTIVA: `GET /api/appointments` no se
+tocó a propósito, porque de ahí sale el picker de horas del alta.
+
+**El efecto medible:** 36 slots en vez de 48 con `slotMinutes = 15`. En modo "Todo el día"
+(`fit`) cada slot crece un 33 %, y de rebote las medias horas del eje pasan el umbral de 28 px
+y se rotulan en pantallas donde antes no cabían.
+
+### 2. El nombre del paciente lleva a su ficha
+
+Era texto muerto: para ver el expediente del paciente cuyo nombre estabas leyendo había que
+bajar a buscar el botón "Expediente". Ahora el nombre y el avatar son **un enlace de verdad**
+(`next/link`, no un div con `onClick`): cursor de mano, subrayado al pasar, foco de teclado
+con el anillo del panel, y click con rueda / Ctrl+click abren la ficha en otra pestaña.
+
+La ruta **no** se inventó: se extrajo a un único `patientHref` que usan el enlace de arriba y
+el botón "Expediente" de abajo (el de la línea 444 del encargo). Y de paso cerró un hueco que
+tenía ese botón: `maskedPatient` devuelve `id: null` cuando el paciente está restringido para
+quien mira (la cita se ve, el nombre se enmascara como "Paciente privado") — el botón navegaba
+a `/dashboard/patients/null`. Sin `id` el nombre se queda como texto plano y el botón sale
+deshabilitado. El `aria-label` del enlace repite el nombre antes del propósito ("Fulano —
+Abrir expediente del paciente"); con solo el propósito, el lector de pantalla no diría de
+quién es el expediente.
+
+### 3. Por qué "Iniciar consulta" caía en SOAP — y dónde se decidió que no
+
+**La respuesta al "averigua POR QUÉ": no era una pestaña.** `?appointment=` NO elige pestaña.
+Enciende la "consulta activa" de la ficha (`isConsultActive`), y eso monta la `ConsultBar` y
+el `SoapEditorInline` **en lo alto de la columna principal, por encima de la pestaña que esté
+abierta**. Como la URL no trae `?tab=`, esa pestaña es Resumen. Lo que llenaba la pantalla
+era el editor SOAP inyectado arriba, no un destino elegido.
+
+Y no fue un descuido: SOAP (S/O/A/P) es el formato de nota COMÚN a todos los verticales, y la
+sesión de consulta cuelga de él — crea el `ClinicalNote` borrador con autoguardado y
+"Completar" firma la nota y cierra la cita. Era el único editor que servía para cualquier
+clínica. Lo que no es, para una dental, es la pantalla con la que se ATIENDE.
+
+Segundo hallazgo, más silencioso: `initialTab` tenía una lista **escrita a mano de siete ids**
+(pediatría, periodoncia, endodoncia, implantes, ortodoncia, facturación, consentimientos) y
+todo lo demás caía en Resumen. O sea que `?tab=expediente` —"Nueva consulta"— ya no funcionaba
+ni pidiéndolo explícitamente. Igual `?tab=odontograma`, `?tab=fotos`, `?tab=recetas`…
+
+**Cómo quedó, y por qué depende de la clínica y no de un cambio a lo bruto:**
+
+- `consult-landing.ts` (nuevo, con todo lo de arriba escrito en la cabecera) decide en un solo
+  sitio: donde hay formulario clínico de consulta se cae en **"Nueva consulta"** (pestaña
+  `expediente`: odontograma, motivo/HEA, antecedentes, signos vitales, "Analizar con IA");
+  donde la visita no es clínica —SPA, MASSAGE, BEAUTY_CENTER, NAIL_SALON, HAIR_SALON,
+  BROW_LASH, LASER_HAIR_REMOVAL, la misma lista con la que la agenda decide no anteponer
+  "Dr."— se conserva el SOAP de siempre, que ahí funciona como nota libre de la sesión.
+  Categoría desconocida o ausente ⇒ se asume clínica (DaleControl es dental).
+- `initialTab` pasa a resolver **cualquier pestaña que el menú de ESE usuario muestre y no esté
+  deshabilitada** (`tabs`, que ya respeta `billing.view`, `consents.view`, `xrays.view`,
+  `prescription.view` y las especialidades ocultas). Las cuatro especialidades OCULTAS del menú
+  pero alcanzables por enlace profundo desde `/dashboard/specialties/*` conservan su rama
+  propia — si se resolvieran contra `tabs` dejarían de funcionar.
+- Orden de precedencia: enlace profundo → pestaña del menú → consulta activa → Resumen. **Un
+  `?tab=` explícito siempre manda**: la agenda sigue navegando con `?appointment=` a secas —
+  ese parámetro es la INTENCIÓN "consulta en curso" y quién la interpreta es la ficha, no la
+  ruta.
+- Además del estado inicial hay un efecto: los dos "Iniciar consulta" de la **propia ficha**
+  (el del hero y el de Ortodoncia) solo empujan `?appointment=` sin remontar el componente, así
+  que el `useState` inicial ya pasó. El efecto se dispara una vez por cita (ref guardado) y
+  respeta el mismo `?tab=`.
+- El editor SOAP **se oculta, no se desmonta**, cuando la pestaña activa es "Nueva consulta"
+  (ahí el editor de la consulta ES el formulario de especialidad; apilarle el SOAP encima era
+  justo lo que ponía la pantalla equivocada delante). No se desmonta porque su autoguardado
+  tiene 1.5 s de debounce y quitarlo a media frase perdería lo tecleado. En cualquier otra
+  pestaña sigue siendo la superficie de la sesión, tal cual. La `ConsultBar` (cronómetro,
+  pausa, Completar) se mantiene SIEMPRE, en los dos caminos.
+
+### Consecuencias aceptadas (dichas, no escondidas)
+
+- **El arrastre y el click en hueco quedan acotados a lo que se pinta.** `recomputeTimes` ya
+  clampeaba al `[0, totalSlots]` de la ventana visible; ahora esa ventana es el día real. En
+  una clínica 09:00–18:00 ya no se puede arrastrar una cita a las 19:00 desde la rejilla. Se
+  sigue pudiendo por el modal de edición, que es donde se escribe la hora a mano y donde el
+  servidor avisa. Es inherente a dejar de dibujar horas que la clínica no trabaja.
+- **Una cita a deshora ensancha el día para todos.** Una emergencia a las 23:00 hace que el eje
+  vaya de 9 a 24 y, en modo "Todo el día", todo se comprime para caber (con piso de 10 px por
+  slot; por debajo reaparece el scroll). Es el mínimo honesto: esa cita hay que verla y hay que
+  verla en su hora.
+- **La franja fuera de horario no se distingue visualmente** de la de trabajo. Se puede sombrear
+  en otra pasada; hoy se comporta igual que antes.
+
+### Qué se probó
+
+`npx next build` COMPLETO, **EXIT 0 real** (`NODE_OPTIONS=--max-old-space-size=8192`, sin
+pipes, leído entero): "Checking validity of types" limpio, 461 páginas, `/dashboard/agenda` y
+`/dashboard/patients/[id]` construidas. Los `prisma:error` del log son los de siempre en local
+(no hay `DATABASE_URL` en el worktree) y no vienen de este cambio. `next lint` sobre los cinco
+archivos tocados: **ningún aviso nuevo** (el `exhaustive-deps` del provider ya está en `HEAD`,
+idéntico).
+
+Pruebas: **79/79 en verde** en las suites de agenda + la nueva
+(`date-ranges`, `slot-metrics`, `clinic-hours`, `transitions`, `close-appointment`,
+`consult-landing`). De ellas **15 son nuevas**:
+
+- `clinic-hours.test.ts` (+14): el eje se ciñe a 9–18; sin `ClinicSchedule` es el de siempre;
+  cierre 18:30 → 19; cita antes de abrir y cita después de cerrar ENSANCHAN; en vista Día las
+  citas de otro día del lote no cuentan y en Semana sí; unión de los días habilitados; día
+  cerrado usa el horario general; todos los días cerrados → ventana de siempre; cruce de
+  medianoche → 24; `endsAt` nulo y fechas basura no rompen nada; la ventana siempre cae en
+  `[0,24]` con `dayEnd > dayStart`; `scheduleDayOfISO` coincide con `scheduleDayOf`; y un
+  candado explícito de que **`effectiveAgendaWindow` NO cambió** (lo que lee y valida sigue
+  siendo la unión).
+- `consult-landing.test.ts` (nuevo, `npm run test:consult-landing`): las once categorías
+  clínicas caen en "Nueva consulta", las siete no clínicas conservan SOAP, categoría
+  ausente/desconocida se asume clínica, y el id de la pestaña sigue siendo `expediente` (si
+  alguien la renombra en `patient-nav-items`, esta prueba lo caza).
+
+### Lo que NO se probó
+
+**No se abrió el navegador.** No hay `DATABASE_URL` en el worktree (`.env.example` solamente),
+así que nada corrió contra Postgres ni contra la app viva: el eje estrechado, el enlace del
+nombre y el aterrizaje en "Nueva consulta" están compilados, razonados y cubiertos por lógica
+pura, **no vistos en pantalla**. Sin SQL, sin migraciones, sin endpoints nuevos, sin
+dependencias nuevas.
+
+Tampoco se ejercitó: el arrastre con la ventana estrechada (la lógica es la misma
+`recomputeTimes` que ya cubre `test:agenda-metrics`, pero con otros límites), el
+comportamiento con una clínica SIN filas de `ClinicSchedule` en base real, ni el editor SOAP
+oculto durante una consulta larga con autoguardado en vuelo.
+
+**Observación anotada, no arreglada** (fuera del encargo): tres sitios navegan a
+`?tab=soap&new=1` (topbar `onCreateSoap`, `patient-context-bar` y la paleta de comandos) y
+`soap` no es ningún id de pestaña — caen en Resumen desde antes de este cambio, y siguen
+cayendo igual. Además pisan la URL completa, así que borran el `?appointment=` y apagan la
+consulta activa.
+
+### Qué debe probar Rafael
+
+1. Agenda, vista Día, clínica de prueba: el eje debe ir de **09:00 a 18:00**, no de 8 a 20, y
+   el día entero debe caber con slots más altos que ayer.
+2. Crear una cita a las **08:00** (el sistema avisa y la guarda). Recargar: el eje debe abrir
+   a las 8 y la cita debe estar **en la línea de las 8**, no pegada arriba en la de las 9.
+   Igual con una a las **19:00** → el eje llega a las 20.
+3. Vista **Semana**: el eje debe cubrir el horario de todos los días habilitados (si el sábado
+   abre antes o cierra después, se nota) y ninguna cita debe quedar cortada abajo.
+4. Un **domingo** (cerrado) con una cita: debe pintarse el horario normal de la clínica,
+   ensanchado por esa cita.
+5. Abrir una cita → click en el **nombre/avatar** del paciente arriba: lleva a la ficha.
+   Probar también con Tab (foco visible) y Ctrl+click (pestaña nueva).
+6. **"Iniciar consulta"** desde la agenda: debe aterrizar en **Nueva consulta** (odontograma,
+   motivo/HEA, antecedentes, signos, "Analizar con IA") con la barra de consulta arriba, no en
+   el editor SOAP. Cambiar a cualquier otra pestaña: el SOAP reaparece con su borrador.
+   "Completar" en la barra sigue cerrando la cita y firmando la nota.

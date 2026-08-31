@@ -27,6 +27,11 @@ import {
 } from "@/lib/agenda/store";
 import { viewRangeISO } from "@/lib/agenda/date-ranges";
 import { todayInTz } from "@/lib/agenda/time-utils";
+import {
+  ALL_SCHEDULE_DAYS,
+  paintedAgendaWindow,
+  scheduleDayOfISO,
+} from "@/lib/agenda/clinic-hours";
 import { slotHeightFor } from "@/lib/agenda/slot-metrics";
 import type {
   AgendaAppointmentDTO,
@@ -123,7 +128,7 @@ export function AgendaProvider({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [state, dispatch] = useReducer(
+  const [rawState, dispatch] = useReducer(
     agendaReducer,
     null,
     () => {
@@ -143,6 +148,56 @@ export function AgendaProvider({
         density: storedDensity ?? "fit",
       };
     },
+  );
+
+  // ── Ventana que se PINTA ────────────────────────────────────────────
+  // El eje deja de dibujar la ventana ANCHA (agendaDayStart/End ∪ Ajustes) y
+  // pasa a dibujar el horario REAL de los días visibles, ensanchado lo justo
+  // para no esconder ninguna cita fuera de horario (existen: el alta AVISA,
+  // no bloquea). Una clínica 09:00–18:00 dejaba de regalar 3 de 12 horas.
+  //
+  // Se calcula AQUÍ y no en el reducer a propósito: sus entradas cambian con
+  // media docena de acciones (LOAD_DAY, SET_APPOINTMENTS, cambio de vista, y
+  // cada mutación optimista que mueve una cita). Derivarlo del estado ya
+  // reducido no puede quedarse desincronizado por olvidar un `case`.
+  //
+  // Nada de esto viaja a la API: la ventana EFECTIVA sigue mandando en lo que
+  // se lee, se crea y se valida — ver clinic-hours.ts.
+  const painted = useMemo(
+    () =>
+      paintedAgendaWindow({
+        fallback: { dayStart: rawState.dayStart, dayEnd: rawState.dayEnd },
+        schedules: rawState.schedules,
+        visibleDays:
+          rawState.viewMode === "day"
+            ? [scheduleDayOfISO(rawState.dayISO, rawState.timezone)]
+            : ALL_SCHEDULE_DAYS,
+        appointments: rawState.appointments,
+        // En Día el lote puede traer aún la semana entera (cache SWR entre
+        // cambios de vista): solo cuentan las citas del día que se pinta.
+        onlyDayISO: rawState.viewMode === "day" ? rawState.dayISO : null,
+        timezone: rawState.timezone,
+      }),
+    [
+      rawState.dayStart,
+      rawState.dayEnd,
+      rawState.schedules,
+      rawState.viewMode,
+      rawState.dayISO,
+      rawState.appointments,
+      rawState.timezone,
+    ],
+  );
+
+  // El contexto expone el estado con la ventana ya pintada, así que TODOS los
+  // consumidores de `state.dayStart/dayEnd` (eje, columnas, cards, alto de la
+  // grilla, drag) hablan del mismo día sin tocar ni uno.
+  const state = useMemo<AgendaStoreState>(
+    () =>
+      rawState.dayStart === painted.dayStart && rawState.dayEnd === painted.dayEnd
+        ? rawState
+        : { ...rawState, dayStart: painted.dayStart, dayEnd: painted.dayEnd },
+    [rawState, painted],
   );
 
   // ── Métrica vertical (densidad) ─────────────────────────────────────

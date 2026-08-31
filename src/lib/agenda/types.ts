@@ -2,6 +2,7 @@ import type {
   AppointmentStatus,
   AppointmentDTO as HomeAppointmentDTO,
 } from "@/lib/home/types";
+import type { ScheduleDay } from "./clinic-hours";
 
 export type { AppointmentStatus } from "@/lib/home/types";
 
@@ -150,8 +151,22 @@ export interface AgendaDayResponse {
   range: { from: string; to: string };
   timezone: string;
   slotMinutes: number;
+  /**
+   * Ventana que el eje PINTA de arranque. La SSR de /dashboard/agenda manda
+   * aquí `paintedAgendaWindow` (horario real del día + las citas de ese día);
+   * los endpoints siguen mandando la ventana EFECTIVA. El cliente la recalcula
+   * en cuanto cambia el día, la vista o las citas — ver agenda-provider.
+   */
   dayStart: number;
   dayEnd: number;
+  /**
+   * Horario configurado en Ajustes (ClinicSchedule). Solo `enabled` +
+   * `openTime`/`closeTime` por día: el horario de atención de la clínica, que
+   * ya es público en su página de reserva. Lo necesita el cliente para
+   * recalcular el eje al navegar sin volver al servidor. Opcional: los
+   * endpoints que no lo mandan dejan al cliente con la ventana del payload.
+   */
+  schedules?: ScheduleDay[];
   appointments: AgendaAppointmentDTO[];
   doctors: DoctorColumnDTO[];
   resources: ResourceDTO[];
@@ -246,8 +261,14 @@ export interface AgendaStoreState {
   resources: ResourceDTO[];
   waitlistCount: number;
   slotMinutes: number;
+  /**
+   * Ventana que el eje PINTA. En el contexto del provider llega ya recalculada
+   * con `paintedAgendaWindow`; el reducer guarda la del payload como suelo.
+   */
   dayStart: number;
   dayEnd: number;
+  /** Horario de Ajustes — entrada de `paintedAgendaWindow` en el cliente. */
+  schedules: ScheduleDay[];
   timezone: string;
 
   drag: AgendaDragState;

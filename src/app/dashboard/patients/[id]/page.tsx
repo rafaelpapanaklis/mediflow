@@ -431,6 +431,9 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             role:               user.role,
           }}
           specialty={user.clinic.specialty}
+          // Solo decide dónde cae una consulta recién iniciada (spa/salón
+          // conservan el editor SOAP) — ver consult-landing.ts.
+          clinicCategory={user.clinic.category}
           // Permiso granular (no el rol): el SUPER_ADMIN puede dárselo o
           // quitárselo a cualquier miembro desde el modal de equipo. Controla el
           // ítem "Eliminar paciente" del menú; el endpoint lo revalida con 403.

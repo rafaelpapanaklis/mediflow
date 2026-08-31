@@ -56,6 +56,7 @@ export function buildInitialState(payload: AgendaDayResponse, dayISO: string): A
     slotMinutes: payload.slotMinutes,
     dayStart: payload.dayStart,
     dayEnd: payload.dayEnd,
+    schedules: payload.schedules ?? [],
     timezone: payload.timezone,
     drag: {
       draggingId: null,
@@ -91,6 +92,7 @@ export function agendaReducer(
         slotMinutes: action.payload.slotMinutes,
         dayStart: action.payload.dayStart,
         dayEnd: action.payload.dayEnd,
+        schedules: action.payload.schedules ?? state.schedules,
         timezone: action.payload.timezone,
         isLoading: false,
         error: null,

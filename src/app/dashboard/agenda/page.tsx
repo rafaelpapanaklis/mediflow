@@ -14,7 +14,11 @@ import {
   todayInTz,
   type ClinicTimeConfig,
 } from "@/lib/agenda/time-utils";
-import { effectiveAgendaWindow } from "@/lib/agenda/clinic-hours";
+import {
+  effectiveAgendaWindow,
+  paintedAgendaWindow,
+  scheduleDayOfISO,
+} from "@/lib/agenda/clinic-hours";
 import { prisma } from "@/lib/prisma";
 import { viewRangeUtc } from "@/lib/agenda/date-ranges";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
@@ -46,9 +50,10 @@ export default async function AgendaPage({ searchParams }: PageProps) {
   const clinic = user.clinic;
   if (!clinic) redirect("/login");
 
-  // P1-13: el eje respeta el horario configurado en Ajustes (ClinicSchedule),
-  // con la MISMA ventana efectiva que /api/appointments y /api/agenda/range
-  // (unión — nunca más angosto que el 8–20 histórico).
+  // P1-13: la ventana EFECTIVA (unión con el 8–20 histórico) — la MISMA que
+  // /api/appointments y /api/agenda/range. Es la que lee y la que valida;
+  // ensancharla nunca esconde nada. Lo que el eje DIBUJA sale más abajo de
+  // paintedAgendaWindow, que sí se ciñe al horario real del día.
   const schedules = await prisma.clinicSchedule.findMany({
     where: { clinicId: clinic.id },
     select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
@@ -97,6 +102,21 @@ export default async function AgendaPage({ searchParams }: PageProps) {
       fetchWaitlistCount(clinic.id),
     ]);
 
+  // Lo que el eje PINTA de arranque: el horario real de ESTE día, ensanchado
+  // para cubrir sus citas fuera de horario. La ventana efectiva de arriba
+  // sigue siendo la que leyó los datos y la que valida; esto es solo el
+  // dibujo, y va en el payload para que la SSR ya pinte la altura correcta en
+  // vez de encogerse en el primer render del cliente (que lo recalcula igual
+  // al cambiar de día, de vista o al llegar citas nuevas).
+  const painted = paintedAgendaWindow({
+    fallback: window,
+    schedules,
+    visibleDays: [scheduleDayOfISO(dayISO, clinic.timezone)],
+    appointments,
+    onlyDayISO: dayISO,
+    timezone: clinic.timezone,
+  });
+
   const payload: AgendaDayResponse = {
     range: {
       from: range.fromUtc.toISOString(),
@@ -104,8 +124,12 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     },
     timezone: clinic.timezone,
     slotMinutes: clinic.defaultSlotMinutes,
-    dayStart: window.dayStart,
-    dayEnd: window.dayEnd,
+    dayStart: painted.dayStart,
+    dayEnd: painted.dayEnd,
+    // Solo enabled + horas por día (el horario de atención, público en la
+    // página de reserva de la clínica): con esto el cliente recalcula el eje
+    // al navegar sin volver al servidor. NUNCA la fila Clinic entera.
+    schedules,
     appointments,
     doctors,
     resources,

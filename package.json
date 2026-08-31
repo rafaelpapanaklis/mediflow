@@ -23,6 +23,7 @@
     "test:patient-visibility": "tsx --test src/lib/__tests__/patient-visibility.test.ts",
     "test:public-slots": "tsx --test src/lib/public-booking/__tests__/slots.test.ts",
     "test:clinic-hours": "tsx --test src/lib/agenda/__tests__/clinic-hours.test.ts",
+    "test:consult-landing": "tsx --test src/components/dashboard/patient-detail/__tests__/consult-landing.test.ts",
     "test:agenda-transitions": "tsx --test src/lib/agenda/__tests__/transitions.test.ts",
     "test:close-appointment": "tsx --test src/lib/agenda/__tests__/close-appointment.test.ts",
     "test:patient-deletion": "tsx --test src/lib/__tests__/patient-deletion-policy.test.ts",
