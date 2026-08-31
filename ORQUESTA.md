@@ -29954,3 +29954,193 @@ reales simultáneos.
    (backfill de sign) va viva a propósito. Comprobaciones en la sección 5.
 2. Los SQL de olas anteriores siguen SIN aplicar (7–12, 14, fix-auditoria) — el orden vive
    en sus memorias; éste va al final.
+
+## [Institucional · EL VISOR] — Le faltaba la panorámica (que el DICOM no trae: hay que calcularla), los cuadros no eran cuadrados, y el modal de ancho fijo dejaba media pantalla en negro ✅ (2026-08-31) · rama `feat/edu-visor`
+
+### El problema de fondo
+
+Cuando el laboratorio entrega un CBCT, su propio visor dibuja la curva del arco y los cortes
+transversales. **Esas líneas no viajan dentro del DICOM** — son del software del lab —, así que
+la única forma de tenerlas en el nuestro es CALCULARLAS. Sin eso, el usuario compara los dos
+visores y ve que al nuestro le falta la mitad. Encima el visor vivía en una hoja de 1160 px con
+paneles de tamaños distintos y desalineados: en un monitor de 27" se veía como una maqueta.
+
+Nada de esto era código nuevo que escribir. El dental ya lo tiene resuelto y probado.
+
+### 1 · La panorámica: se IMPORTÓ TAL CUAL, sin adaptador de acoples
+
+Las tres piezas entran directas desde `src/components/patient-3d/`:
+
+| pieza | qué hace |
+| --- | --- |
+| `PanoramicPane.tsx` | los dos lienzos: el axial donde se traza la arcada y la panorámica del reslice, con slab MIP/promedio y la longitud de arco en mm reales |
+| `arch-autodetect.ts` | detecta la curva sola (MIP de la banda dental, Otsu, morfología, línea central polar) — se dispara desde dentro de PanoramicPane |
+| `panoramic-reslice.ts` | el recorte curvo del volumen |
+
+**NO hicieron falta adaptadores de datos, y eso se comprobó, no se supuso**: las tres son puras
+—ni un `/api/`, ni `patientId`, ni `fileId`, ni `fetch(`, ni `prisma`—, y solo reciben el
+volumen que el visor ya tiene en memoria (`slices`, `scale`) para devolver píxeles. Hay una
+prueba que lo vigila (`edu-visor.test.ts`): el día que el dental le meta un fetch a una de
+ellas, la suite se pone roja **antes** de que el instituto reciba un 401 en producción.
+
+Lo único que se escribió es un **anfitrión de TAMAÑO**, no de datos:
+`src/components/edu/estudios/panoramica-pane.tsx`. Existe porque `PanoramicPane` fija el alto de
+sus lienzos con un estilo **en línea** de 380 px — correcto en el modal del dental, corto aquí,
+donde el visor usa la ventana entera. Como ese archivo no se edita, el alto se sube **desde
+fuera** con la variable `--edu-pano-h` que `edu-theme.css` aplica con `!important` (un
+`!important` de hoja de estilos sí le gana a un estilo en línea). Si ese árbol cambiara, la
+regla deja de casar y la panorámica se queda en sus 380 px de siempre: no se rompe.
+
+### 2 · La rejilla: cuadrados del mismo lado, y el reparto lo decide MEDIR
+
+Cinco vistas. Los **cuatro** paneles de corte y volumen son cuadrados idénticos y **caben
+siempre en la pantalla sin desplazar**; la **panorámica va en su propia fila, de borde a borde**.
+
+**Por qué la panorámica no es un cuadrado más:** un arco dental mide ~150 mm de largo por ~60 de
+alto. Meter eso en un cuadrado es tirar media caja. Y encima `PanoramicPane` no es UN lienzo:
+son dos (el axial de trazado y el resultado) uno al lado del otro. La fila ancha es su forma.
+
+**Por qué no hay un corte fijo de columnas en el CSS.** `visor-medidas.ts` prueba 1, 2 y 4
+columnas con el ancho y el alto REALES y se queda con el reparto que hace los paneles **más
+grandes**, con la condición de que los cuatro quepan sin desplazar. Un `@media` no puede hacer
+esa cuenta, y por eso el resultado es tan distinto:
+
+| ventana útil | antes (2 columnas fijas) | ahora | lo que se gana |
+| --- | --- | --- | --- |
+| 1920×950 | 321 px de lado, 979 px usados de 1834 | **4 col · 465 px**, 1884 px usados | el ancho entero |
+| 1440×780 | 274 px | **4 col · 345 px** | |
+| 1366×1024 (iPad Pro horizontal) | 359 px | **2 col · 359 px** | con alto de sobra, gana el 2×2 |
+| 768×1024 (iPad vertical) | 359 px | **2 col · 359 px** | el 2×2 de siempre |
+| 2752×927 | 310 px | **4 col · 629 px** | el doble |
+
+Se descartó 3 columnas a propósito: el cuarto panel se queda solo en la segunda fila dejando dos
+huecos, y **nunca gana** — necesita las mismas dos filas que el 2×2 con columnas más estrechas.
+
+Que sean cuadrados no es un `aspect-ratio` sobre la imagen: el lado se le pasa a `MprPane` como
+`heightPx = lado − 34`, donde 34 px es **exactamente** el alto de la regleta del corte que
+`MprPane` pinta debajo. Así la **tarjeta entera** mide `lado × lado`, no solo su parte negra. Ese
+34 es la constante `EDU_PANEL_CHROME`, es el mismo número que el `height` de
+`.edu-visor3d-pane__barra` en el CSS, y **hay una prueba que falla si se separan** — porque si se
+separan no se rompe nada: solo se ve mal, que es la peor forma de fallar.
+
+El panel del volumen no necesitó medir su barra de Sólido/MIP/Densidad/Umbral (que se parte o no
+según el ancho): una regla convierte la raíz de `Dicom3DVolume` en una rejilla de dos filas
+—lienzo elástico y barra al natural— y se le pasa `height="100%"`.
+
+### 3 · La pantalla: la hoja del visor, no el modal del vertical
+
+- **`EduModal` no se tocó.** Lo usan ~20 pantallas del vertical y su forma es la correcta para
+  formularios y fichas. El CBCT y las mallas abren en `visor-shell.tsx`, una hoja propia:
+  `100dvh` (no `100vh`: en el móvil la barra del navegador aparece y desaparece, y el pie del
+  visor se quedaría bajo el borde), `scrollbar-gutter: stable` para que la barra de
+  desplazamiento no cambie el ancho y la rejilla no oscile, y las mismas reglas de siempre —
+  Escape cierra, el foco vuelve a quien abrió, el fondo no se desplaza, `role="dialog"` +
+  `aria-modal` + `aria-labelledby`. Las imágenes y los PDF siguen en `EduModal`.
+- **Pantalla completa DE VERDAD**, la del sistema, sobre esa hoja. En el iPhone el botón **no se
+  pinta** (WebKit solo deja pantalla completa al vídeo) y no hay nada que explicar: la hoja ya
+  ocupa la ventana entera. Ahí Escape sale de pantalla completa **sin** cerrar el visor.
+- **Maximizar un panel** ahora usa el hueco REAL de la hoja (`--edu-max-h`) en vez del tope de
+  78vh que `MprPane` trae pensado para el modal del dental. Y **oculta** los demás paneles en vez
+  de desmontarlos.
+- **iPad**: el reparto sale de la ventana, no del aparato, así que el giro reparte de nuevo sin
+  tocar el volumen. `@media` y ni una consulta de contenedor — el visor a pantalla completa es
+  `fixed` y un `@container` lo ataría al ancho de su columna (misma razón que el cajón del menú).
+- **iPhone**: una vista a la vez con selector de cinco. Y ahí "maximizar" hace lo único que tiene
+  sentido en 600 px de alto: **quitar las barras de encima** y dejar el corte solo.
+- **Gestos táctiles** (`visor-gestos.ts`). `MprPane` está escrito para el ratón y no se edita, así
+  que los gestos se montan desde fuera y se traducen a lo que ese archivo **ya entiende**:
+  - un dedo con la CRUZ → navega cortes (lo maneja el contenedor, que es quien tiene `cross`),
+  - un dedo con medir/sonda/mover → se reenvían `mousedown`/`mousemove`/`mouseup`, para que con
+    el dedo se pueda medir, que es para lo que se abre un CBCT,
+  - **pellizcar** → `wheel` con `ctrlKey`, que es literalmente el zoom de `MprPane`,
+  - **dos dedos** → arrastre con el **botón central**, que `MprPane` ya trata como paneo con
+    cualquier herramienta,
+  - un toque seco no se toca: al no llamar a `preventDefault`, el navegador sintetiza el clic y
+    la cruz se mueve sola.
+
+### Lo que este trabajo ALCANZA del dental sin editarlo (cuatro cosas, y cómo degradan)
+
+| qué | para qué | si deja de casar |
+| --- | --- | --- |
+| `.edu-visor3d-vol > div` (CSS, sin `!important`) | el lienzo 3D se estira al hueco que deja su propia barra | el panel del volumen sale más alto que los otros |
+| `.edu-visor3d-pano .relative.w-full` + `canvas` (CSS, `!important`) | subir los 380 px en línea de la panorámica | la panorámica se queda en 380 px |
+| `.edu-visor3d-celda--activa … .select-none` (CSS, `!important`) | el panel maximizado usa el hueco real y no 78vh | maximizado aprovecha algo menos |
+| `viewport.style.touchAction = "none"` (JS, en caliente, se restaura) | que el navegador no se lleve el arrastre | los gestos no se activan y el visor queda como estaba |
+
+Ninguna revienta nada: todas degradan a lo que había.
+
+### Lo que NO se rompió (y está probado)
+
+El aviso de que **el CBCT no entrega unidades Hounsfield reales** sigue textual. Siguen los
+presets **Auto/Hueso/Tejido/Aire**, el **umbral** del volumen, la **cruz sincronizada en mm**, el
+**contador de cortes**, el juicio de geometría (`GeometryWarning`) y el bloque **Apoyo de IA**
+(que se sigue pintando también apagado, porque su primer trabajo es decir por qué lo está). El
+freno del estudio pesado sigue existiendo y sigue mirando la **memoria** del aparato — nunca el
+tamaño de la ventana.
+
+**Rendimiento — el candado.** El volumen (668 cortes, 296 MB) vive en `slices`, y ese estado solo
+lo llena el efecto de carga, cuyas dependencias son la clave del estudio, su URL y la clase de
+memoria. Girar el iPad, maximizar, entrar a pantalla completa o pasar de 2 a 4 columnas son CSS y
+números. Hay **una prueba que falla** si alguien mete `compacto`, `maximizada` o el lado del panel
+en esa lista. Y por eso maximizar **oculta** en vez de desmontar (desmontar re-detectaría la
+arcada de cero al volver) y la rama "compacto" mira el **lado menor** de la ventana, que es el
+mismo antes y después del giro. Al 3D se le pasa `height="100%"`: el alto no está entre las
+dependencias que reconstruyen su textura.
+
+### Un cambio de comportamiento, y es a mejor
+
+Antes, en cualquier aparato táctil un CBCT de más de 32 MB era un **bloqueo duro**. Sigue siéndolo
+en el teléfono (ahí la recarga de la pestaña es casi segura), pero en pantalla de tablet ahora se
+ofrece **"Intentar abrirlo aquí de todas formas"**: el freno es una precaución de memoria, no una
+certeza, y un iPad reciente suele poder. La decisión queda en quien tiene el aparato en la mano.
+
+### Qué se probó
+
+`npm run build` **exit 0** (✓ 460/460 páginas; los warnings de `file-type` y de Tailwind son
+preexistentes, y el spam de `DATABASE_URL` es el esperado sin `.env`). `npx tsc --noEmit` limpio
+salvo los **6 errores PREEXISTENTES** de `src/lib/barber/__tests__`. `npx next lint` sobre las dos
+carpetas tocadas: sin avisos. **846/846 pruebas edu en verde**, incluidas las **22 nuevas** de
+`edu-visor.test.ts`: los dos números que tienen que coincidir entre CSS y JS, que no hay ni un
+`@container`, que la panorámica se importa y no está copiada, que las tres piezas del dental
+siguen puras, que `DicomSetViewer` sigue fuera del vertical, que el efecto de decodificar no
+depende del tamaño, y el reparto de columnas (que los cuatro cuadrados quepan siempre en el alto,
+en seis ventanas reales y raras).
+
+**La rejilla se midió en un navegador de verdad.** Como sin base de datos no hay estudio que
+abrir, se generó un banco estático que **recorta el CSS real de `edu-theme.css`** y reproduce la
+estructura que pinta `MprPane`, y se le pidieron sus rectángulos a Chrome en nueve ventanas. De
+ahí salen los números de la tabla de arriba. En 1400×820, por ejemplo: cuatro celdas de 335×336,
+335×336, 335×336 y 335×335, todas en `y=180`, separadas exactamente 343 px (335 + 8 de hueco), y
+la panorámica de 1364 px de borde a borde. Eso es "mismo tamaño, cuadrados, alineados", medido.
+
+### Lo que NO se probó
+
+- **Ningún CBCT real.** No hay base ni URL firmada en este entorno: la decodificación, la
+  auto-detección de la arcada, el reslice y el volumen 3D están razonados y compilados, **no
+  vistos con un estudio**. En particular no se cronometró cuánto tarda `autoDetectArch` sobre un
+  volumen de 668 cortes (cede el hilo con doble `rAF` y pinta su propio "Detectando arcada…",
+  pero el número no se midió).
+- **Ningún gesto táctil se hizo con un dedo.** No hubo aparato táctil: el reenvío de eventos está
+  escrito contra el código de `MprPane` que sí se leyó línea por línea, pero nadie lo tocó.
+- **No se verificó el re-medido en vivo** (ResizeObserver / `resize` / giro). La pestaña que
+  maneja el navegador automatizado corre en segundo plano y Chrome le congela `requestAnimationFrame`
+  y los ResizeObserver; el cálculo sí se ejecutó a mano en cada tamaño. El giro real de un iPad
+  no se ha visto.
+- **Pantalla completa nunca se activó**: la API requiere un gesto del usuario.
+- Nada corrió contra Postgres. **No hubo SQL** — esta rama no toca el esquema ni añade un
+  endpoint, y por eso no hay `sql/edu-visor.sql`.
+
+### Lo que se quiso tocar y NO se tocó
+
+- **El dental**: ni una línea. `PanoramicPane`, `arch-autodetect`, `panoramic-reslice`, `MprPane`,
+  `Dicom3DVolume`, `GeometryWarning` y `cbct-mpr-shared` se importan tal cual.
+- **`EduModal`**: se dejó exactamente como estaba, incluida su prop `wide` — que a partir de ahora
+  **no la usa nadie** (el visor era su único cliente). Quitarla habría sido tocar un archivo
+  compartido por medio vertical para borrar tres líneas muertas.
+- **La agenda, los casos, el padrón y los P2 de la auditoría**: son de `fix/edu-cierre`, que
+  corría en paralelo. Ni un archivo suyo se abrió.
+- **El binario "lite" de móvil**: sigue sin existir, sigue exigiendo un generador de servidor que
+  el instituto no tiene, y la pantalla lo sigue diciendo.
+- **Gestos dentro de la panorámica**: en el lienzo del trazado, con el dedo se pueden **añadir**
+  puntos (el navegador sintetiza el clic) pero no **arrastrarlos**. El camino normal es
+  "Auto-detectar", que no necesita el dedo; corregir la curva a mano sigue siendo cosa de ratón.
