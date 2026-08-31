@@ -18,6 +18,7 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  MessageCircle,
   Ruler,
   Sparkles,
   Stamp,
@@ -81,6 +82,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   building: Building2,
   // Ola 8 - la cartera de IA.
   sparkles: Sparkles,
+  // Ola 9 — WhatsApp y recordatorios.
+  "message-circle": MessageCircle,
 };
 
 export interface EduShellProps {

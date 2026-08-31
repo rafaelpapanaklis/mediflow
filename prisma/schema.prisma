@@ -12425,6 +12425,13 @@ model EduInstitution {
   // qué. No hay ninguna bandera de entorno que la encienda por instituto.
   aiQuota          EduAiQuota?
   aiUsages         EduAiUsage[]
+  // Ola 9 · WhatsApp y recordatorios. Bloque ADITIVO al final de las
+  // relaciones: los modelos viven al FINAL del archivo, con su encabezado.
+  // La conexión es 1:1 (cada instituto conecta SU propia WhatsApp; no hay
+  // una compartida porque Meta le cobra las plantillas a la tarjeta de esa
+  // WABA y no se puede mandar en nombre de otra cuenta).
+  whatsappConfig   EduWhatsappConfig?
+  whatsappMessages EduWhatsappMessage[]
 
   @@map("edu_institutions")
 }
@@ -14882,4 +14889,244 @@ model EduAiPrice {
   @@unique([feature, model], map: "edu_ai_prices_modelo_key")
   @@index([feature, isActive], map: "edu_ai_prices_funcion_idx")
   @@map("edu_ai_prices")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — Ola 9 · WHATSAPP Y RECORDATORIOS.
+//
+// Dos tablas: la CONEXIÓN de cada instituto con Meta (EduWhatsappConfig) y
+// el REGISTRO DE CADA ENVÍO con su resultado (EduWhatsappMessage).
+//
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 CADA INSTITUTO CONECTA SU PROPIA WHATSAPP. NO HAY UNA COMPARTIDA.
+//
+// No es una decisión de arquitectura, es cómo funciona Meta: cada plantilla
+// que sale se le COBRA a la tarjeta de la WABA desde la que salió, y no se
+// puede mandar "en nombre de" otra cuenta. Un número de DaleControl
+// compartido por veinte escuelas significaría que DaleControl paga los
+// recordatorios de las veinte, y que el paciente de la Escuela A recibe un
+// mensaje de un remitente que no reconoce.
+//
+// Consecuencia directa, y es la que más se ve en pantalla: si la WABA del
+// instituto NO tiene método de pago válido, Meta rechaza el envío con el
+// código 131042. Eso NO es un fallo del panel y el panel no puede
+// arreglarlo — se detecta, se marca aquí ("billingOk" a false) y se dice
+// con esas palabras: SIN MÉTODO DE PAGO.
+//
+// 🔴 LA VENTANA DE 24 h SE CONSIDERA SIEMPRE CERRADA EN ESTE VERTICAL.
+//
+// Meta deja mandar texto libre durante las 24 h siguientes al último
+// mensaje DEL PACIENTE. Saber si esa ventana está abierta exige INGERIR los
+// mensajes que entran (webhook + bandeja), y este vertical no los ingiere:
+// no hay Inbox del instituto, ni webhook propio, ni nadie que conteste. Así
+// que la respuesta honesta es la conservadora — la ventana está cerrada
+// siempre y TODO sale por plantilla aprobada, o no sale.
+//
+// Y de ahí la regla que sostiene la ola: SIN PLANTILLA APROBADA PARA UN
+// TIPO DE MENSAJE, ESE AVISO NO SE INTENTA. No se encola para fallar
+// después: se dice en la pantalla, con el nombre del tipo que falta. Un
+// intento que Meta rechaza gasta la llamada, deja una fila roja que nadie
+// sabe leer y —lo peor— se puede confundir con "ya salió".
+//
+// 🔴 institutionId ESTÁ EN LAS DOS TABLAS, igual que en las seis olas
+// anteriores: toda consulta del vertical filtra por el institutionId de la
+// SESIÓN. Ojo Prisma: un institutionId `undefined` BORRA el filtro y
+// devuelve las filas de TODOS los institutos.
+//
+// ⚠️ POR QUÉ EduWhatsappMessage NO DECLARA RELACIONES CON EduPatient,
+// EduAppointment, EduConsent NI EduCharge, y eso es a propósito:
+//
+//   1. Lo que el registro tiene que contestar dentro de un año es "¿qué se
+//      le mandó a quién y qué contestó Meta?", y eso se contesta con datos
+//      CONGELADOS en la propia fila ("toName", "toPhone", "body"), igual
+//      que EduChargeItem congela el precio y EduCaseGrade el nombre de la
+//      rúbrica. Un JOIN devolvería el nombre de HOY, no el del día del
+//      envío, y un paciente borrado se llevaría por delante la prueba de
+//      que se le avisó.
+//   2. Las cuatro columnas son filtros ESCALARES ("¿hay ya un recordatorio
+//      de esta cita?") y para eso no hace falta relación.
+//
+// Las llaves foráneas SÍ existen en la base (sql/edu-ola-9.sql), en SET
+// NULL: borrar un paciente no puede borrar la constancia del aviso.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-9.sql y hay que
+// aplicarlo a mano en Supabase.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Qué clase de mensaje es. NO es texto libre: cada tipo tiene su plantilla
+/// aprobada, su interruptor y su permiso.
+enum EduWhatsappKind {
+  /// Recordatorio de cita. Lo manda el CRON, nadie más.
+  RECORDATORIO
+  /// La carta de consentimiento informado, con su liga por token.
+  CONSENTIMIENTO
+  /// El resumen del recibo de un cobro.
+  RECIBO
+}
+
+/// En qué acabó un envío.
+///
+/// 🔴 PENDING EXISTE PORQUE LA FILA SE ESCRIBE ANTES DE LLAMAR A META. Si
+/// se escribiera después, un proceso que muere a mitad de la llamada dejaría
+/// un mensaje entregado y ninguna constancia — y al siguiente tick se
+/// mandaría otra vez. Escribir primero convierte ese caso en una fila
+/// PENDING, que es incómoda pero VERDADERA.
+///
+/// BLOCKED no es un fallo de Meta: es una decisión nuestra tomada ANTES de
+/// gastar la llamada (sin plantilla aprobada, sin teléfono, sin conexión).
+enum EduWhatsappStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+  BLOCKED
+}
+
+/// La conexión de UN instituto con la Cloud API de Meta. Una fila por
+/// instituto (institutionId es único).
+model EduWhatsappConfig {
+  id            String @id @default(cuid())
+  institutionId String @unique
+
+  /// Credenciales de la WABA del instituto.
+  ///
+  /// 🔴 phoneNumberId es ÚNICO en toda la tabla: dos institutos con el
+  /// mismo número serían dos escuelas mandando desde el mismo remitente, y
+  /// el día que este vertical ingiera mensajes entrantes no habría forma de
+  /// decidir de quién es la conversación.
+  phoneNumberId     String? @unique
+  businessAccountId String?
+  /// CIFRADO en reposo con el envelope de la app ("v1:…"). Un token de
+  /// WhatsApp en claro es la cuenta de Meta entera del instituto.
+  accessToken       String?
+  /// El número tal como se lee ("+52 55 1234 5678"). Solo para pintarlo:
+  /// nunca se manda con él, se manda con phoneNumberId.
+  displayPhone      String? @db.VarChar(40)
+  /// Cómo se conectó: "manual" (se pegan las credenciales) es lo único que
+  /// existe hoy. "embedded" y "coexistence" quedan escritas porque son los
+  /// dos caminos que Meta ofrece y el día que se implementen esta columna
+  /// ya distingue las filas viejas.
+  connMethod        String? @db.VarChar(20)
+
+  /// ¿Hay conexión utilizable? Se apaga sola ante un 190 / HTTP 401 (token
+  /// revocado), igual que waConnected en el dental: sin esto, el cron
+  /// seguiría intentando con un token muerto en cada tick y la escuela
+  /// creería que sus recordatorios salen.
+  connected      Boolean   @default(false)
+  connectedAt    DateTime?
+  /// Último error de Meta que se vio, para poder pintarlo tal cual.
+  lastErrorCode  Int?
+  lastErrorMsg   String?   @db.VarChar(500)
+  lastErrorAt    DateTime?
+
+  /// 🔴 ¿La WABA tiene método de pago válido? Meta le cobra a ELLA cada
+  /// plantilla. Sin tarjeta, el envío falla con 131042 y esto se pone en
+  /// false; con el primer envío aceptado vuelve a true. La pantalla lo dice
+  /// con esas palabras ("sin método de pago") para que no parezca un bug
+  /// del panel: el panel no lo puede arreglar, se arregla en Meta.
+  billingOk        Boolean   @default(false)
+  billingCheckedAt DateTime?
+
+  /// Plantillas aprobadas por TIPO de mensaje:
+  /// { "RECORDATORIO": { "name": "edu_recordatorio_cita", "lang": "es_MX",
+  ///   "status": "APPROVED" }, … }. La clave es un EduWhatsappKind.
+  /// Se lee con eduParseWaTemplates (src/lib/edu/whatsapp-core.ts), que
+  /// DESCARTA lo que venga mal formado: mandarle a Meta un nombre inválido
+  /// gasta un intento y devuelve un código que no explica nada.
+  templates      Json?
+
+  /// ── Qué avisos están encendidos ────────────────────────────────────
+  /// Los tres nacen APAGADOS. Un producto que empieza a mandarle WhatsApp a
+  /// pacientes reales el día que se aplica el .sql —sin que nadie lo haya
+  /// pedido y con cargo a la tarjeta de la escuela— no es una función, es
+  /// un accidente.
+  remindersEnabled Boolean @default(false)
+  /// CUÁNTAS HORAS ANTES sale el recordatorio. Una sola anticipación y no
+  /// dos como el dental: cada plantilla que sale se le cobra al instituto,
+  /// y "24 h y además 2 h" es duplicar la factura de la escuela sin que
+  /// nadie lo haya pedido. Si un día hacen falta dos, se agrega la segunda
+  /// columna — no se agrega ahora "por si acaso".
+  reminderHoursBefore Int  @default(24)
+  consentEnabled   Boolean @default(false)
+  receiptEnabled   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@map("edu_whatsapp_configs")
+}
+
+/// UN envío: lo que se mandó, a quién, y qué contestó Meta.
+///
+/// 🔴 UN RECORDATORIO QUE SE CREE ENVIADO Y NO SALIÓ ES PEOR QUE NINGUNO.
+/// Por eso la fila se escribe ANTES de llamar a Meta (status PENDING), se
+/// sella con el wamid si Meta acepta, y guarda el CÓDIGO del error si no —
+/// el texto de Meta cambia de redacción y de idioma, el número no.
+model EduWhatsappMessage {
+  id            String            @id @default(cuid())
+  institutionId String
+  kind          EduWhatsappKind
+  status        EduWhatsappStatus @default(PENDING)
+
+  /// A quién se le mandó, CONGELADO. El nombre es el de ese día: si el
+  /// paciente cambia de apellido o se da de baja, la constancia sigue
+  /// diciendo a quién se le avisó.
+  patientId String?
+  toName    String  @db.VarChar(160)
+  /// Normalizado a 10 dígitos nacionales. Meta lo recibe con el 52 delante
+  /// (lo pone normalizeMxWhatsAppPhone al enviar).
+  toPhone   String  @db.VarChar(20)
+
+  /// De qué es este aviso. Solo uno de los tres viene lleno.
+  appointmentId String?
+  consentId     String?
+  chargeId      String?
+
+  /// El texto que la persona LEE, con la plantilla ya pintada. No es el
+  /// texto libre que se habría mandado dentro de la ventana: guardar ése
+  /// sería enseñarle al instituto algo que nadie recibió.
+  body         String  @db.Text
+  templateName String? @db.VarChar(80)
+  templateLang String? @db.VarChar(12)
+
+  /// 🔴 LA LLAVE DE IDEMPOTENCIA DEL RECORDATORIO, Y LLEVA DENTRO LA HORA
+  /// DE LA CITA: "<citaId>:<horasAntes>:<startsAt ISO>". Si la cita se
+  /// mueve, la llave CAMBIA, así que el recordatorio de la hora nueva no lo
+  /// bloquea la fila de la hora vieja. En el dental la llave no lleva la
+  /// hora y ése es justamente el bug: la fila vieja tapa el aviso bueno y
+  /// no es que llegue tarde, es que no llega nunca.
+  /// Null en los documentos: reenviar una carta a mano es legítimo.
+  dedupeKey String? @db.VarChar(200)
+
+  /// Cuándo TENÍA que salir (el recordatorio) y cuándo salió de verdad.
+  scheduledFor DateTime? @db.Timestamptz(3)
+  sentAt       DateTime? @db.Timestamptz(3)
+
+  /// Lo que contestó Meta.
+  wamid     String? @db.VarChar(120)
+  errorCode Int?
+  errorMsg  String? @db.VarChar(500)
+  /// Cuántas veces se ha intentado. Un fallo se reintenta unas pocas veces
+  /// (una tarjeta que se arregla, un 500 de Meta) y luego se deja en paz:
+  /// reintentar una plantilla rechazada cada quince minutos es pegarle a
+  /// Meta toda la vida.
+  attempts  Int     @default(0)
+
+  /// Quién lo mandó. Null = el CRON (un cron no tiene usuario).
+  sentByUserId String?
+  sentByName   String? @db.VarChar(160)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, dedupeKey], map: "edu_whatsapp_messages_dedupe_key")
+  @@index([institutionId, createdAt], map: "edu_whatsapp_messages_fecha_idx")
+  @@index([institutionId, patientId, createdAt], map: "edu_whatsapp_messages_patient_idx")
+  @@index([institutionId, appointmentId], map: "edu_whatsapp_messages_appt_idx")
+  @@index([institutionId, status, scheduledFor], map: "edu_whatsapp_messages_cola_idx")
+  @@map("edu_whatsapp_messages")
 }

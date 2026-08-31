@@ -868,6 +868,20 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "ia.view",
   },
+  // ── Ola 9 · WhatsApp y recordatorios ─────────────────────────────────
+  {
+    // Va en ADMINISTRACIÓN y la ÚLTIMA: es configuración que se toca una
+    // vez —conectar el número, registrar las plantillas, decidir cuántas
+    // horas antes sale el recordatorio— y casi no se vuelve a abrir. Lo que
+    // sí se usa a diario (mandarle la carta o el recibo a un paciente) no
+    // está aquí: está en la ficha del paciente, que es donde uno está
+    // cuando lo necesita.
+    key: "whatsapp",
+    href: "/instituto/whatsapp",
+    icon: "message-circle",
+    section: "administracion",
+    permission: "whatsapp.view",
+  },
 ];
 
 /** Etiqueta de cada sección del menú (las vacías no se pintan). */
@@ -916,6 +930,7 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   // item que dijera "IA" haría que quien busca "por qué se apagó el
   // micrófono" no supiera que es aquí.
   ia: "Consumo de IA",
+  whatsapp: "WhatsApp",
 };
 
 // ── Marca del vertical ──────────────────────────────────────────────────

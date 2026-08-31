@@ -5070,3 +5070,297 @@ button.edu-dir-money__fila:hover {
 .edu-progreso--agotado .edu-progreso__bar {
   background: var(--edu-danger);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Ola 9 · WHATSAPP Y RECORDATORIOS
+
+   Bloque ADITIVO al final del archivo, como todas las olas. Reusa los
+   tokens de arriba y no redefine ni una variable: un color suelto aquí
+   sería el primer color del vertical que no cambia con el tema.
+
+   MÓVIL PRIMERO: todo apilado y a una columna; en pantallas anchas las
+   tarjetas se reparten con auto-fit. No hay ninguna tabla nueva — lo que
+   se lee aquí son párrafos ("por qué no salió"), y un párrafo dentro de
+   una celda de tabla en un teléfono es ilegible.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── El estado de la conexión ─────────────────────────────────────────── */
+.edu-wa-conn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--edu-line);
+  border-left: 3px solid var(--edu-line-strong);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-wa-conn--conectado {
+  border-left-color: var(--edu-ok);
+}
+
+/* "Sin método de pago" y "se cayó la conexión" comparten la franja roja a
+   propósito: las dos significan lo mismo desde el mostrador —hoy no sale
+   nada— aunque una se arregle en Meta y la otra aquí. */
+.edu-wa-conn--sin_metodo_de_pago,
+.edu-wa-conn--token_caido {
+  border-left-color: var(--edu-danger);
+  background: var(--edu-danger-soft);
+}
+
+.edu-wa-conn--sin_conectar {
+  border-left-color: var(--edu-amber-700);
+}
+
+.edu-wa-conn__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.edu-wa-conn__phone {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.edu-wa-conn__detail {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--edu-text-2);
+}
+
+.edu-wa-conn__meta {
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+  overflow-wrap: anywhere;
+}
+
+/* ── Los tres avisos ──────────────────────────────────────────────────── */
+.edu-wa-avisos {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 760px) {
+  .edu-wa-avisos {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+.edu-wa-aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+}
+
+.edu-wa-aviso--on {
+  border-color: var(--edu-line-brand);
+  background: var(--edu-surface-2);
+}
+
+.edu-wa-aviso__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.edu-wa-aviso__name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.edu-wa-aviso__desc,
+.edu-wa-aviso__meta {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-text-2);
+}
+
+.edu-wa-aviso__tpl {
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+  overflow-wrap: anywhere;
+}
+
+/* El porqué de que un aviso no pueda salir. En ROJO y a la vista, nunca en
+   un tooltip: es lo único de esta pantalla que alguien tiene que leer para
+   arreglar algo. */
+.edu-wa-aviso__problema {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-danger);
+}
+
+/* ── Las plantillas ───────────────────────────────────────────────────── */
+.edu-wa-tpls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edu-wa-tpl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+}
+
+.edu-wa-tpl__kind {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.edu-wa-tpl__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-wa-tpl__reason {
+  font-size: 12.5px;
+  color: var(--edu-danger);
+}
+
+/* El texto EXACTO que hay que dar de alta en Meta. En monoespaciada y con
+   los saltos respetados: quien lo copia lo tiene que pegar carácter a
+   carácter, y una plantilla con un espacio de más es una plantilla
+   distinta. */
+.edu-wa-tpl__body {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--edu-surface-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.edu-wa-tpl__vars {
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+/* ── Documentos que se pueden mandar (ficha del paciente) ─────────────── */
+.edu-wa-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-wa-doc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+}
+
+.edu-wa-doc__name {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.edu-wa-doc__meta {
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+}
+
+/* ── El registro de envíos ────────────────────────────────────────────── */
+.edu-wa-envios {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-wa-envio {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--edu-line);
+  border-left: 3px solid var(--edu-line-strong);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+}
+
+.edu-wa-envio--sent {
+  border-left-color: var(--edu-ok);
+}
+
+/* FAILED y BLOCKED comparten el rojo, y no es pereza: desde fuera son la
+   misma noticia —el paciente no recibió nada— y la diferencia (si se
+   intentó o no) la explica el texto, que es donde de verdad se lee. */
+.edu-wa-envio--failed,
+.edu-wa-envio--blocked {
+  border-left-color: var(--edu-danger);
+}
+
+.edu-wa-envio--cancelled {
+  border-left-color: var(--edu-text-3);
+  opacity: 0.82;
+}
+
+.edu-wa-envio__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.edu-wa-envio__kind {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.edu-wa-envio__to {
+  font-size: 13px;
+  color: var(--edu-text-2);
+}
+
+/* El texto que de verdad salió. Se pinta ENTERO y no recortado con puntos
+   suspensivos: cuando alguien viene a esta pantalla es porque el paciente
+   dice que le llegó algo raro, y lo que hace falta es leerlo tal cual. */
+.edu-wa-envio__body {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--edu-surface-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.edu-wa-envio__error {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-danger);
+  overflow-wrap: anywhere;
+}
+
+.edu-wa-envio__meta {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+}
