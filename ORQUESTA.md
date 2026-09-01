@@ -31641,3 +31641,244 @@ pantalla server-rendered contra Prisma devuelve 500 antes de pintar. Lo que est�
 aritmética, los textos, el orden del corte dentro de `/sign`, la cerradura de rol y la cadena
 del mensaje de error hasta la alerta de la pantalla. Que el ámbar se vea ámbar en un monitor
 queda para el preview de Vercel. PR contra `main`, SIN mergear.
+
+## [Institucional · INICIO DE DIRECCIÓN] — El nombre de la escuela no lo aplastaba el minificador sino el LAYOUT, y el Inicio de quien dirige deja de ser un saludo para ser un tablero ✅ (2026-09-01) · rama `feat/edu-inicio-direccion`
+
+Tres cosas en una rama, sobre `origin/feat/edu-cuota-storage` (necesita
+`src/lib/edu/almacenamiento.ts`, que vive ahí y todavía no está en `main`): el bug del nombre
+cortado, el Inicio de DIRECCIÓN convertido en tablero, y el medidor de almacenamiento dentro
+de ese tablero.
+
+### 1 · El nombre de la escuela cortado — QUÉ LO ROMPÍA (medido, no deducido)
+
+El síntoma en producción: `.edu-sidebar__school` llegaba con `display: flow-root`, la caja
+medía **10 px** —solo su relleno— y se veía media línea. La hipótesis de partida era que algo
+de la tubería (minificador / autoprefixer / lightningcss) reescribía la regla. **No era eso, y
+hay dos hallazgos.**
+
+**Cómo se reprodujo.** `npm run build` + `npx next start`, con una página temporal que monta el
+sidebar REAL (mismo markup que `edu-shell.tsx`) con el menú completo de dirección — 22
+renglones, que es lo que ve un director. Medido con `getComputedStyle` contra ese build:
+
+```
+ANTES    display: flow-root · height 10 px  · clientHeight 10 · scrollHeight 63 · flex-shrink 1
+DESPUÉS  display: flow-root · height 35.1px · clientHeight 35 · scrollHeight 53 · flex-shrink 0
+         35.1 px = 2 × 17.55 px de line-height  →  1.99 renglones exactos
+```
+
+**Hallazgo 1 — la tubería NO toca la regla.** En el CSS emitido
+(`.next/static/css/*.css`) la regla sale **letra por letra** como está escrita:
+`display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2`. `postcss.config.mjs`
+solo tiene dos plugins (`tailwindcss` y `autoprefixer`) y ninguno la modifica; el CSSOM del
+navegador confirma `display: -webkit-box` como valor **especificado**. El `flow-root` es el
+valor **COMPUTADO** que Chrome 152 le da hoy a ese display heredado — se comprobó con un
+elemento creado a mano con `style="display:-webkit-box"` **inline**, sin hoja de estilos de por
+medio: sale `flow-root` igual. Y es cosmético: el recorte a dos renglones **sigue funcionando**
+(se comprobó poniéndole `flex-shrink: 0` y nada más — la caja pasó de 10 px a 45 px con sus
+puntos suspensivos). O sea: el dato que despistaba era real, pero no era la causa.
+
+**Hallazgo 2 — lo que aplastaba la caja era el LAYOUT.** `.edu-sidebar` es un contenedor flex
+en COLUMNA con alto definido (`100dvh` en escritorio, `top/bottom` en el cajón), y **un ítem
+flex con `overflow: hidden` tiene tamaño mínimo automático CERO**. Con el menú de dirección
+—1103 px de contenido en 655 px de columna— el algoritmo encoge lo único que se deja encoger, y
+`.edu-sidebar__school` es el **único** hijo del cajón con `overflow: hidden`. Por eso fue el
+único que se rompió, y por eso el bug depende del rol: con un menú corto no se ve.
+
+**El arreglo, y por qué éste sobrevive:**
+
+- **`flex: none`** — es EL arreglo. La caja no se encoge; si el menú no cabe, el cajón scrollea
+  (ya tenía `overflow-y: auto`). Un menú con scroll se usa; un nombre de escuela a 10 px no se
+  lee. Se comprobó que **nadie más** se aplasta en su lugar: `.edu-nav` y `.edu-sidebar__foot`
+  siguen a su alto de contenido.
+- **`max-height: calc(2 * 1.35em)`** — el cinturón, por si un navegador deja de honrar el
+  `-webkit-box` (Chrome ya lo computa a otra cosa). Se comprobó que corta a dos renglones
+  incluso con `display: block`.
+- **El `padding-bottom: 10px` pasó a `margin-bottom: 10px`** (el hueco hasta el menú es el
+  mismo: 14 px medidos antes y después). `overflow: hidden` recorta en la caja de RELLENO, así
+  que con el padding dentro **asomaban 10 px del tercer renglón** por debajo de los puntos
+  suspensivos. Se vio en la captura y se corrigió.
+- ⚠️ **El respaldo que proponía el encargo, `max-height` a secas, NO arregla nada por sí solo**:
+  se midió y la caja seguía en 10 px. `max-height` no impide que un ítem flex se encoja. Queda
+  como segunda línea, no como arreglo.
+
+**El mismo truco en otro sitio.** `.edu-topbar__name` (la barra superior del móvil) tiene la
+misma forma: `-webkit-box` con `overflow: hidden` dentro de un contenedor flex. Hoy **no** se
+rompe —`.edu-topbar__title` crece con su contenido, así que no hay quien apriete; medido a
+372 px en un iframe: 36.25 px = 2 renglones, antes y después— pero el día que la barra gane un
+alto fijo se aplastaría igual. Lleva el mismo `flex: none` + `max-height`, y el `line-height`
+se declaró en la propia regla porque es el número que usa el `calc`. Son los **dos únicos**
+sitios del vertical con line-clamp (`grep` de `-webkit-box|line-clamp` sobre
+`src/app/instituto/`, `src/components/edu/` y `src/app/admin/institutos/`).
+
+**Vuelto a medir contra el build final** (`npm run build` + `next start`, la regla leída del
+CSSOM del archivo emitido): `flex: 0 0 auto`, `max-height: 35.1px`, altura 35.1 px, 1.99
+renglones, `scrollHeight` 53 → el texto sobrante queda recortado con sus puntos suspensivos.
+En el cajón del móvil (iframe a 372 px), de 10 px a 35.1 px.
+
+### 2 · El Inicio de DIRECCIÓN, un tablero
+
+`/instituto/inicio` era un saludo con tres tarjetas. Para **DOCENTE, ESTUDIANTE y CAJA sigue
+siendo exactamente eso, sin una línea de diferencia**. Para DIRECCIÓN es ahora un tablero con
+tres gráficas, un bloque de "lo que está esperando" y el medidor de almacenamiento.
+
+- **Tres gráficas con conmutador semana / mes**, todas por día y todas respetando la sede del
+  selector que ya existe (`getEduCampusScope`):
+  1. **Pacientes atendidos** — personas distintas con una cita `COMPLETED` ese día.
+  2. **Dinero cobrado** — pagos REALES menos devoluciones, por la fecha del **pago** (no cobros
+     emitidos).
+  3. **Tratamientos autorizados** — autorizaciones `APPROVED`, por la fecha de la firma.
+  Cada una con su total del periodo y la variación contra el periodo anterior.
+- **Debajo, lo que está esperando**, con su número y el enlace a donde se resuelve:
+  autorizaciones sin firmar (`/instituto/autorizaciones`), citas de hoy (`/instituto/agenda`) y
+  por cobrar (`/instituto/caja`).
+
+**No se escribió un tablero desde cero.** Las series viven en `direccion-core.ts` (lo puro) y
+`direccion.ts` (las consultas), al lado de las cuatro tarjetas de la Ola 7, y de ahí las
+consume el Inicio. Se reusa TODO: `eduDirVentana` (mismo periodo, y el anterior pegado por la
+izquierda y del mismo largo), `EDU_DIR_MAX_CITAS`/`EDU_DIR_MAX_FILAS` con el mismo aviso al
+alcanzarlos, `eduDirVariacion` (que **no inventa un porcentaje** cuando el periodo anterior fue
+cero) y `eduDirAlcance` (que es quien niega). Dos módulos calculando el mismo dinero de dos
+formas es un bug esperando, y por eso el total de "Dinero cobrado" del Inicio es **el mismo
+número** que la tarjeta "Cobrado" del tablero: mismo `where`, misma ventana, misma resta de
+devoluciones.
+
+**Las decisiones que no se deducen del código:**
+
+- 🔴 **Las barras de "pacientes" NO suman su total, y la pantalla lo dice.** La cifra cuenta
+  PERSONAS: quien vino el lunes y el jueves suma 1 en el lunes, 1 en el jueves y **1** en el
+  total. Por eso `eduDirArmarSerie` **recibe** el total en vez de deducirlo sumando — deducirlo
+  diría 2 y contradiría al tablero de Dirección, que dice 1. Hay prueba.
+- 🔴 **Las autorizaciones NO se recortan por sede, y se dice cuando hay una elegida.** Una
+  autorización cuelga de un CASO, y en la Ola 11 lo académico no se divide por campus (un
+  estudiante rota entre edificios y su expediente es uno solo). `EduCaseApproval` no tiene
+  `campusId`, y derivarle una sede por el sillón de alguna de sus citas sería inventarla: un
+  caso puede tener citas en dos edificios. Es la misma decisión que ya toma la tarjeta
+  "esperando firma" del tablero. Las otras dos series sí se recortan: las citas por su
+  **sillón** y el dinero por la columna de sede **sellada en el cobro**, exactamente como en
+  `/instituto/direccion`.
+- 🔴 **Se pintan TODOS los días del periodo, también los de cero.** Una serie armada solo con
+  los días que tuvieron filas pega el viernes con el lunes y dibuja una clínica que trabaja
+  siete días.
+- 🔴 **El día de cada fila se decide en la zona del INSTITUTO.** Un pago de las 19:00 en México
+  es de HOY; leído en UTC caería en la barra de mañana. Probado en los dos sentidos.
+- 🔴 **Un día de dinero puede salir NEGATIVO y se pinta así** (se devolvió más de lo que
+  entró), con su línea del cero. Taparlo escondería el único día que hay que ir a mirar.
+- 🔴 **La variación del DINERO se escribe en dinero.** `eduDirVariacion` es genérica y escribe
+  los dos extremos como números pelados; en centavos eso saca `(0 → 842300)`, que se lee como
+  ochocientos cuarenta y dos mil pesos cuando son ocho mil cuatrocientos veintitrés. Se añadió
+  `eduDirVariacionEn(actual, anterior, unidad)`: **la aritmética no cambia** (sigue siendo la
+  misma función, con su regla de no inventar porcentajes), solo cómo se escriben esos dos
+  números. Hay prueba de las dos cosas.
+- **El conmutador tiene DOS posiciones, no cuatro.** "Hoy" es un día —una gráfica de una barra
+  no es una gráfica— y el rango personalizado ya vive en el tablero con su exportación al lado.
+  `parseEduDirInicioPeriodo` existe justo para eso: `hoy` y `rango` son valores LEGALES del
+  tablero, y aquí caen a "semana".
+- **El Inicio no filtra por especialidad.** Es la portada de la escuela entera; el desglose por
+  especialidad es análisis y vive en Dirección.
+- **El conmutador NAVEGA** (`?periodo=`), no guarda estado en el cliente: cambiar de semana a
+  mes es cambiar la consulta, así que se hace donde vive la consulta. Mismo mecanismo que el
+  tablero, y deja la vista compartible y recargable.
+
+**El alcance pasa por `visibility.ts`, el punto único.** Se añadió ahí
+`eduPuedeVerLaClinicaEntera(actor)`, que **pregunta a `eduVisibility`** por los cuatro recursos
+en vez de escribir una lista blanca de roles nueva — así, el día que un rol cambie de alcance,
+esto lo dice solo. `eduDirAlcance` (que ya hacía esa comprobación a mano) ahora la usa, y con
+ella el motivo del 403, que también se mudó al punto único: dos redacciones del mismo motivo
+son dos formas de explicar mal la misma regla. **Un DOCENTE, un ESTUDIANTE o CAJA que peguen la
+URL no ven el dinero de la escuela**: el permiso `direccion.panel` decide si se PIDEN los datos
+y el alcance decide si se pueden dar — NIEGA, no recorta, porque un total recortado presentado
+como el total es un dato falso. Hacen falta los dos: el permiso se enciende a mano desde
+Equipo, el ROL no. (Caja da `false` y conviene saber por qué: ve pacientes, agenda y dinero,
+pero **no casos**, así que "tratamientos autorizados" le saldría en cero y se leería como "esta
+semana no se autorizó nada".) Y si el tablero no se puede pintar, el Inicio **degrada al saludo
+de siempre** en vez de quedarse en blanco: es la portada del panel.
+
+**Las gráficas: `recharts`, la misma librería que ya usa el repo.** Cero dependencias nuevas —
+ya está en `package.json` (`^2.12.7`) y la usan `/admin/analytics`, `/dashboard/finanzas`,
+`/dashboard/reports`, `/dashboard/analytics/crm` y media docena de sitios más del dental. La
+forma de cargarla está copiada de
+`src/components/dashboard/home/parts/revenue-trend-card.tsx`: `next/dynamic` con `ssr: false`,
+porque recharts pesa ~95 kB y el Inicio lo abren también un estudiante y un docente, que no ven
+ninguna gráfica. Decisiones de dibujo:
+
+- **Barras y no una línea**: cada punto es un día, y una línea entre dos días insinúa que hubo
+  algo entre medias ("1.4 pacientes el martes por la tarde").
+- **Un solo color en las tres, el de la marca.** En este vertical el color está reservado para
+  el semáforo; tres gráficas de tres colores enseñarían a leerlo como decoración justo en la
+  pantalla donde luego hay que creerle a un rojo.
+- **La etiqueta del eje es corta — "Mar 25"** y no "mar 25 de ago": con 30 barras solo se
+  rotula una de cada cuatro y la larga se pisa con la siguiente. El mes está en el encabezado
+  del periodo y la fecha COMPLETA la dice el globo del ratón.
+- **El eje del dinero es corto** (`-$550`, `$1.1k`, `$120k`), con el signo delante del peso.
+  `$12,340.00` no cabe en 46 px y recharts lo recorta a la mitad.
+- **Dos gráficas arriba y la tercera a lo ancho** (≥1000 px). Con la tercera en media columna
+  quedaba medio bloque en blanco al lado, que se lee como algo que no cargó. Medido a 387 px:
+  las tres apiladas, **cero desborde horizontal**.
+
+### 3 · El almacenamiento, dentro del tablero
+
+Tarjeta al pie del tablero, **reusando** `getEduAlmacenamientoPanel` y `EduAlmacenamientoCard`
+de la rama de la cuota: mismos colores (ámbar al 80 %, rojo al 95 %, bloqueado al 100 %),
+mismos textos, mismo consumo. **No se recalcula nada** — hay prueba de que la pantalla del
+Inicio no nombra `eduStudy`, `sizeBytes` ni `storageQuotaBytes`. Y **no pasa por la sede**
+aunque el resto del tablero sí: la cuota es del INSTITUTO —tres sedes con 5 TB son 5 TB entre
+las tres— y recortarla por campus le enseñaría a una escuela con dos edificios la mitad de su
+consumo. También hay prueba de que se pide con `getEduAlmacenamientoPanel(ctx)` y no con la
+sede.
+
+### Verificación
+
+- **`npm run build` completo, sin pipes: exit 0.** (Un intento intermedio salió EPERM en
+  `prisma generate` porque el `next start` de la medición tenía tomado
+  `query_engine-windows.dll.node`; se paró el servidor y el build corrió limpio. Es el EPERM
+  conocido de Windows, no del código.)
+- **`npm run test:edu`: exit 0 — 31 archivos, 1014 pruebas, 1014 pass, 0 fail.** Las 40 nuevas
+  están en `src/lib/edu/__tests__/edu-inicio-direccion.test.ts` y cubren lo que pidió el
+  encargo: que las series por día respeten la sede (y que las autorizaciones **no**, con su
+  aviso), que un DOCENTE/ESTUDIANTE/CAJA no las reciban, y la variación contra el periodo
+  anterior. Más: los días de cero, la zona horaria del instituto, el total que no se deduce
+  sumando barras, el día negativo que no se tapa, la variación del dinero escrita en dinero, y
+  un **candado mecánico** sobre `direccion.ts` — si alguien le escribe a mano un
+  `institutionId`, le quita el `pagoCharge(alcance, …)`, le pone un `campusId` a las
+  autorizaciones o cambia los pagos por cobros emitidos, la prueba falla.
+- **Guardia:** `EDU_GUARD_SHARED="ORQUESTA.md,prisma/schema.prisma" node scripts/edu-guard.cjs`
+  → **exit 0**. ⚠️ `prisma/schema.prisma` hay que declararlo porque la rama sale de
+  `feat/edu-cuota-storage` y hereda su columna `storageQuotaBytes`; **esta rama no toca el
+  esquema** —no añade ni una tabla ni una columna— y por lo mismo **no hay `.sql` que aplicar**.
+- **Raíz del repo limpia:** ni un archivo nuevo en la raíz; el único de raíz que cambia es
+  `ORQUESTA.md`. Las dos páginas temporales de medición (`src/app/dev-edu-css/`,
+  `src/app/dev-edu-inicio/`) se borraron antes de commitear y `git status` lo confirma.
+
+### Lo que NO se hizo, a propósito
+
+- **El Inicio no tiene endpoint propio ni se refresca solo.** El bloque en vivo (los sillones,
+  quién está sentado en cada uno) sigue siendo del tablero de Dirección, que es donde se mira
+  de pie. Aquí lo que se lee es cómo va la semana, y eso no cambia mientras se mira.
+- **No se enlaza a una lista concreta desde cada gráfica.** El tablero de Dirección no abre sus
+  modales desde la URL, así que un `?detalle=…` llegaría a una pantalla sin abrir nada. Cada
+  gráfica enlaza a Dirección **con el mismo periodo**, y ahí la cifra se abre.
+- **La gráfica de dinero se dibuja con filas y no con un `groupBy`** (el tablero sí usa
+  `groupBy` para su total): Postgres no puede agrupar por "día en la zona del instituto" sin SQL
+  crudo, y el SQL crudo se saltaría los `where` de `visibility.ts`. Lleva el mismo tope de
+  10 000 filas que los cobros, con su aviso si se alcanza.
+- **No se tocó el tablero de Dirección** más allá de hacerle usar el punto único para negar.
+  Sus cifras, sus listas y su CSV están igual.
+
+### Encontrado y NO arreglado (queda anotado)
+
+La tarjeta **"Cobrado" del tablero de Dirección (Ola 7) escribe su variación en centavos
+pelados**: `variacion.texto` sale como `+12 % (1234500 → 1500000)` y la pantalla lo pinta tal
+cual (`direccion-screen.tsx`, componente `Cifra`). Es el mismo problema que se arregló aquí
+para las series, y la función que lo arregla ya existe (`eduDirVariacionEn`). No se cambió allí
+porque **el CSV de acreditación lee ese mismo `texto`** y la columna "Periodo anterior" del CSV
+escribe también los centavos crudos: tocarlo es una ola pequeña propia —con su decisión sobre
+qué debe decir el archivo— y no un cambio de paso dentro de ésta.
+
+### Lo que no se vio
+
+Sin `.env` ni base de datos en el worktree, `/instituto/inicio` con datos reales no se pudo
+abrir. Lo que SÍ se vio en un navegador contra el build de producción: el bug del nombre y su
+arreglo (medido con `getComputedStyle`, con captura antes y después, en escritorio y en el
+cajón del móvil) y el tablero completo montado con los COMPONENTES REALES y datos falsos en una
+página temporal —las tres gráficas en semana y en mes, el conmutador, los accesos y el
+medidor—, a 1180 px y a 387 px, borrada antes de commitear. PR contra `main`, SIN mergear.

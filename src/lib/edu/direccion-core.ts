@@ -47,9 +47,11 @@ import {
   eduDayRange,
   eduFormatDayShort,
   eduFormatDayLong,
+  EDU_WEEKDAY_SHORT,
   eduSafeTimeZone,
   eduShiftDayISO,
   eduTodayISO,
+  eduUtcToZoned,
   eduWeekdayOf,
   parseEduDayISO,
   type EduScheduleSlot,
@@ -1232,4 +1234,301 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
   }
 
   return eduCsvFile(filas);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 10 · LAS SERIES POR DÍA — el INICIO de la DIRECCIÓN
+//
+// 🔴 POR QUÉ VIVEN AQUÍ Y NO EN UN MÓDULO NUEVO DEL INICIO.
+//
+// El Inicio de dirección pinta tres gráficas —pacientes atendidos, dinero
+// cobrado y tratamientos autorizados, día a día— y las tres son preguntas
+// que este archivo YA contesta, partidas por día. Escribirlas aparte, con
+// su propia ventana, su propio `where` y su propia idea de qué es
+// "cobrado", es exactamente cómo se llega a que el Inicio diga $84 300 y
+// Dirección diga $84 900 el mismo martes: a partir de ahí no se puede usar
+// ninguna de las dos.
+//
+// Así que se reusa TODO: la misma ventana (eduDirVentana), los mismos
+// topes (EDU_DIR_MAX_*), la misma variación (eduDirVariacion) y el mismo
+// alcance (el de direccion.ts, que sale de visibility.ts). Lo único nuevo
+// es el reparto por día, que es lo que se prueba aquí abajo sin base.
+//
+// 🔴 TODOS LOS DÍAS DEL PERIODO, INCLUIDOS LOS DE CERO. Una serie armada
+// solo con los días que tuvieron filas pega el viernes con el lunes y
+// dibuja una clínica que trabaja siete días. Los días salen del
+// calendario y los datos se les cuelgan encima.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Los dos periodos del conmutador del Inicio: SEMANA y MES.
+ *
+ * No están "hoy" ni "rango", y no es un olvido. "Hoy" es UN día: una
+ * gráfica de una barra no es una gráfica, es un número con adorno. Y el
+ * rango personalizado es una herramienta de análisis que ya vive en el
+ * tablero de Dirección con su exportación al lado; el Inicio es la
+ * pantalla que se abre al llegar por la mañana, y ahí elegir dos fechas
+ * sobra.
+ */
+export const EDU_DIR_INICIO_PERIODOS = ["semana", "mes"] as const;
+
+export type EduDirInicioPeriodo = (typeof EDU_DIR_INICIO_PERIODOS)[number];
+
+/** Con qué periodo abre el Inicio. */
+export const EDU_DIR_INICIO_PERIODO_DEFAULT: EduDirInicioPeriodo = "semana";
+
+/**
+ * Lee el conmutador de la URL.
+ *
+ * Comparte el nombre del parámetro con el tablero de Dirección
+ * (`?periodo=`) a propósito, para que pasar de una pantalla a otra no
+ * cambie de qué se está hablando. Y por eso mismo hace falta esta
+ * función: "hoy" y "rango" son valores LEGALES allí, y aquí dejarían una
+ * gráfica de una sola barra. Cualquier cosa que no sea "mes" cae en
+ * "semana".
+ */
+export function parseEduDirInicioPeriodo(raw: unknown): EduDirInicioPeriodo {
+  return parseEduDirPeriodo(raw) === "mes" ? "mes" : "semana";
+}
+
+/** Las tres gráficas. El orden es el de la pantalla. */
+export const EDU_DIR_SERIE_KEYS = ["pacientes", "cobrado", "autorizaciones"] as const;
+
+export type EduDirSerieKey = (typeof EDU_DIR_SERIE_KEYS)[number];
+
+/** Un día de una serie. En la serie "cobrado", `value` son CENTAVOS. */
+export interface EduDirSeriePunto {
+  dayISO: string;
+  /** "lun 31 ago" — lo que va debajo de la barra. */
+  label: string;
+  /** "lunes 31 de agosto de 2026" — lo que dice el globo al pasar encima. */
+  largo: string;
+  value: number;
+}
+
+export interface EduDirSerie {
+  key: EduDirSerieKey;
+  titulo: string;
+  /** Qué se cuenta EXACTAMENTE. Va bajo el título, a la vista. */
+  detalle: string;
+  /** "dinero" se pinta con eduMoney; "conteo", con el número pelón. */
+  unidad: "conteo" | "dinero";
+  puntos: EduDirSeriePunto[];
+  total: number;
+  /** El total ya formateado según la unidad. */
+  totalLabel: string;
+  /** El mismo total, del periodo anterior. */
+  anterior: number;
+  variacion: EduDirVariacion;
+  /** El día más alto. 0 = la serie entera está en cero. */
+  maximo: number;
+  /**
+   * Lo que esta serie tiene que CONFESAR: que las barras no suman el
+   * total (pacientes), o que la sede elegida no la recorta
+   * (autorizaciones). Cadena vacía = no hay nada que advertir.
+   */
+  nota: string;
+}
+
+/**
+ * Los días del periodo, TODOS, del primero al último.
+ *
+ * Recortados por EDU_DIR_MAX_DIAS, que es el mismo tope de la ventana: dos
+ * topes distintos para lo mismo serían un día que sale en la gráfica y no
+ * en el total.
+ */
+export function eduDirDiasDeVentana(desdeISO: string, dias: number): string[] {
+  const n = Math.max(0, Math.min(Math.trunc(dias), EDU_DIR_MAX_DIAS));
+  const out: string[] = [];
+  for (let i = 0; i < n; i += 1) out.push(eduShiftDayISO(desdeISO, i));
+  return out;
+}
+
+/**
+ * En qué día del calendario DEL INSTITUTO cae un instante.
+ *
+ * 🔴 La zona sale del instituto y no del servidor, por lo mismo que la
+ * ventana: en México un pago de las 19:00 es de HOY, y leído en UTC caería
+ * en la barra de mañana. Un instante ilegible devuelve `null` y su fila no
+ * se cuenta en NINGÚN día — antes eso que meterla en el equivocado.
+ */
+export function eduDirDiaDe(instante: Date | null | undefined, timeZone: string): string | null {
+  if (!(instante instanceof Date) || Number.isNaN(instante.getTime())) return null;
+  return eduUtcToZoned(instante, eduSafeTimeZone(timeZone)).dayISO;
+}
+
+/**
+ * La etiqueta que va DEBAJO de la barra: "mar 25".
+ *
+ * Corta a propósito, y no `eduFormatDayShort` ("mar 25 de ago"): con 30
+ * barras el eje solo rotula una de cada cuatro, y una etiqueta larga se
+ * pisa con la siguiente en cuanto la ventana se estrecha. El mes ya está
+ * en el encabezado del periodo ("2 ago – 31 ago") y la fecha COMPLETA la
+ * dice el globo del ratón, que es donde se comprueba.
+ */
+export function eduDirEtiquetaDeDia(dayISO: string): string {
+  const limpio = parseEduDayISO(dayISO);
+  if (!limpio) return "—";
+  const dia = Number(limpio.slice(8, 10));
+  return `${EDU_WEEKDAY_SHORT[eduWeekdayOf(limpio)]} ${dia}`;
+}
+
+/**
+ * La variación EN LA UNIDAD DE LA SERIE.
+ *
+ * 🔴 `eduDirVariacion` es genérica y escribe los dos extremos como números
+ * pelados: en dinero eso saca "(0 → 842300)", que se lee como ochocientos
+ * cuarenta y dos mil pesos cuando son ocho mil cuatrocientos veintitrés.
+ * La ARITMÉTICA no cambia —sigue siendo la misma función, con su regla de
+ * no inventar un porcentaje contra cero—; lo único que cambia es cómo se
+ * escriben esos dos números.
+ */
+export function eduDirVariacionEn(
+  actual: number,
+  anterior: number,
+  unidad: "conteo" | "dinero",
+): EduDirVariacion {
+  const v = eduDirVariacion(actual, anterior);
+  if (unidad !== "dinero") return v;
+
+  const a = Number.isFinite(actual) ? actual : 0;
+  const b = Number.isFinite(anterior) ? anterior : 0;
+  if (v.pct === null) {
+    return {
+      ...v,
+      texto:
+        a === 0 && b === 0
+          ? "igual que antes: nada en los dos periodos"
+          : `antes no entró nada (${eduMoney(b)} → ${eduMoney(a)})`,
+    };
+  }
+  const signo = v.pct > 0 ? "+" : "";
+  return { ...v, texto: `${signo}${v.pct} % (${eduMoney(b)} → ${eduMoney(a)})` };
+}
+
+/**
+ * Los puntos de una serie: los días del calendario con sus valores encima.
+ *
+ * `valores` es día → valor. Un día sin entrada vale CERO y se pinta igual:
+ * es la diferencia entre "ese domingo no vino nadie" y "ese domingo no
+ * existe", y la segunda no es verdad.
+ *
+ * Una clave que cae FUERA del periodo se ignora en silencio a propósito:
+ * quien la mete es una fila cuyo `where` ya la acotó, así que si aparece
+ * es un instante de borde leído en otra zona — y sumarlo al primer o al
+ * último día correría el total de ese día.
+ */
+export function eduDirPuntosPorDia(
+  desdeISO: string,
+  dias: number,
+  valores: Map<string, number> | null | undefined,
+): EduDirSeriePunto[] {
+  return eduDirDiasDeVentana(desdeISO, dias).map((dayISO) => ({
+    dayISO,
+    label: eduDirEtiquetaDeDia(dayISO),
+    largo: eduFormatDayLong(dayISO),
+    value: valores?.get(dayISO) ?? 0,
+  }));
+}
+
+/** La suma de una serie. */
+export function eduDirSumaPuntos(puntos: EduDirSeriePunto[] | null | undefined): number {
+  let total = 0;
+  for (const p of puntos ?? []) total += Number.isFinite(p?.value) ? p.value : 0;
+  return total;
+}
+
+/** El día más alto de una serie. 0 si está toda en cero (o vacía). */
+export function eduDirMaximoPuntos(puntos: EduDirSeriePunto[] | null | undefined): number {
+  let max = 0;
+  for (const p of puntos ?? []) {
+    const v = Number.isFinite(p?.value) ? p.value : 0;
+    if (v > max) max = v;
+  }
+  return max;
+}
+
+/**
+ * Arma una serie completa.
+ *
+ * 🔴 EL TOTAL SE PASA, NO SE DEDUCE DE LAS BARRAS, y ése es el argumento
+ * que existe para no equivocarse: en dinero y en autorizaciones el total
+ * ES la suma de los días, pero en PACIENTES no lo es. Esa cifra cuenta
+ * personas DISTINTAS, así que quien vino el lunes y el jueves suma 1 en el
+ * lunes, 1 en el jueves y 1 en el total. Deducir el total sumando las
+ * barras diría 2 y contradiría al tablero de Dirección, que dice 1.
+ */
+export function eduDirArmarSerie(input: {
+  key: EduDirSerieKey;
+  titulo: string;
+  detalle: string;
+  unidad: "conteo" | "dinero";
+  puntos: EduDirSeriePunto[];
+  total: number;
+  anterior: number;
+  nota?: string;
+}): EduDirSerie {
+  const puntos = input.puntos ?? [];
+  const total = Number.isFinite(input.total) ? input.total : 0;
+  const anterior = Number.isFinite(input.anterior) ? input.anterior : 0;
+  return {
+    key: input.key,
+    titulo: input.titulo,
+    detalle: input.detalle,
+    unidad: input.unidad,
+    puntos,
+    total,
+    totalLabel: input.unidad === "dinero" ? eduMoney(total) : String(total),
+    anterior,
+    variacion: eduDirVariacionEn(total, anterior, input.unidad),
+    maximo: eduDirMaximoPuntos(puntos),
+    nota: input.nota ?? "",
+  };
+}
+
+/**
+ * El semáforo de la bandeja de firmas, con el MISMO umbral que el tablero
+ * de Dirección (EDU_DIR_FIRMA_VIEJA_MIN), importado y no copiado.
+ *
+ * Sin nada pendiente es NEUTRO y no OK: "no hay autorizaciones esperando"
+ * no es un logro que merezca un verde, es el estado normal de una tarde
+ * cualquiera. El color de esta pantalla se reserva para lo que de verdad
+ * se juzga — la misma regla que ya sigue el tablero.
+ */
+export function eduDirSemaforoDeFirmas(
+  pendientes: number,
+  masViejaMin: number | null,
+): EduDirSemaforo {
+  if (!Number.isFinite(pendientes) || pendientes <= 0) return "NEUTRO";
+  if (masViejaMin !== null && Number.isFinite(masViejaMin) && masViejaMin >= EDU_DIR_FIRMA_VIEJA_MIN) {
+    return "ACTUAR";
+  }
+  return "VIGILAR";
+}
+
+/** Un acceso del bloque "lo que está esperando". */
+export interface EduDirInicioAcceso {
+  key: "firmas" | "citas-hoy" | "por-cobrar";
+  titulo: string;
+  /** El número ya formateado (dinero incluido). */
+  valor: string;
+  raw: number;
+  /** Qué es y qué se espera de quien lo lee. */
+  detalle: string;
+  /** Adónde lleva. Es la pantalla donde eso se resuelve, no un informe. */
+  href: string;
+  semaforo: EduDirSemaforo;
+}
+
+/** Lo que el Inicio de dirección le manda a la pantalla. */
+export interface EduDirInicio {
+  ventana: EduDirVentana;
+  periodo: EduDirInicioPeriodo;
+  institucion: string;
+  /** La sede elegida, o `null` en el consolidado del instituto. */
+  sede: string | null;
+  series: EduDirSerie[];
+  esperando: EduDirInicioAcceso[];
+  /** Topes alcanzados y todo lo que este tablero no puede saber. */
+  avisos: string[];
 }

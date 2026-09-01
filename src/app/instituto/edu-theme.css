@@ -199,14 +199,30 @@ body:has(.edu-auth) {
 /* El nombre del instituto NO se corta a media palabra: envuelve hasta dos
    renglones y solo entonces pone puntos suspensivos (line-clamp corta en
    frontera de palabra). En el teléfono no hay hover que rescate un title,
-   así que el nombre tiene que leerse en la propia barra. */
+   así que el nombre tiene que leerse en la propia barra.
+
+   🔴 `flex: none` y `max-height` son EL MISMO ARREGLO que lleva
+   .edu-sidebar__school; ahí está explicado entero. Aquí el bug todavía no
+   se ve —.edu-topbar__title crece con su contenido, así que no hay quien
+   apriete— pero la forma es idéntica (caja con overflow:hidden dentro de
+   un contenedor flex), y el día que la barra gane un alto fijo el nombre
+   del instituto se aplastaría igual. Se arregla ahora, que cuesta dos
+   renglones, y no cuando alguien lo reporte desde su teléfono.
+
+   El `line-height` se declara AQUÍ aunque valga lo mismo que el heredado
+   de .edu-topbar__title: es el número que usa el calc de abajo, y un calc
+   que depende de un valor escrito en otra regla se rompe en silencio el
+   día que esa otra regla cambie. */
 .edu-topbar__name {
   font-size: 14.5px;
   font-weight: 650;
   letter-spacing: -0.01em;
+  line-height: 1.25;
+  flex: none;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  max-height: calc(2 * 1.25em);
   overflow: hidden;
   overflow-wrap: break-word;
 }
@@ -304,16 +320,58 @@ body:has(.edu-auth) {
 /* El nombre de la escuela, bajo la marca. Dos renglones cortando por
    palabra y ellipsis limpio al final del segundo si ni así cabe; el title
    del elemento lleva siempre el nombre completo. Un renglón con nowrap
-   dejaba "Institute Odontológico de Esp…" sin forma de leerse. */
+   dejaba "Institute Odontológico de Esp…" sin forma de leerse.
+
+   ═══════════════════════════════════════════════════════════════════════
+   🔴 POR QUÉ ESTA REGLA LLEVA `flex: none` Y UN `max-height`
+   (medido en un build de producción, no deducido)
+
+   En producción este nombre se veía como MEDIA LÍNEA: la caja medía 10 px
+   —solo su relleno— con 63 px de texto dentro. Parecía que el minificador
+   se estaba comiendo el `-webkit-box`, y NO era eso:
+
+   · La hoja emitida (.next/static/css/*.css) trae la regla LETRA POR
+     LETRA como está escrita aquí. Ni tailwindcss ni autoprefixer (los dos
+     únicos plugins de postcss.config.mjs) la tocan, y el CSSOM del
+     navegador confirma `display: -webkit-box` como valor especificado.
+   · `getComputedStyle` sí devuelve `flow-root` en vez de `-webkit-box`
+     (Chrome 152), y ése es el dato que despista: es cómo Chrome COMPUTA
+     hoy ese display heredado. El recorte a dos renglones sigue
+     funcionando — se comprobó poniéndole `flex-shrink: 0` y nada más: la
+     caja pasó de 10 px a 45 px con sus puntos suspensivos.
+   · Lo que aplastaba la caja era el LAYOUT: .edu-sidebar es un contenedor
+     flex en COLUMNA con alto definido (100dvh en escritorio, top/bottom
+     en el cajón), y un ítem flex con `overflow: hidden` tiene tamaño
+     mínimo automático CERO. Con el menú de DIRECCIÓN —veintitantos
+     renglones: 1103 px de contenido en 655 px de columna— el algoritmo
+     encoge lo único que se deja encoger, que es justo esta caja. Es el
+     único hijo del cajón con `overflow: hidden`, y por eso fue el único
+     que se rompió.
+
+   Así que el arreglo es `flex: none`: esta caja no se encoge, y si el
+   menú no cabe, el cajón scrollea (ya tiene `overflow-y: auto`), que es
+   lo correcto — un menú con scroll se usa, un nombre de escuela cortado a
+   10 px no se lee.
+
+   El `max-height` es el cinturón por si un navegador deja de honrar el
+   `-webkit-box` (Chrome ya lo computa a otra cosa): dos renglones de alto
+   máximo pase lo que pase. Y el relleno de abajo pasó a `margin-bottom`
+   —el hueco hasta el menú es el mismo— porque `overflow: hidden` recorta
+   en la caja de RELLENO: con `padding-bottom: 10px` asomaban 10 px del
+   tercer renglón por debajo de los puntos suspensivos.
+   ═══════════════════════════════════════════════════════════════════════ */
 .edu-sidebar__school {
-  padding: 0 8px 10px;
+  padding: 0 8px;
+  margin-bottom: 10px;
   font-size: 13px;
   font-weight: 650;
   line-height: 1.35;
   color: var(--edu-text-2);
+  flex: none;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  max-height: calc(2 * 1.35em);
   overflow: hidden;
   overflow-wrap: break-word;
 }
@@ -6499,4 +6557,144 @@ button.edu-dir-money__fila:hover {
 .edu-alm--lleno {
   border-left-color: var(--edu-danger);
   background: var(--edu-danger-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL INICIO DE LA DIRECCIÓN — las tres gráficas del día a día
+
+   ⚠️ Se reusa TODO lo que ya existe: .edu-dir-bloque para el bloque,
+   .edu-seg para el conmutador semana/mes, .edu-dir-cifra (con su franja de
+   semáforo a la izquierda) para los accesos de "lo que está esperando" y
+   .edu-dir-cifra__var para la variación. Lo de aquí abajo es SOLO la
+   tarjeta de la gráfica, que no existía.
+
+   🔴 LA GRÁFICA TIENE ALTO FIJO, y no es pereza: el <ResponsiveContainer>
+   de recharts mide su contenedor, y un contenedor de alto automático mide
+   cero mientras el hijo espera a que el padre mida — la gráfica sale en
+   blanco sin un solo error en la consola. El alto está en píxeles y en un
+   solo sitio; el ANCHO sí es responsivo.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-ini-graficas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* Dos columnas a partir de 1000 px. No tres: con 30 barras, una columna de
+   un tercio de pantalla deja las barras en dos píxeles y el eje ilegible. */
+@media (min-width: 1000px) {
+  .edu-ini-graficas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Son TRES: dos arriba y la tercera a lo ancho. Con la tercera en media
+     columna quedaba medio bloque en blanco al lado, que se lee como algo
+     que no cargo. */
+  .edu-ini-graficas > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+.edu-ini-grafica {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-ini-grafica__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.edu-ini-grafica__titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--edu-text-1);
+}
+
+.edu-ini-grafica__detalle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-2);
+  max-width: 46ch;
+}
+
+.edu-ini-grafica__total {
+  font-size: 26px;
+  line-height: 1.05;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  /* Sin esto los totales de las tres tarjetas bailan al cambiar de dígito. */
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-1);
+}
+
+.edu-ini-grafica__total--dinero {
+  font-size: 21px;
+}
+
+.edu-ini-chart {
+  width: 100%;
+  height: 190px;
+}
+
+/* Mientras recharts baja (va por next/dynamic): un hueco del MISMO alto,
+   para que la página no dé un salto cuando llegue. */
+.edu-ini-chart--cargando {
+  border-radius: 10px;
+  background: var(--edu-surface-2);
+}
+
+.edu-ini-grafica__nota,
+.edu-ini-grafica__vacio {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+}
+
+.edu-ini-grafica__link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--edu-600);
+  text-decoration: none;
+}
+
+.dark .edu-ini-grafica__link {
+  color: var(--edu-300);
+}
+
+.edu-ini-grafica__link:hover {
+  text-decoration: underline;
+}
+
+/* Los accesos de "lo que está esperando" son ENLACES con la pinta de una
+   cifra del tablero. La regla de hover existía solo para button.edu-dir-cifra
+   (el tablero abre modales); aquí se navega. */
+a.edu-ini-acceso {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+a.edu-ini-acceso:hover {
+  border-color: var(--edu-line-brand);
+  box-shadow: var(--edu-shadow-2);
 }

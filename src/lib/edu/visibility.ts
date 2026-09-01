@@ -999,3 +999,58 @@ export function eduPuedeVerAlmacenamiento(actor: EduVisibilityActor): boolean {
 export const EDU_ALMACENAMIENTO_NONE_DETAIL =
   "El almacenamiento que incluye el contrato del instituto, y cuánto se lleva usado, lo ve " +
   "la dirección. Es una cláusula del contrato con DaleControl, no un ajuste del panel.";
+
+// ═══════════════════════════════════════════════════════════════════════
+// ¿QUIÉN VE LA CLÍNICA ENTERA?
+//
+// 🔴 ESTA ES LA CERRADURA DE LOS TABLEROS DE TOTALES: el de Dirección
+// (Ola 7) y el Inicio de dirección con sus tres gráficas.
+//
+// La diferencia con todo lo demás de este archivo es qué se hace cuando la
+// respuesta es "no". En las pantallas de listas, un alcance parcial
+// RECORTA: un docente ve a sus alumnos y esa lista es verdad. En un
+// tablero de totales no se puede recortar, porque lo que se pinta ES el
+// total —"cobrado del periodo", "pacientes atendidos", "ocupación"— y un
+// total recortado presentado como el total es un dato falso, proyectado
+// además en una junta. Así que aquí se NIEGA.
+//
+// Vive en visibility.ts y no en el tablero por la razón de siempre: es una
+// regla de "quién ve qué", y una regla de ésas escrita dentro de una
+// pantalla se comprueba mirando el JSX — por eso se rompe. Aquí abajo se
+// comprueba con una prueba de tres líneas y sin base de datos.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ¿Esta cuenta ve la clínica ENTERA, sin recorte, en los cuatro recursos?
+ *
+ * Hoy solo DIRECCION. Y no está escrito como una lista de roles a
+ * propósito: se PREGUNTA a `eduVisibility`, que es el punto único, así que
+ * el día que un rol nuevo reciba alcance completo sobre los cuatro
+ * recursos esto lo dirá solo — y el día que a DIRECCION se le recorte
+ * uno, dejará de decirlo. Una lista blanca aparte sería una segunda
+ * verdad que se desincroniza con la primera.
+ *
+ * ⚠️ CAJA da `false`, y hay que saberlo: caja ve pacientes, citas y
+ * dinero, pero NO casos (línea explícita de `eduVisibility`). Sin casos no
+ * se puede decir "tratamientos iniciados", así que un tablero de totales
+ * para caja tendría una cifra en cero que se leería como "esta semana no
+ * se empezó ningún tratamiento".
+ */
+export function eduPuedeVerLaClinicaEntera(actor: EduVisibilityActor): boolean {
+  if (typeof actor !== "object" || actor === null) return false;
+  const recursos: EduVisibilityResource[] = ["patients", "appointments", "cases", "charges"];
+  return recursos.every((r) => eduVisibility(actor, r).kind === "all");
+}
+
+/**
+ * Lo que se le dice a quien llegó a un tablero de totales y ve una parte.
+ *
+ * Es el texto que ya devolvía el 403 del panel de Dirección desde la Ola 7,
+ * movido aquí para que las dos pantallas de totales digan lo MISMO: dos
+ * redacciones del mismo motivo son dos formas de explicar mal la misma
+ * regla.
+ */
+export const EDU_CLINICA_ENTERA_NONE_DETAIL =
+  "Este tablero es de la dirección del instituto: enseña la clínica ENTERA, así que solo " +
+  "tiene sentido para quien la ve entera. Tu cuenta ve una parte, y una parte presentada " +
+  "como el total sería un dato falso.";
