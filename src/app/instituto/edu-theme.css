@@ -6132,8 +6132,13 @@ button.edu-dir-money__fila:hover {
 
 /* ── La línea de tiempo del resumen ─────────────────────────────────────
    Lista con un riel a la izquierda; cada punto lleva el color de su
-   clase de renglón. Nada de librerías: es un <ol>. */
-.edu-linea {
+   clase de renglón. Nada de librerías: es un <ol>.
+   ⚠️ El prefijo es `edu-historia` y NO `edu-linea`. Ese nombre ya es de
+   las líneas del cobro de Caja, que SÍ declara `grid-template-columns`:
+   mientras esta lista se llamó igual heredó sus cinco columnas y los
+   renglones salían uno JUNTO A OTRO en vez de apilados. No lo acortes;
+   edu-theme.test.ts falla si dos bloques declaran la misma clase. */
+.edu-historia {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -6141,18 +6146,18 @@ button.edu-dir-money__fila:hover {
   gap: 0;
 }
 
-.edu-linea__item {
+.edu-historia__item {
   position: relative;
   display: flex;
   gap: 10px;
   padding: 8px 0 8px 2px;
 }
 
-.edu-linea__item + .edu-linea__item {
+.edu-historia__item + .edu-historia__item {
   border-top: 1px solid var(--edu-line);
 }
 
-.edu-linea__punto {
+.edu-historia__punto {
   flex: 0 0 auto;
   width: 9px;
   height: 9px;
@@ -6161,27 +6166,27 @@ button.edu-dir-money__fila:hover {
   background: var(--edu-400);
 }
 
-.edu-linea__punto--nota {
+.edu-historia__punto--nota {
   background: var(--edu-600);
 }
 
-.edu-linea__punto--estudio {
+.edu-historia__punto--estudio {
   background: var(--edu-amber-500, #d97706);
 }
 
-.edu-linea__punto--consentimiento {
+.edu-historia__punto--consentimiento {
   background: #15803d; /* el verde de --ok, sólido para un punto de 9px */
 }
 
-.edu-linea__punto--receta {
+.edu-historia__punto--receta {
   background: #8c1d18; /* el granate de --danger-soft, como punto */
 }
 
-.edu-linea__cuerpo {
+.edu-historia__cuerpo {
   min-width: 0;
 }
 
-.edu-linea__titulo {
+.edu-historia__titulo {
   margin: 0;
   font-size: 13px;
   font-weight: 650;
@@ -6189,7 +6194,7 @@ button.edu-dir-money__fila:hover {
   overflow-wrap: anywhere;
 }
 
-.edu-linea__meta {
+.edu-historia__meta {
   margin: 1px 0 0;
   font-size: 12px;
   line-height: 1.45;

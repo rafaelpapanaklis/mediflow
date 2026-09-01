@@ -30952,3 +30952,122 @@ mensaje y el sub-objeto de recall: no puede ir crudo. Necesita un campo DERIVADO
 
 Buscado y descartado: `patients.sideCards.reminderText` era la ÚNICA copia de ese texto en el
 panel (ningún vertical —instituto, inmuebles, barber— lo duplica).
+
+═══════════════════════════════════════════════════════════════════════════
+## EDU-HISTORIA — "Historia reciente" se pintaba en columnas: dos bloques del tema con el mismo nombre ✅ (2026-09-01)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: este mismo · RAMA `fix/edu-historia-clase` · BUILD `npm run build` EXIT 0 completo ·
+Sin SQL, sin endpoints, sin dependencias, sin cambios de schema, sin tocar `package.json`.
+4 pruebas nuevas en `src/lib/edu/__tests__/edu-theme.test.ts`. PR contra `main`, SIN mergear.
+
+───────────────────────────────────────────────────────────────────────────
+1 · EL BUG
+───────────────────────────────────────────────────────────────────────────
+SÍNTOMA (visto en producción): en `/instituto/pacientes/[id]`, pestaña Resumen, el bloque
+"Historia reciente" pintaba sus entradas EN COLUMNAS, una junto a otra, en vez de apiladas.
+En escritorio salían de 900px y 88px; en el teléfono de 80px y 261px, con el texto de la
+segunda partido letra por letra.
+
+POR QUÉ. `edu-theme.css` es UNA hoja de 6 459 renglones para todo el vertical, y `.edu-linea`
+estaba declarada DOS veces, por dos dueños que no se conocen:
+
+  · línea 2517 — el renglón de un cobro en Caja. Declara `grid-template-columns: 1fr auto` y,
+    en `@media (min-width: 560px)`, `minmax(0,1fr) 88px 110px auto auto`. Su familia es
+    `--recibo`, `__desc`, `__name`, `__sub`, `__aviso`, `__total`; la usan `caja-screen.tsx`,
+    `planes-screen.tsx` y `facturacion-screen.tsx`.
+  · línea 6136 — la línea de tiempo del resumen, de la ola de Casos. Solo declaraba
+    `display: grid; gap: 0` y NO declaraba columnas. Su familia es `__item`, `__punto`
+    (`--nota`/`--estudio`/`--consentimiento`/`--receta`), `__cuerpo`, `__titulo`, `__meta`.
+
+Como la de Caja SÍ reparte columnas y gana la cascada, sus cinco columnas se le aplicaban a la
+línea de tiempo y los `<li>` se repartían en ellas. Nada falla, nada se pone rojo: solo se ve
+mal, que es la peor forma de fallar.
+
+───────────────────────────────────────────────────────────────────────────
+2 · EL ARREGLO — renombrar a la recién llegada, no tapar el síntoma
+───────────────────────────────────────────────────────────────────────────
+Se renombró la familia de la LÍNEA DE TIEMPO (la nueva) a su propio prefijo, `edu-historia`.
+Caja se queda con `edu-linea`, que es suyo desde antes. DOS archivos:
+
+  · `src/app/instituto/edu-theme.css` — solo el bloque de la timeline (renglones 6133-6199):
+    `.edu-linea` → `.edu-historia` y toda su familia (`__item`, `__item + __item`, `__punto`
+    y sus CUATRO modificadores —`--receta` incluido, que el diagnóstico no mencionaba—,
+    `__cuerpo`, `__titulo`, `__meta`). El comentario del bloque ahora dice por qué el prefijo
+    es largo, para que nadie lo "acorte" de vuelta.
+  · `src/app/instituto/(panel)/pacientes/[id]/page.tsx` — el `<ol>` y sus hijos (172-195).
+
+NO se arregló agregando `grid-template-columns` a la timeline: eso dejaría las dos clases
+pisándose y la próxima regla de Caja lo rompe otra vez.
+
+INTACTO Y VERIFICADO: el bloque de Caja (2505-2600) es BYTE POR BYTE el de HEAD (`diff` del
+tramo contra `git show HEAD:` → sin salida). Los once hunks del diff del CSS empiezan todos en
+el renglón 6135. `caja-screen.tsx`, `planes-screen.tsx` y `facturacion-screen.tsx` no aparecen
+en el diff. No se tocó nada de dental, barbería ni inmuebles.
+
+Sin referencias huérfanas: el único `edu-linea` que queda fuera de la familia de Caja es la
+palabra dentro del comentario de aviso.
+
+───────────────────────────────────────────────────────────────────────────
+3 · EL CANDADO — `src/lib/edu/__tests__/edu-theme.test.ts` (4 pruebas)
+───────────────────────────────────────────────────────────────────────────
+Lee `edu-theme.css` y falla si una misma clase base se declara en dos bloques. Cuenta las
+llaves a mano en vez de usar una expresión regular, porque hace falta la PROFUNDIDAD: una
+regla dentro de un `@media` no es una declaración nueva, es la misma clase en otro ancho, y
+tratarla como choque llenaría el archivo de falsos positivos. Solo cuentan los bloques de
+primer nivel cuyo selector es una clase sola; los agrupados por comas se parten
+(`.edu-shell, .edu-auth {` declara las dos). No cuentan `.dark .edu-x`, `.edu-x:hover`,
+`.edu-a.edu-b`, ni `__hijo`/`--modificador`, que son nombres propios.
+
+  1. `ninguna clase del tema se declara en dos bloques distintos` — el candado. El mensaje de
+     fallo nombra la clase, los DOS renglones y qué hacer (renombrar al recién llegado, no
+     redeclarar propiedades encima).
+  2. `cada perdón de PERDONADOS sigue haciendo falta` — si un perdón deja de ser necesario, la
+     prueba exige borrarlo. Una lista de excepciones que engorda sola es un agujero abierto.
+  3. `la línea de tiempo del resumen no comparte nombre con los renglones de Caja` — la
+     regresión concreta: `.edu-linea` con UN solo dueño, que además sigue siendo el que declara
+     columnas, y la ficha sin una sola mención a `edu-linea`.
+  4. `cada clase edu-historia que usa la ficha existe en el tema` — atrapa un renombre a
+     medias, y exige una regla `.edu-historia__punto--<kind>` por CADA tipo de
+     `EDU_RESUMEN_TIMELINE_KIND_LABELS` (un tipo nuevo sin su color pintaría el punto gris).
+
+LA LISTA DE PERDONES es explícita y CERRADA. Cada entrada trae los selectores EXACTOS que se
+perdonan, no solo el nombre de la clase: si aparece un tercer bloque, o cambia la forma de los
+dos de hoy, la prueba se pone roja igual.
+
+HALLAZGO: los duplicados de hoy son TRES, no dos. Además de `.edu-linea` (el que se arregla) y
+`.edu-auth` (renglones 42 y 706), está `.edu-shell` (renglones 42 y 146). Es el MISMO caso
+legítimo y por el mismo renglón: el bloque de tokens de arriba es `.edu-shell, .edu-auth {` y
+nombra a las dos para darles la paleta del vertical, y más abajo cada una declara su propia
+maquetación —la del panel y la del login—. Los dos están perdonados, cada uno con su motivo
+escrito.
+
+QUE EL CANDADO MUERDE, PROBADO DE DOS FORMAS:
+  a) reintroduciendo el nombre viejo en el CSS a propósito → 3 de las 4 pruebas en rojo, con
+     «.edu-linea se declara 2 veces: línea 2517 (.edu-linea) y línea 6141 (.edu-linea)».
+     Revertido.
+  b) duplicando una clase DISTINTA e inventada (`.edu-minis`) → también en rojo, con sus dos
+     renglones. El candado es general, no una aserción a medida de este bug. Revertido.
+
+`package.json` NO se tocó: el PR abierto `feat/edu-tests` agrega `npm run test:edu` con un
+runner que descubre los archivos solos, así que esta prueba entra ahí sin conflicto.
+
+───────────────────────────────────────────────────────────────────────────
+4 · VERIFICACIÓN
+───────────────────────────────────────────────────────────────────────────
+  · `npm run build` completo, SIN pipes (un pipe enmascara el exit code) → EXIT 0, con
+    `NODE_OPTIONS=--max-old-space-size=8192`. 463/463 páginas y la tabla de rutas completa.
+    Cierra con "Compiled with warnings": son las de siempre (clases ambiguas de Tailwind y el
+    `Critical dependency` de `file-type`), ninguna de este cambio. El spam de
+    `Environment variable not found: DATABASE_URL` es el de un worktree sin `.env`.
+  · Los 29 archivos de prueba del vertical, UNO POR UNO con `npx tsx --test` → 933 pruebas en
+    verde, cero rojas. El corredor también exige que ningún archivo salga verde habiendo
+    corrido CERO pruebas: son 929 las que ya había más las 4 nuevas.
+  · `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → exit 0.
+  · Raíz del repo limpia: los tres archivos del `git status` son los dos del arreglo más el
+    test nuevo. Los logs y respaldos se quedaron en el scratchpad, fuera del repo.
+
+LO QUE NO SE PUDO VERIFICAR: no se vio en Chrome. Este worktree no tiene `.env` ni base de
+datos, y la ficha del instituto es una página server-rendered que consulta Prisma: sin
+`DATABASE_URL` devuelve 500 antes de pintar nada. El cambio es de nombres de clase —el CSS
+renombrado y el JSX que lo usa se comprueban el uno contra el otro en la prueba 4—, pero el
+"ahora sí se apilan" en pantalla real queda pendiente de mirarse en el preview de Vercel.
