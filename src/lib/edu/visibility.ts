@@ -945,3 +945,57 @@ export function eduCanSendWhatsappKind(
   if (kind === "RECIBO") return !!chargeScope && chargeScope.kind === "all";
   return true;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 · LA CUOTA DE ALMACENAMIENTO — QUIÉN VE EL MEDIDOR
+//
+// 🔴 NO HAY UN QUINTO RECURSO EN `eduVisibility`, Y ESO ES A PROPÓSITO.
+// Los cuatro recursos de arriba recortan FILAS ("de quién puedo ver los
+// pacientes"). El medidor de almacenamiento no tiene filas que recortar:
+// es UN total del instituto entero, y con un total la pregunta no es
+// cuánto se recorta sino si se ve o no se ve. Meterlo en `eduVisibility`
+// habría obligado a inventar un "all" que en realidad significa "sí" y un
+// "none" que significa "no", y el primer rol nuevo lo habría leído mal.
+//
+// Vive AQUÍ igual, y no en la pantalla, porque el punto único de alcance es
+// este archivo: una regla de "quién ve qué" escrita dentro de un componente
+// se comprueba mirando el JSX, y por eso se rompe.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Los roles que VEN el medidor de almacenamiento. Lista BLANCA, por la
+ * misma razón que EDU_ROLES_CON_DINERO: si mañana el schema gana un rol
+ * (COORDINADOR, RECTOR, ADMINISTRATIVO), la respuesta por omisión tiene que
+ * ser "no lo ve" y no "se me olvidó agregarlo a los que no".
+ *
+ * Un ALUMNO, un DOCENTE y CAJA no lo ven: cuánto almacenamiento incluye el
+ * contrato y cuánto se lleva gastado es una conversación entre la dirección
+ * de la escuela y DaleControl.
+ */
+const EDU_ROLES_CON_ALMACENAMIENTO: EduRole[] = ["DIRECCION"];
+
+/**
+ * ¿Esta cuenta ve el medidor de almacenamiento del instituto?
+ *
+ * ⚠️ Es una cerradura SEPARADA del permiso "direccion.panel" que abre el
+ * tablero, y las dos hacen falta. El permiso se puede encender a mano desde
+ * el equipo (permissionsOverride); el ROL no. Así, una cuenta de caja a la
+ * que alguien le encienda el tablero por error sigue sin ver la cuota.
+ */
+export function eduPuedeVerAlmacenamiento(actor: EduVisibilityActor): boolean {
+  if (typeof actor !== "object" || actor === null) return false;
+  return EDU_ROLES_CON_ALMACENAMIENTO.includes(actor.role);
+}
+
+/**
+ * Lo que se le dice a quien llegó al medidor y no le toca.
+ *
+ * ⚠️ Esto NO es lo que lee quien intenta subir un estudio con la cuota
+ * llena: a ése se le dice cuánto queda y cuánto pesa su archivo
+ * (eduAlmRechazo, en almacenamiento-core.ts), porque sin esos dos números
+ * no puede decidir nada. Ver el MEDIDOR —lo contratado, lo gastado, lo que
+ * cuesta el TB extra— es otra cosa.
+ */
+export const EDU_ALMACENAMIENTO_NONE_DETAIL =
+  "El almacenamiento que incluye el contrato del instituto, y cuánto se lleva usado, lo ve " +
+  "la dirección. Es una cláusula del contrato con DaleControl, no un ajuste del panel.";

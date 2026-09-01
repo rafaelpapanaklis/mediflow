@@ -6462,3 +6462,41 @@ button.edu-dir-money__fila:hover {
     print-color-adjust: exact;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CUOTA DE ALMACENAMIENTO · el medidor del tablero de dirección
+
+   Bloque ADITIVO al final del archivo, como todas las olas. No redefine ni
+   una variable ni una clase existente: la barra es la .edu-progreso de la
+   Ola 6 y el rojo del 100 % es el .edu-progreso--agotado que ya usaba el
+   cupo de IA agotado — mismo significado, "esto ya no funciona", mismo
+   color. Aquí abajo solo están los DOS colores que faltaban (ámbar del 80 %
+   y rojo del 95 %) y el borde de la tarjeta.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 80 % — ámbar. Todavía no bloquea nada, pero ya hay que decidir. */
+.edu-progreso--aviso .edu-progreso__bar {
+  background: var(--edu-amber-700);
+}
+
+/* 95 % — rojo. Con una tomografía se acaba. */
+.edu-progreso--critico .edu-progreso__bar {
+  background: var(--edu-danger);
+}
+
+/* La tarjeta del medidor. El borde acompaña al semáforo: una tarjeta que
+   solo cambia una barra de 8 px se lee igual de lejos esté como esté. */
+.edu-alm {
+  border-left: 3px solid var(--edu-ok);
+}
+
+.edu-alm--aviso {
+  border-left-color: var(--edu-amber-700);
+  background: var(--edu-amber-50);
+}
+
+.edu-alm--critico,
+.edu-alm--lleno {
+  border-left-color: var(--edu-danger);
+  background: var(--edu-danger-soft);
+}

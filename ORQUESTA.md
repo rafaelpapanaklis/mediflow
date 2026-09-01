@@ -31440,3 +31440,204 @@ real queda pendiente de mirarse en el preview de Vercel: la ficha del instituto 
 server-rendered contra Prisma y sin `DATABASE_URL` devuelve 500 antes de pintar nada. Lo que sí
 está probado es la relación entre las dos piezas del arreglo —el CSS renombrado y el JSX que lo
 usa se comprueban el uno contra el otro en la prueba 4—. PR contra `main`, SIN mergear.
+
+
+## [Institucional · CUOTA DE ALMACENAMIENTO] — Una escuela podía subir tomografías hasta que llegara la factura de Supabase: ahora hay 5 TB por contrato, un medidor que dice la verdad y un corte ANTES de firmar la subida ✅ (2026-09-01) · rama `feat/edu-cuota-storage`
+
+### Qué es
+
+Hasta hoy el vertical institucional no tenía **ningún tope ni ningún medidor** de
+almacenamiento. Los estudios (radiografías, tomografías CBCT de cientos de MB, fotos, PDFs)
+suben directos al bucket `edu-files` con URL firmada, y lo único que los acotaba era el tope
+de 2 GB **por archivo**. Nadie —ni la escuela, ni DaleControl— podía contestar cuánto lleva
+gastado un instituto ni cuándo hay que cobrarle más.
+
+Ahora: `EduInstitution.storageQuotaBytes` (BigInt, **5 TB** por omisión), un medidor en el
+tablero de dirección con semáforo 80/95/100, el **corte de la subida en `/sign`** con un
+mensaje que dice cuánto queda y cuánto pesa el archivo, y `/admin/institutos`, donde
+DaleControl ve TB contratados, TB usados y **cuánto facturarle al mes** por el extra.
+
+### Las cuatro decisiones que sostienen esto
+
+- 🔴 **La cuota es POR INSTITUTO, no por sede.** Tres sedes con 5 TB son 5 TB entre las tres,
+  no 15: la sede es una división DENTRO de la escuela (Ola 11) y comparten la bolsa; las sedes
+  siguen siendo ilimitadas. El `where` de la suma lo construye `eduAlmacenamientoWhere` y tiene
+  **UNA sola llave**, con su prueba: en cuanto alguien le agregue un `campusId` "para afinar el
+  reporte", una escuela con dos edificios vería la mitad de su consumo y creería que le sobra
+  el doble de espacio. El medidor del tablero es además lo ÚNICO de esa pantalla que **no**
+  pasa por la sede elegida en la barra superior, y también está probado.
+- 🔴 **El consumo se CUENTA, no se guarda.** `SUM("sizeBytes")` de `edu_studies` con un
+  `aggregate` cada vez que alguien pregunta — nunca se traen las filas. Misma decisión que el
+  cupo de IA de la Ola 8 y por la misma razón: un contador guardado se desincroniza el día que
+  una escritura falle a la mitad, y a partir de ahí o se le bloquea la subida a una escuela que
+  sí tenía espacio, o se le regala el que ya usó.
+- 🔴 **La cuota se VE y no se edita desde el panel.** Es una cláusula del contrato, como
+  `contractStartsAt`/`contractEndsAt`. La tarjeta de dirección no tiene ni un `<button>` ni un
+  `<form>` (probado), ningún archivo bajo `src/app/api/instituto/**` nombra siquiera la columna
+  (probado, recorriendo el árbol entero), y la ÚNICA escritura del producto sale de
+  `/admin/institutos`. Si la escuela pudiera subírsela sola, el cobro por TB extra no
+  existiría.
+- 🔴 **El precio vive en UNA constante.** `EDU_ALM_TB_EXTRA_MXN = 400`
+  (`src/lib/edu/almacenamiento-core.ts`), con el comentario de que es la fuente única. Hay una
+  prueba que abre las tres pantallas y falla si alguna trae `$400`, `400 MXN` o un `* 400`
+  escrito a mano: el día que el TB extra valga $450, se cambia en un sitio y cambia en todos.
+
+### El medidor (panel de Dirección)
+
+Tarjeta en `/instituto/direccion`, componente de **servidor** (no tiene estado ni eventos: no
+hay razón para mandarle JavaScript al navegador). Usado, contratado y porcentaje con el
+formateador que YA existía —`eduFormatBytes`, al que solo se le agregó el tramo de TB, para que
+no haya un segundo formateador que un día diga "5.0 TB" en un sitio y "5120.0 GB" en otro—.
+
+- Verde hasta el 80 %. **Ámbar al 80**: "Queda 1.0 TB…". **Rojo al 95**: "con una tomografía se
+  acaba". **Al 100 %** deja de ser un medidor: dice que **la subida está BLOQUEADA** y las dos
+  salidas (contratar más TB, con el precio, o liberar espacio).
+- **100 % ⟺ bloqueado**, como invariante. El porcentaje se calcula hacia ABAJO mientras quede un
+  byte y vale 100 exacto cuando ya no queda: si se redondeara al alza, un 99.6 % pintaría
+  "100 %" —o sea, "no puedes subir"— con gigas libres. Probado en los dos sentidos.
+- El medidor **CONFIESA lo que cuenta**: los ESTUDIOS del expediente, y dice el número de
+  estudios al lado del tamaño. Las firmas de consentimiento viven en el mismo bucket y **no**
+  tienen fila con su tamaño; no se estiman ni se inventan. Un medidor que inventa bytes es peor
+  que no tener medidor, porque se le cree.
+- ⛔ **No lo ve un ALUMNO, un DOCENTE ni CAJA.** Dos cerraduras: el permiso `direccion.panel`
+  abre el tablero y `eduPuedeVerAlmacenamiento` (punto único de alcance, `visibility.ts`) decide
+  el medidor, con **lista blanca** de roles — un rol nuevo en el enum no lo ve por omisión. Las
+  dos hacen falta: el permiso se puede encender a mano desde Equipo, el ROL no.
+
+### El bloqueo (y por qué va en `/sign`)
+
+El corte está en `signEduStudyUpload`, **antes** de `eduSignUpload` (probado por posición en el
+fuente): si lo usado más lo que viene pasa de la cuota, se rechaza con **507 Insufficient
+Storage** —no 413: el archivo no es demasiado grande, es la escuela la que no tiene sitio— y el
+mensaje dice **cuánto pesa el archivo, cuánto le queda al instituto y a quién avisarle**.
+Firmar primero significaría que alguien se pasa veinte minutos subiendo una tomografía que iba
+a rebotar igual.
+
+**Nunca un 413 mudo:** el cliente de subida ya convierte cualquier respuesta no-ok de `/sign`
+en el texto que mandó el servidor y la pantalla lo pinta en su alerta; hay una prueba que fija
+esa cadena de tres archivos.
+
+Los **dos topes son distintos y los dos siguen valiendo**: `EDU_MAX_STUDY_BYTES` (2 GB por
+archivo, sin tocar) y la cuota de la escuela. Un archivo de 1 GB pasa el primero y no pasa el
+segundo si a la escuela le quedan 200 MB.
+
+### 🔴 La carrera entre `/sign` y `/confirm` — qué se decidió y por qué
+
+Los bytes solo cuentan cuando existe la fila, y quien la crea es `/confirm`. Dos personas que
+firman a la vez con la bolsa casi llena ven las dos el mismo hueco y las dos suben.
+
+**La decisión: el corte vive en `/sign` y `/confirm` NO rechaza por cuota.** Registra —aunque
+el total quede por encima— y deja un `console.warn` con `institutionId`, `studyId`, bytes del
+archivo, usado y cuota, para que el rebase se pueda auditar. El razonamiento largo está escrito
+en la cabecera de `src/lib/edu/almacenamiento.ts` y resumido en `confirmEduStudyUpload`:
+
+1. En `/confirm` los bytes **ya están** en el bucket. Rechazar ahí no ahorra un peso salvo que
+   se BORRE el objeto, y eso es destruir una radiografía que alguien subió entera por una
+   carrera que no podía ver. (El tope de 2 GB sí borra, y no es lo mismo: allí el cliente
+   mintió sobre el tamaño al firmar. Aquí no mintió nadie.)
+2. El rebase está **acotado** a lo que estaba en vuelo, y cada archivo en vuelo pesa como mucho
+   2 GB.
+3. Se **autocorrige** en el intento siguiente: como el consumo se cuenta y no se guarda, el
+   próximo `/sign` ya ve el total real —rebase incluido— y dice que no. No queda deriva ni
+   contador que reparar.
+4. La alternativa honesta (RESERVAR los bytes al firmar) exige una tabla de reservas con
+   caducidad, y un navegador que se cierra a media subida deja reservas fantasma que le comen
+   la cuota a una escuela real hasta que pase un barrido. El modo de fallo pasaría a ser "no
+   puedo subir y nadie sabe por qué", que es peor que pasarse dos gigas.
+5. Y el rebase **no es dinero perdido**: el `/admin` enseña los TB usados y el contrato se
+   factura a mano. Esto no es la cuenta de API de la Ola 8, donde DaleControl se come el
+   excedente en silencio.
+
+Es la misma forma del rebase que ya documentó el cupo de IA: el techo frena lo que EMPIEZA, no
+aborta lo que está en vuelo.
+
+### Lo que ve Rafael en SU /admin
+
+**`/admin/institutos`** (nuevo). Por cada instituto: TB contratados, TB usados con su semáforo y
+el número de estudios, TB extra y **cuánto facturarle al mes**. Arriba, el total a facturar de
+todos juntos — que es el número que contesta "¿cuánto dinero se me está yendo?". DOS consultas
+para N institutos, no N+1 (un `groupBy` por `institutionId` suma todos de una vez).
+
+Ahí **sí** se edita la cuota, en TB enteros, y el modal enseña la factura que se acaba de crear
+ANTES de guardar. La server action **vuelve a exigir sesión de administrador** (una server
+action es un POST que se alcanza sin pasar por ningún layout) y emite un evento `ADMIN_AUDIT`
+con el antes y el después: subir una cuota cambia lo que se le cobra a un cliente.
+
+⛔ **El instituto NO entra a Stripe.** El contrato institucional se administra a mano, por
+diseño (está escrito en el esquema). Esta pantalla no cobra nada: **dice cuánto cobrar**. Hay
+una prueba que falla si alguno de los cuatro archivos importa Stripe.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes
+  (`NODE_OPTIONS=--max-old-space-size=8192`). `prisma generate` limpio (sin EPERM),
+  **464/464 páginas** generadas —una más que antes: `/admin/institutos`, que sale en la tabla
+  de rutas como `ƒ` (4.77 kB)—, `.next/BUILD_ID` escrito, y `/instituto/direccion` sigue en su
+  sitio entre las 138 rutas del vertical. Cero "Failed to compile", cero `error TS`, cero heap
+  OOM. Los únicos avisos son los PREEXISTENTES y ajenos a esta rama: el `Critical dependency`
+  de `file-type` en `api/ai-wallet/spei/topup` y tres clases ambiguas de Tailwind. El spam de
+  `Environment variable not found: DATABASE_URL` es el de siempre (worktree sin `.env`) y no
+  afecta al exit.
+  **Se comprobó ROJO antes que verde, sin querer y con provecho:** el primer intento falló con
+  `Syntax Error` porque un `**/confirm` escrito dentro de un comentario de bloque lleva un
+  `*/` que lo cierra a media frase. Arreglado, y anotado aquí: muerde a cualquiera que escriba
+  una ruta con asterisco dentro de un bloque `/* */`.
+- **`npm run test:edu` exit 0** — **30 archivos descubiertos, 974 pruebas, 974 pass, 0 fail**.
+  Las 41 nuevas viven en `src/lib/edu/__tests__/edu-almacenamiento.test.ts` y cubren lo que
+  pidió el encargo: la suma por instituto ignorando la sede, los umbrales 80/95/100, el corte
+  en `/sign` (y que va ANTES de firmar), y que un ALUMNO/DOCENTE/CAJA no alcancen el medidor.
+  Más: el precio en una sola constante, que ninguna pantalla lo escriba a mano, que ningún
+  endpoint del instituto escriba la cuota, y que el esquema y el `.sql` traigan los MISMOS
+  5 TB que el código.
+- **Guardia:** `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs`
+  → **exit 0**. 18 archivos vs `origin/main`: 16 propios del vertical y los 2 compartidos
+  declarados. **Cero prohibidos y cero compartidos sin declarar**: ni una línea del dental, de
+  barbería ni de inmuebles.
+- **Raíz del repo limpia:** esta rama no añade ni un archivo a la raíz; el único de raíz que
+  cambia es `ORQUESTA.md`.
+- `scripts/edu-guard.cjs` gana el prefijo `src/app/admin/institutos/` como PROPIO del vertical
+  —carpeta nueva y exclusiva, mismo criterio y mismo renglón que `barber-guard.cjs` con
+  `src/app/admin/barberias/`— y `scripts/edu-tests.cjs` gana esa raíz para que una prueba
+  futura ahí se descubra sola.
+
+### 🔴 SQL — `sql/edu-cuota-storage.sql`, OBLIGATORIO ANTES DEL DEPLOY
+
+Una columna, idempotente, CERO DROP, delimitador `$edu$`, con su bloque de comprobación (que
+existe, que es `bigint`, que ningún instituto se quedó sin cuota) y, comentado, el `UPDATE`
+para cambiar una cuota a mano y el `SELECT` que lee cómo va cada escuela.
+
+**El `DEFAULT` hace de backfill**: Postgres se lo aplica a las filas que ya existen, así que
+todos los institutos dados de alta quedan con los 5 TB incluidos sin un `UPDATE` aparte.
+
+Si se despliega el código sin aplicarlo, Prisma pide una columna que no existe y **toda**
+lectura de `edu_institutions` revienta — y de ahí cuelga la sesión del panel. Mismo trato que
+la `searchIndex` de la Ola 1B y los antecedentes de la ola de Casos.
+
+### Lo que NO se hizo, a propósito
+
+- **No hay entrada en el menú de `/admin`.** `/admin/institutos` funciona y es marcable, pero
+  el sidebar (`src/app/admin/admin-nav.tsx`) es un archivo COMPARTIDO con el dental, y
+  declararlo habría hecho fallar la guardia con el comando pactado
+  (`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`). El día que se quiera, es un renglón
+  en `NAV_ITEMS` (`{ href: "/admin/institutos", label: "Institutos", icon: GraduationCap,
+  section: "main" }`), agregar `"src/app/admin/admin-nav.tsx"` a `SHARED_FILES` de
+  `edu-guard.cjs` —donde ya está en los guards de barber y de inmuebles— y correr la guardia
+  declarándolo.
+- **No se metió al instituto en Stripe**, por diseño (ver arriba).
+- **No hay tabla de reservas de subida** (ver la carrera).
+- **No se cuentan las firmas de consentimiento** en el medidor. Existen, ocupan espacio y no
+  tienen fila con su tamaño; estimarlas sería inventar. La pantalla lo dice.
+- **No hay barrido de huérfanos**: un objeto subido y nunca confirmado (el navegador se cerró a
+  media subida) sigue ocupando bytes reales que este medidor no ve, porque no tiene fila. Ya
+  estaba anotado como pendiente desde la Ola 3 y esta ola no lo cierra — pero ahora ese hueco
+  tiene consecuencia económica, así que conviene subirlo de prioridad.
+- **No se avisa por WhatsApp ni por correo al llegar al 80 %.** El aviso vive en la pantalla:
+  quien no entre al tablero de dirección no se entera hasta que alguien no pueda subir.
+
+### Lo que no se vio
+
+Sin navegador ni base de datos en esta sesión: el worktree no tiene `.env`, así que cualquier
+pantalla server-rendered contra Prisma devuelve 500 antes de pintar. Lo que está probado es la
+aritmética, los textos, el orden del corte dentro de `/sign`, la cerradura de rol y la cadena
+del mensaje de error hasta la alerta de la pantalla. Que el ámbar se vea ámbar en un monitor
+queda para el preview de Vercel. PR contra `main`, SIN mergear.

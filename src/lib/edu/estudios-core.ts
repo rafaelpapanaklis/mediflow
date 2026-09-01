@@ -287,9 +287,20 @@ export function eduStudyPathBelongsTo(
   return path.startsWith(eduStudyPathPrefix(institutionId, patientId));
 }
 
-/** Bytes → "1.4 GB" / "930.2 MB". Para la cuota y para la tarjeta. */
+/**
+ * Bytes → "5.0 TB" / "1.4 GB" / "930.2 MB". Para la cuota y para la tarjeta.
+ *
+ * 🔴 ES EL ÚNICO FORMATEADOR DE BYTES DEL VERTICAL. La cuota de
+ * almacenamiento (src/lib/edu/almacenamiento-core.ts) le agregó el tramo de
+ * TB en vez de escribir el suyo: con dos, el día que alguien cambie el
+ * redondeo, la misma escuela leería "5.0 TB" en un sitio y "5120.0 GB" en
+ * otro y no habría forma de saber cuál está bien.
+ */
 export function eduFormatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
+  // TB: sin este tramo, una cuota de 5 TB se lee "5120.0 GB" — un número
+  // que nadie compara de cabeza contra un contrato que dice "5 TB".
+  if (bytes >= 1024 ** 4) return `${(bytes / 1024 ** 4).toFixed(1)} TB`;
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;

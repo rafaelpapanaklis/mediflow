@@ -57,6 +57,13 @@ const ROOTS = [
   "src/components/edu",
   "src/app/instituto",
   "src/app/api/instituto",
+  // La sección del vertical dentro del panel de plataforma (la cuota de
+  // almacenamiento). Hoy no tiene pruebas al lado —las suyas viven en
+  // src/lib/edu/__tests__/edu-almacenamiento.test.ts, con el resto del
+  // dominio— pero la raíz va declarada igual: si mañana alguien pone una
+  // prueba ahí, se descubre sola en vez de no correr nunca. Una raíz que no
+  // existe no tumba el runner (walk lo tolera).
+  "src/app/admin/institutos",
 ];
 
 const IS_TEST = /\.test\.tsx?$/;

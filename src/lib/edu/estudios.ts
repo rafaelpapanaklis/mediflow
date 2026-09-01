@@ -61,6 +61,12 @@ import {
   type EduStudyRow,
 } from "@/lib/edu/estudios-core";
 import {
+  eduAlmCabe,
+  eduAlmRechazo,
+  eduAlmRestanteBytes,
+} from "@/lib/edu/almacenamiento-core";
+import { getEduAlmacenamientoMedidor } from "@/lib/edu/almacenamiento";
+import {
   eduSignReadMany,
   eduSignUpload,
   eduStorageConfigured,
@@ -228,7 +234,9 @@ export interface EduSignedUpload {
  * Lo que se valida aquí (todo en el servidor, nada se cree del cliente):
  *   · sesión + alcance clínico + paciente de ESTE instituto
  *   · extensión dentro de la lista blanca
- *   · tamaño DECLARADO <= 2 GB
+ *   · tamaño DECLARADO <= 2 GB (el tope POR ARCHIVO)
+ *   · que quepa en la CUOTA DEL INSTITUTO (el tope de la ESCUELA) — son
+ *     dos límites distintos y los dos siguen valiendo
  *   · el PATH lo compone el servidor con el institutionId de la SESIÓN
  *
  * Lo que NO se puede validar aquí: la firma real del contenido (los magic
@@ -265,6 +273,31 @@ export async function signEduStudyUpload(
       `Ese archivo pesa ${eduFormatBytes(declared)} y el máximo por archivo es ${EDU_MAX_STUDY_LABEL}.`,
       413,
     );
+  }
+
+  // ── LA CUOTA DEL INSTITUTO ───────────────────────────────────────────
+  //
+  // 🔴 EL CORTE VA AQUÍ, ANTES DE FIRMAR. Después de firmar, el navegador
+  // ya se pasó veinte minutos subiendo una tomografía que iba a rebotar
+  // igual — y el rebote llegaría del bucket, sin palabras.
+  //
+  // Son DOS TOPES DISTINTOS y los dos siguen valiendo: arriba, lo que pesa
+  // ESE archivo (2 GB, EDU_MAX_STUDY_BYTES, que es un límite técnico de la
+  // subida); aquí, lo que le queda a la ESCUELA (su cuota contratada). Un
+  // archivo de 1 GB pasa el primero y no pasa el segundo si quedan 200 MB.
+  //
+  // El tamaño con el que se decide es el DECLARADO, que un cliente podría
+  // mentir a la baja. No importa para la cuota: mentir aquí solo consigue
+  // colar UN archivo (acotado a 2 GB por el tope de arriba, que /confirm
+  // vuelve a medir contra el objeto real), y el siguiente /sign ya ve el
+  // total verdadero porque el consumo se cuenta, no se guarda.
+  const medidor = await getEduAlmacenamientoMedidor(institutionId);
+  if (!eduAlmCabe(medidor, declared)) {
+    // 507 Insufficient Storage, no 413: el archivo no es demasiado grande,
+    // es la escuela la que no tiene sitio. Se distinguen en los logs, y el
+    // mensaje —que la pantalla enseña tal cual— dice cuánto queda, cuánto
+    // pesa esto y a quién avisarle.
+    throw new EduPadronError(eduAlmRechazo(medidor, declared), 507);
   }
 
   // 🔴 El path lo compone el SERVIDOR, con el institutionId de la sesión y
@@ -401,6 +434,44 @@ export async function confirmEduStudyUpload(
     },
     select: { id: true },
   });
+
+  // ── LA CARRERA CON LA CUOTA ──────────────────────────────────────────
+  //
+  // 🔴 AQUÍ NO SE RECHAZA POR CUOTA, Y ES UNA DECISIÓN, NO UN OLVIDO.
+  //
+  // El corte vive en /sign. Dos personas que firman a la vez con la bolsa
+  // casi llena ven las dos el mismo hueco y las dos suben: al llegar aquí,
+  // el total puede quedar por encima de la cuota. Se registra igual.
+  //
+  // Porque en este punto los bytes YA ESTÁN en el bucket: rechazar no
+  // ahorra un peso salvo que se BORRE el objeto, y eso es destruir una
+  // radiografía que alguien subió entera por una carrera que no podía ver.
+  // (El tope de 2 GB de arriba sí borra, y no es lo mismo: allí el cliente
+  // mintió sobre el tamaño al firmar.) El rebase está acotado a lo que
+  // estaba en vuelo, se autocorrige en el siguiente /sign —el consumo se
+  // cuenta, no se guarda— y el /admin lo ve y lo factura.
+  //
+  // El razonamiento largo está en src/lib/edu/almacenamiento.ts.
+  //
+  // Lo que sí se hace es dejar RASTRO, sin poder romper nada: si esta
+  // consulta falla, el estudio ya está registrado y así se queda.
+  try {
+    const medidor = await getEduAlmacenamientoMedidor(institutionId);
+    if (eduAlmRestanteBytes(medidor) <= 0 && medidor.usadoBytes > medidor.cuotaBytes) {
+      console.warn(
+        "[instituto/estudios] cuota rebasada por una subida en vuelo:",
+        JSON.stringify({
+          institutionId,
+          studyId: created.id,
+          bytesDelArchivo: Math.trunc(size),
+          usadoBytes: medidor.usadoBytes,
+          cuotaBytes: medidor.cuotaBytes,
+        }),
+      );
+    }
+  } catch (e) {
+    console.error("[instituto/estudios] no se pudo revisar la cuota tras registrar:", e);
+  }
 
   return { id: created.id, alreadyRegistered: false };
 }

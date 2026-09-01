@@ -40,6 +40,18 @@ const OWN_PREFIXES = [
   "src/app/api/instituto/",
   "src/components/edu/",
   "src/lib/edu/",
+  // Sección INSTITUTOS del panel de plataforma (/admin/institutos): lo que
+  // ve DaleControl de cada escuela y el ÚNICO sitio donde se edita su cuota
+  // de almacenamiento. Vive bajo src/app/admin/** porque ahí es donde el
+  // admin la espera, pero es una carpeta EXCLUSIVA del vertical: nada del
+  // dental la importa y nada de ella importa al dental. Todo lo demás de
+  // src/app/admin/** sigue siendo PROHIBIDO — incluido admin-nav.tsx, que
+  // es COMPARTIDO y se declara aparte.
+  //
+  // Es el mismo criterio (y el mismo renglón) que ya usan barber-guard.cjs
+  // con src/app/admin/barberias/ y realty-guard.cjs con inmobiliarias.
+  "src/app/admin/institutos/",
+  "src/app/api/admin/institutos/",
 ];
 
 // PROPIO del vertical: archivos exactos.
