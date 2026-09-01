@@ -16,6 +16,7 @@ import {
   FileText,
   DollarSign,
   Calendar,
+  ChevronRight,
   LogIn,
   Armchair,
   CheckCircle2,
@@ -350,6 +351,16 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
               aria-label={patientLinkLabel}
             >
               {patientHeader}
+              {/* La señal de "esto lleva a algún lado" que el hover solo no da
+                  (y que en táctil no existe): se queda fija, y al pasar o
+                  enfocar toma el acento y se corre. Decorativo — el ancla ya
+                  tiene su aria-label. */}
+              <ChevronRight
+                size={14}
+                strokeWidth={2.25}
+                className={styles.detailPatientChevron}
+                aria-hidden
+              />
             </Link>
           ) : (
             patientHeader

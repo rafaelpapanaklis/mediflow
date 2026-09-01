@@ -1262,6 +1262,30 @@
   margin: 4px 0 4px;
 }
 
+/* Reglas automáticas — la cabecera lleva el estado REAL a la derecha, para que
+   se lea de un golpe si va a salir algo sin tener que leer el párrafo. */
+.reminderHead {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.reminderPill {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.reminderPillOn  { background: var(--success-soft); color: var(--success-strong); }
+.reminderPillOff { background: var(--bg-elev-2);    color: var(--text-3); }
+.reminderHint {
+  font-size: 11px; color: var(--text-3);
+  line-height: 1.45;
+  margin: 0;
+}
+
 .waEmpty {
   font-size: 12px; color: var(--text-3);
   padding: 6px 0;

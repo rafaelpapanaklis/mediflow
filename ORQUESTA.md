@@ -30850,3 +30850,105 @@ Sin navegador ni base de datos en esta sesión: la panorámica del visor, la tab
 recibo imprimible y los chips de antecedentes están compilados y con sus tests de lógica en
 verde, pero no vistos en Chrome contra datos reales. Tampoco se aplicó ni se probó el SQL
 —esta rama no toca la base—. PR contra `main`, SIN mergear.
+
+═══════════════════════════════════════════════════════════════════════════
+## AGENDA-FICHA-VERDAD — El enlace del paciente PARECE enlace y el aviso de recordatorio deja de mentir ✅ (2026-08-31)
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: este mismo · BUILD `npx next build` EXIT 0 completo · Sin SQL, sin endpoints, sin
+dependencias, sin cambios de schema. 15 pruebas nuevas (`npm run test:reminders-promise`).
+
+Dos arreglos de honestidad sobre lo que se pusheó en 0d8e5a33: uno de señal visual y uno de copy.
+
+───────────────────────────────────────────────────────────────────────────
+1 · EL ENLACE DEL PACIENTE NO PARECÍA ENLACE
+───────────────────────────────────────────────────────────────────────────
+SÍNTOMA: en el panel de detalle de la agenda el nombre del paciente YA navegaba a
+/dashboard/patients/{id} (verificado en producción), pero se veía idéntico a un texto muerto.
+Quien lo probó concluyó que el enlace no se había hecho.
+
+POR QUÉ. La señal existía solo en :hover, y era la más débil posible: fondo `--bg-elev-2`
+(#F0EEF7) sobre el `--bg-elev` (#FFFFFF) del panel — un susurro de 5% de luminancia — más un
+subrayado que también aparecía solo al pasar. En reposo no había NADA (color heredado, sin
+subrayado, sin icono) y en una pantalla táctil el hover ni siquiera existe.
+
+QUÉ CAMBIA (`agenda.module.css` + `agenda-detail-panel.tsx`):
+  · REPOSO: el nombre lleva subrayado punteado en el acento de marca (55% sobre transparente,
+    offset 3px) y detrás del bloque va un chevrón `--text-3`. Se lee como enlace sin tocarlo.
+  · HOVER: fondo `--brand-soft`, el nombre toma el acento, el subrayado pasa a sólido y el
+    chevrón se corre 2px. `:active` baja a `--brand-softer`.
+  · FOCO DE TECLADO: `:focus-visible` con `box-shadow: var(--ring)` (--ring ES un box-shadow,
+    no un outline: por eso se apaga el outline). El mismo anillo del resto del panel.
+  · MODO OSCURO: el acento es un token propio del componente, `--mf-link-accent`, porque
+    `--brand` es el MISMO #7c3aed en claro y en oscuro y sobre el #121020 del panel oscuro se
+    lee a 2.4:1. En `:global(.dark)` baja a `--violet-400` (#A78BFA ≈ 6.5:1). Cero azul de
+    navegador: solo tokens del design system.
+  · `prefers-reduced-motion` apaga transiciones y el desplazamiento del chevrón.
+  · El avatar y el nombre siguen dentro del MISMO ancla (área tocable ampliada con
+    `margin: -4px -6px; padding: 4px 6px`); el chevrón va DENTRO del `<Link>`, no en
+    `patientHeader`, para que la variante sin enlace (paciente restringido, `patient.id` null)
+    se quede exactamente como estaba: texto plano, sin flecha.
+
+VERIFICADO en Chrome con render estático de los tokens y el CSS reales (reposo / hover / foco,
+en claro y en oscuro). No en la app con datos: sigue sin base de datos en esta sesión.
+
+───────────────────────────────────────────────────────────────────────────
+2 · EL AVISO DE RECORDATORIO MENTÍA
+───────────────────────────────────────────────────────────────────────────
+SÍNTOMA: la tarjeta "REGLAS AUTOMÁTICAS" de la ficha decía a TODO el mundo «{nombre} recibirá un
+recordatorio por WhatsApp 24h antes de su próxima cita (si la clínica tiene WhatsApp activado)».
+En una clínica con `reminderSettings.enabled = false` y `waReminderActive = false` el aviso
+seguía prometiendo un mensaje que no sale nunca.
+
+POR QUÉ. El texto era una constante de i18n con DOS mentiras cosidas:
+  a) el paréntesis miraba la CONEXIÓN de WhatsApp, no el interruptor de los recordatorios;
+  b) el "24h" estaba escrito a mano, aunque el momento es configurable (48 h / 24 h / 4 h /
+     2 h / 1 h, hasta cuatro a la vez).
+
+QUÉ CAMBIA:
+  · NUEVO `src/lib/reminders/promise.ts` — puro, sin BD y sin i18n. `resolveReminderOutcome()`
+    repite los cortes de `src/lib/reminders/enqueue.ts` (el cron) EN EL MISMO ORDEN:
+      1. `settings.enabled && offsets.length > 0`, con `settings` = `getEffectiveReminderSettings`
+         (la MISMA que lee el cron — ahí vive la trampa de que `waReminderActive` en NULL
+         significa ENCENDIDO: `waReminderActive ?? true`);
+      2. canal de la clínica: whatsapp exige `waConnected`, email no exige nada;
+      3. override del paciente (`PatientAccount.notifPrefs`): puede dejar UN solo momento y
+         recortar el canal, pero nunca dejarlo sin ninguno (el mismo `if (wa || em)` del cron);
+      4. el dato de contacto: sin teléfono no sale WhatsApp, sin correo no sale email.
+    Devuelve `{ willSend, reason, channels, wanted, offsets }` — `reason` nombra cuál de los
+    cuatro cortes falló para poder decirlo en pantalla.
+  · `page.tsx` (server) lo resuelve y manda al cliente SOLO el veredicto derivado: ni la fila
+    Clinic, ni la plantilla del mensaje. El override del portal se lee en su PROPIA query
+    (`.catch(() => null)`) y no pegado al select del estado del portal: `notifPrefs` es una
+    columna reciente y si a una BD le falta el SQL, meterla ahí habría tumbado también el
+    estado de la cuenta del portal (habría quedado "sin cuenta").
+  · `side-cards.tsx` pinta la frase real, el estado ("ACTIVOS" verde / "SIN ENVÍO" neutro), el
+    icono (BellRing/BellOff) y quita el degradado de marca cuando no va a salir nada. Los
+    momentos se listan con `Intl.ListFormat` del locale activo ("48 h, 24 h y 2 h antes"), con
+    respaldo a comas.
+  · i18n: se BORRÓ `patients.sideCards.reminderText` (es/en) y entraron 14 llaves nuevas, una
+    por caso real: apagados (+ pista "Se encienden en Ajustes › Recordatorios"), WhatsApp sin
+    conectar, sin teléfono, sin correo, sin ninguno de los dos, y las tres de "sí sale"
+    (WhatsApp / correo / ambos) con el momento interpolado.
+
+PRUEBAS: `npm run test:reminders-promise` — 15/15 en verde. Cubren el caso reportado, el NULL =
+encendido, el legacy sin ningún momento, "both" sin WhatsApp conectado, el paciente sin teléfono
+y los tres comportamientos del override del portal.
+
+───────────────────────────────────────────────────────────────────────────
+LO QUE NO SE ARREGLÓ (y por qué) — la MISMA promesa, en el sitio público
+───────────────────────────────────────────────────────────────────────────
+`src/app/[slug]/_shared/booking-flow.tsx:1036` — la pantalla de "¡Cita confirmada!" del flujo de
+reserva le promete AL PACIENTE «⏰ Recordatorio 24 horas antes» (y, un renglón antes, «Recibirás
+un WhatsApp con los detalles»), sin mirar tampoco la configuración de la clínica. Es la misma
+mentira, y peor: se la dice al paciente, que puede contar con ella.
+
+No se tocó porque no es el mismo cambio: ese componente lo montan TRES superficies
+(`/[slug]` mini-web, `/reservar/[slug]` y el popup del directorio), cada una arma su
+`BookingFlowClinic` de una fuente distinta, y la mini-web se sirve por ISR desde un `select`
+EXPLÍCITO y deliberadamente cerrado (`clinic-landing-server.tsx`) cuyo comentario advierte que
+todo lo que se agregue ahí viaja al HTML público. `reminderSettings` incluye la plantilla del
+mensaje y el sub-objeto de recall: no puede ir crudo. Necesita un campo DERIVADO nuevo en
+`LandingClinic` calculado en el server y enhebrado por las tres rutas. Queda como tarea aparte.
+
+Buscado y descartado: `patients.sideCards.reminderText` era la ÚNICA copia de ese texto en el
+panel (ningún vertical —instituto, inmuebles, barber— lo duplica).

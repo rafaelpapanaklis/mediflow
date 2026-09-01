@@ -44,6 +44,7 @@
     "test:consent-render": "tsx --test src/lib/consent/__tests__/render.test.ts",
     "test:consent-dates": "tsx --test src/lib/consent/__tests__/dates.test.ts",
     "test:reminders-reschedule": "tsx --test src/lib/reminders/__tests__/reschedule.test.ts",
+    "test:reminders-promise": "tsx --test src/lib/reminders/__tests__/promise.test.ts",
     "test:inbox": "tsx --test src/lib/inbox/__tests__/inbox-send.test.ts",
     "test:inbox-drafts": "tsx --test src/lib/inbox/__tests__/composer-drafts.test.ts",
     "test:inbox-templates": "tsx --test src/lib/inbox/__tests__/composer-templates.test.ts",

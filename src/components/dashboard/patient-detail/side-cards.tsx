@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Receipt, Sparkles, MessageCircle, CheckCircle2, Send } from "lucide-react";
+import { Receipt, BellRing, BellOff, MessageCircle, CheckCircle2, Send } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { isAbortError } from "@/lib/fetch-safe";
-import { useT } from "@/i18n/i18n-provider";
+import { useT, useLocale } from "@/i18n/i18n-provider";
+import { reminderOffsetHours, type ReminderOutcome } from "@/lib/reminders/promise";
 import { StartConversationModal } from "@/components/dashboard/inbox/start-conversation-modal";
 import styles from "./patient-detail.module.css";
 
@@ -38,6 +39,16 @@ interface SideCardsProps {
    * page.tsx en el server; el POST lo revalida con 403.
    */
   canStartConversation?: boolean;
+  /**
+   * Qué va a pasar DE VERDAD con los recordatorios de ESTE paciente. Lo resuelve
+   * el server con getEffectiveReminderSettings —la MISMA config que lee el cron
+   * de /api/cron/appointment-reminders— y resolveReminderOutcome. Antes esta
+   * tarjeta prometía "recordatorio por WhatsApp 24h antes" a todo el mundo,
+   * mirando solo si la clínica tenía WhatsApp CONECTADO: con los recordatorios
+   * apagados el aviso mentía, y con otro momento configurado mentía la hora.
+   * `null` solo si el server no pudo resolverlo: la tarjeta no promete nada.
+   */
+  reminderOutcome?: ReminderOutcome | null;
 }
 
 /** Máximo de cobros timbrados listados; el resto se resume en un enlace. */
@@ -84,13 +95,22 @@ export function SideCards({
   canViewBilling = false,
   stampedInvoices = [],
   canStartConversation = false,
+  reminderOutcome = null,
 }: SideCardsProps) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const stampedShown = stampedInvoices.slice(0, MAX_STAMPED_ROWS);
   const stampedRest  = stampedInvoices.length - stampedShown.length;
   const firstName = patientName.split(" ")[0] ?? "";
   const [composeOpen, setComposeOpen] = useState(false);
+
+  // ── Reglas automáticas: la verdad, no la promesa ────────────────────────
+  // `willSend` es el veredicto completo (interruptor + canal + conexión de
+  // WhatsApp + dato de contacto del paciente); `reason` dice cuál de los cuatro
+  // cortes falló para poder nombrarlo. Sin outcome no se promete nada.
+  const remindersOn = reminderOutcome?.willSend === true;
+  const reminderLine = buildReminderLine(reminderOutcome, firstName, t, locale);
 
   // ── WhatsApp recientes ──────────────────────────────────────────────────
   // La tarjeta era ESTÁTICA: pintaba siempre "Sin mensajes recientes" porque
@@ -235,16 +255,37 @@ export function SideCards({
         </section>
       )}
 
-      {/* Reglas automáticas */}
-      <section className={`${styles.sideCard} ${styles.aiCard}`}>
-        <header className={styles.sideCardHead}>
+      {/* Reglas automáticas — dice lo que VA A PASAR, no lo que el producto
+          sabe hacer. El texto sale de reminderOutcome, que replica los cortes
+          del cron sobre la config efectiva de la clínica; la tarjeta solo deja
+          de vestirse de "IA activa" (sin el degradado de marca) cuando no va a
+          salir nada. */}
+      <section className={`${styles.sideCard} ${remindersOn ? styles.aiCard : ""}`}>
+        <header className={styles.reminderHead}>
           <h3 className={styles.sideCardTitle}>
-            <Sparkles size={13} strokeWidth={1.75} aria-hidden /> {t("patients.sideCards.autoRules")}
+            {remindersOn ? (
+              <BellRing size={13} strokeWidth={1.75} aria-hidden />
+            ) : (
+              <BellOff size={13} strokeWidth={1.75} aria-hidden />
+            )}{" "}
+            {t("patients.sideCards.autoRules")}
           </h3>
+          <span
+            className={`${styles.reminderPill} ${
+              remindersOn ? styles.reminderPillOn : styles.reminderPillOff
+            }`}
+          >
+            {t(
+              remindersOn
+                ? "patients.sideCards.reminderStateOn"
+                : "patients.sideCards.reminderStateOff",
+            )}
+          </span>
         </header>
-        <p className={styles.aiText}>
-          {t("patients.sideCards.reminderText", { name: firstName })}
-        </p>
+        <p className={styles.aiText}>{reminderLine}</p>
+        {reminderOutcome?.reason === "disabled" && (
+          <p className={styles.reminderHint}>{t("patients.sideCards.reminderOffHint")}</p>
+        )}
       </section>
 
       {/* WhatsApp recientes */}
@@ -342,4 +383,59 @@ export function SideCards({
       )}
     </aside>
   );
+}
+
+/**
+ * El renglón de "Reglas automáticas" a partir del veredicto del server.
+ *
+ * Los momentos se pintan en el orden en que los manda el cron (descendente:
+ * "48 h, 24 h y 2 h antes"). Intl.ListFormat pone la conjunción del idioma
+ * activo; si el runtime no la trae, cae a comas y se sigue entendiendo.
+ */
+function buildReminderLine(
+  outcome: ReminderOutcome | null,
+  name: string,
+  t: ReturnType<typeof useT>,
+  locale: string,
+): string {
+  if (!outcome) return t("patients.sideCards.reminderUnknown");
+
+  if (outcome.reason === "disabled") {
+    return t("patients.sideCards.reminderOff", { name });
+  }
+  // Único caso que llega aquí: la clínica manda por WhatsApp y no está
+  // conectado (con canal de correo SIEMPRE hay canal, así que no hay "noChannel").
+  if (outcome.reason === "noChannel") {
+    return t("patients.sideCards.reminderNoWhatsapp", { name });
+  }
+  if (outcome.reason === "noContact") {
+    const key =
+      outcome.wanted.length > 1
+        ? "reminderNoContact"
+        : outcome.wanted[0] === "email"
+        ? "reminderNoEmail"
+        : "reminderNoPhone";
+    return t(`patients.sideCards.${key}`, { name });
+  }
+
+  const parts = outcome.offsets.map((min) => {
+    const h = reminderOffsetHours(min);
+    return h !== null
+      ? t("patients.sideCards.reminderHours", { h })
+      : t("patients.sideCards.reminderMinutes", { m: min });
+  });
+  let when: string;
+  try {
+    when = new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(parts);
+  } catch {
+    when = parts.join(", ");
+  }
+
+  const key =
+    outcome.channels.length > 1
+      ? "reminderOnBoth"
+      : outcome.channels[0] === "email"
+      ? "reminderOnEmail"
+      : "reminderOnWhatsapp";
+  return t(`patients.sideCards.${key}`, { name, when });
 }

@@ -653,26 +653,70 @@
   font-size: 10px; color: var(--text-3);
   margin-top: 1px;
 }
-/* El nombre y el avatar SON el enlace al expediente: hasta ahora había que
-   bajar a buscar el botón "Expediente" para ver la ficha del paciente cuyo
-   nombre estabas leyendo. Enlace de verdad (ancla), con su cursor, su
-   subrayado al pasar y el foco de teclado del resto del panel. */
+/* EL NOMBRE Y EL AVATAR SON EL ENLACE al expediente — y tienen que PARECERLO.
+   Navegar ya navegaba, pero pintado como texto muerto (color heredado, sin
+   subrayado, y un :hover de fondo --bg-elev-2 que sobre el --bg-elev del panel
+   es un susurro): quien lo probó dio por hecho que el enlace no existía. La
+   señal va ahora en REPOSO, no solo en :hover — en una pantalla táctil el hover
+   no existe —, y sin el azul del navegador: color heredado + subrayado punteado
+   en la marca, y al pasar/enfocar el nombre toma el acento, el subrayado se
+   vuelve sólido y el chevrón se corre. El acento es propio (--mf-link-accent)
+   porque --brand es el MISMO violeta #7c3aed en claro y en oscuro y sobre el
+   #121020 del panel oscuro se lee a 2.4:1; en .dark baja a --violet-400. */
 .detailPatientLink {
+  --mf-link-accent: var(--violet-600);
   display: flex;
   align-items: center;
   gap: 10px;
   color: inherit;
   text-decoration: none;
+  cursor: pointer;
   border-radius: 10px;
-  margin: -4px;
-  padding: 4px;
-  transition: background 120ms ease;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
-.detailPatientLink:hover { background: var(--bg-elev-2); }
-.detailPatientLink:hover .detailName { text-decoration: underline; }
+:global(.dark) .detailPatientLink { --mf-link-accent: var(--violet-400); }
+/* Subrayado solo bajo el NOMBRE: el avatar y el "Paciente" de abajo van dentro
+   del ancla nada más para agrandar el área tocable. */
+.detailPatientLink .detailName {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--mf-link-accent) 55%, transparent);
+  text-underline-offset: 3px;
+  transition: color var(--dur-1) var(--ease);
+}
+.detailPatientChevron {
+  flex-shrink: 0;
+  color: var(--text-3);
+  transition: color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.detailPatientLink:hover { background: var(--brand-soft); }
+.detailPatientLink:active { background: var(--brand-softer); }
+.detailPatientLink:hover .detailName,
+.detailPatientLink:focus-visible .detailName {
+  color: var(--mf-link-accent);
+  text-decoration-style: solid;
+  text-decoration-color: currentColor;
+}
+.detailPatientLink:hover .detailPatientChevron,
+.detailPatientLink:focus-visible .detailPatientChevron {
+  color: var(--mf-link-accent);
+  transform: translateX(2px);
+}
+/* Foco de teclado visible: el mismo anillo del resto del panel. --ring ES un
+   box-shadow (no un outline), por eso se apaga el outline y se pinta con él. */
 .detailPatientLink:focus-visible {
   outline: none;
   box-shadow: var(--ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .detailPatientLink,
+  .detailPatientLink .detailName,
+  .detailPatientChevron { transition: none; }
+  .detailPatientLink:hover .detailPatientChevron,
+  .detailPatientLink:focus-visible .detailPatientChevron { transform: none; }
 }
 .detailTimeCard {
   margin: 10px 14px;

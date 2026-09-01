@@ -37,6 +37,9 @@ import {
 } from "@/lib/clinical-shared/get-patient-activity-counts";
 import { questionnaireFreshness } from "@/lib/health-questionnaire";
 import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
+import { getEffectiveReminderSettings } from "@/lib/reminders/config";
+import { resolveReminderOutcome } from "@/lib/reminders/promise";
+import { parseNotifPrefs } from "@/lib/patient-notifications/types";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -161,7 +164,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // activas (o todas, si la clínica está en trial vigente) y reusamos esa
   // lista para Pediatría / Periodoncia / prefill endo. Reemplaza tres
   // llamadas previas a canAccessModule() — mismo contrato, una query.
-  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount, portalAccountLink] = await Promise.all([
+  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount, portalAccountLink, portalNotifPrefsRow] = await Promise.all([
     getActiveClinicModuleKeys(user.clinicId),
     getPatientActivityCounts({ clinicId: user.clinicId, patientId: patient.id }),
     // Cuestionario de salud vigente (anamnesis WS1-T2). .catch(()=>null) lo
@@ -190,6 +193,18 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       select: { account: { select: { passwordHash: true } } },
       orderBy: { createdAt: "asc" },
     }).catch(() => null),
+    // Override de recordatorios del paciente (PatientAccount.notifPrefs), para
+    // que la tarjeta "Reglas automáticas" diga el momento y el canal que de
+    // verdad le van a llegar. Va en su PROPIA query, no pegada al select de
+    // arriba, a propósito: notifPrefs es una columna reciente y si a una BD
+    // todavía le falta el SQL, seleccionarla ahí tumbaría también el estado del
+    // portal (quedaría "sin cuenta"). Aquí el .catch() solo cuesta el override
+    // — exactamente la misma degradación best-effort que hace el cron.
+    prisma.patientAccountLink.findFirst({
+      where: { patientId: patient.id, clinicId: user.clinicId },
+      select: { account: { select: { notifPrefs: true } } },
+      orderBy: { createdAt: "asc" },
+    }).catch(() => null),
   ]);
   // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
   // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
@@ -199,6 +214,25 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     : linkedPortalAccount.passwordHash === null
       ? "invited"
       : "active";
+
+  // RECORDATORIOS — qué va a pasar DE VERDAD con este paciente.
+  // La tarjeta "Reglas automáticas" del rail prometía a todo el mundo un
+  // "recordatorio por WhatsApp 24h antes (si la clínica tiene WhatsApp
+  // activado)": el paréntesis miraba la CONEXIÓN de WhatsApp y no el
+  // interruptor de los recordatorios, así que en una clínica con los
+  // recordatorios apagados el aviso prometía un mensaje que no sale nunca —
+  // y la hora estaba escrita a mano aunque el momento sea configurable.
+  // getEffectiveReminderSettings es la MISMA función que lee el cron (ahí vive
+  // la trampa de que waReminderActive en NULL significa ENCENDIDO), y
+  // resolveReminderOutcome repite sus cortes en orden. Al cliente viaja SOLO el
+  // veredicto derivado: ni la fila Clinic, ni la plantilla del mensaje.
+  const reminderOutcome = resolveReminderOutcome({
+    settings: getEffectiveReminderSettings(user.clinic),
+    waConnected: Boolean(user.clinic.waConnected),
+    patientHasPhone: Boolean(patient.phone),
+    patientHasEmail: Boolean(patient.email),
+    patientPrefs: parseNotifPrefs(portalNotifPrefsRow?.account?.notifPrefs ?? null),
+  });
 
   // FACTURACIÓN — permiso granular "billing.view" (el mismo que gatea Caja y el
   // link del sidebar). Sin él la ficha NO muestra la pestaña Facturación ni el
@@ -464,6 +498,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           // Solo el modo fiscal (no la fila de Clinic): con qué impuestos nace
           // una factura nueva desde la ficha — igual que en Caja.
           clinicTaxMode={(user.clinic as any).cfdiTaxMode ?? "exempt"}
+          reminderOutcome={reminderOutcome}
           portalUrl={portalUrl}
           portalAccountStatus={portalAccountStatus}
           pediatricsData={pediatricsData}

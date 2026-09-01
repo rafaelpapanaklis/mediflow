@@ -14,6 +14,7 @@ import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard
 import { PatientNavBar } from "@/components/dashboard/patient-detail/patient-nav-bar";
 import { buildPatientNavItems } from "@/components/dashboard/patient-detail/patient-nav-items";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
+import type { ReminderOutcome } from "@/lib/reminders/promise";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import {
@@ -399,6 +400,9 @@ interface Props {
   /** Clinic.cfdiTaxMode ("exempt" | "iva16"): impuestos con los que nace una
    *  factura nueva, para que el desglose interno y el CFDI no se contradigan. */
   clinicTaxMode?: string | null;
+  /** Veredicto de recordatorios de ESTE paciente (ver SideCards). Solo el
+   *  resultado derivado —nunca la fila Clinic ni la plantilla del mensaje. */
+  reminderOutcome?: ReminderOutcome | null;
 }
 
 export function PatientDetailClient({
@@ -436,6 +440,7 @@ export function PatientDetailClient({
   canViewPrescriptions = false,
   canEditTreatments = false,
   facturApiEnabled = false,
+  reminderOutcome = null,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -3316,6 +3321,7 @@ export function PatientDetailClient({
             canViewBilling={canViewBilling}
             stampedInvoices={stampedInvoices}
             canStartConversation={canStartConversation}
+            reminderOutcome={reminderOutcome}
           />
         )}
       </div>
