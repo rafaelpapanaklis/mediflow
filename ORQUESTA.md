@@ -30952,3 +30952,159 @@ mensaje y el sub-objeto de recall: no puede ir crudo. Necesita un campo DERIVADO
 
 Buscado y descartado: `patients.sideCards.reminderText` era la ÚNICA copia de ese texto en el
 panel (ningún vertical —instituto, inmuebles, barber— lo duplica).
+
+## [Agenda · Legible III] — El color del doctor ya tiene leyenda donde de verdad hace falta, y esa leyenda ES el filtro que ya existía (no un segundo control que lo contradiga) ✅ (2026-09-01) · rama `feat/agenda-legible` → EN MAIN (`5b55a18b`)
+
+La ola anterior (`84ebae29`) dejó la card pintada con el color del doctor. En vista Día +
+Doctores eso se explica solo —cada columna trae el nombre arriba— pero en Semana las columnas
+son DÍAS y en Día + Sillones son SILLONES: cincuenta citas de tres colores y ninguna forma de
+saber de quién es cada uno. Esto lo cierra. **Todo es presentación: no se tocó ni un dato ni el
+filtrado del servidor.**
+
+### 1. Dónde va, y dónde NO
+
+| Vista | ¿Leyenda? | Por qué |
+|---|---|---|
+| **Semana** | **SÍ** | Las columnas son días. Nada dice de quién es el color. |
+| **Día + Sillones** (y la columna unificada) | **SÍ** | La columna dice el sillón; el doctor, nadie. |
+| Día + Doctores | NO | `AgendaColumnHeader` ya pinta el MISMO chip de color con iniciales + el nombre. Sería lo mismo dos veces y ancho gastado. |
+| **Mes** | NO | **Ahí las citas NO se pintan con el color del doctor.** `MONTH_STATUS_COLOR` (agenda-month-view.tsx:24) las pinta por ESTADO. Una leyenda de colores que la pantalla no usa engaña más de lo que explica. |
+| Lista | NO | Mismo caso: la fila usa `--mf-status-color`, y además ya trae el nombre del doctor en texto. |
+
+Es la única desviación del encargo, que pedía leyenda también en Mes. Se decidió NO cambiar el
+color del Mes a "por doctor" para poder ponerla: eso le quitaría al Mes la única señal de estado
+que tiene hoy, y no era lo que se pidió. Queda como decisión abierta, con red: el test
+`la premisa de arriba se comprueba en el código de la vista Mes` lee `agenda-month-view.tsx` y
+FALLA si alguien mete `doctorColorFor` ahí, obligando a revisar `legendAppliesTo` en el mismo
+cambio.
+
+Regla extra: **con menos de dos doctores no se pinta nada** (`LEGEND_MIN_DOCTORS`). Con uno solo
+todas las citas son del mismo color y la leyenda no distingue nada.
+
+### 2. Cuánto alto cuesta: CERO
+
+La tira vive DENTRO de la fila de sub-toolbar que ya existía (`--mf-subbar-h`, 40px), en el hueco
+libre entre los contadores y los segmentos. `.page` conserva sus tres filas
+(`auto / 40px / 1fr`), la grilla su `1fr` entero y **`slotHpx` no cambia ni un píxel**: lo que se
+ganó con "el día entero cabe sin scroll" queda intacto. Medido en Chrome sobre el componente
+real: la fila sigue midiendo **40px** y la tira **22px** dentro de ella, en las siete
+combinaciones probadas.
+
+Lo que sí cuesta es ANCHO, y por eso la tira nunca crece ni envuelve:
+
+- `.docLegend` es `flex: 1 1 0%` + `min-width: 0` + `overflow: hidden`. Base 0 ⇒ **no aporta
+  nada al ancho mínimo de la fila**: se queda solo con el hueco sobrante y, cuando no sobra
+  nada, los contadores y los segmentos se comportan exactamente como antes.
+- Como el ancho lo decide el flex del padre y no el contenido, pintar más o menos chips no
+  puede realimentar al `ResizeObserver` que los mide. Sin bucle.
+
+### 3. Con muchos doctores: medido, no estimado
+
+Se mide un **espejo oculto del mismo DOM** (mismas clases ⇒ mismas container queries ya
+aplicadas), absoluto dentro del `overflow:hidden`, y `fitLegendChips` (pura, testeada) decide
+cuántos caben reservando el ancho del `+N`. Números REALES tomados en Chrome con 15 doctores:
+
+| Vista · ancho del panel | Hueco de la tira | Chip | Se pintan |
+|---|---|---|---|
+| Semana · 1617px (pantalla 1920) | 1215px | 102 px con nombre | **10 + "+5"** |
+| Semana · 1180px (pantalla 1440) | 778px | 102 px | **6 + "+9"** |
+| Día + Sillones · 1180px | 439px | 88 px (nombre a 54) | **4 + "+11"** |
+| Día + Sillones · 1031px (pantalla 1280) | 290px | 23 px, solo iniciales | **9 + "+6"** |
+| Día + Sillones · 758px | 19px | — | tira oculta; queda la pill "Doctores" |
+
+Día + Sillones aprieta más que Semana porque su sub-toolbar lleva tres contadores y DOS
+segmentos (Vista + Zoom) en vez de uno. Los cortes son container queries sobre la propia tira
+(**`@container`, no `@media`**: con el sidebar colapsable y el panel de detalle abriéndose, el
+ancho de ventana miente): a ≤460px el nombre se recorta a 54px, a ≤300px se va y queda el chip
+de color con las iniciales —lo único que hay que reconocer en la card—, y a ≤48px, donde ni el
+"+N" cabe, se esconde entera en vez de dejar un muñón recortado.
+
+El orden de la tira es lo que la hace útil con 15 doctores: **delante los filtrados, luego los
+que tienen citas en el rango cargado, al final el resto**. Con cinco doctores trabajando hoy,
+los cinco colores que están EN PANTALLA son los primeros; los otros diez viven detrás del "+N".
+El panel del "+N", en cambio, usa el orden del padrón a propósito: ahí no hay que ahorrar ancho
+y reordenar bajo el cursor al marcar una casilla sería desconcertante.
+
+### 4. Sí filtra — y es el MISMO filtro, no uno paralelo
+
+Cada chip lee y escribe `state.filters.doctorIds`, el mismo estado que la pill "Doctores" de la
+toolbar. **No hay estado nuevo**, así que los dos controles no pueden contradecirse. El
+desplegable del "+N" y el de la pill son literalmente el mismo componente nuevo,
+`AgendaDoctorOptions`.
+
+Al unificarlos salió a la luz un desajuste que ya existía: la pill listaba solo
+`activeInAgenda`. `legendDoctors()` lista ahora **activos ∪ los que tienen citas en el rango
+cargado ∪ los ya seleccionados**:
+
+- el doctor **dado de baja con citas hoy** tiene su color pintado en la agenda (es el mismo
+  "huérfano" al que `computeColumns` ya le da columna en Día + Doctores) y ahora también entrada
+  en la leyenda y en el filtro. Antes su color aparecía sin forma de filtrarlo;
+- el **seleccionado sin citas** ya no desaparece de la lista. Antes, filtrar por A dejaba a B
+  fuera del listado mientras seguía contando en el filtro: el contador decía 2 y la lista
+  enseñaba 1.
+
+Estados visibles: sin filtro, todos los chips normales; con filtro, el elegido se tiñe con SU
+color (14% sobre `--bg-elev`, igual que la card) y el resto se apaga. **Se apaga el círculo de
+color, no el nombre**: bajar el chip entero con `opacity` dejaba el texto en ~2:1 sobre el fondo
+oscuro, y una leyenda que no se puede leer no es una leyenda. Con el cambio, el nombre "apagado"
+conserva **7.2:1 en oscuro y 9.1:1 en claro**. Y si el filtrado es uno de los que NO caben, el
+"+N" se pinta en violeta: nunca hay un filtro activo sin ningún control en pantalla que lo diga.
+
+### 5. Dos colores casi iguales
+
+`users.color` lo elige la clínica y nada impide dos violetas parecidos. El chip de la leyenda
+**es** el `.apptDocAvatar` de la card: mismo tamaño, mismo color sólido, mismas iniciales
+sacadas del mismo `shortName` con el mismo `doctorInitials`, y la tinta la sigue decidiendo
+`readableTextOn` por luminancia. Reconocerlo en la agenda es reconocer ESE objeto, no un tono.
+Ni una resolución de color nueva: todo sale de `doctor-color.ts`.
+
+### 6. Archivos
+
+- **`src/lib/agenda/doctor-legend.ts`** (nuevo, puro): `legendDoctors`, `orderLegendStrip`,
+  `fitLegendChips`, `legendAppliesTo`, `LEGEND_MIN_DOCTORS`, `LEGEND_CHIP_GAP_PX` (el gap es
+  constante única: el componente lo escribe inline en la tira y en el espejo, para que medición
+  y render no puedan divergir).
+- **`agenda-doctor-legend.tsx`** (nuevo): la tira, el espejo de medición y el popover del "+N"
+  (portal a `<body>` con `position:fixed`, como la pill — el `.page` de la agenda es
+  `overflow:hidden` y un panel absoluto se recortaría).
+- **`agenda-doctor-options.tsx`** (nuevo): la lista de doctores con color, compartida por la
+  pill y por el "+N".
+- `agenda-sub-toolbar.tsx`: monta la leyenda entre los contadores y los segmentos.
+- `agenda-filter-pills.tsx`: el desplegable de "Doctores" pasa a ser `AgendaDoctorOptions`.
+- `agenda.module.css`: +155 líneas de la sección nueva, más `gap: 12px` en `.subToolbar`.
+- i18n `es`/`en`: `agenda.doctorLegend` (7 llaves, simétricas, con plural en `moreTitle`).
+
+### 7. La trampa que costó encontrar (y que solo se vio en el navegador)
+
+La primera versión medía en un `useLayoutEffect` con dependencias `[ordered, applies]`. En
+Semana funcionaba; **en Día + Sillones el número quedaba VIEJO**: al cambiar de vista aparecen
+dos contadores y el segmento "Vista", la tira se estrecha a la mitad, pero ni las citas ni los
+doctores han cambiado, así que el efecto no volvía a correr. Se pintaban 6 chips donde cabían 4,
+y 3 donde no cabía ninguno. Arreglo: el efecto corre **después de CADA commit** (sin array de
+dependencias) y converge a un punto fijo —ni el ancho de la tira ni los anchos del espejo
+dependen de `visibleCount`, así que la segunda pasada calcula lo mismo y `setVisibleCount`
+corta—; y la medición del `ResizeObserver` va dentro de un `requestAnimationFrame`, porque
+cuando el ancho cruza un breakpoint de `@container` los chips cambian de ancho por CSS, sin
+render de React, y medir dentro del callback mezclaba el ancho nuevo con anchos viejos.
+
+Verificado con una page temporal `src/app/dev-legend/page.tsx` (fuera del matcher del
+middleware, sin BD, **borrada antes de commitear**) que montaba el `AgendaSubToolbar` REAL en
+nueve configuraciones. Las siete que llevan leyenda dan hoy el mismo número que `fitLegendChips`,
+la tira no desborda la barra en ninguna (`scrollWidth - clientWidth === 0`), y las dos que no
+deben llevarla —Día + Doctores y un solo doctor— no la pintan.
+
+### 8. Gates
+
+- **`npx next build` COMPLETO, EXIT 0 real** (con `.next` borrado antes): 463/463 páginas,
+  `Finalizing` + `Collecting build traces` + tabla de rutas. Único warning no preexistente:
+  ninguno (queda el `file-type` de ai-wallet y los tres de clases ambiguas de Tailwind, los
+  mismos de siempre). El ruido de `DATABASE_URL` es el habitual de compilar sin `.env` local.
+- **`npm run test:agenda-legend` — 25/25** (script nuevo). Cubren el invariante "todo doctor con
+  cita tiene entrada", el seleccionado que no desaparece, el orden de la tira, la monotonía de
+  `fitLegendChips` respecto al ancho (garantía de que la tira no parpadea) y la matriz de vistas.
+- `test:agenda-metrics` 17/17, `test:agenda` 19/19, `test:clinic-hours` 23/23 — sin tocar.
+- `npx tsc --noEmit`: solo los **6 errores PREEXISTENTES** de `src/lib/barber/__tests__`.
+- Barrido anti-mojibake limpio en los seis archivos con acentos.
+
+`git fetch origin` + `git merge origin/main` → *Already up to date* (main seguía en `84ebae29`).
+Pusheado a `origin/main` como **`5b55a18b`**.
