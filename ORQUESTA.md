@@ -31440,3 +31440,316 @@ real queda pendiente de mirarse en el preview de Vercel: la ficha del instituto 
 server-rendered contra Prisma y sin `DATABASE_URL` devuelve 500 antes de pintar nada. Lo que sí
 está probado es la relación entre las dos piezas del arreglo —el CSS renombrado y el JSX que lo
 usa se comprueban el uno contra el otro en la prueba 4—. PR contra `main`, SIN mergear.
+
+═══════════════════════════════════════════════════════════════════════════
+## EDU-CLÍNICA-EN-VIVO — El tablero de sillones del instituto ✅ (2026-09-01) · rama feat/edu-clinica-viva → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin pipes) · `npm run test:edu` VERDE (30 archivos, 964 pruebas)
+GUARDIA `EDU_GUARD_SHARED="ORQUESTA.md"` EXIT 0 · SIN SQL · SIN envs nuevas
+
+OBJETIVO: una pantalla nueva —`/instituto/clinica`— que enseña los sillones de la escuela
+en tiempo real: **libre**, **próxima** u **ocupada**, con qué estudiante atiende y a qué
+paciente. Pensada para dos sitios a la vez y los dos de verdad: un monitor colgado en el
+piso clínico y el teléfono de un docente de pie.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · CÓMO SE MAPEARON LOS ESTADOS  (la pieza que había que resolver)
+───────────────────────────────────────────────────────────────────────────
+
+El motor **se importa del dental y no se copia ni se edita**: `src/lib/floor-plan/
+live-mode.ts` (`getChairStatus`, `getChairAppointment`, `getNextChairAppointment`,
+`appointmentProgress`, `maskPatient`). Lo que no encajaba se adaptó **de este lado**, en
+`src/lib/edu/clinica-viva-core.ts`. Son TRES piezas, no una:
+
+**PIEZA 1 — la traducción.** Los dos productos no hablan el mismo idioma:
+
+| instituto (EduAppointmentStatus) | → dental (LiveApptStatus) | efecto en el sillón |
+|---|---|---|
+| `SCHEDULED`   | `SCHEDULED`     | próxima si empieza en ≤30 min |
+| `CHECKED_IN`  | `CHECKED_IN`    | próxima (está en RECEPCIÓN, no en el sillón) |
+| **`IN_CHAIR`**| **`IN_PROGRESS`**| **OCUPADO** ← la línea de esta ola |
+| `IN_PROGRESS` | `IN_PROGRESS`   | OCUPADO |
+| `COMPLETED` · `CANCELLED` · `NO_SHOW` | **`null`** | no viaja al motor |
+
+`getChairStatus` pinta rojo cuando ve `IN_PROGRESS` **y nada más**, y `IN_CHAIR` no existe
+en el dental. Sin esa fila, el paciente que ya está sentado esperando a que llegue su
+docente dejaba el sillón pintado de VERDE y la escuela sentaba a otro encima.
+
+Se escribe como `Record` COMPLETO y no como un `switch` con `default`: si mañana el enum
+gana un estado, TypeScript se pone rojo y obliga a decidir si ocupa el sillón. Un `default`
+habría contestado solo, y la respuesta silenciosa es la que deja un sillón mal pintado.
+
+**PIEZA 2 — lo muerto no viaja.** `getNextChairAppointment` devuelve la próxima cita SIN
+mirar su estado. Una cancelada de las 16:00 habría salido como "próxima 16:00" en un sillón
+que va a estar libre toda la tarde. Por eso los tres estados terminales mapean a `null` y se
+descartan ANTES de entrar al motor.
+
+**PIEZA 3 — la trampa fina, y la razón de que `eduVivaCard` exista.** `getChairStatus` y
+`getChairAppointment` NO contestan lo mismo: el primero (en vivo) solo dice ocupado por
+`IN_PROGRESS`; el segundo, si no encuentra ninguna, se cae a "la cita cuyo rango contiene
+ahora". Una cita `SCHEDULED` de 9:00 a 10:00, a las 9:30 —el paciente que no llegó y que
+nadie marcó— deja el sillón LIBRE para el primero y devuelve esa cita para el segundo.
+Preguntarlas por separado y pintarlas juntas daba una tarjeta **"Libre" con un paciente
+dentro**. Se cierra decidiendo SIEMPRE por el estado y pidiendo la cita después:
+
+    ocupado → getChairAppointment      próximo → getNextChairAppointment
+    libre   → getNextChairAppointment, y SOLO como pista de hora ("Siguiente 14:30")
+
+Corolario documentado: `now` tiene que ser el instante REAL (el motor cambia de criterio a
+±90 s del reloj, porque allá sirve a un timeline que viaja en el tiempo). Las pruebas
+construyen sus horas como `Date.now() + offset` por eso, no por comodidad; las dos que usan
+un instante fijo explican por qué ahí da lo mismo.
+
+**Y el estado sale de la CITA, no de la presencia** — la decisión de la Ola 7, sin tocar.
+El producto no registra quién está conectado. Con presencia, el alumno que cierra el
+navegador con el paciente todavía en el sillón dejaría la unidad en verde.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · QUÉ SE HIZO PARA REFRESCAR  (sin infraestructura nueva)
+───────────────────────────────────────────────────────────────────────────
+
+Polling, no websockets, no colas, no nada nuevo. **DOS relojes que hacen cosas distintas:**
+
+1. **el LATIDO — 20 s** (`EDU_VIVA_REFRESCO_MS`). Vuelve a pedir `GET /api/instituto/clinica`
+   y reemplaza el tablero. Es lo que entera a la pantalla de que alguien se sentó.
+   20 s y no 2: lo que cambia en el piso clínico son minutos, y esta pantalla se queda
+   abierta todo el día en un monitor. Dos segundos serían 1 800 consultas/hora **por
+   pantalla** contra las mismas tablas que usa la agenda, para enseñar lo mismo. Un pelo
+   más rápido que el bloque en vivo de Dirección (25 s) a propósito: allá el tablero vivo
+   es una franja dentro de una pantalla de números; aquí ES la pantalla.
+2. **el TIC — 30 s** (`EDU_VIVA_TIC_MS`). **No pide nada**: solo recalcula "lleva 42 min"
+   con el reloj del navegador. El minutero de una cita en curso avanza solo; consultar al
+   servidor para eso sería tráfico por nada.
+
+**🔴 Los dos se paran con la pestaña oculta** (`document.hidden`) y al volver a hacerse
+visible se pide UNA vez, inmediatamente (`visibilitychange`). No es cortesía de red: el
+navegador FRENA los temporizadores en segundo plano, así que un intervalo que sigue
+corriendo ahí deja de ser el que dice su nombre y, al volver, dispara una ráfaga de
+consultas atrasadas. Los dos listeners y los dos intervalos se limpian al desmontar, y hay
+una prueba que lo comprueba leyendo el componente.
+
+**Si el latido falla, se DICE**: se apaga el punto verde, se pone ámbar y el texto pasa a
+"Sin conexión · último corte 12:03:41". Un tablero pegado que parece vivo es peor que uno
+que avisa. Misma decisión que el panel de Dirección.
+
+**El primer render no parpadea y no desincroniza la hidratación**: el reloj local arranca en
+`null` a propósito, así que servidor y cliente pintan el mismo minutero (el que calculó el
+servidor) y el efecto toma el relevo después.
+
+Consulta acotada: ventana de **±12 h en instantes** (no un día de calendario — las sedes
+pueden estar en husos distintos). El suelo de 12 h no es una optimización: una cita que
+alguien dejó en `IN_PROGRESS` y nunca cerró tiene que dejar de pintar el sillón de rojo en
+algún momento; sin él, una sesión olvidada del martes deja la unidad ocupada para siempre.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · QUIÉN LA VE  (el alcance, en el punto único y en la API)
+───────────────────────────────────────────────────────────────────────────
+
+**Permiso nuevo: `clinica.view`.** Grupo PROPIO en la pantalla de permisos ("Clínica en
+vivo", una sola casilla) y no dentro de "Agenda y sillones": quien le da a caja el bloque de
+la agenda —que es lo normal, caja agenda— no puede darle **de pasada** el tablero que enseña
+el padecimiento de cada paciente de la escuela. Default: **DIRECCION y DOCENTE**. Nadie más.
+
+**El alcance se resuelve en `src/lib/edu/visibility.ts` y en ningún otro archivo.** Función
+nueva `eduLiveFloorVisibility(actor)`, con la misma forma que el dinero de la Ola 5: **lista
+blanca ANTES del recurso**, para que un rol nuevo (COORDINADOR, RECTOR) se quede fuera por
+defecto y no por olvido. Superada la lista, delega en `eduVisibility(actor, "cases")` — el
+recurso del EXPEDIENTE, porque esta pantalla dice qué paciente está sentado y de qué se le
+atiende. No hay una segunda tabla de roles que se pueda desincronizar.
+
+- **CAJA** cae en "none" por el recurso: recibe, agenda y cobra; no abre expediente.
+- **ALUMNO** cae en "none" **por la lista blanca**, y esto sí es una decisión de esta ola:
+  con alcance "own" vería un piso con dos sillones pintados y treinta en blanco, y eso no
+  se lee como "estos dos son los tuyos" sino como "la clínica está vacía". Lo suyo ya tiene
+  pantalla y es **Mi agenda**.
+- **DIRECCION** → `all`: el piso con nombre y apellido.
+- **DOCENTE** → `supervised`: **el piso ENTERO** —cuántos sillones quedan libres es
+  infraestructura de la escuela, no la fila de nadie— con el **DETALLE callado** en los
+  sillones de estudiantes que hoy no supervisa. La tarjeta sigue diciendo OCUPADA (si no, el
+  tablero mentiría sobre cuántas unidades quedan) y del paciente deja solo las INICIALES,
+  con el `maskPatient` del propio motor del dental, que es exactamente para lo que existe.
+  Ni estudiante, ni matrícula, ni especialidad, ni folio. La pantalla lo DICE con todas sus
+  letras en vez de dejar tarjetas mudas que se leen como un fallo de carga.
+
+  ⚠️ **Esto no lo pedía el encargo y conviene que se lea aquí**: el encargo dice "DIRECCION y
+  DOCENTE", y darle al docente el nombre del paciente de otro docente habría roto en una
+  pantalla nueva la regla que el vertical defiende desde la Ola 1A y que está escrita arriba
+  del todo de `visibility.ts` — «DOCENTE → lo de los alumnos que supervisa CON ASIGNACIÓN
+  VIGENTE. Nada de otros docentes». Se falló del lado cerrado. Si la escuela quiere lo
+  contrario, es UNA línea en `eduLiveFloorVisibility` (devolver `{kind:"all"}` para DOCENTE)
+  y nada más — está a propósito en un solo sitio.
+
+**El corte va también en la API, no solo en la pantalla.** `GET /api/instituto/clinica` pasa
+por DOS cerraduras:
+1. `eduApiGuard("clinica.view")` → **403** para ALUMNO y CAJA sin tocar la base;
+2. `getEduClinicaViva` consulta `eduLiveFloorVisibility` y lanza **403** si devuelve "none"
+   → cierra el caso de que alguien le encienda la casilla a un alumno por override (el
+   override REEMPLAZA al default, así que se puede dar). Sigue sin ver un sillón.
+   La página hace lo mismo y pinta el motivo en español.
+
+**Por qué la consulta de citas NO lleva `eduAppointmentScopeWhere`** (y está escrito largo en
+`clinica-viva.ts`, porque es lo primero que un auditor va a mirar): con el recorte de filas,
+los sillones ocupados por alumnos de otro docente saldrían **verdes**, y la pregunta que el
+tablero existe para contestar —"¿dónde siento a este paciente?"— tendría la respuesta
+equivocada. El recorte cambia de sitio, no desaparece: el SILLÓN se lee con
+`eduChairScopeWhere` (tenant + SEDE, como en `sillones.ts`), la CITA cuelga de esos sillones,
+y el DETALLE se decide fila por fila con `eduScopeCoversStudent` — el mismo predicado de
+vigencia que el resto del vertical, así que **una asignación cerrada ayer ya no da acceso**.
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · LA SEDE, LOS SILLONES Y LA PANTALLA
+───────────────────────────────────────────────────────────────────────────
+
+- **Filtro por sede sin techo bajo.** Un `<select>` nativo y no una fila de píldoras: el
+  producto admite 40 sedes (`EDU_MAX_CAMPUSES`) y una fila que se sale de la pantalla en un
+  teléfono no es un filtro. Se pinta solo con más de una sede.
+- **`?sede=<id>` no concede nada.** Pasa por el MISMO `getEduCampusScope` que la cookie de la
+  barra superior, así que hereda su regla: un id de una sede ajena —o de otra escuela— se
+  degrada solo a la vista consolidada de lo suyo. Sin `?sede`, manda la sede de la barra.
+- **Un sillón pertenece a UNA sede y su número solo es único dentro de ella.** El emparejado
+  es siempre por `chairId`, nunca por número: hay dos "Sillón 1" y emparejar por número
+  —que es la forma natural de equivocarse— pondría al paciente del campus sur en la tarjeta
+  del norte. Hay una prueba dedicada a eso.
+- **Cada tarjeta pinta su hora en la hora de PARED de SU sede.** Aquí no hace falta el aviso
+  de "husos distintos" que sí lleva la agenda: lo que miente es una rejilla que pone las
+  9:00 de Tijuana y las 9:00 de Mérida en la misma columna, y aquí cada tarjeta es UN sitio.
+- **`isActive:false` no se pinta.** Un sillón fuera de servicio en verde es una invitación a
+  sentar ahí a alguien.
+
+**La pantalla** (`edu-viva*` en `edu-theme.css`, prefijo propio y sin chocar con nada — lo
+comprueba `edu-theme.test.ts`): rejilla `auto-fill` que arranca en una columna en el teléfono
+y sube sola; el NÚMERO DE LA PARED en `clamp(30px, 3.4vw, 76px)` para que se lea desde cuatro
+metros; el sillón ocupado se tiñe entero, no solo el borde. `auto-fill` y no `auto-fit`: con
+dos sillones y un monitor de 55", `auto-fit` los estiraría a media pantalla cada uno.
+Barra con conteos (libres / próximas / ocupadas / total), pulso con la hora del último corte,
+y leyenda al final —quien mira la pared de lejos no la lee; quien la necesita baja a buscarla—.
+♿ El estado NUNCA se dice solo con color: cada tarjeta lleva su palabra al lado del número.
+Los tres colores se midieron sobre blanco (verde 4.93 · ámbar 5.02 · rojo 6.51) y hay seguro
+de modo oscuro y de `prefers-reduced-motion`.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · ARCHIVOS  (11 propios del vertical + ORQUESTA.md)
+───────────────────────────────────────────────────────────────────────────
+NUEVOS
+  · src/lib/edu/clinica-viva-core.ts        PURO. El motor adaptado, las 3 piezas.
+  · src/lib/edu/clinica-viva.ts             SERVIDOR. Las dos consultas y el 403 del alcance.
+  · src/app/api/instituto/clinica/route.ts  GET del tablero, con las dos cerraduras.
+  · src/app/instituto/(panel)/clinica/page.tsx
+  · src/components/edu/clinica/viva-screen.tsx   El cliente: dos relojes y las tarjetas.
+  · src/lib/edu/__tests__/edu-clinica-viva.test.ts   31 pruebas.
+TOCADOS
+  · src/lib/edu/visibility.ts        + eduLiveFloorVisibility y su copy de 403.
+  · src/lib/edu/permissions.ts       + clinica.view: catálogo, grupo propio, 2 defaults.
+  · src/lib/edu/types.ts             + item de menú "clinica" (3.º, tras Dirección) y etiqueta.
+  · src/components/edu/edu-shell.tsx + icono "layout-grid" → LayoutGrid.
+  · src/app/instituto/edu-theme.css  + el bloque .edu-viva* al final.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · GATES
+───────────────────────────────────────────────────────────────────────────
+
+- **`npm run build` exit 0**, completo y **sin un solo pipe**
+  (`NODE_OPTIONS=--max-old-space-size=8192`, salida a fichero con `>`). `prisma generate`
+  limpio (sin EPERM), **464/464 páginas** generadas —una más que en `origin/main`, que es
+  exactamente la pantalla nueva—, `.next/BUILD_ID` escrito (`RyY9Sj8-aRUKfNCOIWwqr`), tabla
+  de rutas entera con **139 renglones `/instituto`**. Cero "Failed to compile", cero
+  `error TS`, cero heap OOM. Las dos rutas nuevas salen como dinámicas, que es lo correcto
+  para un tablero en vivo:
+
+      ƒ /instituto/clinica                3.26 kB      106 kB First Load
+      ƒ /api/instituto/clinica            0 B          0 B
+
+  Los únicos warnings son los PREEXISTENTES y ajenos al vertical: el `Critical dependency`
+  de `file-type` en `api/ai-wallet/spei/topup`, tres clases ambiguas de Tailwind y el aviso
+  de webpack sobre strings grandes. El spam de `Environment variable not found: DATABASE_URL`
+  es el de siempre (worktree sin `.env`) y no afecta al exit.
+
+- **`npm run test:edu` exit 0** — **30 archivos descubiertos, 964 pruebas, 964 pass, 0 fail**
+  (996 ms). El corredor de `feat/edu-tests` encontró el archivo nuevo **sin tocar una línea
+  del runner**, que es para lo que se escribió así: de **29 archivos / 933 pruebas** a
+  **30 / 964**. Las 31 nuevas están en `src/lib/edu/__tests__/edu-clinica-viva.test.ts` y
+  cubren, por bloques:
+    1. el MAPEO — `IN_CHAIR` e `IN_PROGRESS` ocupan y los demás no; que el `Record` de
+       estados esté COMPLETO contra el enum (una ola que añada uno se entera ahí);
+       `CHECKED_IN` es próxima y no ocupada; lo terminal ni ocupa ni se anuncia; y la
+       ventana de 30 min comprobada **contra el motor del dental**, no contra una copia.
+    2. la TRAMPA — una `SCHEDULED` que ya debería haber empezado deja la tarjeta libre **y
+       vacía** (sin ese orden salía "Libre" con un paciente dentro); con dos citas vivas
+       manda la que está en curso; un sillón libre enseña la HORA y nunca el nombre; y el
+       "siguiente" se recorta al día de calendario de SU sede (probado a las 22:00 de la
+       sede, con las dos ramas).
+    3. la SEDE — el sillón 1 del Sur no se cuela en el sillón 1 del Norte; los conteos se
+       reparten por sede sin sumar los campus; el `where` de sillones recorta por sede,
+       distingue `null` de `[]` y LANZA sin `institutionId`; y un `?sede=` ajeno se degrada
+       a lo suyo en vez de conceder.
+    4. QUIÉN ENTRA — ALUMNO y CAJA en "none"; un rol desconocido y un actor basura también;
+       el docente ve OCUPADO el sillón de otro docente y **no ve de quién** (iniciales, sin
+       estudiante, sin matrícula, sin especialidad, sin folio) mientras el conteo sigue
+       diciendo 2 ocupados; y una asignación VENCIDA no da detalle.
+    5. las DOS CERRADURAS de la API — ni ALUMNO ni CAJA llevan `clinica.view` (→ 403 del
+       guard) **y** con la casilla encendida a mano el alcance sigue diciendo "none"
+       (→ 403 del servidor). Más un barrido del código que exige que el endpoint, la capa
+       de datos y la página lleven las dos, y que **ninguno de los cuatro archivos nuevos
+       decida por su cuenta qué rol ve el piso** — eso vive en `visibility.ts` y solo ahí.
+    6. el CATÁLOGO y el MENÚ — la key en un solo grupo y ese grupo de UNA casilla; la
+       llevan DIRECCION y DOCENTE y nadie más; el item existe, va tercero y **su icono está
+       en el mapa de `edu-shell.tsx`** (un icono que falte cae al genérico EN SILENCIO).
+    7. el REFRESCO — los dos relojes son distintos y razonables, y una lectura del
+       componente comprueba que NO consulta con la pestaña oculta, que vuelve a pedir al
+       volver, y que los dos listeners y el intervalo se limpian al desmontar.
+
+- **La gate se comprobó ROJA, no solo verde.** Con la fila `IN_CHAIR` del mapeo cambiada a
+  `"CHECKED_IN"` —el bug exacto que esta ola existe para evitar, y el que en pantalla se
+  vería como "funciona"—, `npm run test:edu` sale con **exit 1**, dice
+  `PRUEBAS DEL INSTITUTO: ROJO` y nombra **cuatro** pruebas: las dos del mapeo, la de las
+  dos citas vivas en el mismo sillón y la de los conteos por sede. Revertido y verde otra
+  vez (964/964) antes de commitear.
+
+- **Guardia:** `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**.
+  12 archivos vs `origin/main`: **11 propios del vertical** y 1 compartido declarado
+  (`ORQUESTA.md`). **Cero prohibidos y cero compartidos sin declarar**: ni una línea del
+  dental, de barbería ni de inmuebles. En particular, `src/lib/floor-plan/live-mode.ts` se
+  IMPORTA y no se toca — es lo que la guardia habría cazado si se hubiera intentado
+  "arreglarlo" allá para que entendiera `IN_CHAIR`.
+
+- **Raíz del repo limpia:** la rama no añade **ni un archivo** a la raíz — el único de raíz
+  que cambia es `ORQUESTA.md`. `git status` limpio salvo lo de la rama.
+
+### SQL: NINGUNO · envs nuevas: NINGUNA
+
+No hay tabla nueva, ni columna, ni enum: el tablero se arma con lo que ya existe
+(`EduChair`, `EduAppointment`, `EduCase`, `EduSupervisorAssignment`) y con los índices que
+la Ola 7 ya puso para el bloque en vivo de Dirección
+(`edu_appointments_estado_idx`, `edu_chairs_sede_idx`). Siguen pendientes, de antes y sin
+cambios, los `.sql` de las integraciones previas.
+
+⚠️ Lo único que hay que recordar al desplegar es la regla de siempre del vertical: **un
+permiso NUEVO no le llega a quien ya tiene `permissionsOverride` guardado**. Quien tenga
+override tendrá que marcarse "Clínica en vivo" en la pantalla de permisos de
+`/instituto/equipo`. Los que no tienen override (la mayoría) la reciben por su rol.
+
+### Lo que NO se hizo, a propósito
+
+- **No se tocó una línea de `src/lib/floor-plan/`.** Todo lo que no encajaba se adaptó de
+  este lado, que es lo que pedía el encargo y lo que la guardia obliga.
+- **No se añadió presencia** (quién tiene la sesión abierta). Es la decisión de la Ola 7 y
+  esta ola no la reabre.
+- **No hay botón de pantalla completa** ni auto-rotación entre sedes. Se pensó para el
+  monitor de pared y se dejó fuera: no lo pedía el encargo y el `<select>` de sede más el
+  refresco solo ya cubren el caso.
+- **La pantalla no deja tocar nada.** Marcar que el paciente se sentó o cerrar la sesión
+  sigue viviendo donde vivía —Mi agenda y Agenda—, con sus propias keys. Por eso
+  `clinica.view` no se parte en dos: un interruptor que no cierra una puerta no entra en
+  este catálogo.
+- **P2-6 (acotar la pantalla de evaluación) sigue abierto**, único hallazgo vivo de la
+  auditoría. Esta rama no lo toca.
+
+### Lo que no se vio
+
+Sin navegador ni base de datos en esta sesión: `/instituto/clinica` es server-rendered contra
+Prisma y sin `DATABASE_URL` devuelve 500 antes de pintar. Queda por mirar en el preview de
+Vercel, con datos: (a) que la rejilla se lea de verdad desde lejos en un monitor grande —el
+`clamp` del número está calculado, no medido—; (b) que el latido de 20 s se sienta bien en un
+piso con movimiento real. Lo que SÍ está probado sin base de datos es todo lo que decide algo:
+el mapeo de estados contra el motor de verdad, el recorte por sede, el enmascarado del docente
+y las dos cerraduras de la API. PR contra `main`, **SIN mergear**.

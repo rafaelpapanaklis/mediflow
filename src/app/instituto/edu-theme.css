@@ -6462,3 +6462,426 @@ button.edu-dir-money__fila:hover {
     print-color-adjust: exact;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CLÍNICA EN VIVO (/instituto/clinica) — el tablero de sillones.
+
+   Prefijo propio `edu-viva`: ninguna de estas clases existe en el resto de
+   la hoja (lo comprueba edu-theme.test.ts, que se puso roja en producción
+   el día que dos olas llamaron igual a dos cosas distintas).
+
+   ── LA PANTALLA SE MIRA DESDE DOS SITIOS, Y LOS DOS SON DE VERDAD ───────
+   · un monitor colgado en el piso clínico, a cuatro metros. Por eso el
+     NÚMERO del sillón crece con la ventana (`clamp` sobre vw) y el color
+     hace el trabajo: desde esa distancia no se lee un nombre, se cuenta
+     cuántos recuadros verdes quedan.
+   · el teléfono de un docente de pie. Por eso la rejilla arranca en UNA
+     columna y sube sola con `auto-fill`, y el filtro de sede es un
+     <select> nativo — una fila de píldoras con las sedes de una
+     universidad grande (el producto admite 40) se sale de la pantalla.
+
+   ⚠️ @media y no @container, como toda esta hoja: `container-type` crea
+   contención y atraparía el cajón del menú (position: fixed) dentro de la
+   columna en vez de dejarlo cubrir la pantalla.
+
+   ♿ Los tres colores de estado se midieron sobre BLANCO (el fondo de la
+   tarjeta) y sobre su propio relleno:
+     verde  #15803d → 4.93 ✓   ámbar #b45309 → 5.02 ✓   rojo #b3261e → 6.51 ✓
+   Y el estado NUNCA se dice solo con color: cada tarjeta lleva su palabra
+   ("Libre", "Próxima", "Ocupada") escrita al lado del número.
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-viva {
+  --viva-libre: #15803d;
+  --viva-libre-soft: rgba(21, 128, 61, 0.09);
+  --viva-proximo: #b45309;
+  --viva-proximo-soft: rgba(180, 83, 9, 0.1);
+  --viva-ocupado: #b3261e;
+  --viva-ocupado-soft: rgba(179, 38, 30, 0.09);
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── La barra: sede, conteos y pulso ─────────────────────────────────── */
+.edu-viva__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-viva__sede {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.edu-viva__sedelabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--edu-text-3);
+}
+
+.edu-viva__sede .edu-input {
+  width: auto;
+  min-width: 170px;
+  max-width: 260px;
+}
+
+.edu-viva__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  margin-right: auto;
+}
+
+.edu-viva__count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--edu-text-2);
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--edu-line);
+  white-space: nowrap;
+}
+
+.edu-viva__count b {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-1);
+}
+
+.edu-viva__count--libre {
+  border-color: rgba(21, 128, 61, 0.4);
+  background: var(--viva-libre-soft);
+}
+
+.edu-viva__count--proximo {
+  border-color: rgba(180, 83, 9, 0.4);
+  background: var(--viva-proximo-soft);
+}
+
+.edu-viva__count--ocupado {
+  border-color: rgba(179, 38, 30, 0.4);
+  background: var(--viva-ocupado-soft);
+}
+
+.edu-viva__count--total {
+  background: var(--edu-surface-2);
+}
+
+/* El pulso: un punto que late mientras el latido llega. Cuando se rompe,
+   se apaga y el texto DICE la hora del último corte — un tablero pegado
+   que parece vivo es peor que uno que avisa. */
+.edu-viva__pulso {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.edu-viva__punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--viva-libre);
+  animation: edu-viva-late 2s ease-in-out infinite;
+}
+
+.edu-viva__pulso--roto {
+  color: var(--edu-amber-700);
+  font-weight: 600;
+}
+
+.edu-viva__pulso--roto .edu-viva__punto {
+  background: var(--edu-amber-700);
+  animation: none;
+}
+
+@keyframes edu-viva-late {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Quien no quiere movimiento no lo tiene. El punto sigue diciendo lo mismo
+   por su color y por el texto de al lado. */
+@media (prefers-reduced-motion: reduce) {
+  .edu-viva__punto {
+    animation: none;
+  }
+}
+
+.edu-viva__nota {
+  margin: 0;
+  font-size: 13px;
+  color: var(--edu-text-2);
+  padding: 9px 12px;
+  border-left: 3px solid var(--edu-400);
+  background: var(--edu-surface-2);
+  border-radius: 0 8px 8px 0;
+}
+
+/* ── La rejilla ──────────────────────────────────────────────────────── */
+/* `auto-fill` y no `auto-fit`: con dos sillones y un monitor de 55" el
+   `auto-fit` los estiraría a media pantalla cada uno. Con `auto-fill` las
+   tarjetas conservan su tamaño y la pared se lee igual con dos que con
+   cuarenta. */
+.edu-viva__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .edu-viva__grid {
+    grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .edu-viva__grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+  }
+}
+
+/* ── La tarjeta ──────────────────────────────────────────────────────── */
+.edu-viva__card {
+  --viva-color: var(--edu-text-3);
+  --viva-soft: var(--edu-surface-2);
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 13px 13px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-top: 4px solid var(--viva-color);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-viva__card--libre {
+  --viva-color: var(--viva-libre);
+  --viva-soft: var(--viva-libre-soft);
+}
+
+.edu-viva__card--proximo {
+  --viva-color: var(--viva-proximo);
+  --viva-soft: var(--viva-proximo-soft);
+}
+
+/* El sillón ocupado se tiñe entero, no solo el borde: es el que hay que
+   distinguir de un vistazo desde el fondo del piso clínico. */
+.edu-viva__card--ocupado {
+  --viva-color: var(--viva-ocupado);
+  --viva-soft: var(--viva-ocupado-soft);
+  background: var(--viva-ocupado-soft);
+}
+
+.edu-viva__cardhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* EL NÚMERO DE LA PARED. Crece con la ventana porque esta pantalla se mira
+   desde lejos; el tope de 76px evita que en un monitor 4K se coma la
+   tarjeta entera. */
+.edu-viva__num {
+  font-size: clamp(30px, 3.4vw, 76px);
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--viva-color);
+}
+
+.edu-viva__estado {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--viva-color);
+}
+
+.edu-viva__sillon {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-viva__campus {
+  font-weight: 400;
+  color: var(--edu-text-3);
+}
+
+.edu-viva__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding-top: 5px;
+  border-top: 1px dashed var(--edu-line);
+}
+
+.edu-viva__paciente {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+/* El paciente de un sillón que no le toca a quien mira: iniciales, en gris
+   y en cursiva, para que se lea como "esto no es un nombre". */
+.edu-viva__paciente--mudo {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--edu-text-3);
+}
+
+.edu-viva__folio {
+  margin: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-3);
+}
+
+.edu-viva__meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-viva__esp {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--viva-color);
+  overflow-wrap: anywhere;
+}
+
+.edu-viva__reloj {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-viva__reloj--fuerte {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--viva-color);
+}
+
+.edu-viva__barra {
+  margin-top: 5px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--edu-line);
+  overflow: hidden;
+}
+
+.edu-viva__barra > span {
+  display: block;
+  height: 100%;
+  background: var(--viva-color);
+}
+
+/* ── La leyenda ──────────────────────────────────────────────────────── */
+.edu-viva__leyenda {
+  list-style: none;
+  margin: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--edu-text-2);
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+}
+
+.edu-viva__leyenda li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.edu-viva__bolita {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translateY(1px);
+}
+
+.edu-viva__bolita--libre {
+  background: var(--viva-libre);
+}
+
+.edu-viva__bolita--proximo {
+  background: var(--viva-proximo);
+}
+
+.edu-viva__bolita--ocupado {
+  background: var(--viva-ocupado);
+}
+
+@media (min-width: 900px) {
+  .edu-viva__leyenda {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+  }
+}
+
+/* Seguro de modo oscuro, igual que el resto de la hoja: hoy .dark no llega
+   a /instituto, pero el dia que el vertical tenga su interruptor estos tres
+   colores tienen que seguir leyendose sobre #19203a. Los de arriba estan
+   medidos sobre BLANCO y ahi darian 2.6. */
+.dark .edu-viva {
+  --viva-libre: #4ade80;
+  --viva-libre-soft: rgba(74, 222, 128, 0.14);
+  --viva-proximo: #fbbf24;
+  --viva-proximo-soft: rgba(251, 191, 36, 0.14);
+  --viva-ocupado: #f87171;
+  --viva-ocupado-soft: rgba(248, 113, 113, 0.14);
+}
+
+.dark .edu-viva__estado {
+  color: #10162a;
+}
