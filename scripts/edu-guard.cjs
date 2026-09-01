@@ -43,7 +43,15 @@ const OWN_PREFIXES = [
 ];
 
 // PROPIO del vertical: archivos exactos.
-const OWN_FILES = ["src/lib/edu-auth.ts", "scripts/edu-guard.cjs", "scripts/edu-tests.cjs"];
+const OWN_FILES = [
+  "src/lib/edu-auth.ts",
+  "scripts/edu-guard.cjs",
+  "scripts/edu-tests.cjs",
+  // El sembrador del instituto de DEMO. Es PROPIO y no COMPARTIDO: no
+  // toca una linea del dental, solo escribe filas edu_* de un instituto
+  // con slug propio, y se niega a correr si el destino no es el suyo.
+  "scripts/edu-seed-demo.ts",
+];
 
 // PROPIO del vertical: patrones especiales.
 function matchesOwnPattern(p) {

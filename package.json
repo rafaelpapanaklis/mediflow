@@ -77,7 +77,9 @@
     "//test:cbct-geometry": "Necesita el tsconfig de pruebas: el test importa GeometryWarning.tsx (JSX) y el tsconfig de la app deja jsx en 'preserve' para que lo resuelva Next.",
     "test:cbct-geometry": "tsx --tsconfig tsconfig.test.json --test src/components/patient-3d/__tests__/dicom-geometry.test.ts",
     "//test:edu": "NO listar los archivos a mano como test:billing: una lista fija se pudre en la primera ola del instituto y las pruebas nuevas dejan de correrse en silencio. Tampoco un glob: `tsx --test` con un patrón que no encuentra nada sale con código 0 ('tests 0, fail 0'), y además lee los corchetes de una ruta como patrón y se salta el archivo. El runner descubre, FALLA si descubre cero, y propaga el exit code.",
-    "test:edu": "node scripts/edu-tests.cjs"
+    "test:edu": "node scripts/edu-tests.cjs",
+    "//seed:edu-demo": "Siembra UN instituto de DEMO (slug demo-volumen) con el volumen del cliente que viene: 3 sedes, 32 sillones, 120 estudiantes, ~600 pacientes y ~16 000 citas. Se niega a correr contra una base que no sea local salvo que se declare el host, y NO crea WhatsApp ni cuentas de Supabase. `-- --medir` recorre el panel con cronometro; `-- --sql-borrado` imprime el DELETE.",
+    "seed:edu-demo": "tsx scripts/edu-seed-demo.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
