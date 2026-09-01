@@ -1184,6 +1184,17 @@
       "description": "Crea sillones, salas o equipos para organizar tu agenda por recurso. Cada uno aparecerá como una columna en la vista del día.",
       "createFirstChair": "Crear primer sillón"
     },
+    "doctorLegend": {
+      "aria": "Color por doctor",
+      "filterBy": "Ver solo las citas de {name}",
+      "clearFilter": "Quitar el filtro de {name}",
+      "more": "+{count}",
+      "moreTitle": {
+        "one": "1 doctor más",
+        "other": "{count} doctores más"
+      },
+      "panelHint": "Cada color es un doctor. Toca uno para ver solo sus citas."
+    },
     "filterPills": {
       "statusScheduled": "Programada",
       "statusConfirmed": "Confirmada",

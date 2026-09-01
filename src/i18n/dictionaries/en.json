@@ -1184,6 +1184,17 @@
       "description": "Create chairs, rooms, or equipment to organize your schedule by resource. Each one will appear as a column in the day view.",
       "createFirstChair": "Create first chair"
     },
+    "doctorLegend": {
+      "aria": "Color by doctor",
+      "filterBy": "Show only {name}'s appointments",
+      "clearFilter": "Clear the {name} filter",
+      "more": "+{count}",
+      "moreTitle": {
+        "one": "1 more doctor",
+        "other": "{count} more doctors"
+      },
+      "panelHint": "Each color is a doctor. Tap one to show only their appointments."
+    },
     "filterPills": {
       "statusScheduled": "Scheduled",
       "statusConfirmed": "Confirmed",

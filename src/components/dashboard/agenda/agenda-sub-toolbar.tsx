@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
+import { AgendaDoctorLegend } from "./agenda-doctor-legend";
 import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import type { AgendaColumnMode, AgendaDensity } from "@/lib/agenda/types";
 import { useT } from "@/i18n/i18n-provider";
@@ -100,6 +101,11 @@ export function AgendaSubToolbar() {
           </div>
         )}
       </div>
+
+      {/* Leyenda de color por doctor: se pinta AQUÍ, en el hueco que esta
+          fila ya tenía, para no gastar ni un píxel de alto de la grilla.
+          Ella misma decide en qué vistas aparece (legendAppliesTo). */}
+      <AgendaDoctorLegend />
 
       <div className={styles.subToolbarRight}>
         {isDay && hasResources && hasDoctors && (

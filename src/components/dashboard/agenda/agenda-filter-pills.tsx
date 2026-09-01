@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
+import { AgendaDoctorOptions } from "./agenda-doctor-options";
+import { legendDoctors } from "@/lib/agenda/doctor-legend";
 import type { AgendaFilters, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -107,7 +109,21 @@ export function AgendaFilterPills() {
   const t = useT();
   const { state, setFilters, clearFilters } = useAgenda();
 
-  const doctorOptions = state.doctors.filter((d) => d.activeInAgenda);
+  // MISMA lista que la leyenda de la sub-toolbar (activos + los que tienen
+  // citas en el rango cargado + los ya filtrados). Antes era solo
+  // `activeInAgenda` y eso dejaba fuera al doctor dado de baja cuyas citas
+  // SÍ se ven: su color aparecía en la agenda sin forma de filtrarlo, y
+  // filtrar por otro lo borraba de la lista sin bajar el contador.
+  const doctorOptions = useMemo(
+    () =>
+      legendDoctors(
+        state.doctors,
+        state.appointments,
+        state.filters.doctorIds,
+        t("agenda.pageClient.professionalFallback"),
+      ),
+    [state.doctors, state.appointments, state.filters.doctorIds, t],
+  );
   const resourceOptions = state.resources;
 
   const updateFilters = (patch: Partial<AgendaFilters>) => {
@@ -129,29 +145,9 @@ export function AgendaFilterPills() {
         count={doctorOptions.length}
         selected={state.filters.doctorIds.length}
       >
-        {() =>
-          doctorOptions.length === 0 ? (
-            <div className={styles.filterPanelEmpty}>{t("agenda.filterPills.noActiveDoctors")}</div>
-          ) : (
-            <>
-              {doctorOptions.map((d) => (
-                <button
-                  key={d.id}
-                  type="button"
-                  className={styles.filterPanelOption}
-                  onClick={() => updateFilters({ doctorIds: toggle(state.filters.doctorIds, d.id) })}
-                >
-                  <input
-                    type="checkbox"
-                    checked={state.filters.doctorIds.includes(d.id)}
-                    readOnly
-                  />
-                  <span>{d.displayName ?? d.shortName ?? d.id}</span>
-                </button>
-              ))}
-            </>
-          )
-        }
+        {() => (
+          <AgendaDoctorOptions emptyLabel={t("agenda.filterPills.noActiveDoctors")} />
+        )}
       </Pill>
 
       <Pill

@@ -282,6 +282,7 @@
 .subToolbar {
   grid-area: sub;
   display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
   padding: 0 16px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border-soft);
@@ -334,6 +335,160 @@
   border-color: var(--border-brand);
   color: var(--brand);
   background: var(--brand-softer);
+}
+
+/* ─────── LEYENDA DE COLOR POR DOCTOR (agenda-doctor-legend) ─────────
+   Vive DENTRO de esta misma fila de 40px (--mf-subbar-h), en el hueco
+   libre entre los contadores y los segmentos: cuesta 0px de alto nuevo,
+   así que `.page` mantiene sus tres filas, la grilla conserva su `1fr`
+   completo y slotHpx —el "el día entero cabe sin scroll"— no se mueve.
+   · `flex: 1 1 0%` + `min-width: 0`: se queda con el hueco sobrante y su
+     ancho NO depende de su contenido. Por eso pintar más o menos chips
+     no puede realimentar al ResizeObserver que los mide.
+   · container-type: inline-size para que el chip responda al ancho REAL
+     del hueco (@container y no @media: con el sidebar colapsable y el
+     panel de detalle abriéndose, el ancho de ventana miente). Seguro
+     aquí: el panel del "+N" monta en un Portal a <body>, no hay ningún
+     descendiente position:fixed que atrapar. */
+.docLegend {
+  flex: 1 1 0%;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  container-type: inline-size;
+}
+/* Espejo de medición: el MISMO DOM con las MISMAS clases ⇒ las container
+   queries de abajo ya están aplicadas y los anchos medidos son los
+   reales. Absoluto dentro de un contenedor overflow:hidden, así que
+   visibility:hidden no ocupa ni desborda. */
+.docLegendMirror {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.docChip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px 0 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: 99px;
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur-1, 150ms) var(--ease, ease),
+    border-color var(--dur-1, 150ms) var(--ease, ease),
+    opacity var(--dur-1, 150ms) var(--ease, ease);
+}
+.docChip:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-brand);
+  color: var(--text-1);
+}
+/* Filtrando por este doctor: el chip se tiñe con SU color, con el mismo
+   14% que la card usa sobre --bg-elev (que cambia con el tema, así que
+   funciona igual en claro y en oscuro). */
+.docChip.on {
+  background: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 14%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 55%, transparent);
+  color: var(--text-1);
+}
+/* Hay filtro y este doctor queda fuera. Se apaga el CHIP DE COLOR (que es
+   lo que está excluido de la vista) y se aplana la superficie, pero el
+   nombre se queda con --text-2, el mismo del chip normal: bajar el nombre
+   entero con `opacity` lo dejaba en ~2:1 sobre el fondo oscuro y una
+   leyenda que no se puede leer no es una leyenda. */
+.docChip.off {
+  background: transparent;
+  border-color: transparent;
+}
+.docChip.off .apptDocAvatar { opacity: 0.4; }
+.docChip.off:hover { background: var(--bg-hover); border-color: var(--border-soft); }
+.docChip.off:hover .apptDocAvatar { opacity: 1; }
+.docChip:focus-visible { outline: none; box-shadow: var(--ring); }
+.docChipName {
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.docChipMore {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px dashed var(--border-soft);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.docChipMore:hover { color: var(--text-1); border-color: var(--border-brand); }
+.docChipMore:focus-visible { outline: none; box-shadow: var(--ring); }
+/* Alguno de los doctores que NO caben está filtrado: el "+N" tiene que
+   decirlo, o habría un filtro activo sin ningún control en pantalla que
+   lo enseñe. */
+.docChipMore.on {
+  border-style: solid;
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.docPanelHint {
+  padding: 6px 8px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+/* Nombre dentro del desplegable (pill "Doctores" y "+N"): que un nombre
+   largo no ensanche el panel. */
+.docOptName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Hueco angosto (contadores + segmentos ocupando casi toda la fila, o
+   ventana chica): primero se acorta el nombre y al final se va, pero el
+   chip de color con las iniciales —lo único que hay que reconocer en la
+   card— NO se va nunca. */
+@container (max-width: 460px) {
+  .docChipName { max-width: 54px; }
+}
+@container (max-width: 300px) {
+  .docChipName { display: none; }
+  .docChip { padding: 0 3px 0 2px; }
+}
+/* Hueco tan chico que ni el "+N" cabe: mejor nada que un muñón recortado.
+   Solo se esconden los hijos DIRECTOS: los del espejo (nietos) se siguen
+   midiendo, así que en cuanto la fila se ensancha la tira vuelve sola. */
+@container (max-width: 48px) {
+  .docLegend > .docChip,
+  .docLegend > .docChipMore { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docChip { transition: none; }
 }
 
 /* ─────── DAY VIEW — densidad nueva (mockup spec) ─────────────────── */
