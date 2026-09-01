@@ -31326,3 +31326,117 @@ escalón más arriba de donde estaba.
 
 Sin navegador ni base de datos: esta rama no toca una línea de producto. PR contra `main`,
 SIN mergear.
+---
+
+## [Institucional · INTEGRACIÓN 4] — Dos ramas en una: el bug de la ficha y el corredor de pruebas que, sin haberlo pactado, es justo quien corre la prueba que ese bug dejó ✅ (2026-09-01) · rama `edu/integracion4`
+
+### Qué es
+
+Las dos ramas terminadas del vertical, fusionadas en `edu/integracion4` sobre `origin/main`
+(`62aa65f6`), en este orden y con merge normal (`--no-ff`, sin rebase). Un solo build para las
+dos en vez de dos builds:
+
+| # | Rama | PR | HEAD | Merge | Qué trae |
+|---|------|----|------|-------|----------|
+| 1 | `fix/edu-historia-clase` | #153 | `5868b947` | `315c0b1e` | "Historia reciente" de la ficha se pintaba EN COLUMNAS: `.edu-linea` estaba declarada dos veces en `edu-theme.css` y la línea de tiempo heredaba las cinco columnas del renglón de cobro de Caja. La recién llegada pasa a `.edu-historia`, y **4 pruebas nuevas** (`src/lib/edu/__tests__/edu-theme.test.ts`) impiden que vuelva a pasar. |
+| 2 | `feat/edu-tests` | #152 | `314ac415` | `2df6a787` | El P3-15 de la auditoría: `npm run test:edu` (`scripts/edu-tests.cjs`), un corredor que **descubre** los archivos leyendo el disco, **falla si descubre cero** y propaga el exit code. Más `package.json` declarado compartido ante la guardia. |
+
+**8 archivos** cambian respecto de `origin/main`, +805 / −33.
+
+### El conflicto que se esperaba y NO hubo
+
+El encargo daba por hecho que `ORQUESTA.md` chocaría y que había que conservar los dos
+reportes a mano. **No chocó: los dos merges lo auto-fusionaron, y ningún otro archivo
+conflictuó tampoco.** Cero conflictos en toda la integración.
+
+El motivo es la propia forma del archivo: cada reporte va entre líneas separadoras idénticas
+(`═══…` / `---`), así que git tiene contexto común de sobra donde anclar dos añadidos que, en
+crudo, caían los dos "al final". Es un auto-merge **afortunado, no fiable** —el mismo archivo
+con separadores distintos habría conflictuado, y así ha pasado en integraciones anteriores—,
+de modo que lo que decide aquí no es que git dijera "Auto-merging" sino la comprobación:
+
+- `git diff origin/main HEAD -- ORQUESTA.md` → **218 líneas añadidas, 0 borradas** (118 + 100,
+  exactamente lo que aporta cada rama).
+- Contra CADA rama por separado, también **0 líneas borradas**.
+- El bloque íntegro que cada rama añade a `ORQUESTA.md` respecto de su propia base
+  (119 y 101 líneas) aparece en el árbol final **contiguo, byte a byte y exactamente una vez**.
+  No es "no faltan líneas": es "el reporte entero está entero", que es lo que de verdad se
+  quería garantizar.
+
+`package.json` también se auto-fusionó (solo lo toca la rama de pruebas: los dos renglones de
+`test:edu` más su `//` de comentario). Y el `edu-theme.css` de la otra rama no se cruzó con
+nadie: renombra un bloque que está a 3 600 renglones del último que tocó la ola anterior.
+
+### Lo que las dos ramas se hacen entre sí (que es el punto de juntarlas)
+
+No se pisan en el código —tocan archivos distintos—, pero **se completan**:
+
+- `feat/edu-tests` decidió a propósito **descubrir** los archivos de prueba en vez de listarlos
+  a mano, porque "una lista fija se pudre en la primera ola nueva". `fix/edu-historia-clase`
+  es literalmente esa ola: llega con un archivo de pruebas nuevo. Juntas, el corredor lo
+  encuentra **sin tocar una línea del runner**: pasa de **28 archivos / 929 pruebas** a
+  **29 archivos / 933 pruebas**. La decisión de diseño de una rama se cobró sola con la otra
+  en el primer intento.
+- Al revés también: las 4 pruebas de `edu-theme.test.ts` —el candado contra "dos bloques del
+  tema con el mismo nombre"— antes de esta integración **no las corría ningún script**. Ahora
+  sí, y con el mismo comando que el resto del vertical.
+
+Comprobado además que el renombre no dejó cabos: `edu-linea` sobrevive solo donde siempre fue
+suyo —los renglones de cobro de `caja-screen.tsx`, `planes-screen.tsx` y
+`facturacion-screen.tsx` y sus reglas de `edu-theme.css`—, y la ficha del paciente usa
+`edu-historia` en las siete clases de la familia.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`,
+  sandbox off). `prisma generate` limpio (sin EPERM), **463/463 páginas** generadas, tabla de
+  rutas entera (137 renglones `/instituto`), `.next/BUILD_ID` escrito. Cero "Failed to
+  compile", cero `error TS`, cero heap OOM. Los únicos warnings son los PREEXISTENTES y ajenos
+  al vertical: el `Critical dependency` de `file-type` en `api/ai-wallet/spei/topup`, el aviso
+  de edge runtime y tres clases ambiguas de Tailwind. El spam de `Environment variable not
+  found: DATABASE_URL` es el de siempre (worktree sin `.env`) y no afecta al exit.
+- **`npm run test:edu` exit 0** — **29 archivos descubiertos, 933 pruebas, 933 pass, 0 fail**
+  (972 ms). Entre ellos, el `edu-theme.test.ts` que trae la otra rama, con sus 4 en verde.
+- **La gate se comprobó ROJA, no solo verde.** Con una aserción rota a propósito dentro del
+  archivo recién llegado (`edu-theme.test.ts`), `npm run test:edu` sale con **exit 1** y
+  `933 tests / 932 pass / 1 fail`, nombrando la prueba, el archivo y la línea. Revertida con
+  `git checkout --` y árbol limpio otra vez. Importaba hacerlo en ESTE árbol y no fiarse de que
+  la rama de pruebas ya lo hubiera hecho en el suyo: lo que se estaba verificando es que el
+  merge no rompiera ni el descubrimiento ni la propagación del exit code.
+- **Guardia:** `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node scripts/edu-guard.cjs` →
+  **exit 0**. 8 archivos vs `origin/main`: 6 propios del vertical (`docs/audits/EDU_AUDIT.md`,
+  `scripts/edu-guard.cjs`, `scripts/edu-tests.cjs`, la ficha, `edu-theme.css` y
+  `edu-theme.test.ts`) y los 2 compartidos declarados. **Cero prohibidos y cero compartidos sin
+  declarar**: ni una línea del dental, de barbería ni de inmuebles.
+- **Raíz del repo limpia:** la integración no añade **ni un archivo** a la raíz — el único de
+  raíz que cambia es `ORQUESTA.md`. Los `.log` y `.sql` sueltos que hay ahí
+  (`install-integ-final.log`, `mediflow-create-tables.sql`, `migration_*.sql`) ya venían en
+  `origin/main`. `git status` limpio.
+
+### SQL: NINGUNO
+
+A diferencia de las tres integraciones anteriores, **esta no trae nada que aplicar antes del
+deploy**. Ninguna de las dos ramas toca `prisma/schema.prisma` ni añade un `sql/edu-*.sql`: una
+es CSS + JSX, la otra es un script de node y dos renglones de `package.json`. Siguen
+pendientes, de antes y sin cambios, los `.sql` de las integraciones previas.
+
+### Lo que NO se hizo, a propósito
+
+- **`docs/audits/EDU_AUDIT.md` sigue diciendo «28 archivos · 929 pruebas»**, y está bien: es el
+  registro FECHADO de lo que midió la rama `feat/edu-tests` el 2026-08-31. Quien corra
+  `npm run test:edu` hoy en esta rama verá 29 y 933 — la diferencia son las 4 pruebas del tema
+  que llegaron después, y queda anotada aquí en vez de retocar un acta.
+- **P2-6 (acotar la pantalla de evaluación) sigue abierto**, único hallazgo vivo de la
+  auditoría. Esta integración no lo toca.
+- **Las 16 cabeceras de prueba con el comentario ya falso** («No hay `npm run test:edu-…`»)
+  siguen ahí. `feat/edu-tests` las dejó fuera con motivo escrito y esta rama no ensancha el
+  encargo; es prosa, no cambia una aserción.
+- Tampoco se enganchó `test:edu` a CI: el repo sigue sin `.github/` ni `.husky/` donde colgarlo.
+
+### Lo que no se vio
+
+Sin navegador ni base de datos en esta sesión. Que "Historia reciente" **se apile** en pantalla
+real queda pendiente de mirarse en el preview de Vercel: la ficha del instituto es una página
+server-rendered contra Prisma y sin `DATABASE_URL` devuelve 500 antes de pintar nada. Lo que sí
+está probado es la relación entre las dos piezas del arreglo —el CSS renombrado y el JSX que lo
+usa se comprueban el uno contra el otro en la prueba 4—. PR contra `main`, SIN mergear.
