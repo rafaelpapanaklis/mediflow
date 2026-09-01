@@ -169,12 +169,15 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
               recetas que te toquen.
             </p>
           ) : (
-            <ol className="edu-linea" aria-label="Historia clínica reciente">
+            <ol className="edu-historia" aria-label="Historia clínica reciente">
               {r.timeline.map((t, i) => (
-                <li key={`${t.kind}-${t.atISO}-${i}`} className="edu-linea__item">
-                  <span className={`edu-linea__punto edu-linea__punto--${t.kind}`} aria-hidden />
-                  <div className="edu-linea__cuerpo">
-                    <p className="edu-linea__titulo">
+                <li key={`${t.kind}-${t.atISO}-${i}`} className="edu-historia__item">
+                  <span
+                    className={`edu-historia__punto edu-historia__punto--${t.kind}`}
+                    aria-hidden
+                  />
+                  <div className="edu-historia__cuerpo">
+                    <p className="edu-historia__titulo">
                       <Link
                         href={`${base}/${EDU_RESUMEN_TIMELINE_TAB[t.kind]}`}
                         className="edu-link"
@@ -182,7 +185,7 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
                         {t.title}
                       </Link>
                     </p>
-                    <p className="edu-linea__meta">
+                    <p className="edu-historia__meta">
                       {t.whenLabel} · {t.who} ·{" "}
                       {EDU_RESUMEN_TIMELINE_KIND_LABELS[t.kind]}
                     </p>
