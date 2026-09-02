@@ -34778,3 +34778,196 @@ El encuadre aéreo es el que da `createDroneMode` (`DRONE_FILL = 1.18` sobre el 
 cámara a 54°). En una caja ancha y baja como la de esta pantalla (1 406 × 573) la sala se ve
 completa pero con aire de sobra alrededor: ajustarlo pide tocar `drone-controls.ts`, que es un
 CUARTO archivo del dental y queda fuera de la lista declarada. Se deja como está y se anota.
+
+## [Asistente IA · NUEVA CONVERSACIÓN AL ENTRAR] — Entrar abre SIEMPRE un borrador vacío (como ChatGPT), y el cobro de tokens queda auditado ✅ (2026-09-02) · rama `fix/ai-chat-nueva-conversacion` → PR contra main, SIN mergear
+
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (`npx next build` completo, leído entero, sin pipes · 467/467 páginas)
+UN SOLO ARCHIVO TOCADO: `src/app/dashboard/ai-assistant/page.tsx` (+43/−17)
+SIN SQL · SIN envs nuevas · SIN claves i18n nuevas · SIN tocar el modelo (sigue Haiku) ni el monedero
+TAREA 2 (auditoría): el cobro está BIEN. **No se cambió una línea del servidor.** Tres follow-ups anotados.
+
+OBJETIVO: `/dashboard/ai-assistant` abría la ÚLTIMA conversación al entrar, y además creaba
+una conversación vacía cada vez —al entrar y en cada "Nueva conversación"— escribiera algo el
+usuario o no. El historial se llenaba de "Nueva conversación" sin un solo mensaje. Ahora entrar
+equivale a "conversación nueva": pantalla de bienvenida con las sugerencias, y la conversación
+solo nace —y solo se guarda— cuando se escribe el primer mensaje.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · LO QUE CAMBIÓ (TAREA 1) — tres puntos y ni uno más
+───────────────────────────────────────────────────────────────────────────
+
+Las conversaciones siguen viviendo en `localStorage` (`mf:ai-conversations:v1`). No hay tabla,
+no hay endpoint, no hay migración.
+
+**a) Hidratación.** Se sigue leyendo el historial para la barra lateral, pero ya NO se abre la
+última: `activeId` se queda en `null`, que es el estado de BORRADOR. De paso se **filtran las
+conversaciones vacías** que dejó el comportamiento anterior, para que los usuarios de hoy no
+sigan arrastrando esa basura — y como el efecto de persistencia escribe justo después, la
+limpieza se guarda sola. Se comprueba `Array.isArray(c.messages)` y no solo el `length`: en
+`localStorage` puede haber JSON viejo o a medias donde `messages` ni exista.
+
+**b) "Nueva conversación"** (el botón del aside, el de la cabecera, el del estado vacío y el
+atajo ⌘/Ctrl+K, los cuatro llaman al mismo `startNew`). Ya no construye ni persiste un objeto
+vacío: `setActiveId(null)`, limpia `input`, limpia `error` y enfoca el textarea. El foco y el
+atajo se conservan tal cual. `startNew` deja de depender de `t`, así que sus dependencias
+quedan en `[]` — de paso, el efecto del atajo (que captura `startNew` con `deps: []`) deja de
+tener un cierre viejo, porque ahora la función es la misma para siempre.
+
+**c) Persistencia.** Era `if (conversations.length > 0) saveConversations(...)`. Con eso, el
+día que alguien se quede sin conversaciones el array vacío nunca se escribía y al recargar
+"revivían" las viejas. Ahora se escribe **también el caso vacío**.
+
+**d) Restos: no queda ninguno.** El ÚNICO sitio que crea una conversación es `sendMessage`, y
+la crea con el primer mensaje. El `messages: []` que aparece ahí no llega nunca a
+`localStorage`: el `setConversations` que le mete el mensaje va en el MISMO lote de React —
+todo ese bloque es síncrono, antes del primer `await`— así que el efecto de persistencia solo
+ve el estado final. **Comprobado en el navegador**: al enviar el primer mensaje hubo **1 sola
+escritura** y **ninguna escritura contuvo jamás una conversación con `messages: []`**.
+Seleccionar del historial sigue igual (`setActiveId(c.id)` + cerrar el drawer en móvil); no
+hay borrar ni renombrar en esta pantalla (0 coincidencias de `delete`/`rename` en el archivo),
+así que no había nada más que preservar.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · LA TRAMPA: el guardia de hidratación es ESTADO, no un `useRef`
+───────────────────────────────────────────────────────────────────────────
+
+Persistir "también el caso vacío" abre un agujero: en el primer commit el estado todavía es
+`[]` (aún no se leyó `localStorage`), y si el efecto de persistencia corre en ese commit,
+**borra el historial antes de haberlo leído**.
+
+El guardia obvio —un `useRef` que la hidratación pone en `true`— NO sirve: React corre los
+efectos de un MISMO commit en orden de declaración, y la hidratación está declarada antes, así
+que cuando corre el de persistencia el ref ya vale `true`. Con estado no pasa: el efecto de
+persistencia lee el valor del render, que sigue siendo `false`, y se salta la escritura; la
+primera escritura real ocurre en el commit siguiente, ya con el historial cargado.
+
+No es teoría. Se montaron **las dos variantes** en el navegador con React 18 real y la misma
+semilla en `localStorage`:
+
+  · **con estado** (lo que quedó): una sola escritura, y es el historial filtrado.
+  · **con ref** (lo descartado): la primera escritura es un array de **longitud 0** — habría
+    dejado a todo el mundo sin historial en la primera carga.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · AUDITORÍA DEL COBRO DE TOKENS (TAREA 2) — verificación, cero cambios
+───────────────────────────────────────────────────────────────────────────
+
+**Lo que se confirmó, leyendo el código (no se dio por hecho):**
+
+- `src/app/api/ai/route.ts:113` → `const totalTokens = inputTokens + outputTokens;` ✔
+- **Sigue SIN caché**: `cache_control` da **0 coincidencias** en `route.ts` y **0 en todo
+  `src/app/api/ai/`**. El cuerpo que se manda a Anthropic (L97-102) lleva `model`, `max_tokens`,
+  `system` y `messages`, nada más. Así que `cache_read_input_tokens` y
+  `cache_creation_input_tokens` valen siempre 0 y no falta nada en la suma.
+  ⚠️ **El día que se active la caché, esa línea 113 se queda corta** y hay que sumar los dos.
+- `addAiTokens(clinicId, totalTokens, "chat", userId)` (L115) → `src/lib/ai-tokens.ts:135`:
+  incrementa `Clinic.aiTokensUsed` con `increment` (atómico) y escribe la fila de `AiQuotaUsage`.
+  Los dos fail-open, y si falla el incremento **no** se escribe el desglose (no se descuadran).
+- `recordUsageNoCharge(...)` (L119) → `src/lib/ai-billing/record-usage.ts:27`. Se mira porque
+  va `await`eado DENTRO del `try` de la ruta: si lanzara, el doctor se comería un 500 **después
+  de que ya se le cobró y con la respuesta de la IA en la mano**. No lanza: todo el cuerpo está
+  envuelto en su propio try/catch. ✔
+
+**2a · El medidor en vivo CUADRA con el servidor.** Es una identidad, no una casualidad:
+
+    servidor 200:  tokensRemaining = max(0, limit − usadoAntes − total)
+    cliente:       used = limit − tokensRemaining  =  min(limit, usadoAntes + total)
+    la BD:         aiTokensUsed = usadoAntes + total     (lo que devuelve GET /api/ai/usage)
+
+Coinciden. Lo mismo tras el reseteo mensual (`usadoAntes` pasa a 0 en los dos lados) y en el
+429 de cupo, cuyo cuerpo trae `used` acumulado y el cliente lo usa tal cual. **No hay nada que
+arreglar.** Tres casos en que difieren un rato, los tres a favor del servidor al recargar:
+
+  1. **Pasarse del cupo**: el `max(0, …)` recorta, así que el cliente enseña `used = limit` y
+     el servidor el número real (mayor). Solo se nota en el texto "X / Y" — la barra y el % ya
+     van recortados a 100 en LOS DOS (`/api/ai/usage:150` y el memo `meter`). La BD está bien.
+  2. **Dos personas de la misma clínica a la vez**: cada petición leyó `aiTokensUsed` antes de
+     que la otra escribiera. La BD queda bien (el `increment` es atómico); los dos medidores se
+     quedan cortos hasta recargar.
+  3. **Fail-open del metering**: si el `update` falla, la BD no sube pero la respuesta ya había
+     calculado `tokensRemaining` como si sí. El medidor se pasa hasta recargar. Es a propósito.
+
+  🔴 Se revisó a posta un riesgo que NO se materializa: `applyQuota` acepta `data?.limit` como
+  respaldo de `tokensLimit`, y el 429 del limitador de tasa (`src/lib/failban.ts:150`,
+  `tooMany`) devuelve **solo** `{ error }` — sin `limit` ni `used`. Si ese cuerpo llevara el
+  `limit: 10` de "10 peticiones / 5 min", el medidor pasaría a decir "usado / 10". No lo lleva,
+  y `applyQuota` conserva el snapshot anterior.
+
+**2b · FOLLOW-UP (anotado, NO implementado, tal como se pidió).** `/api/ai` **no** distingue
+"plan sin IA" de "cupo agotado". `/api/consult/ai-assist/route.ts:130` sí: devuelve **403** con
+`{ noPlan: true, isAdmin }` cuando `aiTokensLimit <= 0`, y lo hace ANTES del reseteo mensual.
+En `/api/ai/route.ts:70` la condición es `currentTokensUsed >= clinic.aiTokensLimit`, que con
+límite 0 se cumple con `0 >= 0`: a una clínica BÁSICO —que nunca tuvo IA— le sale un 429 que
+dice *"Límite mensual de consultas IA alcanzado. Se renueva el 1 de octubre"*, y eso no le
+explica nada. Matiz: **el medidor ya lo distingue bien** (`meter.limit > 0` → la franja
+`quotaNoPlan`); lo que miente es el error al enviar. Mismo patrón sin distinguir en
+`aiTokenLimitError` (`ai-tokens.ts:109`), que es el que usan el dictado y las demás rutas.
+
+**2c · FOLLOW-UP para Rafael: confirmar en Supabase.** `sql/ai-quota-usage.sql` **existe** en
+el repo (4 561 bytes) y su propia cabecera dice *"⚠️ YA APLICADA EN SUPABASE (2026-07-27)"*; es
+aditivo e idempotente, así que re-correrlo es un no-op. Falta la confirmación de que la tabla
+`ai_quota_usage` está de verdad en producción. **Si no lo estuviera no se rompe nada**: el
+insert es fail-open dentro de `addAiTokens`, el cupo se cobra igual, y `/api/ai/usage:111`
+tiene plan B (agrupa `AiUsageEvent` con `billedCents <= 0`). Solo si TAMBIÉN viniera vacío el
+plan B la pantalla diría "otro consumo sin detalle".
+
+**2d · Recordatorio: el cupo se reinicia el día 1.** El reseteo es perezoso y vive en la propia
+ruta (`/api/ai/route.ts:61`, `monthsDiff >= 1` → `aiTokensUsed = 0`), con la misma aritmética
+en `aiTokenLimitError` (`ai-tokens.ts:105`) y en `/api/ai/usage:45` —que NO escribe, porque un
+GET no debe mutar: reporta 0 y deja el reseteo real a la siguiente llamada de IA—. **Ver "0
+usado" a principios de mes NO es un bug.**
+
+**FOLLOW-UP extra que salió de leer el endpoint (fuera del alcance del cobro, sin tocar).** El
+cliente manda `conversationHistory: messages` con los objetos `Message` COMPLETOS —`id`,
+`timestamp` y a veces `streaming`— y `route.ts:85` los mete tal cual en el `messages` que va a
+Anthropic. Si la API rechaza campos extra en un mensaje (creo que sí, **pero no se comprobó
+contra la API y no se cambió nada**), el chat fallaría **del segundo mensaje en adelante** de
+cada conversación, no del primero. Con este cambio el primer mensaje siempre sale de un
+historial vacío, así que el turno 1 es inmune y el síntoma quedaría escondido ahí. La
+comprobación son cinco minutos y el arreglo es una línea en el servidor
+(`.map(m => ({ role: m.role, content: m.content }))`). No se hizo porque no es cobro y no se
+pidió. (Los roles seguidos del mismo lado —lo que pasa cuando una petición falla y queda el
+mensaje del usuario sin respuesta— sí están permitidos: la API los une en un turno.)
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · VERIFICACIÓN FINAL
+───────────────────────────────────────────────────────────────────────────
+
+La pantalla vive detrás del login y de la BD, y aquí no hay `DATABASE_URL` local (el build lo
+dice 164 veces, es lo normal). Así que (a)-(d) —que son puras de cliente: `localStorage` +
+estado de React, que es TODO lo que toca la TAREA 1— se comprobaron con React 18 de verdad en
+Chrome, montando **las mismas piezas del archivo** (hidratación con filtro, efecto de
+persistencia con guardia, `startNew`, `sendMessage`) sobre el `localStorage` real. No es la
+pantalla entera; es exactamente el mecanismo que se cambió.
+
+  **(a)** Semilla con 2 conversaciones con mensajes → al montar: pantalla **BIENVENIDA**,
+  `activeId = null`. NO abre la última. ✔
+  **(b)** Montar, no escribir nada, desmontar y volver a montar → el historial sigue siendo
+  esas 2, ni una entrada nueva, y `localStorage` idéntico. ✔ Además, la conversación vacía que
+  se metió a mano en la semilla (la basura del comportamiento viejo) **desapareció de
+  `localStorage` sola** en el primer montaje. ✔
+  **(c)** Escribir *"Dosis de ibuprofeno en niño de 8 años"* → pantalla CONVERSACION y el
+  historial pasa a `["Dosis de ibuprofeno en niño de 8 años", "Dosis de amoxicilina", "Nota
+  SOAP de control"]`, con el mensaje como título y persistido. Tras recargar, el historial
+  aguanta los 3 **y la pantalla vuelve a BIENVENIDA**. ✔
+  **(d)** Clic en "Nota SOAP de control" → se abre (`activeId = "vieja-B"`, 1 mensaje).
+  "Nueva conversación" → `activeId = null` y BIENVENIDA, con el historial intacto. ✔
+  **(e)** El medidor: **verificado por código, no en vivo.** La igualdad
+  `limit − tokensRemaining == aiTokensUsed` del punto 2a es la que hace que la barra tras
+  enviar y el `GET /api/ai/usage` tras recargar den el mismo número. **No se mandó un mensaje
+  real**: la única cuenta con datos aquí es la de producción, y hacerlo le cobraría tokens de
+  verdad a la clínica y escribiría filas en `AiQuotaUsage` y en la Tesorería. Queda como la
+  comprobación de un minuto que hace Rafael: enviar un mensaje, apuntar el "usado", recargar.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · LO QUE NO SE HIZO, Y SE DICE
+───────────────────────────────────────────────────────────────────────────
+
+- **2b y 2c no se implementaron** — se pidió anotarlos, y ahí están arriba.
+- **El drawer de móvil no cambia.** "Nueva conversación" sigue sin cerrarlo (elegir una
+  conversación del historial sí lo cierra, eso ya era así). Ahora que el botón devuelve al
+  borrador, en teléfono te deja mirando la lista en vez del saludo. Es una línea
+  (`setMobileSidebarOpen(false)` dentro de `startNew`) y no se metió porque no se pidió.
+- **El botón "Empezar" del estado vacío** (cuando no hay ninguna conversación) ahora solo
+  enfoca el textarea: la pantalla de bienvenida ya está puesta, no hay nada que crear.

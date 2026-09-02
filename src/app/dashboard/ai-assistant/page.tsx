@@ -154,6 +154,15 @@ function formatRelative(ts: number, t: TFunction): string {
 export default function AIAssistantPage() {
   const t = useT();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Marca de que el historial de localStorage YA se leyó. Es estado y no un ref
+  // a propósito: los efectos de un mismo commit corren en orden de declaración,
+  // así que un ref puesto en el efecto de hidratación ya estaría en true cuando
+  // corre el de persistencia del MISMO commit — y ese pisaría lo guardado con el
+  // [] del estado inicial antes de haberlo leído.
+  const [hydrated, setHydrated] = useState(false);
+  // null = BORRADOR. Entrar al asistente abre siempre una conversación nueva y
+  // vacía (pantalla de bienvenida); la conversación real nace en sendMessage con
+  // el primer mensaje, así que salir sin escribir no deja rastro en el historial.
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -181,17 +190,31 @@ export default function AIAssistantPage() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Hydrate from localStorage
+  // Hidratación desde localStorage. Carga el historial para la barra lateral,
+  // pero NO abre la última conversación: `activeId` se queda en null y la
+  // pantalla arranca en borrador.
+  //
+  // El filtro tira las conversaciones sin mensajes que dejó el comportamiento
+  // anterior —que creaba una al entrar y otra en cada "Nueva conversación",
+  // escribiera el usuario o no—, para que nadie siga arrastrando esa basura.
+  // Se comprueba el Array y no solo el length: en localStorage puede haber
+  // JSON viejo o a medias, y ahí `messages` podría ni existir.
   useEffect(() => {
-    const stored = loadConversations();
+    const stored = loadConversations().filter(
+      (c) => c && Array.isArray(c.messages) && c.messages.length > 0,
+    );
     setConversations(stored);
-    if (stored.length > 0) setActiveId(stored[0].id);
+    setHydrated(true);
   }, []);
 
-  // Persist on changes
+  // Persistencia. Escribe SIEMPRE, también el array vacío: con el `length > 0`
+  // de antes, quedarse sin conversaciones nunca llegaba a localStorage y al
+  // recargar "revivían" las viejas. El guardia de `hydrated` es lo que impide
+  // que este efecto pise lo guardado con el [] del estado inicial.
   useEffect(() => {
-    if (conversations.length > 0) saveConversations(conversations);
-  }, [conversations]);
+    if (!hydrated) return;
+    saveConversations(conversations);
+  }, [conversations, hydrated]);
 
   // Lectura inicial del cupo. El medidor es SECUNDARIO: si el endpoint falla o
   // tarda, se traga el error y el chat sigue funcionando exactamente igual.
@@ -317,20 +340,18 @@ export default function AIAssistantPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Vuelve al BORRADOR: `activeId` en null pinta la pantalla de bienvenida y no
+   * hay nada que guardar. Ya no crea ni persiste una conversación vacía — de eso
+   * se encarga `sendMessage`, que la crea con el primer mensaje (y con él como
+   * título). Así el historial solo tiene conversaciones con contenido.
+   */
   const startNew = useCallback(() => {
-    const newConv: Conversation = {
-      id: makeId(),
-      title: t("pages.aiAssistant.newConversation"),
-      updatedAt: Date.now(),
-      messages: [],
-      group: "clinico",
-    };
-    setConversations((prev) => [newConv, ...prev]);
-    setActiveId(newConv.id);
+    setActiveId(null);
     setInput("");
     setError(null);
     setTimeout(() => textareaRef.current?.focus(), 50);
-  }, [t]);
+  }, []);
 
   const sendMessage = useCallback(async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
@@ -338,7 +359,12 @@ export default function AIAssistantPage() {
 
     setError(null);
 
-    // Asegura que hay conversación activa
+    // Asegura que hay conversación activa. ÚNICO sitio que crea una: nace aquí,
+    // con el primer mensaje, y por eso el historial nunca guarda conversaciones
+    // vacías. El `messages: []` de abajo no llega nunca a localStorage: el
+    // setConversations que le mete el mensaje va en el MISMO lote de React (todo
+    // esto es síncrono, antes del primer await), así que el efecto de
+    // persistencia solo ve el estado final.
     let convId = activeId;
     if (!convId) {
       const newConv: Conversation = {
