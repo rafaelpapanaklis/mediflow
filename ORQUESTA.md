@@ -125,6 +125,214 @@ ola dirá "valoración". Se cambió por eso, no por consistencia cosmética.
     `edu-theme.css` de verdad — el panel exige sesión y base de datos.
 
 ═══════════════════════════════════════════════════════════════════════════
+## EDU-AGENDA-VENTANA — La rejilla de la agenda ya no sale cortada ✅ (2026-09-01) · rama fix/edu-agenda-ventana → PR, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 · `npm run test:edu` EXIT 0 (35 archivos, 1 171 pruebas) · GUARDIA EXIT 0
+SQL: **ninguno**. Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Archivos: 5, todos PROPIOS del vertical. Del dental no se tocó una línea.
+
+SÍNTOMA: en producción, /instituto/agenda con el preset "Todo el día" pintaba de 08:00 a
+14:00, no dejaba desplazarse a ninguna hora posterior y del primer rótulo se veía media raya.
+La agenda del dental, en la misma pantalla, pinta 08:00–20:00.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · DE DÓNDE SALÍA CADA COSA (medido en el navegador, no deducido)
+
+Se reprodujo montando la pantalla REAL (`EduAgendaScreen`) en una página temporal fuera del
+matcher del middleware y midiéndola dentro de iframes de 1920×1080, 1366×768 y 390×844. Con
+eso, las tres quejas resultaron ser TRES fallos distintos, y solo uno de ellos estaba donde
+parecía:
+
+  **a) "Pinta de 08:00 a 14:00".** NO es el respaldo. Con sillones sin horario el código ya
+  pintaba 08:00–20:00 (medido: 13 rótulos de hora, de 08 a 20). Las seis horas salen del
+  HORARIO GUARDADO de los sillones — y 08:00–14:00 de lunes a viernes es exactamente la franja
+  que el editor de Sillones trae escrita por defecto al pulsar "Agregar franja"
+  (`sillones-screen.tsx`, `dias: [1,2,3,4,5], desde: "08:00", hasta: "14:00"`). O sea: alguien
+  guardó esa franja alguna vez, y desde entonces el eje es de seis horas.
+  Reproducido tal cual: con los dos sillones en 08:00–14:00 la rejilla pinta **13 rótulos
+  (7 horas + 6 medias), el último renglón rotulado es 13:30 y el eje termina en 14:00** — que
+  es, letra por letra, lo que se veía en producción.
+
+  Debajo de eso SÍ había un fallo de verdad: **un sillón sin horario se quedaba con el eje del
+  vecino**. Un sillón sin franjas está SIEMPRE ABIERTO (regla de la Ola 2, y es la que aplica
+  el servidor en `eduScheduleAllows`: `slots.length === 0` → acepta cualquier hora), pero no
+  aportaba nada al eje, así que el sillón que sí tenía la franja de seis horas se lo recortaba.
+  Con dos sillones —uno con la franja por defecto y otro recién dado de alta— la tarde entera
+  en la que el segundo SÍ acepta citas no se veía ni se podía tocar.
+
+  **b) "No deja desplazarse".** Cierto, y no porque el scroll estuviera roto: en "Todo el día"
+  no había nada más que ver… y a la vez faltaba. El preset reparte el alto disponible entre los
+  renglones con un piso de 10 px que viene del dental. Medido: en 1366×768 la rejilla tiene
+  416 px de hueco y una jornada de 12 h con ese piso mide 480 px → **119 px de rejilla escondida
+  y el rótulo de las 20:00 cortado**; en un teléfono de 390×844, **186 px escondidos**. El
+  preset prometía que el día cabía y se comía las últimas horas.
+
+  **c) "Tapa el primer rótulo".** Los rótulos van centrados en su línea (`translateY(-50%)`).
+  El primero está en la línea 0, así que su mitad de arriba caía DEBAJO de la fila de
+  encabezados, que es `sticky`, opaca y va por encima. Medido en las seis combinaciones de
+  viewport y horario: tapado en las 6.
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · LA REGLA QUE QUEDÓ ESCRITA (src/lib/edu/agenda-rejilla.ts)
+
+`eduAgendaWindow` sigue delegando en `paintedAgendaWindow` del dental —que es quien redondea a
+horas completas y quien ENSANCHA por las citas—, con una adaptación que el dental no necesita:
+allá la clínica es una y tiene un horario; aquí cada sillón tiene el suyo. El eje es la UNIÓN
+de lo que aporta cada sillón que se está pintando:
+
+  · con franjas ese día de la semana → sus franjas, redondeadas a horas completas;
+  · con franjas pero NO ese día      → nada (ese día está cerrado);
+  · SIN franjas ningunas             → la jornada por defecto 08:00–20:00 (`eduChairSinHorario`,
+                                        que usa el MISMO criterio que el servidor);
+  · si no aporta nadie               → la jornada por defecto también.
+
+Y encima de todo eso, las citas del día lo ensanchan: una cita a las 07:30 se VE aunque el
+sillón abra a las 8 — el alta AVISA, no bloquea. Sigue siendo SOLO presentación: el rango de
+lectura lo decide `eduDayRange` en el servidor y por aquí no pasa.
+
+Pruebas nuevas que lo fijan (`edu-agenda-rejilla.test.ts`):
+  · sin ningún horario → 08:00–20:00 (y se comprueba que el respaldo ES el 8–20 del dental);
+  · dos sillones 07:45–13:10 y 10:00–15:00 → 07:00–15:00 (unión, a horas completas);
+  · uno con 08:00–14:00 + otro sin horario → 08:00–20:00 (el que está siempre abierto no se
+    queda con el eje del vecino);
+  · uno con 07:00–21:00 + otro sin horario → 07:00–21:00 (el siempre abierto ENSANCHA, nunca
+    estrecha);
+  · sin horario y con citas a las 07:30 y a las 20:30–21:15 → 07:00–22:00;
+  · domingo con sillones de lunes a viernes → se conserva el lienzo del horario general.
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · QUE "TODO EL DÍA" QUEPA DE VERDAD
+
+`eduSlotHeightFor` sustituye a `slotHeightFor` SOLO para el instituto. Para "Media" y "Amplia"
+delega en el dental tal cual (20 y 30 px). Para "Todo el día" reparte el hueco REAL —el alto
+acotado menos la fila de encabezados (46) y los dos bordes (2), que antes no se descontaban—
+con un piso propio de **5 px por renglón** en vez de los 10 del dental.
+
+El piso no es una intuición, es una medida: el rótulo del eje ocupaba una caja de **18 px**
+(12 px de letra con el interlineado heredado de 1.5) y dos horas seguidas se encabalgaban por
+debajo de 28 px de banda. Con `line-height: 1` —es un rótulo de UNA línea colocado en absoluto,
+el interlineado no pintaba nada— la caja baja a 12 px y aguantan hasta 12 px de banda. Con eso,
+5 px por renglón = 20 px por hora deja 8 px de aire entre rótulos.
+
+Por qué el dental se queda en 10 y aquí no: allá el piso protege el TEXTO DE LAS TARJETAS y se
+acepta que reaparezca el desplazamiento; aquí el preset PROMETE que el día entero cabe sin
+desplazar. Con 5 px, una jornada de 15 h entra en los 303 px que deja un teléfono. Y por debajo
+del piso vuelve el desplazamiento —que funciona— en vez de un eje ilegible.
+
+Además, `.edu-ag__cita` tiene ahora `min-height: 14px`: con el renglón en 5 px una cita de
+quince minutos medía 4 y no se podía ni ver ni tocar.
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · LOS DOS RÓTULOS DE LAS PUNTAS, Y LOS DOS PÍXELES DE BARRA
+
+El primero ya no se centra en su línea: se apoya en ella (`top: 0`, `transform: none`), así que
+queda entero por debajo de la cabecera. El último se ancla al fondo con `bottom: 0` —lo pone la
+pantalla— y NO con `top` + `translateY(-100%)`: con transform el navegador sigue contando la
+caja sin transformar y el desbordamiento vuelve.
+
+Y `.edu-ag__eje` lleva `overflow: clip`. Con la pantalla a 1.25× de densidad la caja de la
+rejilla mide 719.6 px y no 720, y esa fracción bastaba para que el navegador contara dos
+píxeles de contenido de más y pintara una barra de desplazamiento en el preset que promete que
+no hay ninguna. Es `clip` y no `hidden` a propósito: `hidden` convertiría el eje en un
+contenedor con desplazamiento propio. Ningún rótulo se pierde — todos caben dentro.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · LA MEDIDA DEL ALTO YA NO PUEDE FALLAR CALLADA
+
+Cuatro cambios, y los cuatro hacen falta:
+
+  · **El respaldo del CSS se mide contra la ventana**: `--edu-ag-alto` era `520px` fijo. Un
+    respaldo fijo falla callado — si la medida no llega, en un monitor de 1080 la rejilla se
+    quedaba con 520 px (la mitad de lo que cabe) y "Todo el día" apretaba la jornada entera ahí
+    dentro. Ahora es `max(320px, calc(100dvh - 300px))`, con `100vh` delante como respaldo para
+    navegadores sin `dvh`. Hay prueba que revienta si vuelve a aparecer un número de píxeles.
+  · **`alto` empieza en `null`, no en 520**: mientras nadie ha medido, la pantalla NO escribe la
+    variable en línea y manda el respaldo del CSS. "No medido" y "mide 520" dejan de ser lo
+    mismo.
+  · **Se mide en el callback de la `ref`**, en cuanto el nodo existe. El efecto de layout solo
+    encontraba el nodo si la rejilla estaba montada en ese render; arrancando en modo lista (o
+    angosto en Semana, que cae a lista solo) se iba sin medir y no había dependencia que lo
+    despertara al volver.
+  · **El ResizeObserver mide también el alto**, y hay un segundo pase en el cuadro siguiente:
+    cualquier cosa que cambie de tamaño por encima de la rejilla (la leyenda que se envuelve, un
+    aviso que aparece, una fuente que carga tarde) mueve dónde empieza. No se realimenta:
+    `medirAlto` lee dónde EMPIEZA la rejilla, no cuánto mide.
+
+Y `.edu-ag__scroll` pasa de `height` a `max-height`: en "Todo el día" el contenido mide menos
+que el hueco (el reparto redondea hacia abajo) y con `height` esa diferencia quedaba como una
+franja vacía dentro del marco. Sigue siendo un contenedor con desplazamiento propio, que es lo
+que el `sticky` de la cabecera necesita.
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · UN EJE CORTO NO SE EXPLICA SOLO
+
+Cuando los sillones tienen horario, el eje pinta ESE horario y no la jornada de siempre. Es lo
+correcto, pero visto desde fuera es idéntico a una agenda rota: "solo llega a las dos y no me
+deja bajar" — que es literalmente el reporte que abrió esta rama. Así que la pantalla lo DICE,
+con la misma regla que el resto de esta pantalla (lo que decide, lo dice):
+
+    El eje va de 08:00 a 14:00 porque ese es el horario de los sillones. Se cambia en
+    Sillones; una cita fuera de ese rango se sigue viendo.
+
+Sale solo cuando el eje quedó MÁS CORTO que la jornada por defecto y por el horario de los
+sillones. Con un sillón sin horario no puede aparecer nunca: ese aporta la jornada entera.
+
+═══════════════════════════════════════════════════════════════════════════
+### 7 · MEDIDO EN EL NAVEGADOR — `npm run build` + `npx next start`
+
+Producción real (no `next dev`), con la pantalla montada en iframes del ancho exacto. "bajar" =
+`scrollHeight − clientHeight` del contenedor de la rejilla.
+
+Sillones SIN horario (eje 08:00–20:00 en las nueve):
+
+    viewport    zoom       slot   caja        bajar   1er rótulo  último        cabecera
+    1920×1080   Todo día   14px   720px@y330      0   entero      entero        sin scroll
+    1920×1080   Media      20px   730px@y330    278   entero      entero al bajar  PEGADA
+    1920×1080   Amplia     30px   730px@y330    758   entero      entero al bajar  PEGADA
+    1366×768    Todo día    7px   384px@y330      0   entero      entero        sin scroll
+    1366×768    Media      20px   418px@y330    590   entero      entero al bajar  PEGADA
+    1366×768    Amplia     30px   418px@y330   1070   entero      entero al bajar  PEGADA
+    390×844     Todo día    6px   336px@y473      0   entero      entero        sin scroll
+    390×844     Media      20px   351px@y473    657   entero      entero al bajar  PEGADA
+    390×844     Amplia     30px   351px@y473   1137   entero      entero al bajar  PEGADA
+
+Antes del arreglo, en las mismas tres pantallas: primer rótulo TAPADO en las 9, y "Todo el día"
+dejaba 119 px escondidos en 1366×768 y 186 px en 390×844, con el rótulo de las 20:00 cortado.
+
+Los cuatro escenarios de horario, con "Todo el día":
+
+    escenario                                   1920×1080              390×844
+    sin horario                                 08:00–20:00 · bajar 0  08:00–20:00 · bajar 0
+    los dos sillones 08:00–14:00                08:00–14:00 · bajar 0  08:00–14:00 · bajar 0
+    uno 08:00–14:00 + uno sin horario           08:00–20:00 · bajar 0  08:00–20:00 · bajar 0
+    los dos 07:00–21:00                         07:00–21:00 · bajar 0  07:00–21:00 · bajar 0
+    sin horario + citas 07:30 y 20:30–21:15     07:00–22:00 · bajar 0  07:00–22:00 · bajar 0
+
+En todas: primer y último rótulo enteros. Y el CSS minificado del build conserva las cuatro
+declaraciones que sostienen esto (`max-height:var(--edu-ag-alto)`, `100dvh - 300px`,
+`overflow:clip`, `line-height:1`).
+
+═══════════════════════════════════════════════════════════════════════════
+### 8 · LO QUE ESTA RAMA NO ARREGLA (y hay que decirlo)
+
+Si los DOS sillones del instituto tienen guardada la franja 08:00–14:00, el eje sigue pintando
+seis horas — porque ésa es la regla: el eje es el horario de los sillones. Lo que cambia es que
+ahora la pantalla lo explica y dice dónde se cambia (apartado 6), y que basta con que UN sillón
+no tenga horario para que el eje vuelva a la jornada completa. Para que la agenda de ese
+instituto llegue a las ocho de la noche hay que editar la franja en Sillones — o borrarla, que
+deja el sillón siempre abierto.
+
+Tampoco se toca el servidor: `eduScheduleAllows` sigue rechazando una cita fuera del horario del
+sillón (409, "Ese sillón no está abierto a esa hora"). El eje solo pinta.
+
+Archivos:
+    src/lib/edu/agenda-rejilla.ts                    la regla de la ventana + eduSlotHeightFor
+    src/components/edu/agenda/agenda-screen.tsx      la medida del alto y el aviso del eje corto
+    src/components/edu/agenda/agenda-rejilla.tsx     las dos puntas del eje y el alto nullable
+    src/app/instituto/edu-theme.css                  respaldo en dvh, max-height, clip, puntas
+    src/lib/edu/__tests__/edu-agenda-rejilla.test.ts 13 pruebas nuevas (55 en el archivo)
+
+═══════════════════════════════════════════════════════════════════════════
 ## EDU-LANDING — /instituciones, la landing pública del vertical Institucional ✅ (2026-09-01) · rama feat/edu-landing → PR, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
 COMMIT: ce732a5a · PR: #162 (https://github.com/rafaelpapanaklis/mediflow/pull/162) · BUILD EXIT 0 · `npm run test:edu` EXIT 0 · GUARDIA EXIT 0
