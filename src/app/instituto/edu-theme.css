@@ -6657,10 +6657,20 @@ a.edu-ini-acceso:hover {
    dentro no hay un solo `position: fixed`.
 
    ── EL ALTO ACOTADO NO ES DECORATIVO ───────────────────────────────────
-   `.edu-ag__scroll` tiene `height: var(--edu-ag-alto)` (lo mide la
+   `.edu-ag__scroll` tiene `max-height: var(--edu-ag-alto)` (lo mide la
    pantalla). Sin un alto acotado, el `position: sticky; top` de la fila de
    encabezados no se pega a nada: sticky necesita un contenedor con
    desplazamiento propio, y una caja que crece con su contenido no lo es.
+
+   Es `max-height` y no `height` porque en el preset "Todo el día" el
+   contenido mide MENOS que el hueco —el reparto redondea hacia abajo— y con
+   `height` esa diferencia quedaba como una franja vacía dentro del marco.
+   El contenedor sigue siendo suyo el `overflow`, así que el sticky sigue
+   teniendo contra qué pegarse.
+
+   Y el RESPALDO de `--edu-ag-alto` se calcula contra el alto de la ventana
+   (`dvh`), no es un número: un respaldo fijo falla callado. Ver el bloque
+   de `.edu-ag__scroll`.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* 🔴 LA AGENDA NO CABE EN 1100 px. `.edu-page` acota todas las pantallas
@@ -6957,11 +6967,28 @@ a.edu-ini-acceso:hover {
 .edu-ag__scroll {
   /* Fallbacks del SSR: la pantalla los pisa en línea en cuanto mide. */
   --edu-ag-slot-h: 30px;
-  --edu-ag-alto: 520px;
   --edu-ag-eje-w: 54px;
   --edu-ag-col-w: 138px;
 
-  height: var(--edu-ag-alto);
+  /* 🔴 EL RESPALDO DEL ALTO SE MIDE CONTRA LA VENTANA, no es un número.
+     Era `520px` fijo, y un respaldo fijo falla CALLADO: si la medida de la
+     pantalla no llega (la pestaña nunca se pinta, el nodo se montó dentro
+     de la rama de lista, un navegador sin ResizeObserver), en un monitor de
+     1080 la rejilla se quedaba con 520 px —la mitad de lo que cabía— y el
+     preset "Todo el día" apretaba la jornada entera ahí dentro. Con `dvh`
+     el respaldo se adapta solo: los ~300 px descontados son lo que ocupa
+     todo lo que va por encima (encabezado de la página, barra, leyenda y
+     filtros), y el suelo de 320 px evita una rejilla de dos renglones en
+     una ventana muy baja. `vh` primero, para navegadores sin `dvh`. */
+  --edu-ag-alto: max(320px, calc(100vh - 300px));
+  --edu-ag-alto: max(320px, calc(100dvh - 300px));
+
+  /* `max-height` y no `height`: en "Todo el día" el contenido mide MENOS
+     que el hueco (el reparto redondea hacia abajo y sobra el residuo), y
+     con `height` esa diferencia quedaba como una franja vacía dentro del
+     marco. Sigue siendo un contenedor con desplazamiento propio —que es lo
+     que el sticky de la cabecera necesita— porque el `overflow` es suyo. */
+  max-height: var(--edu-ag-alto);
   overflow: auto;
   overscroll-behavior: contain;
   background: var(--edu-surface);
@@ -7067,6 +7094,16 @@ a.edu-ini-acceso:hover {
   position: relative;
   height: 100%;
   user-select: none;
+  /* 🔴 `clip` y NO `hidden`: los rótulos están colocados en absoluto y con
+     la pantalla a 1.25× de densidad la caja de la rejilla mide 719.6 px, no
+     720 — esa fracción hacía que el navegador contara dos píxeles de
+     contenido de más y apareciera una barra de desplazamiento en el preset
+     que promete que no hay ninguna. `clip` recorta ese sobrante sin
+     convertir el eje en un contenedor con desplazamiento propio, que es lo
+     que `hidden` haría (y lo que rompería el sticky de su envoltorio).
+     Ningún rótulo se pierde: todos caben dentro del eje —el primero apoyado
+     arriba, el último anclado abajo—. */
+  overflow: clip;
 }
 
 /* La hora en punto en --edu-text-2 (≥7:1 sobre el blanco del panel). El
@@ -7078,9 +7115,32 @@ a.edu-ini-acceso:hover {
   transform: translateY(-50%);
   font-size: 12px;
   font-weight: 650;
+  /* 🔴 SIN INTERLINEADO. Es un rótulo de UNA línea colocado en absoluto: el
+     interlineado heredado (1.5) le ponía una caja de 18 px alrededor de 9 px
+     de letra, y esos 6 px de aire de más eran los que decidían a partir de
+     qué zoom dos horas seguidas se encabalgaban. Medido: con 1.5, dos horas
+     se tocan por debajo de 28 px de banda; con 1, aguantan hasta 12. Es
+     justo el margen que el preset "Todo el día" necesita en un teléfono. */
+  line-height: 1;
   color: var(--edu-text-2);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+}
+
+/* 🔴 LAS DOS PUNTAS DEL EJE SE CUELGAN HACIA DENTRO.
+   Los rótulos de en medio van centrados en su línea (`translateY(-50%)`),
+   que es lo correcto: la línea pasa por la mitad del texto. En las puntas
+   esa mitad se sale del eje — arriba cae DEBAJO de la fila de encabezados,
+   que es sticky y opaca, y del primer rótulo se veía media raya; abajo cae
+   por fuera del contenedor, que ADEMÁS la contaba como contenido y dejaba
+   dos píxeles de desplazamiento en el preset que promete que no hay
+   ninguno. Aquí no se centra ninguna de las dos: la primera se apoya en su
+   línea (`top: 0`) y la última se ancla al fondo (`bottom: 0`, que lo pone
+   la pantalla: con `top` + transform el navegador sigue contando la caja
+   SIN transformar y el desbordamiento vuelve). */
+.edu-ag__hora--primera,
+.edu-ag__hora--ultima {
+  transform: none;
 }
 
 /* La media hora es apoyo: solo aparece cuando el zoom le da aire de verdad
@@ -7091,6 +7151,7 @@ a.edu-ini-acceso:hover {
   transform: translateY(-50%);
   font-size: 10px;
   font-weight: 550;
+  line-height: 1; /* ídem: una línea, colocada en absoluto */
   color: var(--edu-text-3);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -7160,6 +7221,11 @@ a.edu-ini-acceso:hover {
   position: absolute;
   left: calc(var(--edu-ag-carril, 0) * (100% / var(--edu-ag-carriles, 1)) + 2px);
   width: calc((100% / var(--edu-ag-carriles, 1)) - 4px);
+  /* Con la jornada entera metida en una pantalla baja, el renglón puede
+     bajar a 6 px y una cita de quince minutos mediría 4: una raya que no se
+     puede ni ver ni tocar. Este suelo la deja visible; sigue siendo el
+     preset de mirar el día completo, y el detalle está en "Media". */
+  min-height: 14px;
   display: flex;
   flex-direction: column;
   gap: 1px;

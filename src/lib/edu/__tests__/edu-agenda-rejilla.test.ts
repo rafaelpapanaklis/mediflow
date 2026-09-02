@@ -28,7 +28,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  DEFAULT_SLOT_HPX,
   EDU_AGENDA_DEFAULT_WINDOW,
+  EDU_AGENDA_FIT_MIN_SLOT_HPX,
   EDU_AGENDA_SLOT_MINUTES,
   EDU_AGENDA_STATUS_TONE,
   EDU_AGENDA_URL_KEYS,
@@ -44,7 +46,9 @@ import {
   eduAgendaVisibleDays,
   eduAgendaWindow,
   eduChairScheduleDays,
+  eduChairSinHorario,
   eduProgramColor,
+  eduSlotHeightFor,
   eduRowPlacement,
   eduRowStartMinute,
   eduRowToAgendaDTO,
@@ -58,6 +62,10 @@ import {
   type EduAppointmentRow,
 } from "../agenda-core";
 import { EDU_APPOINTMENT_STATUSES, type EduAppointmentStatus } from "../types";
+// Del DENTAL, y solo para leerlo: el piso de "fit" de allá es el que esta
+// ola tuvo que dejar de usar. Se importa en vez de copiar el número para
+// que la prueba siga diciendo la verdad si allá lo cambian.
+import { FIT_MIN_SLOT_HPX } from "@/lib/agenda/slot-metrics";
 
 const CDMX = "America/Mexico_City";
 const RAIZ = join(__dirname, "..", "..", "..", "..");
@@ -398,6 +406,170 @@ test("sin ningún horario capturado se pinta la jornada de siempre", () => {
     dayStart: EDU_AGENDA_DEFAULT_WINDOW.dayStart,
     dayEnd: EDU_AGENDA_DEFAULT_WINDOW.dayEnd,
   });
+  assert.deepEqual(ventana, { dayStart: 8, dayEnd: 20 }, "el respaldo es el mismo 8–20 del dental");
+});
+
+test("dos sillones con horarios distintos: el eje es la UNIÓN, a horas completas", () => {
+  const ventana = eduAgendaWindow({
+    chairs: [
+      // 07:45 y 13:10 a propósito: el eje pinta HORAS enteras, así que la
+      // apertura baja a las 7 y el cierre sube a las 15 (el otro sillón).
+      sillon({ id: "s1", schedules: [{ weekday: 3, startMinute: 465, endMinute: 790 }] }),
+      sillon({ id: "s2", schedules: [{ weekday: 3, startMinute: 600, endMinute: 900 }] }),
+    ],
+    rows: [],
+    view: "dia",
+    days: ["2026-09-02"], // miércoles
+    timezone: CDMX,
+  });
+  assert.deepEqual(ventana, { dayStart: 7, dayEnd: 15 });
+});
+
+test("un sillón SIN horario no se queda con el eje del vecino", () => {
+  // El caso de producción: dos sillones, uno con la franja 08:00–14:00 que
+  // el editor de Sillones trae escrita por defecto y otro recién dado de
+  // alta. El segundo acepta CUALQUIER hora (regla de la Ola 2, la misma que
+  // aplica el servidor en eduScheduleAllows), así que el eje no se puede
+  // quedar en seis horas: las tardes en las que sí se puede agendar no se
+  // verían ni se podrían tocar.
+  const ventana = eduAgendaWindow({
+    chairs: [
+      sillon({ id: "s1", schedules: [{ weekday: 3, startMinute: 480, endMinute: 840 }] }),
+      sillon({ id: "s2" }),
+    ],
+    rows: [],
+    view: "dia",
+    days: ["2026-09-02"],
+    timezone: CDMX,
+  });
+  assert.deepEqual(ventana, { dayStart: 8, dayEnd: 20 });
+  assert.equal(
+    eduChairSinHorario(sillon({ id: "s2" })),
+    true,
+    "sin filas = siempre abierto, igual que en el servidor",
+  );
+  assert.equal(
+    eduChairSinHorario(
+      sillon({ id: "s1", schedules: [{ weekday: 3, startMinute: 480, endMinute: 840 }] }),
+    ),
+    false,
+  );
+});
+
+test("el sillón siempre abierto ENSANCHA, nunca estrecha", () => {
+  // Un sillón que abre 07:00–21:00 y otro sin horario: la jornada por
+  // defecto (8–20) no puede recortar al primero.
+  const ventana = eduAgendaWindow({
+    chairs: [
+      sillon({ id: "s1", schedules: [{ weekday: 3, startMinute: 420, endMinute: 1260 }] }),
+      sillon({ id: "s2" }),
+    ],
+    rows: [],
+    view: "dia",
+    days: ["2026-09-02"],
+    timezone: CDMX,
+  });
+  assert.deepEqual(ventana, { dayStart: 7, dayEnd: 21 });
+});
+
+test("una cita fuera de la jornada por defecto también ensancha el eje", () => {
+  // Sin ningún horario capturado, el lienzo es 8–20; una cita a las 07:30 y
+  // otra que termina a las 21:15 lo abren por las dos puntas. Si el eje se
+  // quedara en 8–20, las dos se pintarían fuera de la rejilla.
+  const ventana = eduAgendaWindow({
+    chairs: [sillon({ id: "s1" })],
+    rows: [
+      cita({ id: "temprana", startLabel: "07:30", minutes: 30 }),
+      cita({ id: "tardia", startLabel: "20:30", minutes: 45 }),
+    ],
+    view: "dia",
+    days: ["2026-09-02"],
+    timezone: CDMX,
+  });
+  assert.deepEqual(ventana, { dayStart: 7, dayEnd: 22 });
+});
+
+test("un día que ningún sillón abre conserva el lienzo del horario general", () => {
+  // Domingo con sillones de lunes a viernes: no hay franja de ese día, así
+  // que se pinta el horario general en vez de dejar el eje sin nada.
+  const ventana = eduAgendaWindow({
+    chairs: [
+      sillon({
+        id: "s1",
+        schedules: [1, 2, 3, 4, 5].map((weekday) => ({
+          weekday,
+          startMinute: 540,
+          endMinute: 1080,
+        })),
+      }),
+    ],
+    rows: [],
+    view: "dia",
+    days: ["2026-09-06"], // domingo
+    timezone: CDMX,
+  });
+  assert.deepEqual(ventana, { dayStart: 9, dayEnd: 18 });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// 2b · EL ZOOM: "TODO EL DÍA" TIENE QUE CABER DE VERDAD
+// ═══════════════════════════════════════════════════════════════════════
+
+test('"Todo el día" reparte el hueco disponible entre los renglones', () => {
+  const slots = eduAgendaSlots({ dayStart: 8, dayEnd: 20 }); // 48
+  // 1920×1080 medido: 730 px de contenedor − 46 de cabecera − 2 de bordes.
+  assert.equal(eduSlotHeightFor("fit", 682, slots), 14);
+  assert.ok(48 * 14 <= 682, "lo repartido no puede pasarse del hueco");
+  // 1366×768 medido: 418 − 48 = 370.
+  assert.equal(eduSlotHeightFor("fit", 370, slots), 7);
+  // Teléfono 390×844 medido: 351 − 48 = 303.
+  assert.equal(eduSlotHeightFor("fit", 303, slots), 6);
+  // Y una jornada larga (07:00–22:00, 60 renglones) en ese mismo teléfono
+  // también entra: es el caso que obligó a bajar el piso a 5.
+  const largos = eduAgendaSlots({ dayStart: 7, dayEnd: 22 });
+  assert.ok(largos * eduSlotHeightFor("fit", 303, largos) <= 303);
+});
+
+test('"Todo el día" NO deja desplazamiento donde antes lo dejaba', () => {
+  const slots = eduAgendaSlots({ dayStart: 8, dayEnd: 20 });
+  for (const hueco of [303, 370, 682, 1052]) {
+    assert.ok(
+      slots * eduSlotHeightFor("fit", hueco, slots) <= hueco,
+      `la jornada de 12 h no cabe en ${hueco} px: eso es justo lo que el preset promete`,
+    );
+  }
+  // El piso del dental (10 px) era el que sobraba: 48 × 10 = 480 px no
+  // caben en los 370 que deja una pantalla de 1366×768.
+  assert.ok(slots * FIT_MIN_SLOT_HPX > 370, "si esto deja de ser cierto, el piso del dental ya servía");
+});
+
+test("por debajo del piso el eje deja de leerse y vuelve el desplazamiento", () => {
+  // Una ventana de 24 h (que solo ocurre si una cita la ensancha hasta ahí)
+  // en un teléfono: se respeta el piso y reaparece la barra, que es mejor
+  // que un eje de rótulos encimados.
+  const slots = eduAgendaSlots({ dayStart: 0, dayEnd: 24 }); // 96
+  assert.equal(eduSlotHeightFor("fit", 303, slots), EDU_AGENDA_FIT_MIN_SLOT_HPX);
+  // 20 px de banda por hora contra un rótulo de 12 px de caja: 8 px de aire.
+  // Medido en el navegador, no supuesto (ver el comentario del piso).
+  assert.ok(EDU_AGENDA_FIT_MIN_SLOT_HPX * 4 >= 20, "una hora tiene que medir al menos 20 px");
+});
+
+test('"Media" y "Amplia" son fijas y salen del dental, no de una copia', () => {
+  const slots = eduAgendaSlots({ dayStart: 8, dayEnd: 20 });
+  assert.equal(eduSlotHeightFor("medium", 682, slots), 20);
+  assert.equal(eduSlotHeightFor("spacious", 682, slots), 30);
+  // El alto disponible no las mueve: son las densidades fijas del dental.
+  assert.equal(eduSlotHeightFor("medium", 120, slots), 20);
+  assert.equal(eduSlotHeightFor("spacious", null, slots), 30);
+  // Y con 12 h no caben en ninguna pantalla razonable: ahí SÍ hay que
+  // desplazarse, y por eso la cabecera va pegada.
+  assert.ok(slots * 20 > 682);
+});
+
+test("sin medida todavía, el alto de renglón es el del servidor", () => {
+  const slots = eduAgendaSlots({ dayStart: 8, dayEnd: 20 });
+  assert.equal(eduSlotHeightFor("fit", null, slots), DEFAULT_SLOT_HPX);
+  assert.equal(eduSlotHeightFor("fit", 0, slots), DEFAULT_SLOT_HPX);
 });
 
 test("los días visibles son uno en Día y siete en Semana", () => {
@@ -754,7 +926,54 @@ test("la rejilla se mide con @container y no con @media", () => {
     css.includes("@container edu-ag (max-width: 640px)"),
     "el ancho del panel no es el de la ventana: el menú se lleva 252 px en escritorio",
   );
-  assert.ok(css.includes("height: var(--edu-ag-alto)"), "sin alto acotado el encabezado sticky no se pega a nada");
+  assert.ok(
+    css.includes("max-height: var(--edu-ag-alto)"),
+    "sin alto acotado el encabezado sticky no se pega a nada",
+  );
+});
+
+test("el respaldo del alto de la rejilla se mide contra la ventana, no es un número", () => {
+  const css = readFileSync(join(RAIZ, TEMA), "utf8");
+  // Un respaldo fijo falla CALLADO: si la medida de la pantalla no llega,
+  // en un monitor de 1080 la rejilla se quedaba con 520 px —la mitad de lo
+  // que cabía— y "Todo el día" apretaba la jornada entera ahí dentro.
+  assert.ok(
+    css.includes("--edu-ag-alto: max(320px, calc(100dvh - 300px))"),
+    "el respaldo tiene que salir del alto de la ventana",
+  );
+  assert.ok(
+    css.includes("--edu-ag-alto: max(320px, calc(100vh - 300px))"),
+    "y dejar un vh de respaldo para navegadores sin dvh",
+  );
+  assert.ok(
+    !/--edu-ag-alto:\s*\d+px;/.test(css),
+    "ningún respaldo en píxeles fijos: ese era el bug",
+  );
+});
+
+test("los rótulos del eje no arrastran interlineado", () => {
+  const css = readFileSync(join(RAIZ, TEMA), "utf8");
+  // Medido en el navegador: con el interlineado heredado (1.5) el rótulo de
+  // 12 px ocupa una caja de 18 px y dos horas seguidas se encabalgan por
+  // debajo de 28 px de banda; con `line-height: 1` la caja es de 12 y
+  // aguantan hasta 12 px. De ahí sale el piso de "Todo el día".
+  const eje = css.slice(css.indexOf(".edu-ag__hora {"), css.indexOf(".edu-ag__media {"));
+  assert.ok(eje.includes("line-height: 1;"), "sin esto el piso del zoom deja de ser legible");
+});
+
+test("el tema declara las dos puntas del eje, que no se centran en su línea", () => {
+  const css = readFileSync(join(RAIZ, TEMA), "utf8");
+  // Centrado, el primer rótulo cae media raya DEBAJO de la fila de
+  // encabezados (sticky y opaca) y del "08:00" se veía la mitad.
+  assert.ok(css.includes(".edu-ag__hora--primera,"));
+  assert.ok(css.includes(".edu-ag__hora--ultima {"));
+  // Y el eje recorta su propio sobrante: con la pantalla a 1.25x la caja de
+  // la rejilla mide 719.6 px y esa fraccion valia dos pixeles de barra en el
+  // preset que promete que no hay ninguna. `clip`, no `hidden`: `hidden`
+  // convertiria el eje en un contenedor con desplazamiento propio.
+  const eje = css.slice(css.indexOf(".edu-ag__eje {"), css.indexOf(".edu-ag__hora {"));
+  assert.ok(eje.includes("overflow: clip;"), "sin esto vuelve la barra de dos pixeles");
+  assert.ok(!eje.includes("overflow: hidden;"));
 });
 
 // ═══════════════════════════════════════════════════════════════════════

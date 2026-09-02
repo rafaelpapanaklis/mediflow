@@ -92,15 +92,37 @@ function EjeHoras({
 
   return (
     <div className="edu-ag__eje" aria-hidden="true">
-      {horas.map((h) => (
-        <span
-          key={h}
-          className="edu-ag__hora"
-          style={{ top: `calc(${(h - window.dayStart) * slotsPorHora} * var(--edu-ag-slot-h))` }}
-        >
-          {eduMinutesToLabel(h * 60)}
-        </span>
-      ))}
+      {horas.map((h, i) => {
+        // 🔴 LAS DOS PUNTAS NO SE CENTRAN EN SU LÍNEA. Un rótulo centrado
+        // sobresale media línea por arriba y media por abajo: en el primero
+        // esa mitad cae DEBAJO de la fila de encabezados (sticky y opaca) y
+        // del "08:00" se veía media raya; en el último cae por fuera del
+        // contenedor, que además la contaba como contenido y dejaba dos
+        // píxeles de desplazamiento en el preset que promete que no hay.
+        // El primero se apoya en su línea y el último se ancla al fondo con
+        // `bottom` —no con `top` + transform— para no desbordar ni un píxel.
+        const primera = i === 0;
+        const ultima = i === horas.length - 1;
+        return (
+          <span
+            key={h}
+            className={[
+              "edu-ag__hora",
+              primera ? "edu-ag__hora--primera" : "",
+              ultima ? "edu-ag__hora--ultima" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            style={
+              ultima
+                ? { bottom: 0 }
+                : { top: `calc(${(h - window.dayStart) * slotsPorHora} * var(--edu-ag-slot-h))` }
+            }
+          >
+            {eduMinutesToLabel(h * 60)}
+          </span>
+        );
+      })}
       {conMedias &&
         horas.slice(0, -1).map((h) => (
           <span
@@ -342,8 +364,15 @@ export function EduAgendaRejilla({
   vista: "dia" | "semana";
   canManage: boolean;
   slotHpx: number;
-  /** Alto acotado del contenedor. Sin él, el encabezado sticky no pega. */
-  alto: number;
+  /**
+   * Alto acotado del contenedor. Sin él, el encabezado sticky no pega.
+   *
+   * `null` = todavía no se ha medido (el render del servidor, o el primer
+   * cuadro). Entonces NO se escribe la variable y manda el respaldo del
+   * CSS, que se calcula contra el alto de la ventana: un número fijo aquí
+   * sería un respaldo que falla callado.
+   */
+  alto: number | null;
   scrollRef: (el: HTMLDivElement | null) => void;
   onOpen: (row: EduAppointmentRow) => void;
   onHueco: (column: EduAgendaColumn, startLabel: string) => void;
@@ -357,7 +386,7 @@ export function EduAgendaRejilla({
       style={
         {
           "--edu-ag-slot-h": `${slotHpx}px`,
-          "--edu-ag-alto": `${alto}px`,
+          ...(alto === null ? null : { "--edu-ag-alto": `${alto}px` }),
         } as React.CSSProperties
       }
     >
