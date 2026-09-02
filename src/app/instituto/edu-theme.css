@@ -3217,6 +3217,27 @@ select.edu-input {
   font-style: italic;
 }
 
+/* La MARCA de la autofirma de la dirección (quien decidió es quien pidió).
+   Ámbar y no rojo: no es un error ni una alarma — es un dato de la traza
+   que tiene que saltar a la vista de quien audita el caso, sin gritarle a
+   quien lo abre por otra razón. Usa los mismos tokens que el aviso de la
+   tarjeta, así que no define ni un color nuevo. */
+.edu-auth-historial__marca {
+  margin: 4px 0 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--edu-amber-700);
+  background: var(--edu-amber-50);
+}
+
+.dark .edu-auth-historial__marca {
+  color: var(--edu-amber-300);
+  background: rgba(180, 83, 9, 0.14);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    13 · OLA 3B — DICTADO, APOYO DE IA Y CONSENTIMIENTOS.
 

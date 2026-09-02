@@ -21,8 +21,10 @@ import type { EduCaseStatus } from "@/lib/edu/types";
  *   · PAUSAR / REANUDAR / MARCAR ABANDONADO — sin firma, a propósito
  *     (pedir permiso para PARAR es cómo nadie registra que paró).
  *   · FIRMAR — decidir una autorización PENDIENTE sin ir a la bandeja.
- *     Lo propio no se ofrece (nadie firma su propia petición) y la RECETA
- *     tampoco (pide cédula: se firma en la bandeja, que tiene ese campo).
+ *     Lo propio no se ofrece (nadie firma su propia petición) MENOS a la
+ *     dirección, que está exenta por rol y firma lo suyo dejándolo
+ *     marcado; y la RECETA tampoco (pide cédula: se firma en la bandeja,
+ *     que tiene ese campo).
  *   · REGISTRAR SESIÓN — una nota SOAP que nace BORRADOR en el
  *     expediente, colgada de ESTE caso.
  *   · TRASPASAR — cierra este caso como TRANSFERRED y abre uno nuevo con
@@ -198,9 +200,10 @@ export function EduCasoAcciones({
   }
 
   const firmables = canFirmar
-    ? // Lo PROPIO no se ofrece (batchSkip "propia" viene del server con el
-      // id de la sesión) y la RECETA se firma en la bandeja, donde está el
-      // campo de la cédula.
+    ? // Lo PROPIO no se ofrece SALVO a la dirección: el server marca con
+      // batchSkip "propia" (rol + id de la sesión) lo que quien mira no
+      // puede firmar, y a la dirección ya no se lo marca. La RECETA se
+      // firma en la bandeja, donde está el campo de la cédula.
       pendientes.filter((p) => p.stage !== "PRESCRIPTION")
     : [];
 
@@ -233,6 +236,13 @@ export function EduCasoAcciones({
                 {p.isEmergency ? " · URGENCIA" : ""} · pedida por {p.requestedByName} el{" "}
                 {p.requestedAtLabel}
                 <span className="edu-caso-firmas__detalle">{p.summary.title}</span>
+                {/* La dirección SÍ puede decidir lo suyo. Se le dice aquí
+                    lo mismo que en la bandeja: firmarla la deja marcada. */}
+                {p.own && p.batchSkip !== "propia" && (
+                  <span className="edu-caso-firmas__detalle">
+                    La mandaste tú. Al decidirla quedará marcada como una petición propia.
+                  </span>
+                )}
               </div>
               {p.batchSkip === "propia" ? (
                 <p className="edu-note">La mandaste tú: la firma tu docente supervisor.</p>
