@@ -32282,6 +32282,7 @@ arreglo (medido con `getComputedStyle`, con captura antes y después, en escrito
 cajón del móvil) y el tablero completo montado con los COMPONENTES REALES y datos falsos en una
 página temporal —las tres gráficas en semana y en mes, el conmutador, los accesos y el
 medidor—, a 1180 px y a 387 px, borrada antes de commitear. PR contra `main`, SIN mergear.
+
 ═══════════════════════════════════════════════════════════════════════════
 ## EDU-SEED-DEMO — Un instituto de DEMO con volumen real, y lo que se rompe cuando se llena (2026-09-01) · rama feat/edu-seed-demo
 ═══════════════════════════════════════════════════════════════════════════
@@ -32983,6 +32984,7 @@ En producción no se corre `db push`.
 **`docs/audits/EDU_AUDIT.md`: el P2-6 queda cerrado con los números,** y con la tabla de las
 cinco decisiones de producto que la ola de cierre dejó abiertas a propósito. **Ya no queda
 ningún hallazgo abierto en la auditoría del vertical.**
+
 ═══════════════════════════════════════════════════════════════════════════
 ## EDU-CLÍNICA-EN-VIVO — El tablero de sillones del instituto ✅ (2026-09-01) · rama feat/edu-clinica-viva → PR contra main, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
@@ -33295,6 +33297,7 @@ Vercel, con datos: (a) que la rejilla se lea de verdad desde lejos en un monitor
 piso con movimiento real. Lo que SÍ está probado sin base de datos es todo lo que decide algo:
 el mapeo de estados contra el motor de verdad, el recorte por sede, el enmascarado del docente
 y las dos cerraduras de la API. PR contra `main`, **SIN mergear**.
+
 ---
 
 ## 2026-09-02 · DaleControl INSTITUCIONAL — LA AGENDA ES UNA REJILLA
@@ -33503,6 +33506,60 @@ oscuro, que aunque hoy no se aplica en `/instituto` ya no depende de la suerte.
 (`pointerdown` → 5 × `pointermove` → `pointerup`), no con el `left_click_drag` de la
 automatización: esa herramienta no emite `pointermove` intermedios y dnd-kit necesita uno para
 pasar su umbral de 6 px. El gesto real de un ratón sí los emite.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
+  **463/463 páginas**, tabla de rutas entera, `/instituto/agenda` en 14.3 kB. Cero "Failed to compile", cero `error TS`, cero heap OOM. Los únicos warnings son
+  los PREEXISTENTES y ajenos al vertical (el `Critical dependency` de `file-type` en
+  `api/ai-wallet/spei/topup` y tres clases ambiguas de Tailwind). El spam de `Environment
+  variable not found: DATABASE_URL` es el de siempre (worktree sin `.env`).
+  ⚠️ Las dos primeras pasadas murieron en `prisma generate` con el `EPERM ... rename
+  query_engine-windows.dll.node` de Windows, y **no era intermitente**: `next dev` había dejado
+  tres procesos node huérfanos apuntando al worktree —el que mata la tarea es el envoltorio, no
+  el árbol— y ésos tenían la DLL abierta. Matados los tres, el build salió a la primera. Si
+  vuelve a pasar, se buscan con `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` y se
+  filtra por el nombre del worktree antes de sospechar del código.
+- **`npm run test:edu` exit 0** — **30 archivos, 975 pruebas, 975 pass, 0 fail** (desde
+  29/933). Las 42 nuevas están en `edu-agenda-rejilla.test.ts` y cubren lo que el encargo pedía
+  fijar: el modelo de lectura por sillón y la sede, los carriles con citas encimadas, el mapeo
+  de estados a la tarjeta (contra el CSS de verdad) y que las llaves de la URL siguen siendo
+  las mismas. Más el eje, el arrastre y el choque.
+- **`npx tsc --noEmit`** sin un solo error en código de aplicación. Los 8 que quedan son
+  PREEXISTENTES y viven en archivos de prueba ajenos (`src/lib/barber/__tests__/*` y el
+  `edu-theme.test.ts` que ya estaba en `main`): son `TS2802` por recorrer un `Set`/`Map` con el
+  `target` del tsconfig. No los toca esta rama; sí se evitaron en el código nuevo.
+- **Guardia:** `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**.
+  11 archivos vs `origin/main`: 10 propios del vertical y `ORQUESTA.md` declarado. **Cero
+  prohibidos y cero compartidos sin declarar**: ni una línea del dental, de barbería ni de
+  inmuebles.
+- **Raíz del repo limpia:** esta rama no añade ni un archivo a la raíz; el único de raíz que
+  cambia es `ORQUESTA.md`. La page temporal de verificación está borrada y `git status` no la
+  ve.
+
+### Lo que NO se hizo, a propósito
+
+- **La vista de MES queda fuera**, como pedía el encargo.
+- **El "todo el día" no siempre cabe sin desplazar.** El zoom "fit" del dental tiene un suelo de
+  10 px por renglón (por debajo, el texto de las tarjetas deja de leerse). Con la jornada del
+  banco de pruebas —07:00 a 21:00, catorce horas, 56 renglones— eso son 560 px y en una ventana
+  de 927 px de alto quedan ~530 para la rejilla: sobran ~55 px de desplazamiento. Con una
+  jornada de doce horas cabe entera. No se bajó el suelo porque vive en `slot-metrics.ts`, que
+  es del dental y no se edita.
+- **El arrastre no cambia de estudiante ni de duración**: solo hora, día y sillón. Cambiar el
+  estudiante sigue siendo cosa del formulario de reagendar, que es donde el servidor vuelve a
+  derivar el caso.
+- **La lista de estudiantes sigue sin viajar** al navegador de quien no la usa (P1-4 de la
+  auditoría, intacto): los desplegables de Estudiante y Docente se arman con el padrón **más**
+  quien aparece en las filas que ya están en pantalla, así que cubren todo lo que se ve sin
+  traer ni una fila que el servidor no hubiera mandado ya.
+- **Sin base de datos en esta sesión**, así que el `PATCH` del arrastre no se ejecutó contra
+  Postgres. Es el mismo endpoint que ya usaba el formulario de reagendar y no se tocó; lo que
+  sí se probó es todo lo que ocurre antes: el cálculo del destino, el choque en el navegador y
+  la ventana de confirmación.
+
+PR contra `main`, **SIN mergear**.
+
 ---
 
 ## [Institucional · VISOR] — Se retira el visor propio: el instituto abre el MISMO visor que ve un dentista, en un modal que sí deja ver los cuatro paneles ✅ (2026-09-01) · rama `feat/edu-visor-dental`
@@ -33675,53 +33732,6 @@ queda ninguna prueba apuntando a un archivo que no existe.**
 ### Gates
 
 - **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
-  **463/463 páginas**, tabla de rutas entera, `/instituto/agenda` en 14.3 kB. Cero "Failed to compile", cero `error TS`, cero heap OOM. Los únicos warnings son
-  los PREEXISTENTES y ajenos al vertical (el `Critical dependency` de `file-type` en
-  `api/ai-wallet/spei/topup` y tres clases ambiguas de Tailwind). El spam de `Environment
-  variable not found: DATABASE_URL` es el de siempre (worktree sin `.env`).
-  ⚠️ Las dos primeras pasadas murieron en `prisma generate` con el `EPERM ... rename
-  query_engine-windows.dll.node` de Windows, y **no era intermitente**: `next dev` había dejado
-  tres procesos node huérfanos apuntando al worktree —el que mata la tarea es el envoltorio, no
-  el árbol— y ésos tenían la DLL abierta. Matados los tres, el build salió a la primera. Si
-  vuelve a pasar, se buscan con `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` y se
-  filtra por el nombre del worktree antes de sospechar del código.
-- **`npm run test:edu` exit 0** — **30 archivos, 975 pruebas, 975 pass, 0 fail** (desde
-  29/933). Las 42 nuevas están en `edu-agenda-rejilla.test.ts` y cubren lo que el encargo pedía
-  fijar: el modelo de lectura por sillón y la sede, los carriles con citas encimadas, el mapeo
-  de estados a la tarjeta (contra el CSS de verdad) y que las llaves de la URL siguen siendo
-  las mismas. Más el eje, el arrastre y el choque.
-- **`npx tsc --noEmit`** sin un solo error en código de aplicación. Los 8 que quedan son
-  PREEXISTENTES y viven en archivos de prueba ajenos (`src/lib/barber/__tests__/*` y el
-  `edu-theme.test.ts` que ya estaba en `main`): son `TS2802` por recorrer un `Set`/`Map` con el
-  `target` del tsconfig. No los toca esta rama; sí se evitaron en el código nuevo.
-- **Guardia:** `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**.
-  11 archivos vs `origin/main`: 10 propios del vertical y `ORQUESTA.md` declarado. **Cero
-  prohibidos y cero compartidos sin declarar**: ni una línea del dental, de barbería ni de
-  inmuebles.
-- **Raíz del repo limpia:** esta rama no añade ni un archivo a la raíz; el único de raíz que
-  cambia es `ORQUESTA.md`. La page temporal de verificación está borrada y `git status` no la
-  ve.
-
-### Lo que NO se hizo, a propósito
-
-- **La vista de MES queda fuera**, como pedía el encargo.
-- **El "todo el día" no siempre cabe sin desplazar.** El zoom "fit" del dental tiene un suelo de
-  10 px por renglón (por debajo, el texto de las tarjetas deja de leerse). Con la jornada del
-  banco de pruebas —07:00 a 21:00, catorce horas, 56 renglones— eso son 560 px y en una ventana
-  de 927 px de alto quedan ~530 para la rejilla: sobran ~55 px de desplazamiento. Con una
-  jornada de doce horas cabe entera. No se bajó el suelo porque vive en `slot-metrics.ts`, que
-  es del dental y no se edita.
-- **El arrastre no cambia de estudiante ni de duración**: solo hora, día y sillón. Cambiar el
-  estudiante sigue siendo cosa del formulario de reagendar, que es donde el servidor vuelve a
-  derivar el caso.
-- **La lista de estudiantes sigue sin viajar** al navegador de quien no la usa (P1-4 de la
-  auditoría, intacto): los desplegables de Estudiante y Docente se arman con el padrón **más**
-  quien aparece en las filas que ya están en pantalla, así que cubren todo lo que se ve sin
-  traer ni una fila que el servidor no hubiera mandado ya.
-- **Sin base de datos en esta sesión**, así que el `PATCH` del arrastre no se ejecutó contra
-  Postgres. Es el mismo endpoint que ya usaba el formulario de reagendar y no se tocó; lo que
-  sí se probó es todo lo que ocurre antes: el cálculo del destino, el choque en el navegador y
-  la ventana de confirmación.
   Las dos rutas nuevas salen en la tabla: `ƒ /api/instituto/estudios/[id]/lite` y
   `ƒ /api/instituto/estudios/[id]/notas`.
   ⚠️ El primer intento murió con `EPERM ... rename query_engine-windows.dll.node` en
@@ -33792,3 +33802,151 @@ ida y vuelta más y evita una llamada extra a Storage por cada `.zip` al pintar 
 Puede pre-firmarse si algún día molesta.
 
 PR contra `main`, **SIN mergear**.
+---
+
+## [Institucional · INTEGRACIÓN 5] — Ocho ramas en un solo build: el visor que borró los archivos que la landing citaba como prueba, y el reporte de una ola que se metió dentro del de otra ✅ (2026-09-01) · rama `edu/integracion5`
+
+### Qué es
+
+Las ocho ramas terminadas y revisadas del vertical, fusionadas en `edu/integracion5` sobre
+`origin/main` (`79b7e97a`), merge normal y sin rebase, en el orden que exigían las dependencias
+—#158 nace de #155 y #160 nace de #157, así que la madre entra antes que la hija—:
+
+| # | Rama | PR | HEAD | Qué trae |
+|---|------|----|------|----------|
+| 1 | `feat/edu-cuota-storage` | #155 | `40227fef` | 5 TB por CONTRATO y por INSTITUTO (las sedes comparten bolsa), medidor que Dirección VE y no edita, corte con 507 al firmar la subida, y `/admin/institutos`. |
+| 2 | `feat/edu-inicio-direccion` | #158 | `3474382c` | El Inicio de Dirección deja de ser un saludo: tres gráficas por día con los mismos topes y ventana que la Ola 7. Y el nombre de la escuela lo aplastaba el LAYOUT, no el minificador. |
+| 3 | `feat/edu-seed-demo` | #157 | `07fd289b` | `npm run seed:edu-demo`: 120 estudiantes, 32 sillones, 20 577 citas, HOY llena. `--medir` cronometra el panel. |
+| 4 | `fix/edu-volumen` | #160 | `4196beb1` | Los tres hallazgos que midió ese demo: el expediente DICE que cortó, la evaluación lee 78 % menos, el CSV de cerrados vuelve a salir. Cierra el P2-6 de la auditoría. |
+| 5 | `feat/edu-clinica-viva` | #156 | `d91b14e1` | `/instituto/clinica`: el tablero de sillones en vivo. El estado sale de la CITA, no de presencia. |
+| 6 | `feat/edu-agenda-rejilla` | #159 | `8b930e5a` | La agenda es una REJILLA con el motor del dental importado, color por especialidad y arrastre para reagendar. |
+| 7 | `feat/edu-visor-dental` | #161 | `ff173f4c` | Se retira el visor propio: el instituto monta EL MISMO visor que ve un dentista, en un modal `edu-vsr` cuya rejilla 2×2 cabe sin desplazar. |
+| 8 | `feat/edu-landing` | #162 | `d39a8085` | `/instituciones`: la landing pública del vertical, con tres escenas 3D procedurales y ninguna promesa sin archivo. |
+
+**112 archivos** cambian respecto de `origin/main`, +25 074 / −3 787. Quince commits: ocho de
+las ramas, seis merges y uno propio de la integración.
+
+### Los conflictos, y cómo quedó cada uno
+
+Seis choques de git, todos resueltos conservando las DOS partes:
+
+| Archivo | Quién chocó | Cómo quedó |
+|---|---|---|
+| `src/app/instituto/edu-theme.css` | viva, agenda y visor (tres merges seguidos) | Los cinco bloques enteros. Cada choque se resolvió por reconstrucción, no a ojo: se comprobó primero **qué parte de cada lado era apéndice y qué parte era edición a mitad de archivo** (`git show :1: / :2: / :3:`), se fusionó a tres bandas SOLO la zona central —siempre disjunta— y se concatenaron los apéndices en orden. Las clases que agenda y visor **borran** (`.edu-agenda*`, `.edu-daybar*`, `.edu-visor3d*`, `.edu-visorhoja`) siguen borradas y no las usa ni un `.tsx`. |
+| `src/lib/edu/estudios.ts` | cuota + visor | Unión de imports: los tres de `almacenamiento-core` y el `eduSignRead` del visor. El archivo final tiene las tres cosas — el corte de cuota (507), el `truncated` de volumen y el `lite`/notas del visor. |
+| `src/components/edu/expediente/estudios-screen.tsx` | volumen + visor | **El único choque de fondo.** Ver abajo. |
+| `scripts/edu-guard.cjs` | cuota + seed + visor + landing | `OWN_PREFIXES` con las cuatro rutas nuevas y `SHARED_FILES` con los seis compartidos. |
+| `scripts/edu-tests.cjs` | cuota + landing | `ROOTS` con las tres raíces nuevas: `src/app/admin/institutos`, `src/app/instituciones` y `src/components/public/instituciones`. |
+| `ORQUESTA.md` | las ocho | Los ocho reportes, enteros. Ver abajo: el auto-merge MINTIÓ. |
+
+### El choque de fondo: `estudios-screen.tsx`
+
+No es "las dos agregaron". Las dos ramas se contradicen:
+
+- **#161 (visor) BORRÓ la taxonomía de esa pantalla** a propósito: fuera los filtros
+  (`FILTRO_*`, `visibles`, `cuentas`), fuera el `EDU_STUDY_KIND_LABELS` de la tarjeta y fuera la
+  pregunta "¿Qué es esta imagen?" al subir. Su prueba lo fija: si vuelve cualquiera de las tres,
+  `edu-visor.test.ts` se pone roja.
+- **#160 (volumen) AÑADIÓ el aviso de corte** —`truncated`, `maxRows`, el banner y el sufijo del
+  conteo—, y **el texto de su banner terminaba diciendo "los filtros de aquí abajo"**, que es
+  justo lo que la otra rama acababa de quitar.
+
+Se conservan las dos: se parte de la versión del visor (sin taxonomía) y se le vuelven a poner
+las cuatro cosas de volumen. **El único texto que cambié yo** es el segundo párrafo del banner,
+que ya no puede hablar de filtros: ahora dice que lo que falta son los MÁS VIEJOS, que es la
+misma advertencia sin prometer un control que no existe. Las dos pruebas mandan y las dos pasan:
+`edu-expediente.test.ts` exige `truncated: boolean;`, `maxRows: number;`, `{truncated && (` y el
+literal "Se muestran los {maxRows} estudios más recientes"; `edu-visor.test.ts` exige
+`iconoDeArchivo(` y cero rastro de la taxonomía.
+
+### Lo que NO era un conflicto y habría llegado roto a producción
+
+**El visor borró archivos que la landing cita como prueba.** #162 construyó toda su honestidad
+sobre una regla mecánica: cada promesa lleva un `verifiedIn` con rutas de código, y
+`edu-landing.test.ts` falla si una de esas rutas no existe. #161, que se escribió en paralelo,
+**borró `src/components/edu/estudios/cbct-viewer.tsx` y `visor-shell.tsx`** al retirar el visor
+propio. Git no dice nada: son archivos distintos, cero conflicto, los dos merges limpios. Pero al
+juntarlas la landing citaba **tres veces dos archivos que ya no están** —la promesa "Visor con
+cortes y volumen" y la pregunta de las tomografías—, y `npm run test:edu` se pone rojo.
+
+Se repuntan a lo que HOY hace ese trabajo, sin tocar una palabra del copy (que sigue siendo
+cierto: el modal monta `DicomSetViewer` para el set CBCT y `DicomViewer2D` para el corte suelto):
+
+- `cbct-viewer.tsx` → `src/components/edu/estudios/visor-modal.tsx` (2 sitios)
+- `visor-shell.tsx` → `src/components/patient-3d/DicomSetViewer.tsx`
+
+Comprobado además que **las 56 rutas** citadas por `marketing.ts` existen, no solo esas tres.
+
+### El auto-merge de `ORQUESTA.md` mintió, y el conteo lo destapó
+
+Los ocho merges auto-fusionaron `ORQUESTA.md` sin un solo conflicto, y `git diff --numstat`
+decía **`2352 0`**: 2 352 líneas añadidas y **cero borradas**. Cero borradas es justo la señal
+que invita a no mirar más.
+
+Los reportes suman 2 362 líneas, no 2 352. **Faltaban diez.** Y no era ruido de separadores:
+git había usado el `### Gates` del reporte de la agenda como contexto común con el `### Gates`
+del reporte del visor, y con eso **partió el reporte de #159 en dos y metió su segunda mitad
+—47 líneas: las gates, el "Lo que NO se hizo" y el resto— DENTRO del reporte de #161**. Cada
+línea seguía en el archivo, así que ningún grep lo habría notado; lo que se perdió fue el orden,
+que en un archivo de bitácora es el contenido.
+
+`ORQUESTA.md` se reconstruyó a mano desde los blobs: el de `origin/main` entero, el reporte de
+la landing en la posición 2 (esa rama lo mete ARRIBA, no al final) y los siete restantes
+apilados en el orden del merge. Ahora `git diff --numstat` da **`2362 0`** y cada uno de los
+ocho reportes aparece **contiguo, byte a byte y exactamente una vez**.
+
+Con ese hallazgo se pasó la misma comprobación a **los diez archivos que toca más de una rama**:
+para cada uno, toda línea que una rama AÑADE está en el final y toda línea que BORRA sigue
+fuera. Nueve limpios. El décimo es `estudios-screen.tsx`, y las cuatro líneas que marca son
+exactamente las que se reconciliaron a mano (los dos conteos y el texto del banner).
+
+### Lo único que se hizo fuera de mergear
+
+`/admin/institutos` la creó #155 pero nadie le puso entrada en el menú del panel de plataforma.
+Se añade en `src/app/admin/admin-nav.tsx`, junto a Barberías e Inmobiliarias y con el mismo
+criterio de `isActive()` por segmento: `{ href: "/admin/institutos", label: "Institutos",
+icon: GraduationCap, section: "main" }`.
+
+Eso obliga a un segundo renglón: `admin-nav.tsx` **no estaba** en el `SHARED_FILES` de
+`edu-guard.cjs`, así que declararlo en `EDU_GUARD_SHARED` no habría servido de nada —el guard
+solo acepta como compartido lo que ya conoce— y el archivo habría caído en PROHIBIDO. Se agrega
+a esa lista, que es exactamente lo que ya hacen `barber-guard.cjs` y `realty-guard.cjs` con este
+mismo archivo y por esta misma razón.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
+  `prisma generate` limpio, **466/466 páginas**, tabla de rutas entera. Las cinco rutas que
+  pedía el encargo salen todas: `/instituto/clinica` (3.26 kB), `/instituto/agenda` (14.3 kB),
+  `/instituciones` (3.97 kB, estática), `/admin/institutos` (4.65 kB) y
+  `ƒ /api/instituto/estudios/[id]/lite`. Cero "Failed to compile", cero `error TS`, cero heap
+  OOM. Los warnings son los PREEXISTENTES y ajenos: el `Critical dependency` de `file-type` en
+  `api/ai-wallet/spei/topup` y tres clases ambiguas de Tailwind. El spam de `Environment
+  variable not found: DATABASE_URL` es el de siempre (worktree sin `.env`).
+- **`npm run test:edu` exit 0** — **35 archivos descubiertos, 1 158 pruebas, 1 158 pass,
+  0 fail**. Desde 29/933 en `main`: las ocho ramas suman seis archivos nuevos
+  (`edu-almacenamiento`, `edu-inicio-direccion`, `edu-seed-demo`, `edu-clinica-viva`,
+  `edu-agenda-rejilla`, `edu-landing`) y 225 pruebas.
+- **`npx tsc --noEmit -p tsconfig.json`** → 8 errores, **los mismos 8 que ya están en
+  `origin/main`**, y ninguno en un archivo que esta integración toque. De `src/lib/edu/` salen
+  DOS, los dos en `src/lib/edu/__tests__/edu-theme.test.ts` (líneas 174 y 283, `TS2802` por
+  recorrer un `Map`/`Set` con el `target` del tsconfig); ese archivo es **byte a byte idéntico
+  al de `main`**, igual que `src/lib/barber/__tests__/` de donde salen los otros seis. El build
+  de Next no los ve porque ignora los tipos de las pruebas.
+- **Guardia** con los seis compartidos declarados
+  (`prisma/schema.prisma`, `package.json`, `ORQUESTA.md`, `DicomSetViewer.tsx`, `sitemap.ts`,
+  `admin-nav.tsx`) → **exit 0**. 112 archivos: **106 propios, 6 compartidos declarados, 0 sin
+  declarar y 0 prohibidos**.
+- **Raíz del repo limpia:** `git ls-tree` de la raíz es **idéntico** al de `origin/main` — esta
+  rama no añade ni quita un solo archivo suelto ahí.
+
+### Los dos SQL, en este orden, ANTES del merge
+
+1. `sql/edu-cuota-storage.sql` — **BLOQUEANTE**. Añade
+   `edu_institutions."storageQuotaBytes"` (BIGINT, DEFAULT 5 TB, que hace de backfill). El
+   cliente Prisma ya la pide: sin ella, `/admin/institutos` y el medidor de Dirección revientan.
+2. `sql/edu-volumen.sql` — **no bloqueante**. Un índice y nada más
+   (`edu_appointments_student_status_idx`). Sin él el código funciona; la evaluación solo lee de
+   más. Se puede aplicar antes, durante o después.
+
+Los dos son idempotentes y ninguno toca una tabla del dental, de barbería ni de inmuebles.

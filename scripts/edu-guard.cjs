@@ -117,6 +117,13 @@ const SHARED_FILES = [
   // otro cambio ahí se revisa a mano, y declararlo obliga a que se vea:
   //   EDU_GUARD_SHARED="src/app/sitemap.ts" node scripts/edu-guard.cjs
   "src/app/sitemap.ts",
+  // La barra del panel de plataforma. El vertical solo le suma UNA entrada
+  // (/admin/institutos), igual que ya hicieron barber e inmobiliarias — los
+  // dos lo declaran en su propio guard con este mismo renglón. Va de
+  // COMPARTIDO y no de PROPIO porque el archivo es del dental y lo usan
+  // todos los verticales a la vez:
+  //   EDU_GUARD_SHARED="src/app/admin/admin-nav.tsx" node scripts/edu-guard.cjs
+  "src/app/admin/admin-nav.tsx",
 ];
 
 function isOwn(p) {

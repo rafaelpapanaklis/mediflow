@@ -359,9 +359,9 @@ export const EDU_LANDING_EXPEDIENTE: EduClaimGroup = {
       cuerpo:
         "La tomografía se abre dentro del expediente: los tres cortes —axial, coronal y sagital— con la cruz sincronizada en milímetros, medición sobre la imagen y el volumen en tres dimensiones, con hueso, tejido o aire y su umbral. Las mallas del escáner se ven en su propio visor.",
       verifiedIn: [
-        "src/components/edu/estudios/cbct-viewer.tsx",
+        "src/components/edu/estudios/visor-modal.tsx",
         "src/components/edu/estudios/modelo-3d-viewer.tsx",
-        "src/components/edu/estudios/visor-shell.tsx",
+        "src/components/patient-3d/DicomSetViewer.tsx",
       ],
     },
   ],
@@ -610,7 +610,7 @@ export const EDU_LANDING_FAQ: EduFaqItem[] = [
     verifiedIn: [
       "src/lib/edu/estudios-core.ts",
       "src/components/edu/expediente/edu-upload-client.ts",
-      "src/components/edu/estudios/cbct-viewer.tsx",
+      "src/components/edu/estudios/visor-modal.tsx",
     ],
   },
   {
