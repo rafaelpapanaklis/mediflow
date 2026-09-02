@@ -48,12 +48,25 @@ import {
   LiveTimeline,
   type HoverData,
 } from "./components/live-mode";
+import {
+  ChairCard,
+  FloorLegend,
+  FloorShadows,
+  FloorSlab,
+  LiveCounters,
+  type ChairCardData,
+  type StatusCounts,
+} from "./components/floor-look";
 import { SharePanel } from "./components/share-panel";
 import { WaitingRoom, type WaitingRoomEntry } from "./components/waiting-room";
 import { WelcomePrompt } from "./components/welcome-prompt";
 import { OptimizerModal } from "./components/optimizer-modal";
 import { Share2, Box } from "lucide-react";
-import { getChairStatus } from "@/lib/floor-plan/live-mode";
+import {
+  getChairAppointment,
+  getChairStatus,
+  getNextChairAppointment,
+} from "@/lib/floor-plan/live-mode";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./clinic-layout.module.css";
 
@@ -130,6 +143,12 @@ export function ClinicLayoutClient({
   const [hover, setHover] = useState<HoverData | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [showOptimizer, setShowOptimizer] = useState(false);
+  /**
+   * Sillón abierto en la tarjeta flotante (solo modo En Vivo). Se guarda el
+   * `resourceId` y NO el elemento del layout: la tarjeta habla de la
+   * unidad de la agenda, y así sobrevive a que el plano se reordene.
+   */
+  const [pickedChairId, setPickedChairId] = useState<string | null>(null);
 
   // v2: animaciones puerta/gabinete + iluminación dinámica
   /**
@@ -354,6 +373,7 @@ export function ClinicLayoutClient({
 
   // Al activar live, deselecciona y resetea viewTime a ahora.
   useEffect(() => {
+    setPickedChairId(null);
     if (liveMode) {
       setSelectedId(null);
       setDragType(null);
@@ -579,6 +599,7 @@ export function ClinicLayoutClient({
       }
       if (e.key === "Escape") {
         setSelectedId(null);
+        setPickedChairId(null);
         cancelDrag();
         setPanMode(false);
         return;
@@ -652,6 +673,8 @@ export function ClinicLayoutClient({
       // deselección — el window listener maneja el drop.
       if (dragType) return;
 
+      // El pan va PRIMERO: la mano (H) sigue funcionando también En Vivo,
+      // que es como se recorre un plano grande en el monitor de la sala.
       if (panMode) {
         panStartRef.current = {
           x: e.clientX,
@@ -661,13 +684,25 @@ export function ClinicLayoutClient({
         };
         return;
       }
-      // Click sobre el fondo deselecciona (solo con tool select).
+
       const target = e.target as Element;
+
+      // En Vivo: clic en el piso vacío = cerrar la tarjeta. El halo del
+      // sillón (`data-live-chair`) y su dibujo (`data-element-id`) tienen
+      // su propio manejador y NO cuentan como piso vacío.
+      if (liveMode) {
+        if (!target.closest("[data-live-chair]") && !target.closest("[data-element-id]")) {
+          setPickedChairId(null);
+        }
+        return;
+      }
+
+      // Click sobre el fondo deselecciona (solo con tool select).
       if (!target.closest("[data-element-id]")) {
         setSelectedId(null);
       }
     },
-    [panMode, dragType, panOffset.x, panOffset.y],
+    [liveMode, panMode, dragType, panOffset.x, panOffset.y],
   );
 
   /** Mousemove throttled con requestAnimationFrame para PAN y MOVE.
@@ -813,6 +848,31 @@ export function ClinicLayoutClient({
   const onElementMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
       e.stopPropagation();
+      // 🔴 En Vivo el piso NO se edita. Antes el candado solo tapaba el
+      // catálogo: el lienzo seguía aceptando arrastres, así que mirar el
+      // tablero y rozar un sillón movía el plano de una clínica en
+      // producción (y lo autoguardaba en silencio).
+      //
+      // Lo ÚNICO que se quita del modo es mover: el clic sigue haciendo
+      // algo. En un sillón abre su tarjeta; en una puerta o un gabinete
+      // los sigue abriendo y cerrando, igual que antes.
+      if (liveMode) {
+        const vivo = elements.find((x) => x.id === id);
+        if (!vivo) return;
+        if (vivo.resourceId) {
+          setPickedChairId(vivo.resourceId);
+          return;
+        }
+        if (OPENABLE_TYPES.has(vivo.type)) {
+          setOpenIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          });
+        }
+        return;
+      }
       if (panMode || dragType) return;
       setSelectedId(id);
       const elem = elements.find((x) => x.id === id);
@@ -828,7 +888,7 @@ export function ClinicLayoutClient({
       };
       setMovingId(id);
     },
-    [panMode, dragType, elements, eventToGrid],
+    [liveMode, panMode, dragType, elements, eventToGrid],
   );
 
   const onSvgWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
@@ -851,6 +911,72 @@ export function ClinicLayoutClient({
           (selectedElement?.resourceId && selectedElement.resourceId === c.id),
       ),
     [liveChairs, usedChairIds, selectedElement],
+  );
+
+  /* ─── En Vivo: contadores de arriba y tarjeta del sillón ─────────────
+   * Todo sale de las MISMAS citas que ya pintaron los halos: los
+   * contadores no pueden decir "2 libres" con tres halos verdes en
+   * pantalla, y la tarjeta no puede enseñar algo que el piso no enseñe.
+   */
+
+  /** Sillones DIBUJADOS en el plano. Uno dado de alta pero sin colocar no
+   *  cuenta: no está en el piso, así que no se puede contestar "¿dónde?". */
+  const placedLiveChairs = useMemo(() => {
+    const out: { resourceId: string; name: string }[] = [];
+    for (const el of elements) {
+      if (!el.resourceId) continue;
+      const chair = liveChairs.find((c) => c.id === el.resourceId);
+      if (chair) out.push({ resourceId: chair.id, name: chair.name });
+    }
+    return out;
+  }, [elements, liveChairs]);
+
+  const liveCounts: StatusCounts = useMemo(() => {
+    const counts: StatusCounts = { libre: 0, proximo: 0, ocupado: 0 };
+    if (!liveMode) return counts;
+    for (const c of placedLiveChairs) {
+      counts[getChairStatus(c.resourceId, viewTime, appointments)] += 1;
+    }
+    return counts;
+  }, [liveMode, placedLiveChairs, viewTime, appointments]);
+
+  const pickedCard: ChairCardData | null = useMemo(() => {
+    if (!liveMode || !pickedChairId) return null;
+    const chair = placedLiveChairs.find((c) => c.resourceId === pickedChairId);
+    if (!chair) return null;
+    const current = getChairAppointment(pickedChairId, viewTime, appointments);
+    const next = getNextChairAppointment(pickedChairId, viewTime, appointments);
+    const upcoming = appointments
+      .filter(
+        (a) =>
+          a.resourceId === pickedChairId &&
+          a.id !== current?.id &&
+          a.id !== next?.id &&
+          a.start.getTime() > viewTime.getTime(),
+      )
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+    return {
+      chairName: chair.name,
+      status: getChairStatus(pickedChairId, viewTime, appointments),
+      current,
+      next,
+      upcoming,
+    };
+  }, [liveMode, pickedChairId, placedLiveChairs, viewTime, appointments]);
+
+  /** Abre el expediente del paciente de una cita en una pestaña nueva. */
+  const openPatientRecord = useCallback(
+    (apt: LiveAppointment) => {
+      // Sin patientId no podemos navegar al expediente — la ruta
+      // /dashboard/patients/[id] requiere ese segmento.
+      if (!apt.patientId) {
+        toast.error(t("pages.clinicLayout.recordNotAvailable"));
+        return;
+      }
+      // Pestaña nueva para no salir del modo En Vivo.
+      window.open(`/dashboard/patients/${apt.patientId}`, "_blank", "noopener,noreferrer");
+    },
+    [t],
   );
 
   const ox = ORIG_X + panOffset.x;
@@ -943,7 +1069,19 @@ export function ClinicLayoutClient({
         >
           <g dangerouslySetInnerHTML={{ __html: td.draw(sx, sy, { isOpen, isOccupied }) }} />
           {labelText && (
-            <text x={sx + 20} y={sy - 64} className={styles.chairLabel} textAnchor="middle">
+            <text
+              x={sx + 20}
+              y={sy - 64}
+              /* Un sillón sin `resourceId` se dibuja igual pero no está
+                 conectado a la agenda: no se pinta En Vivo y nunca tendrá
+                 citas. La etiqueta en rojo lo dice desde el piso, que es
+                 donde se mira; el panel de la derecha ya lo explicaba,
+                 pero solo si lo seleccionabas. */
+              className={`${styles.chairLabel}${
+                td.isChair && !el.resourceId ? ` ${styles.chairLabelLoose}` : ""
+              }`}
+              textAnchor="middle"
+            >
               {labelText}
             </text>
           )}
@@ -1003,6 +1141,14 @@ export function ClinicLayoutClient({
   }, [lightingHour, t]);
 
   /* ─── Renders ─── */
+
+  /** El globo del hover. Medía 88 px fijos y recortaba "Puerta de baño";
+   *  ahora se estira con el texto (SVG no sabe ajustar una caja a su
+   *  contenido, así que se estima a ~5.9 px por carácter de la Inter 10). */
+  const hoverTipText = elementHover
+    ? `${elementHover.label}${elementHover.isOpen ? ` · ${t("pages.clinicLayout.openSuffix")}` : ""}`
+    : "";
+  const hoverTipWidth = Math.max(72, Math.min(240, hoverTipText.length * 5.9 + 26));
 
   // Welcome prompt cuando no hay layout previo (clínica nueva).
   if (!welcomeDismissed) {
@@ -1285,83 +1431,108 @@ export function ClinicLayoutClient({
 
         {/* ── Canvas + (Timeline si liveMode) ── */}
         <div
-          className={styles.canvasWrap}
+          className={`${styles.canvasWrap} ${liveMode ? styles.canvasWrapLive : ""}`}
           data-pan-mode={panMode && !liveMode ? "true" : "false"}
           data-panning={panStartRef.current ? "true" : "false"}
-          style={
-            liveMode
-              ? { display: "grid", gridTemplateRows: "1fr 180px" }
-              : undefined
-          }
         >
-          <svg
-            ref={svgRef}
-            className={styles.svgRoot}
-            viewBox="0 0 1920 1080"
-            preserveAspectRatio="xMidYMid meet"
-            style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
-            onMouseDown={onSvgMouseDown}
-            onMouseMove={onSvgMouseMove}
-            onMouseUp={onSvgMouseUp}
-            onMouseLeave={cancelMoveOrPan}
-            onWheel={onSvgWheel}
-          >
-            <defs>
-              {lightingMatrix && (
-                <filter
-                  id="mfLighting"
-                  x="0%"
-                  y="0%"
-                  width="100%"
-                  height="100%"
-                  colorInterpolationFilters="sRGB"
-                >
-                  <feColorMatrix type="matrix" values={lightingMatrix} />
-                </filter>
-              )}
-            </defs>
-            <g>{renderGrid()}</g>
-            <g filter={lightingMatrix ? "url(#mfLighting)" : undefined}>
-              {renderElements()}
-              {renderGhost()}
-            </g>
-            {/* Tooltip flotante sobre el elemento hovereado (modo Edición). */}
-            {elementHover && (
-              <g pointerEvents="none">
-                <rect
-                  x={elementHover.cx - 44}
-                  y={elementHover.topY - 22}
-                  width={88}
-                  height={18}
-                  rx={5}
-                  fill="rgba(20,40,80,0.86)"
-                />
-                <text
-                  x={elementHover.cx}
-                  y={elementHover.topY - 9}
-                  textAnchor="middle"
-                  fontFamily="Inter, system-ui, sans-serif"
-                  fontSize={10}
-                  fontWeight={700}
-                  fill="white"
-                >
-                  {elementHover.label}
-                  {elementHover.isOpen ? ` · ${t("pages.clinicLayout.openSuffix")}` : ""}
-                </text>
-              </g>
-            )}
-            {liveMode && (
-              <LiveOverlay
-                elements={elements}
+          {/* La caja del piso. Existe para que los flotantes (contadores,
+              leyenda y tarjeta) se coloquen contra el PISO y no contra el
+              hueco entero, que En Vivo incluye la línea de tiempo. */}
+          <div className={styles.canvasStage}>
+            <svg
+              ref={svgRef}
+              className={styles.svgRoot}
+              viewBox="0 0 1920 1080"
+              preserveAspectRatio="xMidYMid meet"
+              style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
+              onMouseDown={onSvgMouseDown}
+              onMouseMove={onSvgMouseMove}
+              onMouseUp={onSvgMouseUp}
+              onMouseLeave={cancelMoveOrPan}
+              onWheel={onSvgWheel}
+            >
+              <defs>
+                {lightingMatrix && (
+                  <filter
+                    id="mfLighting"
+                    x="0%"
+                    y="0%"
+                    width="100%"
+                    height="100%"
+                    colorInterpolationFilters="sRGB"
+                  >
+                    <feColorMatrix type="matrix" values={lightingMatrix} />
+                  </filter>
+                )}
+              </defs>
+              {/* La losa va DEBAJO de las baldosas: le da grosor al piso
+                  para que deje de flotar sobre el fondo. */}
+              <FloorSlab ox={ox} oy={oy} cols={GRID_COLS} rows={GRID_ROWS} />
+              <g>{renderGrid()}</g>
+              {/* Las sombras, entre el piso y los muebles. */}
+              <FloorShadows
+                elements={sortedElements}
+                byKey={catalog.byKey}
                 ox={ox}
                 oy={oy}
+                movingId={movingId}
+                movingPosition={movingPosition}
+              />
+              <g filter={lightingMatrix ? "url(#mfLighting)" : undefined}>
+                {renderElements()}
+                {renderGhost()}
+              </g>
+              {/* Tooltip flotante sobre el elemento hovereado (modo Edición). */}
+              {elementHover && (
+                <g pointerEvents="none">
+                  <rect
+                    x={elementHover.cx - hoverTipWidth / 2}
+                    y={elementHover.topY - 22}
+                    width={hoverTipWidth}
+                    height={18}
+                    rx={5}
+                    className={styles.hoverTipBox}
+                  />
+                  <text
+                    x={elementHover.cx}
+                    y={elementHover.topY - 9}
+                    textAnchor="middle"
+                    className={styles.hoverTipText}
+                  >
+                    {hoverTipText}
+                  </text>
+                </g>
+              )}
+              {liveMode && (
+                <LiveOverlay
+                  elements={elements}
+                  ox={ox}
+                  oy={oy}
+                  viewTime={viewTime}
+                  appointments={appointments}
+                  showFullNames={clinic.liveModeShowPatientNames}
+                  onHover={setHover}
+                  onPick={setPickedChairId}
+                />
+              )}
+            </svg>
+
+            {/* ── Lo que flota sobre el piso ───────────────────────── */}
+            {liveMode && <LiveCounters counts={liveCounts} t={t} />}
+            <FloorLegend live={liveMode} t={t} />
+            {liveMode && pickedCard && (
+              <ChairCard
+                data={pickedCard}
                 viewTime={viewTime}
-                appointments={appointments}
+                /* 🔴 La MISMA bandera que el panel y el tooltip. Abrir una
+                   tarjeta no destapa el nombre que la clínica pidió ocultar. */
                 showFullNames={clinic.liveModeShowPatientNames}
-                onHover={setHover}
+                onClose={() => setPickedChairId(null)}
+                onOpenRecord={openPatientRecord}
+                t={t}
               />
             )}
-          </svg>
+          </div>
           {liveMode && (
             <LiveTimeline
               elements={elements}
@@ -1401,18 +1572,7 @@ export function ClinicLayoutClient({
                 viewTime={viewTime}
                 appointments={appointments}
                 showFullNames={clinic.liveModeShowPatientNames}
-                onOpenOdontogram={(apt) => {
-                  // Sin patientId no podemos navegar al expediente — la ruta
-                  // /dashboard/patients/[id] requiere ese segmento.
-                  if (!apt.patientId) {
-                    toast.error(
-                      t("pages.clinicLayout.recordNotAvailable"),
-                    );
-                    return;
-                  }
-                  // Abrir en pestaña nueva para no salir del modo En Vivo.
-                  window.open(`/dashboard/patients/${apt.patientId}`, "_blank", "noopener,noreferrer");
-                }}
+                onOpenOdontogram={openPatientRecord}
               />
               <div style={{ marginTop: 14 }}>
                 <WaitingRoom
