@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -30,6 +31,7 @@ import {
   eduFormatDayLong,
   eduFormatDayShort,
   eduHasAgendaFilters,
+  eduMinutesToLabel,
   eduShiftDayISO,
   type EduAgendaQuery,
   type EduAppointmentRow,
@@ -40,6 +42,7 @@ import {
 import {
   EDU_AGENDA_DENSITIES,
   EDU_AGENDA_DENSITY_HINTS,
+  EDU_AGENDA_DEFAULT_WINDOW,
   EDU_AGENDA_DENSITY_KEY,
   EDU_AGENDA_DENSITY_LABELS,
   EDU_AGENDA_NARROW_PX,
@@ -49,8 +52,9 @@ import {
   eduAgendaLayout,
   eduAgendaLegend,
   eduAgendaSlots,
+  eduChairSinHorario,
+  eduSlotHeightFor,
   parseEduAgendaDensity,
-  slotHeightFor,
   type EduAgendaChair,
   type EduAgendaColumn,
   type EduAgendaDensity,
@@ -113,8 +117,24 @@ import {
 /** Alto de la fila de encabezados. Se descuenta para calcular el zoom
  *  "todo el día": si no, la última hora quedaría siempre cortada. */
 const EDU_AG_CABECERA_PX = 46;
+/** Los dos bordes de 1 px de `.edu-ag__scroll`. Van dentro del alto acotado
+ *  (`box-sizing: border-box`), así que también se descuentan: sin ellos el
+ *  día "que cabe" se pasaba por dos píxeles y aparecía una barra inútil. */
+const EDU_AG_BORDES_PX = 2;
 /** Aire por debajo de la rejilla para que no muerda el borde de abajo. */
 const EDU_AG_AIRE_PX = 20;
+/**
+ * Alto que se supone mientras NADIE ha medido todavía.
+ *
+ * 🔴 No es el respaldo de verdad: ese vive en el CSS (`--edu-ag-alto`, que
+ * se calcula contra el alto de la VENTANA) y es el que se queda si la
+ * medida nunca llega. Este número solo alimenta el alto de renglón del
+ * primer render —el del servidor, donde no hay ventana que medir— y dura lo
+ * que tarda el efecto de layout en correr, que es antes de pintar. Se deja
+ * conservador a propósito: prefiere renglones cortos, que caben, a
+ * renglones largos que obligarían a desplazar en el preset que promete que
+ * no hace falta. */
+const EDU_AG_ALTO_SIN_MEDIR = 520;
 
 export interface EduAgendaScreenProps {
   rows: EduAppointmentRow[];
@@ -199,7 +219,43 @@ export function EduAgendaScreen({
   const cajaRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [ancho, setAncho] = useState<number | null>(null);
-  const [alto, setAlto] = useState(520);
+  // `null` = TODAVÍA NADIE HA MEDIDO. No es lo mismo que "mide 520": mientras
+  // vale null la pantalla no escribe `--edu-ag-alto` en línea y manda el
+  // respaldo del CSS, que se calcula contra el alto de la ventana. Un número
+  // fijo aquí sería un respaldo silencioso —520 px pasara lo que pasara— y
+  // en una pantalla de 1080 dejaba la rejilla a la mitad de lo que cabe.
+  const [alto, setAlto] = useState<number | null>(null);
+
+  const medirAlto = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // Se mide desde dónde EMPIEZA la rejilla hasta el borde de abajo de la
+    // ventana. El resultado no depende del alto propio del elemento, así
+    // que no puede realimentarse.
+    const arriba = el.getBoundingClientRect().top;
+    const disponible = window.innerHeight - arriba - EDU_AG_AIRE_PX;
+    const acotado = Math.max(300, Math.min(1100, Math.round(disponible)));
+    setAlto((prev) => (prev !== null && Math.abs(prev - acotado) < 5 ? prev : acotado));
+  }, []);
+
+  /**
+   * 🔴 SE MIDE EN CUANTO EL NODO EXISTE, no en un efecto de después.
+   *
+   * El efecto de layout de abajo corre con `scrollRef.current` ya puesto
+   * SOLO si la rejilla estaba montada en ese render; si la pantalla arrancó
+   * en modo lista (o angosta en Semana, que cae a lista sola), el efecto se
+   * encontraba un `null`, se iba sin medir, y al volver a la rejilla no
+   * había ninguna dependencia que lo despertara: el alto se quedaba en el
+   * respaldo para siempre. Midiendo desde el propio callback de la `ref` no
+   * hay ventana donde eso pase — el nodo no puede existir sin medirse.
+   */
+  const montarScroll = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el;
+      if (el) medirAlto();
+    },
+    [medirAlto],
+  );
 
   useLayoutEffect(() => {
     const caja = cajaRef.current;
@@ -215,22 +271,18 @@ export function EduAgendaScreen({
     // 32 columnas. Con ella, el observador solo se ocupa de los cambios.
     anotar(caja.getBoundingClientRect().width);
     if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver((entries) => anotar(entries[0]?.contentRect.width ?? 0));
+    const ro = new ResizeObserver((entries) => {
+      anotar(entries[0]?.contentRect.width ?? 0);
+      // Y de paso el alto: cualquier cosa que cambie de tamaño por encima de
+      // la rejilla (la leyenda que se envuelve en otro renglón, un aviso que
+      // aparece, una fuente que carga tarde) mueve dónde empieza la rejilla.
+      // No se realimenta: `medirAlto` no lee el alto de la rejilla, lee dónde
+      // EMPIEZA, así que el segundo pase mide lo mismo y no cambia el estado.
+      medirAlto();
+    });
     ro.observe(caja);
     return () => ro.disconnect();
-  }, []);
-
-  const medirAlto = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    // Se mide desde dónde EMPIEZA la rejilla hasta el borde de abajo de la
-    // ventana. El resultado no depende del alto propio del elemento, así
-    // que no puede realimentarse.
-    const arriba = el.getBoundingClientRect().top;
-    const disponible = window.innerHeight - arriba - EDU_AG_AIRE_PX;
-    const acotado = Math.max(300, Math.min(1100, Math.round(disponible)));
-    setAlto((prev) => (Math.abs(prev - acotado) < 5 ? prev : acotado));
-  }, []);
+  }, [medirAlto]);
 
   const angosto = ancho !== null && ancho < EDU_AGENDA_NARROW_PX;
   // La semana en un teléfono se lee como lista, no como siete columnas de
@@ -251,8 +303,17 @@ export function EduAgendaScreen({
   // devuelve 110 px de alto y sin esto la rejilla no se enteraba—.
   useLayoutEffect(() => {
     medirAlto();
+    // Y otra vez en el siguiente cuadro: la primera medida es correcta para
+    // el layout de ESE instante, y hay cosas que lo mueven justo después
+    // (una fuente que termina de cargar, la barra del navegador del teléfono
+    // que se retrae). Sin esta segunda pasada, la rejilla se quedaba con el
+    // alto de un layout que ya no existe.
+    const cuadro = requestAnimationFrame(medirAlto);
     window.addEventListener("resize", medirAlto);
-    return () => window.removeEventListener("resize", medirAlto);
+    return () => {
+      cancelAnimationFrame(cuadro);
+      window.removeEventListener("resize", medirAlto);
+    };
   }, [medirAlto, esLista, query.view, ancho, filtrosAbiertos]);
 
   // ── Zoom ────────────────────────────────────────────────────────────
@@ -291,7 +352,24 @@ export function EduAgendaScreen({
   );
 
   const slots = eduAgendaSlots(layout.window);
-  const slotHpx = slotHeightFor(densidad, Math.max(120, alto - EDU_AG_CABECERA_PX), slots);
+  // El hueco REAL de los renglones: el alto acotado menos la fila de
+  // encabezados y los dos bordes. Dividir el alto entero repartía de más y
+  // la última hora se salía por abajo justo en el preset que promete que
+  // todo cabe.
+  const hueco = Math.max(
+    120,
+    (alto ?? EDU_AG_ALTO_SIN_MEDIR) - EDU_AG_CABECERA_PX - EDU_AG_BORDES_PX,
+  );
+  const slotHpx = eduSlotHeightFor(densidad, hueco, slots);
+
+  // ¿El eje quedó MÁS CORTO que la jornada de siempre, y por el horario de
+  // los sillones? (Con un sillón sin horario nunca puede pasar: ese aporta
+  // la jornada entera.) Es la diferencia entre "esto está roto" y "esto es
+  // lo que configuraste", y solo la pantalla la puede contar.
+  const ejeRecortado =
+    !chairs.some(eduChairSinHorario) &&
+    (layout.window.dayStart > EDU_AGENDA_DEFAULT_WINDOW.dayStart ||
+      layout.window.dayEnd < EDU_AGENDA_DEFAULT_WINDOW.dayEnd);
 
   // ── Arrastrar ───────────────────────────────────────────────────────
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -836,9 +914,7 @@ export function EduAgendaScreen({
                 canManage={canManage && !angosto}
                 slotHpx={slotHpx}
                 alto={alto}
-                scrollRef={(el) => {
-                  scrollRef.current = el;
-                }}
+                scrollRef={montarScroll}
                 onOpen={abrirDetalle}
                 onHueco={abrirHueco}
               />
@@ -861,6 +937,27 @@ export function EduAgendaScreen({
                 : `Hay ${layout.hiddenRows} ${
                     layout.hiddenRows === 1 ? "cita" : "citas"
                   } fuera del sillón que estás filtrando. Quita el filtro o pásate a Lista.`}
+            </span>
+          </p>
+        )}
+
+        {/* 🔴 UN EJE CORTO NO SE EXPLICA SOLO. Cuando los sillones tienen
+            horario, el eje pinta ESE horario y no la jornada de siempre — es
+            lo correcto, pero visto desde fuera es idéntico a una agenda
+            rota: "solo llega a las dos y no me deja bajar". Aquí la pantalla
+            dice de dónde salió el recorte y dónde se cambia, que es la misma
+            regla que el resto de esta pantalla (lo que decide, lo DICE). */}
+        {!pintaLista && ejeRecortado && (
+          <p className="edu-ag__aviso">
+            <ListFilter size={14} aria-hidden="true" />
+            <span>
+              El eje va de {eduMinutesToLabel(layout.window.dayStart * 60)} a{" "}
+              {eduMinutesToLabel(layout.window.dayEnd * 60)} porque ese es el horario de los
+              sillones. Se cambia en{" "}
+              <Link href="/instituto/sillones" className="edu-link">
+                Sillones
+              </Link>
+              ; una cita fuera de ese rango se sigue viendo.
             </span>
           </p>
         )}

@@ -107,6 +107,50 @@ export const EDU_AGENDA_DENSITY_HINTS: Record<AgendaDensity, string> = {
   spacious: "Renglones de 30 px: el máximo detalle.",
 };
 
+/**
+ * Renglón mínimo del preset "Todo el día".
+ *
+ * 🔴 NO es el `FIT_MIN_SLOT_HPX` del dental (10 px), y la diferencia no es
+ * un capricho: allá el piso está puesto para que el TEXTO DE LAS TARJETAS
+ * siga siendo legible y se acepta que reaparezca el desplazamiento; aquí el
+ * preset PROMETE que el día entero cabe sin desplazar, y con 10 px una
+ * jornada de 12 h (48 renglones = 480 px) no cabía en el hueco real que le
+ * queda a la rejilla —medido: 416 px en 1366×768 y 349 px en un teléfono—,
+ * así que se comía las últimas seis horas SIN dejar bajar a verlas.
+ *
+ * 5 px por renglón = 20 px de banda por hora. El número sale de MEDIR, no
+ * de la intuición: el rótulo del eje ocupa 12 px de caja (12 px de letra
+ * con `line-height: 1`, ver edu-theme.css), así que a 20 px por hora quedan
+ * 8 px de aire entre una hora y la siguiente. Por debajo empiezan a
+ * tocarse, y ahí sí vale más que vuelva el desplazamiento —que funciona—
+ * que un eje ilegible: es el suelo, no el objetivo. Con él, una jornada de
+ * 15 h entra en los 303 px que deja un teléfono de 390×844. El detalle
+ * vive en "Media" y "Amplia".
+ */
+export const EDU_AGENDA_FIT_MIN_SLOT_HPX = 5;
+
+/**
+ * El alto del renglón, con el piso de arriba en vez del del dental.
+ *
+ * Para "Media" y "Amplia" delega en `slotHeightFor` tal cual (20 y 30 px):
+ * las densidades fijas son las mismas y duplicar los números aquí sería
+ * justo el bug que `slot-metrics` documenta.
+ *
+ * `disponiblePx` es el hueco REAL para los renglones: el alto acotado del
+ * contenedor MENOS la fila de encabezados y los bordes. Si se le pasa el
+ * alto entero, el día "que cabe" se pasa por el alto de la cabecera y la
+ * última hora queda cortada.
+ */
+export function eduSlotHeightFor(
+  density: AgendaDensity,
+  disponiblePx: number | null,
+  slotsTotal: number,
+): number {
+  if (density !== "fit") return slotHeightFor(density, null, slotsTotal);
+  if (disponiblePx == null || disponiblePx <= 0 || slotsTotal <= 0) return DEFAULT_SLOT_HPX;
+  return Math.max(EDU_AGENDA_FIT_MIN_SLOT_HPX, Math.floor(disponiblePx / slotsTotal));
+}
+
 /** Dónde se recuerda el zoom entre visitas. */
 export const EDU_AGENDA_DENSITY_KEY = "edu-agenda-densidad";
 
@@ -169,10 +213,13 @@ export interface EduAgendaChair {
  *   · la HORA: aquí son minutos desde medianoche (480), allá texto "08:00".
  *
  * Se juntan los horarios de TODOS los sillones visibles y el motor se queda
- * con la unión (el que abre más temprano y el que cierra más tarde). Un
- * sillón SIN filas no aporta ninguna —está siempre abierto y no puede
- * estrechar el eje de los demás—, y si NINGUNO tiene horario la lista sale
- * vacía y el motor cae al lienzo por defecto.
+ * con la unión (el que abre más temprano y el que cierra más tarde).
+ *
+ * 🔴 Un sillón SIN filas no aporta ninguna, y aquí eso NO significa que no
+ * pase nada: está siempre abierto, así que lo que aporta lo pone
+ * `eduAgendaWindow` con `eduJornadaAbierta`. Esta función es solo la
+ * traducción de lo capturado; leerla sola engaña, porque un sillón sin
+ * horario desaparecía del eje y terminaba con el de su vecino.
  */
 export function eduChairScheduleDays(chairs: readonly EduAgendaChair[]): ScheduleDay[] {
   const out: ScheduleDay[] = [];
@@ -193,6 +240,42 @@ export function eduChairScheduleDays(chairs: readonly EduAgendaChair[]): Schedul
   return out;
 }
 
+/**
+ * ¿Este sillón acepta CUALQUIER hora?
+ *
+ * Es la regla del servidor, con su mismo criterio (`eduScheduleAllows`:
+ * `slots.length === 0` → true) y no una parecida: sin filas de horario el
+ * sillón está SIEMPRE ABIERTO, y con una sola fila solo acepta lo que caiga
+ * dentro de ella. Se cuentan las filas CRUDAS —no las válidas— justo para
+ * no separarse del servidor: si el eje usara otro criterio, pintaría huecos
+ * que el alta después rebota, o escondería huecos que sí acepta.
+ */
+export function eduChairSinHorario(chair: EduAgendaChair): boolean {
+  return (chair.schedules ?? []).length === 0;
+}
+
+/**
+ * Lo que un sillón SIN horario le aporta al eje: la jornada por defecto, en
+ * cada uno de los días que se están pintando.
+ *
+ * 🔴 Sin esto, un sillón siempre abierto se quedaba con el eje del vecino.
+ * El comentario de `eduChairScheduleDays` decía que un sillón sin filas "no
+ * puede estrechar el eje de los demás", y era verdad al revés: no aportaba
+ * nada, así que eran LOS DEMÁS los que se lo estrechaban a él. Con dos
+ * sillones —uno con la franja 08:00–14:00 que el editor de Sillones trae
+ * escrita por defecto y otro recién dado de alta— el eje se quedaba en seis
+ * horas, y las tardes del sillón que SÍ acepta citas a las cuatro no se
+ * podían ni ver ni tocar.
+ */
+function eduJornadaAbierta(visibleDays: readonly number[]): ScheduleDay[] {
+  return visibleDays.map((dayOfWeek) => ({
+    dayOfWeek,
+    enabled: true,
+    openTime: eduMinutesToLabel(EDU_AGENDA_DEFAULT_WINDOW.dayStart * 60),
+    closeTime: eduMinutesToLabel(EDU_AGENDA_DEFAULT_WINDOW.dayEnd * 60),
+  }));
+}
+
 /** Los días (0=lunes…6=domingo) que la vista pinta: uno en Día, siete en Semana. */
 export function eduAgendaVisibleDays(view: EduAgendaView, days: readonly string[]): number[] {
   const fuente = view === "semana" ? days : days.slice(0, 1);
@@ -204,11 +287,25 @@ export function eduAgendaVisibleDays(view: EduAgendaView, days: readonly string[
 /**
  * La ventana horaria que el EJE dibuja.
  *
- * Es `paintedAgendaWindow` del dental, tal cual: horario real de los días
- * visibles, ensanchado hasta cubrir la cita más temprana y la más tardía
- * del lote. Solo presentación — nada de lo que LEE citas pasa por aquí (el
- * rango de lectura lo decide `eduDayRange` en el servidor, y estrecharlo
- * dejaría de traer filas).
+ * Es `paintedAgendaWindow` del dental —horario real de los días visibles,
+ * ensanchado hasta cubrir la cita más temprana y la más tardía del lote—
+ * con UNA adaptación que el dental no necesita: allá la clínica es una y
+ * tiene un horario; aquí cada SILLÓN tiene el suyo, y uno sin capturar
+ * está siempre abierto. El eje es la UNIÓN de lo que aporta cada sillón
+ * que se está pintando:
+ *
+ *   · con franjas ese día  → sus franjas, redondeadas a horas completas;
+ *   · con franjas, pero NO ese día → nada (ese día está cerrado);
+ *   · SIN franjas ningunas → la jornada por defecto, 08:00–20:00, porque
+ *     acepta cualquier hora (ver `eduChairSinHorario`);
+ *   · si al final no aporta nadie → la jornada por defecto también.
+ *
+ * Y encima de todo eso, las citas del día lo ensanchan: una cita a las 7:30
+ * se VE aunque el sillón abra a las 8 (el alta AVISA, no bloquea).
+ *
+ * Solo presentación — nada de lo que LEE citas pasa por aquí (el rango de
+ * lectura lo decide `eduDayRange` en el servidor, y estrecharlo dejaría de
+ * traer filas).
  */
 export function eduAgendaWindow(input: {
   chairs: readonly EduAgendaChair[];
@@ -218,10 +315,13 @@ export function eduAgendaWindow(input: {
   timezone: string;
 }): { dayStart: number; dayEnd: number } {
   const { chairs, rows, view, days, timezone } = input;
+  const visibleDays = eduAgendaVisibleDays(view, days);
+  const capturados = eduChairScheduleDays(chairs);
+  const hayAbierto = chairs.some(eduChairSinHorario);
   return paintedAgendaWindow({
     fallback: EDU_AGENDA_DEFAULT_WINDOW,
-    schedules: eduChairScheduleDays(chairs),
-    visibleDays: eduAgendaVisibleDays(view, days),
+    schedules: hayAbierto ? [...capturados, ...eduJornadaAbierta(visibleDays)] : capturados,
+    visibleDays,
     appointments: rows.map((r) => ({ startsAt: r.startsAt, endsAt: r.endsAt })),
     onlyDayISO: view === "semana" ? null : (days[0] ?? null),
     timezone,

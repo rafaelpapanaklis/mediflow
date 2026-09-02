@@ -218,7 +218,7 @@ export function EduExpedienteScreen({
           <p className="edu-empty__detail">
             Una nota clínica cuelga de un CASO —este paciente, contigo, en esta especialidad—
             porque es el registro de un acto clínico y un acto clínico tiene responsable. El caso se
-            abre en el tamizaje.
+            abre en la valoración.
           </p>
         </div>
       )}

@@ -143,7 +143,7 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
           <div className="edu-empty">
             <p className="edu-empty__title">Sin casos que mostrarte</p>
             <p className="edu-empty__detail">
-              Un caso se abre en el tamizaje: es lo que le pone estudiante y especialidad al paciente. Si
+              Un caso se abre en la valoración: es lo que le pone estudiante y especialidad al paciente. Si
               este paciente ya tiene casos con otros estudiantes, no te tocan.
             </p>
           </div>

@@ -77,7 +77,7 @@ export function EduTamizajeScreen({
         <div className="edu-empty">
           <p className="edu-empty__title">No hay valoraciones agendadas</p>
           <p className="edu-empty__detail">
-            Aquí salen las citas de tipo <strong>Tamizaje</strong> de los próximos días.
+            Aquí salen las citas de tipo <strong>Valoración</strong> de los próximos días.
             Recepción las agenda desde la Agenda; si ya valoraste a alguien sin cita, usa
             &quot;Valorar sin cita&quot;.
           </p>
@@ -192,7 +192,7 @@ function FormularioTamizaje({
 
   return (
     <EduModal
-      title="Tamizaje"
+      title="Valoración"
       subtitle={
         cita
           ? `${cita.patientName} · folio ${cita.patientFolio}`

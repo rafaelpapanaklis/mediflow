@@ -8,8 +8,10 @@ import { EduPadronError } from "@/lib/edu/padron";
 import { getEduCampusScope } from "@/lib/edu/campus";
 import { eduWithCampus } from "@/lib/edu/campus-core";
 import { getEduClinicaViva } from "@/lib/edu/clinica-viva";
+import { getEduPlanoSede } from "@/lib/edu/plano";
 import { eduLiveFloorVisibility } from "@/lib/edu/visibility";
 import { EduDenied } from "@/components/edu/edu-denied";
+import { EduPlanoScreen } from "@/components/edu/clinica/plano-screen";
 import { EduVivaScreen } from "@/components/edu/clinica/viva-screen";
 
 export const metadata: Metadata = {
@@ -18,42 +20,40 @@ export const metadata: Metadata = {
 };
 
 /**
- * /instituto/clinica — LOS SILLONES DE LA ESCUELA, AHORA MISMO.
+ * /instituto/clinica — EL PLANO DE LA CLÍNICA, EN VIVO.
  *
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 EL ESTADO SALE DE LA CITA, NO DE QUIÉN ESTÁ CONECTADO.
+ * 🔴 ES EL PISO, NO UNA LISTA. Antes esta pantalla era una tarjeta por
+ * sillón; contestaba "¿cuántos quedan libres?" y no contestaba la pregunta
+ * que se hace de verdad en el piso clínico: "¿DÓNDE hay uno libre?". Ahora
+ * se pinta el PLANO —el mismo mundo 3D del dental, importado entero— con
+ * cada sillón en su sitio, y el estudiante y el paciente dibujados en los
+ * que están ocupados.
  *
- * El producto no registra presencia y no va a empezar a hacerlo — es la
- * decisión de la Ola 7, escrita en el panel de Dirección. Un sillón está
- * ocupado porque su cita está en IN_CHAIR o IN_PROGRESS. Con presencia, el
- * alumno que cierra el navegador con el paciente todavía en el sillón
- * dejaría la unidad pintada de verde.
- *
- * 🔴 EL MOTOR ES EL DEL DENTAL, IMPORTADO. `src/lib/floor-plan/live-mode.ts`
- * ya sabe decidir libre/próxima/ocupada y sacar la cita activa; se usa tal
- * cual y lo que no encaja se adapta de este lado (IN_CHAIR no existe en el
- * dental). Todo eso vive en src/lib/edu/clinica-viva-core.ts, con su
- * explicación larga.
+ * 🔴 EL ESTADO SIGUE SALIENDO DE LA CITA, NO DE QUIÉN ESTÁ CONECTADO. Es la
+ * decisión de la Ola 7 y esta ola no la reabre: un sillón está ocupado
+ * porque su cita está en IN_CHAIR o IN_PROGRESS. Ver clinica-viva-core.ts.
  *
  * ── LAS DOS CERRADURAS ──────────────────────────────────────────────────
- *  1. el PERMISO "clinica.view" AQUÍ, no solo en el menú. Lo llevan
- *     DIRECCION y DOCENTE; CAJA y el ALUMNO no.
+ *  1. el PERMISO "clinica.view" AQUÍ, no solo en el menú. Y "clinica.edit"
+ *     —una key aparte— para el botón de acomodar el plano.
  *  2. el ALCANCE (src/lib/edu/visibility.ts, `eduLiveFloorVisibility`, el
  *     punto único): si devuelve "none" no se pinta nada. Es lo que cierra
  *     el caso de que alguien le encienda la casilla a un alumno por
- *     override — y lo mismo hace el endpoint, para que un GET directo con
- *     su sesión conteste 403.
+ *     override — y lo mismo hacen los endpoints, para que un GET directo
+ *     con su sesión conteste 403.
  *
- * ── LA SEDE ─────────────────────────────────────────────────────────────
- * `?sede=<id>` es el filtro de esta pantalla; sin él manda la sede elegida
- * en la barra superior. Los dos pasan por `getEduCampusScope`, que valida
- * contra el ACCESO de la persona: un id ajeno no amplía nada.
+ * ── UN PLANO ES DE UNA SEDE ─────────────────────────────────────────────
+ * `?sede=<id>` es el filtro; sin él manda la sede elegida en la barra
+ * superior. Los dos pasan por `getEduCampusScope`, que valida contra el
+ * ACCESO de la persona. Y como un plano dibuja UN edificio, la vista
+ * consolidada no existe aquí: sin sede elegida se pinta la primera a la que
+ * esa persona entra, y la pantalla lo dice.
  *
- * ⚠️ Aquí NO hace falta el aviso de "husos distintos" que sí lleva la
- * agenda, y es por la forma de la pantalla: cada tarjeta es UN sitio y
- * pinta su hora en la hora de pared de SU sede. Lo que miente es una
- * rejilla que pone las 9:00 de Tijuana y las 9:00 de Mérida en la misma
- * columna; aquí no hay columna de horas que compartir.
+ * ⚠️ Si el instituto todavía no tiene sedes (o falta aplicar
+ * sql/edu-ola-11.sql), no hay plano que dibujar y se cae al TABLERO DE
+ * TARJETAS de siempre. Es la misma pantalla que había antes de esta ola:
+ * degradar a lo anterior es mejor que un hueco con un mensaje técnico.
  */
 export default async function InstitutoClinicaVivaPage({
   searchParams,
@@ -68,19 +68,57 @@ export default async function InstitutoClinicaVivaPage({
     return (
       <EduDenied
         permission="clinica.view"
-        what="La clínica en vivo: qué sillones están libres, cuáles están por ocuparse y quién está atendiendo en cada uno."
+        what="La clínica en vivo: el plano del piso, qué sillones están libres y quién está atendiendo en cada uno."
       />
     );
   }
+  const puedeEditar = hasEduPermission(permUser, "clinica.edit");
 
   const crudo = searchParams?.sede;
   const pedida = typeof crudo === "string" ? crudo : Array.isArray(crudo) ? crudo[0] : undefined;
   const sede = await getEduCampusScope(ctx, pedida);
 
   const scope = eduLiveFloorVisibility(ctx);
+  const scopeKind = scope.kind === "all" ? "all" : "supervised";
+  const campuses = sede.options.map((c) => ({ id: c.id, name: c.name }));
+  // Un plano dibuja UN edificio: en consolidado se pinta el primero al que
+  // esta persona entra (la pantalla lo dice y deja cambiarlo).
+  const campusId = sede.activeId ?? sede.options[0]?.id ?? "";
 
   try {
-    const board = await getEduClinicaViva(eduWithCampus(ctx, sede));
+    if (!campusId) {
+      // Sin sedes no hay plano. Se cae al tablero de tarjetas de siempre.
+      const board = await getEduClinicaViva(eduWithCampus(ctx, sede));
+      return (
+        <div className="edu-page edu-page--ancha">
+          <header className="edu-pagehead">
+            <div>
+              <h1 className="edu-page__title">Clínica en vivo</h1>
+              <p className="edu-page__lead">
+                Un recuadro por sillón, con el número que está pintado en la pared. El plano en
+                3D necesita que la escuela tenga al menos una sede dada de alta.
+              </p>
+            </div>
+          </header>
+          <EduVivaScreen
+            board={board}
+            campuses={campuses}
+            campusActiveId={sede.activeId}
+            campusAllLabel={sede.allLabel}
+            scopeKind={scopeKind}
+          />
+        </div>
+      );
+    }
+
+    // El plano (guardado o automático) y el estado vivo de ESA sede. Son
+    // dos lecturas y no una a propósito: el plano cambia una vez al año y
+    // el estado cada veinte segundos — el sondeo del navegador solo vuelve
+    // a pedir el segundo.
+    const plano = await getEduPlanoSede({ ...ctx, campusIds: sede.campusIds }, campusId);
+    const board = await getEduClinicaViva({ ...ctx, campusIds: [campusId] }, new Date(), {
+      horario: true,
+    });
 
     return (
       <div className="edu-page edu-page--ancha">
@@ -88,9 +126,11 @@ export default async function InstitutoClinicaVivaPage({
           <div>
             <h1 className="edu-page__title">Clínica en vivo</h1>
             <p className="edu-page__lead">
-              Un recuadro por sillón, con el número que está pintado en la pared. El color sale
-              del estado de la cita —no de quién tenga la pantalla abierta—, así que un paciente
-              sentado sigue ocupando su unidad aunque nadie esté mirando. Se actualiza sola.
+              El piso de {plano.campus.name}, con cada sillón donde está de verdad. En los
+              ocupados se dibujan el estudiante y su paciente; haz clic en cualquiera para ver
+              quién es y abrir su ficha. El color sale del estado de la cita —no de quién tenga
+              la pantalla abierta—, así que un paciente sentado sigue ocupando su unidad aunque
+              nadie esté mirando.
             </p>
           </div>
         </header>
@@ -100,19 +140,24 @@ export default async function InstitutoClinicaVivaPage({
             <div>
               <p className="edu-banner__title">Tu cuenta no tiene ninguna sede</p>
               <p className="edu-banner__detail">
-                Alguien te dejó marcado en sedes que ya no existen, así que aquí no hay sillones
-                que mostrarte. Pídele a la dirección que te dé una sede en Sedes.
+                Alguien te dejó marcado en sedes que ya no existen, así que aquí no hay piso que
+                mostrarte. Pídele a la dirección que te dé una sede en Sedes.
               </p>
             </div>
           </div>
         )}
 
-        <EduVivaScreen
+        <EduPlanoScreen
           board={board}
-          campuses={sede.options.map((c) => ({ id: c.id, name: c.name }))}
+          layout={plano.layout}
+          revision={plano.revision}
+          campus={plano.campus}
+          chairs={plano.chairs}
+          campuses={campuses}
           campusActiveId={sede.activeId}
           campusAllLabel={sede.allLabel}
-          scopeKind={scope.kind === "all" ? "all" : "supervised"}
+          scopeKind={scopeKind}
+          puedeEditar={puedeEditar}
         />
       </div>
     );
@@ -128,7 +173,7 @@ export default async function InstitutoClinicaVivaPage({
           </header>
           <div className="edu-banner edu-banner--warn" role="alert">
             <div>
-              <p className="edu-banner__title">Este tablero no se puede pintar para tu cuenta</p>
+              <p className="edu-banner__title">Este plano no se puede pintar para tu cuenta</p>
               <p className="edu-banner__detail">{err.message}</p>
             </div>
           </div>

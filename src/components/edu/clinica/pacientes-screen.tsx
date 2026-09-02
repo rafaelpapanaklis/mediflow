@@ -822,7 +822,7 @@ function FichaPaciente({
           <p className="edu-note">Cargando…</p>
         ) : (data?.cases.length ?? 0) === 0 ? (
           <p className="edu-note">
-            Sin casos. Un caso se abre en el tamizaje, y es lo que le pone estudiante y
+            Sin casos. Un caso se abre en la valoración, y es lo que le pone estudiante y
             especialidad al paciente.
           </p>
         ) : (

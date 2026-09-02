@@ -908,7 +908,7 @@ export function parseEduDirDetalle(raw: unknown): EduDirDetalleKey | null {
 export const EDU_DIR_DETALLE_TITULOS: Record<EduDirDetalleKey, string> = {
   "pacientes-atendidos": "Pacientes atendidos",
   "citas-completadas": "Citas terminadas",
-  tamizajes: "Tamizajes",
+  tamizajes: "Valoraciones",
   "citas-perdidas": "Citas perdidas",
   "casos-abiertos": "Tratamientos iniciados",
   "casos-cerrados": "Tratamientos terminados",

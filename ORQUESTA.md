@@ -1,4 +1,502 @@
 ═══════════════════════════════════════════════════════════════════════════
+## [Institucional · INTEGRACIÓN 6] — La valoración, la ventana de la agenda y el plano de la clínica, en una sola rama ✅ (2026-09-02) · rama `edu/integracion6` → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin tuberías, 467/467 páginas) · `npm run test:edu` VERDE
+(36 archivos, 1 202 pruebas, 0 fallos) · GUARDIA EXIT 0
+UN SQL: `sql/edu-clinica-plano.sql` — **BLOQUEANTE**, lo trae #166.
+Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Archivos tocados vs `origin/main`: 45 — 40 PROPIOS del vertical y 5 compartidos
+declarados. Cero prohibidos.
+
+QUÉ ES ESTO: tres ramas terminadas, cada una con su PR abierto y ninguna mergeada,
+puestas en una sola rama de integración para que main reciba UN merge y no tres.
+No se escribió una línea de producto: lo único que se redactó aquí es este bloque.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · QUÉ SE JUNTÓ, EN ESTE ORDEN
+───────────────────────────────────────────────────────────────────────────
+
+    #    rama                        commit      qué trae
+    ───  ──────────────────────────  ──────────  ─────────────────────────────
+    164  fix/edu-valoracion          d15f1470    "tamizaje" pasa a leerse
+                                                 "valoración" en TODO lo visible
+                                                 (el enum sigue TAMIZAJE)
+    165  fix/edu-agenda-ventana      e73b06cf    el eje de la rejilla pinta la
+                                                 jornada completa y cabe sin
+                                                 desplazar
+    166  feat/edu-clinica-plano      9dc0751f    /instituto/clinica pasa a ser el
+                                                 PLANO del piso; vista de estado,
+                                                 no paseo en primera persona
+
+Merge normal, sin rebase, y `git status` limpio entre uno y otro. El primero entró
+en avance rápido; los otros dos dejaron su commit de merge.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · LOS DOS ARCHIVOS QUE TOCAN VARIAS RAMAS
+───────────────────────────────────────────────────────────────────────────
+
+Son exactamente dos. Los otros 43 los toca UNA sola rama, y se comprobó archivo por
+archivo que cada uno quedó idéntico al de su rama de origen.
+
+**2.1 · `ORQUESTA.md` — el auto-merge se comió dos líneas SIN avisar.** Los tres
+reportes se añaden en el mismo sitio, así que git tuvo que fusionarlos. NO marcó
+conflicto: dijo "Auto-merging" y siguió. Pero metió 206 líneas donde la rama traía
+208, porque la barra `═══` con la que ABRE el bloque de #165 es idéntica a la que
+CIERRA el bloque de #164, y la fusionó con ella. Resultado: el título
+`## EDU-AGENDA-VENTANA` quedaba pegado a la última línea del reporte anterior, sin
+su barra de arriba — media bitácora dentro de otra, con cero borrados y cero avisos.
+
+Se repusieron a mano las dos líneas (la vacía de cierre y la barra de apertura) y se
+enmendó el commit de merge, no se añadió un parche encima. Después se comprobó, con
+`diff` y no a ojo, que:
+
+  · las 334 primeras líneas son EXACTAMENTE el bloque de #164 seguido del de #165,
+  · las 330 últimas son EXACTAMENTE el bloque de #166,
+  · y las 33 952 de en medio son idénticas al `ORQUESTA.md` de `origin/main`.
+
+Es la tercera integración seguida en la que este archivo se fusiona mal en silencio.
+La comprobación que sirve NO es "0 líneas borradas": es reconstruir el archivo
+esperado y compararlo entero.
+
+**2.2 · `src/app/instituto/edu-theme.css` — los dos bloques, enteros.** #165 edita la
+zona de la agenda (líneas 6657–7226 del archivo de main) y #166 añade 928 líneas al
+final. Rangos disjuntos, así que el auto-merge acertó; aun así se verificó: la parte
+de arriba es idéntica al CSS de la rama #165 y las 928 de abajo al bloque de #166.
+El archivo queda en 8 751 líneas = 7 757 de main + 69 −3 de #165 + 928 de #166.
+
+No hay colisión de nombres: de las 105 clases que declara el bloque del plano,
+ninguna redefine una existente. `.edu-btn` y `.edu-input` aparecen en los dos sitios,
+pero en el bloque nuevo solo como descendientes de clase propia
+(`.edu-plano__tbody .edu-btn`, `.edu-plano__sede .edu-input`), que es lo que hay que
+mirar: la prueba del tema revienta si dos reglas se llaman igual, y está verde.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LO QUE SOLO SE VE AL JUNTARLAS
+───────────────────────────────────────────────────────────────────────────
+
+Cada rama salió de main por su cuenta, así que #165 y #166 se escribieron sin saber
+que "tamizaje" iba a dejar de leerse así. Se revisaron una por una las cadenas
+`tamizaje` que quedan en los archivos de esas dos ramas: son el enum `TAMIZAJE`, las
+clases `.edu-slot--tamizaje` y `.edu-ag__cita--tamizaje`, y comentarios. Ni un texto
+de pantalla — que es justo lo que #164 declaró que NO cambiaba. Nada reintroducido.
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · VERIFICADO (sobre la rama integrada, no sobre las ramas sueltas)
+───────────────────────────────────────────────────────────────────────────
+
+  · `npm run build` EXIT 0, completo y sin tuberías. 467/467 páginas. En la tabla de
+    rutas salen las tres que trae #166:
+
+        ƒ /instituto/clinica                      8.59 kB    111 kB
+        ƒ /instituto/clinica/plano                6.57 kB    125 kB
+        ƒ /api/instituto/clinica/3d-state            0 B       0 B
+
+  · `npm run test:edu` EXIT 0 — **36 archivos, 1 202 pruebas, 0 fallos** (main traía
+    35 y 1 158; #165 suma 13 y #166 un archivo con 31).
+
+  · GUARDIA EXIT 0:
+
+        EDU_GUARD_SHARED="prisma/schema.prisma,src/components/clinic-3d/Clinic3DClient.tsx,src/components/clinic-3d/live-layer.ts,src/components/clinic-3d/Clinic3DHud.tsx,ORQUESTA.md" node scripts/edu-guard.cjs
+
+    40 propios, 5 compartidos declarados, 0 sin declarar, 0 prohibidos. Los tres
+    archivos del dental los toca #166 y los tres reciben prop o argumento OPCIONAL:
+    sin él, el dental se comporta línea por línea igual.
+
+  · `npx tsc --noEmit`: 11 errores, **los 11 dentro de `__tests__/`** y ninguno en
+    código que se envíe al navegador — por eso el build pasa (Next no chequea tipos
+    de las pruebas) y por eso `test:edu` está verde (tsx no las chequea tampoco).
+    **La integración no suma ni uno**, y no es una deducción: se corrió el mismo
+    `tsc` sobre `origin/main` (8 errores) y sobre la rama #166 sola (11, los 8 de
+    antes más los 3 suyos). La rama integrada da EXACTAMENTE esos 11. Se detallan
+    en el punto 6.
+
+  · La raíz del repo, limpia: `git status --porcelain` no devuelve nada.
+
+🔴 EL BUILD NO CABE EN EL HEAP POR DEFECTO. `npm run build` y `npx tsc --noEmit`
+mueren los dos con `FATAL ERROR: Ineffective mark-compacts near heap limit` (exit
+134) en la fase de chequeo de tipos, contra el tope de ~4 GB de V8 y NO contra la RAM
+de la máquina. No es de esta rama ni del código nuevo. Van con el tope subido, en la
+MISMA línea porque la variable no se hereda:
+
+    NODE_OPTIONS=--max-old-space-size=8192 npm run build
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · EL SQL, ANTES DEL MERGE
+───────────────────────────────────────────────────────────────────────────
+
+UNO, y es **bloqueante**: `sql/edu-clinica-plano.sql`. Lo trae #166 y el cliente
+Prisma ya pide la tabla, así que sin él `/instituto/clinica/plano` revienta al
+guardar. Va al FINAL del orden general, después de `sql/edu-volumen.sql`; necesita
+`edu_campuses` (Ola 11) y `edu_institutions`/`edu_users` (Ola 0). Crea una tabla
+(`edu_campus_layouts`), dos índices y tres llaves foráneas; es idempotente y no lleva
+un solo DROP. No toca ninguna tabla del dental, de barbería ni de inmuebles — en
+particular NO toca `clinic_layouts`, que es la equivalente del dental.
+
+Lleva además un backfill de permisos COMENTADO a propósito: la key nueva
+`clinica.edit` no le llega sola a quien ya tenga `permissionsOverride` con contenido,
+porque el override REEMPLAZA al default del rol. El bloque es solo para DIRECCION —
+el docente MIRA el piso pero no lo reacomoda.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · LO QUE QUEDA ANOTADO (no bloquea el merge)
+───────────────────────────────────────────────────────────────────────────
+
+**Los 11 errores de `tsc`, todos en pruebas.** Ocho ya están en `origin/main`, medido:
+seis de barbería y **dos de `src/lib/edu/__tests__/edu-theme.test.ts`** (líneas 174 y
+283, un `Map` y un `Set` iterados con el `target` que trae el tsconfig — el mismo
+tropiezo de siempre). No los toca ninguna de estas tres ramas. Los otros tres son del
+archivo nuevo de #166, `src/lib/edu/__tests__/edu-clinica-plano.test.ts`:
+
+    198,32  TS2345  un `id: number` donde `LayoutElement` pide `string`
+    302,17  TS2352  `Chair3DState` convertido a `Record<string, unknown>` sin pasar
+                    por `unknown`
+    423,40  TS2367  se compara la DESCRIPCIÓN del permiso con la key `"clinica.edit"`
+
+El tercero es el que vale la pena mirar cuando alguien vuelva al archivo: esa
+comparación es siempre falsa, así que esa aserción concreta no está probando lo que
+parece. Las 31 pruebas del archivo pasan; ninguno de los tres afecta a nada que se
+envíe al navegador.
+
+**El bloque de #166 quedó al FINAL de este archivo, no aquí arriba.** Así lo escribió
+su rama y no se movió: mover 330 líneas para dejarlas bonitas es justo el tipo de
+edición que hace ilegible el diff de una integración. Se busca por
+`## [Institucional · EL PLANO DE LA CLÍNICA]`.
+
+═══════════════════════════════════════════════════════════════════════════
+## EDU-VALORACIÓN — "tamizaje" pasa a llamarse "valoración" en TODO lo que se lee ✅ (2026-09-01) · rama fix/edu-valoracion → PR, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+PR: #164 (https://github.com/rafaelpapanaklis/mediflow/pull/164) · BUILD EXIT 0 · `npm run test:edu` EXIT 0 (1158 pruebas en 35 archivos) · GUARDIA EXIT 0
+SQL: **ninguno**. Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Migración de datos: **ninguna**.
+
+OBJETIVO: la misma ola que "alumno → estudiante". La palabra "tamizaje" es jerga de salud
+pública que en una clínica universitaria nadie usa en voz alta; se dice "valoración". Cambia lo
+que la gente LEE. NO cambia lo que el código USA.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · LA REGLA, EN UNA LÍNEA
+
+**El enum sigue siendo `TAMIZAJE`.** Y con él la ruta, la API, la clase CSS, los nombres de
+archivo, las llaves de permisos, los query params y los identificadores. Renombrar eso habría
+pedido SQL, habría roto enlaces guardados y no habría cambiado ni una palabra en pantalla.
+
+    SE QUEDA IGUAL                              PASA A "valoración"
+    ─────────────────────────────────────────   ─────────────────────────────────────────
+    enum EduAppointmentType.TAMIZAJE (Prisma)   EDU_APPOINTMENT_TYPE_LABELS.TAMIZAJE
+    /instituto/agenda/tamizaje                  el <h1> y el botón que llevan ahí
+    POST /api/instituto/tamizaje                los errores que ese endpoint devuelve
+    .edu-slot--tamizaje / .edu-ag__cita--tamizaje  —
+    tamizaje-screen.tsx, tamizaje/page.tsx      lo que esos archivos pintan
+    ?detalle=tamizajes (query param)            el título de esa tarjeta y de su detalle
+    includeTamizaje, runEduTamizaje, …          —
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · QUÉ CAMBIÓ (18 archivos, 26 líneas)
+
+**La etiqueta que arrastra a todo el panel.** `EDU_APPOINTMENT_TYPE_LABELS.TAMIZAJE` pasó de
+`"Tamizaje"` a `"Valoración"` en `src/lib/edu/types.ts`. De ahí sale el texto de NUEVE sitios
+sin tocarlos: el chip de la rejilla, el de la lista, el `<select>` de Tipo de la agenda, el del
+alta de cita, el detalle de la cita, la ficha del paciente, "mi día", las acciones del paciente
+y la bandeja de autorizaciones. Un solo `Record` es toda la pantalla.
+
+Textos propios que sí se editaron a mano:
+
+    src/lib/edu/types.ts                 la etiqueta del tipo + dos descripciones de estado
+                                         ("Todavía no pasa por valoración", "Se abrió en la
+                                         valoración y todavía no se decide el tratamiento")
+    .../agenda/page.tsx                  el botón de la agenda: "Tamizaje" → "Valoración"
+    .../agenda/tamizaje/page.tsx         <title>, <h1>, el lead y el aviso de permiso denegado
+    tamizaje-screen.tsx                  el vacío ("citas de tipo Valoración") y el modal
+    agenda-modales.tsx                   "El tamizaje abre el caso" → "La valoración abre…"
+    casos-screen.tsx · pacientes-screen.tsx · expediente-screen.tsx ·
+    consentimientos-screen.tsx · pacientes/[id]/page.tsx · pacientes/[id]/casos/page.tsx
+                                         las seis pantallas que decían "un caso se abre en el
+                                         tamizaje" ahora dicen "en la valoración"
+    casos.ts                             los dos errores que la API devuelve a la pantalla
+    direccion-core.ts · direccion.ts     la tarjeta del panel de dirección y su detalle
+    ia-core.ts                           la pista de vocabulario del dictado (Whisper)
+    marketing.ts                         la landing: el paso 2 de "Cómo funciona"
+    scripts/edu-seed-demo.ts             el procedimiento del demo ("Valoración inicial")
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · TRES FRASES QUE UN REEMPLAZO CIEGO HABRÍA DEJADO MAL
+
+Y son la razón de leer cada una después de cambiarla:
+
+1. `EduDenied` decía **"El tamizaje es la valoración inicial: decide a qué estudiante…"**. Con
+   la palabra nueva quedaba *"La valoración es la valoración inicial"*. Ahora dice
+   **"La valoración inicial decide a qué estudiante se le asigna el paciente…"**.
+
+2. El error de `runEduTamizaje` decía **"Esa cita no es de tamizaje. El tamizaje se hace sobre
+   una valoración inicial."** — circular con la palabra nueva. Ahora dice qué hacer:
+   **"Esa cita no es de valoración. Elige una cita de tipo Valoración, o valora sin cita."**
+   (las dos salidas que la pantalla ofrece de verdad).
+
+3. El lead de la pantalla era **"La valoración inicial."** bajo un `<h1>` que decía "Tamizaje":
+   definía la jerga. Con el `<h1>` diciendo "Valoración" se repetía, así que ahora abre con
+   **"Es lo primero que se le hace a un paciente nuevo."**
+
+Concordancia aplicada en todos lados: *el* tamizaje → *la* valoración, *del* tamizaje → *de la*
+valoración, "pasa por tamizaje" → "pasa por valoración".
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · LA LANDING SE VIGILA SOLA A PARTIR DE AHORA
+
+`EDU_LANDING_VOCABULARIO` (marketing.ts) ya tenía dos reglas —"alumno" se dice *estudiante*,
+"programa" se dice *especialidad*—. Se le añadió la tercera:
+
+    { patron: /\btamizajes?\b/i, enLugarDe: "valoración" },
+
+`edu-landing.test.ts` la hace cumplir por DOS caminos: barre los archivos de
+`src/app/instituciones` y `src/components/public/instituciones` (código y comentarios
+incluidos) y además recorre todo el copy exportado. Si alguien vuelve a escribir la palabra en
+la página pública, la prueba lo dice antes del deploy. `marketing.ts` se salta a sí mismo en el
+barrido de archivos —ahí VIVE la lista—, por eso el `key: "tamizaje"` interno y los
+`verifiedIn` que citan `src/app/api/instituto/tamizaje/route.ts` siguen ahí sin romperla.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · LO QUE QUEDA DICIENDO "tamizaje" — 121 líneas, TODAS legítimas
+
+Ninguna se pinta. Clasificadas: **58 comentarios · 20 identificadores** (`includeTamizaje`,
+`runEduTamizaje`, `EduTamizajeScreen`, `FormularioTamizaje`, `InstitutoTamizajePage`, la
+variable local `tamizajes` de direccion.ts) **· 16 el enum `"TAMIZAJE"` · 6 clases CSS · 6
+llaves** (`?detalle=tamizajes`, `key: "tamizaje"`, la llave del menú) **· 3 rutas · 2 nombres
+de archivo · 9 nombres y mensajes de prueba · 1 la regla de vocabulario que acabamos de añadir.**
+
+Aparte, `src/lib/specialty-data.ts` dice "tamizaje cervical": es del DENTAL (ginecología, NOM
+de Papanicolaou) y no tiene nada que ver con este vertical.
+
+`prisma/schema.prisma` y los `sql/edu-*.sql` conservan `TAMIZAJE` — el enum en la base y los
+`COMMENT ON COLUMN`, que no los lee ningún usuario.
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · UNA DECISIÓN QUE NO ES TEXTO EN PANTALLA
+
+`EDU_DICTADO_HINT` (ia-core.ts) es la pista de vocabulario que se le manda a Whisper. Nadie la
+lee, pero es la lista de palabras que el residente va a DECIR en voz alta — y a partir de esta
+ola dirá "valoración". Se cambió por eso, no por consistencia cosmética.
+
+═══════════════════════════════════════════════════════════════════════════
+### 7 · VERIFICADO
+
+  · `npm run build` EXIT 0, sin tuberías.
+  · `npm run test:edu` EXIT 0 — 1158 pruebas en 35 archivos.
+  · `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` EXIT 0: los 18 archivos son
+    PROPIOS del vertical, cero compartidos, cero prohibidos.
+  · Leído en el navegador: la agenda (chip y `<select>` de Tipo diciendo "Valoración", el
+    detalle de la cita diciendo "La valoración abre el caso"), la pantalla de valoración
+    entera y el paso 2 de la landing. Los componentes REALES con props de mentira y el
+    `edu-theme.css` de verdad — el panel exige sesión y base de datos.
+
+═══════════════════════════════════════════════════════════════════════════
+## EDU-AGENDA-VENTANA — La rejilla de la agenda ya no sale cortada ✅ (2026-09-01) · rama fix/edu-agenda-ventana → PR, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 · `npm run test:edu` EXIT 0 (35 archivos, 1 171 pruebas) · GUARDIA EXIT 0
+SQL: **ninguno**. Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Archivos: 5, todos PROPIOS del vertical. Del dental no se tocó una línea.
+
+SÍNTOMA: en producción, /instituto/agenda con el preset "Todo el día" pintaba de 08:00 a
+14:00, no dejaba desplazarse a ninguna hora posterior y del primer rótulo se veía media raya.
+La agenda del dental, en la misma pantalla, pinta 08:00–20:00.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · DE DÓNDE SALÍA CADA COSA (medido en el navegador, no deducido)
+
+Se reprodujo montando la pantalla REAL (`EduAgendaScreen`) en una página temporal fuera del
+matcher del middleware y midiéndola dentro de iframes de 1920×1080, 1366×768 y 390×844. Con
+eso, las tres quejas resultaron ser TRES fallos distintos, y solo uno de ellos estaba donde
+parecía:
+
+  **a) "Pinta de 08:00 a 14:00".** NO es el respaldo. Con sillones sin horario el código ya
+  pintaba 08:00–20:00 (medido: 13 rótulos de hora, de 08 a 20). Las seis horas salen del
+  HORARIO GUARDADO de los sillones — y 08:00–14:00 de lunes a viernes es exactamente la franja
+  que el editor de Sillones trae escrita por defecto al pulsar "Agregar franja"
+  (`sillones-screen.tsx`, `dias: [1,2,3,4,5], desde: "08:00", hasta: "14:00"`). O sea: alguien
+  guardó esa franja alguna vez, y desde entonces el eje es de seis horas.
+  Reproducido tal cual: con los dos sillones en 08:00–14:00 la rejilla pinta **13 rótulos
+  (7 horas + 6 medias), el último renglón rotulado es 13:30 y el eje termina en 14:00** — que
+  es, letra por letra, lo que se veía en producción.
+
+  Debajo de eso SÍ había un fallo de verdad: **un sillón sin horario se quedaba con el eje del
+  vecino**. Un sillón sin franjas está SIEMPRE ABIERTO (regla de la Ola 2, y es la que aplica
+  el servidor en `eduScheduleAllows`: `slots.length === 0` → acepta cualquier hora), pero no
+  aportaba nada al eje, así que el sillón que sí tenía la franja de seis horas se lo recortaba.
+  Con dos sillones —uno con la franja por defecto y otro recién dado de alta— la tarde entera
+  en la que el segundo SÍ acepta citas no se veía ni se podía tocar.
+
+  **b) "No deja desplazarse".** Cierto, y no porque el scroll estuviera roto: en "Todo el día"
+  no había nada más que ver… y a la vez faltaba. El preset reparte el alto disponible entre los
+  renglones con un piso de 10 px que viene del dental. Medido: en 1366×768 la rejilla tiene
+  416 px de hueco y una jornada de 12 h con ese piso mide 480 px → **119 px de rejilla escondida
+  y el rótulo de las 20:00 cortado**; en un teléfono de 390×844, **186 px escondidos**. El
+  preset prometía que el día cabía y se comía las últimas horas.
+
+  **c) "Tapa el primer rótulo".** Los rótulos van centrados en su línea (`translateY(-50%)`).
+  El primero está en la línea 0, así que su mitad de arriba caía DEBAJO de la fila de
+  encabezados, que es `sticky`, opaca y va por encima. Medido en las seis combinaciones de
+  viewport y horario: tapado en las 6.
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · LA REGLA QUE QUEDÓ ESCRITA (src/lib/edu/agenda-rejilla.ts)
+
+`eduAgendaWindow` sigue delegando en `paintedAgendaWindow` del dental —que es quien redondea a
+horas completas y quien ENSANCHA por las citas—, con una adaptación que el dental no necesita:
+allá la clínica es una y tiene un horario; aquí cada sillón tiene el suyo. El eje es la UNIÓN
+de lo que aporta cada sillón que se está pintando:
+
+  · con franjas ese día de la semana → sus franjas, redondeadas a horas completas;
+  · con franjas pero NO ese día      → nada (ese día está cerrado);
+  · SIN franjas ningunas             → la jornada por defecto 08:00–20:00 (`eduChairSinHorario`,
+                                        que usa el MISMO criterio que el servidor);
+  · si no aporta nadie               → la jornada por defecto también.
+
+Y encima de todo eso, las citas del día lo ensanchan: una cita a las 07:30 se VE aunque el
+sillón abra a las 8 — el alta AVISA, no bloquea. Sigue siendo SOLO presentación: el rango de
+lectura lo decide `eduDayRange` en el servidor y por aquí no pasa.
+
+Pruebas nuevas que lo fijan (`edu-agenda-rejilla.test.ts`):
+  · sin ningún horario → 08:00–20:00 (y se comprueba que el respaldo ES el 8–20 del dental);
+  · dos sillones 07:45–13:10 y 10:00–15:00 → 07:00–15:00 (unión, a horas completas);
+  · uno con 08:00–14:00 + otro sin horario → 08:00–20:00 (el que está siempre abierto no se
+    queda con el eje del vecino);
+  · uno con 07:00–21:00 + otro sin horario → 07:00–21:00 (el siempre abierto ENSANCHA, nunca
+    estrecha);
+  · sin horario y con citas a las 07:30 y a las 20:30–21:15 → 07:00–22:00;
+  · domingo con sillones de lunes a viernes → se conserva el lienzo del horario general.
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · QUE "TODO EL DÍA" QUEPA DE VERDAD
+
+`eduSlotHeightFor` sustituye a `slotHeightFor` SOLO para el instituto. Para "Media" y "Amplia"
+delega en el dental tal cual (20 y 30 px). Para "Todo el día" reparte el hueco REAL —el alto
+acotado menos la fila de encabezados (46) y los dos bordes (2), que antes no se descontaban—
+con un piso propio de **5 px por renglón** en vez de los 10 del dental.
+
+El piso no es una intuición, es una medida: el rótulo del eje ocupaba una caja de **18 px**
+(12 px de letra con el interlineado heredado de 1.5) y dos horas seguidas se encabalgaban por
+debajo de 28 px de banda. Con `line-height: 1` —es un rótulo de UNA línea colocado en absoluto,
+el interlineado no pintaba nada— la caja baja a 12 px y aguantan hasta 12 px de banda. Con eso,
+5 px por renglón = 20 px por hora deja 8 px de aire entre rótulos.
+
+Por qué el dental se queda en 10 y aquí no: allá el piso protege el TEXTO DE LAS TARJETAS y se
+acepta que reaparezca el desplazamiento; aquí el preset PROMETE que el día entero cabe sin
+desplazar. Con 5 px, una jornada de 15 h entra en los 303 px que deja un teléfono. Y por debajo
+del piso vuelve el desplazamiento —que funciona— en vez de un eje ilegible.
+
+Además, `.edu-ag__cita` tiene ahora `min-height: 14px`: con el renglón en 5 px una cita de
+quince minutos medía 4 y no se podía ni ver ni tocar.
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · LOS DOS RÓTULOS DE LAS PUNTAS, Y LOS DOS PÍXELES DE BARRA
+
+El primero ya no se centra en su línea: se apoya en ella (`top: 0`, `transform: none`), así que
+queda entero por debajo de la cabecera. El último se ancla al fondo con `bottom: 0` —lo pone la
+pantalla— y NO con `top` + `translateY(-100%)`: con transform el navegador sigue contando la
+caja sin transformar y el desbordamiento vuelve.
+
+Y `.edu-ag__eje` lleva `overflow: clip`. Con la pantalla a 1.25× de densidad la caja de la
+rejilla mide 719.6 px y no 720, y esa fracción bastaba para que el navegador contara dos
+píxeles de contenido de más y pintara una barra de desplazamiento en el preset que promete que
+no hay ninguna. Es `clip` y no `hidden` a propósito: `hidden` convertiría el eje en un
+contenedor con desplazamiento propio. Ningún rótulo se pierde — todos caben dentro.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · LA MEDIDA DEL ALTO YA NO PUEDE FALLAR CALLADA
+
+Cuatro cambios, y los cuatro hacen falta:
+
+  · **El respaldo del CSS se mide contra la ventana**: `--edu-ag-alto` era `520px` fijo. Un
+    respaldo fijo falla callado — si la medida no llega, en un monitor de 1080 la rejilla se
+    quedaba con 520 px (la mitad de lo que cabe) y "Todo el día" apretaba la jornada entera ahí
+    dentro. Ahora es `max(320px, calc(100dvh - 300px))`, con `100vh` delante como respaldo para
+    navegadores sin `dvh`. Hay prueba que revienta si vuelve a aparecer un número de píxeles.
+  · **`alto` empieza en `null`, no en 520**: mientras nadie ha medido, la pantalla NO escribe la
+    variable en línea y manda el respaldo del CSS. "No medido" y "mide 520" dejan de ser lo
+    mismo.
+  · **Se mide en el callback de la `ref`**, en cuanto el nodo existe. El efecto de layout solo
+    encontraba el nodo si la rejilla estaba montada en ese render; arrancando en modo lista (o
+    angosto en Semana, que cae a lista solo) se iba sin medir y no había dependencia que lo
+    despertara al volver.
+  · **El ResizeObserver mide también el alto**, y hay un segundo pase en el cuadro siguiente:
+    cualquier cosa que cambie de tamaño por encima de la rejilla (la leyenda que se envuelve, un
+    aviso que aparece, una fuente que carga tarde) mueve dónde empieza. No se realimenta:
+    `medirAlto` lee dónde EMPIEZA la rejilla, no cuánto mide.
+
+Y `.edu-ag__scroll` pasa de `height` a `max-height`: en "Todo el día" el contenido mide menos
+que el hueco (el reparto redondea hacia abajo) y con `height` esa diferencia quedaba como una
+franja vacía dentro del marco. Sigue siendo un contenedor con desplazamiento propio, que es lo
+que el `sticky` de la cabecera necesita.
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · UN EJE CORTO NO SE EXPLICA SOLO
+
+Cuando los sillones tienen horario, el eje pinta ESE horario y no la jornada de siempre. Es lo
+correcto, pero visto desde fuera es idéntico a una agenda rota: "solo llega a las dos y no me
+deja bajar" — que es literalmente el reporte que abrió esta rama. Así que la pantalla lo DICE,
+con la misma regla que el resto de esta pantalla (lo que decide, lo dice):
+
+    El eje va de 08:00 a 14:00 porque ese es el horario de los sillones. Se cambia en
+    Sillones; una cita fuera de ese rango se sigue viendo.
+
+Sale solo cuando el eje quedó MÁS CORTO que la jornada por defecto y por el horario de los
+sillones. Con un sillón sin horario no puede aparecer nunca: ese aporta la jornada entera.
+
+═══════════════════════════════════════════════════════════════════════════
+### 7 · MEDIDO EN EL NAVEGADOR — `npm run build` + `npx next start`
+
+Producción real (no `next dev`), con la pantalla montada en iframes del ancho exacto. "bajar" =
+`scrollHeight − clientHeight` del contenedor de la rejilla.
+
+Sillones SIN horario (eje 08:00–20:00 en las nueve):
+
+    viewport    zoom       slot   caja        bajar   1er rótulo  último        cabecera
+    1920×1080   Todo día   14px   720px@y330      0   entero      entero        sin scroll
+    1920×1080   Media      20px   730px@y330    278   entero      entero al bajar  PEGADA
+    1920×1080   Amplia     30px   730px@y330    758   entero      entero al bajar  PEGADA
+    1366×768    Todo día    7px   384px@y330      0   entero      entero        sin scroll
+    1366×768    Media      20px   418px@y330    590   entero      entero al bajar  PEGADA
+    1366×768    Amplia     30px   418px@y330   1070   entero      entero al bajar  PEGADA
+    390×844     Todo día    6px   336px@y473      0   entero      entero        sin scroll
+    390×844     Media      20px   351px@y473    657   entero      entero al bajar  PEGADA
+    390×844     Amplia     30px   351px@y473   1137   entero      entero al bajar  PEGADA
+
+Antes del arreglo, en las mismas tres pantallas: primer rótulo TAPADO en las 9, y "Todo el día"
+dejaba 119 px escondidos en 1366×768 y 186 px en 390×844, con el rótulo de las 20:00 cortado.
+
+Los cuatro escenarios de horario, con "Todo el día":
+
+    escenario                                   1920×1080              390×844
+    sin horario                                 08:00–20:00 · bajar 0  08:00–20:00 · bajar 0
+    los dos sillones 08:00–14:00                08:00–14:00 · bajar 0  08:00–14:00 · bajar 0
+    uno 08:00–14:00 + uno sin horario           08:00–20:00 · bajar 0  08:00–20:00 · bajar 0
+    los dos 07:00–21:00                         07:00–21:00 · bajar 0  07:00–21:00 · bajar 0
+    sin horario + citas 07:30 y 20:30–21:15     07:00–22:00 · bajar 0  07:00–22:00 · bajar 0
+
+En todas: primer y último rótulo enteros. Y el CSS minificado del build conserva las cuatro
+declaraciones que sostienen esto (`max-height:var(--edu-ag-alto)`, `100dvh - 300px`,
+`overflow:clip`, `line-height:1`).
+
+═══════════════════════════════════════════════════════════════════════════
+### 8 · LO QUE ESTA RAMA NO ARREGLA (y hay que decirlo)
+
+Si los DOS sillones del instituto tienen guardada la franja 08:00–14:00, el eje sigue pintando
+seis horas — porque ésa es la regla: el eje es el horario de los sillones. Lo que cambia es que
+ahora la pantalla lo explica y dice dónde se cambia (apartado 6), y que basta con que UN sillón
+no tenga horario para que el eje vuelva a la jornada completa. Para que la agenda de ese
+instituto llegue a las ocho de la noche hay que editar la franja en Sillones — o borrarla, que
+deja el sillón siempre abierto.
+
+Tampoco se toca el servidor: `eduScheduleAllows` sigue rechazando una cita fuera del horario del
+sillón (409, "Ese sillón no está abierto a esa hora"). El eje solo pinta.
+
+Archivos:
+    src/lib/edu/agenda-rejilla.ts                    la regla de la ventana + eduSlotHeightFor
+    src/components/edu/agenda/agenda-screen.tsx      la medida del alto y el aviso del eje corto
+    src/components/edu/agenda/agenda-rejilla.tsx     las dos puntas del eje y el alto nullable
+    src/app/instituto/edu-theme.css                  respaldo en dvh, max-height, clip, puntas
+    src/lib/edu/__tests__/edu-agenda-rejilla.test.ts 13 pruebas nuevas (55 en el archivo)
+
+═══════════════════════════════════════════════════════════════════════════
 ## EDU-LANDING — /instituciones, la landing pública del vertical Institucional ✅ (2026-09-01) · rama feat/edu-landing → PR, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
 COMMIT: ce732a5a · PR: #162 (https://github.com/rafaelpapanaklis/mediflow/pull/162) · BUILD EXIT 0 · `npm run test:edu` EXIT 0 · GUARDIA EXIT 0
@@ -33950,3 +34448,333 @@ mismo archivo y por esta misma razón.
    más. Se puede aplicar antes, durante o después.
 
 Los dos son idempotentes y ninguno toca una tabla del dental, de barbería ni de inmuebles.
+
+## [Institucional · EL PLANO DE LA CLÍNICA] — La clínica en vivo deja de ser una lista de tarjetas y pasa a ser el PISO: el mundo 3D del dental, con el estudiante y su paciente dibujados en cada sillón ✅ (2026-09-02) · rama `feat/edu-clinica-plano` → PR contra main, SIN mergear
+
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin pipes, 467/467 páginas) · `npm run test:edu` VERDE (36 archivos, 1 186 pruebas)
+GUARDIA `EDU_GUARD_SHARED="prisma/schema.prisma,src/components/clinic-3d/Clinic3DClient.tsx,ORQUESTA.md"` EXIT 0
+UN SQL: `sql/edu-clinica-plano.sql` (BLOQUEANTE) · SIN envs nuevas
+
+OBJETIVO: `/instituto/clinica` era una tarjeta por sillón. Una tarjeta contesta "¿cuántos
+quedan libres?" pero no contesta la pregunta que se hace de verdad en el piso clínico:
+**"¿DÓNDE hay uno libre?"**. Ahora se pinta el PLANO —el mismo mundo 3D que ya tiene el
+producto dental, importado entero— con cada sillón en su sitio, el **estudiante y el
+paciente dibujados** en los ocupados, clic a cualquiera para ver quién es y saltar a su
+ficha, y **debajo el horario** de la sede para hoy.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · EL ARCHIVO DEL DENTAL: UNA PROP OPCIONAL, Y POR QUÉ HIZO FALTA
+───────────────────────────────────────────────────────────────────────────
+
+Se tocó **UN** archivo del dental: `src/components/clinic-3d/Clinic3DClient.tsx`
+(**+169 −7**, y la mayoría son comentario y ramas detrás de una bandera). Recibe una prop
+**opcional** `host?: Clinic3DHost | null`. Sin ella, `isHosted` es `false` y **no se ejecuta
+ni una línea nueva**.
+
+No fue un capricho: ese archivo trae escritas a mano TRES cosas que solo valen para el
+dental y que **no se pueden redirigir desde fuera**, exactamente el mismo caso (y el mismo
+remedio) que la prop `endpoints` de `DicomSetViewer` en la ola del visor:
+
+| escrita a mano | dónde | por qué no sirve aquí |
+|---|---|---|
+| `STATE_API = "/api/clinic-layout/3d-state"` | este archivo | resuelve contra `Resource`/`Appointment` del dental con la sesión del dashboard |
+| el clic → `/dashboard/patients/<id>` | `interaction.ts` (otro archivo) | la ficha del instituto vive en otra ruta y con otros ids |
+| el rótulo del apuntador | `interaction.ts` | dice "clic: agendar cita en…", y aquí no se agenda |
+
+Y una cuarta que no es una ruta: `createInteraction` **descarta lo que esté a más de
+`INTERACT_RANGE` (6 m)**. Es lo correcto para caminar en primera persona y hace **imposible
+clicar desde la vista aérea** — que es justo como se mira un plano de treinta sillones.
+
+Por eso, con anfitrión, `createInteraction` **no se monta** (misma línea que ya excluía al
+modo público) y el clic lo resuelve un `hostPick` de veinte renglones que apunta a la capa
+viva y devuelve `{resourceId, name, part}` — `part` distingue la figura del paciente, la del
+profesional y el sillón (anillo, placa o la caja). El anfitrión decide qué abrir.
+
+**La prueba de que el dental no cambió** es mecánica y está en el repo
+(`edu-clinica-plano.test.ts`): (a) la prop sigue siendo opcional y con `= null` por defecto;
+(b) hay ≥ 8 usos de `isHosted`, o sea que toda rama nueva está tras la bandera; (c) **ninguno
+de sus dos llamadores** —`Clinic3DMount.tsx` y `Clinic3DPublicMount.tsx`— contiene la palabra
+`host`; (d) con anfitrión la interacción del dental no se crea, así que su expediente no se
+puede abrir desde otro producto.
+
+**Lo que el anfitrión gana con la prop:** su ruta de estado, cada payload del sondeo
+(`onState`, para no montar un SEGUNDO sondeo contra la misma tabla), el clic (`onPick`) y el
+rótulo del apuntador (`pickLabel`). Más una cosa que no es una ruta: **con anfitrión el
+latido se para con la pestaña oculta** y vuelve a pedir UNA vez al volver — lo pedía el
+encargo y es lo que ya hacía el tablero de tarjetas; el dental conserva el suyo.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · EL DATO: UN PLANO POR SEDE, Y SIN FILA SE ARMA SOLO
+───────────────────────────────────────────────────────────────────────────
+
+`EduCampusLayout` (1:1 con `EduCampus`), espejo de `ClinicLayout` del dental: `elements Json`
++ `metadata Json`. **Uno por SEDE y no por instituto**, porque cada sede tiene SUS sillones —
+el número está pintado en SU pared y es único dentro de la sede (Ola 11); un plano por
+escuela dibujaría dos edificios encima del otro.
+
+**🔴 SIN FILA = PLANO AUTOMÁTICO.** Una sede que nunca pasó por el editor **no se pinta
+vacía**: `eduPlanoAuto` arma una sala —paredes, una puerta, mostrador— con sus sillones
+activos en rejilla y cada uno ligado a su unidad. La pantalla sirve desde el primer día y
+la dirección la acomoda después. El automático **no se guarda**: se calcula en cada lectura,
+así que un sillón nuevo aparece solo mientras nadie haya acomodado nada. Y la pantalla lo
+DICE ("este plano es automático"), porque un plano que parece dibujado a mano y no lo está
+hace creer que ya lo acomodó alguien.
+
+**La liga sillón↔unidad la cuida el código, no la base.** El vínculo vive DENTRO del JSON
+(`LayoutElement.resourceId` = `EduChair.id`), así que no hay llave foránea posible:
+- **al escribir** (`eduPlanoValidar`): se rechaza un sillón que no sea de ESA sede y se
+  rechazan dos elementos ligados a la MISMA unidad (el mundo 3D crea un ancla por
+  `resourceId`: el segundo pisaría al primero y una unidad quedaría muda para siempre);
+- **al leer** (`eduPlanoRevision`): se marca el que se quedó colgando y el que nunca se ligó,
+  y se listan los sillones activos que faltan en el plano — ésos NO se pintan, y un sillón
+  que falta se lee como "está libre" cuando puede estar ocupado.
+- Un sillón **sin ligar se acepta** al guardar: se dibuja primero y se liga después.
+- Se valida contra TODOS los sillones de la sede, **activos o no**: uno que se dio de baja
+  después de dibujarlo dejaría el plano imposible de guardar justo cuando hay que arreglarlo.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LA PANTALLA
+───────────────────────────────────────────────────────────────────────────
+
+- **El mundo** (`plano-mundo.tsx`): `Clinic3DClient` por `dynamic({ssr:false})`, con
+  `category: "DENTAL"` (la paleta y el catálogo del piso clínico). El alto se le impone
+  desde el tema con `.edu-plano__mundo > div` — su raíz lleva `h-[100dvh]` porque en el
+  dental ocupa la pantalla entera; gana por especificidad, **sin `!important`**.
+- **La tarjeta**: clic en el paciente → folio, caso, especialidad, estudiante, docente, hora
+  de inicio, tiempo transcurrido y **"Abrir ficha"** → `/instituto/pacientes/[id]`. Clic en
+  el estudiante → su nombre y matrícula (y a quién atiende). Clic en un sillón libre → su
+  próxima cita y las siguientes de hoy, con un salto a la agenda de ESE sillón.
+  🔴 **La tarjeta no pide nada al servidor**: sale del MISMO payload que pintó el sillón, así
+  que no puede enseñar algo que el plano no esté enseñando.
+- **El horario, debajo**: por sillón, la que está en curso y las que vienen. Es la misma
+  lectura del tablero en otra forma (`eduVivaHorario`, en el módulo puro) — ni una consulta
+  más, ni una segunda regla de visibilidad. No es una agenda: no se filtra ni se arrastra.
+- **El respaldo**: debajo de 768 px o sin WebGL se pintan **las tarjetas de siempre**
+  (`EduVivaScreen`, sin tocar una línea), con su propio latido. Se decide en el cliente (el
+  servidor no sabe si hay WebGL) y hay un botón para cambiarlo a mano. **Nunca laten los dos
+  a la vez.**
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · EL EDITOR (solo DIRECCIÓN)
+───────────────────────────────────────────────────────────────────────────
+
+`/instituto/clinica/plano`: catálogo · lienzo isométrico · propiedades. Se IMPORTAN
+`getCatalogForClinic` y `toScreen`/`fromScreen` del dental (funciones puras que devuelven
+cadenas SVG); **no** se importa su pantalla (`layout-client.tsx`, 1 538 renglones atados a
+`/api/clinic-layout`, a sus Resources, a su modo En Vivo y a su i18n).
+
+Poner, mover, girar (`R`), borrar (`Supr`), deshacer, tamaño del piso, zoom y guardar. Los
+sillones se ligan uno a uno con un `<select>` de las unidades de ESA sede (las ya usadas
+salen deshabilitadas), los sueltos se pintan en rojo y hay una lista de "sillones que
+faltan" con un botón para ponerlos.
+
+**El lienzo no se arrastra, se desplaza**: el SVG se dibuja a su tamaño real (`viewBox` de la
+rejilla) y el hueco tiene scroll. Así no hay estado de "pan" que mantener ni una herramienta
+de mano peleándose con la de mover, y la conversión ratón→celda sale de la caja del SVG y su
+viewBox, que ya llevan el zoom dentro.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · PERMISOS Y ALCANCE
+───────────────────────────────────────────────────────────────────────────
+
+- `clinica.view` (ya existía) abre el plano: DIRECCION y DOCENTE.
+- **`clinica.edit` es NUEVA** y solo la lleva DIRECCION: mover un sillón de sitio cambia el
+  plano que ven los otros treinta docentes y los ciento veinte estudiantes. Vive en el
+  MISMO grupo de la pantalla de permisos (la de permisos pinta una casilla por key, no hay
+  "marcar el bloque"), y una prueba fija que ese grupo son exactamente esas dos.
+- **El alcance es el MISMO del tablero** (`eduLiveFloorVisibility`, visibility.ts, el punto
+  único) y a propósito: el plano y el tablero enseñan la misma cosa. ALUMNO y CAJA reciben
+  **403 aunque alguien les encienda la casilla**, y lo reciben ANTES de la primera consulta.
+- Y una tercera comprobación que no es de permiso sino de SEDE: `eduCampusCovers`. Un id de
+  una sede ajena —o de otra escuela— no amplía nada.
+
+⚠️ Como toda key nueva, `clinica.edit` **NO le llega a quien ya tenga `permissionsOverride`
+con contenido**: el override REEMPLAZA al default. El bloque de backfill está COMENTADO al
+final de `sql/edu-clinica-plano.sql`, con a quién dárselo (dirección) y a quién no.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · LO QUE SE VIO EN EL NAVEGADOR (build de producción + `next start`)
+───────────────────────────────────────────────────────────────────────────
+
+Con Postgres en Docker, `prisma db push` y `npm run seed:edu-demo` (el instituto de demo:
+3 sedes, 32 sillones, 20 577 citas), y una escena montada a mano en la Sede Norte —1 sillón
+ocupado ahora, 2 próximos, 1 libre con cita más tarde, 8 libres:
+
+- el **plano en 3D** con los 12 sillones de la sede, sus paredes y su puerta;
+- el sillón ocupado con **sus DOS figuras** (paciente recostado + estudiante de pie) y la
+  placa flotante con los dos nombres y "termina 13:30";
+- **clic en el paciente → la tarjeta**: "Sillón 10 · OCUPADA · Verónica González Mendoza ·
+  Folio P-0198 · Caso: Control de ortodoncia · En tratamiento · Especialidad: Ortodoncia ·
+  Estudiante: María Álvarez Rojas · ORTO26-018 · Docente: … · Desde 12:00 · lleva 10 h 55" y
+  el botón **Abrir ficha** con `href="/instituto/pacientes/dsdpat…"`;
+- el **horario** debajo, sillón por sillón;
+- el **editor** con el catálogo (14 elementos con su icono), el lienzo isométrico, la
+  selección, el giro, el aviso de "tienes cambios sin guardar" —que hasta bloqueó una
+  navegación con el diálogo del navegador— y la liga por `<select>`;
+- el **respaldo de tarjetas** con el mismo corte de datos (1 ocupada, 3 próximas, 8 libres);
+- y el **camino de ESCRITURA contra la base**, con un script que llama a las mismas
+  funciones: guardar (la fila aparece en `edu_campus_layouts` y el plano deja de ser
+  automático), **rechazo** del sillón de otra sede, **rechazo** del sillón duplicado y
+  **403** para un ALUMNO con el permiso puesto a mano.
+
+**Sin sesión de Supabase no se puede entrar al panel en local**, así que la pantalla se montó
+con una página temporal (`/dev-plano`) que llama a las MISMAS funciones de servidor con un
+ctx de dirección fabricado. Esa página y su ruta **se borraron antes de commitear** (el
+árbol final no las tiene; la guardia lo confirma).
+
+───────────────────────────────────────────────────────────────────────────
+### 6 bis · LOS CUATRO ARREGLOS QUE SALIERON DE MIRARLO, NO DE LEERLO
+───────────────────────────────────────────────────────────────────────────
+
+Ninguno se ve en el código; los cuatro aparecieron abriendo la pantalla:
+
+1. **🔴 El sondeo de WebGL se comía los contextos.** `hayWebGL()` creaba un canvas y pedía
+   un contexto **en cada `resize`**, y un contexto WebGL no se recoge solo: el navegador
+   aguanta ~16 vivos y luego los NIEGA (o mata el más viejo, que sería el del mundo). Con el
+   plano abierto en tres pestañas, la pantalla contestó "este navegador no puede pintar el
+   plano en 3D" **en un navegador que sí podía**. Ahora se pregunta UNA vez, se cachea y se
+   suelta el contexto con `WEBGL_lose_context`.
+2. **La tarjeta se pintaba DEBAJO de los botones del visor.** El HUD del dental es `z-30` en
+   el mismo contexto de apilado; la tarjeta iba con `z-index: 3` y en la esquina de arriba.
+   Ahora es `z-40` y arranca 58 px más abajo, libre de esa fila.
+3. **Los iconos del catálogo no se pintaban.** `ElementType.icon` es un FRAGMENTO de SVG
+   (rects y paths sueltos), no un `<svg>`: hay que envolverlo con su `viewBox 0 0 40 40`,
+   que es justo lo que hace el editor del dental. Y con `minmax(88px,…)` el catálogo caía a
+   UNA columna porque su barra de desplazamiento se lleva 15 px; a 76 px caben dos.
+4. **La etiqueta del sillón giraba con el sillón.** El editor del dental rota el grupo
+   entero y a 90° el nombre se lee de lado. Aquí la rotación envuelve SOLO al dibujo.
+
+───────────────────────────────────────────────────────────────────────────
+### 7 · LO QUE NO SE HIZO, Y SE DICE
+───────────────────────────────────────────────────────────────────────────
+
+1. **La placa flotante escribe "Dr. \<estudiante\>".** El prefijo está escrito dentro de
+   `live-layer.ts` (`lines.push(\`Dr. ${st.doctorName}\`)`), que es un SEGUNDO archivo del
+   dental y el encargo permitía tocar UNO. Todo lo que es del instituto —la tarjeta, el
+   horario, el respaldo— dice "Estudiante". Arreglarlo es una línea allá, o mover el prefijo
+   al payload.
+2. **El HUD del visor tiene copia del dental**: su leyenda dice "Vacío · clic para agendar /
+   Ocupado · clic para ver expediente" y el aviso de la vista aérea, "clic en un avatar abre
+   su expediente". Con la tarjeta abierta las dos son casi ciertas (la tarjeta lleva a la
+   ficha, y el sillón libre ofrece su agenda), pero la copia no es nuestra. Mismo motivo:
+   vive en `Clinic3DHud.tsx`.
+3. **Lo que sí se tapó** es su enlace "Volver al editor" → `/dashboard/clinic-layout`: eso no
+   es copia, es una puerta al panel del DENTAL. Se esconde desde el tema por su `href`, con
+   una prueba que lee `Clinic3DHud.tsx` y se pone roja el día que el dental cambie esa
+   constante.
+4. **El respaldo de tarjetas no lleva el horario**: en un teléfono, la tarjeta ya dice
+   "Desde 10:00 · lleva 42 min" y "Siguiente 14:30", y montar el horario ahí habría pedido un
+   segundo sondeo para una pantalla que no lo necesita.
+5. **No se toca la agenda ni el flujo de agendar**: desde un sillón libre se SALTA a la
+   agenda filtrada por ese sillón. Este tablero se mira, no se escribe.
+
+───────────────────────────────────────────────────────────────────────────
+### 8 · EL SQL, ANTES DEL DEPLOY
+───────────────────────────────────────────────────────────────────────────
+
+`sql/edu-clinica-plano.sql` — **BLOQUEANTE**. Crea `edu_campus_layouts` (1 tabla, 2 índices,
+3 llaves foráneas, 0 enums, 0 DROP) y lleva COMENTADO el backfill de `clinica.edit` para
+quien tenga overrides. Idempotente: se aplicó dos veces seguidas contra un Postgres limpio
+sin errores. `prisma migrate diff` contra esa base devuelve UNA línea —`ALTER COLUMN
+"updatedAt" DROP DEFAULT`—, que es el mismo `DEFAULT CURRENT_TIMESTAMP` que llevan **todas**
+las tablas que el vertical ya creó por .sql (edu-ola-2, 11, pagos, cuota…) y que Prisma
+nunca usa porque siempre escribe la columna.
+
+Sin aplicarlo, la pantalla **no se cae**: `getEduPlanoSede` atrapa el "falta la tabla" y
+pinta el plano AUTOMÁTICO (con un aviso en el log del servidor); lo que no se puede es
+GUARDAR, y ahí el editor lo dice con el nombre del archivo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 9 · QUE NO SEA UN VIDEOJUEGO: LA SEDE ES UNA VISTA DE ESTADO (2026-09-02)
+
+Con lo de arriba, el plano heredaba el visor del dental TAL CUAL: arrancaba en PRIMERA
+PERSONA —caminar con WASD, una mano en pantalla, una mira en el centro— y la vista aérea era
+un modo alterno detrás de un botón. Para quien dirige una escuela eso está al revés: abre la
+pantalla para preguntar "¿qué sillón está libre?", no para pasear. Este cierre lo invierte y,
+de paso, saca de la pantalla los textos que solo tienen sentido en el dental.
+
+──────────────────────────────────────────────────────────────────────────
+**a) Se arranca ARRIBA, y no hay forma de bajar.**
+
+Con `host` presente (o sea: solo cuando otro producto monta el mundo), `Clinic3DClient`:
+
+  · **no crea** los controles de caminar. No es que no los llame: `createDesktopControls`
+    engancha WASD y las flechas en `window` y les hace `preventDefault`, así que dejarlos
+    montados le rompía el teclado a la pantalla que los hospeda. Igual con el joystick táctil
+    y con la mano FPS.
+  · **entra en la vista aérea al montar**, y sin vuelo de entrada: `enterDrone()` deja la
+    transición de 600 ms en marcha y un `drone.update(1)` la termina de una, así que el primer
+    fotograma que se pinta ya es el de la sede completa. `drone-controls.ts` NO se toca: es su
+    propia API.
+  · **cierra la salida** por los dos caminos: `toggleDrone` es un no-op (la tecla V y el botón
+    🚁) y `exitDrone` se niega aunque le llamen desde otro sitio —hoy el botón de VR, que
+    siempre entra desde FPS—. VR también se esconde: VR *es* primera persona.
+
+La mira desaparece sola (el HUD ya la ataba a `!droneActive`), y con ella se fue la rama que
+le daba rótulo al apuntador para el anfitrión: era código que no se podía ejecutar nunca. Se
+retiró `Clinic3DHost.pickLabel` y el `rotulo` que la pantalla le pasaba.
+
+──────────────────────────────────────────────────────────────────────────
+**b) Los textos del dental, fuera — con el mismo trato que el resto.**
+
+Dos archivos NUEVOS del dental entran a la lista de COMPARTIDOS del guard, cada uno con UN
+argumento/prop opcional cuyo default es exactamente lo de hoy:
+
+  · `live-layer.ts` (+22/−3) — la placa flotante escribía `Dr. <nombre>`. Recibe
+    `LiveLayerLabels` con dos prefijos; sin él, `""` para el paciente y `"Dr. "` para quien
+    atiende, línea por línea lo de siempre. El instituto pasa `"Paciente · "` y
+    `"Estudiante · "`, que es lo que una escuela de especialidades tiene en el sillón.
+  · `Clinic3DHud.tsx` (+45/−6) — recibe `host?: { legend?: string[] | null }`. Con anfitrión
+    no pinta: su leyenda ("Vacío · clic para agendar", "Ocupado · clic para ver expediente"),
+    el enlace "Volver al editor" (→ /dashboard/clinic-layout), los mandos de dron, minimapa y
+    VR, el contador de multijugador y el panel de sala de espera —que en el instituto diría
+    "0 esperando" para siempre porque su estado no la trae—. El hint de la vista dron tampoco:
+    hablaba de volver con V y de abrir un expediente. En su sitio, la leyenda del anfitrión:
+    "Clic al paciente o al estudiante para abrir su ficha".
+
+🔴 Y con eso **se retira la tirita de CSS**: `edu-theme.css` tapaba el enlace del dental con
+`.edu-plano__mundo a[href="/dashboard/clinic-layout"] { display:none }`. Funcionaba y se caía
+sola el día que el dental cambiara la ruta. Ahora no se pinta.
+
+La ayuda de la pantalla también cambia: decía "Camina con W A S D, mira con el ratón…" —
+prometer un modo que ya no existe es peor que no decir nada—. Ahora dice cómo se mira de
+verdad: desde arriba, arrastrar para girar, rueda para acercar, clic para abrir la ficha.
+
+──────────────────────────────────────────────────────────────────────────
+**c) Lo que se vio en el navegador** (`npm run build` EXIT 0 + `npx next start`, instituto de
+demo `demo-volumen`, sede con 12 sillones y una cita en curso de verdad):
+
+  · **Arranca aéreo**: el primer fotograma ya es la sede entera vista desde el aire. El HUD
+    entero dice, literal: `Sede Norte · DENTAL · Libre · Próxima · Ocupado · Clic al paciente
+    o al estudiante para abrir su ficha · Ocupados 1 · Libres 11 / 12`. Ni enlace al editor,
+    ni 🚁, ni minimapa, ni VR, ni multijugador, ni sala de espera, ni "Haz clic para entrar".
+  · **Caminar no hace nada**: 25 pulsaciones de `W` + `A/S/D/flechas/V/M` (a `window` y al
+    canvas) y la captura queda IDÉNTICA salvo el reloj del "En vivo". `document.pointerLockElement`
+    sigue en `null` y el hint del dron no reaparece (la V no vuelve a primera persona).
+  · **Girar y acercar, sí**: arrastrar orbita y la rueda acerca (se comprobó con eventos reales
+    de rueda y de puntero sobre el lienzo).
+  · **La placa dice lo que tiene que decir**. Ampliada sobre el sillón ocupado:
+    `Sillón 1 / Paciente · Luis Gómez Sánchez / Estudiante · Ximena Marisol Reyes Álvarez /
+    termina 12:17`. Cero "Dr.".
+  · **El clic abre la ficha**: clic sobre el paciente del Sillón 1 → tarjeta con `OCUPADA ·
+    PACIENTE Luis Gómez Sánchez · Folio P-0097 · Caso Raspado y alisado radicular por cuadrante
+    · Especialidad Periodoncia · Estudiante Ximena Marisol Reyes Álvarez · PERIO25-017 ·
+    Docente Lucía Ximena Ruiz Chávez · Desde 11:17 · lleva 31 min` y el botón "Abrir ficha".
+
+`npm run test:edu`: **36 archivos, 1 189 pruebas, EXIT 0**. Las nuevas leen los archivos del
+dental y se ponen rojas si alguien quita una bandera: que no se monten los controles de
+caminar ni la mano, que se arranque con `enterDrone()` + `drone?.update(1)`, que la salida
+esté cerrada con `isHosted`, que la prop del HUD siga siendo opcional, que el default de la
+placa siga siendo `"Dr. "` y que la ayuda de la pantalla no vuelva a prometer WASD.
+
+Guardia: **EXIT 0** con los tres archivos del dental declarados —
+`EDU_GUARD_SHARED="prisma/schema.prisma,src/components/clinic-3d/Clinic3DClient.tsx,src/components/clinic-3d/live-layer.ts,src/components/clinic-3d/Clinic3DHud.tsx,ORQUESTA.md"`.
+
+──────────────────────────────────────────────────────────────────────────
+**d) Lo que NO se hizo, y se dice.**
+
+El encuadre aéreo es el que da `createDroneMode` (`DRONE_FILL = 1.18` sobre el bounds, con la
+cámara a 54°). En una caja ancha y baja como la de esta pantalla (1 406 × 573) la sala se ve
+completa pero con aire de sobra alrededor: ajustarlo pide tocar `drone-controls.ts`, que es un
+CUARTO archivo del dental y queda fuera de la lista declarada. Se deja como está y se anota.

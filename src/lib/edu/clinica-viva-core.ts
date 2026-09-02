@@ -248,6 +248,24 @@ export interface EduVivaApptInput {
   studentMatricula: string;
   /** La especialidad del CASO (o la del estudiante si la cita no trae caso). */
   specialty: string | null;
+  // ── Lo que pide la TARJETA del plano (la lista de tarjetas no lo usa) ──
+  // Los cinco son OPCIONALES: el tablero de tarjetas se armó sin ellos y
+  // sigue funcionando igual si no llegan. Un campo obligatorio nuevo aquí
+  // obligaría a tocar a todos los que ya construyen esta entrada.
+  /**
+   * El id del paciente, para el botón "Abrir ficha" del plano.
+   *
+   * 🔴 NO sale de la tarjeta cuando el detalle está callado: un docente que
+   * no supervisa ese sillón ve "ocupado" y las iniciales, y un id en el
+   * JSON sería la puerta trasera a la ficha que la pantalla le cierra.
+   */
+  patientId?: string;
+  /** El id del programa/especialidad: de ahí sale el COLOR del sillón. */
+  specialtyId?: string | null;
+  /** El caso en una línea ("Endodoncia unirradicular · En tratamiento"). */
+  caseLabel?: string | null;
+  /** El DOCENTE que responde por esta cita (el de la cita, o el del caso). */
+  supervisor?: string | null;
   /**
    * ¿El DETALLE de esta cita le toca a quien está mirando?
    *
@@ -278,8 +296,27 @@ export interface EduVivaCard {
   student: string | null;
   studentMatricula: string | null;
   specialty: string | null;
+  /**
+   * El id del paciente. `null` cuando la tarjeta está callada — ver la nota
+   * de `EduVivaApptInput.patientId`. Es lo que enlaza el botón "Abrir
+   * ficha" del plano; la lista de tarjetas no lo usa.
+   */
+  patientId: string | null;
+  /** El id de la especialidad (el color del sillón en el plano). */
+  specialtyId: string | null;
+  /** El caso en una línea. */
+  caseLabel: string | null;
+  /** El docente que responde por la cita. */
+  supervisor: string | null;
   /** Instante de inicio (ISO). El navegador calcula el minutero con él. */
   startISO: string | null;
+  /**
+   * Instante de FIN (ISO). Lo pide el mundo 3D para escribir "termina
+   * 11:30" en la placa flotante con el reloj de quien mira, y el horario de
+   * abajo para saber si una cita ya se pasó de su hora. `endLabel` no sirve
+   * para eso: es texto ya escrito en la hora de pared de SU sede.
+   */
+  endISO: string | null;
   /** "09:30", en la hora de pared de SU sede. */
   startLabel: string | null;
   endLabel: string | null;
@@ -300,6 +337,37 @@ export interface EduVivaCounts {
   total: number;
 }
 
+/**
+ * UN RENGLÓN DEL HORARIO: una cita de hoy en un sillón.
+ *
+ * 🔴 Es la MISMA lectura del tablero, en otra forma. No hay una segunda
+ * consulta ni una segunda regla de visibilidad: sale de las mismas citas
+ * que ya se trajeron para decidir el color de cada sillón, con el mismo
+ * `detail` decidiendo qué se calla. Reimplementar la agenda aquí sería
+ * tener dos sitios donde el piso puede contradecirse.
+ */
+export interface EduVivaSlot {
+  id: string;
+  chairId: string;
+  chairName: string;
+  number: number;
+  startISO: string;
+  endISO: string;
+  /** "09:30", en la hora de pared de SU sede. */
+  startLabel: string;
+  endLabel: string;
+  /** El estado REAL del vertical (el punto de color del renglón). */
+  status: EduAppointmentStatus;
+  /** true = es la que está ocupando el sillón ahora mismo. */
+  enCurso: boolean;
+  /** true = el detalle no le toca a quien mira (mismas reglas del tablero). */
+  masked: boolean;
+  patient: string | null;
+  student: string | null;
+  specialty: string | null;
+  specialtyId: string | null;
+}
+
 export interface EduVivaBoard {
   /** Cuándo se armó (ISO). La pantalla lo pinta: un tablero pegado miente. */
   generatedAt: string;
@@ -309,6 +377,14 @@ export interface EduVivaBoard {
   byCampus: { campusId: string; campusName: string; counts: EduVivaCounts }[];
   /** true = hubo más citas de las que caben (EDU_VIVA_MAX_CITAS). */
   truncated: boolean;
+  /**
+   * EL HORARIO de hoy, sillón por sillón: la que está en curso y las que
+   * vienen después. Solo lo pide quien lo pinta (el plano); el tablero de
+   * tarjetas lo deja `undefined` a propósito — son treinta renglones por
+   * sillón viajando cada veinte segundos para una pantalla que no los
+   * enseña.
+   */
+  schedule?: EduVivaSlot[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -388,7 +464,12 @@ export function eduVivaCard(
     student: null,
     studentMatricula: null,
     specialty: null,
+    patientId: null,
+    specialtyId: null,
+    caseLabel: null,
+    supervisor: null,
     startISO: null,
+    endISO: null,
     startLabel: null,
     endLabel: null,
     elapsedMin: null,
@@ -407,6 +488,7 @@ export function eduVivaCard(
       ...base,
       ...eduVivaDetalle(cita),
       startISO: cita.startsAt.toISOString(),
+      endISO: cita.endsAt.toISOString(),
       startLabel: eduFormatTime(cita.startsAt, chair.campusTimezone),
       endLabel: eduFormatTime(cita.endsAt, chair.campusTimezone),
       elapsedMin: minutosDesde(cita.startsAt, now),
@@ -423,6 +505,7 @@ export function eduVivaCard(
       ...base,
       ...eduVivaDetalle(cita),
       startISO: cita.startsAt.toISOString(),
+      endISO: cita.endsAt.toISOString(),
       startLabel: eduFormatTime(cita.startsAt, chair.campusTimezone),
       endLabel: eduFormatTime(cita.endsAt, chair.campusTimezone),
       startsInMin: minutosHasta(cita.startsAt, now),
@@ -458,7 +541,16 @@ function eduVivaDetalle(
   cita: EduVivaApptInput,
 ): Pick<
   EduVivaCard,
-  "masked" | "patient" | "patientFolio" | "student" | "studentMatricula" | "specialty"
+  | "masked"
+  | "patient"
+  | "patientFolio"
+  | "student"
+  | "studentMatricula"
+  | "specialty"
+  | "patientId"
+  | "specialtyId"
+  | "caseLabel"
+  | "supervisor"
 > {
   if (!cita.detail) {
     return {
@@ -468,6 +560,16 @@ function eduVivaDetalle(
       student: null,
       studentMatricula: null,
       specialty: null,
+      // 🔴 Lo callado se calla ENTERO. Ni el id del paciente (sería la
+      // puerta trasera a la ficha que esta rama cierra), ni el caso, ni el
+      // docente… ni el ID DE LA ESPECIALIDAD: de él sale el COLOR del
+      // sillón en el plano, y un color con leyenda al lado dice de qué se
+      // le está atendiendo — que es exactamente lo que `specialty: null`
+      // acaba de callar dos renglones más arriba.
+      patientId: null,
+      caseLabel: null,
+      supervisor: null,
+      specialtyId: null,
     };
   }
   return {
@@ -477,6 +579,10 @@ function eduVivaDetalle(
     student: cita.studentName,
     studentMatricula: cita.studentMatricula,
     specialty: cita.specialty,
+    patientId: cita.patientId ?? null,
+    specialtyId: cita.specialtyId ?? null,
+    caseLabel: cita.caseLabel ?? null,
+    supervisor: cita.supervisor ?? null,
   };
 }
 
@@ -499,11 +605,82 @@ function contar(cards: EduVivaCard[]): EduVivaCounts {
  * los ids son distintos aunque el número sea el mismo, porque el número es
  * único dentro de la SEDE y no del instituto.
  */
+/**
+ * El horario de HOY de estos sillones: la cita en curso y las siguientes.
+ *
+ * Lo que NO entra, y por qué:
+ *   · lo que ya TERMINÓ (su fin es anterior a ahora) — el horario de un
+ *     piso clínico se lee para saber qué falta, no qué pasó;
+ *   · lo que no es de HOY en la hora de pared de SU sede. La ventana de la
+ *     consulta son ±12 h en instantes (las sedes pueden estar en husos
+ *     distintos), así que sin este recorte la primera cita de mañana
+ *     aparecería a las 21:00 como si fuera de esta tarde. Es el mismo
+ *     recorte que hace `eduVivaCard` con el "siguiente".
+ *
+ * Lo muerto (cancelada, no se presentó, terminada) ni siquiera llega aquí:
+ * se descarta antes de entrar al motor. Ver la PIEZA 2 de la cabecera.
+ */
+export function eduVivaHorario(
+  chairs: EduVivaChairInput[],
+  appts: EduVivaApptInput[],
+  now: Date,
+): EduVivaSlot[] {
+  const porSillon = new Map<string, EduVivaChairInput>();
+  for (const c of chairs) porSillon.set(c.id, c);
+
+  const out: EduVivaSlot[] = [];
+  for (const a of appts) {
+    const chair = porSillon.get(a.chairId);
+    if (!chair) continue;
+    if (!EDU_VIVA_STATUS[a.status]) continue;
+    if (a.endsAt.getTime() <= now.getTime()) continue;
+    const dia = eduUtcToZoned(a.startsAt, chair.campusTimezone).dayISO;
+    if (dia !== eduTodayISO(chair.campusTimezone, now)) continue;
+
+    const enCurso = eduVivaOcupa(a.status);
+    // El nombre se calla con el MISMO criterio que la tarjeta —iniciales
+    // del paciente, nada del estudiante— reusando `eduVivaDetalle`: dos
+    // formas de callar lo mismo es como una de las dos se queda corta.
+    const detalle = eduVivaDetalle(a);
+    out.push({
+      id: a.id,
+      chairId: a.chairId,
+      chairName: chair.name,
+      number: chair.number,
+      startISO: a.startsAt.toISOString(),
+      endISO: a.endsAt.toISOString(),
+      startLabel: eduFormatTime(a.startsAt, chair.campusTimezone),
+      endLabel: eduFormatTime(a.endsAt, chair.campusTimezone),
+      status: a.status,
+      enCurso,
+      masked: !a.detail,
+      patient: detalle.patient,
+      student: detalle.student,
+      specialty: detalle.specialty,
+      specialtyId: detalle.specialtyId,
+    });
+  }
+
+  // Por sillón (el orden en que llegaron, que es el de la escuela) y dentro
+  // de cada uno por hora: es como se lee un horario.
+  const orden = new Map<string, number>();
+  chairs.forEach((c, i) => orden.set(c.id, i));
+  out.sort((a, b) => {
+    const oa = orden.get(a.chairId) ?? 0;
+    const ob = orden.get(b.chairId) ?? 0;
+    if (oa !== ob) return oa - ob;
+    return a.startISO.localeCompare(b.startISO);
+  });
+  return out;
+}
+
 export function buildEduVivaBoard(input: {
   chairs: EduVivaChairInput[];
   appointments: EduVivaApptInput[];
   now: Date;
   truncated?: boolean;
+  /** true = arma también el HORARIO (solo lo pide el plano). */
+  horario?: boolean;
 }): EduVivaBoard {
   const cards = input.chairs.map((c) => eduVivaCard(c, input.appointments, input.now));
 
@@ -524,5 +701,8 @@ export function buildEduVivaBoard(input: {
       counts: contar(lista),
     })),
     truncated: input.truncated === true,
+    schedule: input.horario
+      ? eduVivaHorario(input.chairs, input.appointments, input.now)
+      : undefined,
   };
 }

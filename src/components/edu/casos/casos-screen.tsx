@@ -298,7 +298,7 @@ export function EduCasosScreen({
           <p className="edu-empty__detail">
             {hayFiltros
               ? "Prueba con menos filtros, o elige «También cerrados» si buscas uno terminado o transferido."
-              : "Un caso se abre en el tamizaje: es lo que le pone estudiante y especialidad a un paciente. En cuanto exista uno que te toque, sale aquí."}
+              : "Un caso se abre en la valoración: es lo que le pone estudiante y especialidad a un paciente. En cuanto exista uno que te toque, sale aquí."}
           </p>
         </div>
       ) : (

@@ -176,7 +176,7 @@ export const EDU_LANDING_PROBLEMAS = [
   },
 ] as const;
 
-// ── 5. Cómo funciona: agenda → tamizaje → caso → firma → cobro ──────────
+// ── 5. Cómo funciona: agenda → valoración → caso → firma → cobro ────────
 
 export const EDU_LANDING_FLUJO: EduClaim[] = [
   {
@@ -195,7 +195,7 @@ export const EDU_LANDING_FLUJO: EduClaim[] = [
   {
     key: "tamizaje",
     icon: "clipboard",
-    titulo: "Tamizaje",
+    titulo: "Valoración",
     cuerpo:
       "La valoración inicial decide quién trata a quién: asigna el paciente a un estudiante y le abre su caso. Es una decisión académica, así que solo la toman Dirección y los docentes, nunca el mostrador.",
     verifiedIn: [
@@ -708,6 +708,7 @@ export const EDU_LANDING_PALABRAS_PROHIBIDAS: { patron: RegExp; porque: string }
 export const EDU_LANDING_VOCABULARIO: { patron: RegExp; enLugarDe: string }[] = [
   { patron: /\balumn[oa]s?\b/i, enLugarDe: "estudiante" },
   { patron: /\bprogramas?\b/i, enLugarDe: "especialidad" },
+  { patron: /\btamizajes?\b/i, enLugarDe: "valoración" },
 ];
 
 /**

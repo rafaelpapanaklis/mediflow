@@ -121,7 +121,7 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
           </div>
           {r.casos!.length === 0 ? (
             <p className="edu-note">
-              No tiene casos abiertos que te toquen. Un caso se abre en el tamizaje — o con el
+              No tiene casos abiertos que te toquen. Un caso se abre en la valoración — o con el
               botón «Abrir caso» de arriba, si te corresponde.
             </p>
           ) : (

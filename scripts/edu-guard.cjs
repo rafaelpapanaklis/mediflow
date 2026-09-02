@@ -104,12 +104,35 @@ function matchesOwnPattern(p) {
 // contestan 401/404 — y un adaptador no puede redirigir un fetch escrito
 // dentro. Es un archivo del producto dental VIVO, así que se declara y se ve:
 //   EDU_GUARD_SHARED="src/components/patient-3d/DicomSetViewer.tsx" node scripts/edu-guard.cjs
+//
+// `src/components/clinic-3d/Clinic3DClient.tsx` entra aquí al montar el
+// MUNDO 3D del dental en /instituto/clinica. Es exactamente el mismo caso
+// que DicomSetViewer, y con el mismo remedio: el visor trae escritas a mano
+// la ruta de su estado vivo (/api/clinic-layout/3d-state) y la de lo que
+// abre al clicar (el expediente del dental), y ninguna de las dos se puede
+// redirigir desde fuera. Recibió UNA prop OPCIONAL (`host`) con la ruta y
+// los enganches del anfitrión; sin ella el dental se comporta igual línea
+// por línea. Es un archivo del producto dental VIVO, así que se declara y
+// se ve:
+//   EDU_GUARD_SHARED="src/components/clinic-3d/Clinic3DClient.tsx" node scripts/edu-guard.cjs
+//
+// `live-layer.ts` y `Clinic3DHud.tsx` entran por la MISMA puerta y por el
+// mismo motivo: son los dos sitios donde el mundo escribe TEXTO. La placa
+// flotante dice "Dr. <nombre>" (en una escuela quien atiende es un
+// ESTUDIANTE) y la leyenda del HUD dice "clic para agendar" y "ver
+// expediente" (dos cosas que en el instituto no pasan). Los dos recibieron
+// UN argumento/prop OPCIONAL con el default de siempre: sin él, el dental
+// pinta exactamente lo que pintaba. Se declaran los tres juntos:
+//   EDU_GUARD_SHARED="src/components/clinic-3d/Clinic3DClient.tsx,src/components/clinic-3d/live-layer.ts,src/components/clinic-3d/Clinic3DHud.tsx" node scripts/edu-guard.cjs
 const SHARED_FILES = [
   "prisma/schema.prisma",
   "src/middleware.ts",
   "ORQUESTA.md",
   "package.json",
   "src/components/patient-3d/DicomSetViewer.tsx",
+  "src/components/clinic-3d/Clinic3DClient.tsx",
+  "src/components/clinic-3d/live-layer.ts",
+  "src/components/clinic-3d/Clinic3DHud.tsx",
   // El sitemap del sitio es del DENTAL y está vivo en producción. El
   // vertical solo puede sumarle un bloque aditivo (importar
   // eduStaticSitemapPaths y concatenar su lista al final), igual que ya

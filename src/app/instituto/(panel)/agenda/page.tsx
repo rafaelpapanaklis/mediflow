@@ -149,7 +149,7 @@ export default async function InstitutoAgendaPage({
         {canAssign && (
           <div className="edu-pagehead__actions">
             <Link href="/instituto/agenda/tamizaje" className="edu-btn edu-btn--ghost edu-btn--sm">
-              Tamizaje
+              Valoración
             </Link>
           </div>
         )}

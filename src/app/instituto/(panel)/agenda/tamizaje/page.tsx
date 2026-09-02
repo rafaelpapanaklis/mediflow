@@ -16,7 +16,7 @@ import { EduDenied } from "@/components/edu/edu-denied";
 import { EduTamizajeScreen } from "@/components/edu/clinica/tamizaje-screen";
 
 export const metadata: Metadata = {
-  title: "Tamizaje · DaleControl Institucional",
+  title: "Valoración · DaleControl Institucional",
   robots: { index: false, follow: false },
 };
 
@@ -41,7 +41,7 @@ export default async function InstitutoTamizajePage() {
     return (
       <EduDenied
         permission="casos.assign"
-        what="El tamizaje es la valoración inicial: decide a qué estudiante se le asigna el paciente y abre su caso clínico."
+        what="La valoración inicial decide a qué estudiante se le asigna el paciente y abre su caso clínico."
       />
     );
   }
@@ -61,11 +61,11 @@ export default async function InstitutoTamizajePage() {
     <div className="edu-page">
       <header className="edu-pagehead">
         <div>
-          <h1 className="edu-page__title">Tamizaje</h1>
+          <h1 className="edu-page__title">Valoración</h1>
           <p className="edu-page__lead">
-            La valoración inicial. Aquí el paciente deja de ser &quot;el señor que
-            llegó&quot; y pasa a ser el caso de alguien: se le asigna un estudiante, una
-            especialidad y un docente responsable.
+            Es lo primero que se le hace a un paciente nuevo. Aquí deja de ser &quot;el
+            señor que llegó&quot; y pasa a ser el caso de alguien: se le asigna un
+            estudiante, una especialidad y un docente responsable.
           </p>
         </div>
         <div className="edu-pagehead__actions">

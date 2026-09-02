@@ -444,7 +444,7 @@ test("JSON-LD: se serializa sin poder cerrar la etiqueta script", () => {
 
 test("contenido: hay lo que la página promete tener", () => {
   assert.equal(EDU_LANDING_PROBLEMAS.length, 3, "tres dolores, ni uno más");
-  assert.equal(EDU_LANDING_FLUJO.length, 5, "agenda → tamizaje → caso → firma → cobro");
+  assert.equal(EDU_LANDING_FLUJO.length, 5, "agenda → valoración → caso → firma → cobro");
   assert.equal(EDU_LANDING_ROLES.length, 4, "Dirección, Docente, Estudiante y Caja");
   assert.deepEqual(
     EDU_LANDING_ROLES.map((r) => r.rol),

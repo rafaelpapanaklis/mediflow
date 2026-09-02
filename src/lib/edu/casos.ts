@@ -454,7 +454,7 @@ export async function createEduCase(
       : null;
     if (!cita) throw new EduPadronError("Esa cita no es de este instituto.", 404);
     if (cita.patientId !== partes.patientId) {
-      throw new EduPadronError("Esa cita de tamizaje es de otro paciente.");
+      throw new EduPadronError("Esa cita de valoración es de otro paciente.");
     }
     screeningAppointmentId = cita.id;
   }
@@ -754,7 +754,7 @@ export async function runEduTamizaje(
       : null;
     if (!cita) throw new EduPadronError("Esa cita no es de este instituto.", 404);
     if (cita.type !== "TAMIZAJE") {
-      throw new EduPadronError("Esa cita no es de tamizaje. El tamizaje se hace sobre una valoración inicial.");
+      throw new EduPadronError("Esa cita no es de valoración. Elige una cita de tipo Valoración, o valora sin cita.");
     }
     if (cita.status === "CANCELLED" || cita.status === "NO_SHOW") {
       throw new EduPadronError("Esa valoración se canceló o el paciente no llegó. Agenda otra.", 409);
