@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Clock, ExternalLink, FileText } from "lucide-react";
+import { Clock, FileText } from "lucide-react";
 import { useTOptional } from "@/i18n/i18n-provider";
 import { publicLiveFallbackT } from "./public-live-t";
 import { toScreen } from "@/lib/floor-plan/iso";
 import {
   STATUS_COLORS,
-  STATUS_LABELS,
   type ChairStatus,
   type LayoutElement,
   type LiveAppointment,
@@ -26,6 +25,28 @@ import {
   TIMELINE_START_HOUR,
 } from "@/lib/floor-plan/live-mode";
 import liveStyles from "./live-mode.module.css";
+
+/**
+ * El estado escrito, en el idioma del panel.
+ *
+ * ⚠️ Antes salía de `STATUS_LABELS` (element-types.ts), que es un objeto en
+ * español y además lo comparten el mundo 3D y el plano del instituto: una
+ * clínica en inglés leía "Ocupado". Las tres llaves ya existían en los dos
+ * diccionarios y en el respaldo público, así que /live sigue en español
+ * aunque no tenga provider.
+ */
+const STATE_LABEL_KEY: Record<ChairStatus, string> = {
+  libre: "pages.clinicLayout.legendFree",
+  proximo: "pages.clinicLayout.legendUpcoming",
+  ocupado: "pages.clinicLayout.legendOccupied",
+};
+
+/** El canto de color de la tarjeta. El color vive en la hoja, no en línea. */
+const STATUS_CARD_CLASS: Record<ChairStatus, string> = {
+  libre: liveStyles.statusCardLibre,
+  proximo: liveStyles.statusCardProximo,
+  ocupado: liveStyles.statusCardOcupado,
+};
 
 interface ChairInfo {
   id: string;
@@ -46,6 +67,7 @@ export function LiveOverlay({
   appointments,
   showFullNames,
   onHover,
+  onPick,
 }: {
   elements: LayoutElement[];
   ox: number;
@@ -54,20 +76,30 @@ export function LiveOverlay({
   appointments: LiveAppointment[];
   showFullNames: boolean;
   onHover: (data: HoverData | null) => void;
+  /**
+   * Clic sobre el halo de un sillón. Opcional a propósito: en el editor
+   * abre la tarjeta del sillón; en /live (pantalla de sala de espera, sin
+   * nadie delante) no se pasa y el halo sigue siendo puro adorno.
+   */
+  onPick?: (resourceId: string) => void;
 }) {
   return (
     <g pointerEvents="all">
       {elements.map((el) => {
         if (!el.resourceId) return null;
-        const status = getChairStatus(el.resourceId, viewTime, appointments);
+        const resourceId = el.resourceId;
+        const status = getChairStatus(resourceId, viewTime, appointments);
         const color = STATUS_COLORS[status];
-        const apt = getChairAppointment(el.resourceId, viewTime, appointments);
+        const apt = getChairAppointment(resourceId, viewTime, appointments);
         // Centro aproximado del sillón en pantalla (col+1, row+1.5).
         const [cx, cy] = toScreen(el.col + 1, el.row + 1.5, ox, oy);
         const haloY = cy - 24;
         return (
           <g
             key={el.id}
+            data-live-chair={resourceId}
+            style={onPick ? { cursor: "pointer" } : undefined}
+            onClick={onPick ? () => onPick(resourceId) : undefined}
             onMouseEnter={(e) => {
               if (apt) {
                 onHover({
@@ -181,6 +213,8 @@ export interface HoverData {
 }
 
 export function LiveTooltip({ data }: { data: HoverData | null }) {
+  // useTOptional: también se monta en /live (público, sin I18nProvider).
+  const t = useTOptional() ?? publicLiveFallbackT;
   if (!data) return null;
   const { appointment: a, status, showFullNames, x, y, viewTime } = data;
   const color = STATUS_COLORS[status];
@@ -198,7 +232,7 @@ export function LiveTooltip({ data }: { data: HoverData | null }) {
     >
       <div className={liveStyles.tooltipBadge}>
         <span style={{ background: color }} />
-        {STATUS_LABELS[status]}
+        {t(STATE_LABEL_KEY[status])}
       </div>
       <div className={liveStyles.tooltipPatient}>{patient}</div>
       <div className={liveStyles.tooltipMeta}>{a.treatment}</div>
@@ -278,21 +312,19 @@ export function LiveStatusPanel({
     <div className={liveStyles.statusList}>
       {placedChairs.map((c) => {
         const status = getChairStatus(c.resourceId, viewTime, appointments);
-        const color = STATUS_COLORS[status];
         const apt = getChairAppointment(c.resourceId, viewTime, appointments);
         const next = getNextChairAppointment(c.resourceId, viewTime, appointments);
         const progress = apt ? appointmentProgress(apt, viewTime) * 100 : 0;
         return (
           <div
             key={c.resourceId}
-            className={liveStyles.statusCard}
-            style={{ borderColor: `${color}33`, background: `${color}08` }}
+            className={`${liveStyles.statusCard} ${STATUS_CARD_CLASS[status]}`}
           >
-            <div className={liveStyles.statusCardHeader} style={{ background: `${color}18` }}>
+            <div className={liveStyles.statusCardHeader}>
               <span className={liveStyles.statusCardName}>{c.name}</span>
-              <span className={liveStyles.statusCardBadge} style={{ color }}>
-                <span style={{ background: color }} />
-                {STATUS_LABELS[status]}
+              <span className={liveStyles.statusCardBadge}>
+                <span aria-hidden="true" />
+                {t(STATE_LABEL_KEY[status])}
               </span>
             </div>
             <div className={liveStyles.statusCardBody}>
@@ -301,7 +333,7 @@ export function LiveStatusPanel({
                   <div className={liveStyles.statusPatient}>{maskPatient(apt.patient, showFullNames)}</div>
                   <div className={liveStyles.statusTreatment}>{apt.treatment}</div>
                   <div className={liveStyles.statusBar}>
-                    <div style={{ width: `${progress}%`, background: color }} />
+                    <div style={{ width: `${progress}%` }} />
                   </div>
                   <div className={liveStyles.statusFooter}>
                     {apt.doctor} · {fmtHM(apt.start)}–{fmtHM(apt.end)}

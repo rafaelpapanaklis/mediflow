@@ -1,158 +1,166 @@
-/* ═══════════════════════════════════════════════════════════════════
-   Mi Clínica Visual — editor isométrico 2.5D
-   Source of truth: mockups/clinica-visual/handoff_mi_clinica_visual/
-   ═══════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   Mi Clínica Visual — el editor isométrico del DENTAL.
 
+   ── DE DÓNDE SALE ESTE ASPECTO ────────────────────────────────────────
+   El instituto estrenó su plano (/instituto/clinica y /instituto/clinica/
+   plano) y se ve mejor que esto: baldosas planas y opacas, muebles
+   asentados con sombra, tarjetas de superficie con una sola línea y una
+   sola sombra, micro-etiquetas en versalitas. Aquí se COPIA ese aspecto
+   para el dental. ⛔ No se importa nada de `src/components/edu/`,
+   `src/app/instituto/` ni `src/lib/edu/`: son otro producto, vivo, y
+   duplicar unas cuantas reglas de CSS es más barato que acoplar dos
+   verticales por la hoja de estilos. Lo único compartido de verdad —el
+   catálogo isométrico de `src/lib/floor-plan/`— ya lo era antes y NO se
+   toca: cualquier cambio ahí repintaría también el plano de las escuelas.
+
+   ── DARK MODE: TOKENS, NO PARCHES ─────────────────────────────────────
+   Todo el color de la pantalla sale de las variables `--mc-*` de abajo, y
+   el modo oscuro solo las vuelve a declarar. Antes había ~25 reglas
+   `:global(.dark) .loQueSea { background: … }` sueltas; cada clase nueva
+   nacía rota en oscuro hasta que alguien se acordaba de añadir la suya.
+   El prefijo `--mc-` es a propósito: `--text-2`, `--bg` y compañía existen
+   en globals.css y declararlas aquí las TAPARÍA para todo lo que se monte
+   dentro del editor (modales, toasts, la sala de espera).
+
+   🔴 EL PISO NO SE OSCURECE EN DARK. Los muebles son cadenas SVG con el
+   color metido dentro (`src/lib/floor-plan/elements-dental.ts`): no hay
+   forma de repintarlos desde aquí, y sobre baldosas negras el sillón, el
+   gabinete y el lavabo dejan de leerse. Así que en oscuro el piso baja un
+   punto de luz y lo que cambia es el MARCO —igual que en el instituto—:
+   un plano claro sobre un escritorio oscuro.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Tokens ─────────────────────────────────────────────────────────── */
+.page,
+.mobileBlock,
+.welcomeWrap {
+  /* Marca: el violeta del panel. El instituto es azul institucional; eso
+     NO se copia — el dental sigue siendo el dental. */
+  --mc-brand: #7c3aed;
+  --mc-brand-soft: rgba(124, 58, 237, 0.1);
+  --mc-brand-line: rgba(124, 58, 237, 0.32);
+
+  --mc-text-1: #141a2b;
+  --mc-text-2: #4a5468;
+  --mc-text-3: #67707f;
+  --mc-text-4: #8e97a8;
+
+  --mc-surface: #ffffff;
+  --mc-surface-2: #f1f4fa;
+  --mc-ground: #f5f7fb;
+  --mc-line: rgba(20, 26, 43, 0.12);
+
+  --mc-radius: 12px;
+  --mc-radius-sm: 8px;
+  --mc-shadow-1: 0 1px 2px rgba(20, 26, 43, 0.06);
+  --mc-shadow-2: 0 6px 18px -6px rgba(20, 26, 43, 0.16);
+  --mc-shadow-3: 0 18px 44px -18px rgba(20, 26, 43, 0.3);
+
+  /* Estados. Los mismos tres del instituto (verde #15803d, ámbar #b45309,
+     rojo #b3261e: todos ≥ 4.9:1 sobre blanco) y son SOLO para el marco —
+     píldoras, puntos, texto—. Los halos que se pintan encima del piso
+     siguen usando STATUS_COLORS de `src/lib/floor-plan/element-types.ts`,
+     que es lo que también leen el mundo 3D y /live: si se cambiaran ahí,
+     cambiarían tres pantallas de golpe. */
+  --mc-libre: #15803d;
+  --mc-libre-soft: rgba(21, 128, 61, 0.09);
+  --mc-libre-line: rgba(21, 128, 61, 0.4);
+  --mc-proximo: #b45309;
+  --mc-proximo-soft: rgba(180, 83, 9, 0.1);
+  --mc-proximo-line: rgba(180, 83, 9, 0.4);
+  --mc-ocupado: #b3261e;
+  --mc-ocupado-soft: rgba(179, 38, 30, 0.09);
+  --mc-ocupado-line: rgba(179, 38, 30, 0.4);
+
+  /* El piso. */
+  --mc-canvas: radial-gradient(ellipse at 52% 32%, #eaeef6 0%, #dfe5f0 55%, #d2dae8 100%);
+  --mc-floor-a: #eef2f7;
+  --mc-floor-b: #e6ecf4;
+  --mc-floor-line: rgba(20, 26, 43, 0.06);
+  --mc-floor-rim: rgba(20, 26, 43, 0.14);
+  /* Las dos caras del zócalo. La de abajo-izquierda va más oscura: la luz
+     entra por arriba a la izquierda en todo el catálogo isométrico. */
+  --mc-floor-side-r: #c3cede;
+  --mc-floor-side-l: #a3b1c6;
+  --mc-floor-cast: #0b1220;
+  --mc-floor-cast-opacity: 0.26;
+  --mc-label-ink: #141a2b;
+  --mc-label-halo: #ffffff;
+  --mc-veil: rgba(255, 255, 255, 0.82);
+}
+
+:global(.dark) .page,
+:global(.dark) .mobileBlock,
+:global(.dark) .welcomeWrap {
+  --mc-brand: #a78bfa;
+  --mc-brand-soft: rgba(167, 139, 250, 0.16);
+  --mc-brand-line: rgba(167, 139, 250, 0.42);
+
+  --mc-text-1: #e6ecf7;
+  --mc-text-2: #b9c3d6;
+  --mc-text-3: #9aa4b8;
+  --mc-text-4: #78829a;
+
+  --mc-surface: #19203a;
+  --mc-surface-2: #212a48;
+  --mc-ground: #10162a;
+  --mc-line: rgba(226, 233, 246, 0.12);
+
+  --mc-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --mc-shadow-2: 0 6px 18px -6px rgba(0, 0, 0, 0.55);
+  --mc-shadow-3: 0 18px 44px -18px rgba(0, 0, 0, 0.7);
+
+  /* Tinta clara para el mismo verde/ámbar/rojo: sobre #19203a el #15803d
+     se cae a 2.4:1 y deja de leerse. El fondo suave se mantiene para que
+     la píldora siga teniendo su color. */
+  --mc-libre: #4ade80;
+  --mc-libre-soft: rgba(74, 222, 128, 0.14);
+  --mc-libre-line: rgba(74, 222, 128, 0.38);
+  --mc-proximo: #fbbf24;
+  --mc-proximo-soft: rgba(251, 191, 36, 0.14);
+  --mc-proximo-line: rgba(251, 191, 36, 0.38);
+  --mc-ocupado: #fb7185;
+  --mc-ocupado-soft: rgba(251, 113, 133, 0.14);
+  --mc-ocupado-line: rgba(251, 113, 133, 0.38);
+
+  /* 🔴 El piso sigue CLARO (ver la cabecera). Solo baja un punto. */
+  --mc-canvas: radial-gradient(ellipse at 52% 34%, #1a2340 0%, #141b30 55%, #0d1223 100%);
+  --mc-floor-a: #dfe5ee;
+  --mc-floor-b: #d6dde8;
+  --mc-floor-line: rgba(20, 26, 43, 0.08);
+  --mc-floor-rim: rgba(255, 255, 255, 0.16);
+  --mc-floor-side-r: #a5b2c4;
+  --mc-floor-side-l: #8695ab;
+  --mc-floor-cast: #0b1220;
+  --mc-floor-cast-opacity: 0.3;
+  --mc-label-ink: #141a2b;
+  --mc-label-halo: #f4f6fa;
+  --mc-veil: rgba(16, 22, 42, 0.82);
+}
+
+/* ── Rejilla de la pantalla ─────────────────────────────────────────── */
 .page {
-  /* Acento primario del editor = VIOLETA de marca (OLA 3). El nombre --blue
-     es histórico; en dark el diseño ya lo definía violeta-family (abajo). */
-  --blue: #7C3AED;
-  --blue-hover: #6D28D9;
-  --blue-lt: #F5F3FF;
-  --green: #10B981;
-  --red: #EF4444;
-  --amber: #F59E0B;
-  --text: #1A2540;
-  --text-2: #6B7A99;
-  --text-3: #9AAAC0;
-  --text-4: #B0BAD0;
-  --border: #E2ECF4;
-  --bg: #EEF5FB;
-  --bg-card: #F8FAFC;
-  --bg-input: #F0F6FB;
-  --shadow-sm: 0 1px 4px rgba(30, 60, 120, 0.06);
-  --shadow-md: 0 3px 10px rgba(124, 58, 237, 0.14);
-  --shadow-lg: 0 10px 40px rgba(20, 40, 100, 0.18);
-
   display: grid;
   grid-template-columns: 232px 1fr 268px;
   grid-template-rows: 52px 1fr;
   height: 100vh;
-  background: var(--bg);
+  height: 100dvh;
+  background: var(--mc-ground);
   font-family: 'Inter', system-ui, sans-serif;
-  color: var(--text);
+  color: var(--mc-text-1);
   overflow: hidden;
 }
 
-/* ─── DARK MODE — overrides ─── */
-:global(.dark) .page {
-  --bg: #0B0815;
-  --bg-elev: #121020;
-  --bg-card: #181530;
-  --bg-input: #1A1630;
-  --text: #E8E8EC;
-  --text-2: #A0A0AB;
-  --text-3: #6B6B78;
-  --text-4: #45454F;
-  --border: rgba(255, 255, 255, 0.10);
-  --blue: #a78bfa;
-  --blue-hover: #c4b5fd;
-  --blue-lt: rgba(167, 139, 250, 0.15);
-  --green: #10b981;
-  --red: #ef4444;
-  --amber: #f59e0b;
-  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.7);
-}
-
-/* ─── DARK MODE — overrides explícitos para componentes con colores
-       hardcodeados dentro del .page ───────────────────────────────── */
-:global(.dark) .topbar { background: var(--bg-elev); }
-:global(.dark) .divider { background: var(--border); }
-:global(.dark) .toolbarBtn { background: var(--bg-elev); color: var(--text); }
-:global(.dark) .toolbarBtn:hover:not(:disabled) {
-  background: var(--blue-lt); border-color: var(--blue); color: var(--blue);
-}
-:global(.dark) .kbdHint kbd {
-  background: var(--bg-input); border-color: var(--border); color: var(--text-2);
-}
-:global(.dark) .toolToggleGroup {
-  background: var(--bg-input); border-color: var(--border);
-}
-:global(.dark) .toolToggleBtnActive {
-  background: var(--bg-card); color: var(--blue);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-}
-:global(.dark) .toolToggleBtn kbd {
-  background: rgba(255, 255, 255, 0.06); color: var(--text-3);
-}
-:global(.dark) .modeToggle {
-  background: var(--bg-input); border-color: var(--border);
-}
-:global(.dark) .modeBtnActive {
-  background: var(--bg-card); color: var(--text);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-}
-:global(.dark) .sidebarLockedOverlay {
-  background: rgba(11, 8, 21, 0.78);
-}
-:global(.dark) .categoryHeader { border-bottom-color: var(--border); }
-:global(.dark) .elementCard {
-  background: var(--bg-input); border-color: transparent;
-}
-:global(.dark) .elementCard:hover {
-  background: var(--blue-lt); border-color: var(--blue);
-}
-
-/* ─── Canvas & grid ─── */
-:global(.dark) .canvasWrap {
-  background: radial-gradient(ellipse at 55% 40%, #1A1630 0%, #121020 60%, #0B0815 100%);
-}
-:global(.dark) .gridLine { stroke: rgba(129, 140, 248, 0.10); }
-:global(.dark) .tile { stroke: rgba(129, 140, 248, 0.06); }
-:global(.dark) .tileA { fill: rgba(255, 255, 255, 0.025); }
-:global(.dark) .tileB { fill: rgba(255, 255, 255, 0.012); }
-.tileA { fill: rgba(255, 255, 255, 0.4); }
-.tileB { fill: rgba(232, 244, 250, 0.3); }
-
-/* Etiqueta de consultorio sobre el canvas — legible en ambos modos. */
-:global(.dark) .chairLabel {
-  fill: #c4b5fd;
-  stroke: rgba(11, 8, 21, 0.85);
-  stroke-width: 3;
-  paint-order: stroke;
-}
-
-/* ─── Properties panel ─── */
-:global(.dark) .propertiesPanel {
-  background: var(--bg-elev); border-left-color: var(--border);
-}
-:global(.dark) .propTypePreview {
-  background: var(--bg-input); border-color: var(--border);
-}
-:global(.dark) .propInput {
-  background: var(--bg-input); color: var(--text); border-color: var(--border);
-}
-:global(.dark) .propRotBtn {
-  background: var(--bg-input); color: var(--text-2); border-color: var(--border);
-}
-:global(.dark) .propRotBtnActive {
-  background: var(--blue); color: #fff; border-color: var(--blue);
-}
-:global(.dark) .propDeleteBtn {
-  background: rgba(239, 68, 68, 0.14);
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #f87171;
-}
-:global(.dark) .propDeleteBtn:hover { background: rgba(239, 68, 68, 0.22); }
-:global(.dark) .propChairSelect {
-  background: var(--bg-input); color: var(--text); border-color: var(--border);
-}
-:global(.dark) .propKbdRow code {
-  background: var(--bg-input); border-color: var(--border); color: var(--text);
-}
-
-/* ─── Topbar ─── */
+/* ── Topbar ─────────────────────────────────────────────────────────── */
 .topbar {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 14px;
-  background: #fff;
-  border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  background: var(--mc-surface);
+  border-bottom: 1px solid var(--mc-line);
+  box-shadow: var(--mc-shadow-1);
 }
 .brand {
   display: inline-flex;
@@ -162,7 +170,7 @@
 .brandIcon {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--mc-radius-sm);
   background: var(--brand-grad);
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.35);
   display: grid;
@@ -174,41 +182,51 @@
 .brandText {
   font-weight: 800;
   font-size: 15px;
-  color: var(--brand);
+  color: var(--mc-brand);
   letter-spacing: -0.03em;
 }
 .divider {
   width: 1px;
   height: 22px;
-  background: #E2E8F4;
+  background: var(--mc-line);
 }
 .clinicPill {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-2);
-  background: var(--bg-input);
-  border: 1px solid #DCE8F4;
-  border-radius: 6px;
+  color: var(--mc-text-2);
+  background: var(--mc-surface-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius-sm);
   padding: 3px 10px;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .spacer { flex: 1; }
+
 .savedIndicator {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  color: var(--text-3);
+  color: var(--mc-text-3);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .savedDot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--green);
+  background: var(--mc-libre);
 }
-.savedDotPending { background: var(--amber); animation: mfBlink 1.4s steps(2) infinite; }
-.savedDotError { background: var(--red); }
+.savedDotPending { background: var(--mc-proximo); animation: mfBlink 1.4s steps(2) infinite; }
+.savedDotError { background: var(--mc-ocupado); }
 @keyframes mfBlink { 50% { opacity: 0.35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .savedDotPending { animation: none; }
+}
 
 .toolbarBtn {
   display: inline-flex;
@@ -218,18 +236,19 @@
   height: 32px;
   font-size: 12px;
   font-weight: 600;
-  background: #fff;
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  background: var(--mc-surface);
+  color: var(--mc-text-1);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius-sm);
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .toolbarBtn:hover:not(:disabled) {
-  background: var(--brand-soft);
-  border-color: var(--border-brand);
-  color: var(--brand);
+  background: var(--mc-brand-soft);
+  border-color: var(--mc-brand-line);
+  color: var(--mc-brand);
 }
 .toolbarBtn:disabled {
   opacity: 0.45;
@@ -239,12 +258,6 @@
   outline: none;
   box-shadow: var(--ring);
 }
-.toolbarBtnPrimary {
-  background: var(--brand);
-  color: #fff;
-  border-color: var(--brand);
-}
-.toolbarBtnPrimary:hover:not(:disabled) { background: var(--violet-700); color: #fff; }
 
 /* Botón "Optimizar con IA" — solo modo En Vivo. */
 .optimizerBtn {
@@ -258,7 +271,7 @@
   color: #fff;
   background: var(--brand-grad);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--mc-radius-sm);
   cursor: pointer;
   font-family: inherit;
   box-shadow: 0 2px 10px rgba(124, 58, 237, 0.35);
@@ -277,30 +290,30 @@
   height: 28px;
   font-size: 11px;
   font-weight: 700;
-  background: #F8FAFC;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  background: var(--mc-surface-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius-sm);
   cursor: pointer;
   font-family: inherit;
   transition: background 0.15s, border-color 0.15s;
   flex-shrink: 0;
 }
 .lightingPill:hover {
-  background: #EEF5FB;
-  border-color: #B4D2F0;
+  background: var(--mc-brand-soft);
+  border-color: var(--mc-brand-line);
 }
+.lightingPill:focus-visible { outline: none; box-shadow: var(--ring); }
 .lightingHourTxt {
   font-size: 10px;
-  color: var(--text-3);
+  color: var(--mc-text-3);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   margin-left: 2px;
 }
-:global(.dark) .lightingPill { background: var(--bg-elev); }
-:global(.dark) .lightingPill:hover { background: var(--blue-lt); border-color: var(--blue); }
+
 .zoomPercent {
   font-size: 11px;
-  color: var(--text-2);
+  color: var(--mc-text-2);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   min-width: 36px;
@@ -308,25 +321,28 @@
 }
 .kbdHint {
   font-size: 11px;
-  color: var(--text-4);
+  color: var(--mc-text-4);
+  white-space: nowrap;
 }
-.kbdHint kbd {
+.kbdHint kbd,
+.toolToggleBtn kbd,
+.propKbdRow code {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   padding: 1px 5px;
-  border-radius: 4px;
-  background: #F3F7FB;
-  border: 1px solid var(--border);
-  color: var(--text-2);
+  border-radius: 5px;
+  background: var(--mc-surface-2);
+  border: 1px solid var(--mc-line);
+  color: var(--mc-text-2);
   font-weight: 600;
 }
 
 /* Tool toggle group estilo Figma — Select (V) / Hand (H). */
 .toolToggleGroup {
   display: inline-flex;
-  background: var(--bg-input);
-  border: 1px solid #D0E0EE;
-  border-radius: 8px;
+  background: var(--mc-surface-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius-sm);
   padding: 2px;
   gap: 2px;
 }
@@ -340,42 +356,39 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  color: var(--text-3);
+  color: var(--mc-text-3);
   font-size: 11px;
   font-weight: 600;
   font-family: inherit;
   transition: background 0.15s, color 0.15s;
 }
-.toolToggleBtn:hover:not(:disabled) {
-  color: var(--text-1);
-}
+.toolToggleBtn:hover:not(:disabled) { color: var(--mc-text-1); }
+.toolToggleBtn:focus-visible { outline: none; box-shadow: var(--ring); }
 .toolToggleBtnActive {
-  background: #fff;
-  color: var(--blue);
+  background: var(--mc-surface);
+  color: var(--mc-brand);
   font-weight: 700;
-  box-shadow: 0 1px 4px rgba(30, 60, 120, 0.12);
+  box-shadow: var(--mc-shadow-1);
 }
 .toolToggleBtn kbd {
-  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 9px;
   padding: 1px 4px;
-  border-radius: 3px;
-  background: rgba(15, 25, 50, 0.06);
-  color: var(--text-3);
-  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: var(--mc-text-4);
   letter-spacing: 0.04em;
 }
 .toolToggleBtnActive kbd {
-  background: var(--blue-lt);
-  color: var(--blue);
+  background: var(--mc-brand-soft);
+  color: var(--mc-brand);
 }
 
 /* Toggle Edición / En Vivo */
 .modeToggle {
   display: inline-flex;
   align-items: center;
-  background: var(--bg-input);
-  border: 1px solid #D0E0EE;
+  background: var(--mc-surface-2);
+  border: 1px solid var(--mc-line);
   border-radius: 22px;
   padding: 3px;
   gap: 2px;
@@ -389,34 +402,37 @@
   cursor: pointer;
   font-family: inherit;
   font-size: 12px;
-  color: var(--text-3);
+  color: var(--mc-text-3);
   font-weight: 600;
-  transition: all 0.22s;
+  transition: background 0.22s, color 0.22s, box-shadow 0.22s;
 }
-.modeBtn:hover:not(:disabled) { color: var(--text-2); }
+.modeBtn:hover:not(:disabled) { color: var(--mc-text-2); }
+.modeBtn:focus-visible { outline: none; box-shadow: var(--ring); }
 .modeBtnActive {
-  background: #fff;
-  color: var(--text);
+  background: var(--mc-surface);
+  color: var(--mc-text-1);
   font-weight: 700;
-  box-shadow: 0 1px 4px rgba(30, 60, 120, 0.12);
+  box-shadow: var(--mc-shadow-1);
 }
 .modeBtnActiveLive {
-  background: var(--red);
+  background: #b3261e;
   color: #fff;
-  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.38);
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(179, 38, 30, 0.36);
 }
 
-/* ─── Sidebar (paleta) ─── */
+/* ── Sidebar (el catálogo) ──────────────────────────────────────────── */
 .sidebar {
-  background: var(--bg-card);
-  border-right: 1px solid var(--border);
+  background: var(--mc-surface);
+  border-right: 1px solid var(--mc-line);
   overflow-y: auto;
   position: relative;
+  padding-bottom: 12px;
 }
 .sidebarLockedOverlay {
   position: absolute;
   inset: 0;
-  background: rgba(240, 246, 252, 0.78);
+  background: var(--mc-veil);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
   z-index: 5;
@@ -426,7 +442,7 @@
   justify-content: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--mc-text-2);
   text-align: center;
   padding: 0 20px;
   opacity: 0;
@@ -434,9 +450,10 @@
   transition: opacity 0.3s;
 }
 .sidebarLockedOverlayVisible { opacity: 1; pointer-events: auto; }
-.sidebarLockedOverlay strong { color: var(--text); font-size: 13px; }
+.sidebarLockedOverlay strong { color: var(--mc-text-1); font-size: 13px; }
+
 .categoryHeader {
-  padding: 9px 14px 7px;
+  padding: 11px 14px 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -444,8 +461,8 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--text-2);
-  border-bottom: 1px solid #EEF2FA;
+  color: var(--mc-text-3);
+  border-bottom: 1px solid var(--mc-line);
   background: transparent;
   border-top: none;
   border-left: none;
@@ -455,59 +472,94 @@
   font-family: inherit;
   transition: color 0.15s;
 }
-.categoryHeader:hover { color: var(--blue); }
-.categoryChevron {
-  transition: transform 0.2s;
-}
+.categoryHeader:hover { color: var(--mc-brand); }
+.categoryHeader:focus-visible { outline: none; box-shadow: var(--ring); }
+.categoryChevron { transition: transform 0.2s; }
 .categoryChevronCollapsed { transform: rotate(-90deg); }
+
+/* El catálogo del instituto: rejilla que se rellena sola con celdas de
+   ~76 px. Con `repeat(3, 1fr)` fijo, una etiqueta larga ("Puerta de baño")
+   se partía en tres renglones de 8.5 px. */
 .categoryGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-  padding: 6px 8px 4px;
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+  gap: 6px;
+  padding: 8px 8px 6px;
 }
 .elementCard {
-  background: #fff;
-  border: 1px solid transparent;
+  background: var(--mc-surface-2);
+  border: 1px solid var(--mc-line);
   border-radius: 9px;
-  padding: 7px 4px 5px;
+  padding: 7px 4px 6px;
   cursor: grab;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  transition: all 0.15s;
+  color: var(--mc-text-2);
+  transition: background 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .elementCard:hover {
-  background: var(--blue-lt);
-  border-color: #B4D2F0;
+  background: var(--mc-brand-soft);
+  border-color: var(--mc-brand-line);
+  color: var(--mc-text-1);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--mc-shadow-2);
 }
 .elementCard:active { cursor: grabbing; transform: scale(0.97); }
+.elementCard svg { display: block; }
 .elementCardLabel {
-  font-size: 8.5px;
+  font-size: 9px;
   font-weight: 600;
-  color: var(--text-2);
+  color: inherit;
   text-align: center;
-  line-height: 1.1;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .elementCardChairCount {
-  font-size: 7.5px;
-  color: var(--blue);
+  font-size: 8px;
+  color: var(--mc-brand);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
-/* ─── Canvas ─── */
+/* ── El piso ────────────────────────────────────────────────────────── */
+/* ⚠️ `container-type` aquí y en ningún otro sitio de esta pantalla. Un
+   contenedor de consulta se vuelve bloque contenedor de sus descendientes
+   `position: fixed`, así que si algún día se monta un modal DENTRO del
+   lienzo, quedaría atrapado en esta columna. Los que ya existen —el panel
+   de compartir, el optimizador, el tooltip y los toasts— son hermanos del
+   lienzo, no hijos, y por eso siguen siendo del viewport. */
 .canvasWrap {
   position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-  background: radial-gradient(ellipse at 55% 40%, #EDF5FC 0%, #E2EEF8 60%, #D8E8F4 100%);
+  background: var(--mc-canvas);
   cursor: default;
+  container-type: inline-size;
 }
+/* En Vivo: el piso arriba y la línea de tiempo abajo. Estaba en línea
+   (`style={{ display:"grid", gridTemplateRows:"1fr 180px" }}`); vive aquí
+   porque el lienzo ahora tiene su propia caja —`.canvasStage`— y los
+   flotantes (contadores, leyenda, tarjeta) se posicionan contra ELLA. Con
+   la rejilla en línea, un `bottom: 12px` caía encima de la línea de
+   tiempo. */
+.canvasWrapLive { grid-template-rows: minmax(0, 1fr) 180px; }
+
 .canvasWrap[data-pan-mode="true"] { cursor: grab; }
 .canvasWrap[data-pan-mode="true"][data-panning="true"] { cursor: grabbing; }
+
+/* La caja del piso: es el bloque contenedor de todo lo que flota encima. */
+.canvasStage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
 
 .svgRoot {
   width: 100%;
@@ -516,31 +568,54 @@
   display: block;
 }
 
-.gridLine { stroke: rgba(74, 144, 226, 0.065); stroke-width: 0.5; }
-.tile { stroke: rgba(74, 144, 226, 0.045); stroke-width: 0.5; }
+/* Las baldosas. La losa que las sostiene y las sombras de contacto viven
+   en floor-look.module.css, junto a los componentes que las dibujan. */
+.tile { stroke: var(--mc-floor-line); stroke-width: 0.5; }
+.tileA { fill: var(--mc-floor-a); }
+.tileB { fill: var(--mc-floor-b); }
 
 .elementSelected {
-  stroke: var(--blue);
+  stroke: var(--mc-brand);
   stroke-width: 2;
   stroke-dasharray: 5 3;
-  fill: rgba(74, 144, 226, 0.08);
+  fill: var(--mc-brand-soft);
 }
+
+/* 🔴 El piso es CLARO en los dos modos, así que la etiqueta es tinta
+   oscura con halo claro SIEMPRE. En oscuro esta etiqueta era violeta
+   clara con contorno casi negro: sobre baldosas claras, ilegible. */
 .chairLabel {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  fill: #2860B8;
+  fill: var(--mc-label-ink);
   paint-order: stroke;
-  stroke: rgba(255, 255, 255, 0.95);
-  stroke-width: 3;
+  stroke: var(--mc-label-halo);
+  stroke-width: 3.5;
+  stroke-linejoin: round;
   pointer-events: none;
 }
+.chairLabelLoose {
+  fill: #b3261e;
+}
+
 .elementMoving { opacity: 0.5; }
 .ghostElement { opacity: 0.45; pointer-events: none; }
 
-/* ─── Properties panel ─── */
+/* Tooltip del hover en modo Edición. */
+.hoverTipBox {
+  fill: rgba(20, 26, 43, 0.88);
+}
+.hoverTipText {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  fill: #ffffff;
+}
+
+/* ── Panel de propiedades ───────────────────────────────────────────── */
 .propertiesPanel {
-  background: #fff;
-  border-left: 1px solid var(--border);
+  background: var(--mc-surface);
+  border-left: 1px solid var(--mc-line);
   padding: 14px;
   overflow-y: auto;
 }
@@ -549,15 +624,15 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 60px 20px;
-  color: var(--text-3);
+  padding: 56px 18px;
+  color: var(--mc-text-3);
   gap: 12px;
 }
-.propEmptyIcon { opacity: 0.2; }
+.propEmptyIcon { opacity: 0.22; }
 .propTypePreview {
-  background: #F0F7FA;
-  border: 1px solid #DAEDF8;
-  border-radius: 10px;
+  background: var(--mc-surface-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
   padding: 10px 12px;
   display: flex;
   align-items: center;
@@ -574,36 +649,39 @@
 .propTypePreviewName {
   font-size: 13px;
   font-weight: 700;
+  color: var(--mc-text-1);
 }
 .propTypePreviewMeta {
   font-size: 10.5px;
-  color: var(--text-3);
+  color: var(--mc-text-3);
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 .propLabel {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-3);
-  margin-bottom: 4px;
+  color: var(--mc-text-3);
+  margin-bottom: 5px;
 }
 .propGroup { margin-bottom: 14px; }
-.propInput {
+.propInput,
+.propChairSelect {
   width: 100%;
   height: 33px;
   padding: 0 11px;
   font-size: 13px;
-  color: var(--text);
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  color: var(--mc-text-1);
+  background: var(--mc-surface-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius-sm);
   font-family: inherit;
 }
-.propInput:focus {
+.propInput:focus,
+.propChairSelect:focus {
   outline: none;
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.12);
+  border-color: var(--mc-brand-line);
+  box-shadow: var(--ring);
 }
 .propInputRow {
   display: grid;
@@ -617,27 +695,31 @@
 }
 .propRotBtn {
   height: 30px;
-  background: #fff;
-  color: var(--text-2);
-  border: 1px solid #D8E2EE;
+  background: var(--mc-surface-2);
+  color: var(--mc-text-2);
+  border: 1px solid var(--mc-line);
   border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
+.propRotBtn:hover { border-color: var(--mc-brand-line); color: var(--mc-text-1); }
+.propRotBtn:focus-visible { outline: none; box-shadow: var(--ring); }
 .propRotBtnActive {
-  background: var(--blue);
+  background: var(--mc-brand);
   color: #fff;
-  border-color: var(--blue);
+  border-color: var(--mc-brand);
+  font-weight: 700;
 }
 .propDeleteBtn {
   width: 100%;
   padding: 8px 10px;
-  background: #FEF2F2;
-  border: 1px solid #FCA5A5;
-  color: var(--red);
-  border-radius: 7px;
+  background: var(--mc-ocupado-soft);
+  border: 1px solid var(--mc-ocupado-line);
+  color: var(--mc-ocupado);
+  border-radius: var(--mc-radius-sm);
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
@@ -646,27 +728,18 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
+  transition: filter 0.15s;
 }
-.propDeleteBtn:hover { background: #FEE2E2; }
-
-.propChairSelect {
-  width: 100%;
-  height: 33px;
-  padding: 0 11px;
-  font-size: 13px;
-  color: var(--text);
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  font-family: inherit;
-}
+.propDeleteBtn:hover { filter: brightness(0.96); }
+.propDeleteBtn:focus-visible { outline: none; box-shadow: var(--ring); }
 .propChairHint {
-  font-size: 10.5px;
-  color: var(--text-3);
-  margin-top: 4px;
-  line-height: 1.4;
+  font-size: 11px;
+  color: var(--mc-text-3);
+  margin-top: 5px;
+  line-height: 1.45;
 }
-.propChairHint a { color: var(--blue); text-decoration: none; }
+.propChairHint a { color: var(--mc-brand); text-decoration: none; }
+.propChairHint a:hover { text-decoration: underline; }
 
 .propKbdList {
   list-style: none;
@@ -681,19 +754,10 @@
   justify-content: space-between;
   align-items: center;
   font-size: 11px;
-  color: var(--text-2);
-}
-.propKbdRow code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: #F3F7FB;
-  border: 1px solid var(--border);
-  color: var(--text);
+  color: var(--mc-text-2);
 }
 
-/* ─── Mobile block ─── */
+/* ── Bloqueo en móvil ───────────────────────────────────────────────── */
 .mobileBlock {
   display: none;
   flex-direction: column;
@@ -701,20 +765,22 @@
   justify-content: center;
   gap: 16px;
   padding: 40px;
-  background: var(--bg);
+  background: var(--mc-ground);
+  color: var(--mc-text-1);
   height: 100vh;
+  height: 100dvh;
   text-align: center;
   font-family: 'Inter', system-ui, sans-serif;
 }
 .mobileBlock h1 {
   font-size: 22px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--mc-text-1);
   margin: 0;
 }
 .mobileBlock p {
   font-size: 14px;
-  color: var(--text-2);
+  color: var(--mc-text-2);
   max-width: 360px;
   line-height: 1.5;
   margin: 0;
@@ -723,18 +789,27 @@
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  background: linear-gradient(135deg, var(--blue), var(--blue-hover));
+  background: var(--brand-grad);
   display: grid;
   place-items: center;
   color: #fff;
-  box-shadow: 0 12px 32px -12px rgba(74, 144, 226, 0.55);
+  box-shadow: 0 12px 32px -12px rgba(124, 58, 237, 0.55);
 }
 
 .welcomeWrap {
   display: block;
   height: 100vh;
+  height: 100dvh;
 }
 
+/* ⚠️ Esta es la ÚNICA consulta de medios de la pantalla y NO puede ser una
+   consulta de contenedor: decide si el editor entero se monta o se
+   sustituye por el aviso de "ábrelo en una computadora", y eso es una
+   pregunta sobre el VIEWPORT, no sobre el ancho de una caja. Ponerle
+   `container-type` a un ancestro para poder preguntárselo atraparía los
+   `position: fixed` del panel de compartir, del optimizador y del tooltip
+   dentro de la columna del panel. Lo nuevo de esta pantalla se adapta con
+   `auto-fill` y `flex-wrap`, o con @container sobre el lienzo. */
 @media (max-width: 1023px) {
   .page { display: none; }
   .welcomeWrap { display: none; }

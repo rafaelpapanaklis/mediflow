@@ -1,4 +1,18 @@
-/* Estilos del modo En Vivo — tooltip, panel estado, timeline, reloj. */
+/* ═══════════════════════════════════════════════════════════════════════
+   Modo En Vivo — tooltip, tarjeta por sillón, línea de tiempo y reloj.
+
+   ⚠️ ESTA HOJA SE MONTA EN DOS SITIOS: el editor (/dashboard/clinic-layout,
+   dentro de `.page`) y la vista pública de sala de espera (/live/[slug],
+   que NO tiene esos tokens). Por eso aquí el color va escrito y el modo
+   oscuro se resuelve con `:global(.dark)` — que las dos superficies usan—
+   en vez de con las variables `--mc-*` del editor.
+
+   Los tres estados usan la misma tinta que el plano del instituto: verde
+   #15803d, ámbar #b45309 y rojo #b3261e sobre blanco (≥ 4.9:1), y en
+   oscuro suben a #4ade80 / #fbbf24 / #fb7185 porque el verde oscuro sobre
+   #19203a se cae a 2.4:1. El estado SIEMPRE lleva su palabra escrita al
+   lado del punto: el color no dice nada por sí solo.
+   ═══════════════════════════════════════════════════════════════════════ */
 
 /* ─── Reloj ─── */
 .clock {
@@ -8,11 +22,11 @@
   font-size: 14px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  background: #F0F7FA;
-  border: 1px solid #C8E4F4;
+  background: #f1f4fa;
+  border: 1px solid rgba(20, 26, 43, 0.12);
   border-radius: 8px;
   padding: 4px 12px;
-  color: #1A2540;
+  color: #141a2b;
 }
 
 /* ─── Tooltip ─── */
@@ -22,10 +36,10 @@
   z-index: 60;
   background: #fff;
   border-radius: 12px;
-  padding: 13px 16px;
+  padding: 12px 15px;
   border: 1px solid;
   border-top-width: 3px;
-  box-shadow: 0 10px 40px rgba(20, 40, 100, 0.18);
+  box-shadow: 0 18px 44px -18px rgba(20, 26, 43, 0.4);
   min-width: 220px;
   font-family: 'Inter', system-ui, sans-serif;
   display: flex;
@@ -36,11 +50,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #6B7A99;
+  color: #67707f;
   margin-bottom: 2px;
 }
 .tooltipBadge span {
@@ -51,22 +65,22 @@
 .tooltipPatient {
   font-size: 16px;
   font-weight: 800;
-  color: #1A2540;
+  color: #141a2b;
 }
 .tooltipMeta {
   font-size: 12px;
-  color: #6B7A99;
+  color: #4a5468;
 }
 .tooltipTime {
   font-size: 11px;
   font-weight: 700;
-  color: #7C3AED;
+  color: #7c3aed;
   font-variant-numeric: tabular-nums;
   margin-top: 4px;
 }
 .tooltipBar {
   height: 4px;
-  background: #EEF5FA;
+  background: #eef1f7;
   border-radius: 2px;
   margin-top: 4px;
   overflow: hidden;
@@ -78,12 +92,17 @@
 }
 .tooltipDoctor {
   font-size: 11px;
-  color: #9AAAC0;
+  color: #67707f;
   font-weight: 600;
   margin-top: 2px;
 }
 
-/* ─── Status panel ─── */
+/* ─── Tarjeta por sillón ───────────────────────────────────────────────
+   El mismo objeto que el plano del instituto: superficie lisa, UNA línea,
+   canto de color a la izquierda. Antes la tarjeta entera se teñía del
+   color del estado con `background: ${color}08` en línea; con tres
+   estados en pantalla el panel parecía un semáforo y el nombre del
+   paciente competía con el fondo. */
 .statusList {
   display: flex;
   flex-direction: column;
@@ -92,26 +111,48 @@
 .statusEmpty {
   padding: 30px 16px;
   font-size: 12px;
-  color: #9AAAC0;
+  color: #67707f;
   text-align: center;
-  font-style: italic;
+  line-height: 1.5;
 }
 .statusCard {
+  --st: #15803d;
+  --st-soft: rgba(21, 128, 61, 0.09);
   border-radius: 12px;
-  border: 1px solid;
+  border: 1px solid rgba(20, 26, 43, 0.12);
+  border-left: 4px solid var(--st);
+  background: #fff;
   overflow: hidden;
-  transition: all 0.4s;
+  box-shadow: 0 1px 2px rgba(20, 26, 43, 0.06);
+  transition: box-shadow 0.25s;
+}
+.statusCardLibre {
+  --st: #15803d;
+  --st-soft: rgba(21, 128, 61, 0.09);
+}
+.statusCardProximo {
+  --st: #b45309;
+  --st-soft: rgba(180, 83, 9, 0.1);
+}
+.statusCardOcupado {
+  --st: #b3261e;
+  --st-soft: rgba(179, 38, 30, 0.09);
 }
 .statusCardHeader {
-  padding: 9px 12px;
+  padding: 8px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  background: var(--st-soft);
 }
 .statusCardName {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 800;
-  color: #1A2540;
+  color: #141a2b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .statusCardBadge {
   display: inline-flex;
@@ -120,87 +161,87 @@
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  color: var(--st);
 }
 .statusCardBadge span {
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  background: var(--st);
 }
 .statusCardBody {
-  padding: 9px 12px;
+  padding: 9px 12px 10px;
 }
 .statusPatient {
   font-size: 14px;
   font-weight: 700;
-  color: #1A2540;
+  color: #141a2b;
 }
 .statusTreatment {
-  font-size: 11px;
-  color: #6B7A99;
+  font-size: 11.5px;
+  color: #4a5468;
   margin-top: 2px;
 }
 .statusBar {
-  height: 3px;
-  background: rgba(0, 0, 0, 0.05);
+  height: 4px;
+  background: rgba(20, 26, 43, 0.08);
   border-radius: 2px;
-  margin: 6px 0;
+  margin: 7px 0;
   overflow: hidden;
 }
 .statusBar div {
   height: 100%;
+  border-radius: 2px;
+  background: var(--st);
   transition: width 0.5s;
 }
 .statusFooter {
-  font-size: 10px;
-  color: #9AAAC0;
+  font-size: 10.5px;
+  color: #67707f;
+  font-variant-numeric: tabular-nums;
 }
 .statusFree {
   font-size: 12px;
-  color: #10B981;
-  font-weight: 600;
-  font-style: italic;
+  color: #4a5468;
 }
 .statusOdontogramBtn {
-  margin-top: 8px;
+  margin-top: 9px;
   width: 100%;
-  height: 26px;
+  height: 28px;
   padding: 0 10px;
-  border: 1px solid #DCE8F4;
-  border-radius: 7px;
-  background: #F8FAFC;
-  color: #7C3AED;
+  border: 1px solid rgba(124, 58, 237, 0.32);
+  border-radius: 8px;
+  background: rgba(124, 58, 237, 0.1);
+  color: #7c3aed;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  transition: all 0.15s;
+  transition: border-color 0.15s, background 0.15s;
   font-family: inherit;
 }
 .statusOdontogramBtn:hover {
-  background: #F5F3FF;
-  border-color: #7C3AED;
+  background: rgba(124, 58, 237, 0.16);
+  border-color: #7c3aed;
 }
-:global(.dark) .statusOdontogramBtn {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.08);
-  color: #a78bfa;
-}
-:global(.dark) .statusOdontogramBtn:hover {
-  background: rgba(167, 139, 250, 0.12);
-  border-color: #a78bfa;
+.statusOdontogramBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring, 0 0 0 3px rgba(124, 58, 237, 0.35));
 }
 
-/* ─── Timeline ─── */
+/* ─── Línea de tiempo ─── */
 .timeline {
   position: relative;
-  background: #FAFCFF;
-  border-top: 1px solid #E2ECF4;
+  background: #f8fafd;
+  border-top: 1px solid rgba(20, 26, 43, 0.12);
   padding: 12px 14px 16px;
   font-family: 'Inter', system-ui, sans-serif;
+  overflow: hidden;
 }
 .timelineHeader {
   display: flex;
@@ -212,19 +253,20 @@
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #6B7A99;
+  letter-spacing: 0.07em;
+  color: #67707f;
 }
 .timelineLegend {
   display: inline-flex;
-  gap: 12px;
-  font-size: 10px;
-  color: #9AAAC0;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 10.5px;
+  color: #4a5468;
 }
 .timelineLegend span {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
 }
 .timelineLegend span span {
   width: 8px;
@@ -233,15 +275,16 @@
 }
 .timelineNowBtn {
   margin-left: auto;
-  background: #7C3AED;
+  background: #7c3aed;
   color: #fff;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
 }
 .timelineHours {
   display: flex;
@@ -254,7 +297,8 @@
   justify-content: space-between;
   font-size: 9px;
   font-weight: 600;
-  color: #B0BAD0;
+  color: #8e97a8;
+  font-variant-numeric: tabular-nums;
 }
 .timelineRow {
   display: flex;
@@ -264,27 +308,31 @@
 }
 .timelineLabel {
   width: 108px;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  color: #6B7A99;
+  color: #4a5468;
   text-align: right;
   padding-right: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: none;
 }
 .timelineRail {
   flex: 1;
   height: 24px;
-  background: #EEF5FA;
-  border-radius: 6px;
+  background: #eaeff6;
+  border-radius: 7px;
   position: relative;
   cursor: crosshair;
   overflow: hidden;
 }
-.timelineRail:hover { background: #E5EEF6; }
+.timelineRail:hover { background: #e2e9f2; }
 .timelineBlock {
   position: absolute;
   top: 2px;
   bottom: 2px;
-  border-radius: 4px;
+  border-radius: 5px;
   padding: 2px 5px;
   display: flex;
   align-items: center;
@@ -301,7 +349,7 @@
   top: 30px;
   bottom: 16px;
   width: 2px;
-  background: #EF4444;
+  background: #b3261e;
   pointer-events: none;
 }
 .timelineMarkerNow span {
@@ -311,15 +359,15 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #EF4444;
-  box-shadow: 0 0 6px #EF4444;
+  background: #b3261e;
+  box-shadow: 0 0 6px rgba(179, 38, 30, 0.8);
 }
 .timelineMarkerView {
   position: absolute;
   top: 30px;
   bottom: 16px;
   width: 0;
-  border-left: 2px dashed #7C3AED;
+  border-left: 2px dashed #7c3aed;
   pointer-events: none;
 }
 .timelineMarkerView span {
@@ -329,46 +377,80 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #7C3AED;
-  box-shadow: 0 0 6px #7C3AED;
+  background: #7c3aed;
+  box-shadow: 0 0 6px rgba(124, 58, 237, 0.8);
 }
 
-.timelineSection {
-  border-top: 1px solid #E2ECF4;
-}
-
-/* ─── DARK MODE — overrides ─── */
+/* ─── Modo oscuro ─── */
 :global(.dark) .clock {
-  background: rgba(124, 58, 237, 0.15);
-  border-color: rgba(124, 58, 237, 0.35);
-  color: #E8E8EC;
+  background: rgba(167, 139, 250, 0.16);
+  border-color: rgba(167, 139, 250, 0.42);
+  color: #e6ecf7;
 }
 :global(.dark) .tooltip {
-  background: #181530;
-  color: #E8E8EC;
-  box-shadow: 0 14px 48px rgba(0, 0, 0, 0.6);
+  background: #19203a;
+  color: #e6ecf7;
+  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);
 }
-:global(.dark) .tooltipBadge { color: #A0A0AB; }
-:global(.dark) .tooltipPatient { color: #E8E8EC; }
-:global(.dark) .tooltipMeta { color: #A0A0AB; }
-:global(.dark) .tooltipBar { background: rgba(255, 255, 255, 0.06); }
-:global(.dark) .tooltipDoctor { color: #6B6B78; }
+:global(.dark) .tooltipBadge { color: #9aa4b8; }
+:global(.dark) .tooltipPatient { color: #e6ecf7; }
+:global(.dark) .tooltipMeta { color: #b9c3d6; }
+:global(.dark) .tooltipTime { color: #a78bfa; }
+:global(.dark) .tooltipBar { background: rgba(226, 233, 246, 0.1); }
+:global(.dark) .tooltipDoctor { color: #9aa4b8; }
 
-:global(.dark) .statusEmpty { color: #6B6B78; }
-:global(.dark) .statusCardName { color: #E8E8EC; }
-:global(.dark) .statusPatient { color: #E8E8EC; }
-:global(.dark) .statusTreatment { color: #A0A0AB; }
-:global(.dark) .statusBar { background: rgba(255, 255, 255, 0.08); }
-:global(.dark) .statusFooter { color: #6B6B78; }
+:global(.dark) .statusEmpty { color: #9aa4b8; }
+:global(.dark) .statusCard {
+  background: #19203a;
+  border-color: rgba(226, 233, 246, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+:global(.dark) .statusCardLibre {
+  --st: #4ade80;
+  --st-soft: rgba(74, 222, 128, 0.14);
+}
+:global(.dark) .statusCardProximo {
+  --st: #fbbf24;
+  --st-soft: rgba(251, 191, 36, 0.14);
+}
+:global(.dark) .statusCardOcupado {
+  --st: #fb7185;
+  --st-soft: rgba(251, 113, 133, 0.14);
+}
+:global(.dark) .statusCardName { color: #e6ecf7; }
+:global(.dark) .statusPatient { color: #e6ecf7; }
+:global(.dark) .statusTreatment { color: #b9c3d6; }
+:global(.dark) .statusBar { background: rgba(226, 233, 246, 0.12); }
+:global(.dark) .statusFooter { color: #9aa4b8; }
+:global(.dark) .statusFree { color: #b9c3d6; }
+:global(.dark) .statusOdontogramBtn {
+  background: rgba(167, 139, 250, 0.16);
+  border-color: rgba(167, 139, 250, 0.42);
+  color: #c4b5fd;
+}
+:global(.dark) .statusOdontogramBtn:hover {
+  background: rgba(167, 139, 250, 0.24);
+  border-color: #a78bfa;
+}
 
 :global(.dark) .timeline {
-  background: #121020;
-  border-top-color: rgba(255, 255, 255, 0.08);
+  background: #141b30;
+  border-top-color: rgba(226, 233, 246, 0.12);
 }
-:global(.dark) .timelineTitle { color: #A0A0AB; }
-:global(.dark) .timelineLegend { color: #6B6B78; }
-:global(.dark) .timelineHoursInner { color: #45454F; }
-:global(.dark) .timelineLabel { color: #A0A0AB; }
-:global(.dark) .timelineRail { background: rgba(255, 255, 255, 0.04); }
-:global(.dark) .timelineRail:hover { background: rgba(255, 255, 255, 0.06); }
-:global(.dark) .timelineSection { border-top-color: rgba(255, 255, 255, 0.08); }
+:global(.dark) .timelineTitle { color: #9aa4b8; }
+:global(.dark) .timelineLegend { color: #b9c3d6; }
+:global(.dark) .timelineHoursInner { color: #78829a; }
+:global(.dark) .timelineLabel { color: #b9c3d6; }
+:global(.dark) .timelineRail { background: rgba(226, 233, 246, 0.07); }
+:global(.dark) .timelineRail:hover { background: rgba(226, 233, 246, 0.11); }
+:global(.dark) .timelineNowBtn { background: #7c3aed; color: #fff; }
+:global(.dark) .timelineMarkerNow { background: #fb7185; }
+:global(.dark) .timelineMarkerNow span {
+  background: #fb7185;
+  box-shadow: 0 0 6px rgba(251, 113, 133, 0.8);
+}
+:global(.dark) .timelineMarkerView { border-left-color: #a78bfa; }
+:global(.dark) .timelineMarkerView span {
+  background: #a78bfa;
+  box-shadow: 0 0 6px rgba(167, 139, 250, 0.8);
+}
