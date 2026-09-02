@@ -48,6 +48,23 @@ import * as THREE from "three";
 import { fmtHM } from "@/lib/floor-plan/live-mode";
 import { STATUS_RING_COLOR, type Chair3DState, type ChairLiveStatus, type WorldChairAnchor, type WorldModel } from "./world-types";
 
+/**
+ * Cómo nombra la placa flotante a las dos figuras del sillón.
+ *
+ * 🔴 SIN ESTE ARGUMENTO LA PLACA DICE EXACTAMENTE LO DE HOY: el nombre del
+ * paciente a secas y "Dr. <nombre>" para quien atiende. Existe porque ese
+ * "Dr." está escrito aquí dentro y no se puede redirigir desde fuera —y en
+ * una escuela de odontología quien atiende es un ESTUDIANTE, no un doctor.
+ * Es el mismo remedio que la prop `host` de Clinic3DClient: quien monta el
+ * mundo pone sus palabras, y el dental no se entera.
+ */
+export interface LiveLayerLabels {
+  /** Prefijo del paciente. Default: ninguno. */
+  patient?: string;
+  /** Prefijo de quien atiende. Default: `"Dr. "`. */
+  doctor?: string;
+}
+
 export interface LiveLayer {
   group: THREE.Group;
   /** Aplica los estados vivos (clave = resourceId). Sin reconstruir el mundo. */
@@ -114,7 +131,7 @@ function makeAvatar(clothColor: string, headColor: string): {
   return { group, cloth };
 }
 
-export function createLiveLayer(world: WorldModel): LiveLayer {
+export function createLiveLayer(world: WorldModel, labels?: LiveLayerLabels): LiveLayer {
   const group = new THREE.Group();
   group.name = "live";
   const nodes = new Map<string, ChairNodes>();
@@ -251,8 +268,10 @@ export function createLiveLayer(world: WorldModel): LiveLayer {
         // Placa: regenerar SOLO si el texto cambió (cachea + dispone vieja).
         const lines: string[] = [n.anchor.name];
         if (occupied) {
-          if (st?.patientName) lines.push(st.patientName);
-          if (st?.doctorName) lines.push(`Dr. ${st.doctorName}`);
+          // Los prefijos son los del anfitrión, y sin él los de siempre:
+          // el paciente a secas y "Dr." delante de quien atiende.
+          if (st?.patientName) lines.push(`${labels?.patient ?? ""}${st.patientName}`);
+          if (st?.doctorName) lines.push(`${labels?.doctor ?? "Dr. "}${st.doctorName}`);
           if (st?.appointmentEndsAt) {
             const ends = new Date(st.appointmentEndsAt);
             if (!Number.isNaN(ends.getTime())) lines.push(`termina ${fmtHM(ends)}`);

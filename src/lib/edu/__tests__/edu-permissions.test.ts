@@ -696,8 +696,13 @@ test("🔴 SOLO DIRECCION lleva direccion.panel por defecto", () => {
  * a dieciséis, porque el cupo de IA, la conexión de WhatsApp y las dos
  * llaves duras de facturación (cancelar y configurar) son decisiones del
  * contrato o del SAT — de dirección y de nadie más, cada una por su ola.
+ *
+ * Y una más con el PLANO de la clínica: diecisiete. `clinica.edit` cambia
+ * dónde está cada sillón EN EL PISO, que es lo que ven los treinta docentes
+ * y los ciento veinte estudiantes de la escuela; el docente MIRA el piso
+ * (lleva "clinica.view") y no lo redibuja.
  */
-test("las keys de UN SOLO rol son todas de DIRECCION, y son estas dieciséis", () => {
+test("las keys de UN SOLO rol son todas de DIRECCION, y son estas diecisiete", () => {
   const cuantosRoles = (k: EduPermissionKey) =>
     EDU_ROLES.filter((r) => EDU_ROLE_DEFAULTS[r].includes(k)).length;
 
@@ -708,6 +713,9 @@ test("las keys de UN SOLO rol son todas de DIRECCION, y son estas dieciséis", (
       "padron.manage",
       "supervision.assign",
       "sillones.manage",
+      // Ola del PLANO · acomodar el piso clínico. Mirar el piso lo hace
+      // también el docente; moverlo de sitio, no.
+      "clinica.edit",
       "tarifarios.manage",
       "equipo.manage",
       "rubricas.manage",

@@ -12476,6 +12476,9 @@ model EduInstitution {
   // modelos viven al FINAL del archivo, con su propio encabezado.
   paymentPlans       EduPaymentPlan[]
   installments       EduInstallment[]
+  // El PLANO de cada sede. Bloque ADITIVO al final de las relaciones: el
+  // modelo vive al FINAL del archivo, con su propio encabezado.
+  campusLayouts      EduCampusLayout[]
 
   @@map("edu_institutions")
 }
@@ -12605,6 +12608,11 @@ model EduUser {
   /// visibilidad.
   paymentPlansCreated   EduPaymentPlan[] @relation("EduPlanCreatedBy")
   paymentPlansCancelled EduPaymentPlan[] @relation("EduPlanCancelledBy")
+
+  /// El PLANO de la sede. Una sola columna de AUTORÍA —quién lo acomodó la
+  /// última vez— y ninguna de visibilidad: el plano es infraestructura de
+  /// la escuela, lo edita la dirección y lo mira todo el piso.
+  campusLayoutsUpdated  EduCampusLayout[] @relation("EduCampusLayoutUpdatedBy")
 
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
@@ -14704,6 +14712,9 @@ model EduCampus {
   chairs      EduChair[]
   access      EduUserCampusAccess[]
   charges     EduCharge[]
+  /// El PLANO de esta sede. OPCIONAL, y esa opcionalidad ES la regla: una
+  /// sede sin fila se pinta con el plano automático de sus sillones.
+  layout      EduCampusLayout?
 
   @@unique([institutionId, code], map: "edu_campuses_code_key")
   @@index([institutionId, isActive, orderIndex], map: "edu_campuses_orden_idx")
@@ -15929,4 +15940,55 @@ model EduInstallment {
   // "Qué vence esta semana" del instituto entero, sin recorrer plan por plan.
   @@index([institutionId, dueDate], map: "edu_installments_vence_idx")
   @@map("edu_installments")
+}
+
+/// EL PLANO DE UNA SEDE — dónde está cada sillón en el piso.
+///
+/// Espejo de `ClinicLayout` del dental (mismas dos columnas Json), y a
+/// propósito: el editor isométrico y el mundo 3D que lo pintan son los del
+/// dental y esperan exactamente esa forma —`LayoutElement[]` y
+/// `LayoutMetadata`— así que guardar otra cosa obligaría a traducir en cada
+/// lectura.
+///
+/// 🔴 UNO POR SEDE, no por instituto. Cada sede tiene SUS sillones (el
+/// número está pintado en SU pared, y es único dentro de la sede, no del
+/// instituto), así que un plano por escuela dibujaría dos edificios encima
+/// del otro. Por eso `campusId` es @unique y no `institutionId`.
+///
+/// 🔴 SIN FILA = PLANO AUTOMÁTICO. Una sede que nunca pasó por el editor no
+/// se pinta vacía: `eduPlanoAuto` (src/lib/edu/plano-core.ts) arma una
+/// rejilla con sus sillones activos para que la pantalla sirva desde el
+/// primer día. La fila aparece cuando la dirección acomoda el plano y
+/// guarda; a partir de ahí manda lo guardado.
+///
+/// El vínculo con la unidad real es `LayoutElement.resourceId`, que aquí
+/// guarda un `EduChair.id` (en el dental guarda un `Resource(kind=CHAIR)`).
+/// Es un id DENTRO del JSON, así que no hay llave foránea que lo cuide: lo
+/// valida la escritura (`eduPlanoValidar`, que exige que el sillón sea de
+/// ESTA sede) y la lectura marca el que se quedó colgando.
+model EduCampusLayout {
+  id            String @id @default(cuid())
+  institutionId String
+  /// 1:1 con la sede. Borrar la sede se lleva su plano: sin sus sillones no
+  /// dibuja nada.
+  campusId      String @unique
+
+  /// `LayoutElement[]` tal como lo escribe el editor del dental.
+  elements Json  @default("[]")
+  /// `LayoutMetadata`: { zoom, panOffset, lastEditAt, gridSize }.
+  metadata Json?
+
+  /// Quién lo acomodó por última vez. SET NULL al borrar la cuenta: el
+  /// plano no desaparece porque su autor se dé de baja.
+  updatedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  campus      EduCampus      @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  updatedBy   EduUser?       @relation("EduCampusLayoutUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId], map: "edu_campus_layouts_institucion_idx")
+  @@map("edu_campus_layouts")
 }
