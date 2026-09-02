@@ -5,7 +5,11 @@ import * as Select from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { FormField } from "../form-field";
 import { SPECIALTIES, SPECIALTY_SLUGS } from "@/lib/specialty-data";
-import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
+import { mxTenDigits } from "@/lib/phone-mx";
+
+// El campo se pide como teléfono de contacto (no como WhatsApp), así que el
+// error también: MX_PHONE_ERROR habla de WhatsApp y lo usan otras superficies.
+const PHONE_ERROR = "Escribe tu teléfono a 10 dígitos";
 
 interface Step2Values {
   clinicName: string;
@@ -273,7 +277,7 @@ export function Step2Clinic({
 
       {showPhone && (
         <FormField
-          label="WhatsApp de la clínica"
+          label="Número de teléfono"
           type="tel"
           inputMode="numeric"
           placeholder="55 1234 5678"
@@ -282,7 +286,7 @@ export function Step2Clinic({
           value={values.phone}
           onChange={e => onChange({ phone: e.target.value })}
           onBlur={() => setTouched(t => ({ ...t, phone: true }))}
-          error={touched.phone && !phoneValid ? MX_PHONE_ERROR : undefined}
+          error={touched.phone && !phoneValid ? PHONE_ERROR : undefined}
           required
         />
       )}

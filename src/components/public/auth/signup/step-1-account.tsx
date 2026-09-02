@@ -5,7 +5,11 @@ import { useState } from "react";
 import { FormField } from "../form-field";
 import { PasswordInput } from "../password-input";
 import { PasswordStrength, scorePassword } from "../password-strength";
-import { MX_PHONE_ERROR, mxTenDigits } from "@/lib/phone-mx";
+import { mxTenDigits } from "@/lib/phone-mx";
+
+// El campo se pide como teléfono de contacto (no como WhatsApp), así que el
+// error también: MX_PHONE_ERROR habla de WhatsApp y lo usan otras superficies.
+const PHONE_ERROR = "Escribe tu teléfono a 10 dígitos";
 
 interface Step1Values {
   nombre: string;
@@ -39,7 +43,7 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
     email:
       (touched.email && !emailValid ? "Email inválido" : undefined) ??
       emailServerError,
-    phone: touched.phone && !phoneValid ? MX_PHONE_ERROR : undefined,
+    phone: touched.phone && !phoneValid ? PHONE_ERROR : undefined,
     password:
       touched.password && !pwValid
         ? "La contraseña es muy débil"
@@ -107,7 +111,7 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
       />
 
       <FormField
-        label="WhatsApp de la clínica"
+        label="Número de teléfono"
         type="tel"
         inputMode="numeric"
         placeholder="55 1234 5678"
