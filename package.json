@@ -15,6 +15,7 @@
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
     "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts",
     "test:agenda-metrics": "tsx --test src/lib/agenda/__tests__/slot-metrics.test.ts",
+    "test:hover-slot": "tsx --test src/lib/agenda/__tests__/hover-slot.test.ts",
     "test:agenda-legend": "tsx --test src/lib/agenda/__tests__/doctor-legend.test.ts",
     "test:permissions": "tsx --test src/lib/auth/__tests__/permissions-matrix.test.ts",
     "test:team-fields": "tsx --test src/lib/team/__tests__/member-fields.test.ts",
