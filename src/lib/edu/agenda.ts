@@ -17,6 +17,12 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
+// El buscador de paciente de la agenda es EL MISMO que el de la pantalla de
+// pacientes: un segundo saneador de texto en el mismo vertical es como se
+// acaba con uno que escapa los comodines de LIKE y otro que no.
+import { eduPatientSearchAnd } from "@/lib/edu/pacientes-core";
+import { EDU_MAX_CHAIRS } from "@/lib/edu/agenda-core";
+import type { EduAgendaChair } from "@/lib/edu/agenda-rejilla";
 import {
   EDU_AGENDA_MAX_ROWS,
   EDU_APPOINTMENT_DEFAULT_MINUTES,
@@ -51,6 +57,7 @@ import {
 import {
   eduAppointmentScopeWhere,
   eduCampusCovers,
+  eduChairScopeWhere,
   eduScopeIsEmpty,
   eduStudentScopeWhere,
   eduVisibility,
@@ -208,6 +215,17 @@ export async function listEduAgenda(
   if (query.studentId) where.studentId = query.studentId;
   if (query.type) where.type = query.type;
   if (query.status) where.status = query.status;
+  // Ola de la rejilla · el DOCENTE. Es `EduAppointment.supervisorUserId`
+  // —quién supervisa ESTA cita— y no la asignación vigente del estudiante:
+  // son cosas distintas a propósito (una cita puede haberla cubierto otro
+  // docente) y la agenda enseña lo que va a pasar en el sillón.
+  if (query.supervisorUserId) where.supervisorUserId = query.supervisorUserId;
+  // Ola de la rejilla · el BUSCADOR de paciente. Se filtra en la BASE con
+  // el MISMO `where` del buscador de pacientes (índice sin acentos), no con
+  // un `includes` en memoria: con el techo de 500 filas, filtrar sobre lo
+  // ya traído diría "no hay" de un paciente que sí está citado.
+  const buscador = eduPatientSearchAnd(query.q);
+  if (buscador.length > 0) where.patient = { AND: buscador };
 
   const rows = await prisma.eduAppointment.findMany({
     where,
@@ -248,11 +266,66 @@ export async function listEduToday(
       studentId: null,
       type: null,
       status: null,
+      supervisorUserId: null,
+      q: null,
+      mode: "rejilla",
     },
     timeZone,
     now,
   );
   return { dayISO, rows: page.rows };
+}
+
+/**
+ * Los SILLONES que la rejilla necesita: los de `listEduChairOptions` MÁS su
+ * horario.
+ *
+ * Existe porque el eje de la rejilla pinta el horario REAL de la clínica y
+ * ese dato no estaba en ninguna de las dos lecturas que ya había:
+ * `listEduChairOptions` (lo que llena un desplegable) no trae horarios, y
+ * `listEduChairs` (la pantalla de Sillones) trae además el conteo de citas
+ * futuras de cada uno — una consulta por sillón que aquí no hace falta y
+ * que con 32 sillones se paga en cada carga de la agenda.
+ *
+ * 🔴 El recorte por SEDE es el de siempre (`eduChairScopeWhere`): un sillón
+ * de otro edificio no puede aparecer como columna.
+ */
+export async function listEduAgendaChairs(
+  ctx: EduClinicaContext,
+): Promise<EduAgendaChair[]> {
+  const institutionId = requireInstitution(ctx);
+  const rows = await prisma.eduChair.findMany({
+    where: eduChairScopeWhere({ institutionId, campusIds: ctx.campusIds }),
+    orderBy: [{ campus: { orderIndex: "asc" } }, { orderIndex: "asc" }, { number: "asc" }],
+    take: EDU_MAX_CHAIRS,
+    select: {
+      id: true,
+      name: true,
+      number: true,
+      isActive: true,
+      orderIndex: true,
+      campusId: true,
+      campus: { select: { name: true } },
+      schedules: {
+        orderBy: [{ weekday: "asc" }, { startMinute: "asc" }],
+        select: { weekday: true, startMinute: true, endMinute: true },
+      },
+    },
+  });
+  return rows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    number: c.number,
+    isActive: c.isActive,
+    orderIndex: c.orderIndex,
+    campusId: c.campusId,
+    campusName: c.campus.name,
+    schedules: c.schedules.map((s) => ({
+      weekday: s.weekday,
+      startMinute: s.startMinute,
+      endMinute: s.endMinute,
+    })),
+  }));
 }
 
 /** Una cita, SI le toca a quien pregunta (si no, se ve como inexistente). */

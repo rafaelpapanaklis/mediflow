@@ -98,6 +98,12 @@ export default async function InstitutoMiDiaPage({
           studentId: null,
           type: null,
           status: null,
+          // Mi agenda no tiene filtros: es el día de quien pregunta, y el
+          // recorte ya lo hizo visibility.ts. Las llaves nuevas de la
+          // rejilla viajan en null / por defecto.
+          supervisorUserId: null,
+          q: null,
+          mode: "rejilla",
         },
         tz,
         now,

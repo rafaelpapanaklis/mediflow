@@ -12,17 +12,17 @@ import {
 } from "@/lib/edu/agenda-core";
 import {
   listEduAgenda,
+  listEduAgendaChairs,
   listEduStudentOptions,
   listEduSupervisorOptions,
 } from "@/lib/edu/agenda";
-import { listEduChairOptions } from "@/lib/edu/sillones";
 import { listEduPatientOptions } from "@/lib/edu/pacientes";
 import { listEduPrograms } from "@/lib/edu/padron";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { getEduCampusScope } from "@/lib/edu/campus";
 import { eduWithCampus } from "@/lib/edu/campus-core";
 import { EduDenied } from "@/components/edu/edu-denied";
-import { EduAgendaScreen } from "@/components/edu/clinica/agenda-screen";
+import { EduAgendaScreen } from "@/components/edu/agenda/agenda-screen";
 
 export const metadata: Metadata = {
   title: "Agenda · DaleControl Institucional",
@@ -112,7 +112,10 @@ export default async function InstitutoAgendaPage({
 
   const [page, sillones, alumnos, docentes, programas, pacientes] = await Promise.all([
     listEduAgenda(cctx, query, tz, now),
-    listEduChairOptions(cctx),
+    // 🔴 Con HORARIO: el eje de la rejilla pinta el horario REAL de la
+    // clínica y sin esta lectura no habría de dónde sacarlo (la de los
+    // desplegables no lo trae). Ver listEduAgendaChairs.
+    listEduAgendaChairs(cctx),
     // 🔴 P1-4 DE LA AUDITORÍA — LA LISTA DE ALUMNOS NO VIAJA AL NAVEGADOR
     // DE QUIEN NO LA USA. Solo se pinta bajo `canManage` (el alta y el
     // reagendar), así que lleva el mismo `canManage ? … : []` que sus dos
@@ -127,7 +130,9 @@ export default async function InstitutoAgendaPage({
   ]);
 
   return (
-    <div className="edu-page">
+    // `edu-ag-page` quita el tope de 1100 px de `.edu-page`: con 32 sillones
+    // ese tope deja siete columnas y media a la vista. Ver edu-theme.css.
+    <div className="edu-page edu-ag-page">
       <header className="edu-pagehead">
         <div>
           <h1 className="edu-page__title">Agenda</h1>
@@ -193,6 +198,17 @@ export default async function InstitutoAgendaPage({
         patients={pacientes.map((p) => ({ id: p.id, folio: p.folio, name: p.name }))}
         canManage={canManage}
         todayISO={eduTodayISO(tz, now)}
+        timezone={tz}
+        /* El selector de sede que ya existe arriba, montado también en los
+           filtros de la agenda: es EL MISMO componente y la MISMA cookie —
+           dos controles del mismo estado que se puedan contradecir es
+           exactamente lo que no queremos. Con una sola sede no se pinta. */
+        sede={{
+          options: sede.options,
+          activeId: sede.activeId,
+          allLabel: sede.allLabel,
+          showPicker: sede.showPicker,
+        }}
       />
     </div>
   );

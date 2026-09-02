@@ -31440,3 +31440,265 @@ real queda pendiente de mirarse en el preview de Vercel: la ficha del instituto 
 server-rendered contra Prisma y sin `DATABASE_URL` devuelve 500 antes de pintar nada. Lo que sí
 está probado es la relación entre las dos piezas del arreglo —el CSS renombrado y el JSX que lo
 usa se comprueban el uno contra el otro en la prueba 4—. PR contra `main`, SIN mergear.
+
+---
+
+## 2026-09-02 · DaleControl INSTITUCIONAL — LA AGENDA ES UNA REJILLA
+
+Rama `feat/edu-agenda-rejilla`. `/instituto/agenda` deja de ser una lista de tarjetas
+agrupadas con la hora escrita y pasa a ser una rejilla con eje de horas real, columnas por
+sillón, color por especialidad, filtros, buscador, zoom y arrastre para reagendar. **SIN SQL**
+(no toca `prisma/schema.prisma` ni añade ningún `sql/edu-*.sql`) y sin variables de entorno
+nuevas.
+
+### Qué se IMPORTÓ del dental y qué se escribió aquí
+
+El motor de la agenda del producto dental resolvió estos problemas hace tiempo y está probado
+en producción. Se importa **tal cual, sin editar una línea** (`src/lib/agenda/`):
+
+| Módulo del dental | Qué aporta a la rejilla del instituto |
+| --- | --- |
+| `lane-layout.ts` (`assignLanes`) | Los CARRILES de las citas encimadas. |
+| `clinic-hours.ts` (`paintedAgendaWindow`) | El eje pinta el horario REAL y se ensancha hasta cubrir toda cita fuera de él. |
+| `slot-metrics.ts` (`slotHeightFor`, `showHalfHourLabels`, `CARD_TWO_ROW_MIN_PX`, `DEFAULT_SLOT_HPX`) | El alto del renglón, el zoom y cuándo caben los rótulos de media hora y la segunda fila de la tarjeta. |
+| `drag-utils.ts` (`deltaYToSlots`, `detectOverlap`) | Píxeles arrastrados ⇄ renglones, y el choque comprobado en el navegador antes de molestar al servidor. |
+| `doctor-color.ts` (`doctorColorFor`, `doctorInitials`, `readableTextOn`) | La paleta, las iniciales y la tinta legible encima de cualquier color. |
+| `types.ts` (`AgendaAppointmentDTO`, `AgendaDensity`) | Las formas que esos módulos esperan. |
+
+Ninguno de los COMPONENTES de `src/components/dashboard/agenda/` se importa: están atados a la
+página dental (su provider, su alta, sus mutaciones). Se miraron para copiar el lenguaje visual
+y la rejilla se escribió aparte, en `src/components/edu/agenda/`.
+
+**Lo que se escribió en esta rama (10 archivos):**
+
+- `src/lib/edu/agenda-rejilla.ts` **(nuevo, puro y client-safe, 780 renglones)** — el cerebro:
+  el modelo de lectura por sillón, las tres traducciones al motor del dental, la ventana del
+  eje, los carriles, el color por especialidad, el arrastre y las llaves de la URL.
+- `src/components/edu/agenda/agenda-screen.tsx` **(nuevo)** — la pantalla: barra, leyenda,
+  filtros, medidas y el `DndContext`.
+- `src/components/edu/agenda/agenda-rejilla.tsx` **(nuevo)** — eje, cabecera, columnas y
+  tarjetas.
+- `src/components/edu/agenda/agenda-lista.tsx` **(nuevo)** — la vista de lista.
+- `src/components/edu/agenda/agenda-modales.tsx` **(nuevo)** — agendar, el detalle y la
+  confirmación del arrastre (los dos primeros vienen de la pantalla vieja, sin cambios de
+  fondo).
+- `src/lib/edu/__tests__/edu-agenda-rejilla.test.ts` **(nuevo, 42 pruebas)**.
+- `src/lib/edu/agenda-core.ts` — tres llaves nuevas en la query (`docente`, `q`, `modo`).
+- `src/lib/edu/agenda.ts` — los dos filtros nuevos en el `where` y `listEduAgendaChairs`.
+- `src/app/instituto/(panel)/agenda/page.tsx` — monta la pantalla nueva y le pasa la sede.
+- `src/app/instituto/edu-theme.css` — la familia `edu-ag` (≈740 renglones) y **fuera** la
+  familia `.edu-agenda*` + `.edu-daybar*`, que solo usaba la pantalla que se reemplaza.
+- `src/components/edu/clinica/agenda-screen.tsx` — **borrado** (1 042 renglones).
+
+### Las reglas de negocio NO se tocaron
+
+`src/lib/edu/agenda-core.ts` y `agenda.ts` conservan enteras las reglas de la Ola 2 y de la
+auditoría: la cita se engancha sola a su caso, reagendar revalida el caso cuando cambia el
+estudiante, reagendar cancela el recordatorio viejo, el tope de 8 h, la sede derivada del
+sillón, el choque medio abierto y los estados clínicos vs. administrativos. Lo que se AÑADIÓ es
+modelo de lectura:
+
+- **`listEduAgendaChairs(ctx)`** — los sillones **con su horario**. Existe porque el eje pinta
+  el horario real y ese dato no estaba en ninguna lectura previa: `listEduChairOptions` (la de
+  los desplegables) no trae horarios y `listEduChairs` (la pantalla de Sillones) trae además el
+  conteo de citas futuras de cada uno, una consulta por sillón que aquí no hace falta y que con
+  32 sillones se paga en cada carga. El recorte por sede es el de siempre
+  (`eduChairScopeWhere`).
+- **Dos filtros nuevos en el `where`**: el DOCENTE (`EduAppointment.supervisorUserId` — quién
+  supervisa ESA cita, no la asignación vigente del estudiante) y el BUSCADOR de paciente, que
+  reusa `eduPatientSearchAnd` de `pacientes-core.ts`. Se filtra en la BASE y no en memoria: con
+  el techo de 500 filas, filtrar sobre lo ya traído diría "no hay" de un paciente que sí está
+  citado.
+
+El alcance sigue saliendo de `visibility.ts` y la rejilla no cambia quién ve qué: la página
+sigue redirigiendo a `/mi-dia` a los alcances "own" y "supervised" (Ola 12).
+
+### Las decisiones que no se deducen del código
+
+**1. El color es de la ESPECIALIDAD, no de la persona.** En el dental el color es del doctor y
+funciona porque una clínica tiene seis. Una escuela tiene ciento veinte estudiantes: un color
+por cabeza no es un código, es ruido —dos tonos vecinos no se distinguen y la leyenda no cabe
+en pantalla—. La especialidad es la unidad con la que la escuela piensa el piso ("hoy
+endodoncia tiene ocho sillones"), son entre tres y diez, y la leyenda cabe arriba. El color
+sale del MISMO hash y la MISMA paleta del dental (`doctorColorFor`), así que no se guarda en
+ninguna columna, y la tinta encima la calcula `readableTextOn`.
+
+**2. La leyenda ES el filtro.** Los chips de especialidad escriben la llave `programa`, la
+misma del desplegable. No hay dos controles del mismo estado que se puedan contradecir — es la
+lección de la leyenda de doctores del dental. Y la leyenda cubre **todo color pintado**,
+incluidas las especialidades que tienen citas pero ya no están en el padrón: un color en
+pantalla que nadie puede nombrar ni filtrar no sirve de nada.
+
+**3. El ESTADO es un punto, no una superficie.** La superficie ya la tiene la especialidad; dos
+señales encima de la misma no se leen. `EDU_AGENDA_STATUS_TONE` es un `Record` COMPLETO del
+enum a propósito: con un `switch` y un `default`, un estado nuevo saldría del color de relleno
+y nadie se enteraría. Hay una prueba que además exige que el tema declare la clase de cada uno.
+**Tamizaje y control se siguen distinguiendo** (borde ámbar punteado y borde punteado suave),
+que es lo que hacía `edu-slot--tamizaje` / `--control` en la pantalla vieja.
+
+**4. Una CANCELADA no ocupa sillón pero SÍ ocupa píxeles.** `assignLanes` del dental descarta
+las canceladas al repartir carriles —allá no se pintan— y aquí sí se pintan, porque una
+cancelada dice que ese hueco se liberó. Sin el ajuste, la cancelada tomaba el ancho entero de
+la columna y tapaba a la cita que de verdad está ocupando el sillón. El CHOQUE es otra pregunta
+y se contesta con el estado REAL (`detectOverlap` descarta canceladas y "no llegó", igual que
+`EDU_APPOINTMENT_FREE_STATUSES` en el servidor). Dos preguntas distintas, dos respuestas
+distintas, las dos probadas.
+
+**5. La correspondencia con el motor del dental no es arbitraria:** el SILLÓN hace de "recurso"
+y el ESTUDIANTE de "doctor". Con eso, `detectOverlap` comprueba en el navegador exactamente las
+dos colisiones que `assertNoClash` comprueba en la base. Si la correspondencia fuera otra, el
+aviso del arrastre diría verde donde el servidor va a decir que no.
+
+**6. Arrastrar PROPONE, no guarda.** Una cita movida por accidente con el codo es un paciente
+al que le llega la hora equivocada, y deshacer no existe. El arrastre abre una ventana que
+enseña de dónde a dónde con las dos horas escritas, y el guardado va contra el **mismo**
+`PATCH /api/instituto/agenda/[id]` que el formulario de reagendar, con las mismas validaciones
+del servidor. Si el servidor dice que no, el error se lee ahí y la tarjeta se queda donde
+estaba. A propósito **no se manda `studentId`**: arrastrar mueve una hora, y mandarlo obligaría
+al servidor a volver a derivar el caso en cada movimiento.
+
+**7. Arrastrar CONSERVA el desfase.** Se le SUMAN cuartos de hora a la hora que tenía, no se la
+realinea a la rejilla. Realineando, una cita de las 09:10 soltada donde estaba se proponía a
+las 09:15 —un cambio que nadie pidió— y la ventana de confirmar se abría por un simple clic.
+
+**8. La hora que sigue a la tarjeta sale del MISMO cálculo que el soltar.** Es un renglón del
+contexto de arrastre, no una segunda cuenta en la tarjeta. Se descubrió en el navegador: cuando
+el arrastre llega al borde, dnd-kit desplaza la rejilla solo, y ese desplazamiento entra en el
+`delta` del soltar pero NO en el `transform` de la tarjeta — el rótulo decía **11:30** y la cita
+se guardaba a las **13:15**. Es el peor fallo posible en una agenda: el que promete una cosa y
+hace otra.
+
+**9. La sede NO tiene un filtro nuevo.** Se monta el `EduSedeSelector` que ya existe, con la
+misma cookie. Un segundo control de sede que escribiera en la URL sería un estado que se puede
+contradecir con el de la barra superior.
+
+**10. Las siete llaves de la URL de siempre no se renombran.** `vista`, `dia`, `sillon`,
+`programa`, `alumno`, `tipo`, `estado` se leen exactamente igual que antes de la ola. Se AÑADEN
+tres: `docente`, `q` y `modo`. `modo` (rejilla/lista) es una llave aparte y no un tercer valor
+de `vista` a propósito: `vista` significa el RANGO que se lee de la base, y una "vista lista"
+dejaría sin respuesta la pregunta de qué rango trae. Hay una prueba que fija las siete viejas
+una por una.
+
+**11. El zoom se recuerda en `localStorage` (`edu-agenda-densidad`) y no en la URL.** No es un
+filtro: es una preferencia de quien mira. Un enlace compartido tiene que llevar QUÉ se ve, no
+con qué aumento lo ve el otro.
+
+### Responsive: qué se decidió para cada ancho
+
+Se mide con **`@container`** sobre `.edu-ag` y no con `@media`, al revés que el resto de
+`edu-theme.css`. El motivo es concreto: en escritorio el menú del panel es una columna fija de
+252 px, así que con la ventana en 1024 px a la agenda le quedan ~770 — medir la ventana
+pintaría columnas de escritorio en un hueco de tableta. **Los tres diálogos se montan FUERA de
+`.edu-ag`** porque un contenedor de consulta atrapa a sus descendientes `position: fixed`, y
+`.edu-modal` lo es. El comentario de `.edu-modal` en el tema, que decía que NADA del panel
+lleva `container-type`, quedó actualizado.
+
+- **390 px (celular) · Día → UNA columna de sillón.** Con 32 sillones no hay forma de que
+  quepan, y encogerlos hasta que quepan da columnas de 11 px. Se pinta un sillón con un
+  selector ‹ Sillón 1 · 1 de 32 sillones › que escribe la MISMA llave `?sillon=` — no hay
+  estado nuevo escondido — y un aviso dice cuántas citas quedan fuera. Los filtros van
+  **plegados** en un desplegable (ahorran 110 px) y la tira de especialidades va en **un
+  renglón que se desliza** (ahorra otros 70). **No se arrastra** en pantalla angosta: en un
+  teléfono ese gesto es desplazarse.
+- **390 px · Semana → cae a LISTA**, y lo dice en pantalla. Siete columnas de 50 px no se leen
+  de ninguna manera, y una semana es justo lo que una lista lee bien.
+- **768 px (tableta):** 32 columnas de 124 px con desplazamiento horizontal; ~5 a la vista.
+- **1024 px:** columnas de 124 px, ~7 a la vista.
+- **Escritorio ancho:** columnas de 152 px. La página de la agenda estrena `edu-ag-page`, que
+  le quita a `.edu-page` el tope de 1100 px — con ese tope se veían **siete columnas y media**
+  de 32 y el resto quedaba detrás de un desplazamiento eterno. Es un modificador: ninguna otra
+  pantalla del vertical se entera.
+
+**La primera columna (las horas) y la fila de encabezados se quedan fijas.** Se probó midiendo:
+con la rejilla desplazada 1 500 px a la derecha y 54 hacia abajo, el eje y la esquina siguen en
+`left: 1` y la cabecera en `top: 1`. Dos detalles que costaron y quedan escritos en el CSS:
+(a) UN SOLO contenedor con desplazamiento para los dos ejes —con el alto y el ancho en
+contenedores anidados, el `sticky` del eje se resuelve contra el de dentro y las horas se van
+con las columnas—; y (b) **dos filas flex, no una rejilla CSS**: en `display: grid` el bloque
+contenedor de un hijo es su ÁREA, así que un `sticky left: 0` en la primera columna no tiene
+sitio a donde correrse.
+
+### Lo que se vio en el navegador (y lo que se arregló por haberlo visto)
+
+`npx next dev` + una page temporal fuera de `/instituto` (el middleware matchea
+`/instituto/:path*`) montando el componente REAL con 32 sillones, 24 citas del día y 27 de la
+semana, los siete estados, tres carriles encimados y una cancelada. **La page se borró antes de
+commitear** y la guardia lo confirma.
+
+Cuatro fallos que solo se ven mirando, los cuatro arreglados:
+
+1. **El rótulo del arrastre mentía** cuando la rejilla se desplazaba sola (11:30 en pantalla,
+   13:15 guardado). Ver la decisión 8.
+2. **El ancho no llegaba nunca si el `ResizeObserver` no disparaba.** Un observador no entrega
+   su primera llamada hasta el siguiente paso de renderizado, y una pestaña que el navegador no
+   está pintando no da ninguno: el ancho se quedaba en `null` y **un teléfono pintaba las 32
+   columnas**. Ahora hay una medida directa en el montaje y el observador solo se ocupa de los
+   cambios.
+3. **La rejilla no recuperaba el alto** que le devolvía el desplegable de filtros al plegarse.
+4. **El aviso de "la semana se enseña como lista" salía repartido por el renglón**: es un
+   contenedor flex y cada trozo de texto suelto era un elemento flexible por su cuenta.
+
+Y se comprobó, además: el arrastre completo (activación, el hueco de destino en **verde**
+cuando cabe y en **rojo** cuando choca, el rótulo siguiendo la hora, y la ventana "¿Mover esta
+cita?" con "Estaba 10:00–11:30 · Sillón 3 / Queda 11:30–13:00 · Sillón 3"); que el detalle de
+una cita abre a pantalla completa y **no** encerrado en la columna (la trampa del
+`container-type`); las cuatro resoluciones sin desbordar la página en ninguna; y el tema
+oscuro, que aunque hoy no se aplica en `/instituto` ya no depende de la suerte.
+
+⚠️ **El arrastre se verificó con una secuencia de eventos de puntero escrita a mano**
+(`pointerdown` → 5 × `pointermove` → `pointerup`), no con el `left_click_drag` de la
+automatización: esa herramienta no emite `pointermove` intermedios y dnd-kit necesita uno para
+pasar su umbral de 6 px. El gesto real de un ratón sí los emite.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
+  **463/463 páginas**, tabla de rutas entera, `/instituto/agenda` en 14.3 kB. Cero "Failed to compile", cero `error TS`, cero heap OOM. Los únicos warnings son
+  los PREEXISTENTES y ajenos al vertical (el `Critical dependency` de `file-type` en
+  `api/ai-wallet/spei/topup` y tres clases ambiguas de Tailwind). El spam de `Environment
+  variable not found: DATABASE_URL` es el de siempre (worktree sin `.env`).
+  ⚠️ Las dos primeras pasadas murieron en `prisma generate` con el `EPERM ... rename
+  query_engine-windows.dll.node` de Windows, y **no era intermitente**: `next dev` había dejado
+  tres procesos node huérfanos apuntando al worktree —el que mata la tarea es el envoltorio, no
+  el árbol— y ésos tenían la DLL abierta. Matados los tres, el build salió a la primera. Si
+  vuelve a pasar, se buscan con `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` y se
+  filtra por el nombre del worktree antes de sospechar del código.
+- **`npm run test:edu` exit 0** — **30 archivos, 975 pruebas, 975 pass, 0 fail** (desde
+  29/933). Las 42 nuevas están en `edu-agenda-rejilla.test.ts` y cubren lo que el encargo pedía
+  fijar: el modelo de lectura por sillón y la sede, los carriles con citas encimadas, el mapeo
+  de estados a la tarjeta (contra el CSS de verdad) y que las llaves de la URL siguen siendo
+  las mismas. Más el eje, el arrastre y el choque.
+- **`npx tsc --noEmit`** sin un solo error en código de aplicación. Los 8 que quedan son
+  PREEXISTENTES y viven en archivos de prueba ajenos (`src/lib/barber/__tests__/*` y el
+  `edu-theme.test.ts` que ya estaba en `main`): son `TS2802` por recorrer un `Set`/`Map` con el
+  `target` del tsconfig. No los toca esta rama; sí se evitaron en el código nuevo.
+- **Guardia:** `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**.
+  11 archivos vs `origin/main`: 10 propios del vertical y `ORQUESTA.md` declarado. **Cero
+  prohibidos y cero compartidos sin declarar**: ni una línea del dental, de barbería ni de
+  inmuebles.
+- **Raíz del repo limpia:** esta rama no añade ni un archivo a la raíz; el único de raíz que
+  cambia es `ORQUESTA.md`. La page temporal de verificación está borrada y `git status` no la
+  ve.
+
+### Lo que NO se hizo, a propósito
+
+- **La vista de MES queda fuera**, como pedía el encargo.
+- **El "todo el día" no siempre cabe sin desplazar.** El zoom "fit" del dental tiene un suelo de
+  10 px por renglón (por debajo, el texto de las tarjetas deja de leerse). Con la jornada del
+  banco de pruebas —07:00 a 21:00, catorce horas, 56 renglones— eso son 560 px y en una ventana
+  de 927 px de alto quedan ~530 para la rejilla: sobran ~55 px de desplazamiento. Con una
+  jornada de doce horas cabe entera. No se bajó el suelo porque vive en `slot-metrics.ts`, que
+  es del dental y no se edita.
+- **El arrastre no cambia de estudiante ni de duración**: solo hora, día y sillón. Cambiar el
+  estudiante sigue siendo cosa del formulario de reagendar, que es donde el servidor vuelve a
+  derivar el caso.
+- **La lista de estudiantes sigue sin viajar** al navegador de quien no la usa (P1-4 de la
+  auditoría, intacto): los desplegables de Estudiante y Docente se arman con el padrón **más**
+  quien aparece en las filas que ya están en pantalla, así que cubren todo lo que se ve sin
+  traer ni una fila que el servidor no hubiera mandado ya.
+- **Sin base de datos en esta sesión**, así que el `PATCH` del arrastre no se ejecutó contra
+  Postgres. Es el mismo endpoint que ya usaba el formulario de reagendar y no se tocó; lo que
+  sí se probó es todo lo que ocurre antes: el cálculo del destino, el choque en el navegador y
+  la ventana de confirmación.
+
+PR contra `main`, **SIN mergear**.
