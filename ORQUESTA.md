@@ -33950,3 +33950,239 @@ mismo archivo y por esta misma razón.
    más. Se puede aplicar antes, durante o después.
 
 Los dos son idempotentes y ninguno toca una tabla del dental, de barbería ni de inmuebles.
+
+## [Institucional · EL PLANO DE LA CLÍNICA] — La clínica en vivo deja de ser una lista de tarjetas y pasa a ser el PISO: el mundo 3D del dental, con el estudiante y su paciente dibujados en cada sillón ✅ (2026-09-02) · rama `feat/edu-clinica-plano` → PR contra main, SIN mergear
+
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin pipes, 467/467 páginas) · `npm run test:edu` VERDE (36 archivos, 1 186 pruebas)
+GUARDIA `EDU_GUARD_SHARED="prisma/schema.prisma,src/components/clinic-3d/Clinic3DClient.tsx,ORQUESTA.md"` EXIT 0
+UN SQL: `sql/edu-clinica-plano.sql` (BLOQUEANTE) · SIN envs nuevas
+
+OBJETIVO: `/instituto/clinica` era una tarjeta por sillón. Una tarjeta contesta "¿cuántos
+quedan libres?" pero no contesta la pregunta que se hace de verdad en el piso clínico:
+**"¿DÓNDE hay uno libre?"**. Ahora se pinta el PLANO —el mismo mundo 3D que ya tiene el
+producto dental, importado entero— con cada sillón en su sitio, el **estudiante y el
+paciente dibujados** en los ocupados, clic a cualquiera para ver quién es y saltar a su
+ficha, y **debajo el horario** de la sede para hoy.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · EL ARCHIVO DEL DENTAL: UNA PROP OPCIONAL, Y POR QUÉ HIZO FALTA
+───────────────────────────────────────────────────────────────────────────
+
+Se tocó **UN** archivo del dental: `src/components/clinic-3d/Clinic3DClient.tsx`
+(**+169 −7**, y la mayoría son comentario y ramas detrás de una bandera). Recibe una prop
+**opcional** `host?: Clinic3DHost | null`. Sin ella, `isHosted` es `false` y **no se ejecuta
+ni una línea nueva**.
+
+No fue un capricho: ese archivo trae escritas a mano TRES cosas que solo valen para el
+dental y que **no se pueden redirigir desde fuera**, exactamente el mismo caso (y el mismo
+remedio) que la prop `endpoints` de `DicomSetViewer` en la ola del visor:
+
+| escrita a mano | dónde | por qué no sirve aquí |
+|---|---|---|
+| `STATE_API = "/api/clinic-layout/3d-state"` | este archivo | resuelve contra `Resource`/`Appointment` del dental con la sesión del dashboard |
+| el clic → `/dashboard/patients/<id>` | `interaction.ts` (otro archivo) | la ficha del instituto vive en otra ruta y con otros ids |
+| el rótulo del apuntador | `interaction.ts` | dice "clic: agendar cita en…", y aquí no se agenda |
+
+Y una cuarta que no es una ruta: `createInteraction` **descarta lo que esté a más de
+`INTERACT_RANGE` (6 m)**. Es lo correcto para caminar en primera persona y hace **imposible
+clicar desde la vista aérea** — que es justo como se mira un plano de treinta sillones.
+
+Por eso, con anfitrión, `createInteraction` **no se monta** (misma línea que ya excluía al
+modo público) y el clic lo resuelve un `hostPick` de veinte renglones que apunta a la capa
+viva y devuelve `{resourceId, name, part}` — `part` distingue la figura del paciente, la del
+profesional y el sillón (anillo, placa o la caja). El anfitrión decide qué abrir.
+
+**La prueba de que el dental no cambió** es mecánica y está en el repo
+(`edu-clinica-plano.test.ts`): (a) la prop sigue siendo opcional y con `= null` por defecto;
+(b) hay ≥ 8 usos de `isHosted`, o sea que toda rama nueva está tras la bandera; (c) **ninguno
+de sus dos llamadores** —`Clinic3DMount.tsx` y `Clinic3DPublicMount.tsx`— contiene la palabra
+`host`; (d) con anfitrión la interacción del dental no se crea, así que su expediente no se
+puede abrir desde otro producto.
+
+**Lo que el anfitrión gana con la prop:** su ruta de estado, cada payload del sondeo
+(`onState`, para no montar un SEGUNDO sondeo contra la misma tabla), el clic (`onPick`) y el
+rótulo del apuntador (`pickLabel`). Más una cosa que no es una ruta: **con anfitrión el
+latido se para con la pestaña oculta** y vuelve a pedir UNA vez al volver — lo pedía el
+encargo y es lo que ya hacía el tablero de tarjetas; el dental conserva el suyo.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · EL DATO: UN PLANO POR SEDE, Y SIN FILA SE ARMA SOLO
+───────────────────────────────────────────────────────────────────────────
+
+`EduCampusLayout` (1:1 con `EduCampus`), espejo de `ClinicLayout` del dental: `elements Json`
++ `metadata Json`. **Uno por SEDE y no por instituto**, porque cada sede tiene SUS sillones —
+el número está pintado en SU pared y es único dentro de la sede (Ola 11); un plano por
+escuela dibujaría dos edificios encima del otro.
+
+**🔴 SIN FILA = PLANO AUTOMÁTICO.** Una sede que nunca pasó por el editor **no se pinta
+vacía**: `eduPlanoAuto` arma una sala —paredes, una puerta, mostrador— con sus sillones
+activos en rejilla y cada uno ligado a su unidad. La pantalla sirve desde el primer día y
+la dirección la acomoda después. El automático **no se guarda**: se calcula en cada lectura,
+así que un sillón nuevo aparece solo mientras nadie haya acomodado nada. Y la pantalla lo
+DICE ("este plano es automático"), porque un plano que parece dibujado a mano y no lo está
+hace creer que ya lo acomodó alguien.
+
+**La liga sillón↔unidad la cuida el código, no la base.** El vínculo vive DENTRO del JSON
+(`LayoutElement.resourceId` = `EduChair.id`), así que no hay llave foránea posible:
+- **al escribir** (`eduPlanoValidar`): se rechaza un sillón que no sea de ESA sede y se
+  rechazan dos elementos ligados a la MISMA unidad (el mundo 3D crea un ancla por
+  `resourceId`: el segundo pisaría al primero y una unidad quedaría muda para siempre);
+- **al leer** (`eduPlanoRevision`): se marca el que se quedó colgando y el que nunca se ligó,
+  y se listan los sillones activos que faltan en el plano — ésos NO se pintan, y un sillón
+  que falta se lee como "está libre" cuando puede estar ocupado.
+- Un sillón **sin ligar se acepta** al guardar: se dibuja primero y se liga después.
+- Se valida contra TODOS los sillones de la sede, **activos o no**: uno que se dio de baja
+  después de dibujarlo dejaría el plano imposible de guardar justo cuando hay que arreglarlo.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LA PANTALLA
+───────────────────────────────────────────────────────────────────────────
+
+- **El mundo** (`plano-mundo.tsx`): `Clinic3DClient` por `dynamic({ssr:false})`, con
+  `category: "DENTAL"` (la paleta y el catálogo del piso clínico). El alto se le impone
+  desde el tema con `.edu-plano__mundo > div` — su raíz lleva `h-[100dvh]` porque en el
+  dental ocupa la pantalla entera; gana por especificidad, **sin `!important`**.
+- **La tarjeta**: clic en el paciente → folio, caso, especialidad, estudiante, docente, hora
+  de inicio, tiempo transcurrido y **"Abrir ficha"** → `/instituto/pacientes/[id]`. Clic en
+  el estudiante → su nombre y matrícula (y a quién atiende). Clic en un sillón libre → su
+  próxima cita y las siguientes de hoy, con un salto a la agenda de ESE sillón.
+  🔴 **La tarjeta no pide nada al servidor**: sale del MISMO payload que pintó el sillón, así
+  que no puede enseñar algo que el plano no esté enseñando.
+- **El horario, debajo**: por sillón, la que está en curso y las que vienen. Es la misma
+  lectura del tablero en otra forma (`eduVivaHorario`, en el módulo puro) — ni una consulta
+  más, ni una segunda regla de visibilidad. No es una agenda: no se filtra ni se arrastra.
+- **El respaldo**: debajo de 768 px o sin WebGL se pintan **las tarjetas de siempre**
+  (`EduVivaScreen`, sin tocar una línea), con su propio latido. Se decide en el cliente (el
+  servidor no sabe si hay WebGL) y hay un botón para cambiarlo a mano. **Nunca laten los dos
+  a la vez.**
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · EL EDITOR (solo DIRECCIÓN)
+───────────────────────────────────────────────────────────────────────────
+
+`/instituto/clinica/plano`: catálogo · lienzo isométrico · propiedades. Se IMPORTAN
+`getCatalogForClinic` y `toScreen`/`fromScreen` del dental (funciones puras que devuelven
+cadenas SVG); **no** se importa su pantalla (`layout-client.tsx`, 1 538 renglones atados a
+`/api/clinic-layout`, a sus Resources, a su modo En Vivo y a su i18n).
+
+Poner, mover, girar (`R`), borrar (`Supr`), deshacer, tamaño del piso, zoom y guardar. Los
+sillones se ligan uno a uno con un `<select>` de las unidades de ESA sede (las ya usadas
+salen deshabilitadas), los sueltos se pintan en rojo y hay una lista de "sillones que
+faltan" con un botón para ponerlos.
+
+**El lienzo no se arrastra, se desplaza**: el SVG se dibuja a su tamaño real (`viewBox` de la
+rejilla) y el hueco tiene scroll. Así no hay estado de "pan" que mantener ni una herramienta
+de mano peleándose con la de mover, y la conversión ratón→celda sale de la caja del SVG y su
+viewBox, que ya llevan el zoom dentro.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · PERMISOS Y ALCANCE
+───────────────────────────────────────────────────────────────────────────
+
+- `clinica.view` (ya existía) abre el plano: DIRECCION y DOCENTE.
+- **`clinica.edit` es NUEVA** y solo la lleva DIRECCION: mover un sillón de sitio cambia el
+  plano que ven los otros treinta docentes y los ciento veinte estudiantes. Vive en el
+  MISMO grupo de la pantalla de permisos (la de permisos pinta una casilla por key, no hay
+  "marcar el bloque"), y una prueba fija que ese grupo son exactamente esas dos.
+- **El alcance es el MISMO del tablero** (`eduLiveFloorVisibility`, visibility.ts, el punto
+  único) y a propósito: el plano y el tablero enseñan la misma cosa. ALUMNO y CAJA reciben
+  **403 aunque alguien les encienda la casilla**, y lo reciben ANTES de la primera consulta.
+- Y una tercera comprobación que no es de permiso sino de SEDE: `eduCampusCovers`. Un id de
+  una sede ajena —o de otra escuela— no amplía nada.
+
+⚠️ Como toda key nueva, `clinica.edit` **NO le llega a quien ya tenga `permissionsOverride`
+con contenido**: el override REEMPLAZA al default. El bloque de backfill está COMENTADO al
+final de `sql/edu-clinica-plano.sql`, con a quién dárselo (dirección) y a quién no.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · LO QUE SE VIO EN EL NAVEGADOR (build de producción + `next start`)
+───────────────────────────────────────────────────────────────────────────
+
+Con Postgres en Docker, `prisma db push` y `npm run seed:edu-demo` (el instituto de demo:
+3 sedes, 32 sillones, 20 577 citas), y una escena montada a mano en la Sede Norte —1 sillón
+ocupado ahora, 2 próximos, 1 libre con cita más tarde, 8 libres:
+
+- el **plano en 3D** con los 12 sillones de la sede, sus paredes y su puerta;
+- el sillón ocupado con **sus DOS figuras** (paciente recostado + estudiante de pie) y la
+  placa flotante con los dos nombres y "termina 13:30";
+- **clic en el paciente → la tarjeta**: "Sillón 10 · OCUPADA · Verónica González Mendoza ·
+  Folio P-0198 · Caso: Control de ortodoncia · En tratamiento · Especialidad: Ortodoncia ·
+  Estudiante: María Álvarez Rojas · ORTO26-018 · Docente: … · Desde 12:00 · lleva 10 h 55" y
+  el botón **Abrir ficha** con `href="/instituto/pacientes/dsdpat…"`;
+- el **horario** debajo, sillón por sillón;
+- el **editor** con el catálogo (14 elementos con su icono), el lienzo isométrico, la
+  selección, el giro, el aviso de "tienes cambios sin guardar" —que hasta bloqueó una
+  navegación con el diálogo del navegador— y la liga por `<select>`;
+- el **respaldo de tarjetas** con el mismo corte de datos (1 ocupada, 3 próximas, 8 libres);
+- y el **camino de ESCRITURA contra la base**, con un script que llama a las mismas
+  funciones: guardar (la fila aparece en `edu_campus_layouts` y el plano deja de ser
+  automático), **rechazo** del sillón de otra sede, **rechazo** del sillón duplicado y
+  **403** para un ALUMNO con el permiso puesto a mano.
+
+**Sin sesión de Supabase no se puede entrar al panel en local**, así que la pantalla se montó
+con una página temporal (`/dev-plano`) que llama a las MISMAS funciones de servidor con un
+ctx de dirección fabricado. Esa página y su ruta **se borraron antes de commitear** (el
+árbol final no las tiene; la guardia lo confirma).
+
+───────────────────────────────────────────────────────────────────────────
+### 6 bis · LOS CUATRO ARREGLOS QUE SALIERON DE MIRARLO, NO DE LEERLO
+───────────────────────────────────────────────────────────────────────────
+
+Ninguno se ve en el código; los cuatro aparecieron abriendo la pantalla:
+
+1. **🔴 El sondeo de WebGL se comía los contextos.** `hayWebGL()` creaba un canvas y pedía
+   un contexto **en cada `resize`**, y un contexto WebGL no se recoge solo: el navegador
+   aguanta ~16 vivos y luego los NIEGA (o mata el más viejo, que sería el del mundo). Con el
+   plano abierto en tres pestañas, la pantalla contestó "este navegador no puede pintar el
+   plano en 3D" **en un navegador que sí podía**. Ahora se pregunta UNA vez, se cachea y se
+   suelta el contexto con `WEBGL_lose_context`.
+2. **La tarjeta se pintaba DEBAJO de los botones del visor.** El HUD del dental es `z-30` en
+   el mismo contexto de apilado; la tarjeta iba con `z-index: 3` y en la esquina de arriba.
+   Ahora es `z-40` y arranca 58 px más abajo, libre de esa fila.
+3. **Los iconos del catálogo no se pintaban.** `ElementType.icon` es un FRAGMENTO de SVG
+   (rects y paths sueltos), no un `<svg>`: hay que envolverlo con su `viewBox 0 0 40 40`,
+   que es justo lo que hace el editor del dental. Y con `minmax(88px,…)` el catálogo caía a
+   UNA columna porque su barra de desplazamiento se lleva 15 px; a 76 px caben dos.
+4. **La etiqueta del sillón giraba con el sillón.** El editor del dental rota el grupo
+   entero y a 90° el nombre se lee de lado. Aquí la rotación envuelve SOLO al dibujo.
+
+───────────────────────────────────────────────────────────────────────────
+### 7 · LO QUE NO SE HIZO, Y SE DICE
+───────────────────────────────────────────────────────────────────────────
+
+1. **La placa flotante escribe "Dr. \<estudiante\>".** El prefijo está escrito dentro de
+   `live-layer.ts` (`lines.push(\`Dr. ${st.doctorName}\`)`), que es un SEGUNDO archivo del
+   dental y el encargo permitía tocar UNO. Todo lo que es del instituto —la tarjeta, el
+   horario, el respaldo— dice "Estudiante". Arreglarlo es una línea allá, o mover el prefijo
+   al payload.
+2. **El HUD del visor tiene copia del dental**: su leyenda dice "Vacío · clic para agendar /
+   Ocupado · clic para ver expediente" y el aviso de la vista aérea, "clic en un avatar abre
+   su expediente". Con la tarjeta abierta las dos son casi ciertas (la tarjeta lleva a la
+   ficha, y el sillón libre ofrece su agenda), pero la copia no es nuestra. Mismo motivo:
+   vive en `Clinic3DHud.tsx`.
+3. **Lo que sí se tapó** es su enlace "Volver al editor" → `/dashboard/clinic-layout`: eso no
+   es copia, es una puerta al panel del DENTAL. Se esconde desde el tema por su `href`, con
+   una prueba que lee `Clinic3DHud.tsx` y se pone roja el día que el dental cambie esa
+   constante.
+4. **El respaldo de tarjetas no lleva el horario**: en un teléfono, la tarjeta ya dice
+   "Desde 10:00 · lleva 42 min" y "Siguiente 14:30", y montar el horario ahí habría pedido un
+   segundo sondeo para una pantalla que no lo necesita.
+5. **No se toca la agenda ni el flujo de agendar**: desde un sillón libre se SALTA a la
+   agenda filtrada por ese sillón. Este tablero se mira, no se escribe.
+
+───────────────────────────────────────────────────────────────────────────
+### 8 · EL SQL, ANTES DEL DEPLOY
+───────────────────────────────────────────────────────────────────────────
+
+`sql/edu-clinica-plano.sql` — **BLOQUEANTE**. Crea `edu_campus_layouts` (1 tabla, 2 índices,
+3 llaves foráneas, 0 enums, 0 DROP) y lleva COMENTADO el backfill de `clinica.edit` para
+quien tenga overrides. Idempotente: se aplicó dos veces seguidas contra un Postgres limpio
+sin errores. `prisma migrate diff` contra esa base devuelve UNA línea —`ALTER COLUMN
+"updatedAt" DROP DEFAULT`—, que es el mismo `DEFAULT CURRENT_TIMESTAMP` que llevan **todas**
+las tablas que el vertical ya creó por .sql (edu-ola-2, 11, pagos, cuota…) y que Prisma
+nunca usa porque siempre escribe la columna.
+
+Sin aplicarlo, la pantalla **no se cae**: `getEduPlanoSede` atrapa el "falta la tabla" y
+pinta el plano AUTOMÁTICO (con un aviso en el log del servidor); lo que no se puede es
+GUARDAR, y ahí el editor lo dice con el nombre del archivo.

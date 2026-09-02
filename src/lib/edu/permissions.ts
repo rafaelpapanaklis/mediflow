@@ -86,6 +86,18 @@ export const EDU_ALL_PERMISSIONS = {
   // alumno por override NO le enseña un solo sillón: el alcance devuelve
   // "none" y la API contesta 403. Es el mismo doble candado del dinero.
   "clinica.view": "Ver la clínica en vivo: qué sillones están libres, próximos y ocupados",
+  // ── Ola del PLANO · acomodar el piso ─────────────────────────────────
+  // 🔴 SE PARTE EN DOS Y AQUÍ SÍ HACE FALTA, al revés que arriba: mirar el
+  // piso lo hace todo el mundo que entra, pero MOVER un sillón de sitio
+  // cambia el plano que ven los otros treinta docentes y los ciento veinte
+  // estudiantes de la escuela. Es infraestructura del edificio, no la fila
+  // de nadie, y por eso solo la lleva DIRECCION por default.
+  //
+  // ⚠️ Como toda key nueva, NO le llega a quien ya tenga
+  // "permissionsOverride" con contenido: el override REEMPLAZA al default
+  // del rol. El bloque de backfill está COMENTADO en
+  // sql/edu-clinica-plano.sql, con a quién dárselo y a quién no.
+  "clinica.edit": "Acomodar el plano de la clínica: dónde está cada sillón en el piso",
   "casos.view": "Ver los casos clínicos",
   "casos.assign": "Asignar un paciente a un estudiante y abrir su caso",
   // ── Ola 3 · el expediente clínico ────────────────────────────────────
@@ -383,7 +395,7 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
     // padecimiento de cada paciente de la escuela. Esa es exactamente la
     // casilla que no debe tildarse sin querer, y por eso está sola.
     title: "Clínica en vivo",
-    keys: ["clinica.view"],
+    keys: ["clinica.view", "clinica.edit"],
   },
   {
     // Grupo APARTE del de "Pacientes y casos" a propósito: son los seis
@@ -847,6 +859,9 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     // ── Ola de la CLÍNICA EN VIVO ──────────────────────────────────
     // El tablero del piso. Lo llevan DIRECCION y DOCENTE, y nadie más.
     "clinica.view",
+    // ── Ola del PLANO ──────────────────────────────────────────────
+    // Acomodar el piso: SOLO dirección. Ver la nota del catálogo.
+    "clinica.edit",
   ],
   DOCENTE: [
     "inicio.view",

@@ -596,7 +596,17 @@ test("clinica.view está en el catálogo, descrita en español y en UN solo grup
   assert.equal(grupos.length, 1, "la casilla aparece en dos grupos (o en ninguno)");
   // Grupo PROPIO: quien le da a caja el bloque de la agenda no puede darle
   // de pasada el tablero que enseña el padecimiento de cada paciente.
-  assert.equal(grupos[0].keys.length, 1, "la casilla se puede tildar de pasada con otro bloque");
+  //
+  // Desde la ola del PLANO son DOS casillas y no una —mirar el piso y
+  // acomodarlo— y siguen SOLAS en su grupo: la pantalla de permisos pinta
+  // una casilla por key (no hay "marcar el bloque entero"), así que dos
+  // keys en el mismo fieldset no se tildan juntas. Lo que esta prueba
+  // defiende es que aquí NO se cuele nada de agenda, sillones ni caja.
+  assert.deepEqual(
+    grupos[0].keys,
+    ["clinica.view", "clinica.edit"],
+    "el grupo del piso clínico ganó (o perdió) una casilla",
+  );
 });
 
 test("la lleva DIRECCION y DOCENTE, y nadie más", () => {

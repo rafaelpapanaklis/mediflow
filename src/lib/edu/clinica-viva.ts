@@ -42,6 +42,8 @@ import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import { EDU_MAX_CHAIRS, eduSafeTimeZone } from "@/lib/edu/agenda-core";
 import type { EduAppointmentStatus } from "@/lib/edu/types";
+import { EDU_APPOINTMENT_TYPE_LABELS, EDU_CASE_STATUS_LABELS } from "@/lib/edu/types";
+import type { EduAppointmentType, EduCaseStatus } from "@/lib/edu/types";
 import {
   EDU_LIVE_FLOOR_NONE_DETAIL,
   eduChairScopeWhere,
@@ -60,7 +62,12 @@ import {
   type EduVivaChairInput,
 } from "@/lib/edu/clinica-viva-core";
 
-export type { EduVivaBoard, EduVivaCard, EduVivaCounts } from "@/lib/edu/clinica-viva-core";
+export type {
+  EduVivaBoard,
+  EduVivaCard,
+  EduVivaCounts,
+  EduVivaSlot,
+} from "@/lib/edu/clinica-viva-core";
 
 /**
  * Los estados que se traen de la base: los que el motor sabe pintar.
@@ -95,6 +102,26 @@ function persona(u: { firstName: string; lastName: string } | null | undefined):
 }
 
 /**
+ * EL CASO, en una línea.
+ *
+ * Un caso del vertical no tiene folio ni nombre propio: se identifica por
+ * lo que se le está haciendo al paciente y en qué punto va. Así que la
+ * línea es "procedimiento · estado" y, cuando la cita todavía no cuelga de
+ * un caso —la de TAMIZAJE, que es anterior al caso—, el TIPO de la cita,
+ * que es la respuesta correcta a "¿qué está pasando en ese sillón?".
+ */
+function eduVivaCaso(a: {
+  type: EduAppointmentType;
+  case: { status: EduCaseStatus; procedure: { name: string } | null } | null;
+}): string {
+  if (!a.case) return EDU_APPOINTMENT_TYPE_LABELS[a.type] ?? "Cita";
+  const estado = EDU_CASE_STATUS_LABELS[a.case.status] ?? "";
+  const proc = a.case.procedure?.name?.trim();
+  if (proc && estado) return `${proc} · ${estado}`;
+  return proc || estado || "Caso";
+}
+
+/**
  * El tablero del piso clínico, ahora mismo.
  *
  * 🔴 LANZA 403 cuando el alcance no le toca a quien pregunta, y lo hace
@@ -105,6 +132,17 @@ function persona(u: { firstName: string; lastName: string } | null | undefined):
 export async function getEduClinicaViva(
   ctx: EduClinicaContext,
   now: Date = new Date(),
+  opciones: {
+    /**
+     * true = devuelve TAMBIÉN el horario de hoy sillón por sillón.
+     *
+     * Va apagado por defecto porque lo pide UNA pantalla (el plano) y son
+     * decenas de renglones más en un payload que se consulta cada veinte
+     * segundos. La consulta a la base es la MISMA: el horario se arma con
+     * las citas que ya se trajeron para decidir el color de cada sillón.
+     */
+    horario?: boolean;
+  } = {},
 ): Promise<EduVivaBoard> {
   const institutionId = requireInstitution(ctx);
 
@@ -152,7 +190,7 @@ export async function getEduClinicaViva(
   // Sin sillones no hay tablero, y tampoco hay a qué colgarle una cita: se
   // devuelve vacío SIN pegarle a la tabla de citas.
   if (sillones.length === 0) {
-    return buildEduVivaBoard({ chairs: [], appointments: [], now });
+    return buildEduVivaBoard({ chairs: [], appointments: [], now, horario: opciones.horario });
   }
 
   // ── Las citas ───────────────────────────────────────────────────────
@@ -190,13 +228,24 @@ export async function getEduClinicaViva(
       startsAt: true,
       endsAt: true,
       status: true,
-      patient: { select: { firstName: true, lastName: true, folio: true } },
+      // `type` distingue una valoración de una sesión de trabajo: es lo
+      // que se lee en el horario y lo que nombra el "caso" de una cita de
+      // tamizaje, que por definición todavía no tiene caso.
+      type: true,
+      // El id del paciente lo pide el botón "Abrir ficha" del plano. NO
+      // sale del proceso cuando el detalle está callado: lo corta
+      // `eduVivaDetalle` en el módulo puro, en un solo sitio.
+      patient: { select: { id: true, firstName: true, lastName: true, folio: true } },
+      // El DOCENTE de la cita. Se cae al del caso cuando la cita no lo
+      // lleva: son la misma persona en el caso normal, y la cita solo lo
+      // guarda aparte cuando ese día supervisa otro.
+      supervisor: { select: { firstName: true, lastName: true } },
       student: {
         select: {
           userId: true,
           matricula: true,
           user: { select: { firstName: true, lastName: true } },
-          program: { select: { name: true } },
+          program: { select: { id: true, name: true } },
           supervisors: {
             where: supervisoresWhere,
             take: EDU_VIVA_MAX_SUPERVISORES,
@@ -208,7 +257,14 @@ export async function getEduClinicaViva(
       // tamizaje, que es anterior al caso— se cae a la especialidad del
       // estudiante, que es la suya y es la respuesta correcta a "¿de qué se
       // le está atendiendo?".
-      case: { select: { program: { select: { name: true } } } },
+      case: {
+        select: {
+          status: true,
+          program: { select: { id: true, name: true } },
+          procedure: { select: { name: true } },
+          supervisor: { select: { firstName: true, lastName: true } },
+        },
+      },
     },
   });
 
@@ -226,6 +282,16 @@ export async function getEduClinicaViva(
     studentName: persona(a.student?.user),
     studentMatricula: a.student?.matricula ?? "",
     specialty: a.case?.program?.name ?? a.student?.program?.name ?? null,
+    // Los cuatro de la TARJETA del plano. Van en claro hasta el módulo
+    // puro, que es el único que decide qué se calla (misma regla que el
+    // nombre del paciente, dos renglones más abajo).
+    patientId: a.patient?.id ?? undefined,
+    specialtyId: a.case?.program?.id ?? a.student?.program?.id ?? null,
+    caseLabel: eduVivaCaso(a),
+    supervisor:
+      persona(a.supervisor ?? a.case?.supervisor ?? null) === "—"
+        ? null
+        : persona(a.supervisor ?? a.case?.supervisor ?? null),
     // 🔴 AQUÍ Y EN NINGÚN OTRO SITIO se decide si el nombre del paciente
     // sale de este proceso. Con el MISMO predicado de vigencia que el resto
     // del vertical: una asignación cerrada ayer ya no cuenta.
@@ -239,5 +305,11 @@ export async function getEduClinicaViva(
     ),
   }));
 
-  return buildEduVivaBoard({ chairs: sillones, appointments, now, truncated });
+  return buildEduVivaBoard({
+    chairs: sillones,
+    appointments,
+    now,
+    truncated,
+    horario: opciones.horario,
+  });
 }

@@ -58,6 +58,51 @@ export interface Clinic3DPublicMode {
   slug: string;
 }
 
+/**
+ * ANFITRIÓN distinto del dental (hoy: el vertical INSTITUCIONAL, que monta
+ * este mismo mundo en /instituto/clinica).
+ *
+ * 🔴 SIN ESTA PROP EL DENTAL SE COMPORTA IGUAL, LÍNEA POR LÍNEA. Todo lo que
+ * añade vive detrás de `isHosted`, que es false cuando no se pasa.
+ *
+ * Existe porque este archivo trae ESCRITAS A MANO tres cosas que solo valen
+ * para el dental y que no se pueden redirigir desde fuera:
+ *   · la ruta del estado vivo (`STATE_API`);
+ *   · a dónde lleva el clic (el expediente del dental, dentro de
+ *     interaction.ts, y la agenda del dental en un sillón vacío);
+ *   · el rótulo del apuntador, que habla de "agendar cita".
+ * Es el mismo caso —y el mismo remedio— que la prop `endpoints` de
+ * DicomSetViewer: un adaptador no puede redirigir una URL escrita dentro.
+ */
+export interface Clinic3DHost {
+  /** Ruta del estado vivo del anfitrión. Sustituye a `STATE_API`. */
+  state: string;
+  /**
+   * Cada payload del sondeo, tal cual. Existe para que el anfitrión no
+   * tenga que montar un SEGUNDO sondeo contra la misma ruta para pintar sus
+   * propios paneles: así el mundo y lo que se lee al lado son SIEMPRE la
+   * misma foto.
+   */
+  onState?: (payload: unknown) => void;
+  /** Clic sobre un sillón. Sustituye al expediente y al "agendar" del dental. */
+  onPick?: (pick: Clinic3DPick) => void;
+  /** Rótulo del apuntador en primera persona (el del dental habla de agendar). */
+  pickLabel?: (pick: Clinic3DPick) => string;
+}
+
+/** Lo que se apuntó dentro de un sillón. */
+export interface Clinic3DPick {
+  resourceId: string;
+  /** Nombre del sillón (el del ancla del mundo). */
+  name: string;
+  /**
+   * Qué pieza se tocó: la figura del paciente, la del profesional que lo
+   * atiende, o el sillón (anillo, placa o la caja del propio sillón).
+   * Una figura oculta —sillón libre— cuenta como "chair".
+   */
+  part: "patient" | "doctor" | "chair";
+}
+
 export interface Clinic3DClientProps {
   clinic: { id: string; name: string; category: string };
   initialElements: LayoutElement[];
@@ -70,6 +115,11 @@ export interface Clinic3DClientProps {
    * (cero expedientes, cero agendar). Ausente/null = modo dashboard normal.
    */
   publicMode?: Clinic3DPublicMode | null;
+  /**
+   * Anfitrión distinto del dental (ver Clinic3DHost). Ausente/null = dental
+   * normal: ni una rama de las de abajo se ejecuta.
+   */
+  host?: Clinic3DHost | null;
 }
 
 const STATE_API = "/api/clinic-layout/3d-state";
@@ -80,11 +130,19 @@ export function Clinic3DClient({
   initialMetadata,
   initialChairs,
   publicMode = null,
+  host = null,
 }: Clinic3DClientProps) {
   // Primitivas estables del modo público (publicMode se fija al montar y no
   // cambia; el efecto solo depende de `world`).
   const isPublic = !!publicMode;
   const publicSlug = publicMode?.slug ?? "";
+  // Anfitrión: el booleano se fija al montar (como `isPublic`), pero sus
+  // enganches se leen SIEMPRE por ref — son funciones que el padre recrea en
+  // cada render y el efecto solo depende de `world`, así que capturarlas
+  // dejaría llamando para siempre a las del primer render.
+  const isHosted = !!host;
+  const hostRef = useRef<Clinic3DHost | null>(host);
+  hostRef.current = host;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const touchLayerRef = useRef<HTMLDivElement | null>(null);
@@ -177,6 +235,9 @@ export function Clinic3DClient({
     let onTouchEnd: ((e: TouchEvent) => void) | null = null;
     let ro: ResizeObserver | null = null;
     let domEl: HTMLCanvasElement | null = null;
+    // Raycaster propio del anfitrión (ver hostPick, más abajo).
+    const hostRay = new THREE.Raycaster();
+    const hostNdc = new THREE.Vector2();
 
     try {
       // ── Escena / cámara / renderer ────────────────────────────────────────
@@ -235,6 +296,58 @@ export function Clinic3DClient({
       scene.add(buildFurniture(world));
       liveLayer = createLiveLayer(world);
       scene.add(liveLayer.group);
+
+      // ── Anfitrión: a qué sillón pertenece cada objeto de la capa viva ──
+      // Se arma UNA vez: la capa viva crea sus nodos al construirse y de ahí
+      // en adelante solo los MUTA (visibilidad, color, placa), así que este
+      // índice no envejece. El nodo de cada sillón se llama `live-chair-<id>`
+      // y dentro lleva el anillo, la placa, la caja del sillón y las dos
+      // figuras; las figuras son los únicos Group y el profesional es el que
+      // está desplazado a un costado.
+      const hostParts = new Map<THREE.Object3D, Clinic3DPick>();
+      if (isHosted) {
+        const nodeByName = new Map<string, THREE.Object3D>();
+        for (const n of liveLayer.group.children) nodeByName.set(n.name, n);
+        for (const a of world.chairs) {
+          const node = nodeByName.get(`live-chair-${a.resourceId}`);
+          if (!node) continue;
+          for (const child of node.children) {
+            const part: Clinic3DPick["part"] =
+              child.type !== "Group" ? "chair" : Math.abs(child.position.x) > 0.35 ? "doctor" : "patient";
+            hostParts.set(child, { resourceId: a.resourceId, name: a.name, part });
+          }
+        }
+      }
+
+      /**
+       * Sillón apuntado en un punto NDC, o null.
+       *
+       * 🔴 No se reusa `createInteraction` para esto, y no es capricho:
+       *   · abre `/dashboard/patients/<id>` escrito a mano — la ficha del
+       *     anfitrión vive en otra ruta y con otros ids;
+       *   · descarta lo que esté a más de INTERACT_RANGE (6 m), que es lo
+       *     correcto para caminar en primera persona y hace IMPOSIBLE clicar
+       *     desde la vista aérea, que es justo como se mira un plano.
+       * Aquí no hay tope de distancia: se apunta y se abre.
+       */
+      const hostPick = (ndcX: number, ndcY: number): Clinic3DPick | null => {
+        const g = liveLayer?.group;
+        if (!g || hostParts.size === 0) return null;
+        hostNdc.set(ndcX, ndcY);
+        hostRay.setFromCamera(hostNdc, camera);
+        const hits = hostRay.intersectObjects(g.children, true);
+        for (const h of hits) {
+          let cur: THREE.Object3D | null = h.object;
+          while (cur) {
+            const found = hostParts.get(cur);
+            // Una figura OCULTA (sillón libre) sigue siendo alcanzable por el
+            // rayo: cuenta como el sillón, no como una persona que no está.
+            if (found) return cur.visible ? found : { ...found, part: "chair" };
+            cur = cur.parent;
+          }
+        }
+        return null;
+      };
       // V3 — sala de espera viva (avatares sentados + walkers) y barras de progreso.
       waitingLayer = createWaitingLayer(world);
       scene.add(waitingLayer.group);
@@ -275,7 +388,10 @@ export function Clinic3DClient({
       // cero agendar (el adapter público nunca trae patientId y los sillones
       // vacíos no deben abrir la agenda para un visitante). Defensa en profundidad.
       // En dashboard: interacción completa (ocupado→expediente, vacío→agendar).
-      interaction = isPublic
+      // Con ANFITRIÓN tampoco: su clic lo resuelve `hostPick` y lo enruta
+      // quien monta el visor (ver Clinic3DHost). Así ninguna ruta del dental
+      // —ni el expediente ni la agenda— se puede abrir desde otro producto.
+      interaction = isPublic || isHosted
         ? null
         : createInteraction({
             camera,
@@ -359,13 +475,19 @@ export function Clinic3DClient({
         dDownT = e.timeStamp;
       };
       onDroneUp = (e: MouseEvent) => {
-        if (mode !== "drone" || !interaction || !domEl) return;
+        if (mode !== "drone" || !domEl) return;
+        if (!interaction && !isHosted) return;
         const moved = Math.hypot(e.clientX - dDownX, e.clientY - dDownY);
         if (moved > 6 || e.timeStamp - dDownT > 400) return; // fue orbitar, no clic
         const rect = domEl.getBoundingClientRect();
         const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
         const ndcY = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
-        interaction.interactAt(ndcX, ndcY);
+        if (isHosted) {
+          const p = hostPick(ndcX, ndcY);
+          if (p) hostRef.current?.onPick?.(p);
+          return;
+        }
+        interaction?.interactAt(ndcX, ndcY);
       };
       domEl.addEventListener("mousedown", onDroneDown);
       domEl.addEventListener("mouseup", onDroneUp);
@@ -422,13 +544,18 @@ export function Clinic3DClient({
       };
       const poll = async () => {
         try {
+          // Anfitrión: el latido se PARA con la pestaña oculta. El navegador
+          // estrangula los temporizadores en segundo plano, así que un
+          // tablero minimizado que sigue preguntando cada 20 s solo sirve
+          // para gastar consultas que nadie mira. El dental conserva el suyo.
+          if (isHosted && typeof document !== "undefined" && document.hidden) return;
           ac?.abort();
           ac = new AbortController();
           // Público: MISMO endpoint que la vista 2D (datos ya enmascarados);
           // dashboard: estado privado por sesión.
           const url = isPublic
             ? `/api/live/${publicSlug}?date=${new Date().toISOString().slice(0, 10)}`
-            : STATE_API;
+            : hostRef.current?.state || STATE_API;
           const res = await fetch(url, { signal: ac.signal, cache: "no-store" });
           // 401 público = cookie de desbloqueo vencida a mitad del recorrido
           // (TTL 12h, solo con clínica protegida). Recargamos → gate del server.
@@ -446,6 +573,9 @@ export function Clinic3DClient({
             ? adaptPublicLiveChairs(raw)
             : (raw as Clinic3DStatePayload).chairs;
           if (!disposed && Array.isArray(chairs)) applyStates(chairs);
+          // El anfitrión recibe el payload ENTERO (trae más campos que los
+          // que este visor mira) para pintar sus paneles con esta misma foto.
+          if (!disposed && isHosted) hostRef.current?.onState?.(raw);
           // V3 — sala de espera viva: SOLO en dashboard (el payload privado trae
           // waiting[] con nombres; el endpoint público no lo expone en esta forma).
           if (!disposed && !isPublic) applyWaiting((raw as Clinic3DStatePayload).waiting ?? []);
@@ -479,6 +609,14 @@ export function Clinic3DClient({
           hand?.tap();
           return;
         }
+        // Anfitrión: el clic con lock abre lo que él decida sobre el sillón
+        // apuntado por el centro de la pantalla.
+        if (isHosted) {
+          const p = hostPick(0, 0);
+          if (p) hostRef.current?.onPick?.(p);
+          hand?.tap();
+          return;
+        }
         if (interaction) {
           interaction.interactCenter();
           hand?.tap();
@@ -497,13 +635,19 @@ export function Clinic3DClient({
         // touch-controls aparte; esto es solo el tap→interactuar).
         if (isPublic) return;
         const t = e.changedTouches[0];
-        if (!t || !interaction || !domEl) return;
+        if (!t || !domEl) return;
+        if (!interaction && !isHosted) return;
         const moved = Math.hypot(t.clientX - tStartX, t.clientY - tStartY);
         if (moved > 14 || e.timeStamp - tStartT > 400) return; // fue drag, no tap
         const r = domEl.getBoundingClientRect();
         const ndcX = ((t.clientX - r.left) / r.width) * 2 - 1;
         const ndcY = -(((t.clientY - r.top) / r.height) * 2 - 1);
-        interaction.interactAt(ndcX, ndcY);
+        if (isHosted) {
+          const p = hostPick(ndcX, ndcY);
+          if (p) hostRef.current?.onPick?.(p);
+          return;
+        }
+        interaction?.interactAt(ndcX, ndcY);
       };
       if (touch) {
         container.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -570,7 +714,16 @@ export function Clinic3DClient({
 
         // interacción central (crosshair) SOLO en FPS; en dron el clic-cursor la
         // dispara aparte y en VR no hay crosshair DOM. Limpia el estado al salir.
-        if (fps) {
+        if (fps && isHosted) {
+          // Anfitrión: el mismo apuntado, con SU rótulo. Sin resaltado —el
+          // del dental tiñe el emissive del avatar y aquí el clic no abre un
+          // expediente, así que la placa flotante ya dice de quién se trata.
+          const p = hostPick(0, 0);
+          const tg = !!p;
+          const lb = p ? hostRef.current?.pickLabel?.(p) ?? null : null;
+          if (tg !== lastTargeting) { lastTargeting = tg; setTargeting(tg); }
+          if (lb !== lastLabel) { lastLabel = lb; setInteractLabel(lb); }
+        } else if (fps) {
           interaction?.update();
           if (interaction) {
             const tg = interaction.isTargeting();
@@ -621,6 +774,15 @@ export function Clinic3DClient({
         if (visible) {
           clock.getDelta(); // descarta el salto de dt acumulado mientras oculta
           r.setAnimationLoop(loop);
+          // Anfitrión: su latido estuvo PARADO mientras la pestaña estaba
+          // oculta, así que al volver se pide UNA vez de inmediato en vez de
+          // enseñar una foto vieja hasta el siguiente turno. Se cancela el
+          // temporizador pendiente primero: si no, quedarían dos cadenas de
+          // sondeo corriendo a la vez.
+          if (isHosted) {
+            if (pollTimer) window.clearTimeout(pollTimer);
+            void poll();
+          }
         } else {
           r.setAnimationLoop(null);
         }

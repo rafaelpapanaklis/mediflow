@@ -104,12 +104,24 @@ function matchesOwnPattern(p) {
 // contestan 401/404 — y un adaptador no puede redirigir un fetch escrito
 // dentro. Es un archivo del producto dental VIVO, así que se declara y se ve:
 //   EDU_GUARD_SHARED="src/components/patient-3d/DicomSetViewer.tsx" node scripts/edu-guard.cjs
+//
+// `src/components/clinic-3d/Clinic3DClient.tsx` entra aquí al montar el
+// MUNDO 3D del dental en /instituto/clinica. Es exactamente el mismo caso
+// que DicomSetViewer, y con el mismo remedio: el visor trae escritas a mano
+// la ruta de su estado vivo (/api/clinic-layout/3d-state) y la de lo que
+// abre al clicar (el expediente del dental), y ninguna de las dos se puede
+// redirigir desde fuera. Recibió UNA prop OPCIONAL (`host`) con la ruta y
+// los enganches del anfitrión; sin ella el dental se comporta igual línea
+// por línea. Es un archivo del producto dental VIVO, así que se declara y
+// se ve:
+//   EDU_GUARD_SHARED="src/components/clinic-3d/Clinic3DClient.tsx" node scripts/edu-guard.cjs
 const SHARED_FILES = [
   "prisma/schema.prisma",
   "src/middleware.ts",
   "ORQUESTA.md",
   "package.json",
   "src/components/patient-3d/DicomSetViewer.tsx",
+  "src/components/clinic-3d/Clinic3DClient.tsx",
   // El sitemap del sitio es del DENTAL y está vivo en producción. El
   // vertical solo puede sumarle un bloque aditivo (importar
   // eduStaticSitemapPaths y concatenar su lista al final), igual que ya
