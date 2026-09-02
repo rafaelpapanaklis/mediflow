@@ -1321,9 +1321,13 @@ select.edu-input {
 
 /* ── Modal / hoja inferior ──
    MÓVIL PRIMERO: en el teléfono sube desde abajo y ocupa lo que necesita
-   (hasta 92 dvh); en escritorio se centra. Es position:fixed y funciona
-   porque NADA en el árbol del panel lleva container-type ni transform: un
-   contenedor de consulta encima lo encerraría dentro de la columna. */
+   (hasta 92 dvh); en escritorio se centra. Es position:fixed y un
+   contenedor de consulta encima lo encerraría dentro de la columna en vez
+   de cubrir la pantalla.
+   ⚠️ `.edu-ag` (la rejilla de la agenda) SÍ lleva `container-type`, así
+   que los diálogos de esa pantalla se montan FUERA de él a propósito —ver
+   la cabecera de agenda-screen.tsx—. Cualquier pantalla nueva que quiera
+   medirse con @container tiene que hacer lo mismo. */
 .edu-modal {
   position: fixed;
   inset: 0;
@@ -1553,40 +1557,6 @@ select.edu-input {
    tiempo — que es lo primero que se rompe con una cita de 10 minutos.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── Barra de día: ‹ hoy › + día/semana ── */
-.edu-daybar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--edu-surface);
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-  box-shadow: var(--edu-shadow-1);
-}
-
-.edu-daybar__nav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.edu-daybar__label {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  /* El formateador de es-MX devuelve "lunes 31 de agosto"; en un
-     encabezado se lee mejor con la inicial en mayúscula. */
-  text-transform: capitalize;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Selector de dos posiciones (Día / Semana). */
 .edu-seg {
   display: inline-flex;
@@ -1612,64 +1582,6 @@ select.edu-input {
 .edu-seg__btn--on {
   background: var(--edu-600);
   color: #ffffff;
-}
-
-/* ── La agenda ── */
-.edu-agenda {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  align-items: start;
-}
-
-@media (min-width: 900px) {
-  .edu-agenda--cols {
-    grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
-  }
-}
-
-.edu-agenda__group {
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-  background: var(--edu-surface);
-  box-shadow: var(--edu-shadow-1);
-  overflow: hidden;
-}
-
-.edu-agenda__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--edu-surface-2);
-  border-bottom: 1px solid var(--edu-line);
-}
-
-.edu-agenda__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: capitalize;
-}
-
-.edu-agenda__sub {
-  margin: 0;
-  font-size: 12px;
-  color: var(--edu-text-3);
-}
-
-.edu-agenda__body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-}
-
-.edu-agenda__empty {
-  padding: 14px 12px;
-  font-size: 13px;
-  color: var(--edu-text-3);
 }
 
 /* ── La cita ── */
@@ -4422,7 +4334,7 @@ select.edu-input {
   font-size: 15px;
   font-weight: 700;
   color: var(--edu-text-1);
-  /* ⚠️ SIN `text-transform: capitalize`, al revés que .edu-daybar__label de
+  /* ⚠️ SIN `text-transform: capitalize`, al revés que .edu-ag__fecha de
      la agenda. Aquí la etiqueta ya empieza en mayúscula ("Últimos 7 días",
      "Hoy") y capitalizar cada palabra la dejaba en "Últimos 7 Días · 25
      Ago – 31 Ago", que en español está mal. */
@@ -7120,4 +7032,886 @@ a.edu-ini-acceso:hover {
 
 .dark .edu-viva__estado {
   color: #10162a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LA REJILLA DE LA AGENDA — prefijo `edu-ag`
+   (src/components/edu/agenda/*, src/lib/edu/agenda-rejilla.ts)
+
+   ⚠️ NINGÚN nombre de aquí existe ya en esta hoja: la prueba
+   src/lib/edu/__tests__/edu-theme.test.ts revienta si dos bloques de
+   primer nivel se bautizan igual, y esa prueba existe porque ya salió a
+   producción una pantalla torcida por ese motivo.
+
+   ── @container Y NO @media ─────────────────────────────────────────────
+   El resto de esta hoja mide la VENTANA a propósito (el cajón del menú es
+   position:fixed y un contenedor de consulta lo atraparía). La agenda es
+   la excepción y también a propósito: en escritorio el menú es una columna
+   fija de 252 px, así que con la ventana en 1024 a la rejilla le quedan
+   ~770 — medir la ventana pintaría columnas de escritorio en un hueco de
+   tableta. `.edu-ag` puede llevar `container-type` sin peligro porque los
+   tres diálogos de la agenda se montan FUERA de él (ver agenda-screen.tsx):
+   dentro no hay un solo `position: fixed`.
+
+   ── EL ALTO ACOTADO NO ES DECORATIVO ───────────────────────────────────
+   `.edu-ag__scroll` tiene `height: var(--edu-ag-alto)` (lo mide la
+   pantalla). Sin un alto acotado, el `position: sticky; top` de la fila de
+   encabezados no se pega a nada: sticky necesita un contenedor con
+   desplazamiento propio, y una caja que crece con su contenido no lo es.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 🔴 LA AGENDA NO CABE EN 1100 px. `.edu-page` acota todas las pantallas
+   del vertical a 1100 —está bien para un formulario o una lista— pero el
+   piso de una clínica son 32 columnas: con ese tope se ven siete y media y
+   el resto queda detrás de un desplazamiento eterno. Esta pantalla pide el
+   ancho entero. Es un MODIFICADOR de la página, no un cambio de `.edu-page`:
+   ninguna otra pantalla se entera. */
+.edu-ag-page {
+  max-width: none;
+}
+
+.edu-ag {
+  container-type: inline-size;
+  container-name: edu-ag;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ── Barra: el día, el rango, el modo y el zoom ───────────────────────── */
+.edu-ag__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-ag__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.edu-ag__fecha {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  /* es-MX devuelve "lunes 31 de agosto"; en un encabezado se lee mejor con
+     la inicial en mayúscula. */
+  text-transform: capitalize;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edu-ag__modos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── La leyenda de color, que ES el filtro de especialidad ───────────── */
+.edu-ag__leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.edu-ag__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* 34 px: se toca con el pulgar sin ser un botón de formulario. */
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--edu-line);
+  border-radius: 999px;
+  background: var(--edu-surface);
+  color: var(--edu-text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.edu-ag__chip:hover {
+  border-color: var(--edu-line-strong);
+}
+
+/* Encendido: el color de la especialidad como FONDO, con la tinta que
+   `readableTextOn` calculó (negro o blanco según la luminancia — el blanco
+   fijo se perdía sobre los tonos claros de la paleta). */
+.edu-ag__chip--on {
+  background: var(--edu-ag-color, var(--edu-600));
+  border-color: var(--edu-ag-color, var(--edu-600));
+  color: var(--edu-ag-tinta, #ffffff);
+}
+
+/* Sin ninguna cita en el rango: se apaga el CÍRCULO, no el texto. Bajarle
+   la opacidad al nombre lo dejaba por debajo de AA. */
+.edu-ag__chip--vacio .edu-ag__chip-punto {
+  background: transparent;
+  border-color: var(--edu-line-strong);
+}
+
+.edu-ag__chip-punto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--edu-line);
+  background: var(--edu-ag-color, var(--edu-400));
+  flex: none;
+}
+
+.edu-ag__chip--on .edu-ag__chip-punto {
+  border-color: var(--edu-ag-tinta, #ffffff);
+  background: var(--edu-ag-tinta, #ffffff);
+}
+
+.edu-ag__chip-n {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  opacity: 0.85;
+}
+
+/* ── Filtros ──────────────────────────────────────────────────────────── */
+/* En ancho, el desplegable está abierto y su resumen no se pinta: sería un
+   control que no controla nada. En un teléfono es lo que ahorra 110 px de
+   los 800 que hay antes de ver una cita. */
+.edu-ag__filtrocaja {
+  min-width: 0;
+}
+
+.edu-ag__filtrosum {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--edu-text-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.edu-ag__filtrosum::-webkit-details-marker {
+  display: none;
+}
+
+.edu-ag__filtroson {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--edu-600);
+}
+
+.dark .edu-ag__filtroson {
+  color: var(--edu-300);
+}
+
+.edu-ag__filtrocaja[open] > .edu-ag__filtrosum {
+  margin-bottom: 8px;
+}
+
+.edu-ag__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-ag__filtros > .edu-field {
+  min-width: 130px;
+  flex: 1 1 130px;
+  gap: 3px;
+}
+
+/* Campos más bajos SOLO aquí. Seis desplegables de 42 px más su etiqueta se
+   comen 90 px del alto que la rejilla necesita para caber en una pantalla.
+   Es un descendiente de `.edu-ag__filtros`, no una redeclaración de
+   `.edu-input`: el resto del vertical no se entera. */
+.edu-ag__filtros .edu-input {
+  min-height: 36px;
+  font-size: 13.5px;
+}
+
+.edu-ag__filtros .edu-field__label {
+  font-size: 11.5px;
+}
+
+.edu-ag__buscador {
+  flex: 2 1 200px;
+}
+
+.edu-ag__buscabox {
+  position: relative;
+  display: block;
+}
+
+.edu-ag__buscabox > svg {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--edu-text-3);
+  pointer-events: none;
+}
+
+.edu-ag__buscabox > input {
+  padding-left: 30px;
+}
+
+.edu-ag__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* La tira de chips se lleva el hueco que sobre; el contador y el alta
+   quedan pegados a la derecha, y juntos. */
+.edu-ag__pie > .edu-ag__leyenda {
+  flex: 1 1 auto;
+}
+
+.edu-ag__pieaccion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex: none;
+}
+
+/* El icono y el texto, y nada más: el texto va envuelto en un <span>
+   porque cada hijo de un contenedor flex es un elemento por su cuenta —con
+   los trozos sueltos, la frase salía repartida por el renglón—. */
+.edu-ag__aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+}
+
+.edu-ag__aviso > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ── El selector de un solo sillón (pantalla angosta) ─────────────────── */
+.edu-ag__unosillon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+}
+
+.edu-ag__unosillon-txt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.edu-ag__unosillon-txt small {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--edu-text-3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LA REJILLA
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-ag__scroll {
+  /* Fallbacks del SSR: la pantalla los pisa en línea en cuanto mide. */
+  --edu-ag-slot-h: 30px;
+  --edu-ag-alto: 520px;
+  --edu-ag-eje-w: 54px;
+  --edu-ag-col-w: 138px;
+
+  height: var(--edu-ag-alto);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* UN SOLO contenedor de desplazamiento para los dos ejes: es lo que
+   permite que las horas se queden pegadas a la izquierda (sticky left) al
+   desplazarse entre 32 sillones. Con el alto y el ancho en contenedores
+   distintos, el sticky del eje se resuelve contra el de dentro —que nunca
+   se mueve en horizontal— y las horas se van con las columnas.
+
+   🔴 Y DOS FILAS FLEX, no una rejilla CSS: en `display: grid` el bloque
+   contenedor de un hijo es su ÁREA de rejilla, así que un `sticky left: 0`
+   en la primera columna no tiene sitio a donde correrse y el eje se va con
+   las columnas igual. El bloque contenedor de un hijo de una fila FLEX es
+   la fila, que mide todo el ancho del contenido — y ahí sí se queda. */
+.edu-ag__grid {
+  display: flex;
+  flex-direction: column;
+  /* `width` es la preferencia y `min-width` el suelo: con pocas columnas la
+     rejilla llena el ancho, y con muchas crece y aparece el desplazamiento
+     horizontal en vez de columnas de 11 px. */
+  width: 100%;
+  min-width: min-content;
+}
+
+.edu-ag__fila {
+  display: flex;
+  min-width: min-content;
+}
+
+/* La fila de encabezados se queda arriba mientras el cuerpo se desplaza.
+   El fondo es obligatorio: sin él, las tarjetas se leen por debajo. */
+.edu-ag__fila--cab {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--edu-surface);
+}
+
+.edu-ag__esquina {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  flex: 0 0 var(--edu-ag-eje-w);
+  width: var(--edu-ag-eje-w);
+  height: 46px;
+  background: var(--edu-surface);
+  border-bottom: 1px solid var(--edu-line);
+  border-right: 1px solid var(--edu-line);
+}
+
+.edu-ag__cabecera {
+  display: flex;
+  flex: 1 1 var(--edu-ag-col-w);
+  min-width: var(--edu-ag-col-w);
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  height: 46px;
+  padding: 4px 8px;
+  background: var(--edu-surface);
+  border-bottom: 1px solid var(--edu-line);
+  border-right: 1px solid var(--edu-line);
+}
+
+.edu-ag__cabecera:last-child {
+  border-right: none;
+}
+
+.edu-ag__cabecera-tit {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edu-ag__cabecera-sub {
+  font-size: 10.5px;
+  color: var(--edu-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── El eje de horas ─────────────────────────────────────────────────── */
+.edu-ag__ejewrap {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: 0 0 var(--edu-ag-eje-w);
+  width: var(--edu-ag-eje-w);
+  background: var(--edu-surface);
+  border-right: 1px solid var(--edu-line);
+}
+
+.edu-ag__eje {
+  position: relative;
+  height: 100%;
+  user-select: none;
+}
+
+/* La hora en punto en --edu-text-2 (≥7:1 sobre el blanco del panel). El
+   gris claro de 10 px que usaba la agenda del dental antes de su ola de
+   legibilidad daba ~3.9:1 y no pasaba AA. */
+.edu-ag__hora {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--edu-text-2);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* La media hora es apoyo: solo aparece cuando el zoom le da aire de verdad
+   (≥28 px entre rótulos, lo decide showHalfHourLabels). */
+.edu-ag__media {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 550;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ── Una columna ─────────────────────────────────────────────────────── */
+.edu-ag__col {
+  position: relative;
+  flex: 1 1 var(--edu-ag-col-w);
+  min-width: var(--edu-ag-col-w);
+  border-right: 1px solid var(--edu-line);
+  /* Los renglones de 15 minutos se pintan con el fondo: 32 columnas por 48
+     renglones serían 1 536 nodos en el DOM sin ganar nada. */
+  background-image: linear-gradient(
+    to bottom,
+    rgba(20, 26, 43, 0.07) 1px,
+    transparent 1px
+  );
+  background-size: 100% var(--edu-ag-slot-h);
+}
+
+.dark .edu-ag__col {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(226, 233, 246, 0.09) 1px,
+    transparent 1px
+  );
+}
+
+.edu-ag__col:last-child {
+  border-right: none;
+}
+
+.edu-ag__col:hover {
+  background-color: var(--edu-hover);
+}
+
+/* Se puede soltar aquí / aquí ya hay algo. Verde y rojo, pero con el
+   contorno además del fondo: el color solo no se lee con daltonismo. */
+.edu-ag__col--cabe {
+  background-color: rgba(21, 128, 61, 0.09);
+  outline: 2px solid var(--edu-ok);
+  outline-offset: -2px;
+}
+
+.edu-ag__col--choca {
+  background-color: var(--edu-danger-soft);
+  outline: 2px dashed var(--edu-danger);
+  outline-offset: -2px;
+  cursor: not-allowed;
+}
+
+/* La banda de la hora en punto: más marcada que el renglón de 15 minutos. */
+.edu-ag__banda {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  border-top: 1px solid var(--edu-line);
+}
+
+/* ── Una cita ────────────────────────────────────────────────────────── */
+/* CARRILES: cuando dos citas se enciman, cada una toma
+   `100% / carriles` de ancho y se corre `carril` posiciones. Sin encimarse,
+   carril = 0 y carriles = 1, o sea el ancho entero de la columna. */
+.edu-ag__cita {
+  position: absolute;
+  left: calc(var(--edu-ag-carril, 0) * (100% / var(--edu-ag-carriles, 1)) + 2px);
+  width: calc((100% / var(--edu-ag-carriles, 1)) - 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 5px;
+  text-align: left;
+  font: inherit;
+  color: var(--edu-text-1);
+  /* El color de la ESPECIALIDAD como superficie, mezclado con el fondo del
+     panel para que el texto siga encima con contraste en los dos temas. */
+  background: color-mix(in srgb, var(--edu-ag-color, var(--edu-500)) 20%, var(--edu-surface));
+  border: 1px solid color-mix(in srgb, var(--edu-ag-color, var(--edu-500)) 45%, transparent);
+  border-left: 4px solid var(--edu-ag-color, var(--edu-500));
+  border-radius: 7px;
+  box-shadow: var(--edu-shadow-1);
+  overflow: hidden;
+  cursor: grab;
+  z-index: 1;
+  container-type: inline-size;
+}
+
+.edu-ag__cita:hover {
+  box-shadow: var(--edu-shadow-2);
+  z-index: 3;
+}
+
+.edu-ag__cita--arrastrando {
+  cursor: grabbing;
+  z-index: 6;
+  box-shadow: var(--edu-shadow-3);
+  opacity: 0.92;
+}
+
+/* El TIPO se distingue sin robarle la superficie a la especialidad: el
+   tamizaje (lo que ABRE el caso) lleva el borde en ámbar punteado y el
+   control, punteado suave. Y los dos lo dicen además por escrito. */
+.edu-ag__cita--tamizaje {
+  border-top-color: var(--edu-amber-700);
+  border-right-color: var(--edu-amber-700);
+  border-bottom-color: var(--edu-amber-700);
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+.edu-ag__cita--control {
+  border-style: dotted;
+  border-left-style: solid;
+}
+
+/* Cancelada y "no llegó": la superficie deja de ser de la especialidad
+   —el ojo tiene que poder descartarlas— y el punto de estado dice cuál de
+   las dos es. Siguen en pantalla porque ese hueco se liberó, y eso es
+   información. */
+.edu-ag__cita--cancelada,
+.edu-ag__cita--falto {
+  background: var(--edu-surface-2);
+  border-color: var(--edu-line);
+  border-left-color: var(--edu-line-strong);
+  opacity: 0.8;
+}
+
+.edu-ag__cita--cancelada .edu-ag__cita-nombre {
+  text-decoration: line-through;
+  color: var(--edu-text-3);
+}
+
+.edu-ag__cita--terminada {
+  border-left-color: var(--edu-ok);
+}
+
+.edu-ag__cita-fila {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.edu-ag__cita-hora {
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.edu-ag__cita-nombre {
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.edu-ag__cita-meta {
+  font-size: 10.5px;
+  color: var(--edu-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.edu-ag__cita-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--edu-ag-color, var(--edu-500));
+  color: var(--edu-ag-tinta, #ffffff);
+  border: 1px solid var(--edu-line);
+  font-size: 8px;
+  font-weight: 800;
+  flex: none;
+}
+
+/* El ESTADO es un punto, no un color de fondo: la superficie ya la tiene
+   la especialidad y dos señales encima de la misma no se leen. */
+.edu-ag__cita-punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: auto;
+  flex: none;
+  background: var(--edu-400);
+  box-shadow: 0 0 0 1.5px var(--edu-surface);
+}
+
+.edu-ag__cita--agendada .edu-ag__cita-punto { background: var(--edu-400); }
+.edu-ag__cita--llego .edu-ag__cita-punto { background: var(--edu-600); }
+.edu-ag__cita--sillon .edu-ag__cita-punto { background: var(--edu-amber-700); }
+.edu-ag__cita--curso .edu-ag__cita-punto {
+  background: var(--edu-amber-700);
+  box-shadow: 0 0 0 1.5px var(--edu-surface), 0 0 0 3px rgba(180, 83, 9, 0.35);
+}
+.edu-ag__cita--terminada .edu-ag__cita-punto { background: var(--edu-ok); }
+.edu-ag__cita--cancelada .edu-ag__cita-punto { background: var(--edu-text-3); }
+.edu-ag__cita--falto .edu-ag__cita-punto { background: var(--edu-danger); }
+
+/* Carril angosto (dos o tres citas encimadas, o la semana en una tableta):
+   el NOMBRE gana. El color de la superficie sigue diciendo la especialidad.
+   @container sobre la propia tarjeta: es su ancho real el que manda, no el
+   de la ventana. */
+@container (max-width: 74px) {
+  .edu-ag__cita-chip,
+  .edu-ag__cita-punto {
+    display: none;
+  }
+}
+
+@container (max-width: 52px) {
+  .edu-ag__cita-hora {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LA LISTA
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-ag__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.edu-ag__listadia {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edu-ag__listatit {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: capitalize;
+  color: var(--edu-text-2);
+}
+
+.edu-ag__listacount {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--edu-text-3);
+  text-transform: none;
+}
+
+.edu-ag__renglon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-left: 4px solid var(--edu-ag-color, var(--edu-400));
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.edu-ag__renglon:hover {
+  border-color: var(--edu-line-strong);
+  background: var(--edu-hover);
+}
+
+.edu-ag__renglon--cancelada,
+.edu-ag__renglon--falto {
+  background: var(--edu-surface-2);
+  border-left-color: var(--edu-line-strong);
+  opacity: 0.82;
+}
+
+.edu-ag__renglon--cancelada .edu-ag__renglon-nombre {
+  text-decoration: line-through;
+  color: var(--edu-text-3);
+}
+
+.edu-ag__renglon-hora {
+  display: flex;
+  flex-direction: column;
+  font-size: 13.5px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+  min-width: 46px;
+}
+
+.edu-ag__renglon-hora small {
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--edu-text-3);
+}
+
+.edu-ag__renglon-cuerpo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.edu-ag__renglon-nombre {
+  font-size: 14px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edu-ag__renglon-meta {
+  font-size: 12px;
+  color: var(--edu-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edu-ag__renglon-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+  flex: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ANCHOS — se mide el CONTENEDOR de la agenda, no la ventana
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Teléfono (hasta 640 px de contenedor): la rejilla pinta un sillón, así
+   que la columna se lleva todo el ancho y el eje se estrecha. Los filtros
+   pasan a dos por renglón — seis desplegables en una columna son una
+   pantalla entera de desplazamiento antes de ver una sola cita. */
+@container edu-ag (max-width: 640px) {
+  .edu-ag__scroll {
+    --edu-ag-eje-w: 46px;
+    --edu-ag-col-w: 0px;
+  }
+
+  .edu-ag__filtrosum {
+    display: flex;
+  }
+
+  /* La tira de especialidades en UN renglón que se desliza. Envolviéndose,
+     cinco chips ocupan tres renglones (70 px) de una pantalla en la que la
+     rejilla ya va justa. Se deslizan con el pulgar, que es el gesto que
+     esa tira pide. */
+  .edu-ag__leyenda {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .edu-ag__leyenda::-webkit-scrollbar {
+    display: none;
+  }
+
+  .edu-ag__chip {
+    flex: none;
+  }
+
+  .edu-ag__pie > .edu-ag__leyenda {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .edu-ag__barra {
+    padding: 8px 10px;
+  }
+
+  .edu-ag__filtros > .edu-field {
+    flex: 1 1 calc(50% - 6px);
+    min-width: calc(50% - 6px);
+  }
+
+  .edu-ag__buscador {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  .edu-ag__modos {
+    width: 100%;
+  }
+
+  .edu-ag__renglon {
+    flex-wrap: wrap;
+  }
+
+  .edu-ag__renglon-tags {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+/* Tableta: caben más columnas, pero angostas. */
+@container edu-ag (min-width: 641px) and (max-width: 1023px) {
+  .edu-ag__scroll {
+    --edu-ag-col-w: 124px;
+  }
+}
+
+/* Escritorio ancho: la columna respira. */
+@container edu-ag (min-width: 1280px) {
+  .edu-ag__scroll {
+    --edu-ag-col-w: 152px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edu-ag__cita {
+    transition: none;
+  }
 }
