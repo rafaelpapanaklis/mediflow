@@ -729,7 +729,7 @@ export const EDU_DICTADO_HINT =
   "universitaria: diagnóstico, plan de tratamiento, odontograma, profilaxis, " +
   "resina, endodoncia, corona, extracción, periodontitis, gingivitis, oclusión, " +
   "amoxicilina, ibuprofeno, radiografía periapical, tomografía, docente, " +
-  "supervisor, residente, sillón, tamizaje, expediente.";
+  "supervisor, residente, sillón, valoración, expediente.";
 
 // ═══════════════════════════════════════════════════════════════════════
 // EL ANÁLISIS RADIOGRÁFICO

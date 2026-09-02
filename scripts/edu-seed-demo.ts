@@ -229,7 +229,7 @@ const PROCEDIMIENTOS = [
   { code: "PER-02", name: "Cirugía periodontal de acceso", cat: "Periodoncia", min: 120, publico: 380000, alumno: 190000, prog: "PERIO" },
   { code: "PER-03", name: "Injerto de tejido conectivo", cat: "Periodoncia", min: 120, publico: 420000, alumno: 210000, prog: "PERIO" },
   { code: "PER-04", name: "Mantenimiento periodontal", cat: "Periodoncia", min: 45, publico: 90000, alumno: 45000, prog: "PERIO" },
-  { code: "GEN-01", name: "Valoración y tamizaje", cat: "General", min: 30, publico: 0, alumno: 0, prog: "" },
+  { code: "GEN-01", name: "Valoración inicial", cat: "General", min: 30, publico: 0, alumno: 0, prog: "" },
   { code: "GEN-02", name: "Radiografía periapical", cat: "Diagnóstico", min: 15, publico: 25000, alumno: 12000, prog: "" },
   { code: "GEN-03", name: "Ortopantomografía", cat: "Diagnóstico", min: 20, publico: 55000, alumno: 27000, prog: "" },
   { code: "GEN-04", name: "Tomografía de haz cónico (CBCT)", cat: "Diagnóstico", min: 30, publico: 190000, alumno: 95000, prog: "" },

@@ -247,7 +247,7 @@ export const EDU_PATIENT_STATUS_LABELS: Record<EduPatientStatus, string> = {
 };
 
 export const EDU_PATIENT_STATUS_DESCRIPTIONS: Record<EduPatientStatus, string> = {
-  NEW: "Registrado en recepción. Todavía no pasa por tamizaje.",
+  NEW: "Registrado en recepción. Todavía no pasa por valoración.",
   ACTIVE: "Tiene al menos un caso abierto: alguien lo está atendiendo.",
   DISCHARGED: "Terminó sus tratamientos. Su historia no se borra.",
   INACTIVE: "Dejó de venir. Vuelve a estar en tratamiento si regresa.",
@@ -300,7 +300,7 @@ export const EDU_CASE_STATUS_LABELS: Record<EduCaseStatus, string> = {
 };
 
 export const EDU_CASE_STATUS_DESCRIPTIONS: Record<EduCaseStatus, string> = {
-  SCREENING: "Se abrió en el tamizaje y todavía no se decide el tratamiento.",
+  SCREENING: "Se abrió en la valoración y todavía no se decide el tratamiento.",
   ASSIGNED: "Ya tiene estudiante responsable; falta empezar.",
   IN_TREATMENT: "Ya se le está trabajando al paciente.",
   ON_HOLD: "Pausado: falta un estudio, un pago o que el paciente vuelva.",
@@ -331,7 +331,7 @@ export const EDU_APPOINTMENT_TYPES: EduAppointmentType[] = [
 ];
 
 export const EDU_APPOINTMENT_TYPE_LABELS: Record<EduAppointmentType, string> = {
-  TAMIZAJE: "Tamizaje",
+  TAMIZAJE: "Valoración",
   TRATAMIENTO: "Tratamiento",
   CONTROL: "Control",
 };

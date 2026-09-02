@@ -129,7 +129,7 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
           <p className="edu-empty__title">Este paciente no tiene un caso abierto tuyo</p>
           <p className="edu-empty__detail">
             La carta tiene que decir QUÉ estudiante va a atender y QUÉ docente responde, y eso sale del
-            caso: no se teclea a mano. El caso se abre en el tamizaje, y su docente responsable se
+            caso: no se teclea a mano. El caso se abre en la valoración, y su docente responsable se
             asigna desde la ficha del caso.
           </p>
         </div>

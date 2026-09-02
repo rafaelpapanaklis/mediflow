@@ -1096,7 +1096,7 @@ export async function getEduDireccionPanel(
     },
     {
       detalle: "tamizajes",
-      label: "Tamizajes",
+      label: "Valoraciones",
       value: String(tamizajes),
       raw: tamizajes,
       note: "Valoraciones iniciales terminadas: por ahí entra un paciente.",

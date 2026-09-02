@@ -1,4 +1,130 @@
 ═══════════════════════════════════════════════════════════════════════════
+## EDU-VALORACIÓN — "tamizaje" pasa a llamarse "valoración" en TODO lo que se lee ✅ (2026-09-01) · rama fix/edu-valoracion → PR, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+PR: #164 (https://github.com/rafaelpapanaklis/mediflow/pull/164) · BUILD EXIT 0 · `npm run test:edu` EXIT 0 (1158 pruebas en 35 archivos) · GUARDIA EXIT 0
+SQL: **ninguno**. Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Migración de datos: **ninguna**.
+
+OBJETIVO: la misma ola que "alumno → estudiante". La palabra "tamizaje" es jerga de salud
+pública que en una clínica universitaria nadie usa en voz alta; se dice "valoración". Cambia lo
+que la gente LEE. NO cambia lo que el código USA.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · LA REGLA, EN UNA LÍNEA
+
+**El enum sigue siendo `TAMIZAJE`.** Y con él la ruta, la API, la clase CSS, los nombres de
+archivo, las llaves de permisos, los query params y los identificadores. Renombrar eso habría
+pedido SQL, habría roto enlaces guardados y no habría cambiado ni una palabra en pantalla.
+
+    SE QUEDA IGUAL                              PASA A "valoración"
+    ─────────────────────────────────────────   ─────────────────────────────────────────
+    enum EduAppointmentType.TAMIZAJE (Prisma)   EDU_APPOINTMENT_TYPE_LABELS.TAMIZAJE
+    /instituto/agenda/tamizaje                  el <h1> y el botón que llevan ahí
+    POST /api/instituto/tamizaje                los errores que ese endpoint devuelve
+    .edu-slot--tamizaje / .edu-ag__cita--tamizaje  —
+    tamizaje-screen.tsx, tamizaje/page.tsx      lo que esos archivos pintan
+    ?detalle=tamizajes (query param)            el título de esa tarjeta y de su detalle
+    includeTamizaje, runEduTamizaje, …          —
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · QUÉ CAMBIÓ (18 archivos, 26 líneas)
+
+**La etiqueta que arrastra a todo el panel.** `EDU_APPOINTMENT_TYPE_LABELS.TAMIZAJE` pasó de
+`"Tamizaje"` a `"Valoración"` en `src/lib/edu/types.ts`. De ahí sale el texto de NUEVE sitios
+sin tocarlos: el chip de la rejilla, el de la lista, el `<select>` de Tipo de la agenda, el del
+alta de cita, el detalle de la cita, la ficha del paciente, "mi día", las acciones del paciente
+y la bandeja de autorizaciones. Un solo `Record` es toda la pantalla.
+
+Textos propios que sí se editaron a mano:
+
+    src/lib/edu/types.ts                 la etiqueta del tipo + dos descripciones de estado
+                                         ("Todavía no pasa por valoración", "Se abrió en la
+                                         valoración y todavía no se decide el tratamiento")
+    .../agenda/page.tsx                  el botón de la agenda: "Tamizaje" → "Valoración"
+    .../agenda/tamizaje/page.tsx         <title>, <h1>, el lead y el aviso de permiso denegado
+    tamizaje-screen.tsx                  el vacío ("citas de tipo Valoración") y el modal
+    agenda-modales.tsx                   "El tamizaje abre el caso" → "La valoración abre…"
+    casos-screen.tsx · pacientes-screen.tsx · expediente-screen.tsx ·
+    consentimientos-screen.tsx · pacientes/[id]/page.tsx · pacientes/[id]/casos/page.tsx
+                                         las seis pantallas que decían "un caso se abre en el
+                                         tamizaje" ahora dicen "en la valoración"
+    casos.ts                             los dos errores que la API devuelve a la pantalla
+    direccion-core.ts · direccion.ts     la tarjeta del panel de dirección y su detalle
+    ia-core.ts                           la pista de vocabulario del dictado (Whisper)
+    marketing.ts                         la landing: el paso 2 de "Cómo funciona"
+    scripts/edu-seed-demo.ts             el procedimiento del demo ("Valoración inicial")
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · TRES FRASES QUE UN REEMPLAZO CIEGO HABRÍA DEJADO MAL
+
+Y son la razón de leer cada una después de cambiarla:
+
+1. `EduDenied` decía **"El tamizaje es la valoración inicial: decide a qué estudiante…"**. Con
+   la palabra nueva quedaba *"La valoración es la valoración inicial"*. Ahora dice
+   **"La valoración inicial decide a qué estudiante se le asigna el paciente…"**.
+
+2. El error de `runEduTamizaje` decía **"Esa cita no es de tamizaje. El tamizaje se hace sobre
+   una valoración inicial."** — circular con la palabra nueva. Ahora dice qué hacer:
+   **"Esa cita no es de valoración. Elige una cita de tipo Valoración, o valora sin cita."**
+   (las dos salidas que la pantalla ofrece de verdad).
+
+3. El lead de la pantalla era **"La valoración inicial."** bajo un `<h1>` que decía "Tamizaje":
+   definía la jerga. Con el `<h1>` diciendo "Valoración" se repetía, así que ahora abre con
+   **"Es lo primero que se le hace a un paciente nuevo."**
+
+Concordancia aplicada en todos lados: *el* tamizaje → *la* valoración, *del* tamizaje → *de la*
+valoración, "pasa por tamizaje" → "pasa por valoración".
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · LA LANDING SE VIGILA SOLA A PARTIR DE AHORA
+
+`EDU_LANDING_VOCABULARIO` (marketing.ts) ya tenía dos reglas —"alumno" se dice *estudiante*,
+"programa" se dice *especialidad*—. Se le añadió la tercera:
+
+    { patron: /\btamizajes?\b/i, enLugarDe: "valoración" },
+
+`edu-landing.test.ts` la hace cumplir por DOS caminos: barre los archivos de
+`src/app/instituciones` y `src/components/public/instituciones` (código y comentarios
+incluidos) y además recorre todo el copy exportado. Si alguien vuelve a escribir la palabra en
+la página pública, la prueba lo dice antes del deploy. `marketing.ts` se salta a sí mismo en el
+barrido de archivos —ahí VIVE la lista—, por eso el `key: "tamizaje"` interno y los
+`verifiedIn` que citan `src/app/api/instituto/tamizaje/route.ts` siguen ahí sin romperla.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · LO QUE QUEDA DICIENDO "tamizaje" — 121 líneas, TODAS legítimas
+
+Ninguna se pinta. Clasificadas: **58 comentarios · 20 identificadores** (`includeTamizaje`,
+`runEduTamizaje`, `EduTamizajeScreen`, `FormularioTamizaje`, `InstitutoTamizajePage`, la
+variable local `tamizajes` de direccion.ts) **· 16 el enum `"TAMIZAJE"` · 6 clases CSS · 6
+llaves** (`?detalle=tamizajes`, `key: "tamizaje"`, la llave del menú) **· 3 rutas · 2 nombres
+de archivo · 9 nombres y mensajes de prueba · 1 la regla de vocabulario que acabamos de añadir.**
+
+Aparte, `src/lib/specialty-data.ts` dice "tamizaje cervical": es del DENTAL (ginecología, NOM
+de Papanicolaou) y no tiene nada que ver con este vertical.
+
+`prisma/schema.prisma` y los `sql/edu-*.sql` conservan `TAMIZAJE` — el enum en la base y los
+`COMMENT ON COLUMN`, que no los lee ningún usuario.
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · UNA DECISIÓN QUE NO ES TEXTO EN PANTALLA
+
+`EDU_DICTADO_HINT` (ia-core.ts) es la pista de vocabulario que se le manda a Whisper. Nadie la
+lee, pero es la lista de palabras que el residente va a DECIR en voz alta — y a partir de esta
+ola dirá "valoración". Se cambió por eso, no por consistencia cosmética.
+
+═══════════════════════════════════════════════════════════════════════════
+### 7 · VERIFICADO
+
+  · `npm run build` EXIT 0, sin tuberías.
+  · `npm run test:edu` EXIT 0 — 1158 pruebas en 35 archivos.
+  · `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` EXIT 0: los 18 archivos son
+    PROPIOS del vertical, cero compartidos, cero prohibidos.
+  · Leído en el navegador: la agenda (chip y `<select>` de Tipo diciendo "Valoración", el
+    detalle de la cita diciendo "La valoración abre el caso"), la pantalla de valoración
+    entera y el paso 2 de la landing. Los componentes REALES con props de mentira y el
+    `edu-theme.css` de verdad — el panel exige sesión y base de datos.
+
+═══════════════════════════════════════════════════════════════════════════
 ## EDU-LANDING — /instituciones, la landing pública del vertical Institucional ✅ (2026-09-01) · rama feat/edu-landing → PR, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
 COMMIT: ce732a5a · PR: #162 (https://github.com/rafaelpapanaklis/mediflow/pull/162) · BUILD EXIT 0 · `npm run test:edu` EXIT 0 · GUARDIA EXIT 0

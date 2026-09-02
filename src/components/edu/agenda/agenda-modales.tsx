@@ -478,7 +478,7 @@ export function EduAgendaDetalle({
             {row.caseId
               ? `${row.caseProgramName ?? "Caso"}${row.caseStatus ? ` · ${EDU_CASE_STATUS_LABELS[row.caseStatus]}` : ""}`
               : row.type === "TAMIZAJE"
-                ? "El tamizaje abre el caso"
+                ? "La valoración abre el caso"
                 : "Sin caso"}
           </span>
         </div>
