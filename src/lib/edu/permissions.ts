@@ -60,6 +60,32 @@ export const EDU_ALL_PERMISSIONS = {
   "agenda.manage": "Agendar, reagendar y cancelar citas",
   "sillones.view": "Ver las unidades dentales y su horario",
   "sillones.manage": "Dar de alta sillones y capturar su horario",
+  // ── Ola de la CLÍNICA EN VIVO · el tablero de sillones ───────────────
+  // UNA sola key, y la exigen /instituto/clinica y GET
+  // /api/instituto/clinica (la prueba de __tests__/edu-permissions.test.ts
+  // falla si se queda sin lector de servidor).
+  //
+  // 🔴 NO SE PARTE EN "view" + algo más: en esta pantalla no se escribe
+  // nada. Es un tablero que se mira —de pie en el piso o proyectado en la
+  // pared— y lo que se toca (marcar que el paciente se sentó, cerrar la
+  // sesión) sigue viviendo donde vivía, en Mi agenda y en la Agenda, con
+  // sus propias keys. Un interruptor que no cierre una puerta no entra en
+  // este catálogo.
+  //
+  // 🔴 Y NO SE LE DA NI A CAJA NI AL ALUMNO. Las razones son distintas y
+  // conviene no confundirlas:
+  //   · CAJA no alcanza el expediente clínico —lleva cinco olas cerrado por
+  //     partida doble— y este tablero dice qué paciente está en cada sillón
+  //     y de qué se le atiende. Eso es expediente.
+  //   · el ALUMNO sí ve lo suyo, pero un tablero del piso ENTERO recortado
+  //     a sus dos pacientes no es un tablero: es una clínica que parece
+  //     vacía. Lo suyo ya tiene pantalla, y es Mi agenda.
+  //
+  // ⚠️ El permiso abre la pantalla; el ALCANCE la vuelve a cerrar
+  // (visibility.ts, `eduLiveFloorVisibility`). Encenderle esta casilla a un
+  // alumno por override NO le enseña un solo sillón: el alcance devuelve
+  // "none" y la API contesta 403. Es el mismo doble candado del dinero.
+  "clinica.view": "Ver la clínica en vivo: qué sillones están libres, próximos y ocupados",
   "casos.view": "Ver los casos clínicos",
   "casos.assign": "Asignar un paciente a un estudiante y abrir su caso",
   // ── Ola 3 · el expediente clínico ────────────────────────────────────
@@ -348,6 +374,16 @@ export const EDU_PERMISSION_GROUPS: { title: string; keys: EduPermissionKey[] }[
   {
     title: "Agenda y sillones",
     keys: ["agenda.view", "agenda.manage", "sillones.view", "sillones.manage"],
+  },
+  {
+    // Grupo PROPIO y de UNA sola casilla, pegado al de la agenda porque
+    // habla de lo mismo (los sillones) pero SIN meterse dentro: quien le
+    // da a caja el bloque de "Agenda y sillones" —que es lo normal, caja
+    // agenda— no puede darle de pasada el tablero que enseña el
+    // padecimiento de cada paciente de la escuela. Esa es exactamente la
+    // casilla que no debe tildarse sin querer, y por eso está sola.
+    title: "Clínica en vivo",
+    keys: ["clinica.view"],
   },
   {
     // Grupo APARTE del de "Pacientes y casos" a propósito: son los seis
@@ -808,6 +844,9 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "recetas.propose",
     "recetas.issue",
     "recetas.void",
+    // ── Ola de la CLÍNICA EN VIVO ──────────────────────────────────
+    // El tablero del piso. Lo llevan DIRECCION y DOCENTE, y nadie más.
+    "clinica.view",
   ],
   DOCENTE: [
     "inicio.view",
@@ -846,6 +885,13 @@ export const EDU_ROLE_DEFAULTS: Record<EduRole, EduPermissionKey[]> = {
     "recetas.propose",
     "recetas.issue",
     "recetas.void",
+    // ── Ola de la CLÍNICA EN VIVO ──────────────────────────────────
+    // El tablero del piso. Lo llevan DIRECCION y DOCENTE, y nadie más.
+    // El docente ve el piso ENTERO —cuántos sillones quedan libres es
+    // infraestructura de la escuela, no la fila de nadie— y el DETALLE
+    // solo de los estudiantes que supervisa hoy. Eso no lo decide esta
+    // lista: lo decide el alcance (visibility.ts, eduLiveFloorVisibility).
+    "clinica.view",
   ],
   ALUMNO: [
     "inicio.view",

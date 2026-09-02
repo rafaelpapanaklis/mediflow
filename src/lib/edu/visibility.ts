@@ -212,6 +212,77 @@ export const EDU_VISIBILITY_NONE_DETAIL: Record<EduVisibilityResource, string> =
     "Tu rol no ve dinero: ni precios, ni cobros, ni saldos. Los ven la dirección y caja. Un docente y un estudiante no, y no es un permiso que se pueda encender: en el piso clínico se atiende, y en el mostrador se cobra.",
 };
 
+// ── La CLÍNICA EN VIVO — el tablero de sillones ─────────────────────────
+
+/**
+ * Los roles que ven EL PISO ENTERO en vivo (/instituto/clinica).
+ *
+ * 🔴 LISTA BLANCA, igual que la del dinero, y por el mismo motivo: si
+ * mañana el schema gana un rol (COORDINADOR, RECTOR, ADMINISTRATIVO), la
+ * respuesta por defecto tiene que ser "no ve el piso" y no "se me olvidó
+ * agregarlo a los que no". Un olvido con lista negra abre el tablero; con
+ * lista blanca, lo deja cerrado.
+ */
+const EDU_ROLES_PISO_EN_VIVO: EduRole[] = ["DIRECCION", "DOCENTE"];
+
+/**
+ * ¿Quién puede abrir la CLÍNICA EN VIVO, y con cuánto detalle?
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 POR QUÉ ESTA PANTALLA NO SE RESUELVE CON `eduVisibility(ctx, "cases")`
+ * A SECAS, Y POR QUÉ AUN ASÍ VIVE AQUÍ Y NO EN LA PANTALLA
+ *
+ * El tablero enseña, sillón por sillón, QUÉ PACIENTE está sentado y de qué
+ * se le está atendiendo. Eso es expediente clínico, así que el recurso es
+ * "cases" y no "patients" — la misma línea que la Ola 3 defendió para las
+ * notas y el odontograma. Pero el recurso solo no basta, por dos roles:
+ *
+ *   · CAJA cae en "none" con "cases", que es la respuesta correcta. Aquí no
+ *     hace falta nada nuevo: recibe, agenda y cobra; no abre expediente.
+ *   · ALUMNO cae en "own", que NO es una respuesta correcta para ESTA
+ *     pantalla. Un residente con alcance "own" vería un piso con dos
+ *     sillones pintados y treinta en blanco, y ese tablero no dice "estos
+ *     dos son los tuyos": dice "la clínica está vacía". Un tablero que
+ *     miente sobre cuántas unidades quedan libres es peor que no tenerlo, y
+ *     un alumno ya tiene la pantalla que le sirve — /instituto/mi-dia.
+ *
+ * Por eso la lista blanca se aplica ANTES de preguntar por el recurso, con
+ * la misma forma que el dinero de la Ola 5: no hay manera de que un rol
+ * nuevo, un `as any` o un permiso encendido por error acaben devolviendo
+ * "own" sobre el piso entero.
+ *
+ * 🔴 Y LO QUE DEVUELVE SIGUE SIENDO EL ALCANCE DE "cases", no un "sí/no".
+ * Ahí está la mitad fina de la decisión: DIRECCION recibe "all" y ve el
+ * piso con nombre y apellido; un DOCENTE recibe "supervised" y ve el piso
+ * ENTERO —cuántos sillones hay libres es infraestructura de la escuela, no
+ * la fila de nadie— con el DETALLE callado en los que no le tocan. Eso lo
+ * aplica `eduVivaCard` (clinica-viva-core.ts) tarjeta por tarjeta, con el
+ * `detail` que decide `eduScopeCoversStudent` de este mismo archivo.
+ *
+ * La alternativa —darle al docente el nombre del paciente de otro docente—
+ * habría roto en una pantalla nueva la regla que el vertical defiende desde
+ * la Ola 1A y que está escrita arriba del todo: «DOCENTE → lo de los
+ * alumnos que supervisa CON ASIGNACIÓN VIGENTE. Nada de otros docentes».
+ * Falla del lado cerrado, que es de qué lado se falla aquí.
+ *
+ * ⚠️ El PERMISO (`clinica.view`) abre la pantalla; esto decide las filas y
+ * el detalle. Son dos cosas distintas y por eso están en dos archivos
+ * distintos — encenderle "clinica.view" a un alumno por override sigue sin
+ * enseñarle un solo sillón, porque esto devuelve "none".
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduLiveFloorVisibility(actor: EduVisibilityActor): EduVisibilityScope {
+  if (typeof actor !== "object" || actor === null) return { kind: "none" };
+  if (!EDU_ROLES_PISO_EN_VIVO.includes(actor.role)) return { kind: "none" };
+  // Lista blanca superada: de aquí en adelante manda el recurso del
+  // expediente, sin una segunda tabla de roles que se pueda desincronizar.
+  return eduVisibility(actor, "cases");
+}
+
+/** Lo que se le dice a quien abre el tablero y no le toca. */
+export const EDU_LIVE_FLOOR_NONE_DETAIL =
+  "Tu rol no abre la clínica en vivo. El tablero de sillones enseña qué paciente está en cada unidad y de qué se le atiende, así que lo ven la dirección y los docentes. Si eres estudiante, lo tuyo está en Mi agenda; si estás en caja, la ocupación de la agenda está en Agenda.";
+
 // ═══════════════════════════════════════════════════════════════════════
 // 2 · EL RECORTE, EN LA FORMA QUE ENTIENDE PRISMA
 // ═══════════════════════════════════════════════════════════════════════

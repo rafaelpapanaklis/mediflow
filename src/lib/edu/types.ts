@@ -736,6 +736,24 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "operacion",
     permission: "direccion.panel",
   },
+  // ── Ola de la CLÍNICA EN VIVO · el tablero de sillones ──────────────
+  {
+    // Va TERCERO, pegado a Dirección y ANTES de "Mi agenda", y la posición
+    // vale para los dos roles que lo ven: para el director es la pantalla
+    // que se proyecta en la pared del piso clínico, y para el docente es lo
+    // primero que mira al llegar —"¿qué sillón hay libre?"— antes incluso
+    // que su propia agenda. Enterrado en Administración, al lado de los
+    // sillones que se dan de alta una vez al año, no lo abriría nadie.
+    //
+    // ⚠️ Para CAJA y para el ALUMNO este item NO EXISTE: el layout filtra
+    // por permiso y ninguno de los dos lleva "clinica.view". El sidebar de
+    // un estudiante sigue empezando en "Mi agenda".
+    key: "clinica",
+    href: "/instituto/clinica",
+    icon: "layout-grid",
+    section: "operacion",
+    permission: "clinica.view",
+  },
   {
     // Va justo después de Inicio y antes de la agenda completa a
     // propósito: es la pantalla del ALUMNO, que llega al piso clínico con
@@ -985,6 +1003,10 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   // SEMANA — un alumno necesita saber qué trae el jueves, no solo lo de
   // esta tarde. La ruta sigue siendo /instituto/mi-dia: renombrarla
   // rompería los enlaces guardados, igual que con /padron/estructura.
+  // Ola de la Clínica en vivo. "Clínica en vivo" y no "Sillones": ese
+  // nombre ya es de la pantalla donde se dan de alta, y dos items que se
+  // leen igual en el mismo menú son dos sitios donde equivocarse.
+  clinica: "Clínica en vivo",
   "mi-dia": "Mi agenda",
   autorizaciones: "Autorizaciones",
   agenda: "Agenda",

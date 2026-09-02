@@ -17,6 +17,7 @@ import {
   Home,
   KeyRound,
   Layers,
+  LayoutGrid,
   ListChecks,
   LogOut,
   Menu,
@@ -91,6 +92,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "message-circle": MessageCircle,
   // Ola 10 — facturación CFDI.
   receipt: Receipt,
+  // Ola de la Clínica en vivo — la rejilla de sillones del piso.
+  "layout-grid": LayoutGrid,
 };
 
 export interface EduShellProps {
