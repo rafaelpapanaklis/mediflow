@@ -53,13 +53,6 @@ export interface EduUploadOptions {
   file: File;
   caseId?: string | null;
   notes?: string | null;
-  /**
-   * Ola 12 — SOLO corrige radiografía↔foto sobre una imagen. El servidor
-   * lo valida contra la extensión (eduResolveStudyKind) y lo ignora en
-   * cualquier otro caso: el tipo de un .zip o una malla no lo decide nadie
-   * desde el navegador.
-   */
-  kind?: string | null;
   /** 0-100. */
   onProgress?: (percent: number) => void;
   /** Para que la UI diga "Reintentando (2/3)…" en vez de quedarse muda. */
@@ -171,7 +164,6 @@ export async function eduUploadStudy({
   file,
   caseId,
   notes,
-  kind,
   onProgress,
   onPhase,
   signal,
@@ -254,7 +246,6 @@ export async function eduUploadStudy({
           name: file.name,
           caseId: caseId || undefined,
           notes,
-          kind: kind || undefined,
         }),
       });
       if (confirmRes.ok) return (await confirmRes.json()) as { id: string };

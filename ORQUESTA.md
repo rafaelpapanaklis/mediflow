@@ -33103,6 +33103,174 @@ oscuro, que aunque hoy no se aplica en `/instituto` ya no depende de la suerte.
 (`pointerdown` → 5 × `pointermove` → `pointerup`), no con el `left_click_drag` de la
 automatización: esa herramienta no emite `pointermove` intermedios y dnd-kit necesita uno para
 pasar su umbral de 6 px. El gesto real de un ratón sí los emite.
+---
+
+## [Institucional · VISOR] — Se retira el visor propio: el instituto abre el MISMO visor que ve un dentista, en un modal que sí deja ver los cuatro paneles ✅ (2026-09-01) · rama `feat/edu-visor-dental`
+
+El vertical tenía su propio visor de tomografías: `cbct-viewer.tsx` (984 renglones) más
+`panoramica-pane.tsx`, `visor-medidas.ts`, `visor-gestos.ts` y `visor-shell.tsx`. Reproducía el
+del producto dental con otra pinta, abría en una hoja a pantalla completa en vez de en un modal
+y tenía la panorámica rota. **Ese fork se fue.** Ahora se monta `DicomSetViewer` /
+`DicomViewer2D` / `Model3DViewer` —los del dental, importados tal cual— dentro de un modal del
+vertical, y lo único que el instituto pone es la hoja, el CSS y las dos rutas de servidor.
+
+### La ÚNICA modificación del producto dental (18 líneas nuevas, 8 borradas)
+
+`src/components/patient-3d/DicomSetViewer.tsx` tenía dos `fetch` con la URL escrita a mano
+dentro del componente, y un adaptador **no puede redirigir un fetch escrito dentro**. Se le
+añade una prop OPCIONAL:
+
+```ts
+endpoints?: { lite: string; notes: string };
+```
+
+y arriba del componente:
+
+```ts
+const liteEndpoint  = endpoints?.lite  ?? `/api/patients/${patientId}/dicom-set/${fileId}/lite`;
+const notesEndpoint = endpoints?.notes ?? `/api/patients/${patientId}/models-3d/${fileId}`;
+```
+
+Los dos `fetch` pasan a usar esas variables. **Cuando la prop no viene, el dental hace
+exactamente lo de siempre**; hoy no la pasa ningún llamador suyo (`Models3DTab.tsx` es el único
+y no la usa). Los 60 tests de `npm run test:cbct-geometry` siguen en verde.
+
+🔴 **Las rutas se derivan a STRING, no se pasa el objeto.** El modal crea `endpoints` nuevo en
+cada render; si el OBJETO entrara en las dependencias del efecto que decodifica, girar el iPad
+volvería a leer los 668 cortes (296 MB) desde cero. Por eso la dependencia es `liteEndpoint`
+(un string, que compara por valor) y sustituye a `patientId` en esa lista — cuando no hay
+prop, el string contiene `patientId` y `fileId`, así que cambia exactamente cuando cambiaban
+antes. Hay una prueba que se pone roja si alguien mete el objeto.
+
+**El guardia:** `src/components/patient-3d/DicomSetViewer.tsx` se añadió a `SHARED_FILES` de
+`scripts/edu-guard.cjs`. `EDU_GUARD_SHARED` **solo indulta lo que ya está en esa lista** — no
+es un comodín—, así que sin ese renglón el guardia habría marcado el archivo como PROHIBIDO
+haga lo que haga la variable de entorno.
+
+### Lo que el instituto pone del lado del servidor
+
+**`POST /api/instituto/estudios/[id]/lite`** — el CBCT reducido para el móvil. Gemela de la del
+dental, y existe porque aquella resuelve contra `PatientFile` con la sesión del dental: con un
+id del instituto contesta 404. **La matemática NO se copia**: `buildCbctLite`
+(`src/lib/cbct-lite.ts`) se importa —dinámicamente, para no meter JSZip en el bundle de las
+pantallas que solo listan—, el binario hermano `<path>.lite2.bin` se guarda en el bucket
+`edu-files` al lado del original y la siguiente apertura lo encuentra hecho. Se reusan del
+dental el sufijo, el content-type y el techo de 700 MB (`MAX_CBCT_LITE_BYTES`, importado y no
+duplicado: es el mismo límite de RAM). Frenos de coste calcados: 10 generaciones/hora **por
+instituto** y candado por estudio, los dos DESPUÉS del hit de caché para que abrir un estudio
+ya preparado nunca choque con ellos.
+
+**`PATCH /api/instituto/estudios/[id]/notas`** — escribe `EduStudy.notes`, la MISMA columna que
+rellena el formulario de subida y que lee la línea de tiempo del expediente. Acepta
+`doctorNotes` (que es lo que manda el visor del dental) y `notes`.
+
+🔴 **Tenant.** Las dos pasan por `getEduStudyForViewer` (nuevo, en `src/lib/edu/estudios.ts`):
+`institutionId` de la SESIÓN + el paciente por `eduPatientScopeWhere` de
+`src/lib/edu/visibility.ts`. Un estudio de otra escuela —o de un paciente que a ese rol no le
+toca— **no existe**: 404, igual que uno inventado. Un alcance vacío cierra la consulta antes de
+llegar a la base.
+
+🔴 **Permisos, y por qué son distintos.** El `lite` pide `estudios.view`: prepara para verlo
+algo que ya se puede ver. Las notas piden **`estudios.upload`**, que es el permiso de
+ESCRITURA que ya tiene esa pantalla (es el que hoy deja poner notas al subir el estudio). Con
+solo `estudios.view` se mira el expediente y no se escribe en él.
+
+⚠️ **Acción para el deploy, y no la puede hacer esta rama:** `vercel.json` le da a la ruta del
+dental `memory: 3009, maxDuration: 300`. La del instituto necesita lo mismo y `vercel.json` no
+es un archivo del vertical (el guardia lo marca prohibido). Hay que añadirle a mano:
+
+```json
+"src/app/api/instituto/estudios/*/lite/route.ts": { "memory": 3009, "maxDuration": 300 }
+```
+
+Sin eso, preparar un CBCT grande para móvil morirá por falta de memoria en producción. En
+escritorio no se usa esa ruta, así que el visor funciona igual.
+
+### El modal, y lo único en lo que se aparta del dental
+
+`src/components/edu/estudios/visor-modal.tsx`, con CSS propio bajo el prefijo **`edu-vsr`** (el
+tema es UNA hoja de 6 400 renglones y dos olas que bautizan igual dos cosas no dan error, solo
+dejan la pantalla del otro dueño torcida; lo vigila `edu-theme.test.ts`). Reproduce el bloque
+"Modal del visor" de `Models3DTab.tsx`: cortina, tarjeta, cabecera con nombre, descarga y
+cierre, leyenda legal al pie — y **elige el visor por EXTENSIÓN**, `.zip` → `DicomSetViewer`,
+`.dcm/.dicom` → `DicomViewer2D`, `.stl/.ply/.obj` → `Model3DViewer`.
+
+Esa elección vive aparte, en `visor-tipo.ts`, un módulo **sin una sola importación**. No es
+manía: así la prueba puede EJECUTARLA en vez de buscar texto dentro de un `.tsx` que el
+corredor de pruebas no sabe cargar.
+
+**Lo que Rafael pidió: la rejilla 2×2 se ve completa sin bajar.** En el dental los cuatro
+paneles miden **420 px fijos**: suman ~910 px de rejilla y en cualquier monitor hay que
+desplazarse para ver el cuarto. Aquí:
+
+- la hoja mide contra la VENTANA con **`dvh`** (`100dvh` en el teléfono, `min(96dvh,100%)` en
+  escritorio), con `100vh` delante como respaldo para navegadores sin `dvh`;
+- `useAltoDeFila` mide el hueco REAL que queda entre donde empieza la rejilla y el borde de la
+  hoja, y lo reparte entre las dos filas en `--edu-vsr-fila`;
+- el CSS convierte esa variable en `grid-template-rows: repeat(2, var(--edu-vsr-fila, auto))` y
+  hace que cada tarjeta estire su imagen para llenar su fila.
+
+**Por qué se mide en JS y no con un `calc()` de dvh:** entre el borde de la hoja y la rejilla
+solo hay la barra de control del visor, y esa barra **cambia de alto** —se parte en dos o tres
+renglones según el ancho del modal—. Un número fijo acierta en un monitor y deja el cuarto
+panel cortado en el siguiente, que es exactamente el defecto que este trabajo venía a quitar.
+El alto de la HOJA sí es `dvh`, que es lo que se pidió.
+
+Solo hay **dos `!important`**, y son inevitables: `MprPane` y `Dicom3DVolume` llevan su alto
+**en línea** (`style={{ height: 420 }}`) y a un estilo en línea no se le gana con
+especificidad. Hay una prueba que lee los dos archivos del dental y se pone roja el día que
+dejen de hacerlo — ese día los `!important` sobran y hay que quitarlos.
+
+**El reparto se apaga solo** cuando no hay 2×2 que cuadrar: una sola columna (pantalla
+angosta), un panel maximizado, la panorámica o el modo de poca memoria. Ahí manda el dental y
+se desplaza. Encoger cuatro cortes para que quepan en una pantalla de teléfono los deja
+ilegibles, y una radiografía ilegible no es una radiografía.
+
+### El panel de notas MUERTO del visor DICOM 2D
+
+`DicomViewer2D` **no acepta rutas** (solo se tocó un archivo del dental) y pinta siempre su
+panel de notas, que guarda con `PATCH /api/patients/**`: desde el instituto eso contesta 404
+**siempre**. Un botón "Guardar" que nunca guarda es peor que no tenerlo, así que se **oculta
+desde el CSS del vertical**, y de paso se le pone debajo la superficie oscura para la que ese
+visor está dibujado (sus controles son `text-white/70`; sobre el panel claro del instituto
+salían blanco sobre blanco).
+
+⚠️ El ancla es la clase `lg:w-72` con la que el dental marca esa columna. Si el dental la
+cambia, el botón reaparecería y fallaría en cada clic **sin que nada se pusiera rojo** — por
+eso hay una prueba que lee `DicomViewer2D.tsx` y se cae el día que deje de llevarla. El visor
+de mallas no tiene el problema: sin `patientId`/`fileId` su `canPersist` es false y no pinta
+notas (el adaptador del vertical sigue sin pasárselos). Y el CBCT sí las edita de verdad,
+contra la ruta del instituto.
+
+### La taxonomía inventada, fuera de la pantalla
+
+Al subir un estudio ya **no se pregunta qué es** (se fue el "¿Qué es esta imagen?
+Radiografía / Fotografía"), la galería ya no pinta chips por tipo ni la etiqueta del `kind` en
+cada tarjeta, y el visor tampoco la lleva en el subtítulo. El icono de la tarjeta se deduce
+ahora de la EXTENSIÓN, que es el mismo criterio con el que se elige el visor al abrirla: así la
+miniatura nunca promete algo distinto de lo que se va a abrir. El cliente de la subida dejó de
+mandar `kind`.
+
+⛔ **El enum de la base NO cambia y no hay SQL.** `EduStudyKind` lo siguen usando el
+expediente, la línea de tiempo y la IA, y lo sigue decidiendo el servidor con
+`eduResolveStudyKind` sobre la extensión del path que él mismo compuso. Se dejó ese resolutor
+en pie a propósito aunque hoy nadie le mande nada: es la defensa que impide que un `.zip` de
+600 MB se registre como "Foto" el día que alguien vuelva a mandar el campo.
+
+### Lo que se borró
+
+`cbct-viewer.tsx`, `panoramica-pane.tsx`, `visor-medidas.ts`, `visor-gestos.ts`,
+`visor-shell.tsx` y sus ~400 renglones de CSS (`.edu-visor3d*`, `.edu-visorhoja*`). Con ellos
+se fue `.edu-modal__card--wide` y la prop `wide` de `EduModal`: la creó la misma ola para el
+visor y desde el PR #147 no le quedaba **ni un cliente**. Las clases del visor de imágenes y
+PDF (`.edu-visor__marco`, `.edu-visor__pdf`) se quedan: no eran del fork.
+
+`src/lib/edu/__tests__/edu-visor.test.ts` leía esos archivos como texto y se reescribió entero:
+**28 pruebas nuevas** que vigilan lo que ahora hay que vigilar, que ya no son medidas propias
+sino una FRONTERA con un producto vivo. Además `edu-resumen.test.ts` tenía un candado sobre
+`cbct-viewer.tsx` que ahora vigila `visor-modal.tsx` (que no cablee ni una ruta del dental), y
+se corrigió un comentario de `edu-expediente.test.ts` que nombraba un archivo borrado. **No
+queda ninguna prueba apuntando a un archivo que no existe.**
 
 ### Gates
 
@@ -33154,5 +33322,73 @@ pasar su umbral de 6 px. El gesto real de un ratón sí los emite.
   Postgres. Es el mismo endpoint que ya usaba el formulario de reagendar y no se tocó; lo que
   sí se probó es todo lo que ocurre antes: el cálculo del destino, el choque en el navegador y
   la ventana de confirmación.
+  Las dos rutas nuevas salen en la tabla: `ƒ /api/instituto/estudios/[id]/lite` y
+  `ƒ /api/instituto/estudios/[id]/notas`.
+  ⚠️ El primer intento murió con `EPERM ... rename query_engine-windows.dll.node` en
+  `prisma generate`: eran DOS procesos `next dev` HUÉRFANOS del banco de verificación que
+  `TaskStop` no se llevó (mata al envoltorio, no a los hijos). Matados por PID, el build salió
+  limpio. Y el aviso de fondo de siempre: el harness notifica "exit code 0" por el `echo`
+  final — el que vale es el `REALEXIT=` del propio archivo de salida.
+- **`npm run test:edu` exit 0** — 29 archivos, **939 pruebas, 939 pass, 0 fail**.
+- **`npm run test:cbct-geometry` exit 0** — 60/60. Es la prueba del DENTAL sobre el visor que
+  se tocó.
+- **Guardia:** `EDU_GUARD_SHARED="src/components/patient-3d/DicomSetViewer.tsx,ORQUESTA.md"
+  node scripts/edu-guard.cjs` → **exit 0**. 22 archivos vs `origin/main`: 21 propios del
+  vertical, 1 compartido declarado, **cero prohibidos**.
+- `npx tsc --noEmit`: sin un solo error en `src/app`, `src/lib` ni `src/components`. Los que
+  salen son los PREEXISTENTES de `__tests__` (`downlevelIteration` en barbería y en
+  `edu-theme.test.ts`), que `next build` ignora por diseño.
+
+### Lo que se VIO, y con qué
+
+No hay base de datos ni Supabase en este entorno (`.env` no existe en el repo), así que un CBCT
+"real" de un paciente real era imposible. Se montó un **banco temporal**: un `.zip` de **96
+cortes DICOM sintéticos de 160×160** fabricados con `dicom-synth.ts` —el generador de las
+propias pruebas del dental, que escribe Part 10 de verdad— con un maxilar de mentira (arcada
+densa, hueso basal, paladar), servido desde `public/` a una página que monta el modal. Todo el
+banco (página, `.zip`, `.dcm`, marco de iframes y un `.env.local` de mentira) **se borró antes
+del commit**; `git status` no lo lleva.
+
+Lo que se comprobó con eso, en el navegador:
+
+- **1920×950** — `--edu-vsr-fila` = **338 px**, los cuatro paneles de 778×338, el borde
+  inferior del cuarto a **803 px** dentro de un cuerpo de **814**: la rejilla 2×2 entera
+  visible **sin desplazar**. La leyenda clínica, las notas y la ficha quedan debajo (el cuerpo
+  mide 1 121 px de contenido), que es donde tienen que estar.
+- **1366×768** — fila = **250 px**, cuarto panel a **627** de **639**. También cabe. El lienzo
+  3D se queda en 105 px porque sus propios controles ocupan dos renglones; para verlo grande
+  está el botón de maximizar del propio panel.
+- **390×844 (teléfono)** — hoja a pantalla completa, cabecera compacta y paneles apilados con
+  desplazamiento, como en el dental. Se arregló de paso el subtítulo, que se partía en tres
+  renglones y le robaba alto al visor.
+- **La panorámica del dental FUNCIONA**: auto-detectó la arcada sobre el axial y generó la
+  reconstrucción curva, con sus controles de slab/MIP y su escala en mm. Es la del dental,
+  importada; el fork la tenía rota.
+- **Las rutas son las del instituto y ninguna es del dental.** Guardar notas disparó
+  `PATCH /api/instituto/estudios/<id>/notas` → **401** (sin sesión, que es lo correcto), y
+  forzando el camino de poca memoria, `POST /api/instituto/estudios/<id>/lite` → **401**. En
+  todo el registro del servidor hay **CERO** peticiones a `/api/patients/`.
+- **`.dcm` → `DicomViewer2D`**, pintando sobre la superficie oscura y **sin** su panel de notas
+  muerto.
+
+### Lo que NO se pudo ver
+
+- **Un CBCT de un paciente de verdad**, con su URL firmada de Supabase. No hay bucket ni
+  sesión aquí.
+- **Que el CBCT reducido se genere de verdad** (descarga del `.zip` del bucket → `buildCbctLite`
+  → subida del binario hermano → firma). La ruta se ejecutó hasta el guardia y contestó 401
+  correctamente, pero el camino feliz necesita Storage.
+- **El tenant en caliente.** Que un estudio de otra escuela dé 404 está escrito y probado por
+  lectura de código (`getEduStudyForViewer` con `eduPatientScopeWhere`), no ejercido contra la
+  base.
+- **Un dedo de verdad.** El fork traía gestos táctiles sintetizados; el visor del dental tiene
+  los suyos y no se tocaron.
+
+### Detalle menor, dicho para que no sorprenda
+
+La galería no pre-firma la URL del CBCT reducido, así que en un teléfono la primera apertura
+hace un `POST` al `lite` que casi siempre devuelve `cached: true` al instante. Es un viaje de
+ida y vuelta más y evita una llamada extra a Storage por cada `.zip` al pintar la galería.
+Puede pre-firmarse si algún día molesta.
 
 PR contra `main`, **SIN mergear**.

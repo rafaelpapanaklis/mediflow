@@ -13,9 +13,13 @@ export const maxDuration = 60;
  * fila del expediente.
  *
  * POST /api/instituto/pacientes/[id]/estudios/confirm
- *   body: { path, name, caseId?, notes?, kind? }  → { id, alreadyRegistered }
- *   (`kind` solo corrige radiografía↔foto sobre una IMAGEN; para todo lo
- *   demás se ignora y manda la extensión — ver eduResolveStudyKind)
+ *   body: { path, name, caseId?, notes? }  → { id, alreadyRegistered }
+ *
+ * El TIPO no viaja en el cuerpo: la pantalla dejó de preguntarlo y lo
+ * DEDUCE la extensión del path que compuso el servidor. `eduResolveStudyKind`
+ * sigue en su sitio y sigue sin creerle al cliente — si algún día alguien
+ * vuelve a mandar un `kind`, solo se le acepta para distinguir radiografía
+ * de foto sobre una IMAGEN, que es lo único que la extensión no decide.
  *
  * 🔴 NO SE CREE NADA DE LO QUE DIGA EL CLIENTE:
  *   · el `path` debe caer EXACTAMENTE en la carpeta de este instituto y

@@ -342,11 +342,15 @@ test("candado · el visor de mallas NO recibe patientId/fileId del dental", () =
   assert.ok(!src.includes("patientId="), "pasarle patientId re-conectaría el PATCH del dental");
 });
 
-test("candado · el contenedor CBCT propio no llama a rutas del dental", () => {
-  const src = fuente("src", "components", "edu", "estudios", "cbct-viewer.tsx");
-  assert.ok(!src.includes("/api/patients/"), "el contenedor no puede hablar con el dental");
+test("candado · el visor del instituto no llama a rutas del dental", () => {
+  // El contenedor CBCT propio se retiró: ahora se monta el del dental
+  // (DicomSetViewer) y se le pasan las rutas del vertical por prop. Lo que
+  // hay que vigilar dejó de ser "no reescribas la matemática" y pasó a ser
+  // "no dejes ninguna URL del dental cableada aquí".
+  const src = fuente("src", "components", "edu", "estudios", "visor-modal.tsx");
+  assert.ok(!src.includes("/api/patients/"), "el modal no puede hablar con el dental");
   assert.ok(
-    src.includes("keepDominantSeries(") && src.includes("sortSlicesForVolume("),
-    "la matemática de geometría se IMPORTA del dental, no se reescribe",
+    src.includes("/api/instituto/estudios/"),
+    "las dos rutas del visor son las del instituto, no las del dental",
   );
 });
