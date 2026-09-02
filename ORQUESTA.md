@@ -31882,3 +31882,366 @@ arreglo (medido con `getComputedStyle`, con captura antes y después, en escrito
 cajón del móvil) y el tablero completo montado con los COMPONENTES REALES y datos falsos en una
 página temporal —las tres gráficas en semana y en mes, el conmutador, los accesos y el
 medidor—, a 1180 px y a 387 px, borrada antes de commitear. PR contra `main`, SIN mergear.
+═══════════════════════════════════════════════════════════════════════════
+## EDU-SEED-DEMO — Un instituto de DEMO con volumen real, y lo que se rompe cuando se llena (2026-09-01) · rama feat/edu-seed-demo
+═══════════════════════════════════════════════════════════════════════════
+
+Hasta hoy el vertical institucional se había probado con **1 paciente y 1 caso**. El cliente que
+viene son **120 estudiantes y 32 sillones**, y nadie había visto una sola pantalla llena. Esta
+rama siembra un instituto de mentira con ese volumen y **mide** el panel entero: cuánto tarda
+cada pantalla, cuántas filas viajan al navegador y cuántas lee la base para producirlas.
+
+**No arregla nada.** Es un instrumento de medida y un reporte. Lo que encontró está abajo,
+ordenado por lo que más va a doler.
+
+ARCHIVOS: `scripts/edu-seed-demo.ts` (nuevo, PROPIO del vertical) ·
+`scripts/edu-guard.cjs` (+1 renglón en `OWN_FILES`) · `package.json` (+`seed:edu-demo`) ·
+`ORQUESTA.md`. **Cero cambios en el dental, en barbería o en inmuebles. Sin SQL que aplicar,
+sin migración, sin envs nuevas.** El schema no se toca: el seed escribe filas, no columnas.
+
+---
+
+### 1 · QUÉ SIEMBRA
+
+    npm run seed:edu-demo                  # siembra (idempotente)
+    npm run seed:edu-demo -- --medir       # recorre el panel con cronómetro
+    npm run seed:edu-demo -- --sql-borrado # imprime el DELETE completo
+
+| | |
+|---|---|
+| 1 instituto | `DEMO · Instituto de Especialidades DaleControl`, slug `demo-volumen` |
+| **3 sedes** | Norte (12 sillones) · Centro (10) · Sur (10, abre sábados) |
+| **32 sillones** | la numeración **reempieza en cada sede** — hay tres «Sillón 1» |
+| **120 estudiantes** | 2 generaciones (2025-A, 2026-A) × 3 especialidades × 20 |
+| 12 docentes + 1 dirección + 2 caja | 135 personas con login |
+| 180 asignaciones | la generación vieja lleva una **rotación** de docente: una cerrada, una vigente |
+| **600 pacientes** | folios P-0001…P-0600; 22 % **sin antecedentes registrados** (el tri-estado de #150) |
+| **400 casos** | los siete estados del enum, repartidos |
+| **20 577 citas** | de marzo 2025 a hoy+14 días · **hoy: 190 citas, 52 vivas ahora mismo** |
+| 1 511 notas · 1 051 estudios · 1 951 hallazgos de odontograma | |
+| 870 autorizaciones (75 pendientes) · 134 consentimientos · 100 recetas | |
+| 180 cobros · 135 pagos · 12 planes a meses · 105 mensualidades · 32 turnos de caja | |
+| 183 calificaciones con sus 732 criterios · 15 requisitos · 3 rúbricas | |
+| 220 usos de IA con su cupo | |
+
+Se siembra en **7-11 s**. Correrlo dos veces no duplica: cada fila lleva un id determinista
+(sha1 de una llave estable) y todo entra por `createMany({ skipDuplicates: true })`. Verificado:
+segunda corrida → «135 ya estaban», y los conteos de la base no se mueven.
+
+**La única escritura que no es `create`** es el refresco de la foto de HOY: `skipDuplicates`
+haría que un instituto sembrado ayer amaneciera con la agenda de hoy entera en `SCHEDULED` y la
+pantalla de clínica en vivo vacía. Un `UPDATE` acotado a las citas de hoy **de ese
+institutionId** vuelve a poner gente en el sillón.
+
+---
+
+### 2 · 🔴 LAS TRES COSAS QUE NO PODÍA HACER, Y CÓMO SE IMPIDEN
+
+Ninguna de las tres es un comentario pidiendo cuidado. Las tres corren, y se probaron a
+propósito contra un instituto vecino sembrado a mano para la prueba.
+
+**a) No tocar el instituto real.** El seed crea SU instituto y comprueba el destino antes de
+escribir. Las cuatro puertas, ejecutadas:
+
+| Escenario | Qué pasó |
+|---|---|
+| Existe un instituto vecino con datos | `✅ ninguna fila fuera del instituto de demo cambió` — el vecino sigue con su usuario |
+| Alguien le quita el prefijo `DEMO · ` al de demo | **rebota**: «cuyo nombre NO empieza con "DEMO · "… No se escribe nada» |
+| Alguien le pone el slug `demo-volumen` a otro instituto | **rebota**: «tiene id "impostor" y este seed solo sabe escribir en "dsdinst…"» |
+| `DATABASE_URL` apunta a Supabase | **rebota**: «no es local. Si de verdad quieres sembrar ahí, declara el host EXACTO: `EDU_SEED_HOST_REMOTO="…"`» |
+
+Y además, al terminar **cada** corrida (siembra o medición) compara el conteo de filas AJENAS
+de las 42 tablas del vertical contra la foto que tomó al empezar. Si una sola fila de otro
+instituto cambió, sale con código 1 y la nombra.
+
+**b) No mandar nada al mundo.**
+- **No se crea `EduWhatsappConfig`.** El barrido de recordatorios arranca de
+  `eduWhatsappConfig.findMany({ where: { remindersEnabled: true } })` (`recordatorios.ts:116`):
+  **sin fila, el instituto de demo no existe para el cron.** Es más fuerte que poner
+  `remindersEnabled: false`, porque no depende de que nadie lo encienda por curiosidad.
+- Cero filas en `EduWhatsappMessage`. La cola no lleva nada.
+- Correos todos `@demo.local` — TLD reservado por el RFC 2606, no resuelve.
+- Teléfonos del bloque de ficción `55 5501 xxxx`.
+- **`supabaseId` = `demoseed-0001`…**, que nunca es un UUID de Supabase Auth: no se crea
+  ninguna cuenta y por tanto no sale ninguna invitación. **Consecuencia deliberada: a este
+  instituto NO SE PUEDE ENTRAR por el login.** Para pasearlo en un entorno real hay que dar de
+  alta las cuentas en Supabase Auth a mano y copiar sus UUID a `edu_users.supabaseId`. Se
+  prefirió eso a que un seed mandara 135 correos de invitación.
+
+**c) Todo borrable.** `--sql-borrado` imprime el bloque de la sección 6. Probado contra la base
+con el instituto vecino delante: **20 577 citas → 0, y el vecino intacto** (1 instituto, 1
+usuario).
+
+---
+
+### 3 · 🔴 LOS ESTUDIOS NO TIENEN ARCHIVO, Y POR ESO LO DICEN
+
+`EduStudy.sizeBytes` alimenta el tamaño que se pinta junto a cada estudio y la decisión «este
+CBCT no cabe en un móvil» del visor (`cbct-viewer.tsx:442`). **Una fila con 412 MB y ningún
+binario en el bucket es una fila que miente.** Las dos salidas honestas eran subir archivos
+chicos de verdad o marcar la fila. **Se eligió marcar**, por tres razones:
+
+1. El bucket `edu-files` es de Supabase, o sea del mundo. Subirle 1 051 archivos desde un seed
+   es exactamente el «no mandes nada afuera» que esta tarea prohíbe — y además dejaría basura
+   que el DELETE de SQL no limpia: **el objeto de Storage sobrevive a la fila**.
+2. Subir «archivos chicos de verdad» tampoco arregla la mentira: un PNG de 2 KB con
+   `sizeBytes` de 412 MB miente igual, y poniendo el tamaño real el medidor no mediría nada.
+3. El nombre se lee en TODAS las pantallas donde se lee el tamaño, así que el aviso viaja
+   pegado al dato que engañaría.
+
+Cada estudio se llama `Ortopantomografía · DEMO SIN ARCHIVO` y su `storagePath` empieza por
+`demo-seed/`. Los tamaños son verosímiles (periapical ~700 KB, pano ~4 MB, CBCT 290-620 MB).
+
+**Total sembrado: 1 051 estudios, 25.5 GB de `sizeBytes` y CERO bytes en el bucket.** Dicho para
+la rama de la cuota de almacenamiento que anda en paralelo (#155): cuando ese medidor sume
+`sizeBytes` por instituto, este instituto va a reportar 25 GB que no están. El nombre de cada
+fila lo dice; conviene que el medidor no lo contradiga en silencio.
+
+---
+
+### 4 · 📊 LA TABLA DE MEDICIONES
+
+Sacadas llamando **a los mismos loaders que llama cada server component**, con el mismo
+contexto que les llega. Base: Postgres 16 en Docker, **misma máquina, latencia de red cero**.
+Cada `ms` es la **mediana de tres corridas** con la máquina en reposo (las tres coincidieron
+dentro de ±10 % salvo la primera fila, que osciló entre 239 y 293).
+
+> 🔴 **Los milisegundos son un SUELO, no el número de producción.** En Vercel + Supabase hay
+> red y PgBouncer de por medio, y cada consulta paga ida y vuelta. La columna que se traslada
+> tal cual es **«filas leídas»**: esa no depende de dónde esté la base.
+
+Ordenada por lo que más va a doler.
+
+| # | Pantalla | ms | filas al navegador | filas leídas | payload | Qué pasa |
+|---|---|---:|---:|---:|---:|---|
+| **1** | **`/instituto/evaluacion`** (dirección, sin filtro) | **241** | 120 | **17 082** | 93 KB | Lee **16 364 citas COMPLETED** + 400 casos + 183 calificaciones **para pintar 120 renglones**. Es el P2-6, medido. |
+| | ↳ mismo, filtrando 1 generación (2025-A) | 64 | 20 | 4 465 | 16 KB | El arreglo que propone la auditoría, medido: **−73 % de tiempo, −74 % de filas** |
+| | ↳ mismo, filtrando 1 generación (2026-A) | 30 | 20 | 1 251 | 16 KB | **−88 % / −93 %** |
+| | ↳ mismo, con los ojos de un DOCENTE | 26 | 10 | 10 | 8 KB | El recorte por supervisión es lo único que hoy lo salva |
+| **2** | **Ficha · pestaña Expediente** | 79 | **200 de 240** | 240 | **237 KB** | **Corta en 200 y NO lo dice.** Es un expediente clínico. |
+| **3** | **Ficha · pestaña Estudios** | 56 | **200 de 240** | 240 | 92 KB | Igual: tope 200, sin señal |
+| **4** | **`/instituto/direccion` · periodo 30 días** | **231** | — | — | 16 KB | 14 consultas, en secuencia con el bloque en vivo |
+| | ↳ periodo 365 días | 228 | — | — | 16 KB | No empeora: los `take` internos ya lo acotan (y lo avisa) |
+| | ↳ bloque EN VIVO | 23 | 32 | 32 | 23 KB | Barato. Bien. |
+| **5** | **`/instituto/agenda` · SEMANA, 3 sedes** | 107 | **500 (CORTADA)** | 500 | **437 KB** | Tope `EDU_AGENDA_MAX_ROWS`. La semana **no cabe**. Sí avisa. |
+| **6** | `/instituto/agenda` · HOY, 3 sedes (32 sillones) | 67 | **648** | 648 | **237 KB** | 190 citas + 32 sillones + **300 pacientes en un `<select>`** |
+| | ↳ HOY, solo Sede Norte | 27 | 71 | 71 | 62 KB | Elegir sede es lo único que baja la rejilla de 32 columnas |
+| | ↳ HOY, solo Sede Centro / Sur | 21 / 21 | 58 / 61 | | 51 / 53 KB | |
+| **7** | `/instituto/casos` (incluyendo cerrados) | 65 | **300 CORTADA de 400** | 400 | 167 KB | …y con eso **el CSV devuelve 413 y no exporta nada** |
+| | ↳ sin filtro (solo abiertos, el default) | 67 | 406 | 400 | 190 KB | 280 casos abiertos: cabe |
+| | ↳ filtro «en tratamiento» | 36 | 150 | 150 | 85 KB | |
+| | ↳ buscador «Ibarra» | 15 | 13 | 13 | 7 KB | `contains` sobre `searchIndex`, sin índice de texto — a este volumen no se nota |
+| **8** | `/instituto/pacientes` (sin filtro) | 32 | **411 (300 CORTADA de 600)** | 600 | **273 KB** | El payload más gordo del panel |
+| **9** | `/api/instituto/casos/export` (CSV, sin filtro) | 56 | 280 | 400 | 53 KB | Exporta |
+| | ↳ CSV acotando a un estado | 34 | 90 | 90 | 15 KB | |
+| **10** | `/instituto/autorizaciones` (bandeja) | 42 | 75 | 870 | 84 KB | 75 pendientes de 870. Sano. |
+| **11** | Ficha de paciente (layout) | 33 | 1 | 1 | 3.5 KB | Barato |
+| **12** | `/instituto/requisitos` | 4 | 15 | 15 | 6 KB | Barato |
+
+---
+
+### 5 · LOS HALLAZGOS, POR LO QUE MÁS VA A DOLER
+
+#### 🔴 1 — El expediente y los estudios se cortan en 200 SIN DECIRLO
+
+**Lo nuevo de esta sesión.** `listEduPatientRecords` (`expediente.ts:227`) y
+`listEduPatientStudies` (`estudios.ts:179`) hacen `take: 200` **sin `+ 1`**, así que no pueden
+saber que cortaron; devuelven un array pelado, sin bandera. Ninguna de las dos pantallas
+(`expediente-screen.tsx`, `estudios-screen.tsx`) menciona `truncated` — el resto del panel sí:
+casos, pacientes, agenda, equipo, padrón, caja, evaluación, facturación y autorizaciones **todas
+avisan**. `listEduOdontogram` (`odontograma.ts:119`) tiene el mismo patrón con tope 1 000.
+
+Medido: el paciente con 240 notas y 240 estudios **enseña 200 de cada** y no hay una sola
+palabra en pantalla que lo diga. Un alumno que busca la nota de la primera sesión de un caso
+largo va a concluir que no existe.
+
+Esto es exactamente el argumento que la propia auditoría escribió para NO «arreglar» el P2-6 con
+un `take` a secas: *«un `take` a secas aquí no acota — FALSIFICA»*. Aquí ya está puesto, y en un
+expediente clínico. **Arreglo mínimo: `take: MAX + 1`, `truncated`, y el aviso que ya tienen las
+otras nueve pantallas.** Es media hora.
+
+#### 🔴 2 — P2-6 confirmado, con número: 17 082 filas para pintar 120
+
+La auditoría decía «con años de uso son decenas de miles». **Con 18 meses ya son 16 364.** Y
+crece con el TIEMPO, no con los alumnos: la misma escuela dentro de cuatro años lee ~45k.
+Los 241 ms de aquí son con la base en la misma máquina; con Supabase por red, esta pantalla es
+la primera candidata a los tres segundos.
+
+Lo importante es que **el arreglo que la auditoría ya había escrito está medido**: filtrar por
+generación baja de 17 082 a 4 465 filas y de 241 a 64 ms. La decisión de producto sigue siendo
+la misma que quedó anotada en el cierre (¿cuál es la generación por defecto? ¿las cerradas
+cuentan?), pero ya no hay que estimar el beneficio.
+
+Detalle que empeora con el tiempo: el índice `edu_appointments_student_idx` es
+`(institutionId, studentId, startsAt)` — **`status` no entra**, así que las 16 364 COMPLETED se
+filtran DESPUÉS de leer todas las citas de esos alumnos.
+
+#### 🟠 3 — Dirección: 231 ms y no baja con el periodo
+
+Es la segunda pantalla más cara y por un motivo distinto al de evaluación: no es volumen de
+filas, son **14 consultas encadenadas** con el bloque en vivo (a propósito, para no abrir el
+doble de conexiones contra el pool). Por eso 365 días cuesta lo mismo que 30 — los `take`
+internos ya lo acotan y la pantalla lo avisa. Con red de por medio, esos 231 ms se multiplican
+por el número de idas y vueltas, no por el tamaño de los datos: es el caso donde la diferencia
+entre «local» y «Supabase» más se va a notar.
+
+#### 🟠 4 — La agenda de la semana no cabe, y la del día es de 3 sedes a la vez
+
+- **Semana:** 500 filas es el tope, y la semana de este instituto lo alcanza. La pantalla avisa
+  (bien), pero el aviso es «hay más» sin decir qué hacer: el filtro que de verdad la salva es el
+  de **sede**, que está arriba en la barra y no en el aviso.
+- **Día:** cabe en tiempo (67 ms), pero son **32 columnas** de tres edificios distintos en una
+  rejilla. La vista consolidada de la Ola 11 tiene sentido para dirección; para quien va a usar
+  la agenda, la sede debería venir **preseleccionada**, no en consolidado. Con una sede son
+  58-71 citas y 51-62 KB — legible.
+- **Y un `<select>` de 300 pacientes.** `listEduPatientOptions` (`pacientes.ts:282`) va con tope
+  `EDU_CLINICA_MAX_ROWS` = 300; a 600 pacientes ya está cortado, así que **el paciente 301 no se
+  puede elegir al agendar**. A 2 000 pacientes, la escuela agenda a mano el 85 % de su padrón.
+  Ese `<select>` necesita buscador contra el servidor, no un tope.
+
+#### 🟠 5 — El CSV de casos se niega a exportar en cuanto se marcan «incluir cerrados»
+
+`route.ts:36` devuelve **413** si el listado salió cortado — decisión correcta (un CSV
+silenciosamente incompleto es un reporte falso), pero con 400 casos y el tope en 300, marcar la
+casilla de cerrados deja a la escuela sin export. Y «casos cerrados» es justo lo que se exporta
+para una acreditación. El tope de 300 vive en `EDU_CLINICA_MAX_ROWS`, compartido con casos,
+pacientes y opciones de alumno: subirlo mueve cuatro pantallas a la vez.
+
+#### 🟡 6 — Payloads de 237-437 KB por pantalla
+
+Agenda semana 437 KB, pacientes 273 KB, expediente 237 KB, agenda día 237 KB. No es un problema
+de servidor, es lo que baja al navegador en el payload RSC en cada navegación. La agenda del día
+manda `chairCampusName`, `caseProgramName` y el nombre del docente **en cada una de las 190
+filas**; el `<select>` de 300 pacientes va entero aunque el usuario no abra el alta.
+
+#### ⚪ 7 — Lo que aguantó bien
+
+Autorizaciones (75 de 870, 42 ms), requisitos, la ficha del paciente, el bloque en vivo de
+dirección, el buscador de casos y **el recorte por rol**: un docente ve 10 alumnos y paga 26 ms
+donde dirección paga 241. Ninguna consulta se fue a segundos, ninguna reventó, ningún loader
+devolvió datos de otro instituto.
+
+---
+
+### 6 · EL BLOQUE SQL DE BORRADO
+
+Lo imprime `npm run seed:edu-demo -- --sql-borrado`. Va de las hojas a la raíz porque
+**`EduChair.campus` es `onDelete: Restrict`**: borrar la sede antes que el sillón se atora. Cada
+`DELETE` reencuentra el instituto por slug **y por prefijo de nombre**, así que si alguien
+renombró la fila no borra nada.
+
+    BEGIN;
+    -- Si esto no devuelve UNA fila con el prefijo DEMO, PARA.
+    SELECT id, name, slug FROM edu_institutions WHERE slug = 'demo-volumen';
+
+    WITH d AS (SELECT id FROM edu_institutions WHERE slug='demo-volumen' AND name LIKE 'DEMO · %')
+    DELETE FROM edu_installments WHERE "institutionId" IN (SELECT id FROM d);
+    -- …y lo mismo, en este orden, para:
+    --   edu_payment_plans · edu_prescription_items · edu_prescriptions · edu_invoices
+    --   edu_patient_tax_profiles · edu_fiscal_configs · edu_whatsapp_messages
+    --   edu_whatsapp_configs · edu_ai_usage · edu_ai_quotas · edu_case_grade_items
+    --   edu_case_grades · edu_rubric_criteria · edu_rubrics · edu_requirements
+    --   edu_case_approvals · edu_consents · edu_study_analyses · edu_studies
+    --   edu_odontogram_entries · edu_records · edu_payments · edu_charge_items
+    --   edu_charges · edu_cash_sessions · edu_fee_schedule_items · edu_fee_schedules
+    --   edu_appointments · edu_cases · edu_procedures · edu_patients
+    --   edu_chair_schedules · edu_chairs   ← ANTES que las sedes (Restrict)
+    --   edu_user_campus_access · edu_campuses · edu_supervisor_assignments
+    --   edu_students · edu_cohorts · edu_programs · edu_users
+    DELETE FROM edu_institutions WHERE slug='demo-volumen' AND name LIKE 'DEMO · %';
+
+    -- Debe devolver 0 en las tres.
+    SELECT (SELECT count(*) FROM edu_institutions WHERE slug='demo-volumen') AS institutos,
+           (SELECT count(*) FROM edu_users   WHERE "supabaseId" LIKE 'demoseed-%') AS personas,
+           (SELECT count(*) FROM edu_studies WHERE "storagePath" LIKE 'demo-seed/%') AS estudios;
+    COMMIT;
+
+Probado: `0 | 0 | 0`, y el instituto vecino que se sembró a propósito para la prueba salió
+intacto.
+
+---
+
+### 7 · TRES TRAMPAS QUE ESTE SEED PISÓ (valen para todo el repo)
+
+1. **Repartir huecos «de N en N» reparte muchos menos de los que crees.** El primer reparto de
+   citas hacía `huecos[(k * 7) % huecos.length]`, y con 32 sillones × 7 franjas = 224 huecos eso
+   solo visita **224 / mcd(7, 224) = 32 posiciones distintas**. El día «lleno» se llenaba 32
+   veces con el mismo sillón y las 160 filas restantes chocaban contra la clave primaria y
+   `skipDuplicates` **las descartaba en silencio**: la primera corrida dijo «20 577 citas» y
+   metió 13 502. El síntoma engaña porque el contador de arriba es el que generaste, no el que
+   entró. Se arregló barajando (Fisher-Yates con el PRNG sembrado, sigue determinista) y el
+   propio script ahora imprime «(N ya estaban)» para que el hueco se vea.
+
+2. **Un seed que corre de noche no puede enseñar la clínica en vivo.** Los estados `IN_CHAIR` /
+   `IN_PROGRESS` se deciden contra el reloj, y a las 2 de la mañana ninguna cita contiene ese
+   instante: la primera corrida dejó **0 citas vivas** y la pantalla que más importa enseñar
+   nacía vacía. El seed ancla la foto en vivo a las 12:30 del día cuando `now` cae fuera del
+   horario de la clínica, y **lo dice por consola** al hacerlo.
+
+3. **`next build` TIRA A LA BASURA los errores de tipos de las carpetas de prueba.** No es una
+   sospecha: está en una línea de Next.
+
+       // node_modules/next/dist/lib/typescript/runTypeCheck.js:70
+       const regexIgnoredFile = /[\\/]__(?:tests|mocks)__[\\/]|(?<=[\\/.])(?:spec|test)\.[^\\/]+$/;
+       const allDiagnostics = ts.getPreEmitDiagnostics(program)
+         .concat(result.diagnostics)
+         .filter((d) => !(d.file && regexIgnoredFile.test(d.file.fileName)));
+
+   Todo diagnóstico cuyo archivo viva en `__tests__/` o `__mocks__/`, o que termine en
+   `.test.*` / `.spec.*`, **se descarta antes de decidir si el build pasa**. Medido: `npx tsc
+   --noEmit -p tsconfig.json` saca **8 errores** en `src/lib/barber/__tests__/` y en
+   `src/lib/edu/__tests__/edu-theme.test.ts` —archivos **idénticos a `origin/main`**, que no
+   toca esta rama— y `npm run build` sale 0 con esos mismos archivos delante. Las dos cosas son
+   ciertas a la vez y no se contradicen.
+
+   Lo que esto significa en la práctica: **«el build está verde» NO quiere decir que las
+   pruebas compilen**, y **«tsc está rojo» no quiere decir que el build lo esté**. Para saber
+   si una prueba tipa hay que correr `tsc` a mano y leerlo por ruta. Lo que NO cambia es cuál
+   es el gate: el build sigue mandando para todo lo que no sea una prueba.
+
+   Dos matices que costaron un build cada uno:
+   - **El `target` es ES5 para los dos.** El `tsconfig.json` del repo no declara `target`, y
+     Next tampoco se lo escribe (comprobado: `git status tsconfig.json` sale limpio después de
+     dos builds). Así que dentro de `scripts/` —que NO es carpeta de prueba— un `for...of` sobre
+     un `Map` y un literal BigInt (`0n`) rompen el build igual que romperían `tsc`. Van con
+     `Array.from(map.entries())` y `BigInt(0)`.
+   - **Un pipe se traga el exit code.** El error que de verdad tumbó el primer build (`status:
+     string` donde Prisma pide `EduStudentStatus`) yo lo había dado por verde corriendo
+     `tsc | grep edu-seed-demo`: un `grep` sin resultados parece éxito. **Un gate se lee por su
+     exit code, nunca por lo que imprime.**
+
+---
+
+### 8 · GATES
+
+- `npm run build` — **BUILD_EXIT=0**, `✓ Generating static pages (463/463)`, tabla de rutas
+  completa con las 137 líneas de `/instituto/*`. Sin pipes. («Compiled with warnings» es el
+  aviso preexistente de `file-type` en `api/ai-wallet/spei/topup`, que ya venía de `main`.)
+- `npm run test:edu` — **29 archivos, 933 pruebas, 0 fallos**.
+- `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node scripts/edu-guard.cjs` — **EXIT 0**.
+  `scripts/edu-seed-demo.ts` entra como **PROPIO** del vertical (no toca una línea del dental:
+  solo escribe filas `edu_*` de un instituto con slug propio).
+- Verificación funcional: Postgres 16 en Docker con `prisma db push` del schema completo. El
+  seed corrió **cinco veces** (dos desde cero, dos idempotentes, una después del borrado), la
+  medición **cuatro**, y las cuatro guardias se probaron una por una.
+
+### Lo que NO se hizo, a propósito
+
+- **No se arregló ninguno de los hallazgos.** El encargo era sembrar y medir; convertir el
+  reporte en seis parches a la vez habría mezclado el instrumento con la reforma. Los dos
+  primeros (el corte mudo del expediente y el filtro por generación) son ramas cortas y
+  separables.
+- **No se subieron archivos al bucket** (sección 3), y por tanto los estudios llevan el aviso en
+  el nombre.
+- **No se crearon cuentas de Supabase Auth**, así que al instituto de demo no se entra por el
+  login (sección 2b). Es el precio de no mandar 135 invitaciones.
+- **No se tocaron los 8 errores de `tsc` preexistentes** de la sección 7.3: viven en archivos de
+  prueba de barbería y en `edu-theme.test.ts`, son idénticos a `origin/main`, el build los
+  descarta por vivir en `__tests__/`, y arreglarlos pedía tocar barbería — que esta rama tiene
+  prohibido. Quedan anotados porque **nadie los va a ver salir del build nunca**, y ese es
+  justamente el problema; merecen su propia rama, no un arreglo de paso en ésta.
+- **No se midió con navegador.** Sin `.env` ni sesión de Supabase no se puede abrir
+  `/instituto/*`; lo que sí se puede es llamar a los loaders reales con el contexto real, que es
+  donde está el tiempo. La legibilidad de la rejilla de 32 columnas queda **razonada, no vista**:
+  el número duro es que son 32 columnas y 648 filas de datos, y que con una sede son 58-71.
+- **Nada de basura en la raíz del repo.** Un archivo nuevo, y vive en `scripts/`.
