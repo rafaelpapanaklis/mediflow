@@ -17,7 +17,7 @@ import toast from "react-hot-toast";
 import { AgendaProvider, type AgendaPermissions } from "@/components/dashboard/agenda/agenda-provider";
 import { AgendaTopbar } from "@/components/dashboard/agenda/agenda-topbar";
 import { AgendaSubToolbar } from "@/components/dashboard/agenda/agenda-sub-toolbar";
-import { AgendaTimeAxis } from "@/components/dashboard/agenda/agenda-time-axis";
+import { AgendaHoverGuide } from "@/components/dashboard/agenda/agenda-hover-guide";
 import { AgendaColumnHeader } from "@/components/dashboard/agenda/agenda-column-header";
 import { AgendaColumn } from "@/components/dashboard/agenda/agenda-column";
 import { AgendaEmptyDay } from "@/components/dashboard/agenda/agenda-empty-day";
@@ -632,19 +632,14 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
                 scrollbarGutter: "stable",
               }}
             >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "var(--mf-agenda-axis-w) minmax(0, 1fr)",
-                }}
-              >
-                <AgendaTimeAxis />
-                <div className={styles.columnsBody}>
-                  {columns.map((col) => (
-                    <AgendaColumn key={col.key} column={col} />
-                  ))}
-                </div>
-              </div>
+              {/* La guía monta la regla + el cuerpo de columnas porque
+                  necesita medir la grilla para resaltar el slot bajo el
+                  cursor (ver agenda-hover-guide). Misma estructura. */}
+              <AgendaHoverGuide columnCount={columns.length}>
+                {columns.map((col) => (
+                  <AgendaColumn key={col.key} column={col} />
+                ))}
+              </AgendaHoverGuide>
             </div>
           </div>
         </div>

@@ -1140,6 +1140,35 @@
   pointer-events: none;
   line-height: 1;
 }
+
+/* Hora del slot bajo el cursor, centrada en su fila y por encima de los
+   rótulos en punto (que no llevan z-index) para taparlos cuando coinciden. */
+.timeAxisHoverChip {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .timeAxisHoverChip {
+    display: flex;
+    position: absolute;
+    left: 0;
+    right: 4px;
+    height: 16px;
+    transform: translateY(-50%);
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 4px;
+    z-index: 3;
+    pointer-events: none;
+    background: var(--bg);
+    font-family: var(--font-mono, monospace);
+    font-variant-numeric: tabular-nums;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--brand);
+  }
+}
 /* Hora en punto: 12px seminegrita en --text-2 (#4A4560 claro / #A0A0AB
    oscuro) ≈ 7.8:1 y 7.3:1 sobre --bg — legible de un vistazo. El 10px
    --text-3 anterior daba ~3.9:1 (claro) / ~3.6:1 (oscuro): bajo AA. */
@@ -1177,6 +1206,9 @@
   grid-column: 2;
   display: grid;
   grid-template-columns: repeat(var(--mf-agenda-cols), minmax(160px, 1fr));
+  /* Ancla de la guía de horario: fila y celda se posicionan contra la
+     grilla completa, no contra una columna. */
+  position: relative;
 }
 
 .column {
@@ -1232,6 +1264,57 @@
   right: 0;
   pointer-events: none;
   border-top: 1px solid color-mix(in srgb, var(--border-soft) 60%, transparent);
+}
+
+/* ── Guía de horario al pasar el mouse (vista Día) ──
+   Con 3-4 doctores abiertos la regla de horas queda lejísimos del hueco
+   que se va a clickear y agendar se vuelve puntería. La fila completa
+   ata el cursor con la regla; la celda marca el slot exacto que crearía
+   el click y escribe su hora ahí mismo. Ambas por DEBAJO de .appt
+   (z-index 1) para no tapar citas, y sin pointer-events para no robarle
+   el click a la columna.
+   Solo con mouse fino: en touch no hay hover y el tap ya es directo. */
+.hoverRow,
+.hoverCell {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hoverRow {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: var(--mf-agenda-slot-h);
+    z-index: 0;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--brand) 9%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--brand) 38%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--brand) 38%, transparent);
+  }
+
+  .hoverCell {
+    display: flex;
+    position: absolute;
+    height: var(--mf-agenda-slot-h);
+    z-index: 0;
+    pointer-events: none;
+    align-items: center;
+    /* La hora a la izquierda, como el rótulo de las citas: se lee como el
+       borrador de la cita que va a crear el click, no como un tooltip. */
+    justify-content: flex-start;
+    padding-left: 8px;
+    overflow: hidden;
+    border: 1px dashed color-mix(in srgb, var(--brand) 70%, transparent);
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--brand) 15%, transparent);
+    font-family: var(--font-mono, monospace);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--brand);
+  }
 }
 
 .apptPending {

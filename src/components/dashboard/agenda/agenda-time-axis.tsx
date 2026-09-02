@@ -1,6 +1,8 @@
 "use client";
 
 import { useAgenda } from "./agenda-provider";
+import { useAgendaHoverSlot } from "./agenda-hover-slot-context";
+import { slotStartLabel } from "@/lib/agenda/hover-slot";
 import { showHalfHourLabels } from "@/lib/agenda/slot-metrics";
 import styles from "./agenda.module.css";
 
@@ -10,6 +12,7 @@ function pad2(n: number): string {
 
 export function AgendaTimeAxis() {
   const { state, slotHpx } = useAgenda();
+  const hover = useAgendaHoverSlot();
   const totalHours = state.dayEnd - state.dayStart;
 
   const hours = [];
@@ -55,6 +58,19 @@ export function AgendaTimeAxis() {
             </div>
           );
         })}
+      {/* Hora exacta del slot bajo el cursor. Va sobre la regla, con fondo
+          opaco, para tapar el rótulo en punto cuando caen en la misma Y:
+          quien agenda lee "12:15" sin despegar la vista de su columna. */}
+      {hover && (
+        <div
+          className={styles.timeAxisHoverChip}
+          style={{
+            top: `calc((${hover.slot} + 0.5) * ${slotHeightVar})`,
+          }}
+        >
+          {slotStartLabel(hover.slot, state.dayStart, state.slotMinutes)}
+        </div>
+      )}
     </div>
   );
 }

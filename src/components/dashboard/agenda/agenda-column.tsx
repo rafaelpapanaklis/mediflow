@@ -9,6 +9,7 @@ import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/
 import { getTzParts, slotIndexToUtc } from "@/lib/agenda/time-utils";
 import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import { assignLanes } from "@/lib/agenda/lane-layout";
+import { slotFromOffsetY } from "@/lib/agenda/hover-slot";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import {
@@ -19,7 +20,7 @@ import styles from "./agenda.module.css";
 
 export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
   const t = useT();
-  const { state, permissions } = useAgenda();
+  const { state, permissions, slotHpx } = useAgenda();
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -116,9 +117,12 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
       const el = ref.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const slotHeight = rect.height / slotsTotal;
       const y = e.clientY - rect.top;
-      const slotIdx = Math.max(0, Math.min(slotsTotal - 1, Math.floor(y / slotHeight)));
+      // Alto REAL del slot, no rect.height/slotsTotal: `min-height: 100%`
+      // estira las columnas cortas hasta la más alta (basta una cita fuera
+      // de horario en OTRA columna), y entonces esa división daba una hora
+      // distinta a la que muestran la regla y la guía del cursor.
+      const slotIdx = slotFromOffsetY(y, slotHpx, rect.height);
 
       const startsAt = slotIndexToUtc(slotIdx, state.dayISO, {
         timezone: state.timezone,
@@ -136,7 +140,7 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
         openAgendaAfter: true,
       });
     },
-    [openNewAppointment, permissions.canCreate, slotsTotal, state.dayISO, state.dayEnd, state.dayStart, state.slotMinutes, state.timezone, column.doctorId, column.resourceId],
+    [openNewAppointment, permissions.canCreate, slotHpx, state.dayISO, state.dayEnd, state.dayStart, state.slotMinutes, state.timezone, column.doctorId, column.resourceId],
   );
 
   const hourBands = [];
