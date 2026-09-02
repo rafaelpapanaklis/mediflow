@@ -21,6 +21,15 @@
  * dentro, lo que hay que poner es un filtro por generación, no un
  * contador.
  *
+ * 🔴 ESE DÍA LLEGÓ, Y EL FILTRO YA ESTÁ PUESTO (P2-6). El instituto de
+ * demo midió la frase de arriba: 17 082 filas leídas para pintar 120
+ * renglones, 16 364 de ellas citas. `listEduEvaluacion` filtra ahora por
+ * la GENERACIÓN VIGENTE por omisión cuando quien mira ve la escuela
+ * entera, con selector para ver otra o todas, y acota las citas a la
+ * ventana de cada generación. NO se puso un `take`: ver el bloque de
+ * eduVigenteCohort en evaluacion-core.ts para por qué un tope aquí
+ * falsificaría las horas en vez de acotarlas.
+ *
  * 🔴 LAS HORAS TAMPOCO SE CAPTURAN. Salen de las citas COMPLETADAS del
  * alumno. Unas horas que se teclean son unas horas que se pueden teclear
  * mal, y son exactamente las que una acreditación mira con lupa.
@@ -61,12 +70,16 @@ import {
   eduEvalOptionalText,
   eduEvalText,
   eduHoursLabel,
+  eduHoursWindowStart,
+  eduVigenteCohort,
   eduRequirementProgress,
   eduScoreLabel,
   eduSemesterRangeCheck,
   type EduBitacoraCaseRow,
   type EduBitacoraPage,
   type EduCountableCase,
+  type EduEvaluacionFilters,
+  type EduEvaluacionPage,
   type EduEvaluacionRow,
   type EduRequirementRow,
   type EduRequirementSpec,
@@ -428,24 +441,52 @@ const APPOINTMENT_FOR_HOURS_SELECT = {
  */
 export async function listEduEvaluacion(
   ctx: EduClinicaContext,
-  filters: {
-    programId?: string | null;
-    cohortId?: string | null;
-    status?: EduStudentStatus | null;
-    estado?: string | null;
-  } = {},
+  filters: EduEvaluacionFilters = {},
   now: Date = new Date(),
-): Promise<{ rows: EduEvaluacionRow[]; truncated: boolean }> {
+): Promise<EduEvaluacionPage> {
   const institutionId = requireInstitution(ctx);
   const scope = eduVisibility(ctx, "cases");
-  if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
+  if (eduScopeIsEmpty(scope)) {
+    return { rows: [], truncated: false, generacion: { modo: "alcance", name: null } };
+  }
 
   const where: Prisma.EduStudentWhereInput = {
     ...eduStudentScopeWhere({ institutionId, scope, now }),
   };
   if (filters.programId) where.programId = filters.programId;
-  if (filters.cohortId) where.cohortId = filters.cohortId;
   if (filters.status) where.status = filters.status;
+
+  // 🔴 QUÉ GENERACIÓN SE ESTÁ MIRANDO. Cuatro caminos, en este orden:
+  //
+  //   1. `cohortId`                 → la que pidieron. Manda sobre todo.
+  //   2. el alcance NO es la escuela entera → no hay nada que recortar:
+  //      el alumno se ve a sí mismo y el docente a sus vigentes. Aplicarles
+  //      un default de generación dejaría a un alumno de la generación
+  //      anterior mirando CERO filas en su propia pantalla de avance.
+  //   3. `generacion: "vigente"`    → la última que arrancó. ES EL P2-6.
+  //   4. lo demás                   → el padrón entero, como siempre.
+  let generacion: EduEvaluacionPage["generacion"] = { modo: "todas", name: null };
+
+  if (filters.cohortId) {
+    where.cohortId = filters.cohortId;
+    // El NOMBRE se saca de los propios estudiantes más abajo: ya viene en
+    // el select y ahorra una consulta a la tabla de generaciones.
+    generacion = { modo: "elegida", name: null };
+  } else if (scope.kind !== "all") {
+    generacion = { modo: "alcance", name: null };
+  } else if (filters.generacion === "vigente") {
+    const cohortes = await prisma.eduCohort.findMany({
+      where: { institutionId, isActive: true },
+      select: { id: true, name: true, startDate: true, endDate: true, isActive: true },
+    });
+    const vigente = eduVigenteCohort(cohortes, now);
+    if (vigente) {
+      where.cohortId = { in: vigente.ids };
+      generacion = { modo: "vigente", name: vigente.name };
+    }
+    // Sin generaciones con fecha no hay vigente que elegir: se queda en
+    // "todas", que es la verdad de lo que se está leyendo.
+  }
 
   const alumnos = await prisma.eduStudent.findMany({
     where,
@@ -458,6 +499,9 @@ export async function listEduEvaluacion(
       status: true,
       programId: true,
       cohortId: true,
+      // La fecha de ingreso entra en el select por la ventana de citas
+      // (ver eduHoursWindowStart): no se pinta en ninguna columna.
+      enrolledAt: true,
       user: { select: { firstName: true, lastName: true, email: true } },
       program: { select: { name: true } },
       cohort: { select: { name: true, startDate: true, endDate: true } },
@@ -466,10 +510,51 @@ export async function listEduEvaluacion(
 
   const truncated = alumnos.length > EDU_EVALUACION_MAX_ROWS;
   const visibles = alumnos.slice(0, EDU_EVALUACION_MAX_ROWS);
-  if (visibles.length === 0) return { rows: [], truncated };
+  if (generacion.modo === "elegida") {
+    generacion = { modo: "elegida", name: visibles[0]?.cohort.name ?? null };
+  }
+  if (visibles.length === 0) return { rows: [], truncated, generacion };
 
   const studentIds = visibles.map((a) => a.id);
   const programIds = Array.from(new Set(visibles.map((a) => a.programId)));
+
+  // 🔴 LA VENTANA DE CITAS, UNA POR GENERACIÓN PRESENTE.
+  //
+  // Sin esto, la consulta de horas pide "todas las citas COMPLETADAS de
+  // estos estudiantes" y crece para siempre. Con esto pide "las de cada
+  // grupo desde que su generación arrancó", que es el único intervalo en
+  // el que esas horas pueden existir — y además le da al índice
+  // (institutionId, studentId, startsAt) un rango sobre el que trabajar en
+  // vez de una lista suelta de ids.
+  //
+  // ⚠️ El suelo de cada grupo es el MÁS TEMPRANO de sus estudiantes
+  // (eduHoursWindowStart topa arranque-de-generación contra fecha-de-
+  // ingreso y se queda con el anterior). Un solo estudiante con ingreso
+  // viejo ensancha la ventana de su grupo: es exactamente lo que tiene que
+  // pasar — la cota está para acotar, no para perder una hora de nadie.
+  const ventanas = new Map<string, { ids: string[]; from: Date | null }>();
+  for (const a of visibles) {
+    const suelo = eduHoursWindowStart(a.cohort.startDate, a.enrolledAt);
+    const grupo = ventanas.get(a.cohortId);
+    if (!grupo) {
+      ventanas.set(a.cohortId, { ids: [a.id], from: suelo });
+      continue;
+    }
+    grupo.ids.push(a.id);
+    if (suelo === null) grupo.from = null;
+    else if (grupo.from !== null && suelo.getTime() < grupo.from.getTime()) grupo.from = suelo;
+  }
+  const citasWhere: Prisma.EduAppointmentWhereInput = {
+    institutionId,
+    status: "COMPLETED",
+    OR: Array.from(ventanas.values()).map((g) => ({
+      studentId: { in: g.ids },
+      // Sin fecha de arranque NI de ingreso no hay ventana que poner: se
+      // lee todo lo de ese grupo, como antes. Preferible a inventar un
+      // suelo y descontarle horas a quien la escuela capturó a medias.
+      ...(g.from ? { startsAt: { gte: g.from } } : {}),
+    })),
+  };
 
   const [requisitos, casos, citas, calificaciones] = await Promise.all([
     prisma.eduRequirement.findMany({
@@ -482,7 +567,7 @@ export async function listEduEvaluacion(
       select: { ...CASE_FOR_COUNT_SELECT, studentId: true },
     }),
     prisma.eduAppointment.findMany({
-      where: { institutionId, studentId: { in: studentIds }, status: "COMPLETED" },
+      where: citasWhere,
       select: { ...APPOINTMENT_FOR_HOURS_SELECT, studentId: true },
     }),
     prisma.eduCaseGrade.findMany({
@@ -568,7 +653,7 @@ export async function listEduEvaluacion(
   // lo único con fecha de esta ola es la bitácora (getEduBitacora), que sí
   // la recibe. Un parámetro que no se usa es un parámetro que alguien va a
   // empezar a pasar mal.
-  return { rows: filtradas, truncated };
+  return { rows: filtradas, truncated, generacion };
 }
 
 function agrupar<T, K>(rows: T[], key: (row: T) => K): Map<K, T[]> {

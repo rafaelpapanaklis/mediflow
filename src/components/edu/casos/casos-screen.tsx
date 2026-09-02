@@ -255,9 +255,17 @@ export function EduCasosScreen({
                 truncated ? ` (se muestran los primeros ${maxRows})` : ""
               }${recortado ? " · los que te tocan" : ""}`}
         </span>
-        {!truncated && rows.length > 0 && (
+        {rows.length > 0 && (
           // Exportar es LEER: mismo endpoint de guard + alcance, MISMOS
           // filtros (la query string es idéntica a la de la pantalla).
+          //
+          // El botón YA NO SE ESCONDE cuando la lista sale cortada. El
+          // export tiene su propio techo, mucho más alto que el de la
+          // pantalla (EDU_CASOS_EXPORT_MAX_ROWS), justamente porque
+          // llevarse TODO es para lo que existe: quien marca "incluir
+          // cerrados" está armando el reporte de una acreditación, no
+          // leyendo la lista. Esconderlo dejaba a la escuela sin export en
+          // cuanto pasaba de 300 casos.
           <a
             className="edu-btn edu-btn--ghost edu-btn--sm"
             href={`/api/instituto/casos/export${exportQs ? `?${exportQs}` : ""}`}
@@ -273,9 +281,10 @@ export function EduCasosScreen({
           <div>
             <p className="edu-banner__title">Se muestran los primeros {maxRows}, no todos.</p>
             <p className="edu-banner__detail">
-              Acota por especialidad, estado o fechas para ver — y poder exportar — el resto. Un
-              CSV recortado en silencio sería un reporte falso, así que el export se niega
-              mientras la lista esté incompleta.
+              Acota por especialidad, estado o fechas para ver el resto en pantalla.{" "}
+              <strong>El CSV sí sale completo:</strong> el export tiene su propio techo, mucho más
+              alto que el de esta lista, porque llevarse todo es justo para lo que existe. Solo se
+              niega si ni siquiera ahí cabe — y entonces lo dice con el número.
             </p>
           </div>
         </div>

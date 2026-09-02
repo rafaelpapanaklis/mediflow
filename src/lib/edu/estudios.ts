@@ -58,6 +58,7 @@ import {
   eduStudyIsPdf,
   eduStudyPathBelongsTo,
   eduStudyStoragePath,
+  type EduStudyPage,
   type EduStudyRow,
 } from "@/lib/edu/estudios-core";
 import {
@@ -70,7 +71,7 @@ import {
 import { eduCaseScopeWhere, eduScopeIsEmpty, type EduClinicaContext } from "@/lib/edu/visibility";
 
 export { EduPadronError as EduEstudiosError };
-export type { EduStudyRow } from "@/lib/edu/estudios-core";
+export type { EduStudyRow, EduStudyPage } from "@/lib/edu/estudios-core";
 
 function requireInstitution(ctx: EduClinicaContext): string {
   const id = ctx?.institutionId;
@@ -166,20 +167,27 @@ export async function listEduPatientStudies(
   patientId: string,
   timeZone: string,
   now: Date = new Date(),
-): Promise<EduStudyRow[]> {
+): Promise<EduStudyPage> {
   const institutionId = requireInstitution(ctx);
-  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return [];
+  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return { rows: [], truncated: false };
 
   const paciente = await getEduClinicalPatient(ctx, patientId, now);
-  if (!paciente) return [];
+  if (!paciente) return { rows: [], truncated: false };
 
-  const rows = await prisma.eduStudy.findMany({
+  const leidas = await prisma.eduStudy.findMany({
     where: { institutionId, patientId: paciente.id },
     orderBy: [{ createdAt: "desc" }],
-    take: EDU_STUDY_MAX_ROWS,
+    // Una de más, solo para poder DECIR que se cortó (ver
+    // EDU_STUDY_MAX_ROWS). Se descarta en el `slice` de abajo.
+    take: EDU_STUDY_MAX_ROWS + 1,
     select: STUDY_SELECT,
   });
-  if (rows.length === 0) return [];
+  const truncated = leidas.length > EDU_STUDY_MAX_ROWS;
+  // 🔴 EL CORTE VA ANTES DE FIRMAR. La fila sobrante no se pinta, así que
+  // pedirle a Storage su URL sería un viaje pagado por un archivo que nadie
+  // va a abrir.
+  const rows = leidas.slice(0, EDU_STUDY_MAX_ROWS);
+  if (rows.length === 0) return { rows: [], truncated };
 
   // Sin Storage configurado se devuelve la lista con la URL vacía en vez
   // de reventar: la pantalla enseña las tarjetas y dice que el archivo no
@@ -189,7 +197,10 @@ export async function listEduPatientStudies(
     ? await eduSignReadMany(rows.map((r) => r.storagePath))
     : new Map<string, string>();
 
-  return rows.map((r) => toRow(r, urls.get(r.storagePath) ?? "", timeZone));
+  return {
+    truncated,
+    rows: rows.map((r) => toRow(r, urls.get(r.storagePath) ?? "", timeZone)),
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════

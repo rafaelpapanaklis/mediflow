@@ -44,6 +44,15 @@ export interface EduExpedienteScreenProps {
   patientId: string;
   patientName: string;
   rows: EduRecordRow[];
+  /**
+   * true = la consulta se topó con el techo y hay notas MÁS VIEJAS que no
+   * viajaron. No es decoración: sin este aviso, un expediente de 240 notas
+   * y uno de 200 se ven idénticos, y quien busca la primera sesión de un
+   * caso largo concluye que nunca se escribió.
+   */
+  truncated: boolean;
+  /** El techo, para poder decir el número en vez de "hay más". */
+  maxRows: number;
   cases: EduCaseOption[];
   canWrite: boolean;
   /**
@@ -92,6 +101,8 @@ export function EduExpedienteScreen({
   patientId,
   patientName,
   rows,
+  truncated,
+  maxRows,
   cases,
   canWrite,
   canSign,
@@ -164,7 +175,9 @@ export function EduExpedienteScreen({
         <span className="edu-count">
           {navigating
             ? "Actualizando…"
-            : `${rows.length} ${rows.length === 1 ? "nota" : "notas"}`}
+            : `${rows.length} ${rows.length === 1 ? "nota" : "notas"}${
+                truncated ? ` (se muestran las ${maxRows} más recientes)` : ""
+              }`}
         </span>
         {canWrite && (
           <button
@@ -182,6 +195,22 @@ export function EduExpedienteScreen({
           </button>
         )}
       </div>
+
+      {truncated && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">
+              Se muestran las {maxRows} notas más recientes, no todas.
+            </p>
+            <p className="edu-banner__detail">
+              Este expediente tiene más historia de la que cabe en una pantalla. Filtra por caso
+              para ver las notas viejas: dentro de un caso concreto entran completas. Se avisa
+              porque un expediente que corta en silencio se lee como un expediente que no tiene
+              esa nota.
+            </p>
+          </div>
+        </div>
+      )}
 
       {cases.length === 0 && (
         <div className="edu-empty">

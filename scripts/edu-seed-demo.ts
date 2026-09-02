@@ -12,6 +12,10 @@
  *   DATABASE_URL=... npm run seed:edu-demo -- --medir  # mide las pantallas
  *   npm run seed:edu-demo -- --sql-borrado             # imprime el DELETE
  *
+ *   # y para PODER ENTRAR al demo con una cuenta de verdad:
+ *   DATABASE_URL=... npm run seed:edu-demo -- --direccion=<uuid-de-supabase>
+ *   DATABASE_URL=... npm run seed:edu-demo -- --direccion=persona@correo.com
+ *
  * ═══════════════════════════════════════════════════════════════════════
  * 🔴 LAS TRES COSAS QUE ESTE ARCHIVO NO PUEDE HACER, Y CÓMO SE IMPIDEN
  *
@@ -39,11 +43,18 @@
  *      · Los teléfonos son del bloque de ficción 55 5501 xxxx.
  *      · Los `supabaseId` son `demoseed-<n>`, que nunca es un UUID de
  *        Supabase Auth: no se crea ninguna cuenta y por tanto no sale
- *        ninguna invitación. Consecuencia deliberada: a este instituto NO
- *        SE PUEDE ENTRAR por el login. Para pasearlo en un entorno real hay
- *        que dar de alta las cuentas en Supabase Auth a mano y copiar sus
- *        UUID a `edu_users.supabaseId`. Se prefirió eso a que un seed
- *        mandara 135 correos de invitación.
+ *        ninguna invitación. Consecuencia deliberada: con las 135 personas
+ *        sembradas, a este instituto NO SE PUEDE ENTRAR por el login. Se
+ *        prefirió eso a que un seed mandara 135 correos de invitación.
+ *
+ *        🔴 `--direccion=` ES LA PUERTA, Y NO ROMPE ESTA REGLA. Cuelga
+ *        UNA cuenta que YA EXISTE en Supabase Auth como DIRECCIÓN del
+ *        instituto de demo. Sigue sin crearse ninguna cuenta y sigue sin
+ *        salir ningún correo: lo único que se escribe es una fila más en
+ *        `edu_users` DEL INSTITUTO DE DEMO, con el `supabaseId` que la
+ *        persona ya tiene. Es exactamente el "copiar el UUID a mano" que
+ *        antes pedía este comentario, hecho por el script y con guardias
+ *        (ver `resolverDireccionReal`).
  *
  * 3. TODO BORRABLE. Prefijo `DEMO · ` en el nombre, slug `demo-volumen`, e
  *    ids con prefijo `dsd`. El bloque SQL de borrado lo imprime el propio
@@ -357,6 +368,177 @@ async function guardaDestino(db: PrismaClient): Promise<{ id: string; existe: bo
     );
   }
   return { id, existe: true };
+}
+
+// ── La cuenta REAL que entra al demo ───────────────────────────
+
+/** Id determinista de la fila de dirección real. Uno por supabaseId, así
+ *  que correr el seed dos veces con la misma cuenta no duplica. */
+function idDireccionReal(supabaseId: string): string {
+  return did("dirreal", supabaseId);
+}
+
+/** ¿Esto parece un UUID de Supabase Auth? */
+function pareceUuid(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v.trim());
+}
+
+interface DireccionReal {
+  supabaseId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  /** El instituto al que esta cuenta YA entra, si entra a alguno. */
+  yaEntraA: { institutionId: string; nombre: string } | null;
+}
+
+/**
+ * De lo que se tecleó en `--direccion=` a una identidad que se puede
+ * escribir.
+ *
+ * 🔴 NO CREA NADA EN SUPABASE AUTH, y no puede: este script habla con
+ * Postgres, no con el proveedor de identidad. Por eso el argumento tiene
+ * que ser de una cuenta que YA EXISTE:
+ *
+ *   · un UUID  → se usa tal cual. Es lo que Supabase enseña en su tabla de
+ *     usuarios, y es lo único que `getEduContext` mira para resolver una
+ *     sesión (`edu-auth.ts`: findFirst por `supabaseId`).
+ *   · un CORREO → se busca una fila de `edu_users` que ya lo tenga y que
+ *     lleve un supabaseId de verdad (no `demoseed-`), y se copia ESE. Es
+ *     el caso real: "la cuenta con la que ya entro al instituto de QA".
+ *
+ * Si el correo no aparece por ningún lado se REBOTA en vez de inventar un
+ * supabaseId. Una fila con un supabaseId inventado no es un acceso: es una
+ * cuenta muerta que mañana parece un bug del login.
+ */
+async function resolverDireccionReal(db: PrismaClient, arg: string): Promise<DireccionReal> {
+  const valor = arg.trim();
+  if (!valor) {
+    throw new Error("GUARDIA: --direccion= necesita un UUID de Supabase o un correo.");
+  }
+
+  let supabaseId: string;
+  let email: string;
+  let firstName = "Dirección";
+  let lastName = "de la demo";
+
+  if (pareceUuid(valor)) {
+    supabaseId = valor.toLowerCase();
+    // Si esa cuenta ya es EduUser en algún lado, se le copian nombre y
+    // correo: el panel saluda con el nombre de la persona y no con
+    // "Dirección de la demo".
+    const previo = await db.eduUser.findFirst({
+      where: { supabaseId },
+      select: { email: true, firstName: true, lastName: true },
+      orderBy: { createdAt: "asc" },
+    });
+    email = previo?.email ?? `direccion.${supabaseId.slice(0, 8)}@${DEMO_MAIL}`;
+    if (previo) {
+      firstName = previo.firstName;
+      lastName = previo.lastName;
+    }
+  } else if (valor.includes("@")) {
+    email = valor.toLowerCase();
+    const previo = await db.eduUser.findFirst({
+      where: { email, NOT: { supabaseId: { startsWith: "demoseed-" } } },
+      select: { supabaseId: true, firstName: true, lastName: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!previo) {
+      throw new Error(
+        `GUARDIA: no hay ninguna cuenta de instituto con el correo "${email}" y un supabaseId real, ` +
+          "así que no se puede saber con qué identidad entraría. Pasa el UUID de Supabase Auth: " +
+          "--direccion=<uuid>.",
+      );
+    }
+    supabaseId = previo.supabaseId;
+    firstName = previo.firstName;
+    lastName = previo.lastName;
+  } else {
+    throw new Error(
+      `GUARDIA: "${valor}" no es un UUID de Supabase ni un correo. --direccion= admite esas dos cosas.`,
+    );
+  }
+
+  // ⚠️ ¿ESTA CUENTA YA ENTRA A OTRO INSTITUTO? `getEduContext` resuelve
+  // la sesión con `findFirst(... orderBy createdAt asc)`: se queda con la
+  // fila MÁS VIEJA. O sea que si esta persona ya es EduUser activo en otro
+  // instituto, el login la seguirá mandando ALLÍ y la fila de demo no se
+  // usará nunca. Se detecta para poder DECIRLO — no se toca esa otra fila
+  // ni de lejos: es de otro instituto, y la regla número uno de este
+  // archivo es no escribir fuera del demo.
+  const otro = await db.eduUser.findFirst({
+    where: { supabaseId, isActive: true },
+    select: { institutionId: true, institution: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const idDemo = did("inst", DEMO_SLUG);
+
+  return {
+    supabaseId,
+    email,
+    firstName,
+    lastName,
+    yaEntraA:
+      otro && otro.institutionId !== idDemo
+        ? { institutionId: otro.institutionId, nombre: otro.institution.name }
+        : null,
+  };
+}
+
+/**
+ * Escribe (o completa) la fila de DIRECCIÓN real del instituto de demo.
+ *
+ * Idempotente: el id sale de `did("dirreal", supabaseId)`, así que correrlo
+ * dos veces con la misma cuenta actualiza la misma fila.
+ *
+ * ⚠️ NO se le da acceso a ninguna sede. En este vertical, un usuario SIN
+ * filas en `edu_user_campus_access` ve las TRES sedes (eduResolveCampusScope
+ * degrada a "sin recorte"), que es justo lo que una dirección necesita para
+ * pasear el demo. La única cuenta sembrada con acceso acotado es una caja,
+ * a propósito.
+ */
+async function colgarDireccionReal(
+  db: PrismaClient,
+  inst: string,
+  quien: DireccionReal,
+): Promise<string> {
+  const id = idDireccionReal(quien.supabaseId);
+  const searchIndex = eduUserSearchIndex({
+    firstName: quien.firstName,
+    lastName: quien.lastName,
+    email: quien.email,
+    phone: null,
+  });
+
+  await db.eduUser.upsert({
+    where: { id },
+    // 🔴 El `create` y el `update` llevan los dos el institutionId del
+    // DEMO. Un upsert cuyo update no fija el instituto es como una fila de
+    // demo termina apuntando a otro sitio después de un dedazo.
+    create: {
+      id,
+      institutionId: inst,
+      supabaseId: quien.supabaseId,
+      email: quien.email,
+      firstName: quien.firstName,
+      lastName: quien.lastName,
+      role: "DIRECCION",
+      isActive: true,
+      searchIndex,
+    },
+    update: {
+      institutionId: inst,
+      email: quien.email,
+      firstName: quien.firstName,
+      lastName: quien.lastName,
+      role: "DIRECCION",
+      isActive: true,
+      searchIndex,
+    },
+    select: { id: true },
+  });
+  return id;
 }
 
 /** La base de destino. Local sin ceremonia; remota SOLO si quien corre
@@ -1600,7 +1782,7 @@ async function medir(db: PrismaClient, inst: string): Promise<void> {
     { listEduEvaluacion, listEduRequirements },
     { listEduAgenda, listEduStudentOptions, listEduSupervisorOptions },
     { listEduChairOptions },
-    { listEduCasosPanel },
+    { listEduCasosPanel, listEduCasosParaExport },
     { listEduPatients, listEduPatientOptions, getEduPatient },
     { listEduPrograms, listEduCohorts, listEduCurrentAssignments },
     { getEduDireccionAhora, getEduDireccionPanel, eduDirContextFrom },
@@ -1608,7 +1790,9 @@ async function medir(db: PrismaClient, inst: string): Promise<void> {
     { eduWithCampus },
     { getEduPatientResumen },
     { listEduPatientRecords },
+    { EDU_RECORD_MAX_ROWS },
     { listEduPatientStudies },
+    { EDU_STUDY_MAX_ROWS },
     { parseEduCasosPanelFilters },
     { parseEduAgendaQuery },
     { buildEduCasosCsv },
@@ -1624,7 +1808,9 @@ async function medir(db: PrismaClient, inst: string): Promise<void> {
     import("@/lib/edu/campus-core"),
     import("@/lib/edu/resumen"),
     import("@/lib/edu/expediente"),
+    import("@/lib/edu/expediente-core"),
     import("@/lib/edu/estudios"),
+    import("@/lib/edu/estudios-core"),
     import("@/lib/edu/casos-core"),
     import("@/lib/edu/agenda-core"),
     import("@/lib/edu/casos-core"),
@@ -1676,14 +1862,42 @@ async function medir(db: PrismaClient, inst: string): Promise<void> {
   ]);
   const evalLeidas = Math.min(alumnosVisibles, 301) + nCasos + nCitas + nNotas + nReq;
 
-  const ev = await cronometrar(() => listEduEvaluacion(ctx, {}, now));
+  // ANTES del arreglo del P2-6: el padrón entero. Sigue siendo alcanzable
+  // (?generacion=todas) porque una acreditación lo pide, y por eso se mide.
+  const ev = await cronometrar(() => listEduEvaluacion(ctx, { generacion: "todas" }, now));
   anota({
-    pantalla: "/instituto/evaluacion (dirección, sin filtro)",
+    pantalla: "/instituto/evaluacion (TODAS las generaciones)",
     ms: ev.ms,
     filas: ev.out.rows.length,
     leidas: evalLeidas,
     kb: kb(ev.out.rows),
     nota: `casos ${nCasos} · citas COMPLETED ${nCitas} · calificaciones ${nNotas}`,
+  });
+
+  // DESPUÉS: lo que de verdad se abre al entrar a la pantalla.
+  const evVig = await cronometrar(() => listEduEvaluacion(ctx, { generacion: "vigente" }, now));
+  const nomVig = evVig.out.generacion.name;
+  const idsVig = nomVig
+    ? (await db.eduStudent.findMany({
+        where: { institutionId: inst, cohort: { name: nomVig } },
+        select: { id: true },
+      })).map((x) => x.id)
+    : [];
+  const [vCas, vCit, vNot] = await Promise.all([
+    db.eduCase.count({ where: { institutionId: inst, studentId: { in: idsVig } } }),
+    db.eduAppointment.count({ where: { institutionId: inst, studentId: { in: idsVig }, status: "COMPLETED" } }),
+    db.eduCaseGrade.count({ where: { institutionId: inst, studentId: { in: idsVig } } }),
+  ]);
+  const vigLeidas = idsVig.length + vCas + vCit + vNot + nReq;
+  anota({
+    pantalla: `/instituto/evaluacion (DEFAULT: vigente ${nomVig ?? "?"})`,
+    ms: evVig.ms,
+    filas: evVig.out.rows.length,
+    leidas: vigLeidas,
+    kb: kb(evVig.out.rows),
+    nota:
+      `casos ${vCas} · citas COMPLETED ${vCit} · calificaciones ${vNot}` +
+      `  → ${(100 - (vigLeidas * 100) / Math.max(1, evalLeidas)).toFixed(0)}% menos filas que "todas"`,
   });
 
   // Las DOS generaciones por separado: el filtro que el P2-6 propone como
@@ -1791,33 +2005,50 @@ async function medir(db: PrismaClient, inst: string): Promise<void> {
     filas: csTodos.out.rows.length,
     leidas: totalCasos,
     kb: kb(csTodos.out.rows),
-    nota: csTodos.out.truncated ? `CORTADA en 300 de ${totalCasos} — y el CSV devuelve 413` : `${totalCasos} caben`,
+    nota: csTodos.out.truncated ? `CORTADA en 300 de ${totalCasos} — pero el CSV ya no muere` : `${totalCasos} caben`,
   });
 
   const unApellido = (await db.eduPatient.findFirst({ where: { institutionId: inst }, select: { lastName: true } }))?.lastName?.split(" ")[0] ?? "garcia";
   const csQ = await cronometrar(() => listEduCasosPanel(ctx, parseEduCasosPanelFilters({ q: unApellido }), TZ, now));
   anota({ pantalla: `/instituto/casos (buscador: "${unApellido}")`, ms: csQ.ms, filas: csQ.out.rows.length, leidas: csQ.out.rows.length, kb: kb(csQ.out.rows), nota: "contains sobre searchIndex, sin índice de texto" });
 
-  // El endpoint del CSV devuelve 413 SI el listado salio cortado
-  // (route.ts:36) — o sea que por encima de 300 casos la escuela no puede
-  // exportar nada hasta que acote. Se mide el caso real: sin filtro.
+  // El endpoint del CSV lee por SU camino (listEduCasosParaExport), con el
+  // tope del export y en lotes. Antes reusaba el de la pantalla y devolvia
+  // 413 en cuanto la lista se cortaba: con 400 casos, marcar "incluir
+  // cerrados" dejaba a la escuela sin export. Se miden los tres casos.
   const csv = await cronometrar(async () => {
-    const page = await listEduCasosPanel(ctx, parseEduCasosPanelFilters({}), TZ, now);
+    const page = await listEduCasosParaExport(ctx, parseEduCasosPanelFilters({}), TZ, now);
     return { page, texto: page.truncated ? "" : buildEduCasosCsv(page.rows) };
   });
   anota({
     pantalla: "/api/instituto/casos/export (CSV, sin filtro)",
     ms: csv.ms,
     filas: csv.out.page.truncated ? 0 : csv.out.page.rows.length,
-    leidas: totalCasos,
+    leidas: csv.out.page.rows.length,
     kb: Math.round(Buffer.byteLength(csv.out.texto) / 102.4) / 10,
     nota: csv.out.page.truncated
-      ? `413: SE NIEGA A EXPORTAR (${totalCasos} casos, tope 300)`
+      ? "413: sigue negandose (por encima del tope del export)"
       : `${csv.out.page.rows.length} de ${totalCasos}`,
   });
 
+  // EL CASO DEL HALLAZGO: "incluir cerrados" sobre los 400 del seed.
+  const csvCerrados = await cronometrar(async () => {
+    const page = await listEduCasosParaExport(ctx, parseEduCasosPanelFilters({ cerrados: "1" }), TZ, now);
+    return { page, texto: page.truncated ? "" : buildEduCasosCsv(page.rows) };
+  });
+  anota({
+    pantalla: "/api/instituto/casos/export (CSV, INCLUYENDO CERRADOS)",
+    ms: csvCerrados.ms,
+    filas: csvCerrados.out.page.truncated ? 0 : csvCerrados.out.page.rows.length,
+    leidas: csvCerrados.out.page.rows.length,
+    kb: Math.round(Buffer.byteLength(csvCerrados.out.texto) / 102.4) / 10,
+    nota: csvCerrados.out.page.truncated
+      ? "413: sigue negandose"
+      : `${csvCerrados.out.page.rows.length} de ${totalCasos} — EXPORTA (la pantalla corta en 300)`,
+  });
+
   const csvFil = await cronometrar(async () => {
-    const page = await listEduCasosPanel(ctx, parseEduCasosPanelFilters({ estado: "COMPLETED" }), TZ, now);
+    const page = await listEduCasosParaExport(ctx, parseEduCasosPanelFilters({ estado: "COMPLETED" }), TZ, now);
     return { page, texto: page.truncated ? "" : buildEduCasosCsv(page.rows) };
   });
   anota({
@@ -1874,11 +2105,27 @@ async function medir(db: PrismaClient, inst: string): Promise<void> {
     });
     anota({ pantalla: `Ficha de paciente (${nEst} estudios, ${nNot} notas)`, ms: ficha.ms, filas: 1, leidas: 1, kb: kb(ficha.out), nota: "layout: getEduPatient + getEduPatientResumen" });
 
+    // Las dos devuelven `{ rows, truncated }` desde el arreglo del volumen:
+    // sin la bandera, 200 de 200 y 200 de 240 se median exactamente igual.
     const exp = await cronometrar(() => listEduPatientRecords(ctx, pid, TZ));
-    anota({ pantalla: "Ficha · pestaña Expediente", ms: exp.ms, filas: (exp.out as any).rows?.length ?? (exp.out as any).length ?? 0, leidas: nNot, kb: kb(exp.out), nota: "" });
+    anota({
+      pantalla: "Ficha · pestaña Expediente",
+      ms: exp.ms,
+      filas: exp.out.rows.length,
+      leidas: Math.min(nNot, EDU_RECORD_MAX_ROWS + 1),
+      kb: kb(exp.out.rows),
+      nota: exp.out.truncated ? `CORTADA en ${EDU_RECORD_MAX_ROWS} de ${nNot} — y LO DICE` : `${nNot} caben`,
+    });
 
     const est = await cronometrar(() => listEduPatientStudies(ctx, pid, TZ));
-    anota({ pantalla: "Ficha · pestaña Estudios", ms: est.ms, filas: (est.out as any).rows?.length ?? (est.out as any).length ?? 0, leidas: nEst, kb: kb(est.out), nota: "" });
+    anota({
+      pantalla: "Ficha · pestaña Estudios",
+      ms: est.ms,
+      filas: est.out.rows.length,
+      leidas: Math.min(nEst, EDU_STUDY_MAX_ROWS + 1),
+      kb: kb(est.out.rows),
+      nota: est.out.truncated ? `CORTADA en ${EDU_STUDY_MAX_ROWS} de ${nEst} — y LO DICE` : `${nEst} caben`,
+    });
   }
 
   // ── /instituto/autorizaciones ─────────────────────────────────────────
@@ -1896,8 +2143,8 @@ async function medir(db: PrismaClient, inst: string): Promise<void> {
   });
 
   // ── El mismo recorrido con los ojos de un DOCENTE ──────────────────────
-  const evDoc = await cronometrar(() => listEduEvaluacion(ctxDocente, {}, now));
-  anota({ pantalla: "/instituto/evaluacion (docente: sus alumnos)", ms: evDoc.ms, filas: evDoc.out.rows.length, leidas: evDoc.out.rows.length, kb: kb(evDoc.out.rows), nota: "el recorte por supervisión es lo que lo salva" });
+  const evDoc = await cronometrar(() => listEduEvaluacion(ctxDocente, { generacion: "vigente" }, now));
+  anota({ pantalla: "/instituto/evaluacion (docente: sus alumnos)", ms: evDoc.ms, filas: evDoc.out.rows.length, leidas: evDoc.out.rows.length, kb: kb(evDoc.out.rows), nota: `modo "${evDoc.out.generacion.modo}": el alcance ya acota, el default de generación NO se le aplica` });
 
   // ── Almacenamiento: lo que sumaría un medidor ─────────────────────────
   const bytes = await db.eduStudy.aggregate({ where: { institutionId: inst }, _sum: { sizeBytes: true }, _count: { _all: true } });
@@ -2033,6 +2280,14 @@ async function main(): Promise<void> {
     return;
   }
 
+  // --direccion=<uuid|correo> — la cuenta REAL que va a poder entrar. Se lee
+  // ANTES de conectar para rebotar un argumento vacío sin abrir la base.
+  const argDireccion = args.find((a) => a.startsWith("--direccion="));
+  const direccionArg = argDireccion ? argDireccion.slice("--direccion=".length).trim() : null;
+  if (argDireccion && !direccionArg) {
+    throw new Error("GUARDIA: --direccion= necesita un UUID de Supabase o un correo.");
+  }
+
   const host = guardaBase();
   const db = new PrismaClient();
   try {
@@ -2048,6 +2303,34 @@ async function main(): Promise<void> {
       const t = Date.now();
       await sembrar(db, destino.id);
       console.log(`\nSembrado en ${((Date.now() - t) / 1000).toFixed(1)} s.`);
+    }
+
+    // 🔴 LA CUENTA REAL VA DESPUÉS DEL SEMBRADO Y ANTES DE LA GUARDIA.
+    // Después, porque necesita que el instituto exista; antes de la
+    // comparación de filas ajenas, porque ESCRIBE — y lo que escribe tiene
+    // que pasar por esa comprobación como todo lo demás. Si un día esta
+    // función tocara una fila de otro instituto, la guardia de abajo la
+    // caza y el script sale con código 1.
+    if (direccionArg) {
+      const quien = await resolverDireccionReal(db, direccionArg);
+      const id = await colgarDireccionReal(db, destino.id, quien);
+      console.log("\n── CUENTA DE DIRECCIÓN DEL DEMO ─────────────────────────────────\n");
+      console.log(`  ${quien.firstName} ${quien.lastName} <${quien.email}>`);
+      console.log(`  supabaseId   ${quien.supabaseId}`);
+      console.log(`  edu_users.id ${id} · rol DIRECCIÓN · las 3 sedes`);
+      console.log("\n  Entra por /instituto/login con ESA cuenta de Supabase.");
+      if (quien.yaEntraA) {
+        console.log(
+          "\n  ⚠️ PERO NO VA A ENTRAR AQUÍ, y hay que decirlo: esa cuenta ya es un\n" +
+            `     usuario ACTIVO de "${quien.yaEntraA.nombre}". La sesión se resuelve con la\n` +
+            "     fila MÁS VIEJA (edu-auth.ts: findFirst por supabaseId, orderBy createdAt\n" +
+            "     asc), así que el login la seguirá mandando allí. Usa una cuenta de\n" +
+            "     Supabase que todavía no sea de ningún instituto. La fila del otro\n" +
+            "     instituto NO se toca para arreglarlo: es justo lo que este seed tiene\n" +
+            "     prohibido, y la guardia de filas ajenas lo comprobaría igual.",
+        );
+      }
+      console.log("");
     }
 
     if (args.includes("--medir") || args.includes("--con-medicion")) {
@@ -2066,6 +2349,11 @@ async function main(): Promise<void> {
     }
     console.log("\n✅ GUARDIA: ninguna fila fuera del instituto de demo cambió.");
     console.log("   Para borrarlo entero: npm run seed:edu-demo -- --sql-borrado");
+    if (!direccionArg) {
+      console.log(
+        "   Para poder ENTRAR:   npm run seed:edu-demo -- --direccion=<uuid-de-supabase>",
+      );
+    }
   } finally {
     await db.$disconnect();
   }

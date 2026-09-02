@@ -6,6 +6,7 @@ import { hasEduPermission } from "@/lib/edu/permissions";
 import { eduPatientFullName } from "@/lib/edu/pacientes-core";
 import {
   EDU_CLINICAL_NONE_DETAIL,
+  EDU_RECORD_MAX_ROWS,
   eduClinicalScope,
 } from "@/lib/edu/expediente-core";
 import {
@@ -56,7 +57,7 @@ export default async function PacienteExpedientePage({ params }: { params: { id:
   const paciente = await getEduClinicalPatient(ctx, params.id);
   if (!paciente) notFound();
 
-  const [rows, cases, iaDictado] = await Promise.all([
+  const [page, cases, iaDictado] = await Promise.all([
     listEduPatientRecords(ctx, paciente.id, ctx.institution.timezone),
     listEduPatientCaseOptions(ctx, paciente.id),
     // 🔴 Se resuelve AQUÍ, en el servidor, y desde la Ola 8 mira además el
@@ -71,7 +72,9 @@ export default async function PacienteExpedientePage({ params }: { params: { id:
     <EduExpedienteScreen
       patientId={paciente.id}
       patientName={eduPatientFullName(paciente)}
-      rows={rows}
+      rows={page.rows}
+      truncated={page.truncated}
+      maxRows={EDU_RECORD_MAX_ROWS}
       cases={cases}
       canWrite={hasEduPermission(permUser, "expediente.write")}
       // P2-13: firmar es otra key. El alumno (write sin sign) entrega; la
