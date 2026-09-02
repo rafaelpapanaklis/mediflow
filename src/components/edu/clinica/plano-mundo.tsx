@@ -23,12 +23,23 @@ import type { Clinic3DHost, Clinic3DPick } from "@/components/clinic-3d/Clinic3D
  * la misma que el odontograma y el motor de la agenda.
  *
  * Lo único que hizo falta del otro lado fue UNA prop opcional (`host`),
- * porque el visor trae escritas a mano tres cosas que solo valen para el
- * dental: la ruta de su estado vivo, a dónde lleva el clic (el expediente
- * del dental) y el rótulo del apuntador, que habla de agendar. Sin esa
+ * porque el visor trae escritas a mano cosas que solo valen para el dental:
+ * la ruta de su estado vivo, a dónde lleva el clic (el expediente del
+ * dental), el "Dr." de la placa flotante y los textos de su HUD. Sin esa
  * prop el dental se comporta igual línea por línea; con ella, este vertical
  * le pone las suyas. Un adaptador no puede redirigir un fetch escrito
  * dentro.
+ *
+ * ── ESTO ES UNA VISTA DE ESTADO, NO UN VIDEOJUEGO ──────────────────────
+ * 🔴 El visor del dental es un recorrido en PRIMERA PERSONA: se camina con
+ * WASD, hay una mano en pantalla, una mira en el centro y la vista aérea es
+ * un modo alterno. Aquí eso está AL REVÉS y no por gusto: quien abre esta
+ * pantalla es la dirección de una escuela mirando el piso —"¿qué sillón
+ * está libre?"—, no alguien que quiere pasear. Con `host` presente el visor
+ * arranca en la vista AÉREA, encuadrando la sede completa, y NO hay forma
+ * de pasar a primera persona: ni se montan los controles de caminar, ni la
+ * mano, ni la mira, ni el mando que alterna. Se gira con el ratón y se
+ * acerca con la rueda, que es lo que se le pide a un plano.
  *
  * ── EL CLIC ────────────────────────────────────────────────────────────
  * `host.onPick` avisa QUÉ se tocó (la figura del paciente, la del
@@ -69,9 +80,24 @@ export interface EduPlanoMundoProps {
   onEstado: (payload: unknown) => void;
   /** Clic sobre un sillón: la pantalla abre su tarjeta. */
   onPick: (pick: Clinic3DPick) => void;
-  /** Cómo se llama cada sillón, para el rótulo del apuntador. */
-  rotulo: (pick: Clinic3DPick) => string;
 }
+
+/**
+ * Cómo nombra la placa flotante a las dos figuras.
+ *
+ * 🔴 En una escuela quien atiende NO es un doctor: es un ESTUDIANTE, y
+ * decirle "Dr." delante de su paciente es exactamente lo que el vertical
+ * lleva una ola entera corrigiendo (ver la ola de TEXTOS). El "Dr." está
+ * escrito dentro de la capa viva del dental, así que se le pasa el prefijo.
+ */
+const PLACA = { patient: "Paciente · ", doctor: "Estudiante · " } as const;
+
+/**
+ * La leyenda del HUD. La del dental dice "clic para agendar" y "clic para
+ * ver expediente" —dos cosas que aquí no pasan: el clic abre la tarjeta del
+ * sillón, dentro de esta misma pantalla—.
+ */
+const LEYENDA = ["Clic al paciente o al estudiante para abrir su ficha"];
 
 export function EduPlanoMundo({
   campus,
@@ -81,14 +107,13 @@ export function EduPlanoMundo({
   endpoint,
   onEstado,
   onPick,
-  rotulo,
 }: EduPlanoMundoProps) {
   // El objeto se recrea en cada render y da igual: el visor lo lee por ref
   // (para no quedarse con los enganches del primer render) y su efecto solo
   // depende del mundo. El useMemo es higiene, no una necesidad.
   const host = useMemo<Clinic3DHost>(
-    () => ({ state: endpoint, onState: onEstado, onPick, pickLabel: rotulo }),
-    [endpoint, onEstado, onPick, rotulo],
+    () => ({ state: endpoint, onState: onEstado, onPick, plate: PLACA, legend: LEYENDA }),
+    [endpoint, onEstado, onPick],
   );
 
   return (

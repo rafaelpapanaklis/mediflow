@@ -36,7 +36,7 @@ import {
 import { parseLayoutToWorld } from "./layout-parser";
 import { buildArchitecture } from "./build-architecture";
 import { buildFurniture } from "./build-furniture";
-import { createLiveLayer } from "./live-layer";
+import { createLiveLayer, type LiveLayerLabels } from "./live-layer";
 import { createCollisionSystem } from "./collision";
 import { createDesktopControls } from "./fps-controls";
 import { createTouchControls } from "./touch-controls";
@@ -65,14 +65,22 @@ export interface Clinic3DPublicMode {
  * 🔴 SIN ESTA PROP EL DENTAL SE COMPORTA IGUAL, LÍNEA POR LÍNEA. Todo lo que
  * añade vive detrás de `isHosted`, que es false cuando no se pasa.
  *
- * Existe porque este archivo trae ESCRITAS A MANO tres cosas que solo valen
- * para el dental y que no se pueden redirigir desde fuera:
- *   · la ruta del estado vivo (`STATE_API`);
- *   · a dónde lleva el clic (el expediente del dental, dentro de
- *     interaction.ts, y la agenda del dental en un sillón vacío);
- *   · el rótulo del apuntador, que habla de "agendar cita".
- * Es el mismo caso —y el mismo remedio— que la prop `endpoints` de
- * DicomSetViewer: un adaptador no puede redirigir una URL escrita dentro.
+ * Existe porque este archivo trae ESCRITAS A MANO cosas que solo valen para
+ * el dental y que no se pueden redirigir desde fuera: la ruta del estado
+ * vivo (`STATE_API`), a dónde lleva el clic (el expediente del dental,
+ * dentro de interaction.ts, y la agenda del dental en un sillón vacío), el
+ * "Dr." de la placa flotante y los textos del HUD. Es el mismo caso —y el
+ * mismo remedio— que la prop `endpoints` de DicomSetViewer: un adaptador no
+ * puede redirigir una URL escrita dentro.
+ *
+ * ── Y ADEMÁS: CON ANFITRIÓN ESTO ES UNA VISTA, NO UN PASEO ─────────────
+ * 🔴 El dental es un recorrido en PRIMERA PERSONA (WASD, mano, mira,
+ * multijugador, VR) con la vista aérea como modo alterno. Un anfitrión que
+ * monta este mundo dentro de una pantalla de gestión quiere lo contrario:
+ * el piso entero de un vistazo. Con `host` presente el visor arranca en la
+ * vista AÉREA y no sale de ella —ni se montan los controles de caminar, ni
+ * la mano, ni la mira, ni el mando que alterna—, así que no hay ninguna
+ * forma de acabar caminando dentro de la clínica de otro producto.
  */
 export interface Clinic3DHost {
   /** Ruta del estado vivo del anfitrión. Sustituye a `STATE_API`. */
@@ -86,8 +94,10 @@ export interface Clinic3DHost {
   onState?: (payload: unknown) => void;
   /** Clic sobre un sillón. Sustituye al expediente y al "agendar" del dental. */
   onPick?: (pick: Clinic3DPick) => void;
-  /** Rótulo del apuntador en primera persona (el del dental habla de agendar). */
-  pickLabel?: (pick: Clinic3DPick) => string;
+  /** Cómo nombra la placa a las dos figuras (el dental escribe "Dr."). */
+  plate?: LiveLayerLabels;
+  /** La leyenda del HUD. La del dental habla de agendar y de expedientes. */
+  legend?: string[];
 }
 
 /** Lo que se apuntó dentro de un sillón. */
@@ -294,7 +304,7 @@ export function Clinic3DClient({
       // ── Mundo (builders): A5 arquitectura+techo, A6 mobiliario+detalles ────
       scene.add(buildArchitecture(world));
       scene.add(buildFurniture(world));
-      liveLayer = createLiveLayer(world);
+      liveLayer = createLiveLayer(world, hostRef.current?.plate);
       scene.add(liveLayer.group);
 
       // ── Anfitrión: a qué sillón pertenece cada objeto de la capa viva ──
@@ -362,8 +372,17 @@ export function Clinic3DClient({
 
       // ── Colisión + controles ──────────────────────────────────────────────
       const collision = createCollisionSystem(world);
-      desktop = !touch ? createDesktopControls(camera, domEl) : null;
-      touchCtl = touch && touchLayerRef.current ? createTouchControls(camera, touchLayerRef.current) : null;
+      // 🔴 CON ANFITRIÓN NO SE MONTAN LOS CONTROLES DE CAMINAR. No basta con
+      // no llamar a su `update`: `createDesktopControls` engancha WASD y las
+      // flechas en `window` (y les hace preventDefault), así que el teclado
+      // de la pantalla que lo hospeda dejaría de funcionar por un modo que
+      // ahí no existe. Sin ellos, "caminar" no es que no haga nada: es que
+      // no hay nada escuchando.
+      desktop = !touch && !isHosted ? createDesktopControls(camera, domEl) : null;
+      touchCtl =
+        touch && !isHosted && touchLayerRef.current
+          ? createTouchControls(camera, touchLayerRef.current)
+          : null;
       if (desktop) {
         const d = desktop;
         d.onLockChange((l) => {
@@ -377,8 +396,8 @@ export function Clinic3DClient({
         lockRef.current = () => d.lock();
       }
 
-      // ── V2: mano FPS (solo desktop) ────────────────────────────────────────
-      if (!touch) {
+      // ── V2: mano FPS (solo desktop, y nunca con anfitrión) ─────────────────
+      if (!touch && !isHosted) {
         hand = createHand(camera);
         camera.add(hand.group);
       }
@@ -444,14 +463,32 @@ export function Clinic3DClient({
         drone.enter();
       };
       const exitDrone = () => {
-        if (!drone || mode !== "drone") return;
+        // El cerrojo de verdad: aunque alguien llame aquí por otro camino
+        // (el botón de VR, una tecla futura), con anfitrión no se vuelve.
+        if (!drone || mode !== "drone" || isHosted) return;
         mode = "fps";
         setDroneActive(false);
         hand?.setVisible(true);
         drone.exit(); // onExitComplete re-habilita FPS + relock al terminar
       };
-      const toggleDrone = () => (mode === "drone" ? exitDrone() : enterDrone());
+      // Con anfitrión NO se alterna: de la vista aérea no se sale (ver
+      // Clinic3DHost). Es la misma puerta para la tecla V y para el botón
+      // 🚁 —que además el HUD ni siquiera pinta—.
+      const toggleDrone = () => {
+        if (isHosted) return;
+        return mode === "drone" ? exitDrone() : enterDrone();
+      };
       toggleDroneRef.current = toggleDrone;
+
+      // 🔴 ANFITRIÓN: SE ARRANCA ARRIBA. `enterDrone` deja la transición en
+      // marcha (600 ms de vuelo desde donde nace la cámara); un `update` con
+      // un salto de tiempo mayor que la transición la termina de una, así
+      // que el primer fotograma que se pinta YA es el de la sede completa
+      // vista desde el aire. No se toca `drone-controls`: es su propia API.
+      if (isHosted) {
+        enterDrone();
+        drone?.update(1);
+      }
       enterVrRef.current = () => {
         if (!vr) return;
         if (mode === "drone") exitDrone(); // VR siempre se entra desde FPS
@@ -714,16 +751,9 @@ export function Clinic3DClient({
 
         // interacción central (crosshair) SOLO en FPS; en dron el clic-cursor la
         // dispara aparte y en VR no hay crosshair DOM. Limpia el estado al salir.
-        if (fps && isHosted) {
-          // Anfitrión: el mismo apuntado, con SU rótulo. Sin resaltado —el
-          // del dental tiñe el emissive del avatar y aquí el clic no abre un
-          // expediente, así que la placa flotante ya dice de quién se trata.
-          const p = hostPick(0, 0);
-          const tg = !!p;
-          const lb = p ? hostRef.current?.pickLabel?.(p) ?? null : null;
-          if (tg !== lastTargeting) { lastTargeting = tg; setTargeting(tg); }
-          if (lb !== lastLabel) { lastLabel = lb; setInteractLabel(lb); }
-        } else if (fps) {
+        // Con ANFITRIÓN no hay FPS —se arranca y se queda en la vista aérea—,
+        // así que aquí no entra nunca y no hay mira que alimentar.
+        if (fps) {
           interaction?.update();
           if (interaction) {
             const tg = interaction.isTargeting();
@@ -931,6 +961,10 @@ export function Clinic3DClient({
         vrSupported={vrSupported}
         inVr={inVr}
         onEnterVr={() => enterVrRef.current()}
+        // Con anfitrión el HUD esconde lo que solo vale para el dental (su
+        // enlace al editor, los mandos de dron/minimapa/VR, el contador de
+        // multijugador y la sala de espera) y pinta SU leyenda.
+        host={isHosted ? { legend: host?.legend ?? null } : null}
       />
     </div>
   );

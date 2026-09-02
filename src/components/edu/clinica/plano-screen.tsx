@@ -200,12 +200,6 @@ export function EduPlanoScreen({
 
   const abrirSillon = useCallback((elegido: Clinic3DPick) => setPick(elegido), []);
 
-  const rotulo = useCallback((p: Clinic3DPick) => {
-    if (p.part === "patient") return "Clic: ver al paciente de este sillón";
-    if (p.part === "doctor") return "Clic: ver al estudiante que atiende";
-    return `Clic: ver ${p.name}`;
-  }, []);
-
   const cambiarSede = useCallback(
     (valor: string) => {
       const destino =
@@ -424,7 +418,6 @@ export function EduPlanoScreen({
             endpoint={endpoint}
             onEstado={recibirEstado}
             onPick={abrirSillon}
-            rotulo={rotulo}
           />
 
           {pick && (
@@ -460,9 +453,9 @@ export function EduPlanoScreen({
           </li>
         ))}
         <li className="edu-plano__leyenda-ayuda">
-          Camina con <kbd>W A S D</kbd>, mira con el ratón y <kbd>Esc</kbd> para soltarlo. El
-          botón de la esquina sube a <strong>vista aérea</strong>: desde ahí se ve el piso
-          entero y se clica cualquier sillón.
+          El piso se ve <strong>desde arriba</strong> y entero: arrastra para girarlo y usa la
+          rueda para acercarte. Clic en el paciente o en el estudiante de un sillón para abrir
+          su ficha.
         </li>
       </ul>
     </div>

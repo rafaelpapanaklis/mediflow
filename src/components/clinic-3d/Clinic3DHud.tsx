@@ -104,6 +104,18 @@ export interface Clinic3DHudProps {
   inVr: boolean;
   /** Inicia la sesión VR. */
   onEnterVr: () => void;
+  /**
+   * ANFITRIÓN distinto del dental (hoy el vertical INSTITUCIONAL). Ausente
+   * = el HUD de siempre, línea por línea.
+   *
+   * 🔴 Aquí dentro hay TEXTOS Y MANDOS que solo valen para el dental y que
+   * no se pueden redirigir desde fuera: la leyenda dice "clic para agendar"
+   * y "ver expediente", el enlace de arriba lleva a /dashboard/clinic-layout
+   * y los botones de dron, minimapa y VR son de un mundo que se RECORRE.
+   * En una vista de estado no hay nada de eso que ofrecer, así que con
+   * anfitrión se esconden y la leyenda la pone él.
+   */
+  host?: { legend?: string[] | null } | null;
 }
 
 const EDITOR_HREF = "/dashboard/clinic-layout";
@@ -363,6 +375,7 @@ function ReadyOverlay(props: Clinic3DHudProps) {
     vrSupported,
     inVr,
     onEnterVr,
+    host = null,
   } = props;
 
   const waiting = Math.max(0, waitingCount || 0);
@@ -398,6 +411,7 @@ function ReadyOverlay(props: Clinic3DHudProps) {
         {/* Contador de usuarios conectados (o aviso discreto si no hay multijugador).
             En público NO hay multijugador (canal privado del dashboard): se oculta. */}
         {!publicMode &&
+          !host &&
           (multiplayerEnabled ? (
             <div className={`${panelBase} static flex items-center gap-1.5 px-2.5 py-1 text-[clamp(11px,1.4vw,13px)] tabular-nums`}>
               <span aria-hidden="true">👥</span>
@@ -414,6 +428,9 @@ function ReadyOverlay(props: Clinic3DHudProps) {
       {/* Top-right: volver al editor + minimapa (toggle) + fullscreen, y debajo el minimapa */}
       <div className="pointer-events-none absolute right-0 top-0 m-[max(env(safe-area-inset-right),0.75rem)] mt-[max(env(safe-area-inset-top),0.75rem)] flex flex-col items-end gap-2">
         <div className="flex items-center gap-2">
+          {/* Con anfitrión, ni el enlace ni los tres mandos de abajo: llevan
+              al panel del dental o a modos de un mundo que se recorre. */}
+          {!host ? (
           <Link
             href={publicMode?.backHref ?? EDITOR_HREF}
             className="pointer-events-auto inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-2.5 py-1.5 text-xs font-medium text-white/90 backdrop-blur-md transition-colors hover:bg-black/60 hover:text-white"
@@ -422,6 +439,8 @@ function ReadyOverlay(props: Clinic3DHudProps) {
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">{publicMode ? "Ver plano 2D" : "Volver al editor"}</span>
           </Link>
+          ) : null}
+          {!host ? (
           <button
             type="button"
             onClick={onToggleDrone}
@@ -435,6 +454,8 @@ function ReadyOverlay(props: Clinic3DHudProps) {
           >
             <span aria-hidden="true">🚁</span>
           </button>
+          ) : null}
+          {!host ? (
           <button
             type="button"
             onClick={onToggleMinimap}
@@ -448,6 +469,7 @@ function ReadyOverlay(props: Clinic3DHudProps) {
           >
             <MapIcon className="h-4 w-4" />
           </button>
+          ) : null}
           <button
             type="button"
             onClick={props.onToggleFullscreen}
@@ -457,8 +479,9 @@ function ReadyOverlay(props: Clinic3DHudProps) {
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
-          {/* Entrar en VR: SOLO si el equipo soporta immersive-vr (desktop normal: nada). */}
-          {vrSupported ? (
+          {/* Entrar en VR: SOLO si el equipo soporta immersive-vr (desktop normal: nada).
+              Con anfitrión tampoco: VR ES primera persona. */}
+          {vrSupported && !host ? (
             <button
               type="button"
               onClick={onEnterVr}
@@ -486,16 +509,25 @@ function ReadyOverlay(props: Clinic3DHudProps) {
         <LegendDot color={STATUS_RING_COLOR.libre} label="Libre" />
         <LegendDot color={STATUS_RING_COLOR.proximo} label="Próxima" />
         <LegendDot color={STATUS_RING_COLOR.ocupado} label="Ocupado" />
-        {/* v3 — qué hace el clic en un sillón */}
+        {/* v3 — qué hace el clic en un sillón. Con anfitrión, lo que diga él:
+            aquí el clic no agenda ni abre un expediente del dental. */}
         <div className="mt-1 flex flex-col gap-0.5 border-t border-white/10 pt-1 text-[10px] leading-snug text-white/60">
-          <span>Vacío · clic para agendar</span>
-          <span>Ocupado · clic para ver expediente</span>
+          {host
+            ? (host.legend ?? []).map((linea) => <span key={linea}>{linea}</span>)
+            : (
+              <>
+                <span>Vacío · clic para agendar</span>
+                <span>Ocupado · clic para ver expediente</span>
+              </>
+            )}
         </div>
       </div>
 
       {/* Bottom-right: sala de espera + contadores (apilados) */}
       <div className="pointer-events-none absolute bottom-0 right-0 mb-[max(env(safe-area-inset-bottom),0.75rem)] mr-[max(env(safe-area-inset-right),0.75rem)] flex flex-col items-end gap-1.5">
-        {/* Pacientes en sala de espera (v3) */}
+        {/* Pacientes en sala de espera (v3). Con anfitrión no: su estado no
+            trae sala de espera y el panel diría "0 esperando" para siempre. */}
+        {!host ? (
         <div
           className={`${panelBase} static flex items-center gap-1.5 px-2.5 py-1 text-[clamp(11px,1.4vw,13px)] tabular-nums`}
         >
@@ -503,6 +535,7 @@ function ReadyOverlay(props: Clinic3DHudProps) {
           <span className="font-medium text-white/90">{waiting}</span>
           <span className="text-white/60">esperando</span>
         </div>
+        ) : null}
         {/* Contadores de sillones */}
         <div className={`${panelBase} static px-3 py-2 text-[clamp(11px,1.4vw,13px)] tabular-nums`}>
           <span className="font-medium text-white/90">Ocupados {occupied}</span>
@@ -569,8 +602,10 @@ function ReadyOverlay(props: Clinic3DHudProps) {
         </div>
       ) : null}
 
-      {/* Hint de la vista dron (aérea) */}
-      {droneActive ? (
+      {/* Hint de la vista dron (aérea). Con anfitrión no: habla de volver con
+          V —que ahí no vuelve a ningún sitio— y de abrir un expediente del
+          dental. Cómo se mira lo explica él, en su propio idioma. */}
+      {droneActive && !host ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-[max(env(safe-area-inset-bottom),1.25rem)] flex justify-center px-6">
           <span className="rounded-full border border-violet-400/25 bg-black/50 px-3.5 py-1.5 text-center text-[11px] text-white/80 backdrop-blur-md">
             {isTouch

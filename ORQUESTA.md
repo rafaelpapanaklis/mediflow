@@ -34186,3 +34186,97 @@ nunca usa porque siempre escribe la columna.
 Sin aplicarlo, la pantalla **no se cae**: `getEduPlanoSede` atrapa el "falta la tabla" y
 pinta el plano AUTOMÁTICO (con un aviso en el log del servidor); lo que no se puede es
 GUARDAR, y ahí el editor lo dice con el nombre del archivo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 9 · QUE NO SEA UN VIDEOJUEGO: LA SEDE ES UNA VISTA DE ESTADO (2026-09-02)
+
+Con lo de arriba, el plano heredaba el visor del dental TAL CUAL: arrancaba en PRIMERA
+PERSONA —caminar con WASD, una mano en pantalla, una mira en el centro— y la vista aérea era
+un modo alterno detrás de un botón. Para quien dirige una escuela eso está al revés: abre la
+pantalla para preguntar "¿qué sillón está libre?", no para pasear. Este cierre lo invierte y,
+de paso, saca de la pantalla los textos que solo tienen sentido en el dental.
+
+──────────────────────────────────────────────────────────────────────────
+**a) Se arranca ARRIBA, y no hay forma de bajar.**
+
+Con `host` presente (o sea: solo cuando otro producto monta el mundo), `Clinic3DClient`:
+
+  · **no crea** los controles de caminar. No es que no los llame: `createDesktopControls`
+    engancha WASD y las flechas en `window` y les hace `preventDefault`, así que dejarlos
+    montados le rompía el teclado a la pantalla que los hospeda. Igual con el joystick táctil
+    y con la mano FPS.
+  · **entra en la vista aérea al montar**, y sin vuelo de entrada: `enterDrone()` deja la
+    transición de 600 ms en marcha y un `drone.update(1)` la termina de una, así que el primer
+    fotograma que se pinta ya es el de la sede completa. `drone-controls.ts` NO se toca: es su
+    propia API.
+  · **cierra la salida** por los dos caminos: `toggleDrone` es un no-op (la tecla V y el botón
+    🚁) y `exitDrone` se niega aunque le llamen desde otro sitio —hoy el botón de VR, que
+    siempre entra desde FPS—. VR también se esconde: VR *es* primera persona.
+
+La mira desaparece sola (el HUD ya la ataba a `!droneActive`), y con ella se fue la rama que
+le daba rótulo al apuntador para el anfitrión: era código que no se podía ejecutar nunca. Se
+retiró `Clinic3DHost.pickLabel` y el `rotulo` que la pantalla le pasaba.
+
+──────────────────────────────────────────────────────────────────────────
+**b) Los textos del dental, fuera — con el mismo trato que el resto.**
+
+Dos archivos NUEVOS del dental entran a la lista de COMPARTIDOS del guard, cada uno con UN
+argumento/prop opcional cuyo default es exactamente lo de hoy:
+
+  · `live-layer.ts` (+22/−3) — la placa flotante escribía `Dr. <nombre>`. Recibe
+    `LiveLayerLabels` con dos prefijos; sin él, `""` para el paciente y `"Dr. "` para quien
+    atiende, línea por línea lo de siempre. El instituto pasa `"Paciente · "` y
+    `"Estudiante · "`, que es lo que una escuela de especialidades tiene en el sillón.
+  · `Clinic3DHud.tsx` (+45/−6) — recibe `host?: { legend?: string[] | null }`. Con anfitrión
+    no pinta: su leyenda ("Vacío · clic para agendar", "Ocupado · clic para ver expediente"),
+    el enlace "Volver al editor" (→ /dashboard/clinic-layout), los mandos de dron, minimapa y
+    VR, el contador de multijugador y el panel de sala de espera —que en el instituto diría
+    "0 esperando" para siempre porque su estado no la trae—. El hint de la vista dron tampoco:
+    hablaba de volver con V y de abrir un expediente. En su sitio, la leyenda del anfitrión:
+    "Clic al paciente o al estudiante para abrir su ficha".
+
+🔴 Y con eso **se retira la tirita de CSS**: `edu-theme.css` tapaba el enlace del dental con
+`.edu-plano__mundo a[href="/dashboard/clinic-layout"] { display:none }`. Funcionaba y se caía
+sola el día que el dental cambiara la ruta. Ahora no se pinta.
+
+La ayuda de la pantalla también cambia: decía "Camina con W A S D, mira con el ratón…" —
+prometer un modo que ya no existe es peor que no decir nada—. Ahora dice cómo se mira de
+verdad: desde arriba, arrastrar para girar, rueda para acercar, clic para abrir la ficha.
+
+──────────────────────────────────────────────────────────────────────────
+**c) Lo que se vio en el navegador** (`npm run build` EXIT 0 + `npx next start`, instituto de
+demo `demo-volumen`, sede con 12 sillones y una cita en curso de verdad):
+
+  · **Arranca aéreo**: el primer fotograma ya es la sede entera vista desde el aire. El HUD
+    entero dice, literal: `Sede Norte · DENTAL · Libre · Próxima · Ocupado · Clic al paciente
+    o al estudiante para abrir su ficha · Ocupados 1 · Libres 11 / 12`. Ni enlace al editor,
+    ni 🚁, ni minimapa, ni VR, ni multijugador, ni sala de espera, ni "Haz clic para entrar".
+  · **Caminar no hace nada**: 25 pulsaciones de `W` + `A/S/D/flechas/V/M` (a `window` y al
+    canvas) y la captura queda IDÉNTICA salvo el reloj del "En vivo". `document.pointerLockElement`
+    sigue en `null` y el hint del dron no reaparece (la V no vuelve a primera persona).
+  · **Girar y acercar, sí**: arrastrar orbita y la rueda acerca (se comprobó con eventos reales
+    de rueda y de puntero sobre el lienzo).
+  · **La placa dice lo que tiene que decir**. Ampliada sobre el sillón ocupado:
+    `Sillón 1 / Paciente · Luis Gómez Sánchez / Estudiante · Ximena Marisol Reyes Álvarez /
+    termina 12:17`. Cero "Dr.".
+  · **El clic abre la ficha**: clic sobre el paciente del Sillón 1 → tarjeta con `OCUPADA ·
+    PACIENTE Luis Gómez Sánchez · Folio P-0097 · Caso Raspado y alisado radicular por cuadrante
+    · Especialidad Periodoncia · Estudiante Ximena Marisol Reyes Álvarez · PERIO25-017 ·
+    Docente Lucía Ximena Ruiz Chávez · Desde 11:17 · lleva 31 min` y el botón "Abrir ficha".
+
+`npm run test:edu`: **36 archivos, 1 189 pruebas, EXIT 0**. Las nuevas leen los archivos del
+dental y se ponen rojas si alguien quita una bandera: que no se monten los controles de
+caminar ni la mano, que se arranque con `enterDrone()` + `drone?.update(1)`, que la salida
+esté cerrada con `isHosted`, que la prop del HUD siga siendo opcional, que el default de la
+placa siga siendo `"Dr. "` y que la ayuda de la pantalla no vuelva a prometer WASD.
+
+Guardia: **EXIT 0** con los tres archivos del dental declarados —
+`EDU_GUARD_SHARED="prisma/schema.prisma,src/components/clinic-3d/Clinic3DClient.tsx,src/components/clinic-3d/live-layer.ts,src/components/clinic-3d/Clinic3DHud.tsx,ORQUESTA.md"`.
+
+──────────────────────────────────────────────────────────────────────────
+**d) Lo que NO se hizo, y se dice.**
+
+El encuadre aéreo es el que da `createDroneMode` (`DRONE_FILL = 1.18` sobre el bounds, con la
+cámara a 54°). En una caja ancha y baja como la de esta pantalla (1 406 × 573) la sala se ve
+completa pero con aire de sobra alrededor: ajustarlo pide tocar `drone-controls.ts`, que es un
+CUARTO archivo del dental y queda fuera de la lista declarada. Se deja como está y se anota.

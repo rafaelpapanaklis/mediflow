@@ -68,6 +68,8 @@ const RUTA_ESTADO = "src/app/api/instituto/clinica/3d-state/route.ts";
 const RUTA_PLANO = "src/app/api/instituto/clinica/plano/route.ts";
 const RUTA_PAGINA_EDITOR = "src/app/instituto/(panel)/clinica/plano/page.tsx";
 const DENTAL = "src/components/clinic-3d/Clinic3DClient.tsx";
+const DENTAL_HUD = "src/components/clinic-3d/Clinic3DHud.tsx";
+const DENTAL_CAPA = "src/components/clinic-3d/live-layer.ts";
 
 const SILLONES: EduPlanoChair[] = [
   { id: "ch_1", name: "Sillón 1", number: 1 },
@@ -528,23 +530,111 @@ test("el alto del mundo se le impone desde el tema del instituto, sin !important
   assert.equal(/!important/.test(bloque.slice(0, 200)), false, "no hace falta !important: gana por especificidad");
 });
 
-test("🔴 el enlace del HUD que lleva al panel del DENTAL está escondido, y se vigila", () => {
-  // El HUD del visor pinta "Volver al editor" cableado a
-  // /dashboard/clinic-layout. Desde el instituto no lleva a ningún sitio al
-  // que esa persona pueda entrar. Se esconde por su href desde el tema.
-  const hud = fuente("src/components/clinic-3d/Clinic3DHud.tsx");
+// ═════════════════════════════════════════════════════════════════════
+// 6b · UNA VISTA DE ESTADO, NO UN VIDEOJUEGO
+//
+// El visor del dental es un recorrido en primera persona (WASD, mano,
+// mira, VR) con la vista aérea de modo alterno. Montado aquí tiene que ser
+// justo lo contrario, y estas pruebas leen el archivo del dental porque es
+// donde vive la decisión: si alguien quita una de estas banderas, la
+// escuela vuelve a tener un videojuego y nada más se pondría rojo.
+// ═════════════════════════════════════════════════════════════════════
+
+test("🔴 con anfitrión NO se monta ningún control de primera persona", () => {
+  const visor = fuente(DENTAL);
+
+  // Caminar: los controles ni se crean. No basta con no llamar a su update
+  // —enganchan WASD y las flechas en `window` y les hacen preventDefault—.
   assert.match(
-    hud,
-    /const EDITOR_HREF = "\/dashboard\/clinic-layout";/,
-    "el dental cambió la ruta de su editor: el enlace volvería a aparecer en el plano del instituto",
+    visor,
+    /desktop = !touch && !isHosted \? createDesktopControls\(/,
+    "con anfitrión se seguirían montando los controles de caminar (y el teclado de la pantalla dejaría de responder)",
+  );
+  assert.match(
+    visor,
+    /touch && !isHosted && touchLayerRef\.current/,
+    "en un móvil hospedado se montaría el joystick de caminar",
+  );
+  // La mano en pantalla es del paseo, no de un plano.
+  assert.match(visor, /if \(!touch && !isHosted\) \{\s*\n\s*hand = createHand/);
+
+  // Y se ARRANCA arriba, sin vuelo de entrada.
+  assert.match(
+    visor,
+    /if \(isHosted\) \{\s*\n\s*enterDrone\(\);\s*\n\s*drone\?\.update\(1\);/,
+    "con anfitrión el visor tiene que arrancar YA en la vista aérea",
+  );
+  // Del que no se sale: el alternador es un no-op (tecla V y botón 🚁).
+  assert.match(
+    visor,
+    /const toggleDrone = \(\) => \{\s*\n\s*if \(isHosted\) return;/,
+    "con anfitrión se podría volver a primera persona con la tecla V",
+  );
+  // Y el cerrojo de verdad, por si alguien llega a la salida por otro
+  // camino (hoy: el botón de VR, que se entra desde FPS).
+  assert.match(
+    visor,
+    /mode !== "drone" \|\| isHosted/,
+    "salir de la vista aérea tiene que estar CERRADO con anfitrión, no solo escondido",
   );
 
-  const tema = fuente("src/app/instituto/edu-theme.css");
-  assert.match(
-    tema,
-    /\.edu-plano__mundo a\[href="\/dashboard\/clinic-layout"\]/,
-    "falta la regla que esconde el enlace al panel del dental",
+  // La mira solo se alimenta en FPS, y con anfitrión no hay FPS: la rama
+  // que le daba rótulo al apuntador se fue con ella.
+  assert.equal(/pickLabel/.test(visor), false, "quedó el rótulo del apuntador, que ya no se pinta nunca");
+  assert.equal(
+    /fps && isHosted/.test(visor),
+    false,
+    "quedó una rama de primera persona para el anfitrión",
   );
+});
+
+test("🔴 el HUD del dental no enseña sus textos ni sus mandos con anfitrión", () => {
+  const hud = fuente(DENTAL_HUD);
+
+  // La prop es OPCIONAL y por defecto no existe: el dental, igual que hoy.
+  assert.match(hud, /host\?: \{ legend\?: string\[\] \| null \} \| null;/, "la prop dejó de ser opcional");
+  assert.match(hud, /host = null,/, "sin la prop el HUD tiene que caer en null");
+
+  // El enlace al panel del DENTAL ya no se tapa con CSS desde el instituto
+  // (era una tirita que se caía si el dental cambiaba la ruta): no se pinta.
+  assert.match(hud, /\{!host \? \(\s*\n\s*<Link/, "el enlace al editor del dental se sigue pintando");
+  const tema = fuente("src/app/instituto/edu-theme.css");
+  assert.equal(
+    /\.edu-plano__mundo a\[href=/.test(tema),
+    false,
+    "quedó la regla vieja que escondía el enlace por href: ahora lo resuelve la prop",
+  );
+
+  // Los dos textos del dental que el instituto no puede enseñar.
+  assert.match(hud, /host\s*\n?\s*\? \(host\.legend \?\? \[\]\)\.map/, "la leyenda del dental no la sustituye el anfitrión");
+  assert.match(hud, /vrSupported && !host/, "con anfitrión se ofrecería VR, que ES primera persona");
+
+  // Y el instituto pone la suya, con sus palabras.
+  const mundo = fuente("src/components/edu/clinica/plano-mundo.tsx");
+  assert.match(mundo, /legend: LEYENDA/);
+  assert.match(mundo, /Clic al paciente o al estudiante para abrir su ficha/);
+});
+
+test('🔴 la placa NO dice "Dr." en una escuela: el prefijo lo pone el anfitrión', () => {
+  const capa = fuente(DENTAL_CAPA);
+
+  // Sin argumento, la placa del dental sigue diciendo exactamente lo de hoy.
+  assert.match(capa, /createLiveLayer\(world: WorldModel, labels\?: LiveLayerLabels\)/);
+  assert.match(capa, /labels\?\.doctor \?\? "Dr\. "/, "el default dejó de ser el del dental");
+  assert.match(capa, /labels\?\.patient \?\? ""/, "el paciente del dental llevaba prefijo y no debe llevarlo");
+
+  // Y el instituto pasa los suyos.
+  const mundo = fuente("src/components/edu/clinica/plano-mundo.tsx");
+  assert.match(mundo, /patient: "Paciente · ", doctor: "Estudiante · "/);
+  assert.match(mundo, /plate: PLACA/);
+});
+
+test("la ayuda de la pantalla NO promete caminar por la clínica", () => {
+  // La leyenda decía "Camina con W A S D…". Prometer un modo que ya no
+  // existe es peor que no decir nada: quien lo intenta cree que se rompió.
+  const pantalla = fuente("src/components/edu/clinica/plano-screen.tsx");
+  assert.equal(/W A S D|WASD/.test(pantalla), false, "la ayuda sigue prometiendo caminar");
+  assert.match(pantalla, /desde arriba/, "la ayuda tiene que decir cómo se mira de verdad");
 });
 
 test("la pantalla del plano NO monta un segundo sondeo cuando el visor ya late", () => {

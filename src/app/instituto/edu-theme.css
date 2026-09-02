@@ -7968,19 +7968,15 @@ a.edu-ini-acceso:hover {
   }
 }
 
-/* 🔴 EL ENLACE DEL DENTAL, ESCONDIDO. El HUD del visor (Clinic3DHud.tsx,
-   que NO es este vertical) pinta arriba a la derecha un "Volver al editor"
-   cableado a /dashboard/clinic-layout — el panel del DENTAL. Desde el
-   instituto ese enlace no lleva a ningún sitio al que esta persona pueda
-   entrar. Se esconde por su `href`, que es el ancla más estable que hay, y
-   hay una prueba (edu-clinica-plano.test.ts) que lee Clinic3DHud.tsx y se
-   pone roja el día que el dental cambie esa constante — si no, el enlace
-   reaparecería sin que nada fallara. Mismo patrón que el panel de notas del
-   visor de estudios.
+/* 🔴 EL ENLACE DEL DENTAL YA NO SE ESCONDE DESDE AQUÍ, Y ESO ES EL ARREGLO.
+   Aquí vivía una regla que tapaba por `href` el "Volver al editor" que el
+   HUD del visor cablea a /dashboard/clinic-layout. Funcionaba, pero era una
+   tirita: bastaba que el dental cambiara la constante para que el enlace
+   reapareciera en la pantalla de una escuela. Desde la ola de la vista de
+   estado, `Clinic3DHud` recibe la prop opcional `host` y NO PINTA ese
+   enlace (ni el mando de dron, ni el minimapa, ni VR) cuando el mundo lo
+   monta otro producto. Hay prueba que lo vigila en edu-clinica-plano.test.ts.
    Su sitio lo ocupa el botón "Acomodar el plano" de la barra de arriba. */
-.edu-plano__mundo a[href="/dashboard/clinic-layout"] {
-  display: none;
-}
 
 /* ── La tarjeta que se abre al clicar ────────────────────────────────── */
 .edu-plano__tarjeta {
