@@ -87,6 +87,48 @@
   --mc-label-ink: #141a2b;
   --mc-label-halo: #ffffff;
   --mc-veil: rgba(255, 255, 255, 0.82);
+
+  /* ═══════════════════════════════════════════════════════════════════
+     EL TEMA DEL DENTAL, TRADUCIDO PARA LA CAPA COMPARTIDA
+
+     El piso, la paleta del catálogo y los paneles los dibuja ahora
+     src/components/floor-plan/, la MISMA capa que pinta el plano del
+     vertical institucional. Esa capa no conoce ni un color: lee `--fp-*`
+     de su ancestro. Este bloque es el único sitio del dental que los
+     define, y por eso el azul del instituto no llega aquí ni el violeta
+     de aquí llega allá — lo que viaja entre los dos productos es la
+     forma, no el tema.
+
+     No hay ni un color nuevo: cada `--fp-*` apunta al `--mc-*` que esta
+     pantalla ya usaba, así que el modo oscuro sigue saliendo de un solo
+     sitio (el bloque `:global(.dark)` de abajo) y una clase nueva no
+     puede nacer rota en oscuro. */
+  --fp-surface: var(--mc-surface);
+  --fp-surface-2: var(--mc-surface-2);
+  --fp-line: var(--mc-line);
+  --fp-text-1: var(--mc-text-1);
+  --fp-text-2: var(--mc-text-2);
+  --fp-text-3: var(--mc-text-3);
+  --fp-radius: var(--mc-radius);
+  --fp-shadow-1: var(--mc-shadow-1);
+  --fp-shadow-2: var(--mc-shadow-2);
+  --fp-accent: var(--mc-brand);
+  --fp-accent-soft: var(--mc-brand-soft);
+  --fp-accent-line: var(--mc-brand-line);
+  --fp-libre: var(--mc-libre);
+  --fp-libre-soft: var(--mc-libre-soft);
+  --fp-proximo: var(--mc-proximo);
+  --fp-proximo-soft: var(--mc-proximo-soft);
+  --fp-ocupado: var(--mc-ocupado);
+  --fp-ocupado-soft: var(--mc-ocupado-soft);
+  --fp-tile-a: var(--mc-floor-a);
+  --fp-tile-b: var(--mc-floor-b);
+  --fp-tile-stroke: var(--mc-floor-line);
+  --fp-label: var(--mc-label-ink);
+  --fp-label-halo: var(--mc-label-halo);
+  /* 64 y no los 76 por omisión: la columna del catálogo mide 232 px y con
+     76 caían dos por fila en vez de las tres de siempre. */
+  --fp-palette-min: 64px;
 }
 
 :global(.dark) .page,
@@ -476,55 +518,11 @@
 .categoryHeader:focus-visible { outline: none; box-shadow: var(--ring); }
 .categoryChevron { transition: transform 0.2s; }
 .categoryChevronCollapsed { transform: rotate(-90deg); }
-
-/* El catálogo del instituto: rejilla que se rellena sola con celdas de
-   ~76 px. Con `repeat(3, 1fr)` fijo, una etiqueta larga ("Puerta de baño")
-   se partía en tres renglones de 8.5 px. */
+/* Solo el hueco: la rejilla la pone la paleta compartida (`FloorPalette`),
+   que se acomoda sola con `--fp-palette-min`. Dejar aquí un `display:grid`
+   la metería dentro de una celda y volvería a una columna. */
 .categoryGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
-  gap: 6px;
-  padding: 8px 8px 6px;
-}
-.elementCard {
-  background: var(--mc-surface-2);
-  border: 1px solid var(--mc-line);
-  border-radius: 9px;
-  padding: 7px 4px 6px;
-  cursor: grab;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  color: var(--mc-text-2);
-  transition: background 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
-}
-.elementCard:hover {
-  background: var(--mc-brand-soft);
-  border-color: var(--mc-brand-line);
-  color: var(--mc-text-1);
-  transform: translateY(-1px);
-  box-shadow: var(--mc-shadow-2);
-}
-.elementCard:active { cursor: grabbing; transform: scale(0.97); }
-.elementCard svg { display: block; }
-.elementCardLabel {
-  font-size: 9px;
-  font-weight: 600;
-  color: inherit;
-  text-align: center;
-  line-height: 1.15;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.elementCardChairCount {
-  font-size: 8px;
-  color: var(--mc-brand);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  padding: 6px 8px 8px;
 }
 
 /* ── El piso ────────────────────────────────────────────────────────── */
@@ -721,14 +719,6 @@
   font-size: 10.5px;
   color: var(--mc-text-3);
   font-family: var(--font-mono, ui-monospace, monospace);
-}
-.propLabel {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--mc-text-3);
-  margin-bottom: 5px;
 }
 .propGroup { margin-bottom: 14px; }
 .propInput,

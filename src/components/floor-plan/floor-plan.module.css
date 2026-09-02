@@ -1,0 +1,1002 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   LA CAPA VISUAL DEL PLANO DE UN PISO — NEUTRAL, DE NADIE Y DE LOS DOS.
+
+   La usan hoy dos productos distintos:
+     · el DENTAL       → /dashboard/clinic-layout ("Mi Clínica Visual") y
+                          /live/[slug] (el televisor de recepción);
+     · el INSTITUCIONAL → /instituto/clinica y /instituto/clinica/plano.
+
+   Aquí NO hay una palabra de ninguno de los dos. Ni "doctor" ni
+   "estudiante", ni "sucursal" ni "sede": esta hoja pinta cajas, píldoras,
+   baldosas y tarjetas, y quien la monta le pasa los textos. Si algún día
+   aparece aquí un literal de negocio, está en el archivo equivocado.
+
+   ── POR QUÉ EXISTE ────────────────────────────────────────────────────
+   El institucional estrenó su plano copiando la FORMA del dental (el
+   catálogo isométrico, `toScreen`, el mundo 3D) pero escribiendo su propia
+   cáscara. Dos cáscaras que se parecen se separan en el primer arreglo:
+   quien pide "que la etiqueta del sillón no gire con el mueble" lo pide
+   dos veces, y la segunda se olvida. Esta hoja es el sitio donde se
+   arregla UNA vez.
+
+   ═══════════════════════════════════════════════════════════════════════
+   🔴 LOS COLORES NO SON DE NADIE: SE INYECTAN
+
+   Nada aquí conoce el violeta del dental ni el azul del instituto. Cada
+   anfitrión mapea SU tema sobre las variables `--fp-*` en cualquier
+   ancestro y esta hoja lo resuelve. Lo que viaja son variables, no una
+   paleta: arrastrar el tema del instituto al dental es exactamente lo que
+   no se quería. Hoy lo hacen dos bloques, uno en cada producto:
+
+     · el dental,    en clinic-layout.module.css → .page  { --fp-surface: …; --fp-accent: var(--blue); … }
+     · el instituto, en edu-theme.css            → .edu-plano { --fp-surface: var(--edu-surface); --fp-accent: var(--edu-600); … }
+
+   ⚠️ Los valores por omisión (los del `var(..., x)`) NO se declaran una
+   sola vez arriba: se declaran DOS, una para claro y otra dentro de
+   `:global(.dark)`. Es la única forma de que un anfitrión que NO mapea
+   nada —hoy `/live/[slug]`, que es una pantalla pública sin panel
+   detrás— siga leyéndose en los dos temas. Si el anfitrión sí mapea, su
+   valor gana igual: `var()` resuelve la variable del ancestro antes de
+   mirar el respaldo.
+
+   ── CADA COMPONENTE LLEVA `.fp` EN SU RAÍZ ────────────────────────────
+   🔴 Y no es decoración. `.fp` es el bloque que TRADUCE `--fp-*` a las
+   `--fpc-*` que usan las reglas. Un componente que se monte fuera de otro
+   —la tarjeta flotante del modo en vivo se pinta a nivel de página, no
+   dentro del lienzo— no tendría quién se las resolviera. Poniéndolo en
+   cada raíz, cada pieza es autosuficiente y da igual dónde se cuelgue.
+
+   ── MEDIDAS EN PÍXELES, NUNCA EN `rem` ────────────────────────────────
+   ⚠️ El panel del dental tiene la raíz a 13 px y el resto del sitio a 16.
+   Un `rem` aquí mediría distinto en cada anfitrión. Todo va en px, igual
+   que las dos hojas de las que sale esto.
+
+   ── RESPONSIVE CON @container ─────────────────────────────────────────
+   Lo que reacciona al ancho reacciona al de SU caja (`.workbench`), no al
+   de la ventana: la misma pieza vive en una pantalla completa y dentro de
+   una columna. ⚠️ `container-type` atrapa a los `position: fixed` de
+   dentro, así que el contenedor se declara SOLO en `.workbench` (el
+   cuerpo del editor, que no tiene ninguno) y nunca en la raíz de la
+   página.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── El traductor de tokens (va en la raíz de cada componente) ───────── */
+.fp {
+  --fpc-surface: var(--fp-surface, #ffffff);
+  --fpc-surface2: var(--fp-surface-2, #f1f5fa);
+  --fpc-line: var(--fp-line, rgba(20, 26, 43, 0.12));
+  --fpc-text1: var(--fp-text-1, #141a2b);
+  --fpc-text2: var(--fp-text-2, #4a5468);
+  --fpc-text3: var(--fp-text-3, #67707f);
+  --fpc-radius: var(--fp-radius, 12px);
+  --fpc-shadow1: var(--fp-shadow-1, 0 1px 2px rgba(20, 26, 43, 0.06));
+  --fpc-shadow2: var(--fp-shadow-2, 0 6px 18px -6px rgba(20, 26, 43, 0.16));
+  --fpc-accent: var(--fp-accent, #4665ac);
+  --fpc-accent-soft: var(--fp-accent-soft, rgba(70, 101, 172, 0.12));
+  --fpc-accent-line: var(--fp-accent-line, rgba(70, 101, 172, 0.34));
+
+  /* ♿ Los tres estados. Son los tonos OSCUROS a propósito: aquí se pintan
+     TEXTOS y bordes sobre superficie clara, y el verde/ámbar/rojo vivos
+     del lienzo (STATUS_COLORS, que rellenan halos y anillos dentro del
+     SVG) se quedan por debajo de 3:1 en texto. Los vivos siguen siendo
+     los del lienzo; estos son los de las letras. */
+  --fpc-libre: var(--fp-libre, #15803d);
+  --fpc-libre-soft: var(--fp-libre-soft, rgba(21, 128, 61, 0.09));
+  --fpc-proximo: var(--fp-proximo, #b45309);
+  --fpc-proximo-soft: var(--fp-proximo-soft, rgba(180, 83, 9, 0.1));
+  --fpc-ocupado: var(--fp-ocupado, #b3261e);
+  --fpc-ocupado-soft: var(--fp-ocupado-soft, rgba(179, 38, 30, 0.09));
+
+  --fpc-tile-a: var(--fp-tile-a, #eef2f7);
+  --fpc-tile-b: var(--fp-tile-b, #e6ecf4);
+  --fpc-tile-stroke: var(--fp-tile-stroke, rgba(20, 26, 43, 0.06));
+  --fpc-label: var(--fp-label, #141a2b);
+  --fpc-label-halo: var(--fp-label-halo, #ffffff);
+
+  /* Tono por omisión de las piezas que llevan estado. Lo pisan .tone*. */
+  --fpc-tone: var(--fpc-text3);
+  --fpc-tone-soft: var(--fpc-surface2);
+}
+
+:global(.dark) .fp {
+  --fpc-surface: var(--fp-surface, #19203a);
+  --fpc-surface2: var(--fp-surface-2, #212a48);
+  --fpc-line: var(--fp-line, rgba(226, 233, 246, 0.14));
+  --fpc-text1: var(--fp-text-1, #e6ecf7);
+  --fpc-text2: var(--fp-text-2, #b9c3d6);
+  --fpc-text3: var(--fp-text-3, #9aa4b8);
+  --fpc-shadow1: var(--fp-shadow-1, 0 1px 2px rgba(0, 0, 0, 0.4));
+  --fpc-shadow2: var(--fp-shadow-2, 0 6px 18px -6px rgba(0, 0, 0, 0.5));
+  --fpc-accent: var(--fp-accent, #9bb0dc);
+  --fpc-accent-soft: var(--fp-accent-soft, rgba(155, 176, 220, 0.16));
+  --fpc-accent-line: var(--fp-accent-line, rgba(155, 176, 220, 0.4));
+
+  /* ♿ En oscuro los tonos se ACLARAN. El verde #15803d sobre un panel
+     #19203a da 2.3:1 y no se lee; estos tres pasan de 4.5:1 sobre las dos
+     superficies oscuras que usan los dos productos. */
+  --fpc-libre: var(--fp-libre, #4ade80);
+  --fpc-libre-soft: var(--fp-libre-soft, rgba(74, 222, 128, 0.14));
+  --fpc-proximo: var(--fp-proximo, #fbbf24);
+  --fpc-proximo-soft: var(--fp-proximo-soft, rgba(251, 191, 36, 0.14));
+  --fpc-ocupado: var(--fp-ocupado, #fb7185);
+  --fpc-ocupado-soft: var(--fp-ocupado-soft, rgba(251, 113, 133, 0.14));
+
+  /* 🔴 Las baldosas NO se oscurecen del todo. El catálogo isométrico son
+     cadenas SVG con el color escrito dentro (`fill="#e8f4f8"`) y no se
+     pueden repintar desde una hoja: un piso negro debajo de muebles
+     claros se ve como un agujero. Se bajan lo justo para que el mueble
+     siga destacando. */
+  --fpc-tile-a: var(--fp-tile-a, #dfe5ee);
+  --fpc-tile-b: var(--fp-tile-b, #d6dde8);
+  --fpc-tile-stroke: var(--fp-tile-stroke, rgba(20, 26, 43, 0.1));
+  --fpc-label: var(--fp-label, #141a2b);
+  --fpc-label-halo: var(--fp-label-halo, #f4f6fa);
+}
+
+/* ── Los tres tonos ──────────────────────────────────────────────────── */
+.toneLibre {
+  --fpc-tone: var(--fpc-libre);
+  --fpc-tone-soft: var(--fpc-libre-soft);
+}
+
+.toneProximo {
+  --fpc-tone: var(--fpc-proximo);
+  --fpc-tone-soft: var(--fpc-proximo-soft);
+}
+
+.toneOcupado {
+  --fpc-tone: var(--fpc-ocupado);
+  --fpc-tone-soft: var(--fpc-ocupado-soft);
+}
+
+.toneNeutral {
+  --fpc-tone: var(--fpc-text3);
+  --fpc-tone-soft: var(--fpc-surface2);
+}
+
+.toneAccent {
+  --fpc-tone: var(--fpc-accent);
+  --fpc-tone-soft: var(--fpc-accent-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   1 · LA BARRA Y SUS PIEZAS
+   ═══════════════════════════════════════════════════════════════════════ */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 10px 14px;
+  background: var(--fpc-surface);
+  border: 1px solid var(--fpc-line);
+  border-radius: var(--fpc-radius);
+  box-shadow: var(--fpc-shadow1);
+  color: var(--fpc-text2);
+  font-size: 13px;
+}
+
+/* Variante sin caja: la barra ya vive dentro de una (el topbar del
+   dental es una fila de la rejilla de la página). */
+.barBare {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.barSpacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ── Contadores ──────────────────────────────────────────────────────── */
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--fpc-tone);
+  background: var(--fpc-tone-soft);
+  color: var(--fpc-text2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.countValue {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--fpc-text1);
+}
+
+/* ── El pulso ────────────────────────────────────────────────────────── */
+.pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fpc-text2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pulseDot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--fpc-libre);
+  box-shadow: 0 0 0 3px var(--fpc-libre-soft);
+}
+
+.pulseBroken {
+  color: var(--fpc-ocupado);
+}
+
+.pulseBroken .pulseDot {
+  background: var(--fpc-ocupado);
+  box-shadow: 0 0 0 3px var(--fpc-ocupado-soft);
+}
+
+/* ── Nota informativa ────────────────────────────────────────────────── */
+.note {
+  margin: 0;
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fpc-text2);
+  background: var(--fpc-surface2);
+  border: 1px solid var(--fpc-line);
+  border-left: 3px solid var(--fpc-tone);
+  border-radius: var(--fpc-radius);
+}
+
+.note strong {
+  color: var(--fpc-text1);
+}
+
+/* ── Leyenda ─────────────────────────────────────────────────────────── */
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12.5px;
+  color: var(--fpc-text2);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--fpc-tone);
+}
+
+.legendHelp {
+  color: var(--fpc-text3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   2 · LOS PANELES (catálogo, propiedades, sala de espera…)
+   ═══════════════════════════════════════════════════════════════════════ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--fpc-surface);
+  border: 1px solid var(--fpc-line);
+  border-radius: var(--fpc-radius);
+  color: var(--fpc-text2);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.panelFlush {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.panelScroll {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fpc-text3);
+}
+
+.panelHelp {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fpc-text3);
+}
+
+.panelHelp kbd,
+.legend kbd {
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--fpc-line);
+  background: var(--fpc-surface2);
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--fpc-text2);
+}
+
+.panelGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panelGroupLabel {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--fpc-text2);
+}
+
+.panelDivider {
+  border-top: 1px solid var(--fpc-line);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.panelEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 42px 18px;
+  text-align: center;
+  color: var(--fpc-text3);
+  font-size: 12.5px;
+}
+
+.panelEmpty strong {
+  color: var(--fpc-text2);
+  font-size: 13.5px;
+}
+
+/* ── La paleta de elementos ──────────────────────────────────────────── */
+.palette {
+  display: grid;
+  /* ⚠️ El ancho mínimo de columna es un token y no un número fijo, porque
+     las dos columnas que hospedan esta paleta no miden lo mismo: la del
+     instituto son 220 px (caben dos de 76) y la del dental 232 px con
+     tres columnas históricas de ~68. Con un solo número, uno de los dos
+     se queda con la lista al doble de larga. */
+  grid-template-columns: repeat(auto-fill, minmax(var(--fp-palette-min, 76px), 1fr));
+  gap: 6px;
+}
+
+.paletteItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  border-radius: 9px;
+  border: 1px solid var(--fpc-line);
+  background: var(--fpc-surface2);
+  color: var(--fpc-text2);
+  cursor: grab;
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.2;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.paletteItem:hover {
+  border-color: var(--fpc-accent-line);
+  transform: translateY(-1px);
+}
+
+.paletteItem:active {
+  cursor: grabbing;
+  transform: scale(0.97);
+}
+
+.paletteItem:focus-visible {
+  outline: 2px solid var(--fpc-accent);
+  outline-offset: 1px;
+}
+
+.paletteItemOn {
+  border-color: var(--fpc-accent);
+  background: var(--fpc-accent-soft);
+  color: var(--fpc-text1);
+  font-weight: 700;
+}
+
+.paletteIcon {
+  display: block;
+  width: 34px;
+  height: 34px;
+}
+
+.paletteLabel {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.paletteBadge {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--fpc-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   3 · LAS TARJETAS POR SILLÓN Y SU HORARIO
+   ═══════════════════════════════════════════════════════════════════════ */
+.chairGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+/* Cuando la rejilla vive en una columna estrecha (el panel derecho del
+   dental mide 268 px) el `auto-fill` ya la deja en una sola columna: no
+   hace falta consulta ninguna. */
+.chairColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chairCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  background: var(--fpc-surface);
+  border: 1px solid var(--fpc-line);
+  border-left: 3px solid var(--fpc-tone);
+  border-radius: var(--fpc-radius);
+  min-width: 0;
+}
+
+.chairHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chairName {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  font-size: 13.5px;
+  color: var(--fpc-text1);
+  text-align: left;
+  min-width: 0;
+}
+
+.chairNameButton {
+  cursor: pointer;
+}
+
+.chairNameButton:hover {
+  text-decoration: underline;
+}
+
+.chairNameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* El número pintado en la pared, delante del nombre. */
+.chairNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 7px;
+  background: var(--fpc-surface2);
+  border: 1px solid var(--fpc-line);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--fpc-text2);
+}
+
+.chairBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fpc-tone);
+  white-space: nowrap;
+}
+
+.chairDot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--fpc-tone);
+}
+
+.chairEmpty {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fpc-text3);
+}
+
+/* ── Un renglón del horario ──────────────────────────────────────────── */
+.slotList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: var(--fpc-surface2);
+}
+
+.slotActive {
+  background: var(--fpc-tone-soft);
+  box-shadow: inset 2px 0 0 var(--fpc-tone);
+}
+
+.slotTime {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fpc-text1);
+  white-space: nowrap;
+}
+
+.slotEnd {
+  font-weight: 400;
+  color: var(--fpc-text3);
+}
+
+.slotWho {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.slotPrimary {
+  font-size: 12.5px;
+  color: var(--fpc-text1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slotSecondary {
+  font-size: 11.5px;
+  color: var(--fpc-text3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slotTag {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--fpc-line);
+  color: var(--fpc-text2);
+  white-space: nowrap;
+}
+
+/* ── El cuerpo de una tarjeta ────────────────────────────────────────── */
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cardStrong {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--fpc-text1);
+  overflow-wrap: anywhere;
+}
+
+.cardMeta {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--fpc-text3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Barra de avance de la cita en curso ─────────────────────────────── */
+/* Los respaldos van dobles a propósito: esta pieza puede montarse suelta,
+   fuera de una tarjeta, y ahí `--fpc-*` no existe todavía. */
+.progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--fpc-surface2, var(--fp-surface-2, #f1f5fa));
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--fpc-tone, var(--fp-text-3, #67707f));
+  transition: width 0.5s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressFill {
+    transition: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   4 · LA TARJETA QUE SE ABRE (flotante o en su hueco)
+   ═══════════════════════════════════════════════════════════════════════ */
+.pop {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--fpc-radius);
+  border: 1px solid var(--fpc-line);
+  border-left: 4px solid var(--fpc-tone);
+  background: var(--fpc-surface);
+  box-shadow: var(--fpc-shadow2);
+  min-width: 210px;
+  color: var(--fpc-text2);
+}
+
+/* Flotando SOBRE el lienzo (la abre un clic en un sillón). El anfitrión
+   pone `top`/`right`/`left` por estilo en línea: solo él sabe qué más hay
+   en esa esquina. */
+.popFloating {
+  position: absolute;
+  z-index: 40;
+  width: min(330px, calc(100% - 28px));
+  max-height: calc(100% - 72px);
+  overflow-y: auto;
+}
+
+/* Siguiendo al ratón (el tooltip del modo en vivo del dental). */
+.popPointer {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  width: max-content;
+  max-width: 280px;
+}
+
+.popHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.popTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--fpc-text1);
+  line-height: 1.25;
+}
+
+.popState {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fpc-tone);
+}
+
+.popClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--fpc-line);
+  background: transparent;
+  color: var(--fpc-text2);
+  cursor: pointer;
+}
+
+.popClose:hover {
+  background: var(--fpc-surface2);
+}
+
+.popBody {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.popLabel {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fpc-text3);
+}
+
+.popName {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--fpc-text1);
+}
+
+.popNameMuted {
+  color: var(--fpc-text2);
+  font-style: italic;
+}
+
+.popData {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fpc-text2);
+}
+
+.popKey {
+  font-weight: 700;
+  color: var(--fpc-text3);
+}
+
+.popClock {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fpc-text2);
+}
+
+.popClockStrong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--fpc-text1);
+}
+
+.popList {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12.5px;
+  color: var(--fpc-text2);
+}
+
+.popList b {
+  font-variant-numeric: tabular-nums;
+  color: var(--fpc-text1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   5 · EL BANCO DE TRABAJO (catálogo · lienzo · propiedades)
+   ═══════════════════════════════════════════════════════════════════════ */
+.workbench {
+  /* El contenedor de consulta. ⚠️ Aquí dentro NO puede haber ningún
+     `position: fixed` que dependa de la ventana: un contenedor de
+     consulta se convierte en su bloque contenedor y lo encierra. */
+  container-type: inline-size;
+  container-name: fpwork;
+
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 250px;
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+@container fpwork (max-width: 1100px) {
+  .workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.canvasBox {
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--fpc-line);
+  border-radius: var(--fpc-radius);
+  background: var(--fpc-surface2);
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   6 · EL LIENZO ISOMÉTRICO
+
+   Lo que se pinta DENTRO del elemento sale del catálogo
+   (src/lib/floor-plan/elements-dental.ts) y son cadenas SVG con el color
+   escrito dentro: desde aquí solo se manda en el suelo, la etiqueta, el
+   fantasma y la marca de selección.
+   ═══════════════════════════════════════════════════════════════════════ */
+.tile {
+  stroke: var(--fpc-tile-stroke);
+  stroke-width: 0.5;
+}
+
+.tileA {
+  fill: var(--fpc-tile-a);
+}
+
+.tileB {
+  fill: var(--fpc-tile-b);
+}
+
+.element {
+  cursor: move;
+}
+
+/* `inherit` y no `default`: cuando el lienzo está en modo mano, el cursor
+   de agarrar lo pone el contenedor y el elemento no debe taparlo. */
+.elementLocked {
+  cursor: inherit;
+}
+
+.elementMoving {
+  opacity: 0.62;
+}
+
+.ghost {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* La etiqueta del sillón. `paint-order: stroke` pinta el halo por DEBAJO
+   de la letra: sin eso el trazo blanco se come el texto. */
+.chairLabel {
+  font-size: 12px;
+  font-weight: 700;
+  fill: var(--fpc-label);
+  paint-order: stroke;
+  stroke: var(--fpc-label-halo);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+  user-select: none;
+}
+
+.chairLabelBad {
+  fill: #b3261e;
+}
+
+.selection {
+  fill: none;
+  stroke: var(--fpc-accent);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   7 · LA CAJA DEL MUNDO 3D
+
+   🔴 `Clinic3DClient` lleva `h-[100dvh]` EN LÍNEA en su raíz: está hecho
+   para ocupar una pantalla entera, que es lo que hace en su propia
+   página. Montado dentro de otra pantalla hay que imponerle el alto del
+   hueco desde fuera, y se gana por especificidad (clase + elemento,
+   0-1-1, contra la utilidad de Tailwind, 0-1-0) en vez de con
+   `!important`: repintar el archivo del dental desde aquí dejaría sin
+   repintar la próxima clase que le añadan.
+   ═══════════════════════════════════════════════════════════════════════ */
+.world {
+  position: relative;
+  border-radius: var(--fpc-radius);
+  overflow: hidden;
+  border: 1px solid var(--fpc-line);
+  background: #0b0d11;
+  height: clamp(420px, 62dvh, 760px);
+}
+
+.world > div {
+  height: 100%;
+  width: 100%;
+}
+
+.worldLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 14px;
+}
+
+.worldSpin {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #ffffff;
+  animation: fpSpin 0.9s linear infinite;
+}
+
+@keyframes fpSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .worldSpin {
+    animation: none;
+  }
+}

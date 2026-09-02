@@ -14,6 +14,7 @@ const FALLBACK_ES: Record<string, string> = {
   "pages.clinicLayout.legendFree": "Libre",
   "pages.clinicLayout.legendOccupied": "Ocupado",
   "pages.clinicLayout.legendUpcoming": "Próximo",
+  "pages.clinicLayout.liveNow": "En vivo",
   "pages.clinicLayout.next": "Próxima",
   "pages.clinicLayout.noPendingAppointments": "Sin citas pendientes",
   "pages.clinicLayout.odontogram": "Odontograma",

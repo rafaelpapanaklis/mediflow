@@ -7771,6 +7771,8 @@
       "legendOccupied": "Ocupado",
       "legendUpcoming": "Próximo",
       "legendFree": "Libre",
+      "liveNow": "En vivo",
+      "countsAria": "Sillones por estado",
       "backToNow": "Volver a ahora",
       "optimizerUnknownError": "error_desconocido",
       "optimizerAriaLabel": "Optimizador de agenda con IA",

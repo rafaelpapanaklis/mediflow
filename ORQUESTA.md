@@ -35575,3 +35575,218 @@ el fantasma), y el clic sobre un sillón con citas reales. Se leyó el código y
    la puerta de una pantalla no es un cambio de aspecto.
 3. **No se migró ningún plano guardado.** `LayoutElement` y `LayoutMetadata` están igual: lo
    que hay en la base de las 11 clínicas se lee y se guarda exactamente como antes.
+═══════════════════════════════════════════════════════════════════════════
+## [Clinica-Visual-Plano] — "Mi Clínica Visual" del dental se ve como el plano del instituto, porque los dos pintan LA MISMA capa ✅ (2026-09-02) · rama `feat/clinica-visual-plano` (sale de `feat/edu-clinica-plano`, NO de main)
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npx next build` EXIT 0 (leído entero) · `npm run test:edu` EXIT 0 — 36 archivos, 1 191 pruebas
+SQL: **ninguno**. Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Migración de datos: **ninguna, y no hace falta** (ver el punto 4).
+
+OBJETIVO: llevar al dental los gráficos que estrenó el vertical institucional en su plano,
+en los DOS modos de /dashboard/clinic-layout (armar y en vivo), **sin copiarlos**. Copiar
+habría dejado dos pantallas gemelas que se separan en el primer arreglo y obligan a pedir el
+mismo cambio dos veces.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · QUÉ SE EXTRAJO Y DÓNDE ESTÁ
+
+Carpeta NUEVA y neutral — ni `components/edu/` ni `app/dashboard/`:
+
+    src/components/floor-plan/floor-plan.module.css   la hoja (tokens, cajas, baldosas)
+    src/components/floor-plan/floor-chrome.tsx        29 piezas de presentación
+    src/components/floor-plan/iso-canvas.tsx          IsoTiles · IsoElement · IsoGhost
+
+Vive al lado de `src/lib/floor-plan/` (la matemática isométrica y el catálogo), que YA era
+compartido desde que el instituto montó su editor. Lo que faltaba era la mitad visual.
+
+**Lo que se fue ahí dentro** — con quién lo tenía antes:
+
+| Pieza | Lo tenía el instituto | Lo tenía el dental |
+|---|---|---|
+| Contadores por estado (libre/próximo/ocupado) | `edu-plano__count*` | **no existía** |
+| Pulso "En vivo · hh:mm:ss" con punto | `edu-plano__pulso` | `LiveClock` (reloj a secas) |
+| Ficha flotante de un sillón | `edu-plano__tarjeta*` (17 clases) | `LiveTooltip` |
+| Tarjeta por sillón + sus citas | `edu-plano__hsillon*` (14 clases) | `LiveStatusPanel` |
+| Leyenda de estados | `edu-plano__leyenda*` | `timelineLegend` |
+| Paleta de elementos del catálogo | `edu-planoed__item*` | `elementCard*` |
+| Paneles (catálogo, propiedades) | `edu-planoed__catalogo/props` | `sidebar` / `propertiesPanel` |
+| **Baldosas + mueble + etiqueta + fantasma + selección** | `edu-planoed__tile/el/etiqueta/ghost/sel` | `tile/chairLabel/ghostElement/elementSelected` |
+| Caja del mundo 3D (le impone el alto al visor) | `edu-plano__mundo` | — |
+
+🔴 El dibujo del piso estaba **TRES veces**: el editor del dental, el editor del instituto y
+el televisor `/live/[slug]`. Tres bucles calcados sobre las mismas cadenas SVG del catálogo.
+Ahora es uno.
+
+**Dos cosas se arreglaron al unificar**, y las dos se ven:
+
+  · **La rotación ya solo envuelve al dibujo.** El editor del dental giraba el grupo entero y
+    con él la etiqueta del sillón y la caja de selección: a 90° el nombre se leía de lado. El
+    instituto ya lo hacía bien; gana el que lo hacía bien. El mueble gira exactamente igual.
+  · **El suelo se memoiza.** 32×24 son 768 polígonos que el dental reconstruía en CADA render
+    —incluido cada fotograma de un arrastre—. `IsoTiles` va con `memo` sobre cuatro números.
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · QUÉ QUEDÓ PROPIO DE CADA UNO (y por qué)
+
+**a) El TEMA no se comparte.** La capa neutral no conoce un solo color: lee tokens `--fp-*`
+de su ancestro. Cada producto los mapea en UN bloque de su propia hoja:
+
+    .page       (clinic-layout.module.css) → --fp-accent: var(--blue)   [violeta]
+    .edu-plano  (edu-theme.css)            → --fp-accent: var(--edu-600) [azul]
+    .live       (live-public.module.css)   → el televisor, que no tiene panel detrás
+
+Así el instituto NO arrastra su azul al dental ni al revés. Lo que viaja es la forma.
+Del dental se mapean además las **baldosas translúcidas** y el color de la etiqueta: debajo
+del lienzo hay un degradado radial que se ve a través, y el gris opaco de la capa neutral lo
+habría apagado. El lienzo del dental queda como estaba.
+
+**b) El VOCABULARIO no se comparte** — está prohibido por prueba. `floor-chrome.tsx` no dice
+"estudiante" ni "doctor", ni "sede" ni "sucursal", ni "paciente". Todo texto entra por prop:
+el dental lo resuelve con su `t()` (es/en) y el instituto lo escribe en su castellano.
+`edu-clinica-plano.test.ts` lee los tres archivos compartidos SIN comentarios y se pone roja
+si alguna de esas nueve palabras aparece en el código.
+
+**c) El COMPORTAMIENTO no se comparte.** El arrastre del dental (RAF sobre un `viewBox` fijo,
+herramienta de mano, autoguardado, historial, optimizador, En Vivo) y el del instituto (SVG a
+tamaño real, el hueco se desplaza solo, guardar a mano, ligar sillón↔EduChair) siguen cada uno
+en su archivo. Unificarlos sería reescribir el editor que once clínicas usan hoy — que es
+exactamente lo que NO se pidió.
+
+**d) Piezas que se quedan donde estaban** porque solo tienen un dueño: la **línea de tiempo**
+por carriles y la **sala de espera** con su llamado por turnos son del dental (el instituto
+no las tiene); el **selector de sede**, el **aviso del respaldo de tarjetas** y la **liga
+sillón↔unidad** son del instituto.
+
+`edu-theme.css`: el bloque del plano pasa de **931 a 236 líneas**. Lo que queda es lo de
+arriba más el mapa de tokens.
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · QUÉ CAMBIA EN PANTALLA
+
+**MODO ARMAR** (se ve mejor, se comporta igual — colocar, mover, borrar, girar, deshacer,
+autoguardar, crear sillón al soltar, borrar sillón con su Resource: **sin tocar**):
+  · el catálogo son tarjetas con borde, hueco y estado activo, y ahora son `<button>`
+    (se llega con el tabulador y se ve el foco; antes eran `<div>` no enfocables);
+  · la etiqueta del sillón pasa de 10 px a 12 px, con halo, y **ya no gira** con el mueble;
+  · la marca de selección es un recuadro redondeado que tampoco gira;
+  · el catálogo y el panel de propiedades comparten las cabeceras y las ayudas.
+
+**MODO EN VIVO**, lo único NUEVO de verdad:
+  · **contadores por estado en la barra** (`4 libres · 1 próximo · 3 ocupados`), calculados
+    con los MISMOS `appointments` y el mismo `viewTime` que pintan los halos, así que no
+    pueden contradecir al piso ni cuando se viaja por la línea de tiempo. Cuentan solo los
+    sillones colocados y con unidad existente — el mismo criterio del panel derecho;
+  · el reloj es ahora el **pulso** (punto verde + "En vivo · hh:mm:ss");
+  · las tarjetas por sillón, la ficha flotante y la leyenda son las del instituto.
+
+♿ **Los tres colores de estado se separan en dos familias, a propósito.** Los vivos
+(`STATUS_COLORS`: #10B981 / #F59E0B / #EF4444) siguen rellenando halos y anillos DENTRO del
+SVG y no se han tocado. Para TEXTO se usan los oscuros del instituto (#15803d / #b45309 /
+#b3261e, ≥ 4.9:1 sobre blanco) y —esto es nuevo también para el instituto— una variante
+CLARA en modo oscuro: el verde #15803d sobre un panel #19203a daba 2.3:1 y no se leía.
+
+Responsive con `@container`, no `@media`: el banco de trabajo del editor (`.workbench`) y la
+barra del dental (`.topbar`, donde los contadores se retiran por debajo de 1 260 px antes que
+empujar fuera de pantalla el indicador de guardado). ⚠️ El contenedor de consulta se declara
+SOLO en esas dos cajas, que no tienen ningún `position: fixed` dentro: `.callBanner` de la
+sala de espera y `.tooltip` sí lo son, y un contenedor de consulta los habría encerrado.
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · EL FORMATO DEL PLANO ES EL MISMO EN LOS DOS. NO HAY NADA QUE MIGRAR.
+
+Se verificó antes de escribir código. `src/lib/edu/plano-core.ts` lo dice en su cabecera y el
+código lo confirma: el instituto guarda `LayoutElement[]` + `LayoutMetadata` de
+`src/lib/floor-plan/element-types.ts`, **byte a byte la misma forma** que `ClinicLayout` del
+dental, y sanea con el mismo `sanitizeElements`. Lo único que cambia de significado es
+`LayoutElement.resourceId`: en el dental apunta a un `Resource(kind=CHAIR)` y en el instituto
+a un `EduChair.id`.
+
+🔴 **Ningún plano guardado se toca.** Este trabajo no escribe en `ClinicLayout` ni cambia el
+`PUT /api/clinic-layout`: las once clínicas abren mañana el mismo JSON que guardaron ayer y
+ven el mismo piso, mejor pintado.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · EL 3D COMPARTIDO: NO SE TOCÓ
+
+`Clinic3DClient.tsx`, `Clinic3DHud.tsx` y `live-layer.ts` quedan **exactamente** como los dejó
+`feat/edu-clinica-plano`. Se leyó el diff (+224/+51/+25) antes de decidir: todo lo que añadió
+el instituto cuelga de `isHosted`, que es `false` cuando no se pasa `host`, y ningún llamador
+del dental la pasa. El dental no necesita nada distinto ahí.
+
+⛔ **`/dashboard/clinic-layout/3d` no se tocó**, ni su `Clinic3DMount.tsx`. Las pruebas del
+instituto que vigilan que ese archivo NO pase `host` siguen verdes.
+
+**Lo que NO hice, y lo digo:** no empotré el mundo 3D dentro del modo En Vivo del dental. La
+fontanería existe (`Clinic3DHost`) y el instituto demuestra que funciona, pero eso es una
+función nueva, no un cambio de aspecto, y el encargo decía que el modo En Vivo es "el piso con
+el estado de cada sillón, la sala de espera y la agenda del día". El dental ya tiene su
+recorrido en su propia página. **Si lo quieres dentro, es una tarde y un archivo — dilo.**
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · `/live/[slug]` SÍ SE LLEVA EL CAMBIO, Y ESTO ES LO QUE PASA
+
+El televisor de recepción comparte con el panel `LiveStatusPanel`, `LiveTooltip`,
+`LiveTimeline` y `WaitingRoom`, así que hereda el aspecto nuevo. Se dejó a propósito: tener la
+pantalla de recepción con una piel y el panel con otra era la incoherencia que este trabajo
+viene a quitar. Además pierde su copia del bucle de baldosas.
+
+🔴 **El enmascarado NO se toca ni se relaja.** `liveModeShowPatientNames` sigue decidiendo en
+el servidor y `maskPatient(nombre, showFullNames)` sigue llamándose en los mismos tres sitios,
+con los mismos argumentos. Lo que cambió es de qué color es la caja. El televisor tampoco
+empieza a pintar el nombre del sillón: `IsoElement` solo pinta etiqueta si se le pasa, y ahí
+no se le pasa.
+
+═══════════════════════════════════════════════════════════════════════════
+### 7 · LA GUARDIA DEL INSTITUTO NO APLICA AQUÍ, Y NO SE RODEÓ
+
+`scripts/edu-guard.cjs` existe para que una ola del INSTITUTO no toque el dental. Este trabajo
+va en la dirección contraria: es un cambio del dental que además reengancha al instituto, y lo
+pediste tú. Corriéndolo marcaría prohibidos `src/components/floor-plan/`,
+`src/app/dashboard/clinic-layout/**`, `src/app/live/**` y `src/i18n/dictionaries/*.json`, que
+es justo lo que esta rama tiene que tocar.
+
+**No se añadió ni un renglón a `SHARED_FILES` ni a `OWN_PREFIXES`.** Ampliar esa lista para
+que pase esta rama la dejaría más permisiva para la próxima ola del instituto, que es
+exactamente lo que la guardia impide. El archivo se queda como está y esta rama simplemente no
+es un trabajo del vertical institucional.
+
+═══════════════════════════════════════════════════════════════════════════
+### 8 · PRUEBAS
+
+`npm run test:edu` → **36 archivos, 1 191 pruebas, EXIT 0**. Tres nuevas en
+`edu-clinica-plano.test.ts`:
+
+  · la capa compartida no escribe una palabra de ningún vertical (nueve prohibidas, leyendo
+    los archivos SIN comentarios — la regla es que no salgan por pantalla, no que no se
+    puedan nombrar para explicar la regla);
+  · los cinco archivos de los dos productos importan la capa, y **ninguno** vuelve a dibujar
+    el suelo por su cuenta;
+  · la regla que le impone el alto al visor del dental se mudó de `edu-theme.css` a la capa
+    compartida (`.world > div`), sigue sin `!important` y la pantalla sigue usándola.
+
+`edu-theme.test.ts` (el candado de choques de nombres) verde: ⚠️ `.edu-plano` y `.edu-planoed`
+van en UN solo bloque agrupado, no en dos con uno pisando al otro — un selector agrupado
+declara las dos clases y la segunda declaración habría contado como choque.
+
+Se revisó la capa **en el navegador**, con las paletas de los dos productos y en los dos
+temas, sobre un HTML estático con el módulo CSS: contadores, pulso roto, paleta con item
+activo, lienzo con etiqueta y selección, ficha flotante, tarjetas por sillón con renglón en
+curso, y la leyenda. Legible en los cuatro cuadrantes.
+
+═══════════════════════════════════════════════════════════════════════════
+### 9 · QUÉ HAY QUE PROBAR A MANO
+
+  1. **/dashboard/clinic-layout, modo Edición**: arrastrar un elemento del catálogo al piso,
+     moverlo, girarlo con `R`, borrarlo con `Supr`, `⌘Z`, la mano (`H`) y el zoom. Que el
+     indicador de guardado pase por "sin guardar" → "guardado hace un momento".
+  2. **Un sillón girado a 90°**: el mueble gira, el nombre y el recuadro NO. Es el cambio
+     visual más notorio del modo Edición.
+  3. **Modo En Vivo**: que los tres contadores cuadren con los halos del piso y con el panel
+     de la derecha, y que sigan cuadrando al mover la línea de tiempo al pasado.
+  4. **Ventana estrecha (~1 100 px)**: los contadores desaparecen y no se rompe la barra.
+  5. **Modo oscuro** en las dos pantallas.
+  6. **/live/[slug] con `Mostrar nombres` APAGADO**: que siga diciendo "J.P." y no el nombre
+     completo, en el panel de sillones y en el globo al pasar el ratón.
+  7. **/instituto/clinica y /instituto/clinica/plano**: que se vean igual que antes (es el
+     mismo diseño, servido desde otro archivo) y que ligar un sillón a su unidad siga
+     funcionando.

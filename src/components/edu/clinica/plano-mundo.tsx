@@ -7,6 +7,7 @@ import type { LayoutElement, LayoutMetadata } from "@/components/clinic-3d/world
 // línea NO arrastra three.js al bundle de la pantalla. El visor entero
 // entra por el `dynamic()` de abajo, en su propio trozo y solo aquí.
 import type { Clinic3DHost, Clinic3DPick } from "@/components/clinic-3d/Clinic3DClient";
+import { FloorWorldLoading } from "@/components/floor-plan/floor-chrome";
 
 /**
  * EL MUNDO 3D DEL DENTAL, MONTADO EN EL INSTITUTO.
@@ -60,12 +61,9 @@ const Clinic3DClient = dynamic(
   () => import("@/components/clinic-3d/Clinic3DClient").then((m) => m.Clinic3DClient),
   {
     ssr: false,
-    loading: () => (
-      <div className="edu-plano__cargando">
-        <span className="edu-plano__spin" aria-hidden="true" />
-        <span>Cargando el plano en 3D…</span>
-      </div>
-    ),
+    // La caja y el girito son los de la capa compartida: es el MISMO
+    // hueco negro que el dental le reserva a este visor.
+    loading: () => <FloorWorldLoading>Cargando el plano en 3D…</FloorWorldLoading>,
   },
 );
 

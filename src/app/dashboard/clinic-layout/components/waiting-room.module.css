@@ -1,32 +1,45 @@
-/* Sala de espera + banner de llamado por turnos. */
+/* Sala de espera + banner de llamado por turnos.
+
+   Es una pieza del DENTAL (el instituto no llama por turnos), asi que se
+   queda aqui. Lo unico que cambio es de donde salen los colores: ahora de
+   los tokens `--fp-*` que mapea el anfitrion, para que la sala de espera
+   no sea la unica caja del modo En Vivo con su propia paleta.
+
+   El respaldo va escrito DOS veces —claro y `:global(.dark)`— porque
+   /live/[slug] es publica, no mapea tokens y tiene su propio interruptor
+   de tema.
+
+   ⚠️ `.callBanner` es `position: fixed`: ningun ancestro suyo puede
+   declarar `container-type`, o el aviso se quedaria encerrado en la
+   columna en vez de cruzar la pantalla. */
 
 .wrap {
   position: relative;
-  background: #fff;
-  border: 1px solid #E2ECF4;
-  border-radius: 12px;
+  background: var(--fp-surface, #fff);
+  border: 1px solid var(--fp-line, #E2ECF4);
+  border-radius: var(--fp-radius, 12px);
   overflow: hidden;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: inherit;
 }
 :global(.dark) .wrap {
-  background: #121020;
-  border-color: rgba(255, 255, 255, 0.10);
-  color: #E8E8EC;
+  background: var(--fp-surface, #121020);
+  border-color: var(--fp-line, rgba(255, 255, 255, 0.10));
+  color: var(--fp-text-1, #E8E8EC);
 }
 :global(.dark) .wrap .header {
-  background: #1A1630;
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--fp-surface-2, #1A1630);
+  border-color: var(--fp-line, rgba(255, 255, 255, 0.08));
 }
 :global(.dark) .wrap .item {
-  border-color: rgba(255, 255, 255, 0.06);
+  border-color: var(--fp-line, rgba(255, 255, 255, 0.06));
 }
-:global(.dark) .wrap .itemPatient { color: #E8E8EC; }
-:global(.dark) .wrap .itemMeta { color: #A0A0AB; }
+:global(.dark) .wrap .itemPatient { color: var(--fp-text-1, #E8E8EC); }
+:global(.dark) .wrap .itemMeta { color: var(--fp-text-2, #A0A0AB); }
 :global(.dark) .wrap .position {
-  background: rgba(124, 58, 237, 0.20);
-  color: #c4b5fd;
+  background: var(--fp-accent-soft, rgba(124, 58, 237, 0.20));
+  color: var(--fp-accent, #c4b5fd);
 }
-:global(.dark) .empty { color: #6B6B78; }
+:global(.dark) .empty { color: var(--fp-text-3, #6B6B78); }
 
 /* ─── Banner de llamado ─── */
 .callBanner {
@@ -81,8 +94,8 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid #E2ECF4;
-  background: #F8FAFC;
+  border-bottom: 1px solid var(--fp-line, #E2ECF4);
+  background: var(--fp-surface-2, #F8FAFC);
 }
 .headerTitle {
   flex: 1;
@@ -93,13 +106,13 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #6B7A99;
+  color: var(--fp-text-2, #6B7A99);
 }
 .headerCount {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10.5px;
   font-weight: 700;
-  background: #7C3AED;
+  background: var(--fp-accent, #7C3AED);
   color: #fff;
   padding: 1px 7px;
   border-radius: 999px;
@@ -110,17 +123,21 @@
   display: grid;
   place-items: center;
   background: transparent;
-  border: 1px solid #E2ECF4;
+  border: 1px solid var(--fp-line, #E2ECF4);
   border-radius: 6px;
   cursor: pointer;
-  color: #6B7A99;
+  color: var(--fp-text-2, #6B7A99);
   font-family: inherit;
 }
-.soundBtn:hover { background: #F5F3FF; color: #7C3AED; border-color: #DDD6FE; }
+.soundBtn:hover {
+  background: var(--fp-accent-soft, #F5F3FF);
+  color: var(--fp-accent, #7C3AED);
+  border-color: var(--fp-accent-line, #DDD6FE);
+}
 .soundBtn[aria-pressed="true"] {
-  background: #F5F3FF;
-  color: #7C3AED;
-  border-color: #DDD6FE;
+  background: var(--fp-accent-soft, #F5F3FF);
+  color: var(--fp-accent, #7C3AED);
+  border-color: var(--fp-accent-line, #DDD6FE);
 }
 
 /* ─── Lista ─── */
@@ -128,7 +145,7 @@
   padding: 30px 16px;
   text-align: center;
   font-size: 12px;
-  color: #9AAAC0;
+  color: var(--fp-text-3, #9AAAC0);
   font-style: italic;
 }
 .list {
@@ -144,16 +161,16 @@
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  border-bottom: 1px solid #F0F4F8;
+  border-bottom: 1px solid var(--fp-line, #F0F4F8);
 }
 .item:last-child { border-bottom: none; }
 .position {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   font-weight: 800;
-  color: #7C3AED;
+  color: var(--fp-accent, #7C3AED);
   text-align: center;
-  background: #F5F3FF;
+  background: var(--fp-accent-soft, #F5F3FF);
   border-radius: 5px;
   padding: 2px 0;
 }
@@ -166,14 +183,14 @@
 .itemPatient {
   font-size: 13px;
   font-weight: 700;
-  color: #1A2540;
+  color: var(--fp-text-1, #1A2540);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .itemMeta {
   font-size: 10.5px;
-  color: #6B7A99;
+  color: var(--fp-text-2, #6B7A99);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -184,9 +201,16 @@
   gap: 3px;
   font-size: 10px;
   font-family: var(--font-mono, ui-monospace, monospace);
-  color: #F59E0B;
+  color: var(--fp-proximo, #b45309);
   font-weight: 700;
-  background: rgba(245, 158, 11, 0.1);
+  background: var(--fp-proximo-soft, rgba(245, 158, 11, 0.12));
   padding: 2px 7px;
   border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .callBanner,
+  .callBannerInner {
+    animation: none;
+  }
 }

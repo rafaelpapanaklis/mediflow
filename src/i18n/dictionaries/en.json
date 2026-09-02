@@ -7771,6 +7771,8 @@
       "legendOccupied": "Occupied",
       "legendUpcoming": "Upcoming",
       "legendFree": "Free",
+      "liveNow": "Live",
+      "countsAria": "Chairs by status",
       "backToNow": "Back to now",
       "optimizerUnknownError": "Unknown error",
       "optimizerAriaLabel": "AI schedule optimizer",

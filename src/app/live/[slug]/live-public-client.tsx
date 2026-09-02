@@ -15,7 +15,7 @@ import {
   Box,
   Map as MapIcon,
 } from "lucide-react";
-import { isoViewBox, toScreen } from "@/lib/floor-plan/iso";
+import { isoViewBox } from "@/lib/floor-plan/iso";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import type {
   LayoutElement,
@@ -31,6 +31,10 @@ import {
 } from "../../dashboard/clinic-layout/components/live-mode";
 import { WaitingRoom, type WaitingRoomEntry } from "../../dashboard/clinic-layout/components/waiting-room";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+// El dibujo del piso es el MISMO que el del editor del panel y el del plano
+// del vertical institucional (src/components/floor-plan/). Ver la nota del
+// bloque del lienzo, más abajo.
+import { IsoElement, IsoTiles } from "@/components/floor-plan/iso-canvas";
 import { sanitizeElements, sanitizeMetadata, sanitizeChairs } from "@/lib/floor-plan/sanitize";
 import {
   ANCHO_MIN_3D,
@@ -850,29 +854,11 @@ export function LivePublicClient({
                 transition: isPanning ? "none" : "transform 0.08s linear",
               }}
             >
-              {/* Floor tiles */}
-              <g>
-                {Array.from({ length: GRID_ROWS }).map((_, r) =>
-                  Array.from({ length: GRID_COLS }).map((__, c) => {
-                    const A = toScreen(c, r, ox, oy);
-                    const B = toScreen(c + 1, r, ox, oy);
-                    const Cc = toScreen(c + 1, r + 1, ox, oy);
-                    const D = toScreen(c, r + 1, ox, oy);
-                    // Fill via CSS class para que el toggle dark mode pueda
-                    // swap-ear los colores sin tocar JSX. Inline `fill` ganaba
-                    // a la regla CSS y dejaba el grid blanco en dark.
-                    const tileClass = (c + r) % 2 === 0 ? liveStyles.tileA : liveStyles.tileB;
-                    return (
-                      <polygon
-                        key={`t-${c}-${r}`}
-                        className={`${tileClass} ${liveStyles.tileStroke}`}
-                        points={`${A[0]},${A[1]} ${B[0]},${B[1]} ${Cc[0]},${Cc[1]} ${D[0]},${D[1]}`}
-                        strokeWidth={0.5}
-                      />
-                    );
-                  }),
-                )}
-              </g>
+              {/* El suelo y el mobiliario los pinta la capa compartida
+                  (src/components/floor-plan/), la misma que el editor del
+                  panel y el plano del vertical institucional. Aqui eran una
+                  TERCERA copia del mismo bucle. */}
+              <IsoTiles cols={GRID_COLS} rows={GRID_ROWS} ox={ox} oy={oy} />
               {/* Elementos */}
               <g>
                 {elements
@@ -881,12 +867,22 @@ export function LivePublicClient({
                   .map((el) => {
                     const td = catalog.byKey.get(el.type);
                     if (!td) return null;
-                    const [sx, sy] = toScreen(el.col, el.row, ox, oy);
+                    // 🔴 `locked`: esta pantalla no se edita, asi que el
+                    // cursor sigue siendo el de arrastrar el lienzo y no el
+                    // de mover un mueble. Y sin `label`: el televisor de
+                    // recepcion nunca ha pintado el nombre del sillon y no
+                    // empieza ahora.
                     return (
-                      <g
+                      <IsoElement
                         key={el.id}
-                        transform={el.rotation ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
-                        dangerouslySetInnerHTML={{ __html: td.draw(sx, sy) }}
+                        elementId={el.id}
+                        type={td}
+                        col={el.col}
+                        row={el.row}
+                        rotation={el.rotation}
+                        ox={ox}
+                        oy={oy}
+                        locked
                       />
                     );
                   })}

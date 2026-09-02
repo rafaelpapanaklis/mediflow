@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Maximize2, MapPinned, Pencil, X } from "lucide-react";
+import { Maximize2, MapPinned, Pencil } from "lucide-react";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EDU_CAMPUS_ALL } from "@/lib/edu/campus-core";
 import {
@@ -21,6 +21,33 @@ import type { EduPlanoLayout, EduPlanoRevision } from "@/lib/edu/plano-core";
 import type { Clinic3DPick } from "@/components/clinic-3d/Clinic3DClient";
 import { EduPlanoMundo } from "@/components/edu/clinica/plano-mundo";
 import { EduVivaScreen } from "@/components/edu/clinica/viva-screen";
+// ── La capa visual COMPARTIDA (src/components/floor-plan) ──────────────
+// La misma que usa "Mi Clínica Visual" del dental. Aquí no vive ni un
+// color ni una caja: solo QUÉ se pinta y con qué palabras — que son las de
+// una escuela ("Estudiante", "Sede") y por eso viajan como props.
+import {
+  FloorBar,
+  FloorBarSpacer,
+  FloorChairCard,
+  FloorChairEmpty,
+  FloorChairGrid,
+  FloorChairNumber,
+  FloorCounters,
+  FloorLegend,
+  FloorNote,
+  FloorPopCard,
+  FloorPopData,
+  FloorPopLabel,
+  FloorPopList,
+  FloorPopName,
+  FloorPopClock,
+  FloorPulse,
+  FloorSlot,
+  FloorSlotList,
+  FloorWorldBox,
+  type FloorCountItem,
+  type FloorLegendItem,
+} from "@/components/floor-plan/floor-chrome";
 
 /**
  * /instituto/clinica — EL PLANO DE LA CLÍNICA, EN VIVO.
@@ -34,10 +61,21 @@ import { EduVivaScreen } from "@/components/edu/clinica/viva-screen";
  * mundo 3D del dental, con el estudiante y el paciente dibujados en cada
  * unidad ocupada.
  *
+ * ── LA CÁSCARA TAMPOCO ES DE AQUÍ ──────────────────────────────────────
+ * 🔴 Los contadores, el pulso, la ficha que se abre, la rejilla del
+ * horario y la leyenda salen de src/components/floor-plan/, que es de los
+ * DOS productos. Cuando esta ola las escribió aquí, el dental tenía su
+ * propia versión de casi todas; el día que alguien pidiera "que el estado
+ * también se lea escrito" habría que hacerlo dos veces. Ahora se hace una.
+ *
+ * ⚠️ Lo que NO se comparte es el vocabulario. Esa capa no sabe qué es un
+ * estudiante ni una sede: cada texto entra por prop, escrito aquí en el
+ * castellano del vertical, y en el dental con su `t()` de es/en.
+ *
  * ── LO QUE SE MONTA Y LO QUE NO ────────────────────────────────────────
  * El mundo es de OTRO producto y se importa entero (ver plano-mundo.tsx).
- * De este lado viven las tres cosas que son del instituto: la TARJETA que
- * se abre al clicar (folio, caso, especialidad, estudiante, docente y el
+ * De este lado viven las tres cosas que son del instituto: QUÉ dice la
+ * tarjeta que se abre (folio, caso, especialidad, estudiante, docente y el
  * botón a la ficha), el HORARIO de la sede debajo, y el RESPALDO.
  *
  * ── EL RESPALDO NO ES UN ADORNO ────────────────────────────────────────
@@ -271,6 +309,29 @@ export function EduPlanoScreen({
     [campus.id],
   );
 
+  const conteos = useMemo<FloorCountItem[]>(
+    () =>
+      ESTADOS.map((s) => ({
+        key: s,
+        tone: s,
+        count: board.counts[s],
+        label: EDU_VIVA_STATE_LABELS[s].toLowerCase(),
+        detail: EDU_VIVA_STATE_DETAILS[s],
+      })),
+    [board.counts],
+  );
+
+  const leyenda = useMemo<FloorLegendItem[]>(
+    () =>
+      ESTADOS.map((s) => ({
+        key: s,
+        tone: s,
+        label: EDU_VIVA_STATE_LABELS[s],
+        detail: EDU_VIVA_STATE_DETAILS[s],
+      })),
+    [],
+  );
+
   const sinSillones = chairs.length === 0;
   const sinDibujar = revision.sinDibujar.length;
 
@@ -298,7 +359,7 @@ export function EduPlanoScreen({
   return (
     <div className="edu-plano">
       {/* ── La barra: sede, conteos, pulso y el botón de acomodar ─────── */}
-      <div className="edu-plano__bar">
+      <FloorBar>
         {campuses.length > 1 && (
           <label className="edu-plano__sede">
             <span className="edu-plano__sedelabel">Sede</span>
@@ -317,24 +378,18 @@ export function EduPlanoScreen({
           </label>
         )}
 
-        <div className="edu-plano__counts" role="status" aria-live="polite">
-          {ESTADOS.map((s) => (
-            <span
-              key={s}
-              className={`edu-plano__count edu-plano__count--${s}`}
-              title={EDU_VIVA_STATE_DETAILS[s]}
-            >
-              <b>{board.counts[s]}</b> {EDU_VIVA_STATE_LABELS[s].toLowerCase()}
-            </span>
-          ))}
-        </div>
+        <FloorCounters items={conteos} ariaLabel="Sillones por estado" />
 
-        <p className={`edu-plano__pulso${latiendo ? "" : " edu-plano__pulso--roto"}`}>
-          <span className="edu-plano__punto" aria-hidden="true" />
-          {latiendo
-            ? `En vivo · ${relojDe(board.generatedAt)}`
-            : `Sin conexión · último corte ${relojDe(board.generatedAt)}`}
-        </p>
+        <FloorPulse
+          live={latiendo}
+          text={
+            latiendo
+              ? `En vivo · ${relojDe(board.generatedAt)}`
+              : `Sin conexión · último corte ${relojDe(board.generatedAt)}`
+          }
+        />
+
+        <FloorBarSpacer />
 
         <div className="edu-plano__acciones">
           <button
@@ -353,23 +408,23 @@ export function EduPlanoScreen({
             </Link>
           )}
         </div>
-      </div>
+      </FloorBar>
 
       {/* ── Avisos que solo se pueden dar aquí ────────────────────────── */}
       {campusActiveId === null && campuses.length > 1 && (
-        <p className="edu-plano__nota">
+        <FloorNote>
           Un plano es de <strong>una sede</strong>: se está pintando el de{" "}
           <strong>{campus.name}</strong>. Elige otra arriba para ver la suya.
-        </p>
+        </FloorNote>
       )}
 
       {layout.auto && !sinSillones && (
-        <p className="edu-plano__nota">
+        <FloorNote>
           Este plano es <strong>automático</strong>: los {chairs.length}{" "}
           {chairs.length === 1 ? "sillón" : "sillones"} de {campus.name} puestos en rejilla, para
           que la pantalla sirva desde hoy.{" "}
           {puedeEditar ? "Acomódalo como es el piso de verdad con «Acomodar el plano»." : null}
-        </p>
+        </FloorNote>
       )}
 
       {!layout.auto && sinDibujar > 0 && (
@@ -391,10 +446,10 @@ export function EduPlanoScreen({
       )}
 
       {scopeKind === "supervised" && board.cards.some((c) => c.masked) && (
-        <p className="edu-plano__nota">
+        <FloorNote tone="ocupado">
           Los sillones <strong>fuera de tu supervisión</strong> se pintan ocupados —para eso es
           el piso— y no dicen de quién.
-        </p>
+        </FloorNote>
       )}
 
       {/* ── El mundo ───────────────────────────────────────────────────── */}
@@ -408,7 +463,7 @@ export function EduPlanoScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-plano__mundo">
+        <FloorWorldBox>
           <EduPlanoMundo
             key={campus.id}
             campus={campus}
@@ -429,7 +484,7 @@ export function EduPlanoScreen({
               onCerrar={() => setPick(null)}
             />
           )}
-        </div>
+        </FloorWorldBox>
       )}
 
       {/* ── El horario de hoy, debajo del plano ────────────────────────── */}
@@ -445,19 +500,16 @@ export function EduPlanoScreen({
         />
       )}
 
-      <ul className="edu-plano__leyenda">
-        {ESTADOS.map((s) => (
-          <li key={s}>
-            <span className={`edu-plano__bolita edu-plano__bolita--${s}`} aria-hidden="true" />
-            <b>{EDU_VIVA_STATE_LABELS[s]}</b> — {EDU_VIVA_STATE_DETAILS[s]}
-          </li>
-        ))}
-        <li className="edu-plano__leyenda-ayuda">
-          El piso se ve <strong>desde arriba</strong> y entero: arrastra para girarlo y usa la
-          rueda para acercarte. Clic en el paciente o en el estudiante de un sillón para abrir
-          su ficha.
-        </li>
-      </ul>
+      <FloorLegend
+        items={leyenda}
+        help={
+          <>
+            El piso se ve <strong>desde arriba</strong> y entero: arrastra para girarlo y usa la
+            rueda para acercarte. Clic en el paciente o en el estudiante de un sillón para abrir
+            su ficha.
+          </>
+        }
+      />
     </div>
   );
 }
@@ -507,6 +559,9 @@ function ModoBarra({
  * memoria —el mismo que pintó el sillón— y por eso no puede enseñar algo
  * que el plano no esté enseñando. El id del paciente viene de ahí y NO del
  * estado del mundo: en el mundo viajan colores y nombres, no ids.
+ *
+ * La CAJA es la compartida (`FloorPopCard`); lo de dentro —matrícula,
+ * caso, especialidad, docente— es del instituto y de nadie más.
  */
 function TarjetaSillon({
   pick,
@@ -536,105 +591,100 @@ function TarjetaSillon({
     !ocupado ? "sillon" : pick.part === "doctor" ? "estudiante" : "paciente";
 
   return (
-    <aside className={`edu-plano__tarjeta edu-plano__tarjeta--${estado}`} role="dialog" aria-label={`Sillón ${pick.name}`}>
-      <header className="edu-plano__thead">
-        <div>
-          <p className="edu-plano__tsillon">{card?.chairName ?? pick.name}</p>
-          <span className={`edu-plano__testado edu-plano__testado--${estado}`}>
-            {EDU_VIVA_STATE_LABELS[estado]}
-          </span>
-        </div>
-        <button type="button" className="edu-plano__tcerrar" onClick={onCerrar} aria-label="Cerrar">
-          <X size={16} aria-hidden="true" />
-        </button>
-      </header>
-
+    <FloorPopCard
+      variant="floating"
+      tone={estado}
+      title={card?.chairName ?? pick.name}
+      stateLabel={EDU_VIVA_STATE_LABELS[estado]}
+      onClose={onCerrar}
+      closeLabel="Cerrar"
+      ariaLabel={`Sillón ${pick.name}`}
+      // Debajo de la fila de botones del HUD del visor (pantalla completa),
+      // que vive en esta misma esquina y mide ~44 px.
+      style={{ top: 58, right: 14 }}
+    >
       {ocupado && card?.masked && (
-        <div className="edu-plano__tbody">
-          <p className="edu-plano__tnombre edu-plano__tnombre--mudo">{card.patient}</p>
-          <p className="edu-plano__tdato">
+        <>
+          <FloorPopName muted>{card.patient}</FloorPopName>
+          <FloorPopData>
             Fuera de tu supervisión. El sillón está ocupado —eso no es secreto— y de quién, sí.
-          </p>
-        </div>
+          </FloorPopData>
+        </>
       )}
 
       {ocupado && card && !card.masked && (
-        <div className="edu-plano__tbody">
+        <>
           {foco === "estudiante" ? (
             <>
-              <p className="edu-plano__tetiqueta">Estudiante</p>
-              <p className="edu-plano__tnombre">{card.student}</p>
+              <FloorPopLabel>Estudiante</FloorPopLabel>
+              <FloorPopName>{card.student}</FloorPopName>
               {card.studentMatricula && (
-                <p className="edu-plano__tdato">Matrícula {card.studentMatricula}</p>
+                <FloorPopData>Matrícula {card.studentMatricula}</FloorPopData>
               )}
-              <p className="edu-plano__tdato">
+              <FloorPopData>
                 Atendiendo a <strong>{card.patient}</strong>
                 {card.patientFolio ? ` · ${card.patientFolio}` : ""}
-              </p>
+              </FloorPopData>
             </>
           ) : (
             <>
-              <p className="edu-plano__tetiqueta">Paciente</p>
-              <p className="edu-plano__tnombre">{card.patient}</p>
-              {card.patientFolio && <p className="edu-plano__tdato">Folio {card.patientFolio}</p>}
-              {card.caseLabel && (
-                <p className="edu-plano__tdato">
-                  <span className="edu-plano__tclave">Caso</span> {card.caseLabel}
-                </p>
-              )}
+              <FloorPopLabel>Paciente</FloorPopLabel>
+              <FloorPopName>{card.patient}</FloorPopName>
+              {card.patientFolio && <FloorPopData>Folio {card.patientFolio}</FloorPopData>}
+              {card.caseLabel && <FloorPopData label="Caso">{card.caseLabel}</FloorPopData>}
               {card.specialty && (
-                <p className="edu-plano__tdato">
-                  <span className="edu-plano__tclave">Especialidad</span> {card.specialty}
-                </p>
+                <FloorPopData label="Especialidad">{card.specialty}</FloorPopData>
               )}
-              <p className="edu-plano__tdato">
-                <span className="edu-plano__tclave">Estudiante</span> {card.student}
+              <FloorPopData label="Estudiante">
+                {card.student}
                 {card.studentMatricula ? ` · ${card.studentMatricula}` : ""}
-              </p>
+              </FloorPopData>
             </>
           )}
 
-          <p className="edu-plano__tdato">
-            <span className="edu-plano__tclave">Docente</span>{" "}
+          <FloorPopData label="Docente">
             {card.supervisor ?? "sin docente asignado"}
-          </p>
-          <p className="edu-plano__treloj">
+          </FloorPopData>
+          <FloorPopClock>
             Desde {card.startLabel}
             {lleva !== null ? ` · lleva ${duracion(lleva)}` : ""}
-          </p>
+          </FloorPopClock>
 
           {card.patientId ? (
-            <Link className="edu-btn edu-btn--primary edu-btn--sm" href={`/instituto/pacientes/${card.patientId}`}>
+            <Link
+              className="edu-btn edu-btn--primary edu-btn--sm edu-plano__tcta"
+              href={`/instituto/pacientes/${card.patientId}`}
+            >
               Abrir ficha
             </Link>
           ) : null}
-        </div>
+        </>
       )}
 
       {!ocupado && (
-        <div className="edu-plano__tbody">
+        <>
           {card?.state === "proximo" && card.startLabel ? (
-            <p className="edu-plano__treloj edu-plano__treloj--fuerte">
+            <FloorPopClock strong>
               Próxima cita a las {card.startLabel}
               {card.startsInMin !== null ? ` · en ${duracion(card.startsInMin)}` : ""}
-            </p>
+            </FloorPopClock>
           ) : (
-            <p className="edu-plano__treloj">
+            <FloorPopClock>
               {card?.nextLabel
                 ? `Libre. Siguiente a las ${card.nextLabel}`
                 : `Libre. Sin nada en las próximas ${EDU_VIVA_PROXIMA_MIN} min`}
-            </p>
+            </FloorPopClock>
           )}
 
           {siguientes.length > 0 && (
-            <ul className="edu-plano__tlista">
+            <FloorPopList>
               {siguientes.slice(0, 4).map((s) => (
                 <li key={s.id}>
                   <b>{s.startLabel}</b> {s.patient ?? "—"}
                   {s.specialty ? ` · ${s.specialty}` : ""}
                 </li>
               ))}
-            </ul>
+            </FloorPopList>
           )}
 
           {/* La pregunta que hace quien mira un sillón libre es "¿puedo
@@ -642,14 +692,14 @@ function TarjetaSillon({
               ESE sillón. No se agenda desde aquí —esto es un tablero, no un
               formulario— pero el salto es de un clic y llega filtrado. */}
           <Link
-            className="edu-btn edu-btn--ghost edu-btn--sm"
+            className="edu-btn edu-btn--ghost edu-btn--sm edu-plano__tcta"
             href={`/instituto/agenda?sillon=${encodeURIComponent(pick.resourceId)}`}
           >
             Ver este sillón en la agenda
           </Link>
-        </div>
+        </>
       )}
-    </aside>
+    </FloorPopCard>
   );
 }
 
@@ -689,56 +739,43 @@ function Horario({
         </p>
       </header>
 
-      <div className="edu-plano__hgrid">
+      <FloorChairGrid>
         {chairs.map((c) => {
           const lista = porSillon.get(c.id) ?? [];
-          const card = tarjetas.get(c.id);
+          const estado = tarjetas.get(c.id)?.state ?? "libre";
           return (
-            <article key={c.id} className="edu-plano__hsillon">
-              <header className="edu-plano__hsillonhead">
-                <button
-                  type="button"
-                  className="edu-plano__hnombre"
-                  onClick={() => onVerSillon(c.id, c.name)}
-                >
-                  <span className="edu-plano__hnum">{c.number}</span>
-                  {c.name}
-                </button>
-                <span
-                  className={`edu-plano__hbolita edu-plano__hbolita--${card?.state ?? "libre"}`}
-                  aria-hidden="true"
-                />
-              </header>
-
+            <FloorChairCard
+              key={c.id}
+              name={c.name}
+              prefix={<FloorChairNumber>{c.number}</FloorChairNumber>}
+              stateLabel={EDU_VIVA_STATE_LABELS[estado]}
+              tone={estado}
+              onOpen={() => onVerSillon(c.id, c.name)}
+              openTitle={`Ver ${c.name} en el plano`}
+            >
               {lista.length === 0 ? (
-                <p className="edu-plano__hvacio">Sin nada más hoy</p>
+                <FloorChairEmpty>Sin nada más hoy</FloorChairEmpty>
               ) : (
-                <ol className="edu-plano__hlista">
+                <FloorSlotList>
                   {lista.map((s) => (
-                    <li
+                    <FloorSlot
                       key={s.id}
-                      className={`edu-plano__hfila${s.enCurso ? " edu-plano__hfila--curso" : ""}`}
-                    >
-                      <span className="edu-plano__hhora">
-                        {s.startLabel}
-                        <span className="edu-plano__hfin">–{s.endLabel}</span>
-                      </span>
-                      <span className="edu-plano__hquien">
-                        <span className="edu-plano__hpaciente">{s.patient ?? "—"}</span>
-                        {s.student && <span className="edu-plano__hest">{s.student}</span>}
-                        {s.masked && <span className="edu-plano__hest">Fuera de tu supervisión</span>}
-                      </span>
-                      <span className={`edu-tag edu-plano__hestado edu-plano__hestado--${s.status.toLowerCase()}`}>
-                        {EDU_APPOINTMENT_STATUS_LABELS[s.status]}
-                      </span>
-                    </li>
+                      start={s.startLabel}
+                      end={s.endLabel}
+                      active={s.enCurso}
+                      primary={s.patient ?? "—"}
+                      secondary={
+                        s.masked ? "Fuera de tu supervisión" : (s.student ?? undefined)
+                      }
+                      tag={EDU_APPOINTMENT_STATUS_LABELS[s.status]}
+                    />
                   ))}
-                </ol>
+                </FloorSlotList>
               )}
-            </article>
+            </FloorChairCard>
           );
         })}
-      </div>
+      </FloorChairGrid>
     </section>
   );
 }
