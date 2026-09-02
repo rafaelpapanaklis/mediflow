@@ -1,4 +1,404 @@
 ═══════════════════════════════════════════════════════════════════════════
+## EDU-LANDING — /instituciones, la landing pública del vertical Institucional ✅ (2026-09-01) · rama feat/edu-landing → PR, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: ce732a5a · PR: #162 (https://github.com/rafaelpapanaklis/mediflow/pull/162) · BUILD EXIT 0 · `npm run test:edu` EXIT 0 · GUARDIA EXIT 0
+SQL: **ninguno**. Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+
+OBJETIVO: la página que convierte a una escuela de especialidades odontológicas en cliente.
+Una sola acción —escribirle por WhatsApp al manager asignado—, cero precios, y cada afirmación
+de producto comprobada contra el código antes de escribirla.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · QUÉ SE CONSTRUYÓ
+
+Ruta pública nueva `/instituciones`, ESTÁTICA (`○` en la tabla de rutas), 3.99 kB de página y
+103 kB de JS de primera carga — **three.js NO viaja en esa cifra**: vive en trozos aparte que
+solo se piden cuando hay alguien mirando la escena.
+
+    src/app/instituciones/page.tsx              la página (metadata + JSON-LD + secciones)
+    src/app/instituciones/opengraph-image.tsx   imagen social 1200×630 (Edge)
+    src/app/instituciones/twitter-image.tsx     la misma pieza, etiqueta de X
+    src/components/public/instituciones/        18 archivos: nav, portada, secciones, plan,
+                                                preguntas, cierre, pie, maquetas, las tres
+                                                escenas 3D con su puerta y sus respaldos, CSS
+    src/lib/edu/marketing.ts                    TODO el texto y TODAS las promesas, con los
+                                                archivos donde se verificó cada una
+    src/lib/edu/seo.ts                          eduStaticSitemapPaths() + rutas NO indexables
+    src/lib/edu/__tests__/edu-landing.test.ts   26 pruebas que vigilan lo de arriba
+
+Compartido tocado, UNA sola cosa: `src/app/sitemap.ts` — un import y un bloque aditivo de seis
+líneas al final, calcado del que ya tiene barbería. Nada del dental cambia.
+
+Propios del vertical que se ampliaron:
+  · `scripts/edu-guard.cjs`  → los dos prefijos públicos nuevos en OWN_PREFIXES y
+    `src/app/sitemap.ts` en SHARED_FILES (antes no estaba: el vertical nunca había tocado el
+    sitemap, y sin declararlo el guard lo marcaba PROHIBIDO, que es justo lo que debía hacer).
+  · `scripts/edu-tests.cjs` → las dos raíces nuevas en ROOTS, que es lo que su propio aviso
+    pide hacer cuando el vertical estrena carpeta.
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · LA REGLA DE ESTA PÁGINA: NINGUNA PROMESA SIN ARCHIVO
+
+Cada afirmación de producto vive en `src/lib/edu/marketing.ts` como un `EduClaim` con la lista
+de archivos donde se comprobó (`verifiedIn`), igual que hizo la landing de barberías. La prueba
+`edu-landing.test.ts` exige que esos archivos EXISTAN: el día que alguien borre o renombre un
+módulo del vertical, la promesa que lo citaba deja de pasar la prueba **antes** de que la
+página mienta.
+
+Y al revés, que es la mitad que faltaba en barbería: **una promesa sin archivos es un fallo**,
+salvo que se declare `contrato: true`. Esa es la única puerta, y por ella pasan exactamente
+cuatro cosas —el almacenamiento incluido, la IA por contrato, el manager asignado y cómo se
+contrata—, todas términos comerciales que fijó la dirección de DaleControl, no funciones. La
+prueba fija esa lista de cuatro: un quinto renglón sin código no entra en silencio.
+
+En total: **50 afirmaciones**, **56 archivos distintos citados**. La tabla completa está en el
+apartado 8.
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · LO QUE LA PÁGINA NO PUEDE DECIR, Y NO PUEDE DECIRLO AUNQUE ALGUIEN LO INTENTE
+
+`EDU_LANDING_PALABRAS_PROHIBIDAS` es una lista de patrones con su motivo escrito, y la prueba
+la busca en TODOS los archivos de la landing —código y comentarios incluidos—:
+
+  · certificaciones que no existen (la norma del expediente electrónico, ISO 27001);
+  · facturación fiscal, que en este vertical todavía no emite un comprobante de verdad;
+  · infraestructura ("AWS"), que ni es argumento ni es cierta;
+  · "quién está conectado": el producto NO registra presencia y el panel de dirección lo dice
+    por escrito (`src/lib/edu/direccion-core.ts`); un contador de sesiones abiertas se leería
+    como gente en la clínica y sería falso justo cuando importa;
+  · la unidad radiológica: el visor trabaja con VALORES RELATIVOS DE DENSIDAD y nombrarla
+    implicaría una calibración que este producto no hace;
+  · el marketplace y los proveedores, que no son de este vertical;
+  · "Ola N", que es lenguaje interno del repositorio.
+
+Y el vocabulario: se dice **estudiante** (nunca "alumno") y **especialidad** (nunca
+"programa"). La prueba lo comprueba sobre los archivos y, además, recorriendo el objeto de copy
+entero — que es todo lo que se pinta.
+
+**CERO PRECIOS.** Ni un signo de pesos con cifra, ni una cantidad en moneda, en ningún archivo
+ni en ningún texto. La letra chica del plan dice lo que sí se puede decir: "Licencia anual por
+institución. Cotización según tamaño de la escuela." Hasta la maqueta de la pantalla de caja
+—que enseña la tarifa de estudiante— va SIN importes: en la pantalla real el precio lo pone el
+servidor, y ésa es justamente la promesa.
+
+Tampoco entra nada de lo que todavía no está en producción: ni el tablero de la clínica en
+vivo, ni la agenda en rejilla, ni las gráficas del panel de dirección, ni el visor nuevo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · EL CONTACTO: UN MANAGER, UN NÚMERO, UN SOLO SITIO
+
+Toda la página vende una acción. El botón aparece cuatro veces —barra, portada, plan y
+cierre— y las cuatro son el mismo componente (`whatsapp.tsx`), que compone el enlace con
+`eduManagerWaHref()`: `wa.me` + E.164 **sin** el "+" + el texto pre-escrito codificado, la
+convención que ya usa la landing dental. El evento de conversión de GA4 (`whatsapp_click`)
+viaja con `send_to` explícito y con la posición del clic, para poder distinguir cuál de los
+cuatro botones convierte.
+
+    EDU_MANAGER = { nombre: "Rafael", numeroE164: "529992602093",
+                    textoPrevio: "Hola Rafael, soy de <escuela> y quiero una demo de
+                                  DaleControl Institucional." }
+
+El hueco `<escuela>` se queda a la vista a propósito: un mensaje que ya viene relleno con una
+escuela inventada es peor que uno con un hueco evidente.
+
+🔴 El número vive en `EDU_MANAGER` y en ningún otro sitio. El teléfono legible
+(`+52 999 260 2093`) se DERIVA del E.164 con `eduManagerDisplayPhone()`, y una prueba busca las
+dos formas en todos los archivos de la landing y falla si alguien las teclea a mano — que es
+como se acaba con un botón que marca a un número y una letra chica que enseña otro.
+
+Sin formularios y sin backend nuevo: no hay ni un endpoint, ni una tabla, ni una variable de
+entorno más.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · LAS TRES ESCENAS 3D
+
+Tres escenas, **todas procedurales**: ni un modelo, ni un mapa de entorno, ni un byte en
+`/public`. Una prueba lo vigila (`escenas 3D: …ninguna pide un archivo pesado`).
+
+  1. **Portada · la arcada.** Dieciséis dientes sobre una parábola: un perfil torneado
+     (`LatheGeometry`) repetido con `InstancedMesh` —una sola llamada de dibujo para los
+     dieciséis— y la encía como un tubo sobre la MISMA parábola. Gira despacio sobre su eje.
+  2. **Expediente · el volumen.** Un campo de densidad de 64³ calculado con una fórmula
+     (herradura + coronas + raíces + hueso), metido en una `Data3DTexture` y dibujado
+     **lanzando rayos** con el mapa de color óseo del visor del producto — marrón oscuro a
+     marfil— y una lámina azul que lo recorre, como la cruz del visor sobre los cortes.
+     🔴 Es una RECREACIÓN: no se carga ningún estudio, ni real ni de ejemplo. Una tomografía
+     es de una persona y no se publica en una página de ventas.
+  3. **Sedes · la clínica isométrica.** Cámara ORTOGRÁFICA a 45° de azimut y **30° de
+     elevación**, que no se eligió a ojo: el plano de piso del producto proyecta
+     `x = (col − fila)·C`, `y = (col + fila)·C/2`, o sea dos de ancho por uno de alto, y esa
+     razón sale exactamente con sen(elevación) = 0,5. La escena y el plano del panel dibujan
+     el MISMO piso. Seis sillones —pedestal, asiento, respaldo reclinado, cabezal y el brazo
+     de la lámpara— en cuatro `InstancedMesh`.
+
+**Los respaldos estáticos no son marcadores de posición: son dibujos terminados.** Viajan en
+el HTML, son lo primero que ve todo el mundo y lo que ve PARA SIEMPRE quien pidió menos
+movimiento, quien no tiene WebGL y quien nunca desplaza hasta la sección. El de la clínica usa
+`toScreen`, `pts` y la constante `C` de `src/lib/floor-plan/iso.ts` —la retícula real del
+producto, importada, no copiada—, así que el día que cambie la proyección cambia con ella.
+
+**La puerta** (`escena-gate.tsx`) descarga three.js sólo cuando se cumplen cuatro cosas, en
+este orden: (1) la máquina puede —hay WebGL y no es un pintor por software, no hay
+`prefers-reduced-motion`, no hay ahorro de datos ni red 2G/3G, hay memoria y núcleos—;
+(2) la caja de la escena se acerca a la pantalla (observador de intersección con 240 px de
+margen); (3) la página ya disparó `load` y hubo una **señal de que hay una persona** (mover el
+puntero, desplazar, tocar, una tecla); (4) el hilo está ocioso. Si algo falla al montar
+—contexto perdido, sombreador que no compila, WebGL 2 ausente— se quita el atributo y el dibujo
+estático, que nunca salió del DOM, vuelve a verse.
+
+La caja tiene proporción fija en el CSS, así que montar el lienzo **no mueve un píxel**: el
+desplazamiento acumulado de diseño es 0 con escena y sin ella.
+
+Y el arranque va en tareas cortas —armar, ceder el hilo, `compileAsync`, primer cuadro—, no se
+genera entorno de reflejos (PMREM cuesta cientos de ms y estas escenas son mate) y el bucle
+sólo dibuja con la caja a la vista y la pestaña visible.
+
+**Dos errores que sólo aparecieron al abrirlo en el navegador, y que estaban en el código:**
+
+  · **La arcada tenía los dientes 4,6 veces más grandes de lo que le tocaba.** Un diente medía
+    0,7 de ancho contra una media arcada de 1,52 —un 46%—, cuando en una boca de adulto un
+    diente es el 29% de la media anchura (8 mm contra 55 de arcada). Dieciséis de ésos no caben
+    en el arco: se encimaban, y la cámara tenía que alejarse tanto que la escena parecía una
+    fila de molares gigantes. Se corrigió con dos factores medidos sobre la proporción real
+    (`ANCHO_DIENTE`, `LARGO_DIENTE`) y el encuadre se recalculó sobre la caja de verdad.
+  · **El sombreador del volumen NUNCA compiló.** En GLSL 3, three.js **no** define
+    `gl_FragColor` para un `ShaderMaterial` propio (ese atajo sólo lo pone para sus materiales
+    de fábrica), así que el fragmento moría con
+    `ERROR: 'gl_FragColor' : undeclared identifier`. Y como el fallo salta al ENLAZAR el
+    programa y no al llamar a `compileAsync`, **la escena se daba por lista y pintaba la caja
+    vacía**: se veía el alambre del cubo y nada dentro. Se declara la salida a mano
+    (`out vec4 salida`) y, ya de paso, se deshace la premultiplicación del alfa antes de
+    entregar el color, que si no el hueso sale al cuadrado de oscuro.
+
+También se quitó `THREE.Clock`, que está marcada como obsoleta en la versión del repo y avisaba
+por consola en cada montaje: el tiempo entre cuadros son tres líneas.
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · IDENTIDAD VISUAL
+
+**Es una ESCUELA, no una barbería ni un consultorio.** El dental es violeta y de producto;
+barberías es caramelo sobre negro cálido y de oficio. Esto es índigo universitario sobre papel,
+con una **regla dorada de diploma** bajo la barra, numerales romanos en los antetítulos y
+titulares en **romana** (Source Serif 4). Serio, con aire, y sin un solo degradado morado de
+plantilla.
+
+  · **El índigo son EXACTAMENTE los tokens del panel del vertical**
+    (`src/app/instituto/edu-theme.css`, del `--edu-50` al `--edu-950`). Se COPIAN, no se
+    importan: aquel archivo escopa todo bajo `.edu-shell`/`.edu-auth`, es del panel, y traerlo
+    a una página pública ataría la landing a los cambios de una superficie privada. Que los
+    números coincidan es lo que hace que la página y el producto se sientan lo mismo.
+  · **El birrete** de la marca es el mismo glifo que lleva el panel en su cabecera
+    (`GraduationCap` de lucide, igual que `src/components/edu/edu-shell.tsx`).
+  · **Tipografía:** Inter en los MISMOS pesos que el home del sitio (400–800) — mismos
+    archivos, misma caché — y Source Serif 4 (600, redonda y cursiva) como voz propia del
+    vertical. Las dos se autoalojan; `display: fallback`, no `swap`.
+  · **Todo el CSS cuelga de `.dcei`** y una prueba lo comprueba con un analizador de llaves de
+    verdad, no con una expresión regular por líneas: no hay un solo selector que se escape del
+    scope, ni dentro de las `@container`.
+
+**Maquetas de pantalla, dibujadas en HTML y CSS** (ni capturas ni ilustraciones de banco):
+la **nota clínica firmada** con su sello y el aviso de que ya no se edita; la **bandeja de
+autorizaciones** con los tres estados —pendiente, autorizada y *vencida porque se editó lo
+firmado*—; y la **caja resolviendo la tarifa de estudiante**, con el motivo ("Lo trajo la
+estudiante Sofía Ibarra") y **sin un solo importe**, porque el importe lo pone el servidor y
+ésa es justamente la promesa.
+
+**Responsive con `@container`** (`.dcei` es el contenedor), probado a 390, 768 y 1280. En
+teléfono los botones ocupan el ancho, la barra deja marca + WhatsApp, las anclas aparecen a
+partir de 900 px de contenedor y la retícula pasa de 1 a 2 y a 3-4 columnas. La barra es
+`sticky` y no `fixed` a propósito: `container-type` crea contención y se tragaría un elemento
+fijo.
+
+**♿ Contraste medido, no supuesto**, sobre los fondos reales — sobre papel `#f7f9fd`: tinta
+15,4 · tinta-2 7,6 · tinta-3 5,0 · índigo-600 7,6; sobre índigo `#121a2e`: 14,5 / 9,7 / oro
+8,3. Dos correcciones salieron de medir en vez de mirar:
+
+  · el botón de WhatsApp usa `#0f7c6f` y no el verde de marca `#128c7e`, que sobre blanco da
+    **4,19** y NO pasa AA con texto de 16 px en negrita; el oscuro da 5,2;
+  · el número de cada paso pasó de oro-500 a **oro-600**: el 500 daba 3,01 sobre blanco, que es
+    el mínimo EXACTO de texto grande, y el 600 da 4,97.
+
+Y el numeral gigante del fondo de "el problema" dejó de ser un nodo de texto: ahora es un
+contador en un pseudo-elemento. A ese tamaño y a ese tono es decoración pura, pero **escrito
+como texto lo mide el auditor de contraste y lo reprueba con razón** — no hay forma de que un
+30 px casi del color del papel pase AA.
+
+═══════════════════════════════════════════════════════════════════════════
+### 7 · GATES
+
+**1 · `npm run build` → exit 0**, completo y SIN pipes
+(`NODE_OPTIONS=--max-old-space-size=8192`). **464/464 páginas** generadas y la ruta en la tabla:
+
+    ├ ○ /instituciones                             3.97 kB         103 kB
+    ├ ƒ /instituciones/opengraph-image              0 B                0 B
+    ├ ƒ /instituciones/twitter-image                0 B                0 B
+
+`○` = ESTÁTICA. Los 103 kB de primera carga **no incluyen three.js**: vive en trozos aparte que
+solo se piden cuando hay alguien mirando la escena. Los únicos avisos son los PREEXISTENTES y
+ajenos (el `Critical dependency` de `file-type`, el aviso de runtime edge de las dos imágenes
+sociales y tres clases ambiguas de Tailwind). El ruido de `DATABASE_URL` es el de siempre
+(worktree sin `.env`) y no afecta al exit.
+
+`npx tsc --noEmit` sobre el proyecto entero: **cero errores nuevos**. Los 8 que salen son los
+PREEXISTENTES de `src/lib/barber/__tests__/**` y `edu-theme.test.ts`, que `next build` no
+compila.
+
+**2 · `npm run test:edu` → exit 0** — **30 archivos descubiertos, 960 pruebas, 960 pass, 0 fail** (908 ms). Las 27 nuevas son las
+de la landing; las otras 933 son las que ya había y siguen verdes. El corredor las descubre
+solo porque `src/lib/edu/__tests__/` ya era una de sus raíces — y aun así se le añadieron las
+dos raíces públicas nuevas, que es lo que su propio aviso pide para cuando una ola futura
+ponga una prueba al lado de su componente.
+
+**3 · Guardia → exit 0**
+
+    EDU_GUARD_SHARED="src/app/sitemap.ts,ORQUESTA.md" node scripts/edu-guard.cjs
+
+**27 archivos** contra `origin/main`: **26 propios** del vertical (los dos árboles públicos
+nuevos, los tres módulos de `src/lib/edu/`, la prueba y los dos scripts) y **1 compartido
+declarado** (`src/app/sitemap.ts`). **Cero prohibidos y cero compartidos sin declarar**: ni
+una línea del dental, de barbería ni de inmuebles.
+
+**4 · Lighthouse, servidor de producción local (`npm start`, build real)**
+
+| Corrida | Rend. | Acces. | Prácticas | SEO | FCP | LCP | TBT | CLS |
+|---|---|---|---|---|---|---|---|---|
+| **Móvil · la página tal como se sirve** | **75** | **100** | 75 | **100** | 2,3 s | 4,2 s | 380 ms | **0** |
+| Móvil · con las escenas 3D FORZADAS a cargar | 79 | 100 | — | — | 2,4 s | 3,8 s | 310 ms | 0 |
+| Móvil · sin las etiquetas de marketing del sitio | 79–82 | 100 | — | — | 2,4 s | 3,8 s | 310 ms | 0 |
+| **Escritorio** | **99** | **100** | 74 | **100** | 0,5 s | 0,8 s | 30 ms | **0** |
+| *Referencia: `/barberias`, en producción hoy* | *65* | *100* | *75* | *92* | *3,4 s* | *5,1 s* | *110 ms* | *0,184* |
+
+Móvil son tres corridas seguidas sobre el build final (74 / 80 / 75); la tabla trae la
+mediana. La dispersión es la máquina, no la página: el servidor de producción, Chrome y las
+propias corridas de Lighthouse comparten el mismo equipo.
+
+🔴 **RENDIMIENTO MÓVIL: 75, NO 90. Y no es la landing.** El encargo pedía ≥ 90 y hay que
+decirlo claro, con el número medido y con dónde está el techo:
+
+  · De los **667 kB de JavaScript** que carga la página, **500 kB son etiquetas de marketing
+    del SITIO** que pone el layout raíz en TODA página pública: Google Tag Manager dos veces
+    (GA4 170 kB + Google Ads 158 kB) y el píxel de Meta (106 + 66 kB). Lo propio de la página
+    son 164 kB, y de ésos su trozo son **4 kB**.
+  · Bloqueando esas etiquetas, la misma página sube a **79–82**. El resto es el armazón
+    (React + Next + el layout), no el contenido.
+  · **`/barberias`, que está en producción hoy, saca 65** en la misma máquina y el mismo
+    servidor, con los mismos 665 kB. Esta página saca 10 puntos más que la landing viva.
+  · **Las escenas 3D NO son el problema, y eso está medido**: con `?escenas=ya` three.js se
+    descarga de verdad durante la auditoría (el JavaScript pasa de 164 a **356 kB**) y el
+    resultado **no se mueve** — 79 con y sin. Arrancan después del `load`, en hilo ocioso y
+    fuera de la ventana que Lighthouse mide.
+
+Lo único que subiría el número es **diferir las etiquetas de marketing en el layout raíz**, que
+es un archivo compartido, vivo en producción, del dental — fuera de este vertical y una
+decisión de quien lleva la medición, no de esta rama.
+
+Lo que sí se hizo, y bajó de 606 a 394 ms el tiempo de disposición: **`content-visibility: auto`
+con `contain-intrinsic-size`** en todas las secciones menos la portada. En una página de
+17 000 px eso es lo que evita medir nueve secciones que nadie está viendo.
+
+**Accesibilidad 100 y CLS 0** — y las dos correcciones que hicieron falta para llegar ahí salieron
+de la propia auditoría; están contadas en el apartado 6. `practicas: 75` es idéntico en
+`/barberias`: son cookies de terceros y errores de consola de las etiquetas de Vercel, que en
+localhost no cargan.
+
+**5 · El clic de WhatsApp** abre
+`https://wa.me/529992602093?text=Hola%20Rafael%2C%20soy%20de%20%3Cescuela%3E%20y%20quiero%20una%20demo%20de%20DaleControl%20Institucional.`
+— E.164 sin el "+", texto pre-escrito, `target="_blank"` con `rel="noopener noreferrer"` y el
+evento `whatsapp_click` con `send_to` y la posición del botón.
+
+═══════════════════════════════════════════════════════════════════════════
+### 8 · FRASE → ARCHIVO VERIFICADO
+
+| # | Dónde | Lo que dice | Verificado en |
+|---|-------|-------------|---------------|
+| 1 | Cómo funciona · Agenda | El paciente se cita en un sillón concreto, de una sede concreta, con el estudiante que lo va a atender y el docente que responde por él. Los… | `src/lib/edu/agenda.ts`<br>`src/lib/edu/agenda-core.ts`<br>`src/lib/edu/sillones.ts`<br>`src/app/instituto/(panel)/agenda/page.tsx` |
+| 2 | Cómo funciona · Tamizaje | La valoración inicial decide quién trata a quién: asigna el paciente a un estudiante y le abre su caso. Es una decisión académica, así que solo la… | `src/app/api/instituto/tamizaje/route.ts`<br>`src/lib/edu/casos.ts`<br>`src/lib/edu/permissions.ts` |
+| 3 | Cómo funciona · Caso | Todo el tratamiento cuelga de un caso: la especialidad, el procedimiento, las notas, los estudios y las calificaciones. El caso tiene un estudiante… | `src/lib/edu/casos.ts`<br>`src/lib/edu/casos-core.ts`<br>`src/lib/edu/types.ts` |
+| 4 | Cómo funciona · Firma | Antes de empezar a tratar, el docente firma el plan desde su teléfono; antes de cerrar, firma el alta. Sin esa firma el caso no avanza, y lo que se… | `src/lib/edu/autorizaciones.ts`<br>`src/lib/edu/autorizaciones-core.ts`<br>`src/lib/edu/autorizaciones-hash.ts` |
+| 5 | Cómo funciona · Cobro | En caja se elige al paciente y el servidor pone su lista de precios según quién lo trajo a la clínica. Se emite el cobro, se registra el pago y todo… | `src/lib/edu/tarifas.ts`<br>`src/lib/edu/caja.ts`<br>`src/lib/edu/dinero-core.ts` |
+| 6 | Por rol · Dirección VE | La escuela entera: el padrón, la clínica, el expediente, el dinero y el avance académico de cada generación, del instituto completo o de una sede a… | `src/lib/edu/visibility.ts`<br>`src/lib/edu/permissions.ts` |
+| 7 | Por rol · Dirección NO VE | Nada: es el único rol sin recorte, y por eso se da con cuentagotas. Todo lo demás del panel se reparte por permisos, no por confianza. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/permissions.ts` |
+| 8 | Por rol · Docente VE | A los estudiantes que supervisa con asignación vigente, y a sus pacientes, citas y casos. Firma las autorizaciones y expide las recetas con su cédula. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/padron-core.ts`<br>`src/lib/edu/recetas-core.ts` |
+| 9 | Por rol · Docente NO VE | A los estudiantes de otro docente. Y cuando entrega su grupo, deja de ver a esos pacientes el mismo día: una asignación vencida no da acceso. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/padron-core.ts`<br>`src/lib/edu/recetas-core.ts` |
+| 10 | Por rol · Estudiante VE | Solo sus casos, sus pacientes y sus citas. Escribe la nota, propone la receta, manda a firmar y ve su propio avance contra los requisitos de su… | `src/lib/edu/visibility.ts`<br>`src/lib/edu/evaluacion.ts` |
+| 11 | Por rol · Estudiante NO VE | A los pacientes de sus compañeros. Tampoco ve el dinero: ni el precio, ni el cobro, ni el saldo de la persona que está atendiendo. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/evaluacion.ts` |
+| 12 | Por rol · Caja VE | A todos los pacientes y toda la agenda, porque recibe, agenda y cobra. Abre turno, emite cobros y recibos, registra pagos y cierra el corte. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/expediente-core.ts`<br>`src/lib/edu/caja.ts` |
+| 13 | Por rol · Caja NO VE | El expediente clínico. Ni una nota, ni el odontograma, ni una radiografía: caja cobra, no abre historia clínica. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/expediente-core.ts`<br>`src/lib/edu/caja.ts` |
+| 14 | Por rol · El padrón académico | Estudiantes con su matrícula, generaciones con sus fechas, especialidades y el equipo docente. La supervisión no se sobrescribe cuando un docente… | `src/lib/edu/padron.ts`<br>`src/lib/edu/padron-core.ts`<br>`src/lib/edu/equipo.ts` |
+| 15 | Expediente · Nota firmada e inmutable | Una nota clínica firmada no se edita: ni el texto, ni el diagnóstico, ni la cita a la que apunta, ni por la dirección del instituto. Si algo estaba… | `src/lib/edu/expediente-core.ts`<br>`src/lib/edu/expediente.ts` |
+| 16 | Expediente · Vacío no quiere decir «sin alergias» | Los antecedentes tienen tres estados y no dos: nadie preguntó todavía, se preguntó y no refiere nada, o hay datos capturados. La ficha avisa en… | `src/lib/edu/pacientes-core.ts`<br>`src/lib/edu/pacientes.ts` |
+| 17 | Expediente · Odontograma e historial | El odontograma del paciente, diente por diente y cara por cara, con el historial de lo que se le fue haciendo a lo largo de los semestres y de los… | `src/lib/edu/odontograma.ts`<br>`src/lib/edu/odontograma-core.ts` |
+| 18 | Expediente · Consentimiento con tres firmas | La carta dice con todas sus letras que quien va a atender es un estudiante y quién lo supervisa. El paciente firma desde su propio teléfono con una… | `src/lib/edu/consentimientos-core.ts`<br>`src/lib/edu/consentimientos.ts`<br>`src/components/edu/consentimiento-publico.tsx` |
+| 19 | Expediente · Tomografías de hasta dos gigabytes | Los estudios se suben directo al almacenamiento, sin pasar por un formulario que se cae a los cien megabytes: hasta 2 GB por archivo. Tomografías en… | `src/lib/edu/estudios-core.ts`<br>`src/lib/edu/estudios.ts`<br>`src/lib/edu/storage.ts`<br>`src/components/edu/expediente/edu-upload-client.ts` |
+| 20 | Expediente · Visor con cortes y volumen | La tomografía se abre dentro del expediente: los tres cortes —axial, coronal y sagital— con la cruz sincronizada en milímetros, medición sobre la… | `src/components/edu/estudios/cbct-viewer.tsx`<br>`src/components/edu/estudios/modelo-3d-viewer.tsx`<br>`src/components/edu/estudios/visor-shell.tsx` |
+| 21 | Caja y evaluacion · En caja nadie teclea precios | Qué lista de precios le toca a un paciente lo decide el servidor a partir de quién lo trajo a la clínica, y cuánto cuesta cada procedimiento lo lee… | `src/lib/edu/tarifas.ts`<br>`src/lib/edu/caja.ts` |
+| 22 | Caja y evaluacion · Turnos, corte y recibos | Se abre turno, se cobra, se registran los pagos y se cierra el corte con lo que de verdad pasó por ese turno. Un cobro cancelado queda en cero y… | `src/lib/edu/caja.ts`<br>`src/lib/edu/dinero-core.ts` |
+| 23 | Caja y evaluacion · Pagos a meses que suman exacto | Un tratamiento largo se parte en mensualidades y la diferencia de centavos va entera en la primera, para que la suma dé el saldo al centavo. Una… | `src/lib/edu/pagos-core.ts`<br>`src/lib/edu/pagos.ts` |
+| 24 | Caja y evaluacion · Rúbricas y calificaciones | Cada caso se califica con la rúbrica de su especialidad, con criterios que pesan lo que la escuela decida y una comprobación de que los pesos suman… | `src/lib/edu/evaluacion-core.ts`<br>`src/lib/edu/rubricas.ts` |
+| 25 | Caja y evaluacion · Requisitos, horas y bitácora | Cuántos casos de cada tipo lleva un estudiante contra lo que su especialidad le exige, cuántas horas de clínica acumula y qué hizo cada día. El… | `src/lib/edu/evaluacion-core.ts`<br>`src/lib/edu/evaluacion.ts`<br>`src/components/edu/evaluacion/bitacora-screen.tsx` |
+| 26 | Caja y evaluacion · Cuando un estudiante rota o se gradúa | Sus casos abiertos se traspasan: el viejo se cierra como transferido, el nuevo apunta al viejo con el motivo y quién lo hizo, y las citas futuras… | `src/lib/edu/traspasos.ts`<br>`src/lib/edu/visibility.ts` |
+| 27 | Sedes · Sedes ilimitadas, sillones por sede | Das de alta las sedes que tengas y los sillones de cada una. El número del sillón es único dentro de su sede, porque es el que está pintado en esa… | `src/lib/edu/campus.ts`<br>`src/lib/edu/campus-core.ts`<br>`src/lib/edu/sillones.ts` |
+| 28 | Sedes · Agenda y panel por sede | Un selector cambia el panel entero a la sede que estás mirando, y a quien solo trabaja en un campus se le puede dar acceso a ese. Lo que se exporta… | `src/lib/edu/visibility.ts`<br>`src/components/edu/sedes/sede-selector.tsx`<br>`src/lib/edu/direccion-core.ts` |
+| 29 | Sedes · Indicadores para la dirección | Hoy, la semana, el mes o el rango que elijas: pacientes atendidos, ocupación de cada sillón, avance por especialidad con su semáforo y el desglose… | `src/lib/edu/direccion.ts`<br>`src/lib/edu/direccion-core.ts` |
+| 30 | Sedes · WhatsApp con el número de la escuela | Los recordatorios de cita salen del número de WhatsApp de la propia institución, con sus credenciales guardadas cifradas y con plantillas aprobadas… | `src/lib/edu/whatsapp.ts`<br>`src/lib/edu/whatsapp-core.ts`<br>`src/lib/edu/recordatorios.ts` |
+| 31 | Sedes · Recetas con cédula | Un estudiante de especialidad no tiene cédula profesional, así que propone la receta y el docente la revisa, la firma y ahí queda expedida: con los… | `src/lib/edu/recetas-core.ts`<br>`src/lib/edu/recetas.ts`<br>`src/lib/edu/receta-pdf.tsx` |
+| 32 | Sedes · IA de apoyo, con cupo por escuela | Dictado de la nota clínica y una segunda lectura de la radiografía, con cupo mensual por institución y el gasto a la vista. El análisis es apoyo… | `src/lib/edu/ia-core.ts`<br>`src/lib/edu/ia.ts`<br>`src/lib/edu/ia-cupo.ts` |
+| 33 | El plan | Sedes ilimitadas y los sillones que tenga cada una | `src/lib/edu/campus.ts`<br>`src/lib/edu/sillones.ts` |
+| 34 | El plan | Los cuatro roles con aislamiento real: Dirección, Docente, Estudiante y Caja | `src/lib/edu/visibility.ts`<br>`src/lib/edu/permissions.ts` |
+| 35 | El plan | Expediente clínico completo, imagenología en tres dimensiones y consentimientos | `src/lib/edu/expediente.ts`<br>`src/lib/edu/estudios.ts`<br>`src/lib/edu/consentimientos.ts` |
+| 36 | El plan | Caja con turnos y corte, pagos a meses y evaluación académica | `src/lib/edu/caja.ts`<br>`src/lib/edu/pagos.ts`<br>`src/lib/edu/evaluacion.ts` |
+| 37 | El plan | WhatsApp con el número de la propia escuela | `src/lib/edu/whatsapp.ts` |
+| 38 | El plan | 5 TB de almacenamiento incluidos, con espacio adicional disponible | **término de contrato** (no es una función: lo fijó la dirección de DaleControl) |
+| 39 | El plan | IA clínica disponible según contrato | **término de contrato** (no es una función: lo fijó la dirección de DaleControl) |
+| 40 | El plan | Un manager asignado, con nombre y teléfono | **término de contrato** (no es una función: lo fijó la dirección de DaleControl) |
+| 41 | Pregunta · ¿Mis estudiantes pueden ver a los pacientes de los demás? | No. Un estudiante ve solo sus casos, sus pacientes y sus citas, y eso no es una casilla de configuración: el filtro se arma en un único archivo por… | `src/lib/edu/visibility.ts` |
+| 42 | Pregunta · ¿Qué pasa cuando un estudiante se gradúa o cambia de rotación? | Sus casos abiertos se traspasan a otro estudiante: el caso anterior se cierra como transferido, el nuevo apunta al anterior con el motivo y quién lo… | `src/lib/edu/traspasos.ts`<br>`src/lib/edu/visibility.ts` |
+| 43 | Pregunta · ¿Cuántas sedes puedo tener? | Las que tengas. Cada sede lleva sus propios sillones, con su horario, y el panel entero se puede mirar por sede o consolidado. A quien solo trabaja… | `src/lib/edu/campus.ts`<br>`src/lib/edu/sillones.ts`<br>`src/lib/edu/visibility.ts` |
+| 44 | Pregunta · ¿De qué tamaño puedo subir una tomografía? | Hasta 2 GB por archivo, y el archivo viaja directo al almacenamiento en vez de pasar por un formulario. Dentro del expediente se abre con los tres… | `src/lib/edu/estudios-core.ts`<br>`src/components/edu/expediente/edu-upload-client.ts`<br>`src/components/edu/estudios/cbct-viewer.tsx` |
+| 45 | Pregunta · ¿La persona de caja puede abrir el expediente? | No. Caja ve a todos los pacientes y toda la agenda —recibe, agenda y cobra— y ni una nota clínica, ni el odontograma, ni una radiografía. Al revés… | `src/lib/edu/visibility.ts`<br>`src/lib/edu/expediente-core.ts` |
+| 46 | Pregunta · ¿Un estudiante puede recetar? | Propone la receta; no la expide. El docente con cédula la revisa, la firma y ahí queda expedida, con los dos nombres en el documento y la cédula de… | `src/lib/edu/recetas-core.ts`<br>`src/lib/edu/recetas.ts` |
+| 47 | Pregunta · ¿Y si alguien edita algo que el docente ya había firmado? | La autorización se vence sola. Al firmar se guarda un resumen de exactamente lo que se firmó; si el contenido cambia, ese resumen deja de coincidir,… | `src/lib/edu/autorizaciones-core.ts`<br>`src/lib/edu/autorizaciones-hash.ts`<br>`src/lib/edu/expediente-core.ts` |
+| 48 | Pregunta · ¿Qué hace la inteligencia artificial y qué no hace? | Dicta la nota clínica a partir de la voz y da una segunda lectura de una radiografía para que el estudiante y su docente la comenten. Es apoyo,… | `src/lib/edu/ia-core.ts`<br>`src/lib/edu/ia-cupo.ts` |
+| 49 | Pregunta · ¿Los recordatorios salen del número de mi escuela? | Sí. La institución conecta su propia cuenta de WhatsApp Business y los avisos salen de su número; las credenciales se guardan cifradas. Los mensajes… | `src/lib/edu/whatsapp.ts`<br>`src/lib/edu/whatsapp-core.ts` |
+| 50 | Pregunta · ¿Cómo se contrata? | Es una licencia anual por institución, no una suscripción por usuario ni un cobro por tarjeta. Se cotiza según el tamaño de la escuela, y quien la… | **término de contrato** (no es una función: lo fijó la dirección de DaleControl) |
+
+La tabla NO se escribió a mano: sale de recorrer los `verifiedIn` de
+`src/lib/edu/marketing.ts`, que es la misma fuente que lee la página y la misma que comprueba
+la prueba. **50 afirmaciones · 56 archivos distintos citados.**
+
+═══════════════════════════════════════════════════════════════════════════
+### 9 · LO QUE NO SE HIZO, A PROPÓSITO
+
+- **No se dice "consentimiento en PDF".** El encargo lo pedía, y el vertical **no lo tiene**:
+  el consentimiento se firma en pantalla —el paciente desde su teléfono con una liga
+  (`consentimiento-publico.tsx`), y encima las dos contrafirmas— pero no hay ninguna ruta que
+  lo exporte. La única `/pdf` del vertical es la de recetas
+  (`src/app/api/instituto/recetas/[id]/pdf`). La página dice lo que sí hay y calla lo que no.
+- **No se dice "etapas configurables".** El encargo lo pedía así, y las etapas son una lista
+  CERRADA en el código (`EDU_APPROVAL_STAGES`: plan, procedimiento, sesión, alta y receta), no
+  algo que la escuela configure. Lo que sí es cierto —y es lo que se escribió— es que el
+  docente firma el plan antes de tratar y el alta antes de cerrar, que son las dos puertas
+  reales (`EDU_APPROVAL_GATE_BY_CASE_STATUS`).
+- **"Comparación entre sedes" se dice como es.** No hay una tabla que ponga dos campus lado a
+  lado: hay un SELECTOR que cambia el panel entero a una sede o al consolidado, y el CSV que
+  se exporta declara de qué sede son las cifras. Eso es lo que dice la página.
+- **Los 5 TB, la IA por contrato y el manager van marcados como términos de contrato**, no como
+  funciones: en `main` no existe ninguna cuota de almacenamiento en el código del vertical.
+- **Nada de lo que no está en producción.** Ni el tablero de la clínica en vivo, ni la agenda
+  en rejilla, ni las gráficas del panel de dirección, ni el visor nuevo — aunque parte de eso
+  ya esté en `main`. Se agregan cuando estén desplegados.
+- **La landing dental NO se tocó** y no enlaza aquí. El enlace va en un solo sentido: el pie de
+  `/instituciones` lleva a `/` ("DaleControl para consultorios").
+- **Sin diccionario i18n.** El vertical es de una sola lengua y el panel tampoco lo tiene;
+  crear `src/i18n/dictionaries/edu/` habría sido una carpeta nueva que el guard marca prohibida
+  (con razón) a cambio de un idioma que nadie va a usar. Todo el texto vive en `marketing.ts`,
+  que además es lo que permite recorrerlo entero en la prueba.
+- **Sin dependencias nuevas.** three.js ya estaba (`^0.184.0`), y las tres escenas son
+  procedurales: ni un `.glb`, ni un `.hdr`, ni un byte en `/public`.
+- **Sin backend.** Ni un endpoint, ni una tabla, ni una variable de entorno: el único contacto
+  es un enlace de `wa.me`.
+
+═══════════════════════════════════════════════════════════════════════════
 ## BILLING-EMAILS-MERGE — Correos de billing → MAIN ✅ (2026-06-29)
 ═══════════════════════════════════════════════════════════════════════════
 MERGE: d50b28fe (`--no-ff` de feat/billing-emails @ 8708ac17 sobre main f52400dd) · BUILD EXIT 0

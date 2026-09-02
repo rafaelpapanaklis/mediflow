@@ -11,6 +11,8 @@ import { PRODUCTO_SLUGS } from "@/lib/producto/data";
 // Vertical BARBER. Ver el bloque ADITIVO al final de la función.
 import { barberStaticSitemapPaths } from "@/lib/barber/seo";
 import { getBarberWebSitemapEntries } from "@/lib/barber/seo-query";
+// Vertical INSTITUCIONAL. Ver el bloque ADITIVO al final de la función.
+import { eduStaticSitemapPaths } from "@/lib/edu/seo";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -157,6 +159,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     barberWebEntries = [];
   }
 
+  // ════════════════════════════════════════════════════════════════════
+  // VERTICAL INSTITUCIONAL (DaleControl Institucional) — bloque ADITIVO.
+  //
+  // Nada de lo de arriba cambia. La lista es ESTÁTICA (sin base de datos,
+  // así que nunca puede tumbar el sitemap del dental) y el registro vive
+  // en src/lib/edu/seo.ts: publicar una superficie pública nueva del
+  // vertical NO vuelve a tocar este archivo compartido.
+  //
+  // Del vertical solo entra la LANDING. Todo lo que cuelga de
+  // /instituto/** es panel —o una liga con token que lleva el nombre de un
+  // paciente— y está documentado como no indexable en ese mismo archivo.
+  // ════════════════════════════════════════════════════════════════════
+  const eduStaticEntries: MetadataRoute.Sitemap = eduStaticSitemapPaths().map((r) => ({
+    url: `${SITE_URL}${r.path}`,
+    lastModified: now,
+    changeFrequency: r.changeFrequency,
+    priority: r.priority,
+  }));
+
   return [
     ...staticEntries,
     ...productoEntries,
@@ -170,5 +191,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...herramientaEntries,
     ...barberStaticEntries,
     ...barberWebEntries,
+    ...eduStaticEntries,
   ];
 }

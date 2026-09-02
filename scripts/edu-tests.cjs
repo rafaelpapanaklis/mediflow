@@ -64,6 +64,13 @@ const ROOTS = [
   // prueba ahí, se descubre sola en vez de no correr nunca. Una raíz que no
   // existe no tumba el runner (walk lo tolera).
   "src/app/admin/institutos",
+  // Landing pública del vertical. Hoy su prueba vive en
+  // src/lib/edu/__tests__/edu-landing.test.ts (es una prueba de datos, no
+  // de componentes), pero las raíces se declaran completas: el aviso de
+  // arriba pide que una raíz nueva entre AQUÍ y en OWN_PREFIXES del guard,
+  // y las dos ya están en el guard.
+  "src/app/instituciones",
+  "src/components/public/instituciones",
 ];
 
 const IS_TEST = /\.test\.tsx?$/;
