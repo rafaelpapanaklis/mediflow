@@ -57,6 +57,13 @@ const ROOTS = [
   "src/components/edu",
   "src/app/instituto",
   "src/app/api/instituto",
+  // Landing pública del vertical. Hoy su prueba vive en
+  // src/lib/edu/__tests__/edu-landing.test.ts (es una prueba de datos, no
+  // de componentes), pero las raíces se declaran completas: el aviso de
+  // arriba pide que una raíz nueva entre AQUÍ y en OWN_PREFIXES del guard,
+  // y las dos ya están en el guard.
+  "src/app/instituciones",
+  "src/components/public/instituciones",
 ];
 
 const IS_TEST = /\.test\.tsx?$/;

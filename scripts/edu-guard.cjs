@@ -40,6 +40,12 @@ const OWN_PREFIXES = [
   "src/app/api/instituto/",
   "src/components/edu/",
   "src/lib/edu/",
+  // Landing PÚBLICA del vertical (/instituciones) y sus secciones. Viven
+  // fuera de "instituto/" porque son la superficie comercial y no el
+  // panel — la misma separación que hace barber entre /barber (panel) y
+  // /barberias (landing). Nada del dental las importa.
+  "src/app/instituciones/",
+  "src/components/public/instituciones/",
 ];
 
 // PROPIO del vertical: archivos exactos.
@@ -74,6 +80,13 @@ const SHARED_FILES = [
   "src/middleware.ts",
   "ORQUESTA.md",
   "package.json",
+  // El sitemap del sitio es del DENTAL y está vivo en producción. El
+  // vertical solo puede sumarle un bloque aditivo (importar
+  // eduStaticSitemapPaths y concatenar su lista al final), igual que ya
+  // hace barber. Va de COMPARTIDO y no de PROPIO a propósito: cualquier
+  // otro cambio ahí se revisa a mano, y declararlo obliga a que se vea:
+  //   EDU_GUARD_SHARED="src/app/sitemap.ts" node scripts/edu-guard.cjs
+  "src/app/sitemap.ts",
 ];
 
 function isOwn(p) {
