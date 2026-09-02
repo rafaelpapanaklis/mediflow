@@ -1,4 +1,404 @@
 ═══════════════════════════════════════════════════════════════════════════
+## EDU-LANDING — /instituciones, la landing pública del vertical Institucional ✅ (2026-09-01) · rama feat/edu-landing → PR, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+COMMIT: ce732a5a · PR: #162 (https://github.com/rafaelpapanaklis/mediflow/pull/162) · BUILD EXIT 0 · `npm run test:edu` EXIT 0 · GUARDIA EXIT 0
+SQL: **ninguno**. Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+
+OBJETIVO: la página que convierte a una escuela de especialidades odontológicas en cliente.
+Una sola acción —escribirle por WhatsApp al manager asignado—, cero precios, y cada afirmación
+de producto comprobada contra el código antes de escribirla.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · QUÉ SE CONSTRUYÓ
+
+Ruta pública nueva `/instituciones`, ESTÁTICA (`○` en la tabla de rutas), 3.99 kB de página y
+103 kB de JS de primera carga — **three.js NO viaja en esa cifra**: vive en trozos aparte que
+solo se piden cuando hay alguien mirando la escena.
+
+    src/app/instituciones/page.tsx              la página (metadata + JSON-LD + secciones)
+    src/app/instituciones/opengraph-image.tsx   imagen social 1200×630 (Edge)
+    src/app/instituciones/twitter-image.tsx     la misma pieza, etiqueta de X
+    src/components/public/instituciones/        18 archivos: nav, portada, secciones, plan,
+                                                preguntas, cierre, pie, maquetas, las tres
+                                                escenas 3D con su puerta y sus respaldos, CSS
+    src/lib/edu/marketing.ts                    TODO el texto y TODAS las promesas, con los
+                                                archivos donde se verificó cada una
+    src/lib/edu/seo.ts                          eduStaticSitemapPaths() + rutas NO indexables
+    src/lib/edu/__tests__/edu-landing.test.ts   26 pruebas que vigilan lo de arriba
+
+Compartido tocado, UNA sola cosa: `src/app/sitemap.ts` — un import y un bloque aditivo de seis
+líneas al final, calcado del que ya tiene barbería. Nada del dental cambia.
+
+Propios del vertical que se ampliaron:
+  · `scripts/edu-guard.cjs`  → los dos prefijos públicos nuevos en OWN_PREFIXES y
+    `src/app/sitemap.ts` en SHARED_FILES (antes no estaba: el vertical nunca había tocado el
+    sitemap, y sin declararlo el guard lo marcaba PROHIBIDO, que es justo lo que debía hacer).
+  · `scripts/edu-tests.cjs` → las dos raíces nuevas en ROOTS, que es lo que su propio aviso
+    pide hacer cuando el vertical estrena carpeta.
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · LA REGLA DE ESTA PÁGINA: NINGUNA PROMESA SIN ARCHIVO
+
+Cada afirmación de producto vive en `src/lib/edu/marketing.ts` como un `EduClaim` con la lista
+de archivos donde se comprobó (`verifiedIn`), igual que hizo la landing de barberías. La prueba
+`edu-landing.test.ts` exige que esos archivos EXISTAN: el día que alguien borre o renombre un
+módulo del vertical, la promesa que lo citaba deja de pasar la prueba **antes** de que la
+página mienta.
+
+Y al revés, que es la mitad que faltaba en barbería: **una promesa sin archivos es un fallo**,
+salvo que se declare `contrato: true`. Esa es la única puerta, y por ella pasan exactamente
+cuatro cosas —el almacenamiento incluido, la IA por contrato, el manager asignado y cómo se
+contrata—, todas términos comerciales que fijó la dirección de DaleControl, no funciones. La
+prueba fija esa lista de cuatro: un quinto renglón sin código no entra en silencio.
+
+En total: **50 afirmaciones**, **56 archivos distintos citados**. La tabla completa está en el
+apartado 8.
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · LO QUE LA PÁGINA NO PUEDE DECIR, Y NO PUEDE DECIRLO AUNQUE ALGUIEN LO INTENTE
+
+`EDU_LANDING_PALABRAS_PROHIBIDAS` es una lista de patrones con su motivo escrito, y la prueba
+la busca en TODOS los archivos de la landing —código y comentarios incluidos—:
+
+  · certificaciones que no existen (la norma del expediente electrónico, ISO 27001);
+  · facturación fiscal, que en este vertical todavía no emite un comprobante de verdad;
+  · infraestructura ("AWS"), que ni es argumento ni es cierta;
+  · "quién está conectado": el producto NO registra presencia y el panel de dirección lo dice
+    por escrito (`src/lib/edu/direccion-core.ts`); un contador de sesiones abiertas se leería
+    como gente en la clínica y sería falso justo cuando importa;
+  · la unidad radiológica: el visor trabaja con VALORES RELATIVOS DE DENSIDAD y nombrarla
+    implicaría una calibración que este producto no hace;
+  · el marketplace y los proveedores, que no son de este vertical;
+  · "Ola N", que es lenguaje interno del repositorio.
+
+Y el vocabulario: se dice **estudiante** (nunca "alumno") y **especialidad** (nunca
+"programa"). La prueba lo comprueba sobre los archivos y, además, recorriendo el objeto de copy
+entero — que es todo lo que se pinta.
+
+**CERO PRECIOS.** Ni un signo de pesos con cifra, ni una cantidad en moneda, en ningún archivo
+ni en ningún texto. La letra chica del plan dice lo que sí se puede decir: "Licencia anual por
+institución. Cotización según tamaño de la escuela." Hasta la maqueta de la pantalla de caja
+—que enseña la tarifa de estudiante— va SIN importes: en la pantalla real el precio lo pone el
+servidor, y ésa es justamente la promesa.
+
+Tampoco entra nada de lo que todavía no está en producción: ni el tablero de la clínica en
+vivo, ni la agenda en rejilla, ni las gráficas del panel de dirección, ni el visor nuevo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · EL CONTACTO: UN MANAGER, UN NÚMERO, UN SOLO SITIO
+
+Toda la página vende una acción. El botón aparece cuatro veces —barra, portada, plan y
+cierre— y las cuatro son el mismo componente (`whatsapp.tsx`), que compone el enlace con
+`eduManagerWaHref()`: `wa.me` + E.164 **sin** el "+" + el texto pre-escrito codificado, la
+convención que ya usa la landing dental. El evento de conversión de GA4 (`whatsapp_click`)
+viaja con `send_to` explícito y con la posición del clic, para poder distinguir cuál de los
+cuatro botones convierte.
+
+    EDU_MANAGER = { nombre: "Rafael", numeroE164: "529992602093",
+                    textoPrevio: "Hola Rafael, soy de <escuela> y quiero una demo de
+                                  DaleControl Institucional." }
+
+El hueco `<escuela>` se queda a la vista a propósito: un mensaje que ya viene relleno con una
+escuela inventada es peor que uno con un hueco evidente.
+
+🔴 El número vive en `EDU_MANAGER` y en ningún otro sitio. El teléfono legible
+(`+52 999 260 2093`) se DERIVA del E.164 con `eduManagerDisplayPhone()`, y una prueba busca las
+dos formas en todos los archivos de la landing y falla si alguien las teclea a mano — que es
+como se acaba con un botón que marca a un número y una letra chica que enseña otro.
+
+Sin formularios y sin backend nuevo: no hay ni un endpoint, ni una tabla, ni una variable de
+entorno más.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · LAS TRES ESCENAS 3D
+
+Tres escenas, **todas procedurales**: ni un modelo, ni un mapa de entorno, ni un byte en
+`/public`. Una prueba lo vigila (`escenas 3D: …ninguna pide un archivo pesado`).
+
+  1. **Portada · la arcada.** Dieciséis dientes sobre una parábola: un perfil torneado
+     (`LatheGeometry`) repetido con `InstancedMesh` —una sola llamada de dibujo para los
+     dieciséis— y la encía como un tubo sobre la MISMA parábola. Gira despacio sobre su eje.
+  2. **Expediente · el volumen.** Un campo de densidad de 64³ calculado con una fórmula
+     (herradura + coronas + raíces + hueso), metido en una `Data3DTexture` y dibujado
+     **lanzando rayos** con el mapa de color óseo del visor del producto — marrón oscuro a
+     marfil— y una lámina azul que lo recorre, como la cruz del visor sobre los cortes.
+     🔴 Es una RECREACIÓN: no se carga ningún estudio, ni real ni de ejemplo. Una tomografía
+     es de una persona y no se publica en una página de ventas.
+  3. **Sedes · la clínica isométrica.** Cámara ORTOGRÁFICA a 45° de azimut y **30° de
+     elevación**, que no se eligió a ojo: el plano de piso del producto proyecta
+     `x = (col − fila)·C`, `y = (col + fila)·C/2`, o sea dos de ancho por uno de alto, y esa
+     razón sale exactamente con sen(elevación) = 0,5. La escena y el plano del panel dibujan
+     el MISMO piso. Seis sillones —pedestal, asiento, respaldo reclinado, cabezal y el brazo
+     de la lámpara— en cuatro `InstancedMesh`.
+
+**Los respaldos estáticos no son marcadores de posición: son dibujos terminados.** Viajan en
+el HTML, son lo primero que ve todo el mundo y lo que ve PARA SIEMPRE quien pidió menos
+movimiento, quien no tiene WebGL y quien nunca desplaza hasta la sección. El de la clínica usa
+`toScreen`, `pts` y la constante `C` de `src/lib/floor-plan/iso.ts` —la retícula real del
+producto, importada, no copiada—, así que el día que cambie la proyección cambia con ella.
+
+**La puerta** (`escena-gate.tsx`) descarga three.js sólo cuando se cumplen cuatro cosas, en
+este orden: (1) la máquina puede —hay WebGL y no es un pintor por software, no hay
+`prefers-reduced-motion`, no hay ahorro de datos ni red 2G/3G, hay memoria y núcleos—;
+(2) la caja de la escena se acerca a la pantalla (observador de intersección con 240 px de
+margen); (3) la página ya disparó `load` y hubo una **señal de que hay una persona** (mover el
+puntero, desplazar, tocar, una tecla); (4) el hilo está ocioso. Si algo falla al montar
+—contexto perdido, sombreador que no compila, WebGL 2 ausente— se quita el atributo y el dibujo
+estático, que nunca salió del DOM, vuelve a verse.
+
+La caja tiene proporción fija en el CSS, así que montar el lienzo **no mueve un píxel**: el
+desplazamiento acumulado de diseño es 0 con escena y sin ella.
+
+Y el arranque va en tareas cortas —armar, ceder el hilo, `compileAsync`, primer cuadro—, no se
+genera entorno de reflejos (PMREM cuesta cientos de ms y estas escenas son mate) y el bucle
+sólo dibuja con la caja a la vista y la pestaña visible.
+
+**Dos errores que sólo aparecieron al abrirlo en el navegador, y que estaban en el código:**
+
+  · **La arcada tenía los dientes 4,6 veces más grandes de lo que le tocaba.** Un diente medía
+    0,7 de ancho contra una media arcada de 1,52 —un 46%—, cuando en una boca de adulto un
+    diente es el 29% de la media anchura (8 mm contra 55 de arcada). Dieciséis de ésos no caben
+    en el arco: se encimaban, y la cámara tenía que alejarse tanto que la escena parecía una
+    fila de molares gigantes. Se corrigió con dos factores medidos sobre la proporción real
+    (`ANCHO_DIENTE`, `LARGO_DIENTE`) y el encuadre se recalculó sobre la caja de verdad.
+  · **El sombreador del volumen NUNCA compiló.** En GLSL 3, three.js **no** define
+    `gl_FragColor` para un `ShaderMaterial` propio (ese atajo sólo lo pone para sus materiales
+    de fábrica), así que el fragmento moría con
+    `ERROR: 'gl_FragColor' : undeclared identifier`. Y como el fallo salta al ENLAZAR el
+    programa y no al llamar a `compileAsync`, **la escena se daba por lista y pintaba la caja
+    vacía**: se veía el alambre del cubo y nada dentro. Se declara la salida a mano
+    (`out vec4 salida`) y, ya de paso, se deshace la premultiplicación del alfa antes de
+    entregar el color, que si no el hueso sale al cuadrado de oscuro.
+
+También se quitó `THREE.Clock`, que está marcada como obsoleta en la versión del repo y avisaba
+por consola en cada montaje: el tiempo entre cuadros son tres líneas.
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · IDENTIDAD VISUAL
+
+**Es una ESCUELA, no una barbería ni un consultorio.** El dental es violeta y de producto;
+barberías es caramelo sobre negro cálido y de oficio. Esto es índigo universitario sobre papel,
+con una **regla dorada de diploma** bajo la barra, numerales romanos en los antetítulos y
+titulares en **romana** (Source Serif 4). Serio, con aire, y sin un solo degradado morado de
+plantilla.
+
+  · **El índigo son EXACTAMENTE los tokens del panel del vertical**
+    (`src/app/instituto/edu-theme.css`, del `--edu-50` al `--edu-950`). Se COPIAN, no se
+    importan: aquel archivo escopa todo bajo `.edu-shell`/`.edu-auth`, es del panel, y traerlo
+    a una página pública ataría la landing a los cambios de una superficie privada. Que los
+    números coincidan es lo que hace que la página y el producto se sientan lo mismo.
+  · **El birrete** de la marca es el mismo glifo que lleva el panel en su cabecera
+    (`GraduationCap` de lucide, igual que `src/components/edu/edu-shell.tsx`).
+  · **Tipografía:** Inter en los MISMOS pesos que el home del sitio (400–800) — mismos
+    archivos, misma caché — y Source Serif 4 (600, redonda y cursiva) como voz propia del
+    vertical. Las dos se autoalojan; `display: fallback`, no `swap`.
+  · **Todo el CSS cuelga de `.dcei`** y una prueba lo comprueba con un analizador de llaves de
+    verdad, no con una expresión regular por líneas: no hay un solo selector que se escape del
+    scope, ni dentro de las `@container`.
+
+**Maquetas de pantalla, dibujadas en HTML y CSS** (ni capturas ni ilustraciones de banco):
+la **nota clínica firmada** con su sello y el aviso de que ya no se edita; la **bandeja de
+autorizaciones** con los tres estados —pendiente, autorizada y *vencida porque se editó lo
+firmado*—; y la **caja resolviendo la tarifa de estudiante**, con el motivo ("Lo trajo la
+estudiante Sofía Ibarra") y **sin un solo importe**, porque el importe lo pone el servidor y
+ésa es justamente la promesa.
+
+**Responsive con `@container`** (`.dcei` es el contenedor), probado a 390, 768 y 1280. En
+teléfono los botones ocupan el ancho, la barra deja marca + WhatsApp, las anclas aparecen a
+partir de 900 px de contenedor y la retícula pasa de 1 a 2 y a 3-4 columnas. La barra es
+`sticky` y no `fixed` a propósito: `container-type` crea contención y se tragaría un elemento
+fijo.
+
+**♿ Contraste medido, no supuesto**, sobre los fondos reales — sobre papel `#f7f9fd`: tinta
+15,4 · tinta-2 7,6 · tinta-3 5,0 · índigo-600 7,6; sobre índigo `#121a2e`: 14,5 / 9,7 / oro
+8,3. Dos correcciones salieron de medir en vez de mirar:
+
+  · el botón de WhatsApp usa `#0f7c6f` y no el verde de marca `#128c7e`, que sobre blanco da
+    **4,19** y NO pasa AA con texto de 16 px en negrita; el oscuro da 5,2;
+  · el número de cada paso pasó de oro-500 a **oro-600**: el 500 daba 3,01 sobre blanco, que es
+    el mínimo EXACTO de texto grande, y el 600 da 4,97.
+
+Y el numeral gigante del fondo de "el problema" dejó de ser un nodo de texto: ahora es un
+contador en un pseudo-elemento. A ese tamaño y a ese tono es decoración pura, pero **escrito
+como texto lo mide el auditor de contraste y lo reprueba con razón** — no hay forma de que un
+30 px casi del color del papel pase AA.
+
+═══════════════════════════════════════════════════════════════════════════
+### 7 · GATES
+
+**1 · `npm run build` → exit 0**, completo y SIN pipes
+(`NODE_OPTIONS=--max-old-space-size=8192`). **464/464 páginas** generadas y la ruta en la tabla:
+
+    ├ ○ /instituciones                             3.97 kB         103 kB
+    ├ ƒ /instituciones/opengraph-image              0 B                0 B
+    ├ ƒ /instituciones/twitter-image                0 B                0 B
+
+`○` = ESTÁTICA. Los 103 kB de primera carga **no incluyen three.js**: vive en trozos aparte que
+solo se piden cuando hay alguien mirando la escena. Los únicos avisos son los PREEXISTENTES y
+ajenos (el `Critical dependency` de `file-type`, el aviso de runtime edge de las dos imágenes
+sociales y tres clases ambiguas de Tailwind). El ruido de `DATABASE_URL` es el de siempre
+(worktree sin `.env`) y no afecta al exit.
+
+`npx tsc --noEmit` sobre el proyecto entero: **cero errores nuevos**. Los 8 que salen son los
+PREEXISTENTES de `src/lib/barber/__tests__/**` y `edu-theme.test.ts`, que `next build` no
+compila.
+
+**2 · `npm run test:edu` → exit 0** — **30 archivos descubiertos, 960 pruebas, 960 pass, 0 fail** (908 ms). Las 27 nuevas son las
+de la landing; las otras 933 son las que ya había y siguen verdes. El corredor las descubre
+solo porque `src/lib/edu/__tests__/` ya era una de sus raíces — y aun así se le añadieron las
+dos raíces públicas nuevas, que es lo que su propio aviso pide para cuando una ola futura
+ponga una prueba al lado de su componente.
+
+**3 · Guardia → exit 0**
+
+    EDU_GUARD_SHARED="src/app/sitemap.ts,ORQUESTA.md" node scripts/edu-guard.cjs
+
+**27 archivos** contra `origin/main`: **26 propios** del vertical (los dos árboles públicos
+nuevos, los tres módulos de `src/lib/edu/`, la prueba y los dos scripts) y **1 compartido
+declarado** (`src/app/sitemap.ts`). **Cero prohibidos y cero compartidos sin declarar**: ni
+una línea del dental, de barbería ni de inmuebles.
+
+**4 · Lighthouse, servidor de producción local (`npm start`, build real)**
+
+| Corrida | Rend. | Acces. | Prácticas | SEO | FCP | LCP | TBT | CLS |
+|---|---|---|---|---|---|---|---|---|
+| **Móvil · la página tal como se sirve** | **75** | **100** | 75 | **100** | 2,3 s | 4,2 s | 380 ms | **0** |
+| Móvil · con las escenas 3D FORZADAS a cargar | 79 | 100 | — | — | 2,4 s | 3,8 s | 310 ms | 0 |
+| Móvil · sin las etiquetas de marketing del sitio | 79–82 | 100 | — | — | 2,4 s | 3,8 s | 310 ms | 0 |
+| **Escritorio** | **99** | **100** | 74 | **100** | 0,5 s | 0,8 s | 30 ms | **0** |
+| *Referencia: `/barberias`, en producción hoy* | *65* | *100* | *75* | *92* | *3,4 s* | *5,1 s* | *110 ms* | *0,184* |
+
+Móvil son tres corridas seguidas sobre el build final (74 / 80 / 75); la tabla trae la
+mediana. La dispersión es la máquina, no la página: el servidor de producción, Chrome y las
+propias corridas de Lighthouse comparten el mismo equipo.
+
+🔴 **RENDIMIENTO MÓVIL: 75, NO 90. Y no es la landing.** El encargo pedía ≥ 90 y hay que
+decirlo claro, con el número medido y con dónde está el techo:
+
+  · De los **667 kB de JavaScript** que carga la página, **500 kB son etiquetas de marketing
+    del SITIO** que pone el layout raíz en TODA página pública: Google Tag Manager dos veces
+    (GA4 170 kB + Google Ads 158 kB) y el píxel de Meta (106 + 66 kB). Lo propio de la página
+    son 164 kB, y de ésos su trozo son **4 kB**.
+  · Bloqueando esas etiquetas, la misma página sube a **79–82**. El resto es el armazón
+    (React + Next + el layout), no el contenido.
+  · **`/barberias`, que está en producción hoy, saca 65** en la misma máquina y el mismo
+    servidor, con los mismos 665 kB. Esta página saca 10 puntos más que la landing viva.
+  · **Las escenas 3D NO son el problema, y eso está medido**: con `?escenas=ya` three.js se
+    descarga de verdad durante la auditoría (el JavaScript pasa de 164 a **356 kB**) y el
+    resultado **no se mueve** — 79 con y sin. Arrancan después del `load`, en hilo ocioso y
+    fuera de la ventana que Lighthouse mide.
+
+Lo único que subiría el número es **diferir las etiquetas de marketing en el layout raíz**, que
+es un archivo compartido, vivo en producción, del dental — fuera de este vertical y una
+decisión de quien lleva la medición, no de esta rama.
+
+Lo que sí se hizo, y bajó de 606 a 394 ms el tiempo de disposición: **`content-visibility: auto`
+con `contain-intrinsic-size`** en todas las secciones menos la portada. En una página de
+17 000 px eso es lo que evita medir nueve secciones que nadie está viendo.
+
+**Accesibilidad 100 y CLS 0** — y las dos correcciones que hicieron falta para llegar ahí salieron
+de la propia auditoría; están contadas en el apartado 6. `practicas: 75` es idéntico en
+`/barberias`: son cookies de terceros y errores de consola de las etiquetas de Vercel, que en
+localhost no cargan.
+
+**5 · El clic de WhatsApp** abre
+`https://wa.me/529992602093?text=Hola%20Rafael%2C%20soy%20de%20%3Cescuela%3E%20y%20quiero%20una%20demo%20de%20DaleControl%20Institucional.`
+— E.164 sin el "+", texto pre-escrito, `target="_blank"` con `rel="noopener noreferrer"` y el
+evento `whatsapp_click` con `send_to` y la posición del botón.
+
+═══════════════════════════════════════════════════════════════════════════
+### 8 · FRASE → ARCHIVO VERIFICADO
+
+| # | Dónde | Lo que dice | Verificado en |
+|---|-------|-------------|---------------|
+| 1 | Cómo funciona · Agenda | El paciente se cita en un sillón concreto, de una sede concreta, con el estudiante que lo va a atender y el docente que responde por él. Los… | `src/lib/edu/agenda.ts`<br>`src/lib/edu/agenda-core.ts`<br>`src/lib/edu/sillones.ts`<br>`src/app/instituto/(panel)/agenda/page.tsx` |
+| 2 | Cómo funciona · Tamizaje | La valoración inicial decide quién trata a quién: asigna el paciente a un estudiante y le abre su caso. Es una decisión académica, así que solo la… | `src/app/api/instituto/tamizaje/route.ts`<br>`src/lib/edu/casos.ts`<br>`src/lib/edu/permissions.ts` |
+| 3 | Cómo funciona · Caso | Todo el tratamiento cuelga de un caso: la especialidad, el procedimiento, las notas, los estudios y las calificaciones. El caso tiene un estudiante… | `src/lib/edu/casos.ts`<br>`src/lib/edu/casos-core.ts`<br>`src/lib/edu/types.ts` |
+| 4 | Cómo funciona · Firma | Antes de empezar a tratar, el docente firma el plan desde su teléfono; antes de cerrar, firma el alta. Sin esa firma el caso no avanza, y lo que se… | `src/lib/edu/autorizaciones.ts`<br>`src/lib/edu/autorizaciones-core.ts`<br>`src/lib/edu/autorizaciones-hash.ts` |
+| 5 | Cómo funciona · Cobro | En caja se elige al paciente y el servidor pone su lista de precios según quién lo trajo a la clínica. Se emite el cobro, se registra el pago y todo… | `src/lib/edu/tarifas.ts`<br>`src/lib/edu/caja.ts`<br>`src/lib/edu/dinero-core.ts` |
+| 6 | Por rol · Dirección VE | La escuela entera: el padrón, la clínica, el expediente, el dinero y el avance académico de cada generación, del instituto completo o de una sede a… | `src/lib/edu/visibility.ts`<br>`src/lib/edu/permissions.ts` |
+| 7 | Por rol · Dirección NO VE | Nada: es el único rol sin recorte, y por eso se da con cuentagotas. Todo lo demás del panel se reparte por permisos, no por confianza. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/permissions.ts` |
+| 8 | Por rol · Docente VE | A los estudiantes que supervisa con asignación vigente, y a sus pacientes, citas y casos. Firma las autorizaciones y expide las recetas con su cédula. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/padron-core.ts`<br>`src/lib/edu/recetas-core.ts` |
+| 9 | Por rol · Docente NO VE | A los estudiantes de otro docente. Y cuando entrega su grupo, deja de ver a esos pacientes el mismo día: una asignación vencida no da acceso. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/padron-core.ts`<br>`src/lib/edu/recetas-core.ts` |
+| 10 | Por rol · Estudiante VE | Solo sus casos, sus pacientes y sus citas. Escribe la nota, propone la receta, manda a firmar y ve su propio avance contra los requisitos de su… | `src/lib/edu/visibility.ts`<br>`src/lib/edu/evaluacion.ts` |
+| 11 | Por rol · Estudiante NO VE | A los pacientes de sus compañeros. Tampoco ve el dinero: ni el precio, ni el cobro, ni el saldo de la persona que está atendiendo. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/evaluacion.ts` |
+| 12 | Por rol · Caja VE | A todos los pacientes y toda la agenda, porque recibe, agenda y cobra. Abre turno, emite cobros y recibos, registra pagos y cierra el corte. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/expediente-core.ts`<br>`src/lib/edu/caja.ts` |
+| 13 | Por rol · Caja NO VE | El expediente clínico. Ni una nota, ni el odontograma, ni una radiografía: caja cobra, no abre historia clínica. | `src/lib/edu/visibility.ts`<br>`src/lib/edu/expediente-core.ts`<br>`src/lib/edu/caja.ts` |
+| 14 | Por rol · El padrón académico | Estudiantes con su matrícula, generaciones con sus fechas, especialidades y el equipo docente. La supervisión no se sobrescribe cuando un docente… | `src/lib/edu/padron.ts`<br>`src/lib/edu/padron-core.ts`<br>`src/lib/edu/equipo.ts` |
+| 15 | Expediente · Nota firmada e inmutable | Una nota clínica firmada no se edita: ni el texto, ni el diagnóstico, ni la cita a la que apunta, ni por la dirección del instituto. Si algo estaba… | `src/lib/edu/expediente-core.ts`<br>`src/lib/edu/expediente.ts` |
+| 16 | Expediente · Vacío no quiere decir «sin alergias» | Los antecedentes tienen tres estados y no dos: nadie preguntó todavía, se preguntó y no refiere nada, o hay datos capturados. La ficha avisa en… | `src/lib/edu/pacientes-core.ts`<br>`src/lib/edu/pacientes.ts` |
+| 17 | Expediente · Odontograma e historial | El odontograma del paciente, diente por diente y cara por cara, con el historial de lo que se le fue haciendo a lo largo de los semestres y de los… | `src/lib/edu/odontograma.ts`<br>`src/lib/edu/odontograma-core.ts` |
+| 18 | Expediente · Consentimiento con tres firmas | La carta dice con todas sus letras que quien va a atender es un estudiante y quién lo supervisa. El paciente firma desde su propio teléfono con una… | `src/lib/edu/consentimientos-core.ts`<br>`src/lib/edu/consentimientos.ts`<br>`src/components/edu/consentimiento-publico.tsx` |
+| 19 | Expediente · Tomografías de hasta dos gigabytes | Los estudios se suben directo al almacenamiento, sin pasar por un formulario que se cae a los cien megabytes: hasta 2 GB por archivo. Tomografías en… | `src/lib/edu/estudios-core.ts`<br>`src/lib/edu/estudios.ts`<br>`src/lib/edu/storage.ts`<br>`src/components/edu/expediente/edu-upload-client.ts` |
+| 20 | Expediente · Visor con cortes y volumen | La tomografía se abre dentro del expediente: los tres cortes —axial, coronal y sagital— con la cruz sincronizada en milímetros, medición sobre la… | `src/components/edu/estudios/cbct-viewer.tsx`<br>`src/components/edu/estudios/modelo-3d-viewer.tsx`<br>`src/components/edu/estudios/visor-shell.tsx` |
+| 21 | Caja y evaluacion · En caja nadie teclea precios | Qué lista de precios le toca a un paciente lo decide el servidor a partir de quién lo trajo a la clínica, y cuánto cuesta cada procedimiento lo lee… | `src/lib/edu/tarifas.ts`<br>`src/lib/edu/caja.ts` |
+| 22 | Caja y evaluacion · Turnos, corte y recibos | Se abre turno, se cobra, se registran los pagos y se cierra el corte con lo que de verdad pasó por ese turno. Un cobro cancelado queda en cero y… | `src/lib/edu/caja.ts`<br>`src/lib/edu/dinero-core.ts` |
+| 23 | Caja y evaluacion · Pagos a meses que suman exacto | Un tratamiento largo se parte en mensualidades y la diferencia de centavos va entera en la primera, para que la suma dé el saldo al centavo. Una… | `src/lib/edu/pagos-core.ts`<br>`src/lib/edu/pagos.ts` |
+| 24 | Caja y evaluacion · Rúbricas y calificaciones | Cada caso se califica con la rúbrica de su especialidad, con criterios que pesan lo que la escuela decida y una comprobación de que los pesos suman… | `src/lib/edu/evaluacion-core.ts`<br>`src/lib/edu/rubricas.ts` |
+| 25 | Caja y evaluacion · Requisitos, horas y bitácora | Cuántos casos de cada tipo lleva un estudiante contra lo que su especialidad le exige, cuántas horas de clínica acumula y qué hizo cada día. El… | `src/lib/edu/evaluacion-core.ts`<br>`src/lib/edu/evaluacion.ts`<br>`src/components/edu/evaluacion/bitacora-screen.tsx` |
+| 26 | Caja y evaluacion · Cuando un estudiante rota o se gradúa | Sus casos abiertos se traspasan: el viejo se cierra como transferido, el nuevo apunta al viejo con el motivo y quién lo hizo, y las citas futuras… | `src/lib/edu/traspasos.ts`<br>`src/lib/edu/visibility.ts` |
+| 27 | Sedes · Sedes ilimitadas, sillones por sede | Das de alta las sedes que tengas y los sillones de cada una. El número del sillón es único dentro de su sede, porque es el que está pintado en esa… | `src/lib/edu/campus.ts`<br>`src/lib/edu/campus-core.ts`<br>`src/lib/edu/sillones.ts` |
+| 28 | Sedes · Agenda y panel por sede | Un selector cambia el panel entero a la sede que estás mirando, y a quien solo trabaja en un campus se le puede dar acceso a ese. Lo que se exporta… | `src/lib/edu/visibility.ts`<br>`src/components/edu/sedes/sede-selector.tsx`<br>`src/lib/edu/direccion-core.ts` |
+| 29 | Sedes · Indicadores para la dirección | Hoy, la semana, el mes o el rango que elijas: pacientes atendidos, ocupación de cada sillón, avance por especialidad con su semáforo y el desglose… | `src/lib/edu/direccion.ts`<br>`src/lib/edu/direccion-core.ts` |
+| 30 | Sedes · WhatsApp con el número de la escuela | Los recordatorios de cita salen del número de WhatsApp de la propia institución, con sus credenciales guardadas cifradas y con plantillas aprobadas… | `src/lib/edu/whatsapp.ts`<br>`src/lib/edu/whatsapp-core.ts`<br>`src/lib/edu/recordatorios.ts` |
+| 31 | Sedes · Recetas con cédula | Un estudiante de especialidad no tiene cédula profesional, así que propone la receta y el docente la revisa, la firma y ahí queda expedida: con los… | `src/lib/edu/recetas-core.ts`<br>`src/lib/edu/recetas.ts`<br>`src/lib/edu/receta-pdf.tsx` |
+| 32 | Sedes · IA de apoyo, con cupo por escuela | Dictado de la nota clínica y una segunda lectura de la radiografía, con cupo mensual por institución y el gasto a la vista. El análisis es apoyo… | `src/lib/edu/ia-core.ts`<br>`src/lib/edu/ia.ts`<br>`src/lib/edu/ia-cupo.ts` |
+| 33 | El plan | Sedes ilimitadas y los sillones que tenga cada una | `src/lib/edu/campus.ts`<br>`src/lib/edu/sillones.ts` |
+| 34 | El plan | Los cuatro roles con aislamiento real: Dirección, Docente, Estudiante y Caja | `src/lib/edu/visibility.ts`<br>`src/lib/edu/permissions.ts` |
+| 35 | El plan | Expediente clínico completo, imagenología en tres dimensiones y consentimientos | `src/lib/edu/expediente.ts`<br>`src/lib/edu/estudios.ts`<br>`src/lib/edu/consentimientos.ts` |
+| 36 | El plan | Caja con turnos y corte, pagos a meses y evaluación académica | `src/lib/edu/caja.ts`<br>`src/lib/edu/pagos.ts`<br>`src/lib/edu/evaluacion.ts` |
+| 37 | El plan | WhatsApp con el número de la propia escuela | `src/lib/edu/whatsapp.ts` |
+| 38 | El plan | 5 TB de almacenamiento incluidos, con espacio adicional disponible | **término de contrato** (no es una función: lo fijó la dirección de DaleControl) |
+| 39 | El plan | IA clínica disponible según contrato | **término de contrato** (no es una función: lo fijó la dirección de DaleControl) |
+| 40 | El plan | Un manager asignado, con nombre y teléfono | **término de contrato** (no es una función: lo fijó la dirección de DaleControl) |
+| 41 | Pregunta · ¿Mis estudiantes pueden ver a los pacientes de los demás? | No. Un estudiante ve solo sus casos, sus pacientes y sus citas, y eso no es una casilla de configuración: el filtro se arma en un único archivo por… | `src/lib/edu/visibility.ts` |
+| 42 | Pregunta · ¿Qué pasa cuando un estudiante se gradúa o cambia de rotación? | Sus casos abiertos se traspasan a otro estudiante: el caso anterior se cierra como transferido, el nuevo apunta al anterior con el motivo y quién lo… | `src/lib/edu/traspasos.ts`<br>`src/lib/edu/visibility.ts` |
+| 43 | Pregunta · ¿Cuántas sedes puedo tener? | Las que tengas. Cada sede lleva sus propios sillones, con su horario, y el panel entero se puede mirar por sede o consolidado. A quien solo trabaja… | `src/lib/edu/campus.ts`<br>`src/lib/edu/sillones.ts`<br>`src/lib/edu/visibility.ts` |
+| 44 | Pregunta · ¿De qué tamaño puedo subir una tomografía? | Hasta 2 GB por archivo, y el archivo viaja directo al almacenamiento en vez de pasar por un formulario. Dentro del expediente se abre con los tres… | `src/lib/edu/estudios-core.ts`<br>`src/components/edu/expediente/edu-upload-client.ts`<br>`src/components/edu/estudios/cbct-viewer.tsx` |
+| 45 | Pregunta · ¿La persona de caja puede abrir el expediente? | No. Caja ve a todos los pacientes y toda la agenda —recibe, agenda y cobra— y ni una nota clínica, ni el odontograma, ni una radiografía. Al revés… | `src/lib/edu/visibility.ts`<br>`src/lib/edu/expediente-core.ts` |
+| 46 | Pregunta · ¿Un estudiante puede recetar? | Propone la receta; no la expide. El docente con cédula la revisa, la firma y ahí queda expedida, con los dos nombres en el documento y la cédula de… | `src/lib/edu/recetas-core.ts`<br>`src/lib/edu/recetas.ts` |
+| 47 | Pregunta · ¿Y si alguien edita algo que el docente ya había firmado? | La autorización se vence sola. Al firmar se guarda un resumen de exactamente lo que se firmó; si el contenido cambia, ese resumen deja de coincidir,… | `src/lib/edu/autorizaciones-core.ts`<br>`src/lib/edu/autorizaciones-hash.ts`<br>`src/lib/edu/expediente-core.ts` |
+| 48 | Pregunta · ¿Qué hace la inteligencia artificial y qué no hace? | Dicta la nota clínica a partir de la voz y da una segunda lectura de una radiografía para que el estudiante y su docente la comenten. Es apoyo,… | `src/lib/edu/ia-core.ts`<br>`src/lib/edu/ia-cupo.ts` |
+| 49 | Pregunta · ¿Los recordatorios salen del número de mi escuela? | Sí. La institución conecta su propia cuenta de WhatsApp Business y los avisos salen de su número; las credenciales se guardan cifradas. Los mensajes… | `src/lib/edu/whatsapp.ts`<br>`src/lib/edu/whatsapp-core.ts` |
+| 50 | Pregunta · ¿Cómo se contrata? | Es una licencia anual por institución, no una suscripción por usuario ni un cobro por tarjeta. Se cotiza según el tamaño de la escuela, y quien la… | **término de contrato** (no es una función: lo fijó la dirección de DaleControl) |
+
+La tabla NO se escribió a mano: sale de recorrer los `verifiedIn` de
+`src/lib/edu/marketing.ts`, que es la misma fuente que lee la página y la misma que comprueba
+la prueba. **50 afirmaciones · 56 archivos distintos citados.**
+
+═══════════════════════════════════════════════════════════════════════════
+### 9 · LO QUE NO SE HIZO, A PROPÓSITO
+
+- **No se dice "consentimiento en PDF".** El encargo lo pedía, y el vertical **no lo tiene**:
+  el consentimiento se firma en pantalla —el paciente desde su teléfono con una liga
+  (`consentimiento-publico.tsx`), y encima las dos contrafirmas— pero no hay ninguna ruta que
+  lo exporte. La única `/pdf` del vertical es la de recetas
+  (`src/app/api/instituto/recetas/[id]/pdf`). La página dice lo que sí hay y calla lo que no.
+- **No se dice "etapas configurables".** El encargo lo pedía así, y las etapas son una lista
+  CERRADA en el código (`EDU_APPROVAL_STAGES`: plan, procedimiento, sesión, alta y receta), no
+  algo que la escuela configure. Lo que sí es cierto —y es lo que se escribió— es que el
+  docente firma el plan antes de tratar y el alta antes de cerrar, que son las dos puertas
+  reales (`EDU_APPROVAL_GATE_BY_CASE_STATUS`).
+- **"Comparación entre sedes" se dice como es.** No hay una tabla que ponga dos campus lado a
+  lado: hay un SELECTOR que cambia el panel entero a una sede o al consolidado, y el CSV que
+  se exporta declara de qué sede son las cifras. Eso es lo que dice la página.
+- **Los 5 TB, la IA por contrato y el manager van marcados como términos de contrato**, no como
+  funciones: en `main` no existe ninguna cuota de almacenamiento en el código del vertical.
+- **Nada de lo que no está en producción.** Ni el tablero de la clínica en vivo, ni la agenda
+  en rejilla, ni las gráficas del panel de dirección, ni el visor nuevo — aunque parte de eso
+  ya esté en `main`. Se agregan cuando estén desplegados.
+- **La landing dental NO se tocó** y no enlaza aquí. El enlace va en un solo sentido: el pie de
+  `/instituciones` lleva a `/` ("DaleControl para consultorios").
+- **Sin diccionario i18n.** El vertical es de una sola lengua y el panel tampoco lo tiene;
+  crear `src/i18n/dictionaries/edu/` habría sido una carpeta nueva que el guard marca prohibida
+  (con razón) a cambio de un idioma que nadie va a usar. Todo el texto vive en `marketing.ts`,
+  que además es lo que permite recorrerlo entero en la prueba.
+- **Sin dependencias nuevas.** three.js ya estaba (`^0.184.0`), y las tres escenas son
+  procedurales: ni un `.glb`, ni un `.hdr`, ni un byte en `/public`.
+- **Sin backend.** Ni un endpoint, ni una tabla, ni una variable de entorno: el único contacto
+  es un enlace de `wa.me`.
+
+═══════════════════════════════════════════════════════════════════════════
 ## BILLING-EMAILS-MERGE — Correos de billing → MAIN ✅ (2026-06-29)
 ═══════════════════════════════════════════════════════════════════════════
 MERGE: d50b28fe (`--no-ff` de feat/billing-emails @ 8708ac17 sobre main f52400dd) · BUILD EXIT 0
@@ -31440,3 +31840,2113 @@ real queda pendiente de mirarse en el preview de Vercel: la ficha del instituto 
 server-rendered contra Prisma y sin `DATABASE_URL` devuelve 500 antes de pintar nada. Lo que sí
 está probado es la relación entre las dos piezas del arreglo —el CSS renombrado y el JSX que lo
 usa se comprueban el uno contra el otro en la prueba 4—. PR contra `main`, SIN mergear.
+
+
+## [Institucional · CUOTA DE ALMACENAMIENTO] — Una escuela podía subir tomografías hasta que llegara la factura de Supabase: ahora hay 5 TB por contrato, un medidor que dice la verdad y un corte ANTES de firmar la subida ✅ (2026-09-01) · rama `feat/edu-cuota-storage`
+
+### Qué es
+
+Hasta hoy el vertical institucional no tenía **ningún tope ni ningún medidor** de
+almacenamiento. Los estudios (radiografías, tomografías CBCT de cientos de MB, fotos, PDFs)
+suben directos al bucket `edu-files` con URL firmada, y lo único que los acotaba era el tope
+de 2 GB **por archivo**. Nadie —ni la escuela, ni DaleControl— podía contestar cuánto lleva
+gastado un instituto ni cuándo hay que cobrarle más.
+
+Ahora: `EduInstitution.storageQuotaBytes` (BigInt, **5 TB** por omisión), un medidor en el
+tablero de dirección con semáforo 80/95/100, el **corte de la subida en `/sign`** con un
+mensaje que dice cuánto queda y cuánto pesa el archivo, y `/admin/institutos`, donde
+DaleControl ve TB contratados, TB usados y **cuánto facturarle al mes** por el extra.
+
+### Las cuatro decisiones que sostienen esto
+
+- 🔴 **La cuota es POR INSTITUTO, no por sede.** Tres sedes con 5 TB son 5 TB entre las tres,
+  no 15: la sede es una división DENTRO de la escuela (Ola 11) y comparten la bolsa; las sedes
+  siguen siendo ilimitadas. El `where` de la suma lo construye `eduAlmacenamientoWhere` y tiene
+  **UNA sola llave**, con su prueba: en cuanto alguien le agregue un `campusId` "para afinar el
+  reporte", una escuela con dos edificios vería la mitad de su consumo y creería que le sobra
+  el doble de espacio. El medidor del tablero es además lo ÚNICO de esa pantalla que **no**
+  pasa por la sede elegida en la barra superior, y también está probado.
+- 🔴 **El consumo se CUENTA, no se guarda.** `SUM("sizeBytes")` de `edu_studies` con un
+  `aggregate` cada vez que alguien pregunta — nunca se traen las filas. Misma decisión que el
+  cupo de IA de la Ola 8 y por la misma razón: un contador guardado se desincroniza el día que
+  una escritura falle a la mitad, y a partir de ahí o se le bloquea la subida a una escuela que
+  sí tenía espacio, o se le regala el que ya usó.
+- 🔴 **La cuota se VE y no se edita desde el panel.** Es una cláusula del contrato, como
+  `contractStartsAt`/`contractEndsAt`. La tarjeta de dirección no tiene ni un `<button>` ni un
+  `<form>` (probado), ningún archivo bajo `src/app/api/instituto/**` nombra siquiera la columna
+  (probado, recorriendo el árbol entero), y la ÚNICA escritura del producto sale de
+  `/admin/institutos`. Si la escuela pudiera subírsela sola, el cobro por TB extra no
+  existiría.
+- 🔴 **El precio vive en UNA constante.** `EDU_ALM_TB_EXTRA_MXN = 400`
+  (`src/lib/edu/almacenamiento-core.ts`), con el comentario de que es la fuente única. Hay una
+  prueba que abre las tres pantallas y falla si alguna trae `$400`, `400 MXN` o un `* 400`
+  escrito a mano: el día que el TB extra valga $450, se cambia en un sitio y cambia en todos.
+
+### El medidor (panel de Dirección)
+
+Tarjeta en `/instituto/direccion`, componente de **servidor** (no tiene estado ni eventos: no
+hay razón para mandarle JavaScript al navegador). Usado, contratado y porcentaje con el
+formateador que YA existía —`eduFormatBytes`, al que solo se le agregó el tramo de TB, para que
+no haya un segundo formateador que un día diga "5.0 TB" en un sitio y "5120.0 GB" en otro—.
+
+- Verde hasta el 80 %. **Ámbar al 80**: "Queda 1.0 TB…". **Rojo al 95**: "con una tomografía se
+  acaba". **Al 100 %** deja de ser un medidor: dice que **la subida está BLOQUEADA** y las dos
+  salidas (contratar más TB, con el precio, o liberar espacio).
+- **100 % ⟺ bloqueado**, como invariante. El porcentaje se calcula hacia ABAJO mientras quede un
+  byte y vale 100 exacto cuando ya no queda: si se redondeara al alza, un 99.6 % pintaría
+  "100 %" —o sea, "no puedes subir"— con gigas libres. Probado en los dos sentidos.
+- El medidor **CONFIESA lo que cuenta**: los ESTUDIOS del expediente, y dice el número de
+  estudios al lado del tamaño. Las firmas de consentimiento viven en el mismo bucket y **no**
+  tienen fila con su tamaño; no se estiman ni se inventan. Un medidor que inventa bytes es peor
+  que no tener medidor, porque se le cree.
+- ⛔ **No lo ve un ALUMNO, un DOCENTE ni CAJA.** Dos cerraduras: el permiso `direccion.panel`
+  abre el tablero y `eduPuedeVerAlmacenamiento` (punto único de alcance, `visibility.ts`) decide
+  el medidor, con **lista blanca** de roles — un rol nuevo en el enum no lo ve por omisión. Las
+  dos hacen falta: el permiso se puede encender a mano desde Equipo, el ROL no.
+
+### El bloqueo (y por qué va en `/sign`)
+
+El corte está en `signEduStudyUpload`, **antes** de `eduSignUpload` (probado por posición en el
+fuente): si lo usado más lo que viene pasa de la cuota, se rechaza con **507 Insufficient
+Storage** —no 413: el archivo no es demasiado grande, es la escuela la que no tiene sitio— y el
+mensaje dice **cuánto pesa el archivo, cuánto le queda al instituto y a quién avisarle**.
+Firmar primero significaría que alguien se pasa veinte minutos subiendo una tomografía que iba
+a rebotar igual.
+
+**Nunca un 413 mudo:** el cliente de subida ya convierte cualquier respuesta no-ok de `/sign`
+en el texto que mandó el servidor y la pantalla lo pinta en su alerta; hay una prueba que fija
+esa cadena de tres archivos.
+
+Los **dos topes son distintos y los dos siguen valiendo**: `EDU_MAX_STUDY_BYTES` (2 GB por
+archivo, sin tocar) y la cuota de la escuela. Un archivo de 1 GB pasa el primero y no pasa el
+segundo si a la escuela le quedan 200 MB.
+
+### 🔴 La carrera entre `/sign` y `/confirm` — qué se decidió y por qué
+
+Los bytes solo cuentan cuando existe la fila, y quien la crea es `/confirm`. Dos personas que
+firman a la vez con la bolsa casi llena ven las dos el mismo hueco y las dos suben.
+
+**La decisión: el corte vive en `/sign` y `/confirm` NO rechaza por cuota.** Registra —aunque
+el total quede por encima— y deja un `console.warn` con `institutionId`, `studyId`, bytes del
+archivo, usado y cuota, para que el rebase se pueda auditar. El razonamiento largo está escrito
+en la cabecera de `src/lib/edu/almacenamiento.ts` y resumido en `confirmEduStudyUpload`:
+
+1. En `/confirm` los bytes **ya están** en el bucket. Rechazar ahí no ahorra un peso salvo que
+   se BORRE el objeto, y eso es destruir una radiografía que alguien subió entera por una
+   carrera que no podía ver. (El tope de 2 GB sí borra, y no es lo mismo: allí el cliente
+   mintió sobre el tamaño al firmar. Aquí no mintió nadie.)
+2. El rebase está **acotado** a lo que estaba en vuelo, y cada archivo en vuelo pesa como mucho
+   2 GB.
+3. Se **autocorrige** en el intento siguiente: como el consumo se cuenta y no se guarda, el
+   próximo `/sign` ya ve el total real —rebase incluido— y dice que no. No queda deriva ni
+   contador que reparar.
+4. La alternativa honesta (RESERVAR los bytes al firmar) exige una tabla de reservas con
+   caducidad, y un navegador que se cierra a media subida deja reservas fantasma que le comen
+   la cuota a una escuela real hasta que pase un barrido. El modo de fallo pasaría a ser "no
+   puedo subir y nadie sabe por qué", que es peor que pasarse dos gigas.
+5. Y el rebase **no es dinero perdido**: el `/admin` enseña los TB usados y el contrato se
+   factura a mano. Esto no es la cuenta de API de la Ola 8, donde DaleControl se come el
+   excedente en silencio.
+
+Es la misma forma del rebase que ya documentó el cupo de IA: el techo frena lo que EMPIEZA, no
+aborta lo que está en vuelo.
+
+### Lo que ve Rafael en SU /admin
+
+**`/admin/institutos`** (nuevo). Por cada instituto: TB contratados, TB usados con su semáforo y
+el número de estudios, TB extra y **cuánto facturarle al mes**. Arriba, el total a facturar de
+todos juntos — que es el número que contesta "¿cuánto dinero se me está yendo?". DOS consultas
+para N institutos, no N+1 (un `groupBy` por `institutionId` suma todos de una vez).
+
+Ahí **sí** se edita la cuota, en TB enteros, y el modal enseña la factura que se acaba de crear
+ANTES de guardar. La server action **vuelve a exigir sesión de administrador** (una server
+action es un POST que se alcanza sin pasar por ningún layout) y emite un evento `ADMIN_AUDIT`
+con el antes y el después: subir una cuota cambia lo que se le cobra a un cliente.
+
+⛔ **El instituto NO entra a Stripe.** El contrato institucional se administra a mano, por
+diseño (está escrito en el esquema). Esta pantalla no cobra nada: **dice cuánto cobrar**. Hay
+una prueba que falla si alguno de los cuatro archivos importa Stripe.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes
+  (`NODE_OPTIONS=--max-old-space-size=8192`). `prisma generate` limpio (sin EPERM),
+  **464/464 páginas** generadas —una más que antes: `/admin/institutos`, que sale en la tabla
+  de rutas como `ƒ` (4.77 kB)—, `.next/BUILD_ID` escrito, y `/instituto/direccion` sigue en su
+  sitio entre las 138 rutas del vertical. Cero "Failed to compile", cero `error TS`, cero heap
+  OOM. Los únicos avisos son los PREEXISTENTES y ajenos a esta rama: el `Critical dependency`
+  de `file-type` en `api/ai-wallet/spei/topup` y tres clases ambiguas de Tailwind. El spam de
+  `Environment variable not found: DATABASE_URL` es el de siempre (worktree sin `.env`) y no
+  afecta al exit.
+  **Se comprobó ROJO antes que verde, sin querer y con provecho:** el primer intento falló con
+  `Syntax Error` porque un `**/confirm` escrito dentro de un comentario de bloque lleva un
+  `*/` que lo cierra a media frase. Arreglado, y anotado aquí: muerde a cualquiera que escriba
+  una ruta con asterisco dentro de un bloque `/* */`.
+- **`npm run test:edu` exit 0** — **30 archivos descubiertos, 974 pruebas, 974 pass, 0 fail**.
+  Las 41 nuevas viven en `src/lib/edu/__tests__/edu-almacenamiento.test.ts` y cubren lo que
+  pidió el encargo: la suma por instituto ignorando la sede, los umbrales 80/95/100, el corte
+  en `/sign` (y que va ANTES de firmar), y que un ALUMNO/DOCENTE/CAJA no alcancen el medidor.
+  Más: el precio en una sola constante, que ninguna pantalla lo escriba a mano, que ningún
+  endpoint del instituto escriba la cuota, y que el esquema y el `.sql` traigan los MISMOS
+  5 TB que el código.
+- **Guardia:** `EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md" node scripts/edu-guard.cjs`
+  → **exit 0**. 18 archivos vs `origin/main`: 16 propios del vertical y los 2 compartidos
+  declarados. **Cero prohibidos y cero compartidos sin declarar**: ni una línea del dental, de
+  barbería ni de inmuebles.
+- **Raíz del repo limpia:** esta rama no añade ni un archivo a la raíz; el único de raíz que
+  cambia es `ORQUESTA.md`.
+- `scripts/edu-guard.cjs` gana el prefijo `src/app/admin/institutos/` como PROPIO del vertical
+  —carpeta nueva y exclusiva, mismo criterio y mismo renglón que `barber-guard.cjs` con
+  `src/app/admin/barberias/`— y `scripts/edu-tests.cjs` gana esa raíz para que una prueba
+  futura ahí se descubra sola.
+
+### 🔴 SQL — `sql/edu-cuota-storage.sql`, OBLIGATORIO ANTES DEL DEPLOY
+
+Una columna, idempotente, CERO DROP, delimitador `$edu$`, con su bloque de comprobación (que
+existe, que es `bigint`, que ningún instituto se quedó sin cuota) y, comentado, el `UPDATE`
+para cambiar una cuota a mano y el `SELECT` que lee cómo va cada escuela.
+
+**El `DEFAULT` hace de backfill**: Postgres se lo aplica a las filas que ya existen, así que
+todos los institutos dados de alta quedan con los 5 TB incluidos sin un `UPDATE` aparte.
+
+Si se despliega el código sin aplicarlo, Prisma pide una columna que no existe y **toda**
+lectura de `edu_institutions` revienta — y de ahí cuelga la sesión del panel. Mismo trato que
+la `searchIndex` de la Ola 1B y los antecedentes de la ola de Casos.
+
+### Lo que NO se hizo, a propósito
+
+- **No hay entrada en el menú de `/admin`.** `/admin/institutos` funciona y es marcable, pero
+  el sidebar (`src/app/admin/admin-nav.tsx`) es un archivo COMPARTIDO con el dental, y
+  declararlo habría hecho fallar la guardia con el comando pactado
+  (`EDU_GUARD_SHARED="prisma/schema.prisma,ORQUESTA.md"`). El día que se quiera, es un renglón
+  en `NAV_ITEMS` (`{ href: "/admin/institutos", label: "Institutos", icon: GraduationCap,
+  section: "main" }`), agregar `"src/app/admin/admin-nav.tsx"` a `SHARED_FILES` de
+  `edu-guard.cjs` —donde ya está en los guards de barber y de inmuebles— y correr la guardia
+  declarándolo.
+- **No se metió al instituto en Stripe**, por diseño (ver arriba).
+- **No hay tabla de reservas de subida** (ver la carrera).
+- **No se cuentan las firmas de consentimiento** en el medidor. Existen, ocupan espacio y no
+  tienen fila con su tamaño; estimarlas sería inventar. La pantalla lo dice.
+- **No hay barrido de huérfanos**: un objeto subido y nunca confirmado (el navegador se cerró a
+  media subida) sigue ocupando bytes reales que este medidor no ve, porque no tiene fila. Ya
+  estaba anotado como pendiente desde la Ola 3 y esta ola no lo cierra — pero ahora ese hueco
+  tiene consecuencia económica, así que conviene subirlo de prioridad.
+- **No se avisa por WhatsApp ni por correo al llegar al 80 %.** El aviso vive en la pantalla:
+  quien no entre al tablero de dirección no se entera hasta que alguien no pueda subir.
+
+### Lo que no se vio
+
+Sin navegador ni base de datos en esta sesión: el worktree no tiene `.env`, así que cualquier
+pantalla server-rendered contra Prisma devuelve 500 antes de pintar. Lo que está probado es la
+aritmética, los textos, el orden del corte dentro de `/sign`, la cerradura de rol y la cadena
+del mensaje de error hasta la alerta de la pantalla. Que el ámbar se vea ámbar en un monitor
+queda para el preview de Vercel. PR contra `main`, SIN mergear.
+
+## [Institucional · INICIO DE DIRECCIÓN] — El nombre de la escuela no lo aplastaba el minificador sino el LAYOUT, y el Inicio de quien dirige deja de ser un saludo para ser un tablero ✅ (2026-09-01) · rama `feat/edu-inicio-direccion`
+
+Tres cosas en una rama, sobre `origin/feat/edu-cuota-storage` (necesita
+`src/lib/edu/almacenamiento.ts`, que vive ahí y todavía no está en `main`): el bug del nombre
+cortado, el Inicio de DIRECCIÓN convertido en tablero, y el medidor de almacenamiento dentro
+de ese tablero.
+
+### 1 · El nombre de la escuela cortado — QUÉ LO ROMPÍA (medido, no deducido)
+
+El síntoma en producción: `.edu-sidebar__school` llegaba con `display: flow-root`, la caja
+medía **10 px** —solo su relleno— y se veía media línea. La hipótesis de partida era que algo
+de la tubería (minificador / autoprefixer / lightningcss) reescribía la regla. **No era eso, y
+hay dos hallazgos.**
+
+**Cómo se reprodujo.** `npm run build` + `npx next start`, con una página temporal que monta el
+sidebar REAL (mismo markup que `edu-shell.tsx`) con el menú completo de dirección — 22
+renglones, que es lo que ve un director. Medido con `getComputedStyle` contra ese build:
+
+```
+ANTES    display: flow-root · height 10 px  · clientHeight 10 · scrollHeight 63 · flex-shrink 1
+DESPUÉS  display: flow-root · height 35.1px · clientHeight 35 · scrollHeight 53 · flex-shrink 0
+         35.1 px = 2 × 17.55 px de line-height  →  1.99 renglones exactos
+```
+
+**Hallazgo 1 — la tubería NO toca la regla.** En el CSS emitido
+(`.next/static/css/*.css`) la regla sale **letra por letra** como está escrita:
+`display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2`. `postcss.config.mjs`
+solo tiene dos plugins (`tailwindcss` y `autoprefixer`) y ninguno la modifica; el CSSOM del
+navegador confirma `display: -webkit-box` como valor **especificado**. El `flow-root` es el
+valor **COMPUTADO** que Chrome 152 le da hoy a ese display heredado — se comprobó con un
+elemento creado a mano con `style="display:-webkit-box"` **inline**, sin hoja de estilos de por
+medio: sale `flow-root` igual. Y es cosmético: el recorte a dos renglones **sigue funcionando**
+(se comprobó poniéndole `flex-shrink: 0` y nada más — la caja pasó de 10 px a 45 px con sus
+puntos suspensivos). O sea: el dato que despistaba era real, pero no era la causa.
+
+**Hallazgo 2 — lo que aplastaba la caja era el LAYOUT.** `.edu-sidebar` es un contenedor flex
+en COLUMNA con alto definido (`100dvh` en escritorio, `top/bottom` en el cajón), y **un ítem
+flex con `overflow: hidden` tiene tamaño mínimo automático CERO**. Con el menú de dirección
+—1103 px de contenido en 655 px de columna— el algoritmo encoge lo único que se deja encoger, y
+`.edu-sidebar__school` es el **único** hijo del cajón con `overflow: hidden`. Por eso fue el
+único que se rompió, y por eso el bug depende del rol: con un menú corto no se ve.
+
+**El arreglo, y por qué éste sobrevive:**
+
+- **`flex: none`** — es EL arreglo. La caja no se encoge; si el menú no cabe, el cajón scrollea
+  (ya tenía `overflow-y: auto`). Un menú con scroll se usa; un nombre de escuela a 10 px no se
+  lee. Se comprobó que **nadie más** se aplasta en su lugar: `.edu-nav` y `.edu-sidebar__foot`
+  siguen a su alto de contenido.
+- **`max-height: calc(2 * 1.35em)`** — el cinturón, por si un navegador deja de honrar el
+  `-webkit-box` (Chrome ya lo computa a otra cosa). Se comprobó que corta a dos renglones
+  incluso con `display: block`.
+- **El `padding-bottom: 10px` pasó a `margin-bottom: 10px`** (el hueco hasta el menú es el
+  mismo: 14 px medidos antes y después). `overflow: hidden` recorta en la caja de RELLENO, así
+  que con el padding dentro **asomaban 10 px del tercer renglón** por debajo de los puntos
+  suspensivos. Se vio en la captura y se corrigió.
+- ⚠️ **El respaldo que proponía el encargo, `max-height` a secas, NO arregla nada por sí solo**:
+  se midió y la caja seguía en 10 px. `max-height` no impide que un ítem flex se encoja. Queda
+  como segunda línea, no como arreglo.
+
+**El mismo truco en otro sitio.** `.edu-topbar__name` (la barra superior del móvil) tiene la
+misma forma: `-webkit-box` con `overflow: hidden` dentro de un contenedor flex. Hoy **no** se
+rompe —`.edu-topbar__title` crece con su contenido, así que no hay quien apriete; medido a
+372 px en un iframe: 36.25 px = 2 renglones, antes y después— pero el día que la barra gane un
+alto fijo se aplastaría igual. Lleva el mismo `flex: none` + `max-height`, y el `line-height`
+se declaró en la propia regla porque es el número que usa el `calc`. Son los **dos únicos**
+sitios del vertical con line-clamp (`grep` de `-webkit-box|line-clamp` sobre
+`src/app/instituto/`, `src/components/edu/` y `src/app/admin/institutos/`).
+
+**Vuelto a medir contra el build final** (`npm run build` + `next start`, la regla leída del
+CSSOM del archivo emitido): `flex: 0 0 auto`, `max-height: 35.1px`, altura 35.1 px, 1.99
+renglones, `scrollHeight` 53 → el texto sobrante queda recortado con sus puntos suspensivos.
+En el cajón del móvil (iframe a 372 px), de 10 px a 35.1 px.
+
+### 2 · El Inicio de DIRECCIÓN, un tablero
+
+`/instituto/inicio` era un saludo con tres tarjetas. Para **DOCENTE, ESTUDIANTE y CAJA sigue
+siendo exactamente eso, sin una línea de diferencia**. Para DIRECCIÓN es ahora un tablero con
+tres gráficas, un bloque de "lo que está esperando" y el medidor de almacenamiento.
+
+- **Tres gráficas con conmutador semana / mes**, todas por día y todas respetando la sede del
+  selector que ya existe (`getEduCampusScope`):
+  1. **Pacientes atendidos** — personas distintas con una cita `COMPLETED` ese día.
+  2. **Dinero cobrado** — pagos REALES menos devoluciones, por la fecha del **pago** (no cobros
+     emitidos).
+  3. **Tratamientos autorizados** — autorizaciones `APPROVED`, por la fecha de la firma.
+  Cada una con su total del periodo y la variación contra el periodo anterior.
+- **Debajo, lo que está esperando**, con su número y el enlace a donde se resuelve:
+  autorizaciones sin firmar (`/instituto/autorizaciones`), citas de hoy (`/instituto/agenda`) y
+  por cobrar (`/instituto/caja`).
+
+**No se escribió un tablero desde cero.** Las series viven en `direccion-core.ts` (lo puro) y
+`direccion.ts` (las consultas), al lado de las cuatro tarjetas de la Ola 7, y de ahí las
+consume el Inicio. Se reusa TODO: `eduDirVentana` (mismo periodo, y el anterior pegado por la
+izquierda y del mismo largo), `EDU_DIR_MAX_CITAS`/`EDU_DIR_MAX_FILAS` con el mismo aviso al
+alcanzarlos, `eduDirVariacion` (que **no inventa un porcentaje** cuando el periodo anterior fue
+cero) y `eduDirAlcance` (que es quien niega). Dos módulos calculando el mismo dinero de dos
+formas es un bug esperando, y por eso el total de "Dinero cobrado" del Inicio es **el mismo
+número** que la tarjeta "Cobrado" del tablero: mismo `where`, misma ventana, misma resta de
+devoluciones.
+
+**Las decisiones que no se deducen del código:**
+
+- 🔴 **Las barras de "pacientes" NO suman su total, y la pantalla lo dice.** La cifra cuenta
+  PERSONAS: quien vino el lunes y el jueves suma 1 en el lunes, 1 en el jueves y **1** en el
+  total. Por eso `eduDirArmarSerie` **recibe** el total en vez de deducirlo sumando — deducirlo
+  diría 2 y contradiría al tablero de Dirección, que dice 1. Hay prueba.
+- 🔴 **Las autorizaciones NO se recortan por sede, y se dice cuando hay una elegida.** Una
+  autorización cuelga de un CASO, y en la Ola 11 lo académico no se divide por campus (un
+  estudiante rota entre edificios y su expediente es uno solo). `EduCaseApproval` no tiene
+  `campusId`, y derivarle una sede por el sillón de alguna de sus citas sería inventarla: un
+  caso puede tener citas en dos edificios. Es la misma decisión que ya toma la tarjeta
+  "esperando firma" del tablero. Las otras dos series sí se recortan: las citas por su
+  **sillón** y el dinero por la columna de sede **sellada en el cobro**, exactamente como en
+  `/instituto/direccion`.
+- 🔴 **Se pintan TODOS los días del periodo, también los de cero.** Una serie armada solo con
+  los días que tuvieron filas pega el viernes con el lunes y dibuja una clínica que trabaja
+  siete días.
+- 🔴 **El día de cada fila se decide en la zona del INSTITUTO.** Un pago de las 19:00 en México
+  es de HOY; leído en UTC caería en la barra de mañana. Probado en los dos sentidos.
+- 🔴 **Un día de dinero puede salir NEGATIVO y se pinta así** (se devolvió más de lo que
+  entró), con su línea del cero. Taparlo escondería el único día que hay que ir a mirar.
+- 🔴 **La variación del DINERO se escribe en dinero.** `eduDirVariacion` es genérica y escribe
+  los dos extremos como números pelados; en centavos eso saca `(0 → 842300)`, que se lee como
+  ochocientos cuarenta y dos mil pesos cuando son ocho mil cuatrocientos veintitrés. Se añadió
+  `eduDirVariacionEn(actual, anterior, unidad)`: **la aritmética no cambia** (sigue siendo la
+  misma función, con su regla de no inventar porcentajes), solo cómo se escriben esos dos
+  números. Hay prueba de las dos cosas.
+- **El conmutador tiene DOS posiciones, no cuatro.** "Hoy" es un día —una gráfica de una barra
+  no es una gráfica— y el rango personalizado ya vive en el tablero con su exportación al lado.
+  `parseEduDirInicioPeriodo` existe justo para eso: `hoy` y `rango` son valores LEGALES del
+  tablero, y aquí caen a "semana".
+- **El Inicio no filtra por especialidad.** Es la portada de la escuela entera; el desglose por
+  especialidad es análisis y vive en Dirección.
+- **El conmutador NAVEGA** (`?periodo=`), no guarda estado en el cliente: cambiar de semana a
+  mes es cambiar la consulta, así que se hace donde vive la consulta. Mismo mecanismo que el
+  tablero, y deja la vista compartible y recargable.
+
+**El alcance pasa por `visibility.ts`, el punto único.** Se añadió ahí
+`eduPuedeVerLaClinicaEntera(actor)`, que **pregunta a `eduVisibility`** por los cuatro recursos
+en vez de escribir una lista blanca de roles nueva — así, el día que un rol cambie de alcance,
+esto lo dice solo. `eduDirAlcance` (que ya hacía esa comprobación a mano) ahora la usa, y con
+ella el motivo del 403, que también se mudó al punto único: dos redacciones del mismo motivo
+son dos formas de explicar mal la misma regla. **Un DOCENTE, un ESTUDIANTE o CAJA que peguen la
+URL no ven el dinero de la escuela**: el permiso `direccion.panel` decide si se PIDEN los datos
+y el alcance decide si se pueden dar — NIEGA, no recorta, porque un total recortado presentado
+como el total es un dato falso. Hacen falta los dos: el permiso se enciende a mano desde
+Equipo, el ROL no. (Caja da `false` y conviene saber por qué: ve pacientes, agenda y dinero,
+pero **no casos**, así que "tratamientos autorizados" le saldría en cero y se leería como "esta
+semana no se autorizó nada".) Y si el tablero no se puede pintar, el Inicio **degrada al saludo
+de siempre** en vez de quedarse en blanco: es la portada del panel.
+
+**Las gráficas: `recharts`, la misma librería que ya usa el repo.** Cero dependencias nuevas —
+ya está en `package.json` (`^2.12.7`) y la usan `/admin/analytics`, `/dashboard/finanzas`,
+`/dashboard/reports`, `/dashboard/analytics/crm` y media docena de sitios más del dental. La
+forma de cargarla está copiada de
+`src/components/dashboard/home/parts/revenue-trend-card.tsx`: `next/dynamic` con `ssr: false`,
+porque recharts pesa ~95 kB y el Inicio lo abren también un estudiante y un docente, que no ven
+ninguna gráfica. Decisiones de dibujo:
+
+- **Barras y no una línea**: cada punto es un día, y una línea entre dos días insinúa que hubo
+  algo entre medias ("1.4 pacientes el martes por la tarde").
+- **Un solo color en las tres, el de la marca.** En este vertical el color está reservado para
+  el semáforo; tres gráficas de tres colores enseñarían a leerlo como decoración justo en la
+  pantalla donde luego hay que creerle a un rojo.
+- **La etiqueta del eje es corta — "Mar 25"** y no "mar 25 de ago": con 30 barras solo se
+  rotula una de cada cuatro y la larga se pisa con la siguiente. El mes está en el encabezado
+  del periodo y la fecha COMPLETA la dice el globo del ratón.
+- **El eje del dinero es corto** (`-$550`, `$1.1k`, `$120k`), con el signo delante del peso.
+  `$12,340.00` no cabe en 46 px y recharts lo recorta a la mitad.
+- **Dos gráficas arriba y la tercera a lo ancho** (≥1000 px). Con la tercera en media columna
+  quedaba medio bloque en blanco al lado, que se lee como algo que no cargó. Medido a 387 px:
+  las tres apiladas, **cero desborde horizontal**.
+
+### 3 · El almacenamiento, dentro del tablero
+
+Tarjeta al pie del tablero, **reusando** `getEduAlmacenamientoPanel` y `EduAlmacenamientoCard`
+de la rama de la cuota: mismos colores (ámbar al 80 %, rojo al 95 %, bloqueado al 100 %),
+mismos textos, mismo consumo. **No se recalcula nada** — hay prueba de que la pantalla del
+Inicio no nombra `eduStudy`, `sizeBytes` ni `storageQuotaBytes`. Y **no pasa por la sede**
+aunque el resto del tablero sí: la cuota es del INSTITUTO —tres sedes con 5 TB son 5 TB entre
+las tres— y recortarla por campus le enseñaría a una escuela con dos edificios la mitad de su
+consumo. También hay prueba de que se pide con `getEduAlmacenamientoPanel(ctx)` y no con la
+sede.
+
+### Verificación
+
+- **`npm run build` completo, sin pipes: exit 0.** (Un intento intermedio salió EPERM en
+  `prisma generate` porque el `next start` de la medición tenía tomado
+  `query_engine-windows.dll.node`; se paró el servidor y el build corrió limpio. Es el EPERM
+  conocido de Windows, no del código.)
+- **`npm run test:edu`: exit 0 — 31 archivos, 1014 pruebas, 1014 pass, 0 fail.** Las 40 nuevas
+  están en `src/lib/edu/__tests__/edu-inicio-direccion.test.ts` y cubren lo que pidió el
+  encargo: que las series por día respeten la sede (y que las autorizaciones **no**, con su
+  aviso), que un DOCENTE/ESTUDIANTE/CAJA no las reciban, y la variación contra el periodo
+  anterior. Más: los días de cero, la zona horaria del instituto, el total que no se deduce
+  sumando barras, el día negativo que no se tapa, la variación del dinero escrita en dinero, y
+  un **candado mecánico** sobre `direccion.ts` — si alguien le escribe a mano un
+  `institutionId`, le quita el `pagoCharge(alcance, …)`, le pone un `campusId` a las
+  autorizaciones o cambia los pagos por cobros emitidos, la prueba falla.
+- **Guardia:** `EDU_GUARD_SHARED="ORQUESTA.md,prisma/schema.prisma" node scripts/edu-guard.cjs`
+  → **exit 0**. ⚠️ `prisma/schema.prisma` hay que declararlo porque la rama sale de
+  `feat/edu-cuota-storage` y hereda su columna `storageQuotaBytes`; **esta rama no toca el
+  esquema** —no añade ni una tabla ni una columna— y por lo mismo **no hay `.sql` que aplicar**.
+- **Raíz del repo limpia:** ni un archivo nuevo en la raíz; el único de raíz que cambia es
+  `ORQUESTA.md`. Las dos páginas temporales de medición (`src/app/dev-edu-css/`,
+  `src/app/dev-edu-inicio/`) se borraron antes de commitear y `git status` lo confirma.
+
+### Lo que NO se hizo, a propósito
+
+- **El Inicio no tiene endpoint propio ni se refresca solo.** El bloque en vivo (los sillones,
+  quién está sentado en cada uno) sigue siendo del tablero de Dirección, que es donde se mira
+  de pie. Aquí lo que se lee es cómo va la semana, y eso no cambia mientras se mira.
+- **No se enlaza a una lista concreta desde cada gráfica.** El tablero de Dirección no abre sus
+  modales desde la URL, así que un `?detalle=…` llegaría a una pantalla sin abrir nada. Cada
+  gráfica enlaza a Dirección **con el mismo periodo**, y ahí la cifra se abre.
+- **La gráfica de dinero se dibuja con filas y no con un `groupBy`** (el tablero sí usa
+  `groupBy` para su total): Postgres no puede agrupar por "día en la zona del instituto" sin SQL
+  crudo, y el SQL crudo se saltaría los `where` de `visibility.ts`. Lleva el mismo tope de
+  10 000 filas que los cobros, con su aviso si se alcanza.
+- **No se tocó el tablero de Dirección** más allá de hacerle usar el punto único para negar.
+  Sus cifras, sus listas y su CSV están igual.
+
+### Encontrado y NO arreglado (queda anotado)
+
+La tarjeta **"Cobrado" del tablero de Dirección (Ola 7) escribe su variación en centavos
+pelados**: `variacion.texto` sale como `+12 % (1234500 → 1500000)` y la pantalla lo pinta tal
+cual (`direccion-screen.tsx`, componente `Cifra`). Es el mismo problema que se arregló aquí
+para las series, y la función que lo arregla ya existe (`eduDirVariacionEn`). No se cambió allí
+porque **el CSV de acreditación lee ese mismo `texto`** y la columna "Periodo anterior" del CSV
+escribe también los centavos crudos: tocarlo es una ola pequeña propia —con su decisión sobre
+qué debe decir el archivo— y no un cambio de paso dentro de ésta.
+
+### Lo que no se vio
+
+Sin `.env` ni base de datos en el worktree, `/instituto/inicio` con datos reales no se pudo
+abrir. Lo que SÍ se vio en un navegador contra el build de producción: el bug del nombre y su
+arreglo (medido con `getComputedStyle`, con captura antes y después, en escritorio y en el
+cajón del móvil) y el tablero completo montado con los COMPONENTES REALES y datos falsos en una
+página temporal —las tres gráficas en semana y en mes, el conmutador, los accesos y el
+medidor—, a 1180 px y a 387 px, borrada antes de commitear. PR contra `main`, SIN mergear.
+
+═══════════════════════════════════════════════════════════════════════════
+## EDU-SEED-DEMO — Un instituto de DEMO con volumen real, y lo que se rompe cuando se llena (2026-09-01) · rama feat/edu-seed-demo
+═══════════════════════════════════════════════════════════════════════════
+
+Hasta hoy el vertical institucional se había probado con **1 paciente y 1 caso**. El cliente que
+viene son **120 estudiantes y 32 sillones**, y nadie había visto una sola pantalla llena. Esta
+rama siembra un instituto de mentira con ese volumen y **mide** el panel entero: cuánto tarda
+cada pantalla, cuántas filas viajan al navegador y cuántas lee la base para producirlas.
+
+**No arregla nada.** Es un instrumento de medida y un reporte. Lo que encontró está abajo,
+ordenado por lo que más va a doler.
+
+ARCHIVOS: `scripts/edu-seed-demo.ts` (nuevo, PROPIO del vertical) ·
+`scripts/edu-guard.cjs` (+1 renglón en `OWN_FILES`) · `package.json` (+`seed:edu-demo`) ·
+`ORQUESTA.md`. **Cero cambios en el dental, en barbería o en inmuebles. Sin SQL que aplicar,
+sin migración, sin envs nuevas.** El schema no se toca: el seed escribe filas, no columnas.
+
+---
+
+### 1 · QUÉ SIEMBRA
+
+    npm run seed:edu-demo                  # siembra (idempotente)
+    npm run seed:edu-demo -- --medir       # recorre el panel con cronómetro
+    npm run seed:edu-demo -- --sql-borrado # imprime el DELETE completo
+
+| | |
+|---|---|
+| 1 instituto | `DEMO · Instituto de Especialidades DaleControl`, slug `demo-volumen` |
+| **3 sedes** | Norte (12 sillones) · Centro (10) · Sur (10, abre sábados) |
+| **32 sillones** | la numeración **reempieza en cada sede** — hay tres «Sillón 1» |
+| **120 estudiantes** | 2 generaciones (2025-A, 2026-A) × 3 especialidades × 20 |
+| 12 docentes + 1 dirección + 2 caja | 135 personas con login |
+| 180 asignaciones | la generación vieja lleva una **rotación** de docente: una cerrada, una vigente |
+| **600 pacientes** | folios P-0001…P-0600; 22 % **sin antecedentes registrados** (el tri-estado de #150) |
+| **400 casos** | los siete estados del enum, repartidos |
+| **20 577 citas** | de marzo 2025 a hoy+14 días · **hoy: 190 citas, 52 vivas ahora mismo** |
+| 1 511 notas · 1 051 estudios · 1 951 hallazgos de odontograma | |
+| 870 autorizaciones (75 pendientes) · 134 consentimientos · 100 recetas | |
+| 180 cobros · 135 pagos · 12 planes a meses · 105 mensualidades · 32 turnos de caja | |
+| 183 calificaciones con sus 732 criterios · 15 requisitos · 3 rúbricas | |
+| 220 usos de IA con su cupo | |
+
+Se siembra en **7-11 s**. Correrlo dos veces no duplica: cada fila lleva un id determinista
+(sha1 de una llave estable) y todo entra por `createMany({ skipDuplicates: true })`. Verificado:
+segunda corrida → «135 ya estaban», y los conteos de la base no se mueven.
+
+**La única escritura que no es `create`** es el refresco de la foto de HOY: `skipDuplicates`
+haría que un instituto sembrado ayer amaneciera con la agenda de hoy entera en `SCHEDULED` y la
+pantalla de clínica en vivo vacía. Un `UPDATE` acotado a las citas de hoy **de ese
+institutionId** vuelve a poner gente en el sillón.
+
+---
+
+### 2 · 🔴 LAS TRES COSAS QUE NO PODÍA HACER, Y CÓMO SE IMPIDEN
+
+Ninguna de las tres es un comentario pidiendo cuidado. Las tres corren, y se probaron a
+propósito contra un instituto vecino sembrado a mano para la prueba.
+
+**a) No tocar el instituto real.** El seed crea SU instituto y comprueba el destino antes de
+escribir. Las cuatro puertas, ejecutadas:
+
+| Escenario | Qué pasó |
+|---|---|
+| Existe un instituto vecino con datos | `✅ ninguna fila fuera del instituto de demo cambió` — el vecino sigue con su usuario |
+| Alguien le quita el prefijo `DEMO · ` al de demo | **rebota**: «cuyo nombre NO empieza con "DEMO · "… No se escribe nada» |
+| Alguien le pone el slug `demo-volumen` a otro instituto | **rebota**: «tiene id "impostor" y este seed solo sabe escribir en "dsdinst…"» |
+| `DATABASE_URL` apunta a Supabase | **rebota**: «no es local. Si de verdad quieres sembrar ahí, declara el host EXACTO: `EDU_SEED_HOST_REMOTO="…"`» |
+
+Y además, al terminar **cada** corrida (siembra o medición) compara el conteo de filas AJENAS
+de las 42 tablas del vertical contra la foto que tomó al empezar. Si una sola fila de otro
+instituto cambió, sale con código 1 y la nombra.
+
+**b) No mandar nada al mundo.**
+- **No se crea `EduWhatsappConfig`.** El barrido de recordatorios arranca de
+  `eduWhatsappConfig.findMany({ where: { remindersEnabled: true } })` (`recordatorios.ts:116`):
+  **sin fila, el instituto de demo no existe para el cron.** Es más fuerte que poner
+  `remindersEnabled: false`, porque no depende de que nadie lo encienda por curiosidad.
+- Cero filas en `EduWhatsappMessage`. La cola no lleva nada.
+- Correos todos `@demo.local` — TLD reservado por el RFC 2606, no resuelve.
+- Teléfonos del bloque de ficción `55 5501 xxxx`.
+- **`supabaseId` = `demoseed-0001`…**, que nunca es un UUID de Supabase Auth: no se crea
+  ninguna cuenta y por tanto no sale ninguna invitación. **Consecuencia deliberada: a este
+  instituto NO SE PUEDE ENTRAR por el login.** Para pasearlo en un entorno real hay que dar de
+  alta las cuentas en Supabase Auth a mano y copiar sus UUID a `edu_users.supabaseId`. Se
+  prefirió eso a que un seed mandara 135 correos de invitación.
+
+**c) Todo borrable.** `--sql-borrado` imprime el bloque de la sección 6. Probado contra la base
+con el instituto vecino delante: **20 577 citas → 0, y el vecino intacto** (1 instituto, 1
+usuario).
+
+---
+
+### 3 · 🔴 LOS ESTUDIOS NO TIENEN ARCHIVO, Y POR ESO LO DICEN
+
+`EduStudy.sizeBytes` alimenta el tamaño que se pinta junto a cada estudio y la decisión «este
+CBCT no cabe en un móvil» del visor (`cbct-viewer.tsx:442`). **Una fila con 412 MB y ningún
+binario en el bucket es una fila que miente.** Las dos salidas honestas eran subir archivos
+chicos de verdad o marcar la fila. **Se eligió marcar**, por tres razones:
+
+1. El bucket `edu-files` es de Supabase, o sea del mundo. Subirle 1 051 archivos desde un seed
+   es exactamente el «no mandes nada afuera» que esta tarea prohíbe — y además dejaría basura
+   que el DELETE de SQL no limpia: **el objeto de Storage sobrevive a la fila**.
+2. Subir «archivos chicos de verdad» tampoco arregla la mentira: un PNG de 2 KB con
+   `sizeBytes` de 412 MB miente igual, y poniendo el tamaño real el medidor no mediría nada.
+3. El nombre se lee en TODAS las pantallas donde se lee el tamaño, así que el aviso viaja
+   pegado al dato que engañaría.
+
+Cada estudio se llama `Ortopantomografía · DEMO SIN ARCHIVO` y su `storagePath` empieza por
+`demo-seed/`. Los tamaños son verosímiles (periapical ~700 KB, pano ~4 MB, CBCT 290-620 MB).
+
+**Total sembrado: 1 051 estudios, 25.5 GB de `sizeBytes` y CERO bytes en el bucket.** Dicho para
+la rama de la cuota de almacenamiento que anda en paralelo (#155): cuando ese medidor sume
+`sizeBytes` por instituto, este instituto va a reportar 25 GB que no están. El nombre de cada
+fila lo dice; conviene que el medidor no lo contradiga en silencio.
+
+---
+
+### 4 · 📊 LA TABLA DE MEDICIONES
+
+Sacadas llamando **a los mismos loaders que llama cada server component**, con el mismo
+contexto que les llega. Base: Postgres 16 en Docker, **misma máquina, latencia de red cero**.
+Cada `ms` es la **mediana de tres corridas** con la máquina en reposo (las tres coincidieron
+dentro de ±10 % salvo la primera fila, que osciló entre 239 y 293).
+
+> 🔴 **Los milisegundos son un SUELO, no el número de producción.** En Vercel + Supabase hay
+> red y PgBouncer de por medio, y cada consulta paga ida y vuelta. La columna que se traslada
+> tal cual es **«filas leídas»**: esa no depende de dónde esté la base.
+
+Ordenada por lo que más va a doler.
+
+| # | Pantalla | ms | filas al navegador | filas leídas | payload | Qué pasa |
+|---|---|---:|---:|---:|---:|---|
+| **1** | **`/instituto/evaluacion`** (dirección, sin filtro) | **241** | 120 | **17 082** | 93 KB | Lee **16 364 citas COMPLETED** + 400 casos + 183 calificaciones **para pintar 120 renglones**. Es el P2-6, medido. |
+| | ↳ mismo, filtrando 1 generación (2025-A) | 64 | 20 | 4 465 | 16 KB | El arreglo que propone la auditoría, medido: **−73 % de tiempo, −74 % de filas** |
+| | ↳ mismo, filtrando 1 generación (2026-A) | 30 | 20 | 1 251 | 16 KB | **−88 % / −93 %** |
+| | ↳ mismo, con los ojos de un DOCENTE | 26 | 10 | 10 | 8 KB | El recorte por supervisión es lo único que hoy lo salva |
+| **2** | **Ficha · pestaña Expediente** | 79 | **200 de 240** | 240 | **237 KB** | **Corta en 200 y NO lo dice.** Es un expediente clínico. |
+| **3** | **Ficha · pestaña Estudios** | 56 | **200 de 240** | 240 | 92 KB | Igual: tope 200, sin señal |
+| **4** | **`/instituto/direccion` · periodo 30 días** | **231** | — | — | 16 KB | 14 consultas, en secuencia con el bloque en vivo |
+| | ↳ periodo 365 días | 228 | — | — | 16 KB | No empeora: los `take` internos ya lo acotan (y lo avisa) |
+| | ↳ bloque EN VIVO | 23 | 32 | 32 | 23 KB | Barato. Bien. |
+| **5** | **`/instituto/agenda` · SEMANA, 3 sedes** | 107 | **500 (CORTADA)** | 500 | **437 KB** | Tope `EDU_AGENDA_MAX_ROWS`. La semana **no cabe**. Sí avisa. |
+| **6** | `/instituto/agenda` · HOY, 3 sedes (32 sillones) | 67 | **648** | 648 | **237 KB** | 190 citas + 32 sillones + **300 pacientes en un `<select>`** |
+| | ↳ HOY, solo Sede Norte | 27 | 71 | 71 | 62 KB | Elegir sede es lo único que baja la rejilla de 32 columnas |
+| | ↳ HOY, solo Sede Centro / Sur | 21 / 21 | 58 / 61 | | 51 / 53 KB | |
+| **7** | `/instituto/casos` (incluyendo cerrados) | 65 | **300 CORTADA de 400** | 400 | 167 KB | …y con eso **el CSV devuelve 413 y no exporta nada** |
+| | ↳ sin filtro (solo abiertos, el default) | 67 | 406 | 400 | 190 KB | 280 casos abiertos: cabe |
+| | ↳ filtro «en tratamiento» | 36 | 150 | 150 | 85 KB | |
+| | ↳ buscador «Ibarra» | 15 | 13 | 13 | 7 KB | `contains` sobre `searchIndex`, sin índice de texto — a este volumen no se nota |
+| **8** | `/instituto/pacientes` (sin filtro) | 32 | **411 (300 CORTADA de 600)** | 600 | **273 KB** | El payload más gordo del panel |
+| **9** | `/api/instituto/casos/export` (CSV, sin filtro) | 56 | 280 | 400 | 53 KB | Exporta |
+| | ↳ CSV acotando a un estado | 34 | 90 | 90 | 15 KB | |
+| **10** | `/instituto/autorizaciones` (bandeja) | 42 | 75 | 870 | 84 KB | 75 pendientes de 870. Sano. |
+| **11** | Ficha de paciente (layout) | 33 | 1 | 1 | 3.5 KB | Barato |
+| **12** | `/instituto/requisitos` | 4 | 15 | 15 | 6 KB | Barato |
+
+---
+
+### 5 · LOS HALLAZGOS, POR LO QUE MÁS VA A DOLER
+
+#### 🔴 1 — El expediente y los estudios se cortan en 200 SIN DECIRLO
+
+**Lo nuevo de esta sesión.** `listEduPatientRecords` (`expediente.ts:227`) y
+`listEduPatientStudies` (`estudios.ts:179`) hacen `take: 200` **sin `+ 1`**, así que no pueden
+saber que cortaron; devuelven un array pelado, sin bandera. Ninguna de las dos pantallas
+(`expediente-screen.tsx`, `estudios-screen.tsx`) menciona `truncated` — el resto del panel sí:
+casos, pacientes, agenda, equipo, padrón, caja, evaluación, facturación y autorizaciones **todas
+avisan**. `listEduOdontogram` (`odontograma.ts:119`) tiene el mismo patrón con tope 1 000.
+
+Medido: el paciente con 240 notas y 240 estudios **enseña 200 de cada** y no hay una sola
+palabra en pantalla que lo diga. Un alumno que busca la nota de la primera sesión de un caso
+largo va a concluir que no existe.
+
+Esto es exactamente el argumento que la propia auditoría escribió para NO «arreglar» el P2-6 con
+un `take` a secas: *«un `take` a secas aquí no acota — FALSIFICA»*. Aquí ya está puesto, y en un
+expediente clínico. **Arreglo mínimo: `take: MAX + 1`, `truncated`, y el aviso que ya tienen las
+otras nueve pantallas.** Es media hora.
+
+#### 🔴 2 — P2-6 confirmado, con número: 17 082 filas para pintar 120
+
+La auditoría decía «con años de uso son decenas de miles». **Con 18 meses ya son 16 364.** Y
+crece con el TIEMPO, no con los alumnos: la misma escuela dentro de cuatro años lee ~45k.
+Los 241 ms de aquí son con la base en la misma máquina; con Supabase por red, esta pantalla es
+la primera candidata a los tres segundos.
+
+Lo importante es que **el arreglo que la auditoría ya había escrito está medido**: filtrar por
+generación baja de 17 082 a 4 465 filas y de 241 a 64 ms. La decisión de producto sigue siendo
+la misma que quedó anotada en el cierre (¿cuál es la generación por defecto? ¿las cerradas
+cuentan?), pero ya no hay que estimar el beneficio.
+
+Detalle que empeora con el tiempo: el índice `edu_appointments_student_idx` es
+`(institutionId, studentId, startsAt)` — **`status` no entra**, así que las 16 364 COMPLETED se
+filtran DESPUÉS de leer todas las citas de esos alumnos.
+
+#### 🟠 3 — Dirección: 231 ms y no baja con el periodo
+
+Es la segunda pantalla más cara y por un motivo distinto al de evaluación: no es volumen de
+filas, son **14 consultas encadenadas** con el bloque en vivo (a propósito, para no abrir el
+doble de conexiones contra el pool). Por eso 365 días cuesta lo mismo que 30 — los `take`
+internos ya lo acotan y la pantalla lo avisa. Con red de por medio, esos 231 ms se multiplican
+por el número de idas y vueltas, no por el tamaño de los datos: es el caso donde la diferencia
+entre «local» y «Supabase» más se va a notar.
+
+#### 🟠 4 — La agenda de la semana no cabe, y la del día es de 3 sedes a la vez
+
+- **Semana:** 500 filas es el tope, y la semana de este instituto lo alcanza. La pantalla avisa
+  (bien), pero el aviso es «hay más» sin decir qué hacer: el filtro que de verdad la salva es el
+  de **sede**, que está arriba en la barra y no en el aviso.
+- **Día:** cabe en tiempo (67 ms), pero son **32 columnas** de tres edificios distintos en una
+  rejilla. La vista consolidada de la Ola 11 tiene sentido para dirección; para quien va a usar
+  la agenda, la sede debería venir **preseleccionada**, no en consolidado. Con una sede son
+  58-71 citas y 51-62 KB — legible.
+- **Y un `<select>` de 300 pacientes.** `listEduPatientOptions` (`pacientes.ts:282`) va con tope
+  `EDU_CLINICA_MAX_ROWS` = 300; a 600 pacientes ya está cortado, así que **el paciente 301 no se
+  puede elegir al agendar**. A 2 000 pacientes, la escuela agenda a mano el 85 % de su padrón.
+  Ese `<select>` necesita buscador contra el servidor, no un tope.
+
+#### 🟠 5 — El CSV de casos se niega a exportar en cuanto se marcan «incluir cerrados»
+
+`route.ts:36` devuelve **413** si el listado salió cortado — decisión correcta (un CSV
+silenciosamente incompleto es un reporte falso), pero con 400 casos y el tope en 300, marcar la
+casilla de cerrados deja a la escuela sin export. Y «casos cerrados» es justo lo que se exporta
+para una acreditación. El tope de 300 vive en `EDU_CLINICA_MAX_ROWS`, compartido con casos,
+pacientes y opciones de alumno: subirlo mueve cuatro pantallas a la vez.
+
+#### 🟡 6 — Payloads de 237-437 KB por pantalla
+
+Agenda semana 437 KB, pacientes 273 KB, expediente 237 KB, agenda día 237 KB. No es un problema
+de servidor, es lo que baja al navegador en el payload RSC en cada navegación. La agenda del día
+manda `chairCampusName`, `caseProgramName` y el nombre del docente **en cada una de las 190
+filas**; el `<select>` de 300 pacientes va entero aunque el usuario no abra el alta.
+
+#### ⚪ 7 — Lo que aguantó bien
+
+Autorizaciones (75 de 870, 42 ms), requisitos, la ficha del paciente, el bloque en vivo de
+dirección, el buscador de casos y **el recorte por rol**: un docente ve 10 alumnos y paga 26 ms
+donde dirección paga 241. Ninguna consulta se fue a segundos, ninguna reventó, ningún loader
+devolvió datos de otro instituto.
+
+---
+
+### 6 · EL BLOQUE SQL DE BORRADO
+
+Lo imprime `npm run seed:edu-demo -- --sql-borrado`. Va de las hojas a la raíz porque
+**`EduChair.campus` es `onDelete: Restrict`**: borrar la sede antes que el sillón se atora. Cada
+`DELETE` reencuentra el instituto por slug **y por prefijo de nombre**, así que si alguien
+renombró la fila no borra nada.
+
+    BEGIN;
+    -- Si esto no devuelve UNA fila con el prefijo DEMO, PARA.
+    SELECT id, name, slug FROM edu_institutions WHERE slug = 'demo-volumen';
+
+    WITH d AS (SELECT id FROM edu_institutions WHERE slug='demo-volumen' AND name LIKE 'DEMO · %')
+    DELETE FROM edu_installments WHERE "institutionId" IN (SELECT id FROM d);
+    -- …y lo mismo, en este orden, para:
+    --   edu_payment_plans · edu_prescription_items · edu_prescriptions · edu_invoices
+    --   edu_patient_tax_profiles · edu_fiscal_configs · edu_whatsapp_messages
+    --   edu_whatsapp_configs · edu_ai_usage · edu_ai_quotas · edu_case_grade_items
+    --   edu_case_grades · edu_rubric_criteria · edu_rubrics · edu_requirements
+    --   edu_case_approvals · edu_consents · edu_study_analyses · edu_studies
+    --   edu_odontogram_entries · edu_records · edu_payments · edu_charge_items
+    --   edu_charges · edu_cash_sessions · edu_fee_schedule_items · edu_fee_schedules
+    --   edu_appointments · edu_cases · edu_procedures · edu_patients
+    --   edu_chair_schedules · edu_chairs   ← ANTES que las sedes (Restrict)
+    --   edu_user_campus_access · edu_campuses · edu_supervisor_assignments
+    --   edu_students · edu_cohorts · edu_programs · edu_users
+    DELETE FROM edu_institutions WHERE slug='demo-volumen' AND name LIKE 'DEMO · %';
+
+    -- Debe devolver 0 en las tres.
+    SELECT (SELECT count(*) FROM edu_institutions WHERE slug='demo-volumen') AS institutos,
+           (SELECT count(*) FROM edu_users   WHERE "supabaseId" LIKE 'demoseed-%') AS personas,
+           (SELECT count(*) FROM edu_studies WHERE "storagePath" LIKE 'demo-seed/%') AS estudios;
+    COMMIT;
+
+Probado: `0 | 0 | 0`, y el instituto vecino que se sembró a propósito para la prueba salió
+intacto.
+
+---
+
+### 7 · TRES TRAMPAS QUE ESTE SEED PISÓ (valen para todo el repo)
+
+1. **Repartir huecos «de N en N» reparte muchos menos de los que crees.** El primer reparto de
+   citas hacía `huecos[(k * 7) % huecos.length]`, y con 32 sillones × 7 franjas = 224 huecos eso
+   solo visita **224 / mcd(7, 224) = 32 posiciones distintas**. El día «lleno» se llenaba 32
+   veces con el mismo sillón y las 160 filas restantes chocaban contra la clave primaria y
+   `skipDuplicates` **las descartaba en silencio**: la primera corrida dijo «20 577 citas» y
+   metió 13 502. El síntoma engaña porque el contador de arriba es el que generaste, no el que
+   entró. Se arregló barajando (Fisher-Yates con el PRNG sembrado, sigue determinista) y el
+   propio script ahora imprime «(N ya estaban)» para que el hueco se vea.
+
+2. **Un seed que corre de noche no puede enseñar la clínica en vivo.** Los estados `IN_CHAIR` /
+   `IN_PROGRESS` se deciden contra el reloj, y a las 2 de la mañana ninguna cita contiene ese
+   instante: la primera corrida dejó **0 citas vivas** y la pantalla que más importa enseñar
+   nacía vacía. El seed ancla la foto en vivo a las 12:30 del día cuando `now` cae fuera del
+   horario de la clínica, y **lo dice por consola** al hacerlo.
+
+3. **`next build` TIRA A LA BASURA los errores de tipos de las carpetas de prueba.** No es una
+   sospecha: está en una línea de Next.
+
+       // node_modules/next/dist/lib/typescript/runTypeCheck.js:70
+       const regexIgnoredFile = /[\\/]__(?:tests|mocks)__[\\/]|(?<=[\\/.])(?:spec|test)\.[^\\/]+$/;
+       const allDiagnostics = ts.getPreEmitDiagnostics(program)
+         .concat(result.diagnostics)
+         .filter((d) => !(d.file && regexIgnoredFile.test(d.file.fileName)));
+
+   Todo diagnóstico cuyo archivo viva en `__tests__/` o `__mocks__/`, o que termine en
+   `.test.*` / `.spec.*`, **se descarta antes de decidir si el build pasa**. Medido: `npx tsc
+   --noEmit -p tsconfig.json` saca **8 errores** en `src/lib/barber/__tests__/` y en
+   `src/lib/edu/__tests__/edu-theme.test.ts` —archivos **idénticos a `origin/main`**, que no
+   toca esta rama— y `npm run build` sale 0 con esos mismos archivos delante. Las dos cosas son
+   ciertas a la vez y no se contradicen.
+
+   Lo que esto significa en la práctica: **«el build está verde» NO quiere decir que las
+   pruebas compilen**, y **«tsc está rojo» no quiere decir que el build lo esté**. Para saber
+   si una prueba tipa hay que correr `tsc` a mano y leerlo por ruta. Lo que NO cambia es cuál
+   es el gate: el build sigue mandando para todo lo que no sea una prueba.
+
+   Dos matices que costaron un build cada uno:
+   - **El `target` es ES5 para los dos.** El `tsconfig.json` del repo no declara `target`, y
+     Next tampoco se lo escribe (comprobado: `git status tsconfig.json` sale limpio después de
+     dos builds). Así que dentro de `scripts/` —que NO es carpeta de prueba— un `for...of` sobre
+     un `Map` y un literal BigInt (`0n`) rompen el build igual que romperían `tsc`. Van con
+     `Array.from(map.entries())` y `BigInt(0)`.
+   - **Un pipe se traga el exit code.** El error que de verdad tumbó el primer build (`status:
+     string` donde Prisma pide `EduStudentStatus`) yo lo había dado por verde corriendo
+     `tsc | grep edu-seed-demo`: un `grep` sin resultados parece éxito. **Un gate se lee por su
+     exit code, nunca por lo que imprime.**
+
+---
+
+### 8 · GATES
+
+- `npm run build` — **BUILD_EXIT=0**, `✓ Generating static pages (463/463)`, tabla de rutas
+  completa con las 137 líneas de `/instituto/*`. Sin pipes. («Compiled with warnings» es el
+  aviso preexistente de `file-type` en `api/ai-wallet/spei/topup`, que ya venía de `main`.)
+- `npm run test:edu` — **29 archivos, 933 pruebas, 0 fallos**.
+- `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node scripts/edu-guard.cjs` — **EXIT 0**.
+  `scripts/edu-seed-demo.ts` entra como **PROPIO** del vertical (no toca una línea del dental:
+  solo escribe filas `edu_*` de un instituto con slug propio).
+- Verificación funcional: Postgres 16 en Docker con `prisma db push` del schema completo. El
+  seed corrió **cinco veces** (dos desde cero, dos idempotentes, una después del borrado), la
+  medición **cuatro**, y las cuatro guardias se probaron una por una.
+
+### Lo que NO se hizo, a propósito
+
+- **No se arregló ninguno de los hallazgos.** El encargo era sembrar y medir; convertir el
+  reporte en seis parches a la vez habría mezclado el instrumento con la reforma. Los dos
+  primeros (el corte mudo del expediente y el filtro por generación) son ramas cortas y
+  separables.
+- **No se subieron archivos al bucket** (sección 3), y por tanto los estudios llevan el aviso en
+  el nombre.
+- **No se crearon cuentas de Supabase Auth**, así que al instituto de demo no se entra por el
+  login (sección 2b). Es el precio de no mandar 135 invitaciones.
+- **No se tocaron los 8 errores de `tsc` preexistentes** de la sección 7.3: viven en archivos de
+  prueba de barbería y en `edu-theme.test.ts`, son idénticos a `origin/main`, el build los
+  descarta por vivir en `__tests__/`, y arreglarlos pedía tocar barbería — que esta rama tiene
+  prohibido. Quedan anotados porque **nadie los va a ver salir del build nunca**, y ese es
+  justamente el problema; merecen su propia rama, no un arreglo de paso en ésta.
+- **No se midió con navegador.** Sin `.env` ni sesión de Supabase no se puede abrir
+  `/instituto/*`; lo que sí se puede es llamar a los loaders reales con el contexto real, que es
+  donde está el tiempo. La legibilidad de la rejilla de 32 columnas queda **razonada, no vista**:
+  el número duro es que son 32 columnas y 648 filas de datos, y que con una sede son 58-71.
+- **Nada de basura en la raíz del repo.** Un archivo nuevo, y vive en `scripts/`.
+
+═══════════════════════════════════════════════════════════════════════════
+## EDU-VOLUMEN — Los tres hallazgos que midió el instituto de demo, arreglados; y una puerta para entrar a pasearlo (2026-09-01) · rama fix/edu-volumen
+═══════════════════════════════════════════════════════════════════════════
+
+La rama anterior (`feat/edu-seed-demo`) sembró un instituto de mentira con el volumen del
+cliente que viene y **midió** el panel entero. No arreglaba nada: era un instrumento y un
+reporte. Esta rama arregla los tres hallazgos que encontró, **con el mismo instrumento
+delante** — cada número de abajo sale de `npm run seed:edu-demo -- --medir` antes y después,
+sobre la misma base y la misma máquina.
+
+Y arregla el efecto secundario del propio seed: **al instituto de demo no se podía entrar.**
+
+ARCHIVOS (17): `src/lib/edu/expediente.ts` · `expediente-core.ts` · `estudios.ts` ·
+`estudios-core.ts` · `evaluacion.ts` · `evaluacion-core.ts` · `casos.ts` · `casos-core.ts` ·
+`src/components/edu/expediente/{expediente,estudios}-screen.tsx` ·
+`src/components/edu/{evaluacion/evaluacion-screen,casos/casos-screen}.tsx` ·
+`src/app/instituto/(panel)/{evaluacion/page.tsx,pacientes/[id]/{expediente,estudios}/page.tsx}` ·
+`src/app/api/instituto/{evaluacion/route.ts,casos/export/route.ts,pacientes/[id]/{expediente,estudios}/route.ts}` ·
+`scripts/edu-seed-demo.ts` · `sql/edu-volumen.sql` (nuevo) ·
+`src/lib/edu/__tests__/{edu-expediente,edu-evaluacion,edu-casos}.test.ts` +
+`edu-seed-demo.test.ts` (nuevo) · `docs/audits/EDU_AUDIT.md` · `ORQUESTA.md`.
+
+**Cero cambios en el dental, en barbería y en inmuebles. `prisma/schema.prisma` NO se toca.
+Un `.sql`, y NO es bloqueante para el deploy** (ver §5).
+
+⛔ **No se tocó** `agenda-screen.tsx`, `agenda.ts`, `agenda-core.ts` ni `direccion.ts` — otras
+sesiones los están editando. `direccion.ts` sí condicionó el diseño del P2-6, y eso está
+explicado abajo: **es la razón por la que el default vive en la página y no en el loader.**
+
+---
+
+### 1 · 🔴 EL EXPEDIENTE Y LOS ESTUDIOS CORTABAN EN 200 SIN DECIRLO
+
+`listEduPatientRecords` (`expediente.ts`) y `listEduPatientStudies` (`estudios.ts`) hacían
+`take: MAX` **sin `+ 1`**. Eso no es un tope pequeño: es un tope **que no puede saber que
+cortó**. Doscientas notas y doscientas cuarenta devuelven exactamente lo mismo desde dentro de
+la función, así que no había nada que la pantalla pudiera decir aunque quisiera. Y ninguna de
+las dos pantallas mencionaba `truncated` — el resto del panel (casos, pacientes, agenda,
+equipo, padrón, caja, evaluación, facturación y autorizaciones) **sí avisa**.
+
+Es un expediente clínico. Quien busca la nota de la primera sesión de un caso largo concluye
+que no existe.
+
+**Arreglo**, con el mismo patrón que ya usaban `casos.ts` y `pacientes.ts`: `take: MAX + 1`,
+devolver `{ rows, truncated }` (`EduRecordPage`, `EduStudyPage`), y el banner que ya tienen las
+otras nueve pantallas.
+
+Tres detalles que no son cosméticos:
+
+- **El corte va ANTES de firmar las URLs de Storage.** La fila 201 no se pinta; pedirle a
+  Supabase su URL firmada sería un viaje pagado por un archivo que nadie va a abrir.
+- **`truncated` viaja también en los dos endpoints** (`/api/instituto/pacientes/[id]/expediente`
+  y `.../estudios`), no solo en la pantalla. Si solo lo supiera el panel, cortar en silencio
+  vuelve por la puerta de al lado.
+- **El aviso de estudios va ARRIBA de los filtros de tipo.** Esos filtros ordenan lo que ya
+  llegó: «0 radiografías» con la lista cortada se lee como «no tiene ninguna», y no lo es.
+
+| medido con el paciente más cargado del seed | antes | después |
+|---|---|---|
+| Expediente (240 notas) | 200 filas, **240 leídas, sin una palabra** | 200 filas, **201 leídas**, «se muestran las 200 más recientes» |
+| Estudios (240 archivos) | 200 filas, **240 leídas, sin una palabra** | 200 filas, **201 leídas**, mismo aviso |
+
+Probado con 201 (la prueba fija los tres casos: 201 → corta y avisa; **exactamente 200 → NO
+avisa**, que es la mentira simétrica; 0 → tampoco).
+
+**Sigue abierto y no lo toqué:** `listEduOdontogram` (`odontograma.ts`) tiene el mismo patrón
+con tope 1 000. Está fuera del encargo y a ese volumen no duele todavía; queda dicho.
+
+---
+
+### 2 · 🔴 P2-6 — 17 082 FILAS PARA PINTAR 120 RENGLONES
+
+El hallazgo de la auditoría, medido: `/instituto/evaluacion` traía hasta 300 alumnos y luego
+**todos** sus casos, **todas** sus citas COMPLETADAS y **todas** sus calificaciones. 16 364 de
+esas filas eran citas — y las citas crecen con el TIEMPO, no con el padrón.
+
+**Lo que NO se hizo, porque la auditoría lo prohibió con motivo escrito:** un `take` sobre esas
+tres consultas. *«Un `take` a secas aquí no acota — FALSIFICA»*: truncaría las filas de ALGÚN
+alumno al azar y sus horas clínicas saldrían menores sin ninguna señal, y esas horas son las
+que la escuela enseña en una acreditación. **Hay una prueba que comprueba que no ha aparecido
+un `take` ahí.**
+
+**Lo que se hizo:** acotar el conjunto de PERSONAS —una generación entera, dicha con todas sus
+letras en pantalla— y dentro de ella contar a cada estudiante COMPLETO.
+
+#### 2.1 · Las decisiones de producto que faltaban
+
+| Pregunta | Respuesta | Por qué |
+|---|---|---|
+| ¿Cuál es la generación por defecto? | **La última que ya arrancó** (`eduVigenteCohort`) | Una especialidad de tres años tiene varias generaciones en vuelo a la vez: «vigente = en curso» serían todas y no acotaría nada. «La vigente» es de la que la escuela habla |
+| ¿Las cerradas cuentan? | **Sí, cuando se piden** (`?generacion=todas`) | Una acreditación las pide. Lo que cambia es que se PIDEN, en vez de caerse en ellas por abrir la pantalla |
+| ¿Una generación o una por especialidad? | **Por NOMBRE** — las tres especialidades a la vez | `EduCohort` es único por (instituto, especialidad, nombre): «2026-A» de Endodoncia y de Ortodoncia son la misma generación. Para una sola ya existe el filtro de especialidad |
+| ¿Y el alumno y el docente? | **El default NO se les aplica** | Sus alcances ya acotan (1 fila y ~10). Con el default puesto, **un alumno de la generación anterior abriría SU pantalla de avance y vería cero filas** |
+
+Los casos raros de «la vigente», todos resueltos hacia el lado útil y todos con prueba: ninguna
+ha arrancado → la que está por arrancar; todas terminaron → la última igual (mejor que enseñar
+el padrón entero justo en la escuela con más historia); una inactiva no compite; **empate de
+fechas → desempate total por nombre y por id**, para que el default no parpadee entre cargas.
+
+#### 2.2 · 🔴 Por qué el default vive en la PÁGINA y no dentro del loader
+
+`listEduEvaluacion` **no la llama solo su pantalla**: el tablero de Dirección la reusa
+(`direccion.ts:753`, *«reuso, no segunda cuenta»*) para hablar de la escuela COMPLETA en un
+periodo. Si el recorte por generación fuera el default del loader, **los atrasados de Dirección
+pasarían a ser los de una sola generación sin que nadie lo hubiera pedido ni lo viera** — la
+misma clase de recorte callado que este arreglo vino a quitar. Y `direccion.ts` está prohibido
+en esta tarea, así que ni siquiera podría haberlo compensado ahí.
+
+Así que: el loader recibe `generacion: "vigente" | "todas"`, **la ausencia significa "todas"**
+(el comportamiento de siempre, Dirección intacta), y quien pide la vigente es la página — y
+también el endpoint `/api/instituto/evaluacion`, porque si ahí la ausencia significara «todas»,
+la consulta de 17 082 filas volvería por esa puerta. Hay una prueba de las dos cosas.
+
+#### 2.3 · La ventana de citas
+
+Además del filtro, la consulta de horas se acota por generación:
+`startsAt >= min(arranque de su generación, su fecha de ingreso)` — **la ANTERIOR de las dos**,
+que es la única cota que no puede perder una hora real: cubre al transferido desde una
+generación previa y al que se inscribió antes de que abriera el ciclo. Se agrupa por cohorte, un
+`OR` por grupo, para que el índice `(institutionId, studentId, startsAt)` tenga un RANGO sobre
+el que trabajar en vez de una lista suelta de ids.
+
+**No hay cota superior, a propósito.** Una cita COMPLETADA con fecha futura es un dato mal
+capturado; esconderla haría bajar las horas sin que nadie pudiera ir a arreglar la cita.
+
+Honestamente: **en el instituto de demo esta cota no quita ni una fila** (nadie tiene citas
+anteriores a su generación, porque el seed las genera dentro de la ventana de cada alumno). Su
+valor es el techo —la consulta deja de crecer con la historia— y el índice.
+
+#### 2.4 · 📊 ANTES / DESPUÉS
+
+`npm run seed:edu-demo -- --medir`. 120 estudiantes, 2 generaciones, 3 especialidades, 18 meses
+de historia. Postgres 16 en Docker, misma máquina, latencia de red cero.
+
+> 🔴 Los milisegundos son un SUELO. La columna que se traslada tal cual a Vercel + Supabase es
+> **filas leídas**: esa no depende de dónde esté la base.
+
+| `/instituto/evaluacion`, con los ojos de DIRECCIÓN | ms | filas al navegador | **filas leídas** | payload |
+|---|---:|---:|---:|---:|
+| **ANTES** (y hoy, pidiendo `?generacion=todas`) | 185 | 120 | **17 082** | 93.4 KB |
+| **DESPUÉS** — lo que se abre al entrar (vigente `2026-A`) | **39** | 60 | **3 680** | 46.6 KB |
+| | **−79 %** | | **−78 %** | −50 % |
+
+Desglose del ahorro: **16 364 → 3 315 citas COMPLETADAS**, 400 → 200 casos, 183 → 90
+calificaciones, 120 → 60 estudiantes. La meta era −70 %.
+
+| filtros que ya existían, para comparar | ms | filas | leídas |
+|---|---:|---:|---:|
+| Una sola generación-especialidad (2026-A Endodoncia) | 17 | 20 | 1 251 |
+| Una sola generación-especialidad (2025-A Endodoncia) | 46 | 20 | 4 465 |
+| Un DOCENTE (sus alumnos) — **sin cambios, el default no se le aplica** | 19 | 10 | 10 |
+
+#### 2.5 · Lo que ve la persona
+
+- Un aviso, siempre que el servidor haya decidido: **«Estás viendo la generación 2026-A, la
+  vigente»**, con el porqué en una frase (el avance se cuenta, no se guarda) y un enlace a
+  «todas las generaciones». Una pantalla que enseña 60 de 120 sin decirlo es la misma mentira
+  que la lista que corta en 200 y calla.
+- El selector: **la opción vacía ya no dice «Todas»** — decía eso y habría contradicho a la
+  pantalla. Ahora dice `Vigente (2026-A)`, y «Todas las generaciones» es un `<option>` propio.
+- Los dos saltos son **`<Link>` de verdad**, no botones: esta es justo la vista que alguien
+  copia y manda por correo para una acreditación.
+- El contador de abajo dice «60 estudiantes · generación 2026-A».
+
+---
+
+### 3 · 🔴 EL CSV DE CASOS DEVOLVÍA 413 CON «INCLUIR CERRADOS»
+
+`/api/instituto/casos/export` reusaba `listEduCasosPanel` — **tope 300, el de una PANTALLA** —
+y devolvía 413 en cuanto la lista se cortaba. La regla es correcta (un CSV silenciosamente
+incompleto es un reporte falso), pero el número era el equivocado: **un export existe para
+llevarse TODO**, y «casos cerrados» es justo lo que se exporta para una acreditación. Con 400
+casos, marcar la casilla dejaba a la escuela sin export.
+
+**Arreglo:** el export tiene su propio techo, `EDU_CASOS_EXPORT_MAX_ROWS = 10 000`, explícito y
+con su porqué escrito. Se lee **en lotes de 500 con cursor** (`listEduCasosParaExport`), no con
+un `take: 10001`: cada fila arrastra paciente, alumno, especialidad, docente y sus
+autorizaciones, y diez mil de golpe es un pico de memoria por una descarga que casi nunca llega
+a mil.
+
+**Lo que NO cambió:** por encima de ESE tope, el 413 se queda. Y ahora **dice el número** — «hay
+más de los que caben» sin decir cuántos caben no le dice a nadie cuánto tiene que acotar.
+
+⚠️ **El cursor necesitaba un orden TOTAL.** `openedAt` empata (dos casos abiertos en el mismo
+instante existen), y con un orden que empata la paginación por cursor puede devolver la misma
+fila en dos lotes y saltarse otra. `CASOS_PANEL_ORDER` lleva ahora desempate por `id`, y **la
+pantalla usa el mismo orden** para que la lista y el CSV no salgan barajados distinto.
+
+**No es una segunda consulta.** La lista y el export comparten `where`, `orderBy` y `select`
+línea por línea (`eduCasosPanelWhere`, `CASOS_PANEL_ORDER`, `CASOS_PANEL_SELECT`): un endpoint
+de descarga con su propia consulta es la puerta de atrás clásica. Hay pruebas de que los dos
+pasan por el mismo `where` y de que los dos comprueban `eduScopeIsEmpty` (sin eso, CAJA se
+llevaría un CSV de la clínica entera).
+
+Y el botón **ya no se esconde** cuando la pantalla sale cortada: esconderlo era lo que dejaba a
+la escuela sin export en cuanto pasaba de 300 casos.
+
+| `/api/instituto/casos/export` (400 casos en la base) | antes | después |
+|---|---|---|
+| sin filtro (solo abiertos) | 280 de 280 ✅ | 280 de 280 ✅, 36 ms |
+| **incluyendo cerrados** | **413 — no exporta nada** | **400 de 400 ✅, 55 ms** |
+| acotando a un estado | 90 ✅ | 90 ✅, 22 ms |
+
+---
+
+### 4 · LA PUERTA DE ENTRADA AL INSTITUTO DE DEMO
+
+El seed pone `supabaseId: demoseed-0001…` en las 135 personas — nunca un UUID de Supabase
+Auth — y eso es deliberado: sin identidades reales no se crea ninguna cuenta y no sale ningún
+correo de invitación. El efecto secundario también era deliberado y estaba escrito: **al demo
+no se podía entrar.**
+
+    npm run seed:edu-demo -- --direccion=<uuid-de-supabase>
+    npm run seed:edu-demo -- --direccion=persona@correo.com
+
+Cuelga **una** cuenta que YA EXISTE como DIRECCIÓN del instituto de demo. Es exactamente el
+«copiar el UUID a mano» que el comentario del seed pedía, hecho por el script:
+
+- **UUID** → se usa tal cual. Es lo único que `getEduContext` mira (`edu-auth.ts`: `findFirst`
+  por `supabaseId`). Si esa cuenta ya es EduUser en algún sitio, se le copian nombre y correo
+  para que el panel salude con el nombre de la persona.
+- **Correo** → se busca una fila de `edu_users` que ya lo tenga **con un supabaseId real** (no
+  `demoseed-`) y se copia ESE. Es el caso de verdad: «la cuenta con la que ya entro a QA».
+- **Si el correo no aparece, REBOTA** en vez de inventar un supabaseId. Una fila con un
+  supabaseId inventado no es un acceso: es una cuenta muerta que mañana parece un bug del login.
+
+⚠️ **Y avisa cuando no va a funcionar.** `getEduContext` resuelve la sesión con la fila **MÁS
+VIEJA** (`orderBy: { createdAt: "asc" }`). Si la cuenta ya es un EduUser activo de otro
+instituto, el login la seguirá mandando allí y la fila del demo no se usará nunca. El seed lo
+detecta y lo dice con nombre y apellido — **y no toca esa otra fila**, porque escribir fuera del
+instituto de demo es la regla número uno de ese archivo.
+
+**Todo lo demás del seed queda EXACTAMENTE igual**, y se comprobó ejecutándolo:
+el rechazo a una base remota sin `EDU_SEED_HOST_REMOTO`, el destino por slug + prefijo `DEMO · `,
+los `supabaseId` falsos de las 135 personas, la ausencia de `EduWhatsappConfig`, el `--sql-borrado`.
+La escritura de la cuenta real va **después del sembrado y antes de la comparación de filas
+ajenas**, así que pasa por la misma guardia que todo lo demás. Probado con un instituto vecino
+sembrado a mano delante:
+
+| escenario | qué pasó |
+|---|---|
+| `--direccion=<uuid nuevo>` | fila creada, `✅ ninguna fila fuera del instituto de demo cambió` |
+| `--direccion=rafa@vecino.mx` (cuenta del vecino) | fila creada + **⚠️ el aviso**, y el vecino intacto |
+| `--direccion=noexiste@nada.com` | **rebota** con exit 1: «pasa el UUID de Supabase Auth» |
+| `--direccion=pepito` | **rebota** con exit 1: «no es un UUID ni un correo» |
+| `--direccion=` (vacío) | **rebota** con exit 1, sin abrir la base |
+| correrlo dos veces con la misma cuenta | la misma fila (id determinista `did("dirreal", supabaseId)`) |
+
+---
+
+### 5 · EL SQL — `sql/edu-volumen.sql`
+
+**UN índice. Ni una tabla, ni una columna, ni un enum, ni una fila.** Idempotente.
+
+⚠️ **NO es bloqueante para el deploy**, y esa es la diferencia con los `.sql` de las olas
+anteriores: aquí no hay ninguna columna nueva que el cliente Prisma vaya a pedir. Sin el índice
+el código funciona igual, solo que la consulta de horas lee más páginas de las necesarias. Se
+puede aplicar antes, durante o después.
+
+```sql
+CREATE INDEX IF NOT EXISTS "edu_appointments_student_status_idx"
+  ON "edu_appointments" ("institutionId", "studentId", "status", "startsAt");
+```
+
+**Por qué:** el único índice que servía era `edu_appointments_student_idx`
+`(institutionId, studentId, startsAt)` — **`status` no entra**. Comprobado con `EXPLAIN ANALYZE`
+sobre el instituto de demo:
+
+- **sin** el índice nuevo: `Filter: (status = 'COMPLETED')` → **Rows Removed by Filter: 25** por
+  estudiante, sobre 55 útiles. Un 31 % de la lectura tirada.
+- **con** él: todo pasa a `Index Cond`, sin filtro posterior.
+
+El orden de las columnas no es decorativo: igualdades primero (`institutionId`, `studentId`,
+`status`) y **el RANGO al final** (`startsAt`), porque una vez que entras en el rango se acabó
+la búsqueda por índice.
+
+⚠️ **No va en `prisma/schema.prisma`** porque es un archivo COMPARTIDO con el dental y esta rama
+no lo toca. Es el mismo trato que ya tienen los índices trigram del vertical
+(`edu_patients_search_trgm` y compañía, `sql/edu-ola-1b.sql`): viven solo en SQL. La
+consecuencia hay que saberla y está escrita en el propio archivo — un `prisma db push` contra
+una base de desarrollo se lo llevaría por delante, y se recupera volviendo a correr el `.sql`.
+En producción no se corre `db push`.
+
+---
+
+### 6 · VERIFICACIÓN
+
+1. **`npm run build` completo, sin pipes: exit 0.** `prisma generate` limpio (v5.22.0),
+   type-check completo, tabla de rutas entera.
+2. **`npm run test:edu`: VERDE — 30 archivos, 971 pruebas, 0 fallos** (antes: 29 y 929).
+   **+42 pruebas nuevas**, repartidas donde vive cada cosa:
+   - `edu-expediente.test.ts` (+9): la aritmética del recorte con 201, con exactamente 200 y con
+     0; que las dos consultas piden `MAX + 1`; **que el corte va antes de firmar las URLs**; que
+     las dos pantallas avisan; que las dos páginas pasan la bandera; que los dos endpoints la
+     devuelven.
+   - `edu-evaluacion.test.ts` (+16): la elección de la vigente y sus casos raros; el desempate
+     total; la ventana que no puede perder una hora; **que NO ha aparecido un `take`** sobre
+     casos, citas ni calificaciones; que el default no se le aplica al alumno ni al docente;
+     **que `direccion.ts` sigue llamando al loader sin la preferencia**; que la pantalla dice qué
+     generación mira; que el centinela `todas` vive en un solo sitio.
+   - `edu-casos.test.ts` (+3, 2 actualizadas): que el export usa su propio camino y **ya no el de
+     la pantalla**; que su tope es mucho mayor y el 413 sigue por encima; que lee en lotes con
+     **cursor y orden total**; que lista y export comparten `where`/`orden`/`select` y los dos
+     comprueban el alcance vacío.
+   - `edu-seed-demo.test.ts` (nuevo, 9): las guardias del seed leídas del código — una guardia
+     que alguien borra en un refactor no rompe ninguna prueba, simplemente deja de correr.
+3. **`npx tsc --noEmit -p tsconfig.json`: cero errores en los archivos de esta rama.** Quedan 8
+   errores PREEXISTENTES en ficheros de prueba ajenos (6 en `src/lib/barber/__tests__/`, 2 en
+   `src/lib/edu/__tests__/edu-theme.test.ts`), todos `TS2802` de `--downlevelIteration` y un
+   `TS2353`; están en `main` desde antes y `next build` no los ve (ignora los tipos de las
+   pruebas). Ninguno toca un archivo de esta rama.
+   ⚠️ `tsc` necesita `NODE_OPTIONS=--max-old-space-size=8192`: con el heap por defecto muere en
+   OOM, y eso no tiene nada que ver con el código.
+4. **Guardia: `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node scripts/edu-guard.cjs` → exit 0.**
+   Los dos compartidos que declara son de la rama base (`feat/edu-seed-demo` ya había añadido
+   `seed:edu-demo` a `package.json`); **esta tarea no toca ninguno de los dos salvo este reporte**
+   — `--direccion` es un argumento del script que ya existía, no un script nuevo.
+5. **El seed corrido de verdad** contra Postgres 16 en Docker, con las mediciones antes/después
+   y con un instituto vecino delante para las cuatro puertas de la §4.
+
+---
+
+### 7 · LO QUE QUEDA DICHO Y NO ARREGLADO
+
+- **`listEduOdontogram`** tiene el mismo patrón del §1 con tope 1 000. Fuera del encargo.
+- **El `<select>` de 300 pacientes al agendar** (`listEduPatientOptions`): con 600 pacientes ya
+  está cortado, así que el paciente 301 no se puede elegir. Necesita buscador contra el
+  servidor, no un tope. Vive en `pacientes.ts` y toca la agenda — prohibida en esta tarea.
+- **Los payloads de 237-437 KB** por pantalla (agenda semana, pacientes, expediente). El
+  expediente ya no empeora con el volumen; los otros dos siguen igual.
+- **Dirección: 231 ms** por 14 consultas encadenadas. No es volumen de filas, y `direccion.ts`
+  está prohibido en esta tarea. La ventana de citas del §2.3 sí le llega gratis (usa el mismo
+  loader) sin cambiarle un solo número.
+
+**`docs/audits/EDU_AUDIT.md`: el P2-6 queda cerrado con los números,** y con la tabla de las
+cinco decisiones de producto que la ola de cierre dejó abiertas a propósito. **Ya no queda
+ningún hallazgo abierto en la auditoría del vertical.**
+
+═══════════════════════════════════════════════════════════════════════════
+## EDU-CLÍNICA-EN-VIVO — El tablero de sillones del instituto ✅ (2026-09-01) · rama feat/edu-clinica-viva → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin pipes) · `npm run test:edu` VERDE (30 archivos, 964 pruebas)
+GUARDIA `EDU_GUARD_SHARED="ORQUESTA.md"` EXIT 0 · SIN SQL · SIN envs nuevas
+
+OBJETIVO: una pantalla nueva —`/instituto/clinica`— que enseña los sillones de la escuela
+en tiempo real: **libre**, **próxima** u **ocupada**, con qué estudiante atiende y a qué
+paciente. Pensada para dos sitios a la vez y los dos de verdad: un monitor colgado en el
+piso clínico y el teléfono de un docente de pie.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · CÓMO SE MAPEARON LOS ESTADOS  (la pieza que había que resolver)
+───────────────────────────────────────────────────────────────────────────
+
+El motor **se importa del dental y no se copia ni se edita**: `src/lib/floor-plan/
+live-mode.ts` (`getChairStatus`, `getChairAppointment`, `getNextChairAppointment`,
+`appointmentProgress`, `maskPatient`). Lo que no encajaba se adaptó **de este lado**, en
+`src/lib/edu/clinica-viva-core.ts`. Son TRES piezas, no una:
+
+**PIEZA 1 — la traducción.** Los dos productos no hablan el mismo idioma:
+
+| instituto (EduAppointmentStatus) | → dental (LiveApptStatus) | efecto en el sillón |
+|---|---|---|
+| `SCHEDULED`   | `SCHEDULED`     | próxima si empieza en ≤30 min |
+| `CHECKED_IN`  | `CHECKED_IN`    | próxima (está en RECEPCIÓN, no en el sillón) |
+| **`IN_CHAIR`**| **`IN_PROGRESS`**| **OCUPADO** ← la línea de esta ola |
+| `IN_PROGRESS` | `IN_PROGRESS`   | OCUPADO |
+| `COMPLETED` · `CANCELLED` · `NO_SHOW` | **`null`** | no viaja al motor |
+
+`getChairStatus` pinta rojo cuando ve `IN_PROGRESS` **y nada más**, y `IN_CHAIR` no existe
+en el dental. Sin esa fila, el paciente que ya está sentado esperando a que llegue su
+docente dejaba el sillón pintado de VERDE y la escuela sentaba a otro encima.
+
+Se escribe como `Record` COMPLETO y no como un `switch` con `default`: si mañana el enum
+gana un estado, TypeScript se pone rojo y obliga a decidir si ocupa el sillón. Un `default`
+habría contestado solo, y la respuesta silenciosa es la que deja un sillón mal pintado.
+
+**PIEZA 2 — lo muerto no viaja.** `getNextChairAppointment` devuelve la próxima cita SIN
+mirar su estado. Una cancelada de las 16:00 habría salido como "próxima 16:00" en un sillón
+que va a estar libre toda la tarde. Por eso los tres estados terminales mapean a `null` y se
+descartan ANTES de entrar al motor.
+
+**PIEZA 3 — la trampa fina, y la razón de que `eduVivaCard` exista.** `getChairStatus` y
+`getChairAppointment` NO contestan lo mismo: el primero (en vivo) solo dice ocupado por
+`IN_PROGRESS`; el segundo, si no encuentra ninguna, se cae a "la cita cuyo rango contiene
+ahora". Una cita `SCHEDULED` de 9:00 a 10:00, a las 9:30 —el paciente que no llegó y que
+nadie marcó— deja el sillón LIBRE para el primero y devuelve esa cita para el segundo.
+Preguntarlas por separado y pintarlas juntas daba una tarjeta **"Libre" con un paciente
+dentro**. Se cierra decidiendo SIEMPRE por el estado y pidiendo la cita después:
+
+    ocupado → getChairAppointment      próximo → getNextChairAppointment
+    libre   → getNextChairAppointment, y SOLO como pista de hora ("Siguiente 14:30")
+
+Corolario documentado: `now` tiene que ser el instante REAL (el motor cambia de criterio a
+±90 s del reloj, porque allá sirve a un timeline que viaja en el tiempo). Las pruebas
+construyen sus horas como `Date.now() + offset` por eso, no por comodidad; las dos que usan
+un instante fijo explican por qué ahí da lo mismo.
+
+**Y el estado sale de la CITA, no de la presencia** — la decisión de la Ola 7, sin tocar.
+El producto no registra quién está conectado. Con presencia, el alumno que cierra el
+navegador con el paciente todavía en el sillón dejaría la unidad en verde.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · QUÉ SE HIZO PARA REFRESCAR  (sin infraestructura nueva)
+───────────────────────────────────────────────────────────────────────────
+
+Polling, no websockets, no colas, no nada nuevo. **DOS relojes que hacen cosas distintas:**
+
+1. **el LATIDO — 20 s** (`EDU_VIVA_REFRESCO_MS`). Vuelve a pedir `GET /api/instituto/clinica`
+   y reemplaza el tablero. Es lo que entera a la pantalla de que alguien se sentó.
+   20 s y no 2: lo que cambia en el piso clínico son minutos, y esta pantalla se queda
+   abierta todo el día en un monitor. Dos segundos serían 1 800 consultas/hora **por
+   pantalla** contra las mismas tablas que usa la agenda, para enseñar lo mismo. Un pelo
+   más rápido que el bloque en vivo de Dirección (25 s) a propósito: allá el tablero vivo
+   es una franja dentro de una pantalla de números; aquí ES la pantalla.
+2. **el TIC — 30 s** (`EDU_VIVA_TIC_MS`). **No pide nada**: solo recalcula "lleva 42 min"
+   con el reloj del navegador. El minutero de una cita en curso avanza solo; consultar al
+   servidor para eso sería tráfico por nada.
+
+**🔴 Los dos se paran con la pestaña oculta** (`document.hidden`) y al volver a hacerse
+visible se pide UNA vez, inmediatamente (`visibilitychange`). No es cortesía de red: el
+navegador FRENA los temporizadores en segundo plano, así que un intervalo que sigue
+corriendo ahí deja de ser el que dice su nombre y, al volver, dispara una ráfaga de
+consultas atrasadas. Los dos listeners y los dos intervalos se limpian al desmontar, y hay
+una prueba que lo comprueba leyendo el componente.
+
+**Si el latido falla, se DICE**: se apaga el punto verde, se pone ámbar y el texto pasa a
+"Sin conexión · último corte 12:03:41". Un tablero pegado que parece vivo es peor que uno
+que avisa. Misma decisión que el panel de Dirección.
+
+**El primer render no parpadea y no desincroniza la hidratación**: el reloj local arranca en
+`null` a propósito, así que servidor y cliente pintan el mismo minutero (el que calculó el
+servidor) y el efecto toma el relevo después.
+
+Consulta acotada: ventana de **±12 h en instantes** (no un día de calendario — las sedes
+pueden estar en husos distintos). El suelo de 12 h no es una optimización: una cita que
+alguien dejó en `IN_PROGRESS` y nunca cerró tiene que dejar de pintar el sillón de rojo en
+algún momento; sin él, una sesión olvidada del martes deja la unidad ocupada para siempre.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · QUIÉN LA VE  (el alcance, en el punto único y en la API)
+───────────────────────────────────────────────────────────────────────────
+
+**Permiso nuevo: `clinica.view`.** Grupo PROPIO en la pantalla de permisos ("Clínica en
+vivo", una sola casilla) y no dentro de "Agenda y sillones": quien le da a caja el bloque de
+la agenda —que es lo normal, caja agenda— no puede darle **de pasada** el tablero que enseña
+el padecimiento de cada paciente de la escuela. Default: **DIRECCION y DOCENTE**. Nadie más.
+
+**El alcance se resuelve en `src/lib/edu/visibility.ts` y en ningún otro archivo.** Función
+nueva `eduLiveFloorVisibility(actor)`, con la misma forma que el dinero de la Ola 5: **lista
+blanca ANTES del recurso**, para que un rol nuevo (COORDINADOR, RECTOR) se quede fuera por
+defecto y no por olvido. Superada la lista, delega en `eduVisibility(actor, "cases")` — el
+recurso del EXPEDIENTE, porque esta pantalla dice qué paciente está sentado y de qué se le
+atiende. No hay una segunda tabla de roles que se pueda desincronizar.
+
+- **CAJA** cae en "none" por el recurso: recibe, agenda y cobra; no abre expediente.
+- **ALUMNO** cae en "none" **por la lista blanca**, y esto sí es una decisión de esta ola:
+  con alcance "own" vería un piso con dos sillones pintados y treinta en blanco, y eso no
+  se lee como "estos dos son los tuyos" sino como "la clínica está vacía". Lo suyo ya tiene
+  pantalla y es **Mi agenda**.
+- **DIRECCION** → `all`: el piso con nombre y apellido.
+- **DOCENTE** → `supervised`: **el piso ENTERO** —cuántos sillones quedan libres es
+  infraestructura de la escuela, no la fila de nadie— con el **DETALLE callado** en los
+  sillones de estudiantes que hoy no supervisa. La tarjeta sigue diciendo OCUPADA (si no, el
+  tablero mentiría sobre cuántas unidades quedan) y del paciente deja solo las INICIALES,
+  con el `maskPatient` del propio motor del dental, que es exactamente para lo que existe.
+  Ni estudiante, ni matrícula, ni especialidad, ni folio. La pantalla lo DICE con todas sus
+  letras en vez de dejar tarjetas mudas que se leen como un fallo de carga.
+
+  ⚠️ **Esto no lo pedía el encargo y conviene que se lea aquí**: el encargo dice "DIRECCION y
+  DOCENTE", y darle al docente el nombre del paciente de otro docente habría roto en una
+  pantalla nueva la regla que el vertical defiende desde la Ola 1A y que está escrita arriba
+  del todo de `visibility.ts` — «DOCENTE → lo de los alumnos que supervisa CON ASIGNACIÓN
+  VIGENTE. Nada de otros docentes». Se falló del lado cerrado. Si la escuela quiere lo
+  contrario, es UNA línea en `eduLiveFloorVisibility` (devolver `{kind:"all"}` para DOCENTE)
+  y nada más — está a propósito en un solo sitio.
+
+**El corte va también en la API, no solo en la pantalla.** `GET /api/instituto/clinica` pasa
+por DOS cerraduras:
+1. `eduApiGuard("clinica.view")` → **403** para ALUMNO y CAJA sin tocar la base;
+2. `getEduClinicaViva` consulta `eduLiveFloorVisibility` y lanza **403** si devuelve "none"
+   → cierra el caso de que alguien le encienda la casilla a un alumno por override (el
+   override REEMPLAZA al default, así que se puede dar). Sigue sin ver un sillón.
+   La página hace lo mismo y pinta el motivo en español.
+
+**Por qué la consulta de citas NO lleva `eduAppointmentScopeWhere`** (y está escrito largo en
+`clinica-viva.ts`, porque es lo primero que un auditor va a mirar): con el recorte de filas,
+los sillones ocupados por alumnos de otro docente saldrían **verdes**, y la pregunta que el
+tablero existe para contestar —"¿dónde siento a este paciente?"— tendría la respuesta
+equivocada. El recorte cambia de sitio, no desaparece: el SILLÓN se lee con
+`eduChairScopeWhere` (tenant + SEDE, como en `sillones.ts`), la CITA cuelga de esos sillones,
+y el DETALLE se decide fila por fila con `eduScopeCoversStudent` — el mismo predicado de
+vigencia que el resto del vertical, así que **una asignación cerrada ayer ya no da acceso**.
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · LA SEDE, LOS SILLONES Y LA PANTALLA
+───────────────────────────────────────────────────────────────────────────
+
+- **Filtro por sede sin techo bajo.** Un `<select>` nativo y no una fila de píldoras: el
+  producto admite 40 sedes (`EDU_MAX_CAMPUSES`) y una fila que se sale de la pantalla en un
+  teléfono no es un filtro. Se pinta solo con más de una sede.
+- **`?sede=<id>` no concede nada.** Pasa por el MISMO `getEduCampusScope` que la cookie de la
+  barra superior, así que hereda su regla: un id de una sede ajena —o de otra escuela— se
+  degrada solo a la vista consolidada de lo suyo. Sin `?sede`, manda la sede de la barra.
+- **Un sillón pertenece a UNA sede y su número solo es único dentro de ella.** El emparejado
+  es siempre por `chairId`, nunca por número: hay dos "Sillón 1" y emparejar por número
+  —que es la forma natural de equivocarse— pondría al paciente del campus sur en la tarjeta
+  del norte. Hay una prueba dedicada a eso.
+- **Cada tarjeta pinta su hora en la hora de PARED de SU sede.** Aquí no hace falta el aviso
+  de "husos distintos" que sí lleva la agenda: lo que miente es una rejilla que pone las
+  9:00 de Tijuana y las 9:00 de Mérida en la misma columna, y aquí cada tarjeta es UN sitio.
+- **`isActive:false` no se pinta.** Un sillón fuera de servicio en verde es una invitación a
+  sentar ahí a alguien.
+
+**La pantalla** (`edu-viva*` en `edu-theme.css`, prefijo propio y sin chocar con nada — lo
+comprueba `edu-theme.test.ts`): rejilla `auto-fill` que arranca en una columna en el teléfono
+y sube sola; el NÚMERO DE LA PARED en `clamp(30px, 3.4vw, 76px)` para que se lea desde cuatro
+metros; el sillón ocupado se tiñe entero, no solo el borde. `auto-fill` y no `auto-fit`: con
+dos sillones y un monitor de 55", `auto-fit` los estiraría a media pantalla cada uno.
+Barra con conteos (libres / próximas / ocupadas / total), pulso con la hora del último corte,
+y leyenda al final —quien mira la pared de lejos no la lee; quien la necesita baja a buscarla—.
+♿ El estado NUNCA se dice solo con color: cada tarjeta lleva su palabra al lado del número.
+Los tres colores se midieron sobre blanco (verde 4.93 · ámbar 5.02 · rojo 6.51) y hay seguro
+de modo oscuro y de `prefers-reduced-motion`.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · ARCHIVOS  (11 propios del vertical + ORQUESTA.md)
+───────────────────────────────────────────────────────────────────────────
+NUEVOS
+  · src/lib/edu/clinica-viva-core.ts        PURO. El motor adaptado, las 3 piezas.
+  · src/lib/edu/clinica-viva.ts             SERVIDOR. Las dos consultas y el 403 del alcance.
+  · src/app/api/instituto/clinica/route.ts  GET del tablero, con las dos cerraduras.
+  · src/app/instituto/(panel)/clinica/page.tsx
+  · src/components/edu/clinica/viva-screen.tsx   El cliente: dos relojes y las tarjetas.
+  · src/lib/edu/__tests__/edu-clinica-viva.test.ts   31 pruebas.
+TOCADOS
+  · src/lib/edu/visibility.ts        + eduLiveFloorVisibility y su copy de 403.
+  · src/lib/edu/permissions.ts       + clinica.view: catálogo, grupo propio, 2 defaults.
+  · src/lib/edu/types.ts             + item de menú "clinica" (3.º, tras Dirección) y etiqueta.
+  · src/components/edu/edu-shell.tsx + icono "layout-grid" → LayoutGrid.
+  · src/app/instituto/edu-theme.css  + el bloque .edu-viva* al final.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · GATES
+───────────────────────────────────────────────────────────────────────────
+
+- **`npm run build` exit 0**, completo y **sin un solo pipe**
+  (`NODE_OPTIONS=--max-old-space-size=8192`, salida a fichero con `>`). `prisma generate`
+  limpio (sin EPERM), **464/464 páginas** generadas —una más que en `origin/main`, que es
+  exactamente la pantalla nueva—, `.next/BUILD_ID` escrito (`RyY9Sj8-aRUKfNCOIWwqr`), tabla
+  de rutas entera con **139 renglones `/instituto`**. Cero "Failed to compile", cero
+  `error TS`, cero heap OOM. Las dos rutas nuevas salen como dinámicas, que es lo correcto
+  para un tablero en vivo:
+
+      ƒ /instituto/clinica                3.26 kB      106 kB First Load
+      ƒ /api/instituto/clinica            0 B          0 B
+
+  Los únicos warnings son los PREEXISTENTES y ajenos al vertical: el `Critical dependency`
+  de `file-type` en `api/ai-wallet/spei/topup`, tres clases ambiguas de Tailwind y el aviso
+  de webpack sobre strings grandes. El spam de `Environment variable not found: DATABASE_URL`
+  es el de siempre (worktree sin `.env`) y no afecta al exit.
+
+- **`npm run test:edu` exit 0** — **30 archivos descubiertos, 964 pruebas, 964 pass, 0 fail**
+  (996 ms). El corredor de `feat/edu-tests` encontró el archivo nuevo **sin tocar una línea
+  del runner**, que es para lo que se escribió así: de **29 archivos / 933 pruebas** a
+  **30 / 964**. Las 31 nuevas están en `src/lib/edu/__tests__/edu-clinica-viva.test.ts` y
+  cubren, por bloques:
+    1. el MAPEO — `IN_CHAIR` e `IN_PROGRESS` ocupan y los demás no; que el `Record` de
+       estados esté COMPLETO contra el enum (una ola que añada uno se entera ahí);
+       `CHECKED_IN` es próxima y no ocupada; lo terminal ni ocupa ni se anuncia; y la
+       ventana de 30 min comprobada **contra el motor del dental**, no contra una copia.
+    2. la TRAMPA — una `SCHEDULED` que ya debería haber empezado deja la tarjeta libre **y
+       vacía** (sin ese orden salía "Libre" con un paciente dentro); con dos citas vivas
+       manda la que está en curso; un sillón libre enseña la HORA y nunca el nombre; y el
+       "siguiente" se recorta al día de calendario de SU sede (probado a las 22:00 de la
+       sede, con las dos ramas).
+    3. la SEDE — el sillón 1 del Sur no se cuela en el sillón 1 del Norte; los conteos se
+       reparten por sede sin sumar los campus; el `where` de sillones recorta por sede,
+       distingue `null` de `[]` y LANZA sin `institutionId`; y un `?sede=` ajeno se degrada
+       a lo suyo en vez de conceder.
+    4. QUIÉN ENTRA — ALUMNO y CAJA en "none"; un rol desconocido y un actor basura también;
+       el docente ve OCUPADO el sillón de otro docente y **no ve de quién** (iniciales, sin
+       estudiante, sin matrícula, sin especialidad, sin folio) mientras el conteo sigue
+       diciendo 2 ocupados; y una asignación VENCIDA no da detalle.
+    5. las DOS CERRADURAS de la API — ni ALUMNO ni CAJA llevan `clinica.view` (→ 403 del
+       guard) **y** con la casilla encendida a mano el alcance sigue diciendo "none"
+       (→ 403 del servidor). Más un barrido del código que exige que el endpoint, la capa
+       de datos y la página lleven las dos, y que **ninguno de los cuatro archivos nuevos
+       decida por su cuenta qué rol ve el piso** — eso vive en `visibility.ts` y solo ahí.
+    6. el CATÁLOGO y el MENÚ — la key en un solo grupo y ese grupo de UNA casilla; la
+       llevan DIRECCION y DOCENTE y nadie más; el item existe, va tercero y **su icono está
+       en el mapa de `edu-shell.tsx`** (un icono que falte cae al genérico EN SILENCIO).
+    7. el REFRESCO — los dos relojes son distintos y razonables, y una lectura del
+       componente comprueba que NO consulta con la pestaña oculta, que vuelve a pedir al
+       volver, y que los dos listeners y el intervalo se limpian al desmontar.
+
+- **La gate se comprobó ROJA, no solo verde.** Con la fila `IN_CHAIR` del mapeo cambiada a
+  `"CHECKED_IN"` —el bug exacto que esta ola existe para evitar, y el que en pantalla se
+  vería como "funciona"—, `npm run test:edu` sale con **exit 1**, dice
+  `PRUEBAS DEL INSTITUTO: ROJO` y nombra **cuatro** pruebas: las dos del mapeo, la de las
+  dos citas vivas en el mismo sillón y la de los conteos por sede. Revertido y verde otra
+  vez (964/964) antes de commitear.
+
+- **Guardia:** `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**.
+  12 archivos vs `origin/main`: **11 propios del vertical** y 1 compartido declarado
+  (`ORQUESTA.md`). **Cero prohibidos y cero compartidos sin declarar**: ni una línea del
+  dental, de barbería ni de inmuebles. En particular, `src/lib/floor-plan/live-mode.ts` se
+  IMPORTA y no se toca — es lo que la guardia habría cazado si se hubiera intentado
+  "arreglarlo" allá para que entendiera `IN_CHAIR`.
+
+- **Raíz del repo limpia:** la rama no añade **ni un archivo** a la raíz — el único de raíz
+  que cambia es `ORQUESTA.md`. `git status` limpio salvo lo de la rama.
+
+### SQL: NINGUNO · envs nuevas: NINGUNA
+
+No hay tabla nueva, ni columna, ni enum: el tablero se arma con lo que ya existe
+(`EduChair`, `EduAppointment`, `EduCase`, `EduSupervisorAssignment`) y con los índices que
+la Ola 7 ya puso para el bloque en vivo de Dirección
+(`edu_appointments_estado_idx`, `edu_chairs_sede_idx`). Siguen pendientes, de antes y sin
+cambios, los `.sql` de las integraciones previas.
+
+⚠️ Lo único que hay que recordar al desplegar es la regla de siempre del vertical: **un
+permiso NUEVO no le llega a quien ya tiene `permissionsOverride` guardado**. Quien tenga
+override tendrá que marcarse "Clínica en vivo" en la pantalla de permisos de
+`/instituto/equipo`. Los que no tienen override (la mayoría) la reciben por su rol.
+
+### Lo que NO se hizo, a propósito
+
+- **No se tocó una línea de `src/lib/floor-plan/`.** Todo lo que no encajaba se adaptó de
+  este lado, que es lo que pedía el encargo y lo que la guardia obliga.
+- **No se añadió presencia** (quién tiene la sesión abierta). Es la decisión de la Ola 7 y
+  esta ola no la reabre.
+- **No hay botón de pantalla completa** ni auto-rotación entre sedes. Se pensó para el
+  monitor de pared y se dejó fuera: no lo pedía el encargo y el `<select>` de sede más el
+  refresco solo ya cubren el caso.
+- **La pantalla no deja tocar nada.** Marcar que el paciente se sentó o cerrar la sesión
+  sigue viviendo donde vivía —Mi agenda y Agenda—, con sus propias keys. Por eso
+  `clinica.view` no se parte en dos: un interruptor que no cierra una puerta no entra en
+  este catálogo.
+- **P2-6 (acotar la pantalla de evaluación) sigue abierto**, único hallazgo vivo de la
+  auditoría. Esta rama no lo toca.
+
+### Lo que no se vio
+
+Sin navegador ni base de datos en esta sesión: `/instituto/clinica` es server-rendered contra
+Prisma y sin `DATABASE_URL` devuelve 500 antes de pintar. Queda por mirar en el preview de
+Vercel, con datos: (a) que la rejilla se lea de verdad desde lejos en un monitor grande —el
+`clamp` del número está calculado, no medido—; (b) que el latido de 20 s se sienta bien en un
+piso con movimiento real. Lo que SÍ está probado sin base de datos es todo lo que decide algo:
+el mapeo de estados contra el motor de verdad, el recorte por sede, el enmascarado del docente
+y las dos cerraduras de la API. PR contra `main`, **SIN mergear**.
+
+---
+
+## 2026-09-02 · DaleControl INSTITUCIONAL — LA AGENDA ES UNA REJILLA
+
+Rama `feat/edu-agenda-rejilla`. `/instituto/agenda` deja de ser una lista de tarjetas
+agrupadas con la hora escrita y pasa a ser una rejilla con eje de horas real, columnas por
+sillón, color por especialidad, filtros, buscador, zoom y arrastre para reagendar. **SIN SQL**
+(no toca `prisma/schema.prisma` ni añade ningún `sql/edu-*.sql`) y sin variables de entorno
+nuevas.
+
+### Qué se IMPORTÓ del dental y qué se escribió aquí
+
+El motor de la agenda del producto dental resolvió estos problemas hace tiempo y está probado
+en producción. Se importa **tal cual, sin editar una línea** (`src/lib/agenda/`):
+
+| Módulo del dental | Qué aporta a la rejilla del instituto |
+| --- | --- |
+| `lane-layout.ts` (`assignLanes`) | Los CARRILES de las citas encimadas. |
+| `clinic-hours.ts` (`paintedAgendaWindow`) | El eje pinta el horario REAL y se ensancha hasta cubrir toda cita fuera de él. |
+| `slot-metrics.ts` (`slotHeightFor`, `showHalfHourLabels`, `CARD_TWO_ROW_MIN_PX`, `DEFAULT_SLOT_HPX`) | El alto del renglón, el zoom y cuándo caben los rótulos de media hora y la segunda fila de la tarjeta. |
+| `drag-utils.ts` (`deltaYToSlots`, `detectOverlap`) | Píxeles arrastrados ⇄ renglones, y el choque comprobado en el navegador antes de molestar al servidor. |
+| `doctor-color.ts` (`doctorColorFor`, `doctorInitials`, `readableTextOn`) | La paleta, las iniciales y la tinta legible encima de cualquier color. |
+| `types.ts` (`AgendaAppointmentDTO`, `AgendaDensity`) | Las formas que esos módulos esperan. |
+
+Ninguno de los COMPONENTES de `src/components/dashboard/agenda/` se importa: están atados a la
+página dental (su provider, su alta, sus mutaciones). Se miraron para copiar el lenguaje visual
+y la rejilla se escribió aparte, en `src/components/edu/agenda/`.
+
+**Lo que se escribió en esta rama (10 archivos):**
+
+- `src/lib/edu/agenda-rejilla.ts` **(nuevo, puro y client-safe, 780 renglones)** — el cerebro:
+  el modelo de lectura por sillón, las tres traducciones al motor del dental, la ventana del
+  eje, los carriles, el color por especialidad, el arrastre y las llaves de la URL.
+- `src/components/edu/agenda/agenda-screen.tsx` **(nuevo)** — la pantalla: barra, leyenda,
+  filtros, medidas y el `DndContext`.
+- `src/components/edu/agenda/agenda-rejilla.tsx` **(nuevo)** — eje, cabecera, columnas y
+  tarjetas.
+- `src/components/edu/agenda/agenda-lista.tsx` **(nuevo)** — la vista de lista.
+- `src/components/edu/agenda/agenda-modales.tsx` **(nuevo)** — agendar, el detalle y la
+  confirmación del arrastre (los dos primeros vienen de la pantalla vieja, sin cambios de
+  fondo).
+- `src/lib/edu/__tests__/edu-agenda-rejilla.test.ts` **(nuevo, 42 pruebas)**.
+- `src/lib/edu/agenda-core.ts` — tres llaves nuevas en la query (`docente`, `q`, `modo`).
+- `src/lib/edu/agenda.ts` — los dos filtros nuevos en el `where` y `listEduAgendaChairs`.
+- `src/app/instituto/(panel)/agenda/page.tsx` — monta la pantalla nueva y le pasa la sede.
+- `src/app/instituto/edu-theme.css` — la familia `edu-ag` (≈740 renglones) y **fuera** la
+  familia `.edu-agenda*` + `.edu-daybar*`, que solo usaba la pantalla que se reemplaza.
+- `src/components/edu/clinica/agenda-screen.tsx` — **borrado** (1 042 renglones).
+
+### Las reglas de negocio NO se tocaron
+
+`src/lib/edu/agenda-core.ts` y `agenda.ts` conservan enteras las reglas de la Ola 2 y de la
+auditoría: la cita se engancha sola a su caso, reagendar revalida el caso cuando cambia el
+estudiante, reagendar cancela el recordatorio viejo, el tope de 8 h, la sede derivada del
+sillón, el choque medio abierto y los estados clínicos vs. administrativos. Lo que se AÑADIÓ es
+modelo de lectura:
+
+- **`listEduAgendaChairs(ctx)`** — los sillones **con su horario**. Existe porque el eje pinta
+  el horario real y ese dato no estaba en ninguna lectura previa: `listEduChairOptions` (la de
+  los desplegables) no trae horarios y `listEduChairs` (la pantalla de Sillones) trae además el
+  conteo de citas futuras de cada uno, una consulta por sillón que aquí no hace falta y que con
+  32 sillones se paga en cada carga. El recorte por sede es el de siempre
+  (`eduChairScopeWhere`).
+- **Dos filtros nuevos en el `where`**: el DOCENTE (`EduAppointment.supervisorUserId` — quién
+  supervisa ESA cita, no la asignación vigente del estudiante) y el BUSCADOR de paciente, que
+  reusa `eduPatientSearchAnd` de `pacientes-core.ts`. Se filtra en la BASE y no en memoria: con
+  el techo de 500 filas, filtrar sobre lo ya traído diría "no hay" de un paciente que sí está
+  citado.
+
+El alcance sigue saliendo de `visibility.ts` y la rejilla no cambia quién ve qué: la página
+sigue redirigiendo a `/mi-dia` a los alcances "own" y "supervised" (Ola 12).
+
+### Las decisiones que no se deducen del código
+
+**1. El color es de la ESPECIALIDAD, no de la persona.** En el dental el color es del doctor y
+funciona porque una clínica tiene seis. Una escuela tiene ciento veinte estudiantes: un color
+por cabeza no es un código, es ruido —dos tonos vecinos no se distinguen y la leyenda no cabe
+en pantalla—. La especialidad es la unidad con la que la escuela piensa el piso ("hoy
+endodoncia tiene ocho sillones"), son entre tres y diez, y la leyenda cabe arriba. El color
+sale del MISMO hash y la MISMA paleta del dental (`doctorColorFor`), así que no se guarda en
+ninguna columna, y la tinta encima la calcula `readableTextOn`.
+
+**2. La leyenda ES el filtro.** Los chips de especialidad escriben la llave `programa`, la
+misma del desplegable. No hay dos controles del mismo estado que se puedan contradecir — es la
+lección de la leyenda de doctores del dental. Y la leyenda cubre **todo color pintado**,
+incluidas las especialidades que tienen citas pero ya no están en el padrón: un color en
+pantalla que nadie puede nombrar ni filtrar no sirve de nada.
+
+**3. El ESTADO es un punto, no una superficie.** La superficie ya la tiene la especialidad; dos
+señales encima de la misma no se leen. `EDU_AGENDA_STATUS_TONE` es un `Record` COMPLETO del
+enum a propósito: con un `switch` y un `default`, un estado nuevo saldría del color de relleno
+y nadie se enteraría. Hay una prueba que además exige que el tema declare la clase de cada uno.
+**Tamizaje y control se siguen distinguiendo** (borde ámbar punteado y borde punteado suave),
+que es lo que hacía `edu-slot--tamizaje` / `--control` en la pantalla vieja.
+
+**4. Una CANCELADA no ocupa sillón pero SÍ ocupa píxeles.** `assignLanes` del dental descarta
+las canceladas al repartir carriles —allá no se pintan— y aquí sí se pintan, porque una
+cancelada dice que ese hueco se liberó. Sin el ajuste, la cancelada tomaba el ancho entero de
+la columna y tapaba a la cita que de verdad está ocupando el sillón. El CHOQUE es otra pregunta
+y se contesta con el estado REAL (`detectOverlap` descarta canceladas y "no llegó", igual que
+`EDU_APPOINTMENT_FREE_STATUSES` en el servidor). Dos preguntas distintas, dos respuestas
+distintas, las dos probadas.
+
+**5. La correspondencia con el motor del dental no es arbitraria:** el SILLÓN hace de "recurso"
+y el ESTUDIANTE de "doctor". Con eso, `detectOverlap` comprueba en el navegador exactamente las
+dos colisiones que `assertNoClash` comprueba en la base. Si la correspondencia fuera otra, el
+aviso del arrastre diría verde donde el servidor va a decir que no.
+
+**6. Arrastrar PROPONE, no guarda.** Una cita movida por accidente con el codo es un paciente
+al que le llega la hora equivocada, y deshacer no existe. El arrastre abre una ventana que
+enseña de dónde a dónde con las dos horas escritas, y el guardado va contra el **mismo**
+`PATCH /api/instituto/agenda/[id]` que el formulario de reagendar, con las mismas validaciones
+del servidor. Si el servidor dice que no, el error se lee ahí y la tarjeta se queda donde
+estaba. A propósito **no se manda `studentId`**: arrastrar mueve una hora, y mandarlo obligaría
+al servidor a volver a derivar el caso en cada movimiento.
+
+**7. Arrastrar CONSERVA el desfase.** Se le SUMAN cuartos de hora a la hora que tenía, no se la
+realinea a la rejilla. Realineando, una cita de las 09:10 soltada donde estaba se proponía a
+las 09:15 —un cambio que nadie pidió— y la ventana de confirmar se abría por un simple clic.
+
+**8. La hora que sigue a la tarjeta sale del MISMO cálculo que el soltar.** Es un renglón del
+contexto de arrastre, no una segunda cuenta en la tarjeta. Se descubrió en el navegador: cuando
+el arrastre llega al borde, dnd-kit desplaza la rejilla solo, y ese desplazamiento entra en el
+`delta` del soltar pero NO en el `transform` de la tarjeta — el rótulo decía **11:30** y la cita
+se guardaba a las **13:15**. Es el peor fallo posible en una agenda: el que promete una cosa y
+hace otra.
+
+**9. La sede NO tiene un filtro nuevo.** Se monta el `EduSedeSelector` que ya existe, con la
+misma cookie. Un segundo control de sede que escribiera en la URL sería un estado que se puede
+contradecir con el de la barra superior.
+
+**10. Las siete llaves de la URL de siempre no se renombran.** `vista`, `dia`, `sillon`,
+`programa`, `alumno`, `tipo`, `estado` se leen exactamente igual que antes de la ola. Se AÑADEN
+tres: `docente`, `q` y `modo`. `modo` (rejilla/lista) es una llave aparte y no un tercer valor
+de `vista` a propósito: `vista` significa el RANGO que se lee de la base, y una "vista lista"
+dejaría sin respuesta la pregunta de qué rango trae. Hay una prueba que fija las siete viejas
+una por una.
+
+**11. El zoom se recuerda en `localStorage` (`edu-agenda-densidad`) y no en la URL.** No es un
+filtro: es una preferencia de quien mira. Un enlace compartido tiene que llevar QUÉ se ve, no
+con qué aumento lo ve el otro.
+
+### Responsive: qué se decidió para cada ancho
+
+Se mide con **`@container`** sobre `.edu-ag` y no con `@media`, al revés que el resto de
+`edu-theme.css`. El motivo es concreto: en escritorio el menú del panel es una columna fija de
+252 px, así que con la ventana en 1024 px a la agenda le quedan ~770 — medir la ventana
+pintaría columnas de escritorio en un hueco de tableta. **Los tres diálogos se montan FUERA de
+`.edu-ag`** porque un contenedor de consulta atrapa a sus descendientes `position: fixed`, y
+`.edu-modal` lo es. El comentario de `.edu-modal` en el tema, que decía que NADA del panel
+lleva `container-type`, quedó actualizado.
+
+- **390 px (celular) · Día → UNA columna de sillón.** Con 32 sillones no hay forma de que
+  quepan, y encogerlos hasta que quepan da columnas de 11 px. Se pinta un sillón con un
+  selector ‹ Sillón 1 · 1 de 32 sillones › que escribe la MISMA llave `?sillon=` — no hay
+  estado nuevo escondido — y un aviso dice cuántas citas quedan fuera. Los filtros van
+  **plegados** en un desplegable (ahorran 110 px) y la tira de especialidades va en **un
+  renglón que se desliza** (ahorra otros 70). **No se arrastra** en pantalla angosta: en un
+  teléfono ese gesto es desplazarse.
+- **390 px · Semana → cae a LISTA**, y lo dice en pantalla. Siete columnas de 50 px no se leen
+  de ninguna manera, y una semana es justo lo que una lista lee bien.
+- **768 px (tableta):** 32 columnas de 124 px con desplazamiento horizontal; ~5 a la vista.
+- **1024 px:** columnas de 124 px, ~7 a la vista.
+- **Escritorio ancho:** columnas de 152 px. La página de la agenda estrena `edu-ag-page`, que
+  le quita a `.edu-page` el tope de 1100 px — con ese tope se veían **siete columnas y media**
+  de 32 y el resto quedaba detrás de un desplazamiento eterno. Es un modificador: ninguna otra
+  pantalla del vertical se entera.
+
+**La primera columna (las horas) y la fila de encabezados se quedan fijas.** Se probó midiendo:
+con la rejilla desplazada 1 500 px a la derecha y 54 hacia abajo, el eje y la esquina siguen en
+`left: 1` y la cabecera en `top: 1`. Dos detalles que costaron y quedan escritos en el CSS:
+(a) UN SOLO contenedor con desplazamiento para los dos ejes —con el alto y el ancho en
+contenedores anidados, el `sticky` del eje se resuelve contra el de dentro y las horas se van
+con las columnas—; y (b) **dos filas flex, no una rejilla CSS**: en `display: grid` el bloque
+contenedor de un hijo es su ÁREA, así que un `sticky left: 0` en la primera columna no tiene
+sitio a donde correrse.
+
+### Lo que se vio en el navegador (y lo que se arregló por haberlo visto)
+
+`npx next dev` + una page temporal fuera de `/instituto` (el middleware matchea
+`/instituto/:path*`) montando el componente REAL con 32 sillones, 24 citas del día y 27 de la
+semana, los siete estados, tres carriles encimados y una cancelada. **La page se borró antes de
+commitear** y la guardia lo confirma.
+
+Cuatro fallos que solo se ven mirando, los cuatro arreglados:
+
+1. **El rótulo del arrastre mentía** cuando la rejilla se desplazaba sola (11:30 en pantalla,
+   13:15 guardado). Ver la decisión 8.
+2. **El ancho no llegaba nunca si el `ResizeObserver` no disparaba.** Un observador no entrega
+   su primera llamada hasta el siguiente paso de renderizado, y una pestaña que el navegador no
+   está pintando no da ninguno: el ancho se quedaba en `null` y **un teléfono pintaba las 32
+   columnas**. Ahora hay una medida directa en el montaje y el observador solo se ocupa de los
+   cambios.
+3. **La rejilla no recuperaba el alto** que le devolvía el desplegable de filtros al plegarse.
+4. **El aviso de "la semana se enseña como lista" salía repartido por el renglón**: es un
+   contenedor flex y cada trozo de texto suelto era un elemento flexible por su cuenta.
+
+Y se comprobó, además: el arrastre completo (activación, el hueco de destino en **verde**
+cuando cabe y en **rojo** cuando choca, el rótulo siguiendo la hora, y la ventana "¿Mover esta
+cita?" con "Estaba 10:00–11:30 · Sillón 3 / Queda 11:30–13:00 · Sillón 3"); que el detalle de
+una cita abre a pantalla completa y **no** encerrado en la columna (la trampa del
+`container-type`); las cuatro resoluciones sin desbordar la página en ninguna; y el tema
+oscuro, que aunque hoy no se aplica en `/instituto` ya no depende de la suerte.
+
+⚠️ **El arrastre se verificó con una secuencia de eventos de puntero escrita a mano**
+(`pointerdown` → 5 × `pointermove` → `pointerup`), no con el `left_click_drag` de la
+automatización: esa herramienta no emite `pointermove` intermedios y dnd-kit necesita uno para
+pasar su umbral de 6 px. El gesto real de un ratón sí los emite.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
+  **463/463 páginas**, tabla de rutas entera, `/instituto/agenda` en 14.3 kB. Cero "Failed to compile", cero `error TS`, cero heap OOM. Los únicos warnings son
+  los PREEXISTENTES y ajenos al vertical (el `Critical dependency` de `file-type` en
+  `api/ai-wallet/spei/topup` y tres clases ambiguas de Tailwind). El spam de `Environment
+  variable not found: DATABASE_URL` es el de siempre (worktree sin `.env`).
+  ⚠️ Las dos primeras pasadas murieron en `prisma generate` con el `EPERM ... rename
+  query_engine-windows.dll.node` de Windows, y **no era intermitente**: `next dev` había dejado
+  tres procesos node huérfanos apuntando al worktree —el que mata la tarea es el envoltorio, no
+  el árbol— y ésos tenían la DLL abierta. Matados los tres, el build salió a la primera. Si
+  vuelve a pasar, se buscan con `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` y se
+  filtra por el nombre del worktree antes de sospechar del código.
+- **`npm run test:edu` exit 0** — **30 archivos, 975 pruebas, 975 pass, 0 fail** (desde
+  29/933). Las 42 nuevas están en `edu-agenda-rejilla.test.ts` y cubren lo que el encargo pedía
+  fijar: el modelo de lectura por sillón y la sede, los carriles con citas encimadas, el mapeo
+  de estados a la tarjeta (contra el CSS de verdad) y que las llaves de la URL siguen siendo
+  las mismas. Más el eje, el arrastre y el choque.
+- **`npx tsc --noEmit`** sin un solo error en código de aplicación. Los 8 que quedan son
+  PREEXISTENTES y viven en archivos de prueba ajenos (`src/lib/barber/__tests__/*` y el
+  `edu-theme.test.ts` que ya estaba en `main`): son `TS2802` por recorrer un `Set`/`Map` con el
+  `target` del tsconfig. No los toca esta rama; sí se evitaron en el código nuevo.
+- **Guardia:** `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**.
+  11 archivos vs `origin/main`: 10 propios del vertical y `ORQUESTA.md` declarado. **Cero
+  prohibidos y cero compartidos sin declarar**: ni una línea del dental, de barbería ni de
+  inmuebles.
+- **Raíz del repo limpia:** esta rama no añade ni un archivo a la raíz; el único de raíz que
+  cambia es `ORQUESTA.md`. La page temporal de verificación está borrada y `git status` no la
+  ve.
+
+### Lo que NO se hizo, a propósito
+
+- **La vista de MES queda fuera**, como pedía el encargo.
+- **El "todo el día" no siempre cabe sin desplazar.** El zoom "fit" del dental tiene un suelo de
+  10 px por renglón (por debajo, el texto de las tarjetas deja de leerse). Con la jornada del
+  banco de pruebas —07:00 a 21:00, catorce horas, 56 renglones— eso son 560 px y en una ventana
+  de 927 px de alto quedan ~530 para la rejilla: sobran ~55 px de desplazamiento. Con una
+  jornada de doce horas cabe entera. No se bajó el suelo porque vive en `slot-metrics.ts`, que
+  es del dental y no se edita.
+- **El arrastre no cambia de estudiante ni de duración**: solo hora, día y sillón. Cambiar el
+  estudiante sigue siendo cosa del formulario de reagendar, que es donde el servidor vuelve a
+  derivar el caso.
+- **La lista de estudiantes sigue sin viajar** al navegador de quien no la usa (P1-4 de la
+  auditoría, intacto): los desplegables de Estudiante y Docente se arman con el padrón **más**
+  quien aparece en las filas que ya están en pantalla, así que cubren todo lo que se ve sin
+  traer ni una fila que el servidor no hubiera mandado ya.
+- **Sin base de datos en esta sesión**, así que el `PATCH` del arrastre no se ejecutó contra
+  Postgres. Es el mismo endpoint que ya usaba el formulario de reagendar y no se tocó; lo que
+  sí se probó es todo lo que ocurre antes: el cálculo del destino, el choque en el navegador y
+  la ventana de confirmación.
+
+PR contra `main`, **SIN mergear**.
+
+---
+
+## [Institucional · VISOR] — Se retira el visor propio: el instituto abre el MISMO visor que ve un dentista, en un modal que sí deja ver los cuatro paneles ✅ (2026-09-01) · rama `feat/edu-visor-dental`
+
+El vertical tenía su propio visor de tomografías: `cbct-viewer.tsx` (984 renglones) más
+`panoramica-pane.tsx`, `visor-medidas.ts`, `visor-gestos.ts` y `visor-shell.tsx`. Reproducía el
+del producto dental con otra pinta, abría en una hoja a pantalla completa en vez de en un modal
+y tenía la panorámica rota. **Ese fork se fue.** Ahora se monta `DicomSetViewer` /
+`DicomViewer2D` / `Model3DViewer` —los del dental, importados tal cual— dentro de un modal del
+vertical, y lo único que el instituto pone es la hoja, el CSS y las dos rutas de servidor.
+
+### La ÚNICA modificación del producto dental (18 líneas nuevas, 8 borradas)
+
+`src/components/patient-3d/DicomSetViewer.tsx` tenía dos `fetch` con la URL escrita a mano
+dentro del componente, y un adaptador **no puede redirigir un fetch escrito dentro**. Se le
+añade una prop OPCIONAL:
+
+```ts
+endpoints?: { lite: string; notes: string };
+```
+
+y arriba del componente:
+
+```ts
+const liteEndpoint  = endpoints?.lite  ?? `/api/patients/${patientId}/dicom-set/${fileId}/lite`;
+const notesEndpoint = endpoints?.notes ?? `/api/patients/${patientId}/models-3d/${fileId}`;
+```
+
+Los dos `fetch` pasan a usar esas variables. **Cuando la prop no viene, el dental hace
+exactamente lo de siempre**; hoy no la pasa ningún llamador suyo (`Models3DTab.tsx` es el único
+y no la usa). Los 60 tests de `npm run test:cbct-geometry` siguen en verde.
+
+🔴 **Las rutas se derivan a STRING, no se pasa el objeto.** El modal crea `endpoints` nuevo en
+cada render; si el OBJETO entrara en las dependencias del efecto que decodifica, girar el iPad
+volvería a leer los 668 cortes (296 MB) desde cero. Por eso la dependencia es `liteEndpoint`
+(un string, que compara por valor) y sustituye a `patientId` en esa lista — cuando no hay
+prop, el string contiene `patientId` y `fileId`, así que cambia exactamente cuando cambiaban
+antes. Hay una prueba que se pone roja si alguien mete el objeto.
+
+**El guardia:** `src/components/patient-3d/DicomSetViewer.tsx` se añadió a `SHARED_FILES` de
+`scripts/edu-guard.cjs`. `EDU_GUARD_SHARED` **solo indulta lo que ya está en esa lista** — no
+es un comodín—, así que sin ese renglón el guardia habría marcado el archivo como PROHIBIDO
+haga lo que haga la variable de entorno.
+
+### Lo que el instituto pone del lado del servidor
+
+**`POST /api/instituto/estudios/[id]/lite`** — el CBCT reducido para el móvil. Gemela de la del
+dental, y existe porque aquella resuelve contra `PatientFile` con la sesión del dental: con un
+id del instituto contesta 404. **La matemática NO se copia**: `buildCbctLite`
+(`src/lib/cbct-lite.ts`) se importa —dinámicamente, para no meter JSZip en el bundle de las
+pantallas que solo listan—, el binario hermano `<path>.lite2.bin` se guarda en el bucket
+`edu-files` al lado del original y la siguiente apertura lo encuentra hecho. Se reusan del
+dental el sufijo, el content-type y el techo de 700 MB (`MAX_CBCT_LITE_BYTES`, importado y no
+duplicado: es el mismo límite de RAM). Frenos de coste calcados: 10 generaciones/hora **por
+instituto** y candado por estudio, los dos DESPUÉS del hit de caché para que abrir un estudio
+ya preparado nunca choque con ellos.
+
+**`PATCH /api/instituto/estudios/[id]/notas`** — escribe `EduStudy.notes`, la MISMA columna que
+rellena el formulario de subida y que lee la línea de tiempo del expediente. Acepta
+`doctorNotes` (que es lo que manda el visor del dental) y `notes`.
+
+🔴 **Tenant.** Las dos pasan por `getEduStudyForViewer` (nuevo, en `src/lib/edu/estudios.ts`):
+`institutionId` de la SESIÓN + el paciente por `eduPatientScopeWhere` de
+`src/lib/edu/visibility.ts`. Un estudio de otra escuela —o de un paciente que a ese rol no le
+toca— **no existe**: 404, igual que uno inventado. Un alcance vacío cierra la consulta antes de
+llegar a la base.
+
+🔴 **Permisos, y por qué son distintos.** El `lite` pide `estudios.view`: prepara para verlo
+algo que ya se puede ver. Las notas piden **`estudios.upload`**, que es el permiso de
+ESCRITURA que ya tiene esa pantalla (es el que hoy deja poner notas al subir el estudio). Con
+solo `estudios.view` se mira el expediente y no se escribe en él.
+
+⚠️ **Acción para el deploy, y no la puede hacer esta rama:** `vercel.json` le da a la ruta del
+dental `memory: 3009, maxDuration: 300`. La del instituto necesita lo mismo y `vercel.json` no
+es un archivo del vertical (el guardia lo marca prohibido). Hay que añadirle a mano:
+
+```json
+"src/app/api/instituto/estudios/*/lite/route.ts": { "memory": 3009, "maxDuration": 300 }
+```
+
+Sin eso, preparar un CBCT grande para móvil morirá por falta de memoria en producción. En
+escritorio no se usa esa ruta, así que el visor funciona igual.
+
+### El modal, y lo único en lo que se aparta del dental
+
+`src/components/edu/estudios/visor-modal.tsx`, con CSS propio bajo el prefijo **`edu-vsr`** (el
+tema es UNA hoja de 6 400 renglones y dos olas que bautizan igual dos cosas no dan error, solo
+dejan la pantalla del otro dueño torcida; lo vigila `edu-theme.test.ts`). Reproduce el bloque
+"Modal del visor" de `Models3DTab.tsx`: cortina, tarjeta, cabecera con nombre, descarga y
+cierre, leyenda legal al pie — y **elige el visor por EXTENSIÓN**, `.zip` → `DicomSetViewer`,
+`.dcm/.dicom` → `DicomViewer2D`, `.stl/.ply/.obj` → `Model3DViewer`.
+
+Esa elección vive aparte, en `visor-tipo.ts`, un módulo **sin una sola importación**. No es
+manía: así la prueba puede EJECUTARLA en vez de buscar texto dentro de un `.tsx` que el
+corredor de pruebas no sabe cargar.
+
+**Lo que Rafael pidió: la rejilla 2×2 se ve completa sin bajar.** En el dental los cuatro
+paneles miden **420 px fijos**: suman ~910 px de rejilla y en cualquier monitor hay que
+desplazarse para ver el cuarto. Aquí:
+
+- la hoja mide contra la VENTANA con **`dvh`** (`100dvh` en el teléfono, `min(96dvh,100%)` en
+  escritorio), con `100vh` delante como respaldo para navegadores sin `dvh`;
+- `useAltoDeFila` mide el hueco REAL que queda entre donde empieza la rejilla y el borde de la
+  hoja, y lo reparte entre las dos filas en `--edu-vsr-fila`;
+- el CSS convierte esa variable en `grid-template-rows: repeat(2, var(--edu-vsr-fila, auto))` y
+  hace que cada tarjeta estire su imagen para llenar su fila.
+
+**Por qué se mide en JS y no con un `calc()` de dvh:** entre el borde de la hoja y la rejilla
+solo hay la barra de control del visor, y esa barra **cambia de alto** —se parte en dos o tres
+renglones según el ancho del modal—. Un número fijo acierta en un monitor y deja el cuarto
+panel cortado en el siguiente, que es exactamente el defecto que este trabajo venía a quitar.
+El alto de la HOJA sí es `dvh`, que es lo que se pidió.
+
+Solo hay **dos `!important`**, y son inevitables: `MprPane` y `Dicom3DVolume` llevan su alto
+**en línea** (`style={{ height: 420 }}`) y a un estilo en línea no se le gana con
+especificidad. Hay una prueba que lee los dos archivos del dental y se pone roja el día que
+dejen de hacerlo — ese día los `!important` sobran y hay que quitarlos.
+
+**El reparto se apaga solo** cuando no hay 2×2 que cuadrar: una sola columna (pantalla
+angosta), un panel maximizado, la panorámica o el modo de poca memoria. Ahí manda el dental y
+se desplaza. Encoger cuatro cortes para que quepan en una pantalla de teléfono los deja
+ilegibles, y una radiografía ilegible no es una radiografía.
+
+### El panel de notas MUERTO del visor DICOM 2D
+
+`DicomViewer2D` **no acepta rutas** (solo se tocó un archivo del dental) y pinta siempre su
+panel de notas, que guarda con `PATCH /api/patients/**`: desde el instituto eso contesta 404
+**siempre**. Un botón "Guardar" que nunca guarda es peor que no tenerlo, así que se **oculta
+desde el CSS del vertical**, y de paso se le pone debajo la superficie oscura para la que ese
+visor está dibujado (sus controles son `text-white/70`; sobre el panel claro del instituto
+salían blanco sobre blanco).
+
+⚠️ El ancla es la clase `lg:w-72` con la que el dental marca esa columna. Si el dental la
+cambia, el botón reaparecería y fallaría en cada clic **sin que nada se pusiera rojo** — por
+eso hay una prueba que lee `DicomViewer2D.tsx` y se cae el día que deje de llevarla. El visor
+de mallas no tiene el problema: sin `patientId`/`fileId` su `canPersist` es false y no pinta
+notas (el adaptador del vertical sigue sin pasárselos). Y el CBCT sí las edita de verdad,
+contra la ruta del instituto.
+
+### La taxonomía inventada, fuera de la pantalla
+
+Al subir un estudio ya **no se pregunta qué es** (se fue el "¿Qué es esta imagen?
+Radiografía / Fotografía"), la galería ya no pinta chips por tipo ni la etiqueta del `kind` en
+cada tarjeta, y el visor tampoco la lleva en el subtítulo. El icono de la tarjeta se deduce
+ahora de la EXTENSIÓN, que es el mismo criterio con el que se elige el visor al abrirla: así la
+miniatura nunca promete algo distinto de lo que se va a abrir. El cliente de la subida dejó de
+mandar `kind`.
+
+⛔ **El enum de la base NO cambia y no hay SQL.** `EduStudyKind` lo siguen usando el
+expediente, la línea de tiempo y la IA, y lo sigue decidiendo el servidor con
+`eduResolveStudyKind` sobre la extensión del path que él mismo compuso. Se dejó ese resolutor
+en pie a propósito aunque hoy nadie le mande nada: es la defensa que impide que un `.zip` de
+600 MB se registre como "Foto" el día que alguien vuelva a mandar el campo.
+
+### Lo que se borró
+
+`cbct-viewer.tsx`, `panoramica-pane.tsx`, `visor-medidas.ts`, `visor-gestos.ts`,
+`visor-shell.tsx` y sus ~400 renglones de CSS (`.edu-visor3d*`, `.edu-visorhoja*`). Con ellos
+se fue `.edu-modal__card--wide` y la prop `wide` de `EduModal`: la creó la misma ola para el
+visor y desde el PR #147 no le quedaba **ni un cliente**. Las clases del visor de imágenes y
+PDF (`.edu-visor__marco`, `.edu-visor__pdf`) se quedan: no eran del fork.
+
+`src/lib/edu/__tests__/edu-visor.test.ts` leía esos archivos como texto y se reescribió entero:
+**28 pruebas nuevas** que vigilan lo que ahora hay que vigilar, que ya no son medidas propias
+sino una FRONTERA con un producto vivo. Además `edu-resumen.test.ts` tenía un candado sobre
+`cbct-viewer.tsx` que ahora vigila `visor-modal.tsx` (que no cablee ni una ruta del dental), y
+se corrigió un comentario de `edu-expediente.test.ts` que nombraba un archivo borrado. **No
+queda ninguna prueba apuntando a un archivo que no existe.**
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
+  Las dos rutas nuevas salen en la tabla: `ƒ /api/instituto/estudios/[id]/lite` y
+  `ƒ /api/instituto/estudios/[id]/notas`.
+  ⚠️ El primer intento murió con `EPERM ... rename query_engine-windows.dll.node` en
+  `prisma generate`: eran DOS procesos `next dev` HUÉRFANOS del banco de verificación que
+  `TaskStop` no se llevó (mata al envoltorio, no a los hijos). Matados por PID, el build salió
+  limpio. Y el aviso de fondo de siempre: el harness notifica "exit code 0" por el `echo`
+  final — el que vale es el `REALEXIT=` del propio archivo de salida.
+- **`npm run test:edu` exit 0** — 29 archivos, **939 pruebas, 939 pass, 0 fail**.
+- **`npm run test:cbct-geometry` exit 0** — 60/60. Es la prueba del DENTAL sobre el visor que
+  se tocó.
+- **Guardia:** `EDU_GUARD_SHARED="src/components/patient-3d/DicomSetViewer.tsx,ORQUESTA.md"
+  node scripts/edu-guard.cjs` → **exit 0**. 22 archivos vs `origin/main`: 21 propios del
+  vertical, 1 compartido declarado, **cero prohibidos**.
+- `npx tsc --noEmit`: sin un solo error en `src/app`, `src/lib` ni `src/components`. Los que
+  salen son los PREEXISTENTES de `__tests__` (`downlevelIteration` en barbería y en
+  `edu-theme.test.ts`), que `next build` ignora por diseño.
+
+### Lo que se VIO, y con qué
+
+No hay base de datos ni Supabase en este entorno (`.env` no existe en el repo), así que un CBCT
+"real" de un paciente real era imposible. Se montó un **banco temporal**: un `.zip` de **96
+cortes DICOM sintéticos de 160×160** fabricados con `dicom-synth.ts` —el generador de las
+propias pruebas del dental, que escribe Part 10 de verdad— con un maxilar de mentira (arcada
+densa, hueso basal, paladar), servido desde `public/` a una página que monta el modal. Todo el
+banco (página, `.zip`, `.dcm`, marco de iframes y un `.env.local` de mentira) **se borró antes
+del commit**; `git status` no lo lleva.
+
+Lo que se comprobó con eso, en el navegador:
+
+- **1920×950** — `--edu-vsr-fila` = **338 px**, los cuatro paneles de 778×338, el borde
+  inferior del cuarto a **803 px** dentro de un cuerpo de **814**: la rejilla 2×2 entera
+  visible **sin desplazar**. La leyenda clínica, las notas y la ficha quedan debajo (el cuerpo
+  mide 1 121 px de contenido), que es donde tienen que estar.
+- **1366×768** — fila = **250 px**, cuarto panel a **627** de **639**. También cabe. El lienzo
+  3D se queda en 105 px porque sus propios controles ocupan dos renglones; para verlo grande
+  está el botón de maximizar del propio panel.
+- **390×844 (teléfono)** — hoja a pantalla completa, cabecera compacta y paneles apilados con
+  desplazamiento, como en el dental. Se arregló de paso el subtítulo, que se partía en tres
+  renglones y le robaba alto al visor.
+- **La panorámica del dental FUNCIONA**: auto-detectó la arcada sobre el axial y generó la
+  reconstrucción curva, con sus controles de slab/MIP y su escala en mm. Es la del dental,
+  importada; el fork la tenía rota.
+- **Las rutas son las del instituto y ninguna es del dental.** Guardar notas disparó
+  `PATCH /api/instituto/estudios/<id>/notas` → **401** (sin sesión, que es lo correcto), y
+  forzando el camino de poca memoria, `POST /api/instituto/estudios/<id>/lite` → **401**. En
+  todo el registro del servidor hay **CERO** peticiones a `/api/patients/`.
+- **`.dcm` → `DicomViewer2D`**, pintando sobre la superficie oscura y **sin** su panel de notas
+  muerto.
+
+### Lo que NO se pudo ver
+
+- **Un CBCT de un paciente de verdad**, con su URL firmada de Supabase. No hay bucket ni
+  sesión aquí.
+- **Que el CBCT reducido se genere de verdad** (descarga del `.zip` del bucket → `buildCbctLite`
+  → subida del binario hermano → firma). La ruta se ejecutó hasta el guardia y contestó 401
+  correctamente, pero el camino feliz necesita Storage.
+- **El tenant en caliente.** Que un estudio de otra escuela dé 404 está escrito y probado por
+  lectura de código (`getEduStudyForViewer` con `eduPatientScopeWhere`), no ejercido contra la
+  base.
+- **Un dedo de verdad.** El fork traía gestos táctiles sintetizados; el visor del dental tiene
+  los suyos y no se tocaron.
+
+### Detalle menor, dicho para que no sorprenda
+
+La galería no pre-firma la URL del CBCT reducido, así que en un teléfono la primera apertura
+hace un `POST` al `lite` que casi siempre devuelve `cached: true` al instante. Es un viaje de
+ida y vuelta más y evita una llamada extra a Storage por cada `.zip` al pintar la galería.
+Puede pre-firmarse si algún día molesta.
+
+PR contra `main`, **SIN mergear**.
+---
+
+## [Institucional · INTEGRACIÓN 5] — Ocho ramas en un solo build: el visor que borró los archivos que la landing citaba como prueba, y el reporte de una ola que se metió dentro del de otra ✅ (2026-09-01) · rama `edu/integracion5`
+
+### Qué es
+
+Las ocho ramas terminadas y revisadas del vertical, fusionadas en `edu/integracion5` sobre
+`origin/main` (`79b7e97a`), merge normal y sin rebase, en el orden que exigían las dependencias
+—#158 nace de #155 y #160 nace de #157, así que la madre entra antes que la hija—:
+
+| # | Rama | PR | HEAD | Qué trae |
+|---|------|----|------|----------|
+| 1 | `feat/edu-cuota-storage` | #155 | `40227fef` | 5 TB por CONTRATO y por INSTITUTO (las sedes comparten bolsa), medidor que Dirección VE y no edita, corte con 507 al firmar la subida, y `/admin/institutos`. |
+| 2 | `feat/edu-inicio-direccion` | #158 | `3474382c` | El Inicio de Dirección deja de ser un saludo: tres gráficas por día con los mismos topes y ventana que la Ola 7. Y el nombre de la escuela lo aplastaba el LAYOUT, no el minificador. |
+| 3 | `feat/edu-seed-demo` | #157 | `07fd289b` | `npm run seed:edu-demo`: 120 estudiantes, 32 sillones, 20 577 citas, HOY llena. `--medir` cronometra el panel. |
+| 4 | `fix/edu-volumen` | #160 | `4196beb1` | Los tres hallazgos que midió ese demo: el expediente DICE que cortó, la evaluación lee 78 % menos, el CSV de cerrados vuelve a salir. Cierra el P2-6 de la auditoría. |
+| 5 | `feat/edu-clinica-viva` | #156 | `d91b14e1` | `/instituto/clinica`: el tablero de sillones en vivo. El estado sale de la CITA, no de presencia. |
+| 6 | `feat/edu-agenda-rejilla` | #159 | `8b930e5a` | La agenda es una REJILLA con el motor del dental importado, color por especialidad y arrastre para reagendar. |
+| 7 | `feat/edu-visor-dental` | #161 | `ff173f4c` | Se retira el visor propio: el instituto monta EL MISMO visor que ve un dentista, en un modal `edu-vsr` cuya rejilla 2×2 cabe sin desplazar. |
+| 8 | `feat/edu-landing` | #162 | `d39a8085` | `/instituciones`: la landing pública del vertical, con tres escenas 3D procedurales y ninguna promesa sin archivo. |
+
+**112 archivos** cambian respecto de `origin/main`, +25 074 / −3 787. Quince commits: ocho de
+las ramas, seis merges y uno propio de la integración.
+
+### Los conflictos, y cómo quedó cada uno
+
+Seis choques de git, todos resueltos conservando las DOS partes:
+
+| Archivo | Quién chocó | Cómo quedó |
+|---|---|---|
+| `src/app/instituto/edu-theme.css` | viva, agenda y visor (tres merges seguidos) | Los cinco bloques enteros. Cada choque se resolvió por reconstrucción, no a ojo: se comprobó primero **qué parte de cada lado era apéndice y qué parte era edición a mitad de archivo** (`git show :1: / :2: / :3:`), se fusionó a tres bandas SOLO la zona central —siempre disjunta— y se concatenaron los apéndices en orden. Las clases que agenda y visor **borran** (`.edu-agenda*`, `.edu-daybar*`, `.edu-visor3d*`, `.edu-visorhoja`) siguen borradas y no las usa ni un `.tsx`. |
+| `src/lib/edu/estudios.ts` | cuota + visor | Unión de imports: los tres de `almacenamiento-core` y el `eduSignRead` del visor. El archivo final tiene las tres cosas — el corte de cuota (507), el `truncated` de volumen y el `lite`/notas del visor. |
+| `src/components/edu/expediente/estudios-screen.tsx` | volumen + visor | **El único choque de fondo.** Ver abajo. |
+| `scripts/edu-guard.cjs` | cuota + seed + visor + landing | `OWN_PREFIXES` con las cuatro rutas nuevas y `SHARED_FILES` con los seis compartidos. |
+| `scripts/edu-tests.cjs` | cuota + landing | `ROOTS` con las tres raíces nuevas: `src/app/admin/institutos`, `src/app/instituciones` y `src/components/public/instituciones`. |
+| `ORQUESTA.md` | las ocho | Los ocho reportes, enteros. Ver abajo: el auto-merge MINTIÓ. |
+
+### El choque de fondo: `estudios-screen.tsx`
+
+No es "las dos agregaron". Las dos ramas se contradicen:
+
+- **#161 (visor) BORRÓ la taxonomía de esa pantalla** a propósito: fuera los filtros
+  (`FILTRO_*`, `visibles`, `cuentas`), fuera el `EDU_STUDY_KIND_LABELS` de la tarjeta y fuera la
+  pregunta "¿Qué es esta imagen?" al subir. Su prueba lo fija: si vuelve cualquiera de las tres,
+  `edu-visor.test.ts` se pone roja.
+- **#160 (volumen) AÑADIÓ el aviso de corte** —`truncated`, `maxRows`, el banner y el sufijo del
+  conteo—, y **el texto de su banner terminaba diciendo "los filtros de aquí abajo"**, que es
+  justo lo que la otra rama acababa de quitar.
+
+Se conservan las dos: se parte de la versión del visor (sin taxonomía) y se le vuelven a poner
+las cuatro cosas de volumen. **El único texto que cambié yo** es el segundo párrafo del banner,
+que ya no puede hablar de filtros: ahora dice que lo que falta son los MÁS VIEJOS, que es la
+misma advertencia sin prometer un control que no existe. Las dos pruebas mandan y las dos pasan:
+`edu-expediente.test.ts` exige `truncated: boolean;`, `maxRows: number;`, `{truncated && (` y el
+literal "Se muestran los {maxRows} estudios más recientes"; `edu-visor.test.ts` exige
+`iconoDeArchivo(` y cero rastro de la taxonomía.
+
+### Lo que NO era un conflicto y habría llegado roto a producción
+
+**El visor borró archivos que la landing cita como prueba.** #162 construyó toda su honestidad
+sobre una regla mecánica: cada promesa lleva un `verifiedIn` con rutas de código, y
+`edu-landing.test.ts` falla si una de esas rutas no existe. #161, que se escribió en paralelo,
+**borró `src/components/edu/estudios/cbct-viewer.tsx` y `visor-shell.tsx`** al retirar el visor
+propio. Git no dice nada: son archivos distintos, cero conflicto, los dos merges limpios. Pero al
+juntarlas la landing citaba **tres veces dos archivos que ya no están** —la promesa "Visor con
+cortes y volumen" y la pregunta de las tomografías—, y `npm run test:edu` se pone rojo.
+
+Se repuntan a lo que HOY hace ese trabajo, sin tocar una palabra del copy (que sigue siendo
+cierto: el modal monta `DicomSetViewer` para el set CBCT y `DicomViewer2D` para el corte suelto):
+
+- `cbct-viewer.tsx` → `src/components/edu/estudios/visor-modal.tsx` (2 sitios)
+- `visor-shell.tsx` → `src/components/patient-3d/DicomSetViewer.tsx`
+
+Comprobado además que **las 56 rutas** citadas por `marketing.ts` existen, no solo esas tres.
+
+### El auto-merge de `ORQUESTA.md` mintió, y el conteo lo destapó
+
+Los ocho merges auto-fusionaron `ORQUESTA.md` sin un solo conflicto, y `git diff --numstat`
+decía **`2352 0`**: 2 352 líneas añadidas y **cero borradas**. Cero borradas es justo la señal
+que invita a no mirar más.
+
+Los reportes suman 2 362 líneas, no 2 352. **Faltaban diez.** Y no era ruido de separadores:
+git había usado el `### Gates` del reporte de la agenda como contexto común con el `### Gates`
+del reporte del visor, y con eso **partió el reporte de #159 en dos y metió su segunda mitad
+—47 líneas: las gates, el "Lo que NO se hizo" y el resto— DENTRO del reporte de #161**. Cada
+línea seguía en el archivo, así que ningún grep lo habría notado; lo que se perdió fue el orden,
+que en un archivo de bitácora es el contenido.
+
+`ORQUESTA.md` se reconstruyó a mano desde los blobs: el de `origin/main` entero, el reporte de
+la landing en la posición 2 (esa rama lo mete ARRIBA, no al final) y los siete restantes
+apilados en el orden del merge. Ahora `git diff --numstat` da **`2362 0`** y cada uno de los
+ocho reportes aparece **contiguo, byte a byte y exactamente una vez**.
+
+Con ese hallazgo se pasó la misma comprobación a **los diez archivos que toca más de una rama**:
+para cada uno, toda línea que una rama AÑADE está en el final y toda línea que BORRA sigue
+fuera. Nueve limpios. El décimo es `estudios-screen.tsx`, y las cuatro líneas que marca son
+exactamente las que se reconciliaron a mano (los dos conteos y el texto del banner).
+
+### Lo único que se hizo fuera de mergear
+
+`/admin/institutos` la creó #155 pero nadie le puso entrada en el menú del panel de plataforma.
+Se añade en `src/app/admin/admin-nav.tsx`, junto a Barberías e Inmobiliarias y con el mismo
+criterio de `isActive()` por segmento: `{ href: "/admin/institutos", label: "Institutos",
+icon: GraduationCap, section: "main" }`.
+
+Eso obliga a un segundo renglón: `admin-nav.tsx` **no estaba** en el `SHARED_FILES` de
+`edu-guard.cjs`, así que declararlo en `EDU_GUARD_SHARED` no habría servido de nada —el guard
+solo acepta como compartido lo que ya conoce— y el archivo habría caído en PROHIBIDO. Se agrega
+a esa lista, que es exactamente lo que ya hacen `barber-guard.cjs` y `realty-guard.cjs` con este
+mismo archivo y por esta misma razón.
+
+### Gates
+
+- **`npm run build` exit 0**, completo y sin pipes (`NODE_OPTIONS=--max-old-space-size=8192`).
+  `prisma generate` limpio, **466/466 páginas**, tabla de rutas entera. Las cinco rutas que
+  pedía el encargo salen todas: `/instituto/clinica` (3.26 kB), `/instituto/agenda` (14.3 kB),
+  `/instituciones` (3.97 kB, estática), `/admin/institutos` (4.65 kB) y
+  `ƒ /api/instituto/estudios/[id]/lite`. Cero "Failed to compile", cero `error TS`, cero heap
+  OOM. Los warnings son los PREEXISTENTES y ajenos: el `Critical dependency` de `file-type` en
+  `api/ai-wallet/spei/topup` y tres clases ambiguas de Tailwind. El spam de `Environment
+  variable not found: DATABASE_URL` es el de siempre (worktree sin `.env`).
+- **`npm run test:edu` exit 0** — **35 archivos descubiertos, 1 158 pruebas, 1 158 pass,
+  0 fail**. Desde 29/933 en `main`: las ocho ramas suman seis archivos nuevos
+  (`edu-almacenamiento`, `edu-inicio-direccion`, `edu-seed-demo`, `edu-clinica-viva`,
+  `edu-agenda-rejilla`, `edu-landing`) y 225 pruebas.
+- **`npx tsc --noEmit -p tsconfig.json`** → 8 errores, **los mismos 8 que ya están en
+  `origin/main`**, y ninguno en un archivo que esta integración toque. De `src/lib/edu/` salen
+  DOS, los dos en `src/lib/edu/__tests__/edu-theme.test.ts` (líneas 174 y 283, `TS2802` por
+  recorrer un `Map`/`Set` con el `target` del tsconfig); ese archivo es **byte a byte idéntico
+  al de `main`**, igual que `src/lib/barber/__tests__/` de donde salen los otros seis. El build
+  de Next no los ve porque ignora los tipos de las pruebas.
+- **Guardia** con los seis compartidos declarados
+  (`prisma/schema.prisma`, `package.json`, `ORQUESTA.md`, `DicomSetViewer.tsx`, `sitemap.ts`,
+  `admin-nav.tsx`) → **exit 0**. 112 archivos: **106 propios, 6 compartidos declarados, 0 sin
+  declarar y 0 prohibidos**.
+- **Raíz del repo limpia:** `git ls-tree` de la raíz es **idéntico** al de `origin/main` — esta
+  rama no añade ni quita un solo archivo suelto ahí.
+
+### Los dos SQL, en este orden, ANTES del merge
+
+1. `sql/edu-cuota-storage.sql` — **BLOQUEANTE**. Añade
+   `edu_institutions."storageQuotaBytes"` (BIGINT, DEFAULT 5 TB, que hace de backfill). El
+   cliente Prisma ya la pide: sin ella, `/admin/institutos` y el medidor de Dirección revientan.
+2. `sql/edu-volumen.sql` — **no bloqueante**. Un índice y nada más
+   (`edu_appointments_student_status_idx`). Sin él el código funciona; la evaluación solo lee de
+   más. Se puede aplicar antes, durante o después.
+
+Los dos son idempotentes y ninguno toca una tabla del dental, de barbería ni de inmuebles.

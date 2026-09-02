@@ -66,7 +66,18 @@ export const EDU_CLINICAL_NONE_DETAIL =
 export const EDU_RECORD_TEXT_MAX = 4000;
 export const EDU_RECORD_DIAGNOSIS_MAX = 500;
 
-/** Techo de notas por consulta. */
+/**
+ * Techo de notas por consulta.
+ *
+ * 🔴 SE LEE `MAX + 1` Y SE DEVUELVE `truncated`. El tope existe para que
+ * una consulta rota no se traiga la tabla entera, pero un expediente
+ * clinico que corta en 200 y CALLA es peor que uno lento: el alumno que
+ * busca la nota de la primera sesion de un caso largo concluye que no
+ * existe. Medido con el instituto de demo: 240 notas, se pintaban 200 y no
+ * habia una sola palabra en pantalla que lo dijera. El resto del panel
+ * (casos, pacientes, agenda, equipo, padron, caja, evaluacion, facturacion
+ * y autorizaciones) ya avisaba; estas dos eran la excepcion.
+ */
 export const EDU_RECORD_MAX_ROWS = 200;
 
 /** Los cuatro campos del SOAP, en el orden en que se escriben. */
@@ -240,6 +251,19 @@ export interface EduRecordRow {
   createdAt: string;
   createdLabel: string;
   updatedAt: string;
+}
+
+/**
+ * Una página de notas: las filas Y si se quedó algo fuera.
+ *
+ * La bandera viaja PEGADA a las filas y no como un segundo valor que la
+ * pantalla tenga que pedir aparte: así no puede existir una pantalla que
+ * reciba las filas y se olvide de preguntar si estaban todas. Es la misma
+ * forma que `EduCasosPanelPage` y que el resto del panel.
+ */
+export interface EduRecordPage {
+  rows: EduRecordRow[];
+  truncated: boolean;
 }
 
 /** Lo MÍNIMO para el <select> de "¿a qué caso va esta nota?". */

@@ -7,9 +7,11 @@ import { X } from "lucide-react";
 import {
   EDU_ATRASO_DESCRIPTIONS,
   EDU_ATRASO_LABELS,
+  EDU_GENERACION_TODAS,
   eduScoreLabel,
   type EduAtrasoEstado,
   type EduEvaluacionRow,
+  type EduGeneracionModo,
 } from "@/lib/edu/evaluacion-core";
 import {
   EDU_STUDENT_STATUSES,
@@ -42,9 +44,20 @@ export interface EduEvaluacionScreenProps {
   rows: EduEvaluacionRow[];
   truncated: boolean;
   maxRows: number;
+  /**
+   * QUÉ GENERACIÓN se está mirando, y quién lo decidió (P2-6).
+   *
+   * 🔴 Se pinta SIEMPRE que el servidor haya decidido por omisión. Una
+   * pantalla que enseña 60 de 120 estudiantes sin decir que está filtrada
+   * es la misma clase de mentira que la lista que corta en 200 y calla: la
+   * dirección contaría los atrasados de una generación creyendo que son
+   * los de la escuela.
+   */
+  generacion: { modo: EduGeneracionModo; name: string | null };
   filters: {
     programId: string | null;
     cohortId: string | null;
+    todasLasGeneraciones: boolean;
     status: EduStudentStatus | null;
     semaforo: string | null;
   };
@@ -65,6 +78,7 @@ export function EduEvaluacionScreen({
   rows,
   truncated,
   maxRows,
+  generacion,
   filters,
   programs,
   cohorts,
@@ -75,13 +89,32 @@ export function EduEvaluacionScreen({
   const [navigating, startNav] = useTransition();
 
   const hayFiltros = Boolean(
-    filters.programId || filters.cohortId || filters.status || filters.semaforo,
+    filters.programId ||
+      filters.cohortId ||
+      filters.todasLasGeneraciones ||
+      filters.status ||
+      filters.semaforo,
   );
 
-  function aplicar(next: Partial<Record<"especialidad" | "generacion" | "estado" | "semaforo", string>>) {
+  type EduEvalParam = "especialidad" | "generacion" | "estado" | "semaforo";
+
+  /**
+   * La URL con los filtros de ahora MÁS el cambio.
+   *
+   * 🔴 Es una función aparte y no código dentro de `aplicar` porque los
+   * avisos de generación ofrecen el mismo salto como ENLACE de verdad
+   * (`<Link>`): así "todas las generaciones" se puede abrir en otra
+   * pestaña, copiar y mandar. Un `<button onClick>` que navega no se puede
+   * hacer ninguna de las tres cosas, y esta es justo la vista que alguien
+   * manda por correo para una acreditación.
+   */
+  function urlCon(next: Partial<Record<EduEvalParam, string>>): string {
     const actual: Record<string, string> = {};
     if (filters.programId) actual.especialidad = filters.programId;
-    if (filters.cohortId) actual.generacion = filters.cohortId;
+    // "" = la vigente (el parámetro se cae de la URL); EDU_GENERACION_TODAS
+    // = la escuela entera; cualquier otra cosa = ese cohort.
+    if (filters.todasLasGeneraciones) actual.generacion = EDU_GENERACION_TODAS;
+    else if (filters.cohortId) actual.generacion = filters.cohortId;
     if (filters.status) actual.estado = filters.status;
     if (filters.semaforo) actual.semaforo = filters.semaforo;
 
@@ -90,10 +123,13 @@ export function EduEvaluacionScreen({
       if (v) params.set(k, v);
     }
     const qs = params.toString();
+    return qs ? `/instituto/evaluacion?${qs}` : "/instituto/evaluacion";
+  }
+
+  function aplicar(next: Partial<Record<EduEvalParam, string>>) {
+    const url = urlCon(next);
     startNav(() => {
-      router.replace(qs ? `/instituto/evaluacion?${qs}` : "/instituto/evaluacion", {
-        scroll: false,
-      });
+      router.replace(url, { scroll: false });
     });
   }
 
@@ -183,15 +219,22 @@ export function EduEvaluacionScreen({
             <select
               id="edu-ev-gen"
               className="edu-input edu-input--sm"
-              value={filters.cohortId ?? ""}
+              value={filters.todasLasGeneraciones ? EDU_GENERACION_TODAS : (filters.cohortId ?? "")}
               onChange={(e) => aplicar({ generacion: e.target.value })}
             >
-              <option value="">Todas</option>
+              {/* La opción vacía es el DEFAULT, y se llama por su nombre.
+                  Decía "Todas" y era mentira desde que el servidor filtra
+                  por la vigente: el selector habría contradicho a la
+                  pantalla. */}
+              <option value="">
+                {generacion.name ? `Vigente (${generacion.name})` : "La vigente"}
+              </option>
               {generacionesVisibles.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} · {c.programName}
                 </option>
               ))}
+              <option value={EDU_GENERACION_TODAS}>Todas las generaciones</option>
             </select>
           </div>
 
@@ -247,20 +290,59 @@ export function EduEvaluacionScreen({
         </form>
       )}
 
+      {generacion.modo === "vigente" && generacion.name && (
+        <div className="edu-banner" role="status">
+          <div>
+            <p className="edu-banner__title">
+              Estás viendo la generación {generacion.name}, la vigente.
+            </p>
+            <p className="edu-banner__detail">
+              El avance no se guarda: se cuenta al abrir esta pantalla, leyendo los casos, las
+              citas terminadas y las calificaciones de cada estudiante. Por eso arranca en la
+              generación vigente y no en el padrón entero. Elige otra en el selector, o{" "}
+              <Link className="edu-link" href={urlCon({ generacion: EDU_GENERACION_TODAS })}>
+                mira todas las generaciones
+              </Link>{" "}
+              — tarda más, y es la vista que se exporta para una acreditación.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {generacion.modo === "todas" && (
+        <div className="edu-banner" role="status">
+          <div>
+            <p className="edu-banner__title">Todas las generaciones, incluidas las cerradas.</p>
+            <p className="edu-banner__detail">
+              Es la vista completa y la más lenta: cada estudiante se cuenta con toda su
+              historia. Vuelve a{" "}
+              <Link className="edu-link" href={urlCon({ generacion: "" })}>
+                la generación vigente
+              </Link>{" "}
+              cuando termines.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="edu-toolbar__foot">
         <span className="edu-count">
           {navigating
             ? "Calculando…"
             : `${rows.length} ${rows.length === 1 ? "estudiante" : "estudiantes"}${
                 truncated ? ` (se muestran los primeros ${maxRows})` : ""
-              }`}
+              }${generacion.name ? ` · generación ${generacion.name}` : ""}`}
         </span>
       </div>
 
       {rows.length === 0 ? (
         <div className="edu-empty">
           <p className="edu-empty__title">Ningún estudiante coincide</p>
-          <p className="edu-empty__detail">Prueba con menos filtros.</p>
+          <p className="edu-empty__detail">
+            {generacion.modo === "vigente"
+              ? `Prueba con menos filtros, o con otra generación: estás viendo la ${generacion.name}.`
+              : "Prueba con menos filtros."}
+          </p>
         </div>
       ) : (
         <div className="edu-table edu-table--evaluacion">

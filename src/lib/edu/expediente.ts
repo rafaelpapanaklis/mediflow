@@ -48,6 +48,7 @@ import {
   eduRecordText,
   parseEduRecordStatus,
   type EduCaseOption,
+  type EduRecordPage,
   type EduRecordRow,
 } from "@/lib/edu/expediente-core";
 import {
@@ -59,7 +60,7 @@ import {
 import { EDU_CASE_CLOSED_STATUSES, EDU_ROLE_LABELS, type EduRecordStatus } from "@/lib/edu/types";
 
 export { EduPadronError as EduExpedienteError };
-export type { EduRecordRow, EduCaseOption } from "@/lib/edu/expediente-core";
+export type { EduRecordRow, EduRecordPage, EduCaseOption } from "@/lib/edu/expediente-core";
 
 function requireInstitution(ctx: EduClinicaContext): string {
   const id = ctx?.institutionId;
@@ -199,6 +200,15 @@ export async function getEduClinicalPatient(
  * lleva la endodoncia de esta señora NO lee las notas de su ortodoncia, que
  * son de otro alumno y de otro docente. Que pueda abrir la ficha del
  * paciente no le da su expediente completo.
+ *
+ * 🔴 SE PIDE UNA DE MÁS (`MAX + 1`) PARA PODER DECIRLO. Con `take: MAX` a
+ * secas, doscientas notas y doscientas cuarenta se ven exactamente igual
+ * desde aquí: la consulta devuelve 200 en los dos casos y no hay forma de
+ * saber cuál era. La fila sobrante no se pinta —se descarta al cortar— y
+ * su único trabajo es encender `truncated`, que es lo que la pantalla
+ * convierte en un aviso. En un expediente clínico callarlo es peor que
+ * tardar: quien busca la nota de la primera sesión de un caso largo
+ * concluye que no existe.
  */
 export async function listEduPatientRecords(
   ctx: EduClinicaContext,
@@ -206,12 +216,12 @@ export async function listEduPatientRecords(
   timeZone: string,
   options: { caseId?: string | null } = {},
   now: Date = new Date(),
-): Promise<EduRecordRow[]> {
+): Promise<EduRecordPage> {
   const institutionId = requireInstitution(ctx);
   const scope = eduClinicalScope(ctx);
-  if (eduScopeIsEmpty(scope)) return [];
+  if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
   const id = eduCleanId(patientId);
-  if (!id) return [];
+  if (!id) return { rows: [], truncated: false };
 
   const where: Prisma.EduRecordWhereInput = {
     institutionId,
@@ -224,10 +234,14 @@ export async function listEduPatientRecords(
   const rows = await prisma.eduRecord.findMany({
     where,
     orderBy: [{ createdAt: "desc" }],
-    take: EDU_RECORD_MAX_ROWS,
+    take: EDU_RECORD_MAX_ROWS + 1,
     select: RECORD_SELECT,
   });
-  return rows.map((r) => toRow(r, timeZone));
+
+  return {
+    truncated: rows.length > EDU_RECORD_MAX_ROWS,
+    rows: rows.slice(0, EDU_RECORD_MAX_ROWS).map((r) => toRow(r, timeZone)),
+  };
 }
 
 /**

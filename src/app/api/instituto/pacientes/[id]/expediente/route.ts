@@ -36,14 +36,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
     }
 
     const url = new URL(request.url);
-    const [rows, cases] = await Promise.all([
+    const [page, cases] = await Promise.all([
       listEduPatientRecords(g.ctx, paciente.id, g.ctx.institution.timezone, {
         caseId: eduCleanId(url.searchParams.get("caso")),
       }),
       listEduPatientCaseOptions(g.ctx, paciente.id),
     ]);
 
-    return NextResponse.json({ rows, cases });
+    // 🔴 `truncated` VIAJA EN LA RESPUESTA, no solo en la pantalla. Quien
+    // consuma este endpoint sin pasar por el panel tiene que poder saber
+    // que la lista salió cortada; si no, cortar en silencio se reintroduce
+    // por la puerta de al lado.
+    return NextResponse.json({ rows: page.rows, truncated: page.truncated, cases });
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/pacientes/[id]/expediente");
   }

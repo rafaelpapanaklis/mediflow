@@ -11,6 +11,7 @@ import { listEduCohorts, listEduPrograms } from "@/lib/edu/padron";
 import { listEduEvaluacion } from "@/lib/edu/evaluacion";
 import {
   EDU_EVALUACION_MAX_ROWS,
+  EDU_GENERACION_TODAS,
   parseEduSemaforo,
 } from "@/lib/edu/evaluacion-core";
 import { EduDenied } from "@/components/edu/edu-denied";
@@ -70,9 +71,24 @@ export default async function InstitutoEvaluacionPage({
   const sp = searchParams ?? {};
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? null;
 
+  // 🔴 EL PARÁMETRO `generacion` TIENE TRES FORMAS, Y LA AUSENCIA ES UNA
+  // DE ELLAS (P2-6):
+  //
+  //   ausente        → la generación VIGENTE, que la resuelve el loader
+  //   "todas"        → la escuela entera, decisión explícita
+  //   <id de cohort> → esa generación
+  //
+  // El valor `todas` no puede chocar con un id: `eduCleanId` deja pasar
+  // cualquier [A-Za-z0-9_-], pero un id de EduCohort es un cuid de 25
+  // caracteres. Se comprueba ANTES de limpiar el id para que el orden sea
+  // el mismo lea quien lea este código.
+  const generacionRaw = (first(sp.generacion) ?? "").trim();
+  const todasLasGeneraciones = generacionRaw === EDU_GENERACION_TODAS;
+
   const filters = {
     programId: eduCleanId(first(sp.especialidad)),
-    cohortId: eduCleanId(first(sp.generacion)),
+    cohortId: todasLasGeneraciones ? null : eduCleanId(generacionRaw),
+    todasLasGeneraciones,
     status: parseEduStudentStatus(first(sp.estado)),
     semaforo: parseEduSemaforo(first(sp.semaforo)),
   };
@@ -86,6 +102,13 @@ export default async function InstitutoEvaluacionPage({
     listEduEvaluacion(ctx, {
       programId: filters.programId,
       cohortId: filters.cohortId,
+      // 🔴 AQUÍ VIVE EL DEFAULT DE PRODUCTO, y no dentro del loader: esta
+      // misma función la reusa el tablero de Dirección para hablar de la
+      // escuela completa, y meterle el recorte por dentro habría cambiado
+      // sus números sin que nadie lo pidiera. La pantalla que se abre
+      // sesenta veces al día arranca en la generación vigente; quien
+      // necesita el padrón entero lo pide con ?generacion=todas.
+      generacion: filters.todasLasGeneraciones ? "todas" : "vigente",
       status: filters.status,
       estado: filters.semaforo,
     }),
@@ -110,6 +133,7 @@ export default async function InstitutoEvaluacionPage({
         rows={page.rows}
         truncated={page.truncated}
         maxRows={EDU_EVALUACION_MAX_ROWS}
+        generacion={page.generacion}
         filters={filters}
         programs={programs.map((p) => ({ id: p.id, name: p.name }))}
         cohorts={cohorts.map((c) => ({

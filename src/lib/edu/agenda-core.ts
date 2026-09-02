@@ -665,6 +665,17 @@ export function eduOptionalText(raw: unknown, maxLength: number): string | null 
 
 export type EduAgendaView = "dia" | "semana";
 
+/**
+ * CÓMO se pinta el rango, que es otra pregunta que CUÁL rango se pinta.
+ *
+ * `vista` (dia/semana) sigue significando exactamente lo que significaba —el
+ * RANGO que se lee de la base—, y esta llave nueva (`modo`) decide si ese
+ * rango se dibuja como rejilla o se lee como lista. Separarlas evita la
+ * pregunta sin respuesta de "¿y una vista `lista` qué rango trae?", y deja
+ * intacta la única llave de la que cuelgan enlaces viejos.
+ */
+export type EduAgendaMode = "rejilla" | "lista";
+
 export interface EduAgendaQuery {
   view: EduAgendaView;
   /** El día que se está viendo (en el calendario del INSTITUTO). */
@@ -675,6 +686,23 @@ export interface EduAgendaQuery {
   studentId: string | null;
   type: EduAppointmentType | null;
   status: EduAppointmentStatus | null;
+  /**
+   * El DOCENTE que supervisa. Llave `docente`, añadida por la ola de la
+   * rejilla: la agenda ya se podía acotar a un estudiante y no a quien lo
+   * supervisa, que es la pregunta que se hace un titular con doce alumnos
+   * repartidos por el piso.
+   */
+  supervisorUserId: string | null;
+  /**
+   * El buscador de PACIENTE. Llave `q`, añadida por la ola de la rejilla.
+   *
+   * Filtra en la BASE y no en memoria: con el techo de 500 filas, buscar
+   * sobre lo ya traído mentiría en cuanto una semana lo rebasara — diría
+   * "no hay" de un paciente que sí está citado.
+   */
+  q: string | null;
+  /** Rejilla o lista. Llave `modo`; el default es la rejilla. */
+  mode: EduAgendaMode;
 }
 
 function firstParam(value: string | string[] | undefined): string | null {
@@ -708,12 +736,33 @@ export function parseEduAgendaQuery(
     studentId: eduCleanId(firstParam(sp.alumno)),
     type: parseEduAppointmentType(firstParam(sp.tipo)),
     status: parseEduAppointmentStatus(firstParam(sp.estado)),
+    supervisorUserId: eduCleanId(firstParam(sp.docente)),
+    q: eduAgendaSearchTerm(firstParam(sp.q)),
+    mode: firstParam(sp.modo) === "lista" ? "lista" : "rejilla",
   };
+}
+
+/**
+ * El término del buscador, saneado.
+ *
+ * Recortado y con techo: lo que se hace con él es un `contains` contra el
+ * índice del paciente, y un término de mil caracteres no encuentra nada,
+ * solo hace trabajar a Postgres. El escapado de los comodines de LIKE lo
+ * hace `eduSearchTokens` más adentro — aquí no se parte, para que la caja
+ * de texto siga enseñando lo que la persona tecleó.
+ */
+export function eduAgendaSearchTerm(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().replace(/\s+/g, " ");
+  if (!v) return null;
+  return v.slice(0, 80);
 }
 
 /** ¿Hay algún filtro puesto? (para pintar el botón de "limpiar"). */
 export function eduHasAgendaFilters(q: EduAgendaQuery): boolean {
-  return Boolean(q.chairId || q.programId || q.studentId || q.type || q.status);
+  return Boolean(
+    q.chairId || q.programId || q.studentId || q.type || q.status || q.supervisorUserId || q.q,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════

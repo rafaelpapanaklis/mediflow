@@ -40,10 +40,36 @@ const OWN_PREFIXES = [
   "src/app/api/instituto/",
   "src/components/edu/",
   "src/lib/edu/",
+  // Sección INSTITUTOS del panel de plataforma (/admin/institutos): lo que
+  // ve DaleControl de cada escuela y el ÚNICO sitio donde se edita su cuota
+  // de almacenamiento. Vive bajo src/app/admin/** porque ahí es donde el
+  // admin la espera, pero es una carpeta EXCLUSIVA del vertical: nada del
+  // dental la importa y nada de ella importa al dental. Todo lo demás de
+  // src/app/admin/** sigue siendo PROHIBIDO — incluido admin-nav.tsx, que
+  // es COMPARTIDO y se declara aparte.
+  //
+  // Es el mismo criterio (y el mismo renglón) que ya usan barber-guard.cjs
+  // con src/app/admin/barberias/ y realty-guard.cjs con inmobiliarias.
+  "src/app/admin/institutos/",
+  "src/app/api/admin/institutos/",
+  // Landing PÚBLICA del vertical (/instituciones) y sus secciones. Viven
+  // fuera de "instituto/" porque son la superficie comercial y no el
+  // panel — la misma separación que hace barber entre /barber (panel) y
+  // /barberias (landing). Nada del dental las importa.
+  "src/app/instituciones/",
+  "src/components/public/instituciones/",
 ];
 
 // PROPIO del vertical: archivos exactos.
-const OWN_FILES = ["src/lib/edu-auth.ts", "scripts/edu-guard.cjs", "scripts/edu-tests.cjs"];
+const OWN_FILES = [
+  "src/lib/edu-auth.ts",
+  "scripts/edu-guard.cjs",
+  "scripts/edu-tests.cjs",
+  // El sembrador del instituto de DEMO. Es PROPIO y no COMPARTIDO: no
+  // toca una linea del dental, solo escribe filas edu_* de un instituto
+  // con slug propio, y se niega a correr si el destino no es el suyo.
+  "scripts/edu-seed-demo.ts",
+];
 
 // PROPIO del vertical: patrones especiales.
 function matchesOwnPattern(p) {
@@ -69,11 +95,35 @@ function matchesOwnPattern(p) {
 // de TODO el repo, y una ola del instituto que lo toque sin decirlo sigue
 // siendo un fallo. Declarándolo, el guard obliga a que el cambio se vea:
 //   EDU_GUARD_SHARED="package.json" node scripts/edu-guard.cjs
+//
+// `src/components/patient-3d/DicomSetViewer.tsx` entra aquí al retirar el
+// visor CBCT propio del vertical. El instituto ya no reproduce el visor del
+// dental: monta EL MISMO, y para eso ese archivo recibió una prop OPCIONAL
+// (`endpoints`) con la que se le pasan las rutas del vertical. Sin ella, sus
+// dos fetch internos apuntan a /api/patients/**, que con ids del instituto
+// contestan 401/404 — y un adaptador no puede redirigir un fetch escrito
+// dentro. Es un archivo del producto dental VIVO, así que se declara y se ve:
+//   EDU_GUARD_SHARED="src/components/patient-3d/DicomSetViewer.tsx" node scripts/edu-guard.cjs
 const SHARED_FILES = [
   "prisma/schema.prisma",
   "src/middleware.ts",
   "ORQUESTA.md",
   "package.json",
+  "src/components/patient-3d/DicomSetViewer.tsx",
+  // El sitemap del sitio es del DENTAL y está vivo en producción. El
+  // vertical solo puede sumarle un bloque aditivo (importar
+  // eduStaticSitemapPaths y concatenar su lista al final), igual que ya
+  // hace barber. Va de COMPARTIDO y no de PROPIO a propósito: cualquier
+  // otro cambio ahí se revisa a mano, y declararlo obliga a que se vea:
+  //   EDU_GUARD_SHARED="src/app/sitemap.ts" node scripts/edu-guard.cjs
+  "src/app/sitemap.ts",
+  // La barra del panel de plataforma. El vertical solo le suma UNA entrada
+  // (/admin/institutos), igual que ya hicieron barber e inmobiliarias — los
+  // dos lo declaran en su propio guard con este mismo renglón. Va de
+  // COMPARTIDO y no de PROPIO porque el archivo es del dental y lo usan
+  // todos los verticales a la vez:
+  //   EDU_GUARD_SHARED="src/app/admin/admin-nav.tsx" node scripts/edu-guard.cjs
+  "src/app/admin/admin-nav.tsx",
 ];
 
 function isOwn(p) {

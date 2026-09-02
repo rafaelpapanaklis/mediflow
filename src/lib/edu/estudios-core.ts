@@ -287,16 +287,35 @@ export function eduStudyPathBelongsTo(
   return path.startsWith(eduStudyPathPrefix(institutionId, patientId));
 }
 
-/** Bytes → "1.4 GB" / "930.2 MB". Para la cuota y para la tarjeta. */
+/**
+ * Bytes → "5.0 TB" / "1.4 GB" / "930.2 MB". Para la cuota y para la tarjeta.
+ *
+ * 🔴 ES EL ÚNICO FORMATEADOR DE BYTES DEL VERTICAL. La cuota de
+ * almacenamiento (src/lib/edu/almacenamiento-core.ts) le agregó el tramo de
+ * TB en vez de escribir el suyo: con dos, el día que alguien cambie el
+ * redondeo, la misma escuela leería "5.0 TB" en un sitio y "5120.0 GB" en
+ * otro y no habría forma de saber cuál está bien.
+ */
 export function eduFormatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
+  // TB: sin este tramo, una cuota de 5 TB se lee "5120.0 GB" — un número
+  // que nadie compara de cabeza contra un contrato que dice "5 TB".
+  if (bytes >= 1024 ** 4) return `${(bytes / 1024 ** 4).toFixed(1)} TB`;
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${bytes} B`;
 }
 
-/** Techo de estudios por consulta. */
+/**
+ * Techo de estudios por consulta.
+ *
+ * 🔴 SE LEE `MAX + 1` Y SE DEVUELVE `truncated`, por lo mismo que las
+ * notas (ver EDU_RECORD_MAX_ROWS en expediente-core.ts): una galería que
+ * corta en 200 y calla le dice al alumno que la panorámica de hace año y
+ * medio no se subió nunca. Medido con el instituto de demo: 240 estudios,
+ * se pintaban 200, sin una palabra.
+ */
 export const EDU_STUDY_MAX_ROWS = 200;
 
 /**
@@ -338,4 +357,16 @@ export interface EduStudyRow {
   /** true si se puede pintar dentro de la página. */
   isImage: boolean;
   isPdf: boolean;
+}
+
+/**
+ * Una página de estudios: las filas Y si se quedó algo fuera.
+ *
+ * Misma forma que `EduRecordPage` y que el resto del panel — la bandera
+ * viaja pegada a las filas para que no exista una pantalla que reciba los
+ * estudios y se olvide de preguntar si estaban todos.
+ */
+export interface EduStudyPage {
+  rows: EduStudyRow[];
+  truncated: boolean;
 }

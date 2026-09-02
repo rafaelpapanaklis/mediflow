@@ -30,16 +30,9 @@ export interface EduModalProps {
   footer?: React.ReactNode;
   /** Se bloquea el cierre mientras hay una escritura en vuelo. */
   busy?: boolean;
-  /**
-   * Ola 12: hoja ANCHA para los visores (CBCT en rejilla 2×2, mallas 3D).
-   * En el teléfono no cambia nada — la hoja ya ocupa todo el ancho; en
-   * escritorio pasa de 560 px a casi la pantalla, porque un corte axial de
-   * 560 px no le sirve a nadie.
-   */
-  wide?: boolean;
 }
 
-export function EduModal({ title, subtitle, onClose, children, footer, busy, wide }: EduModalProps) {
+export function EduModal({ title, subtitle, onClose, children, footer, busy }: EduModalProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const returnTo = useRef<HTMLElement | null>(null);
   // useId y no un contador propio: React garantiza que es único y estable
@@ -81,7 +74,7 @@ export function EduModal({ title, subtitle, onClose, children, footer, busy, wid
     >
       <div
         ref={cardRef}
-        className={`edu-modal__card ${wide ? "edu-modal__card--wide" : ""}`}
+        className="edu-modal__card"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

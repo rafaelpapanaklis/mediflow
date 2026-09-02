@@ -1,0 +1,1498 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl INSTITUCIONAL — landing pública /instituciones.
+
+   Scope: TODO cuelga de .dcei. No toca globals.css, ni el tema del panel
+   dental, ni el de barberías, ni el de inmuebles.
+
+   ── LA IDENTIDAD, Y POR QUÉ NO SE PARECE A LAS OTRAS DOS ───────────────
+   El dental es violeta y de producto; barberías es caramelo sobre negro
+   cálido y de oficio. Esto es una ESCUELA: índigo universitario, papel,
+   una regla dorada de diploma y titulares en romana. Serio, con aire, y
+   sin un solo degradado morado de plantilla.
+
+   El índigo son EXACTAMENTE los tokens del panel del vertical
+   (src/app/instituto/edu-theme.css). Se copian, no se importan: aquel
+   archivo escopa todo bajo .edu-shell/.edu-auth y es del panel; traerlo a
+   una página pública ataría la landing a los cambios de una superficie
+   privada. Que los números coincidan es lo que hace que la página y el
+   producto se sientan lo mismo.
+
+   ── POR QUÉ TODO EN px ────────────────────────────────────────────────
+   globals.css define html { font-size: clamp(13px, …, 16px) }: en un
+   celular la raíz mide 13 px y cualquier medida en rem sale un 20% más
+   chica justo donde llega casi todo el tráfico. Aquí la base son 16 px
+   fijos y todo se mide en px.
+
+   ── RESPONSIVE CON @container ─────────────────────────────────────────
+   .dcei es el contenedor (inline-size) y las secciones preguntan por su
+   ancho, no por el de la ventana. Dos consecuencias que hay que respetar:
+     · container-type CREA CONTENCIÓN, así que aquí NO hay nada
+       position: fixed — la barra es sticky, que sí funciona dentro;
+     · el root lleva overflow-x: clip y no hidden: `hidden` lo volvería un
+       puerto de desplazamiento y mataría el sticky de la barra.
+   Los tamaños fluidos van en vw (no en cqi): medido en el vertical de
+   barberías, cqi obliga a un doble paso de disposición de todo el árbol,
+   y aquí .dcei mide lo mismo que la ventana.
+
+   ── MOVIMIENTO ────────────────────────────────────────────────────────
+   Solo opacidad y transform, nunca disposición: CLS 0. El título y la
+   entradilla de la portada NO se animan (son el LCP). Con
+   prefers-reduced-motion: reduce no se mueve nada (bloque al final) y las
+   escenas 3D ni se descargan (escena-gate.tsx).
+
+   ♿ CONTRASTE (medido, no supuesto, sobre los fondos REALES)
+     sobre papel #f7f9fd:  --tinta #141a2b 15.4 ✓ · --tinta-2 #45506a 7.6 ✓
+                           --tinta-3 #626c82 5.0 ✓ · --i600 #344e8c 7.6 ✓
+     sobre índigo #121a2e: #e6ecf7 14.5 ✓ · #b9c3d6 9.7 ✓ · oro #d8ae5e 8.3 ✓
+     botón WhatsApp: blanco sobre #0f7c6f 5.2 ✓  (el verde de marca puro,
+     #128c7e, daba 4.19 y NO pasa con texto de 16 px en negrita).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dcei {
+  container-type: inline-size;
+  container-name: dcei;
+
+  /* Índigo universitario — los tokens del panel del vertical. */
+  --i50: #f2f5fb;
+  --i100: #e3e9f6;
+  --i200: #c4d1ec;
+  --i300: #9bb0dc;
+  --i400: #6c88c6;
+  --i500: #4665ac;
+  --i600: #344e8c;
+  --i700: #2a3f70;
+  --i800: #23345a;
+  --i900: #1e2b4a;
+  --i950: #121a2e;
+
+  /* El oro del diploma: reglas, sellos y acentos. Nunca texto chico. */
+  --oro-200: #f2e0bb;
+  --oro-300: #e8c98a;
+  --oro-400: #d8ae5e;
+  --oro-500: #b98c3c;
+  --oro-600: #8f6a2a;
+
+  --papel: #f7f9fd;
+  --papel-2: #eef2fa;
+  --blanco: #ffffff;
+
+  --tinta: #141a2b;
+  --tinta-2: #45506a;
+  --tinta-3: #626c82;
+
+  --claro-1: #e6ecf7;
+  --claro-2: #b9c3d6;
+
+  --linea: rgba(20, 26, 43, 0.13);
+  --linea-fuerte: rgba(20, 26, 43, 0.22);
+  --linea-clara: rgba(230, 236, 247, 0.16);
+
+  --wa: #0f7c6f;
+  --ok: #15803d;
+
+  --sombra-1: 0 1px 2px rgba(20, 26, 43, 0.06);
+  --sombra-2: 0 10px 30px -18px rgba(20, 26, 43, 0.4);
+  --sombra-3: 0 28px 60px -32px rgba(20, 26, 43, 0.5);
+
+  --radio: 14px;
+  --radio-lg: 20px;
+
+  --sans: var(--font-inter-edu), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: var(--font-serif-edu), "Source Serif 4", "Iowan Old Style", Georgia, "Times New Roman", serif;
+
+  /* Grano de papel: un SVG diminuto en línea, cero peticiones. */
+  --grano: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--tinta);
+  background: var(--papel);
+  min-height: 100vh;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Reinicio local ──────────────────────────────────────────────────── */
+.dcei *,
+.dcei *::before,
+.dcei *::after {
+  box-sizing: border-box;
+}
+.dcei h1,
+.dcei h2,
+.dcei h3,
+.dcei h4,
+.dcei p,
+.dcei ul,
+.dcei ol,
+.dcei dl,
+.dcei dd,
+.dcei figure {
+  margin: 0;
+}
+.dcei ul,
+.dcei ol {
+  list-style: none;
+  padding: 0;
+}
+/* 🔴 EL RESET DE LOS ENLACES VA EN :where() Y NO A PELO.
+   `.dcei a` pesa (0,1,1) —una clase y un elemento— y eso GANA a
+   `.dcei-btn--wa` (0,1,0): el `color: inherit` se comía el blanco del botón
+   de WhatsApp y el texto salía en tinta sobre verde. Contraste medido por
+   Lighthouse: 3,4 — reprobado. Con `:where()` el reset pesa CERO y
+   cualquier regla de clase lo pisa, que es lo que un reset debe hacer.
+   Vale para los tres botones, para el enlace de "Entrar" y para el pie. */
+.dcei :where(a) {
+  color: inherit;
+  text-decoration: none;
+}
+.dcei svg {
+  flex-shrink: 0;
+}
+.dcei ::selection {
+  background: var(--i200);
+  color: var(--tinta);
+}
+.dcei :focus-visible {
+  outline: 3px solid var(--i500);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+.dcei [id] {
+  scroll-margin-top: 88px;
+}
+.dcei-balance {
+  text-wrap: balance;
+}
+.dcei-pretty {
+  text-wrap: pretty;
+}
+
+/* ── Rejilla base ────────────────────────────────────────────────────── */
+.dcei-wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+.dcei-wrap--angosto {
+  max-width: 820px;
+}
+
+.dcei-section {
+  position: relative;
+  padding: clamp(56px, 8vw, 108px) 0;
+  background: var(--blanco);
+
+  /* 🔴 LO QUE NO SE VE, NO SE MIDE.
+     La página mide 17 000 px en un teléfono: nueve secciones con
+     cuarenta y tantas tarjetas, y calcular la disposición de TODAS en el
+     primer pintado costaba 606 ms de hilo (medido en Lighthouse móvil, con
+     su freno de 4×). `content-visibility: auto` deja que el navegador se
+     salte la disposición y el pintado de lo que está fuera de pantalla y
+     lo haga cuando se acerca.
+
+     `contain-intrinsic-size: auto 1400px` es la mitad imprescindible: sin
+     un alto supuesto, la barra de desplazamiento saltaría al ir midiendo
+     — y `auto` hace que, una vez medida de verdad, se quede con el alto
+     REAL. La portada NO lleva esto: es el LCP y tiene que pintarse ya. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1400px;
+}
+.dcei-section--papel {
+  background: var(--papel);
+}
+/* Papel: un grano finísimo (un SVG de 160 px en línea, cero peticiones) que
+   quita el plano perfecto del fondo claro sin que se note lo que es. */
+.dcei-section--papel::before,
+.dcei-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: var(--grano);
+  background-size: 160px 160px;
+}
+.dcei-section--papel > * {
+  position: relative;
+}
+.dcei-section--oscuro {
+  background: var(--i950);
+  color: var(--claro-1);
+}
+/* La cuadrícula tenue del fondo oscuro: papel milimetrado de lámina. */
+.dcei-section--oscuro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(155, 176, 220, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(155, 176, 220, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, #000 30%, transparent 100%);
+}
+.dcei-section--oscuro > * {
+  position: relative;
+}
+
+/* ── Tipografía ──────────────────────────────────────────────────────── */
+.dcei-h1 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(34px, 5.4vw, 60px);
+  line-height: 1.06;
+  letter-spacing: -0.018em;
+  color: var(--i950);
+}
+.dcei-h1__acento {
+  color: var(--i600);
+  font-style: italic;
+}
+.dcei-h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(26px, 3.6vw, 40px);
+  line-height: 1.14;
+  letter-spacing: -0.014em;
+  color: var(--i950);
+}
+.dcei-section--oscuro .dcei-h2 {
+  color: var(--blanco);
+}
+.dcei-lead {
+  margin-top: 16px;
+  font-size: clamp(16px, 1.5vw, 18.5px);
+  line-height: 1.62;
+  color: var(--tinta-2);
+  max-width: 62ch;
+}
+.dcei-section--oscuro .dcei-lead {
+  color: var(--claro-2);
+}
+
+.dcei-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--i600);
+}
+.dcei-section--oscuro .dcei-eyebrow {
+  color: var(--oro-300);
+}
+.dcei-eyebrow__num {
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 9px 1px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  opacity: 0.85;
+}
+
+.dcei-head {
+  max-width: 780px;
+  margin-bottom: clamp(32px, 4.6vw, 56px);
+}
+.dcei-head .dcei-h2 {
+  margin-top: 14px;
+}
+.dcei-head--centro {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+.dcei-head--centro .dcei-lead {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── Botones ─────────────────────────────────────────────────────────── */
+.dcei-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 50px;
+  padding: 0 22px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  font-family: var(--sans);
+  font-size: 15.5px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.dcei-btn--sm {
+  min-height: 38px;
+  padding: 0 15px;
+  font-size: 14px;
+  border-radius: 9px;
+  gap: 7px;
+}
+.dcei-btn--block {
+  width: 100%;
+}
+.dcei-btn--wa {
+  background: var(--wa);
+  color: var(--blanco);
+  box-shadow: 0 10px 24px -14px rgba(15, 124, 111, 0.9);
+}
+.dcei-btn--wa:hover {
+  background: #0c6b60;
+  transform: translateY(-1px);
+}
+.dcei-btn--ghost {
+  background: transparent;
+  border-color: var(--linea-fuerte);
+  color: var(--i700);
+}
+.dcei-btn--ghost:hover {
+  border-color: var(--i500);
+  background: rgba(70, 101, 172, 0.07);
+}
+.dcei-section--oscuro .dcei-btn--ghost,
+.dcei-nav .dcei-btn--ghost {
+  color: var(--i700);
+}
+
+/* ── Barra ───────────────────────────────────────────────────────────── */
+.dcei-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(247, 249, 253, 0.9);
+  backdrop-filter: saturate(150%) blur(10px);
+  -webkit-backdrop-filter: saturate(150%) blur(10px);
+}
+.dcei-nav__in {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 66px;
+}
+.dcei-regla {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--oro-400) 18%,
+    var(--oro-200) 50%,
+    var(--oro-400) 82%,
+    transparent
+  );
+  opacity: 0.85;
+}
+
+.dcei-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+}
+.dcei-brand__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(150deg, var(--i600), var(--i800));
+  color: var(--oro-300);
+  box-shadow: var(--sombra-1);
+}
+.dcei-brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+.dcei-brand__name {
+  font-size: 16.5px;
+  /* 700 y no 800: el 800 se usaba SOLO aquí y obligaba a descargar un
+     archivo de fuente entero (~23 kB) para un wordmark de 16 px. */
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--i950);
+}
+.dcei-brand__name em {
+  font-style: normal;
+  color: var(--i500);
+}
+.dcei-brand__tag {
+  font-family: var(--serif);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--oro-600);
+}
+
+.dcei-nav__links {
+  display: none;
+  gap: 22px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--tinta-2);
+}
+.dcei-nav__links a:hover {
+  color: var(--i600);
+}
+.dcei-nav__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dcei-nav__login {
+  display: none;
+}
+.dcei-nav__cta-largo {
+  display: none;
+}
+
+/* ── Portada ─────────────────────────────────────────────────────────── */
+.dcei-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 60% at 78% 18%, rgba(70, 101, 172, 0.1), transparent 70%),
+    linear-gradient(180deg, var(--papel), var(--blanco));
+  padding: clamp(40px, 6vw, 76px) 0 clamp(48px, 7vw, 92px);
+}
+.dcei-hero__trama {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(20, 26, 43, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 26, 43, 0.035) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(180deg, #000, transparent 78%);
+}
+.dcei-hero__resplandor {
+  position: absolute;
+  right: -8%;
+  top: -18%;
+  width: 62%;
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(216, 174, 94, 0.16), transparent 62%);
+}
+.dcei-hero__grid {
+  position: relative;
+  display: grid;
+  gap: clamp(28px, 4vw, 52px);
+}
+.dcei-hero__copy {
+  min-width: 0;
+}
+.dcei-placa {
+  display: inline-block;
+  padding: 7px 14px;
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  background: var(--blanco);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--i600);
+  box-shadow: var(--sombra-1);
+}
+.dcei-hero__copy .dcei-h1 {
+  margin-top: 20px;
+}
+.dcei-hero__lead {
+  margin-top: 18px;
+  max-width: 52ch;
+}
+.dcei-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+.dcei-confianza {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 26px;
+  font-size: 14.5px;
+  color: var(--tinta-2);
+}
+.dcei-confianza li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.dcei-confianza svg {
+  color: var(--i500);
+}
+
+/* ── Anfitrión de una escena ─────────────────────────────────────────── */
+.dcei-escena {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radio-lg);
+  overflow: hidden;
+  isolation: isolate;
+}
+.dcei-escena__art,
+.dcei-escena__3d {
+  position: absolute;
+  inset: 0;
+}
+/* La proporción la fija un elemento en el flujo: la caja reserva su altura
+   ANTES de que exista la escena, así que montar el lienzo no mueve nada. */
+.dcei-escena::before {
+  content: "";
+  display: block;
+  width: 100%;
+  padding-top: 72%;
+}
+.dcei-escena .dcei-static {
+  width: 100%;
+  height: 100%;
+  display: block;
+  transition: opacity 0.5s ease;
+}
+.dcei-escena[data-3d="on"] .dcei-static {
+  opacity: 0;
+}
+.dcei-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dcei-escena--arcada {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 38%, rgba(70, 101, 172, 0.16), transparent 70%),
+    linear-gradient(165deg, var(--i900), var(--i950));
+  border: 1px solid var(--linea);
+  box-shadow: var(--sombra-3);
+}
+.dcei-escena--volumen {
+  background: linear-gradient(170deg, #0b1120, var(--i950));
+  border: 1px solid rgba(108, 136, 198, 0.35);
+  box-shadow: var(--sombra-2);
+}
+.dcei-escena--clinica {
+  background: linear-gradient(180deg, var(--blanco), var(--papel-2));
+  border: 1px solid var(--linea);
+  box-shadow: var(--sombra-2);
+}
+.dcei-escena--clinica::before {
+  padding-top: 56%;
+}
+
+.dcei-pie {
+  margin-top: 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--tinta-3);
+}
+.dcei-section--oscuro .dcei-pie {
+  color: var(--claro-2);
+}
+.dcei-pie--centro {
+  text-align: center;
+  max-width: 68ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── El problema ─────────────────────────────────────────────────────── */
+.dcei-problemas {
+  display: grid;
+  gap: 18px;
+  counter-reset: dcei-prob;
+}
+.dcei-prob {
+  position: relative;
+  padding: 26px 24px 24px;
+  background: var(--blanco);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-1);
+}
+/* El numeral de fondo. Va en un pseudo-elemento y con un CONTADOR, no como
+   texto: a ese tamaño y a ese tono es decoración pura, pero escrito como
+   nodo de texto lo mide el auditor de contraste y lo reprueba con razón —
+   no hay forma de que un 30 px casi del color del papel pase AA. Así no
+   existe para el lector de pantalla ni para el auditor, y se sigue viendo. */
+.dcei-prob {
+  counter-increment: dcei-prob;
+}
+.dcei-prob::after {
+  content: "0" counter(dcei-prob);
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--i100);
+  pointer-events: none;
+}
+.dcei-prob__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--i50);
+  border: 1px solid var(--i100);
+  color: var(--i600);
+}
+.dcei-prob__title {
+  margin-top: 16px;
+  font-family: var(--serif);
+  font-size: 19.5px;
+  font-weight: 600;
+  line-height: 1.24;
+  color: var(--i950);
+}
+.dcei-prob__body {
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.62;
+  color: var(--tinta-2);
+}
+
+/* ── Cómo funciona ───────────────────────────────────────────────────── */
+.dcei-flujo {
+  display: grid;
+  gap: clamp(28px, 4vw, 48px);
+}
+.dcei-pasos {
+  position: relative;
+  display: grid;
+  gap: 4px;
+}
+.dcei-paso {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 16px;
+  padding: 0 0 26px 0;
+}
+.dcei-paso:last-child {
+  padding-bottom: 0;
+}
+/* La línea que une los pasos: se corta sola en el último. */
+.dcei-paso::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 38px;
+  bottom: 4px;
+  width: 1px;
+  background: linear-gradient(180deg, var(--i200), rgba(196, 209, 236, 0.15));
+}
+.dcei-paso:last-child::before {
+  display: none;
+}
+.dcei-paso__marca {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--blanco);
+  border: 1px solid var(--i200);
+  color: var(--i600);
+  box-shadow: var(--sombra-1);
+}
+.dcei-paso__title {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--i950);
+}
+.dcei-paso__title span {
+  /* oro-600 y no oro-500: sobre blanco, el 500 mide 3,01 —el mínimo exacto
+     de texto grande— y el 600 mide 4,97, que pasa AA hasta en texto chico. */
+  color: var(--oro-600);
+}
+.dcei-paso__body {
+  margin-top: 7px;
+  font-size: 15px;
+  line-height: 1.62;
+  color: var(--tinta-2);
+}
+
+/* ── Roles ───────────────────────────────────────────────────────────── */
+.dcei-roles {
+  display: grid;
+  gap: 16px;
+}
+.dcei-rol {
+  padding: 24px 22px;
+  border: 1px solid var(--linea-clara);
+  border-radius: var(--radio);
+  background: linear-gradient(165deg, rgba(35, 52, 90, 0.7), rgba(18, 26, 46, 0.55));
+}
+.dcei-rol__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: rgba(108, 136, 198, 0.18);
+  border: 1px solid rgba(155, 176, 220, 0.28);
+  color: var(--oro-300);
+}
+.dcei-rol__title {
+  margin-top: 14px;
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--blanco);
+}
+.dcei-rol__linea {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 14.5px;
+  line-height: 1.58;
+  color: var(--claro-2);
+}
+.dcei-rol__et {
+  align-self: start;
+  padding: 2px 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  border-radius: 6px;
+}
+.dcei-rol__et--si {
+  color: #7ee2a8;
+  border: 1px solid rgba(126, 226, 168, 0.4);
+}
+.dcei-rol__et--no {
+  color: #ffb4ae;
+  border: 1px solid rgba(255, 180, 174, 0.4);
+}
+
+.dcei-padron {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+  margin-top: 22px;
+  padding: 22px;
+  border: 1px solid var(--linea-clara);
+  border-left: 3px solid var(--oro-400);
+  border-radius: var(--radio);
+  background: rgba(35, 52, 90, 0.45);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--claro-2);
+}
+.dcei-padron__icon {
+  color: var(--oro-300);
+}
+.dcei-padron__title {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--blanco);
+  margin-bottom: 6px;
+}
+
+/* ── Tarjetas de promesa ─────────────────────────────────────────────── */
+.dcei-cards {
+  display: grid;
+  gap: 16px;
+  margin-top: clamp(28px, 4vw, 44px);
+}
+.dcei-card {
+  padding: 22px 20px;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  background: var(--blanco);
+  box-shadow: var(--sombra-1);
+}
+.dcei-section--oscuro .dcei-card {
+  background: rgba(35, 52, 90, 0.5);
+  border-color: var(--linea-clara);
+  box-shadow: none;
+}
+.dcei-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--i50);
+  border: 1px solid var(--i100);
+  color: var(--i600);
+}
+.dcei-section--oscuro .dcei-card__icon {
+  background: rgba(108, 136, 198, 0.16);
+  border-color: rgba(155, 176, 220, 0.26);
+  color: var(--oro-300);
+}
+.dcei-card__title {
+  margin-top: 14px;
+  font-family: var(--serif);
+  font-size: 18.5px;
+  font-weight: 600;
+  line-height: 1.28;
+  color: var(--i950);
+}
+.dcei-section--oscuro .dcei-card__title {
+  color: var(--blanco);
+}
+.dcei-card__body {
+  margin-top: 9px;
+  font-size: 14.8px;
+  line-height: 1.62;
+  color: var(--tinta-2);
+}
+.dcei-section--oscuro .dcei-card__body {
+  color: var(--claro-2);
+}
+
+.dcei-duo,
+.dcei-split {
+  display: grid;
+  gap: clamp(24px, 3.4vw, 40px);
+  align-items: start;
+}
+
+/* ── Maquetas de pantalla ────────────────────────────────────────────── */
+.dcei-mock {
+  margin: 0;
+}
+.dcei-mock__in {
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  background: var(--blanco);
+  box-shadow: var(--sombra-2);
+  overflow: hidden;
+}
+.dcei-section--oscuro .dcei-mock__in,
+.dcei-section--papel .dcei-mock__in {
+  background: var(--blanco);
+}
+.dcei-mock__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--linea);
+  background: var(--papel);
+}
+.dcei-mock__dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.dcei-mock__dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--i200);
+}
+.dcei-mock__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tinta-2);
+  margin-right: auto;
+}
+.dcei-mock__body {
+  padding: 16px 16px 14px;
+}
+.dcei-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.dcei-chip--ok {
+  color: #106b32;
+  background: #e6f4ea;
+  border-color: #b7e0c4;
+}
+.dcei-chip--espera {
+  color: #8a4008;
+  background: #fdf1dd;
+  border-color: #f2d4a4;
+}
+.dcei-chip--alto {
+  color: #8f1c16;
+  background: #fdeceb;
+  border-color: #f3c3bf;
+}
+.dcei-chip--marca {
+  color: var(--i700);
+  background: var(--i50);
+  border-color: var(--i200);
+}
+
+.dcei-soap {
+  display: grid;
+  gap: 10px;
+}
+.dcei-soap > div {
+  display: grid;
+  grid-template-columns: 82px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+.dcei-soap dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--i500);
+}
+.dcei-soap dd {
+  font-size: 13.6px;
+  line-height: 1.5;
+  color: var(--tinta-2);
+}
+.dcei-mock__sello {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--i50);
+  border: 1px solid var(--i100);
+  font-size: 13px;
+  color: var(--i800);
+}
+.dcei-mock__sello svg {
+  color: var(--i600);
+}
+.dcei-mock__pie {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--tinta-3);
+}
+.dcei-mock__pie svg {
+  margin-top: 3px;
+}
+.dcei-mock__nota {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--tinta-2);
+}
+
+.dcei-gate {
+  display: grid;
+  gap: 8px;
+}
+.dcei-gate li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--papel);
+}
+.dcei-gate__quien {
+  font-size: 13.4px;
+  color: var(--tinta-2);
+  min-width: 0;
+}
+.dcei-gate__quien strong {
+  color: var(--i900);
+}
+
+.dcei-caja__paciente {
+  font-size: 13.6px;
+  color: var(--tinta-2);
+}
+.dcei-caja__paciente strong {
+  color: var(--i950);
+}
+.dcei-caja__tarifa {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed var(--i200);
+  border-radius: 10px;
+  background: var(--i50);
+}
+.dcei-caja__tarifa p {
+  margin-top: 7px;
+  font-size: 13px;
+  color: var(--tinta-2);
+}
+.dcei-caja__lineas {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+.dcei-caja__lineas li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--linea);
+  font-size: 13.4px;
+  color: var(--tinta-2);
+}
+.dcei-caja__importe {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--i600);
+  white-space: nowrap;
+}
+
+/* ── El plan ─────────────────────────────────────────────────────────── */
+.dcei-plan {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: clamp(26px, 3.4vw, 40px);
+  border: 1px solid var(--linea);
+  border-top: 3px solid var(--oro-400);
+  border-radius: var(--radio-lg);
+  background: var(--blanco);
+  box-shadow: var(--sombra-3);
+}
+.dcei-plan__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--linea);
+}
+.dcei-plan__sello {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: linear-gradient(150deg, var(--i600), var(--i800));
+  color: var(--oro-300);
+}
+.dcei-plan__name {
+  font-family: var(--serif);
+  font-size: clamp(26px, 3.2vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--i950);
+}
+.dcei-plan__sub {
+  margin-top: 22px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--i600);
+}
+.dcei-plan__lista {
+  display: grid;
+  gap: 11px;
+  margin-top: 14px;
+}
+.dcei-plan__lista li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 11px;
+  align-items: start;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--tinta-2);
+}
+.dcei-plan__lista svg {
+  margin-top: 3px;
+  color: var(--ok);
+}
+.dcei-plan__accion {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--linea);
+  text-align: center;
+}
+.dcei-plan__chica {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--tinta-3);
+}
+.dcei-plan__manager {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--tinta-2);
+}
+.dcei-plan__tel {
+  white-space: nowrap;
+}
+
+/* ── Preguntas ───────────────────────────────────────────────────────── */
+.dcei-faq {
+  border-top: 1px solid var(--linea);
+}
+.dcei-faq details {
+  border-bottom: 1px solid var(--linea);
+}
+.dcei-faq summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 2px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--i950);
+}
+.dcei-faq summary::-webkit-details-marker {
+  display: none;
+}
+.dcei-faq summary:hover {
+  color: var(--i600);
+}
+.dcei-faq__mas {
+  position: relative;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 4px;
+}
+.dcei-faq__mas::before,
+.dcei-faq__mas::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 1.8px;
+  border-radius: 2px;
+  background: var(--i500);
+  transform: translate(-50%, -50%);
+  transition: transform 0.22s ease;
+}
+.dcei-faq__mas::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+.dcei-faq details[open] .dcei-faq__mas::after {
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+.dcei-faq__a {
+  padding: 0 2px 22px;
+  max-width: 68ch;
+  font-size: 15px;
+  line-height: 1.66;
+  color: var(--tinta-2);
+}
+
+/* ── Cierre ──────────────────────────────────────────────────────────── */
+.dcei-final__caja {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: clamp(30px, 4vw, 48px);
+  text-align: center;
+  border: 1px solid var(--linea-clara);
+  border-radius: var(--radio-lg);
+  background: linear-gradient(165deg, rgba(35, 52, 90, 0.75), rgba(18, 26, 46, 0.6));
+  position: relative;
+}
+.dcei-final__caja::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgba(216, 174, 94, 0.28);
+  border-radius: calc(var(--radio-lg) - 6px);
+  pointer-events: none;
+}
+.dcei-final__sello {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(216, 174, 94, 0.5);
+  background: rgba(216, 174, 94, 0.12);
+  color: var(--oro-300);
+}
+.dcei-final .dcei-lead {
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 26px;
+}
+.dcei-final__tel {
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--claro-2);
+}
+.dcei-final__tel strong {
+  color: var(--oro-300);
+}
+.dcei-final__entrar {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: var(--claro-2);
+}
+.dcei-final__entrar a {
+  color: var(--claro-1);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Pie ─────────────────────────────────────────────────────────────── */
+.dcei-footer {
+  padding: clamp(40px, 5vw, 64px) 0 32px;
+  background: var(--papel);
+  border-top: 1px solid var(--linea);
+}
+.dcei-footer__grid {
+  display: grid;
+  gap: 30px;
+}
+.dcei-footer__lema {
+  margin-top: 14px;
+  max-width: 40ch;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--tinta-2);
+}
+.dcei-footer__col h3 {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--i600);
+}
+.dcei-footer__col ul {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+  font-size: 14.5px;
+  color: var(--tinta-2);
+}
+.dcei-footer__col a:hover {
+  color: var(--i600);
+}
+.dcei-footer__bajo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  justify-content: space-between;
+  margin-top: 34px;
+  padding-top: 20px;
+  border-top: 1px solid var(--linea);
+  font-size: 13px;
+  color: var(--tinta-3);
+}
+.dcei-footer__bajo em {
+  font-style: normal;
+  color: var(--i500);
+  font-weight: 700;
+}
+.dcei-footer__bajo a:hover {
+  color: var(--i600);
+}
+
+/* ═══ Anchos ═══════════════════════════════════════════════════════════
+   Consultas al CONTENEDOR .dcei, no a la ventana.
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* Teléfono angosto: la placa de la portada se aprieta un punto (dos
+   renglones de versalitas espaciadas se leen mal a 390 px) y los dos
+   botones ocupan el ancho, que es lo que se toca con el pulgar. */
+@container dcei (max-width: 559px) {
+  .dcei-placa {
+    padding: 6px 12px;
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    line-height: 1.35;
+  }
+  .dcei-hero__cta {
+    gap: 10px;
+  }
+  .dcei-hero__cta .dcei-btn {
+    width: 100%;
+  }
+}
+
+@container dcei (min-width: 560px) {
+  .dcei-nav__login {
+    display: inline-flex;
+  }
+}
+
+@container dcei (min-width: 680px) {
+  .dcei-problemas {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dcei-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dcei-roles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dcei-nav__cta-largo {
+    display: inline-flex;
+  }
+  .dcei-nav__cta-corto {
+    display: none;
+  }
+}
+
+@container dcei (min-width: 900px) {
+  .dcei-wrap {
+    padding: 0 32px;
+  }
+  .dcei-nav__links {
+    display: flex;
+  }
+  .dcei-hero__grid {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    align-items: center;
+  }
+  .dcei-problemas {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .dcei-flujo {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    align-items: start;
+  }
+  .dcei-flujo__mock {
+    position: sticky;
+    top: 96px;
+  }
+  .dcei-duo {
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  }
+  .dcei-split {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  }
+  .dcei-split__lado {
+    position: sticky;
+    top: 96px;
+  }
+  .dcei-cards--dos {
+    grid-template-columns: repeat(2, 1fr);
+    margin-top: 0;
+  }
+}
+
+@container dcei (min-width: 1080px) {
+  /* La columna de texto se lleva algo más: con 1,05fr los dos botones de la
+     portada sumaban 560 px en una columna de 590 y el segundo se caía a otro
+     renglón — con 1,15fr caben en línea y la lista de confianza deja de
+     partirse con una viuda. */
+  .dcei-hero__grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  }
+  .dcei-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .dcei-cards--dos {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dcei-roles {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .dcei-footer__grid {
+    grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr));
+    gap: 44px;
+  }
+  .dcei-padron {
+    grid-template-columns: auto 1fr;
+    padding: 26px 30px;
+  }
+}
+
+/* ═══ Movimiento ═══════════════════════════════════════════════════════ */
+
+/* Entrada escalonada de la portada. El estado inicial vive aquí, así que
+   sin JavaScript se ve igual: es una animación, no un interruptor. */
+@keyframes dcei-entra {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.dcei-entra {
+  animation: dcei-entra 0.62s cubic-bezier(0.22, 0.8, 0.28, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+
+/* Aparición al desplazar. El estado inicial lo pone reveal.tsx (clase
+   dcei-reveal-init), de modo que sin JavaScript nada se esconde. */
+.dcei-reveal-init {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.dcei-reveal-on {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.6s ease var(--rd, 0ms),
+    transform 0.6s cubic-bezier(0.22, 0.8, 0.28, 1) var(--rd, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dcei *,
+  .dcei *::before,
+  .dcei *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .dcei-entra,
+  .dcei-reveal-init,
+  .dcei-reveal-on {
+    opacity: 1;
+    transform: none;
+  }
+}

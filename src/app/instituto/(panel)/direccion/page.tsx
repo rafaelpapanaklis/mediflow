@@ -14,6 +14,8 @@ import {
 import { getEduCampusScope } from "@/lib/edu/campus";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduDireccionScreen } from "@/components/edu/direccion/direccion-screen";
+import { EduAlmacenamientoCard } from "@/components/edu/direccion/almacenamiento-card";
+import { getEduAlmacenamientoPanel } from "@/lib/edu/almacenamiento";
 
 export const metadata: Metadata = {
   title: "Dirección · DaleControl Institucional",
@@ -72,6 +74,21 @@ export default async function InstitutoDireccionPage({
   const sede = await getEduCampusScope(ctx);
   const dirCtx = eduDirContextFrom(ctx, sede);
 
+  // EL MEDIDOR DE ALMACENAMIENTO. Va aparte del tablero, y eso importa por
+  // dos razones:
+  //
+  //  1. 🔴 NO PASA POR `sede`. La cuota es del INSTITUTO —tres sedes con
+  //     5 TB son 5 TB entre las tres, no 15— así que recortarla por campus
+  //     le enseñaría a una escuela con dos edificios la mitad de su
+  //     consumo y creería que le sobra el doble de espacio.
+  //  2. No depende de la VENTANA de tiempo del tablero: no es "cuánto se
+  //     subió en agosto", es cuánto hay ahora mismo.
+  //
+  // Devuelve null cuando el rol no lo ve (lo decide visibility.ts) y la
+  // tarjeta simplemente no se pinta: es una parte del tablero, no una
+  // pantalla, y una excepción dejaría a esa cuenta sin el resto.
+  const almacenamiento = await getEduAlmacenamientoPanel(ctx);
+
   try {
     const ahora = await getEduDireccionAhora(dirCtx, filtros);
     const panel = await getEduDireccionPanel(dirCtx, filtros);
@@ -88,6 +105,8 @@ export default async function InstitutoDireccionPage({
             </p>
           </div>
         </header>
+
+        {almacenamiento && <EduAlmacenamientoCard medidor={almacenamiento} />}
 
         <EduDireccionScreen ahora={ahora} panel={panel} />
       </div>

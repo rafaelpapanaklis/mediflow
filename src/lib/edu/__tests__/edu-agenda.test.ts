@@ -440,6 +440,12 @@ test("la query de la agenda descarta lo que no reconoce", () => {
     studentId: "st_1",
     type: "TAMIZAJE",
     status: "IN_CHAIR",
+    // Las tres llaves que añadió la ola de la rejilla (`docente`, `q` y
+    // `modo`). Ausentes en la URL de arriba, así que salen en su valor
+    // neutro: la lectura de las siete de siempre no cambió ni un carácter.
+    supervisorUserId: null,
+    q: null,
+    mode: "rejilla",
   });
 
   const basura = parseEduAgendaQuery(

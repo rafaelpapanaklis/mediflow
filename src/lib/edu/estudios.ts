@@ -32,6 +32,7 @@
 import { randomUUID } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { CBCT_LITE_CONTENT_TYPE } from "@/components/patient-3d/cbct-lite-shared";
 import { EduPadronError } from "@/lib/edu/padron";
 import {
   eduCleanId,
@@ -58,19 +59,35 @@ import {
   eduStudyIsPdf,
   eduStudyPathBelongsTo,
   eduStudyStoragePath,
+  type EduStudyPage,
   type EduStudyRow,
 } from "@/lib/edu/estudios-core";
 import {
+  eduAlmCabe,
+  eduAlmRechazo,
+  eduAlmRestanteBytes,
+} from "@/lib/edu/almacenamiento-core";
+import { getEduAlmacenamientoMedidor } from "@/lib/edu/almacenamiento";
+import {
+  eduSignRead,
   eduSignReadMany,
   eduSignUpload,
   eduStorageConfigured,
+  eduStorageDownload,
+  eduStorageObjectSize,
   eduStorageObjectSizeWithRetry,
   eduStorageRemove,
+  eduStorageUpload,
 } from "@/lib/edu/storage";
-import { eduCaseScopeWhere, eduScopeIsEmpty, type EduClinicaContext } from "@/lib/edu/visibility";
+import {
+  eduCaseScopeWhere,
+  eduPatientScopeWhere,
+  eduScopeIsEmpty,
+  type EduClinicaContext,
+} from "@/lib/edu/visibility";
 
 export { EduPadronError as EduEstudiosError };
-export type { EduStudyRow } from "@/lib/edu/estudios-core";
+export type { EduStudyRow, EduStudyPage } from "@/lib/edu/estudios-core";
 
 function requireInstitution(ctx: EduClinicaContext): string {
   const id = ctx?.institutionId;
@@ -166,20 +183,27 @@ export async function listEduPatientStudies(
   patientId: string,
   timeZone: string,
   now: Date = new Date(),
-): Promise<EduStudyRow[]> {
+): Promise<EduStudyPage> {
   const institutionId = requireInstitution(ctx);
-  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return [];
+  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return { rows: [], truncated: false };
 
   const paciente = await getEduClinicalPatient(ctx, patientId, now);
-  if (!paciente) return [];
+  if (!paciente) return { rows: [], truncated: false };
 
-  const rows = await prisma.eduStudy.findMany({
+  const leidas = await prisma.eduStudy.findMany({
     where: { institutionId, patientId: paciente.id },
     orderBy: [{ createdAt: "desc" }],
-    take: EDU_STUDY_MAX_ROWS,
+    // Una de más, solo para poder DECIR que se cortó (ver
+    // EDU_STUDY_MAX_ROWS). Se descarta en el `slice` de abajo.
+    take: EDU_STUDY_MAX_ROWS + 1,
     select: STUDY_SELECT,
   });
-  if (rows.length === 0) return [];
+  const truncated = leidas.length > EDU_STUDY_MAX_ROWS;
+  // 🔴 EL CORTE VA ANTES DE FIRMAR. La fila sobrante no se pinta, así que
+  // pedirle a Storage su URL sería un viaje pagado por un archivo que nadie
+  // va a abrir.
+  const rows = leidas.slice(0, EDU_STUDY_MAX_ROWS);
+  if (rows.length === 0) return { rows: [], truncated };
 
   // Sin Storage configurado se devuelve la lista con la URL vacía en vez
   // de reventar: la pantalla enseña las tarjetas y dice que el archivo no
@@ -189,7 +213,10 @@ export async function listEduPatientStudies(
     ? await eduSignReadMany(rows.map((r) => r.storagePath))
     : new Map<string, string>();
 
-  return rows.map((r) => toRow(r, urls.get(r.storagePath) ?? "", timeZone));
+  return {
+    truncated,
+    rows: rows.map((r) => toRow(r, urls.get(r.storagePath) ?? "", timeZone)),
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -228,7 +255,9 @@ export interface EduSignedUpload {
  * Lo que se valida aquí (todo en el servidor, nada se cree del cliente):
  *   · sesión + alcance clínico + paciente de ESTE instituto
  *   · extensión dentro de la lista blanca
- *   · tamaño DECLARADO <= 2 GB
+ *   · tamaño DECLARADO <= 2 GB (el tope POR ARCHIVO)
+ *   · que quepa en la CUOTA DEL INSTITUTO (el tope de la ESCUELA) — son
+ *     dos límites distintos y los dos siguen valiendo
  *   · el PATH lo compone el servidor con el institutionId de la SESIÓN
  *
  * Lo que NO se puede validar aquí: la firma real del contenido (los magic
@@ -265,6 +294,31 @@ export async function signEduStudyUpload(
       `Ese archivo pesa ${eduFormatBytes(declared)} y el máximo por archivo es ${EDU_MAX_STUDY_LABEL}.`,
       413,
     );
+  }
+
+  // ── LA CUOTA DEL INSTITUTO ───────────────────────────────────────────
+  //
+  // 🔴 EL CORTE VA AQUÍ, ANTES DE FIRMAR. Después de firmar, el navegador
+  // ya se pasó veinte minutos subiendo una tomografía que iba a rebotar
+  // igual — y el rebote llegaría del bucket, sin palabras.
+  //
+  // Son DOS TOPES DISTINTOS y los dos siguen valiendo: arriba, lo que pesa
+  // ESE archivo (2 GB, EDU_MAX_STUDY_BYTES, que es un límite técnico de la
+  // subida); aquí, lo que le queda a la ESCUELA (su cuota contratada). Un
+  // archivo de 1 GB pasa el primero y no pasa el segundo si quedan 200 MB.
+  //
+  // El tamaño con el que se decide es el DECLARADO, que un cliente podría
+  // mentir a la baja. No importa para la cuota: mentir aquí solo consigue
+  // colar UN archivo (acotado a 2 GB por el tope de arriba, que /confirm
+  // vuelve a medir contra el objeto real), y el siguiente /sign ya ve el
+  // total verdadero porque el consumo se cuenta, no se guarda.
+  const medidor = await getEduAlmacenamientoMedidor(institutionId);
+  if (!eduAlmCabe(medidor, declared)) {
+    // 507 Insufficient Storage, no 413: el archivo no es demasiado grande,
+    // es la escuela la que no tiene sitio. Se distinguen en los logs, y el
+    // mensaje —que la pantalla enseña tal cual— dice cuánto queda, cuánto
+    // pesa esto y a quién avisarle.
+    throw new EduPadronError(eduAlmRechazo(medidor, declared), 507);
   }
 
   // 🔴 El path lo compone el SERVIDOR, con el institutionId de la sesión y
@@ -402,6 +456,44 @@ export async function confirmEduStudyUpload(
     select: { id: true },
   });
 
+  // ── LA CARRERA CON LA CUOTA ──────────────────────────────────────────
+  //
+  // 🔴 AQUÍ NO SE RECHAZA POR CUOTA, Y ES UNA DECISIÓN, NO UN OLVIDO.
+  //
+  // El corte vive en /sign. Dos personas que firman a la vez con la bolsa
+  // casi llena ven las dos el mismo hueco y las dos suben: al llegar aquí,
+  // el total puede quedar por encima de la cuota. Se registra igual.
+  //
+  // Porque en este punto los bytes YA ESTÁN en el bucket: rechazar no
+  // ahorra un peso salvo que se BORRE el objeto, y eso es destruir una
+  // radiografía que alguien subió entera por una carrera que no podía ver.
+  // (El tope de 2 GB de arriba sí borra, y no es lo mismo: allí el cliente
+  // mintió sobre el tamaño al firmar.) El rebase está acotado a lo que
+  // estaba en vuelo, se autocorrige en el siguiente /sign —el consumo se
+  // cuenta, no se guarda— y el /admin lo ve y lo factura.
+  //
+  // El razonamiento largo está en src/lib/edu/almacenamiento.ts.
+  //
+  // Lo que sí se hace es dejar RASTRO, sin poder romper nada: si esta
+  // consulta falla, el estudio ya está registrado y así se queda.
+  try {
+    const medidor = await getEduAlmacenamientoMedidor(institutionId);
+    if (eduAlmRestanteBytes(medidor) <= 0 && medidor.usadoBytes > medidor.cuotaBytes) {
+      console.warn(
+        "[instituto/estudios] cuota rebasada por una subida en vuelo:",
+        JSON.stringify({
+          institutionId,
+          studyId: created.id,
+          bytesDelArchivo: Math.trunc(size),
+          usadoBytes: medidor.usadoBytes,
+          cuotaBytes: medidor.cuotaBytes,
+        }),
+      );
+    }
+  } catch (e) {
+    console.error("[instituto/estudios] no se pudo revisar la cuota tras registrar:", e);
+  }
+
   return { id: created.id, alreadyRegistered: false };
 }
 
@@ -452,4 +544,167 @@ export async function abortEduStudyUpload(
     return { deleted: false };
   }
   return { deleted: true };
+}
+
+
+// ════════════════════════════════════════════════════════════════════════
+// EL ESTUDIO SUELTO — lo que necesita el visor montado en la ficha
+// ════════════════════════════════════════════════════════════════════════
+
+export interface EduStudyForViewer {
+  id: string;
+  patientId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  notes: string | null;
+}
+
+/**
+ * UN estudio, buscado DENTRO del alcance CLÍNICO.
+ *
+ * 🔴 Es la puerta de las dos rutas nuevas del visor (el CBCT reducido y
+ * las notas). El institutionId sale de la SESIÓN y el paciente pasa por
+ * `eduPatientScopeWhere`, así que un id de otra escuela —o de un paciente
+ * que a este rol no le toca— no existe: devuelve null y la ruta contesta
+ * 404, igual que uno inventado. El mismo recorte que usa la galería, para
+ * que "lo que veo" y "lo que puedo preparar o anotar" no se separen nunca.
+ */
+export async function getEduStudyForViewer(
+  ctx: EduClinicaContext,
+  studyId: string,
+  now: Date = new Date(),
+): Promise<EduStudyForViewer | null> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduClinicalScope(ctx);
+  if (eduScopeIsEmpty(scope)) return null;
+  const id = eduCleanId(studyId);
+  if (!id) return null;
+
+  const row = await prisma.eduStudy.findFirst({
+    where: {
+      id,
+      institutionId,
+      patient: eduPatientScopeWhere({ institutionId, scope, now }),
+    },
+    select: {
+      id: true,
+      patientId: true,
+      name: true,
+      mimeType: true,
+      sizeBytes: true,
+      storagePath: true,
+      notes: true,
+    },
+  });
+  if (!row) return null;
+  return { ...row, sizeBytes: bytesToNumber(row.sizeBytes) };
+}
+
+/**
+ * Las NOTAS del estudio, escritas desde el visor.
+ *
+ * El visor del dental manda `{ doctorNotes }`; aquí se guarda en
+ * `EduStudy.notes`, que es la MISMA columna que rellena el formulario de
+ * subida y la que lee la línea de tiempo del expediente. Un solo sitio: si
+ * el visor escribiera en otro lado, el estudio tendría dos notas y la ficha
+ * enseñaría la vieja.
+ *
+ * El tope es el del `@db.VarChar(1000)` del esquema. Recortar aquí y no
+ * rebotar es a propósito: quien acaba de escribir no pierde lo escrito por
+ * pasarse de largo.
+ */
+export async function updateEduStudyNotes(
+  ctx: EduClinicaContext,
+  studyId: string,
+  rawNotes: unknown,
+  now: Date = new Date(),
+): Promise<{ notes: string | null }> {
+  const institutionId = requireInstitution(ctx);
+  const estudio = await getEduStudyForViewer(ctx, studyId, now);
+  if (!estudio) throw new EduPadronError("Ese estudio no existe o no te toca.", 404);
+
+  const notes = eduOptionalText(rawNotes, 1000) ?? null;
+  // updateMany con el institutionId REPETIDO en el where: aunque el
+  // findFirst de arriba ya lo comprobó, la escritura no se apoya en que
+  // nadie meta mano entre las dos consultas.
+  await prisma.eduStudy.updateMany({
+    where: { id: estudio.id, institutionId },
+    data: { notes },
+  });
+  return { notes };
+}
+
+/**
+ * El CBCT REDUCIDO para el móvil (`.lite2.bin`), generado una vez y reusado.
+ *
+ * Mismo patrón que la ruta del dental: se descarga el .zip original, se
+ * reduce con `buildCbctLite` (lib COMPARTIDA — se importa, no se copia: la
+ * próxima corrección de geometría del dental llega sola) y el binario
+ * hermano se guarda al lado del original en el bucket `edu-files`. La
+ * siguiente apertura lo encuentra hecho.
+ *
+ * 🔴 Es la invocación MÁS CARA del vertical: descomprime el .zip ENTERO en
+ * memoria. El techo de tamaño es el MISMO número que el del dental
+ * (importado, no copiado); el freno por instituto y el candado por estudio
+ * los pone la ruta, que es quien tiene la petición.
+ *
+ * El import de `@/lib/cbct-lite` es DINÁMICO: JSZip y el decodificador
+ * pesan, y no tienen por qué entrar en el bundle de las pantallas que
+ * simplemente listan estudios.
+ */
+export interface EduLiteResult {
+  liteUrl: string;
+  cached: boolean;
+  count?: number;
+  rows?: number;
+  cols?: number;
+  sourceSlices?: number;
+}
+
+export async function buildEduStudyLite(
+  estudio: EduStudyForViewer,
+  litePath: string,
+  targetXY: number,
+): Promise<EduLiteResult> {
+  requireStorage();
+
+  const zip = await eduStorageDownload(estudio.storagePath);
+  if (!zip) {
+    throw new EduPadronError("No se pudo leer el estudio original.", 500);
+  }
+
+  const { buildCbctLite } = await import("@/lib/cbct-lite");
+  const result = await buildCbctLite(zip, targetXY, 180);
+
+  const guardado = await eduStorageUpload(
+    litePath,
+    Buffer.from(result.bytes),
+    CBCT_LITE_CONTENT_TYPE,
+  );
+  if (!guardado) {
+    throw new EduPadronError("No se pudo guardar la versión ligera del estudio.", 500);
+  }
+
+  const liteUrl = await eduSignRead(litePath);
+  if (!liteUrl) {
+    throw new EduPadronError("No se pudo firmar la versión ligera del estudio.", 500);
+  }
+
+  return {
+    liteUrl,
+    cached: false,
+    count: result.meta.count,
+    rows: result.meta.rows,
+    cols: result.meta.cols,
+    sourceSlices: result.sourceSlices,
+  };
+}
+
+/** ¿Ya está generado el binario reducido? Devuelve su URL firmada o "". */
+export async function eduLiteYaGenerado(litePath: string): Promise<string> {
+  const size = await eduStorageObjectSize(litePath);
+  if (size == null) return "";
+  return eduSignRead(litePath);
 }

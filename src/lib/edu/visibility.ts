@@ -212,6 +212,77 @@ export const EDU_VISIBILITY_NONE_DETAIL: Record<EduVisibilityResource, string> =
     "Tu rol no ve dinero: ni precios, ni cobros, ni saldos. Los ven la dirección y caja. Un docente y un estudiante no, y no es un permiso que se pueda encender: en el piso clínico se atiende, y en el mostrador se cobra.",
 };
 
+// ── La CLÍNICA EN VIVO — el tablero de sillones ─────────────────────────
+
+/**
+ * Los roles que ven EL PISO ENTERO en vivo (/instituto/clinica).
+ *
+ * 🔴 LISTA BLANCA, igual que la del dinero, y por el mismo motivo: si
+ * mañana el schema gana un rol (COORDINADOR, RECTOR, ADMINISTRATIVO), la
+ * respuesta por defecto tiene que ser "no ve el piso" y no "se me olvidó
+ * agregarlo a los que no". Un olvido con lista negra abre el tablero; con
+ * lista blanca, lo deja cerrado.
+ */
+const EDU_ROLES_PISO_EN_VIVO: EduRole[] = ["DIRECCION", "DOCENTE"];
+
+/**
+ * ¿Quién puede abrir la CLÍNICA EN VIVO, y con cuánto detalle?
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 POR QUÉ ESTA PANTALLA NO SE RESUELVE CON `eduVisibility(ctx, "cases")`
+ * A SECAS, Y POR QUÉ AUN ASÍ VIVE AQUÍ Y NO EN LA PANTALLA
+ *
+ * El tablero enseña, sillón por sillón, QUÉ PACIENTE está sentado y de qué
+ * se le está atendiendo. Eso es expediente clínico, así que el recurso es
+ * "cases" y no "patients" — la misma línea que la Ola 3 defendió para las
+ * notas y el odontograma. Pero el recurso solo no basta, por dos roles:
+ *
+ *   · CAJA cae en "none" con "cases", que es la respuesta correcta. Aquí no
+ *     hace falta nada nuevo: recibe, agenda y cobra; no abre expediente.
+ *   · ALUMNO cae en "own", que NO es una respuesta correcta para ESTA
+ *     pantalla. Un residente con alcance "own" vería un piso con dos
+ *     sillones pintados y treinta en blanco, y ese tablero no dice "estos
+ *     dos son los tuyos": dice "la clínica está vacía". Un tablero que
+ *     miente sobre cuántas unidades quedan libres es peor que no tenerlo, y
+ *     un alumno ya tiene la pantalla que le sirve — /instituto/mi-dia.
+ *
+ * Por eso la lista blanca se aplica ANTES de preguntar por el recurso, con
+ * la misma forma que el dinero de la Ola 5: no hay manera de que un rol
+ * nuevo, un `as any` o un permiso encendido por error acaben devolviendo
+ * "own" sobre el piso entero.
+ *
+ * 🔴 Y LO QUE DEVUELVE SIGUE SIENDO EL ALCANCE DE "cases", no un "sí/no".
+ * Ahí está la mitad fina de la decisión: DIRECCION recibe "all" y ve el
+ * piso con nombre y apellido; un DOCENTE recibe "supervised" y ve el piso
+ * ENTERO —cuántos sillones hay libres es infraestructura de la escuela, no
+ * la fila de nadie— con el DETALLE callado en los que no le tocan. Eso lo
+ * aplica `eduVivaCard` (clinica-viva-core.ts) tarjeta por tarjeta, con el
+ * `detail` que decide `eduScopeCoversStudent` de este mismo archivo.
+ *
+ * La alternativa —darle al docente el nombre del paciente de otro docente—
+ * habría roto en una pantalla nueva la regla que el vertical defiende desde
+ * la Ola 1A y que está escrita arriba del todo: «DOCENTE → lo de los
+ * alumnos que supervisa CON ASIGNACIÓN VIGENTE. Nada de otros docentes».
+ * Falla del lado cerrado, que es de qué lado se falla aquí.
+ *
+ * ⚠️ El PERMISO (`clinica.view`) abre la pantalla; esto decide las filas y
+ * el detalle. Son dos cosas distintas y por eso están en dos archivos
+ * distintos — encenderle "clinica.view" a un alumno por override sigue sin
+ * enseñarle un solo sillón, porque esto devuelve "none".
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduLiveFloorVisibility(actor: EduVisibilityActor): EduVisibilityScope {
+  if (typeof actor !== "object" || actor === null) return { kind: "none" };
+  if (!EDU_ROLES_PISO_EN_VIVO.includes(actor.role)) return { kind: "none" };
+  // Lista blanca superada: de aquí en adelante manda el recurso del
+  // expediente, sin una segunda tabla de roles que se pueda desincronizar.
+  return eduVisibility(actor, "cases");
+}
+
+/** Lo que se le dice a quien abre el tablero y no le toca. */
+export const EDU_LIVE_FLOOR_NONE_DETAIL =
+  "Tu rol no abre la clínica en vivo. El tablero de sillones enseña qué paciente está en cada unidad y de qué se le atiende, así que lo ven la dirección y los docentes. Si eres estudiante, lo tuyo está en Mi agenda; si estás en caja, la ocupación de la agenda está en Agenda.";
+
 // ═══════════════════════════════════════════════════════════════════════
 // 2 · EL RECORTE, EN LA FORMA QUE ENTIENDE PRISMA
 // ═══════════════════════════════════════════════════════════════════════
@@ -945,3 +1016,112 @@ export function eduCanSendWhatsappKind(
   if (kind === "RECIBO") return !!chargeScope && chargeScope.kind === "all";
   return true;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 · LA CUOTA DE ALMACENAMIENTO — QUIÉN VE EL MEDIDOR
+//
+// 🔴 NO HAY UN QUINTO RECURSO EN `eduVisibility`, Y ESO ES A PROPÓSITO.
+// Los cuatro recursos de arriba recortan FILAS ("de quién puedo ver los
+// pacientes"). El medidor de almacenamiento no tiene filas que recortar:
+// es UN total del instituto entero, y con un total la pregunta no es
+// cuánto se recorta sino si se ve o no se ve. Meterlo en `eduVisibility`
+// habría obligado a inventar un "all" que en realidad significa "sí" y un
+// "none" que significa "no", y el primer rol nuevo lo habría leído mal.
+//
+// Vive AQUÍ igual, y no en la pantalla, porque el punto único de alcance es
+// este archivo: una regla de "quién ve qué" escrita dentro de un componente
+// se comprueba mirando el JSX, y por eso se rompe.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Los roles que VEN el medidor de almacenamiento. Lista BLANCA, por la
+ * misma razón que EDU_ROLES_CON_DINERO: si mañana el schema gana un rol
+ * (COORDINADOR, RECTOR, ADMINISTRATIVO), la respuesta por omisión tiene que
+ * ser "no lo ve" y no "se me olvidó agregarlo a los que no".
+ *
+ * Un ALUMNO, un DOCENTE y CAJA no lo ven: cuánto almacenamiento incluye el
+ * contrato y cuánto se lleva gastado es una conversación entre la dirección
+ * de la escuela y DaleControl.
+ */
+const EDU_ROLES_CON_ALMACENAMIENTO: EduRole[] = ["DIRECCION"];
+
+/**
+ * ¿Esta cuenta ve el medidor de almacenamiento del instituto?
+ *
+ * ⚠️ Es una cerradura SEPARADA del permiso "direccion.panel" que abre el
+ * tablero, y las dos hacen falta. El permiso se puede encender a mano desde
+ * el equipo (permissionsOverride); el ROL no. Así, una cuenta de caja a la
+ * que alguien le encienda el tablero por error sigue sin ver la cuota.
+ */
+export function eduPuedeVerAlmacenamiento(actor: EduVisibilityActor): boolean {
+  if (typeof actor !== "object" || actor === null) return false;
+  return EDU_ROLES_CON_ALMACENAMIENTO.includes(actor.role);
+}
+
+/**
+ * Lo que se le dice a quien llegó al medidor y no le toca.
+ *
+ * ⚠️ Esto NO es lo que lee quien intenta subir un estudio con la cuota
+ * llena: a ése se le dice cuánto queda y cuánto pesa su archivo
+ * (eduAlmRechazo, en almacenamiento-core.ts), porque sin esos dos números
+ * no puede decidir nada. Ver el MEDIDOR —lo contratado, lo gastado, lo que
+ * cuesta el TB extra— es otra cosa.
+ */
+export const EDU_ALMACENAMIENTO_NONE_DETAIL =
+  "El almacenamiento que incluye el contrato del instituto, y cuánto se lleva usado, lo ve " +
+  "la dirección. Es una cláusula del contrato con DaleControl, no un ajuste del panel.";
+
+// ═══════════════════════════════════════════════════════════════════════
+// ¿QUIÉN VE LA CLÍNICA ENTERA?
+//
+// 🔴 ESTA ES LA CERRADURA DE LOS TABLEROS DE TOTALES: el de Dirección
+// (Ola 7) y el Inicio de dirección con sus tres gráficas.
+//
+// La diferencia con todo lo demás de este archivo es qué se hace cuando la
+// respuesta es "no". En las pantallas de listas, un alcance parcial
+// RECORTA: un docente ve a sus alumnos y esa lista es verdad. En un
+// tablero de totales no se puede recortar, porque lo que se pinta ES el
+// total —"cobrado del periodo", "pacientes atendidos", "ocupación"— y un
+// total recortado presentado como el total es un dato falso, proyectado
+// además en una junta. Así que aquí se NIEGA.
+//
+// Vive en visibility.ts y no en el tablero por la razón de siempre: es una
+// regla de "quién ve qué", y una regla de ésas escrita dentro de una
+// pantalla se comprueba mirando el JSX — por eso se rompe. Aquí abajo se
+// comprueba con una prueba de tres líneas y sin base de datos.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ¿Esta cuenta ve la clínica ENTERA, sin recorte, en los cuatro recursos?
+ *
+ * Hoy solo DIRECCION. Y no está escrito como una lista de roles a
+ * propósito: se PREGUNTA a `eduVisibility`, que es el punto único, así que
+ * el día que un rol nuevo reciba alcance completo sobre los cuatro
+ * recursos esto lo dirá solo — y el día que a DIRECCION se le recorte
+ * uno, dejará de decirlo. Una lista blanca aparte sería una segunda
+ * verdad que se desincroniza con la primera.
+ *
+ * ⚠️ CAJA da `false`, y hay que saberlo: caja ve pacientes, citas y
+ * dinero, pero NO casos (línea explícita de `eduVisibility`). Sin casos no
+ * se puede decir "tratamientos iniciados", así que un tablero de totales
+ * para caja tendría una cifra en cero que se leería como "esta semana no
+ * se empezó ningún tratamiento".
+ */
+export function eduPuedeVerLaClinicaEntera(actor: EduVisibilityActor): boolean {
+  if (typeof actor !== "object" || actor === null) return false;
+  const recursos: EduVisibilityResource[] = ["patients", "appointments", "cases", "charges"];
+  return recursos.every((r) => eduVisibility(actor, r).kind === "all");
+}
+
+/**
+ * Lo que se le dice a quien llegó a un tablero de totales y ve una parte.
+ *
+ * Es el texto que ya devolvía el 403 del panel de Dirección desde la Ola 7,
+ * movido aquí para que las dos pantallas de totales digan lo MISMO: dos
+ * redacciones del mismo motivo son dos formas de explicar mal la misma
+ * regla.
+ */
+export const EDU_CLINICA_ENTERA_NONE_DETAIL =
+  "Este tablero es de la dirección del instituto: enseña la clínica ENTERA, así que solo " +
+  "tiene sentido para quien la ve entera. Tu cuenta ve una parte, y una parte presentada " +
+  "como el total sería un dato falso.";

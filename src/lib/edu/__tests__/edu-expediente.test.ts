@@ -29,6 +29,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   EduRecordStatus as PrismaRecordStatus,
   EduStudyKind as PrismaStudyKind,
@@ -36,6 +39,7 @@ import type {
 import {
   EDU_CLINICAL_NONE_DETAIL,
   EDU_RECORD_DIAGNOSIS_MAX,
+  EDU_RECORD_MAX_ROWS,
   EDU_RECORD_TEXT_MAX,
   EDU_SOAP_FIELDS,
   EDU_SOAP_HINTS,
@@ -71,6 +75,7 @@ import {
   EDU_MAX_STUDY_BYTES,
   EDU_SIGNED_URL_TTL_SECONDS,
   EDU_STUDY_EXT,
+  EDU_STUDY_MAX_ROWS,
   eduExtOfName,
   eduFormatBytes,
   eduIsStudyExt,
@@ -674,9 +679,10 @@ test("solo las imágenes y los PDF se pintan dentro de la página", () => {
   assert.equal(eduStudyIsImage(eduMimeForExt("zip")), false);
   assert.equal(eduStudyIsPdf(eduMimeForExt("pdf")), true);
   assert.equal(eduStudyIsPdf(eduMimeForExt("dcm")), false);
-  // Una tomografía NO se pinta con <img>: desde la Ola 12 la abre el
-  // visor CBCT propio (cbct-viewer.tsx), que decodifica el DICOM — pero
-  // sigue sin ser una imagen del navegador, y eso es lo que fija esta línea.
+  // Una tomografía NO se pinta con <img>: la abre el visor de tomografía
+  // del dental (DicomSetViewer / DicomViewer2D), que decodifica el DICOM —
+  // pero sigue sin ser una imagen del navegador, y eso es lo que fija esta
+  // línea.
   assert.equal(eduStudyIsImage(eduMimeForExt("dcm")), false);
   assert.equal(eduStudyIsPdf(eduMimeForExt("zip")), false);
 });
@@ -708,4 +714,138 @@ test("el bucket es propio del vertical y la URL firmada caduca", () => {
   assert.equal(EDU_FILES_BUCKET, "edu-files");
   assert.notEqual(EDU_FILES_BUCKET, "patient-files");
   assert.ok(EDU_SIGNED_URL_TTL_SECONDS > 0 && EDU_SIGNED_URL_TTL_SECONDS <= 3600);
+});
+
+
+// ══════════════════════════════════════════════════════════════════════
+// 7 · 🔴 EL EXPEDIENTE Y LOS ESTUDIOS CORTAN — Y TIENEN QUE DECIRLO
+//
+// Medido con el instituto de demo (scripts/edu-seed-demo.ts): un paciente
+// con 240 notas y 240 estudios enseñaba 200 de cada uno y no había una
+// sola palabra en pantalla que lo dijera. Las dos consultas hacían
+// `take: MAX` sin `+ 1`, así que ni siquiera podían SABER que habían
+// cortado: doscientas notas y doscientas cuarenta devuelven lo mismo.
+//
+// Un alumno que busca la nota de la primera sesión de un caso largo
+// concluye que no existe. Es un expediente clínico.
+// ══════════════════════════════════════════════════════════════════════
+
+const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+
+/** El archivo sin comentarios: lo que se comprueba es el CÓDIGO, no la
+ *  prosa que lo explica. Mismo helper que edu-casos.test.ts. */
+function fuente(...tramos: string[]): string {
+  return readFileSync(join(RAIZ, ...tramos), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+}
+
+/**
+ * La aritmética del recorte, tal cual la hacen los dos loaders.
+ *
+ * Se prueba como función pura porque es donde estaba el fallo: el `+ 1` y
+ * el `slice` van juntos o no significan nada — leer una de más y pintarla
+ * sería enseñar 201 filas y decir que hay 200.
+ */
+function recorte<T>(leidas: T[], max: number): { rows: T[]; truncated: boolean } {
+  return { truncated: leidas.length > max, rows: leidas.slice(0, max) };
+}
+
+test("🔴 con MAX+1 filas leídas, se pintan MAX y `truncated` es true", () => {
+  const filas = Array.from({ length: EDU_RECORD_MAX_ROWS + 1 }, (_, i) => i);
+  const page = recorte(filas, EDU_RECORD_MAX_ROWS);
+  assert.equal(page.truncated, true, "201 leídas de un tope de 200: hay más");
+  assert.equal(page.rows.length, EDU_RECORD_MAX_ROWS, "la fila 201 NO se pinta");
+  assert.equal(page.rows[page.rows.length - 1], EDU_RECORD_MAX_ROWS - 1);
+});
+
+test("con EXACTAMENTE MAX no se miente al revés: caben todas y no se avisa", () => {
+  const filas = Array.from({ length: EDU_RECORD_MAX_ROWS }, (_, i) => i);
+  const page = recorte(filas, EDU_RECORD_MAX_ROWS);
+  assert.equal(page.truncated, false, "200 de 200 NO está cortado: avisar sería otra mentira");
+  assert.equal(page.rows.length, EDU_RECORD_MAX_ROWS);
+});
+
+test("un expediente vacío no dice que cortó", () => {
+  const page = recorte([], EDU_RECORD_MAX_ROWS);
+  assert.equal(page.truncated, false);
+  assert.deepEqual(page.rows, []);
+});
+
+test("los estudios usan la misma aritmética con su propio tope", () => {
+  const filas = Array.from({ length: EDU_STUDY_MAX_ROWS + 1 }, (_, i) => i);
+  const page = recorte(filas, EDU_STUDY_MAX_ROWS);
+  assert.equal(page.truncated, true);
+  assert.equal(page.rows.length, EDU_STUDY_MAX_ROWS);
+});
+
+test("🔴 fuente · las dos consultas piden MAX + 1 (sin el +1 no pueden saber que cortaron)", () => {
+  const exp = fuente("src", "lib", "edu", "expediente.ts");
+  const desdeExp = exp.indexOf("export async function listEduPatientRecords");
+  assert.notEqual(desdeExp, -1, "¿renombraron listEduPatientRecords?");
+  const cuerpoExp = exp.slice(desdeExp, desdeExp + 1500);
+  assert.match(cuerpoExp, /take: EDU_RECORD_MAX_ROWS \+ 1/);
+  assert.match(cuerpoExp, /truncated: rows\.length > EDU_RECORD_MAX_ROWS/);
+  assert.match(cuerpoExp, /\.slice\(0, EDU_RECORD_MAX_ROWS\)/);
+
+  const est = fuente("src", "lib", "edu", "estudios.ts");
+  const desdeEst = est.indexOf("export async function listEduPatientStudies");
+  assert.notEqual(desdeEst, -1, "¿renombraron listEduPatientStudies?");
+  const cuerpoEst = est.slice(desdeEst, desdeEst + 1800);
+  assert.match(cuerpoEst, /take: EDU_STUDY_MAX_ROWS \+ 1/);
+  assert.match(cuerpoEst, /leidas\.length > EDU_STUDY_MAX_ROWS/);
+  assert.match(cuerpoEst, /leidas\.slice\(0, EDU_STUDY_MAX_ROWS\)/);
+});
+
+test("🔴 fuente · los estudios se CORTAN antes de firmar sus URLs", () => {
+  // Firmar es un viaje a Storage. Firmar la fila 201, que no se pinta, es
+  // pagar por un archivo que nadie va a abrir.
+  const src = fuente("src", "lib", "edu", "estudios.ts");
+  const desde = src.indexOf("export async function listEduPatientStudies");
+  const cuerpo = src.slice(desde, desde + 1800);
+  const corte = cuerpo.indexOf("leidas.slice(0, EDU_STUDY_MAX_ROWS)");
+  const firma = cuerpo.indexOf("eduSignReadMany");
+  assert.notEqual(corte, -1);
+  assert.notEqual(firma, -1);
+  assert.ok(corte < firma, "se están firmando las URLs ANTES de tirar la fila sobrante");
+});
+
+test("🔴 fuente · las dos pantallas AVISAN, como las otras nueve del panel", () => {
+  for (const [archivo, palabra] of [
+    ["expediente-screen.tsx", "notas"],
+    ["estudios-screen.tsx", "estudios"],
+  ] as const) {
+    const src = fuente("src", "components", "edu", "expediente", archivo);
+    assert.match(src, /truncated: boolean;/, `${archivo} no recibe la bandera`);
+    assert.match(src, /maxRows: number;/, `${archivo} no recibe el tope`);
+    // El aviso: un banner condicionado a `truncated` que dice el número.
+    assert.match(
+      src,
+      /\{truncated && \(/,
+      `${archivo} recibe la bandera y no pinta nada con ella`,
+    );
+    assert.match(
+      src,
+      new RegExp(`Se muestran (las|los) \\{maxRows\\} ${palabra} más recientes`),
+      `${archivo} no dice CUÁNTAS se muestran`,
+    );
+  }
+});
+
+test("fuente · las dos páginas le pasan la bandera a su pantalla", () => {
+  const exp = fuente("src", "app", "instituto", "(panel)", "pacientes", "[id]", "expediente", "page.tsx");
+  assert.match(exp, /truncated=\{page\.truncated\}/);
+  assert.match(exp, /maxRows=\{EDU_RECORD_MAX_ROWS\}/);
+
+  const est = fuente("src", "app", "instituto", "(panel)", "pacientes", "[id]", "estudios", "page.tsx");
+  assert.match(est, /truncated=\{page\.truncated\}/);
+  assert.match(est, /maxRows=\{EDU_STUDY_MAX_ROWS\}/);
+});
+
+test("fuente · los dos endpoints devuelven `truncated` (la puerta de al lado también avisa)", () => {
+  const exp = fuente("src", "app", "api", "instituto", "pacientes", "[id]", "expediente", "route.ts");
+  assert.match(exp, /truncated: page\.truncated/);
+
+  const est = fuente("src", "app", "api", "instituto", "pacientes", "[id]", "estudios", "route.ts");
+  assert.match(est, /truncated: page\.truncated/);
 });

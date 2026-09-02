@@ -199,14 +199,30 @@ body:has(.edu-auth) {
 /* El nombre del instituto NO se corta a media palabra: envuelve hasta dos
    renglones y solo entonces pone puntos suspensivos (line-clamp corta en
    frontera de palabra). En el teléfono no hay hover que rescate un title,
-   así que el nombre tiene que leerse en la propia barra. */
+   así que el nombre tiene que leerse en la propia barra.
+
+   🔴 `flex: none` y `max-height` son EL MISMO ARREGLO que lleva
+   .edu-sidebar__school; ahí está explicado entero. Aquí el bug todavía no
+   se ve —.edu-topbar__title crece con su contenido, así que no hay quien
+   apriete— pero la forma es idéntica (caja con overflow:hidden dentro de
+   un contenedor flex), y el día que la barra gane un alto fijo el nombre
+   del instituto se aplastaría igual. Se arregla ahora, que cuesta dos
+   renglones, y no cuando alguien lo reporte desde su teléfono.
+
+   El `line-height` se declara AQUÍ aunque valga lo mismo que el heredado
+   de .edu-topbar__title: es el número que usa el calc de abajo, y un calc
+   que depende de un valor escrito en otra regla se rompe en silencio el
+   día que esa otra regla cambie. */
 .edu-topbar__name {
   font-size: 14.5px;
   font-weight: 650;
   letter-spacing: -0.01em;
+  line-height: 1.25;
+  flex: none;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  max-height: calc(2 * 1.25em);
   overflow: hidden;
   overflow-wrap: break-word;
 }
@@ -304,16 +320,58 @@ body:has(.edu-auth) {
 /* El nombre de la escuela, bajo la marca. Dos renglones cortando por
    palabra y ellipsis limpio al final del segundo si ni así cabe; el title
    del elemento lleva siempre el nombre completo. Un renglón con nowrap
-   dejaba "Institute Odontológico de Esp…" sin forma de leerse. */
+   dejaba "Institute Odontológico de Esp…" sin forma de leerse.
+
+   ═══════════════════════════════════════════════════════════════════════
+   🔴 POR QUÉ ESTA REGLA LLEVA `flex: none` Y UN `max-height`
+   (medido en un build de producción, no deducido)
+
+   En producción este nombre se veía como MEDIA LÍNEA: la caja medía 10 px
+   —solo su relleno— con 63 px de texto dentro. Parecía que el minificador
+   se estaba comiendo el `-webkit-box`, y NO era eso:
+
+   · La hoja emitida (.next/static/css/*.css) trae la regla LETRA POR
+     LETRA como está escrita aquí. Ni tailwindcss ni autoprefixer (los dos
+     únicos plugins de postcss.config.mjs) la tocan, y el CSSOM del
+     navegador confirma `display: -webkit-box` como valor especificado.
+   · `getComputedStyle` sí devuelve `flow-root` en vez de `-webkit-box`
+     (Chrome 152), y ése es el dato que despista: es cómo Chrome COMPUTA
+     hoy ese display heredado. El recorte a dos renglones sigue
+     funcionando — se comprobó poniéndole `flex-shrink: 0` y nada más: la
+     caja pasó de 10 px a 45 px con sus puntos suspensivos.
+   · Lo que aplastaba la caja era el LAYOUT: .edu-sidebar es un contenedor
+     flex en COLUMNA con alto definido (100dvh en escritorio, top/bottom
+     en el cajón), y un ítem flex con `overflow: hidden` tiene tamaño
+     mínimo automático CERO. Con el menú de DIRECCIÓN —veintitantos
+     renglones: 1103 px de contenido en 655 px de columna— el algoritmo
+     encoge lo único que se deja encoger, que es justo esta caja. Es el
+     único hijo del cajón con `overflow: hidden`, y por eso fue el único
+     que se rompió.
+
+   Así que el arreglo es `flex: none`: esta caja no se encoge, y si el
+   menú no cabe, el cajón scrollea (ya tiene `overflow-y: auto`), que es
+   lo correcto — un menú con scroll se usa, un nombre de escuela cortado a
+   10 px no se lee.
+
+   El `max-height` es el cinturón por si un navegador deja de honrar el
+   `-webkit-box` (Chrome ya lo computa a otra cosa): dos renglones de alto
+   máximo pase lo que pase. Y el relleno de abajo pasó a `margin-bottom`
+   —el hueco hasta el menú es el mismo— porque `overflow: hidden` recorta
+   en la caja de RELLENO: con `padding-bottom: 10px` asomaban 10 px del
+   tercer renglón por debajo de los puntos suspensivos.
+   ═══════════════════════════════════════════════════════════════════════ */
 .edu-sidebar__school {
-  padding: 0 8px 10px;
+  padding: 0 8px;
+  margin-bottom: 10px;
   font-size: 13px;
   font-weight: 650;
   line-height: 1.35;
   color: var(--edu-text-2);
+  flex: none;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  max-height: calc(2 * 1.35em);
   overflow: hidden;
   overflow-wrap: break-word;
 }
@@ -1263,9 +1321,13 @@ select.edu-input {
 
 /* ── Modal / hoja inferior ──
    MÓVIL PRIMERO: en el teléfono sube desde abajo y ocupa lo que necesita
-   (hasta 92 dvh); en escritorio se centra. Es position:fixed y funciona
-   porque NADA en el árbol del panel lleva container-type ni transform: un
-   contenedor de consulta encima lo encerraría dentro de la columna. */
+   (hasta 92 dvh); en escritorio se centra. Es position:fixed y un
+   contenedor de consulta encima lo encerraría dentro de la columna en vez
+   de cubrir la pantalla.
+   ⚠️ `.edu-ag` (la rejilla de la agenda) SÍ lleva `container-type`, así
+   que los diálogos de esa pantalla se montan FUERA de él a propósito —ver
+   la cabecera de agenda-screen.tsx—. Cualquier pantalla nueva que quiera
+   medirse con @container tiene que hacer lo mismo. */
 .edu-modal {
   position: fixed;
   inset: 0;
@@ -1495,40 +1557,6 @@ select.edu-input {
    tiempo — que es lo primero que se rompe con una cita de 10 minutos.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── Barra de día: ‹ hoy › + día/semana ── */
-.edu-daybar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--edu-surface);
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-  box-shadow: var(--edu-shadow-1);
-}
-
-.edu-daybar__nav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.edu-daybar__label {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  /* El formateador de es-MX devuelve "lunes 31 de agosto"; en un
-     encabezado se lee mejor con la inicial en mayúscula. */
-  text-transform: capitalize;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Selector de dos posiciones (Día / Semana). */
 .edu-seg {
   display: inline-flex;
@@ -1554,64 +1582,6 @@ select.edu-input {
 .edu-seg__btn--on {
   background: var(--edu-600);
   color: #ffffff;
-}
-
-/* ── La agenda ── */
-.edu-agenda {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  align-items: start;
-}
-
-@media (min-width: 900px) {
-  .edu-agenda--cols {
-    grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
-  }
-}
-
-.edu-agenda__group {
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-  background: var(--edu-surface);
-  box-shadow: var(--edu-shadow-1);
-  overflow: hidden;
-}
-
-.edu-agenda__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--edu-surface-2);
-  border-bottom: 1px solid var(--edu-line);
-}
-
-.edu-agenda__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: capitalize;
-}
-
-.edu-agenda__sub {
-  margin: 0;
-  font-size: 12px;
-  color: var(--edu-text-3);
-}
-
-.edu-agenda__body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-}
-
-.edu-agenda__empty {
-  padding: 14px 12px;
-  font-size: 13px;
-  color: var(--edu-text-3);
 }
 
 /* ── La cita ── */
@@ -4364,7 +4334,7 @@ select.edu-input {
   font-size: 15px;
   font-weight: 700;
   color: var(--edu-text-1);
-  /* ⚠️ SIN `text-transform: capitalize`, al revés que .edu-daybar__label de
+  /* ⚠️ SIN `text-transform: capitalize`, al revés que .edu-ag__fecha de
      la agenda. Aquí la etiqueta ya empieza en mayúscula ("Últimos 7 días",
      "Hoy") y capitalizar cada palabra la dejaba en "Últimos 7 Días · 25
      Ago – 31 Ago", que en español está mal. */
@@ -5532,403 +5502,6 @@ button.edu-dir-money__fila:hover {
   box-shadow: 0 0 0 1px var(--edu-500) inset;
 }
 
-/* La hoja ANCHA del modal: los visores 3D no caben en 560 px. En el
-   teléfono no cambia nada (la hoja ya es de ancho completo). */
-@media (min-width: 640px) {
-  .edu-modal__card--wide {
-    max-width: min(1160px, 96vw);
-  }
-}
-
-/* El visor CBCT propio (cbct-viewer.tsx). Las VISTAS en sí (MprPane,
-   Dicom3DVolume) traen su propio lienzo del dental; esto es solo el
-   chrome de alrededor: barras, rejilla y avisos. */
-.edu-visor3d {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.edu-visor3d-barra {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--edu-line);
-  border-radius: 10px;
-  background: var(--edu-surface-2);
-}
-
-.edu-visor3d-grupo {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.edu-visor3d-slider {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1 1 160px;
-  min-width: 150px;
-  color: var(--edu-text-2);
-}
-
-.edu-visor3d-slider input[type="range"] {
-  flex: 1;
-  min-width: 0;
-  accent-color: var(--edu-500);
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   LA REJILLA DEL VISOR CBCT — paneles CUADRADOS, del mismo lado.
-
-   Cinco vistas: axial, coronal, sagital, volumen y panorámica. Las cuatro
-   primeras son cuadrados IDÉNTICOS; la panorámica va en su propia fila y de
-   borde a borde, porque un arco dental mide ~150 mm de largo por ~60 de
-   alto y meterlo en un cuadrado sería tirar media caja.
-
-   🔴 NI UNA CONSULTA DE CONTENEDOR. El visor se abre en una hoja `fixed`
-   que ocupa la ventana entera; un @container ataría la rejilla al ancho de
-   la columna que la contiene y atraparía dentro al `fixed`. Es la misma
-   razón por la que el cajón del menú del vertical usa @media.
-
-   🔴 Estos cortes son el RESPALDO del primer pintado. El reparto bueno lo
-   elige visor-medidas.ts midiendo la ventana —se queda con el que hace los
-   paneles más grandes— y lo aplica en línea sobre la rejilla. Una cuenta
-   puede decidir eso; un corte fijo, no.
-
-   El reparto por ventana:
-     · 1 columna  → ventana angosta y alta
-     · 2 columnas → el 2×2 de siempre
-     · 4 columnas → una sola tira: es lo que evita dejar media pantalla en
-       negro con paneles pequeños en el centro de un monitor grande
-   Y la panorámica SIEMPRE en su propia fila, de borde a borde.
-   Por debajo de eso NO hay rejilla: `EDU_MEDIA_COMPACTO` (visor-medidas.ts)
-   manda una vista a la vez con selector. Ese umbral mira el lado MENOR de
-   la ventana —`(max-width: 599.98px), (max-height: 599.98px) and
-   (pointer: coarse)`— para que girar un teléfono no cambie de modo ni
-   remonte un lienzo.
-   ═══════════════════════════════════════════════════════════════════════ */
-.edu-visor3d-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  /* ⚠️ El MISMO número que EDU_REJILLA_GAP en visor-medidas.ts: el lado del
-     cuadrado se calcula descontando estos huecos. */
-  gap: 8px;
-  align-items: start;
-  width: 100%;
-  margin-inline: auto;
-}
-
-/* La panorámica, de borde a borde y en su propia fila, sean las columnas
-   que sean: es ancha por naturaleza y así ninguna fila queda con huecos. */
-.edu-visor3d-grid__pano {
-  grid-column: 1 / -1;
-}
-
-@media (min-width: 760px) {
-  .edu-visor3d-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.edu-visor3d-celda {
-  position: relative;
-  min-width: 0;
-}
-
-/* UNA sola vista: porque la ventana no da para más, o porque alguien
-   maximizó un panel. Los demás se OCULTAN, no se desmontan: desmontarlos
-   obligaría a volver a rasterizar los cortes, a resubir la textura 3D y a
-   RE-DETECTAR la arcada al volver atrás. 668 cortes y 296 MB no se tocan
-   por cambiar de tamaño. */
-.edu-visor3d-grid--solo > * {
-  display: none;
-}
-
-.edu-visor3d-grid--solo > .edu-visor3d-celda--activa {
-  display: block;
-  grid-column: 1 / -1;
-}
-
-/* ── El panel del volumen 3D ─────────────────────────────────────────── */
-.edu-visor3d-vol {
-  border: 1px solid var(--edu-line);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--edu-surface);
-}
-
-/* 🔴 ESTA REGLA ALCANZA AL DENTAL (sin editarlo). Dicom3DVolume pinta
-   <div>{lienzo}{barra de Sólido/MIP · Hueso/Tejido/Aire · Umbral}</div>, y
-   esa barra se ensancha o se parte según el ancho. Convirtiendo su raíz en
-   una rejilla de dos filas —lienzo elástico y barra al natural— el lienzo
-   se queda con el hueco exacto que sobra, sin tener que MEDIR la barra, y
-   la tarjeta entera mide igual que un plano. Si mañana ese árbol cambiara,
-   la regla deja de casar y el panel del volumen sale más alto que los
-   otros: se ve feo, no se rompe. */
-.edu-visor3d-vol > div:not(.edu-visor3d-cargando) {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  height: 100%;
-}
-
-/* ── El chrome común de los paneles ──────────────────────────────────── */
-/* Etiqueta flotante sobre el lienzo negro, con la misma pinta que la que
-   MprPane pinta en sus planos (mono, blanco 90 %, negro 50 %). */
-.edu-visor3d-pane__hud {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.5);
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  pointer-events: none;
-}
-
-.edu-visor3d-pane__max {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.5);
-  color: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-}
-
-.edu-visor3d-pane__max:hover {
-  background: rgba(0, 0, 0, 0.7);
-}
-
-/* Misma esquina que el botón de maximizar de MprPane, para que el gesto
-   sea el mismo en los cuatro paneles. */
-.edu-visor3d-pane__max--flota {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-}
-
-/* Barra inferior de 34 px. ⚠️ El MISMO número que EDU_PANEL_CHROME en
-   visor-medidas.ts, que es lo que hace que la TARJETA salga cuadrada y no
-   solo su imagen. */
-.edu-visor3d-pane__barra {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  box-sizing: border-box;
-  height: 34px;
-  padding: 0 8px;
-  border-top: 1px solid var(--edu-line);
-  background: var(--edu-surface-2);
-}
-
-.edu-visor3d-pane__nombre {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--edu-text-2);
-}
-
-.edu-visor3d-pane__barra .edu-visor3d-pane__max {
-  background: transparent;
-  color: var(--edu-text-2);
-}
-
-.edu-visor3d-pane__barra .edu-visor3d-pane__max:hover {
-  background: var(--edu-surface);
-  color: var(--edu-text-1);
-}
-
-/* ── La panorámica reconstruida ──────────────────────────────────────── */
-.edu-visor3d-pano {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--edu-line);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--edu-surface);
-}
-
-.edu-visor3d-pano__caja {
-  padding: 8px;
-}
-
-/* 🔴 ESTAS DOS REGLAS ALCANZAN AL DENTAL (sin editarlo). PanoramicPane fija
-   el alto de sus lienzos con un estilo EN LÍNEA de 380 px: correcto en el
-   modal del dental, corto aquí, donde el visor usa la ventana entera. Un
-   `!important` de hoja de estilos SÍ le gana a un estilo en línea, así que
-   el alto se sube desde fuera con `--edu-pano-h`, que calcula el anfitrión
-   (panoramica-pane.tsx) a partir del alto de la celda.
-   El respaldo de la variable son los 380 px de siempre, y los selectores
-   son los de las dos cajas de lienzo: si ese árbol cambiara, la
-   panorámica se queda en su tamaño original — no se rompe. */
-.edu-visor3d-pano .relative.w-full {
-  height: var(--edu-pano-h, 380px) !important;
-}
-
-.edu-visor3d-pano canvas {
-  max-height: var(--edu-pano-h, 380px) !important;
-}
-
-/* 🔴 Y ÉSTA, también al dental. Maximizado, MprPane se pone un techo de
-   78vh pensado para el modal del dental (que además tiene su propio
-   scroll). Aquí el techo correcto es el hueco REAL de esta hoja, que ya
-   está medido: ni sobra pantalla ni se desborda por abajo. Sin la regla,
-   el panel maximizado se queda en 78vh: aprovecha algo menos, nada más. */
-.edu-visor3d-grid--solo
-  .edu-visor3d-celda--activa:not(.edu-visor3d-grid__pano)
-  .relative.w-full.select-none {
-  max-height: var(--edu-max-h, 78vh) !important;
-}
-
-.edu-visor3d-aviso {
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--edu-amber-700);
-}
-
-.dark .edu-visor3d-aviso {
-  color: var(--edu-amber-300);
-}
-
-.edu-visor3d-cargando {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 180px;
-  color: var(--edu-text-2);
-  font-size: 13px;
-}
-
-/* El spinner de "preparando el visor": la única animación del bloque, y
-   respeta la preferencia de menos movimiento. */
-.edu-girando {
-  animation: edu-girar 0.9s linear infinite;
-}
-
-@keyframes edu-girar {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .edu-girando {
-    animation: none;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   LA HOJA DEL VISOR (visor-shell.tsx) — la VENTANA entera.
-
-   `EduModal` sigue siendo la hoja del vertical y no se tocó: es la correcta
-   para formularios y fichas. Un CBCT no es eso —son cinco vistas que
-   quieren cada píxel— y por eso tiene la suya.
-
-   `100dvh` y no `100vh`: en el teléfono la barra del navegador aparece y
-   desaparece, y con `100vh` el pie del visor se queda por debajo del borde
-   justo cuando hace falta tocarlo. Se deja `100vh` delante como respaldo
-   para navegadores sin dvh.
-
-   `scrollbar-gutter: stable` no es cosmético: sin él, aparecer o
-   desaparecer la barra de desplazamiento cambia el ancho útil, la rejilla
-   se vuelve a medir y podría oscilar entre dos tamaños.
-   ═══════════════════════════════════════════════════════════════════════ */
-.edu-visorhoja {
-  position: fixed;
-  inset: 0 0 auto 0;
-  z-index: 80;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
-  background: var(--edu-surface);
-  /* El color se escribe COMPLETO: una hoja que hereda un `color` claro de
-     más arriba es una hoja en blanco, y eso ya pasó en este repo. */
-  color: var(--edu-text-1);
-}
-
-/* En pantalla completa manda el elemento: el navegador ya lo pone del
-   tamaño de la pantalla y `100dvh` sobra. */
-.edu-visorhoja:fullscreen,
-.edu-visorhoja:-webkit-full-screen {
-  height: 100%;
-}
-
-.edu-visorhoja__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 10px 14px;
-  padding-top: max(10px, env(safe-area-inset-top));
-  padding-left: max(14px, env(safe-area-inset-left));
-  padding-right: max(14px, env(safe-area-inset-right));
-  border-bottom: 1px solid var(--edu-line);
-}
-
-.edu-visorhoja__titulos {
-  flex: 1;
-  min-width: 0;
-}
-
-.edu-visorhoja__title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.edu-visorhoja__sub {
-  margin: 3px 0 0;
-  font-size: 12.5px;
-  color: var(--edu-text-2);
-}
-
-.edu-visorhoja__body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 10px;
-  padding-left: max(10px, env(safe-area-inset-left));
-  padding-right: max(10px, env(safe-area-inset-right));
-}
-
-.edu-visorhoja__foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  padding-left: max(14px, env(safe-area-inset-left));
-  padding-right: max(14px, env(safe-area-inset-right));
-  border-top: 1px solid var(--edu-line);
-}
 
 /* ═══════════════════════════════════════════════════════════════════════
    OLA 14 · RECETAS
@@ -6461,4 +6034,1724 @@ button.edu-dir-money__fila:hover {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CUOTA DE ALMACENAMIENTO · el medidor del tablero de dirección
+
+   Bloque ADITIVO al final del archivo, como todas las olas. No redefine ni
+   una variable ni una clase existente: la barra es la .edu-progreso de la
+   Ola 6 y el rojo del 100 % es el .edu-progreso--agotado que ya usaba el
+   cupo de IA agotado — mismo significado, "esto ya no funciona", mismo
+   color. Aquí abajo solo están los DOS colores que faltaban (ámbar del 80 %
+   y rojo del 95 %) y el borde de la tarjeta.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 80 % — ámbar. Todavía no bloquea nada, pero ya hay que decidir. */
+.edu-progreso--aviso .edu-progreso__bar {
+  background: var(--edu-amber-700);
+}
+
+/* 95 % — rojo. Con una tomografía se acaba. */
+.edu-progreso--critico .edu-progreso__bar {
+  background: var(--edu-danger);
+}
+
+/* La tarjeta del medidor. El borde acompaña al semáforo: una tarjeta que
+   solo cambia una barra de 8 px se lee igual de lejos esté como esté. */
+.edu-alm {
+  border-left: 3px solid var(--edu-ok);
+}
+
+.edu-alm--aviso {
+  border-left-color: var(--edu-amber-700);
+  background: var(--edu-amber-50);
+}
+
+.edu-alm--critico,
+.edu-alm--lleno {
+  border-left-color: var(--edu-danger);
+  background: var(--edu-danger-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL INICIO DE LA DIRECCIÓN — las tres gráficas del día a día
+
+   ⚠️ Se reusa TODO lo que ya existe: .edu-dir-bloque para el bloque,
+   .edu-seg para el conmutador semana/mes, .edu-dir-cifra (con su franja de
+   semáforo a la izquierda) para los accesos de "lo que está esperando" y
+   .edu-dir-cifra__var para la variación. Lo de aquí abajo es SOLO la
+   tarjeta de la gráfica, que no existía.
+
+   🔴 LA GRÁFICA TIENE ALTO FIJO, y no es pereza: el <ResponsiveContainer>
+   de recharts mide su contenedor, y un contenedor de alto automático mide
+   cero mientras el hijo espera a que el padre mida — la gráfica sale en
+   blanco sin un solo error en la consola. El alto está en píxeles y en un
+   solo sitio; el ANCHO sí es responsivo.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-ini-graficas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* Dos columnas a partir de 1000 px. No tres: con 30 barras, una columna de
+   un tercio de pantalla deja las barras en dos píxeles y el eje ilegible. */
+@media (min-width: 1000px) {
+  .edu-ini-graficas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Son TRES: dos arriba y la tercera a lo ancho. Con la tercera en media
+     columna quedaba medio bloque en blanco al lado, que se lee como algo
+     que no cargo. */
+  .edu-ini-graficas > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+.edu-ini-grafica {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-ini-grafica__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.edu-ini-grafica__titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--edu-text-1);
+}
+
+.edu-ini-grafica__detalle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-2);
+  max-width: 46ch;
+}
+
+.edu-ini-grafica__total {
+  font-size: 26px;
+  line-height: 1.05;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  /* Sin esto los totales de las tres tarjetas bailan al cambiar de dígito. */
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-1);
+}
+
+.edu-ini-grafica__total--dinero {
+  font-size: 21px;
+}
+
+.edu-ini-chart {
+  width: 100%;
+  height: 190px;
+}
+
+/* Mientras recharts baja (va por next/dynamic): un hueco del MISMO alto,
+   para que la página no dé un salto cuando llegue. */
+.edu-ini-chart--cargando {
+  border-radius: 10px;
+  background: var(--edu-surface-2);
+}
+
+.edu-ini-grafica__nota,
+.edu-ini-grafica__vacio {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+}
+
+.edu-ini-grafica__link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--edu-600);
+  text-decoration: none;
+}
+
+.dark .edu-ini-grafica__link {
+  color: var(--edu-300);
+}
+
+.edu-ini-grafica__link:hover {
+  text-decoration: underline;
+}
+
+/* Los accesos de "lo que está esperando" son ENLACES con la pinta de una
+   cifra del tablero. La regla de hover existía solo para button.edu-dir-cifra
+   (el tablero abre modales); aquí se navega. */
+a.edu-ini-acceso {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+a.edu-ini-acceso:hover {
+  border-color: var(--edu-line-brand);
+  box-shadow: var(--edu-shadow-2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CLÍNICA EN VIVO (/instituto/clinica) — el tablero de sillones.
+
+   Prefijo propio `edu-viva`: ninguna de estas clases existe en el resto de
+   la hoja (lo comprueba edu-theme.test.ts, que se puso roja en producción
+   el día que dos olas llamaron igual a dos cosas distintas).
+
+   ── LA PANTALLA SE MIRA DESDE DOS SITIOS, Y LOS DOS SON DE VERDAD ───────
+   · un monitor colgado en el piso clínico, a cuatro metros. Por eso el
+     NÚMERO del sillón crece con la ventana (`clamp` sobre vw) y el color
+     hace el trabajo: desde esa distancia no se lee un nombre, se cuenta
+     cuántos recuadros verdes quedan.
+   · el teléfono de un docente de pie. Por eso la rejilla arranca en UNA
+     columna y sube sola con `auto-fill`, y el filtro de sede es un
+     <select> nativo — una fila de píldoras con las sedes de una
+     universidad grande (el producto admite 40) se sale de la pantalla.
+
+   ⚠️ @media y no @container, como toda esta hoja: `container-type` crea
+   contención y atraparía el cajón del menú (position: fixed) dentro de la
+   columna en vez de dejarlo cubrir la pantalla.
+
+   ♿ Los tres colores de estado se midieron sobre BLANCO (el fondo de la
+   tarjeta) y sobre su propio relleno:
+     verde  #15803d → 4.93 ✓   ámbar #b45309 → 5.02 ✓   rojo #b3261e → 6.51 ✓
+   Y el estado NUNCA se dice solo con color: cada tarjeta lleva su palabra
+   ("Libre", "Próxima", "Ocupada") escrita al lado del número.
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-viva {
+  --viva-libre: #15803d;
+  --viva-libre-soft: rgba(21, 128, 61, 0.09);
+  --viva-proximo: #b45309;
+  --viva-proximo-soft: rgba(180, 83, 9, 0.1);
+  --viva-ocupado: #b3261e;
+  --viva-ocupado-soft: rgba(179, 38, 30, 0.09);
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── La barra: sede, conteos y pulso ─────────────────────────────────── */
+.edu-viva__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-viva__sede {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.edu-viva__sedelabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--edu-text-3);
+}
+
+.edu-viva__sede .edu-input {
+  width: auto;
+  min-width: 170px;
+  max-width: 260px;
+}
+
+.edu-viva__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  margin-right: auto;
+}
+
+.edu-viva__count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--edu-text-2);
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--edu-line);
+  white-space: nowrap;
+}
+
+.edu-viva__count b {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-1);
+}
+
+.edu-viva__count--libre {
+  border-color: rgba(21, 128, 61, 0.4);
+  background: var(--viva-libre-soft);
+}
+
+.edu-viva__count--proximo {
+  border-color: rgba(180, 83, 9, 0.4);
+  background: var(--viva-proximo-soft);
+}
+
+.edu-viva__count--ocupado {
+  border-color: rgba(179, 38, 30, 0.4);
+  background: var(--viva-ocupado-soft);
+}
+
+.edu-viva__count--total {
+  background: var(--edu-surface-2);
+}
+
+/* El pulso: un punto que late mientras el latido llega. Cuando se rompe,
+   se apaga y el texto DICE la hora del último corte — un tablero pegado
+   que parece vivo es peor que uno que avisa. */
+.edu-viva__pulso {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.edu-viva__punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--viva-libre);
+  animation: edu-viva-late 2s ease-in-out infinite;
+}
+
+.edu-viva__pulso--roto {
+  color: var(--edu-amber-700);
+  font-weight: 600;
+}
+
+.edu-viva__pulso--roto .edu-viva__punto {
+  background: var(--edu-amber-700);
+  animation: none;
+}
+
+@keyframes edu-viva-late {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Quien no quiere movimiento no lo tiene. El punto sigue diciendo lo mismo
+   por su color y por el texto de al lado. */
+@media (prefers-reduced-motion: reduce) {
+  .edu-viva__punto {
+    animation: none;
+  }
+}
+
+.edu-viva__nota {
+  margin: 0;
+  font-size: 13px;
+  color: var(--edu-text-2);
+  padding: 9px 12px;
+  border-left: 3px solid var(--edu-400);
+  background: var(--edu-surface-2);
+  border-radius: 0 8px 8px 0;
+}
+
+/* ── La rejilla ──────────────────────────────────────────────────────── */
+/* `auto-fill` y no `auto-fit`: con dos sillones y un monitor de 55" el
+   `auto-fit` los estiraría a media pantalla cada uno. Con `auto-fill` las
+   tarjetas conservan su tamaño y la pared se lee igual con dos que con
+   cuarenta. */
+.edu-viva__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .edu-viva__grid {
+    grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .edu-viva__grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+  }
+}
+
+/* ── La tarjeta ──────────────────────────────────────────────────────── */
+.edu-viva__card {
+  --viva-color: var(--edu-text-3);
+  --viva-soft: var(--edu-surface-2);
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 13px 13px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-top: 4px solid var(--viva-color);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-viva__card--libre {
+  --viva-color: var(--viva-libre);
+  --viva-soft: var(--viva-libre-soft);
+}
+
+.edu-viva__card--proximo {
+  --viva-color: var(--viva-proximo);
+  --viva-soft: var(--viva-proximo-soft);
+}
+
+/* El sillón ocupado se tiñe entero, no solo el borde: es el que hay que
+   distinguir de un vistazo desde el fondo del piso clínico. */
+.edu-viva__card--ocupado {
+  --viva-color: var(--viva-ocupado);
+  --viva-soft: var(--viva-ocupado-soft);
+  background: var(--viva-ocupado-soft);
+}
+
+.edu-viva__cardhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* EL NÚMERO DE LA PARED. Crece con la ventana porque esta pantalla se mira
+   desde lejos; el tope de 76px evita que en un monitor 4K se coma la
+   tarjeta entera. */
+.edu-viva__num {
+  font-size: clamp(30px, 3.4vw, 76px);
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--viva-color);
+}
+
+.edu-viva__estado {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--viva-color);
+}
+
+.edu-viva__sillon {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-viva__campus {
+  font-weight: 400;
+  color: var(--edu-text-3);
+}
+
+.edu-viva__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding-top: 5px;
+  border-top: 1px dashed var(--edu-line);
+}
+
+.edu-viva__paciente {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+/* El paciente de un sillón que no le toca a quien mira: iniciales, en gris
+   y en cursiva, para que se lea como "esto no es un nombre". */
+.edu-viva__paciente--mudo {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--edu-text-3);
+}
+
+.edu-viva__folio {
+  margin: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--edu-text-3);
+}
+
+.edu-viva__meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-viva__esp {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--viva-color);
+  overflow-wrap: anywhere;
+}
+
+.edu-viva__reloj {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.edu-viva__reloj--fuerte {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--viva-color);
+}
+
+.edu-viva__barra {
+  margin-top: 5px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--edu-line);
+  overflow: hidden;
+}
+
+.edu-viva__barra > span {
+  display: block;
+  height: 100%;
+  background: var(--viva-color);
+}
+
+/* ── La leyenda ──────────────────────────────────────────────────────── */
+.edu-viva__leyenda {
+  list-style: none;
+  margin: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--edu-text-2);
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+}
+
+.edu-viva__leyenda li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.edu-viva__bolita {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  transform: translateY(1px);
+}
+
+.edu-viva__bolita--libre {
+  background: var(--viva-libre);
+}
+
+.edu-viva__bolita--proximo {
+  background: var(--viva-proximo);
+}
+
+.edu-viva__bolita--ocupado {
+  background: var(--viva-ocupado);
+}
+
+@media (min-width: 900px) {
+  .edu-viva__leyenda {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+  }
+}
+
+/* Seguro de modo oscuro, igual que el resto de la hoja: hoy .dark no llega
+   a /instituto, pero el dia que el vertical tenga su interruptor estos tres
+   colores tienen que seguir leyendose sobre #19203a. Los de arriba estan
+   medidos sobre BLANCO y ahi darian 2.6. */
+.dark .edu-viva {
+  --viva-libre: #4ade80;
+  --viva-libre-soft: rgba(74, 222, 128, 0.14);
+  --viva-proximo: #fbbf24;
+  --viva-proximo-soft: rgba(251, 191, 36, 0.14);
+  --viva-ocupado: #f87171;
+  --viva-ocupado-soft: rgba(248, 113, 113, 0.14);
+}
+
+.dark .edu-viva__estado {
+  color: #10162a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LA REJILLA DE LA AGENDA — prefijo `edu-ag`
+   (src/components/edu/agenda/*, src/lib/edu/agenda-rejilla.ts)
+
+   ⚠️ NINGÚN nombre de aquí existe ya en esta hoja: la prueba
+   src/lib/edu/__tests__/edu-theme.test.ts revienta si dos bloques de
+   primer nivel se bautizan igual, y esa prueba existe porque ya salió a
+   producción una pantalla torcida por ese motivo.
+
+   ── @container Y NO @media ─────────────────────────────────────────────
+   El resto de esta hoja mide la VENTANA a propósito (el cajón del menú es
+   position:fixed y un contenedor de consulta lo atraparía). La agenda es
+   la excepción y también a propósito: en escritorio el menú es una columna
+   fija de 252 px, así que con la ventana en 1024 a la rejilla le quedan
+   ~770 — medir la ventana pintaría columnas de escritorio en un hueco de
+   tableta. `.edu-ag` puede llevar `container-type` sin peligro porque los
+   tres diálogos de la agenda se montan FUERA de él (ver agenda-screen.tsx):
+   dentro no hay un solo `position: fixed`.
+
+   ── EL ALTO ACOTADO NO ES DECORATIVO ───────────────────────────────────
+   `.edu-ag__scroll` tiene `height: var(--edu-ag-alto)` (lo mide la
+   pantalla). Sin un alto acotado, el `position: sticky; top` de la fila de
+   encabezados no se pega a nada: sticky necesita un contenedor con
+   desplazamiento propio, y una caja que crece con su contenido no lo es.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 🔴 LA AGENDA NO CABE EN 1100 px. `.edu-page` acota todas las pantallas
+   del vertical a 1100 —está bien para un formulario o una lista— pero el
+   piso de una clínica son 32 columnas: con ese tope se ven siete y media y
+   el resto queda detrás de un desplazamiento eterno. Esta pantalla pide el
+   ancho entero. Es un MODIFICADOR de la página, no un cambio de `.edu-page`:
+   ninguna otra pantalla se entera. */
+.edu-ag-page {
+  max-width: none;
+}
+
+.edu-ag {
+  container-type: inline-size;
+  container-name: edu-ag;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ── Barra: el día, el rango, el modo y el zoom ───────────────────────── */
+.edu-ag__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-ag__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.edu-ag__fecha {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  /* es-MX devuelve "lunes 31 de agosto"; en un encabezado se lee mejor con
+     la inicial en mayúscula. */
+  text-transform: capitalize;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edu-ag__modos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── La leyenda de color, que ES el filtro de especialidad ───────────── */
+.edu-ag__leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.edu-ag__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* 34 px: se toca con el pulgar sin ser un botón de formulario. */
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--edu-line);
+  border-radius: 999px;
+  background: var(--edu-surface);
+  color: var(--edu-text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.edu-ag__chip:hover {
+  border-color: var(--edu-line-strong);
+}
+
+/* Encendido: el color de la especialidad como FONDO, con la tinta que
+   `readableTextOn` calculó (negro o blanco según la luminancia — el blanco
+   fijo se perdía sobre los tonos claros de la paleta). */
+.edu-ag__chip--on {
+  background: var(--edu-ag-color, var(--edu-600));
+  border-color: var(--edu-ag-color, var(--edu-600));
+  color: var(--edu-ag-tinta, #ffffff);
+}
+
+/* Sin ninguna cita en el rango: se apaga el CÍRCULO, no el texto. Bajarle
+   la opacidad al nombre lo dejaba por debajo de AA. */
+.edu-ag__chip--vacio .edu-ag__chip-punto {
+  background: transparent;
+  border-color: var(--edu-line-strong);
+}
+
+.edu-ag__chip-punto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--edu-line);
+  background: var(--edu-ag-color, var(--edu-400));
+  flex: none;
+}
+
+.edu-ag__chip--on .edu-ag__chip-punto {
+  border-color: var(--edu-ag-tinta, #ffffff);
+  background: var(--edu-ag-tinta, #ffffff);
+}
+
+.edu-ag__chip-n {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  opacity: 0.85;
+}
+
+/* ── Filtros ──────────────────────────────────────────────────────────── */
+/* En ancho, el desplegable está abierto y su resumen no se pinta: sería un
+   control que no controla nada. En un teléfono es lo que ahorra 110 px de
+   los 800 que hay antes de ver una cita. */
+.edu-ag__filtrocaja {
+  min-width: 0;
+}
+
+.edu-ag__filtrosum {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface);
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--edu-text-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.edu-ag__filtrosum::-webkit-details-marker {
+  display: none;
+}
+
+.edu-ag__filtroson {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--edu-600);
+}
+
+.dark .edu-ag__filtroson {
+  color: var(--edu-300);
+}
+
+.edu-ag__filtrocaja[open] > .edu-ag__filtrosum {
+  margin-bottom: 8px;
+}
+
+.edu-ag__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-ag__filtros > .edu-field {
+  min-width: 130px;
+  flex: 1 1 130px;
+  gap: 3px;
+}
+
+/* Campos más bajos SOLO aquí. Seis desplegables de 42 px más su etiqueta se
+   comen 90 px del alto que la rejilla necesita para caber en una pantalla.
+   Es un descendiente de `.edu-ag__filtros`, no una redeclaración de
+   `.edu-input`: el resto del vertical no se entera. */
+.edu-ag__filtros .edu-input {
+  min-height: 36px;
+  font-size: 13.5px;
+}
+
+.edu-ag__filtros .edu-field__label {
+  font-size: 11.5px;
+}
+
+.edu-ag__buscador {
+  flex: 2 1 200px;
+}
+
+.edu-ag__buscabox {
+  position: relative;
+  display: block;
+}
+
+.edu-ag__buscabox > svg {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--edu-text-3);
+  pointer-events: none;
+}
+
+.edu-ag__buscabox > input {
+  padding-left: 30px;
+}
+
+.edu-ag__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* La tira de chips se lleva el hueco que sobre; el contador y el alta
+   quedan pegados a la derecha, y juntos. */
+.edu-ag__pie > .edu-ag__leyenda {
+  flex: 1 1 auto;
+}
+
+.edu-ag__pieaccion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex: none;
+}
+
+/* El icono y el texto, y nada más: el texto va envuelto en un <span>
+   porque cada hijo de un contenedor flex es un elemento por su cuenta —con
+   los trozos sueltos, la frase salía repartida por el renglón—. */
+.edu-ag__aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+}
+
+.edu-ag__aviso > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ── El selector de un solo sillón (pantalla angosta) ─────────────────── */
+.edu-ag__unosillon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+}
+
+.edu-ag__unosillon-txt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.edu-ag__unosillon-txt small {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--edu-text-3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LA REJILLA
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-ag__scroll {
+  /* Fallbacks del SSR: la pantalla los pisa en línea en cuanto mide. */
+  --edu-ag-slot-h: 30px;
+  --edu-ag-alto: 520px;
+  --edu-ag-eje-w: 54px;
+  --edu-ag-col-w: 138px;
+
+  height: var(--edu-ag-alto);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* UN SOLO contenedor de desplazamiento para los dos ejes: es lo que
+   permite que las horas se queden pegadas a la izquierda (sticky left) al
+   desplazarse entre 32 sillones. Con el alto y el ancho en contenedores
+   distintos, el sticky del eje se resuelve contra el de dentro —que nunca
+   se mueve en horizontal— y las horas se van con las columnas.
+
+   🔴 Y DOS FILAS FLEX, no una rejilla CSS: en `display: grid` el bloque
+   contenedor de un hijo es su ÁREA de rejilla, así que un `sticky left: 0`
+   en la primera columna no tiene sitio a donde correrse y el eje se va con
+   las columnas igual. El bloque contenedor de un hijo de una fila FLEX es
+   la fila, que mide todo el ancho del contenido — y ahí sí se queda. */
+.edu-ag__grid {
+  display: flex;
+  flex-direction: column;
+  /* `width` es la preferencia y `min-width` el suelo: con pocas columnas la
+     rejilla llena el ancho, y con muchas crece y aparece el desplazamiento
+     horizontal en vez de columnas de 11 px. */
+  width: 100%;
+  min-width: min-content;
+}
+
+.edu-ag__fila {
+  display: flex;
+  min-width: min-content;
+}
+
+/* La fila de encabezados se queda arriba mientras el cuerpo se desplaza.
+   El fondo es obligatorio: sin él, las tarjetas se leen por debajo. */
+.edu-ag__fila--cab {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--edu-surface);
+}
+
+.edu-ag__esquina {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  flex: 0 0 var(--edu-ag-eje-w);
+  width: var(--edu-ag-eje-w);
+  height: 46px;
+  background: var(--edu-surface);
+  border-bottom: 1px solid var(--edu-line);
+  border-right: 1px solid var(--edu-line);
+}
+
+.edu-ag__cabecera {
+  display: flex;
+  flex: 1 1 var(--edu-ag-col-w);
+  min-width: var(--edu-ag-col-w);
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  height: 46px;
+  padding: 4px 8px;
+  background: var(--edu-surface);
+  border-bottom: 1px solid var(--edu-line);
+  border-right: 1px solid var(--edu-line);
+}
+
+.edu-ag__cabecera:last-child {
+  border-right: none;
+}
+
+.edu-ag__cabecera-tit {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edu-ag__cabecera-sub {
+  font-size: 10.5px;
+  color: var(--edu-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── El eje de horas ─────────────────────────────────────────────────── */
+.edu-ag__ejewrap {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: 0 0 var(--edu-ag-eje-w);
+  width: var(--edu-ag-eje-w);
+  background: var(--edu-surface);
+  border-right: 1px solid var(--edu-line);
+}
+
+.edu-ag__eje {
+  position: relative;
+  height: 100%;
+  user-select: none;
+}
+
+/* La hora en punto en --edu-text-2 (≥7:1 sobre el blanco del panel). El
+   gris claro de 10 px que usaba la agenda del dental antes de su ola de
+   legibilidad daba ~3.9:1 y no pasaba AA. */
+.edu-ag__hora {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--edu-text-2);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* La media hora es apoyo: solo aparece cuando el zoom le da aire de verdad
+   (≥28 px entre rótulos, lo decide showHalfHourLabels). */
+.edu-ag__media {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 550;
+  color: var(--edu-text-3);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ── Una columna ─────────────────────────────────────────────────────── */
+.edu-ag__col {
+  position: relative;
+  flex: 1 1 var(--edu-ag-col-w);
+  min-width: var(--edu-ag-col-w);
+  border-right: 1px solid var(--edu-line);
+  /* Los renglones de 15 minutos se pintan con el fondo: 32 columnas por 48
+     renglones serían 1 536 nodos en el DOM sin ganar nada. */
+  background-image: linear-gradient(
+    to bottom,
+    rgba(20, 26, 43, 0.07) 1px,
+    transparent 1px
+  );
+  background-size: 100% var(--edu-ag-slot-h);
+}
+
+.dark .edu-ag__col {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(226, 233, 246, 0.09) 1px,
+    transparent 1px
+  );
+}
+
+.edu-ag__col:last-child {
+  border-right: none;
+}
+
+.edu-ag__col:hover {
+  background-color: var(--edu-hover);
+}
+
+/* Se puede soltar aquí / aquí ya hay algo. Verde y rojo, pero con el
+   contorno además del fondo: el color solo no se lee con daltonismo. */
+.edu-ag__col--cabe {
+  background-color: rgba(21, 128, 61, 0.09);
+  outline: 2px solid var(--edu-ok);
+  outline-offset: -2px;
+}
+
+.edu-ag__col--choca {
+  background-color: var(--edu-danger-soft);
+  outline: 2px dashed var(--edu-danger);
+  outline-offset: -2px;
+  cursor: not-allowed;
+}
+
+/* La banda de la hora en punto: más marcada que el renglón de 15 minutos. */
+.edu-ag__banda {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  border-top: 1px solid var(--edu-line);
+}
+
+/* ── Una cita ────────────────────────────────────────────────────────── */
+/* CARRILES: cuando dos citas se enciman, cada una toma
+   `100% / carriles` de ancho y se corre `carril` posiciones. Sin encimarse,
+   carril = 0 y carriles = 1, o sea el ancho entero de la columna. */
+.edu-ag__cita {
+  position: absolute;
+  left: calc(var(--edu-ag-carril, 0) * (100% / var(--edu-ag-carriles, 1)) + 2px);
+  width: calc((100% / var(--edu-ag-carriles, 1)) - 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 5px;
+  text-align: left;
+  font: inherit;
+  color: var(--edu-text-1);
+  /* El color de la ESPECIALIDAD como superficie, mezclado con el fondo del
+     panel para que el texto siga encima con contraste en los dos temas. */
+  background: color-mix(in srgb, var(--edu-ag-color, var(--edu-500)) 20%, var(--edu-surface));
+  border: 1px solid color-mix(in srgb, var(--edu-ag-color, var(--edu-500)) 45%, transparent);
+  border-left: 4px solid var(--edu-ag-color, var(--edu-500));
+  border-radius: 7px;
+  box-shadow: var(--edu-shadow-1);
+  overflow: hidden;
+  cursor: grab;
+  z-index: 1;
+  container-type: inline-size;
+}
+
+.edu-ag__cita:hover {
+  box-shadow: var(--edu-shadow-2);
+  z-index: 3;
+}
+
+.edu-ag__cita--arrastrando {
+  cursor: grabbing;
+  z-index: 6;
+  box-shadow: var(--edu-shadow-3);
+  opacity: 0.92;
+}
+
+/* El TIPO se distingue sin robarle la superficie a la especialidad: el
+   tamizaje (lo que ABRE el caso) lleva el borde en ámbar punteado y el
+   control, punteado suave. Y los dos lo dicen además por escrito. */
+.edu-ag__cita--tamizaje {
+  border-top-color: var(--edu-amber-700);
+  border-right-color: var(--edu-amber-700);
+  border-bottom-color: var(--edu-amber-700);
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+.edu-ag__cita--control {
+  border-style: dotted;
+  border-left-style: solid;
+}
+
+/* Cancelada y "no llegó": la superficie deja de ser de la especialidad
+   —el ojo tiene que poder descartarlas— y el punto de estado dice cuál de
+   las dos es. Siguen en pantalla porque ese hueco se liberó, y eso es
+   información. */
+.edu-ag__cita--cancelada,
+.edu-ag__cita--falto {
+  background: var(--edu-surface-2);
+  border-color: var(--edu-line);
+  border-left-color: var(--edu-line-strong);
+  opacity: 0.8;
+}
+
+.edu-ag__cita--cancelada .edu-ag__cita-nombre {
+  text-decoration: line-through;
+  color: var(--edu-text-3);
+}
+
+.edu-ag__cita--terminada {
+  border-left-color: var(--edu-ok);
+}
+
+.edu-ag__cita-fila {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.edu-ag__cita-hora {
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.edu-ag__cita-nombre {
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.edu-ag__cita-meta {
+  font-size: 10.5px;
+  color: var(--edu-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.edu-ag__cita-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--edu-ag-color, var(--edu-500));
+  color: var(--edu-ag-tinta, #ffffff);
+  border: 1px solid var(--edu-line);
+  font-size: 8px;
+  font-weight: 800;
+  flex: none;
+}
+
+/* El ESTADO es un punto, no un color de fondo: la superficie ya la tiene
+   la especialidad y dos señales encima de la misma no se leen. */
+.edu-ag__cita-punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: auto;
+  flex: none;
+  background: var(--edu-400);
+  box-shadow: 0 0 0 1.5px var(--edu-surface);
+}
+
+.edu-ag__cita--agendada .edu-ag__cita-punto { background: var(--edu-400); }
+.edu-ag__cita--llego .edu-ag__cita-punto { background: var(--edu-600); }
+.edu-ag__cita--sillon .edu-ag__cita-punto { background: var(--edu-amber-700); }
+.edu-ag__cita--curso .edu-ag__cita-punto {
+  background: var(--edu-amber-700);
+  box-shadow: 0 0 0 1.5px var(--edu-surface), 0 0 0 3px rgba(180, 83, 9, 0.35);
+}
+.edu-ag__cita--terminada .edu-ag__cita-punto { background: var(--edu-ok); }
+.edu-ag__cita--cancelada .edu-ag__cita-punto { background: var(--edu-text-3); }
+.edu-ag__cita--falto .edu-ag__cita-punto { background: var(--edu-danger); }
+
+/* Carril angosto (dos o tres citas encimadas, o la semana en una tableta):
+   el NOMBRE gana. El color de la superficie sigue diciendo la especialidad.
+   @container sobre la propia tarjeta: es su ancho real el que manda, no el
+   de la ventana. */
+@container (max-width: 74px) {
+  .edu-ag__cita-chip,
+  .edu-ag__cita-punto {
+    display: none;
+  }
+}
+
+@container (max-width: 52px) {
+  .edu-ag__cita-hora {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LA LISTA
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-ag__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.edu-ag__listadia {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edu-ag__listatit {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: capitalize;
+  color: var(--edu-text-2);
+}
+
+.edu-ag__listacount {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--edu-text-3);
+  text-transform: none;
+}
+
+.edu-ag__renglon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-left: 4px solid var(--edu-ag-color, var(--edu-400));
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.edu-ag__renglon:hover {
+  border-color: var(--edu-line-strong);
+  background: var(--edu-hover);
+}
+
+.edu-ag__renglon--cancelada,
+.edu-ag__renglon--falto {
+  background: var(--edu-surface-2);
+  border-left-color: var(--edu-line-strong);
+  opacity: 0.82;
+}
+
+.edu-ag__renglon--cancelada .edu-ag__renglon-nombre {
+  text-decoration: line-through;
+  color: var(--edu-text-3);
+}
+
+.edu-ag__renglon-hora {
+  display: flex;
+  flex-direction: column;
+  font-size: 13.5px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+  min-width: 46px;
+}
+
+.edu-ag__renglon-hora small {
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--edu-text-3);
+}
+
+.edu-ag__renglon-cuerpo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.edu-ag__renglon-nombre {
+  font-size: 14px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edu-ag__renglon-meta {
+  font-size: 12px;
+  color: var(--edu-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edu-ag__renglon-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+  flex: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ANCHOS — se mide el CONTENEDOR de la agenda, no la ventana
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Teléfono (hasta 640 px de contenedor): la rejilla pinta un sillón, así
+   que la columna se lleva todo el ancho y el eje se estrecha. Los filtros
+   pasan a dos por renglón — seis desplegables en una columna son una
+   pantalla entera de desplazamiento antes de ver una sola cita. */
+@container edu-ag (max-width: 640px) {
+  .edu-ag__scroll {
+    --edu-ag-eje-w: 46px;
+    --edu-ag-col-w: 0px;
+  }
+
+  .edu-ag__filtrosum {
+    display: flex;
+  }
+
+  /* La tira de especialidades en UN renglón que se desliza. Envolviéndose,
+     cinco chips ocupan tres renglones (70 px) de una pantalla en la que la
+     rejilla ya va justa. Se deslizan con el pulgar, que es el gesto que
+     esa tira pide. */
+  .edu-ag__leyenda {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .edu-ag__leyenda::-webkit-scrollbar {
+    display: none;
+  }
+
+  .edu-ag__chip {
+    flex: none;
+  }
+
+  .edu-ag__pie > .edu-ag__leyenda {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .edu-ag__barra {
+    padding: 8px 10px;
+  }
+
+  .edu-ag__filtros > .edu-field {
+    flex: 1 1 calc(50% - 6px);
+    min-width: calc(50% - 6px);
+  }
+
+  .edu-ag__buscador {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  .edu-ag__modos {
+    width: 100%;
+  }
+
+  .edu-ag__renglon {
+    flex-wrap: wrap;
+  }
+
+  .edu-ag__renglon-tags {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+/* Tableta: caben más columnas, pero angostas. */
+@container edu-ag (min-width: 641px) and (max-width: 1023px) {
+  .edu-ag__scroll {
+    --edu-ag-col-w: 124px;
+  }
+}
+
+/* Escritorio ancho: la columna respira. */
+@container edu-ag (min-width: 1280px) {
+  .edu-ag__scroll {
+    --edu-ag-col-w: 152px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edu-ag__cita {
+    transition: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL VISOR DE ESTUDIOS (src/components/edu/estudios/visor-modal.tsx)
+
+   Los tres visores son del DENTAL y se importan tal cual; lo de aquí es
+   solo la hoja que los sostiene y el reparto de la rejilla. Prefijo propio
+   `edu-vsr` — el tema es UNA hoja de seis mil renglones y dos olas que
+   bautizan igual dos cosas distintas no dan error, solo dejan la pantalla
+   del otro dueño torcida (hay prueba que lo vigila: edu-theme.test.ts).
+
+   🔴 EL ALTO DE LA HOJA ES `dvh`, NO `vh`. En el teléfono la barra del
+   navegador aparece y desaparece: con `vh` la leyenda del pie se queda por
+   debajo del borde justo cuando hace falta leerla. Se deja `vh` delante
+   como respaldo para navegadores sin `dvh`.
+
+   🔴 `@media` y NUNCA `@container`: la hoja es `position: fixed` y
+   `container-type` CREA contención — un contenedor de consulta encima la
+   atraparía dentro de la columna del panel en vez de cubrir la pantalla.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-vsr {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: rgba(18, 26, 46, 0.6);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.edu-vsr__card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--edu-surface);
+  /* El color se escribe COMPLETO: una hoja blanca que hereda un `color`
+     claro de más arriba es una hoja en blanco, y eso ya pasó en este
+     repo. */
+  color: var(--edu-text-1);
+  box-shadow: var(--edu-shadow-3);
+  overflow: hidden;
+}
+
+@media (min-width: 720px) {
+  .edu-vsr {
+    align-items: center;
+    padding: 12px;
+  }
+
+  .edu-vsr__card {
+    width: min(1600px, 100%);
+    height: min(96dvh, 100%);
+    border-radius: 16px;
+  }
+}
+
+.edu-vsr__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
+  border-bottom: 1px solid var(--edu-line);
+}
+
+.edu-vsr__titulos {
+  flex: 1;
+  min-width: 0;
+}
+
+.edu-vsr__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edu-vsr__sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+  /* En un teléfono el subtítulo se partía en tres renglones y empujaba la
+     cabecera hacia abajo, quitándole alto al visor. Un renglón y puntos
+     suspensivos: es un dato de apoyo, no el nombre del estudio. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* El cuerpo desplaza; la rejilla se dimensiona para que NO haga falta.
+   `scrollbar-gutter: stable` no es cosmético: sin él, aparecer o
+   desaparecer la barra de desplazamiento cambia el ancho útil, la rejilla
+   se vuelve a medir y podría oscilar entre dos tamaños. */
+.edu-vsr__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px;
+  padding-left: max(10px, env(safe-area-inset-left));
+  padding-right: max(10px, env(safe-area-inset-right));
+}
+
+.edu-vsr__lienzo {
+  min-width: 0;
+}
+
+.edu-vsr__cargando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 260px;
+  color: var(--edu-text-2);
+  font-size: 13px;
+}
+
+/* El único movimiento de la hoja, y respeta la preferencia de menos
+   movimiento. */
+.edu-girando {
+  animation: edu-girar 0.9s linear infinite;
+}
+
+@keyframes edu-girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edu-girando {
+    animation: none;
+  }
+}
+
+/* ── LA REJILLA 2×2 CABE EN LA PRIMERA PANTALLA ────────────────────────
+   Es lo único en lo que el instituto se aparta del dental. Allí los cuatro
+   paneles miden 420 px FIJOS: en un 1080p suman 910 px y siempre hay que
+   bajar para ver el cuarto. Aquí las dos filas miden `--edu-vsr-fila`, que
+   `useAltoDeFila` (visor-modal.tsx) calcula midiendo el hueco REAL que
+   queda bajo la barra de control — esa barra se parte en dos o tres
+   renglones según el ancho, así que un número fijo no sirve.
+
+   Los `!important` son inevitables y son solo DOS: `MprPane` y
+   `Dicom3DVolume` llevan su alto EN LÍNEA (`style={{ height: 420 }}`), y a
+   un estilo en línea no se le gana de otra forma. Todo lo demás se
+   consigue con especificidad normal.
+
+   Va dentro del mismo @media que el `lg:grid-cols-2` de Tailwind: por
+   debajo de 1024 px la rejilla del dental es de UNA columna y son cuatro
+   paneles apilados, donde no hay 2×2 que cuadrar. Ahí se desplaza, como en
+   el dental — encoger los cortes hasta que quepan cuatro sería dejarlos
+   ilegibles, y una radiografía ilegible no es una radiografía. */
+@media (min-width: 1024px) {
+  .edu-vsr__lienzo--cbct .grid {
+    grid-template-rows: repeat(2, var(--edu-vsr-fila, auto));
+    align-items: stretch;
+  }
+
+  /* Sin esto manda el `self-start` del dental, que deja cada tarjeta en
+     fit-content y el reparto de filas no sirve de nada. */
+  .edu-vsr__lienzo--cbct .grid > div {
+    align-self: stretch;
+    min-height: 0;
+  }
+
+  /* Un plano MPR: la caja negra se queda con lo que sobra bajo su barra. */
+  .edu-vsr__lienzo--cbct .grid > div > .select-none.overflow-hidden {
+    height: auto !important;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  /* El volumen 3D: el lienzo se queda con lo que sobra entre su cabecera y
+     sus controles (sólido/MIP, densidad, umbral). */
+  .edu-vsr__lienzo--cbct .grid > div > .p-2 {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .edu-vsr__lienzo--cbct .grid > div > .p-2 > div {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .edu-vsr__lienzo--cbct .grid > div > .p-2 > div > div:first-child {
+    height: auto !important;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+/* ── EL VISOR DICOM 2D DEL DENTAL, EN UNA HOJA CLARA ───────────────────
+   `DicomViewer2D` está dibujado para una superficie OSCURA: sus controles
+   son `text-white/70` sobre `bg-white/5`. El panel del instituto es claro,
+   así que se le pone debajo la superficie para la que fue dibujado en vez
+   de repintarle treinta clases una por una (repintarlas sería reescribir
+   un archivo del dental desde fuera, y la próxima clase que añada se
+   quedaría sin repintar).
+
+   Y se le OCULTA su panel de notas. Ese panel guarda con
+   `PATCH /api/patients/**`, que resuelve contra las tablas del dental: con
+   un id del instituto contesta 404 SIEMPRE. Un botón "Guardar" que nunca
+   guarda es peor que no tenerlo. Las notas del estudio se ven en la ficha
+   de abajo, y en el CBCT se editan dentro del propio visor contra la ruta
+   del instituto.
+   ⚠️ El ancla es la clase `lg:w-72` con la que el dental marca esa
+   columna. Si el dental la cambia, el panel volvería a aparecer sin que
+   nada falle — por eso hay una prueba (edu-visor.test.ts) que lee
+   DicomViewer2D.tsx y se pone roja el día que deje de llevarla. */
+.edu-vsr__lienzo--dicom {
+  background: #0b0d11;
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.edu-vsr__lienzo--dicom .lg\:w-72 {
+  display: none;
 }

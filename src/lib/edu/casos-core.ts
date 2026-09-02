@@ -301,6 +301,49 @@ export interface EduCasosPanelPage {
   truncated: boolean;
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// EL TOPE DEL EXPORT NO ES EL DE LA PANTALLA
+//
+// 🔴 UN CSV Y UNA PANTALLA NO SIRVEN PARA LO MISMO, así que no pueden
+// compartir techo. Una pantalla se lee: trescientos renglones ya son más
+// de los que nadie recorre, y el aviso "acota con los filtros" es un
+// consejo Útil. Un export existe justamente para LLEVARSE TODO — una
+// acreditación pide los casos cerrados de la generación entera — y ahí
+// "acota con los filtros" significa "arma el reporte a mano en cinco
+// trozos y pégalos en Excel", que es peor que no tener export.
+//
+// Con el tope de pantalla, marcar la casilla de "incluir cerrados" en un
+// instituto de 400 casos dejaba a la escuela SIN export: 413 y a mano.
+// Medido con el instituto de demo.
+//
+// ⚠️ LO QUE NO CAMBIA es la regla: por encima de ESTE tope el 413 se
+// queda. Un CSV silenciosamente incompleto es un reporte falso, y eso no
+// depende de dónde esté el número.
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * Cuántos casos caben en UN export.
+ *
+ * Diez mil no es un número redondo por casualidad: es el orden de
+ * magnitud del archivo histórico completo de una escuela mediana (el
+ * instituto de demo, con dos generaciones y 18 meses, lleva 400), y a la
+ * vez es un CSV de unos dos megas que Excel abre. Por encima de eso el
+ * problema deja de ser el tope y pasa a ser que nadie va a leer ese
+ * archivo: ahí el 413 con su mensaje es la respuesta correcta.
+ */
+export const EDU_CASOS_EXPORT_MAX_ROWS = 10000;
+
+/**
+ * De cuántos en cuántos se lee ese export.
+ *
+ * 🔴 SE LEE EN LOTES Y NO DE UN `take: 10001` a propósito. Cada fila
+ * arrastra paciente, alumno, especialidad, docente y sus autorizaciones
+ * pendientes; diez mil de golpe es un pico de memoria en el servidor por
+ * una descarga que casi nunca llega a mil. En lotes, el caso normal paga
+ * un solo viaje y el caso extremo paga varios pequeños.
+ */
+export const EDU_CASOS_EXPORT_BATCH = 500;
+
 // ═══════════════════════════════════════════════════════════════════════
 // 4 · EL CSV
 // ═══════════════════════════════════════════════════════════════════════

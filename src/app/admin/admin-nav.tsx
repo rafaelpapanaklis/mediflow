@@ -9,6 +9,7 @@ import {
   LifeBuoy, FlaskConical, Users, KeyRound, ScrollText, LineChart, Newspaper, UserRound, Globe,
   Scissors,
   Landmark,
+  GraduationCap,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
@@ -34,6 +35,11 @@ const NAV_ITEMS: NavItem[] = [
   // (/admin/inmobiliarias/planes, /admin/inmobiliarias/[id]) cuelgan de esta
   // ruta, no como hermanas, para que isActive() encienda un solo item.
   { href: "/admin/inmobiliarias", label: "Inmobiliarias", icon: Landmark,      section: "main"   },
+  // Vertical INSTITUCIONAL (escuelas de especialidades odontológicas). Mismo
+  // criterio que barberías e inmobiliarias: sus subsecciones cuelgan de esta
+  // ruta, no como hermanas. Es el ÚNICO sitio donde se ve —y se edita— la
+  // cuota de almacenamiento que cada escuela tiene por contrato.
+  { href: "/admin/institutos",   label: "Institutos",   icon: GraduationCap,   section: "main"   },
   { href: "/admin/affiliates",   label: "Afiliados",    icon: Handshake,       section: "main"   },
   // Ruta HERMANA de /admin/affiliates, no hija, a propósito: isActive() empareja
   // por segmento, así que "/admin/affiliates/paginas" encendería también

@@ -12368,6 +12368,37 @@ model EduInstitution {
   contractStartsAt DateTime?
   contractEndsAt   DateTime?
 
+  /// LA CUOTA DE ALMACENAMIENTO del instituto, en bytes. Otra CLÁUSULA del
+  /// contrato, y por eso vive aquí al lado de las fechas: la dirección la
+  /// VE en su panel y no la edita con ningún permiso. Se cambia desde el
+  /// /admin de DaleControl o por SQL — si la escuela pudiera subírsela
+  /// sola, el cobro por TB extra no existiría.
+  ///
+  /// El default son 5 TB (5 * 1024^4 = 5 497 558 138 880), que es lo que
+  /// incluye un contrato institucional; el TB extra se factura aparte
+  /// (el precio vive en UNA constante: src/lib/edu/almacenamiento-core.ts).
+  ///
+  /// 🔴 BigInt, no Int: 5 TB desborda un INTEGER de Postgres (tope
+  /// 2 147 483 647) por seis órdenes de magnitud. Es la misma razón por la
+  /// que EduStudy.sizeBytes es BigInt.
+  ///
+  /// 🔴 LA CUOTA ES POR INSTITUTO, NO POR SEDE. Tres sedes con 5 TB son
+  /// 5 TB entre las tres, no 15: las sedes son una división DENTRO de la
+  /// escuela y comparten la bolsa. Por eso la columna vive aquí y no en
+  /// EduCampus, y el consumo se suma por `institutionId` (EduStudy no
+  /// tiene campusId, así que la suma ya pool los campus sola).
+  ///
+  /// El consumo NO se guarda en ninguna columna: se CUENTA sumando
+  /// EduStudy.sizeBytes cada vez que alguien pregunta, igual que el cupo
+  /// de IA de la Ola 8. Un contador guardado se desincroniza el día que
+  /// una escritura falle a la mitad, y entonces o se le bloquea la subida
+  /// a una escuela que sí tenía espacio, o se le regala el que ya usó.
+  ///
+  /// Columna real en sql/edu-cuota-storage.sql (ADD COLUMN IF NOT EXISTS).
+  /// APLICARLO ANTES del deploy: si Prisma la lee sin que exista, TODA
+  /// lectura de edu_institutions revienta — y de ahí cuelga la sesión.
+  storageQuotaBytes BigInt @default(5497558138880)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   users        EduUser[]

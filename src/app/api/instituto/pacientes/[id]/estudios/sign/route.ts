@@ -21,7 +21,10 @@ export const dynamic = "force-dynamic";
  * Lo que se valida (todo en el servidor, nada se cree del cliente):
  *   · sesión + permiso + ALCANCE clínico del paciente
  *   · extensión dentro de la lista blanca
- *   · tamaño DECLARADO <= 2 GB
+ *   · tamaño DECLARADO <= 2 GB (el tope POR ARCHIVO)
+ *   · que quepa en la CUOTA DE ALMACENAMIENTO del instituto — si no cabe,
+ *     se rechaza con 507 y un mensaje que dice cuánto queda y cuánto pesa
+ *     esto. Nunca un 413 mudo: quien sube tiene al paciente en el sillón.
  *   · el PATH lo compone el servidor con el institutionId de la SESIÓN
  *
  * Lo que NO se puede validar aquí: la firma real del contenido, porque los

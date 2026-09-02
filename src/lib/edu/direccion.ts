@@ -40,6 +40,7 @@ import {
   EDU_MAX_CHAIRS,
   eduCleanId,
   eduDayRange,
+  eduFormatDayLong,
   eduFormatTime,
   eduSafeTimeZone,
   eduTodayISO,
@@ -65,8 +66,10 @@ import {
   eduChargeScopeWhere,
   eduPatientScopeWhere,
   eduPaymentScopeWhere,
+  eduPuedeVerLaClinicaEntera,
   eduStudentScopeWhere,
   eduVisibility,
+  EDU_CLINICA_ENTERA_NONE_DETAIL,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
 import { eduCampusLabel, eduWithCampus, type EduCampusScope } from "@/lib/edu/campus-core";
@@ -80,15 +83,20 @@ import {
   EDU_DIR_MAX_FILAS,
   EDU_DIR_TOP_ALUMNOS,
   EDU_DIR_FIRMA_VIEJA_MIN,
+  eduDirArmarSerie,
   eduDirCapacidadMinutos,
+  eduDirDiaDe,
   eduDirEsperaLabel,
   eduDirEstadoAgregado,
   eduDirMinutosDesde,
   eduDirOcupacion,
+  eduDirPuntosPorDia,
+  eduDirSemaforoDeFirmas,
   eduDirSillonEstado,
   eduDirVariacion,
   eduDirVentana,
   eduDirWeekdayCounts,
+  parseEduDirInicioPeriodo,
   type EduDirAhora,
   type EduDirAlumnoRow,
   type EduDirCifra,
@@ -98,6 +106,8 @@ import {
   type EduDirDocenteVivo,
   type EduDirEspecialidadRow,
   type EduDirFiltrosCrudos,
+  type EduDirInicio,
+  type EduDirInicioAcceso,
   type EduDirPanel,
   type EduDirRecepcionFila,
   type EduDirSillonUso,
@@ -176,11 +186,13 @@ function eduDirAlcance(ctx: EduClinicaContext & { timeZone: string }, now: Date)
   const sCas = eduVisibility(ctx, "cases");
   const sCob = eduVisibility(ctx, "charges");
 
-  if (sPac.kind !== "all" || sCit.kind !== "all" || sCas.kind !== "all" || sCob.kind !== "all") {
-    throw new EduPadronError(
-      "Este tablero es de la dirección del instituto: enseña la clínica ENTERA, así que solo tiene sentido para quien la ve entera. Tu cuenta ve una parte, y una parte presentada como el total sería un dato falso.",
-      403,
-    );
+  // 🔴 LA NEGACIÓN LA DECIDE visibility.ts, NO ESTE ARCHIVO. Desde que el
+  // Inicio de dirección pinta totales (sus tres gráficas), la misma regla
+  // hace falta en dos sitios, y escribirla dos veces es cómo se llega a que
+  // una de las dos pantallas se lo permita a un rol nuevo. El motivo del
+  // 403 también sale de allí, para que las dos digan lo mismo.
+  if (!eduPuedeVerLaClinicaEntera(ctx)) {
+    throw new EduPadronError(EDU_CLINICA_ENTERA_NONE_DETAIL, 403);
   }
 
   // 🔴 Ola 11 · LA SEDE, y aquí NO niega: RECORTA. Es lo contrario del
@@ -1156,6 +1168,309 @@ export async function getEduDireccionPanel(
         .slice()
         .sort((a, b) => (a.ocupacion ?? 2) - (b.ocupacion ?? 2) || a.number - b.number),
     },
+    avisos,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 2-BIS · EL INICIO DE LA DIRECCIÓN: TRES SERIES POR DÍA
+//
+// 🔴 ES EL MISMO TABLERO, PARTIDO POR DÍA. Vive en este archivo y no en
+// uno nuevo porque las tres gráficas contestan preguntas que las tarjetas
+// de arriba ya contestan: pacientes atendidos y dinero cobrado son
+// literalmente dos de las cuatro. Un módulo aparte con su propio `where`
+// habría sido un segundo sitio donde decidir qué es "cobrado", y el día
+// que los dos discrepen —y discrepan— la dirección deja de creerle a los
+// dos.
+//
+// Lo que se comparte, y no por comodidad:
+//   · el ALCANCE  → eduDirAlcance(), que NIEGA a quien no ve la clínica
+//     entera (la regla vive en visibility.ts) y recorta por sede;
+//   · la VENTANA  → eduDirVentana(), con su periodo anterior pegado por la
+//     izquierda y del mismo largo;
+//   · los TOPES   → EDU_DIR_MAX_CITAS y EDU_DIR_MAX_FILAS, con el mismo
+//     aviso cuando se alcanzan;
+//   · la VARIACIÓN→ eduDirVariacion(), que NO inventa un porcentaje
+//     cuando el periodo anterior fue cero.
+//
+// 🔴 Y LO QUE NO SE COMPARTE, DICHO AQUÍ PARA QUE NO SE DESCUBRA TARDE:
+//
+//   1. El Inicio NO filtra por especialidad. Es la portada de la escuela
+//      entera; el desglose por especialidad es una herramienta de análisis
+//      y vive en /instituto/direccion, con su exportación al lado. Meter
+//      aquí un segundo selector sería pedirle a quien acaba de entrar que
+//      configure algo antes de leer nada.
+//   2. Las AUTORIZACIONES no se recortan por sede, y la pantalla lo dice.
+//      Una autorización cuelga de un CASO, y en la Ola 11 lo académico
+//      —alumnos, casos, pacientes— NO se divide por campus: un alumno rota
+//      entre sedes y su expediente es uno solo. Derivarle una sede por el
+//      sillón de alguna de sus citas sería inventarla (un caso puede tener
+//      citas en dos edificios). Es la misma decisión que ya toma la
+//      tarjeta "esperando firma" del tablero de Dirección.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Los estados de una cita que ocupan la agenda de hoy. */
+const CITAS_DE_HOY_STATUSES = EDU_BUSY_STATUSES;
+
+export async function getEduDireccionInicio(
+  ctx: EduDirContext,
+  filtros: EduDirFiltrosCrudos,
+  now: Date = new Date(),
+): Promise<EduDirInicio> {
+  // 🔴 PRIMERA LÍNEA Y NO LA ÚLTIMA: esto es lo que impide que un DOCENTE,
+  // un ALUMNO o CAJA que teclee /instituto/inicio reciba el dinero de la
+  // escuela. Lanza EduPadronError 403 con su motivo.
+  const alcance = eduDirAlcance(ctx, now);
+  const institutionId = alcance.institutionId;
+  const tz = alcance.timeZone;
+
+  const periodo = parseEduDirInicioPeriodo(filtros?.periodo);
+  const ventana = eduDirVentana({ periodo }, tz, now);
+  const avisos: string[] = [];
+  if (ventana.aviso) avisos.push(ventana.aviso);
+
+  const enPeriodo = { gte: ventana.from, lt: ventana.to };
+  const enPrevio = { gte: ventana.prevFrom, lt: ventana.prevTo };
+  const hoyISO = eduTodayISO(tz, now);
+  const diaHoy = eduDayRange(hoyISO, tz, 1);
+
+  // ── Grupo 1 · las tres series y sus periodos anteriores ──────────────
+  // Seis promesas (el tope del repo es siete). Las de "anterior" traen lo
+  // MÍNIMO para un solo número: un count o un groupBy, nunca las filas.
+  const [citas, citasPrev, pagos, pagosPrev, firmadas, firmadasPrev] = await Promise.all([
+    // 🔴 La ventana se aplica sobre `startsAt`, igual que en el tablero,
+    // y el día de la barra sale de ESA MISMA columna. Repartir por
+    // `completedAt` metería en la gráfica una cita que empezó dentro del
+    // periodo y se cerró fuera, o al revés — y entonces la suma de las
+    // barras no sería el total de arriba.
+    prisma.eduAppointment.findMany({
+      where: { ...alcance.citas(), status: "COMPLETED", startsAt: enPeriodo },
+      take: EDU_DIR_MAX_CITAS + 1,
+      select: { patientId: true, startsAt: true },
+    }),
+    prisma.eduAppointment.findMany({
+      where: { ...alcance.citas(), status: "COMPLETED", startsAt: enPrevio },
+      take: EDU_DIR_MAX_CITAS + 1,
+      // Del periodo anterior solo hace falta CUÁNTAS PERSONAS distintas.
+      select: { patientId: true },
+    }),
+    // El dinero se trae por filas —y no con el `groupBy` del tablero—
+    // porque aquí hay que repartirlo por día, y Postgres no puede agrupar
+    // por "día en la zona del instituto" sin SQL crudo; y el SQL crudo se
+    // saltaría los `where` de visibility.ts, que es justo lo que no se
+    // hace en este vertical. Con el mismo tope que los cobros.
+    prisma.eduPayment.findMany({
+      where: { ...alcance.pagos, paidAt: enPeriodo, ...pagoCharge(alcance, null) },
+      take: EDU_DIR_MAX_FILAS + 1,
+      select: { paidAt: true, amountCents: true, isRefund: true },
+    }),
+    // El anterior sí se suma en Postgres: es UN número y no se pinta.
+    prisma.eduPayment.groupBy({
+      by: ["isRefund"],
+      where: { ...alcance.pagos, paidAt: enPrevio, ...pagoCharge(alcance, null) },
+      _sum: { amountCents: true },
+    }),
+    // 🔴 AUTORIZACIONES FIRMADAS, por la fecha de la DECISIÓN. `status`
+    // APPROVED y no "tiene firma": una que caducó (EXPIRED, el contenido
+    // cambió después de firmarse) ya no autoriza nada, y contarla diría
+    // que ese tratamiento sigue autorizado cuando no lo está.
+    prisma.eduCaseApproval.findMany({
+      where: { institutionId, status: "APPROVED", decidedAt: enPeriodo },
+      take: EDU_DIR_MAX_FILAS + 1,
+      select: { decidedAt: true },
+    }),
+    prisma.eduCaseApproval.count({
+      where: { institutionId, status: "APPROVED", decidedAt: enPrevio },
+    }),
+  ]);
+
+  // ── Grupo 2 · lo que está esperando ──────────────────────────────────
+  // Tres consultas, todas de CONTEO: este bloque son accesos, no listas.
+  const [firmasPendientes, citasHoy, porCobrar] = await Promise.all([
+    // count + la más vieja en UNA consulta, igual que el tablero: dos
+    // serían dos viajes para pintar la misma tarjeta.
+    prisma.eduCaseApproval.aggregate({
+      where: { institutionId, status: "PENDING" },
+      _count: { _all: true },
+      _min: { requestedAt: true },
+    }),
+    prisma.eduAppointment.count({
+      where: {
+        ...alcance.citas(),
+        ...(diaHoy ? { startsAt: { gte: diaHoy.from, lt: diaHoy.to } } : {}),
+        status: { in: CITAS_DE_HOY_STATUSES },
+      },
+    }),
+    // 🔴 EL SALDO VIVO, NO EL DEL PERIODO. "Por cobrar" es lo que la
+    // escuela tiene sin cobrar HOY, venga de cuando venga: recortarlo al
+    // periodo escondería justo la deuda vieja, que es la que importa.
+    //
+    // Se excluye CANCELLED además de exigir saldo > 0. Anular un cobro
+    // deja el saldo en cero (lo dice el esquema), así que la segunda
+    // condición sobra… mientras nadie escriba una fila que se salte esa
+    // regla. Si alguien la escribe, esto no la cuenta como dinero por
+    // cobrar en vez de sumarla en silencio.
+    prisma.eduCharge.aggregate({
+      where: { ...alcance.cobros, status: { not: "CANCELLED" }, balanceCents: { gt: 0 } },
+      _sum: { balanceCents: true },
+      _count: { _all: true },
+    }),
+  ]);
+
+  // ── Topes ────────────────────────────────────────────────────────────
+  const citasCortadas = citas.length > EDU_DIR_MAX_CITAS;
+  const pagosCortados = pagos.length > EDU_DIR_MAX_FILAS;
+  const firmasCortadas = firmadas.length > EDU_DIR_MAX_FILAS;
+  const citasV = citasCortadas ? citas.slice(0, EDU_DIR_MAX_CITAS) : citas;
+  const pagosV = pagosCortados ? pagos.slice(0, EDU_DIR_MAX_FILAS) : pagos;
+  const firmadasV = firmasCortadas ? firmadas.slice(0, EDU_DIR_MAX_FILAS) : firmadas;
+
+  if (citasCortadas) {
+    avisos.push(
+      `El periodo tiene más de ${EDU_DIR_MAX_CITAS.toLocaleString("es-MX")} citas y la gráfica de pacientes se hizo con las primeras. Cambia a la semana para que los totales sean exactos.`,
+    );
+  }
+  if (pagosCortados || firmasCortadas) {
+    avisos.push(
+      `El periodo tiene más de ${EDU_DIR_MAX_FILAS.toLocaleString("es-MX")} pagos o autorizaciones y las gráficas se hicieron con los primeros. Cambia a la semana para que los totales sean exactos.`,
+    );
+  }
+
+  // ── Serie 1 · pacientes atendidos ────────────────────────────────────
+  // 🔴 PERSONAS DISTINTAS, y por eso hay un Set POR DÍA y otro del periodo
+  // entero. Quien vino el lunes y el jueves cuenta uno el lunes, uno el
+  // jueves y UNO en el total: las barras no suman el total, y la pantalla
+  // lo dice en vez de dejar que alguien las sume a mano y le salga otra
+  // cosa. El total es el MISMO número que la tarjeta "Pacientes
+  // atendidos" del tablero de Dirección, que se calcula igual.
+  const pacientesPorDia = new Map<string, Set<string>>();
+  const pacientesDelPeriodo = new Set<string>();
+  for (const c of citasV) {
+    pacientesDelPeriodo.add(c.patientId);
+    const dia = eduDirDiaDe(c.startsAt, tz);
+    if (!dia) continue;
+    const set = pacientesPorDia.get(dia) ?? new Set<string>();
+    set.add(c.patientId);
+    pacientesPorDia.set(dia, set);
+  }
+  const pacientesValores = new Map<string, number>();
+  pacientesPorDia.forEach((set, dia) => pacientesValores.set(dia, set.size));
+
+  const serviciosPuntos = eduDirPuntosPorDia(ventana.desdeISO, ventana.dias, pacientesValores);
+  const pacientesSerie = eduDirArmarSerie({
+    key: "pacientes",
+    titulo: "Pacientes atendidos",
+    detalle: "Personas distintas con una cita TERMINADA ese día.",
+    unidad: "conteo",
+    puntos: serviciosPuntos,
+    total: pacientesDelPeriodo.size,
+    anterior: new Set(citasPrev.map((c) => c.patientId)).size,
+    nota:
+      "Las barras no suman el total: quien vino dos días cuenta en los dos días y una sola " +
+      "vez en el total, porque la cifra cuenta personas y no visitas.",
+  });
+
+  // ── Serie 2 · dinero cobrado ─────────────────────────────────────────
+  // Pagos MENOS devoluciones, por la fecha del PAGO — la misma definición
+  // que la tarjeta "Cobrado" del tablero. Un día puede salir negativo si
+  // se devolvió más de lo que entró, y se pinta así: taparlo en cero
+  // escondería el único día que hay que ir a mirar.
+  const cobradoValores = new Map<string, number>();
+  let cobradoCents = 0;
+  for (const p of pagosV) {
+    const monto = p.isRefund ? -p.amountCents : p.amountCents;
+    cobradoCents += monto;
+    const dia = eduDirDiaDe(p.paidAt, tz);
+    if (!dia) continue;
+    cobradoValores.set(dia, (cobradoValores.get(dia) ?? 0) + monto);
+  }
+  const cobradoSerie = eduDirArmarSerie({
+    key: "cobrado",
+    titulo: "Dinero cobrado",
+    detalle: "Lo que ENTRÓ a caja ese día, menos las devoluciones.",
+    unidad: "dinero",
+    puntos: eduDirPuntosPorDia(ventana.desdeISO, ventana.dias, cobradoValores),
+    total: cobradoCents,
+    anterior: neto(pagosPrev),
+    nota:
+      "Son pagos REALES, no cobros emitidos: un ticket de hoy que se paga la semana que viene " +
+      "entra en el día en que se paga. Lo emitido y lo que falta por cobrar están en Dirección.",
+  });
+
+  // ── Serie 3 · tratamientos autorizados ───────────────────────────────
+  const autorizadasValores = new Map<string, number>();
+  for (const f of firmadasV) {
+    const dia = eduDirDiaDe(f.decidedAt, tz);
+    if (!dia) continue;
+    autorizadasValores.set(dia, (autorizadasValores.get(dia) ?? 0) + 1);
+  }
+  const autorizacionesSerie = eduDirArmarSerie({
+    key: "autorizaciones",
+    titulo: "Tratamientos autorizados",
+    detalle: "Autorizaciones que un docente FIRMÓ ese día (plan, procedimiento, sesión o alta).",
+    unidad: "conteo",
+    puntos: eduDirPuntosPorDia(ventana.desdeISO, ventana.dias, autorizadasValores),
+    total: firmadasV.length,
+    anterior: firmadasPrev,
+    nota: ctx.campusLabel
+      ? "Esta gráfica es del INSTITUTO ENTERO aunque arriba haya una sede elegida: una " +
+        "autorización cuelga de un caso, y un caso no es de una sede — el estudiante rota " +
+        "entre edificios y su expediente es uno solo."
+      : "",
+  });
+
+  // ── Lo que está esperando ────────────────────────────────────────────
+  const firmasCount = firmasPendientes._count._all ?? 0;
+  const firmaMasViejaMin = eduDirMinutosDesde(firmasPendientes._min.requestedAt, now);
+  const saldoCents = porCobrar._sum.balanceCents ?? 0;
+  const saldoCobros = porCobrar._count._all ?? 0;
+
+  const esperando: EduDirInicioAcceso[] = [
+    {
+      key: "firmas",
+      titulo: "Autorizaciones sin firmar",
+      valor: String(firmasCount),
+      raw: firmasCount,
+      detalle:
+        firmasCount === 0
+          ? "No hay ninguna esperando decisión de un docente."
+          : `${firmasCount === 1 ? "Una autorización espera" : `${firmasCount} autorizaciones esperan`} la decisión de un docente. La más vieja lleva ${eduDirEsperaLabel(firmaMasViejaMin)}.`,
+      href: "/instituto/autorizaciones",
+      semaforo: eduDirSemaforoDeFirmas(firmasCount, firmaMasViejaMin),
+    },
+    {
+      key: "citas-hoy",
+      titulo: "Citas de hoy",
+      valor: String(citasHoy),
+      raw: citasHoy,
+      detalle:
+        citasHoy === 0
+          ? "Hoy no hay ninguna cita agendada."
+          : `Agendadas para hoy y todavía en pie (sin contar canceladas ni ausencias). ${eduFormatDayLong(hoyISO)}.`,
+      href: "/instituto/agenda",
+      semaforo: "NEUTRO",
+    },
+    {
+      key: "por-cobrar",
+      titulo: "Por cobrar",
+      valor: eduMoney(saldoCents),
+      raw: saldoCents,
+      detalle:
+        saldoCobros === 0
+          ? "No queda ningún cobro con saldo."
+          : `Saldo vivo de ${saldoCobros.toLocaleString("es-MX")} ${saldoCobros === 1 ? "cobro" : "cobros"}, de cualquier fecha — no solo del periodo de arriba.`,
+      href: "/instituto/caja",
+      semaforo: "NEUTRO",
+    },
+  ];
+
+  return {
+    ventana,
+    periodo,
+    institucion: ctx.institutionName,
+    sede: ctx.campusLabel,
+    series: [pacientesSerie, cobradoSerie, autorizacionesSerie],
+    esperando,
     avisos,
   };
 }
