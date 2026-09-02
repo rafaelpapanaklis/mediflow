@@ -32245,3 +32245,341 @@ intacto.
   donde está el tiempo. La legibilidad de la rejilla de 32 columnas queda **razonada, no vista**:
   el número duro es que son 32 columnas y 648 filas de datos, y que con una sede son 58-71.
 - **Nada de basura en la raíz del repo.** Un archivo nuevo, y vive en `scripts/`.
+
+═══════════════════════════════════════════════════════════════════════════
+## EDU-VOLUMEN — Los tres hallazgos que midió el instituto de demo, arreglados; y una puerta para entrar a pasearlo (2026-09-01) · rama fix/edu-volumen
+═══════════════════════════════════════════════════════════════════════════
+
+La rama anterior (`feat/edu-seed-demo`) sembró un instituto de mentira con el volumen del
+cliente que viene y **midió** el panel entero. No arreglaba nada: era un instrumento y un
+reporte. Esta rama arregla los tres hallazgos que encontró, **con el mismo instrumento
+delante** — cada número de abajo sale de `npm run seed:edu-demo -- --medir` antes y después,
+sobre la misma base y la misma máquina.
+
+Y arregla el efecto secundario del propio seed: **al instituto de demo no se podía entrar.**
+
+ARCHIVOS (17): `src/lib/edu/expediente.ts` · `expediente-core.ts` · `estudios.ts` ·
+`estudios-core.ts` · `evaluacion.ts` · `evaluacion-core.ts` · `casos.ts` · `casos-core.ts` ·
+`src/components/edu/expediente/{expediente,estudios}-screen.tsx` ·
+`src/components/edu/{evaluacion/evaluacion-screen,casos/casos-screen}.tsx` ·
+`src/app/instituto/(panel)/{evaluacion/page.tsx,pacientes/[id]/{expediente,estudios}/page.tsx}` ·
+`src/app/api/instituto/{evaluacion/route.ts,casos/export/route.ts,pacientes/[id]/{expediente,estudios}/route.ts}` ·
+`scripts/edu-seed-demo.ts` · `sql/edu-volumen.sql` (nuevo) ·
+`src/lib/edu/__tests__/{edu-expediente,edu-evaluacion,edu-casos}.test.ts` +
+`edu-seed-demo.test.ts` (nuevo) · `docs/audits/EDU_AUDIT.md` · `ORQUESTA.md`.
+
+**Cero cambios en el dental, en barbería y en inmuebles. `prisma/schema.prisma` NO se toca.
+Un `.sql`, y NO es bloqueante para el deploy** (ver §5).
+
+⛔ **No se tocó** `agenda-screen.tsx`, `agenda.ts`, `agenda-core.ts` ni `direccion.ts` — otras
+sesiones los están editando. `direccion.ts` sí condicionó el diseño del P2-6, y eso está
+explicado abajo: **es la razón por la que el default vive en la página y no en el loader.**
+
+---
+
+### 1 · 🔴 EL EXPEDIENTE Y LOS ESTUDIOS CORTABAN EN 200 SIN DECIRLO
+
+`listEduPatientRecords` (`expediente.ts`) y `listEduPatientStudies` (`estudios.ts`) hacían
+`take: MAX` **sin `+ 1`**. Eso no es un tope pequeño: es un tope **que no puede saber que
+cortó**. Doscientas notas y doscientas cuarenta devuelven exactamente lo mismo desde dentro de
+la función, así que no había nada que la pantalla pudiera decir aunque quisiera. Y ninguna de
+las dos pantallas mencionaba `truncated` — el resto del panel (casos, pacientes, agenda,
+equipo, padrón, caja, evaluación, facturación y autorizaciones) **sí avisa**.
+
+Es un expediente clínico. Quien busca la nota de la primera sesión de un caso largo concluye
+que no existe.
+
+**Arreglo**, con el mismo patrón que ya usaban `casos.ts` y `pacientes.ts`: `take: MAX + 1`,
+devolver `{ rows, truncated }` (`EduRecordPage`, `EduStudyPage`), y el banner que ya tienen las
+otras nueve pantallas.
+
+Tres detalles que no son cosméticos:
+
+- **El corte va ANTES de firmar las URLs de Storage.** La fila 201 no se pinta; pedirle a
+  Supabase su URL firmada sería un viaje pagado por un archivo que nadie va a abrir.
+- **`truncated` viaja también en los dos endpoints** (`/api/instituto/pacientes/[id]/expediente`
+  y `.../estudios`), no solo en la pantalla. Si solo lo supiera el panel, cortar en silencio
+  vuelve por la puerta de al lado.
+- **El aviso de estudios va ARRIBA de los filtros de tipo.** Esos filtros ordenan lo que ya
+  llegó: «0 radiografías» con la lista cortada se lee como «no tiene ninguna», y no lo es.
+
+| medido con el paciente más cargado del seed | antes | después |
+|---|---|---|
+| Expediente (240 notas) | 200 filas, **240 leídas, sin una palabra** | 200 filas, **201 leídas**, «se muestran las 200 más recientes» |
+| Estudios (240 archivos) | 200 filas, **240 leídas, sin una palabra** | 200 filas, **201 leídas**, mismo aviso |
+
+Probado con 201 (la prueba fija los tres casos: 201 → corta y avisa; **exactamente 200 → NO
+avisa**, que es la mentira simétrica; 0 → tampoco).
+
+**Sigue abierto y no lo toqué:** `listEduOdontogram` (`odontograma.ts`) tiene el mismo patrón
+con tope 1 000. Está fuera del encargo y a ese volumen no duele todavía; queda dicho.
+
+---
+
+### 2 · 🔴 P2-6 — 17 082 FILAS PARA PINTAR 120 RENGLONES
+
+El hallazgo de la auditoría, medido: `/instituto/evaluacion` traía hasta 300 alumnos y luego
+**todos** sus casos, **todas** sus citas COMPLETADAS y **todas** sus calificaciones. 16 364 de
+esas filas eran citas — y las citas crecen con el TIEMPO, no con el padrón.
+
+**Lo que NO se hizo, porque la auditoría lo prohibió con motivo escrito:** un `take` sobre esas
+tres consultas. *«Un `take` a secas aquí no acota — FALSIFICA»*: truncaría las filas de ALGÚN
+alumno al azar y sus horas clínicas saldrían menores sin ninguna señal, y esas horas son las
+que la escuela enseña en una acreditación. **Hay una prueba que comprueba que no ha aparecido
+un `take` ahí.**
+
+**Lo que se hizo:** acotar el conjunto de PERSONAS —una generación entera, dicha con todas sus
+letras en pantalla— y dentro de ella contar a cada estudiante COMPLETO.
+
+#### 2.1 · Las decisiones de producto que faltaban
+
+| Pregunta | Respuesta | Por qué |
+|---|---|---|
+| ¿Cuál es la generación por defecto? | **La última que ya arrancó** (`eduVigenteCohort`) | Una especialidad de tres años tiene varias generaciones en vuelo a la vez: «vigente = en curso» serían todas y no acotaría nada. «La vigente» es de la que la escuela habla |
+| ¿Las cerradas cuentan? | **Sí, cuando se piden** (`?generacion=todas`) | Una acreditación las pide. Lo que cambia es que se PIDEN, en vez de caerse en ellas por abrir la pantalla |
+| ¿Una generación o una por especialidad? | **Por NOMBRE** — las tres especialidades a la vez | `EduCohort` es único por (instituto, especialidad, nombre): «2026-A» de Endodoncia y de Ortodoncia son la misma generación. Para una sola ya existe el filtro de especialidad |
+| ¿Y el alumno y el docente? | **El default NO se les aplica** | Sus alcances ya acotan (1 fila y ~10). Con el default puesto, **un alumno de la generación anterior abriría SU pantalla de avance y vería cero filas** |
+
+Los casos raros de «la vigente», todos resueltos hacia el lado útil y todos con prueba: ninguna
+ha arrancado → la que está por arrancar; todas terminaron → la última igual (mejor que enseñar
+el padrón entero justo en la escuela con más historia); una inactiva no compite; **empate de
+fechas → desempate total por nombre y por id**, para que el default no parpadee entre cargas.
+
+#### 2.2 · 🔴 Por qué el default vive en la PÁGINA y no dentro del loader
+
+`listEduEvaluacion` **no la llama solo su pantalla**: el tablero de Dirección la reusa
+(`direccion.ts:753`, *«reuso, no segunda cuenta»*) para hablar de la escuela COMPLETA en un
+periodo. Si el recorte por generación fuera el default del loader, **los atrasados de Dirección
+pasarían a ser los de una sola generación sin que nadie lo hubiera pedido ni lo viera** — la
+misma clase de recorte callado que este arreglo vino a quitar. Y `direccion.ts` está prohibido
+en esta tarea, así que ni siquiera podría haberlo compensado ahí.
+
+Así que: el loader recibe `generacion: "vigente" | "todas"`, **la ausencia significa "todas"**
+(el comportamiento de siempre, Dirección intacta), y quien pide la vigente es la página — y
+también el endpoint `/api/instituto/evaluacion`, porque si ahí la ausencia significara «todas»,
+la consulta de 17 082 filas volvería por esa puerta. Hay una prueba de las dos cosas.
+
+#### 2.3 · La ventana de citas
+
+Además del filtro, la consulta de horas se acota por generación:
+`startsAt >= min(arranque de su generación, su fecha de ingreso)` — **la ANTERIOR de las dos**,
+que es la única cota que no puede perder una hora real: cubre al transferido desde una
+generación previa y al que se inscribió antes de que abriera el ciclo. Se agrupa por cohorte, un
+`OR` por grupo, para que el índice `(institutionId, studentId, startsAt)` tenga un RANGO sobre
+el que trabajar en vez de una lista suelta de ids.
+
+**No hay cota superior, a propósito.** Una cita COMPLETADA con fecha futura es un dato mal
+capturado; esconderla haría bajar las horas sin que nadie pudiera ir a arreglar la cita.
+
+Honestamente: **en el instituto de demo esta cota no quita ni una fila** (nadie tiene citas
+anteriores a su generación, porque el seed las genera dentro de la ventana de cada alumno). Su
+valor es el techo —la consulta deja de crecer con la historia— y el índice.
+
+#### 2.4 · 📊 ANTES / DESPUÉS
+
+`npm run seed:edu-demo -- --medir`. 120 estudiantes, 2 generaciones, 3 especialidades, 18 meses
+de historia. Postgres 16 en Docker, misma máquina, latencia de red cero.
+
+> 🔴 Los milisegundos son un SUELO. La columna que se traslada tal cual a Vercel + Supabase es
+> **filas leídas**: esa no depende de dónde esté la base.
+
+| `/instituto/evaluacion`, con los ojos de DIRECCIÓN | ms | filas al navegador | **filas leídas** | payload |
+|---|---:|---:|---:|---:|
+| **ANTES** (y hoy, pidiendo `?generacion=todas`) | 185 | 120 | **17 082** | 93.4 KB |
+| **DESPUÉS** — lo que se abre al entrar (vigente `2026-A`) | **39** | 60 | **3 680** | 46.6 KB |
+| | **−79 %** | | **−78 %** | −50 % |
+
+Desglose del ahorro: **16 364 → 3 315 citas COMPLETADAS**, 400 → 200 casos, 183 → 90
+calificaciones, 120 → 60 estudiantes. La meta era −70 %.
+
+| filtros que ya existían, para comparar | ms | filas | leídas |
+|---|---:|---:|---:|
+| Una sola generación-especialidad (2026-A Endodoncia) | 17 | 20 | 1 251 |
+| Una sola generación-especialidad (2025-A Endodoncia) | 46 | 20 | 4 465 |
+| Un DOCENTE (sus alumnos) — **sin cambios, el default no se le aplica** | 19 | 10 | 10 |
+
+#### 2.5 · Lo que ve la persona
+
+- Un aviso, siempre que el servidor haya decidido: **«Estás viendo la generación 2026-A, la
+  vigente»**, con el porqué en una frase (el avance se cuenta, no se guarda) y un enlace a
+  «todas las generaciones». Una pantalla que enseña 60 de 120 sin decirlo es la misma mentira
+  que la lista que corta en 200 y calla.
+- El selector: **la opción vacía ya no dice «Todas»** — decía eso y habría contradicho a la
+  pantalla. Ahora dice `Vigente (2026-A)`, y «Todas las generaciones» es un `<option>` propio.
+- Los dos saltos son **`<Link>` de verdad**, no botones: esta es justo la vista que alguien
+  copia y manda por correo para una acreditación.
+- El contador de abajo dice «60 estudiantes · generación 2026-A».
+
+---
+
+### 3 · 🔴 EL CSV DE CASOS DEVOLVÍA 413 CON «INCLUIR CERRADOS»
+
+`/api/instituto/casos/export` reusaba `listEduCasosPanel` — **tope 300, el de una PANTALLA** —
+y devolvía 413 en cuanto la lista se cortaba. La regla es correcta (un CSV silenciosamente
+incompleto es un reporte falso), pero el número era el equivocado: **un export existe para
+llevarse TODO**, y «casos cerrados» es justo lo que se exporta para una acreditación. Con 400
+casos, marcar la casilla dejaba a la escuela sin export.
+
+**Arreglo:** el export tiene su propio techo, `EDU_CASOS_EXPORT_MAX_ROWS = 10 000`, explícito y
+con su porqué escrito. Se lee **en lotes de 500 con cursor** (`listEduCasosParaExport`), no con
+un `take: 10001`: cada fila arrastra paciente, alumno, especialidad, docente y sus
+autorizaciones, y diez mil de golpe es un pico de memoria por una descarga que casi nunca llega
+a mil.
+
+**Lo que NO cambió:** por encima de ESE tope, el 413 se queda. Y ahora **dice el número** — «hay
+más de los que caben» sin decir cuántos caben no le dice a nadie cuánto tiene que acotar.
+
+⚠️ **El cursor necesitaba un orden TOTAL.** `openedAt` empata (dos casos abiertos en el mismo
+instante existen), y con un orden que empata la paginación por cursor puede devolver la misma
+fila en dos lotes y saltarse otra. `CASOS_PANEL_ORDER` lleva ahora desempate por `id`, y **la
+pantalla usa el mismo orden** para que la lista y el CSV no salgan barajados distinto.
+
+**No es una segunda consulta.** La lista y el export comparten `where`, `orderBy` y `select`
+línea por línea (`eduCasosPanelWhere`, `CASOS_PANEL_ORDER`, `CASOS_PANEL_SELECT`): un endpoint
+de descarga con su propia consulta es la puerta de atrás clásica. Hay pruebas de que los dos
+pasan por el mismo `where` y de que los dos comprueban `eduScopeIsEmpty` (sin eso, CAJA se
+llevaría un CSV de la clínica entera).
+
+Y el botón **ya no se esconde** cuando la pantalla sale cortada: esconderlo era lo que dejaba a
+la escuela sin export en cuanto pasaba de 300 casos.
+
+| `/api/instituto/casos/export` (400 casos en la base) | antes | después |
+|---|---|---|
+| sin filtro (solo abiertos) | 280 de 280 ✅ | 280 de 280 ✅, 36 ms |
+| **incluyendo cerrados** | **413 — no exporta nada** | **400 de 400 ✅, 55 ms** |
+| acotando a un estado | 90 ✅ | 90 ✅, 22 ms |
+
+---
+
+### 4 · LA PUERTA DE ENTRADA AL INSTITUTO DE DEMO
+
+El seed pone `supabaseId: demoseed-0001…` en las 135 personas — nunca un UUID de Supabase
+Auth — y eso es deliberado: sin identidades reales no se crea ninguna cuenta y no sale ningún
+correo de invitación. El efecto secundario también era deliberado y estaba escrito: **al demo
+no se podía entrar.**
+
+    npm run seed:edu-demo -- --direccion=<uuid-de-supabase>
+    npm run seed:edu-demo -- --direccion=persona@correo.com
+
+Cuelga **una** cuenta que YA EXISTE como DIRECCIÓN del instituto de demo. Es exactamente el
+«copiar el UUID a mano» que el comentario del seed pedía, hecho por el script:
+
+- **UUID** → se usa tal cual. Es lo único que `getEduContext` mira (`edu-auth.ts`: `findFirst`
+  por `supabaseId`). Si esa cuenta ya es EduUser en algún sitio, se le copian nombre y correo
+  para que el panel salude con el nombre de la persona.
+- **Correo** → se busca una fila de `edu_users` que ya lo tenga **con un supabaseId real** (no
+  `demoseed-`) y se copia ESE. Es el caso de verdad: «la cuenta con la que ya entro a QA».
+- **Si el correo no aparece, REBOTA** en vez de inventar un supabaseId. Una fila con un
+  supabaseId inventado no es un acceso: es una cuenta muerta que mañana parece un bug del login.
+
+⚠️ **Y avisa cuando no va a funcionar.** `getEduContext` resuelve la sesión con la fila **MÁS
+VIEJA** (`orderBy: { createdAt: "asc" }`). Si la cuenta ya es un EduUser activo de otro
+instituto, el login la seguirá mandando allí y la fila del demo no se usará nunca. El seed lo
+detecta y lo dice con nombre y apellido — **y no toca esa otra fila**, porque escribir fuera del
+instituto de demo es la regla número uno de ese archivo.
+
+**Todo lo demás del seed queda EXACTAMENTE igual**, y se comprobó ejecutándolo:
+el rechazo a una base remota sin `EDU_SEED_HOST_REMOTO`, el destino por slug + prefijo `DEMO · `,
+los `supabaseId` falsos de las 135 personas, la ausencia de `EduWhatsappConfig`, el `--sql-borrado`.
+La escritura de la cuenta real va **después del sembrado y antes de la comparación de filas
+ajenas**, así que pasa por la misma guardia que todo lo demás. Probado con un instituto vecino
+sembrado a mano delante:
+
+| escenario | qué pasó |
+|---|---|
+| `--direccion=<uuid nuevo>` | fila creada, `✅ ninguna fila fuera del instituto de demo cambió` |
+| `--direccion=rafa@vecino.mx` (cuenta del vecino) | fila creada + **⚠️ el aviso**, y el vecino intacto |
+| `--direccion=noexiste@nada.com` | **rebota** con exit 1: «pasa el UUID de Supabase Auth» |
+| `--direccion=pepito` | **rebota** con exit 1: «no es un UUID ni un correo» |
+| `--direccion=` (vacío) | **rebota** con exit 1, sin abrir la base |
+| correrlo dos veces con la misma cuenta | la misma fila (id determinista `did("dirreal", supabaseId)`) |
+
+---
+
+### 5 · EL SQL — `sql/edu-volumen.sql`
+
+**UN índice. Ni una tabla, ni una columna, ni un enum, ni una fila.** Idempotente.
+
+⚠️ **NO es bloqueante para el deploy**, y esa es la diferencia con los `.sql` de las olas
+anteriores: aquí no hay ninguna columna nueva que el cliente Prisma vaya a pedir. Sin el índice
+el código funciona igual, solo que la consulta de horas lee más páginas de las necesarias. Se
+puede aplicar antes, durante o después.
+
+```sql
+CREATE INDEX IF NOT EXISTS "edu_appointments_student_status_idx"
+  ON "edu_appointments" ("institutionId", "studentId", "status", "startsAt");
+```
+
+**Por qué:** el único índice que servía era `edu_appointments_student_idx`
+`(institutionId, studentId, startsAt)` — **`status` no entra**. Comprobado con `EXPLAIN ANALYZE`
+sobre el instituto de demo:
+
+- **sin** el índice nuevo: `Filter: (status = 'COMPLETED')` → **Rows Removed by Filter: 25** por
+  estudiante, sobre 55 útiles. Un 31 % de la lectura tirada.
+- **con** él: todo pasa a `Index Cond`, sin filtro posterior.
+
+El orden de las columnas no es decorativo: igualdades primero (`institutionId`, `studentId`,
+`status`) y **el RANGO al final** (`startsAt`), porque una vez que entras en el rango se acabó
+la búsqueda por índice.
+
+⚠️ **No va en `prisma/schema.prisma`** porque es un archivo COMPARTIDO con el dental y esta rama
+no lo toca. Es el mismo trato que ya tienen los índices trigram del vertical
+(`edu_patients_search_trgm` y compañía, `sql/edu-ola-1b.sql`): viven solo en SQL. La
+consecuencia hay que saberla y está escrita en el propio archivo — un `prisma db push` contra
+una base de desarrollo se lo llevaría por delante, y se recupera volviendo a correr el `.sql`.
+En producción no se corre `db push`.
+
+---
+
+### 6 · VERIFICACIÓN
+
+1. **`npm run build` completo, sin pipes: exit 0.** `prisma generate` limpio (v5.22.0),
+   type-check completo, tabla de rutas entera.
+2. **`npm run test:edu`: VERDE — 30 archivos, 971 pruebas, 0 fallos** (antes: 29 y 929).
+   **+42 pruebas nuevas**, repartidas donde vive cada cosa:
+   - `edu-expediente.test.ts` (+9): la aritmética del recorte con 201, con exactamente 200 y con
+     0; que las dos consultas piden `MAX + 1`; **que el corte va antes de firmar las URLs**; que
+     las dos pantallas avisan; que las dos páginas pasan la bandera; que los dos endpoints la
+     devuelven.
+   - `edu-evaluacion.test.ts` (+16): la elección de la vigente y sus casos raros; el desempate
+     total; la ventana que no puede perder una hora; **que NO ha aparecido un `take`** sobre
+     casos, citas ni calificaciones; que el default no se le aplica al alumno ni al docente;
+     **que `direccion.ts` sigue llamando al loader sin la preferencia**; que la pantalla dice qué
+     generación mira; que el centinela `todas` vive en un solo sitio.
+   - `edu-casos.test.ts` (+3, 2 actualizadas): que el export usa su propio camino y **ya no el de
+     la pantalla**; que su tope es mucho mayor y el 413 sigue por encima; que lee en lotes con
+     **cursor y orden total**; que lista y export comparten `where`/`orden`/`select` y los dos
+     comprueban el alcance vacío.
+   - `edu-seed-demo.test.ts` (nuevo, 9): las guardias del seed leídas del código — una guardia
+     que alguien borra en un refactor no rompe ninguna prueba, simplemente deja de correr.
+3. **`npx tsc --noEmit -p tsconfig.json`: cero errores en los archivos de esta rama.** Quedan 8
+   errores PREEXISTENTES en ficheros de prueba ajenos (6 en `src/lib/barber/__tests__/`, 2 en
+   `src/lib/edu/__tests__/edu-theme.test.ts`), todos `TS2802` de `--downlevelIteration` y un
+   `TS2353`; están en `main` desde antes y `next build` no los ve (ignora los tipos de las
+   pruebas). Ninguno toca un archivo de esta rama.
+   ⚠️ `tsc` necesita `NODE_OPTIONS=--max-old-space-size=8192`: con el heap por defecto muere en
+   OOM, y eso no tiene nada que ver con el código.
+4. **Guardia: `EDU_GUARD_SHARED="package.json,ORQUESTA.md" node scripts/edu-guard.cjs` → exit 0.**
+   Los dos compartidos que declara son de la rama base (`feat/edu-seed-demo` ya había añadido
+   `seed:edu-demo` a `package.json`); **esta tarea no toca ninguno de los dos salvo este reporte**
+   — `--direccion` es un argumento del script que ya existía, no un script nuevo.
+5. **El seed corrido de verdad** contra Postgres 16 en Docker, con las mediciones antes/después
+   y con un instituto vecino delante para las cuatro puertas de la §4.
+
+---
+
+### 7 · LO QUE QUEDA DICHO Y NO ARREGLADO
+
+- **`listEduOdontogram`** tiene el mismo patrón del §1 con tope 1 000. Fuera del encargo.
+- **El `<select>` de 300 pacientes al agendar** (`listEduPatientOptions`): con 600 pacientes ya
+  está cortado, así que el paciente 301 no se puede elegir. Necesita buscador contra el
+  servidor, no un tope. Vive en `pacientes.ts` y toca la agenda — prohibida en esta tarea.
+- **Los payloads de 237-437 KB** por pantalla (agenda semana, pacientes, expediente). El
+  expediente ya no empeora con el volumen; los otros dos siguen igual.
+- **Dirección: 231 ms** por 14 consultas encadenadas. No es volumen de filas, y `direccion.ts`
+  está prohibido en esta tarea. La ventana de citas del §2.3 sí le llega gratis (usa el mismo
+  loader) sin cambiarle un solo número.
+
+**`docs/audits/EDU_AUDIT.md`: el P2-6 queda cerrado con los números,** y con la tabla de las
+cinco decisiones de producto que la ola de cierre dejó abiertas a propósito. **Ya no queda
+ningún hallazgo abierto en la auditoría del vertical.**

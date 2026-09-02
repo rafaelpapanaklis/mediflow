@@ -405,7 +405,68 @@ test("fuente · el export de casos pasa por el guard y por los MISMOS filtros qu
   const src = fuente("src", "app", "api", "instituto", "casos", "export", "route.ts");
   assert.match(src, /eduApiGuard\("casos\.view"\)/);
   assert.match(src, /parseEduCasosPanelFilters/);
-  assert.match(src, /listEduCasosPanel/);
+  // Lee por el camino del EXPORT (su propio techo, en lotes), no por el de
+  // la pantalla. Lo que NO cambia: el guard y los filtros son los mismos.
+  assert.match(src, /listEduCasosParaExport/);
+  assert.doesNotMatch(
+    src,
+    /await listEduCasosPanel\(/,
+    "el export volvió al tope de PANTALLA: con eso, marcar 'incluir cerrados' devuelve 413",
+  );
+});
+
+test("🔴 fuente · el export tiene SU tope, más alto que el de la pantalla, y sigue negando por encima", () => {
+  const core = fuente("src", "lib", "edu", "casos-core.ts");
+  assert.match(core, /export const EDU_CASOS_EXPORT_MAX_ROWS = (\d+);/);
+  const tope = Number(/EDU_CASOS_EXPORT_MAX_ROWS = (\d+)/.exec(core)?.[1]);
+  const pantalla = Number(
+    /EDU_CLINICA_MAX_ROWS = (\d+)/.exec(fuente("src", "lib", "edu", "agenda-core.ts"))?.[1],
+  );
+  assert.ok(Number.isFinite(tope) && Number.isFinite(pantalla));
+  assert.ok(
+    tope > pantalla * 10,
+    `el tope del export (${tope}) tiene que ser MUY superior al de la pantalla (${pantalla}): ` +
+      "si no, un export de una acreditación vuelve a caber en una pantalla",
+  );
+
+  // Y la regla que NO cambia: por encima de ese tope, 413.
+  const route = fuente("src", "app", "api", "instituto", "casos", "export", "route.ts");
+  assert.match(route, /if \(page\.truncated\)/);
+  assert.match(route, /status: 413/);
+  assert.match(
+    route,
+    /EDU_CASOS_EXPORT_MAX_ROWS/,
+    "el 413 tiene que decir CUÁNTOS caben, no solo que hay más",
+  );
+});
+
+test("🔴 fuente · el export lee EN LOTES y con un orden TOTAL (si no, el cursor duplica o pierde)", () => {
+  const src = fuente("src", "lib", "edu", "casos.ts");
+  const desde = src.indexOf("export async function listEduCasosParaExport");
+  assert.notEqual(desde, -1, "¿renombraron listEduCasosParaExport?");
+  const cuerpo = src.slice(desde);
+
+  assert.match(cuerpo, /EDU_CASOS_EXPORT_BATCH/, "el export tiene que leer por lotes");
+  assert.match(cuerpo, /cursor: \{ id: cursor \}/, "la paginación va por cursor de id");
+  assert.match(cuerpo, /skip: 1/, "sin skip:1 el cursor repite la última fila de cada lote");
+
+  // El desempate por id es lo que hace el orden TOTAL. Sin él, dos casos
+  // abiertos en el mismo instante pueden salir en dos lotes o en ninguno.
+  const orden = /const CASOS_PANEL_ORDER[\s\S]*?\];/.exec(src)?.[0] ?? "";
+  assert.match(orden, /openedAt: "desc"/);
+  assert.match(orden, /id: "desc"/, "el orden del export empata sin el desempate por id");
+});
+
+test("fuente · la lista y el export comparten where, orden y select — no hay segunda consulta", () => {
+  const src = fuente("src", "lib", "edu", "casos.ts");
+  for (const fn of ["listEduCasosPanel", "listEduCasosParaExport"]) {
+    const desde = src.indexOf(`export async function ${fn}`);
+    assert.notEqual(desde, -1, `¿renombraron ${fn}?`);
+    const cuerpo = src.slice(desde, desde + 2000);
+    assert.match(cuerpo, /eduCasosPanelWhere\(/, `${fn} armó su propio where`);
+    assert.match(cuerpo, /CASOS_PANEL_ORDER/, `${fn} armó su propio orden`);
+    assert.match(cuerpo, /CASOS_PANEL_SELECT/, `${fn} armó su propio select`);
+  }
 });
 
 test("fuente · el PATCH de antecedentes exige una de las DOS llaves, además del guard base", () => {
@@ -435,13 +496,24 @@ test("fuente · updateEduPatientAntecedentes busca DENTRO del alcance y estampa 
   assert.match(cuerpo, /historyRecordedById: ctx\.eduUserId/);
 });
 
-test("fuente · listEduCasosPanel recorta con eduCaseScopeWhere, como todo el vertical", () => {
+test("fuente · la lista Y el export recortan con eduCaseScopeWhere, como todo el vertical", () => {
   const src = fuente("src", "lib", "edu", "casos.ts");
-  const desde = src.indexOf("export async function listEduCasosPanel");
-  assert.notEqual(desde, -1, "¿renombraron listEduCasosPanel?");
-  const cuerpo = src.slice(desde);
-  assert.match(cuerpo, /eduCaseScopeWhere/);
-  assert.match(cuerpo, /eduScopeIsEmpty/);
+
+  // El recorte vive en el where COMPARTIDO...
+  const where = src.indexOf("function eduCasosPanelWhere");
+  assert.notEqual(where, -1, "¿renombraron eduCasosPanelWhere?");
+  assert.match(src.slice(where, where + 1500), /eduCaseScopeWhere/);
+
+  // ...y las dos puertas comprueban el alcance vacío ANTES de consultar.
+  // El export es una puerta nueva: sin esta prueba, una lectura sin
+  // `eduScopeIsEmpty` le entregaría a CAJA un CSV de la clínica entera.
+  for (const fn of ["listEduCasosPanel", "listEduCasosParaExport"]) {
+    const desde = src.indexOf(`export async function ${fn}`);
+    assert.notEqual(desde, -1, `¿renombraron ${fn}?`);
+    const cuerpo = src.slice(desde, desde + 1200);
+    assert.match(cuerpo, /eduVisibility\(ctx, "cases"\)/, `${fn} no pide el alcance`);
+    assert.match(cuerpo, /eduScopeIsEmpty\(scope\)/, `${fn} no corta con alcance vacío`);
+  }
 });
 
 test("fuente · la pantalla /instituto/casos exige el permiso y niega a caja con palabras", () => {

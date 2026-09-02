@@ -41,6 +41,15 @@ import {
 export interface EduEstudiosScreenProps {
   patientId: string;
   rows: EduStudyRow[];
+  /**
+   * true = la galería se topó con el techo y hay estudios MÁS VIEJOS que no
+   * viajaron. Igual que en el expediente: sin el aviso, "no está" y "no
+   * cupo" se ven exactamente igual, y lo que se concluye es que la
+   * panorámica de hace año y medio nunca se subió.
+   */
+  truncated: boolean;
+  /** El techo, para poder decir el número en vez de "hay más". */
+  maxRows: number;
   cases: EduCaseOption[];
   canUpload: boolean;
   /** Ola 3B: estado del apoyo de IA, resuelto en el SERVIDOR. */
@@ -105,6 +114,8 @@ const FASE_LABEL: Record<EduUploadPhase, string> = {
 export function EduEstudiosScreen({
   patientId,
   rows,
+  truncated,
+  maxRows,
   cases,
   canUpload,
   iaAnalisis,
@@ -169,7 +180,9 @@ export function EduEstudiosScreen({
         <span className="edu-count">
           {navigating
             ? "Actualizando…"
-            : `${visibles.length} ${visibles.length === 1 ? "estudio" : "estudios"}`}
+            : `${visibles.length} ${visibles.length === 1 ? "estudio" : "estudios"}${
+                truncated ? ` (se muestran los ${maxRows} más recientes)` : ""
+              }`}
         </span>
         {canUpload && (
           <button
@@ -185,6 +198,21 @@ export function EduEstudiosScreen({
           </button>
         )}
       </div>
+
+      {truncated && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">
+              Se muestran los {maxRows} estudios más recientes, no todos.
+            </p>
+            <p className="edu-banner__detail">
+              Este paciente tiene más archivos de los que caben en una pantalla. Los filtros de
+              aquí abajo ordenan lo que ya llegó, así que un tipo puede salir en cero aunque el
+              paciente sí tenga estudios viejos de ese tipo.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Los filtros solo se pintan cuando hay algo que filtrar: con la
           galería vacía serían cinco botones sobre la nada. */}

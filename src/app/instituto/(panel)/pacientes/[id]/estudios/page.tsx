@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { EDU_CLINICAL_NONE_DETAIL, eduClinicalScope } from "@/lib/edu/expediente-core";
+import { EDU_STUDY_MAX_ROWS } from "@/lib/edu/estudios-core";
 import { getEduClinicalPatient, listEduPatientCaseOptions } from "@/lib/edu/expediente";
 import { listEduPatientStudies } from "@/lib/edu/estudios";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
@@ -70,7 +71,7 @@ export default async function PacienteEstudiosPage({
   const paciente = await getEduClinicalPatient(ctx, params.id);
   if (!paciente) notFound();
 
-  const [rows, cases, iaAnalisis] = await Promise.all([
+  const [page, cases, iaAnalisis] = await Promise.all([
     listEduPatientStudies(ctx, paciente.id, ctx.institution.timezone),
     listEduPatientCaseOptions(ctx, paciente.id),
     // El estado de la IA lo resuelve el SERVIDOR (Ola 3B), y desde la Ola 8
@@ -83,7 +84,9 @@ export default async function PacienteEstudiosPage({
   return (
     <EduEstudiosScreen
       patientId={paciente.id}
-      rows={rows}
+      rows={page.rows}
+      truncated={page.truncated}
+      maxRows={EDU_STUDY_MAX_ROWS}
       cases={cases}
       canUpload={hasEduPermission(permUser, "estudios.upload")}
       iaAnalisis={iaAnalisis}

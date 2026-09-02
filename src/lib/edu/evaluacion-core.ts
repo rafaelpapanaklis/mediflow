@@ -33,7 +33,7 @@
  * SQL — y el número que se enseña en una acreditación es justamente ése.
  * ═══════════════════════════════════════════════════════════════════════
  */
-import type { EduCaseStatus } from "@/lib/edu/types";
+import type { EduCaseStatus, EduStudentStatus } from "@/lib/edu/types";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 0 · TOPES Y CONSTANTES
@@ -713,6 +713,169 @@ export function eduCycleFraction(
   return clamp01((now.getTime() - ini.getTime()) / total);
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// LA GENERACIÓN VIGENTE (P2-6)
+//
+// 🔴 POR QUÉ ESTA PANTALLA NECESITA UN DEFAULT Y LAS OTRAS NO.
+//
+// El avance NO se guarda: se cuenta al abrir la pantalla, y contarlo exige
+// leer los casos, las citas COMPLETADAS y las calificaciones de cada
+// estudiante que se pinta. Medido con el instituto de demo (120
+// estudiantes, 18 meses de historia): **17 082 filas leídas para pintar 120
+// renglones**, de las cuales 16 364 eran citas — y las citas crecen con el
+// TIEMPO, no con el padrón. La misma escuela dentro de cuatro años lee
+// ~45 000.
+//
+// 🔴 Y POR QUÉ NO SE ARREGLA CON UN `take`. La auditoría lo dejó escrito
+// (docs/audits/EDU_AUDIT.md, P2-6) y hay que respetarlo: un tope global
+// aquí NO acota, FALSIFICA. Estas filas alimentan las horas clínicas y el
+// avance que la escuela enseña en una acreditación; truncar las citas de
+// ALGÚN estudiante al azar bajaría sus horas sin una sola señal. Lo que se
+// acota es el CONJUNTO DE PERSONAS — una generación entera, dicha con
+// todas sus letras en pantalla —, y dentro de esa generación cada
+// estudiante se cuenta COMPLETO.
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * El valor de `?generacion=` que significa "todas".
+ *
+ * 🔴 Vive AQUÍ y no escrito a mano en la página y otra vez en la
+ * pantalla: son los dos extremos del mismo parámetro y el día que uno de
+ * los dos se escriba distinto, el selector diría "Todas" y el servidor
+ * seguiría mandando la vigente, sin error y sin señal.
+ */
+export const EDU_GENERACION_TODAS = "todas";
+
+/** Lo mínimo de una generación para poder elegir la vigente. */
+export interface EduCohortForPick {
+  id: string;
+  name: string;
+  startDate: Date | string | null;
+  endDate: Date | string | null;
+  isActive: boolean;
+}
+
+export interface EduGeneracionVigente {
+  /** Cómo la llama la escuela: "2026-A". */
+  name: string;
+  /**
+   * TODAS las generaciones que se llaman así — una por especialidad.
+   *
+   * 🔴 Se agrupa por NOMBRE y no por id a propósito. `EduCohort` es
+   * único por (instituto, especialidad, nombre): "2026-A" de Endodoncia y
+   * "2026-A" de Ortodoncia son la MISMA generación en dos especialidades,
+   * y eso es lo que una escuela quiere decir cuando dice "la generación
+   * vigente". Recortar a un solo id dejaría fuera dos tercios del padrón
+   * sin avisar; para mirar una sola especialidad ya existe su filtro.
+   */
+  ids: string[];
+  /**
+   * El arranque MÁS TEMPRANO de esas generaciones. Es el suelo de la
+   * ventana de citas (ver eduHoursWindowStart).
+   */
+  from: Date;
+}
+
+function pickDate(v: Date | string | null | undefined): Date | null {
+  return toDate(v ?? null);
+}
+
+/**
+ * Cuál es LA GENERACIÓN VIGENTE de este instituto.
+ *
+ * La regla, en una frase: **la última que ya arrancó**. En una escuela con
+ * varias generaciones en vuelo a la vez —lo normal en una especialidad de
+ * tres años— "vigente" no puede significar "las que están corriendo",
+ * porque eso son todas y no acota nada; significa la ÚLTIMA que entró, que
+ * es de la que la escuela habla cuando dice "la generación vigente".
+ *
+ * Los casos raros, todos resueltos hacia el lado útil:
+ *   · Ninguna arrancó todavía (la escuela capturó su primera generación
+ *     con fecha futura) → la que está por arrancar, la más cercana.
+ *   · Todas terminaron → la última igualmente. Es preferible a devolver
+ *     null y enseñar el padrón entero por omisión justo en la escuela que
+ *     más historia acumuló.
+ *   · Sin generaciones activas → null, y quien llama no filtra: no hay
+ *     nada por lo que filtrar.
+ *   · Sin fecha de inicio → esa generación no compite (no se puede
+ *     ordenar), pero sigue siendo elegible a mano en el selector.
+ *
+ * ⚠️ Es PURA: recibe el reloj. Sin eso, "la vigente" sería imposible de
+ * probar sin esperar a que pase el tiempo.
+ */
+export function eduVigenteCohort(
+  cohorts: EduCohortForPick[],
+  now: Date,
+): EduGeneracionVigente | null {
+  const activas = (Array.isArray(cohorts) ? cohorts : []).filter(
+    (c) => c && c.isActive !== false && typeof c.name === "string" && c.name.trim() !== "",
+  );
+  if (activas.length === 0) return null;
+
+  const conFecha = activas
+    .map((c) => ({ c, ini: pickDate(c.startDate) }))
+    .filter((x): x is { c: EduCohortForPick; ini: Date } => x.ini !== null);
+  if (conFecha.length === 0) return null;
+
+  const t = now.getTime();
+  const arrancadas = conFecha.filter((x) => x.ini.getTime() <= t);
+
+  // Desempate TOTAL y determinista: fecha, luego nombre, luego id. Sin el
+  // último criterio, dos generaciones creadas el mismo día podrían salir en
+  // un orden distinto en cada carga y la pantalla parpadearía de default.
+  const elegida = arrancadas.length > 0
+    ? arrancadas.reduce((mejor, x) => (mayor(x, mejor) ? x : mejor))
+    : conFecha.reduce((mejor, x) => (mayor(mejor, x) ? x : mejor));
+
+  const name = elegida.c.name;
+  const hermanas = conFecha.filter((x) => x.c.name === name);
+  const from = hermanas.reduce(
+    (min, x) => (x.ini.getTime() < min.getTime() ? x.ini : min),
+    hermanas[0].ini,
+  );
+
+  return { name, ids: hermanas.map((x) => x.c.id), from };
+}
+
+/** "a va después que b" con desempate total. */
+function mayor(
+  a: { c: EduCohortForPick; ini: Date },
+  b: { c: EduCohortForPick; ini: Date },
+): boolean {
+  const d = a.ini.getTime() - b.ini.getTime();
+  if (d !== 0) return d > 0;
+  const n = a.c.name.localeCompare(b.c.name, "es");
+  if (n !== 0) return n > 0;
+  return a.c.id > b.c.id;
+}
+
+/**
+ * El SUELO de la ventana de citas de un estudiante.
+ *
+ * 🔴 ES LA ÚNICA COTA QUE NO PUEDE PERDER UNA HORA REAL. Se toma la
+ * MÁS TEMPRANA entre el arranque de su generación y su propia fecha de
+ * ingreso: antes de las dos, esa persona no era estudiante de este
+ * programa, así que una cita clínica suya anterior no existe. Elegir solo
+ * el arranque de la generación dejaría fuera al que se inscribió antes de
+ * que abriera el ciclo; elegir solo el ingreso, al transferido desde una
+ * generación anterior. Se toma la anterior de las dos y no se pierde
+ * ninguno.
+ *
+ * NO hay cota superior a propósito. Una cita COMPLETADA con fecha futura
+ * es un dato mal capturado, y esconderla haría que las horas bajaran sin
+ * que nadie pudiera ir a arreglar la cita.
+ */
+export function eduHoursWindowStart(
+  cohortStart: Date | string | null,
+  enrolledAt: Date | string | null,
+): Date | null {
+  const a = pickDate(cohortStart);
+  const b = pickDate(enrolledAt);
+  if (!a) return b;
+  if (!b) return a;
+  return a.getTime() <= b.getTime() ? a : b;
+}
+
 export interface EduAtrasoVerdict {
   /** null = no se puede calcular (y `motivo` dice por qué). */
   estado: EduAtrasoEstado | null;
@@ -1112,6 +1275,67 @@ export interface EduEvaluacionRow {
   averageX100: number | null;
   averageLabel: string | null;
   averageScaleMax: number | null;
+}
+
+/**
+ * CÓMO SE LLEGÓ A ESTAS FILAS — y por qué viaja a la pantalla.
+ *
+ * 🔴 Una lista recortada que no dice que está recortada es una lista que
+ * miente, y aquí lo recortado son PERSONAS: la dirección que abre
+ * "Evaluación" y ve 60 estudiantes tiene que saber si son todos o si son
+ * los de una generación. Por eso el modo no es un detalle interno del
+ * loader sino parte de la respuesta.
+ */
+export type EduGeneracionModo =
+  /** La puso el SERVIDOR por omisión: es la generación vigente. */
+  | "vigente"
+  /** La pidió quien mira, con el selector. */
+  | "elegida"
+  /** Decisión explícita de ver la escuela entera. Es la cara. */
+  | "todas"
+  /** No hizo falta: el alcance ya acota (un alumno se ve a sí mismo, un
+   *  docente a sus vigentes). */
+  | "alcance";
+
+/** Qué hacer cuando no se pidió una generación concreta. */
+export type EduGeneracionPref = "vigente" | "todas";
+
+export interface EduEvaluacionFilters {
+  programId?: string | null;
+  /** Una generación CONCRETA (un id de EduCohort). Manda sobre todo lo
+   *  demás: si viene, no se resuelve ninguna vigente. */
+  cohortId?: string | null;
+  status?: EduStudentStatus | null;
+  /** El semáforo: ATRASADO / VIGILAR / AL_DIA / SIN_CALCULAR. */
+  estado?: string | null;
+  /**
+   * Qué generación mirar CUANDO NO SE PIDIÓ UNA CONCRETA.
+   *
+   *   "vigente" → la última que arrancó. Es lo que pide la PANTALLA de
+   *               evaluación, y es el arreglo del P2-6.
+   *   "todas"   → el padrón entero.
+   *   ausente   → "todas".
+   *
+   * 🔴 LA AUSENCIA SIGNIFICA "TODAS" A PROPÓSITO, Y NO ES PEREZA.
+   * Esta función no la llama solo su pantalla: el tablero de DIRECCIÓN la
+   * reusa (`direccion.ts`, "reuso, no segunda cuenta") para hablar de la
+   * escuela COMPLETA en un periodo. Si el recorte por generación fuera el
+   * default del loader, los atrasados de Dirección pasarían a ser los de
+   * una sola generación sin que nadie lo hubiera pedido ni lo viera — la
+   * misma clase de recorte callado que este arreglo vino a quitar. El
+   * default de PRODUCTO vive donde se decide el producto: en la página.
+   */
+  generacion?: EduGeneracionPref;
+}
+
+export interface EduEvaluacionPage {
+  rows: EduEvaluacionRow[];
+  truncated: boolean;
+  generacion: {
+    modo: EduGeneracionModo;
+    /** El nombre a pintar ("2026-A"). null cuando no aplica. */
+    name: string | null;
+  };
 }
 
 /** La bitácora completa de UN alumno. */

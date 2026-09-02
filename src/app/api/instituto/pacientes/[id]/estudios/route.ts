@@ -27,8 +27,11 @@ export async function GET(_request: Request, { params }: { params: { id: string 
         { status: 404 },
       );
     }
-    const rows = await listEduPatientStudies(g.ctx, paciente.id, g.ctx.institution.timezone);
-    return NextResponse.json({ rows });
+    const page = await listEduPatientStudies(g.ctx, paciente.id, g.ctx.institution.timezone);
+    // 🔴 `truncated` viaja en la respuesta y no solo en la pantalla: quien
+    // consuma este endpoint sin pasar por el panel tiene que poder saber
+    // que la galería salió cortada.
+    return NextResponse.json({ rows: page.rows, truncated: page.truncated });
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/pacientes/[id]/estudios");
   }

@@ -40,6 +40,8 @@ import {
 // "esperando", el CSV) vive en casos-core.ts; aquí solo la consulta.
 import { eduPhoneSearchToken } from "@/lib/edu/pacientes-core";
 import {
+  EDU_CASOS_EXPORT_BATCH,
+  EDU_CASOS_EXPORT_MAX_ROWS,
   eduCasoEsperando,
   type EduCasosPanelFilters,
   type EduCasosPanelPage,
@@ -826,6 +828,95 @@ export async function listEduCasosPanel(
   const scope = eduVisibility(ctx, "cases");
   if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
 
+  const where = eduCasosPanelWhere(institutionId, scope, filters, timeZone, now);
+  const tz = eduSafeTimeZone(timeZone);
+
+  const rows = await prisma.eduCase.findMany({
+    where,
+    orderBy: CASOS_PANEL_ORDER,
+    take: EDU_CLINICA_MAX_ROWS + 1,
+    select: CASOS_PANEL_SELECT,
+  });
+
+  return {
+    truncated: rows.length > EDU_CLINICA_MAX_ROWS,
+    rows: rows.slice(0, EDU_CLINICA_MAX_ROWS).map((c) => toCasoPanelRow(c, tz)),
+  };
+}
+
+/**
+ * LOS MISMOS casos, para un CSV, con el tope del EXPORT.
+ *
+ * 🔴 NO ES UNA SEGUNDA CONSULTA: comparte `where`, `orderBy` y `select`
+ * con la pantalla, línea por línea. Un endpoint de descarga con su propia
+ * consulta es la puerta de atrás clásica — se audita la pantalla, se
+ * arregla el alcance de la pantalla, y el CSV sigue entregando lo de
+ * antes. Lo único que cambia es CUÁNTO cabe y cómo se lee.
+ *
+ * Se lee EN LOTES con cursor (`EDU_CASOS_EXPORT_BATCH`), no con un `take`
+ * de diez mil: ver EDU_CASOS_EXPORT_MAX_ROWS en casos-core.ts.
+ *
+ * ⚠️ EL CURSOR NECESITA UN ORDEN TOTAL. `openedAt` empata — dos casos
+ * abiertos el mismo instante existen — y con un orden que empata, Postgres
+ * puede devolver el mismo caso en dos lotes y saltarse otro. Por eso
+ * `CASOS_PANEL_ORDER` lleva el `id` de desempate: es único, así que el
+ * orden es total y la paginación no puede duplicar ni perder una fila. La
+ * pantalla usa el MISMO orden, para que el CSV y la lista no salgan
+ * barajados distinto.
+ */
+export async function listEduCasosParaExport(
+  ctx: EduClinicaContext,
+  filters: EduCasosPanelFilters,
+  timeZone: string,
+  now: Date = new Date(),
+): Promise<EduCasosPanelPage> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "cases");
+  if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
+
+  const where = eduCasosPanelWhere(institutionId, scope, filters, timeZone, now);
+  const tz = eduSafeTimeZone(timeZone);
+
+  const acumulado: EduCasosPanelRow[] = [];
+  let cursor: string | null = null;
+
+  // Se pide UNA de más que el tope (igual que en la pantalla) para poder
+  // distinguir "caben justo" de "hay más".
+  while (acumulado.length <= EDU_CASOS_EXPORT_MAX_ROWS) {
+    const falta = EDU_CASOS_EXPORT_MAX_ROWS + 1 - acumulado.length;
+    const lote: CasoPanelPayload[] = await prisma.eduCase.findMany({
+      where,
+      orderBy: CASOS_PANEL_ORDER,
+      take: Math.min(EDU_CASOS_EXPORT_BATCH, falta),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: CASOS_PANEL_SELECT,
+    });
+    if (lote.length === 0) break;
+    for (const c of lote) acumulado.push(toCasoPanelRow(c, tz));
+    cursor = lote[lote.length - 1].id;
+    // Un lote corto significa que ya no hay más: pedir otro sería un viaje
+    // garantizado a vacío en el caso normal (menos de 500 casos).
+    if (lote.length < Math.min(EDU_CASOS_EXPORT_BATCH, falta)) break;
+  }
+
+  return {
+    truncated: acumulado.length > EDU_CASOS_EXPORT_MAX_ROWS,
+    rows: acumulado.slice(0, EDU_CASOS_EXPORT_MAX_ROWS),
+  };
+}
+
+/**
+ * El `where` de la pantalla de casos. Vive aparte porque lo comparten la
+ * lista y el export, y dos copias es como se acaba con un CSV que entrega
+ * filas que la pantalla no enseña.
+ */
+function eduCasosPanelWhere(
+  institutionId: string,
+  scope: ReturnType<typeof eduVisibility>,
+  filters: EduCasosPanelFilters,
+  timeZone: string,
+  now: Date,
+): Prisma.EduCaseWhereInput {
   const where: Prisma.EduCaseWhereInput = {
     ...eduCaseScopeWhere({
       institutionId,
@@ -871,65 +962,65 @@ export async function listEduCasosPanel(
   }
 
   if (and.length > 0) where.AND = and;
+  return where;
+}
 
-  const rows = await prisma.eduCase.findMany({
-    where,
-    orderBy: [{ openedAt: "desc" }],
-    take: EDU_CLINICA_MAX_ROWS + 1,
+/** El orden de la lista de casos. Lo comparten pantalla y export, y lleva
+ *  desempate por `id` para que el cursor del export sea total. */
+const CASOS_PANEL_ORDER: Prisma.EduCaseOrderByWithRelationInput[] = [
+  { openedAt: "desc" },
+  { id: "desc" },
+];
+
+const CASOS_PANEL_SELECT = {
+  id: true,
+  status: true,
+  openedAt: true,
+  closedAt: true,
+  supervisorUserId: true,
+  patient: { select: { id: true, folio: true, firstName: true, lastName: true } },
+  student: {
     select: {
       id: true,
-      status: true,
-      openedAt: true,
-      closedAt: true,
-      supervisorUserId: true,
-      patient: { select: { id: true, folio: true, firstName: true, lastName: true } },
-      student: {
-        select: {
-          id: true,
-          matricula: true,
-          semester: true,
-          user: { select: { firstName: true, lastName: true, email: true } },
-          cohort: { select: { name: true } },
-        },
-      },
-      program: { select: { name: true } },
-      supervisor: { select: { firstName: true, lastName: true, email: true } },
-      // Solo lo que la columna "esperando" necesita: PENDING y APPROVED.
-      // Las CHANGES_REQUESTED/REJECTED/EXPIRED no cambian la espera y
-      // engordarían el payload de cada fila.
-      approvals: {
-        where: { status: { in: ["PENDING", "APPROVED"] } },
-        select: { stage: true, status: true },
-      },
+      matricula: true,
+      semester: true,
+      user: { select: { firstName: true, lastName: true, email: true } },
+      cohort: { select: { name: true } },
     },
-  });
+  },
+  program: { select: { name: true } },
+  supervisor: { select: { firstName: true, lastName: true, email: true } },
+  // Solo lo que la columna "esperando" necesita: PENDING y APPROVED.
+  // Las CHANGES_REQUESTED/REJECTED/EXPIRED no cambian la espera y
+  // engordarían el payload de cada fila.
+  approvals: {
+    where: { status: { in: ["PENDING", "APPROVED"] } },
+    select: { stage: true, status: true },
+  },
+} satisfies Prisma.EduCaseSelect;
 
-  const toPanelRow = (c: (typeof rows)[number]): EduCasosPanelRow => {
-    const abierto = eduUtcToZoned(c.openedAt, tz).dayISO;
-    return {
-      id: c.id,
-      status: c.status,
-      statusLabel: EDU_CASE_STATUS_LABELS[c.status] ?? c.status,
-      patientId: c.patient.id,
-      patientName:
-        [c.patient.firstName, c.patient.lastName].filter(Boolean).join(" ").trim() || "Sin nombre",
-      patientFolio: c.patient.folio,
-      studentId: c.student.id,
-      studentName: personName(c.student.user),
-      studentMatricula: c.student.matricula,
-      supervisorName: c.supervisor ? personName(c.supervisor) : null,
-      programName: c.program.name,
-      cohortName: c.student.cohort?.name ?? null,
-      semester: c.student.semester,
-      openedISO: abierto,
-      openedLabel: eduFormatDayShort(abierto),
-      closedLabel: c.closedAt ? eduFormatDayShort(eduUtcToZoned(c.closedAt, tz).dayISO) : null,
-      espera: eduCasoEsperando(c.status, c.approvals),
-    };
-  };
+type CasoPanelPayload = Prisma.EduCaseGetPayload<{ select: typeof CASOS_PANEL_SELECT }>;
 
+function toCasoPanelRow(c: CasoPanelPayload, tz: string): EduCasosPanelRow {
+  const abierto = eduUtcToZoned(c.openedAt, tz).dayISO;
   return {
-    truncated: rows.length > EDU_CLINICA_MAX_ROWS,
-    rows: rows.slice(0, EDU_CLINICA_MAX_ROWS).map(toPanelRow),
+    id: c.id,
+    status: c.status,
+    statusLabel: EDU_CASE_STATUS_LABELS[c.status] ?? c.status,
+    patientId: c.patient.id,
+    patientName:
+      [c.patient.firstName, c.patient.lastName].filter(Boolean).join(" ").trim() || "Sin nombre",
+    patientFolio: c.patient.folio,
+    studentId: c.student.id,
+    studentName: personName(c.student.user),
+    studentMatricula: c.student.matricula,
+    supervisorName: c.supervisor ? personName(c.supervisor) : null,
+    programName: c.program.name,
+    cohortName: c.student.cohort?.name ?? null,
+    semester: c.student.semester,
+    openedISO: abierto,
+    openedLabel: eduFormatDayShort(abierto),
+    closedLabel: c.closedAt ? eduFormatDayShort(eduUtcToZoned(c.closedAt, tz).dayISO) : null,
+    espera: eduCasoEsperando(c.status, c.approvals),
   };
 }

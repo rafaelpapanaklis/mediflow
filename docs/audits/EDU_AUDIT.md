@@ -27,7 +27,7 @@ ningún caso»* (PR contra `main`).
 | **P0-2** | ✅ arreglado | `src/lib/edu/agenda.ts` (la cita se engancha sola a su caso) · `src/lib/edu/traspasos.ts` (el traspaso engancha las sueltas) · `src/lib/edu/visibility.ts` (una cita suelta no abre la ficha de un paciente entregado) · `sql/edu-fix-auditoria.sql` (las filas viejas) |
 | **P1-3** | ✅ arreglado | `src/lib/edu/agenda.ts` — `updateEduAppointment` revalida el caso cuando cambia el alumno |
 | **P1-4** | ✅ arreglado | `src/app/instituto/(panel)/agenda/page.tsx` · `.../docentes/page.tsx` · **y también** `src/app/api/instituto/docentes/route.ts`, que tenía la misma fuga a un `fetch` de distancia |
-| **P2-5 … P3-18** | ver abajo | La **ola de cierre** (rama `fix/edu-cierre`, 2026-08-31) arregló **doce de los catorce** — cada sección lleva su bloque «Cómo quedó». **P3-15 se cerró después**, en la rama `feat/edu-tests` (2026-08-31): ya existe `npm run test:edu`. Fuera queda **uno solo**, con motivo escrito: **P2-6** (acotar la pantalla de evaluación) |
+| **P2-5 … P3-18** | ✅ **los catorce** | La **ola de cierre** (rama `fix/edu-cierre`, 2026-08-31) arregló doce — cada sección lleva su bloque «Cómo quedó». **P3-15** se cerró en `feat/edu-tests` (2026-08-31): ya existe `npm run test:edu`. **P2-6** se cerró en `fix/edu-volumen` (2026-09-01), con los números del instituto de demo delante: **17 082 → 3 680 filas leídas, −78 %**. **No queda ninguno abierto.** |
 
 > 🔴 **ACTUALIZACIÓN 2026-08-31 — LA OLA DE CIERRE.** Además de los P2/P3,
 > probar el producto en producción con los tres roles encontró un hueco que
@@ -547,6 +547,68 @@ en la pantalla, con su semántica de producto (¿cuál es el default? ¿las
 cerradas cuentan?) — y esa decisión no se toma de pasada en una ola de
 cierre. Sigue pendiente.
 
+#### ✅ Cómo quedó de verdad (rama `fix/edu-volumen`, 2026-09-01)
+
+Se cerró **como esta auditoría pedía**: filtrando por GENERACIÓN, no con un
+`take`. Las tres consultas siguen sin tope — dentro de la generación que se
+mira, cada estudiante se cuenta COMPLETO, y por eso las horas de una
+acreditación siguen siendo verdad. Lo que se acota es el conjunto de
+PERSONAS, y la pantalla lo dice con todas sus letras.
+
+**Las decisiones de producto que faltaban, contestadas:**
+
+| Pregunta | Respuesta | Por qué |
+|---|---|---|
+| ¿Cuál es la generación por defecto? | **La última que ya arrancó** (`eduVigenteCohort`, `evaluacion-core.ts`) | Con una especialidad de tres años hay varias generaciones en vuelo a la vez, así que «vigente = en curso» serían todas y no acotaría nada. «La vigente» es de la que la escuela habla |
+| ¿Las cerradas cuentan? | **Sí, cuando se piden** — `?generacion=todas`, un `<option>` del selector | Una acreditación las pide. Lo que cambia es que se PIDEN, en vez de caerse en ellas por abrir la pantalla |
+| ¿Una generación o una por especialidad? | **Por NOMBRE**, o sea las tres especialidades a la vez | `EduCohort` es único por (instituto, especialidad, nombre): «2026-A» de Endodoncia y de Ortodoncia son la misma generación. Para una sola especialidad ya existe su filtro |
+| ¿Y el alumno y el docente? | **El default NO se les aplica** | Sus alcances ya acotan (una fila y ~10). Con el default puesto, un alumno de la generación anterior abriría SU pantalla de avance y vería cero filas |
+| ¿Y el tablero de Dirección, que reusa el mismo loader? | **Intacto** | El default vive en la PÁGINA, no en `listEduEvaluacion`. Meterlo dentro habría cambiado los atrasados de Dirección por debajo, sin que nadie lo pidiera ni lo viera — la misma clase de recorte callado que este arreglo vino a quitar |
+
+**Lo medido**, con `npm run seed:edu-demo -- --medir` (120 estudiantes, 2
+generaciones, 18 meses, Postgres 16 en la misma máquina):
+
+| | filas leídas | ms | filas al navegador |
+|---|---:|---:|---:|
+| Antes (y hoy: `?generacion=todas`) | **17 082** | 185 | 120 |
+| **Ahora, al abrir la pantalla** (vigente 2026-A) | **3 680** | **39** | 60 |
+| | **−78 %** | **−79 %** | |
+
+Desglose del ahorro: 16 364 → 3 315 citas COMPLETADAS, 400 → 200 casos,
+183 → 90 calificaciones. Un docente sigue pagando 10 filas: su alcance ya
+lo salvaba y nada cambió para él.
+
+**La ventana de citas.** Además del filtro, la consulta de horas se acota
+ahora por generación: `startsAt >= min(arranque de su generación, su fecha
+de ingreso)` — la ANTERIOR de las dos, que es la única cota que no puede
+perder una hora real (cubre al transferido desde una generación previa y al
+que se inscribió antes de que abriera el ciclo). No hay cota superior a
+propósito: una cita COMPLETADA con fecha futura es un dato mal capturado, y
+esconderla haría bajar las horas sin que nadie pudiera ir a arreglarla. En
+el instituto de demo esta cota no quita ni una fila (nadie tiene citas
+anteriores a su generación); su valor es el techo — la consulta deja de
+crecer con la historia — y darle al índice un RANGO sobre el que trabajar.
+
+**El índice que faltaba** (`sql/edu-volumen.sql`, idempotente, NO bloqueante
+para el deploy). La auditoría señaló que `edu_appointments_student_idx` no
+lleva `status`. Comprobado con `EXPLAIN ANALYZE` sobre el instituto de demo:
+
+- sin el índice nuevo: `Filter: status = COMPLETED` — **Rows Removed by
+  Filter: 25** por estudiante, sobre 55 útiles (un 31 % de lectura tirada);
+- con `edu_appointments_student_status_idx (institutionId, studentId,
+  status, startsAt)`: todo pasa a **Index Cond**, sin filtro posterior.
+
+No va en `prisma/schema.prisma` porque es un archivo compartido con el
+dental y esta rama no lo toca — mismo trato que los índices trigram del
+vertical (`sql/edu-ola-1b.sql`). El .sql lo dice y es idempotente.
+
+**Pruebas** (`edu-evaluacion.test.ts`, 16 nuevas): la elección de la
+vigente con sus casos raros (ninguna arrancada, todas terminadas, una
+inactiva, empate de fechas), la ventana que no puede perder una hora, y
+cuatro candados de fuente — entre ellos **que no haya aparecido un `take`**
+sobre casos, citas ni calificaciones, que es justo lo que esta sección
+prohibió.
+
 ### P2-7 · El dinero está cerrado una vez, no dos
 
 `permissions.ts:80-87` promete, con todas sus letras, que el dinero está
@@ -1041,10 +1103,9 @@ guardia no se aflojó; se le puso la puerta que le faltaba.
    `package.json` declarado como compartido ante la guardia.
    `npm run test:edu` → **28 archivos, 929 pruebas, 0 fallos.**
 10. Del resto: ✅ **P2-12, P2-13, P2-14, P3-16, P3-17 y P3-18** cayeron en
-    la ola de cierre (cada uno con su «Cómo quedó»). ⏳ **P2-6** queda
-    fuera con motivo escrito: un `take` a secas falsificaría las horas de
-    acreditación; el arreglo real es el filtro por generación que la
-    cabecera de `evaluacion.ts` ya planea.
+    la ola de cierre (cada uno con su «Cómo quedó»). ✅ **P2-6** se cerró
+    después, en `fix/edu-volumen` — y se cerró **como esta auditoría pidió**:
+    con un filtro por generación, no con un `take`. Ver su sección.
 
 ---
 

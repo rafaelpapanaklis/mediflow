@@ -25,9 +25,13 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   EDU_ATRASO_LABELS,
   EDU_ATRASO_UMBRAL_VIGILAR,
+  EDU_GENERACION_TODAS,
   EDU_HORAS_MAX_MINUTOS_POR_CITA,
   EDU_WEIGHT_TOTAL,
   eduAppointmentMinutes,
@@ -43,13 +47,16 @@ import {
   eduCurrentGrade,
   eduCycleFraction,
   eduHoursLabel,
+  eduHoursWindowStart,
   eduParseScoreX100,
   eduRequirementProgress,
   eduRubricWeightCheck,
   eduScaleCheck,
   eduScoreLabel,
   eduSemesterRangeCheck,
+  eduVigenteCohort,
   parseEduSemaforo,
+  type EduCohortForPick,
   type EduCountableCase,
   type EduRequirementSpec,
   type EduTimedAppointment,
@@ -594,4 +601,245 @@ test("el nombre del archivo sale sin acentos ni espacios", () => {
     "bitacora-a-01-maria-rodriguez-2026-03-01.csv",
   );
   assert.equal(eduCsvFileName("", "2026-03-01"), "bitacora-estudiante-2026-03-01.csv");
+});
+
+
+// ══════════════════════════════════════════════════════════════════════
+// 7 · 🔴 P2-6 — LA GENERACIÓN VIGENTE
+//
+// La pantalla leía 17 082 filas para pintar 120 renglones (medido con
+// scripts/edu-seed-demo.ts): 16 364 de ellas citas, que crecen con el
+// TIEMPO y no con el padrón. La auditoría dejó escrito que un `take` a
+// secas aquí NO acota sino que FALSIFICA — truncaría las horas de algún
+// alumno al azar, y esas horas son las que la escuela enseña en una
+// acreditación. Lo que se acota es el CONJUNTO DE PERSONAS, dicho con
+// todas sus letras en pantalla.
+// ══════════════════════════════════════════════════════════════════════
+
+const RAIZ_EV = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+
+function fuenteEv(...tramos: string[]): string {
+  return readFileSync(join(RAIZ_EV, ...tramos), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+}
+
+const AHORA = new Date("2026-09-01T12:00:00Z");
+
+function coh(
+  id: string,
+  name: string,
+  start: string,
+  end: string | null,
+  isActive = true,
+): EduCohortForPick {
+  return { id, name, startDate: start, endDate: end, isActive };
+}
+
+/** El caso del instituto de demo: 2 generaciones × 3 especialidades, LAS
+ *  DOS en vuelo (una especialidad de tres años siempre tiene varias). */
+const DEMO: EduCohortForPick[] = [
+  coh("c-endo-25", "2025-A", "2025-02-03", "2027-12-10"),
+  coh("c-orto-25", "2025-A", "2025-02-03", "2027-12-10"),
+  coh("c-perio-25", "2025-A", "2025-02-03", "2027-12-10"),
+  coh("c-endo-26", "2026-A", "2026-02-02", "2028-12-08"),
+  coh("c-orto-26", "2026-A", "2026-02-02", "2028-12-08"),
+  coh("c-perio-26", "2026-A", "2026-02-02", "2028-12-08"),
+];
+
+test("🔴 la vigente es la ÚLTIMA QUE ARRANCÓ, no 'las que están corriendo'", () => {
+  // Las seis están en vuelo hoy. "Vigente = en curso" no acotaría nada:
+  // serían las seis y el hallazgo seguiría ahí.
+  const v = eduVigenteCohort(DEMO, AHORA);
+  assert.equal(v?.name, "2026-A");
+});
+
+test("🔴 la vigente agrupa por NOMBRE: la generación es la misma en las tres especialidades", () => {
+  const v = eduVigenteCohort(DEMO, AHORA);
+  assert.deepEqual(v?.ids.sort(), ["c-endo-26", "c-orto-26", "c-perio-26"]);
+  // Recortar a UN id dejaría fuera dos tercios del padrón sin avisar; para
+  // mirar una sola especialidad ya existe su propio filtro.
+  assert.equal(v?.ids.length, 3);
+});
+
+test("el suelo de la ventana es el arranque MÁS TEMPRANO de esa generación", () => {
+  const desfasada = [...DEMO, coh("c-tarde-26", "2026-A", "2026-03-15", "2028-12-08")];
+  const v = eduVigenteCohort(desfasada, AHORA);
+  assert.equal(v?.ids.length, 4);
+  assert.equal(v?.from.toISOString().slice(0, 10), "2026-02-02");
+});
+
+test("una generación con fecha FUTURA todavía no es la vigente", () => {
+  const conFutura = [...DEMO, coh("c-endo-27", "2027-A", "2027-02-01", "2029-12-01")];
+  assert.equal(eduVigenteCohort(conFutura, AHORA)?.name, "2026-A");
+});
+
+test("si NINGUNA arrancó, se elige la que está por arrancar (una escuela que abre)", () => {
+  const nueva = [coh("c1", "2027-A", "2027-02-01", null), coh("c2", "2028-A", "2028-02-01", null)];
+  assert.equal(eduVigenteCohort(nueva, AHORA)?.name, "2027-A");
+});
+
+test("si TODAS terminaron, se elige la última igual — mejor que enseñar el padrón entero", () => {
+  const viejas = [
+    coh("c1", "2019-A", "2019-02-01", "2021-12-01"),
+    coh("c2", "2021-A", "2021-02-01", "2023-12-01"),
+  ];
+  assert.equal(eduVigenteCohort(viejas, AHORA)?.name, "2021-A");
+});
+
+test("una generación INACTIVA no compite, y sin generaciones no hay vigente", () => {
+  const conBaja = [...DEMO, coh("c-baja", "2099-A", "2026-08-01", null, false)];
+  assert.equal(eduVigenteCohort(conBaja, AHORA)?.name, "2026-A");
+  assert.equal(eduVigenteCohort([], AHORA), null);
+  // Sin fecha de inicio no se puede ordenar: no compite, pero sigue siendo
+  // elegible a mano en el selector.
+  assert.equal(eduVigenteCohort([coh("c", "X", null as never, null)], AHORA), null);
+});
+
+test("🔴 el desempate es TOTAL: dos generaciones del mismo día no hacen parpadear el default", () => {
+  const empate = [
+    coh("zzz", "2026-B", "2026-02-02", null),
+    coh("aaa", "2026-A", "2026-02-02", null),
+  ];
+  const a = eduVigenteCohort(empate, AHORA);
+  const b = eduVigenteCohort([...empate].reverse(), AHORA);
+  assert.equal(a?.name, b?.name, "el orden de entrada cambió la respuesta");
+  assert.equal(a?.name, "2026-B");
+});
+
+test("🔴 la ventana de citas toma la fecha ANTERIOR: no puede perder una hora real", () => {
+  const arranque = "2026-02-02";
+  // El transferido desde una generación anterior: se inscribió ANTES.
+  const antiguo = eduHoursWindowStart(arranque, "2025-02-03");
+  assert.equal(antiguo?.toISOString().slice(0, 10), "2025-02-03");
+  // El que se inscribió después de que abriera el ciclo: manda el ciclo.
+  const tardio = eduHoursWindowStart(arranque, "2026-04-10");
+  assert.equal(tardio?.toISOString().slice(0, 10), "2026-02-02");
+});
+
+test("sin una de las dos fechas se usa la otra; sin ninguna, NO se acota", () => {
+  assert.equal(eduHoursWindowStart(null, "2026-04-10")?.toISOString().slice(0, 10), "2026-04-10");
+  assert.equal(eduHoursWindowStart("2026-02-02", null)?.toISOString().slice(0, 10), "2026-02-02");
+  // null = sin ventana. Preferible a inventar un suelo y descontarle horas
+  // a quien la escuela capturó a medias.
+  assert.equal(eduHoursWindowStart(null, null), null);
+});
+
+test("🔴 fuente · NO se puso un `take` sobre casos, citas ni calificaciones", () => {
+  // Es la trampa que la auditoría dejó escrita: un tope global aquí
+  // truncaría las filas de ALGÚN alumno al azar y sus horas saldrían
+  // menores sin ninguna señal. Eso es peor que el costo.
+  const src = fuenteEv("src", "lib", "edu", "evaluacion.ts");
+  const desde = src.indexOf("export async function listEduEvaluacion");
+  const hasta = src.indexOf("function agrupar", desde);
+  assert.ok(desde !== -1 && hasta > desde);
+  const cuerpo = src.slice(desde, hasta);
+
+  const takes = cuerpo.match(/take:/g) ?? [];
+  assert.equal(
+    takes.length,
+    1,
+    "el ÚNICO take de esta función es el de los ESTUDIANTES (EDU_EVALUACION_MAX_ROWS + 1)",
+  );
+  assert.match(cuerpo, /take: EDU_EVALUACION_MAX_ROWS \+ 1/);
+});
+
+test("🔴 fuente · las citas se acotan a la ventana de la generación, con OR por grupo", () => {
+  const src = fuenteEv("src", "lib", "edu", "evaluacion.ts");
+  const desde = src.indexOf("export async function listEduEvaluacion");
+  const cuerpo = src.slice(desde, src.indexOf("function agrupar", desde));
+  assert.match(cuerpo, /eduHoursWindowStart\(a\.cohort\.startDate, a\.enrolledAt\)/);
+  assert.match(cuerpo, /startsAt: \{ gte: g\.from \}/);
+  assert.match(cuerpo, /status: "COMPLETED"/);
+  // Sin ventana (fechas a medias) se lee todo ese grupo, como antes.
+  assert.match(cuerpo, /g\.from \? \{ startsAt/);
+});
+
+test("🔴 fuente · el default NO se le aplica al alumno ni al docente", () => {
+  // Con el default puesto también para ellos, un alumno de la generación
+  // anterior abriría SU pantalla de avance y vería cero filas.
+  const src = fuenteEv("src", "lib", "edu", "evaluacion.ts");
+  const desde = src.indexOf("export async function listEduEvaluacion");
+  const cuerpo = src.slice(desde, src.indexOf("const alumnos = await", desde));
+  assert.match(cuerpo, /scope\.kind !== "all"/);
+  assert.match(cuerpo, /modo: "alcance"/);
+  // Y la resolución de la vigente cuelga de ese mismo camino.
+  assert.match(cuerpo, /filters\.generacion === "vigente"/);
+  assert.match(cuerpo, /eduVigenteCohort\(cohortes, now\)/);
+});
+
+test("🔴 fuente · el loader NO recorta por su cuenta: Dirección lo reusa para la escuela entera", () => {
+  const src = fuenteEv("src", "lib", "edu", "evaluacion.ts");
+  const desde = src.indexOf("export async function listEduEvaluacion");
+  const cuerpo = src.slice(desde, src.indexOf("const alumnos = await", desde));
+  // El default arranca en "todas": sin `generacion: "vigente"`, se lee todo.
+  assert.match(cuerpo, /generacion: EduEvaluacionPage\["generacion"\] = \{ modo: "todas"/);
+  // Y direccion.ts sigue llamándolo SIN la preferencia (no puede cambiar
+  // sus números por debajo).
+  const dir = fuenteEv("src", "lib", "edu", "direccion.ts");
+  assert.match(dir, /listEduEvaluacion\(ctx, \{ programId \}, now\)/);
+  assert.doesNotMatch(dir, /listEduEvaluacion\([^)]*generacion:/);
+});
+
+test("🔴 fuente · la pantalla y el endpoint arrancan los dos en la vigente", () => {
+  const page = fuenteEv("src", "app", "instituto", "(panel)", "evaluacion", "page.tsx");
+  assert.match(page, /generacion: filters\.todasLasGeneraciones \? "todas" : "vigente"/);
+  assert.match(page, /EDU_GENERACION_TODAS/);
+
+  // El endpoint es la puerta de al lado: si ahí la ausencia significara
+  // "todas", la consulta de 17 082 filas vuelve por ese camino.
+  const api = fuenteEv("src", "app", "api", "instituto", "evaluacion", "route.ts");
+  assert.match(api, /generacion: todas \? "todas" : "vigente"/);
+  assert.match(api, /EDU_GENERACION_TODAS/);
+});
+
+test("🔴 fuente · la pantalla DICE qué generación está mirando", () => {
+  // Una pantalla que enseña 60 de 120 sin decir que está filtrada es la
+  // misma mentira que la lista que corta en 200 y calla.
+  const src = fuenteEv("src", "components", "edu", "evaluacion", "evaluacion-screen.tsx");
+  assert.match(src, /generacion\.modo === "vigente"/);
+  assert.match(src, /la vigente/);
+  assert.match(src, /Todas las generaciones/);
+  // Y se puede salir de ahí con un enlace de verdad (copiable, abrible en
+  // otra pestaña): es la vista que alguien manda para una acreditación.
+  assert.match(src, /href=\{urlCon\(\{ generacion: EDU_GENERACION_TODAS \}\)\}/);
+});
+
+test("🔴 el centinela de la URL vive en UN solo sitio", () => {
+  // Los DOS extremos del parámetro `?generacion=`: quien lo LEE (página y
+  // endpoint) y quien lo ESCRIBE (el <select> y los enlaces). Escrito a
+  // mano en cada uno, el día que uno cambie el selector diría "Todas" y el
+  // servidor seguiría mandando la vigente: sin error y sin señal.
+  assert.equal(EDU_GENERACION_TODAS, "todas");
+
+  const lectores: [string[], RegExp][] = [
+    // La página compara lo que vino en la query contra la constante.
+    [
+      ["src", "app", "instituto", "(panel)", "evaluacion", "page.tsx"],
+      /generacionRaw === EDU_GENERACION_TODAS/,
+    ],
+    [
+      ["src", "app", "api", "instituto", "evaluacion", "route.ts"],
+      /generacionRaw === EDU_GENERACION_TODAS/,
+    ],
+  ];
+  for (const [archivo, patron] of lectores) {
+    const src = fuenteEv(...archivo);
+    assert.match(src, patron, `${archivo.join("/")} no compara contra la constante`);
+    assert.doesNotMatch(
+      src,
+      /generacionRaw === "todas"/,
+      `${archivo.join("/")} compara contra el literal`,
+    );
+  }
+
+  // Y quien lo escribe: el <option> del selector y el enlace del aviso.
+  const screen = fuenteEv("src", "components", "edu", "evaluacion", "evaluacion-screen.tsx");
+  assert.match(screen, /<option value=\{EDU_GENERACION_TODAS\}>/);
+  assert.match(screen, /actual\.generacion = EDU_GENERACION_TODAS/);
+  assert.doesNotMatch(
+    screen,
+    /generacion: "todas"|value="todas"/,
+    "la pantalla escribe el literal en vez de la constante",
+  );
 });
