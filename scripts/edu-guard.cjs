@@ -69,11 +69,21 @@ function matchesOwnPattern(p) {
 // de TODO el repo, y una ola del instituto que lo toque sin decirlo sigue
 // siendo un fallo. Declarándolo, el guard obliga a que el cambio se vea:
 //   EDU_GUARD_SHARED="package.json" node scripts/edu-guard.cjs
+//
+// `src/components/patient-3d/DicomSetViewer.tsx` entra aquí al retirar el
+// visor CBCT propio del vertical. El instituto ya no reproduce el visor del
+// dental: monta EL MISMO, y para eso ese archivo recibió una prop OPCIONAL
+// (`endpoints`) con la que se le pasan las rutas del vertical. Sin ella, sus
+// dos fetch internos apuntan a /api/patients/**, que con ids del instituto
+// contestan 401/404 — y un adaptador no puede redirigir un fetch escrito
+// dentro. Es un archivo del producto dental VIVO, así que se declara y se ve:
+//   EDU_GUARD_SHARED="src/components/patient-3d/DicomSetViewer.tsx" node scripts/edu-guard.cjs
 const SHARED_FILES = [
   "prisma/schema.prisma",
   "src/middleware.ts",
   "ORQUESTA.md",
   "package.json",
+  "src/components/patient-3d/DicomSetViewer.tsx",
 ];
 
 function isOwn(p) {

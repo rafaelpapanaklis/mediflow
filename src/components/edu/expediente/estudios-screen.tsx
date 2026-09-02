@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Box, FileText, Image as ImageIcon, Layers, Upload, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
@@ -9,10 +9,8 @@ import {
   EDU_STUDY_ACCEPT,
   eduExtOfName,
   eduFormatBytes,
-  eduStudyKindForExt,
   type EduStudyRow,
 } from "@/lib/edu/estudios-core";
-import { EDU_STUDY_KIND_LABELS, type EduStudyKind } from "@/lib/edu/types";
 import type { EduCaseOption } from "@/lib/edu/expediente-core";
 import type { EduIaEstado } from "@/lib/edu/ia-core";
 import type { Dictionary } from "@/i18n/t";
@@ -33,6 +31,15 @@ import {
  * porcentaje que se ve aquí es real (viene de `xhr.upload.onprogress`), y
  * no un spinner que gira mientras se reza.
  *
+ * 🔴 AQUÍ NO SE PREGUNTA "¿QUÉ TIPO DE ESTUDIO ES?". Lo dice el archivo:
+ * un .zip o un .dcm es una tomografía, un .stl es una malla, un .pdf es un
+ * documento y un .jpg es una imagen. Preguntarlo era pedirle a la persona
+ * que clasificara lo que el servidor ya sabe, y abría la puerta a un .zip
+ * de 600 MB registrado como "Foto". El `kind` sigue existiendo en la base
+ * —lo usan el expediente, la línea de tiempo y la IA— y lo decide la
+ * EXTENSIÓN del path que compuso el servidor (`eduResolveStudyKind`); lo
+ * que desapareció es la taxonomía de la pantalla.
+ *
  * ⚠️ Lo que se ve aquí son TODOS los estudios del paciente, no solo los del
  * caso propio. Es a propósito: una tomografía de la boca es de la boca, y
  * esconderle al de endodoncia la panorámica que pidió el de ortodoncia
@@ -43,57 +50,40 @@ export interface EduEstudiosScreenProps {
   rows: EduStudyRow[];
   cases: EduCaseOption[];
   canUpload: boolean;
-  /** Ola 3B: estado del apoyo de IA, resuelto en el SERVIDOR. */
+  /** Estado del apoyo de IA, resuelto en el SERVIDOR. */
   iaAnalisis: EduIaEstado;
   canAnalyze: boolean;
-  /** Ola 12: el trozo de diccionario que necesita el visor de mallas 3D. */
+  /** El trozo de diccionario que necesita el visor de mallas 3D. */
   dict3d: Dictionary;
-  /** Ola 12: abrir el modal de subida al llegar (viene de ?subir=1, el
-   *  botón "Subir estudio" de la ficha). */
+  /** Abrir el modal de subida al llegar (viene de ?subir=1, el botón
+   *  "Subir estudio" de la ficha). */
   abrirSubida?: boolean;
 }
 
-const ICONO: Record<EduStudyKind, typeof ImageIcon> = {
-  RADIOGRAFIA: ImageIcon,
-  TOMOGRAFIA: Layers,
-  FOTO: ImageIcon,
-  PDF: FileText,
-  OTRO: FileText,
-  MODELO_3D: Box,
-};
-
 /**
- * Ola 12 — la galería se parte COMO EL DENTAL (radiografías · fotos ·
- * archivos · modelos 3D), pero en UNA pestaña con filtros y no en cuatro
- * pestañas: esta pantalla se usa en un teléfono, de pie, y cuatro pestañas
- * más dentro de una ficha que ya tiene nueve son un carrusel de toques. El
- * CBCT vive en "Modelos 3D" junto a las mallas —igual que en el dental—
- * porque los dos se abren en visor 3D; el corte suelto .dcm también.
+ * El icono de la tarjeta sale de la EXTENSIÓN, no del `kind` de la fila: es
+ * el mismo criterio con el que se elige el visor al abrirla, y así la
+ * miniatura nunca promete algo distinto de lo que se va a abrir.
  */
-type EduEstudioFiltro = "todos" | "radiografias" | "fotos" | "archivos" | "modelos3d";
-
-const FILTRO_KINDS: Record<Exclude<EduEstudioFiltro, "todos">, EduStudyKind[]> = {
-  radiografias: ["RADIOGRAFIA"],
-  fotos: ["FOTO"],
-  archivos: ["PDF", "OTRO"],
-  modelos3d: ["TOMOGRAFIA", "MODELO_3D"],
-};
-
-const FILTRO_LABELS: Record<EduEstudioFiltro, string> = {
-  todos: "Todos",
-  radiografias: "Radiografías",
-  fotos: "Fotos",
-  archivos: "Archivos",
-  modelos3d: "Modelos 3D",
-};
-
-const FILTRO_ORDEN: EduEstudioFiltro[] = [
-  "todos",
-  "radiografias",
-  "fotos",
-  "archivos",
-  "modelos3d",
-];
+function iconoDeArchivo(name: string): typeof ImageIcon {
+  switch (eduExtOfName(name)) {
+    case "zip":
+    case "dcm":
+    case "dicom":
+      return Layers;
+    case "stl":
+    case "ply":
+    case "obj":
+      return Box;
+    case "jpg":
+    case "jpeg":
+    case "png":
+    case "webp":
+      return ImageIcon;
+    default:
+      return FileText;
+  }
+}
 
 const FASE_LABEL: Record<EduUploadPhase, string> = {
   firmando: "Preparando…",
@@ -120,7 +110,6 @@ export function EduEstudiosScreen({
   // estado inicial — después manda la persona.
   const [subir, setSubir] = useState(Boolean(abrirSubida && canUpload));
   const [ver, setVer] = useState<EduStudyRow | null>(null);
-  const [filtro, setFiltro] = useState<EduEstudioFiltro>("todos");
 
   function recargar(mensaje: string) {
     setFlash(mensaje);
@@ -133,27 +122,6 @@ export function EduEstudiosScreen({
     setSubir(false);
     if (abrirSubida && pathname) router.replace(pathname, { scroll: false });
   }
-
-  const cuentas = useMemo(() => {
-    const c: Record<EduEstudioFiltro, number> = {
-      todos: rows.length,
-      radiografias: 0,
-      fotos: 0,
-      archivos: 0,
-      modelos3d: 0,
-    };
-    for (const r of rows) {
-      for (const f of ["radiografias", "fotos", "archivos", "modelos3d"] as const) {
-        if (FILTRO_KINDS[f].includes(r.kind)) c[f] += 1;
-      }
-    }
-    return c;
-  }, [rows]);
-
-  const visibles = useMemo(
-    () => (filtro === "todos" ? rows : rows.filter((r) => FILTRO_KINDS[filtro].includes(r.kind))),
-    [rows, filtro],
-  );
 
   return (
     <div className="edu-stack">
@@ -169,7 +137,7 @@ export function EduEstudiosScreen({
         <span className="edu-count">
           {navigating
             ? "Actualizando…"
-            : `${visibles.length} ${visibles.length === 1 ? "estudio" : "estudios"}`}
+            : `${rows.length} ${rows.length === 1 ? "estudio" : "estudios"}`}
         </span>
         {canUpload && (
           <button
@@ -186,25 +154,6 @@ export function EduEstudiosScreen({
         )}
       </div>
 
-      {/* Los filtros solo se pintan cuando hay algo que filtrar: con la
-          galería vacía serían cinco botones sobre la nada. */}
-      {rows.length > 0 && (
-        <div className="edu-filtros" role="group" aria-label="Filtrar por tipo de estudio">
-          {FILTRO_ORDEN.map((f) => (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={filtro === f}
-              className={`edu-filtro ${filtro === f ? "edu-filtro--on" : ""}`}
-              onClick={() => setFiltro(f)}
-            >
-              {FILTRO_LABELS[f]}
-              <span className="edu-filtro__n">{cuentas[f]}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
       {rows.length === 0 ? (
         <div className="edu-empty">
           <p className="edu-empty__title">Todavía no hay estudios</p>
@@ -214,18 +163,10 @@ export function EduEstudiosScreen({
             sube directo al almacenamiento, sin pasar por el servidor.
           </p>
         </div>
-      ) : visibles.length === 0 ? (
-        <div className="edu-empty">
-          <p className="edu-empty__title">Nada de este tipo</p>
-          <p className="edu-empty__detail">
-            Este paciente no tiene {FILTRO_LABELS[filtro].toLowerCase()} todavía. Cambia el filtro
-            o sube el primero.
-          </p>
-        </div>
       ) : (
         <div className="edu-estudios">
-          {visibles.map((e) => {
-            const Icono = ICONO[e.kind] ?? FileText;
+          {rows.map((e) => {
+            const Icono = iconoDeArchivo(e.name);
             return (
               <article key={e.id} className="edu-estudio">
                 <button
@@ -245,7 +186,7 @@ export function EduEstudiosScreen({
 
                 <span className="edu-estudio__name">{e.name}</span>
                 <span className="edu-estudio__meta">
-                  {EDU_STUDY_KIND_LABELS[e.kind]} · {e.sizeLabel} · {e.createdLabel}
+                  {e.sizeLabel} · {e.createdLabel}
                 </span>
                 <span className="edu-estudio__meta">
                   {e.uploadedByName}
@@ -283,6 +224,7 @@ export function EduEstudiosScreen({
       {ver && (
         <EduEstudioViewer
           estudio={ver}
+          patientId={patientId}
           onClose={() => setVer(null)}
           iaAnalisis={iaAnalisis}
           canAnalyze={canAnalyze}
@@ -311,11 +253,6 @@ function SubirEstudio({
   const [file, setFile] = useState<File | null>(null);
   const [caseId, setCaseId] = useState("");
   const [notes, setNotes] = useState("");
-  // Ola 12 — radiografía y foto intraoral llegan como la MISMA imagen y no
-  // hay forma de distinguirlas por el archivo: se pregunta aquí, solo para
-  // imágenes. Para todo lo demás el tipo lo decide la extensión en el
-  // servidor y esta elección se ignora (eduResolveStudyKind).
-  const [kindImagen, setKindImagen] = useState<"RADIOGRAFIA" | "FOTO">("RADIOGRAFIA");
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
   const [fase, setFase] = useState<EduUploadPhase | null>(null);
@@ -325,10 +262,6 @@ function SubirEstudio({
   // tiene por qué repintar, y en el estado se perdería entre renders justo
   // cuando alguien pulsa "Cancelar".
   const abortRef = useRef<AbortController | null>(null);
-
-  // ¿El archivo elegido es una IMAGEN? Solo entonces se pregunta qué es.
-  // La misma regla que aplica el servidor, importada del mismo módulo puro.
-  const esImagen = file ? eduStudyKindForExt(eduExtOfName(file.name)) === "RADIOGRAFIA" : false;
 
   async function subir() {
     if (!file) return;
@@ -343,7 +276,6 @@ function SubirEstudio({
         file,
         caseId: caseId || null,
         notes: notes.trim() || null,
-        kind: esImagen ? kindImagen : null,
         onProgress: setPct,
         onPhase: (f, i) => {
           setFase(f);
@@ -421,7 +353,7 @@ function SubirEstudio({
         />
         <span className="edu-field__hint">
           Imágenes (.jpg .png .webp), tomografías (.zip de cortes DICOM, .dcm), reportes (.pdf) y
-          mallas (.stl .ply .obj).
+          mallas (.stl .ply .obj). No hace falta decir qué es: lo deduce el archivo.
         </span>
       </div>
 
@@ -429,31 +361,6 @@ function SubirEstudio({
         <p className="edu-note">
           {file.name} · {eduFormatBytes(file.size)}
         </p>
-      )}
-
-      {esImagen && (
-        <div className="edu-field">
-          <span className="edu-field__label">¿Qué es esta imagen?</span>
-          <div className="edu-filtros" role="radiogroup" aria-label="Tipo de la imagen">
-            {(["RADIOGRAFIA", "FOTO"] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                role="radio"
-                aria-checked={kindImagen === k}
-                disabled={busy}
-                className={`edu-filtro ${kindImagen === k ? "edu-filtro--on" : ""}`}
-                onClick={() => setKindImagen(k)}
-              >
-                {k === "RADIOGRAFIA" ? "Radiografía" : "Fotografía"}
-              </button>
-            ))}
-          </div>
-          <span className="edu-field__hint">
-            Una placa exportada y una foto intraoral llegan como la misma imagen: dinos cuál es
-            para que la galería la acomode en su filtro.
-          </span>
-        </div>
       )}
 
       {busy && (

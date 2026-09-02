@@ -96,6 +96,14 @@ interface Props {
   // En móvil el visor carga ESTE binario (~20 MB) en vez del .zip (300-600 MB).
   liteUrl?: string;
   initialNotes?: string;
+  /**
+   * Rutas de servidor que usa el visor, para montarlo fuera del panel dental.
+   * Si no viene, se usan las de siempre (`/api/patients/...`) y nada cambia.
+   *   · `lite`  → POST que genera/devuelve el CBCT reducido (se le añade
+   *               `?res=hi` para la variante HD, igual que en el dental).
+   *   · `notes` → PATCH { doctorNotes } que guarda las notas del estudio.
+   */
+  endpoints?: { lite: string; notes: string };
 }
 
 type DecodeProgress = (done: number, total: number) => void;
@@ -334,7 +342,12 @@ function isLowMemoryDevice(): boolean {
   }
 }
 
-export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, initialNotes = "" }: Props) {
+export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, initialNotes = "", endpoints }: Props) {
+  // Las dos rutas del visor, resueltas a STRING (no al objeto `endpoints`):
+  // un objeto recién creado en cada render del padre entraría en las
+  // dependencias del efecto de carga y re-decodificaría el estudio entero.
+  const liteEndpoint = endpoints?.lite ?? `/api/patients/${patientId}/dicom-set/${fileId}/lite`;
+  const notesEndpoint = endpoints?.notes ?? `/api/patients/${patientId}/models-3d/${fileId}`;
   const [slices, setSlices] = useState<Slice[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "empty">("loading");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -588,10 +601,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
             // No existe aún (o falló la descarga): pídele al servidor que lo genere.
             setLiteBuilding(true);
             try {
-              const gen = await fetch(
-                `/api/patients/${patientId}/dicom-set/${fileId}/lite${hd ? "?res=hi" : ""}`,
-                { method: "POST" },
-              );
+              const gen = await fetch(`${liteEndpoint}${hd ? "?res=hi" : ""}`, { method: "POST" });
               if (cancelled) return;
               if (gen.ok) {
                 const j = await gen.json().catch(() => null);
@@ -702,7 +712,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
       activeWorker?.terminate();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId, lowMem, liteUrl, patientId, hd]);
+  }, [fileId, lowMem, liteUrl, liteEndpoint, hd]);
 
   // Auto-ventana p1/p99 al cargar (mejor que el WindowCenter/Width del scanner, que
   // en CBCT suele caer mal). Se aplica una vez por estudio en cuanto hay percentiles.
@@ -768,7 +778,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
   const saveNotes = useCallback(async () => {
     setSavingNotes(true);
     try {
-      const res = await fetch(`/api/patients/${patientId}/models-3d/${fileId}`, {
+      const res = await fetch(notesEndpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ doctorNotes: notes }),
@@ -780,7 +790,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, liteUrl, 
     } finally {
       setSavingNotes(false);
     }
-  }, [notes, patientId, fileId]);
+  }, [notes, notesEndpoint]);
 
   const notesPanel = (
     <div className="w-full border-t border-border pt-4">

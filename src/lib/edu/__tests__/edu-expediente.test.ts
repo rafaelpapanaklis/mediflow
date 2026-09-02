@@ -674,9 +674,10 @@ test("solo las imágenes y los PDF se pintan dentro de la página", () => {
   assert.equal(eduStudyIsImage(eduMimeForExt("zip")), false);
   assert.equal(eduStudyIsPdf(eduMimeForExt("pdf")), true);
   assert.equal(eduStudyIsPdf(eduMimeForExt("dcm")), false);
-  // Una tomografía NO se pinta con <img>: desde la Ola 12 la abre el
-  // visor CBCT propio (cbct-viewer.tsx), que decodifica el DICOM — pero
-  // sigue sin ser una imagen del navegador, y eso es lo que fija esta línea.
+  // Una tomografía NO se pinta con <img>: la abre el visor de tomografía
+  // del dental (DicomSetViewer / DicomViewer2D), que decodifica el DICOM —
+  // pero sigue sin ser una imagen del navegador, y eso es lo que fija esta
+  // línea.
   assert.equal(eduStudyIsImage(eduMimeForExt("dcm")), false);
   assert.equal(eduStudyIsPdf(eduMimeForExt("zip")), false);
 });

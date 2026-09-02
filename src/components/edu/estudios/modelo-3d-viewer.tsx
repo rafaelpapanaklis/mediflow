@@ -7,7 +7,7 @@ import type { Model3DFormat } from "@/components/patient-3d/Model3DViewer";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
- * OLA 12 · EL VISOR DE MALLAS 3D — ADAPTADOR, NO COPIA.
+ * EL VISOR DE MALLAS 3D — ADAPTADOR, NO COPIA.
  *
  * `Model3DViewer` (src/components/patient-3d/Model3DViewer.tsx) se importa
  * TAL CUAL del dental: es el visor de escaneos intraorales STL/PLY/OBJ con
@@ -37,7 +37,7 @@ import type { Model3DFormat } from "@/components/patient-3d/Model3DViewer";
 const Model3DViewer = dynamic(() => import("@/components/patient-3d/Model3DViewer"), {
   ssr: false,
   loading: () => (
-    <div className="edu-visor3d-cargando" role="status">
+    <div className="edu-vsr__cargando" role="status">
       Preparando el visor 3D…
     </div>
   ),
