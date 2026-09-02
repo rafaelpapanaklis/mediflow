@@ -1,4 +1,168 @@
 ═══════════════════════════════════════════════════════════════════════════
+## [Institucional · INTEGRACIÓN 6] — La valoración, la ventana de la agenda y el plano de la clínica, en una sola rama ✅ (2026-09-02) · rama `edu/integracion6` → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin tuberías, 467/467 páginas) · `npm run test:edu` VERDE
+(36 archivos, 1 202 pruebas, 0 fallos) · GUARDIA EXIT 0
+UN SQL: `sql/edu-clinica-plano.sql` — **BLOQUEANTE**, lo trae #166.
+Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Archivos tocados vs `origin/main`: 45 — 40 PROPIOS del vertical y 5 compartidos
+declarados. Cero prohibidos.
+
+QUÉ ES ESTO: tres ramas terminadas, cada una con su PR abierto y ninguna mergeada,
+puestas en una sola rama de integración para que main reciba UN merge y no tres.
+No se escribió una línea de producto: lo único que se redactó aquí es este bloque.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · QUÉ SE JUNTÓ, EN ESTE ORDEN
+───────────────────────────────────────────────────────────────────────────
+
+    #    rama                        commit      qué trae
+    ───  ──────────────────────────  ──────────  ─────────────────────────────
+    164  fix/edu-valoracion          d15f1470    "tamizaje" pasa a leerse
+                                                 "valoración" en TODO lo visible
+                                                 (el enum sigue TAMIZAJE)
+    165  fix/edu-agenda-ventana      e73b06cf    el eje de la rejilla pinta la
+                                                 jornada completa y cabe sin
+                                                 desplazar
+    166  feat/edu-clinica-plano      9dc0751f    /instituto/clinica pasa a ser el
+                                                 PLANO del piso; vista de estado,
+                                                 no paseo en primera persona
+
+Merge normal, sin rebase, y `git status` limpio entre uno y otro. El primero entró
+en avance rápido; los otros dos dejaron su commit de merge.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · LOS DOS ARCHIVOS QUE TOCAN VARIAS RAMAS
+───────────────────────────────────────────────────────────────────────────
+
+Son exactamente dos. Los otros 43 los toca UNA sola rama, y se comprobó archivo por
+archivo que cada uno quedó idéntico al de su rama de origen.
+
+**2.1 · `ORQUESTA.md` — el auto-merge se comió dos líneas SIN avisar.** Los tres
+reportes se añaden en el mismo sitio, así que git tuvo que fusionarlos. NO marcó
+conflicto: dijo "Auto-merging" y siguió. Pero metió 206 líneas donde la rama traía
+208, porque la barra `═══` con la que ABRE el bloque de #165 es idéntica a la que
+CIERRA el bloque de #164, y la fusionó con ella. Resultado: el título
+`## EDU-AGENDA-VENTANA` quedaba pegado a la última línea del reporte anterior, sin
+su barra de arriba — media bitácora dentro de otra, con cero borrados y cero avisos.
+
+Se repusieron a mano las dos líneas (la vacía de cierre y la barra de apertura) y se
+enmendó el commit de merge, no se añadió un parche encima. Después se comprobó, con
+`diff` y no a ojo, que:
+
+  · las 334 primeras líneas son EXACTAMENTE el bloque de #164 seguido del de #165,
+  · las 330 últimas son EXACTAMENTE el bloque de #166,
+  · y las 33 952 de en medio son idénticas al `ORQUESTA.md` de `origin/main`.
+
+Es la tercera integración seguida en la que este archivo se fusiona mal en silencio.
+La comprobación que sirve NO es "0 líneas borradas": es reconstruir el archivo
+esperado y compararlo entero.
+
+**2.2 · `src/app/instituto/edu-theme.css` — los dos bloques, enteros.** #165 edita la
+zona de la agenda (líneas 6657–7226 del archivo de main) y #166 añade 928 líneas al
+final. Rangos disjuntos, así que el auto-merge acertó; aun así se verificó: la parte
+de arriba es idéntica al CSS de la rama #165 y las 928 de abajo al bloque de #166.
+El archivo queda en 8 751 líneas = 7 757 de main + 69 −3 de #165 + 928 de #166.
+
+No hay colisión de nombres: de las 105 clases que declara el bloque del plano,
+ninguna redefine una existente. `.edu-btn` y `.edu-input` aparecen en los dos sitios,
+pero en el bloque nuevo solo como descendientes de clase propia
+(`.edu-plano__tbody .edu-btn`, `.edu-plano__sede .edu-input`), que es lo que hay que
+mirar: la prueba del tema revienta si dos reglas se llaman igual, y está verde.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LO QUE SOLO SE VE AL JUNTARLAS
+───────────────────────────────────────────────────────────────────────────
+
+Cada rama salió de main por su cuenta, así que #165 y #166 se escribieron sin saber
+que "tamizaje" iba a dejar de leerse así. Se revisaron una por una las cadenas
+`tamizaje` que quedan en los archivos de esas dos ramas: son el enum `TAMIZAJE`, las
+clases `.edu-slot--tamizaje` y `.edu-ag__cita--tamizaje`, y comentarios. Ni un texto
+de pantalla — que es justo lo que #164 declaró que NO cambiaba. Nada reintroducido.
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · VERIFICADO (sobre la rama integrada, no sobre las ramas sueltas)
+───────────────────────────────────────────────────────────────────────────
+
+  · `npm run build` EXIT 0, completo y sin tuberías. 467/467 páginas. En la tabla de
+    rutas salen las tres que trae #166:
+
+        ƒ /instituto/clinica                      8.59 kB    111 kB
+        ƒ /instituto/clinica/plano                6.57 kB    125 kB
+        ƒ /api/instituto/clinica/3d-state            0 B       0 B
+
+  · `npm run test:edu` EXIT 0 — **36 archivos, 1 202 pruebas, 0 fallos** (main traía
+    35 y 1 158; #165 suma 13 y #166 un archivo con 31).
+
+  · GUARDIA EXIT 0:
+
+        EDU_GUARD_SHARED="prisma/schema.prisma,src/components/clinic-3d/Clinic3DClient.tsx,src/components/clinic-3d/live-layer.ts,src/components/clinic-3d/Clinic3DHud.tsx,ORQUESTA.md" node scripts/edu-guard.cjs
+
+    40 propios, 5 compartidos declarados, 0 sin declarar, 0 prohibidos. Los tres
+    archivos del dental los toca #166 y los tres reciben prop o argumento OPCIONAL:
+    sin él, el dental se comporta línea por línea igual.
+
+  · `npx tsc --noEmit`: 11 errores, **los 11 dentro de `__tests__/`** y ninguno en
+    código que se envíe al navegador — por eso el build pasa (Next no chequea tipos
+    de las pruebas) y por eso `test:edu` está verde (tsx no las chequea tampoco).
+    **La integración no suma ni uno**, y no es una deducción: se corrió el mismo
+    `tsc` sobre `origin/main` (8 errores) y sobre la rama #166 sola (11, los 8 de
+    antes más los 3 suyos). La rama integrada da EXACTAMENTE esos 11. Se detallan
+    en el punto 6.
+
+  · La raíz del repo, limpia: `git status --porcelain` no devuelve nada.
+
+🔴 EL BUILD NO CABE EN EL HEAP POR DEFECTO. `npm run build` y `npx tsc --noEmit`
+mueren los dos con `FATAL ERROR: Ineffective mark-compacts near heap limit` (exit
+134) en la fase de chequeo de tipos, contra el tope de ~4 GB de V8 y NO contra la RAM
+de la máquina. No es de esta rama ni del código nuevo. Van con el tope subido, en la
+MISMA línea porque la variable no se hereda:
+
+    NODE_OPTIONS=--max-old-space-size=8192 npm run build
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · EL SQL, ANTES DEL MERGE
+───────────────────────────────────────────────────────────────────────────
+
+UNO, y es **bloqueante**: `sql/edu-clinica-plano.sql`. Lo trae #166 y el cliente
+Prisma ya pide la tabla, así que sin él `/instituto/clinica/plano` revienta al
+guardar. Va al FINAL del orden general, después de `sql/edu-volumen.sql`; necesita
+`edu_campuses` (Ola 11) y `edu_institutions`/`edu_users` (Ola 0). Crea una tabla
+(`edu_campus_layouts`), dos índices y tres llaves foráneas; es idempotente y no lleva
+un solo DROP. No toca ninguna tabla del dental, de barbería ni de inmuebles — en
+particular NO toca `clinic_layouts`, que es la equivalente del dental.
+
+Lleva además un backfill de permisos COMENTADO a propósito: la key nueva
+`clinica.edit` no le llega sola a quien ya tenga `permissionsOverride` con contenido,
+porque el override REEMPLAZA al default del rol. El bloque es solo para DIRECCION —
+el docente MIRA el piso pero no lo reacomoda.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · LO QUE QUEDA ANOTADO (no bloquea el merge)
+───────────────────────────────────────────────────────────────────────────
+
+**Los 11 errores de `tsc`, todos en pruebas.** Ocho ya están en `origin/main`, medido:
+seis de barbería y **dos de `src/lib/edu/__tests__/edu-theme.test.ts`** (líneas 174 y
+283, un `Map` y un `Set` iterados con el `target` que trae el tsconfig — el mismo
+tropiezo de siempre). No los toca ninguna de estas tres ramas. Los otros tres son del
+archivo nuevo de #166, `src/lib/edu/__tests__/edu-clinica-plano.test.ts`:
+
+    198,32  TS2345  un `id: number` donde `LayoutElement` pide `string`
+    302,17  TS2352  `Chair3DState` convertido a `Record<string, unknown>` sin pasar
+                    por `unknown`
+    423,40  TS2367  se compara la DESCRIPCIÓN del permiso con la key `"clinica.edit"`
+
+El tercero es el que vale la pena mirar cuando alguien vuelva al archivo: esa
+comparación es siempre falsa, así que esa aserción concreta no está probando lo que
+parece. Las 31 pruebas del archivo pasan; ninguno de los tres afecta a nada que se
+envíe al navegador.
+
+**El bloque de #166 quedó al FINAL de este archivo, no aquí arriba.** Así lo escribió
+su rama y no se movió: mover 330 líneas para dejarlas bonitas es justo el tipo de
+edición que hace ilegible el diff de una integración. Se busca por
+`## [Institucional · EL PLANO DE LA CLÍNICA]`.
+
+═══════════════════════════════════════════════════════════════════════════
 ## EDU-VALORACIÓN — "tamizaje" pasa a llamarse "valoración" en TODO lo que se lee ✅ (2026-09-01) · rama fix/edu-valoracion → PR, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
 PR: #164 (https://github.com/rafaelpapanaklis/mediflow/pull/164) · BUILD EXIT 0 · `npm run test:edu` EXIT 0 (1158 pruebas en 35 archivos) · GUARDIA EXIT 0
