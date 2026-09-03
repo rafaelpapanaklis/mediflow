@@ -807,6 +807,226 @@ antes de commitear; `git status` quedó con los 7 archivos del cambio y nada má
     src/app/instituto/edu-theme.css                +21  .edu-auth-historial__marca
 
 ═══════════════════════════════════════════════════════════════════════════
+## [Institucional · AUTOFIRMA DE DIRECCIÓN] — la dirección puede firmar lo que ella misma mandó, y queda escrito ✅ (2026-09-02) · rama `fix/edu-direccion-autofirma` → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin tuberías) · `npm run test:edu` VERDE (36 archivos,
+1 210 pruebas, 0 fallos) · GUARDIA EXIT 0 (7 archivos, los 7 PROPIOS del vertical).
+SQL: **ninguno** — es lógica, no schema. Columnas nuevas: **ninguna**.
+Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Migración de datos: **ninguna**. Nada del dental se tocó.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · LA REGLA, EN UNA LÍNEA
+───────────────────────────────────────────────────────────────────────────
+
+**"Nadie firma su propia petición" sigue en pie para TODOS, menos para
+DIRECCIÓN.** La dirección puede autorizar, rechazar o pedir cambios sobre una
+petición que mandó ella, y esas peticiones entran al lote como cualquier otra.
+Para el DOCENTE —y para el alumno, y para caja, y para cualquier rol que el
+enum gane mañana— no cambió absolutamente nada: mismo bloqueo, mismo texto,
+misma exclusión del lote.
+
+**La exención va por ROL de la sesión, no por permiso.** `ctx.role ===
+"DIRECCION"`. Encenderle `autorizaciones.decide` a un docente desde la pantalla
+de permisos le da la bandeja, NO la exención. Si la exención colgara de esa
+casilla, la separación de funciones que sostiene la Ola 4 entera se apagaría
+con un clic y quien lo diera no tendría cómo saber que además la estaba
+apagando.
+
+**Por qué la dirección sí.** Es la única figura que responde por la escuela
+entera y la única que no tiene a nadie encima. Con la regla puesta también
+sobre ella, una petición suya sobre un estudiante SIN supervisor vigente se
+quedaba sin NADIE con alcance para firmarla, y la única salida que el producto
+sabía ofrecerle era que se nombrara un superior que no existe. Lo que sustituye
+a la regla no es nada: es la TRAZA.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · DÓNDE VIVÍA LA REGLA (tres veces) Y DÓNDE VIVE AHORA (una)
+───────────────────────────────────────────────────────────────────────────
+
+La regla estaba escrita TRES veces, con tres comparaciones sueltas
+`requestedById === ctx.eduUserId`, y las tres tenían que decir lo mismo para
+siempre. Ahora vive UNA vez en el módulo puro y los tres sitios la llaman:
+
+    ANTES (3 comparaciones sueltas)             AHORA (1 función, 3 llamadas)
+    ─────────────────────────────────────────   ─────────────────────────────────
+    autorizaciones.ts ~516 · la bandeja         eduApprovalBatchSkipFor(ctx, …)
+      const propia = a.requestedById === …        (bandeja Y lote, misma función)
+    autorizaciones.ts ~1080 · la individual     eduApprovalOwnBlocked(ctx, …)
+      if (actual.requestedById === …) throw       + EDU_APPROVAL_OWN_DENIED
+    autorizaciones.ts ~1306 · el lote           eduApprovalBatchSkipFor(ctx, …)
+      if (f.requestedById === …) skip
+
+Lo nuevo en `src/lib/edu/autorizaciones-core.ts` (puro, client-safe, sin
+Prisma), sección **5 bis · LO PROPIO**:
+
+    eduApprovalRoleSignsOwn(role)          ¿este ROL firma lo suyo? Solo DIRECCION.
+    eduApprovalIsOwn(actor, requestedById) ¿la mandó quien mira? — el HECHO
+    eduApprovalOwnBlocked(actor, req)      ¿se le cierra? — la CONSECUENCIA
+    eduApprovalBatchSkipFor(actor, fila)   el motivo del lote, con lo propio ya juzgado
+    EDU_APPROVAL_OWN_DENIED                el 409 del docente, palabra por palabra
+
+El HECHO y la CONSECUENCIA van separados a propósito: la dirección tiene que
+poder VER que una petición es suya —y que firmarla quedará marcado— sin que eso
+le cierre nada. Por eso la fila viaja con `own` (la mandé yo) **y** con
+`batchSkip` (por qué no la puedo firmar de golpe), que ya no son lo mismo.
+
+`eduApprovalBatchSkipFor` juzga lo propio ANTES que todo lo demás, igual que
+antes: a quien no puede firmarla no se le explica que además es una urgencia.
+Y no toca la Ola 14 — una receta propia de la dirección sigue fuera del lote
+por ser receta, y sigue pidiendo `recetas.issue` y la cédula.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LA TRAZA: LA MARCA, SIN COLUMNA NUEVA
+───────────────────────────────────────────────────────────────────────────
+
+Los dos ids ya se guardaban: `requestedById` al pedir y `decidedById` al
+decidir. La marca es la COMPARACIÓN de esos dos, derivada AL LEER:
+
+    eduApprovalSelfDecided({ requestedById, decidedById })  →  boolean
+    EDU_APPROVAL_SELF_SIGNED_MARK   "Firmada por Dirección sobre una petición propia"
+    EDU_APPROVAL_SELF_DECIDED_MARK  "Decidida por Dirección sobre una petición propia"
+    eduApprovalSelfMark(status)     elige una de las dos
+
+Una columna "fue autofirma" habría sido un TERCER dato que mantener de acuerdo
+con esos dos, y el día que discrepara ganaría el que nadie comprueba. Lo único
+que hizo falta fue pedir `decidedById: true` en el `APPROVAL_SELECT` que ya
+existía: cero consultas nuevas, cero migración.
+
+**La marca no miente sobre lo que pasó.** Un RECHAZO sobre una petición propia
+no dice "firmada": dice "decidida". `EXPIRED` sí dice "firmada" — la firma
+existió y fue suya, y luego caducó porque el contenido cambió.
+
+Dónde se lee (las tres superficies):
+
+    · LA BANDEJA (/instituto/autorizaciones) — `bandeja-screen.tsx`
+      · antes de firmar: a la dirección, sobre su propia petición pendiente,
+        una línea gris: «La mandaste tú. Puedes decidirla: quedará marcada
+        "Firmada por Dirección sobre una petición propia".» No es una
+        advertencia y no bloquea nada: es la traza que ella está eligiendo
+        dejar. Al docente esa línea NO le sale nunca.
+      · después: la marca, en la tarjeta, cuando la fila trae `selfDecided`.
+    · EL DETALLE / EL EXPEDIENTE DEL CASO — `caso-autorizaciones.tsx`
+      La lista de autorizaciones del caso ES el historial del expediente (no
+      hay otro). Debajo del "pedida por … · firmada por …" sale la marca en
+      ámbar (`.edu-auth-historial__marca`, clase nueva, tokens ya existentes).
+    · FIRMAR DESDE LA FICHA — `caso-acciones.tsx`
+      La propia de la dirección ya se ofrece con sus tres botones, con la misma
+      advertencia previa. La del docente sigue con «La mandaste tú: la firma tu
+      docente supervisor.»
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · LOS TEXTOS
+───────────────────────────────────────────────────────────────────────────
+
+    QUÉ                                    DOCENTE (y demás)   DIRECCIÓN
+    ─────────────────────────────────────  ──────────────────  ─────────────────
+    409 al decidir lo propio               igual, palabra por   ya no ocurre
+                                           palabra
+    motivo del lote "propia"               igual                ya no ocurre
+    nota del grupo ("no entran en el       igual                sin "o las
+    lote: son urgencias o recetas…")                            mandaste tú"
+    aviso en la tarjeta                    ninguno (como        línea gris con
+                                           antes)               la marca futura
+    marca en el caso y en la bandeja       no la puede          sí
+                                           producir
+
+El 409 del docente está FIJADO por una prueba con el texto completo: lo que
+cambió es a quién se le aplica la regla, no lo que lee el docente cuando le
+aplica.
+
+La nota del grupo dejó de decirle a la dirección "o las mandaste tú" porque ya
+no la frena nada; para el docente se conserva tal cual.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · LO QUE **NO** CAMBIÓ
+───────────────────────────────────────────────────────────────────────────
+
+· El ALCANCE. `eduVisibility(ctx, "cases")` decide qué filas se ven y se
+  firman, exactamente igual: un docente que ya rotó sigue sin ver (ni firmar)
+  lo de los estudiantes que entregó, y caja sigue sin ver nada.
+· El HASH. Se sigue recalculando al firmar sobre lo que el firmante tiene
+  delante, y una firma sobre contenido editado sigue caducando sola.
+· Las URGENCIAS y las RECETAS siguen fuera del lote para todo el mundo,
+  dirección incluida.
+· Los tres permisos de la Ola 4 y su reparto por rol: intactos.
+· El endpoint, la ruta y la forma de la respuesta: intactos. La fila del JSON
+  ganó dos booleanos (`own`, `selfDecided`).
+· Consecuencia que conviene saber: como la RECETA usa el mismo mecanismo de la
+  Ola 4, la dirección que proponga una receta ahora puede expedirla ella misma
+  —con su cédula, y con la marca puesta—. Sigue exigiendo `recetas.issue` y se
+  lee una por una.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · PRUEBAS (+8, todas en el archivo de la Ola 4)
+───────────────────────────────────────────────────────────────────────────
+
+`src/lib/edu/__tests__/edu-autorizaciones.test.ts`, sección **5 bis**. Sin base
+de datos, como todo el archivo: lo que se prueba son funciones puras, que es
+justo donde ahora vive la regla.
+
+    · la DIRECCIÓN decide una petición propia y queda registrada como tal
+    · el DOCENTE sigue sin poder, con EL MISMO mensaje (texto completo fijado)
+    · la exención va por ROL: un docente con "autorizaciones.decide" por
+      override NO queda exento
+    · SOLO la dirección está exenta — recorre EDU_ROLES entero, así que un rol
+      nuevo nace del lado bloqueado
+    · el LOTE de la dirección SÍ incluye las propias; el del docente NO
+    · una propia que además es urgencia o receta: al docente "propia", a la
+      dirección el otro motivo
+    · LA MARCA sale cuando decidedById === requestedById y NO sale cuando no
+      (ni con la fila sin decidir, ni con ids vacíos)
+    · la marca no miente: un rechazo dice "decidida", no "firmada"
+
+Total del vertical: **1 210 pruebas en 36 archivos**, verde.
+
+───────────────────────────────────────────────────────────────────────────
+### 7 · CÓMO SE VERIFICÓ, Y LO QUE **NO** SE PUDO VERIFICAR
+───────────────────────────────────────────────────────────────────────────
+
+    npm run build (sin tuberías)                      EXIT 0
+    npm run test:edu                                  EXIT 0 · 1 210 pruebas
+    EDU_GUARD_SHARED="ORQUESTA.md" node edu-guard.cjs EXIT 0 · 0 prohibidos
+    npx tsc --noEmit                                  sin errores nuevos
+
+**No se pudo hacer el recorrido con sesión real.** `getEduContext()` exige una
+sesión de **Supabase**, y en esta máquina no hay `.env` local ni proyecto de
+Supabase (el único `.env.e2e` apunta a producción, y `seed:edu-demo` no crea
+cuentas de Supabase a propósito). Entrar a `/instituto` como Dirección para
+mandar un plan y firmarlo habría pedido credenciales de producción.
+
+Lo que sí se hizo, que es la receta que ya usa este repo para ver UI detrás de
+un login que no se puede fabricar: **renderizar los componentes REALES**
+(`bandeja-screen.tsx` y `caso-autorizaciones.tsx`) con `react-dom/server`, con
+el `edu-theme.css` de verdad, servirlos por HTTP y mirarlos en Chrome — en
+claro y en oscuro. Lo que se vio, y quedó en la captura:
+
+    · DIRECCIÓN, petición SUYA: los tres botones ACTIVOS, la línea gris «La
+      mandaste tú. Puedes decidirla: quedará marcada "Firmada por Dirección
+      sobre una petición propia"», el botón de lote diciendo "Autorizar las 2
+      que se pueden" (la suya cuenta) y la nota del grupo SIN "las mandaste tú".
+    · DOCENTE, petición SUYA: nota del grupo con "…o las mandaste tú", su
+      propia fuera del lote. Idéntico a antes.
+    · EXPEDIENTE DEL CASO: "Firmada por Dirección sobre una petición propia"
+      bajo la autorizada, "Decidida por Dirección sobre una petición propia"
+      bajo la rechazada, y NADA bajo la que firmó el docente.
+
+Los archivos del render (`_render.tmp.tsx`, `_render-stub.tmp.ts`) se borraron
+antes de commitear; `git status` quedó con los 7 archivos del cambio y nada más.
+
+───────────────────────────────────────────────────────────────────────────
+### 8 · ARCHIVOS (7)
+───────────────────────────────────────────────────────────────────────────
+
+    src/lib/edu/autorizaciones-core.ts            +137  la regla y la marca, puras
+    src/lib/edu/autorizaciones.ts                  ~96  los tres puntos, ahora llamadas
+    src/lib/edu/__tests__/edu-autorizaciones.test.ts +148  sección 5 bis (+8 pruebas)
+    src/components/edu/autorizaciones/bandeja-screen.tsx  +41  aviso previo y marca
+    src/components/edu/autorizaciones/caso-autorizaciones.tsx +9  la marca del caso
+    src/components/edu/casos/caso-acciones.tsx     +20  firmar lo propio desde la ficha
+    src/app/instituto/edu-theme.css                +21  .edu-auth-historial__marca
+
+═══════════════════════════════════════════════════════════════════════════
 ## [Institucional · INTEGRACIÓN 6] — La valoración, la ventana de la agenda y el plano de la clínica, en una sola rama ✅ (2026-09-02) · rama `edu/integracion6` → PR contra main, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
 BUILD EXIT 0 (completo, sin tuberías, 467/467 páginas) · `npm run test:edu` VERDE
