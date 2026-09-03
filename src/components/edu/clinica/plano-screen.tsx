@@ -334,6 +334,11 @@ export function EduPlanoScreen({
 
   const sinSillones = chairs.length === 0;
   const sinDibujar = revision.sinDibujar.length;
+  /** Los que el código puso solo y nadie ha acomodado todavía. */
+  const sinAcomodar = useMemo(() => {
+    const marcados = new Set(layout.pendientes ?? []);
+    return chairs.filter((c) => marcados.has(c.id));
+  }, [chairs, layout.pendientes]);
 
   // ── El respaldo: las tarjetas de siempre, sin tocar ───────────────────
   if (!mundoMontado) {
@@ -443,6 +448,25 @@ export function EduPlanoScreen({
             </p>
           </div>
         </div>
+      )}
+
+      {/* Los sillones que ENTRARON SOLOS al plano (se dieron de alta después
+          de que alguien lo acomodara). Ya se pintan y ya dicen su estado; lo
+          único que les falta es estar en el sitio de verdad, y eso lo tiene
+          que hacer una persona. */}
+      {!layout.auto && sinAcomodar.length > 0 && (
+        <FloorNote tone="proximo" role="status">
+          <strong>{sinAcomodar.map((c) => c.name).join(", ")}</strong>{" "}
+          {sinAcomodar.length === 1 ? "es nuevo y entró" : "son nuevos y entraron"} al plano{" "}
+          <strong>al lado del último</strong>: se {sinAcomodar.length === 1 ? "pinta" : "pintan"} en
+          vivo desde ya, pero todavía no {sinAcomodar.length === 1 ? "está" : "están"} donde{" "}
+          {sinAcomodar.length === 1 ? "está" : "están"} de verdad.{" "}
+          {puedeEditar
+            ? sinAcomodar.length === 1
+              ? "Acomódalo con «Acomodar el plano»."
+              : "Acomódalos con «Acomodar el plano»."
+            : "La dirección los acomoda desde «Acomodar el plano»."}
+        </FloorNote>
       )}
 
       {scopeKind === "supervised" && board.cards.some((c) => c.masked) && (

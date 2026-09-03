@@ -8141,6 +8141,14 @@ a.edu-ini-acceso:hover {
   color: #fb7185;
 }
 
+.edu-planoed__nuevo {
+  color: #8a5400;
+}
+
+.dark .edu-planoed__nuevo {
+  color: #fbbf24;
+}
+
 .edu-planoed__zoom {
   display: inline-flex;
   align-items: center;
@@ -8160,6 +8168,25 @@ a.edu-ini-acceso:hover {
 .edu-planoed__columna,
 .edu-planoed__lienzo {
   max-height: 74dvh;
+}
+
+/* Un plano que no se guardó no puede decirlo con el gris de "todo bien". */
+.edu-planoed__estado--mal {
+  color: #b3261e;
+  font-weight: 700;
+}
+
+.dark .edu-planoed__estado--mal {
+  color: #fb7185;
+}
+
+.edu-planoed__aviso {
+  color: #8a5400;
+  font-weight: 600;
+}
+
+.dark .edu-planoed__aviso {
+  color: #fbbf24;
 }
 
 .edu-planoed__svg {
@@ -8182,6 +8209,33 @@ a.edu-ini-acceso:hover {
   gap: 3px;
   font-size: 11.5px;
   color: var(--edu-text-3);
+}
+
+/* ── EL ARRASTRE ────────────────────────────────────────────────────────
+   El `<g>` que envuelve al dibujo de la capa compartida y que CAPTURA el
+   puntero. Sin `touch-action: none` el navegador se queda el gesto del dedo
+   para desplazar el lienzo y cancela el arrastre a los dos píxeles. (El SVG
+   ya lo lleva; se repite en el hijo porque es quien captura.) */
+.edu-planoed__arrastre {
+  touch-action: none;
+  cursor: grab;
+}
+
+.edu-planoed__arrastre:active {
+  cursor: grabbing;
+}
+
+/* El sillón que entró SOLO al plano: se pinta en vivo desde ya, pero no está
+   donde está de verdad hasta que la dirección lo arrastre. */
+.edu-planoed__nuevomarca {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  fill: #7a4a00;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .edu-planoed__campo {

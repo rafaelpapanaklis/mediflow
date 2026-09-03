@@ -200,6 +200,196 @@ MISMA capa"— pasa de verdad: `live-mode.tsx` monta ahora `FloorChairCard`, no 
 
 
 ═══════════════════════════════════════════════════════════════════════════
+## [EDU-PLANO · ARREGLOS] — El sillón que no se dejaba mover y el que no aparecía ✅ (2026-09-02) · rama `fix/edu-plano-editor` → PR contra main
+═══════════════════════════════════════════════════════════════════════════
+
+Dos fallos del editor del plano de la clínica del vertical INSTITUCIONAL
+(`/instituto/clinica/plano`, que alimenta `/instituto/clinica`). Ninguno es
+de dibujo: los dos hacen que el piso que se pinta en vivo **no sea el piso
+de verdad**, que es justamente lo único que esa pantalla promete.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · ARRASTRAR UN SILLÓN NO LO MOVÍA, Y LO MOVIDO NO SE GUARDABA
+───────────────────────────────────────────────────────────────────────────
+
+**El síntoma**: agarras un sillón, lo arrastras a donde va, sueltas — y
+vuelve a su celda. A veces sí se movía (dos clics sueltos), lo que es peor
+que si no funcionara nunca. Y si funcionaba, salir de la pantalla sin pulsar
+«Guardar el plano» tiraba el trabajo con un aviso de "tienes cambios sin
+guardar" que se lee de reojo y no lo ve nadie.
+
+**La causa, las dos mitades:**
+
+  · **El movimiento se confirmaba en un `click` del SVG.** El elemento se
+    tomaba en `mousedown` (→ estado `moviendo`), se seguía con el
+    `mousemove` del lienzo y se confirmaba en `onLienzoClick`. Con un
+    arrastre de verdad —presionar, mover, soltar— el navegador manda el
+    `click` al **ancestro común** del `mousedown` y el `mouseup`: si al
+    soltar el ratón está sobre otro elemento, o fuera del lienzo, ese
+    `click` no llega donde se le espera y `moviendo` se pierde. Con el dedo
+    directamente no funcionaba.
+  · **El guardado era un botón.** Acomodar un piso son veinte arrastres y
+    una pantalla que se abandona.
+
+**El arreglo** (`src/components/edu/clinica/plano-editor.tsx`):
+
+  · **Pointer Events con captura.** `pointerdown` sobre el elemento toma y
+    hace `setPointerCapture(e.pointerId)`; a partir de ahí **todos** los
+    `pointermove`/`pointerup` del gesto llegan al elemento aunque el dedo se
+    salga del sillón, del lienzo o de la ventana. **`pointerup` CONFIRMA**
+    la celda si está dentro de la rejilla y **libre**; si no, el sillón se
+    queda donde estaba y la pantalla lo dice ("Esa celda ya está ocupada.
+    Suéltalo en una libre."). Ratón, dedo y lápiz, el mismo camino.
+  · **Clic sin mover = seleccionar**, como antes y sin ensuciar la historia:
+    el arrastre lleva una bandera `movido` y, sin ella, `pointerup` sale
+    antes de tocar nada. `pointercancel` y `lostpointercapture` sueltan.
+  · 🔴 **El elemento en la mano vive en una REFERENCIA, no solo en el
+    estado**, y esto costó verlo en el navegador: el primer `pointermove`
+    llega ANTES de que React repinte —suele caer en el mismo tic que el
+    `pointerdown`—, así que su cierre veía todavía `null`, descartaba el
+    movimiento y el `pointerup` lo daba por "clic sin mover". Arrastrando
+    despacio funcionaba y arrastrando rápido no. El estado sigue existiendo
+    porque es lo que DIBUJA el sillón en su celda de destino mientras lo
+    llevas; quien decide son los tres manejadores, y leen de la referencia.
+  · **Guardado automático.** Soltar, girar, poner, borrar, ligar o cambiar
+    el tamaño del piso programan un PUT al **mismo endpoint** con un
+    debounce de `EDU_PLANO_AUTOSAVE_MS` (900 ms, en plano-core). Veinte
+    arrastres seguidos son UN guardado. El botón «Guardar el plano» se queda
+    para forzarlo.
+  · **El error NUNCA pasa en silencio.** El mensaje del servidor se pinta en
+    grande, con sus palabras ("un sillón ligado a una unidad que no es de
+    esta sede"), y la línea de estado se pone en rojo. ⚠️ Y **no se
+    reintenta solo con el mismo contenido**: un error de validación se
+    repetiría cada segundo para siempre. El siguiente cambio —o el botón—
+    lo vuelve a intentar.
+  · **La versión, no un booleano.** El guardado apunta qué versión mandó y
+    solo se da por limpio si nadie tocó nada mientras la petición viajaba;
+    con un `sucio` booleano, un cambio hecho durante el guardado se marcaba
+    como guardado sin haberse mandado nunca.
+  · De paso: `cambiar()` y `deshacer()` ya no apilan la historia **dentro**
+    del actualizador de `setElements` (en modo estricto React lo ejecuta dos
+    veces y "Deshacer" pedía dos pulsaciones por movimiento).
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · UN SILLÓN NUEVO NO ENTRABA AL PLANO GUARDADO
+───────────────────────────────────────────────────────────────────────────
+
+**El síntoma**: das de alta un sillón en `/instituto/sillones` y en el plano
+no está. Ni en el editor ni en la clínica en vivo — y un sillón que no se
+pinta **se lee como "está libre"** cuando puede estar ocupado.
+
+**La causa**: el plano automático (`eduPlanoAuto`) solo se usaba cuando la
+sede NO tenía plano guardado. En cuanto Dirección guardaba el suyo, el
+automático dejaba de correr y las unidades creadas después no entraban a
+ningún sitio. La única pista era un aviso de "hay un sillón que no está en
+el plano" que nadie tiene por qué saber resolver.
+
+**El arreglo**: la **LECTURA reconcilia**.
+
+  · `eduPlanoReconciliar` (`src/lib/edu/plano-core.ts`, puro): recorre los
+    sillones **activos** en el orden de la escuela (`orderIndex`, luego
+    `number` — el mismo con el que llegan de Sillones) y por cada uno sin
+    elemento pone uno **a continuación del último**, en la **misma rejilla
+    del automático** (`EDU_PLANO_AUTO_POR_FILA` / `PASO_COL` / `PASO_ROW`) y
+    en una **celda libre** (contando lo que mide el sillón, 2×3, no solo su
+    esquina). **Ligado a su `EduChair` desde el primer momento**: un sillón
+    dibujado sin ligar no se pinta en vivo, y esto existe para que se pinte.
+    · El ancla es el elemento del **último sillón en el orden de la
+      escuela**, no el que quede más abajo en el dibujo: si Dirección movió
+      el 12 a la esquina de arriba, el 13 aparece a su lado, que es donde
+      alguien lo va a buscar.
+    · Si se acaba el piso, la rejilla **crece** hacia abajo (con el tope del
+      mundo 3D). Un sillón dibujado y torcido se arregla en un arrastre; uno
+      invisible no se arregla nunca.
+  · **Se PERSISTE** (`getEduPlanoSede` → `persistirReconciliacion`). Sin eso
+    el sillón cambiaría de celda entre dos cargas de la pantalla, porque la
+    celda libre depende de lo que haya alrededor.
+  · 🔴 **Pero NO se firma.** `updatedByUserId` no se toca y `updatedAt` se
+    manda **explícito** con el valor que ya tenía, para que Prisma no lo
+    suba con su `@updatedAt`: "Guardado · <fecha> por <persona>" sigue
+    diciendo la verdad — la última vez que una PERSONA acomodó ese piso.
+  · Y si esa escritura falla (falta el `.sql`, base de solo lectura), la
+    pantalla se pinta igual con el plano reconciliado **en memoria**: aviso
+    en el servidor y nada revienta. Es una lectura de pantalla.
+  · **Queda marcado como pendiente** (`metadata.pendientes`, una llave
+    nuestra dentro del JSON que ya se guarda — sin schema y sin `.sql`). El
+    editor lo pinta en el lienzo ("nuevo · ponlo en su sitio"), lo cuenta
+    arriba ("1 sin acomodar") y lo lista aparte con un botón para verlo; la
+    clínica en vivo lo dice en una nota. La marca se quita en cuanto
+    Dirección lo **toca** (mover, girar, ligar, borrar), que es la única
+    señal honesta de que ya está donde va.
+  · **Un sillón dado de baja NO se toca**: su elemento se queda colgante,
+    como ya hacía `eduPlanoRevision`. Borrarlo tiraría el trabajo de
+    Dirección por reactivar un sillón dos días después.
+
+⚠️ **Consecuencia buscada**: borrar del plano el elemento de un sillón
+**activo** ya no lo quita del piso — la siguiente lectura lo vuelve a poner.
+El editor lo dice al borrarlo ("sigue activo en Sillones, así que volverá al
+plano; para quitarlo, dalo de baja allá") en vez de dejar que reaparezca
+solo y que nadie entienda por qué.
+
+───────────────────────────────────────────────────────────────────────────
+### ARCHIVOS
+───────────────────────────────────────────────────────────────────────────
+
+  · `src/lib/edu/plano-core.ts` — `eduPlanoReconciliar`, `eduPlanoPendientes`,
+    `EDU_PLANO_AUTOSAVE_MS`, `EDU_PLANO_SILLON_W/H`, `EduPlanoMetadata`;
+    `eduPlanoMetadata` conserva los pendientes; `EduPlanoLayout.pendientes`.
+  · `src/lib/edu/plano.ts` — la lectura reconcilia y persiste sin firmar;
+    `saveEduPlano` valida los pendientes que manda el editor.
+  · `src/components/edu/clinica/plano-editor.tsx` — arrastre y autoguardado.
+  · `src/components/edu/clinica/plano-screen.tsx` — la nota de "nuevos".
+  · `src/app/instituto/edu-theme.css` — `touch-action` del elemento,
+    cursores, la marca del sillón nuevo y el estado en rojo.
+  · `src/lib/edu/__tests__/edu-clinica-plano.test.ts` — 13 pruebas nuevas (46 en el archivo del plano).
+
+⚠️ **Rebasado sobre la capa compartida** (`src/components/floor-plan/`, la que
+entró con el PR #173 mientras esto se escribía). El arrastre NO se metió dentro
+de `IsoElement`: esa capa DIBUJA y no interactúa —lo dice su propia cabecera— y
+el editor del dental arrastra de otra manera. Aquí su dibujo va envuelto en un
+`<g>` de esta pantalla que lleva los Pointer Events, la marca del sillón recién
+puesto y el `touch-action: none` (el que captura es el que lo necesita). Cero
+archivos compartidos tocados: el guard lo confirma.
+
+**SIN SQL. SIN SCHEMA.** Es lógica: los pendientes viven en la `metadata`
+JSON que la tabla `edu_campus_layouts` ya guarda.
+
+───────────────────────────────────────────────────────────────────────────
+### VERIFICACIÓN
+───────────────────────────────────────────────────────────────────────────
+
+  · `npm run build` → **exit 0** (sin pipes).
+  · `npm run test:edu` → **VERDE, 36 archivos, 1 234 pruebas**, con las
+    nuevas: (a) el sillón nuevo entra después del último y en celda libre,
+    (b) reconciliar dos veces no duplica ni lo mueve, (c) tres nuevos entran
+    en el orden de Sillones; más la rejilla del automático, la celda
+    ocupada, el sillón de baja que se queda colgante, el crecimiento del
+    piso, los pendientes que sobreviven al saneo del dental, y que el
+    editor confirma en `pointerup` y guarda solo sin reintentar un error.
+  · `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**
+    (6 archivos propios + este reporte).
+  · **CON EL RATÓN**, contra Postgres real (Docker) y `npx next start`:
+    arrastré tres sillones (1, 2, 3) a otra fila → se guardaron **solos**
+    ("Guardado 10:43 p.m.", sin tocar el botón) → recargué → siguen ahí →
+    `/instituto/clinica` los pinta en el 3D en su sitio nuevo. Solté uno
+    encima de otro → rebotó con el aviso "Esa celda ya está ocupada".
+    Di de alta el "Sillón 7" en Sillones y volví al plano **sin tocar
+    nada** → apareció junto al último, ligado, marcado "nuevo · ponlo en su
+    sitio", `8 de 8 ligados · 1 sin acomodar`; recargar dos veces **no lo
+    movió ni lo duplicó** (los mismos elementos las dos veces) y el
+    "Guardado" siguió marcando la hora de la PERSONA, no la de la
+    reconciliación. Lo arrastré a su sitio y la marca desapareció, también
+    tras recargar. Repetido con el "Sillón 8": cayó **un paso de columna a
+    la derecha del 7**.
+  · Y el camino del ERROR, también con el ratón: con un elemento colgando
+    de un sillón borrado a mano de la base, el autoguardado falló y la
+    pantalla lo dijo en grande con las palabras del servidor ("está ligado
+    a una unidad que no es de esta sede"), la línea de estado se puso en
+    rojo ("Sin guardar.") y **no reintentó sola**. Al borrar ese elemento
+    —lo que pide el aviso— se guardó sin pulsar nada. Salir de la pantalla
+    con eso pendiente disparó el aviso del navegador.
+
+═══════════════════════════════════════════════════════════════════════════
 ## [Live-Dental-3D · ARREGLOS] — El día de la clínica, el humo del plano y el piso cortado ✅ (2026-09-02) · rama `fix/live-fecha-local` → PR contra main
 ═══════════════════════════════════════════════════════════════════════════
 
@@ -1522,7 +1712,7 @@ Archivos:
     src/components/edu/agenda/agenda-screen.tsx      la medida del alto y el aviso del eje corto
     src/components/edu/agenda/agenda-rejilla.tsx     las dos puntas del eje y el alto nullable
     src/app/instituto/edu-theme.css                  respaldo en dvh, max-height, clip, puntas
-    src/lib/edu/__tests__/edu-agenda-rejilla.test.ts 13 pruebas nuevas (55 en el archivo)
+    src/lib/edu/__tests__/edu-agenda-rejilla.test.ts 13 pruebas nuevas (46 en el archivo del plano) (55 en el archivo)
 
 ═══════════════════════════════════════════════════════════════════════════
 ## EDU-LANDING — /instituciones, la landing pública del vertical Institucional ✅ (2026-09-01) · rama feat/edu-landing → PR, SIN mergear
@@ -24541,7 +24731,7 @@ viera. Ahora `recorridoEmbebible()` elige el primero que SE PUEDE PINTAR y
 `tieneRecorrido()` responde lo mismo, así que insignia y ficha no se
 contradicen.
 
-**(e) 13 pruebas nuevas** en `src/lib/realty/__tests__/recorridos.test.ts`,
+**(e) 13 pruebas nuevas (46 en el archivo del plano)** en `src/lib/realty/__tests__/recorridos.test.ts`,
 con las variantes reales de Matterport (`/show/?m=`, sin subdominio, con www,
 `/models/<id>`, `/models/<id>/edit`, con parámetros de más) y las que hay que
 rechazar (`/discover/space/…`, la raíz, una sección del sitio). La que más
