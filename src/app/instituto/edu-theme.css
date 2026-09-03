@@ -6970,6 +6970,12 @@ a.edu-ini-acceso:hover {
   --edu-ag-eje-w: 54px;
   --edu-ag-col-w: 138px;
 
+  /* El acento de la guía del cursor (la fila, la celda y la hora sobre el
+     eje). Es un token y no `var(--edu-600)` escrito cuatro veces porque el
+     600 es AZUL OSCURO: sobre el #19203a del modo oscuro no se vería, y
+     así se cambia en un solo sitio (ver `.dark .edu-ag__scroll`). */
+  --edu-ag-guia: var(--edu-600);
+
   /* 🔴 EL RESPALDO DEL ALTO SE MIDE CONTRA LA VENTANA, no es un número.
      Era `520px` fijo, y un respaldo fijo falla CALLADO: si la medida de la
      pantalla no llega (la pestaña nunca se pinta, el nodo se montó dentro
@@ -7021,6 +7027,11 @@ a.edu-ini-acceso:hover {
 .edu-ag__fila {
   display: flex;
   min-width: min-content;
+  /* Ancla de la guía del cursor: la fila resaltada cruza TODAS las columnas
+     y la celda se coloca contra la fila entera, no contra una columna. Al
+     encabezado no le llega: su `position: sticky` va escrito debajo y gana
+     por orden. */
+  position: relative;
 }
 
 /* La fila de encabezados se queda arriba mientras el cuerpo se desplaza.
@@ -7157,6 +7168,36 @@ a.edu-ini-acceso:hover {
   pointer-events: none;
 }
 
+/* La hora del renglón que señala el cursor, sobre el eje. Ocupa el ANCHO
+   entero con fondo opaco a propósito: tapa al rótulo en punto o al de la
+   media que caiga a la misma altura, para que se lea "10:15" y no dos
+   horas encimadas. El `top` con `clamp` lo escribe el componente. */
+.edu-ag__horacursor {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .edu-ag__horacursor {
+    display: flex;
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 16px;
+    transform: translateY(-50%);
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 6px;
+    z-index: 1;
+    pointer-events: none;
+    background: var(--edu-surface);
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1;
+    color: var(--edu-ag-guia);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 /* ── Una columna ─────────────────────────────────────────────────────── */
 .edu-ag__col {
   position: relative;
@@ -7179,6 +7220,12 @@ a.edu-ini-acceso:hover {
     rgba(226, 233, 246, 0.09) 1px,
     transparent 1px
   );
+}
+
+/* El azul de acción del tema claro sobre el #19203a del oscuro daría ~1.4:1
+   y la guía desaparecería. Este periwinkle da 7:1 sobre la superficie. */
+.dark .edu-ag__scroll {
+  --edu-ag-guia: #9bb0dc;
 }
 
 .edu-ag__col:last-child {
@@ -7211,6 +7258,76 @@ a.edu-ini-acceso:hover {
   right: 0;
   pointer-events: none;
   border-top: 1px solid var(--edu-line);
+}
+
+/* ── LA GUÍA DEL CURSOR (src/components/edu/agenda/agenda-guia.tsx) ─────
+   Con doce sillones abiertos —o los siete días de la semana— el eje de
+   horas queda a media pantalla del hueco que se va a clickear y agendar se
+   vuelve puntería. La FILA ata el punto donde está el dedo con el eje; la
+   CELDA marca el renglón exacto y escribe su hora ahí mismo.
+
+   🔴 `z-index: 0` Y VAN DESPUÉS DE LAS COLUMNAS EN EL DOM. Las dos cosas:
+   el 0 las deja por DEBAJO de las tarjetas (`.edu-ag__cita` es 1) para no
+   tapar una cita, y el orden las deja por ENCIMA del fondo de la columna
+   —que en `:hover` es opaco— para que se vean. Y sin `pointer-events`, o
+   le robarían el click a la columna. */
+.edu-ag__guiafila,
+.edu-ag__guiaceld {
+  display: none;
+}
+
+/* Solo con ratón fino: en una pantalla táctil no hay "pasar por encima" y
+   el toque ya cae directo donde se ve. */
+@media (hover: hover) and (pointer: fine) {
+  .edu-ag__guiafila {
+    display: block;
+    position: absolute;
+    /* Empieza donde acaba el eje: la fila cruza las columnas, no la regla
+       (que además es sticky y se pinta por encima al desplazarse). */
+    left: var(--edu-ag-eje-w);
+    right: 0;
+    height: var(--edu-ag-slot-h);
+    z-index: 0;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--edu-ag-guia) 8%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--edu-ag-guia) 34%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--edu-ag-guia) 34%, transparent);
+  }
+
+  .edu-ag__guiaceld {
+    display: flex;
+    position: absolute;
+    height: var(--edu-ag-slot-h);
+    z-index: 0;
+    pointer-events: none;
+    align-items: center;
+    /* La hora a la izquierda, como el rótulo de las tarjetas: se lee como
+       el borrador de la cita que va a crear el click. */
+    justify-content: flex-start;
+    padding-left: 7px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--edu-ag-guia) 42%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--edu-ag-guia) 11%, transparent);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--edu-ag-guia);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 🔴 EL PUNTEADO SOLO DONDE EL CLICK SÍ ABRE EL ALTA. En la vista Semana
+     la columna es un DÍA y el alta necesita un sillón, así que ahí el click
+     en un hueco no hace nada —tampoco lo hacía antes de esta guía—; lo
+     mismo sin permiso de gestionar o sobre "Otros sillones". En esos casos
+     la celda sigue diciendo la hora (que es para lo que se mira) pero NO se
+     disfraza de borrador de cita: prometer un hueco que no se va a abrir es
+     peor que no marcar nada. */
+  .edu-ag__guiaceld--hueco {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--edu-ag-guia) 70%, transparent);
+    background: color-mix(in srgb, var(--edu-ag-guia) 16%, transparent);
+  }
 }
 
 /* ── Una cita ────────────────────────────────────────────────────────── */

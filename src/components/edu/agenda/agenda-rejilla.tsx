@@ -8,6 +8,8 @@ import {
   EDU_AGENDA_STATUS_TONE,
   eduAgendaLanes,
   eduAgendaRowIsClosed,
+  eduAgendaSlotAtY,
+  eduAgendaSlotLabel,
   eduAgendaSlots,
   eduProgramColor,
   eduRowPlacement,
@@ -15,6 +17,7 @@ import {
   type EduAgendaColumn,
   type EduAgendaLayout,
 } from "@/lib/edu/agenda-rejilla";
+import { EduAgendaGuia, useEduAgendaHover } from "./agenda-guia";
 import { eduMinutesToLabel, type EduAppointmentRow } from "@/lib/edu/agenda-core";
 import {
   EDU_APPOINTMENT_STATUS_LABELS,
@@ -89,6 +92,9 @@ function EjeHoras({
   // Las medias horas solo cuando les queda aire de verdad (≥28 px entre
   // rótulos). Con la jornada ajustada a pantalla se apilarían.
   const conMedias = showHalfHourLabels(EDU_AGENDA_SLOT_MINUTES, slotHpx);
+  // El renglón que señala el puntero. Es lo ÚNICO que se re-renderea al
+  // mover el mouse: llega por contexto y las columnas ni se enteran.
+  const guia = useEduAgendaHover();
 
   return (
     <div className="edu-ag__eje" aria-hidden="true">
@@ -135,6 +141,21 @@ function EjeHoras({
             {eduMinutesToLabel(h * 60 + 30)}
           </span>
         ))}
+      {/* La hora del renglón bajo el cursor, centrada en su banda y con
+          fondo opaco: tapa al rótulo de la hora o de la media que caiga a
+          la misma altura, para que "12:15" se lea entero. El `clamp` la
+          mantiene dentro del eje —que recorta lo que se salga— cuando el
+          renglón mide cinco píxeles en el preset "Todo el día". */}
+      {guia && (
+        <span
+          className="edu-ag__horacursor"
+          style={{
+            top: `clamp(9px, calc((${guia.slot} + 0.5) * var(--edu-ag-slot-h)), calc(100% - 9px))`,
+          }}
+        >
+          {guia.label}
+        </span>
+      )}
     </div>
   );
 }
@@ -255,6 +276,7 @@ function Tarjeta({
 
 function Columna({
   column,
+  index,
   layout,
   vista,
   canManage,
@@ -263,6 +285,8 @@ function Columna({
   onHueco,
 }: {
   column: EduAgendaColumn;
+  /** Su lugar en la fila. La guía del cursor lo lee del DOM para colocarse. */
+  index: number;
   layout: EduAgendaLayout;
   vista: "dia" | "semana";
   canManage: boolean;
@@ -286,6 +310,12 @@ function Columna({
   const bandas: number[] = [];
   for (let h = 1; h < layout.window.dayEnd - layout.window.dayStart; h++) bandas.push(h);
 
+  // ¿Un click en un hueco de ESTA columna abre el alta? La guía del cursor
+  // lo lee para decidir si marca el renglón como el borrador de una cita o
+  // solo dice la hora. Es la MISMA condición que la de `onClick`, escrita
+  // una vez: en Semana la columna es un día y el alta necesita un sillón.
+  const abreHueco = canManage && column.chairId !== null;
+
   const resalte =
     isOver && drag.overKey === column.key
       ? drag.mode === "conflict"
@@ -300,19 +330,20 @@ function Columna({
         setNodeRef(el);
       }}
       className={`edu-ag__col ${resalte}`}
+      data-edu-col={index}
+      data-edu-hueco={abreHueco ? "1" : "0"}
       style={{ height: `calc(${slots} * var(--edu-ag-slot-h))` }}
       onClick={(e) => {
         // Tocar un hueco vacío propone agendar ahí. Sobre una tarjeta no:
         // eso abre la cita.
-        if (!canManage || column.chairId === null) return;
+        if (!abreHueco) return;
         if ((e.target as HTMLElement).closest(".edu-ag__cita")) return;
         const caja = ref.current?.getBoundingClientRect();
         if (!caja || caja.height <= 0) return;
-        const renglon = Math.floor(((e.clientY - caja.top) / caja.height) * slots);
-        const minuto =
-          layout.window.dayStart * 60 +
-          Math.max(0, Math.min(slots - 1, renglon)) * EDU_AGENDA_SLOT_MINUTES;
-        onHueco(column, eduMinutesToLabel(minuto));
+        // 🔴 El MISMO cálculo que pinta la guía del cursor (ver
+        // `eduAgendaSlotAtY`): lo que se marcó es lo que se abre.
+        const renglon = eduAgendaSlotAtY(e.clientY - caja.top, caja.height, slots);
+        onHueco(column, eduAgendaSlotLabel(renglon, layout.window));
       }}
     >
       {bandas.map((h) => (
@@ -420,17 +451,25 @@ export function EduAgendaRejilla({
           ))}
         </div>
 
-        <div className="edu-ag__fila">
+        {/* La guía MONTA la fila del cuerpo —no la envuelve— porque necesita
+            medir contra ella para colocar el renglón bajo el cursor. Misma
+            estructura de siempre: el eje y las columnas, en ese orden. */}
+        <EduAgendaGuia
+          slots={slots}
+          window={layout.window}
+          columnCount={layout.columns.length}
+        >
           <div
             className="edu-ag__ejewrap"
             style={{ height: `calc(${slots} * var(--edu-ag-slot-h))` }}
           >
             <EjeHoras window={layout.window} slotHpx={slotHpx} />
           </div>
-          {layout.columns.map((c) => (
+          {layout.columns.map((c, i) => (
             <Columna
               key={c.key}
               column={c}
+              index={i}
               layout={layout}
               vista={vista}
               canManage={canManage}
@@ -439,7 +478,7 @@ export function EduAgendaRejilla({
               onHueco={onHueco}
             />
           ))}
-        </div>
+        </EduAgendaGuia>
       </div>
     </div>
   );

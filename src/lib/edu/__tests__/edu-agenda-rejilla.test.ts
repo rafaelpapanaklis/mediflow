@@ -42,6 +42,8 @@ import {
   eduAgendaLayout,
   eduAgendaLegend,
   eduAgendaParams,
+  eduAgendaSlotAtY,
+  eduAgendaSlotLabel,
   eduAgendaSlots,
   eduAgendaVisibleDays,
   eduAgendaWindow,
@@ -974,6 +976,173 @@ test("el tema declara las dos puntas del eje, que no se centran en su línea", (
   const eje = css.slice(css.indexOf(".edu-ag__eje {"), css.indexOf(".edu-ag__hora {"));
   assert.ok(eje.includes("overflow: clip;"), "sin esto vuelve la barra de dos pixeles");
   assert.ok(!eje.includes("overflow: hidden;"));
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6 bis · LA GUÍA DEL CURSOR
+//
+// 🔴 LO ÚNICO QUE IMPORTA AQUÍ: lo que la guía MARCA y lo que el click
+// ABRE tienen que ser el mismo renglón. Una guía que dice 12:15 sobre un
+// click que agenda a las 12:30 es peor que no marcar nada.
+// ═══════════════════════════════════════════════════════════════════════
+
+const REJILLA_TSX = "src/components/edu/agenda/agenda-rejilla.tsx";
+const GUIA_TSX = "src/components/edu/agenda/agenda-guia.tsx";
+
+test("el renglón bajo el puntero sale de repartir el alto medido, no de un alto supuesto", () => {
+  const slots = eduAgendaSlots(EDU_AGENDA_DEFAULT_WINDOW); // 8–20 → 48
+  assert.equal(slots, 48);
+  const alto = slots * 30;
+
+  assert.equal(eduAgendaSlotAtY(0, alto, slots), 0, "el techo es el primer renglón");
+  assert.equal(eduAgendaSlotAtY(29.9, alto, slots), 0, "casi el borde sigue siendo el de arriba");
+  assert.equal(eduAgendaSlotAtY(30, alto, slots), 1, "el borde exacto ya es el de abajo");
+  assert.equal(eduAgendaSlotAtY(alto - 0.1, alto, slots), slots - 1);
+});
+
+test("fuera de la columna no se inventa un renglón que no existe", () => {
+  const slots = 48;
+  const alto = 1440;
+  // El borde de abajo justo (y = alto) daría el renglón 48, que no existe:
+  // se queda en el último. Y por arriba, negativo, en el primero.
+  assert.equal(eduAgendaSlotAtY(alto, alto, slots), slots - 1);
+  assert.equal(eduAgendaSlotAtY(alto + 500, alto, slots), slots - 1);
+  assert.equal(eduAgendaSlotAtY(-40, alto, slots), 0);
+  // Y una medida rota (el nodo aún sin pintar) no puede tirar la pantalla.
+  assert.equal(eduAgendaSlotAtY(120, 0, slots), 0);
+  assert.equal(eduAgendaSlotAtY(120, Number.NaN, slots), 0);
+  assert.equal(eduAgendaSlotAtY(120, alto, 0), 0);
+});
+
+test("con el renglón fraccionario del zoom, el último píxel sigue siendo el último renglón", () => {
+  // La caja de la rejilla a 1.25x de zoom del navegador mide 719.6 px, no
+  // 720: el renglón sale a 14.99… y `y / altoDeRenglón` se pasaba de rango
+  // en el último píxel. Repartiendo el alto medido, no.
+  const slots = 48;
+  const alto = 719.6;
+  assert.equal(eduAgendaSlotAtY(alto - 0.05, alto, slots), 47);
+  assert.equal(eduAgendaSlotAtY(alto / 2, alto, slots), 24);
+});
+
+test("la hora del renglón es la del eje, sacada de un entero de minutos", () => {
+  const w = EDU_AGENDA_DEFAULT_WINDOW;
+  assert.equal(eduAgendaSlotLabel(0, w), "08:00");
+  assert.equal(eduAgendaSlotLabel(1, w), "08:15");
+  assert.equal(eduAgendaSlotLabel(9, w), "10:15", "el caso de la captura: cuartos, no horas en punto");
+  assert.equal(eduAgendaSlotLabel(47, w), "19:45");
+  // Y con el eje recortado por el horario de los sillones, el renglón 0 es
+  // la hora en que abren, no las ocho.
+  assert.equal(eduAgendaSlotLabel(0, { dayStart: 7 }), "07:00");
+  assert.equal(eduAgendaSlotLabel(2, { dayStart: 7 }), "07:30");
+});
+
+test("🔴 la guía y el click hacen LA MISMA cuenta, y sale de un solo sitio", () => {
+  const rejilla = readFileSync(join(RAIZ, REJILLA_TSX), "utf8");
+  const guia = readFileSync(join(RAIZ, GUIA_TSX), "utf8");
+
+  for (const [nombre, src] of [
+    [REJILLA_TSX, rejilla],
+    [GUIA_TSX, guia],
+  ] as const) {
+    assert.ok(
+      src.includes("eduAgendaSlotAtY("),
+      `${nombre} tiene que derivar el renglón con eduAgendaSlotAtY: dos cuentas separadas se desincronizan y la guía empieza a mentir`,
+    );
+    assert.ok(src.includes("eduAgendaSlotLabel("), `${nombre} tiene que escribir la hora con eduAgendaSlotLabel`);
+  }
+
+  // El click ya no reparte el alto a mano.
+  assert.ok(
+    !/Math\.floor\(\(\(e\.clientY/.test(rejilla),
+    "volvió la cuenta copiada dentro del componente",
+  );
+  // Y la guía no se fabrica su propia etiqueta: si formateara aparte, un
+  // cambio de formato dejaría al alta y a la marca diciendo cosas distintas.
+  assert.ok(!guia.includes("eduMinutesToLabel"), "la guía no formatea horas por su cuenta");
+});
+
+test("la guía sabe por el DOM en qué columna está y si ese click abre el alta", () => {
+  const rejilla = readFileSync(join(RAIZ, REJILLA_TSX), "utf8");
+  const guia = readFileSync(join(RAIZ, GUIA_TSX), "utf8");
+
+  // La columna lo publica…
+  assert.ok(rejilla.includes("data-edu-col={index}"));
+  assert.ok(rejilla.includes('data-edu-hueco={abreHueco ? "1" : "0"}'));
+  // …y la guía lo lee. Sin esto tendría que adivinar la columna por
+  // aritmética de anchos, que es justo lo que falla cuando una columna deja
+  // de medir lo mismo que las demás.
+  assert.ok(guia.includes("dataset.eduCol"));
+  assert.ok(guia.includes('dataset.eduHueco === "1"'));
+
+  // Y `abreHueco` es la MISMA condición que gobierna el click, escrita una
+  // sola vez: en Semana la columna es un día (chairId null) y el alta
+  // necesita un sillón, así que ahí la marca no se disfraza de borrador.
+  assert.ok(
+    rejilla.includes("const abreHueco = canManage && column.chairId !== null;"),
+    "si la condición del click y la de la marca se separan, la guía promete huecos que no se abren",
+  );
+  assert.ok(rejilla.includes("if (!abreHueco) return;"), "el click tiene que usar la misma condición");
+});
+
+test("la guía se borra al desplazarse: pegada a su renglón, mentiría", () => {
+  const guia = readFileSync(join(RAIZ, GUIA_TSX), "utf8");
+  // La marca se coloca en coordenadas de la rejilla; al rodar la rueda el
+  // cursor —que no se movió— pasa a señalar otro renglón y el siguiente
+  // click agendaría en uno distinto al marcado.
+  assert.ok(guia.includes('addEventListener("scroll"'), "sin esto la guía sobrevive al desplazamiento");
+  assert.ok(guia.includes(".edu-ag__scroll"), "el que se desplaza es el contenedor de la rejilla");
+});
+
+test("el tema declara la guía, y la pinta DEBAJO de las citas", () => {
+  const css = readFileSync(join(RAIZ, TEMA), "utf8");
+  assert.ok(css.includes(".edu-ag__guiafila {"), "falta la fila de la guía");
+  assert.ok(css.includes(".edu-ag__guiaceld {"), "falta la celda de la guía");
+  assert.ok(css.includes(".edu-ag__guiaceld--hueco {"), "falta la variante que sí abre el alta");
+  assert.ok(css.includes(".edu-ag__horacursor {"), "falta la hora resaltada sobre el eje");
+
+  // Los bloques que MAQUETAN viven dentro del @media del ratón fino; el
+  // primer `.edu-ag__guiafila` de la hoja es el grupo que las apaga.
+  const iFila = css.indexOf(".edu-ag__guiafila {");
+  const iCeld = css.indexOf(".edu-ag__guiaceld {", iFila);
+  const iHueco = css.indexOf(".edu-ag__guiaceld--hueco {", iCeld);
+  assert.ok(iFila > 0 && iCeld > iFila && iHueco > iCeld, "los tres bloques, en ese orden");
+
+  // z-index: la tarjeta es 1 y la guía 0. Al revés, la marca taparía las
+  // citas justo cuando se está buscando un hueco entre ellas.
+  const celda = css.slice(iCeld, iHueco);
+  assert.ok(celda.includes("z-index: 0;"));
+  assert.ok(celda.includes("pointer-events: none;"), "sin esto la guía le roba el click a la columna");
+  const cita = css.slice(css.indexOf(".edu-ag__cita {"), css.indexOf(".edu-ag__cita:hover {"));
+  assert.ok(cita.includes("z-index: 1;"), "si la tarjeta baja a 0, la guía empieza a taparla");
+
+  // La fila empieza donde acaba el eje: cruzar la regla la taparía.
+  const fila = css.slice(iFila, iCeld);
+  assert.ok(fila.includes("left: var(--edu-ag-eje-w);"));
+  assert.ok(fila.includes("z-index: 0;"));
+  assert.ok(fila.includes("pointer-events: none;"));
+
+  // Y las marcas se colocan contra la FILA, no contra la página.
+  const filaFlex = css.slice(css.indexOf(".edu-ag__fila {"), css.indexOf(".edu-ag__fila--cab {"));
+  assert.ok(filaFlex.includes("position: relative;"), "sin ancla, la guía se coloca contra el documento");
+});
+
+test("la guía no se pinta donde no hay ratón, y se ve en los dos temas", () => {
+  const css = readFileSync(join(RAIZ, TEMA), "utf8");
+  // En una pantalla táctil no hay "pasar por encima" y el toque ya cae
+  // directo: la marca sería un adorno que tapa.
+  const apagadas = css.slice(
+    css.indexOf(".edu-ag__guiafila,"),
+    css.indexOf("@media (hover: hover) and (pointer: fine) {", css.indexOf(".edu-ag__guiafila,")),
+  );
+  assert.ok(apagadas.includes("display: none;"), "la guía arranca apagada y solo la enciende el ratón fino");
+
+  // El azul de acción del tema claro sobre el #19203a del oscuro daría
+  // ~1.4:1: hay token propio y el modo oscuro lo cambia.
+  assert.ok(css.includes("--edu-ag-guia: var(--edu-600);"));
+  assert.ok(
+    /\.dark \.edu-ag__scroll \{\s*--edu-ag-guia:/.test(css),
+    "sin el relevo oscuro la guía se vuelve invisible el día que el vertical tenga interruptor",
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -333,6 +333,39 @@ export function eduAgendaSlots(window: { dayStart: number; dayEnd: number }): nu
   return Math.max(1, Math.round(((window.dayEnd - window.dayStart) * 60) / EDU_AGENDA_SLOT_MINUTES));
 }
 
+/**
+ * El renglón que señala el puntero dentro de una columna.
+ *
+ * 🔴 ESTE CÁLCULO ES EL DEL CLICK, y por eso vive AQUÍ y no dentro de un
+ * componente. La guía que se pinta al pasar el mouse y el hueco que abre el
+ * click tienen que caer en el MISMO renglón: una guía que marca las 12:15 y
+ * un alta que sale a las 12:30 es peor que no marcar nada — promete una
+ * cosa y hace otra, que es el peor fallo posible en una agenda. Si esto
+ * cambia, cambia para los dos a la vez.
+ *
+ * Se reparte el alto MEDIDO entre los renglones (y no `y / altoDeRenglón`)
+ * porque el alto de la columna se escribe en CSS como
+ * `calc(renglones * --edu-ag-slot-h)`: así cualquier redondeo del navegador
+ * queda dentro de la misma división y el último renglón no se queda a medio
+ * píxel de su borde.
+ */
+export function eduAgendaSlotAtY(offsetY: number, columnHeight: number, slots: number): number {
+  if (!(columnHeight > 0) || slots <= 0) return 0;
+  const crudo = Math.floor((offsetY / columnHeight) * slots);
+  return Math.max(0, Math.min(slots - 1, crudo));
+}
+
+/**
+ * La hora escrita de un renglón, "HH:MM".
+ *
+ * Sale de un ENTERO de minutos de pared, como todo lo que esta pantalla
+ * escribe: `eduMinutesToLabel` no sabe lo que es una zona horaria. Es la
+ * misma etiqueta que el eje pinta en punto y la que recibe el alta.
+ */
+export function eduAgendaSlotLabel(slot: number, window: { dayStart: number }): string {
+  return eduMinutesToLabel(window.dayStart * 60 + slot * EDU_AGENDA_SLOT_MINUTES);
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 2 · DÓNDE CAE UNA CITA EN LA REJILLA
 // ═══════════════════════════════════════════════════════════════════════
