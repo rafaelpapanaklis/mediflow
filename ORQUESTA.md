@@ -1,3 +1,215 @@
+═══════════════════════════════════════════════════════════════════════════
+## [Institucional · INTEGRACIÓN 7] — Dos ramas, un solo merge: la autofirma que main ya tenía y el sillón que ahora sí se arrastra ✅ (2026-09-02) · rama `edu/integracion7` → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin tuberías, 470/470 páginas) · `npm run test:edu` VERDE
+(36 archivos, 1 234 pruebas, 0 fallos) · GUARDIA EXIT 0
+SQL: **ninguno** en esta tanda. Variables de entorno nuevas: **ninguna**.
+Dependencias nuevas: **ninguna**.
+Archivos tocados vs `origin/main`: 7 — 6 PROPIOS del vertical y 1 compartido
+declarado (`ORQUESTA.md`). Cero prohibidos.
+
+QUÉ ES ESTO: dos ramas terminadas, cada una con su PR abierto y ninguna mergeada,
+puestas en una sola rama de integración para que main reciba UN merge y no dos. No
+se escribió una línea de producto: lo único que se redactó aquí es este bloque. Lo
+demás que se tocó fue reparar dos daños en la bitácora, y se detallan abajo.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · QUÉ SE JUNTÓ, EN ESTE ORDEN
+───────────────────────────────────────────────────────────────────────────
+
+    #    rama                        commit      qué trae
+    ───  ──────────────────────────  ──────────  ─────────────────────────────
+    168  fix/edu-direccion-autofirma 1dd333f6    la dirección puede firmar sus
+                                                 propias autorizaciones, y queda
+                                                 escrito
+    174  fix/edu-plano-editor        048bbb76    el sillón se arrastra de verdad,
+                                                 el plano se guarda solo y el
+                                                 sillón nuevo entra al plano
+
+Merge normal, sin rebase, y `git status` limpio entre uno y otro. Los dos dejaron su
+commit de merge (`0c2b57d4` y `f02e4098`). **Cero conflictos**: git no marcó ni uno.
+
+⚠️ **Y un TERCER merge, que no estaba en el plan: `origin/main` se movió mientras
+esto se verificaba.** Al hacer el `git fetch` previo al push, main ya no era
+`d7ac4b13` sino `9f4b3d4e` ("la guía de horario del cursor también en la vista
+Semana"). Se mergeó main a la rama —sin conflictos, 3 archivos suyos del panel
+dental: `agenda-hover-guide.tsx`, `agenda-week-view.tsx` y `hover-slot.test.ts`— y
+se **repitieron las tres puertas sobre esa base nueva**, no sobre la vieja. Sin ese
+merge la guardia habría salido en rojo por sí sola: mide contra `origin/main`, y
+una rama atrasada le hace leer los archivos ajenos de main como intrusos.
+
+🔴 **#168 NO TRAJO CÓDIGO: main ya lo tenía.** El merge de la primera rama cambió
+**un solo archivo, `ORQUESTA.md`**, y ni una línea de producto. No es un fallo del
+merge: el commit que hoy es la punta de main, `d7ac4b13` ("Rescate 2-sep", PR #173),
+ya se había llevado esa rama dentro — su propia tabla lo dice en la fila D ("La
+dirección firma sus propias autorizaciones · rama `fix/edu-direccion-autofirma` ·
+merge"). Sus 6 archivos de producto, su prueba y sus 21 líneas de `edu-theme.css`
+estaban ya en main **idénticos**, así que el merge no tuvo nada que aportar.
+
+Consecuencia para quien lea el PR: el diff contra main son 7 archivos y **todos
+menos `ORQUESTA.md` son de #174**. La autofirma no aparece en el diff porque ya
+está en producción; el PR de #168 se puede cerrar sin mergear.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · LOS DOS ARCHIVOS QUE TOCAN LAS DOS RAMAS
+───────────────────────────────────────────────────────────────────────────
+
+Son exactamente dos, y ninguno dio conflicto. Los otros 5 los toca UNA sola rama.
+
+**2.1 · `src/app/instituto/edu-theme.css` — sin colisión de nombres.** #168 añade 21
+líneas (`.edu-auth-historial__marca` y familia) que **ya estaban en main** por el
+rescate, y #174 añade 54 al final: `.edu-planoed__nuevo`, `__estado--mal`,
+`__aviso`, `__arrastre`, `__nuevomarca` y sus variantes en `.dark`. Rangos
+disjuntos y prefijo propio (`edu-planoed__`, que ya era de esa pantalla). La prueba
+del tema —la que revienta si dos bloques de primer nivel se llaman igual— está en
+verde, así que no hay dos dueños para un mismo nombre.
+
+**2.2 · `ORQUESTA.md` — DOS daños, y ninguno lo avisó nadie.** El auto-merge no
+marcó conflicto; dijo "Auto-merging" y siguió. Quedaron dos cosas mal, las dos
+encontradas comparando el archivo entero contra el de main y no a ojo:
+
+🔴 **(a) El reporte de #168, DUPLICADO palabra por palabra.** main ya traía ese
+bloque (entró con el rescate #173) y la rama lo trae en su propia cabecera; git no
+los reconoció como el mismo texto y **dejó las dos copias, una detrás de la otra**:
+220 líneas idénticas repetidas. Se comprobó con `diff` que los dos bloques eran
+byte a byte iguales y se borró el segundo. Las barras `═══` de apertura y cierre se
+revisaron después: el bloque siguiente conserva la suya.
+
+🔴 **(b) Dos reportes AJENOS quedaron con texto metido dentro.** Este no es del
+merge: **ya venía mal en la rama #174**. Quien redactó su reporte hizo un
+reemplazo global de `13 pruebas nuevas` → `13 pruebas nuevas (46 en el archivo del
+plano)` sobre TODO el `ORQUESTA.md`, y esa frase aparecía en otros dos sitios que
+no tenían nada que ver:
+
+    reporte de la agenda (#165):
+      main    · edu-agenda-rejilla.test.ts 13 pruebas nuevas (55 en el archivo)
+      la rama · edu-agenda-rejilla.test.ts 13 pruebas nuevas (46 en el archivo del plano) (55 en el archivo)
+
+    reporte de recorridos de Inmuebles:
+      main    · **(e) 13 pruebas nuevas** en `src/lib/realty/__tests__/recorridos.test.ts`,
+      la rama · **(e) 13 pruebas nuevas (46 en el archivo del plano)** en `src/lib/realty/…`,
+
+Las dos líneas se devolvieron al texto de main. La línea legítima de #174 —la que
+sí habla del archivo del plano— se quedó como estaba. Después del arreglo,
+`ORQUESTA.md` contra main es **+190 líneas y CERO borradas ni modificadas**: una
+inserción limpia del bloque de #174, que es lo único que debía cambiar.
+
+La lección se repite por cuarta integración seguida: en este archivo la
+comprobación que sirve NO es "git no marcó conflicto", ni "no se borró nada". Es
+mirar el `git diff` contra main **línea por línea de las que NO son del bloque
+nuevo**, porque las dos veces el daño estaba a 24 000 líneas de distancia del sitio
+donde se escribió.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LO QUE SOLO SE VE AL JUNTARLAS
+───────────────────────────────────────────────────────────────────────────
+
+Poco, y por una razón buena: las dos ramas salen del main de HOY (`d7ac4b13` es
+ancestro de las dos) y no se pisan en ningún archivo de producto. #168 toca las
+autorizaciones (`src/lib/edu/autorizaciones*.ts`, la bandeja y la ficha del caso) y
+#174 toca el plano de la clínica (`plano-core.ts`, `plano.ts`, el editor y su
+pantalla). Ni un archivo en común.
+
+Se comprobó archivo por archivo, comparando los objetos de git y no el árbol de
+trabajo, que los 6 archivos de código de la rama integrada son **idénticos** a los
+de `origin/fix/edu-plano-editor`: `git diff origin/fix/edu-plano-editor HEAD -- src/`
+no devuelve nada. (Comparar con `git show … | diff` da falsos positivos en este
+repo: los archivos del disco están en CRLF y los objetos en LF, y salen los 6 como
+"distintos" sin que lo sean.)
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · VERIFICADO (sobre la rama integrada, no sobre las ramas sueltas)
+───────────────────────────────────────────────────────────────────────────
+
+  · `npm run build` EXIT 0, completo y sin tuberías. **470/470 páginas.** En la
+    tabla de rutas salen las del plano que trae #174:
+
+        ƒ /instituto/clinica                     8.68 kB    115 kB
+        ƒ /instituto/clinica/plano               8.19 kB    130 kB
+        ƒ /api/instituto/clinica/plano              0 B       0 B
+        ƒ /api/instituto/clinica/3d-state           0 B       0 B
+
+  · `npm run test:edu` EXIT 0 — **36 archivos, 1 234 pruebas, 0 fallos.**
+
+    ⚠️ Son **13 pruebas más que main, no 26**, y el número cuadra a la primera: se
+    corrió el mismo `test:edu` sobre `origin/main` y da **36 archivos y 1 221
+    pruebas**. Las 13 que suben son TODAS de #174 (su archivo
+    `edu-clinica-plano.test.ts` pasa de 33 a 46). #168 no suma ninguna porque sus
+    pruebas —igual que su código— ya estaban en main desde el rescate #173. Si se
+    esperaban ~1 240, la diferencia es esa y no una prueba perdida.
+
+  · GUARDIA EXIT 0:
+
+        EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs
+
+    6 propios del vertical, 1 compartido declarado (`ORQUESTA.md`), 0 sin declarar,
+    0 prohibidos. Nada del dental, nada de barber, nada de inmuebles.
+
+  · La raíz del repo, limpia: `git status --porcelain` no devuelve nada y no hay
+    ningún archivo sin seguir.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · `tsc --noEmit`: 12 errores, y UNO es nuevo
+───────────────────────────────────────────────────────────────────────────
+
+`npx tsc --noEmit -p tsconfig.json` sale con **exit 2 y 12 errores, los 12 dentro de
+`__tests__/`**. Ninguno en código que se envíe al navegador — por eso el build pasa
+(Next no chequea los tipos de las pruebas) y por eso `test:edu` está en verde (el
+runner tampoco los chequea).
+
+No es una deducción: se corrió el MISMO `tsc` sobre `origin/main`, que da **11**.
+La rama integrada añade **exactamente uno**, y es de #174:
+
+    src/lib/edu/__tests__/edu-clinica-plano.test.ts(560,45):
+      error TS1501: This regular expression flag is only available when
+                    targeting 'es2018' or later.
+
+Es la bandera `/s` (dotAll) de esta comprobación, que verifica que la reconciliación
+del plano no firme a nombre de nadie:
+
+    !/data:\s*\{[^}]*updatedByUserId[^}]*\}/s.test(…)
+
+**No rompe nada**: Node entiende `dotAll` desde la v8, la prueba corre y pasa. Es
+deuda de configuración del repo, no de la prueba: `tsconfig.json` **no declara
+`target`**, así que TypeScript asume el más viejo. Es la misma causa de los otros
+dos errores de `src/lib/edu/` que ya venían de antes (`TS2802` en
+`edu-theme.test.ts`, por recorrer un `Map` y un `Set`). Se deja anotado y NO se
+toca aquí: cambiar el `target` del repo entero no es trabajo de una integración.
+
+Los 6 errores de `src/lib/edu/`, tal cual salen:
+
+    edu-clinica-plano.test.ts(213,32) TS2345  el arreglo literal no encaja en
+                                              LayoutElement[]              (ya en main)
+    edu-clinica-plano.test.ts(560,45) TS1501  la bandera /s pide es2018     ← NUEVO, de #174
+    edu-clinica-plano.test.ts(722,17) TS2352  Chair3DState → Record<string,unknown>
+                                                                           (ya en main)
+    edu-clinica-plano.test.ts(843,40) TS2367  comparación entre dos textos
+                                              que no se solapan            (ya en main)
+    edu-theme.test.ts(174,33)         TS2802  recorrer un Map pide es2015   (ya en main)
+    edu-theme.test.ts(283,22)         TS2802  recorrer un Set pide es2015   (ya en main)
+
+(Los tres de `edu-clinica-plano.test.ts` marcados "ya en main" son los mismos de
+main en las líneas 205, 309 y 430; se movieron de sitio porque #174 metió pruebas
+por encima.) Los 6 restantes son de `src/lib/barber/__tests__/`, ajenos al vertical
+y ya en main.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · QUÉ HACE FALTA PARA DESPLEGAR
+───────────────────────────────────────────────────────────────────────────
+
+  · **Ningún `.sql`.** Esta tanda no toca la base. El `.sql` del plano
+    (`sql/edu-clinica-plano.sql`) ya entró con la integración 6.
+  · Ninguna variable de entorno nueva, ninguna dependencia nueva.
+  · El PR de **#168 se puede cerrar sin mergear**: su código ya está en main.
+
+🔴 EL BUILD NO CABE EN EL HEAP POR DEFECTO. `npm run build` y `npx tsc --noEmit`
+mueren los dos contra el tope de ~4 GB de V8 (y NO contra la RAM de la máquina). No
+es de esta rama. Van con el tope subido, en la MISMA línea porque la variable no se
+hereda:
+
+    NODE_OPTIONS=--max-old-space-size=8192 npm run build
+
+═══════════════════════════════════════════════════════════════════════════
 ## [RESCATE 2-SEP] — Cuatro piezas sueltas del reinicio, en una sola rama ✅ (2026-09-02) · rama `integ/rescate-2sep` → PR contra main, SIN mergear
 
 Un reinicio dejó fuera de main el trabajo de un día: dos worktrees sin commitear y dos ramas
@@ -198,6 +410,196 @@ MISMA capa"— pasa de verdad: `live-mode.tsx` monta ahora `FloorChairCard`, no 
      instituto solo hereda dos props opcionales nuevas que no usa.
   7. **/dev-live-look en un despliegue** — tiene que dar 404.
 
+
+═══════════════════════════════════════════════════════════════════════════
+## [EDU-PLANO · ARREGLOS] — El sillón que no se dejaba mover y el que no aparecía ✅ (2026-09-02) · rama `fix/edu-plano-editor` → PR contra main
+═══════════════════════════════════════════════════════════════════════════
+
+Dos fallos del editor del plano de la clínica del vertical INSTITUCIONAL
+(`/instituto/clinica/plano`, que alimenta `/instituto/clinica`). Ninguno es
+de dibujo: los dos hacen que el piso que se pinta en vivo **no sea el piso
+de verdad**, que es justamente lo único que esa pantalla promete.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · ARRASTRAR UN SILLÓN NO LO MOVÍA, Y LO MOVIDO NO SE GUARDABA
+───────────────────────────────────────────────────────────────────────────
+
+**El síntoma**: agarras un sillón, lo arrastras a donde va, sueltas — y
+vuelve a su celda. A veces sí se movía (dos clics sueltos), lo que es peor
+que si no funcionara nunca. Y si funcionaba, salir de la pantalla sin pulsar
+«Guardar el plano» tiraba el trabajo con un aviso de "tienes cambios sin
+guardar" que se lee de reojo y no lo ve nadie.
+
+**La causa, las dos mitades:**
+
+  · **El movimiento se confirmaba en un `click` del SVG.** El elemento se
+    tomaba en `mousedown` (→ estado `moviendo`), se seguía con el
+    `mousemove` del lienzo y se confirmaba en `onLienzoClick`. Con un
+    arrastre de verdad —presionar, mover, soltar— el navegador manda el
+    `click` al **ancestro común** del `mousedown` y el `mouseup`: si al
+    soltar el ratón está sobre otro elemento, o fuera del lienzo, ese
+    `click` no llega donde se le espera y `moviendo` se pierde. Con el dedo
+    directamente no funcionaba.
+  · **El guardado era un botón.** Acomodar un piso son veinte arrastres y
+    una pantalla que se abandona.
+
+**El arreglo** (`src/components/edu/clinica/plano-editor.tsx`):
+
+  · **Pointer Events con captura.** `pointerdown` sobre el elemento toma y
+    hace `setPointerCapture(e.pointerId)`; a partir de ahí **todos** los
+    `pointermove`/`pointerup` del gesto llegan al elemento aunque el dedo se
+    salga del sillón, del lienzo o de la ventana. **`pointerup` CONFIRMA**
+    la celda si está dentro de la rejilla y **libre**; si no, el sillón se
+    queda donde estaba y la pantalla lo dice ("Esa celda ya está ocupada.
+    Suéltalo en una libre."). Ratón, dedo y lápiz, el mismo camino.
+  · **Clic sin mover = seleccionar**, como antes y sin ensuciar la historia:
+    el arrastre lleva una bandera `movido` y, sin ella, `pointerup` sale
+    antes de tocar nada. `pointercancel` y `lostpointercapture` sueltan.
+  · 🔴 **El elemento en la mano vive en una REFERENCIA, no solo en el
+    estado**, y esto costó verlo en el navegador: el primer `pointermove`
+    llega ANTES de que React repinte —suele caer en el mismo tic que el
+    `pointerdown`—, así que su cierre veía todavía `null`, descartaba el
+    movimiento y el `pointerup` lo daba por "clic sin mover". Arrastrando
+    despacio funcionaba y arrastrando rápido no. El estado sigue existiendo
+    porque es lo que DIBUJA el sillón en su celda de destino mientras lo
+    llevas; quien decide son los tres manejadores, y leen de la referencia.
+  · **Guardado automático.** Soltar, girar, poner, borrar, ligar o cambiar
+    el tamaño del piso programan un PUT al **mismo endpoint** con un
+    debounce de `EDU_PLANO_AUTOSAVE_MS` (900 ms, en plano-core). Veinte
+    arrastres seguidos son UN guardado. El botón «Guardar el plano» se queda
+    para forzarlo.
+  · **El error NUNCA pasa en silencio.** El mensaje del servidor se pinta en
+    grande, con sus palabras ("un sillón ligado a una unidad que no es de
+    esta sede"), y la línea de estado se pone en rojo. ⚠️ Y **no se
+    reintenta solo con el mismo contenido**: un error de validación se
+    repetiría cada segundo para siempre. El siguiente cambio —o el botón—
+    lo vuelve a intentar.
+  · **La versión, no un booleano.** El guardado apunta qué versión mandó y
+    solo se da por limpio si nadie tocó nada mientras la petición viajaba;
+    con un `sucio` booleano, un cambio hecho durante el guardado se marcaba
+    como guardado sin haberse mandado nunca.
+  · De paso: `cambiar()` y `deshacer()` ya no apilan la historia **dentro**
+    del actualizador de `setElements` (en modo estricto React lo ejecuta dos
+    veces y "Deshacer" pedía dos pulsaciones por movimiento).
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · UN SILLÓN NUEVO NO ENTRABA AL PLANO GUARDADO
+───────────────────────────────────────────────────────────────────────────
+
+**El síntoma**: das de alta un sillón en `/instituto/sillones` y en el plano
+no está. Ni en el editor ni en la clínica en vivo — y un sillón que no se
+pinta **se lee como "está libre"** cuando puede estar ocupado.
+
+**La causa**: el plano automático (`eduPlanoAuto`) solo se usaba cuando la
+sede NO tenía plano guardado. En cuanto Dirección guardaba el suyo, el
+automático dejaba de correr y las unidades creadas después no entraban a
+ningún sitio. La única pista era un aviso de "hay un sillón que no está en
+el plano" que nadie tiene por qué saber resolver.
+
+**El arreglo**: la **LECTURA reconcilia**.
+
+  · `eduPlanoReconciliar` (`src/lib/edu/plano-core.ts`, puro): recorre los
+    sillones **activos** en el orden de la escuela (`orderIndex`, luego
+    `number` — el mismo con el que llegan de Sillones) y por cada uno sin
+    elemento pone uno **a continuación del último**, en la **misma rejilla
+    del automático** (`EDU_PLANO_AUTO_POR_FILA` / `PASO_COL` / `PASO_ROW`) y
+    en una **celda libre** (contando lo que mide el sillón, 2×3, no solo su
+    esquina). **Ligado a su `EduChair` desde el primer momento**: un sillón
+    dibujado sin ligar no se pinta en vivo, y esto existe para que se pinte.
+    · El ancla es el elemento del **último sillón en el orden de la
+      escuela**, no el que quede más abajo en el dibujo: si Dirección movió
+      el 12 a la esquina de arriba, el 13 aparece a su lado, que es donde
+      alguien lo va a buscar.
+    · Si se acaba el piso, la rejilla **crece** hacia abajo (con el tope del
+      mundo 3D). Un sillón dibujado y torcido se arregla en un arrastre; uno
+      invisible no se arregla nunca.
+  · **Se PERSISTE** (`getEduPlanoSede` → `persistirReconciliacion`). Sin eso
+    el sillón cambiaría de celda entre dos cargas de la pantalla, porque la
+    celda libre depende de lo que haya alrededor.
+  · 🔴 **Pero NO se firma.** `updatedByUserId` no se toca y `updatedAt` se
+    manda **explícito** con el valor que ya tenía, para que Prisma no lo
+    suba con su `@updatedAt`: "Guardado · <fecha> por <persona>" sigue
+    diciendo la verdad — la última vez que una PERSONA acomodó ese piso.
+  · Y si esa escritura falla (falta el `.sql`, base de solo lectura), la
+    pantalla se pinta igual con el plano reconciliado **en memoria**: aviso
+    en el servidor y nada revienta. Es una lectura de pantalla.
+  · **Queda marcado como pendiente** (`metadata.pendientes`, una llave
+    nuestra dentro del JSON que ya se guarda — sin schema y sin `.sql`). El
+    editor lo pinta en el lienzo ("nuevo · ponlo en su sitio"), lo cuenta
+    arriba ("1 sin acomodar") y lo lista aparte con un botón para verlo; la
+    clínica en vivo lo dice en una nota. La marca se quita en cuanto
+    Dirección lo **toca** (mover, girar, ligar, borrar), que es la única
+    señal honesta de que ya está donde va.
+  · **Un sillón dado de baja NO se toca**: su elemento se queda colgante,
+    como ya hacía `eduPlanoRevision`. Borrarlo tiraría el trabajo de
+    Dirección por reactivar un sillón dos días después.
+
+⚠️ **Consecuencia buscada**: borrar del plano el elemento de un sillón
+**activo** ya no lo quita del piso — la siguiente lectura lo vuelve a poner.
+El editor lo dice al borrarlo ("sigue activo en Sillones, así que volverá al
+plano; para quitarlo, dalo de baja allá") en vez de dejar que reaparezca
+solo y que nadie entienda por qué.
+
+───────────────────────────────────────────────────────────────────────────
+### ARCHIVOS
+───────────────────────────────────────────────────────────────────────────
+
+  · `src/lib/edu/plano-core.ts` — `eduPlanoReconciliar`, `eduPlanoPendientes`,
+    `EDU_PLANO_AUTOSAVE_MS`, `EDU_PLANO_SILLON_W/H`, `EduPlanoMetadata`;
+    `eduPlanoMetadata` conserva los pendientes; `EduPlanoLayout.pendientes`.
+  · `src/lib/edu/plano.ts` — la lectura reconcilia y persiste sin firmar;
+    `saveEduPlano` valida los pendientes que manda el editor.
+  · `src/components/edu/clinica/plano-editor.tsx` — arrastre y autoguardado.
+  · `src/components/edu/clinica/plano-screen.tsx` — la nota de "nuevos".
+  · `src/app/instituto/edu-theme.css` — `touch-action` del elemento,
+    cursores, la marca del sillón nuevo y el estado en rojo.
+  · `src/lib/edu/__tests__/edu-clinica-plano.test.ts` — 13 pruebas nuevas (46 en el archivo del plano).
+
+⚠️ **Rebasado sobre la capa compartida** (`src/components/floor-plan/`, la que
+entró con el PR #173 mientras esto se escribía). El arrastre NO se metió dentro
+de `IsoElement`: esa capa DIBUJA y no interactúa —lo dice su propia cabecera— y
+el editor del dental arrastra de otra manera. Aquí su dibujo va envuelto en un
+`<g>` de esta pantalla que lleva los Pointer Events, la marca del sillón recién
+puesto y el `touch-action: none` (el que captura es el que lo necesita). Cero
+archivos compartidos tocados: el guard lo confirma.
+
+**SIN SQL. SIN SCHEMA.** Es lógica: los pendientes viven en la `metadata`
+JSON que la tabla `edu_campus_layouts` ya guarda.
+
+───────────────────────────────────────────────────────────────────────────
+### VERIFICACIÓN
+───────────────────────────────────────────────────────────────────────────
+
+  · `npm run build` → **exit 0** (sin pipes).
+  · `npm run test:edu` → **VERDE, 36 archivos, 1 234 pruebas**, con las
+    nuevas: (a) el sillón nuevo entra después del último y en celda libre,
+    (b) reconciliar dos veces no duplica ni lo mueve, (c) tres nuevos entran
+    en el orden de Sillones; más la rejilla del automático, la celda
+    ocupada, el sillón de baja que se queda colgante, el crecimiento del
+    piso, los pendientes que sobreviven al saneo del dental, y que el
+    editor confirma en `pointerup` y guarda solo sin reintentar un error.
+  · `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**
+    (6 archivos propios + este reporte).
+  · **CON EL RATÓN**, contra Postgres real (Docker) y `npx next start`:
+    arrastré tres sillones (1, 2, 3) a otra fila → se guardaron **solos**
+    ("Guardado 10:43 p.m.", sin tocar el botón) → recargué → siguen ahí →
+    `/instituto/clinica` los pinta en el 3D en su sitio nuevo. Solté uno
+    encima de otro → rebotó con el aviso "Esa celda ya está ocupada".
+    Di de alta el "Sillón 7" en Sillones y volví al plano **sin tocar
+    nada** → apareció junto al último, ligado, marcado "nuevo · ponlo en su
+    sitio", `8 de 8 ligados · 1 sin acomodar`; recargar dos veces **no lo
+    movió ni lo duplicó** (los mismos elementos las dos veces) y el
+    "Guardado" siguió marcando la hora de la PERSONA, no la de la
+    reconciliación. Lo arrastré a su sitio y la marca desapareció, también
+    tras recargar. Repetido con el "Sillón 8": cayó **un paso de columna a
+    la derecha del 7**.
+  · Y el camino del ERROR, también con el ratón: con un elemento colgando
+    de un sillón borrado a mano de la base, el autoguardado falló y la
+    pantalla lo dijo en grande con las palabras del servidor ("está ligado
+    a una unidad que no es de esta sede"), la línea de estado se puso en
+    rojo ("Sin guardar.") y **no reintentó sola**. Al borrar ese elemento
+    —lo que pide el aviso— se guardó sin pulsar nada. Salir de la pantalla
+    con eso pendiente disparó el aviso del navegador.
 
 ═══════════════════════════════════════════════════════════════════════════
 ## [Live-Dental-3D · ARREGLOS] — El día de la clínica, el humo del plano y el piso cortado ✅ (2026-09-02) · rama `fix/live-fecha-local` → PR contra main
@@ -36495,3 +36897,298 @@ Lo que devolvió ese arnés, literal:
    convirtió el resto del formulario del bot en autosave; los otros tres interruptores del bot
    (FAQ / agendar / derivar) siguen con el botón de Guardar; y `/api/clinic` se dejó como
    está —sigue sin escribir `waReminder*`, que ahora ya no le pide nadie—.
+
+═══════════════════════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════
+
+## [CRM-Editar-Plantillas] — El prospecto ya se edita desde donde lo estás mirando, y el guion de venta deja de vivir en las notas del teléfono ✅ (2026-09-02) · rama `feat/crm-editar-plantillas` (sale de `origin/main` = `9f4b3d4e`)
+
+Tres cosas en `/admin/crm`: que se pueda editar un prospecto sin ir a buscar el botón, que la
+pantalla se lea mejor siendo la misma pantalla, y una sección nueva —**Mis textos**— para los
+mensajes que se le mandan a un prospecto.
+
+Sesión de PLATAFORMA en todo: `admin_token` + `getAdminSession()` en cada server action, jamás
+`getAuthContext`. Ningún dato de prospecto sale a una ruta pública. Cero dependencias nuevas.
+`/admin` no está traducido y **no** se tradujo ahora.
+
+═══════════════════════════════════════════════════════════════════════════
+### 0 · ⚠️ EL SQL PENDIENTE QUE YA ESTABA AHÍ (LÉELO ANTES DE NADA)
+
+Me pediste comprobar si el CRM tenía algún SQL previo sin aplicar. **Sí lo tiene, y no es el
+mío.**
+
+`sql/crm-dalecontrol.sql` — el que crea `crm_prospects` y `crm_activities` — nació en el commit
+`4bc0fe2c` (la libreta de ventas) con la nota «🔴 APLICARLO ANTES DEL DEPLOY», y **no hay
+constancia en el repo de que se haya corrido**. Desde aquí no puedo comprobarlo: este worktree
+no tiene `DATABASE_URL`, y aplicar SQL no me toca.
+
+Lo que sí puedo decirte es cómo se ve desde afuera si NO se corrió: `/admin/crm` no truena, pero
+en vez del tablero enseña «No se pudo leer la lista de prospectos… falta aplicar
+sql/crm-dalecontrol.sql», y el badge del menú se queda en cero. Si la has visto funcionando con
+prospectos dentro, está aplicado.
+
+**La comprobación de cinco segundos, en el editor de SQL de Supabase:**
+
+```sql
+SELECT table_name FROM information_schema.tables
+ WHERE table_schema = 'public'
+   AND table_name IN ('crm_prospects','crm_activities','crm_templates');
+```
+
+  · **0 filas** → falta `sql/crm-dalecontrol.sql` Y `sql/crm-textos.sql`. Corre primero el de
+    dalecontrol y después el mío.
+  · **2 filas** → sólo falta el mío (`sql/crm-textos.sql`).
+  · **3 filas** → ya está todo; correr el mío otra vez no hace nada (es idempotente).
+
+El otro archivo con pinta de pendiente, `sql/crm_enhancements.sql` (junio, «⚠️ RAFAEL: correr
+este SQL»), **está aplicado seguro**: sólo añade columnas a `patients` y `clinics`
+(`lifecycleStage`, `source`, `birthdayMsgActive`…) y el esquema las declara; si faltaran, hoy
+estaría rota la lista de pacientes entera, no sólo el CRM. No hace falta tocarlo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · EDITAR: QUÉ HABÍA DE VERDAD, Y QUÉ SE HIZO
+
+Lo comprobé antes de tocar nada, y el diagnóstico no era exacto en un punto:
+
+  · `actualizarProspectoAccion` **funcionaba**. ✔
+  · `CrmFormulario` **ya editaba** —recibe `prospecto` y cubre 18 campos—, pero sólo se montaba
+    en modo edición en `/admin/crm/[id]` (`prospecto-client.tsx:377`). Desde `crm-client.tsx` se
+    montaba sin `prospecto`, o sea sólo para crear. ✔
+  · **El tablero SÍ enlazaba a la ficha.** `CrmTarjeta` envolvía el avatar y el nombre en un
+    `<Link href={/admin/crm/${p.id}}>` desde el primer día. Lo que pasaba es que **no lo
+    parecía**: sin subrayado, del mismo color que el resto del texto, y con `cursor: grab` en
+    toda la tarjeta —o sea, la tarjeta te decía «arrástrame», no «ábreme». Un enlace que nadie
+    encuentra es, para el que trabaja, un enlace que no existe; pero el arreglo no era «añadir
+    el enlace», era hacerlo visible y, sobre todo, dejar de depender de él.
+
+**Lo que hay ahora — la decisión: MODAL EN SITIO, y la ficha se queda para lo demás.**
+
+Cada tarjeta del tablero, cada fila de la lista y cada renglón de «hoy toca» traen tres botones
+CON SU NOMBRE, siempre visibles: **Editar · Textos · Ficha ↗**.
+
+  · **Editar abre el formulario encima, sin salir de donde estás.** El motivo es concreto: la
+    vista (tablero/lista), la búsqueda, los filtros, el orden y el scroll son estado LOCAL de
+    `crm-client.tsx`. Ir a la ficha para corregir un teléfono cuesta una navegación de ida y
+    otra de vuelta, y al volver se ha perdido todo ese contexto — que es justo el contexto de
+    trabajo de una sesión de llamadas. Corregir un dato es una tarea de dos segundos y no puede
+    costar dos navegaciones.
+  · **La ficha sigue siendo la ficha**: la bitácora completa, el compositor de anotaciones, la
+    URL que se puede mandar y el botón atrás. Se llega con «Ficha ↗», que ahora tiene nombre en
+    vez de ser un nombre subrayable que había que adivinar.
+  · Al guardar, la tarjeta se repinta ANTES de que vuelva el servidor (`guardado()` mezcla el
+    DTO devuelto en `filas` y luego `router.refresh()`), igual que ya hacía arrastrar. Sin eso
+    la tarjeta se quedaba con el nombre viejo el tiempo de la recarga y parecía que no guardó.
+  · Los botones no se esconden detrás del `:hover`. Un botón que sólo aparece al pasar el ratón
+    no existe en una tableta.
+
+**El barrido del modelo: 28 columnas en `CrmProspect`, y dónde está cada una.**
+
+| Qué | Antes | Ahora |
+| --- | --- | --- |
+| Los 18 de siempre (nombre, giro, fuente, persona, puesto, teléfono, correo, ciudad, estado, país, sitio, tamaño, valor, próximo paso + nota, etiquetas, notas) | se editaban | igual |
+| `lostReason` — por qué se perdió | **se tecleaba una vez al cerrar y ya no se podía corregir** | se edita, en la sección «El cierre», sólo si está en Perdido |
+| `clinicId` — qué cuenta nació de aquí | **no se podía poner NUNCA**: la ficha decía «todavía no se le vinculó una clínica» para siempre | selector con las cuentas de `/admin/clinics`, sólo si está en Ya es cliente |
+| `stage` | desaparecía del formulario al editar | **se enseña** como insignia, con la frase de por qué se cambia por otro camino |
+| `lastContactAt`, `wonAt`, `lostAt`, `createdAt`, `createdByEmail`, `affiliateId` | no salían | **se enseñan** en el bloque «Lo que se llena solo», con su valor y de dónde sale cada uno |
+| `id`, `updatedAt` | — | siguen sin salir: el `id` es la URL de la ficha y `updatedAt` es la clave del orden «Más recientes». Son fontanería, no datos del negocio. |
+
+Los dos que se estrenan (`lostReason`, `clinicId`) **ya estaban soportados en el servidor**:
+`aColumnas()` los traducía desde el primer día. Lo único que faltaba era el campo en pantalla.
+
+Por qué `stage` sigue sin editarse aquí y ahora se DICE: mover de etapa no es escribir una
+columna, es `crmMoverEtapa` — escribe la bitácora, acomoda `wonAt`/`lostAt`, borra el próximo
+paso al cerrar y pregunta el motivo de pérdida. Un `<select>` en el formulario se saltaría las
+cuatro cosas.
+
+Y `lastContactAt` no se teclea porque sale de la bitácora, y sólo de un contacto REAL: a mano se
+podría decir que se buscó a alguien a quien nadie buscó, que es justo la mentira que hace que el
+semáforo de «enfriándose» deje de servir.
+
+**Un aviso honesto sobre el selector de clínicas:** manda al navegador `id` y `name` de hasta
+500 cuentas (`CLINICAS_MAX`). Con más habría que cambiarlo por un buscador; mientras tanto, si
+no llega la lista, el campo cae a teclear el id a mano en vez de desaparecer, y un id vinculado
+que ya no esté en la lista se sigue ofreciendo para que abrir el selector no lo desvincule solo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · EL DISEÑO: SIETE CAMBIOS, Y NINGÚN ESTILO NUEVO
+
+Nada inventado. Los mismos tokens, `CardNew`/`KpiCard`/`BadgeNew`/`ButtonNew`, `.table-new`,
+`.input-new`, y dos clases del sistema que el CRM **no estaba usando** y ahora sí: `.tabs-new` y
+`.segment-new`. En `globals.css` se añadieron 6 líneas (dos reglas de `:hover`/`:focus-visible`,
+que no se pueden escribir inline) y ni una más.
+
+  1. **La barra de filtros era un muro de ocho controles** encima de lo que de verdad se viene a
+     leer. Ahora: buscar, ordenar, «Sólo pendientes» y un botón **Filtros (n)** que DICE cuántos
+     hay puestos y despliega los cuatro selectores. Los filtros puestos se ven SIEMPRE como
+     fichas con su «×», con el panel abierto o cerrado — un filtro escondido se lee como
+     prospectos perdidos. Y hay un arreglo real ahí dentro: el selector de etapa sólo existe en
+     la vista de lista, así que un filtro de etapa puesto desde el tablero **no tenía forma de
+     quitarse**; ahora la ficha lo quita.
+  2. **Los cuatro números ahora FILTRAN.** «Por atender» y «Ya son clientes» son botones: te
+     dicen que hay 7 y te enseñan los 7. Un KPI que sólo se puede mirar te obliga a bajar a los
+     selectores a reproducirlo a mano. Van como `div[role="button"]` con Enter/Espacio y foco
+     visible — un `<div>` dentro de un `<button>` es HTML inválido y React lo reordena al
+     hidratar.
+  3. **«Hoy toca» tiene barra de color a la izquierda**: roja lo vencido, ámbar lo de hoy. Es lo
+     único que hay que poder ver sin leer, y antes había que leer el chip de cada renglón.
+     Además cada renglón ganó Editar/Textos/Ficha.
+  4. **El tablero: cada columna estrena una línea de acento con el tono de su etapa** — el MISMO
+     tono que ya usa la insignia en la lista y en la ficha. Ocho cajas grises iguales obligaban
+     a leer el encabezado para saber dónde estabas.
+  5. **La lista tiñe los días sin contacto** a partir de los 14 (`CRM_DIAS_PARA_ENFRIARSE`, la
+     constante que ya define «enfriándose»; no un número tecleado otra vez). Un «21» en gris se
+     lee igual que un «2».
+  6. **El nombre por fin parece un enlace**: se subraya al pasar por encima, en la tarjeta, en la
+     lista y en «hoy toca».
+  7. **Cabecera más corta y pestañas.** El párrafo de tres líneas se quedó en una con enlace a
+     Clínicas, y debajo van **Prospectos | Mis textos** con `.tabs-new`. Como pestañas y no como
+     un item más del menú lateral: son la misma herramienta, el menú de `/admin` ya tiene 28
+     entradas, y el `isActive()` del sidebar empareja por segmento, así que `/admin/crm/textos`
+     deja encendido «CRM de ventas» — que es lo correcto.
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · MIS TEXTOS
+
+`/admin/crm/textos` — crear, editar, borrar, ordenar (↑/↓) y copiar. Cada texto tiene título
+(para encontrarlo cuando haya veinte), cuerpo, y dos etiquetas opcionales.
+
+**▶ Los huecos: sí, y con la trampa resuelta.**
+
+Un texto puede traer `{{negocio}}`, `{{ciudad}}`… y se rellenan solos con el prospecto que
+tengas abierto. **Nueve huecos, y ni uno más**: `saludo`, `negocio`, `contacto`, `ciudad`,
+`estado`, `giro`, `producto`, `medida`, `tamano`. Cada hueco que se añade es un hueco que hay
+que recordar al escribir.
+
+Lo que **NO** entra, a propósito: el valor mensual estimado, el motivo de pérdida, quién lo
+recomendó. Son datos NUESTROS, y un texto que los pegue en un WhatsApp se los manda al
+prospecto.
+
+La trampa de verdad es el prospecto al que le FALTA el dato: `Hola {{contacto}},` con contacto
+vacío produce `Hola ,`, que es exactamente el mensaje que hace que no te contesten. Se resuelve
+en tres tiempos:
+
+  1. **`{{saludo}}`** existe para no tener que escribir `Hola {{contacto}},`. Resuelve solo a
+     «Hola Dra. Ana,» o a «Hola, buen día:» — es la MISMA regla que ya usaba
+     `crmPlantillaWhatsapp`, no una segunda que un día discrepe.
+  2. **Lo que quede vacío se limpia**: espacios dobles, y el espacio suelto delante de una coma
+     o un punto. (El `%` NO entra en esa limpieza: «50 %» se escribe con espacio en todo el
+     panel y juntarlo sería cambiarle el texto a quien lo puso.)
+  3. **Lo que faltó se DICE antes de copiar**: «A este prospecto le falta ciudad, así que ese
+     hueco se quedó vacío. Se copia igual — revísalo antes de mandarlo». Se copia igual porque a
+     veces se escribe a mano en WhatsApp; lo que no se hace es callarlo.
+
+Y un hueco mal escrito (`{{nomre}}`) **se rechaza AL GUARDAR**, nombrándolo y listando los
+válidos. Descubrirlo pegado en WhatsApp es descubrirlo tarde.
+
+**▶ Agrupados por GIRO, con la etapa como etiqueta.**
+
+Me preguntaste si por etapa del embudo o por vertical. **Por vertical**, y la etapa va como
+etiqueta que filtra pero no parte la lista. El motivo: lo que cambia de raíz entre un texto y
+otro es QUÉ se vende —a una escuela de odontología no se le manda ni de lejos el mensaje de una
+barbería, y eso ya está en el catálogo, donde cada giro trae su `producto`—. La etapa cambia el
+MOMENTO, casi nunca las palabras: el mismo «te vuelvo a escribir por si no lo viste» sirve en
+Contactado y en Propuesta. Agrupar por etapa dejaría los tres textos de dental desperdigados en
+ocho columnas.
+
+Los dos campos son **opcionales**: vacío = «sirve para cualquiera», que es el caso más común y
+no puede costar trabajo. Y ninguno esconde nada: en la ficha de un prospecto los que le quedan
+salen primero, y los que no salen **debajo, bajo «Otros»**. Una lista que oculta cosas es una
+lista en la que se deja de confiar, y a veces el texto de dental es justo el que quieres adaptar
+para una barbería.
+
+**▶ Dónde se usan.**
+
+  · **En la ficha del prospecto**, tarjeta «Mis textos» junto a los botones de contacto: eliges,
+    ves cómo queda YA con sus datos, y copias — o abres WhatsApp con el texto puesto.
+  · **Desde el tablero y la lista**, el botón «Textos» abre lo mismo en una ventana. Mismo
+    componente en los dos sitios; duplicarlo habría dejado dos previsualizaciones que un día
+    discrepan. El botón sólo se pinta si hay textos guardados.
+  · En la libreta, «Copiar» copia el texto **crudo, con los huecos sin rellenar**, y el aviso lo
+    dice: ahí no hay ningún prospecto abierto, y rellenarlo con el de ejemplo mandaría «Clínica
+    Dental Sonrisa» a un cliente de verdad.
+
+**▶ Lo que decidí NO hacer, y por qué.** El botón de WhatsApp de las tarjetas sigue usando la
+plantilla fija de `crmPlantillaWhatsapp`. Hacer que use tus textos obligaría a cargar la libreta
+en cada pintado del tablero y cambiaría en silencio lo que ese botón lleva mandando; se queda
+para cuando lo pidas, sabiendo que ya existe el sitio donde vive la decisión.
+
+**▶ Copiar de verdad.** `navigator.clipboard` sólo existe en contexto seguro (https o
+localhost). En un panel abierto por IP de la red local no existe, y sin plan B el botón no haría
+nada sin decir por qué. Hay plan B (`execCommand`) y plan C: si los dos fallan, se avisa y la
+vista previa se puede seleccionar a mano.
+
+**▶ El orden**, con ↑/↓ y no arrastrando: arrastrar no funciona con teclado ni bien en móvil, y
+aquí no hay una segunda vía como la tiene el tablero. Al mover se manda la lista COMPLETA de ids
+y el servidor reescribe todos los `sortOrder` en una transacción — intercambiar dos valores
+fallaría con los textos recién creados, que nacen todos con el mismo. Las flechas se apagan
+mientras hay una búsqueda puesta: reordenar sobre una lista filtrada movería el texto a un sitio
+que no se está viendo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · EL SQL — `sql/crm-textos.sql`
+
+Una tabla (`crm_templates`), dos índices con los nombres exactos de Prisma, una policy RLS
+deny-all como el resto del CRM. Aditivo e idempotente, cero DROP, cero ALTER sobre tablas
+existentes. Delimitador con nombre (`$crmtx$`) y sin bloques `DO` anidados.
+
+`vertical` y `stage` son **TEXT y opcionales**, contra los mismos catálogos de TypeScript que el
+resto del CRM — misma decisión y mismo motivo que la etapa del prospecto: el embudo se retoca
+seguido y cada retoque de un enum sería un `ALTER TYPE` a mano antes de desplegar.
+
+🔴 **La propiedad que importa: sin este SQL, el CRM NO se cae.** `crmTextosListar()` no lanza —
+devuelve `{ textos: [], falta: true }`—, así que `/admin/crm` sigue entero (tablero, lista,
+bitácora, importación) y sólo «Mis textos» dice, con esas palabras, que falta correr el archivo.
+Las ESCRITURAS sí devuelven error con todas sus letras, y si el fallo es P2021 el mensaje nombra
+el archivo: guardar algo que no se guardó sería peor que no dejar guardar.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · GATES
+
+  · `npx next build` **COMPLETO, EXIT 0** — 471/471 páginas, tabla de rutas entera. Las tres
+    rutas del CRM en su sitio: `ƒ /admin/crm`, `ƒ /admin/crm/[id]`, `ƒ /admin/crm/textos`.
+    Los únicos avisos son los preexistentes (`file-type` y las clases ambiguas de Tailwind).
+  · `npx prisma validate` → **válido**. El modelo `CrmTemplate` se añadió al FINAL del esquema.
+  · `npm run test:crm` → **47/47** (las de siempre, intactas).
+  · `npm run test:crm-textos` → **27/27**, nuevas. Protegen lo que si se rompe NO truena nada y
+    sólo hace que se mande un mensaje malo a un cliente de verdad: que un hueco vacío no deje
+    «Hola ,», que lo que faltó salga en la lista de faltantes, que un hueco inventado se rechace
+    al guardar, que un texto de barbería no se sugiera en una dental **pero tampoco desaparezca**,
+    y que dos textos con el mismo `sortOrder` no se intercambien de sitio entre recargas.
+  · `npm run lint` NO corre en un worktree con junction (eslint no está físicamente en ese
+    `node_modules`); es ambiental, no del código.
+  · **No se vio en el navegador**: este worktree no tiene `DATABASE_URL` y `/admin/crm` necesita
+    sesión de admin y datos. Los cambios de diseño van dentro del sistema que ya existe, pero
+    quedan sin comprobar a ojo.
+
+Ojo con una cosa del entorno: `npx prisma generate` escribió el cliente en el `node_modules`
+COMPARTIDO por el junction. Si otro worktree corre `generate` con un esquema sin `CrmTemplate`,
+esta rama dejará de compilar hasta volver a generar.
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · QUÉ HAY QUE PROBAR A MANO
+
+  1. **Antes que nada, el SQL.** Corre la consulta del punto 0. Si faltan las dos tablas del CRM,
+     corre `sql/crm-dalecontrol.sql` primero y `sql/crm-textos.sql` después.
+  2. **Editar desde el TABLERO**: en una tarjeta, «Editar» → cambia el nombre → Guardar. La
+     tarjeta tiene que cambiar al instante, sin recargar y **sin perder el filtro ni el scroll**.
+  3. **Editar desde la LISTA y desde «hoy toca»**: lo mismo, mismo formulario.
+  4. **Un prospecto en «Ya es cliente»**: Editar → sección «El cierre» → elige la cuenta →
+     Guardar → abre su ficha: el aviso verde tiene que enseñar el enlace a `/admin/clinics` en
+     vez de «todavía no se le vinculó una clínica».
+  5. **Un prospecto en «Perdido»**: Editar → corrige el motivo → la ficha lo enseña corregido.
+  6. **El bloque «Lo que se llena solo»** al final del formulario: que los cuatro datos cuadren
+     con lo que dice la ficha.
+  7. **Escribe tu primer texto** en Mis textos con `{{saludo}} le escribo de {{producto}} para
+     su clínica de {{ciudad}}.` — mira la vista previa mientras escribes.
+  8. **Prueba el aviso de lo que falta**: ábrelo desde un prospecto SIN ciudad. Tiene que decirlo
+     en ámbar, y el texto no puede quedar con un espacio raro donde iba la ciudad.
+  9. **Copiar**: pégalo en cualquier sitio y comprueba que llegó completo. Y «Abrir WhatsApp»,
+     que abre la app con el texto puesto (y que, a diferencia de los botones de contacto de la
+     ficha, **no anota nada en la bitácora** — está dicho en pantalla).
+ 10. **Ordena** con ↑/↓ y recarga: el orden se tiene que quedar.
+ 11. **Escribe un texto con `{{nomre}}`**: no te tiene que dejar guardarlo, y el error tiene que
+     nombrar el hueco malo.
+ 12. **Los KPIs que filtran**: clic en «Por atender» y en «Ya son clientes».
+ 13. **Filtros**: pon un giro, cierra el panel, comprueba que la ficha con la × sigue ahí y que
+     al quitarla vuelven todos.
+ 14. **Modo claro y oscuro** en las dos pantallas.

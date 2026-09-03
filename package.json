@@ -54,6 +54,7 @@
     "test:audit": "tsx --test src/lib/admin/audit-core.test.ts",
     "test:mrr": "tsx --test src/lib/admin/mrr-core.test.ts",
     "test:crm": "tsx --test src/lib/admin/crm/__tests__/crm-core.test.ts",
+    "test:crm-textos": "tsx --test src/lib/admin/crm/__tests__/textos-core.test.ts",
     "test:patient-number": "tsx --test src/lib/patients/__tests__/next-patient-number-core.test.ts",
     "test:invoice-number": "tsx --test src/lib/invoices/__tests__/next-invoice-number-core.test.ts",
     "test:proration": "tsx --test src/lib/billing/proration.test.ts",

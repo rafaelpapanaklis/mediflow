@@ -17,7 +17,17 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Mail, MessageCircle, Phone, Globe, Handshake, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  FileText,
+  Globe,
+  Handshake,
+  Mail,
+  MessageCircle,
+  Pencil,
+  Phone,
+  X,
+} from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import {
@@ -412,6 +422,90 @@ export function CrmAccionesContacto({
   );
 }
 
+// ── Qué se puede hacer con una fila ─────────────────────────────────────
+
+/**
+ * EDITAR, TEXTOS Y FICHA, siempre a la vista.
+ *
+ * Con etiqueta y no sólo con icono, y sin esconderse detrás del hover: un
+ * botón que sólo aparece al pasar el ratón no existe en una tableta, y uno
+ * que es un lápiz suelto hay que adivinarlo. Estos tres van en la tarjeta
+ * del tablero, en la fila de la lista y en la de «hoy toca», para que
+ * editar se pueda desde donde se esté mirando y no haya que ir a la ficha
+ * a buscar el botón.
+ *
+ * `alTextos` es opcional: sin textos guardados el botón no se pinta, en vez
+ * de abrir una ventana vacía.
+ */
+export function CrmAccionesFila({
+  p,
+  alEditar,
+  alTextos,
+}: {
+  p: CrmProspectoDTO;
+  alEditar: (p: CrmProspectoDTO) => void;
+  alTextos?: (p: CrmProspectoDTO) => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          alEditar(p);
+        }}
+        style={ESTILO_ACCION}
+        title={`Editar los datos de ${p.name} sin salir de aquí`}
+      >
+        <Pencil size={12} />
+        Editar
+      </button>
+      {alTextos && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            alTextos(p);
+          }}
+          style={ESTILO_ACCION}
+          title="Copiar uno de mis textos, ya con sus datos puestos"
+        >
+          <FileText size={12} />
+          Textos
+        </button>
+      )}
+      <Link
+        href={`/admin/crm/${p.id}`}
+        draggable={false}
+        style={{ ...ESTILO_ACCION, textDecoration: "none" }}
+        title="Abrir su ficha y su bitácora"
+        onClick={(e) => e.stopPropagation()}
+      >
+        Ficha
+        <ArrowUpRight size={12} />
+      </Link>
+    </div>
+  );
+}
+
+const ESTILO_ACCION: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  height: 26,
+  padding: "0 9px",
+  borderRadius: 7,
+  border: "1px solid var(--border-soft)",
+  background: "var(--bg-elev-2)",
+  color: "var(--text-2)",
+  fontSize: 11,
+  fontWeight: 500,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
 // ── Tarjeta del prospecto (la del tablero) ──────────────────────────────
 
 export function CrmTarjeta({
@@ -419,11 +513,15 @@ export function CrmTarjeta({
   ahora,
   arrastrable,
   alArrastrar,
+  alEditar,
+  alTextos,
 }: {
   p: CrmProspectoDTO;
   ahora: Date;
   arrastrable?: boolean;
   alArrastrar?: (id: string) => void;
+  alEditar?: (p: CrmProspectoDTO) => void;
+  alTextos?: (p: CrmProspectoDTO) => void;
 }) {
   const [levantada, setLevantada] = useState(false);
   const v = crmVertical(p.vertical);
@@ -452,10 +550,17 @@ export function CrmTarjeta({
       }}
     >
       {/* draggable={false}: un <a> se arrastra solo, y arrastrando desde el
-          nombre el navegador movía la URL en vez de la tarjeta. */}
+          nombre el navegador movía la URL en vez de la tarjeta.
+
+          El nombre SÍ era un enlace desde el primer día, pero no lo
+          parecía: sin subrayado, del mismo color que el resto y con el
+          cursor de "arrastrar" encima de toda la tarjeta. Ahora se
+          subraya al pasar por encima y, sobre todo, ya no es la única
+          puerta — abajo están Editar, Textos y Ficha con su nombre. */}
       <Link
         href={`/admin/crm/${p.id}`}
         draggable={false}
+        className="crm-tarjeta-nombre"
         style={{ display: "flex", gap: 8, textDecoration: "none", minWidth: 0 }}
       >
         <CrmAvatar name={p.name} vertical={p.vertical} size={30} />
@@ -521,6 +626,12 @@ export function CrmTarjeta({
       )}
 
       <CrmAccionesContacto p={p} soloIconos />
+
+      {alEditar && (
+        <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
+          <CrmAccionesFila p={p} alEditar={alEditar} alTextos={alTextos} />
+        </div>
+      )}
     </div>
   );
 }
