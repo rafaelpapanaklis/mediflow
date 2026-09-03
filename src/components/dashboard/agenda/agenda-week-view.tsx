@@ -4,11 +4,12 @@ import { useCallback, useMemo, useRef } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useAgenda } from "./agenda-provider";
 import { useT } from "@/i18n/i18n-provider";
-import { AgendaTimeAxis } from "./agenda-time-axis";
+import { AgendaHoverGuide } from "./agenda-hover-guide";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
 import { slotIndexToUtc, todayInTz } from "@/lib/agenda/time-utils";
 import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import { assignLanes } from "@/lib/agenda/lane-layout";
+import { slotFromOffsetY } from "@/lib/agenda/hover-slot";
 import { useDragOverlap } from "@/app/dashboard/agenda/agenda-page-client";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
@@ -135,24 +136,23 @@ export function AgendaWeekView() {
             scrollbarGutter: "stable",
           }}
         >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "var(--mf-agenda-axis-w) minmax(0, 1fr)",
-            }}
-          >
-            <AgendaTimeAxis />
-            <div className={styles.columnsBody}>
-              {days.map((d) => (
-                <WeekDayColumn
-                  key={d.iso}
-                  day={d}
-                  isToday={d.iso === today}
-                  slotsTotal={slotsTotal}
-                />
-              ))}
-            </div>
-          </div>
+          {/* La guía del cursor monta por dentro la regla de horas Y el
+              cuerpo de columnas —necesita medir la grilla entera para
+              resaltar el slot—, así que SUSTITUYE a los dos en vez de
+              sumarse (ver agenda-hover-guide). Aquí cada columna es un
+              DÍA y no un doctor: columnCount son los días visibles, el
+              mismo número que --mf-agenda-cols de arriba, del que sale
+              el ancho de la celda resaltada. */}
+          <AgendaHoverGuide columnCount={days.length}>
+            {days.map((d) => (
+              <WeekDayColumn
+                key={d.iso}
+                day={d}
+                isToday={d.iso === today}
+                slotsTotal={slotsTotal}
+              />
+            ))}
+          </AgendaHoverGuide>
         </div>
       </div>
     </div>
@@ -166,7 +166,7 @@ interface WeekDayColumnProps {
 }
 
 function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
-  const { state, permissions, setDay } = useAgenda();
+  const { state, permissions, setDay, slotHpx } = useAgenda();
   const t = useT();
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const colRef = useRef<HTMLDivElement | null>(null);
@@ -220,9 +220,14 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
       const el = colRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const slotHeight = rect.height / slotsTotal;
       const y = e.clientY - rect.top;
-      const slotIdx = Math.max(0, Math.min(slotsTotal - 1, Math.floor(y / slotHeight)));
+      // MISMA cuenta que la guía del cursor: slotFromOffsetY con slotHpx,
+      // no rect.height/slotsTotal. Si las dos se separan el resalte morado
+      // promete una hora y el alta abre otra (la regla de oro que explica
+      // hover-slot.ts). De paso slotHpx es el alto REAL del slot aunque
+      // `min-height: 100%` estire la columna, que es lo que ya arregló la
+      // vista Día en agenda-column.
+      const slotIdx = slotFromOffsetY(y, slotHpx, rect.height);
       const startsAt = slotIndexToUtc(slotIdx, day.iso, {
         timezone: state.timezone,
         slotMinutes: state.slotMinutes,
@@ -234,7 +239,7 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
         openAgendaAfter: true,
       });
     },
-    [openNewAppointment, permissions.canCreate, setDay, day.iso, slotsTotal, state.timezone, state.slotMinutes, state.dayStart, state.dayEnd],
+    [openNewAppointment, permissions.canCreate, setDay, day.iso, slotHpx, state.timezone, state.slotMinutes, state.dayStart, state.dayEnd],
   );
 
   const overlapMode = useDragOverlap(droppableId);

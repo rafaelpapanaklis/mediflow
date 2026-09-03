@@ -28,6 +28,11 @@ import styles from "./agenda.module.css";
  * no en cada píxel.
  */
 
+/** Lo que se resalta: el slot, la columna y el ancho REAL de esa columna. */
+interface HoverGeom extends HoverSlot {
+  colW: number;
+}
+
 export function AgendaHoverGuide({
   columnCount,
   children,
@@ -37,7 +42,7 @@ export function AgendaHoverGuide({
 }) {
   const { state, permissions, slotHpx } = useAgenda();
   const colsRef = useRef<HTMLDivElement | null>(null);
-  const [hover, setHover] = useState<HoverSlot | null>(null);
+  const [hover, setHover] = useState<HoverGeom | null>(null);
 
   const clear = useCallback(() => {
     setHover((prev) => (prev === null ? prev : null));
@@ -62,16 +67,26 @@ export function AgendaHoverGuide({
       if (x < 0 || y < 0 || x > rect.width || y > rect.height) return clear();
 
       const slot = slotFromOffsetY(y, slotHpx, rect.height);
-      const col = columnFromOffsetX(x, rect.width, columnCount);
+      // Ancho que ocupan las columnas DE VERDAD. Los tracks son
+      // minmax(160px, 1fr): cuando la grilla no cabe se quedan en su
+      // mínimo y DESBORDAN la caja, así que rect.width mide menos que
+      // las columnas y el reparto marcaría la de al lado (medido en la
+      // semana: caja 979px contra 1120px de columnas a 1280 con la barra
+      // lateral abierta). scrollWidth sí abarca los tracks enteros, y con
+      // la grilla holgada vale exactamente lo mismo.
+      const spanW = Math.max(rect.width, el.scrollWidth);
+      const col = columnFromOffsetX(x, spanW, columnCount);
+      const colW = spanW / columnCount;
       setHover((prev) =>
-        prev && prev.slot === slot && prev.col === col ? prev : { slot, col },
+        prev && prev.slot === slot && prev.col === col && prev.colW === colW
+          ? prev
+          : { slot, col, colW },
       );
     },
     [clear, columnCount, permissions.canCreate, slotHpx],
   );
 
   const slotH = "var(--mf-agenda-slot-h)";
-  const colW = "calc(100% / var(--mf-agenda-cols))";
 
   return (
     <HoverSlotContext.Provider value={hover}>
@@ -97,8 +112,8 @@ export function AgendaHoverGuide({
                 className={styles.hoverCell}
                 style={{
                   top: `calc(${hover.slot} * ${slotH})`,
-                  left: `calc(${hover.col} * ${colW})`,
-                  width: colW,
+                  left: `${hover.col * hover.colW}px`,
+                  width: `${hover.colW}px`,
                 }}
                 aria-hidden
               >
