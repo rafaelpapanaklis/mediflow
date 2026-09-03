@@ -4,6 +4,7 @@ import { getAdminSessionResult } from "@/lib/admin-auth";
 import { countAdminPendingReply } from "@/lib/support/service";
 import { countAffiliateSupportPendingReply } from "@/lib/affiliate-support/service";
 import { countPagesPendingReview } from "@/lib/affiliates/page-moderation";
+import { crmContarPendientes } from "@/lib/admin/crm/service";
 import AdminLoginPage from "./login/page";
 import { AdminSessionError } from "./session-error";
 import { AdminSessionKeepalive } from "./session-keepalive";
@@ -11,7 +12,7 @@ import "@/app/panel-chrome-va.css";
 
 async function getNavCounts() {
   try {
-    const [clinics, atRisk, supportPending, affiliateSupportPending, affiliatePagesPending] = await Promise.all([
+    const [clinics, atRisk, supportPending, affiliateSupportPending, affiliatePagesPending, crmPendientes] = await Promise.all([
       prisma.clinic.count().catch(() => 0),
       prisma.clinic.count({
         where: {
@@ -26,8 +27,12 @@ async function getNavCounts() {
       // Páginas de socio esperando revisión. countPagesPendingReview ya trae su
       // propio try/catch → 0 si la consulta falla.
       countPagesPendingReview(),
+      // Prospectos del CRM con seguimiento vencido o para hoy. Ya trae su
+      // propio try/catch → 0 si las tablas del CRM aún no existen; un badge
+      // no puede tumbar el sidebar entero.
+      crmContarPendientes(),
     ]);
-    return { clinics, atRisk, supportPending, affiliateSupportPending, affiliatePagesPending };
+    return { clinics, atRisk, supportPending, affiliateSupportPending, affiliatePagesPending, crmPendientes };
   } catch {
     return {
       clinics: 0,
@@ -35,6 +40,7 @@ async function getNavCounts() {
       supportPending: 0,
       affiliateSupportPending: 0,
       affiliatePagesPending: 0,
+      crmPendientes: 0,
     };
   }
 }

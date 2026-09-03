@@ -15992,3 +15992,149 @@ model EduCampusLayout {
   @@index([institutionId], map: "edu_campus_layouts_institucion_idx")
   @@map("edu_campus_layouts")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// CRM DE VENTAS DE DALECONTROL — /admin/crm
+//
+// A quién le queremos vender, no a quién ya le vendimos. Un prospecto de
+// aquí NO es un cliente: `Clinic` es el que ya contrató y paga; esto es la
+// libreta de antes — la clínica que vi en Maps, la universidad que pidió
+// informes en el congreso, el consultorio al que le mandé WhatsApp y no
+// me ha contestado.
+//
+// GLOBAL, como AdminUser: sin `clinicId`, fuera del RLS por clínica a
+// propósito. Sólo el panel de DaleControl lo lee y lo escribe; en la base
+// las dos tablas van con RLS deny-all para anon/authenticated (traen
+// teléfonos y correos de negocios reales).
+//
+// 🔴 LAS ETAPAS SON TEXT, NO UN ENUM DE POSTGRES — y es deliberado. El
+// catálogo (etapas, giros, fuentes, tipos de actividad) vive completo en
+// src/lib/admin/crm/crm-core.ts, que valida ANTES de escribir. Un embudo
+// de ventas se retoca seguido y con enum cada retoque sería un ALTER TYPE
+// a mano en Supabase antes de desplegar. El precio: la integridad la pone
+// la aplicación, no la base — por eso el servicio nunca guarda una etapa
+// sin pasarla por `crmEsEtapa`.
+//
+// SQL: sql/crm-dalecontrol.sql (correr en Supabase ANTES del deploy).
+// ═══════════════════════════════════════════════════════════════════════
+model CrmProspect {
+  id String @id @default(cuid())
+
+  /// El negocio: "Clínica Dental Sonrisa", "Universidad Cuauhtémoc".
+  name String
+  /// Qué producto se le vende. Catálogo: CRM_VERTICALES.
+  vertical String  @default("DENTAL")
+  /// Dónde va en el embudo. Catálogo: CRM_ETAPAS.
+  stage    String  @default("NUEVO")
+  /// Cómo llegó a la lista. Catálogo: CRM_FUENTES.
+  source   String?
+
+  /// La persona con la que se habla, no el negocio.
+  contactName String?
+  contactRole String?
+  /// Se guarda TAL COMO se tecleó; quien arma el wa.me/tel: lo normaliza
+  /// (crmWhatsappNumero). Guardar el crudo permite recuperar un dato mal
+  /// capturado; guardar sólo los 10 dígitos perdería una extensión.
+  phone       String?
+  email       String?
+
+  city    String?
+  state   String?
+  /// País. Existe porque los afiliados capturan "Ciudad / País" y hay
+  /// prospectos fuera de México.
+  country String?
+  website String?
+
+  /// Tamaño en la unidad del giro: consultorios, sillones, estudiantes…
+  size         Int?
+  /// Cuánto pagaría al mes si cierra. Es la base del valor del embudo.
+  monthlyValue Float?
+
+  /// EL CAMPO QUE HACE QUE ESTO SIRVA: qué sigue y cuándo. Es una FECHA DE
+  /// CALENDARIO guardada a las 12:00 UTC (ver crmFechaDeCalendario): a
+  /// medianoche UTC caería al día anterior en México.
+  nextActionAt   DateTime?
+  /// "Quiere junta pero aún no confirma", "vuelve de vacaciones el 12".
+  nextActionNote String?
+
+  /// Último contacto REAL (WhatsApp, llamada, correo, junta, visita). Una
+  /// nota interna no lo mueve: si lo moviera, el semáforo de "días sin
+  /// contacto" diría que se le buscó cuando nadie lo hizo.
+  lastContactAt DateTime?
+
+  wonAt      DateTime?
+  lostAt     DateTime?
+  lostReason String?
+
+  /// Si cerró: la clínica que nació de aquí. Es un id SUELTO, sin llave
+  /// foránea, a propósito — este CRM no debe poder estorbar el borrado de
+  /// una cuenta viva, y la ficha resuelve el nombre con una consulta
+  /// aparte que ya trae su propio catch.
+  clinicId String?
+
+  notes String?  @db.Text
+  tags  String[] @default([])
+
+  /// Correo del admin que lo dio de alta, denormalizado. Sin llave foránea
+  /// a AdminUser: la libreta tiene que sobrevivir a que se dé de baja
+  /// quien la escribió.
+  createdByEmail String?
+
+  /// 🔴 QUIÉN LO RECOMENDÓ. NULL = lo dio de alta DaleControl desde
+  /// /admin/crm; con valor = lo mandó ese afiliado desde /afiliados/crm.
+  /// Es lo que SEPARA lo que cada afiliado puede ver: toda consulta del
+  /// panel de afiliados filtra por esta columna con el id que sale de la
+  /// sesión, jamás del cuerpo de la petición.
+  ///
+  /// Sin llave foránea a Affiliate, igual que `clinicId`: dar de baja a
+  /// un socio no puede quedar bloqueado por la libreta de ventas, y un
+  /// id colgando se pinta como "afiliado dado de baja" — mejor que
+  /// convertir sus prospectos en propios sin que nadie se entere, que es
+  /// lo que haría un ON DELETE SET NULL.
+  affiliateId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities CrmActivity[]
+
+  @@index([stage])
+  @@index([nextActionAt])
+  @@index([vertical])
+  @@index([createdAt])
+  @@index([affiliateId])
+  @@map("crm_prospects")
+}
+
+/// Bitácora del prospecto: cada WhatsApp, llamada, junta, nota y cambio de
+/// etapa, en orden. Es el registro que contesta "¿ya le escribí?" — la
+/// pregunta que hace que un prospecto se pierda cuando nadie la puede
+/// contestar. Sólo se agrega: nada la reescribe.
+model CrmActivity {
+  id         String @id @default(cuid())
+  prospectId String
+
+  /// Catálogo: CRM_ACTIVIDADES. ETAPA la escribe el sistema.
+  kind    String
+  body    String? @db.Text
+  /// Cómo salió el intento (contestó / no contestó / …). Catálogo:
+  /// CRM_RESULTADOS. Sólo tiene sentido en intentos de contacto.
+  outcome String?
+
+  /// Para kind = ETAPA. En columnas propias y no en un Json: se consulta,
+  /// se lee de un vistazo y no arrastra el enredo de DbNull de Prisma.
+  stageFrom String?
+  stageTo   String?
+
+  /// CUÁNDO PASÓ, que no siempre es cuándo se anotó: se puede registrar
+  /// una llamada de ayer. La bitácora se ordena por esto.
+  happenedAt  DateTime @default(now())
+  authorEmail String?
+  createdAt   DateTime @default(now())
+
+  prospect CrmProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, happenedAt])
+  @@index([happenedAt])
+  @@map("crm_activities")
+}

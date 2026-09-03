@@ -10,6 +10,7 @@ import {
   Scissors,
   Landmark,
   GraduationCap,
+  Target,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
@@ -53,6 +54,10 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/account-managers", label: "Managers",  icon: UserRound,      section: "main"   },
   { href: "/admin/churn",        label: "Retención",    icon: TrendingDown,    section: "main"   },
   { href: "/admin/onboarding",   label: "Onboarding",   icon: CheckSquare,     section: "main"   },
+  // El CRM de VENTAS: a quién le queremos vender, no a quién ya le
+  // vendimos. Va en Crecimiento y no en Principal a propósito — lo de
+  // Principal son cuentas que YA existen; esto es la libreta de antes.
+  { href: "/admin/crm",          label: "CRM de ventas", icon: Target,          section: "growth" },
   { href: "/admin/analytics",    label: "Analytics",    icon: LineChart,       section: "growth" },
   { href: "/admin/reports",      label: "Reportes",     icon: BarChart3,       section: "growth" },
   { href: "/admin/blog",         label: "Blog",         icon: Newspaper,       section: "growth" },
@@ -74,6 +79,7 @@ export function AdminSidebar({
     supportPending?: number;
     affiliateSupportPending?: number;
     affiliatePagesPending?: number;
+    crmPendientes?: number;
   };
 }) {
   const pathname = usePathname();
@@ -110,15 +116,19 @@ export function AdminSidebar({
     // de clínicas y de afiliados, con contadores independientes) y las páginas
     // de socio, que no se publican hasta que alguien las revise: sin el badge,
     // un socio puede quedarse días esperando sin que nadie se entere.
+    // Y los seguimientos del CRM vencidos o de hoy: un prospecto que se
+    // pasa de su fecha es justo el que se pierde.
     const alert =
       item.href === "/admin/soporte" ||
       item.href === "/admin/soporte-afiliados" ||
-      item.href === "/admin/paginas-socio";
+      item.href === "/admin/paginas-socio" ||
+      item.href === "/admin/crm";
     if (item.href === "/admin/clinics") count = counts?.clinics;
     if (item.href === "/admin/churn")   count = counts?.atRisk;
     if (item.href === "/admin/soporte") count = counts?.supportPending;
     if (item.href === "/admin/soporte-afiliados") count = counts?.affiliateSupportPending;
     if (item.href === "/admin/paginas-socio") count = counts?.affiliatePagesPending;
+    if (item.href === "/admin/crm") count = counts?.crmPendientes;
     return (
       <Link
         key={item.href}
@@ -131,7 +141,13 @@ export function AdminSidebar({
         {typeof count === "number" && count > 0 && (
           <span
             className={`nav-item-new__count ${alert ? "nav-item-new__count--alert" : ""}`}
-            title={alert ? `${count} ticket${count === 1 ? "" : "s"} sin responder` : undefined}
+            title={
+              item.href === "/admin/crm"
+                ? `${count} prospecto${count === 1 ? "" : "s"} por atender hoy`
+                : alert
+                  ? `${count} ticket${count === 1 ? "" : "s"} sin responder`
+                  : undefined
+            }
           >
             {count}
           </span>
