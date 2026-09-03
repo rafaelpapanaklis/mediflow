@@ -17,7 +17,12 @@ next-env.d.ts
 /design-reference/
 /design-reference-landing/
 /design-reference-auth/
-/.claude/
+/.claude/*
+!/.claude/settings.json
+!/.claude/agents/
+
+# ORQUESTA.md vive fuera del repo (ClauCode/MediFlow/ORQUESTA.md)
+ORQUESTA.md
 
 docs/ortho-redesign/
 
