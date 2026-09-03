@@ -29,6 +29,15 @@ demás que se tocó fue reparar dos daños en la bitácora, y se detallan abajo.
 Merge normal, sin rebase, y `git status` limpio entre uno y otro. Los dos dejaron su
 commit de merge (`0c2b57d4` y `f02e4098`). **Cero conflictos**: git no marcó ni uno.
 
+⚠️ **Y un TERCER merge, que no estaba en el plan: `origin/main` se movió mientras
+esto se verificaba.** Al hacer el `git fetch` previo al push, main ya no era
+`d7ac4b13` sino `9f4b3d4e` ("la guía de horario del cursor también en la vista
+Semana"). Se mergeó main a la rama —sin conflictos, 3 archivos suyos del panel
+dental: `agenda-hover-guide.tsx`, `agenda-week-view.tsx` y `hover-slot.test.ts`— y
+se **repitieron las tres puertas sobre esa base nueva**, no sobre la vieja. Sin ese
+merge la guardia habría salido en rojo por sí sola: mide contra `origin/main`, y
+una rama atrasada le hace leer los archivos ajenos de main como intrusos.
+
 🔴 **#168 NO TRAJO CÓDIGO: main ya lo tenía.** El merge de la primera rama cambió
 **un solo archivo, `ORQUESTA.md`**, y ni una línea de producto. No es un fallo del
 merge: el commit que hoy es la punta de main, `d7ac4b13` ("Rescate 2-sep", PR #173),
