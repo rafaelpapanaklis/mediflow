@@ -21,9 +21,13 @@
  *    mandó y que se firmó, lo que queda autorizado tiene que ser lo que se
  *    leyó, no lo que se mandó.
  *
- * 4. NADIE FIRMA SU PROPIA PETICIÓN. No es un permiso: es que una firma sobre
- *    lo que uno mismo pidió no es una firma. Se comprueba aquí y no en el
- *    endpoint porque el endpoint no sabe de quién era la fila.
+ * 4. NADIE FIRMA SU PROPIA PETICIÓN — SALVO LA DIRECCIÓN. No es un permiso:
+ *    es que una firma sobre lo que uno mismo pidió no es una firma. Se
+ *    comprueba aquí y no en el endpoint porque el endpoint no sabe de quién
+ *    era la fila. La dirección queda exenta por ROL (no por permiso:
+ *    eduApprovalRoleSignsOwn) porque no tiene a nadie encima a quien
+ *    mandarle su petición; a cambio, la autofirma queda MARCADA en cada
+ *    sitio donde la autorización se lee (`selfDecided`).
  *
  * Las escrituras NO comprueban permisos: eso lo hace el endpoint con
  * eduApiGuard antes de llamar. Aquí se comprueba la PERTENENCIA, que es lo
@@ -52,10 +56,14 @@ import {
   EDU_APPROVAL_MAX_ROWS,
   EDU_APPROVAL_NOTE_MAX,
   EDU_APPROVAL_NOTE_MIN,
-  eduApprovalBatchSkipReason,
+  EDU_APPROVAL_OWN_DENIED,
+  eduApprovalBatchSkipFor,
   eduApprovalContentChanged,
   eduApprovalDecisionNeedsNote,
   eduApprovalEffectiveStatus,
+  eduApprovalIsOwn,
+  eduApprovalOwnBlocked,
+  eduApprovalSelfDecided,
   eduApprovalStageForCaseStatus,
   eduApprovalTargetForStage,
   eduApprovalWaitSeverity,
@@ -65,6 +73,7 @@ import {
   parseEduApprovalDecision,
   parseEduApprovalStage,
   parseEduApprovalTarget,
+  type EduApprovalActor,
   type EduApprovalBatchSkip,
   type EduApprovalRow,
   type EduApprovalSnapshot,
@@ -473,6 +482,9 @@ const APPROVAL_SELECT = {
   emergencyReason: true,
   caseId: true,
   requestedById: true,
+  // La traza de la autofirma sale de COMPARAR los dos ids que ya se
+  // guardan; por eso hace falta el del que decidió, y no una columna nueva.
+  decidedById: true,
   case: {
     select: {
       id: true,
@@ -499,7 +511,7 @@ function toRow(
   target: TargetInfo,
   timeZone: string,
   now: Date,
-  viewerUserId: string,
+  viewer: EduApprovalActor,
 ): EduApprovalRow {
   const contentChanged = eduApprovalContentChanged(
     { status: a.status, contentHash: a.contentHash, isEmergency: a.isEmergency },
@@ -510,10 +522,6 @@ function toRow(
     target.hash,
   );
   const waitedMinutes = eduApprovalWaitedMinutes(a.requestedAt, now);
-
-  // 🔴 "La mandaste tú" se decide con el id de la SESIÓN, no con un campo del
-  // cliente: es lo que saca del lote las peticiones que uno mismo escribió.
-  const propia = a.requestedById === viewerUserId;
 
   return {
     id: a.id,
@@ -554,15 +562,22 @@ function toRow(
     emergencyReason: a.emergencyReason,
 
     contentChanged,
-    batchSkip: propia
-      ? "propia"
-      : eduApprovalBatchSkipReason({
-          status,
-          isEmergency: a.isEmergency,
-          contentChanged,
-          // Ola 14: una RECETA nunca entra al lote — se expide leyéndola.
-          stage: a.stage,
-        }),
+    // 🔴 "La mandaste tú" se decide con el ROL y el ID de la SESIÓN, nunca
+    // con un campo del cliente. La DIRECCIÓN está exenta y las suyas entran
+    // al lote como cualquier otra; para el resto, "propia" gana a todo.
+    batchSkip: eduApprovalBatchSkipFor(viewer, {
+      status,
+      isEmergency: a.isEmergency,
+      contentChanged,
+      // Ola 14: una RECETA nunca entra al lote — se expide leyéndola.
+      stage: a.stage,
+      requestedById: a.requestedById,
+    }),
+    own: eduApprovalIsOwn(viewer, a.requestedById),
+    // La traza: quien decidió es quien pidió. Se deriva de los dos ids que
+    // ya viajan en el SELECT, y viaja para TODOS los que la miran — no solo
+    // para quien la firmó.
+    selfDecided: eduApprovalSelfDecided(a),
 
     summary: target.summary,
   };
@@ -627,7 +642,7 @@ export async function listEduApprovalInbox(
   const page = found.slice(0, EDU_APPROVAL_MAX_ROWS);
   const targets = await loadTargets(prisma, institutionId, page, timeZone);
   const rows = page.map((a) =>
-    toRow(a, targets.get(claveTarget(a.targetType, a.targetId)) ?? TARGET_FALTA, timeZone, now, ctx.eduUserId),
+    toRow(a, targets.get(claveTarget(a.targetType, a.targetId)) ?? TARGET_FALTA, timeZone, now, ctx),
   );
 
   return { rows, truncated: found.length > EDU_APPROVAL_MAX_ROWS };
@@ -672,7 +687,7 @@ export async function getEduCaseApprovalState(
 
   const targets = await loadTargets(prisma, institutionId, found, timeZone);
   const rows = found.map((a) =>
-    toRow(a, targets.get(claveTarget(a.targetType, a.targetId)) ?? TARGET_FALTA, timeZone, now, ctx.eduUserId),
+    toRow(a, targets.get(claveTarget(a.targetType, a.targetId)) ?? TARGET_FALTA, timeZone, now, ctx),
   );
   await persistExpired(prisma, institutionId, rows);
 
@@ -1025,7 +1040,8 @@ function datosDeDecision(
  *     ya rotó no firma lo de los alumnos que entregó);
  *  2. que siga PENDIENTE — dos docentes mirando la misma bandeja es el caso
  *     normal, no el raro;
- *  3. que no la haya pedido él mismo.
+ *  3. que no la haya pedido él mismo — salvo si quien decide es la
+ *     DIRECCIÓN, que sí firma lo suyo y queda marcado como tal.
  */
 export async function decideEduApproval(
   ctx: EduClinicaContext,
@@ -1069,19 +1085,20 @@ export async function decideEduApproval(
     );
   }
 
-  // 🔴 NADIE FIRMA SU PROPIA PETICIÓN. No hay excepción para la dirección: la
-  // separación de funciones no es un permiso que se pueda encender.
+  // 🔴 NADIE FIRMA SU PROPIA PETICIÓN, CON UNA SOLA EXCEPCIÓN: LA DIRECCIÓN.
   //
-  // ⚠️ El caso que hay que saber desatorar, y por eso el mensaje lo dice: si
-  // la dirección manda algo de un alumno que NO tiene supervisor vigente, no
-  // hay nadie más con alcance sobre ese alumno y la petición se queda sin
-  // quien la firme. La salida no es aflojar esta regla — es asignarle
-  // supervisor al alumno, que es lo que le faltaba de todos modos.
-  if (actual.requestedById === ctx.eduUserId) {
-    throw new EduPadronError(
-      "No puedes decidir lo que tú mismo mandaste: una firma sobre la propia petición no es una firma. Que la revise el docente que supervisa a ese estudiante; si no tiene supervisor vigente, asígnaselo desde Docentes y él la firma.",
-      409,
-    );
+  // La separación de funciones sigue sin ser un permiso que se pueda
+  // encender — la exención va por ROL de la sesión, así que darle
+  // "autorizaciones.decide" a un docente NO lo exime. Lo que cambió es a
+  // quién se le aplica: la dirección es la única figura sin nadie encima, y
+  // con la regla puesta también sobre ella su petición sobre un alumno sin
+  // supervisor vigente se quedaba sin NADIE que pudiera firmarla.
+  //
+  // Lo que sustituye a la regla para la dirección no es nada: es la TRAZA.
+  // `decidedById` queda igual a `requestedById` y cada pantalla que lee esa
+  // autorización lo dice con todas sus letras (EDU_APPROVAL_SELF_*_MARK).
+  if (eduApprovalOwnBlocked(ctx, actual.requestedById)) {
+    throw new EduPadronError(EDU_APPROVAL_OWN_DENIED, 409);
   }
 
   let note: string | null = null;
@@ -1239,7 +1256,8 @@ export interface EduApprovalBatchResult {
  * Se quedan FUERA y se devuelven con su motivo:
  *  · las URGENCIAS — son las únicas que YA ocurrieron sin firma;
  *  · las que el alumno editó después de mandarlas;
- *  · las que él mismo pidió;
+ *  · las que él mismo pidió — MENOS si quien firma es la dirección: está
+ *    exenta por rol, las suyas entran al lote y quedan marcadas;
  *  · las que dejaron de estar pendientes mientras miraba la lista.
  *
  * Solo autoriza. Pedir cambios y rechazar llevan motivo escrito y van una por
@@ -1303,11 +1321,10 @@ export async function decideEduApprovalBatch(
     const contentChanged = eduApprovalContentChanged(f, h);
     const status = eduApprovalEffectiveStatus(f, h);
 
-    if (f.requestedById === ctx.eduUserId) {
-      skipped.push({ id: f.id, reason: "propia" });
-      continue;
-    }
-    const razon = eduApprovalBatchSkipReason({
+    // Lo PROPIO se juzga con el mismo criterio que pinta la bandeja (misma
+    // función, un solo sitio): sale del lote para todos MENOS para la
+    // dirección, que está exenta por rol y firma también lo suyo — marcado.
+    const razon = eduApprovalBatchSkipFor(ctx, {
       status,
       isEmergency: f.isEmergency,
       contentChanged,
@@ -1315,6 +1332,7 @@ export async function decideEduApprovalBatch(
       // del firmante en el papel, y eso se lee completo, una por una. El
       // filtro de la pantalla dice lo mismo; éste es el que cierra.
       stage: f.stage,
+      requestedById: f.requestedById,
     });
     if (razon) {
       skipped.push({ id: f.id, reason: razon });

@@ -38,10 +38,19 @@ import {
   EDU_APPROVAL_DECISIONS,
   EDU_APPROVAL_GATE_BY_CASE_STATUS,
   EDU_APPROVAL_HASH_VERSION,
+  EDU_APPROVAL_OWN_DENIED,
+  EDU_APPROVAL_SELF_DECIDED_MARK,
+  EDU_APPROVAL_SELF_SIGNED_MARK,
   EDU_APPROVAL_STAGE_TARGET,
   EDU_APPROVAL_TARGETS,
   EDU_APPROVAL_WAIT_LATE_MINUTES,
+  eduApprovalBatchSkipFor,
   eduApprovalBatchSkipReason,
+  eduApprovalIsOwn,
+  eduApprovalOwnBlocked,
+  eduApprovalRoleSignsOwn,
+  eduApprovalSelfDecided,
+  eduApprovalSelfMark,
   eduApprovalCanonicalText,
   eduApprovalContentChanged,
   eduApprovalDecisionNeedsNote,
@@ -484,6 +493,143 @@ test("el lote SOLO autoriza: pedir cambios y rechazar llevan motivo y van una po
 });
 
 // ═════════════════════════════════════════════════════════════════════
+// 5 bis · LO PROPIO: la DIRECCIÓN firma lo suyo (marcado); nadie más
+//
+// La regla vieja era "nadie firma su propia petición, sin excepción". La
+// excepción es UNA —la dirección— y viene con una contrapartida: la traza
+// dice quién firmó lo que él mismo pidió. Lo que fija esta sección es que
+// la excepción no se le escape a ningún otro rol y que la traza no se
+// pueda perder.
+// ═════════════════════════════════════════════════════════════════════
+
+/** Lo que guarda la fila después de una decisión, en lo que aquí importa. */
+function decidida(requestedById: string, decidedById: string | null) {
+  return { requestedById, decidedById };
+}
+
+test("🔴 la DIRECCIÓN decide una petición PROPIA, y queda registrada como tal", () => {
+  const direccion = actor("DIRECCION", "u_dir");
+
+  // 1. No se le cierra: puede autorizar, rechazar o pedir cambios.
+  assert.equal(eduApprovalIsOwn(direccion, "u_dir"), true, "sigue siendo suya");
+  assert.equal(eduApprovalOwnBlocked(direccion, "u_dir"), false, "y ya no se le cierra");
+
+  // 2. Al decidirla, `decidedById` queda igual a `requestedById` — que es
+  //    justo el dato del que sale la marca. Sin columna nueva.
+  const guardada = decidida("u_dir", direccion.eduUserId);
+  assert.equal(eduApprovalSelfDecided(guardada), true);
+  assert.equal(eduApprovalSelfMark("APPROVED"), "Firmada por Dirección sobre una petición propia");
+});
+
+test("🔴 el DOCENTE sigue sin poder firmar lo suyo, con EL MISMO mensaje", () => {
+  const docente = actor("DOCENTE", "u_doc");
+  assert.equal(eduApprovalOwnBlocked(docente, "u_doc"), true);
+  // El texto está fijado a propósito: lo que cambió fue a quién se le
+  // aplica la regla, NO lo que lee el docente cuando le aplica.
+  assert.equal(
+    EDU_APPROVAL_OWN_DENIED,
+    "No puedes decidir lo que tú mismo mandaste: una firma sobre la propia petición no es una firma. Que la revise el docente que supervisa a ese estudiante; si no tiene supervisor vigente, asígnaselo desde Docentes y él la firma.",
+  );
+  // Y lo ajeno lo sigue firmando igual: la regla es sobre lo PROPIO.
+  assert.equal(eduApprovalOwnBlocked(docente, "u_alumno"), false);
+});
+
+test("🔴 la exención va por ROL, no por permiso: un docente con 'decide' NO queda exento", () => {
+  // Encenderle la casilla a un docente le da la bandeja, no la exención.
+  // Si esto se rompe, la separación de funciones de toda la ola se apaga
+  // con un clic desde la pantalla de permisos.
+  const conOverride = {
+    role: "DOCENTE" as EduRole,
+    permissionsOverride: ["autorizaciones.view", "autorizaciones.decide"],
+  };
+  assert.equal(hasEduPermission(conOverride, "autorizaciones.decide"), true);
+  assert.equal(eduApprovalRoleSignsOwn("DOCENTE"), false);
+  assert.equal(eduApprovalOwnBlocked(actor("DOCENTE", "u_doc"), "u_doc"), true);
+});
+
+test("🔴 SOLO la dirección está exenta: cualquier otro rol, presente o futuro, no", () => {
+  for (const rol of EDU_ROLES) {
+    const esperado = rol === "DIRECCION";
+    assert.equal(eduApprovalRoleSignsOwn(rol), esperado, `${rol} quedó del lado equivocado`);
+    assert.equal(
+      eduApprovalOwnBlocked(actor(rol, "u_x"), "u_x"),
+      !esperado,
+      `${rol}: lo propio no se juzgó como debía`,
+    );
+  }
+});
+
+test("🔴 el LOTE de la dirección SÍ incluye las propias; el del docente NO", () => {
+  const pendiente = { status: "PENDING" as EduApprovalStatus, isEmergency: false, contentChanged: false };
+
+  // Docente: lo suyo sale del lote con su motivo, como siempre.
+  assert.equal(
+    eduApprovalBatchSkipFor(actor("DOCENTE", "u_doc"), { ...pendiente, requestedById: "u_doc" }),
+    "propia",
+  );
+  // Dirección: entra al lote como cualquier otra.
+  assert.equal(
+    eduApprovalBatchSkipFor(actor("DIRECCION", "u_dir"), { ...pendiente, requestedById: "u_dir" }),
+    null,
+  );
+  // Y lo AJENO se juzga igual para los dos: la exención no toca nada más.
+  for (const a of [actor("DOCENTE", "u_doc"), actor("DIRECCION", "u_dir")]) {
+    assert.equal(eduApprovalBatchSkipFor(a, { ...pendiente, requestedById: "u_alumno" }), null);
+    assert.equal(
+      eduApprovalBatchSkipFor(a, { ...pendiente, isEmergency: true, requestedById: "u_alumno" }),
+      "urgencia",
+    );
+  }
+});
+
+test("una propia que ADEMÁS es urgencia o receta: al docente 'propia', a la dirección el otro motivo", () => {
+  const base = { status: "PENDING" as EduApprovalStatus, contentChanged: false, requestedById: "u_x" };
+  assert.equal(
+    eduApprovalBatchSkipFor(actor("DOCENTE", "u_x"), { ...base, isEmergency: true }),
+    "propia",
+    "a quien no puede firmarla no se le explica que además es una urgencia",
+  );
+  assert.equal(
+    eduApprovalBatchSkipFor(actor("DIRECCION", "u_x"), { ...base, isEmergency: true }),
+    "urgencia",
+  );
+  assert.equal(
+    eduApprovalBatchSkipFor(actor("DIRECCION", "u_x"), {
+      ...base,
+      isEmergency: false,
+      stage: "PRESCRIPTION",
+    }),
+    "receta",
+    "la exención no mete la receta en el lote: eso lo cierra la Ola 14",
+  );
+});
+
+test("🔴 LA MARCA sale cuando quien decidió es quien pidió, y NO sale cuando no", () => {
+  // Sale.
+  assert.equal(eduApprovalSelfDecided(decidida("u_dir", "u_dir")), true);
+  // No sale: la firmó otro.
+  assert.equal(eduApprovalSelfDecided(decidida("u_alumno", "u_doc")), false);
+  // No sale: todavía no la decide nadie (PENDING no tiene decidedById).
+  assert.equal(eduApprovalSelfDecided(decidida("u_dir", null)), false);
+  // Ni con los dos vacíos, que es lo que devuelve una fila a medio leer.
+  assert.equal(eduApprovalSelfDecided({}), false);
+  assert.equal(eduApprovalSelfDecided({ requestedById: "", decidedById: "" }), false);
+});
+
+test("la marca NO miente sobre lo que pasó: un rechazo no dice 'firmada'", () => {
+  assert.equal(eduApprovalSelfMark("APPROVED"), EDU_APPROVAL_SELF_SIGNED_MARK);
+  // Firmada y luego caducada: la firma existió, y fue suya.
+  assert.equal(eduApprovalSelfMark("EXPIRED"), EDU_APPROVAL_SELF_SIGNED_MARK);
+  assert.equal(eduApprovalSelfMark("REJECTED"), EDU_APPROVAL_SELF_DECIDED_MARK);
+  assert.equal(eduApprovalSelfMark("CHANGES_REQUESTED"), EDU_APPROVAL_SELF_DECIDED_MARK);
+  // Las dos dicen lo que hay que poder leer, y nombran a quien responde.
+  for (const m of [EDU_APPROVAL_SELF_SIGNED_MARK, EDU_APPROVAL_SELF_DECIDED_MARK]) {
+    assert.ok(m.includes("sobre una petición propia"), `la marca no dice qué pasó: ${m}`);
+    assert.ok(m.includes("Dirección"), `la marca no dice quién: ${m}`);
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════
 // 6 · LA BANDEJA: agrupada por alumno, urgencias primero
 // ═════════════════════════════════════════════════════════════════════
 
@@ -519,6 +665,8 @@ function fila(over: Partial<EduApprovalRow>): EduApprovalRow {
     emergencyReason: null,
     contentChanged: false,
     batchSkip: null,
+    own: false,
+    selfDecided: false,
     summary: { title: "Necrosis pulpar 26", lines: [] },
     ...over,
   };

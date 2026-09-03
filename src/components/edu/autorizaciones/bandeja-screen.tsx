@@ -9,6 +9,9 @@ import {
   EDU_APPROVAL_BATCH_SKIP_LABELS,
   EDU_APPROVAL_DECISION_LABELS,
   EDU_APPROVAL_NOTE_MIN,
+  EDU_APPROVAL_SELF_SIGNED_MARK,
+  eduApprovalRoleSignsOwn,
+  eduApprovalSelfMark,
   type EduApprovalDecision,
   type EduApprovalGroup,
   type EduApprovalRow,
@@ -43,6 +46,12 @@ import { EDU_APPROVAL_STATUS_LABELS, type EduRole } from "@/lib/edu/types";
  * se pueden se quedan a la vista con su motivo: las urgencias (ya
  * ocurrieron), las que el alumno editó después de mandarlas y las que pidió
  * uno mismo. El servidor vuelve a comprobarlo — esto de aquí solo lo pinta.
+ *
+ * 🔴 LO PROPIO, Y LA DIRECCIÓN. "Nadie firma su propia petición" sigue en pie
+ * para el docente y para cualquier otro rol. La DIRECCIÓN está exenta por
+ * ROL (no por permiso), así que sus peticiones le llegan firmables y entran
+ * al lote; lo que las acompaña es la MARCA: firmarlas deja escrito, aquí y
+ * en el caso, que quien firmó fue quien pidió.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export interface EduBandejaScreenProps {
@@ -190,6 +199,12 @@ export function EduBandejaScreen({
   function tarjeta(row: EduApprovalRow) {
     const abiertaAqui = abierta?.id === row.id;
     const ocupada = busyId === row.id;
+    // La DIRECCIÓN sí firma lo suyo (el servidor la exime por ROL), y por
+    // eso la tarjeta se lo dice ANTES de firmar: lo que va a quedar escrito
+    // es que quien firmó fue quien pidió. `own` es el HECHO ("la mandaste
+    // tú") y `batchSkip` la consecuencia; al docente le sigue saliendo
+    // "propia" y esta línea no la ve nunca.
+    const propiaFirmable = row.own && canDecide && row.batchSkip !== "propia";
     // Ola 14. Una RECETA se decide con la segunda llave (recetas.issue):
     // expedirla pone la cédula del firmante en el papel. Sin la llave no
     // se pintan los botones — el endpoint los rebotaría igual; esto solo
@@ -230,6 +245,16 @@ export function EduBandejaScreen({
           <p className="edu-auth-card__aviso">
             Lo editó después de mandarlo. Lo que ves abajo es lo que dice AHORA, y es lo que vas a
             firmar.
+          </p>
+        )}
+
+        {/* La petición propia de la DIRECCIÓN: no se le cierra nada, se le
+            dice qué va a quedar escrito si la firma. Va en gris (meta) y no
+            en el amarillo del aviso a propósito — no es una advertencia,
+            es la traza que ella misma está eligiendo dejar. */}
+        {propiaFirmable && (
+          <p className="edu-auth-card__meta">
+            La mandaste tú. Puedes decidirla: quedará marcada «{EDU_APPROVAL_SELF_SIGNED_MARK}».
           </p>
         )}
 
@@ -396,6 +421,12 @@ export function EduBandejaScreen({
             {row.decidedByName ? ` por ${row.decidedByName}` : ""}
           </p>
         )}
+
+        {/* La TRAZA, en la bandeja: si quien decidió es quien pidió, se lee
+            aquí y no hay que abrir el caso para enterarse. */}
+        {row.selfDecided && (
+          <p className="edu-auth-card__aviso">{eduApprovalSelfMark(row.status)}</p>
+        )}
       </article>
     );
   }
@@ -509,8 +540,14 @@ export function EduBandejaScreen({
                 {canDecide && g.batchIds.length < g.rows.length && (
                   <p className="edu-auth-grupo__nota">
                     {g.rows.length - g.batchIds.length} de este estudiante no entran en el lote: son
-                    urgencias o recetas, cambiaron después de mandarse o las mandaste tú. Se firman
-                    leyéndolas.
+                    urgencias o recetas
+                    {eduApprovalRoleSignsOwn(viewerRole)
+                      ? // A la dirección lo suyo SÍ le entra al lote: dejarle
+                        // "o las mandaste tú" sería decirle que algo la
+                        // frena cuando ya no la frena nada.
+                        ", o cambiaron después de mandarse"
+                      : ", cambiaron después de mandarse o las mandaste tú"}
+                    . Se firman leyéndolas.
                   </p>
                 )}
 
