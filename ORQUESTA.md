@@ -34971,3 +34971,218 @@ pantalla entera; es exactamente el mecanismo que se cambió.
   (`setMobileSidebarOpen(false)` dentro de `startNew`) y no se metió porque no se pidió.
 - **El botón "Empezar" del estado vacío** (cuando no hay ninguna conversación) ahora solo
   enfoca el textarea: la pantalla de bienvenida ya está puesta, no hay nada que crear.
+## [Clinica-Visual-Look] — "Mi Clínica Visual" del dental se ve como el plano que estrenó el instituto: el piso deja de flotar, los muebles se asientan y En Vivo tiene sus contadores, su leyenda y su tarjeta ✅ (2026-09-02) · rama `feat/clinica-visual-look`
+
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npx next build` **EXIT 0** (completo, sin pipes, 467/467 páginas) · SIN SQL · SIN envs nuevas
+⛔ **CERO archivos de `src/components/edu/`, `src/app/instituto/` y `src/lib/edu/`** — comprobado con `git diff --name-only origin/main`
+⛔ **CERO archivos de `src/lib/floor-plan/`** — el catálogo isométrico lo comparten el dental, /live, el mundo 3D **y el plano del instituto**
+⛔ `/dashboard/clinic-layout/3d` intacto · formato del layout guardado **sin tocar** (los planos de las 11 clínicas se leen igual)
+
+OBJETIVO: el instituto estrenó su plano y se veía mejor que el del dental. Este bloque
+**copia el aspecto** —baldosas, muebles asentados, sombras, contadores, leyenda, tarjetas por
+sillón— a `/dashboard/clinic-layout`, en sus DOS modos, sin tocar el otro vertical y sin
+cambiar el comportamiento de Armar.
+
+**8 archivos: 6 tocados, 2 nuevos.** Los 8 viven en `src/app/dashboard/clinic-layout/` salvo
+los dos diccionarios.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · POR QUÉ SE DUPLICA Y NO SE COMPARTE
+───────────────────────────────────────────────────────────────────────────
+
+El instituto pinta su plano con `edu-plano` / `edu-planoed` en `edu-theme.css` (8 751
+renglones) y sus componentes en `src/components/edu/clinica/`. **Nada de eso se importa.** Se
+leyó para copiar el aspecto y se volvió a escribir del lado del dental: unas 300 líneas de
+CSS y un componente nuevo.
+
+Acoplarlos por la hoja de estilos habría significado que el día que una escuela pida otro
+verde, cambie también el editor de once clínicas dentales. Lo único de verdad compartido —el
+catálogo isométrico de `src/lib/floor-plan/`— **ya lo era antes de este bloque y no se tocó
+ni un renglón**: cualquier cambio ahí repinta a la vez el editor del dental, `/live`, el mundo
+3D y el plano del instituto.
+
+Por lo mismo, `STATUS_COLORS` (`element-types.ts`) se queda como está. Los halos del piso
+siguen usando ese verde/ámbar/rojo brillante, que es la identidad que comparten con el mundo
+3D; **el marco** (píldoras, puntos, cantos de tarjeta, texto) usa las tintas accesibles del
+instituto —#15803d, #b45309, #b3261e, todas ≥ 4.9:1 sobre blanco— declaradas como tokens
+locales `--mc-*`. Es exactamente lo que hace el instituto con este mismo mundo.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · EL PISO: UNA LOSA, BALDOSAS OPACAS Y SOMBRAS DE CONTACTO
+───────────────────────────────────────────────────────────────────────────
+
+Tres cosas, todas en `components/floor-look.tsx` (nuevo):
+
+**La losa.** El piso era un tapiz de rombos translúcidos (`rgba(255,255,255,.4)`) sobre un
+degradado azul: terminaba en un borde de sierra y flotaba. Ahora hay un polígono debajo con
+las baldosas opacas del instituto (#eef2f7 / #e6ecf4) **y zócalo**: las dos caras que se ven
+desde este ángulo, 18 px, la de abajo-izquierda más oscura que la de abajo-derecha —de donde
+viene la luz en todo el catálogo—. El piso pasa a ser un objeto con canto.
+
+> ⚠️ **Lo primero que se probó fue `filter: drop-shadow()` sobre la losa, y se descartó.**
+> La losa mide ~2 600 × 1 150 px: un filtro sobre ella obliga al navegador a rasterizar esa
+> superficie entera **en cada frame** del desplazamiento con la mano. El zócalo cuesta tres
+> polígonos y da más sensación de volumen que la sombra.
+
+**Las sombras de contacto.** Una huella difuminada por mueble, sacada de su tamaño en celdas
+(`type.w`/`type.h`) y desplazada 7 × 5 px. Es lo que hace que el sillón, el gabinete y las
+paredes **se apoyen** en el piso en vez de estar pegados encima.
+
+> ⚠️ **`memo` + `skipId` no son adorno.** Todas las huellas van en UN grupo con UN
+> `feGaussianBlur` (uno por mueble eran ~40 pasadas de blur por frame). Pero un filtro obliga
+> a rasterizar la caja del grupo, o sea el piso entero: si el mueble que se arrastra viviera
+> dentro de ese grupo, esa rasterización se repetiría en cada frame del arrastre. El grupo
+> grande está memoizado y **excluye** al que se mueve; su sombra se pinta aparte, en un grupo
+> con la caja de un solo mueble.
+
+**La etiqueta del sillón.** El piso es claro en los dos temas (ver §5), así que la etiqueta
+es tinta oscura con halo claro **siempre**. En oscuro era violeta clara con contorno casi
+negro: sobre baldosas claras, ilegible. Y un sillón **sin ligar a la agenda** ahora la lleva
+en rojo: se dibuja igual, pero nunca tendrá citas ni se pintará En Vivo, y eso antes solo lo
+decía el panel de la derecha si lo seleccionabas.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · MODO ARMAR: SE VE MEJOR, SE COMPORTA IGUAL
+───────────────────────────────────────────────────────────────────────────
+
+Colocar, mover, rotar, borrar, deshacer, duplicar, zoom, mano y autoguardado: **ni una línea
+de esa lógica cambió**. Lo que cambió es el marco, en el lenguaje del instituto: superficie +
+una línea + radio 12 + una sombra, micro-etiquetas en versalitas con `letter-spacing`, y el
+catálogo con tarjetas de icono 34 px.
+
+Dos arreglos pequeños que salieron al mirarlo:
+
+| lo que pasaba | lo que hace ahora |
+|---|---|
+| El catálogo era `repeat(3, 1fr)` fijo: "Puerta de baño" se partía en tres renglones de 8.5 px | `repeat(auto-fill, minmax(66px, 1fr))` y la etiqueta con elipsis |
+| El globo del hover medía 88 px fijos y recortaba las etiquetas largas | se estira con el texto |
+
+Y una línea de ayuda flotante abajo a la izquierda que dice **cómo se pone un mueble**. Antes
+no lo decía nada en pantalla: el catálogo de la izquierda no explica que se arrastra.
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · MODO EN VIVO: CONTADORES, LEYENDA Y TARJETA — Y UN FALLO QUE SALIÓ AL HACERLO
+───────────────────────────────────────────────────────────────────────────
+
+· **Contadores arriba**, flotando sobre el piso: `1 libres · 1 por empezar · 1 ocupados`,
+  cada uno con su color y su explicación en el `title`. Contesta "¿queda alguno?"; el DÓNDE
+  lo contesta el piso.
+· **Leyenda abajo a la izquierda**: los tres puntos con **su palabra escrita al lado** (el
+  color nunca va solo) y la línea de ayuda.
+· **Tarjeta por sillón**: clic en un sillón —en su dibujo o en su halo— y se abre arriba a la
+  derecha con paciente, tratamiento, doctor, "Desde 11:20 · lleva 34 min", barra de avance y
+  el botón al expediente. Si está libre, dice a qué hora es la siguiente y lista las que
+  vienen. Se cierra con la X, con `Esc` o clicando el piso vacío.
+· **Las tarjetas del panel derecho** dejan de teñirse enteras del color del estado
+  (`background: ${color}08` en línea, con tres estados a la vez el panel parecía un semáforo)
+  y pasan a ser superficie lisa con canto de color, como las del instituto.
+
+> 🔴 **La máscara del paciente no se relaja.** La tarjeta llama a `maskPatient(nombre,
+> clinic.liveModeShowPatientNames)` — la MISMA bandera que el panel de estado y el tooltip.
+> Si la clínica pidió iniciales, la tarjeta dice `M.G.`. Abrir una tarjeta no es una puerta
+> trasera al nombre completo.
+
+**El fallo.** En Vivo el candado tapaba el **catálogo**, pero el **lienzo seguía aceptando
+arrastres**: mirar el tablero y rozar un sillón movía el plano de una clínica en producción
+— y el autoguardado lo persistía en silencio. Ahora En Vivo el piso no se edita. Lo **único**
+que se quita es mover: el clic en un sillón abre su tarjeta, y las puertas y los gabinetes
+se siguen abriendo y cerrando al clic. La mano (H) sigue desplazando el plano también En
+Vivo, que es como se recorre un piso grande en el monitor de la sala.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · OSCURO CON TOKENS, Y POR QUÉ EL PISO NO SE OSCURECE
+───────────────────────────────────────────────────────────────────────────
+
+Había ~25 reglas `:global(.dark) .loQueSea { background: … }` sueltas: cada clase nueva nacía
+rota en oscuro hasta que alguien se acordaba de añadir la suya. Ahora todo el color sale de
+variables `--mc-*` declaradas una vez y **el modo oscuro solo las vuelve a declarar**.
+
+El prefijo `--mc-` es a propósito: `--text-2`, `--bg` y compañía existen en `globals.css`, y
+declararlas dentro de `.page` las **taparía** para todo lo que se monte ahí dentro (el panel
+de compartir, el optimizador, los toasts, la sala de espera).
+
+> 🔴 **El piso sigue CLARO en oscuro**, igual que en el instituto, y baja un punto de luz.
+> Los muebles son cadenas SVG con el color metido dentro (`elements-dental.ts`): no hay forma
+> de repintarlos desde la hoja, y sobre baldosas negras el sillón, el gabinete y el lavabo
+> dejan de leerse. Lo que se oscurece es el MARCO: un plano claro sobre un escritorio oscuro.
+
+Los tres estados suben a tintas claras en oscuro (#4ade80 / #fbbf24 / #fb7185): sobre #19203a
+el verde #15803d se cae a 2.4:1.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · @container, i18n Y LO QUE ARRASTRA /live
+───────────────────────────────────────────────────────────────────────────
+
+**@container.** Lo nuevo se adapta con `auto-fill` y `flex-wrap`, que no necesitan consulta
+ninguna, más **una** consulta de contenedor sobre el lienzo (la leyenda se queda solo con su
+línea de ayuda por debajo de 640 px de LIENZO — que es lo que cambia con el panel lateral, no
+la ventana).
+
+> ⚠️ **La consulta va SIN NOMBRE a propósito.** El contenedor lo declara `.canvasWrap`, que
+> vive en OTRO módulo CSS; `container-name` es un identificador y css-loader lo reescribe por
+> archivo, así que un nombre puesto allí y preguntado aquí **podría no coincidir nunca — y
+> una consulta que no casa no falla: simplemente no se aplica**. Sin nombre gana el
+> contenedor más cercano, que es justo ese.
+>
+> ⚠️ Y `container-type` está en **un solo sitio** de la pantalla. Un contenedor de consulta
+> se vuelve bloque contenedor de sus descendientes `position: fixed`: si algún día se monta
+> un modal DENTRO del lienzo, quedaría atrapado en esa columna. Los que ya existen —panel de
+> compartir, optimizador, tooltip y toasts— son **hermanos** del lienzo, no hijos.
+
+**Queda UNA `@media`**, la que ya estaba: `max-width: 1023px`, la que decide si se monta el
+editor o el aviso de "ábrelo en una computadora". Esa es una pregunta sobre el **viewport**,
+no sobre el ancho de una caja, y para poder preguntarla con `@container` habría que ponerle
+`container-type` a un ancestro — que es exactamente lo que atraparía los `fixed` de arriba.
+Se deja como está, con el porqué escrito al lado.
+
+**i18n.** 23 llaves nuevas en los dos diccionarios (es y en). De paso, el estado escrito del
+tooltip y de las tarjetas salía de `STATUS_LABELS`, un objeto **en español** en
+`element-types.ts`: una clínica en inglés leía "Ocupado". Ahora sale del diccionario con las
+tres llaves que ya existían (`legendFree` / `legendUpcoming` / `legendOccupied`), presentes
+también en el respaldo público, así que **/live sigue en español aunque no tenga provider**.
+
+**`/live/[slug]`.** Arrastra dos archivos compartidos: `live-mode.tsx` (la prop `onPick` es
+**opcional** y `/live` no la pasa, así que ahí el halo sigue siendo puro adorno) y
+`live-mode.module.css` (sus tarjetas de sillón mejoran igual). Los archivos propios de
+`/live` no se tocaron y el enmascarado del paciente no se rozó.
+
+───────────────────────────────────────────────────────────────────────────
+### 7 · LO QUE SE VIO, Y CÓMO
+───────────────────────────────────────────────────────────────────────────
+
+No hay `DATABASE_URL` en el worktree, así que la pantalla no se puede abrir con datos
+reales. Se hizo lo de siempre: **un render estático** que importa el catálogo isométrico de
+verdad y pega las tres hojas tal cual están en el repo (los módulos CSS usan en el archivo
+fuente los mismos nombres de clase que el HTML de prueba), con el plano demo de 50 muebles y
+tres sillones en tres estados. Cuatro páginas: armar/vivo × claro/oscuro.
+
+  · **Armar, claro y oscuro**: la losa se lee como una placa con canto; las paredes y los
+    muebles tienen su sombra debajo; el catálogo cae en tres columnas sin partir etiquetas;
+    la línea de ayuda está abajo a la izquierda; el sillón sin ligar sale **en rojo**.
+  · **En Vivo, claro y oscuro**: los tres contadores arriba en el centro, la leyenda abajo a
+    la izquierda, la tarjeta de `Consultorio 2` arriba a la derecha con `OCUPADO · PACIENTE ·
+    M.G. · Tratamiento Resina en molar · Doctor Dra. Paula Rentería · Desde 11:20 · lleva 34
+    min` y el botón al expediente. El panel derecho con las tres tarjetas de estado y la
+    línea de tiempo abajo.
+  · **Oscuro**: el piso se queda claro y el marco se va a oscuro; el estado en tinta clara.
+
+Lo que **no** se pudo mirar así: el arrastre de verdad (la sombra del mueble en movimiento y
+el fantasma), y el clic sobre un sillón con citas reales. Se leyó el código y se dejó dicho.
+
+───────────────────────────────────────────────────────────────────────────
+### 8 · LO QUE NO SE HIZO, Y SE DICE
+───────────────────────────────────────────────────────────────────────────
+
+1. **La pantalla sigue siendo `100dvh` dentro del panel.** El instituto monta su plano como
+   una tarjeta de la página (`clamp(420px, 62dvh, 760px)`); aquí el editor sigue siendo una
+   ventana de app dentro del `<main>` acolchado del dashboard, con su propia barra de marca.
+   Cambiar eso es reestructurar la rejilla de una pantalla que once clínicas usan a diario, y
+   no es "el aspecto": queda anotado.
+2. **`page.tsx` sigue decidiendo por ROL** (`SUPER_ADMIN`/`ADMIN`), no por permiso, mientras
+   el menú lateral muestra la entrada con `clinicLayout.view` y la API escribe con
+   `clinicLayout.edit`. O sea: alguien con `clinicLayout.view` y sin rol de admin ve el menú
+   y al entrar lo mandan al dashboard. Es de antes de este bloque y **no se tocó** — cambiar
+   la puerta de una pantalla no es un cambio de aspecto.
+3. **No se migró ningún plano guardado.** `LayoutElement` y `LayoutMetadata` están igual: lo
+   que hay en la base de las 11 clínicas se lee y se guarda exactamente como antes.
