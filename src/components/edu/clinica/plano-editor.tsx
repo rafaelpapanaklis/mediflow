@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, RotateCw, Save, Trash2, Undo2 } from "lucide-react";
 import { eduRequest } from "@/components/edu/edu-http";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
-import { C as ISO_C, fromScreen } from "@/lib/floor-plan/iso";
+import { C as ISO_C, fromScreen, toScreen } from "@/lib/floor-plan/iso";
 import type { LayoutElement, Rotation } from "@/lib/floor-plan/element-types";
 import {
+  EDU_PLANO_AUTOSAVE_MS,
   EDU_PLANO_GRID_MAX,
   EDU_PLANO_GRID_MIN,
   EDU_PLANO_MAX_ELEMENTOS,
@@ -70,6 +71,40 @@ import {
  * un botón de mano que pelearse con el de mover, y el zoom es un simple
  * multiplicador del ancho en píxeles: la conversión ratón→celda sale de la
  * caja del SVG y de su viewBox, que ya llevan el zoom dentro.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EL ARRASTRE ES DE POINTER EVENTS, Y LO CONFIRMA EL `pointerup`
+ *
+ * La primera versión tomaba el elemento en `mousedown`, lo seguía en el
+ * `mousemove` del SVG y confirmaba el movimiento en el `click` del SVG. Con
+ * un arrastre de verdad —presionar, mover, soltar— ese `click` no llega
+ * donde se le espera: el navegador lo manda al ancestro común del
+ * pointerdown y el pointerup, que con el ratón fuera del elemento puede no
+ * ser el lienzo, y el sillón volvía a su celda. Se movía "a dos clics" y
+ * nadie lo descubría solo.
+ *
+ * Ahora: `pointerdown` sobre el elemento TOMA y hace `setPointerCapture`,
+ * así que todos los `pointermove` siguientes llegan al elemento aunque el
+ * dedo se salga del SVG; `pointermove` sigue; `pointerup` CONFIRMA la celda
+ * si está dentro de la rejilla y libre. Funciona igual con ratón, con dedo
+ * y con lápiz, que es lo que hace Pointer Events y no hacía `mousedown`.
+ * Un clic sin mover sigue siendo SELECCIONAR y no ensucia la historia
+ * (destino == origen ⇒ no se llama a `cambiar`).
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 SE GUARDA SOLO, Y CUANDO FALLA LO DICE
+ *
+ * El guardado era un botón. Acomodar el piso son veinte arrastres y una
+ * pantalla que se abandona; salir sin pulsarlo tiraba el trabajo con un
+ * aviso de "cambios sin guardar" que es fácil de no ver. Ahora cada cosa
+ * que cambia el plano —soltar, girar, poner, borrar, ligar, cambiar el
+ * tamaño del piso— programa un guardado a `EDU_PLANO_AUTOSAVE_MS`, y el
+ * botón se queda para forzarlo.
+ *
+ * ⚠️ Un guardado que falla NO se reintenta solo con el mismo contenido: un
+ * error de validación (un sillón de otra sede, dos ligados a la misma
+ * unidad) se repetiría cada segundo para siempre. Se pinta el error del
+ * servidor en grande y el siguiente cambio vuelve a intentarlo.
  */
 
 export interface EduPlanoEditorProps {
@@ -88,6 +123,18 @@ const ZOOM_MAX = 1.4;
 
 type Herramienta = { tipo: "mover" } | { tipo: "poner"; key: string };
 
+/** Un elemento en la mano: de dónde salió, dónde está y si ya se movió. */
+interface Arrastre {
+  id: number;
+  col: number;
+  row: number;
+  desdeCol: number;
+  desdeRow: number;
+  pointerId: number;
+  /** true en cuanto cambia de celda: distingue arrastrar de seleccionar. */
+  movido: boolean;
+}
+
 export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) {
   const catalogo = useMemo(() => getCatalogForClinic("DENTAL"), []);
 
@@ -101,13 +148,60 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
   const [herramienta, setHerramienta] = useState<Herramienta>({ tipo: "mover" });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [ghost, setGhost] = useState<{ col: number; row: number } | null>(null);
-  const [moviendo, setMoviendo] = useState<{ id: number; col: number; row: number } | null>(null);
+  const [moviendo, setMoviendo] = useState<Arrastre | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [guardadoISO, setGuardadoISO] = useState<string | null>(layout.savedAtISO);
-  const [sucio, setSucio] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Un recado corto para el que suelta un sillón donde no cabe. */
+  const [aviso, setAviso] = useState<string | null>(null);
+  /** Los sillones que el servidor puso solo y nadie ha acomodado todavía. */
+  const [pendientes, setPendientes] = useState<string[]>(() => layout.pendientes ?? []);
+
+  /**
+   * LA VERSIÓN DEL PLANO. Sube en cada cambio; el guardado apunta cuál
+   * mandó y solo se da por limpio si nadie tocó nada mientras viajaba. Con
+   * un simple booleano "sucio", un cambio hecho durante el guardado se
+   * marcaría como guardado sin haberse mandado nunca.
+   */
+  const [version, setVersion] = useState(0);
+  const [guardada, setGuardada] = useState(0);
+  const versionRef = useRef(0);
+  const guardandoRef = useRef(false);
+  /** La versión cuyo guardado falló: no se reintenta sola (bucle de errores). */
+  const fallidaRef = useRef<number | null>(null);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
+  /** El espejo de `elements` para leerlo sin depender del render en curso. */
+  const elementsRef = useRef<LayoutElement[]>(layout.elements);
+  /** true entre el `pointerup` de un arrastre y el `click` que viene detrás. */
+  const arrastreRef = useRef(false);
+  /**
+   * 🔴 EL ELEMENTO EN LA MANO VIVE EN UNA REFERENCIA, no solo en el estado.
+   *
+   * Los tres manejadores del gesto leen de aquí. Con el estado, el
+   * `pointermove` que llega ANTES de que React repinte —y llega: el primero
+   * suele caer en el mismo tic que el `pointerdown`— ve todavía `null` en su
+   * cierre y descarta el movimiento; el sillón se quedaba quieto y el
+   * `pointerup` lo daba por "clic sin mover". Pasó de verdad al arrastrar
+   * rápido. El estado sigue existiendo porque es lo que DIBUJA el sillón en
+   * su celda de destino mientras lo llevas.
+   */
+  const moviendoRef = useRef<Arrastre | null>(null);
+
+  /** Toma (o suelta) el elemento: la referencia y el estado, siempre juntos. */
+  const tomar = useCallback((a: Arrastre | null) => {
+    moviendoRef.current = a;
+    setMoviendo(a);
+  }, []);
+
+  const sucio = version > guardada;
+
+  /** Marca que el plano cambió: es lo que dispara el guardado automático. */
+  const marcar = useCallback(() => {
+    versionRef.current += 1;
+    setVersion(versionRef.current);
+    setError(null);
+  }, []);
 
   const revision = useMemo(() => eduPlanoRevision(elements, chairs), [elements, chairs]);
   const seleccionado = useMemo(
@@ -115,28 +209,51 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
     [elements, selectedId],
   );
 
-  /** Cambiar los elementos SIEMPRE por aquí: apila la historia y ensucia. */
+  /** Los sillones activos, por id: lo que necesita saber si algo se pinta en vivo. */
+  const sillonPorId = useMemo(() => {
+    const m = new Map<string, EduPlanoChair>();
+    for (const c of chairs) m.set(c.id, c);
+    return m;
+  }, [chairs]);
+
+  /**
+   * Cambiar los elementos SIEMPRE por aquí: apila la historia y ensucia.
+   *
+   * El estado se calcula desde una REFERENCIA y no dentro del actualizador
+   * de `setElements`: React vuelve a ejecutar los actualizadores en modo
+   * estricto y ahí la historia se apilaría dos veces por cambio, dejando
+   * "Deshacer" pidiendo dos pulsaciones para un movimiento.
+   */
   const cambiar = useCallback(
     (fn: (prev: LayoutElement[]) => LayoutElement[]) => {
-      setElements((prev) => {
-        setHistoria((h) => [...h.slice(-29), prev]);
-        setSucio(true);
-        setError(null);
-        return fn(prev);
-      });
+      const previo = elementsRef.current;
+      const siguiente = fn(previo);
+      elementsRef.current = siguiente;
+      setElements(siguiente);
+      setHistoria((h) => [...h.slice(-29), previo]);
+      marcar();
     },
-    [],
+    [marcar],
   );
 
-  const deshacer = useCallback(() => {
-    setHistoria((h) => {
-      if (h.length === 0) return h;
-      const ultima = h[h.length - 1];
-      setElements(ultima);
-      setSucio(true);
-      return h.slice(0, -1);
-    });
+  /**
+   * Un sillón deja de estar "sin acomodar" en cuanto la dirección lo toca:
+   * moverlo, girarlo, ligarlo a otra unidad o borrarlo. Es la única señal
+   * honesta de que alguien ya lo puso donde va.
+   */
+  const acomodado = useCallback((resourceId: string | null | undefined) => {
+    if (!resourceId) return;
+    setPendientes((prev) => (prev.includes(resourceId) ? prev.filter((x) => x !== resourceId) : prev));
   }, []);
+
+  const deshacer = useCallback(() => {
+    if (historia.length === 0) return;
+    const ultima = historia[historia.length - 1];
+    elementsRef.current = ultima;
+    setElements(ultima);
+    setHistoria((h) => h.slice(0, -1));
+    marcar();
+  }, [historia, marcar]);
 
   // ── El lienzo ────────────────────────────────────────────────────────
   const vista = useMemo(() => {
@@ -167,39 +284,33 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
     [grid.cols, grid.rows],
   );
 
+  /** ¿Cabe algo en esta celda, sin contar al que se está moviendo? */
+  const celdaLibre = useCallback(
+    (col: number, row: number, exceptoId: number) =>
+      !elements.some((el) => el.id !== exceptoId && el.col === col && el.row === row),
+    [elements],
+  );
+
   const onLienzoMove = useCallback(
     (e: ReactMouseEvent<SVGSVGElement>) => {
+      // Solo el fantasma de "poner": el arrastre lo sigue el propio
+      // elemento, que tiene el puntero capturado.
+      if (moviendo || herramienta.tipo !== "poner") return;
       const celda = aCelda(e.clientX, e.clientY);
-      if (!celda) return;
-      if (moviendo) {
-        setMoviendo({ id: moviendo.id, col: celda.col, row: celda.row });
-        return;
-      }
-      if (herramienta.tipo === "poner") setGhost(celda);
+      if (celda) setGhost(celda);
     },
     [aCelda, herramienta, moviendo],
   );
 
   const onLienzoClick = useCallback(
     (e: ReactMouseEvent<SVGSVGElement>) => {
-      // Soltar un elemento que se estaba moviendo.
-      if (moviendo) {
-        const destino = moviendo;
-        setMoviendo(null);
-        if (!dentro(destino.col, destino.row)) return;
-        // Un clic para SELECCIONAR también pasa por aquí (el mousedown ya
-        // dejó el elemento "en la mano"). Sin esta comprobación, elegir un
-        // elemento apilaría un paso de historia y dejaría la pantalla
-        // diciendo "tienes cambios sin guardar" sin haber movido nada.
-        const antes = elements.find((x) => x.id === destino.id);
-        if (!antes || (antes.col === destino.col && antes.row === destino.row)) return;
-        cambiar((prev) =>
-          prev.map((el) =>
-            el.id === destino.id ? { ...el, col: destino.col, row: destino.row } : el,
-          ),
-        );
-        return;
-      }
+      // Un arrastre termina en `pointerup` y el navegador manda además un
+      // `click` detrás: si no se ignorara, con la herramienta de poner
+      // dejaría un mueble suelto en el sitio donde acabas de soltar. La
+      // marca se apaga sola (ver `onElementoUp`) y NO al consumirla: si el
+      // arrastre acabó fuera del lienzo ese `click` no llega nunca, y una
+      // marca que se quedara encendida se comería el clic siguiente.
+      if (arrastreRef.current) return;
 
       if (herramienta.tipo === "poner") {
         const celda = aCelda(e.clientX, e.clientY);
@@ -225,50 +336,162 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
       const target = e.target as Element;
       if (!target.closest("[data-element-id]")) setSelectedId(null);
     },
-    [aCelda, cambiar, dentro, elements, herramienta, moviendo],
+    [aCelda, cambiar, dentro, elements, herramienta],
   );
 
+  // ── El arrastre ──────────────────────────────────────────────────────
+  // 🔴 `setPointerCapture` sobre el ELEMENTO. A partir de ahí, todos los
+  // pointermove/pointerup del gesto llegan aquí aunque el dedo se salga del
+  // sillón, del lienzo o de la ventana: es lo que hace que arrastrar
+  // funcione de verdad, y lo que faltaba cuando esto se seguía con el
+  // `mousemove` del SVG y se confirmaba con un `click` que a veces no
+  // llegaba nunca.
   const onElementoDown = useCallback(
-    (e: ReactMouseEvent, id: number) => {
+    (e: ReactPointerEvent<SVGGElement>, id: number) => {
       if (herramienta.tipo === "poner") return; // poniendo: el clic pone, no mueve
+      if (e.button !== 0 && e.pointerType === "mouse") return; // el botón derecho no arrastra
       e.stopPropagation();
       setSelectedId(id);
-      const el = elements.find((x) => x.id === id);
-      if (el) setMoviendo({ id, col: el.col, row: el.row });
+      setAviso(null);
+      const el = elementsRef.current.find((x) => x.id === id);
+      if (!el) return;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // Un navegador que no deje capturar sigue funcionando: los eventos
+        // llegan mientras el puntero esté encima del elemento.
+      }
+      tomar({
+        id,
+        col: el.col,
+        row: el.row,
+        desdeCol: el.col,
+        desdeRow: el.row,
+        pointerId: e.pointerId,
+        movido: false,
+      });
     },
-    [elements, herramienta],
+    [herramienta, tomar],
+  );
+
+  const onElementoMove = useCallback(
+    (e: ReactPointerEvent<SVGGElement>) => {
+      const enMano = moviendoRef.current;
+      if (!enMano || e.pointerId !== enMano.pointerId) return;
+      const celda = aCelda(e.clientX, e.clientY);
+      if (!celda) return;
+      if (celda.col === enMano.col && celda.row === enMano.row) return;
+      // El dedo tiene que poder arrastrar sin que la página se desplace.
+      e.preventDefault();
+      tomar({ ...enMano, col: celda.col, row: celda.row, movido: true });
+    },
+    [aCelda, tomar],
+  );
+
+  /** 🔴 AQUÍ se confirma el movimiento. No en un `click` que puede no llegar. */
+  const onElementoUp = useCallback(
+    (e: ReactPointerEvent<SVGGElement>) => {
+      const destino = moviendoRef.current;
+      if (!destino || e.pointerId !== destino.pointerId) return;
+      e.stopPropagation();
+      tomar(null);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ya se soltó */
+      }
+
+      // Clic sin mover = SELECCIONAR. No toca la historia ni ensucia el
+      // plano: elegir un elemento no es un cambio.
+      if (!destino.movido || (destino.col === destino.desdeCol && destino.row === destino.desdeRow)) {
+        return;
+      }
+      // Se ignora el `click` que viene detrás de este arrastre, y solo ése:
+      // el temporizador a cero corre después del click y deja la pizarra
+      // limpia aunque el click no haya llegado.
+      arrastreRef.current = true;
+      window.setTimeout(() => {
+        arrastreRef.current = false;
+      }, 0);
+
+      if (!dentro(destino.col, destino.row)) {
+        setAviso("Ahí ya no hay piso: suéltalo dentro de la rejilla.");
+        return;
+      }
+      if (!celdaLibre(destino.col, destino.row, destino.id)) {
+        setAviso("Esa celda ya está ocupada. Suéltalo en una libre.");
+        return;
+      }
+
+      setAviso(null);
+      cambiar((prev) =>
+        prev.map((el) =>
+          el.id === destino.id ? { ...el, col: destino.col, row: destino.row } : el,
+        ),
+      );
+      const movido = elementsRef.current.find((x) => x.id === destino.id);
+      acomodado(movido?.resourceId ?? null);
+    },
+    [acomodado, cambiar, celdaLibre, dentro, tomar],
+  );
+
+  /** El gesto se cancela (Esc del sistema, una llamada entrante): se suelta. */
+  const onElementoCancel = useCallback(
+    (e: ReactPointerEvent<SVGGElement>) => {
+      const enMano = moviendoRef.current;
+      if (!enMano || e.pointerId !== enMano.pointerId) return;
+      tomar(null);
+    },
+    [tomar],
   );
 
   const girar = useCallback(() => {
     if (selectedId === null) return;
+    const el = elementsRef.current.find((x) => x.id === selectedId);
     cambiar((prev) =>
-      prev.map((el) =>
-        el.id === selectedId ? { ...el, rotation: (((el.rotation + 90) % 360) as Rotation) } : el,
+      prev.map((x) =>
+        x.id === selectedId ? { ...x, rotation: (((x.rotation + 90) % 360) as Rotation) } : x,
       ),
     );
-  }, [cambiar, selectedId]);
+    acomodado(el?.resourceId ?? null);
+  }, [acomodado, cambiar, selectedId]);
 
   const borrar = useCallback(() => {
     if (selectedId === null) return;
-    cambiar((prev) => prev.filter((el) => el.id !== selectedId));
+    const el = elementsRef.current.find((x) => x.id === selectedId);
+    cambiar((prev) => prev.filter((x) => x.id !== selectedId));
     setSelectedId(null);
-  }, [cambiar, selectedId]);
+    acomodado(el?.resourceId ?? null);
+    // ⚠️ Un sillón ACTIVO no se quita del piso borrándolo aquí: la lectura
+    // del plano lo vuelve a poner (es lo que hace que un sillón nuevo
+    // aparezca solo). Decirlo ahora es mejor que dejar que reaparezca
+    // "solo" en la próxima carga y que nadie entienda por qué.
+    if (el?.resourceId && sillonPorId.has(el.resourceId)) {
+      setAviso(
+        `«${sillonPorId.get(el.resourceId)?.name}» sigue activo en Sillones, así que volverá al plano. Para quitarlo del piso, dalo de baja allá.`,
+      );
+    }
+  }, [acomodado, cambiar, selectedId, sillonPorId]);
 
   const ligar = useCallback(
     (id: number, resourceId: string | null) => {
       const chair = chairs.find((c) => c.id === resourceId) ?? null;
+      const antes = elementsRef.current.find((x) => x.id === id);
       cambiar((prev) =>
         prev.map((el) =>
           el.id === id ? { ...el, resourceId, name: chair ? chair.name : null } : el,
         ),
       );
+      acomodado(antes?.resourceId ?? null);
+      acomodado(resourceId);
     },
-    [cambiar, chairs],
+    [acomodado, cambiar, chairs],
   );
 
   /** Pone un sillón que falta en el primer hueco libre de la rejilla. */
   const ponerSillon = useCallback(
     (chair: EduPlanoChair) => {
+      let nuevoId: number | null = null;
       cambiar((prev) => {
         const ocupadas = new Set(prev.map((el) => `${el.col}:${el.row}`));
         let col = 3;
@@ -283,6 +506,7 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
           }
         }
         const id = prev.reduce((max, el) => Math.max(max, el.id), 0) + 1;
+        nuevoId = id;
         return [
           ...prev,
           {
@@ -296,8 +520,11 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
           },
         ];
       });
+      // Ponerlo a mano ES acomodarlo: quien pulsa el botón elige el hueco.
+      acomodado(chair.id);
+      if (nuevoId !== null) setSelectedId(nuevoId);
     },
-    [cambiar, grid.cols, grid.rows],
+    [acomodado, cambiar, grid.cols, grid.rows],
   );
 
   // ── Teclado ──────────────────────────────────────────────────────────
@@ -308,7 +535,7 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
       if (e.key === "Escape") {
         setHerramienta({ tipo: "mover" });
         setGhost(null);
-        setMoviendo(null);
+        tomar(null);
         setSelectedId(null);
         return;
       }
@@ -323,44 +550,89 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [borrar, girar]);
+  }, [borrar, girar, tomar]);
 
-  // ── Aviso al salir con cambios sin guardar ───────────────────────────
+  // ── Aviso al salir con algo todavía sin guardar ──────────────────────
+  // Con el guardado automático esta ventana dura menos de un segundo, pero
+  // no desaparece: cerrar la pestaña justo entre el arrastre y el guardado
+  // —o con el guardado en vuelo, o después de un error— seguiría tirando el
+  // trabajo sin decir nada.
   useEffect(() => {
-    if (!sucio) return;
+    if (!sucio && !guardando) return;
     const antes = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", antes);
     return () => window.removeEventListener("beforeunload", antes);
-  }, [sucio]);
+  }, [guardando, sucio]);
 
   // ── Guardar ──────────────────────────────────────────────────────────
+  /**
+   * Manda el plano tal como está AHORA.
+   *
+   * Apunta qué versión mandó: si mientras viajaba la petición alguien movió
+   * otro sillón, el plano NO se da por limpio y el guardado automático
+   * vuelve a dispararse con lo nuevo.
+   */
   const guardar = useCallback(async () => {
-    if (guardando) return;
+    if (guardandoRef.current) return;
+    const mandada = versionRef.current;
+    guardandoRef.current = true;
     setGuardando(true);
     setError(null);
     try {
-      const guardado = await eduRequest<{ layout: EduPlanoLayout }>(
+      // El endpoint contesta la SEDE entera (`EduPlanoSede`); de ahí solo
+      // se leen la fecha y los pendientes: los elementos son los de esta
+      // pantalla, y pisarlos con la respuesta borraría lo que la dirección
+      // haya movido mientras la petición viajaba.
+      const guardado = await eduRequest<{ layout?: EduPlanoLayout }>(
         "/api/instituto/clinica/plano",
         {
           method: "PUT",
           body: {
             campusId: campus.id,
             elements,
-            metadata: { gridSize: grid, lastEditAt: new Date().toISOString() },
+            metadata: { gridSize: grid, lastEditAt: new Date().toISOString(), pendientes },
           },
         },
       );
-      setGuardadoISO(guardado?.layout?.savedAtISO ?? new Date().toISOString());
-      setSucio(false);
+      const devuelto = guardado?.layout ?? null;
+      setGuardadoISO(devuelto?.savedAtISO ?? new Date().toISOString());
+      // El servidor es quien decide qué sigue sin acomodar: puede haber
+      // puesto un sillón que se dio de alta mientras esta pantalla estaba
+      // abierta.
+      if (devuelto && Array.isArray(devuelto.pendientes)) setPendientes(devuelto.pendientes);
+      fallidaRef.current = null;
+      setGuardada(mandada);
     } catch (err) {
+      // 🔴 El error del servidor se pinta con SUS palabras ("un sillón
+      // ligado a una unidad que no es de esta sede"), y la versión que lo
+      // provocó se apunta para no reintentarla en bucle. El siguiente
+      // cambio —o el botón— lo vuelve a intentar.
+      fallidaRef.current = mandada;
       setError(err instanceof Error ? err.message : "No se pudo guardar el plano.");
     } finally {
+      guardandoRef.current = false;
       setGuardando(false);
     }
-  }, [campus.id, elements, grid, guardando]);
+  }, [campus.id, elements, grid, pendientes]);
+
+  /**
+   * EL GUARDADO AUTOMÁTICO.
+   *
+   * Cada cambio reinicia la cuenta (el efecto se vuelve a montar porque
+   * `version` cambió), así que veinte arrastres seguidos son UN guardado.
+   * No se reintenta lo que ya falló y no se pisa un guardado en vuelo: al
+   * terminar, `guardada` cambia y este efecto vuelve a mirar si quedó algo.
+   */
+  useEffect(() => {
+    if (version === 0 || version === guardada) return;
+    if (guardando) return;
+    if (fallidaRef.current === version) return;
+    const t = setTimeout(() => void guardar(), EDU_PLANO_AUTOSAVE_MS);
+    return () => clearTimeout(t);
+  }, [guardar, guardada, guardando, version]);
 
   // ── Render ───────────────────────────────────────────────────────────
   const ordenados = useMemo(
@@ -375,6 +647,12 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
     }
     return m;
   }, [elements]);
+
+  /** Los pendientes que además siguen dibujados: los que hay que acomodar. */
+  const nuevosSinAcomodar = useMemo(
+    () => pendientes.map((id) => sillonPorId.get(id)).filter((c): c is EduPlanoChair => !!c && usados.has(c.id)),
+    [pendientes, sillonPorId, usados],
+  );
 
   const fantasma = herramienta.tipo === "poner" ? catalogo.byKey.get(herramienta.key) : undefined;
 
@@ -394,6 +672,9 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
           {revision.ligados} de {chairs.length} {chairs.length === 1 ? "sillón ligado" : "sillones ligados"}
           {revision.sinLigar.length > 0 && (
             <b className="edu-planoed__alerta"> · {revision.sinLigar.length} sin ligar</b>
+          )}
+          {nuevosSinAcomodar.length > 0 && (
+            <b className="edu-planoed__nuevo"> · {nuevosSinAcomodar.length} sin acomodar</b>
           )}
         </span>
 
@@ -429,21 +710,36 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
         </div>
       </FloorBar>
 
+      {/* 🔴 El error del servidor, en grande y con sus palabras. Un plano que
+          no se guarda tiene que enterarse quien lo está acomodando: la línea
+          de estado de abajo se lee de reojo, esto no. */}
       {error && (
         <div className="edu-banner edu-banner--warn" role="alert">
           <div>
             <p className="edu-banner__title">No se guardó</p>
             <p className="edu-banner__detail">{error}</p>
+            <p className="edu-banner__detail">
+              Lo que ves sigue en esta pantalla: arregla lo que dice el aviso y se vuelve a
+              guardar solo, o pulsa «Guardar el plano».
+            </p>
           </div>
         </div>
       )}
 
-      <p className="edu-planoed__estado" role="status">
-        {sucio
-          ? "Tienes cambios sin guardar."
-          : guardadoISO
-            ? `Guardado · ${new Date(guardadoISO).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}`
-            : "Este plano todavía es el automático: guárdalo para hacerlo tuyo."}
+      <p
+        className={`edu-planoed__estado${error ? " edu-planoed__estado--mal" : ""}`}
+        role="status"
+      >
+        {error
+          ? "Sin guardar."
+          : guardando
+            ? "Guardando…"
+            : sucio
+              ? "Guardando en un momento…"
+              : guardadoISO
+                ? `Guardado ${horaCorta(guardadoISO)}`
+                : "Este plano todavía es el automático: en cuanto muevas algo se guarda solo."}
+        {aviso && <span className="edu-planoed__aviso"> · {aviso}</span>}
       </p>
 
       <FloorWorkbench>
@@ -451,8 +747,9 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
         <FloorPanel as="aside" scroll className="edu-planoed__columna">
           <FloorPanelTitle>Elementos</FloorPanelTitle>
           <FloorPanelHelp>
-            Elige uno y haz clic en el piso para ponerlo. <kbd>R</kbd> gira,{" "}
-            <kbd>Supr</kbd> borra, <kbd>Esc</kbd> suelta.
+            Elige uno y haz clic en el piso para ponerlo. Para mover algo,{" "}
+            <strong>arrástralo</strong>. <kbd>R</kbd> gira, <kbd>Supr</kbd> borra,{" "}
+            <kbd>Esc</kbd> suelta. Se guarda solo.
           </FloorPanelHelp>
 
           {catalogo.grouped.map((grupo) => (
@@ -488,7 +785,7 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
                   value={grid.cols}
                   onChange={(e) => {
                     setGrid((g) => ({ ...g, cols: acotar(Number(e.target.value), g.cols) }));
-                    setSucio(true);
+                    marcar();
                   }}
                 />
               </label>
@@ -502,7 +799,7 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
                   value={grid.rows}
                   onChange={(e) => {
                     setGrid((g) => ({ ...g, rows: acotar(Number(e.target.value), g.rows) }));
-                    setSucio(true);
+                    marcar();
                   }}
                 />
               </label>
@@ -533,26 +830,55 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
               const esSillon = eduPlanoEsSillon(el.type);
               const suelto = esSillon && !el.resourceId;
               const colgante = esSillon && !!el.resourceId && !chairs.some((c) => c.id === el.resourceId);
+              const nuevo = esSillon && !!el.resourceId && pendientes.includes(el.resourceId);
+              const [sx, sy] = toScreen(col, row);
               return (
-                <IsoElement
+                /* 🔴 El ARRASTRE va en un `<g>` de esta pantalla, no dentro de
+                   `IsoElement`: la capa compartida DIBUJA y no interactúa (lo
+                   dice su propia cabecera), y el editor del dental arrastra de
+                   otra manera. Aquí se envuelve su dibujo con los Pointer
+                   Events y la marca del sillón recién puesto, que son de este
+                   producto. `data-element-id` lo sigue poniendo ella. */
+                <g
                   key={el.id}
-                  elementId={el.id}
-                  type={td}
-                  col={col}
-                  row={row}
-                  rotation={el.rotation}
-                  moving={enMovimiento}
-                  selected={el.id === selectedId}
-                  label={
-                    esSillon
-                      ? colgante
-                        ? "Sillón que ya no existe"
-                        : el.name ?? "Sin ligar"
-                      : null
-                  }
-                  labelBad={suelto || colgante}
-                  onMouseDown={(e) => onElementoDown(e, el.id)}
-                />
+                  className={`edu-planoed__arrastre${nuevo ? " edu-planoed__arrastre--nuevo" : ""}`}
+                  onPointerDown={(e) => onElementoDown(e, el.id)}
+                  onPointerMove={onElementoMove}
+                  onPointerUp={onElementoUp}
+                  onPointerCancel={onElementoCancel}
+                  onLostPointerCapture={onElementoCancel}
+                >
+                  <IsoElement
+                    elementId={el.id}
+                    type={td}
+                    col={col}
+                    row={row}
+                    rotation={el.rotation}
+                    moving={enMovimiento}
+                    selected={el.id === selectedId}
+                    label={
+                      esSillon
+                        ? colgante
+                          ? "Sillón que ya no existe"
+                          : el.name ?? "Sin ligar"
+                        : null
+                    }
+                    labelBad={suelto || colgante}
+                  />
+                  {/* 🔴 El sillón que puso el código. Se dibuja y se pinta en
+                      vivo desde ya, pero NO está donde está de verdad: la
+                      marca se quita en cuanto la dirección lo mueve. */}
+                  {nuevo && (
+                    <text
+                      x={sx + ISO_C / 2}
+                      y={sy - 50}
+                      textAnchor="middle"
+                      className="edu-planoed__nuevomarca"
+                    >
+                      nuevo · ponlo en su sitio
+                    </text>
+                  )}
+                </g>
               );
             })}
 
@@ -616,6 +942,41 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
             </FloorPanelHelp>
           )}
 
+          {/* ── Los que puso el código y nadie ha acomodado ─────────── */}
+          {nuevosSinAcomodar.length > 0 && (
+            <FloorPanelGroup divider>
+              <FloorPanelTitle>
+                {nuevosSinAcomodar.length === 1
+                  ? "Un sillón nuevo, sin acomodar"
+                  : `${nuevosSinAcomodar.length} sillones nuevos, sin acomodar`}
+              </FloorPanelTitle>
+              <FloorPanelHelp>
+                Se dieron de alta en Sillones después de la última vez que alguien acomodó este
+                piso, así que entraron solos <strong>al lado del último</strong> y ya se pintan en
+                vivo. Arrástralos a donde están de verdad.
+              </FloorPanelHelp>
+              <ul className="edu-planoed__lista">
+                {nuevosSinAcomodar.map((c) => (
+                  <li key={c.id}>
+                    <span>{c.name}</span>
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      onClick={() => {
+                        const el = elements.find(
+                          (x) => eduPlanoEsSillon(x.type) && x.resourceId === c.id,
+                        );
+                        if (el) setSelectedId(el.id);
+                      }}
+                    >
+                      Verlo
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </FloorPanelGroup>
+          )}
+
           <FloorPanelGroup divider>
             <FloorPanelTitle>Sillones de {campus.name}</FloorPanelTitle>
             {chairs.length === 0 ? (
@@ -651,4 +1012,23 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
 function acotar(valor: number, anterior: number): number {
   if (!Number.isFinite(valor)) return anterior;
   return Math.min(EDU_PLANO_GRID_MAX, Math.max(EDU_PLANO_GRID_MIN, Math.round(valor)));
+}
+
+/**
+ * "12:41" para lo guardado hoy; con la fecha delante si fue otro día.
+ *
+ * La línea de estado se lee de reojo mientras se arrastra un sillón: la
+ * hora sola contesta "¿ya se guardó lo que acabo de hacer?" sin obligar a
+ * leer una fecha completa que casi siempre es la de hoy.
+ */
+function horaCorta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const hora = d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const hoy = new Date();
+  const mismoDia =
+    d.getFullYear() === hoy.getFullYear() &&
+    d.getMonth() === hoy.getMonth() &&
+    d.getDate() === hoy.getDate();
+  return mismoDia ? hora : `${d.toLocaleDateString("es-MX", { dateStyle: "short" })} ${hora}`;
 }

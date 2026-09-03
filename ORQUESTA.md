@@ -1,3 +1,215 @@
+═══════════════════════════════════════════════════════════════════════════
+## [Institucional · INTEGRACIÓN 7] — Dos ramas, un solo merge: la autofirma que main ya tenía y el sillón que ahora sí se arrastra ✅ (2026-09-02) · rama `edu/integracion7` → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin tuberías, 470/470 páginas) · `npm run test:edu` VERDE
+(36 archivos, 1 234 pruebas, 0 fallos) · GUARDIA EXIT 0
+SQL: **ninguno** en esta tanda. Variables de entorno nuevas: **ninguna**.
+Dependencias nuevas: **ninguna**.
+Archivos tocados vs `origin/main`: 7 — 6 PROPIOS del vertical y 1 compartido
+declarado (`ORQUESTA.md`). Cero prohibidos.
+
+QUÉ ES ESTO: dos ramas terminadas, cada una con su PR abierto y ninguna mergeada,
+puestas en una sola rama de integración para que main reciba UN merge y no dos. No
+se escribió una línea de producto: lo único que se redactó aquí es este bloque. Lo
+demás que se tocó fue reparar dos daños en la bitácora, y se detallan abajo.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · QUÉ SE JUNTÓ, EN ESTE ORDEN
+───────────────────────────────────────────────────────────────────────────
+
+    #    rama                        commit      qué trae
+    ───  ──────────────────────────  ──────────  ─────────────────────────────
+    168  fix/edu-direccion-autofirma 1dd333f6    la dirección puede firmar sus
+                                                 propias autorizaciones, y queda
+                                                 escrito
+    174  fix/edu-plano-editor        048bbb76    el sillón se arrastra de verdad,
+                                                 el plano se guarda solo y el
+                                                 sillón nuevo entra al plano
+
+Merge normal, sin rebase, y `git status` limpio entre uno y otro. Los dos dejaron su
+commit de merge (`0c2b57d4` y `f02e4098`). **Cero conflictos**: git no marcó ni uno.
+
+⚠️ **Y un TERCER merge, que no estaba en el plan: `origin/main` se movió mientras
+esto se verificaba.** Al hacer el `git fetch` previo al push, main ya no era
+`d7ac4b13` sino `9f4b3d4e` ("la guía de horario del cursor también en la vista
+Semana"). Se mergeó main a la rama —sin conflictos, 3 archivos suyos del panel
+dental: `agenda-hover-guide.tsx`, `agenda-week-view.tsx` y `hover-slot.test.ts`— y
+se **repitieron las tres puertas sobre esa base nueva**, no sobre la vieja. Sin ese
+merge la guardia habría salido en rojo por sí sola: mide contra `origin/main`, y
+una rama atrasada le hace leer los archivos ajenos de main como intrusos.
+
+🔴 **#168 NO TRAJO CÓDIGO: main ya lo tenía.** El merge de la primera rama cambió
+**un solo archivo, `ORQUESTA.md`**, y ni una línea de producto. No es un fallo del
+merge: el commit que hoy es la punta de main, `d7ac4b13` ("Rescate 2-sep", PR #173),
+ya se había llevado esa rama dentro — su propia tabla lo dice en la fila D ("La
+dirección firma sus propias autorizaciones · rama `fix/edu-direccion-autofirma` ·
+merge"). Sus 6 archivos de producto, su prueba y sus 21 líneas de `edu-theme.css`
+estaban ya en main **idénticos**, así que el merge no tuvo nada que aportar.
+
+Consecuencia para quien lea el PR: el diff contra main son 7 archivos y **todos
+menos `ORQUESTA.md` son de #174**. La autofirma no aparece en el diff porque ya
+está en producción; el PR de #168 se puede cerrar sin mergear.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · LOS DOS ARCHIVOS QUE TOCAN LAS DOS RAMAS
+───────────────────────────────────────────────────────────────────────────
+
+Son exactamente dos, y ninguno dio conflicto. Los otros 5 los toca UNA sola rama.
+
+**2.1 · `src/app/instituto/edu-theme.css` — sin colisión de nombres.** #168 añade 21
+líneas (`.edu-auth-historial__marca` y familia) que **ya estaban en main** por el
+rescate, y #174 añade 54 al final: `.edu-planoed__nuevo`, `__estado--mal`,
+`__aviso`, `__arrastre`, `__nuevomarca` y sus variantes en `.dark`. Rangos
+disjuntos y prefijo propio (`edu-planoed__`, que ya era de esa pantalla). La prueba
+del tema —la que revienta si dos bloques de primer nivel se llaman igual— está en
+verde, así que no hay dos dueños para un mismo nombre.
+
+**2.2 · `ORQUESTA.md` — DOS daños, y ninguno lo avisó nadie.** El auto-merge no
+marcó conflicto; dijo "Auto-merging" y siguió. Quedaron dos cosas mal, las dos
+encontradas comparando el archivo entero contra el de main y no a ojo:
+
+🔴 **(a) El reporte de #168, DUPLICADO palabra por palabra.** main ya traía ese
+bloque (entró con el rescate #173) y la rama lo trae en su propia cabecera; git no
+los reconoció como el mismo texto y **dejó las dos copias, una detrás de la otra**:
+220 líneas idénticas repetidas. Se comprobó con `diff` que los dos bloques eran
+byte a byte iguales y se borró el segundo. Las barras `═══` de apertura y cierre se
+revisaron después: el bloque siguiente conserva la suya.
+
+🔴 **(b) Dos reportes AJENOS quedaron con texto metido dentro.** Este no es del
+merge: **ya venía mal en la rama #174**. Quien redactó su reporte hizo un
+reemplazo global de `13 pruebas nuevas` → `13 pruebas nuevas (46 en el archivo del
+plano)` sobre TODO el `ORQUESTA.md`, y esa frase aparecía en otros dos sitios que
+no tenían nada que ver:
+
+    reporte de la agenda (#165):
+      main    · edu-agenda-rejilla.test.ts 13 pruebas nuevas (55 en el archivo)
+      la rama · edu-agenda-rejilla.test.ts 13 pruebas nuevas (46 en el archivo del plano) (55 en el archivo)
+
+    reporte de recorridos de Inmuebles:
+      main    · **(e) 13 pruebas nuevas** en `src/lib/realty/__tests__/recorridos.test.ts`,
+      la rama · **(e) 13 pruebas nuevas (46 en el archivo del plano)** en `src/lib/realty/…`,
+
+Las dos líneas se devolvieron al texto de main. La línea legítima de #174 —la que
+sí habla del archivo del plano— se quedó como estaba. Después del arreglo,
+`ORQUESTA.md` contra main es **+190 líneas y CERO borradas ni modificadas**: una
+inserción limpia del bloque de #174, que es lo único que debía cambiar.
+
+La lección se repite por cuarta integración seguida: en este archivo la
+comprobación que sirve NO es "git no marcó conflicto", ni "no se borró nada". Es
+mirar el `git diff` contra main **línea por línea de las que NO son del bloque
+nuevo**, porque las dos veces el daño estaba a 24 000 líneas de distancia del sitio
+donde se escribió.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LO QUE SOLO SE VE AL JUNTARLAS
+───────────────────────────────────────────────────────────────────────────
+
+Poco, y por una razón buena: las dos ramas salen del main de HOY (`d7ac4b13` es
+ancestro de las dos) y no se pisan en ningún archivo de producto. #168 toca las
+autorizaciones (`src/lib/edu/autorizaciones*.ts`, la bandeja y la ficha del caso) y
+#174 toca el plano de la clínica (`plano-core.ts`, `plano.ts`, el editor y su
+pantalla). Ni un archivo en común.
+
+Se comprobó archivo por archivo, comparando los objetos de git y no el árbol de
+trabajo, que los 6 archivos de código de la rama integrada son **idénticos** a los
+de `origin/fix/edu-plano-editor`: `git diff origin/fix/edu-plano-editor HEAD -- src/`
+no devuelve nada. (Comparar con `git show … | diff` da falsos positivos en este
+repo: los archivos del disco están en CRLF y los objetos en LF, y salen los 6 como
+"distintos" sin que lo sean.)
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · VERIFICADO (sobre la rama integrada, no sobre las ramas sueltas)
+───────────────────────────────────────────────────────────────────────────
+
+  · `npm run build` EXIT 0, completo y sin tuberías. **470/470 páginas.** En la
+    tabla de rutas salen las del plano que trae #174:
+
+        ƒ /instituto/clinica                     8.68 kB    115 kB
+        ƒ /instituto/clinica/plano               8.19 kB    130 kB
+        ƒ /api/instituto/clinica/plano              0 B       0 B
+        ƒ /api/instituto/clinica/3d-state           0 B       0 B
+
+  · `npm run test:edu` EXIT 0 — **36 archivos, 1 234 pruebas, 0 fallos.**
+
+    ⚠️ Son **13 pruebas más que main, no 26**, y el número cuadra a la primera: se
+    corrió el mismo `test:edu` sobre `origin/main` y da **36 archivos y 1 221
+    pruebas**. Las 13 que suben son TODAS de #174 (su archivo
+    `edu-clinica-plano.test.ts` pasa de 33 a 46). #168 no suma ninguna porque sus
+    pruebas —igual que su código— ya estaban en main desde el rescate #173. Si se
+    esperaban ~1 240, la diferencia es esa y no una prueba perdida.
+
+  · GUARDIA EXIT 0:
+
+        EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs
+
+    6 propios del vertical, 1 compartido declarado (`ORQUESTA.md`), 0 sin declarar,
+    0 prohibidos. Nada del dental, nada de barber, nada de inmuebles.
+
+  · La raíz del repo, limpia: `git status --porcelain` no devuelve nada y no hay
+    ningún archivo sin seguir.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · `tsc --noEmit`: 12 errores, y UNO es nuevo
+───────────────────────────────────────────────────────────────────────────
+
+`npx tsc --noEmit -p tsconfig.json` sale con **exit 2 y 12 errores, los 12 dentro de
+`__tests__/`**. Ninguno en código que se envíe al navegador — por eso el build pasa
+(Next no chequea los tipos de las pruebas) y por eso `test:edu` está en verde (el
+runner tampoco los chequea).
+
+No es una deducción: se corrió el MISMO `tsc` sobre `origin/main`, que da **11**.
+La rama integrada añade **exactamente uno**, y es de #174:
+
+    src/lib/edu/__tests__/edu-clinica-plano.test.ts(560,45):
+      error TS1501: This regular expression flag is only available when
+                    targeting 'es2018' or later.
+
+Es la bandera `/s` (dotAll) de esta comprobación, que verifica que la reconciliación
+del plano no firme a nombre de nadie:
+
+    !/data:\s*\{[^}]*updatedByUserId[^}]*\}/s.test(…)
+
+**No rompe nada**: Node entiende `dotAll` desde la v8, la prueba corre y pasa. Es
+deuda de configuración del repo, no de la prueba: `tsconfig.json` **no declara
+`target`**, así que TypeScript asume el más viejo. Es la misma causa de los otros
+dos errores de `src/lib/edu/` que ya venían de antes (`TS2802` en
+`edu-theme.test.ts`, por recorrer un `Map` y un `Set`). Se deja anotado y NO se
+toca aquí: cambiar el `target` del repo entero no es trabajo de una integración.
+
+Los 6 errores de `src/lib/edu/`, tal cual salen:
+
+    edu-clinica-plano.test.ts(213,32) TS2345  el arreglo literal no encaja en
+                                              LayoutElement[]              (ya en main)
+    edu-clinica-plano.test.ts(560,45) TS1501  la bandera /s pide es2018     ← NUEVO, de #174
+    edu-clinica-plano.test.ts(722,17) TS2352  Chair3DState → Record<string,unknown>
+                                                                           (ya en main)
+    edu-clinica-plano.test.ts(843,40) TS2367  comparación entre dos textos
+                                              que no se solapan            (ya en main)
+    edu-theme.test.ts(174,33)         TS2802  recorrer un Map pide es2015   (ya en main)
+    edu-theme.test.ts(283,22)         TS2802  recorrer un Set pide es2015   (ya en main)
+
+(Los tres de `edu-clinica-plano.test.ts` marcados "ya en main" son los mismos de
+main en las líneas 205, 309 y 430; se movieron de sitio porque #174 metió pruebas
+por encima.) Los 6 restantes son de `src/lib/barber/__tests__/`, ajenos al vertical
+y ya en main.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · QUÉ HACE FALTA PARA DESPLEGAR
+───────────────────────────────────────────────────────────────────────────
+
+  · **Ningún `.sql`.** Esta tanda no toca la base. El `.sql` del plano
+    (`sql/edu-clinica-plano.sql`) ya entró con la integración 6.
+  · Ninguna variable de entorno nueva, ninguna dependencia nueva.
+  · El PR de **#168 se puede cerrar sin mergear**: su código ya está en main.
+
+🔴 EL BUILD NO CABE EN EL HEAP POR DEFECTO. `npm run build` y `npx tsc --noEmit`
+mueren los dos contra el tope de ~4 GB de V8 (y NO contra la RAM de la máquina). No
+es de esta rama. Van con el tope subido, en la MISMA línea porque la variable no se
+hereda:
+
+    NODE_OPTIONS=--max-old-space-size=8192 npm run build
+
+═══════════════════════════════════════════════════════════════════════════
 ## [RESCATE 2-SEP] — Cuatro piezas sueltas del reinicio, en una sola rama ✅ (2026-09-02) · rama `integ/rescate-2sep` → PR contra main, SIN mergear
 
 Un reinicio dejó fuera de main el trabajo de un día: dos worktrees sin commitear y dos ramas
@@ -198,6 +410,196 @@ MISMA capa"— pasa de verdad: `live-mode.tsx` monta ahora `FloorChairCard`, no 
      instituto solo hereda dos props opcionales nuevas que no usa.
   7. **/dev-live-look en un despliegue** — tiene que dar 404.
 
+
+═══════════════════════════════════════════════════════════════════════════
+## [EDU-PLANO · ARREGLOS] — El sillón que no se dejaba mover y el que no aparecía ✅ (2026-09-02) · rama `fix/edu-plano-editor` → PR contra main
+═══════════════════════════════════════════════════════════════════════════
+
+Dos fallos del editor del plano de la clínica del vertical INSTITUCIONAL
+(`/instituto/clinica/plano`, que alimenta `/instituto/clinica`). Ninguno es
+de dibujo: los dos hacen que el piso que se pinta en vivo **no sea el piso
+de verdad**, que es justamente lo único que esa pantalla promete.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · ARRASTRAR UN SILLÓN NO LO MOVÍA, Y LO MOVIDO NO SE GUARDABA
+───────────────────────────────────────────────────────────────────────────
+
+**El síntoma**: agarras un sillón, lo arrastras a donde va, sueltas — y
+vuelve a su celda. A veces sí se movía (dos clics sueltos), lo que es peor
+que si no funcionara nunca. Y si funcionaba, salir de la pantalla sin pulsar
+«Guardar el plano» tiraba el trabajo con un aviso de "tienes cambios sin
+guardar" que se lee de reojo y no lo ve nadie.
+
+**La causa, las dos mitades:**
+
+  · **El movimiento se confirmaba en un `click` del SVG.** El elemento se
+    tomaba en `mousedown` (→ estado `moviendo`), se seguía con el
+    `mousemove` del lienzo y se confirmaba en `onLienzoClick`. Con un
+    arrastre de verdad —presionar, mover, soltar— el navegador manda el
+    `click` al **ancestro común** del `mousedown` y el `mouseup`: si al
+    soltar el ratón está sobre otro elemento, o fuera del lienzo, ese
+    `click` no llega donde se le espera y `moviendo` se pierde. Con el dedo
+    directamente no funcionaba.
+  · **El guardado era un botón.** Acomodar un piso son veinte arrastres y
+    una pantalla que se abandona.
+
+**El arreglo** (`src/components/edu/clinica/plano-editor.tsx`):
+
+  · **Pointer Events con captura.** `pointerdown` sobre el elemento toma y
+    hace `setPointerCapture(e.pointerId)`; a partir de ahí **todos** los
+    `pointermove`/`pointerup` del gesto llegan al elemento aunque el dedo se
+    salga del sillón, del lienzo o de la ventana. **`pointerup` CONFIRMA**
+    la celda si está dentro de la rejilla y **libre**; si no, el sillón se
+    queda donde estaba y la pantalla lo dice ("Esa celda ya está ocupada.
+    Suéltalo en una libre."). Ratón, dedo y lápiz, el mismo camino.
+  · **Clic sin mover = seleccionar**, como antes y sin ensuciar la historia:
+    el arrastre lleva una bandera `movido` y, sin ella, `pointerup` sale
+    antes de tocar nada. `pointercancel` y `lostpointercapture` sueltan.
+  · 🔴 **El elemento en la mano vive en una REFERENCIA, no solo en el
+    estado**, y esto costó verlo en el navegador: el primer `pointermove`
+    llega ANTES de que React repinte —suele caer en el mismo tic que el
+    `pointerdown`—, así que su cierre veía todavía `null`, descartaba el
+    movimiento y el `pointerup` lo daba por "clic sin mover". Arrastrando
+    despacio funcionaba y arrastrando rápido no. El estado sigue existiendo
+    porque es lo que DIBUJA el sillón en su celda de destino mientras lo
+    llevas; quien decide son los tres manejadores, y leen de la referencia.
+  · **Guardado automático.** Soltar, girar, poner, borrar, ligar o cambiar
+    el tamaño del piso programan un PUT al **mismo endpoint** con un
+    debounce de `EDU_PLANO_AUTOSAVE_MS` (900 ms, en plano-core). Veinte
+    arrastres seguidos son UN guardado. El botón «Guardar el plano» se queda
+    para forzarlo.
+  · **El error NUNCA pasa en silencio.** El mensaje del servidor se pinta en
+    grande, con sus palabras ("un sillón ligado a una unidad que no es de
+    esta sede"), y la línea de estado se pone en rojo. ⚠️ Y **no se
+    reintenta solo con el mismo contenido**: un error de validación se
+    repetiría cada segundo para siempre. El siguiente cambio —o el botón—
+    lo vuelve a intentar.
+  · **La versión, no un booleano.** El guardado apunta qué versión mandó y
+    solo se da por limpio si nadie tocó nada mientras la petición viajaba;
+    con un `sucio` booleano, un cambio hecho durante el guardado se marcaba
+    como guardado sin haberse mandado nunca.
+  · De paso: `cambiar()` y `deshacer()` ya no apilan la historia **dentro**
+    del actualizador de `setElements` (en modo estricto React lo ejecuta dos
+    veces y "Deshacer" pedía dos pulsaciones por movimiento).
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · UN SILLÓN NUEVO NO ENTRABA AL PLANO GUARDADO
+───────────────────────────────────────────────────────────────────────────
+
+**El síntoma**: das de alta un sillón en `/instituto/sillones` y en el plano
+no está. Ni en el editor ni en la clínica en vivo — y un sillón que no se
+pinta **se lee como "está libre"** cuando puede estar ocupado.
+
+**La causa**: el plano automático (`eduPlanoAuto`) solo se usaba cuando la
+sede NO tenía plano guardado. En cuanto Dirección guardaba el suyo, el
+automático dejaba de correr y las unidades creadas después no entraban a
+ningún sitio. La única pista era un aviso de "hay un sillón que no está en
+el plano" que nadie tiene por qué saber resolver.
+
+**El arreglo**: la **LECTURA reconcilia**.
+
+  · `eduPlanoReconciliar` (`src/lib/edu/plano-core.ts`, puro): recorre los
+    sillones **activos** en el orden de la escuela (`orderIndex`, luego
+    `number` — el mismo con el que llegan de Sillones) y por cada uno sin
+    elemento pone uno **a continuación del último**, en la **misma rejilla
+    del automático** (`EDU_PLANO_AUTO_POR_FILA` / `PASO_COL` / `PASO_ROW`) y
+    en una **celda libre** (contando lo que mide el sillón, 2×3, no solo su
+    esquina). **Ligado a su `EduChair` desde el primer momento**: un sillón
+    dibujado sin ligar no se pinta en vivo, y esto existe para que se pinte.
+    · El ancla es el elemento del **último sillón en el orden de la
+      escuela**, no el que quede más abajo en el dibujo: si Dirección movió
+      el 12 a la esquina de arriba, el 13 aparece a su lado, que es donde
+      alguien lo va a buscar.
+    · Si se acaba el piso, la rejilla **crece** hacia abajo (con el tope del
+      mundo 3D). Un sillón dibujado y torcido se arregla en un arrastre; uno
+      invisible no se arregla nunca.
+  · **Se PERSISTE** (`getEduPlanoSede` → `persistirReconciliacion`). Sin eso
+    el sillón cambiaría de celda entre dos cargas de la pantalla, porque la
+    celda libre depende de lo que haya alrededor.
+  · 🔴 **Pero NO se firma.** `updatedByUserId` no se toca y `updatedAt` se
+    manda **explícito** con el valor que ya tenía, para que Prisma no lo
+    suba con su `@updatedAt`: "Guardado · <fecha> por <persona>" sigue
+    diciendo la verdad — la última vez que una PERSONA acomodó ese piso.
+  · Y si esa escritura falla (falta el `.sql`, base de solo lectura), la
+    pantalla se pinta igual con el plano reconciliado **en memoria**: aviso
+    en el servidor y nada revienta. Es una lectura de pantalla.
+  · **Queda marcado como pendiente** (`metadata.pendientes`, una llave
+    nuestra dentro del JSON que ya se guarda — sin schema y sin `.sql`). El
+    editor lo pinta en el lienzo ("nuevo · ponlo en su sitio"), lo cuenta
+    arriba ("1 sin acomodar") y lo lista aparte con un botón para verlo; la
+    clínica en vivo lo dice en una nota. La marca se quita en cuanto
+    Dirección lo **toca** (mover, girar, ligar, borrar), que es la única
+    señal honesta de que ya está donde va.
+  · **Un sillón dado de baja NO se toca**: su elemento se queda colgante,
+    como ya hacía `eduPlanoRevision`. Borrarlo tiraría el trabajo de
+    Dirección por reactivar un sillón dos días después.
+
+⚠️ **Consecuencia buscada**: borrar del plano el elemento de un sillón
+**activo** ya no lo quita del piso — la siguiente lectura lo vuelve a poner.
+El editor lo dice al borrarlo ("sigue activo en Sillones, así que volverá al
+plano; para quitarlo, dalo de baja allá") en vez de dejar que reaparezca
+solo y que nadie entienda por qué.
+
+───────────────────────────────────────────────────────────────────────────
+### ARCHIVOS
+───────────────────────────────────────────────────────────────────────────
+
+  · `src/lib/edu/plano-core.ts` — `eduPlanoReconciliar`, `eduPlanoPendientes`,
+    `EDU_PLANO_AUTOSAVE_MS`, `EDU_PLANO_SILLON_W/H`, `EduPlanoMetadata`;
+    `eduPlanoMetadata` conserva los pendientes; `EduPlanoLayout.pendientes`.
+  · `src/lib/edu/plano.ts` — la lectura reconcilia y persiste sin firmar;
+    `saveEduPlano` valida los pendientes que manda el editor.
+  · `src/components/edu/clinica/plano-editor.tsx` — arrastre y autoguardado.
+  · `src/components/edu/clinica/plano-screen.tsx` — la nota de "nuevos".
+  · `src/app/instituto/edu-theme.css` — `touch-action` del elemento,
+    cursores, la marca del sillón nuevo y el estado en rojo.
+  · `src/lib/edu/__tests__/edu-clinica-plano.test.ts` — 13 pruebas nuevas (46 en el archivo del plano).
+
+⚠️ **Rebasado sobre la capa compartida** (`src/components/floor-plan/`, la que
+entró con el PR #173 mientras esto se escribía). El arrastre NO se metió dentro
+de `IsoElement`: esa capa DIBUJA y no interactúa —lo dice su propia cabecera— y
+el editor del dental arrastra de otra manera. Aquí su dibujo va envuelto en un
+`<g>` de esta pantalla que lleva los Pointer Events, la marca del sillón recién
+puesto y el `touch-action: none` (el que captura es el que lo necesita). Cero
+archivos compartidos tocados: el guard lo confirma.
+
+**SIN SQL. SIN SCHEMA.** Es lógica: los pendientes viven en la `metadata`
+JSON que la tabla `edu_campus_layouts` ya guarda.
+
+───────────────────────────────────────────────────────────────────────────
+### VERIFICACIÓN
+───────────────────────────────────────────────────────────────────────────
+
+  · `npm run build` → **exit 0** (sin pipes).
+  · `npm run test:edu` → **VERDE, 36 archivos, 1 234 pruebas**, con las
+    nuevas: (a) el sillón nuevo entra después del último y en celda libre,
+    (b) reconciliar dos veces no duplica ni lo mueve, (c) tres nuevos entran
+    en el orden de Sillones; más la rejilla del automático, la celda
+    ocupada, el sillón de baja que se queda colgante, el crecimiento del
+    piso, los pendientes que sobreviven al saneo del dental, y que el
+    editor confirma en `pointerup` y guarda solo sin reintentar un error.
+  · `EDU_GUARD_SHARED="ORQUESTA.md" node scripts/edu-guard.cjs` → **exit 0**
+    (6 archivos propios + este reporte).
+  · **CON EL RATÓN**, contra Postgres real (Docker) y `npx next start`:
+    arrastré tres sillones (1, 2, 3) a otra fila → se guardaron **solos**
+    ("Guardado 10:43 p.m.", sin tocar el botón) → recargué → siguen ahí →
+    `/instituto/clinica` los pinta en el 3D en su sitio nuevo. Solté uno
+    encima de otro → rebotó con el aviso "Esa celda ya está ocupada".
+    Di de alta el "Sillón 7" en Sillones y volví al plano **sin tocar
+    nada** → apareció junto al último, ligado, marcado "nuevo · ponlo en su
+    sitio", `8 de 8 ligados · 1 sin acomodar`; recargar dos veces **no lo
+    movió ni lo duplicó** (los mismos elementos las dos veces) y el
+    "Guardado" siguió marcando la hora de la PERSONA, no la de la
+    reconciliación. Lo arrastré a su sitio y la marca desapareció, también
+    tras recargar. Repetido con el "Sillón 8": cayó **un paso de columna a
+    la derecha del 7**.
+  · Y el camino del ERROR, también con el ratón: con un elemento colgando
+    de un sillón borrado a mano de la base, el autoguardado falló y la
+    pantalla lo dijo en grande con las palabras del servidor ("está ligado
+    a una unidad que no es de esta sede"), la línea de estado se puso en
+    rojo ("Sin guardar.") y **no reintentó sola**. Al borrar ese elemento
+    —lo que pide el aviso— se guardó sin pulsar nada. Salir de la pantalla
+    con eso pendiente disparó el aviso del navegador.
 
 ═══════════════════════════════════════════════════════════════════════════
 ## [Live-Dental-3D · ARREGLOS] — El día de la clínica, el humo del plano y el piso cortado ✅ (2026-09-02) · rama `fix/live-fecha-local` → PR contra main

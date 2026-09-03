@@ -41,9 +41,13 @@ import {
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
 import {
+  EDU_PLANO_GRID_MIN,
   eduPlanoAuto,
   eduPlanoEstado3D,
+  eduPlanoEsSillon,
   eduPlanoMetadata,
+  eduPlanoPendientes,
+  eduPlanoReconciliar,
   eduPlanoRevision,
   eduPlanoValidar,
   type EduPlanoChair,
@@ -169,6 +173,30 @@ async function sillonesDe(
 
 /**
  * EL PLANO DE UNA SEDE: el guardado, o el automático si nadie lo acomodó.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 UNA LECTURA QUE, A VECES, ESCRIBE
+ *
+ * Cuando la sede YA tiene plano guardado, esta lectura reconcilia
+ * (`eduPlanoReconciliar`): los sillones que se dieron de alta después de la
+ * última vez que alguien lo acomodó entran al plano, ligados, a
+ * continuación del último. Y se GUARDA — desde una lectura, con permiso de
+ * ver y no de editar.
+ *
+ * Suena mal y es a propósito, así que aquí está el razonamiento:
+ *
+ *  · Si no se guardara, el sillón nuevo cambiaría de celda entre dos
+ *    cargas de la pantalla (la celda libre depende de lo que haya
+ *    alrededor), y el editor y la vista en vivo enseñarían el piso de dos
+ *    maneras distintas el mismo día.
+ *  · No es una edición de nadie: `updatedByUserId` NO se toca y
+ *    `updatedAt` se conserva tal cual, así que "Guardado · <fecha> por
+ *    <persona>" sigue diciendo la verdad — la última vez que una PERSONA
+ *    acomodó este piso. El sillón entra marcado como pendiente, que es
+ *    justo lo contrario de fingir que ya está acomodado.
+ *  · Y si el guardado falla (falta el .sql, la base en solo lectura), la
+ *    pantalla se pinta igual con el plano reconciliado en memoria: se
+ *    registra el aviso y nada revienta.
  */
 export async function getEduPlanoSede(
   ctx: EduClinicaContext,
@@ -205,20 +233,43 @@ export async function getEduPlanoSede(
     fila = null;
   }
 
-  const layout: EduPlanoLayout = fila
-    ? {
-        // El saneo es el del dental: un plano guardado hace meses con otra
-        // forma se abre igual, descartando lo malformado en vez de reventar.
-        elements: sanitizeElements(fila.elements),
-        metadata: eduPlanoMetadata(sanitizeMetadata(fila.metadata)),
-        auto: false,
-        savedAtISO: fila.updatedAt.toISOString(),
-        savedBy: fila.updatedBy
-          ? [fila.updatedBy.firstName, fila.updatedBy.lastName].filter(Boolean).join(" ").trim() ||
-            null
-          : null,
-      }
-    : eduPlanoAuto(chairs);
+  let layout: EduPlanoLayout;
+  if (!fila) {
+    // Sin fila guardada manda el automático, que ya dibuja TODOS los
+    // sillones activos: no hay nada que reconciliar ni nada que escribir.
+    layout = eduPlanoAuto(chairs);
+  } else {
+    // El saneo es el del dental: un plano guardado hace meses con otra
+    // forma se abre igual, descartando lo malformado en vez de reventar.
+    const guardados = sanitizeElements(fila.elements);
+    const metaDental = sanitizeMetadata(fila.metadata);
+    const antes = eduPlanoPendientes(fila.metadata);
+
+    const rec = eduPlanoReconciliar({
+      elements: guardados,
+      chairs,
+      grid: metaDental.gridSize ?? rejillaQueAbarca(guardados),
+      pendientes: antes,
+    });
+
+    const metadata = eduPlanoMetadata({ ...metaDental, gridSize: rec.grid }, rec.pendientes);
+
+    if (rec.cambio) {
+      await persistirReconciliacion(campus.id, institutionId, rec.elements, metadata, fila.updatedAt);
+    }
+
+    layout = {
+      elements: rec.elements,
+      metadata,
+      auto: false,
+      savedAtISO: fila.updatedAt.toISOString(),
+      savedBy: fila.updatedBy
+        ? [fila.updatedBy.firstName, fila.updatedBy.lastName].filter(Boolean).join(" ").trim() ||
+          null
+        : null,
+      pendientes: rec.pendientes,
+    };
+  }
 
   return {
     campus,
@@ -226,6 +277,59 @@ export async function getEduPlanoSede(
     layout,
     revision: eduPlanoRevision(layout.elements, chairs),
   };
+}
+
+/**
+ * La rejilla de un plano guardado SIN `gridSize` en su metadata.
+ *
+ * Pasa con los planos más viejos y con cualquiera que se guardara antes de
+ * que el editor mandara el tamaño. Sin esto, la reconciliación creería que
+ * el piso mide 12×12 y pondría el sillón nuevo encima de una pared.
+ */
+function rejillaQueAbarca(elements: { col: number; row: number }[]): { cols: number; rows: number } {
+  let cols = EDU_PLANO_GRID_MIN;
+  let rows = EDU_PLANO_GRID_MIN;
+  for (const el of elements) {
+    cols = Math.max(cols, Math.round(el.col) + 1);
+    rows = Math.max(rows, Math.round(el.row) + 1);
+  }
+  return { cols, rows };
+}
+
+/**
+ * Guarda lo que la reconciliación acaba de poner, SIN firmarlo.
+ *
+ * `updatedAt` se manda explícito para que Prisma no lo suba con su
+ * `@updatedAt`: el plano no lo acomodó nadie ahora mismo y la pantalla dice
+ * esa fecha en voz alta. `updatedByUserId` ni se menciona, así que se queda
+ * como estaba.
+ *
+ * Falla en silencio a propósito (con aviso en el servidor): esto corre
+ * dentro de una LECTURA de pantalla, y una sede sin el .sql aplicado —o una
+ * réplica de solo lectura— tiene que seguir viendo su piso.
+ */
+async function persistirReconciliacion(
+  campusId: string,
+  institutionId: string,
+  elements: unknown,
+  metadata: unknown,
+  updatedAt: Date,
+): Promise<void> {
+  try {
+    await prisma.eduCampusLayout.update({
+      where: { campusId },
+      data: {
+        elements: elements as Prisma.InputJsonValue,
+        metadata: metadata as Prisma.InputJsonValue,
+        updatedAt,
+      },
+    });
+  } catch (err) {
+    console.warn(
+      `[edu-plano] no se pudo persistir la reconciliación de la sede ${campusId} (instituto ${institutionId}):`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 /**
@@ -256,7 +360,21 @@ export async function saveEduPlano(
     throw new EduPadronError(veredicto.error ?? "El plano no se pudo validar.", 400);
   }
 
-  const metadata = eduPlanoMetadata(sanitizeMetadata(input.metadata));
+  // Los PENDIENTES que manda el editor se creen solo hasta donde tienen
+  // sentido: un id que no es un sillón de esta sede, o uno que ya no está
+  // dibujado, se cae. Es la misma desconfianza que con los elementos — el
+  // body lo escribe el navegador.
+  const dibujados = new Set(
+    veredicto.elements
+      .filter((el) => eduPlanoEsSillon(el.type) && el.resourceId)
+      .map((el) => el.resourceId as string),
+  );
+  const deLaSede = new Set(todos.map((c) => c.id));
+  const pendientes = eduPlanoPendientes(input.metadata).filter(
+    (id) => deLaSede.has(id) && dibujados.has(id),
+  );
+
+  const metadata = eduPlanoMetadata(sanitizeMetadata(input.metadata), pendientes);
   const elements = veredicto.elements as unknown as Prisma.InputJsonValue;
 
   try {
