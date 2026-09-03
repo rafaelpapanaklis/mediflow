@@ -64,10 +64,11 @@ function editableFromConfig(c: BotConfigDTO): EditableConfig {
   };
 }
 
-// Switch con estilos propios (inline) para que el estado OFF sea SIEMPRE
-// claramente visible (track gris + perilla a la izquierda) sin depender del
-// color de fondo de la tarjeta. La clase global .switch dejaba el OFF en
-// rgba(255,255,255,0.1), invisible sobre tarjetas claras.
+// Interruptor del design system: la clase global `.switch` de globals.css.
+// Aquí vivía una COPIA con estilos inline porque `.switch` pintaba el estado
+// OFF con blanco al 10 % y sobre las tarjetas claras desaparecía. Arreglado
+// eso con el token --switch-off, la copia sobra y esta pantalla usa el mismo
+// interruptor que el resto del panel.
 function Switch({
   on,
   onClick,
@@ -87,39 +88,9 @@ function Switch({
       aria-checked={on}
       disabled={disabled}
       onClick={onClick}
-      style={{
-        position: "relative",
-        flexShrink: 0,
-        width: 36,
-        height: 20,
-        padding: 0,
-        border: "none",
-        borderRadius: 10,
-        // OFF: gris sólido visible en tema claro y oscuro. ON: morado de marca.
-        background: on ? "var(--brand)" : "#94a3b8",
-        boxShadow: on
-          ? "0 0 12px rgba(124,58,237,0.35)"
-          : "inset 0 0 0 1px rgba(15,10,30,0.18)",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.45 : 1,
-        transition: "background .15s, box-shadow .15s",
-      }}
+      className={`switch ${on ? "switch--on" : ""}`}
     >
-      <span
-        style={{
-          position: "absolute",
-          top: 2,
-          left: 2,
-          width: 16,
-          height: 16,
-          borderRadius: "50%",
-          background: "#fff",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.25)",
-          // OFF: perilla a la izquierda. ON: perilla a la derecha.
-          transform: on ? "translateX(16px)" : "translateX(0)",
-          transition: "transform .2s",
-        }}
-      />
+      <span className="switch__thumb" />
     </button>
   );
 }
@@ -160,15 +131,33 @@ function ToggleRow({
   );
 }
 
+// Mensaje único de "sin permiso": lo usan el gate del cliente y el 403 del
+// servidor, para que la clínica lea lo mismo venga de donde venga.
+const SIN_PERMISO = "No tienes permiso para configurar el bot de WhatsApp";
+
+/** Texto legible de una respuesta de error: el campo `error` del JSON si lo hay. */
+async function textoDeError(res: Response): Promise<string> {
+  const crudo = (await res.text().catch(() => "")).trim();
+  try {
+    const json = JSON.parse(crudo);
+    return typeof json?.error === "string" ? json.error : crudo;
+  } catch {
+    return crudo;
+  }
+}
+
 export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
   const askConfirm = useConfirm();
   // Sin permiso de escritura la pantalla es de solo lectura: las mutaciones se
   // frenan aquí además del 403 del servidor (que es el gate de verdad).
-  const noPermissionToast = () => toast.error("No tienes permiso para configurar el bot de WhatsApp");
+  const noPermissionToast = () => toast.error(SIN_PERMISO);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
+  // PATCH en vuelo del interruptor principal. Mientras vale true el switch
+  // va deshabilitado: con clics rápidos no quedan respuestas pisándose.
+  const [savingEnabled, setSavingEnabled] = useState(false);
 
   // Guardamos el DTO original para no perder id/clinicId al hacer PATCH parcial.
   const [config, setConfig] = useState<BotConfigDTO | null>(null);
@@ -257,6 +246,53 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
       toast.error(err instanceof Error && err.message ? err.message : "No se pudo guardar");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * El interruptor "Bot activado" se guarda SOLO al tocarlo: se mueve al
+   * instante y el PATCH sale detrás; si falla, REGRESA a donde estaba y se
+   * avisa. Manda ÚNICAMENTE `enabled` — buildConfigUpdate ignora los campos
+   * que no vengan, así que los horarios, las FAQs y los mensajes que el
+   * usuario tenga a medio editar NO se guardan de rondón. El resto de la
+   * configuración sigue con su botón de Guardar.
+   */
+  async function toggleEnabled() {
+    if (!canEdit) return noPermissionToast();
+    const prev = form.enabled;
+    const next = !prev;
+    setForm((f) => ({ ...f, enabled: next })); // optimista
+    setSavingEnabled(true);
+    let guardado = false;
+    let mensajeServidor = "";
+    try {
+      const res = await fetch("/api/whatsapp/bot", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (res.ok) {
+        const data: { config: BotConfigDTO } = await res.json();
+        setConfig(data.config);
+        // Solo se sincroniza `enabled` con la respuesta: pisar el form entero
+        // con el DTO borraría lo que el usuario esté escribiendo.
+        setForm((f) => ({ ...f, enabled: data.config.enabled }));
+        toast.success(data.config.enabled ? "Bot activado" : "Bot desactivado");
+        guardado = true;
+      } else {
+        // Un 403 aquí significa que el permiso cambió a mitad de sesión: se dice
+        // con las palabras de esta pantalla, no con la llave interna del servidor.
+        mensajeServidor = res.status === 403 ? SIN_PERMISO : await textoDeError(res);
+      }
+    } catch {
+      // Sin red, fetch tira TypeError("Failed to fetch"): ese texto en inglés
+      // no le dice nada a la clínica. Se ignora y se usa el mensaje de abajo.
+    } finally {
+      setSavingEnabled(false);
+    }
+    if (!guardado) {
+      setForm((f) => ({ ...f, enabled: prev })); // revertir
+      toast.error(mensajeServidor || "No se pudo guardar: el interruptor se quedó como estaba");
     }
   }
 
@@ -453,10 +489,10 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <ToggleRow
               on={form.enabled}
-              onToggle={() => setForm((f) => ({ ...f, enabled: !f.enabled }))}
+              onToggle={toggleEnabled}
               title="Bot activado"
-              desc="Cuando está activo, el bot responde automáticamente los mensajes entrantes."
-              disabled={saving || !canEdit}
+              desc="Se guarda solo al tocarlo. Cuando está activo, el bot responde automáticamente los mensajes entrantes."
+              disabled={saving || savingEnabled || !canEdit}
             />
 
             <div className="field-new">

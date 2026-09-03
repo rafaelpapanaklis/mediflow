@@ -90,6 +90,31 @@ function txSourceLabel(source: TransactionRow["source"]): string {
   }
 }
 
+// ── Por qué un $0.00 aquí es CORRECTO ───────────────────────────────────────
+// El saldo SOLO se gasta cuando el bot contesta con IA (lib/whatsapp/bot/ai.ts
+// llama a chatMetered, y únicamente si canSpend() da true: monedero ACTIVE con
+// saldo, o sobregiro con tarjeta). Con el monedero en cero o pausado el bot ni
+// siquiera llama al modelo: cae a la FAQ por reglas o al handoff, que son
+// gratis. Y los recordatorios y las plantillas de WhatsApp NO consumen IA: los
+// cobra Meta a la tarjeta de la clínica. Sin decirlo, el cero parece un error
+// de cobro o una pantalla rota.
+const SPEND_SCOPE_NOTE =
+  "Tu saldo se usa solo cuando el bot responde con IA. Los recordatorios y las plantillas de WhatsApp los cobra Meta a la tarjeta de tu clínica: no salen de aquí.";
+
+const IDLE_CONSEQUENCE_NOTE =
+  "El bot no está usando IA: responde solo las preguntas frecuentes que tengas configuradas o pasa la conversación a una persona.";
+
+// Dos motivos distintos para que el monedero esté parado. Decir cuál de los
+// dos evita que el mensaje suene equivocado cuando hay saldo pero el monedero
+// está pausado.
+function idleTitle(status: WalletData["status"]): string {
+  return status !== "ACTIVE" ? "Tu monedero está pausado" : "Te quedaste sin saldo";
+}
+
+// Ancla de la tarjeta "Recargar saldo", que vive en esta misma pantalla: el CTA
+// lleva ahí en vez de inventar una ruta nueva.
+const RECHARGE_ANCHOR = "recargar-saldo";
+
 const rootStyle = {
   padding: "clamp(14px, 1.6vw, 28px)",
   maxWidth: 1100,
@@ -288,6 +313,10 @@ export function SaldoClient() {
 
   const lowThreshold = data.autoRechargeThresholdCents > 0 ? data.autoRechargeThresholdCents : 5000;
   const showLowWarning = !data.autoRecharge && data.balanceCents < lowThreshold;
+  // Monedero parado = pausado o sin saldo. Es exactamente lo que hace que
+  // canSpend() devuelva false y el bot no llame a la IA.
+  const walletIdle = data.status !== "ACTIVE" || data.balanceCents <= 0;
+  const spentCents = data.usage.reduce((acc, u) => acc + u.billedCents, 0);
 
   return (
     <div style={rootStyle}>
@@ -353,17 +382,39 @@ export function SaldoClient() {
               {data.status === "ACTIVE" ? "Activo" : "Pausado"}
             </BadgeNew>
           </div>
-          {showLowWarning && (
+          {walletIdle ? (
+            <div
+              style={{
+                marginTop: 14,
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid var(--border-soft)",
+                background: "var(--bg-elev-2)",
+                fontSize: 12.5,
+                lineHeight: 1.6,
+                color: "var(--text-2)",
+              }}
+            >
+              <div style={{ fontWeight: 600, color: "var(--text-1)", marginBottom: 3 }}>
+                {idleTitle(data.status)}
+              </div>
+              {IDLE_CONSEQUENCE_NOTE} Mientras tanto no se te cobra nada.
+              {/* La tarjeta "Consumo de IA" explica lo mismo, pero queda al final de
+                  la página: quien mira el $0.00 lo tiene aquí arriba. */}
+              <div style={{ marginTop: 8, color: "var(--text-3)" }}>{SPEND_SCOPE_NOTE}</div>
+              <RechargeCta isAdmin={data.isAdmin} />
+            </div>
+          ) : showLowWarning ? (
             <div style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 12 }}>
               Saldo bajo — recarga para que tu bot siga respondiendo.
             </div>
-          )}
+          ) : null}
         </CardNew>
 
         {/* ── Recargar (solo admin) ── */}
         {data.isAdmin ? (
           <>
-            <CardNew title="Recargar saldo" sub="Elige un monto y un método de pago.">
+            <CardNew id={RECHARGE_ANCHOR} title="Recargar saldo" sub="Elige un monto y un método de pago.">
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {/* Chips de monto */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -512,8 +563,37 @@ export function SaldoClient() {
         {/* ── Historial de consumo ── */}
         <CardNew title="Consumo de IA" sub="Detalle de lo que ha consumido tu asistente." noPad>
           {data.usage.length === 0 ? (
-            <div style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "var(--text-3)" }}>
-              Aún no hay consumo de IA.
+            <div style={{ padding: "28px 20px", textAlign: "center" }}>
+              <div style={{ fontSize: 28, fontWeight: 600, color: "var(--text-1)", lineHeight: 1.1 }}>
+                {fmtMXNdec(spentCents / 100)}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
+                gastado en IA hasta hoy
+              </div>
+              <p
+                style={{
+                  maxWidth: 520,
+                  margin: "12px auto 0",
+                  fontSize: 12.5,
+                  lineHeight: 1.6,
+                  color: "var(--text-2)",
+                }}
+              >
+                {SPEND_SCOPE_NOTE}
+              </p>
+              {walletIdle && (
+                <p
+                  style={{
+                    maxWidth: 520,
+                    margin: "8px auto 0",
+                    fontSize: 12.5,
+                    lineHeight: 1.6,
+                    color: "var(--text-2)",
+                  }}
+                >
+                  {`${idleTitle(data.status)}. ${IDLE_CONSEQUENCE_NOTE}`}
+                </p>
+              )}
             </div>
           ) : (
             <table className="table-new">
@@ -683,9 +763,40 @@ export function SaldoClient() {
   );
 }
 
-// Switch con estilos propios (inline) para que el estado OFF sea SIEMPRE
-// claramente visible (track gris + perilla a la izquierda). Mismo patrón que
-// la página del bot.
+// CTA de recarga. No inventa ruta: ancla a la tarjeta "Recargar saldo" de esta
+// misma pantalla, que es donde viven Tarjeta / MercadoPago / SPEI. Si quien mira
+// no es administrador esa tarjeta no se pinta, así que se le dice a quién pedirlo.
+function RechargeCta({ isAdmin }: { isAdmin: boolean }) {
+  if (!isAdmin) {
+    return (
+      <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-3)" }}>
+        Pídele a un administrador de la clínica que recargue el saldo.
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button
+        type="button"
+        className="btn-new btn-new--secondary"
+        onClick={() =>
+          document
+            .getElementById(RECHARGE_ANCHOR)
+            // `center` en vez de un ancla #: así la barra superior fija no tapa
+            // la tarjeta a la que acabamos de mandar al usuario.
+            ?.scrollIntoView({ behavior: "smooth", block: "center" })
+        }
+      >
+        <Wallet size={15} /> Recargar saldo
+      </button>
+    </div>
+  );
+}
+
+// Interruptor del design system: la clase global `.switch` de globals.css. Aquí
+// había una COPIA con estilos inline porque `.switch` pintaba el OFF con blanco
+// al 10 % y desaparecía sobre las tarjetas claras; con el token --switch-off
+// arreglado, la copia sobra.
 function Switch({ on, onClick, disabled }: { on: boolean; onClick: () => void; disabled?: boolean }) {
   return (
     <button
@@ -694,37 +805,9 @@ function Switch({ on, onClick, disabled }: { on: boolean; onClick: () => void; d
       aria-checked={on}
       disabled={disabled}
       onClick={onClick}
-      style={{
-        position: "relative",
-        flexShrink: 0,
-        width: 36,
-        height: 20,
-        padding: 0,
-        border: "none",
-        borderRadius: 10,
-        background: on ? "var(--brand)" : "#94a3b8",
-        boxShadow: on
-          ? "0 0 12px rgba(124,58,237,0.35)"
-          : "inset 0 0 0 1px rgba(15,10,30,0.18)",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.45 : 1,
-        transition: "background .15s, box-shadow .15s",
-      }}
+      className={`switch ${on ? "switch--on" : ""}`}
     >
-      <span
-        style={{
-          position: "absolute",
-          top: 2,
-          left: 2,
-          width: 16,
-          height: 16,
-          borderRadius: "50%",
-          background: "#fff",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.25)",
-          transform: on ? "translateX(16px)" : "translateX(0)",
-          transition: "transform .2s",
-        }}
-      />
+      <span className="switch__thumb" />
     </button>
   );
 }

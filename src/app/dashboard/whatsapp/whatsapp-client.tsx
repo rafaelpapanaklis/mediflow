@@ -116,6 +116,10 @@ export function WhatsAppClient({
   const [r24h,       setR24h]       = useState(init24h);
   const [r1h,        setR1h]        = useState(init1h);
   const [savingMsg,  setSavingMsg]  = useState(false);
+  // Switch con un PATCH en vuelo (por llave). Mientras vale true el propio
+  // interruptor va deshabilitado, así dos clics rápidos no dejan respuestas
+  // pisándose ni un revert contra un valor que ya cambió.
+  const [toggleBusy, setToggleBusy] = useState<Record<string, boolean>>({});
 
   // El popup del Embedded Signup no nos devuelve el número: tras conectar
   // hacemos router.refresh() y el servidor manda los datos reales por props.
@@ -167,16 +171,69 @@ export function WhatsAppClient({
     } catch { toast.error(t("common.genericError")); } finally { setLoading(false); }
   }
 
+  // El PATCH de /api/clinic arma su `data` campo por campo y waReminderMsg /
+  // waReminder24h / waReminder1h NO están en esa lista: los descartaba en
+  // silencio (respondía 200 con la fila intacta), y por eso el botón decía
+  // «Configuración guardada» y al recargar volvía todo como estaba.
+  // /api/settings sí los tiene en su whitelist y acepta updates parciales;
+  // es el mismo endpoint que usa la sección Recordatorios de Ajustes.
+  const SETTINGS_URL = "/api/settings";
+
+  // Guardado a mano SOLO del texto del recordatorio. Los interruptores ya no
+  // viajan aquí: se guardan solos al tocarlos (saveToggle).
   async function saveSettings() {
     setSavingMsg(true);
     try {
-      await fetch("/api/clinic", {
+      const res = await fetch(SETTINGS_URL, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ waReminderMsg: msg, waReminder24h: r24h, waReminder1h: r1h }),
+        body: JSON.stringify({ waReminderMsg: msg }),
       });
+      // Sin este check un 403 (sin permiso de configuración) pintaba el toast
+      // de éxito igual que un guardado real.
+      if (!res.ok) throw new Error(String(res.status));
       toast.success(t("inbox.whatsapp.settingsSavedToast"));
     } catch { toast.error(t("common.genericError")); } finally { setSavingMsg(false); }
+  }
+
+  /**
+   * Autosave de un interruptor de recordatorio: se mueve al instante y el
+   * PATCH sale detrás. Si el guardado falla, el switch REGRESA a donde estaba
+   * y se avisa — la pantalla nunca dice algo distinto de lo que quedó
+   * guardado. Manda SOLO su propio campo: incluir waReminderMsg guardaría de
+   * rondón el texto que la clínica está editando y no ha confirmado.
+   */
+  async function saveToggle(
+    key: "24h" | "1h",
+    field: "waReminder24h" | "waReminder1h",
+    next: boolean,
+    set: (v: boolean) => void,
+    toastKey: string,
+  ) {
+    const prev = !next;
+    set(next);                                   // optimista
+    setToggleBusy(b => ({ ...b, [key]: true }));
+    try {
+      const res = await fetch(SETTINGS_URL, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: next }), // solo el campo del toggle
+      });
+      if (!res.ok) {
+        set(prev);
+        toast.error(t(res.status === 403
+          ? "inbox.whatsapp.reminderToggleForbidden"
+          : "inbox.whatsapp.reminderToggleError"));
+        return;
+      }
+      toast.success(t(toastKey));
+    } catch {
+      // Sin red el fetch ni siquiera responde: mismo revert.
+      set(prev);
+      toast.error(t("inbox.whatsapp.reminderToggleError"));
+    } finally {
+      setToggleBusy(b => ({ ...b, [key]: false }));
+    }
   }
 
   // "embedded" y "coexistence" son el mismo flujo real (el número se queda en el
@@ -390,15 +447,17 @@ export function WhatsAppClient({
             <CardNew title={t("inbox.whatsapp.whenToSendTitle")} sub={t("inbox.whatsapp.whenToSendSub")}>
               <div className={s.toggles}>
                 {([
-                  { key: "24h", labelKey: "inbox.whatsapp.reminder24hLabel", descKey: "inbox.whatsapp.reminder24hDesc", val: r24h, set: setR24h },
-                  { key: "1h",  labelKey: "inbox.whatsapp.reminder1hLabel",  descKey: "inbox.whatsapp.reminder1hDesc",  val: r1h,  set: setR1h  },
+                  { key: "24h", field: "waReminder24h", labelKey: "inbox.whatsapp.reminder24hLabel", descKey: "inbox.whatsapp.reminder24hDesc", onKey: "inbox.whatsapp.reminder24hOnToast", offKey: "inbox.whatsapp.reminder24hOffToast", val: r24h, set: setR24h },
+                  { key: "1h",  field: "waReminder1h",  labelKey: "inbox.whatsapp.reminder1hLabel",  descKey: "inbox.whatsapp.reminder1hDesc",  onKey: "inbox.whatsapp.reminder1hOnToast",  offKey: "inbox.whatsapp.reminder1hOffToast",  val: r1h,  set: setR1h  },
                 ] as const).map(opt => (
                   <div key={opt.key} className={[s.toggle, opt.val ? s.toggleOn : ""].filter(Boolean).join(" ")}>
                     <button
                       type="button"
+                      role="switch"
                       aria-label={t(opt.labelKey)}
-                      aria-pressed={opt.val}
-                      onClick={() => opt.set(!opt.val)}
+                      aria-checked={opt.val}
+                      disabled={!!toggleBusy[opt.key]}
+                      onClick={() => saveToggle(opt.key, opt.field, !opt.val, opt.set, opt.val ? opt.offKey : opt.onKey)}
                       className={`switch ${opt.val ? "switch--on" : ""}`}
                     >
                       <span className="switch__thumb" />
