@@ -16138,3 +16138,50 @@ model CrmActivity {
   @@index([happenedAt])
   @@map("crm_activities")
 }
+
+/// "MIS TEXTOS" — el guion de venta de DaleControl: los mensajes que se le
+/// mandan a un prospecto, escritos una vez y reusados desde /admin/crm.
+///
+/// NO es una plantilla de WhatsApp Business (esas se aprueban en Meta y las
+/// manda el producto). Esto se COPIA AL PORTAPAPELES y lo pega una persona,
+/// así que aquí no hay estado de entrega ni de aprobación: es una libreta.
+///
+/// Sin dueño: /admin es la sesión de plataforma de DaleControl y sus textos
+/// son de la casa, igual que el resto de la libreta de ventas. Ningún
+/// afiliado ve esta tabla — /afiliados/crm no la consulta.
+model CrmTemplate {
+  id String @id @default(cuid())
+
+  /// Cómo se encuentra después. Es el campo que hace que la libreta sirva
+  /// cuando ya hay veinte textos.
+  title String
+  /// El mensaje. Puede traer huecos —{{negocio}}, {{ciudad}}, {{saludo}}—
+  /// que se rellenan con el prospecto que se tenga abierto. El catálogo de
+  /// huecos y el relleno viven en src/lib/admin/crm/textos-core.ts, y un
+  /// hueco fuera del catálogo se rechaza AL GUARDAR.
+  body  String @db.Text
+
+  /// A qué giro le queda. NULL = sirve para cualquiera. Catálogo:
+  /// CRM_VERTICALES.
+  vertical String?
+  /// En qué momento del embudo se usa. NULL = en cualquiera. Catálogo:
+  /// CRM_ETAPAS. Es una ETIQUETA, no una regla: nada impide copiar un texto
+  /// de otra etapa.
+  stage String?
+
+  /// El orden que le puso la persona. Se reescribe entero al reordenar (no
+  /// se intercambian dos valores) para que dos textos nuevos, ambos en 0,
+  /// no se salten de sitio entre recargas.
+  sortOrder Int @default(0)
+
+  /// Correo del admin que lo escribió, denormalizado y sin llave foránea:
+  /// el mismo criterio que createdByEmail de CrmProspect.
+  createdByEmail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
+  @@index([vertical])
+  @@map("crm_templates")
+}

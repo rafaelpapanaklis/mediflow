@@ -51,13 +51,15 @@ import {
   CRM_RESULTADOS,
 } from "@/lib/admin/crm/crm-core";
 import type { CrmActividadDTO, CrmFicha } from "@/lib/admin/crm/service";
+import type { CrmTextoDTO } from "@/lib/admin/crm/textos-core";
 import {
   eliminarProspectoAccion,
   moverEtapaAccion,
   programarSeguimientoAccion,
   registrarActividadAccion,
 } from "../actions";
-import { CrmFormulario } from "../crm-form";
+import { CrmFormulario, type CrmClinicaLite } from "../crm-form";
+import { CrmTextosElegir } from "../crm-textos-panel";
 import {
   CrmAccionesContacto,
   CrmAvatar,
@@ -81,7 +83,17 @@ const ICONO_ACTIVIDAD: Record<string, React.ReactNode> = {
   ETAPA: <ArrowRight size={13} />,
 };
 
-export function CrmProspectoClient({ ficha }: { ficha: CrmFicha }) {
+export function CrmProspectoClient({
+  ficha,
+  clinicas,
+  textos,
+}: {
+  ficha: CrmFicha;
+  /** Las cuentas de /admin/clinics, para vincular un prospecto ganado. */
+  clinicas: CrmClinicaLite[];
+  /** "Mis textos". Vacío si no hay ninguno o si falta aplicar su SQL. */
+  textos: CrmTextoDTO[];
+}) {
   const router = useRouter();
   const askConfirm = useConfirm();
   const [, startTransition] = useTransition();
@@ -312,6 +324,22 @@ export function CrmProspectoClient({ ficha }: { ficha: CrmFicha }) {
 
           <ProximoPaso p={p} ahora={ahora} />
 
+          {/* ── Mis textos, ya con SUS datos puestos ──────────────────
+              Va aquí, junto a los botones de contacto y no en otra
+              pantalla, porque es el momento exacto en que sirve: se acaba
+              de leer con quién se habla y qué se le dijo la última vez, y
+              lo que sigue es escribirle. */}
+          <CardNew
+            title="Mis textos"
+            sub={
+              textos.length > 0
+                ? "Ya con el nombre y la ciudad de este prospecto puestos."
+                : undefined
+            }
+          >
+            <CrmTextosElegir textos={textos} prospecto={p} compacto />
+          </CardNew>
+
           {p.notes && (
             <CardNew
               title="Notas"
@@ -376,6 +404,7 @@ export function CrmProspectoClient({ ficha }: { ficha: CrmFicha }) {
       {editando && (
         <CrmFormulario
           prospecto={p}
+          clinicas={clinicas}
           alCerrar={() => setEditando(false)}
           alGuardar={() => router.refresh()}
         />

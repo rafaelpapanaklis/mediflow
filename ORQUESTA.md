@@ -36611,3 +36611,298 @@ curso, y la leyenda. Legible en los cuatro cuadrantes.
   7. **/instituto/clinica y /instituto/clinica/plano**: que se vean igual que antes (es el
      mismo diseño, servido desde otro archivo) y que ligar un sillón a su unidad siga
      funcionando.
+
+═══════════════════════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════
+
+## [CRM-Editar-Plantillas] — El prospecto ya se edita desde donde lo estás mirando, y el guion de venta deja de vivir en las notas del teléfono ✅ (2026-09-02) · rama `feat/crm-editar-plantillas` (sale de `origin/main` = `9f4b3d4e`)
+
+Tres cosas en `/admin/crm`: que se pueda editar un prospecto sin ir a buscar el botón, que la
+pantalla se lea mejor siendo la misma pantalla, y una sección nueva —**Mis textos**— para los
+mensajes que se le mandan a un prospecto.
+
+Sesión de PLATAFORMA en todo: `admin_token` + `getAdminSession()` en cada server action, jamás
+`getAuthContext`. Ningún dato de prospecto sale a una ruta pública. Cero dependencias nuevas.
+`/admin` no está traducido y **no** se tradujo ahora.
+
+═══════════════════════════════════════════════════════════════════════════
+### 0 · ⚠️ EL SQL PENDIENTE QUE YA ESTABA AHÍ (LÉELO ANTES DE NADA)
+
+Me pediste comprobar si el CRM tenía algún SQL previo sin aplicar. **Sí lo tiene, y no es el
+mío.**
+
+`sql/crm-dalecontrol.sql` — el que crea `crm_prospects` y `crm_activities` — nació en el commit
+`4bc0fe2c` (la libreta de ventas) con la nota «🔴 APLICARLO ANTES DEL DEPLOY», y **no hay
+constancia en el repo de que se haya corrido**. Desde aquí no puedo comprobarlo: este worktree
+no tiene `DATABASE_URL`, y aplicar SQL no me toca.
+
+Lo que sí puedo decirte es cómo se ve desde afuera si NO se corrió: `/admin/crm` no truena, pero
+en vez del tablero enseña «No se pudo leer la lista de prospectos… falta aplicar
+sql/crm-dalecontrol.sql», y el badge del menú se queda en cero. Si la has visto funcionando con
+prospectos dentro, está aplicado.
+
+**La comprobación de cinco segundos, en el editor de SQL de Supabase:**
+
+```sql
+SELECT table_name FROM information_schema.tables
+ WHERE table_schema = 'public'
+   AND table_name IN ('crm_prospects','crm_activities','crm_templates');
+```
+
+  · **0 filas** → falta `sql/crm-dalecontrol.sql` Y `sql/crm-textos.sql`. Corre primero el de
+    dalecontrol y después el mío.
+  · **2 filas** → sólo falta el mío (`sql/crm-textos.sql`).
+  · **3 filas** → ya está todo; correr el mío otra vez no hace nada (es idempotente).
+
+El otro archivo con pinta de pendiente, `sql/crm_enhancements.sql` (junio, «⚠️ RAFAEL: correr
+este SQL»), **está aplicado seguro**: sólo añade columnas a `patients` y `clinics`
+(`lifecycleStage`, `source`, `birthdayMsgActive`…) y el esquema las declara; si faltaran, hoy
+estaría rota la lista de pacientes entera, no sólo el CRM. No hace falta tocarlo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · EDITAR: QUÉ HABÍA DE VERDAD, Y QUÉ SE HIZO
+
+Lo comprobé antes de tocar nada, y el diagnóstico no era exacto en un punto:
+
+  · `actualizarProspectoAccion` **funcionaba**. ✔
+  · `CrmFormulario` **ya editaba** —recibe `prospecto` y cubre 18 campos—, pero sólo se montaba
+    en modo edición en `/admin/crm/[id]` (`prospecto-client.tsx:377`). Desde `crm-client.tsx` se
+    montaba sin `prospecto`, o sea sólo para crear. ✔
+  · **El tablero SÍ enlazaba a la ficha.** `CrmTarjeta` envolvía el avatar y el nombre en un
+    `<Link href={/admin/crm/${p.id}}>` desde el primer día. Lo que pasaba es que **no lo
+    parecía**: sin subrayado, del mismo color que el resto del texto, y con `cursor: grab` en
+    toda la tarjeta —o sea, la tarjeta te decía «arrástrame», no «ábreme». Un enlace que nadie
+    encuentra es, para el que trabaja, un enlace que no existe; pero el arreglo no era «añadir
+    el enlace», era hacerlo visible y, sobre todo, dejar de depender de él.
+
+**Lo que hay ahora — la decisión: MODAL EN SITIO, y la ficha se queda para lo demás.**
+
+Cada tarjeta del tablero, cada fila de la lista y cada renglón de «hoy toca» traen tres botones
+CON SU NOMBRE, siempre visibles: **Editar · Textos · Ficha ↗**.
+
+  · **Editar abre el formulario encima, sin salir de donde estás.** El motivo es concreto: la
+    vista (tablero/lista), la búsqueda, los filtros, el orden y el scroll son estado LOCAL de
+    `crm-client.tsx`. Ir a la ficha para corregir un teléfono cuesta una navegación de ida y
+    otra de vuelta, y al volver se ha perdido todo ese contexto — que es justo el contexto de
+    trabajo de una sesión de llamadas. Corregir un dato es una tarea de dos segundos y no puede
+    costar dos navegaciones.
+  · **La ficha sigue siendo la ficha**: la bitácora completa, el compositor de anotaciones, la
+    URL que se puede mandar y el botón atrás. Se llega con «Ficha ↗», que ahora tiene nombre en
+    vez de ser un nombre subrayable que había que adivinar.
+  · Al guardar, la tarjeta se repinta ANTES de que vuelva el servidor (`guardado()` mezcla el
+    DTO devuelto en `filas` y luego `router.refresh()`), igual que ya hacía arrastrar. Sin eso
+    la tarjeta se quedaba con el nombre viejo el tiempo de la recarga y parecía que no guardó.
+  · Los botones no se esconden detrás del `:hover`. Un botón que sólo aparece al pasar el ratón
+    no existe en una tableta.
+
+**El barrido del modelo: 28 columnas en `CrmProspect`, y dónde está cada una.**
+
+| Qué | Antes | Ahora |
+| --- | --- | --- |
+| Los 18 de siempre (nombre, giro, fuente, persona, puesto, teléfono, correo, ciudad, estado, país, sitio, tamaño, valor, próximo paso + nota, etiquetas, notas) | se editaban | igual |
+| `lostReason` — por qué se perdió | **se tecleaba una vez al cerrar y ya no se podía corregir** | se edita, en la sección «El cierre», sólo si está en Perdido |
+| `clinicId` — qué cuenta nació de aquí | **no se podía poner NUNCA**: la ficha decía «todavía no se le vinculó una clínica» para siempre | selector con las cuentas de `/admin/clinics`, sólo si está en Ya es cliente |
+| `stage` | desaparecía del formulario al editar | **se enseña** como insignia, con la frase de por qué se cambia por otro camino |
+| `lastContactAt`, `wonAt`, `lostAt`, `createdAt`, `createdByEmail`, `affiliateId` | no salían | **se enseñan** en el bloque «Lo que se llena solo», con su valor y de dónde sale cada uno |
+| `id`, `updatedAt` | — | siguen sin salir: el `id` es la URL de la ficha y `updatedAt` es la clave del orden «Más recientes». Son fontanería, no datos del negocio. |
+
+Los dos que se estrenan (`lostReason`, `clinicId`) **ya estaban soportados en el servidor**:
+`aColumnas()` los traducía desde el primer día. Lo único que faltaba era el campo en pantalla.
+
+Por qué `stage` sigue sin editarse aquí y ahora se DICE: mover de etapa no es escribir una
+columna, es `crmMoverEtapa` — escribe la bitácora, acomoda `wonAt`/`lostAt`, borra el próximo
+paso al cerrar y pregunta el motivo de pérdida. Un `<select>` en el formulario se saltaría las
+cuatro cosas.
+
+Y `lastContactAt` no se teclea porque sale de la bitácora, y sólo de un contacto REAL: a mano se
+podría decir que se buscó a alguien a quien nadie buscó, que es justo la mentira que hace que el
+semáforo de «enfriándose» deje de servir.
+
+**Un aviso honesto sobre el selector de clínicas:** manda al navegador `id` y `name` de hasta
+500 cuentas (`CLINICAS_MAX`). Con más habría que cambiarlo por un buscador; mientras tanto, si
+no llega la lista, el campo cae a teclear el id a mano en vez de desaparecer, y un id vinculado
+que ya no esté en la lista se sigue ofreciendo para que abrir el selector no lo desvincule solo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · EL DISEÑO: SIETE CAMBIOS, Y NINGÚN ESTILO NUEVO
+
+Nada inventado. Los mismos tokens, `CardNew`/`KpiCard`/`BadgeNew`/`ButtonNew`, `.table-new`,
+`.input-new`, y dos clases del sistema que el CRM **no estaba usando** y ahora sí: `.tabs-new` y
+`.segment-new`. En `globals.css` se añadieron 6 líneas (dos reglas de `:hover`/`:focus-visible`,
+que no se pueden escribir inline) y ni una más.
+
+  1. **La barra de filtros era un muro de ocho controles** encima de lo que de verdad se viene a
+     leer. Ahora: buscar, ordenar, «Sólo pendientes» y un botón **Filtros (n)** que DICE cuántos
+     hay puestos y despliega los cuatro selectores. Los filtros puestos se ven SIEMPRE como
+     fichas con su «×», con el panel abierto o cerrado — un filtro escondido se lee como
+     prospectos perdidos. Y hay un arreglo real ahí dentro: el selector de etapa sólo existe en
+     la vista de lista, así que un filtro de etapa puesto desde el tablero **no tenía forma de
+     quitarse**; ahora la ficha lo quita.
+  2. **Los cuatro números ahora FILTRAN.** «Por atender» y «Ya son clientes» son botones: te
+     dicen que hay 7 y te enseñan los 7. Un KPI que sólo se puede mirar te obliga a bajar a los
+     selectores a reproducirlo a mano. Van como `div[role="button"]` con Enter/Espacio y foco
+     visible — un `<div>` dentro de un `<button>` es HTML inválido y React lo reordena al
+     hidratar.
+  3. **«Hoy toca» tiene barra de color a la izquierda**: roja lo vencido, ámbar lo de hoy. Es lo
+     único que hay que poder ver sin leer, y antes había que leer el chip de cada renglón.
+     Además cada renglón ganó Editar/Textos/Ficha.
+  4. **El tablero: cada columna estrena una línea de acento con el tono de su etapa** — el MISMO
+     tono que ya usa la insignia en la lista y en la ficha. Ocho cajas grises iguales obligaban
+     a leer el encabezado para saber dónde estabas.
+  5. **La lista tiñe los días sin contacto** a partir de los 14 (`CRM_DIAS_PARA_ENFRIARSE`, la
+     constante que ya define «enfriándose»; no un número tecleado otra vez). Un «21» en gris se
+     lee igual que un «2».
+  6. **El nombre por fin parece un enlace**: se subraya al pasar por encima, en la tarjeta, en la
+     lista y en «hoy toca».
+  7. **Cabecera más corta y pestañas.** El párrafo de tres líneas se quedó en una con enlace a
+     Clínicas, y debajo van **Prospectos | Mis textos** con `.tabs-new`. Como pestañas y no como
+     un item más del menú lateral: son la misma herramienta, el menú de `/admin` ya tiene 28
+     entradas, y el `isActive()` del sidebar empareja por segmento, así que `/admin/crm/textos`
+     deja encendido «CRM de ventas» — que es lo correcto.
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · MIS TEXTOS
+
+`/admin/crm/textos` — crear, editar, borrar, ordenar (↑/↓) y copiar. Cada texto tiene título
+(para encontrarlo cuando haya veinte), cuerpo, y dos etiquetas opcionales.
+
+**▶ Los huecos: sí, y con la trampa resuelta.**
+
+Un texto puede traer `{{negocio}}`, `{{ciudad}}`… y se rellenan solos con el prospecto que
+tengas abierto. **Nueve huecos, y ni uno más**: `saludo`, `negocio`, `contacto`, `ciudad`,
+`estado`, `giro`, `producto`, `medida`, `tamano`. Cada hueco que se añade es un hueco que hay
+que recordar al escribir.
+
+Lo que **NO** entra, a propósito: el valor mensual estimado, el motivo de pérdida, quién lo
+recomendó. Son datos NUESTROS, y un texto que los pegue en un WhatsApp se los manda al
+prospecto.
+
+La trampa de verdad es el prospecto al que le FALTA el dato: `Hola {{contacto}},` con contacto
+vacío produce `Hola ,`, que es exactamente el mensaje que hace que no te contesten. Se resuelve
+en tres tiempos:
+
+  1. **`{{saludo}}`** existe para no tener que escribir `Hola {{contacto}},`. Resuelve solo a
+     «Hola Dra. Ana,» o a «Hola, buen día:» — es la MISMA regla que ya usaba
+     `crmPlantillaWhatsapp`, no una segunda que un día discrepe.
+  2. **Lo que quede vacío se limpia**: espacios dobles, y el espacio suelto delante de una coma
+     o un punto. (El `%` NO entra en esa limpieza: «50 %» se escribe con espacio en todo el
+     panel y juntarlo sería cambiarle el texto a quien lo puso.)
+  3. **Lo que faltó se DICE antes de copiar**: «A este prospecto le falta ciudad, así que ese
+     hueco se quedó vacío. Se copia igual — revísalo antes de mandarlo». Se copia igual porque a
+     veces se escribe a mano en WhatsApp; lo que no se hace es callarlo.
+
+Y un hueco mal escrito (`{{nomre}}`) **se rechaza AL GUARDAR**, nombrándolo y listando los
+válidos. Descubrirlo pegado en WhatsApp es descubrirlo tarde.
+
+**▶ Agrupados por GIRO, con la etapa como etiqueta.**
+
+Me preguntaste si por etapa del embudo o por vertical. **Por vertical**, y la etapa va como
+etiqueta que filtra pero no parte la lista. El motivo: lo que cambia de raíz entre un texto y
+otro es QUÉ se vende —a una escuela de odontología no se le manda ni de lejos el mensaje de una
+barbería, y eso ya está en el catálogo, donde cada giro trae su `producto`—. La etapa cambia el
+MOMENTO, casi nunca las palabras: el mismo «te vuelvo a escribir por si no lo viste» sirve en
+Contactado y en Propuesta. Agrupar por etapa dejaría los tres textos de dental desperdigados en
+ocho columnas.
+
+Los dos campos son **opcionales**: vacío = «sirve para cualquiera», que es el caso más común y
+no puede costar trabajo. Y ninguno esconde nada: en la ficha de un prospecto los que le quedan
+salen primero, y los que no salen **debajo, bajo «Otros»**. Una lista que oculta cosas es una
+lista en la que se deja de confiar, y a veces el texto de dental es justo el que quieres adaptar
+para una barbería.
+
+**▶ Dónde se usan.**
+
+  · **En la ficha del prospecto**, tarjeta «Mis textos» junto a los botones de contacto: eliges,
+    ves cómo queda YA con sus datos, y copias — o abres WhatsApp con el texto puesto.
+  · **Desde el tablero y la lista**, el botón «Textos» abre lo mismo en una ventana. Mismo
+    componente en los dos sitios; duplicarlo habría dejado dos previsualizaciones que un día
+    discrepan. El botón sólo se pinta si hay textos guardados.
+  · En la libreta, «Copiar» copia el texto **crudo, con los huecos sin rellenar**, y el aviso lo
+    dice: ahí no hay ningún prospecto abierto, y rellenarlo con el de ejemplo mandaría «Clínica
+    Dental Sonrisa» a un cliente de verdad.
+
+**▶ Lo que decidí NO hacer, y por qué.** El botón de WhatsApp de las tarjetas sigue usando la
+plantilla fija de `crmPlantillaWhatsapp`. Hacer que use tus textos obligaría a cargar la libreta
+en cada pintado del tablero y cambiaría en silencio lo que ese botón lleva mandando; se queda
+para cuando lo pidas, sabiendo que ya existe el sitio donde vive la decisión.
+
+**▶ Copiar de verdad.** `navigator.clipboard` sólo existe en contexto seguro (https o
+localhost). En un panel abierto por IP de la red local no existe, y sin plan B el botón no haría
+nada sin decir por qué. Hay plan B (`execCommand`) y plan C: si los dos fallan, se avisa y la
+vista previa se puede seleccionar a mano.
+
+**▶ El orden**, con ↑/↓ y no arrastrando: arrastrar no funciona con teclado ni bien en móvil, y
+aquí no hay una segunda vía como la tiene el tablero. Al mover se manda la lista COMPLETA de ids
+y el servidor reescribe todos los `sortOrder` en una transacción — intercambiar dos valores
+fallaría con los textos recién creados, que nacen todos con el mismo. Las flechas se apagan
+mientras hay una búsqueda puesta: reordenar sobre una lista filtrada movería el texto a un sitio
+que no se está viendo.
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · EL SQL — `sql/crm-textos.sql`
+
+Una tabla (`crm_templates`), dos índices con los nombres exactos de Prisma, una policy RLS
+deny-all como el resto del CRM. Aditivo e idempotente, cero DROP, cero ALTER sobre tablas
+existentes. Delimitador con nombre (`$crmtx$`) y sin bloques `DO` anidados.
+
+`vertical` y `stage` son **TEXT y opcionales**, contra los mismos catálogos de TypeScript que el
+resto del CRM — misma decisión y mismo motivo que la etapa del prospecto: el embudo se retoca
+seguido y cada retoque de un enum sería un `ALTER TYPE` a mano antes de desplegar.
+
+🔴 **La propiedad que importa: sin este SQL, el CRM NO se cae.** `crmTextosListar()` no lanza —
+devuelve `{ textos: [], falta: true }`—, así que `/admin/crm` sigue entero (tablero, lista,
+bitácora, importación) y sólo «Mis textos» dice, con esas palabras, que falta correr el archivo.
+Las ESCRITURAS sí devuelven error con todas sus letras, y si el fallo es P2021 el mensaje nombra
+el archivo: guardar algo que no se guardó sería peor que no dejar guardar.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · GATES
+
+  · `npx next build` **COMPLETO, EXIT 0** — 471/471 páginas, tabla de rutas entera. Las tres
+    rutas del CRM en su sitio: `ƒ /admin/crm`, `ƒ /admin/crm/[id]`, `ƒ /admin/crm/textos`.
+    Los únicos avisos son los preexistentes (`file-type` y las clases ambiguas de Tailwind).
+  · `npx prisma validate` → **válido**. El modelo `CrmTemplate` se añadió al FINAL del esquema.
+  · `npm run test:crm` → **47/47** (las de siempre, intactas).
+  · `npm run test:crm-textos` → **27/27**, nuevas. Protegen lo que si se rompe NO truena nada y
+    sólo hace que se mande un mensaje malo a un cliente de verdad: que un hueco vacío no deje
+    «Hola ,», que lo que faltó salga en la lista de faltantes, que un hueco inventado se rechace
+    al guardar, que un texto de barbería no se sugiera en una dental **pero tampoco desaparezca**,
+    y que dos textos con el mismo `sortOrder` no se intercambien de sitio entre recargas.
+  · `npm run lint` NO corre en un worktree con junction (eslint no está físicamente en ese
+    `node_modules`); es ambiental, no del código.
+  · **No se vio en el navegador**: este worktree no tiene `DATABASE_URL` y `/admin/crm` necesita
+    sesión de admin y datos. Los cambios de diseño van dentro del sistema que ya existe, pero
+    quedan sin comprobar a ojo.
+
+Ojo con una cosa del entorno: `npx prisma generate` escribió el cliente en el `node_modules`
+COMPARTIDO por el junction. Si otro worktree corre `generate` con un esquema sin `CrmTemplate`,
+esta rama dejará de compilar hasta volver a generar.
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · QUÉ HAY QUE PROBAR A MANO
+
+  1. **Antes que nada, el SQL.** Corre la consulta del punto 0. Si faltan las dos tablas del CRM,
+     corre `sql/crm-dalecontrol.sql` primero y `sql/crm-textos.sql` después.
+  2. **Editar desde el TABLERO**: en una tarjeta, «Editar» → cambia el nombre → Guardar. La
+     tarjeta tiene que cambiar al instante, sin recargar y **sin perder el filtro ni el scroll**.
+  3. **Editar desde la LISTA y desde «hoy toca»**: lo mismo, mismo formulario.
+  4. **Un prospecto en «Ya es cliente»**: Editar → sección «El cierre» → elige la cuenta →
+     Guardar → abre su ficha: el aviso verde tiene que enseñar el enlace a `/admin/clinics` en
+     vez de «todavía no se le vinculó una clínica».
+  5. **Un prospecto en «Perdido»**: Editar → corrige el motivo → la ficha lo enseña corregido.
+  6. **El bloque «Lo que se llena solo»** al final del formulario: que los cuatro datos cuadren
+     con lo que dice la ficha.
+  7. **Escribe tu primer texto** en Mis textos con `{{saludo}} le escribo de {{producto}} para
+     su clínica de {{ciudad}}.` — mira la vista previa mientras escribes.
+  8. **Prueba el aviso de lo que falta**: ábrelo desde un prospecto SIN ciudad. Tiene que decirlo
+     en ámbar, y el texto no puede quedar con un espacio raro donde iba la ciudad.
+  9. **Copiar**: pégalo en cualquier sitio y comprueba que llegó completo. Y «Abrir WhatsApp»,
+     que abre la app con el texto puesto (y que, a diferencia de los botones de contacto de la
+     ficha, **no anota nada en la bitácora** — está dicho en pantalla).
+ 10. **Ordena** con ↑/↓ y recarga: el orden se tiene que quedar.
+ 11. **Escribe un texto con `{{nomre}}`**: no te tiene que dejar guardarlo, y el error tiene que
+     nombrar el hueco malo.
+ 12. **Los KPIs que filtran**: clic en «Por atender» y en «Ya son clientes».
+ 13. **Filtros**: pon un giro, cierra el panel, comprueba que la ficha con la × sigue ahí y que
+     al quitarla vuelven todos.
+ 14. **Modo claro y oscuro** en las dos pantallas.

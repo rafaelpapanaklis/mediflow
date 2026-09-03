@@ -763,6 +763,16 @@
 .table-new tbody tr:hover { background: var(--bg-hover); }
 .table-new tbody tr:last-child td { border-bottom: none; }
 
+/* CRM de ventas (/admin/crm) ------------------------------------- */
+/* El nombre del prospecto siempre fue un enlace a su ficha, pero no lo
+   parecía: sin subrayado y con el cursor de "arrastrar" de la tarjeta
+   encima. Se subraya al pasar por encima. Va aquí y no en un style inline
+   porque :hover no se puede escribir inline. */
+.crm-tarjeta-nombre:hover { text-decoration: underline; text-underline-offset: 2px; }
+/* El KPI que además filtra. Sin foco visible, un div[role=button] es
+   inalcanzable con teclado a ciegas. */
+.crm-kpi-boton:focus-visible { box-shadow: var(--ring); }
+
 /* Input ----------------------------------------------------------- */
 .input-new {
   width: 100%;

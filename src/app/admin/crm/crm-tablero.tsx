@@ -20,16 +20,37 @@ import { CrmTarjeta, crmFmtMxn } from "./crm-ui";
 /** Tope de tarjetas pintadas por columna: cientos de nodos traban el arrastre. */
 const TOPE_POR_COLUMNA = 60;
 
+/**
+ * El color del tono de la etapa. Sirve para la línea de acento de cada
+ * columna: sin ella las ocho columnas son ocho cajas grises iguales y hay
+ * que leer el encabezado para saber dónde está uno. Es el MISMO tono que
+ * ya usa la insignia de la etapa (CrmEtapaBadge), para que el color diga
+ * lo mismo en el tablero, en la lista y en la ficha.
+ */
+const COLOR_TONO: Record<string, string> = {
+  neutral: "var(--border-strong)",
+  info: "var(--info)",
+  brand: "var(--brand)",
+  warning: "var(--warning)",
+  success: "var(--success)",
+  danger: "var(--danger)",
+};
+
 export function CrmTablero({
   filas,
   ahora,
   mover,
   alVerLista,
+  alEditar,
+  alTextos,
 }: {
   filas: CrmProspectoDTO[];
   ahora: Date;
   mover: (id: string, etapa: string) => void;
   alVerLista: (etapa: string) => void;
+  /** Abre el formulario EN SITIO, sin salir del tablero (ver crm-client). */
+  alEditar: (p: CrmProspectoDTO) => void;
+  alTextos?: (p: CrmProspectoDTO) => void;
 }) {
   const [sobre, setSobre] = useState<string | null>(null);
   const [arrastrando, setArrastrando] = useState<string | null>(null);
@@ -103,6 +124,18 @@ export function CrmTablero({
             }}
           >
             <header style={{ padding: "4px 4px 10px" }}>
+              {/* La línea de acento con el tono de la etapa: es lo que hace
+                  que las ocho columnas se distingan sin leerlas. */}
+              <div
+                aria-hidden
+                style={{
+                  height: 3,
+                  borderRadius: 99,
+                  marginBottom: 8,
+                  background: COLOR_TONO[etapa.tono] ?? COLOR_TONO.neutral,
+                  opacity: etapa.terminal ? 0.55 : 1,
+                }}
+              />
               <div
                 style={{
                   display: "flex",
@@ -167,6 +200,8 @@ export function CrmTablero({
                   ahora={ahora}
                   arrastrable
                   alArrastrar={setArrastrando}
+                  alEditar={alEditar}
+                  alTextos={alTextos}
                 />
               ))}
               {lista.length > TOPE_POR_COLUMNA && (

@@ -18,6 +18,14 @@
 //
 // Buscar y filtrar se hacen aquí, en el navegador, sobre la lista ya
 // cargada — ver el comentario de `crmCoincide` para los dos motivos.
+//
+// ── EDITAR SE HACE EN SITIO, NO EN OTRA PANTALLA ───────────────────────
+// El botón "Editar" de la tarjeta y el de la fila abren el MISMO
+// formulario aquí encima. Ir a la ficha para corregir un teléfono costaría
+// una navegación de ida y otra de vuelta, y al volver se habrían perdido
+// el filtro, la búsqueda, la vista y el scroll — que es todo el contexto
+// de trabajo. La ficha sigue siendo el sitio de la bitácora y de lo que se
+// mira con calma, y desde aquí se llega con "Ficha".
 // ═══════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
@@ -31,9 +39,11 @@ import {
   List,
   Plus,
   Search,
+  SlidersHorizontal,
   Target,
   Trophy,
   Upload,
+  X,
 } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -51,13 +61,17 @@ import {
   CRM_VERTICALES,
 } from "@/lib/admin/crm/crm-core";
 import type { CrmListado, CrmProspectoDTO } from "@/lib/admin/crm/service";
+import type { CrmTextoDTO } from "@/lib/admin/crm/textos-core";
 import { moverEtapaAccion, programarSeguimientoAccion } from "./actions";
-import { CrmFormulario } from "./crm-form";
+import { CrmFormulario, type CrmClinicaLite } from "./crm-form";
 import { CrmImportar } from "./crm-importar";
 import { CrmLista } from "./crm-lista";
 import { CrmTablero } from "./crm-tablero";
+import { CrmTabs } from "./crm-tabs";
+import { CrmTextosModal } from "./crm-textos-panel";
 import {
   CrmAccionesContacto,
+  CrmAccionesFila,
   CrmAvatar,
   CrmMotivoPerdida,
   CrmSemaforoChip,
@@ -79,7 +93,17 @@ const ORDENES: { id: Orden; label: string }[] = [
   { id: "nombre", label: "Nombre" },
 ];
 
-export function CrmClient({ listado }: { listado: CrmListado }) {
+export function CrmClient({
+  listado,
+  clinicas,
+  textos,
+}: {
+  listado: CrmListado;
+  /** Las cuentas de /admin/clinics, para vincular un prospecto ganado. */
+  clinicas: CrmClinicaLite[];
+  /** "Mis textos". Vacío si no hay ninguno o si falta aplicar su SQL. */
+  textos: CrmTextoDTO[];
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -103,10 +127,13 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
   const [origen, setOrigen] = useState("");
   const [soloPendientes, setSoloPendientes] = useState(false);
   const [orden, setOrden] = useState<Orden>("prioridad");
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
 
   const [creando, setCreando] = useState(false);
   const [importando, setImportando] = useState(false);
   const [perdiendo, setPerdiendo] = useState<CrmProspectoDTO | null>(null);
+  const [editando, setEditando] = useState<CrmProspectoDTO | null>(null);
+  const [viendoTextos, setViendoTextos] = useState<CrmProspectoDTO | null>(null);
 
   const resumen = useMemo(() => crmResumen(filas, ahora), [filas, ahora]);
 
@@ -176,6 +203,54 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
     [filas, ahora],
   );
 
+  // ── Filtros ───────────────────────────────────────────────────────────
+
+  /**
+   * Los filtros que se despliegan son cuatro selectores; con todos siempre
+   * a la vista, la barra era un muro de ocho controles encima de lo que de
+   * verdad se viene a leer. Ahora se guardan detrás de un botón que DICE
+   * cuántos hay puestos, y los puestos se siguen viendo como fichas: un
+   * filtro escondido es la forma más rápida de creer que se perdieron
+   * prospectos.
+   */
+  const activos = useMemo(() => {
+    const items: { clave: string; texto: string; limpiar: () => void }[] = [];
+    if (vertical) {
+      const v = CRM_VERTICALES.find((x) => x.id === vertical);
+      items.push({ clave: "vertical", texto: v?.label ?? vertical, limpiar: () => setVertical("") });
+    }
+    if (fuente) {
+      const f = CRM_FUENTES.find((x) => x.id === fuente);
+      items.push({ clave: "fuente", texto: f?.label ?? fuente, limpiar: () => setFuente("") });
+    }
+    if (etapaFiltro) {
+      items.push({
+        clave: "etapa",
+        texto: crmEtapa(etapaFiltro).label,
+        limpiar: () => setEtapaFiltro(""),
+      });
+    }
+    if (origen) {
+      const texto =
+        origen === ORIGEN_DALECONTROL
+          ? "Sólo los míos"
+          : origen === ORIGEN_AFILIADOS
+            ? "De afiliados"
+            : socios.find(([id]) => id === origen)?.[1] ?? "Un socio";
+      items.push({ clave: "origen", texto, limpiar: () => setOrigen("") });
+    }
+    return items;
+  }, [vertical, fuente, etapaFiltro, origen, socios]);
+
+  function limpiarFiltros() {
+    setVertical("");
+    setFuente("");
+    setEtapaFiltro("");
+    setOrigen("");
+    setSoloPendientes(false);
+    setQ("");
+  }
+
   // ── Mutaciones ────────────────────────────────────────────────────────
 
   /** Pinta el cambio de etapa YA y devuelve la anterior para poder revertir. */
@@ -232,6 +307,19 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
     });
   }
 
+  /**
+   * Lo guardado se pinta ANTES de que vuelva el servidor, igual que el
+   * arrastre: si sólo se llamara a router.refresh(), la tarjeta se quedaría
+   * con el nombre viejo el tiempo que tarde la recarga y parecería que no
+   * se guardó.
+   */
+  function guardado(p: CrmProspectoDTO) {
+    setFilas((prev) => prev.map((f) => (f.id === p.id ? { ...f, ...p } : f)));
+    router.refresh();
+  }
+
+  const abrirTextos = textos.length > 0 ? (p: CrmProspectoDTO) => setViendoTextos(p) : undefined;
+
   const vacio = filas.length === 0;
 
   return (
@@ -244,7 +332,7 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
           justifyContent: "space-between",
           gap: 16,
           flexWrap: "wrap",
-          marginBottom: 18,
+          marginBottom: 14,
         }}
       >
         <div>
@@ -252,9 +340,11 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
             CRM de ventas
           </h1>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--text-3)", maxWidth: 720 }}>
-            A quién le queremos vender: clínicas, universidades, laboratorios. No son clientes —
-            los que ya contrataron viven en Clínicas. Aquí se anota a quién le escribiste, a quién
-            le marcaste y qué sigue con cada uno.
+            A quién le queremos vender. No son clientes — los que ya contrataron viven en{" "}
+            <Link href="/admin/clinics" style={{ color: "var(--text-2)" }}>
+              Clínicas
+            </Link>
+            .
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -267,11 +357,13 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
         </div>
       </div>
 
+      <CrmTabs activo="prospectos" />
+
       {vacio ? (
         <VacioInicial alCrear={() => setCreando(true)} alImportar={() => setImportando(true)} />
       ) : (
         <>
-          {/* ── Los cuatro números ─────────────────────────────────── */}
+          {/* ── Los cuatro números, que además FILTRAN ──────────────── */}
           <div
             style={{
               display: "grid",
@@ -280,18 +372,27 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
               marginBottom: 18,
             }}
           >
-            <KpiCard
-              label="Por atender"
-              value={String(resumen.vencidos + resumen.paraHoy)}
-              icon={CalendarClock}
-              hero
-              tone={resumen.vencidos > 0 ? "danger" : undefined}
-              hint={
-                resumen.vencidos > 0
-                  ? `${resumen.vencidos} ${resumen.vencidos === 1 ? "vencido" : "vencidos"} y ${resumen.paraHoy} para hoy`
-                  : "Seguimientos con fecha de hoy"
-              }
-            />
+            <KpiBoton
+              activo={soloPendientes}
+              titulo="Ver sólo los que hay que atender"
+              onClick={() => {
+                setSoloPendientes((v) => !v);
+                setVista("lista");
+              }}
+            >
+              <KpiCard
+                label="Por atender"
+                value={String(resumen.vencidos + resumen.paraHoy)}
+                icon={CalendarClock}
+                hero
+                tone={resumen.vencidos > 0 ? "danger" : undefined}
+                hint={
+                  resumen.vencidos > 0
+                    ? `${resumen.vencidos} ${resumen.vencidos === 1 ? "vencido" : "vencidos"} y ${resumen.paraHoy} para hoy`
+                    : "Seguimientos con fecha de hoy"
+                }
+              />
+            </KpiBoton>
             <KpiCard
               label="En el embudo"
               value={String(resumen.abiertos)}
@@ -305,12 +406,22 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
               tone={resumen.frios > 0 ? "warning" : undefined}
               hint="Abiertos y sin nada anotado en 14 días"
             />
-            <KpiCard
-              label="Ya son clientes"
-              value={String(resumen.ganados)}
-              icon={Trophy}
-              hint={resumen.perdidos > 0 ? `${resumen.perdidos} perdidos` : "Ganados desde que existe la lista"}
-            />
+            <KpiBoton
+              activo={etapaFiltro === "GANADO"}
+              titulo="Ver los que ya cerraron"
+              onClick={() => {
+                setEtapaFiltro((e) => (e === "GANADO" ? "" : "GANADO"));
+                setVista("lista");
+                setFiltrosAbiertos(true);
+              }}
+            >
+              <KpiCard
+                label="Ya son clientes"
+                value={String(resumen.ganados)}
+                icon={Trophy}
+                hint={resumen.perdidos > 0 ? `${resumen.perdidos} perdidos` : "Ganados desde que existe la lista"}
+              />
+            </KpiBoton>
           </div>
 
           {/* ── Lo que mandaron los socios y nadie ha tocado ─────────── */}
@@ -349,6 +460,7 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
                   setOrigen(ORIGEN_AFILIADOS);
                   setEtapaFiltro("NUEVO");
                   setVista("lista");
+                  setFiltrosAbiertos(true);
                 }}
               >
                 Verlas
@@ -362,11 +474,18 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
               <CardNew
                 noPad
                 title={`Hoy toca (${hoyToca.length})`}
-                sub="Lo vencido primero. Escribe, marca o posponlo sin salir de aquí."
+                sub="Lo vencido primero. Escribe, marca, edita o posponlo sin salir de aquí."
               >
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {hoyToca.slice(0, 12).map((p) => (
-                    <FilaHoy key={p.id} p={p} ahora={ahora} alPosponer={(f) => reprogramar(p, f)} />
+                    <FilaHoy
+                      key={p.id}
+                      p={p}
+                      ahora={ahora}
+                      alPosponer={(f) => reprogramar(p, f)}
+                      alEditar={setEditando}
+                      alTextos={abrirTextos}
+                    />
                   ))}
                   {hoyToca.length > 12 && (
                     <button
@@ -394,17 +513,17 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
             </div>
           )}
 
-          {/* ── Filtros ────────────────────────────────────────────── */}
+          {/* ── Barra de trabajo ───────────────────────────────────── */}
           <div
             style={{
               display: "flex",
               gap: 8,
               flexWrap: "wrap",
               alignItems: "center",
-              marginBottom: 12,
+              marginBottom: 10,
             }}
           >
-            <div style={{ position: "relative", flex: "1 1 240px", minWidth: 200 }}>
+            <div style={{ position: "relative", flex: "1 1 240px", minWidth: 200, maxWidth: 420 }}>
               <Search
                 size={13}
                 style={{
@@ -425,72 +544,6 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
                 aria-label="Buscar prospectos"
               />
             </div>
-
-            <select
-              className="input-new"
-              style={{ width: 168 }}
-              value={vertical}
-              onChange={(e) => setVertical(e.target.value)}
-              aria-label="Filtrar por giro"
-            >
-              <option value="">Todos los giros</option>
-              {CRM_VERTICALES.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="input-new"
-              style={{ width: 168 }}
-              value={fuente}
-              onChange={(e) => setFuente(e.target.value)}
-              aria-label="Filtrar por fuente"
-            >
-              <option value="">Todas las fuentes</option>
-              {CRM_FUENTES.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-
-            {vista === "lista" && (
-              <select
-                className="input-new"
-                style={{ width: 160 }}
-                value={etapaFiltro}
-                onChange={(e) => setEtapaFiltro(e.target.value)}
-                aria-label="Filtrar por etapa"
-              >
-                <option value="">Todas las etapas</option>
-                {CRM_ETAPAS.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.label}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {socios.length > 0 && (
-              <select
-                className="input-new"
-                style={{ width: 190 }}
-                value={origen}
-                onChange={(e) => setOrigen(e.target.value)}
-                aria-label="Filtrar por quién lo agregó"
-              >
-                <option value="">Lo agregó cualquiera</option>
-                <option value={ORIGEN_DALECONTROL}>Sólo los míos</option>
-                <option value={ORIGEN_AFILIADOS}>De afiliados ({deAfiliados})</option>
-                {socios.map(([id, nombre]) => (
-                  <option key={id} value={id}>
-                    {nombre}
-                  </option>
-                ))}
-              </select>
-            )}
 
             <select
               className="input-new"
@@ -524,11 +577,172 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
               Sólo pendientes
             </button>
 
-            <div style={{ display: "flex", gap: 2, marginLeft: "auto" }}>
+            <button
+              type="button"
+              onClick={() => setFiltrosAbiertos((v) => !v)}
+              aria-expanded={filtrosAbiertos}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                height: 34,
+                padding: "0 12px",
+                borderRadius: 8,
+                fontSize: 12,
+                cursor: "pointer",
+                border: `1px solid ${activos.length > 0 ? "var(--brand)" : "var(--border-soft)"}`,
+                background: activos.length > 0 ? "var(--brand-soft)" : "var(--bg-elev)",
+                color: activos.length > 0 ? "var(--text-1)" : "var(--text-2)",
+              }}
+            >
+              <SlidersHorizontal size={13} />
+              Filtros
+              {activos.length > 0 && ` (${activos.length})`}
+            </button>
+
+            <div className="segment-new" style={{ marginLeft: "auto" }}>
               <BotonVista actual={vista} valor="tablero" icono={<LayoutGrid size={13} />} label="Tablero" alElegir={setVista} />
               <BotonVista actual={vista} valor="lista" icono={<List size={13} />} label="Lista" alElegir={setVista} />
             </div>
           </div>
+
+          {/* Los filtros puestos, SIEMPRE a la vista — con el panel abierto
+              o cerrado. Uno escondido se lee como prospectos perdidos, y
+              además el selector de etapa sólo existe en la vista de lista:
+              sin estas fichas, un filtro de etapa puesto desde el tablero
+              se quedaría sin forma de quitarse. */}
+          {activos.length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+              {activos.map((a) => (
+                <button
+                  key={a.clave}
+                  type="button"
+                  onClick={a.limpiar}
+                  title={`Quitar el filtro «${a.texto}»`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    height: 26,
+                    padding: "0 6px 0 10px",
+                    borderRadius: 99,
+                    fontSize: 11.5,
+                    cursor: "pointer",
+                    border: "1px solid var(--border-soft)",
+                    background: "var(--bg-elev-2)",
+                    color: "var(--text-2)",
+                  }}
+                >
+                  {a.texto}
+                  <X size={12} />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {filtrosAbiertos && (
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "center",
+                marginBottom: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid var(--border-soft)",
+                background: "var(--bg-elev-2)",
+              }}
+            >
+              <select
+                className="input-new"
+                style={{ width: 168 }}
+                value={vertical}
+                onChange={(e) => setVertical(e.target.value)}
+                aria-label="Filtrar por giro"
+              >
+                <option value="">Todos los giros</option>
+                {CRM_VERTICALES.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="input-new"
+                style={{ width: 168 }}
+                value={fuente}
+                onChange={(e) => setFuente(e.target.value)}
+                aria-label="Filtrar por fuente"
+              >
+                <option value="">Todas las fuentes</option>
+                {CRM_FUENTES.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* La etapa sólo filtra en la LISTA: en el tablero cada etapa
+                  ya es una columna, y filtrar por una dejaría siete vacías. */}
+              {vista === "lista" && (
+                <select
+                  className="input-new"
+                  style={{ width: 160 }}
+                  value={etapaFiltro}
+                  onChange={(e) => setEtapaFiltro(e.target.value)}
+                  aria-label="Filtrar por etapa"
+                >
+                  <option value="">Todas las etapas</option>
+                  {CRM_ETAPAS.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {socios.length > 0 && (
+                <select
+                  className="input-new"
+                  style={{ width: 190 }}
+                  value={origen}
+                  onChange={(e) => setOrigen(e.target.value)}
+                  aria-label="Filtrar por quién lo agregó"
+                >
+                  <option value="">Lo agregó cualquiera</option>
+                  <option value={ORIGEN_DALECONTROL}>Sólo los míos</option>
+                  <option value={ORIGEN_AFILIADOS}>De afiliados ({deAfiliados})</option>
+                  {socios.map(([id, nombre]) => (
+                    <option key={id} value={id}>
+                      {nombre}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {(activos.length > 0 || soloPendientes || q) && (
+                <button
+                  type="button"
+                  onClick={limpiarFiltros}
+                  style={{
+                    height: 34,
+                    padding: "0 12px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    cursor: "pointer",
+                    border: "1px solid var(--border-soft)",
+                    background: "transparent",
+                    color: "var(--text-3)",
+                    marginLeft: "auto",
+                  }}
+                >
+                  Quitar todos
+                </button>
+              )}
+            </div>
+          )}
 
           {/* ── Embudo ─────────────────────────────────────────────── */}
           {vista === "tablero" ? (
@@ -540,10 +754,18 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
                 setEtapaFiltro(etapa);
                 setVista("lista");
               }}
+              alEditar={setEditando}
+              alTextos={abrirTextos}
             />
           ) : (
             <CardNew noPad title={`Prospectos (${filtradas.length})`}>
-              <CrmLista filas={filtradas} ahora={ahora} mover={(id, etapa) => mover(id, etapa)} />
+              <CrmLista
+                filas={filtradas}
+                ahora={ahora}
+                mover={(id, etapa) => mover(id, etapa)}
+                alEditar={setEditando}
+                alTextos={abrirTextos}
+              />
             </CardNew>
           )}
 
@@ -559,8 +781,24 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
 
       {creando && (
         <CrmFormulario
+          clinicas={clinicas}
           alCerrar={() => setCreando(false)}
           alGuardar={() => router.refresh()}
+        />
+      )}
+      {editando && (
+        <CrmFormulario
+          prospecto={editando}
+          clinicas={clinicas}
+          alCerrar={() => setEditando(null)}
+          alGuardar={guardado}
+        />
+      )}
+      {viendoTextos && (
+        <CrmTextosModal
+          textos={textos}
+          prospecto={viendoTextos}
+          alCerrar={() => setViendoTextos(null)}
         />
       )}
       {importando && <CrmImportar alCerrar={() => setImportando(false)} />}
@@ -581,6 +819,60 @@ export function CrmClient({ listado }: { listado: CrmListado }) {
 
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Un número que además filtra. Un KPI que sólo se puede mirar obliga a
+ * bajar a los selectores a reproducirlo a mano: "hay 7 por atender" y
+ * ahora hay que ir a buscarlos. Aquí el número ES el filtro.
+ *
+ * Va como <div role="button"> y no como <button>: dentro vive la tarjeta
+ * entera del KPI, con sus divs, y un <div> dentro de un <button> es HTML
+ * inválido — React lo avisa en consola y algunos navegadores reacomodan el
+ * árbol al hidratar. Con role, tabIndex y el manejo de Enter/Espacio se
+ * comporta igual para el teclado y para el lector de pantalla.
+ */
+function KpiBoton({
+  activo,
+  titulo,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  titulo: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={activo}
+      title={titulo}
+      className="crm-kpi-boton"
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{
+        // `display: grid` + `height: 100%`: sin esto la tarjeta envuelta se
+        // queda con su alto de contenido mientras las hermanas SIN envolver
+        // se estiran al alto de la fila, y quedan dos KPIs más bajos que
+        // los otros dos. `.kpi` no trae alto propio.
+        display: "grid",
+        height: "100%",
+        cursor: "pointer",
+        borderRadius: "var(--radius-lg)",
+        outline: activo ? "1px solid var(--brand)" : "none",
+        outlineOffset: 1,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function BotonVista({
   actual,
   valor,
@@ -600,19 +892,8 @@ function BotonVista({
       type="button"
       onClick={() => alElegir(valor)}
       aria-pressed={activo}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        height: 34,
-        padding: "0 12px",
-        borderRadius: 8,
-        fontSize: 12,
-        cursor: "pointer",
-        border: `1px solid ${activo ? "var(--brand)" : "var(--border-soft)"}`,
-        background: activo ? "var(--brand-soft)" : "var(--bg-elev)",
-        color: activo ? "var(--text-1)" : "var(--text-2)",
-      }}
+      className={`segment-new__btn${activo ? " segment-new__btn--active" : ""}`}
+      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
     >
       {icono}
       {label}
@@ -625,27 +906,37 @@ function FilaHoy({
   p,
   ahora,
   alPosponer,
+  alEditar,
+  alTextos,
 }: {
   p: CrmProspectoDTO;
   ahora: Date;
   alPosponer: (fecha: string | null) => void;
+  alEditar: (p: CrmProspectoDTO) => void;
+  alTextos?: (p: CrmProspectoDTO) => void;
 }) {
   const frio = crmEstaFrio(p, ahora);
+  const estado = crmSemaforo(p.nextActionAt, ahora);
+
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
         gap: 12,
-        padding: "10px 14px",
+        padding: "10px 14px 10px 11px",
         borderTop: "1px solid var(--border-soft)",
         flexWrap: "wrap",
+        // La barra de la izquierda dice de un vistazo qué está vencido y
+        // qué es de hoy, sin tener que leer el chip de cada fila.
+        borderLeft: `3px solid ${estado === "vencido" ? "var(--danger)" : "var(--warning)"}`,
       }}
     >
       <CrmAvatar name={p.name} vertical={p.vertical} size={30} />
       <div style={{ minWidth: 180, flex: "1 1 220px" }}>
         <Link
           href={`/admin/crm/${p.id}`}
+          className="crm-tarjeta-nombre"
           style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 12.5, textDecoration: "none" }}
         >
           {p.name}
@@ -669,6 +960,8 @@ function FilaHoy({
         <BotonPosponer label="+1 sem" onClick={() => alPosponer(crmDiaRelativo(7, ahora))} />
         <BotonPosponer label="Listo" onClick={() => alPosponer(null)} />
       </div>
+
+      <CrmAccionesFila p={p} alEditar={alEditar} alTextos={alTextos} />
     </div>
   );
 }
