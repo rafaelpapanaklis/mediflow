@@ -568,6 +568,72 @@
   display: block;
 }
 
+/* ─── El piso en 3D (modo En Vivo) ────────────────────────────────────
+   Ocupa la caja del piso entera. Los flotantes de esta pantalla (la
+   tarjeta del sillon y el aviso de la hora) van por encima con su
+   z-index; el HUD del visor vive dentro y trae el suyo.
+
+   🔴 El visor del dental trae `h-[100dvh]` escrito en su raiz —esta
+   pensado para ocupar la pantalla, no una casilla de la rejilla del
+   panel—. Se le impone el alto del hueco con `.stage3d > div`, que gana
+   por especificidad (clase + elemento, 0-1-1) a la utilidad de Tailwind
+   (0-1-0) SIN `!important`. Misma solucion que el plano del instituto:
+   repintar el archivo del dental desde fuera dejaria sin repintar la
+   proxima clase que le añadan. */
+.stage3d {
+  position: absolute;
+  inset: 0;
+  background: #0b0d11;
+  /* El HUD del visor se pinta con `z-20` (Tailwind) sobre TODO el hueco.
+     Sin un contexto de apilamiento propio competiria de tu a tu con los
+     flotantes de esta pantalla y taparia la tarjeta del sillon (z-14) y el
+     aviso de la hora (z-6). Con `isolation` el visor entero —HUD incluido—
+     queda por debajo de ellos, que es el orden que la pantalla necesita. */
+  isolation: isolate;
+  z-index: 0;
+}
+.stage3d > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* El aviso de "el piso muestra ahora". Arriba y centrado: abajo a la
+   izquierda y abajo a la derecha estan la leyenda y los contadores del
+   HUD del visor. */
+.stageNote {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 28px);
+  padding: 6px 7px 6px 13px;
+  border-radius: 999px;
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-line);
+  box-shadow: var(--mc-shadow-2);
+  font-size: 12px;
+  color: var(--mc-text-1);
+}
+.stageNote strong { font-weight: 700; }
+.stageNoteBtn {
+  flex: none;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 11px;
+  background: var(--mc-brand);
+  color: #fff;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.stageNoteBtn:hover { filter: brightness(1.08); }
+
 /* Las baldosas. La losa que las sostiene y las sombras de contacto viven
    en floor-look.module.css, junto a los componentes que las dibujan. */
 .tile { stroke: var(--mc-floor-line); stroke-width: 0.5; }

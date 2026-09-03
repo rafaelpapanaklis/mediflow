@@ -57,12 +57,20 @@ import {
   type ChairCardData,
   type StatusCounts,
 } from "./components/floor-look";
+import {
+  ANCHO_MIN_3D,
+  LiveWorld,
+  hayWebGL,
+  useMundoEstable,
+  type Clinic3DPick,
+} from "./components/live-world";
 import { SharePanel } from "./components/share-panel";
 import { WaitingRoom, type WaitingRoomEntry } from "./components/waiting-room";
 import { WelcomePrompt } from "./components/welcome-prompt";
 import { OptimizerModal } from "./components/optimizer-modal";
-import { Share2, Box } from "lucide-react";
+import { Share2, Box, Map as MapIcon } from "lucide-react";
 import {
+  fmtHM,
   getChairAppointment,
   getChairStatus,
   getNextChairAppointment,
@@ -100,6 +108,29 @@ const GRID_COLS = 32;
 const GRID_ROWS = 24;
 const HISTORY_LIMIT = 24;
 const AUTOSAVE_DELAY_MS = 1500;
+
+/**
+ * EL PISO DE "EN VIVO" ES EL MUNDO 3D.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EL MODO EDICIÓN SIGUE EN 2D, Y NO SE DISCUTE. Arrastrar un mueble
+ * a una casilla se hace en el plano isométrico, como siempre: colocar es
+ * una tarea de rejilla y en perspectiva se pierde exactamente la precisión
+ * que hace falta. Lo que cambia aquí es SOLO el piso de En Vivo, que no es
+ * una herramienta sino un tablero — "¿qué sillón está libre y dónde".
+ *
+ * El motor es el compartido (`src/components/clinic-3d/`), montado con
+ * `host` desde components/live-world.tsx: vista aérea, sin caminar, sin
+ * mira y sin VR. El recorrido a pie sigue estando donde estaba, en
+ * /dashboard/clinic-layout/3d, y esa página no se toca.
+ */
+const LEYENDA_3D_PANEL = [
+  "Clic en un sillón para ver quién está dentro",
+  "Arrastra para girar el piso · rueda para acercarte",
+];
+
+/** Cuánto puede alejarse la línea de tiempo de "ahora" antes de avisar. */
+const VIAJE_MS = 90_000;
 
 type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
 
@@ -149,6 +180,39 @@ export function ClinicLayoutClient({
    * unidad de la agenda, y así sobrevive a que el plano se reordene.
    */
   const [pickedChairId, setPickedChairId] = useState<string | null>(null);
+
+  // ── El piso de En Vivo: mundo 3D (por defecto) o el plano de siempre ──
+  const PISO_STORAGE_KEY = `mf:layout-piso:${clinic.id}`;
+  /** `null` = aún sin medir (primer render, servidor incluido). */
+  const [puede3D, setPuede3D] = useState<boolean | null>(null);
+  /** Lo que eligió esta persona a mano. Manda sobre la medición. */
+  const [modoPiso, setModoPiso] = useState<"3d" | "2d" | null>(null);
+
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(PISO_STORAGE_KEY);
+      if (v === "3d" || v === "2d") setModoPiso(v);
+    } catch {/* localStorage bloqueado — manda la medición */}
+  }, [PISO_STORAGE_KEY]);
+
+  const elegirPiso = useCallback(
+    (v: "3d" | "2d") => {
+      setModoPiso(v);
+      try {
+        window.localStorage.setItem(PISO_STORAGE_KEY, v);
+      } catch {/* quota / SecurityError — vale para esta sesión */}
+    },
+    [PISO_STORAGE_KEY],
+  );
+
+  // ¿Puede este equipo pintar el mundo? (WebGL + ancho). `hayWebGL()`
+  // contesta una vez y suelta su contexto — ver la nota en live-world.tsx.
+  useEffect(() => {
+    const medir = () => setPuede3D(hayWebGL() && window.innerWidth >= ANCHO_MIN_3D);
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, []);
 
   // v2: animaciones puerta/gabinete + iluminación dinámica
   /**
@@ -964,6 +1028,44 @@ export function ClinicLayoutClient({
     };
   }, [liveMode, pickedChairId, placedLiveChairs, viewTime, appointments]);
 
+  /**
+   * La geometría del mundo, con identidad congelada contra su contenido
+   * (ver `useMundoEstable`). Aquí el plano solo cambia editando, y editando
+   * no se está En Vivo — pero la firma cuesta nada y quita de en medio toda
+   * una clase de fallo: que un render cualquiera reconstruya la escena y
+   * tire la posición de la cámara.
+   *
+   * De `metadata` el mundo solo mira `gridSize`, así que se le pasa la del
+   * primer render y NO `{ zoom, panOffset }`, que cambian con la rueda del
+   * lienzo 2D y no significan nada en 3D.
+   */
+  const geometria = useMundoEstable(elements, safeInitialMetadata, liveChairs);
+
+  /**
+   * ¿El piso de En Vivo se pinta en 3D? Hace falta estar En Vivo, que haya
+   * plano, que el equipo pueda y que nadie haya pedido el 2D.
+   *
+   * 🔴 En EDICIÓN esto es siempre false: armar el plano se hace en la
+   * rejilla isométrica, arrastrando, como hasta hoy.
+   */
+  const piso3D =
+    liveMode &&
+    elements.length > 0 &&
+    (modoPiso ? modoPiso === "3d" : puede3D === true);
+
+  /** La línea de tiempo está lejos de "ahora" (alguien viajó la hora). */
+  const viajando = piso3D && Math.abs(Date.now() - viewTime.getTime()) >= VIAJE_MS;
+
+  /**
+   * Clic en un sillón del mundo. Abre LA MISMA tarjeta que el clic en el
+   * plano 2D (`ChairCard`), con el mismo enmascarado: el pick solo trae el
+   * `resourceId` del sillón, y de ahí en adelante manda `pickedCard`.
+   */
+  const elegirSillon3D = useCallback(
+    (pick: Clinic3DPick) => setPickedChairId(pick.resourceId),
+    [],
+  );
+
   /** Abre el expediente del paciente de una cita en una pestaña nueva. */
   const openPatientRecord = useCallback(
     (apt: LiveAppointment) => {
@@ -1220,6 +1322,28 @@ export function ClinicLayoutClient({
           </div>
 
           {liveMode && <LiveClock />}
+          {/* Piso 3D ↔ plano 2D, solo En Vivo y solo si el equipo puede
+              pintarlo. La elección se guarda por clínica. */}
+          {liveMode && puede3D && elements.length > 0 && (
+            <button
+              type="button"
+              className={styles.toolbarBtn}
+              onClick={() => elegirPiso(piso3D ? "2d" : "3d")}
+              aria-pressed={piso3D}
+              title={
+                piso3D
+                  ? "Ver el plano isométrico en 2D"
+                  : "Ver el piso en 3D, desde arriba"
+              }
+            >
+              {piso3D ? (
+                <MapIcon size={13} aria-hidden />
+              ) : (
+                <Box size={13} aria-hidden />
+              )}{" "}
+              {piso3D ? "Plano 2D" : "Piso 3D"}
+            </button>
+          )}
           {liveMode && (
             <button
               type="button"
@@ -1439,87 +1563,136 @@ export function ClinicLayoutClient({
               leyenda y tarjeta) se coloquen contra el PISO y no contra el
               hueco entero, que En Vivo incluye la línea de tiempo. */}
           <div className={styles.canvasStage}>
-            <svg
-              ref={svgRef}
-              className={styles.svgRoot}
-              viewBox="0 0 1920 1080"
-              preserveAspectRatio="xMidYMid meet"
-              style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
-              onMouseDown={onSvgMouseDown}
-              onMouseMove={onSvgMouseMove}
-              onMouseUp={onSvgMouseUp}
-              onMouseLeave={cancelMoveOrPan}
-              onWheel={onSvgWheel}
-            >
-              <defs>
-                {lightingMatrix && (
-                  <filter
-                    id="mfLighting"
-                    x="0%"
-                    y="0%"
-                    width="100%"
-                    height="100%"
-                    colorInterpolationFilters="sRGB"
-                  >
-                    <feColorMatrix type="matrix" values={lightingMatrix} />
-                  </filter>
-                )}
-              </defs>
-              {/* La losa va DEBAJO de las baldosas: le da grosor al piso
-                  para que deje de flotar sobre el fondo. */}
-              <FloorSlab ox={ox} oy={oy} cols={GRID_COLS} rows={GRID_ROWS} />
-              <g>{renderGrid()}</g>
-              {/* Las sombras, entre el piso y los muebles. */}
-              <FloorShadows
-                elements={sortedElements}
-                byKey={catalog.byKey}
-                ox={ox}
-                oy={oy}
-                movingId={movingId}
-                movingPosition={movingPosition}
-              />
-              <g filter={lightingMatrix ? "url(#mfLighting)" : undefined}>
-                {renderElements()}
-                {renderGhost()}
-              </g>
-              {/* Tooltip flotante sobre el elemento hovereado (modo Edición). */}
-              {elementHover && (
-                <g pointerEvents="none">
-                  <rect
-                    x={elementHover.cx - hoverTipWidth / 2}
-                    y={elementHover.topY - 22}
-                    width={hoverTipWidth}
-                    height={18}
-                    rx={5}
-                    className={styles.hoverTipBox}
-                  />
-                  <text
-                    x={elementHover.cx}
-                    y={elementHover.topY - 9}
-                    textAnchor="middle"
-                    className={styles.hoverTipText}
-                  >
-                    {hoverTipText}
-                  </text>
-                </g>
-              )}
-              {liveMode && (
-                <LiveOverlay
-                  elements={elements}
+            {/* ── EL PISO ────────────────────────────────────────────
+                En Vivo se pinta el mundo 3D (vista aérea, sin caminar); en
+                Edición, y como respaldo, la rejilla isométrica de siempre.
+
+                🔴 El isométrico se DESMONTA, no se esconde: son 768 baldosas
+                más los muebles reconciliándose en cada render, y el reloj de
+                En Vivo re-renderiza esta pantalla cada segundo durante horas.
+                Un `display:none` ahorraría el pintado pero no el trabajo de
+                React. */}
+            {piso3D ? (
+              <div className={styles.stage3d}>
+                <LiveWorld
+                  clinic={{ id: clinic.id, name: clinic.name, category: clinic.category }}
+                  mundo={geometria}
+                  /* El estado vivo PRIVADO del dueño: trae `patientId`, así
+                     que el clic puede acabar en un expediente. Es la misma
+                     ruta que ya usa /dashboard/clinic-layout/3d. */
+                  endpoint="/api/clinic-layout/3d-state"
+                  onPick={elegirSillon3D}
+                  legend={LEYENDA_3D_PANEL}
+                />
+              </div>
+            ) : (
+              <svg
+                ref={svgRef}
+                className={styles.svgRoot}
+                viewBox="0 0 1920 1080"
+                preserveAspectRatio="xMidYMid meet"
+                style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
+                onMouseDown={onSvgMouseDown}
+                onMouseMove={onSvgMouseMove}
+                onMouseUp={onSvgMouseUp}
+                onMouseLeave={cancelMoveOrPan}
+                onWheel={onSvgWheel}
+              >
+                <defs>
+                  {lightingMatrix && (
+                    <filter
+                      id="mfLighting"
+                      x="0%"
+                      y="0%"
+                      width="100%"
+                      height="100%"
+                      colorInterpolationFilters="sRGB"
+                    >
+                      <feColorMatrix type="matrix" values={lightingMatrix} />
+                    </filter>
+                  )}
+                </defs>
+                {/* La losa va DEBAJO de las baldosas: le da grosor al piso
+                    para que deje de flotar sobre el fondo. */}
+                <FloorSlab ox={ox} oy={oy} cols={GRID_COLS} rows={GRID_ROWS} />
+                <g>{renderGrid()}</g>
+                {/* Las sombras, entre el piso y los muebles. */}
+                <FloorShadows
+                  elements={sortedElements}
+                  byKey={catalog.byKey}
                   ox={ox}
                   oy={oy}
-                  viewTime={viewTime}
-                  appointments={appointments}
-                  showFullNames={clinic.liveModeShowPatientNames}
-                  onHover={setHover}
-                  onPick={setPickedChairId}
+                  movingId={movingId}
+                  movingPosition={movingPosition}
                 />
-              )}
-            </svg>
+                <g filter={lightingMatrix ? "url(#mfLighting)" : undefined}>
+                  {renderElements()}
+                  {renderGhost()}
+                </g>
+                {/* Tooltip flotante sobre el elemento hovereado (modo Edición). */}
+                {elementHover && (
+                  <g pointerEvents="none">
+                    <rect
+                      x={elementHover.cx - hoverTipWidth / 2}
+                      y={elementHover.topY - 22}
+                      width={hoverTipWidth}
+                      height={18}
+                      rx={5}
+                      className={styles.hoverTipBox}
+                    />
+                    <text
+                      x={elementHover.cx}
+                      y={elementHover.topY - 9}
+                      textAnchor="middle"
+                      className={styles.hoverTipText}
+                    >
+                      {hoverTipText}
+                    </text>
+                  </g>
+                )}
+                {liveMode && (
+                  <LiveOverlay
+                    elements={elements}
+                    ox={ox}
+                    oy={oy}
+                    viewTime={viewTime}
+                    appointments={appointments}
+                    showFullNames={clinic.liveModeShowPatientNames}
+                    onHover={setHover}
+                    onPick={setPickedChairId}
+                  />
+                )}
+              </svg>
+            )}
+
+            {/* 🔴 El piso en 3D enseña AHORA y solo AHORA: su estado sale de
+                su propio sondeo, no de la línea de tiempo. Si alguien viaja
+                la hora, el panel y la línea sí la siguen — y callarlo sería
+                dejar dos relojes distintos en la misma pantalla. */}
+            {viajando && (
+              <div className={styles.stageNote} role="status">
+                <span>
+                  El piso muestra <strong>ahora</strong>; abajo estás viendo las{" "}
+                  {fmtHM(viewTime)}.
+                </span>
+                <button
+                  type="button"
+                  className={styles.stageNoteBtn}
+                  onClick={() => setViewTime(new Date())}
+                >
+                  {t("pages.clinicLayout.backToNow")}
+                </button>
+              </div>
+            )}
 
             {/* ── Lo que flota sobre el piso ───────────────────────── */}
-            {liveMode && <LiveCounters counts={liveCounts} t={t} />}
-            <FloorLegend live={liveMode} t={t} />
+            {/* Contadores y leyenda: con el mundo montado los trae SU HUD
+                (abajo a la derecha y abajo a la izquierda). Pintarlos otra
+                vez aquí sería duplicarlos —y además contradecirlos: estos
+                cuentan a la hora de la línea de tiempo y los del HUD cuentan
+                AHORA, que es lo único que sabe el piso en 3D. */}
+            {liveMode && !piso3D && <LiveCounters counts={liveCounts} t={t} />}
+            {!piso3D && <FloorLegend live={liveMode} t={t} />}
             {liveMode && pickedCard && (
               <ChairCard
                 data={pickedCard}
@@ -1544,7 +1717,9 @@ export function ClinicLayoutClient({
             />
           )}
         </div>
-        <LiveTooltip data={hover} />
+        {/* El tooltip lo alimenta el hover del plano 2D. Al cambiar de
+            piso a mitad de un hover se quedaba flotando para siempre. */}
+        <LiveTooltip data={piso3D ? null : hover} />
 
         {shareOpen && (
           <SharePanel

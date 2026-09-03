@@ -51,6 +51,7 @@ export default async function LivePublicPage({ params }: Props) {
   let clinic: {
     id: string;
     name: string;
+    category: string;
     logoUrl: string | null;
     city: string | null;
     liveModeEnabled: boolean;
@@ -64,6 +65,11 @@ export default async function LivePublicPage({ params }: Props) {
       select: {
         id: true,
         name: true,
+        // La categoria manda la PALETA y el catalogo del mundo 3D (el piso
+        // de esta pantalla). Es el MISMO campo que ya lee /live/[slug]/3d;
+        // aqui viaja un escalar y nada mas -- la fila entera de la clinica
+        // JAMAS baja al navegador.
+        category: true,
         logoUrl: true,
         city: true,
         liveModeEnabled: true,
@@ -101,6 +107,7 @@ export default async function LivePublicPage({ params }: Props) {
     <LivePublicClient
       slug={slug}
       clinicName={clinic.name}
+      category={clinic.category}
       logoUrl={clinic.logoUrl ?? null}
       city={clinic.city ?? null}
       showPatientNames={clinic.liveModeShowPatientNames}
