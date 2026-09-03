@@ -31,7 +31,7 @@ export default function LiveError({
   return (
     <div className={liveStyles.errorWrap}>
       <div className={liveStyles.errorCard}>
-        <AlertCircle size={32} aria-hidden style={{ color: "#EF4444" }} />
+        <AlertCircle size={32} aria-hidden style={{ color: "var(--mc-ocupado)" }} />
         <h1>No se pudo mostrar la vista en vivo</h1>
         <p>
           Ocurrió un problema al dibujar el plano. Reintenta; si el problema

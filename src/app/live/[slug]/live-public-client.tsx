@@ -21,7 +21,7 @@ import type {
   LayoutElement,
   LiveAppointment,
 } from "@/lib/floor-plan/elements";
-import { fmtHM, fmtHMS } from "@/lib/floor-plan/live-mode";
+import { fmtHM, fmtHMS, getChairStatus } from "@/lib/floor-plan/live-mode";
 import {
   LiveOverlay,
   LiveTooltip,
@@ -35,6 +35,24 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 // del vertical institucional (src/components/floor-plan/). Ver la nota del
 // bloque del lienzo, más abajo.
 import { IsoElement, IsoTiles } from "@/components/floor-plan/iso-canvas";
+import { FloorShadows, FloorSlab } from "@/components/floor-plan/floor-ground";
+import {
+  FloorCounters,
+  FloorLegend,
+  type FloorCountItem,
+  type FloorLegendItem,
+} from "@/components/floor-plan/floor-chrome";
+import {
+  COUNT_KEY,
+  DETAIL_KEY,
+  ESTADOS,
+  LABEL_KEY,
+} from "../../dashboard/clinic-layout/components/floor-copy";
+/* Esta pantalla es PÚBLICA y no cuelga del I18nProvider del panel, así que
+   `t` cae al respaldo en español. Existe para que las piezas compartidas
+   con el editor —contadores, leyenda— no tengan dos juegos de textos. */
+import { publicLiveFallbackT } from "../../dashboard/clinic-layout/components/public-live-t";
+import { useTOptional } from "@/i18n/i18n-provider";
 import { sanitizeElements, sanitizeMetadata, sanitizeChairs } from "@/lib/floor-plan/sanitize";
 import {
   ANCHO_MIN_3D,
@@ -188,6 +206,7 @@ export function LivePublicClient({
   city: string | null;
   showPatientNames: boolean;
 }) {
+  const t = useTOptional() ?? publicLiveFallbackT;
   const [data, setData] = useState<ApiResponse | null>(null);
   /** Estructura del error: kind ("schema_not_migrated" | "table_missing"
    *  | "internal_error" | "timeout" | "network" | "parse"). hint para
@@ -352,7 +371,7 @@ export function LivePublicClient({
   const zoomIn = useCallback(() => setZoom((z) => clampZoom(z * 1.15)), [clampZoom]);
   const zoomOut = useCallback(() => setZoom((z) => clampZoom(z / 1.15)), [clampZoom]);
 
-  const catalog = getCatalogForClinic("DENTAL");
+  const catalog = useMemo(() => getCatalogForClinic("DENTAL"), []);
 
   // Polling cada 30s con timeout de 10s por request. Si `locked=true`
   // NO se monta el polling — el cliente espera a que el usuario
@@ -653,6 +672,83 @@ export function LivePublicClient({
     }));
   }, [data]);
 
+  /* ───────────────────────────────────────────────────────────────────
+     LO QUE EL PISO NECESITA MASTICADO
+
+     Todo esto vive aquí arriba y no junto al lienzo porque son hooks: por
+     debajo hay returns tempranos (cargando, error, sin plano) y un hook
+     detrás de un return es exactamente el fallo que React no perdona.
+     ─────────────────────────────────────────────────────────────────── */
+
+  const elements = useMemo(() => data?.layout.elements ?? [], [data]);
+
+  /** resourceId → nombre del sillón, como lo llama la agenda. */
+  const chairNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of data?.chairs ?? []) m.set(c.id, c.name);
+    return m;
+  }, [data]);
+
+  /** Sillones colocados en el plano Y atados a la agenda. Uno dado de alta
+   *  pero sin colocar no cuenta: no está en el piso. */
+  const placedChairIds = useMemo(
+    () =>
+      elements
+        .map((el) => el.resourceId)
+        .filter((id): id is string => !!id && chairNames.has(id)),
+    [elements, chairNames],
+  );
+
+  /**
+   * Los ocupados AHORA, primero como texto y luego como conjunto: el texto
+   * se recalcula cada segundo (barato: un puñado de sillones) pero solo
+   * cambia cuando alguien entra o sale de un sillón, y el conjunto —que es
+   * lo que ve el dibujo— conserva su identidad mientras tanto.
+   */
+  const occupiedKey = useMemo(
+    () =>
+      placedChairIds
+        .filter((id) => getChairStatus(id, viewTime, appointments) === "ocupado")
+        .sort()
+        .join("|"),
+    [placedChairIds, viewTime, appointments],
+  );
+  const occupied = useMemo(
+    () => new Set(occupiedKey ? occupiedKey.split("|") : []),
+    [occupiedKey],
+  );
+
+  /** Libres / por empezar / ocupados, para la píldora de arriba. Sale de
+   *  las MISMAS citas que pintan los halos, así que el contador no puede
+   *  contradecir al piso. */
+  const liveCounts = useMemo<FloorCountItem[]>(() => {
+    const tally = { libre: 0, proximo: 0, ocupado: 0 };
+    for (const id of placedChairIds) {
+      tally[getChairStatus(id, viewTime, appointments)] += 1;
+    }
+    return ESTADOS.map((estado) => ({
+      key: estado,
+      tone: estado,
+      count: tally[estado],
+      label: t(COUNT_KEY[estado]),
+      detail: t(DETAIL_KEY[estado]),
+    }));
+  }, [placedChairIds, viewTime, appointments, t]);
+
+  /** La leyenda del televisor: los MISMOS colores que el panel, pero sin
+   *  prometer un clic — nadie está delante de esta pantalla y el halo del
+   *  sillón aquí no responde al ratón. */
+  const legendItems = useMemo<FloorLegendItem[]>(
+    () =>
+      ESTADOS.map((estado) => ({
+        key: estado,
+        tone: estado,
+        label: t(LABEL_KEY[estado]),
+        detail: t(DETAIL_KEY[estado]),
+      })),
+    [t],
+  );
+
   // 401 = locked: prompt inline para ingresar password.
   if (locked) {
     return (
@@ -670,7 +766,7 @@ export function LivePublicClient({
     return (
       <div className={liveStyles.errorWrap}>
         <div className={liveStyles.errorCard}>
-          <AlertCircle size={32} aria-hidden style={{ color: "#EF4444" }} />
+          <AlertCircle size={32} aria-hidden style={{ color: "var(--mc-ocupado)" }} />
           <h1>{errorTitle(error.kind)}</h1>
           <p>{error.hint ?? errorDefaultHint(error.kind)}</p>
           {(error.kind === "schema_not_migrated" || error.kind === "table_missing") && (
@@ -704,7 +800,7 @@ export function LivePublicClient({
     return (
       <div className={liveStyles.errorWrap}>
         <div className={liveStyles.errorCard}>
-          <Building2 size={32} aria-hidden style={{ color: "#4A90E2" }} />
+          <Building2 size={32} aria-hidden style={{ color: "var(--mc-brand)" }} />
           <h1>{clinicName} no tiene layout configurado</h1>
           <p>
             El owner de la clínica debe entrar a <code>/dashboard/clinic-layout</code>{" "}
@@ -723,7 +819,6 @@ export function LivePublicClient({
     );
   }
 
-  const elements = data.layout.elements;
   const ox = ORIG_X;
   const oy = ORIG_Y;
 
@@ -732,7 +827,7 @@ export function LivePublicClient({
       fallbackRender={({ reset }) => (
         <div className={liveStyles.errorWrap}>
           <div className={liveStyles.errorCard}>
-            <AlertCircle size={32} aria-hidden style={{ color: "#EF4444" }} />
+            <AlertCircle size={32} aria-hidden style={{ color: "var(--mc-ocupado)" }} />
             <h1>No se pudo dibujar el plano</h1>
             <p>
               Hubo un problema al renderizar el layout de {clinicName}. Reintenta;
@@ -854,12 +949,25 @@ export function LivePublicClient({
                 transition: isPanning ? "none" : "transform 0.08s linear",
               }}
             >
-              {/* El suelo y el mobiliario los pinta la capa compartida
-                  (src/components/floor-plan/), la misma que el editor del
-                  panel y el plano del vertical institucional. Aqui eran una
-                  TERCERA copia del mismo bucle. */}
+              {/* EL PISO ES EL DEL PANEL, pieza por pieza y en el mismo
+                  orden: la losa debajo para que el plano no flote, las
+                  baldosas encima, las sombras de contacto entre el piso y
+                  los muebles. Todo sale de src/components/floor-plan/, la
+                  misma capa que monta el editor y el plano del vertical
+                  institucional. Aquí era una TERCERA copia del mismo bucle,
+                  y por eso esta pantalla se quedó con el aspecto viejo
+                  cuando el panel se rehízo. */}
+              <FloorSlab ox={ox} oy={oy} cols={GRID_COLS} rows={GRID_ROWS} />
               <IsoTiles cols={GRID_COLS} rows={GRID_ROWS} ox={ox} oy={oy} />
-              {/* Elementos */}
+              <FloorShadows
+                elements={elements}
+                byKey={catalog.byKey}
+                ox={ox}
+                oy={oy}
+                /* Aquí no se arrastra nada: el televisor solo mira. */
+                movingId={null}
+                movingPosition={null}
+              />
               <g>
                 {elements
                   .slice()
@@ -867,11 +975,10 @@ export function LivePublicClient({
                   .map((el) => {
                     const td = catalog.byKey.get(el.type);
                     if (!td) return null;
-                    // 🔴 `locked`: esta pantalla no se edita, asi que el
+                    // 🔴 `locked`: esta pantalla no se edita, así que el
                     // cursor sigue siendo el de arrastrar el lienzo y no el
-                    // de mover un mueble. Y sin `label`: el televisor de
-                    // recepcion nunca ha pintado el nombre del sillon y no
-                    // empieza ahora.
+                    // de mover un mueble.
+                    const nombre = el.resourceId ? chairNames.get(el.resourceId) : null;
                     return (
                       <IsoElement
                         key={el.id}
@@ -883,6 +990,18 @@ export function LivePublicClient({
                         ox={ox}
                         oy={oy}
                         locked
+                        label={
+                          td.isChair
+                            ? nombre ?? el.name ?? t("pages.clinicLayout.chairFallbackLabel")
+                            : null
+                        }
+                        /* El sillón se dibuja ocupado, igual que en el
+                           panel. Es el estado del MUEBLE, no un dato del
+                           paciente: el nombre lo sigue enmascarando
+                           `maskPatient` donde siempre. */
+                        drawOpts={{
+                          isOccupied: !!el.resourceId && occupied.has(el.resourceId),
+                        }}
                       />
                     );
                   })}
@@ -898,6 +1017,28 @@ export function LivePublicClient({
                 onHover={setHover}
               />
             </svg>
+          )}
+
+          {/* ── Lo que flota sobre el piso ─────────────────────────────
+              Solo con el plano 2D: en 3D los contadores y la leyenda los
+              pinta el HUD del propio visor, y dos juegos a la vez se
+              taparían. */}
+          {!mundo && (
+            <>
+              <div className={liveStyles.floatCounters}>
+                <FloorCounters
+                  items={liveCounts}
+                  ariaLabel={t("pages.clinicLayout.statusCountsLabel")}
+                />
+              </div>
+              <div className={liveStyles.floatLegend}>
+                <FloorLegend
+                  items={legendItems}
+                  title={t("pages.clinicLayout.legendTitle")}
+                  help={t("pages.clinicLayout.legendHintPublic")}
+                />
+              </div>
+            </>
           )}
 
           {/* 🔴 El piso en 3D enseña AHORA, siempre: su estado lo trae el

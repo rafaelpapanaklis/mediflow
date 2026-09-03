@@ -1,3 +1,204 @@
+## [RESCATE 2-SEP] — Cuatro piezas sueltas del reinicio, en una sola rama ✅ (2026-09-02) · rama `integ/rescate-2sep` → PR contra main, SIN mergear
+
+Un reinicio dejó fuera de main el trabajo de un día: dos worktrees sin commitear y dos ramas
+sin PR. Esto lo junta todo en una rama, sin perder nada y sin revertir nada de lo que main
+ganó mientras tanto.
+
+### QUÉ SE RESCATÓ
+
+| # | Pieza | De dónde venía | Cómo entró |
+|---|---|---|---|
+| A | Home admin rediseñado + la gráfica de ingresos que cuadra con el KPI | repo principal, SIN COMMITEAR | primer commit de la rama |
+| B | El look del televisor de recepción (/live/[slug]) | worktree `live-publica-look`, 15 archivos SIN COMMITEAR | commit de rescate + porte |
+| C | La capa visual del plano sale a `src/components/floor-plan/` | rama `feat/clinica-visual-plano` | cherry-pick |
+| D | La dirección firma sus propias autorizaciones | rama `fix/edu-direccion-autofirma` | merge |
+
+Se borraron de la raíz del repo 6 `clipboard-*.png` que no eran de nadie.
+
+### LO PRIMERO: ASEGURAR LO SUELTO
+
+El worktree `live-publica-look` tenía 15 archivos sin commitear y CERO commits: un `git
+checkout` de más y no había forma de recuperarlos. Se commitearon TAL CUAL en su propia rama
+(`feat/live-publica-look`, commit `3fe6b235`) antes de tocar nada más. Ese commit no se
+mergea: es el respaldo. Lo que llega a esta rama es el porte, encima de la capa nueva.
+
+### 🔴 EL SUPUESTO QUE NO ERA: NO HABÍA BORRADO-VS-MODIFICADO
+
+La instrucción avisaba de un conflicto borrado-vs-modificado en `floor-look.tsx`. No lo hubo,
+y por una razón que cambia el trabajo: **`floor-look.tsx` no existe en la rama del plano ni en
+su base — nació en MAIN**, con el PR del 3D (`0e49c7ec`, `feat/clinica-visual-look`).
+
+Lo que había en realidad son DOS ramas que resolvieron el MISMO problema en paralelo, sin
+saber una de otra:
+
+  · `feat/clinica-visual-look` → `floor-look.tsx` (losa, sombras, contadores, leyenda,
+    tarjeta del sillón). **Ya estaba en main.**
+  · `feat/clinica-visual-plano` → `src/components/floor-plan/` (la capa compartida con el
+    instituto: hoja de estilos, `floor-chrome.tsx`, `iso-canvas.tsx`).
+
+Un merge las habría dejado a las dos vivas, pintando lo mismo de dos formas. Se resolvió como
+pedía la instrucción: **manda `src/components/floor-plan/`, y `floor-look.tsx` y su hoja se
+BORRAN** (837 líneas). Lo que floor-look tenía y la capa compartida no —la losa con grosor y
+las sombras de contacto— subió a la capa, en `floor-plan/floor-ground.tsx`.
+
+### Y LA OTRA TRAMPA: LA RAMA SQUASHEADA CONFLICTABA CONSIGO MISMA
+
+`feat/clinica-visual-plano` traía 3 commits, pero los 2 primeros son los de
+`feat/edu-clinica-plano`, que main ya tenía **squasheados** (PR #166). Sin historia común, un
+`git merge` daba 13 conflictos —cinco de ellos `add/add` de archivos idénticos— por contenido
+que ya estaba bien en main. Se comprobó primero que main y `9dc0751f` son idénticos en todas
+las rutas del plano (`git diff` vacío) y se hizo **cherry-pick del único commit nuevo**
+(`c2cf5a87`). De 13 conflictos se pasó a 5, ninguno en `schema.prisma`.
+
+### 🔴 UN FALLO REAL DEL COMMIT PORTADO: EL PISO SIN COLOR EN EL DENTAL
+
+`c2cf5a87` se escribió contra el instituto, que monta el lienzo dentro de `FloorCanvasBox` —y
+ahí es donde vive la clase `.fp`, que traduce los `--fp-*` del anfitrión a los `--fpc-*` que
+leen `.tile`, `.chairLabel` y `.selection`—. El editor del dental NO usa esa caja: dibuja el
+SVG a pelo. Aplicado tal cual, en Mi Clínica Visual las baldosas se quedaban **sin relleno** y
+la etiqueta del sillón sin halo.
+
+Se arregló en la capa, no en el anfitrión: `IsoTiles`, `IsoElement`, `IsoGhost`, `FloorSlab` y
+`FloorShadows` llevan ahora `.fp` **en su propio `<g>`**. Son variables CSS: heredan hacia
+dentro del SVG sin pintar nada, así que el dibujo tiene color en cualquier pantalla, esté o no
+dentro de `FloorCanvasBox`.
+
+### CÓMO SE PORTÓ EL LOOK (pieza B) — qué se conservó y qué NO
+
+**El aspecto se conserva entero. Lo que se tiró son las copias.** El trabajo del worktree
+resolvía, por su cuenta, tres cosas que la capa compartida ya resuelve:
+
+| Lo que traía `live-publica-look` | Dónde vive ahora | Qué pasó |
+|---|---|---|
+| `FloorTiles` (baldosas memoizadas) | `iso-canvas.tsx` → `IsoTiles` | ya estaba, y también memoizado |
+| `ChairLabel` + `FloorFurniture` | `iso-canvas.tsx` → `IsoElement` | ya estaba (`label`, `labelBad`, `drawOpts`) |
+| `FloorSlab`, `FloorShadows` | **`floor-plan/floor-ground.tsx`** (nuevo) | SUBIERON a la capa, verbatim |
+| `LiveCounters` | `floor-chrome.tsx` → `FloorCounters` | ya soportaba `detail` y `ariaLabel` |
+| `FloorLegend(mode)` | `floor-chrome.tsx` → `FloorLegend(items)` | se le añadió `title` opcional |
+| `ChairCard` | **`clinic-layout/components/chair-card.tsx`** (nuevo) | rehecha sobre `FloorPopCard` y familia |
+| `floor-tokens.module.css` | igual, + el mapa `--fp-*` | **es la pieza clave, ver abajo** |
+
+**LO QUE SÍ SE PERDIÓ: nada del aspecto. Tres duplicados de código (`FloorTiles`,
+`ChairLabel`, `FloorFurniture`, ~200 líneas) que la capa compartida ya hacía igual o mejor.**
+La única diferencia visible que se buscó a propósito: la rotación del mueble ya **no gira la
+etiqueta ni el recuadro de selección** —a 90° el nombre del sillón se leía de lado—, que es un
+arreglo que la capa traía del instituto.
+
+**`floor-tokens.module.css` es lo que hace que el porte tenga sentido.** El worktree ya había
+visto el problema: el panel y el televisor pintan el MISMO piso y cada uno guardaba su copia
+de los colores. La hoja los saca a un solo sitio (`.mcTokens`) y aquí además **traduce la
+paleta del dental a los `--fp-*` que lee la capa compartida**. Un solo archivo manda en el
+color de las dos pantallas, en claro y en oscuro. El bloque `--fp-*` NO se repite en el bloque
+oscuro a propósito: cada uno apunta a un `--mc-*`, y la sustitución se resuelve en el
+elemento, donde el bloque oscuro ya los volvió a declarar.
+
+Consecuencia: `clinic-layout.module.css` pierde 150 líneas de tokens y `live-public.module.css`
+pierde su segunda paleta (violeta y blancos propios) — el televisor pasa a verse **igual que el
+panel**, que era el objetivo. `/live/layout.tsx` enciende `.mcTokens` para las cuatro
+superficies del segmento (la página, su boundary, el gate de contraseña y el recorrido 3D), y
+tres colores escritos a mano (`#EF4444`, `#4A90E2`) pasan a token.
+
+Además el televisor **estrena lo que solo tenía el panel**: la losa, las sombras de contacto,
+el nombre del sillón sobre el mueble, el sillón dibujado como ocupado, los contadores por
+estado y la leyenda (en modo `public`: los mismos colores, sin prometer un clic que en una
+sala de espera nadie va a dar).
+
+### LO QUE SE DEFENDIÓ DE MAIN (y el porte NO revierte)
+
+`c2cf5a87` es anterior a los PR #171 y #172 del 3D. Al resolver los conflictos se conservó
+**todo** lo que main ganó después:
+
+  · el mundo 3D de En Vivo (`piso3D`, `LiveWorld`, el botón 3D ↔ 2D, `elegirSillon3D`);
+  · la tarjeta del sillón y `pickedCard`, con su botón al expediente;
+  · el aviso de "el piso muestra AHORA" cuando alguien viaja por la línea de tiempo;
+  · el `viewBox` calculado con `isoViewBox` (el commit portado lo tenía a mano, `0 0 1920 1080`);
+  · la etiqueta en ROJO del sillón sin ligar → pasa a `labelBad` de la capa compartida;
+  · **el estado escrito en el idioma del panel.** El commit portado reescribía `live-mode.tsx`
+    con `STATUS_LABELS`, que es un objeto en español: una clínica en inglés habría leído
+    "Ocupado". Se conservó el `t(STATE_LABEL_KEY[…])` de main.
+  · **el resaltado del sillón elegido** (clic en el mundo 3D → su tarjeta se marca y se trae a
+    la vista). Para no perderlo Y usar igual la capa compartida, `FloorChairCard` estrena dos
+    props opcionales: `highlighted` y `cardRef`. Aditivas — el instituto no se entera.
+
+Los contadores del commit portado iban en la barra de arriba; main ya los pinta en el panel de
+la derecha. Se quedan donde main los puso (dos juegos a la vez se taparían), pero **pintados
+por `FloorCounters`**, la pieza compartida. Con eso `container-type: inline-size` no entra en
+la barra superior, que es donde habría atrapado a los `position: fixed` de dentro.
+
+### `src/app/dev-live-look/` — QUÉ SE HIZO
+
+Es un banco de pruebas: monta el `LivePublicClient` REAL con el plano de demostración y citas
+de mentira, sustituyendo `window.fetch`, para poder VER el televisor sin base de datos, sin
+clínica y sin sesión. Vive bajo `src/app/`, así que Next lo publicaría como la ruta
+**/dev-live-look de producción** — una pantalla con datos falsos y una clínica inventada,
+servida a cualquiera que teclee la URL.
+
+**Se commitea (es la única forma cómoda de mirar el televisor) y se BLOQUEA, no se mueve:**
+
+```tsx
+if (process.env.NODE_ENV === "production") notFound();
+```
+
+La guardia es lo PRIMERO del componente de servidor: en el despliegue devuelve el 404 de
+siempre, no se construye ni un dato de mentira y el arnés ni siquiera se monta — así que el
+`window.fetch` que sustituye tampoco llega a tocarse. Se prefirió bloquear a sacarlo de
+`src/app/`: fuera de ahí deja de ser una ruta y el banco de pruebas no se puede usar, que es
+justo para lo que existe. En `npm run dev` sigue abriéndose en `/dev-live-look` (y `?dark=1`).
+
+Se le quitó además la sonda que montaba la raíz del panel para leer los tokens: ahora los
+tokens son una hoja propia y el layout de /live ya los enciende.
+
+### GATES
+
+  · **`git diff main -- prisma/schema.prisma` → VACÍO.** No se revierte ni un modelo. La rama
+    del plano estaba 147 líneas atrás (le faltaba el bloque del CRM que main añadió después);
+    el cherry-pick del único commit nuevo no toca el archivo, así que el bloque sigue entero.
+    `EduCampusLayout` ya estaba en main, idéntico.
+  · **SQL: no hay nada que aplicar.** `sql/edu-clinica-plano.sql` ya está en main y es
+    idéntico (`git diff` vacío, 182 líneas). La integración no necesita SQL nuevo.
+  · **Aislamiento por clínica/instituto:** las dos rutas de API que cambian son las del home
+    (pieza A) y las dos filtran por `invoice: { clinicId: session.clinic.id }`. En el
+    instituto, `autorizaciones.ts` saca el `institutionId` de `requireInstitution(ctx)`, que
+    **lanza 401** si falta en vez de dejarlo pasar: ningún `undefined` llega a un `where`. Las
+    rutas del plano no se tocaron. El enmascarado del paciente tampoco: `maskPatient` se llama
+    en los mismos sitios con la misma bandera, en el panel y en el televisor.
+
+### BUILD Y PRUEBAS
+
+```
+$env:NODE_OPTIONS="--max-old-space-size=8192"; npx next build   → EXIT 0
+npm run test:edu                                                → EXIT 0  (36 archivos, 1 221 pruebas)
+npm run test:home-revenue                                       → EXIT 0  (10 pruebas)
+npx tsc --noEmit                                                → limpio fuera de __tests__
+```
+
+Los errores de `tsc` que quedan están todos en `__tests__` y son los MISMOS que en main (Set
+sin `downlevelIteration`, un `rotation: number`, una comparación de literales): línea base sin
+tocar, y `next build` no mira los tipos de esa carpeta.
+
+Se reforzó la guardia de vocabulario del instituto para que vigile también el archivo nuevo de
+la capa (`floor-ground.tsx`): si a la capa compartida se le cuela "estudiante", "sede",
+"doctor" o "paciente", la prueba se pone roja. La otra guardia —"los dos verticales montan LA
+MISMA capa"— pasa de verdad: `live-mode.tsx` monta ahora `FloorChairCard`, no una copia.
+
+### QUÉ MIRAR ANTES DE MERGEAR
+
+  1. **/dashboard/clinic-layout, modo Armar** — que las baldosas tengan color (claro Y oscuro),
+     que la losa y las sombras sigan ahí, que el catálogo de la izquierda salga a TRES por fila
+     y que arrastrar un mueble no dé tirones.
+  2. **El mismo editor, En Vivo** — contadores arriba, leyenda abajo a la izquierda, y clic en
+     un sillón abre su tarjeta con el botón al expediente.
+  3. **El botón 3D ↔ 2D**, y que al clicar un sillón en el mundo su tarjeta del panel derecho
+     se marque y se traiga a la vista.
+  4. **/live/[slug]** — que se vea como el panel: losa, sombras, nombre del sillón, contadores
+     y leyenda. Y el toggle claro/oscuro de la propia pantalla.
+  5. **/live/[slug] con `Mostrar nombres` APAGADO** — que siga diciendo "J.P." y no el nombre
+     completo, en el panel de sillones, en el globo del ratón y sobre el piso.
+  6. **/instituto/clinica y /instituto/clinica/plano** — que se vean igual que antes: el
+     instituto solo hereda dos props opcionales nuevas que no usa.
+  7. **/dev-live-look en un despliegue** — tiene que dar 404.
+
+
 ═══════════════════════════════════════════════════════════════════════════
 ## [Live-Dental-3D · ARREGLOS] — El día de la clínica, el humo del plano y el piso cortado ✅ (2026-09-02) · rama `fix/live-fecha-local` → PR contra main
 ═══════════════════════════════════════════════════════════════════════════

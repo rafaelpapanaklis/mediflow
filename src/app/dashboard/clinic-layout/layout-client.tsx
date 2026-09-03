@@ -34,6 +34,7 @@ import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import { OPENABLE_TYPES } from "@/lib/floor-plan/element-types";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import type {
+  ChairStatus,
   ElementType,
   LayoutElement,
   LayoutMetadata,
@@ -48,15 +49,16 @@ import {
   LiveTimeline,
   type HoverData,
 } from "./components/live-mode";
-import {
-  ChairCard,
-  FloorLegend,
-  FloorShadows,
-  FloorSlab,
-  LiveCounters,
-  type ChairCardData,
-  type StatusCounts,
-} from "./components/floor-look";
+import { ChairCard, type ChairCardData } from "./components/chair-card";
+/* Las palabras de los tres estados. Viven fuera de la capa compartida —que
+   no conoce ni una palabra del negocio— y las lee también el televisor de
+   /live/[slug], para que los dos digan lo mismo. */
+import { COUNT_KEY, DETAIL_KEY, ESTADOS, LABEL_KEY } from "./components/floor-copy";
+/* Los tokens `--mc-*` del piso, y su traduccion a los `--fp-*` que lee la
+   capa compartida. Viven en su propia hoja porque el televisor de
+   /live/[slug] pinta el MISMO piso y necesita los mismos colores; ver la
+   cabecera de floor-tokens.module.css. */
+import mc from "./components/floor-tokens.module.css";
 import {
   ANCHO_MIN_3D,
   LiveWorld,
@@ -86,11 +88,16 @@ import { useT } from "@/i18n/i18n-provider";
 // panel.
 import { IsoElement, IsoGhost, IsoTiles } from "@/components/floor-plan/iso-canvas";
 import {
+  FloorCounters,
+  FloorLegend,
   FloorPalette,
   FloorPaletteItem,
   FloorPanelHelp,
   FloorPanelTitle,
+  type FloorCountItem,
+  type FloorLegendItem,
 } from "@/components/floor-plan/floor-chrome";
+import { FloorShadows, FloorSlab } from "@/components/floor-plan/floor-ground";
 import styles from "./clinic-layout.module.css";
 
 interface Chair {
@@ -1021,14 +1028,37 @@ export function ClinicLayoutClient({
     return out;
   }, [elements, liveChairs]);
 
-  const liveCounts: StatusCounts = useMemo(() => {
-    const counts: StatusCounts = { libre: 0, proximo: 0, ocupado: 0 };
-    if (!liveMode) return counts;
+  const liveCounts = useMemo<FloorCountItem[]>(() => {
+    if (!liveMode) return [];
+    const tally: Record<ChairStatus, number> = { libre: 0, proximo: 0, ocupado: 0 };
     for (const c of placedLiveChairs) {
-      counts[getChairStatus(c.resourceId, viewTime, appointments)] += 1;
+      tally[getChairStatus(c.resourceId, viewTime, appointments)] += 1;
     }
-    return counts;
-  }, [liveMode, placedLiveChairs, viewTime, appointments]);
+    // El texto entra por prop: la capa compartida no conoce ni una palabra
+    // del negocio, y por eso la puede montar también el instituto.
+    return ESTADOS.map((estado) => ({
+      key: estado,
+      tone: estado,
+      count: tally[estado],
+      label: t(COUNT_KEY[estado]),
+      detail: t(DETAIL_KEY[estado]),
+    }));
+  }, [liveMode, placedLiveChairs, viewTime, appointments, t]);
+
+  /** Qué significa cada color. En modo Armar no hay estados: solo la
+   *  línea que explica cómo se pone un mueble. */
+  const legendItems = useMemo<FloorLegendItem[]>(
+    () =>
+      liveMode
+        ? ESTADOS.map((estado) => ({
+            key: estado,
+            tone: estado,
+            label: t(LABEL_KEY[estado]),
+            detail: t(DETAIL_KEY[estado]),
+          }))
+        : [],
+    [liveMode, t],
+  );
 
   const pickedCard: ChairCardData | null = useMemo(() => {
     if (!liveMode || !pickedChairId) return null;
@@ -1138,7 +1168,9 @@ export function ClinicLayoutClient({
       const renderRow = isMoving && movingPosition ? movingPosition.row : el.row;
       const [sx, sy] = toScreen(renderCol, renderRow, ox, oy);
       const chair = el.resourceId ? liveChairs.find((c) => c.id === el.resourceId) : null;
-      const labelText = td.isChair ? chair?.name ?? el.name ?? "Consultorio" : null;
+      const labelText = td.isChair
+        ? chair?.name ?? el.name ?? t("pages.clinicLayout.chairFallbackLabel")
+        : null;
       // Opts dinámicos para draw():
       // - isOpen: el id está en openIds (puertas/gabinetes click-toggleable)
       // - isOccupied: solo en modo En Vivo, sólo sillones, ocupados ahora
@@ -1234,14 +1266,14 @@ export function ClinicLayoutClient({
   if (!welcomeDismissed) {
     return (
       <>
-        <div className={styles.mobileBlock}>
+        <div className={`${styles.mobileBlock} ${mc.mcTokens}`}>
           <div className={styles.mobileBlockIcon}>
             <Monitor size={32} aria-hidden />
           </div>
           <h1>{t("pages.clinicLayout.openOnComputer")}</h1>
           <p>{t("pages.clinicLayout.editorWidthShort")}</p>
         </div>
-        <div className={styles.welcomeWrap}>
+        <div className={`${styles.welcomeWrap} ${mc.mcTokens}`}>
           <WelcomePrompt
             onLoaded={(data) => {
               const els = sanitizeElements(data.elements);
@@ -1260,7 +1292,7 @@ export function ClinicLayoutClient({
   return (
     <>
       {/* Mobile block */}
-      <div className={styles.mobileBlock}>
+      <div className={`${styles.mobileBlock} ${mc.mcTokens}`}>
         <div className={styles.mobileBlockIcon}>
           <Monitor size={32} aria-hidden />
         </div>
@@ -1268,7 +1300,7 @@ export function ClinicLayoutClient({
         <p>{t("pages.clinicLayout.editorWidthLong")}</p>
       </div>
 
-      <div className={styles.page}>
+      <div className={`${styles.page} ${mc.mcTokens}`}>
         {/* ── Topbar ── */}
         <div className={styles.topbar}>
           <div className={styles.brand}>
@@ -1666,8 +1698,23 @@ export function ClinicLayoutClient({
                 vez aquí sería duplicarlos —y además contradecirlos: estos
                 cuentan a la hora de la línea de tiempo y los del HUD cuentan
                 AHORA, que es lo único que sabe el piso en 3D. */}
-            {liveMode && !piso3D && <LiveCounters counts={liveCounts} t={t} />}
-            {!piso3D && <FloorLegend live={liveMode} t={t} />}
+            {liveMode && !piso3D && liveCounts.length > 0 && (
+              <div className={styles.floatCounters}>
+                <FloorCounters
+                  items={liveCounts}
+                  ariaLabel={t("pages.clinicLayout.statusCountsLabel")}
+                />
+              </div>
+            )}
+            {!piso3D && (
+              <div className={styles.floatLegend}>
+                <FloorLegend
+                  items={legendItems}
+                  title={liveMode ? t("pages.clinicLayout.legendTitle") : undefined}
+                  help={t(liveMode ? "pages.clinicLayout.legendHintLive" : "pages.clinicLayout.legendHintEdit")}
+                />
+              </div>
+            )}
             {liveMode && pickedCard && (
               <ChairCard
                 data={pickedCard}

@@ -76,6 +76,7 @@ const DENTAL_CAPA = "src/components/clinic-3d/live-layer.ts";
 const CAPA_CSS = "src/components/floor-plan/floor-plan.module.css";
 const CAPA_CHROME = "src/components/floor-plan/floor-chrome.tsx";
 const CAPA_LIENZO = "src/components/floor-plan/iso-canvas.tsx";
+const CAPA_SUELO = "src/components/floor-plan/floor-ground.tsx";
 
 const SILLONES: EduPlanoChair[] = [
   { id: "ch_1", name: "Sillón 1", number: 1 },
@@ -573,7 +574,7 @@ test("la capa visual compartida no sabe una palabra de ningún vertical", () => 
     /paciente/i,
     /odontograma/i,
   ];
-  for (const rel of [CAPA_CSS, CAPA_CHROME, CAPA_LIENZO]) {
+  for (const rel of [CAPA_CSS, CAPA_CHROME, CAPA_LIENZO, CAPA_SUELO]) {
     const texto = sinComentarios(fuente(rel));
     for (const mala of prohibidas) {
       assert.equal(

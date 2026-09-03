@@ -1,0 +1,176 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   LA PALETA DEL PISO — un solo sitio para las dos pantallas que lo pintan.
+
+   La estrenó `Mi Clínica Visual` (/dashboard/clinic-layout) y ahora también
+   la usa el televisor de recepción (/live/[slug]). Vive aquí, en su propia
+   hoja, porque el piso tiene que verse IGUAL en las dos: si cada pantalla
+   se guardara su copia de los colores, la primera vez que alguien tocara
+   uno se separarían y nadie se enteraría hasta ver las dos juntas.
+
+   Se aplica añadiendo `.mcTokens` al elemento raíz de la pantalla; todo lo
+   que cuelgue de ahí hereda las variables.
+
+   ⚠️ El prefijo `--mc-` es a propósito: `--text-2`, `--bg` y compañía
+   existen en globals.css y declararlas aquí las TAPARÍA para todo lo que se
+   monte dentro (modales, toasts, la sala de espera).
+
+   🔴 EL PISO NO SE OSCURECE EN DARK. Los muebles son cadenas SVG con el
+   color metido dentro (`src/lib/floor-plan/elements-dental.ts`): no hay
+   forma de repintarlos desde una hoja, y sobre baldosas negras el sillón,
+   el gabinete y el lavabo dejan de leerse. Así que en oscuro el piso baja
+   un punto de luz y lo que cambia es el MARCO: un plano claro sobre un
+   escritorio oscuro.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.mcTokens {
+  /* Marca: el violeta del panel. El instituto es azul institucional; eso
+     NO se copia — el dental sigue siendo el dental. */
+  --mc-brand: #7c3aed;
+  --mc-brand-soft: rgba(124, 58, 237, 0.1);
+  --mc-brand-line: rgba(124, 58, 237, 0.32);
+
+  --mc-text-1: #141a2b;
+  --mc-text-2: #4a5468;
+  --mc-text-3: #67707f;
+  --mc-text-4: #8e97a8;
+
+  --mc-surface: #ffffff;
+  --mc-surface-2: #f1f4fa;
+  --mc-ground: #f5f7fb;
+  --mc-line: rgba(20, 26, 43, 0.12);
+
+  --mc-radius: 12px;
+  --mc-radius-sm: 8px;
+  --mc-shadow-1: 0 1px 2px rgba(20, 26, 43, 0.06);
+  --mc-shadow-2: 0 6px 18px -6px rgba(20, 26, 43, 0.16);
+  --mc-shadow-3: 0 18px 44px -18px rgba(20, 26, 43, 0.3);
+
+  /* Estados. Los mismos tres del instituto (verde #15803d, ámbar #b45309,
+     rojo #b3261e: todos ≥ 4.9:1 sobre blanco) y son SOLO para el marco —
+     píldoras, puntos, texto—. Los halos que se pintan encima del piso
+     siguen usando STATUS_COLORS de `src/lib/floor-plan/element-types.ts`,
+     que es lo que también leen el mundo 3D y el plano del instituto: si se
+     cambiaran ahí, cambiarían tres pantallas de golpe. */
+  --mc-libre: #15803d;
+  --mc-libre-soft: rgba(21, 128, 61, 0.09);
+  --mc-libre-line: rgba(21, 128, 61, 0.4);
+  --mc-proximo: #b45309;
+  --mc-proximo-soft: rgba(180, 83, 9, 0.1);
+  --mc-proximo-line: rgba(180, 83, 9, 0.4);
+  --mc-ocupado: #b3261e;
+  --mc-ocupado-soft: rgba(179, 38, 30, 0.09);
+  --mc-ocupado-line: rgba(179, 38, 30, 0.4);
+
+  /* El piso. */
+  --mc-canvas: radial-gradient(ellipse at 52% 32%, #eaeef6 0%, #dfe5f0 55%, #d2dae8 100%);
+  --mc-floor-a: #eef2f7;
+  --mc-floor-b: #e6ecf4;
+  --mc-floor-line: rgba(20, 26, 43, 0.06);
+  --mc-floor-rim: rgba(20, 26, 43, 0.14);
+  /* Las dos caras del zócalo. La de abajo-izquierda va más oscura: la luz
+     entra por arriba a la izquierda en todo el catálogo isométrico. */
+  --mc-floor-side-r: #c3cede;
+  --mc-floor-side-l: #a3b1c6;
+  --mc-floor-cast: #0b1220;
+  --mc-floor-cast-opacity: 0.26;
+  --mc-label-ink: #141a2b;
+  --mc-label-halo: #ffffff;
+  --mc-veil: rgba(255, 255, 255, 0.82);
+
+  /* ═══════════════════════════════════════════════════════════════════
+     LA MISMA PALETA, TRADUCIDA PARA LA CAPA COMPARTIDA
+
+     El piso, la paleta del catálogo y los paneles los dibuja
+     src/components/floor-plan/, la MISMA capa que pinta el plano del
+     vertical institucional. Esa capa no conoce ni un color: lee `--fp-*`
+     de su ancestro. Este bloque es el único sitio del dental que los
+     define — el panel y el televisor lo encienden con la misma clase—, y
+     por eso el azul del instituto no llega aquí ni el violeta de aquí
+     llega allá: lo que viaja entre los dos productos es la forma, no el
+     tema.
+
+     🔴 NO se repite en el bloque oscuro de abajo, y es a propósito: cada
+     `--fp-*` apunta a un `--mc-*`, y la sustitución se resuelve en el
+     elemento —donde el bloque oscuro ya volvió a declarar los `--mc-*`—.
+     Duplicarlo sería el segundo sitio donde acordarse de un color nuevo,
+     que es exactamente lo que esta hoja existe para evitar.
+     ═══════════════════════════════════════════════════════════════════ */
+  --fp-surface: var(--mc-surface);
+  --fp-surface-2: var(--mc-surface-2);
+  --fp-line: var(--mc-line);
+  --fp-text-1: var(--mc-text-1);
+  --fp-text-2: var(--mc-text-2);
+  --fp-text-3: var(--mc-text-3);
+  --fp-radius: var(--mc-radius);
+  --fp-shadow-1: var(--mc-shadow-1);
+  --fp-shadow-2: var(--mc-shadow-2);
+  --fp-accent: var(--mc-brand);
+  --fp-accent-soft: var(--mc-brand-soft);
+  --fp-accent-line: var(--mc-brand-line);
+  --fp-libre: var(--mc-libre);
+  --fp-libre-soft: var(--mc-libre-soft);
+  --fp-proximo: var(--mc-proximo);
+  --fp-proximo-soft: var(--mc-proximo-soft);
+  --fp-ocupado: var(--mc-ocupado);
+  --fp-ocupado-soft: var(--mc-ocupado-soft);
+  --fp-tile-a: var(--mc-floor-a);
+  --fp-tile-b: var(--mc-floor-b);
+  --fp-tile-stroke: var(--mc-floor-line);
+  --fp-slab-rim: var(--mc-floor-rim);
+  --fp-slab-side-r: var(--mc-floor-side-r);
+  --fp-slab-side-l: var(--mc-floor-side-l);
+  --fp-cast: var(--mc-floor-cast);
+  --fp-cast-opacity: var(--mc-floor-cast-opacity);
+  --fp-label: var(--mc-label-ink);
+  --fp-label-halo: var(--mc-label-halo);
+  /* 64 y no los 76 por omisión: la columna del catálogo mide 232 px y con
+     76 caían dos por fila en vez de las tres de siempre. */
+  --fp-palette-min: 64px;
+}
+
+:global(.dark) .mcTokens {
+  --mc-brand: #a78bfa;
+  --mc-brand-soft: rgba(167, 139, 250, 0.16);
+  --mc-brand-line: rgba(167, 139, 250, 0.42);
+
+  --mc-text-1: #e6ecf7;
+  --mc-text-2: #b9c3d6;
+  --mc-text-3: #9aa4b8;
+  --mc-text-4: #78829a;
+
+  --mc-surface: #19203a;
+  --mc-surface-2: #212a48;
+  --mc-ground: #10162a;
+  --mc-line: rgba(226, 233, 246, 0.12);
+
+  --mc-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --mc-shadow-2: 0 6px 18px -6px rgba(0, 0, 0, 0.55);
+  --mc-shadow-3: 0 18px 44px -18px rgba(0, 0, 0, 0.7);
+
+  /* Tinta clara para el mismo verde/ámbar/rojo: sobre #19203a el #15803d
+     se cae a 2.4:1 y deja de leerse. El fondo suave se mantiene para que
+     la píldora siga teniendo su color. */
+  --mc-libre: #4ade80;
+  --mc-libre-soft: rgba(74, 222, 128, 0.14);
+  --mc-libre-line: rgba(74, 222, 128, 0.38);
+  --mc-proximo: #fbbf24;
+  --mc-proximo-soft: rgba(251, 191, 36, 0.14);
+  --mc-proximo-line: rgba(251, 191, 36, 0.38);
+  --mc-ocupado: #fb7185;
+  --mc-ocupado-soft: rgba(251, 113, 133, 0.14);
+  --mc-ocupado-line: rgba(251, 113, 133, 0.38);
+
+  /* 🔴 El piso sigue CLARO (ver la cabecera). Solo baja un punto. */
+  --mc-canvas: radial-gradient(ellipse at 52% 34%, #1a2340 0%, #141b30 55%, #0d1223 100%);
+  --mc-floor-a: #dfe5ee;
+  --mc-floor-b: #d6dde8;
+  --mc-floor-line: rgba(20, 26, 43, 0.08);
+  --mc-floor-rim: rgba(255, 255, 255, 0.16);
+  --mc-floor-side-r: #a5b2c4;
+  --mc-floor-side-l: #8695ab;
+  --mc-floor-cast: #0b1220;
+  --mc-floor-cast-opacity: 0.3;
+  --mc-label-ink: #141a2b;
+  --mc-label-halo: #f4f6fa;
+  --mc-veil: rgba(16, 22, 42, 0.82);
+}

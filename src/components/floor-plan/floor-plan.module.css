@@ -93,6 +93,16 @@
   --fpc-label: var(--fp-label, #141a2b);
   --fpc-label-halo: var(--fp-label-halo, #ffffff);
 
+  /* El suelo con volumen: el canto de la losa y la sombra de contacto.
+     Las dos caras del zócalo NO son el mismo gris — la de abajo-izquierda
+     va más oscura porque la luz entra por arriba a la izquierda en todo el
+     catálogo isométrico. */
+  --fpc-slab-rim: var(--fp-slab-rim, rgba(20, 26, 43, 0.14));
+  --fpc-slab-side-r: var(--fp-slab-side-r, #c3cede);
+  --fpc-slab-side-l: var(--fp-slab-side-l, #a3b1c6);
+  --fpc-cast: var(--fp-cast, #0b1220);
+  --fpc-cast-opacity: var(--fp-cast-opacity, 0.26);
+
   /* Tono por omisión de las piezas que llevan estado. Lo pisan .tone*. */
   --fpc-tone: var(--fpc-text3);
   --fpc-tone-soft: var(--fpc-surface2);
@@ -131,6 +141,14 @@
   --fpc-tile-stroke: var(--fp-tile-stroke, rgba(20, 26, 43, 0.1));
   --fpc-label: var(--fp-label, #141a2b);
   --fpc-label-halo: var(--fp-label-halo, #f4f6fa);
+
+  /* El piso sigue CLARO en oscuro (ver arriba), así que el zócalo también:
+     lo que sube es el contraste de la sombra contra el escritorio. */
+  --fpc-slab-rim: var(--fp-slab-rim, rgba(255, 255, 255, 0.16));
+  --fpc-slab-side-r: var(--fp-slab-side-r, #a5b2c4);
+  --fpc-slab-side-l: var(--fp-slab-side-l, #8695ab);
+  --fpc-cast: var(--fp-cast, #0b1220);
+  --fpc-cast-opacity: var(--fp-cast-opacity, 0.3);
 }
 
 /* ── Los tres tonos ──────────────────────────────────────────────────── */
@@ -293,6 +311,18 @@
   flex: none;
   border-radius: 999px;
   background: var(--fpc-tone);
+}
+
+/* El encabezado de la leyenda. Va como `<li>` para no romper la lista, y
+   sin punto de color: no es un estado, es el título de los que vienen. */
+.legendTitle {
+  flex-basis: 100%;
+  margin: 0 0 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fpc-text3);
 }
 
 .legendHelp {
@@ -536,6 +566,13 @@
 }
 
 /* El número pintado en la pared, delante del nombre. */
+/* Señalada desde el piso: el canto de acento la separa de la columna sin
+   moverla de sitio. La trae a la vista quien la señala, no esta regla. */
+.chairCardPicked {
+  border-color: var(--fpc-accent);
+  box-shadow: 0 0 0 2px var(--fpc-accent-soft);
+}
+
 .chairNum {
   display: inline-flex;
   align-items: center;
@@ -898,6 +935,30 @@
 
 .tileB {
   fill: var(--fpc-tile-b);
+}
+
+/* ── La losa y las sombras de contacto (floor-ground.tsx) ───────────── */
+/* La cara de arriba es del color de la baldosa clara: el canto solo se ve
+   por el filo. Sin ese filo el piso termina en un borde de sierra contra
+   el fondo y el plano flota. */
+.slabTop {
+  fill: var(--fpc-tile-a);
+  stroke: var(--fpc-slab-rim);
+  stroke-width: 1.5;
+}
+
+.slabSideLeft {
+  fill: var(--fpc-slab-side-l);
+}
+
+.slabSideRight {
+  fill: var(--fpc-slab-side-r);
+}
+
+.shadowLayer {
+  fill: var(--fpc-cast);
+  opacity: var(--fpc-cast-opacity);
+  pointer-events: none;
 }
 
 .element {

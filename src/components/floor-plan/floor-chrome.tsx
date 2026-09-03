@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, MouseEventHandler, ReactNode } from "react";
+import type { CSSProperties, MouseEventHandler, ReactNode, Ref } from "react";
 import { X } from "lucide-react";
 import s from "./floor-plan.module.css";
 
@@ -170,13 +170,18 @@ export interface FloorLegendItem {
 export function FloorLegend({
   items,
   help,
+  title,
 }: {
   items: FloorLegendItem[];
   /** El renglón de ayuda que cierra la leyenda. Opcional. */
   help?: ReactNode;
+  /** Encabezado de la leyenda ("Cómo se lee el piso"). Opcional: la
+   *  pantalla que solo enseña tres puntos con su palabra no lo necesita. */
+  title?: ReactNode;
 }) {
   return (
     <ul className={cx(s.fp, s.legend)}>
+      {title ? <li className={s.legendTitle}>{title}</li> : null}
       {items.map((it) => (
         <li key={it.key} className={floorToneClass(it.tone)}>
           <span className={s.legendDot} aria-hidden="true" />
@@ -348,6 +353,8 @@ export function FloorChairCard({
   tone,
   onOpen,
   openTitle,
+  highlighted = false,
+  cardRef,
   children,
 }: {
   name: string;
@@ -359,6 +366,15 @@ export function FloorChairCard({
   /** Si se pasa, el nombre es un botón. */
   onOpen?: () => void;
   openTitle?: string;
+  /**
+   * Señalada: se le pone un canto para que se distinga del resto de la
+   * columna. La usa quien clica un sillón EN EL PISO y quiere que la
+   * respuesta sea la tarjeta que este panel ya estaba pintando — no una
+   * ficha nueva, así que no toca ningún dato.
+   */
+  highlighted?: boolean;
+  /** Para traerla a la vista cuando se la señala desde fuera. */
+  cardRef?: Ref<HTMLElement>;
   children?: ReactNode;
 }) {
   const head = (
@@ -368,7 +384,10 @@ export function FloorChairCard({
     </>
   );
   return (
-    <article className={cx(s.fp, s.chairCard, floorToneClass(tone))}>
+    <article
+      ref={cardRef}
+      className={cx(s.fp, s.chairCard, floorToneClass(tone), highlighted && s.chairCardPicked)}
+    >
       <header className={s.chairHead}>
         {onOpen ? (
           <button
