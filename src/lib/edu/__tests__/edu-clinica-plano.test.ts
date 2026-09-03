@@ -70,6 +70,13 @@ const RUTA_PAGINA_EDITOR = "src/app/instituto/(panel)/clinica/plano/page.tsx";
 const DENTAL = "src/components/clinic-3d/Clinic3DClient.tsx";
 const DENTAL_HUD = "src/components/clinic-3d/Clinic3DHud.tsx";
 const DENTAL_CAPA = "src/components/clinic-3d/live-layer.ts";
+// La capa VISUAL que el instituto comparte con el dental. No es de ninguno
+// de los dos, y por eso se vigila desde aquí también: si alguien le mete
+// una palabra del negocio, el otro producto la hereda.
+const CAPA_CSS = "src/components/floor-plan/floor-plan.module.css";
+const CAPA_CHROME = "src/components/floor-plan/floor-chrome.tsx";
+const CAPA_LIENZO = "src/components/floor-plan/iso-canvas.tsx";
+const CAPA_SUELO = "src/components/floor-plan/floor-ground.tsx";
 
 const SILLONES: EduPlanoChair[] = [
   { id: "ch_1", name: "Sillón 1", number: 1 },
@@ -520,14 +527,94 @@ test("🔴 NINGÚN llamador del dental pasa la prop nueva", () => {
   assert.match(mundo, /ssr: false/, "three.js en el servidor revienta el build");
 });
 
-test("el alto del mundo se le impone desde el tema del instituto, sin !important", () => {
+test("el alto del mundo se le impone desde la capa compartida, sin !important", () => {
   // `Clinic3DClient` lleva `h-[100dvh]` en su raíz porque en el dental ocupa
   // la pantalla entera. Aquí vive dentro de una pantalla con el horario
   // debajo. Si esta regla desaparece, el plano empuja el horario fuera.
-  const tema = fuente("src/app/instituto/edu-theme.css");
-  assert.match(tema, /\.edu-plano__mundo > div \{/, "falta la regla que le pone el alto al visor");
-  const bloque = tema.slice(tema.indexOf(".edu-plano__mundo > div {"));
+  //
+  // ⚠️ La regla ya NO vive en edu-theme.css: la caja del mundo es
+  // `FloorWorldBox`, de la capa visual que comparten el dental y el
+  // instituto. Se mudó de archivo, no de responsabilidad — y se sigue
+  // vigilando, porque el hueco lo hospeda esta pantalla.
+  const capa = fuente(CAPA_CSS);
+  assert.match(capa, /\.world > div \{/, "falta la regla que le pone el alto al visor");
+  const bloque = capa.slice(capa.indexOf(".world > div {"));
   assert.equal(/!important/.test(bloque.slice(0, 200)), false, "no hace falta !important: gana por especificidad");
+
+  // Y la pantalla la usa: sin la caja, el visor vuelve a ocupar 100dvh.
+  const pantalla = fuente("src/components/edu/clinica/plano-screen.tsx");
+  assert.match(pantalla, /<FloorWorldBox>/, "el mundo se monta sin su caja");
+});
+
+test("la capa visual compartida no sabe una palabra de ningún vertical", () => {
+  // Es LA condición de que se pueda compartir. El instituto dice
+  // "estudiante" y "sede"; el dental "doctor" y "sucursal". En cuanto una
+  // de esas palabras se cuela ahí dentro, el otro producto hereda un
+  // vocabulario que no es suyo — que es justo lo que este vertical lleva
+  // una ola entera corrigiendo. Los textos entran por props.
+  //
+  // ⚠️ Se miran los archivos SIN comentarios. La regla es que ninguna de
+  // esas palabras salga por pantalla, no que no se puedan nombrar para
+  // explicar por qué: un candado que prohíbe escribir "estudiante" ni
+  // siquiera en la prosa deja el archivo sin poder contar su propia regla.
+  const sinComentarios = (texto: string) =>
+    texto
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .split("\n")
+      .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+      .join("\n");
+  const prohibidas = [
+    /estudiante/i,
+    /alumno/i,
+    /docente/i,
+    /matrícula/i,
+    /\bsede\b/i,
+    /\bdoctor\b/i,
+    /\bsucursal\b/i,
+    /paciente/i,
+    /odontograma/i,
+  ];
+  for (const rel of [CAPA_CSS, CAPA_CHROME, CAPA_LIENZO, CAPA_SUELO]) {
+    const texto = sinComentarios(fuente(rel));
+    for (const mala of prohibidas) {
+      assert.equal(
+        mala.test(texto),
+        false,
+        `${rel} escribe ${mala}: el vocabulario entra por props, no por el archivo compartido`,
+      );
+    }
+  }
+});
+
+test("los dos verticales montan LA MISMA capa visual", () => {
+  // Si uno de los dos deja de importarla, vuelve a haber dos cáscaras que
+  // se parecen — y el próximo retoque hay que pedirlo dos veces.
+  const instituto = [
+    "src/components/edu/clinica/plano-screen.tsx",
+    "src/components/edu/clinica/plano-editor.tsx",
+  ];
+  const dental = [
+    "src/app/dashboard/clinic-layout/layout-client.tsx",
+    "src/app/dashboard/clinic-layout/components/live-mode.tsx",
+    "src/app/live/[slug]/live-public-client.tsx",
+  ];
+  for (const rel of [...instituto, ...dental]) {
+    assert.match(
+      fuente(rel),
+      /@\/components\/floor-plan\//,
+      `${rel} dejó de usar la capa visual compartida`,
+    );
+  }
+
+  // Y el dibujo isométrico está en UN sitio: el bucle de baldosas no puede
+  // volver a aparecer en ninguna de las tres pantallas que lo tenían.
+  for (const rel of dental.concat(instituto)) {
+    assert.equal(
+      /const tileClass|edu-planoed__tile/.test(fuente(rel)),
+      false,
+      `${rel} volvió a dibujar el suelo por su cuenta`,
+    );
+  }
 });
 
 // ═════════════════════════════════════════════════════════════════════
@@ -598,12 +685,15 @@ test("🔴 el HUD del dental no enseña sus textos ni sus mandos con anfitrión"
   // El enlace al panel del DENTAL ya no se tapa con CSS desde el instituto
   // (era una tirita que se caía si el dental cambiaba la ruta): no se pinta.
   assert.match(hud, /\{!host \? \(\s*\n\s*<Link/, "el enlace al editor del dental se sigue pintando");
-  const tema = fuente("src/app/instituto/edu-theme.css");
-  assert.equal(
-    /\.edu-plano__mundo a\[href=/.test(tema),
-    false,
-    "quedó la regla vieja que escondía el enlace por href: ahora lo resuelve la prop",
-  );
+  // Ni en el tema del instituto ni en la capa compartida puede quedar una
+  // regla que tape el enlace del dental por su `href`.
+  for (const rel of ["src/app/instituto/edu-theme.css", CAPA_CSS]) {
+    assert.equal(
+      /a\[href=/.test(fuente(rel)),
+      false,
+      `${rel}: quedó la regla vieja que escondía el enlace por href — ahora lo resuelve la prop`,
+    );
+  }
 
   // Los dos textos del dental que el instituto no puede enseñar.
   assert.match(hud, /host\s*\n?\s*\? \(host\.legend \?\? \[\]\)\.map/, "la leyenda del dental no la sustituye el anfitrión");

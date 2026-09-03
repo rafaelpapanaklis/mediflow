@@ -14,129 +14,20 @@
    toca: cualquier cambio ahí repintaría también el plano de las escuelas.
 
    ── DARK MODE: TOKENS, NO PARCHES ─────────────────────────────────────
-   Todo el color de la pantalla sale de las variables `--mc-*` de abajo, y
-   el modo oscuro solo las vuelve a declarar. Antes había ~25 reglas
+   Todo el color de la pantalla sale de las variables `--mc-*`, y el modo
+   oscuro solo las vuelve a declarar. Antes había ~25 reglas
    `:global(.dark) .loQueSea { background: … }` sueltas; cada clase nueva
    nacía rota en oscuro hasta que alguien se acordaba de añadir la suya.
-   El prefijo `--mc-` es a propósito: `--text-2`, `--bg` y compañía existen
-   en globals.css y declararlas aquí las TAPARÍA para todo lo que se monte
-   dentro del editor (modales, toasts, la sala de espera).
 
-   🔴 EL PISO NO SE OSCURECE EN DARK. Los muebles son cadenas SVG con el
-   color metido dentro (`src/lib/floor-plan/elements-dental.ts`): no hay
-   forma de repintarlos desde aquí, y sobre baldosas negras el sillón, el
-   gabinete y el lavabo dejan de leerse. Así que en oscuro el piso baja un
-   punto de luz y lo que cambia es el MARCO —igual que en el instituto—:
-   un plano claro sobre un escritorio oscuro.
+   ⚠️ LAS VARIABLES YA NO SE DECLARAN AQUÍ. Viven en
+   `./components/floor-tokens.module.css` porque el televisor de recepción
+   (/live/[slug]) pinta el MISMO piso y necesita los mismos colores; con
+   una copia en cada hoja se separarían al primer retoque. Esa hoja
+   también es la que traduce la paleta a los `--fp-*` que lee la capa
+   compartida (src/components/floor-plan/). Esta pantalla las enciende
+   poniendo `.mcTokens` junto a `.page`, `.mobileBlock` y `.welcomeWrap`
+   — ver layout-client.tsx.
    ═══════════════════════════════════════════════════════════════════════ */
-
-/* ── Tokens ─────────────────────────────────────────────────────────── */
-.page,
-.mobileBlock,
-.welcomeWrap {
-  /* Marca: el violeta del panel. El instituto es azul institucional; eso
-     NO se copia — el dental sigue siendo el dental. */
-  --mc-brand: #7c3aed;
-  --mc-brand-soft: rgba(124, 58, 237, 0.1);
-  --mc-brand-line: rgba(124, 58, 237, 0.32);
-
-  --mc-text-1: #141a2b;
-  --mc-text-2: #4a5468;
-  --mc-text-3: #67707f;
-  --mc-text-4: #8e97a8;
-
-  --mc-surface: #ffffff;
-  --mc-surface-2: #f1f4fa;
-  --mc-ground: #f5f7fb;
-  --mc-line: rgba(20, 26, 43, 0.12);
-
-  --mc-radius: 12px;
-  --mc-radius-sm: 8px;
-  --mc-shadow-1: 0 1px 2px rgba(20, 26, 43, 0.06);
-  --mc-shadow-2: 0 6px 18px -6px rgba(20, 26, 43, 0.16);
-  --mc-shadow-3: 0 18px 44px -18px rgba(20, 26, 43, 0.3);
-
-  /* Estados. Los mismos tres del instituto (verde #15803d, ámbar #b45309,
-     rojo #b3261e: todos ≥ 4.9:1 sobre blanco) y son SOLO para el marco —
-     píldoras, puntos, texto—. Los halos que se pintan encima del piso
-     siguen usando STATUS_COLORS de `src/lib/floor-plan/element-types.ts`,
-     que es lo que también leen el mundo 3D y /live: si se cambiaran ahí,
-     cambiarían tres pantallas de golpe. */
-  --mc-libre: #15803d;
-  --mc-libre-soft: rgba(21, 128, 61, 0.09);
-  --mc-libre-line: rgba(21, 128, 61, 0.4);
-  --mc-proximo: #b45309;
-  --mc-proximo-soft: rgba(180, 83, 9, 0.1);
-  --mc-proximo-line: rgba(180, 83, 9, 0.4);
-  --mc-ocupado: #b3261e;
-  --mc-ocupado-soft: rgba(179, 38, 30, 0.09);
-  --mc-ocupado-line: rgba(179, 38, 30, 0.4);
-
-  /* El piso. */
-  --mc-canvas: radial-gradient(ellipse at 52% 32%, #eaeef6 0%, #dfe5f0 55%, #d2dae8 100%);
-  --mc-floor-a: #eef2f7;
-  --mc-floor-b: #e6ecf4;
-  --mc-floor-line: rgba(20, 26, 43, 0.06);
-  --mc-floor-rim: rgba(20, 26, 43, 0.14);
-  /* Las dos caras del zócalo. La de abajo-izquierda va más oscura: la luz
-     entra por arriba a la izquierda en todo el catálogo isométrico. */
-  --mc-floor-side-r: #c3cede;
-  --mc-floor-side-l: #a3b1c6;
-  --mc-floor-cast: #0b1220;
-  --mc-floor-cast-opacity: 0.26;
-  --mc-label-ink: #141a2b;
-  --mc-label-halo: #ffffff;
-  --mc-veil: rgba(255, 255, 255, 0.82);
-}
-
-:global(.dark) .page,
-:global(.dark) .mobileBlock,
-:global(.dark) .welcomeWrap {
-  --mc-brand: #a78bfa;
-  --mc-brand-soft: rgba(167, 139, 250, 0.16);
-  --mc-brand-line: rgba(167, 139, 250, 0.42);
-
-  --mc-text-1: #e6ecf7;
-  --mc-text-2: #b9c3d6;
-  --mc-text-3: #9aa4b8;
-  --mc-text-4: #78829a;
-
-  --mc-surface: #19203a;
-  --mc-surface-2: #212a48;
-  --mc-ground: #10162a;
-  --mc-line: rgba(226, 233, 246, 0.12);
-
-  --mc-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --mc-shadow-2: 0 6px 18px -6px rgba(0, 0, 0, 0.55);
-  --mc-shadow-3: 0 18px 44px -18px rgba(0, 0, 0, 0.7);
-
-  /* Tinta clara para el mismo verde/ámbar/rojo: sobre #19203a el #15803d
-     se cae a 2.4:1 y deja de leerse. El fondo suave se mantiene para que
-     la píldora siga teniendo su color. */
-  --mc-libre: #4ade80;
-  --mc-libre-soft: rgba(74, 222, 128, 0.14);
-  --mc-libre-line: rgba(74, 222, 128, 0.38);
-  --mc-proximo: #fbbf24;
-  --mc-proximo-soft: rgba(251, 191, 36, 0.14);
-  --mc-proximo-line: rgba(251, 191, 36, 0.38);
-  --mc-ocupado: #fb7185;
-  --mc-ocupado-soft: rgba(251, 113, 133, 0.14);
-  --mc-ocupado-line: rgba(251, 113, 133, 0.38);
-
-  /* 🔴 El piso sigue CLARO (ver la cabecera). Solo baja un punto. */
-  --mc-canvas: radial-gradient(ellipse at 52% 34%, #1a2340 0%, #141b30 55%, #0d1223 100%);
-  --mc-floor-a: #dfe5ee;
-  --mc-floor-b: #d6dde8;
-  --mc-floor-line: rgba(20, 26, 43, 0.08);
-  --mc-floor-rim: rgba(255, 255, 255, 0.16);
-  --mc-floor-side-r: #a5b2c4;
-  --mc-floor-side-l: #8695ab;
-  --mc-floor-cast: #0b1220;
-  --mc-floor-cast-opacity: 0.3;
-  --mc-label-ink: #141a2b;
-  --mc-label-halo: #f4f6fa;
-  --mc-veil: rgba(16, 22, 42, 0.82);
-}
 
 /* ── Rejilla de la pantalla ─────────────────────────────────────────── */
 .page {
@@ -476,55 +367,11 @@
 .categoryHeader:focus-visible { outline: none; box-shadow: var(--ring); }
 .categoryChevron { transition: transform 0.2s; }
 .categoryChevronCollapsed { transform: rotate(-90deg); }
-
-/* El catálogo del instituto: rejilla que se rellena sola con celdas de
-   ~76 px. Con `repeat(3, 1fr)` fijo, una etiqueta larga ("Puerta de baño")
-   se partía en tres renglones de 8.5 px. */
+/* Solo el hueco: la rejilla la pone la paleta compartida (`FloorPalette`),
+   que se acomoda sola con `--fp-palette-min`. Dejar aquí un `display:grid`
+   la metería dentro de una celda y volvería a una columna. */
 .categoryGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
-  gap: 6px;
-  padding: 8px 8px 6px;
-}
-.elementCard {
-  background: var(--mc-surface-2);
-  border: 1px solid var(--mc-line);
-  border-radius: 9px;
-  padding: 7px 4px 6px;
-  cursor: grab;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  color: var(--mc-text-2);
-  transition: background 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
-}
-.elementCard:hover {
-  background: var(--mc-brand-soft);
-  border-color: var(--mc-brand-line);
-  color: var(--mc-text-1);
-  transform: translateY(-1px);
-  box-shadow: var(--mc-shadow-2);
-}
-.elementCard:active { cursor: grabbing; transform: scale(0.97); }
-.elementCard svg { display: block; }
-.elementCardLabel {
-  font-size: 9px;
-  font-weight: 600;
-  color: inherit;
-  text-align: center;
-  line-height: 1.15;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.elementCardChairCount {
-  font-size: 8px;
-  color: var(--mc-brand);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  padding: 6px 8px 8px;
 }
 
 /* ── El piso ────────────────────────────────────────────────────────── */
@@ -634,38 +481,13 @@
 }
 .stageNoteBtn:hover { filter: brightness(1.08); }
 
-/* Las baldosas. La losa que las sostiene y las sombras de contacto viven
-   en floor-look.module.css, junto a los componentes que las dibujan. */
-.tile { stroke: var(--mc-floor-line); stroke-width: 0.5; }
-.tileA { fill: var(--mc-floor-a); }
-.tileB { fill: var(--mc-floor-b); }
-
-.elementSelected {
-  stroke: var(--mc-brand);
-  stroke-width: 2;
-  stroke-dasharray: 5 3;
-  fill: var(--mc-brand-soft);
-}
-
-/* 🔴 El piso es CLARO en los dos modos, así que la etiqueta es tinta
-   oscura con halo claro SIEMPRE. En oscuro esta etiqueta era violeta
-   clara con contorno casi negro: sobre baldosas claras, ilegible. */
-.chairLabel {
-  font-size: 11px;
-  font-weight: 700;
-  fill: var(--mc-label-ink);
-  paint-order: stroke;
-  stroke: var(--mc-label-halo);
-  stroke-width: 3.5;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-.chairLabelLoose {
-  fill: #b3261e;
-}
-
-.elementMoving { opacity: 0.5; }
-.ghostElement { opacity: 0.45; pointer-events: none; }
+/* ⚠️ AQUÍ YA NO SE DIBUJA EL PISO. Las baldosas, la losa que las sostiene,
+   las sombras de contacto, la etiqueta del sillón, la marca de selección y
+   el fantasma del arrastre los pintan `IsoTiles`/`IsoElement`/`IsoGhost` y
+   `FloorSlab`/`FloorShadows` de src/components/floor-plan/, con las mismas
+   reglas que el plano del instituto. Lo que sigue mandando en el color es
+   esta pantalla: la traducción `--mc-*` → `--fp-*` vive en
+   ./components/floor-tokens.module.css. */
 
 /* Tooltip del hover en modo Edición. */
 .hoverTipBox {
@@ -676,6 +498,74 @@
   font-size: 10px;
   font-weight: 700;
   fill: #ffffff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LO QUE FLOTA SOBRE EL PISO — solo el HUECO, no el aspecto
+
+   Los contadores, la leyenda y la tarjeta del sillón los pinta la capa
+   compartida (src/components/floor-plan/). Aquí se decide únicamente
+   DÓNDE se colocan sobre el lienzo, que es lo que no puede saber una
+   pieza que también vive dentro de una columna del instituto.
+
+   Se colocan contra `.canvasStage` —la caja del PISO— y no contra el
+   hueco entero, que En Vivo incluye la línea de tiempo de abajo.
+   ═══════════════════════════════════════════════════════════════════════ */
+.floatCounters {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-line);
+  box-shadow: var(--mc-shadow-2);
+}
+
+.floatLegend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 12;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 9px 12px;
+  border-radius: var(--mc-radius);
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-line);
+  box-shadow: var(--mc-shadow-1);
+}
+
+/* El botón que abre el expediente desde la tarjeta del sillón. Es del
+   DENTAL —el instituto no tiene expediente que abrir desde el piso—, así
+   que su color vive aquí y no en la capa compartida. */
+.cardRecordBtn {
+  align-self: flex-start;
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--mc-radius-sm);
+  border: 1px solid var(--mc-brand-line);
+  background: var(--mc-brand-soft);
+  color: var(--mc-brand);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cardRecordBtn:hover {
+  border-color: var(--mc-brand);
+}
+
+.cardRecordBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 /* ── Panel de propiedades ───────────────────────────────────────────── */
@@ -721,14 +611,6 @@
   font-size: 10.5px;
   color: var(--mc-text-3);
   font-family: var(--font-mono, ui-monospace, monospace);
-}
-.propLabel {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--mc-text-3);
-  margin-bottom: 5px;
 }
 .propGroup { margin-bottom: 14px; }
 .propInput,

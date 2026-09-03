@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, ReactElement } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { ArrowLeft, RotateCw, Save, Trash2, Undo2 } from "lucide-react";
 import { eduRequest } from "@/components/edu/edu-http";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
-import { C as ISO_C, fromScreen, toScreen } from "@/lib/floor-plan/iso";
+import { C as ISO_C, fromScreen } from "@/lib/floor-plan/iso";
 import type { LayoutElement, Rotation } from "@/lib/floor-plan/element-types";
 import {
   EDU_PLANO_GRID_MAX,
@@ -18,25 +18,43 @@ import {
   type EduPlanoChair,
   type EduPlanoLayout,
 } from "@/lib/edu/plano-core";
+// ── La capa visual COMPARTIDA (src/components/floor-plan) ──────────────
+import { IsoElement, IsoGhost, IsoTiles } from "@/components/floor-plan/iso-canvas";
+import {
+  FloorBar,
+  FloorCanvasBox,
+  FloorPalette,
+  FloorPaletteItem,
+  FloorPanel,
+  FloorPanelGroup,
+  FloorPanelHelp,
+  FloorPanelTitle,
+  FloorWorkbench,
+} from "@/components/floor-plan/floor-chrome";
 
 /**
  * /instituto/clinica/plano — ACOMODAR EL PISO (solo DIRECCIÓN).
  *
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 EL CATÁLOGO Y LA MATEMÁTICA SON DEL DENTAL; LA PANTALLA, NO
+ * 🔴 EL CATÁLOGO, LA MATEMÁTICA Y AHORA TAMBIÉN EL DIBUJO SON COMPARTIDOS
  *
  * Se IMPORTAN `getCatalogForClinic` (el catálogo isométrico: paredes,
- * sillón, gabinete, mostrador, baño, mobiliario) y `toScreen`/`fromScreen`
- * de src/lib/floor-plan/. Son funciones puras que devuelven cadenas SVG y
- * pares de coordenadas: el mismo dibujo que pinta el editor del dental y el
- * mismo que después lee el mundo 3D.
+ * sillón, gabinete, mostrador, baño, mobiliario) y `fromScreen` de
+ * src/lib/floor-plan/, y el DIBUJO entero —baldosas, mueble, etiqueta,
+ * fantasma, marca de selección— de src/components/floor-plan/. Ese último
+ * trozo lo pintaban por separado esta pantalla, el editor del dental y el
+ * televisor de /live: tres bucles calcados sobre las mismas cadenas SVG.
  *
- * ⛔ Lo que NO se importa es su PANTALLA
- * (src/app/dashboard/clinic-layout/layout-client.tsx, 1 538 renglones):
- * está atada a sus rutas (`/api/clinic-layout`), a sus Resources, a su
- * modo En Vivo, a su optimizador y a su i18n. Aquí hace falta otra cosa —
- * ligar cada sillón a un `EduChair` de ESTA sede— y eso es un editor
- * propio de trescientos renglones, no un fork de mil quinientos.
+ * ⛔ Lo que sigue SIN compartirse es el COMPORTAMIENTO del editor
+ * (src/app/dashboard/clinic-layout/layout-client.tsx, 1 500 renglones):
+ * está atado a sus rutas (`/api/clinic-layout`), a sus Resources, a su
+ * modo En Vivo, a su optimizador y a su i18n; y arrastra con
+ * `requestAnimationFrame` sobre un `viewBox` fijo mientras aquí el SVG se
+ * dibuja a su tamaño real y el hueco se desplaza solo. Son dos formas
+ * legítimas de resolver lo mismo y unificarlas sería reescribir el editor
+ * que once clínicas usan hoy. Aquí hace falta además otra cosa —ligar cada
+ * sillón a un `EduChair` de ESTA sede— y eso es un editor propio de
+ * trescientos renglones, no un fork de mil quinientos.
  *
  * ── LO QUE ESTA PANTALLA TIENE QUE HACER BIEN ──────────────────────────
  * 🔴 La liga sillón↔unidad. Un elemento "sillón" sin `resourceId` es un
@@ -202,8 +220,10 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
       }
 
       // Clic en el fondo con la herramienta de mover: deseleccionar.
+      // ⚠️ `data-element-id` lo pone la capa compartida (IsoElement) y es
+      // el MISMO atributo que usa el editor del dental para lo mismo.
       const target = e.target as Element;
-      if (!target.closest("[data-el]")) setSelectedId(null);
+      if (!target.closest("[data-element-id]")) setSelectedId(null);
     },
     [aCelda, cambiar, dentro, elements, herramienta, moviendo],
   );
@@ -356,27 +376,12 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
     return m;
   }, [elements]);
 
-  const celdas: ReactElement[] = [];
-  for (let r = 0; r < grid.rows; r++) {
-    for (let c = 0; c < grid.cols; c++) {
-      const A = toScreen(c, r);
-      const B = toScreen(c + 1, r);
-      const D = toScreen(c + 1, r + 1);
-      const E = toScreen(c, r + 1);
-      celdas.push(
-        <polygon
-          key={`t${c}-${r}`}
-          className={`edu-planoed__tile edu-planoed__tile--${(c + r) % 2 === 0 ? "a" : "b"}`}
-          points={`${A[0]},${A[1]} ${B[0]},${B[1]} ${D[0]},${D[1]} ${E[0]},${E[1]}`}
-        />,
-      );
-    }
-  }
+  const fantasma = herramienta.tipo === "poner" ? catalogo.byKey.get(herramienta.key) : undefined;
 
   return (
     <div className="edu-planoed">
       {/* ── Barra ──────────────────────────────────────────────────── */}
-      <div className="edu-planoed__bar">
+      <FloorBar>
         <Link className="edu-btn edu-btn--ghost edu-btn--sm" href={`/instituto/clinica?sede=${encodeURIComponent(campus.id)}`}>
           <ArrowLeft size={14} aria-hidden="true" /> Volver al plano en vivo
         </Link>
@@ -422,7 +427,7 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
             <Save size={14} aria-hidden="true" /> {guardando ? "Guardando…" : "Guardar el plano"}
           </button>
         </div>
-      </div>
+      </FloorBar>
 
       {error && (
         <div className="edu-banner edu-banner--warn" role="alert">
@@ -441,55 +446,37 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
             : "Este plano todavía es el automático: guárdalo para hacerlo tuyo."}
       </p>
 
-      <div className="edu-planoed__cuerpo">
+      <FloorWorkbench>
         {/* ── Catálogo ────────────────────────────────────────────── */}
-        <aside className="edu-planoed__catalogo">
-          <p className="edu-planoed__ctitulo">Elementos</p>
-          <p className="edu-planoed__cayuda">
+        <FloorPanel as="aside" scroll className="edu-planoed__columna">
+          <FloorPanelTitle>Elementos</FloorPanelTitle>
+          <FloorPanelHelp>
             Elige uno y haz clic en el piso para ponerlo. <kbd>R</kbd> gira,{" "}
             <kbd>Supr</kbd> borra, <kbd>Esc</kbd> suelta.
-          </p>
+          </FloorPanelHelp>
 
           {catalogo.grouped.map((grupo) => (
-            <div className="edu-planoed__grupo" key={grupo.id}>
-              <p className="edu-planoed__glabel">{grupo.label}</p>
-              <div className="edu-planoed__gitems">
+            <FloorPanelGroup key={grupo.id} label={grupo.label}>
+              <FloorPalette>
                 {grupo.types.map((t) => {
                   const activo = herramienta.tipo === "poner" && herramienta.key === t.key;
                   return (
-                    <button
+                    <FloorPaletteItem
                       key={t.key}
-                      type="button"
-                      className={`edu-planoed__item${activo ? " edu-planoed__item--on" : ""}`}
+                      icon={t.icon}
+                      label={t.label}
+                      active={activo}
                       onClick={() =>
                         setHerramienta(activo ? { tipo: "mover" } : { tipo: "poner", key: t.key })
                       }
-                      title={t.label}
-                    >
-                      {/* ⚠️ `icon` del catálogo es un FRAGMENTO de SVG (rects
-                          y paths sueltos), no un `<svg>` completo: hay que
-                          envolverlo con su viewBox 40×40 o el navegador no
-                          pinta nada. Es exactamente lo que hace el editor
-                          del dental con estas mismas cadenas. */}
-                      <svg
-                        className="edu-planoed__icono"
-                        viewBox="0 0 40 40"
-                        width={34}
-                        height={34}
-                        aria-hidden="true"
-                      >
-                        <g dangerouslySetInnerHTML={{ __html: t.icon }} />
-                      </svg>
-                      <span className="edu-planoed__ilabel">{t.label}</span>
-                    </button>
+                    />
                   );
                 })}
-              </div>
-            </div>
+              </FloorPalette>
+            </FloorPanelGroup>
           ))}
 
-          <div className="edu-planoed__grupo">
-            <p className="edu-planoed__glabel">Tamaño del piso</p>
+          <FloorPanelGroup label="Tamaño del piso">
             <div className="edu-planoed__tam">
               <label>
                 Ancho
@@ -520,11 +507,11 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
                 />
               </label>
             </div>
-          </div>
-        </aside>
+          </FloorPanelGroup>
+        </FloorPanel>
 
         {/* ── Lienzo ──────────────────────────────────────────────── */}
-        <div className="edu-planoed__lienzo">
+        <FloorCanvasBox className="edu-planoed__lienzo">
           <svg
             ref={svgRef}
             className={`edu-planoed__svg${herramienta.tipo === "poner" ? " edu-planoed__svg--poniendo" : ""}`}
@@ -535,7 +522,7 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
             onMouseLeave={() => setGhost(null)}
             onClick={onLienzoClick}
           >
-            <g>{celdas}</g>
+            <IsoTiles cols={grid.cols} rows={grid.rows} />
 
             {ordenados.map((el) => {
               const td = catalogo.byKey.get(el.type);
@@ -543,89 +530,75 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
               const enMovimiento = moviendo?.id === el.id;
               const col = enMovimiento ? moviendo.col : el.col;
               const row = enMovimiento ? moviendo.row : el.row;
-              const [sx, sy] = toScreen(col, row);
               const esSillon = eduPlanoEsSillon(el.type);
               const suelto = esSillon && !el.resourceId;
               const colgante = esSillon && !!el.resourceId && !chairs.some((c) => c.id === el.resourceId);
-              const etiqueta = esSillon ? el.name ?? "Sin ligar" : null;
               return (
-                <g
+                <IsoElement
                   key={el.id}
-                  data-el={el.id}
-                  className={`edu-planoed__el${enMovimiento ? " edu-planoed__el--mov" : ""}`}
+                  elementId={el.id}
+                  type={td}
+                  col={col}
+                  row={row}
+                  rotation={el.rotation}
+                  moving={enMovimiento}
+                  selected={el.id === selectedId}
+                  label={
+                    esSillon
+                      ? colgante
+                        ? "Sillón que ya no existe"
+                        : el.name ?? "Sin ligar"
+                      : null
+                  }
+                  labelBad={suelto || colgante}
                   onMouseDown={(e) => onElementoDown(e, el.id)}
-                >
-                  {/* ⚠️ La rotación envuelve SOLO al dibujo. El editor del
-                      dental gira el grupo entero y con él la etiqueta, que a
-                      90° se lee de lado; aquí el nombre del sillón y la marca
-                      de selección se quedan derechos. */}
-                  <g
-                    transform={el.rotation !== 0 ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
-                    dangerouslySetInnerHTML={{ __html: td.draw(sx, sy, {}) }}
-                  />
-                  {etiqueta && (
-                    <text
-                      x={sx + ISO_C / 2}
-                      y={sy - 66}
-                      textAnchor="middle"
-                      className={`edu-planoed__etiqueta${suelto || colgante ? " edu-planoed__etiqueta--mala" : ""}`}
-                    >
-                      {colgante ? "Sillón que ya no existe" : etiqueta}
-                    </text>
-                  )}
-                  {el.id === selectedId && (
-                    <circle cx={sx} cy={sy} r={10} className="edu-planoed__sel" />
-                  )}
-                </g>
+                />
               );
             })}
 
-            {herramienta.tipo === "poner" && ghost && dentro(ghost.col, ghost.row) && (
-              <g
-                className="edu-planoed__ghost"
-                dangerouslySetInnerHTML={{
-                  __html:
-                    catalogo.byKey.get(herramienta.key)?.draw(...toScreen(ghost.col, ghost.row), {}) ??
-                    "",
-                }}
-              />
+            {fantasma && ghost && dentro(ghost.col, ghost.row) && (
+              <IsoGhost type={fantasma} col={ghost.col} row={ghost.row} />
             )}
           </svg>
-        </div>
+        </FloorCanvasBox>
 
         {/* ── Propiedades y sillones ──────────────────────────────── */}
-        <aside className="edu-planoed__props">
+        <FloorPanel as="aside" scroll className="edu-planoed__columna">
           {seleccionado ? (
             <>
-              <p className="edu-planoed__ctitulo">
+              <FloorPanelTitle>
                 {catalogo.byKey.get(seleccionado.type)?.label ?? seleccionado.type}
-              </p>
+              </FloorPanelTitle>
 
               {eduPlanoEsSillon(seleccionado.type) && (
-                <label className="edu-planoed__campo">
-                  <span>Unidad de esta sede</span>
-                  <select
-                    className="edu-input edu-input--sm"
-                    value={seleccionado.resourceId ?? ""}
-                    onChange={(e) => ligar(seleccionado.id, e.target.value || null)}
-                  >
-                    <option value="">— sin ligar —</option>
-                    {chairs.map((c) => {
-                      const ocupadoPor = usados.get(c.id);
-                      const libre = ocupadoPor === undefined || ocupadoPor === seleccionado.id;
-                      return (
-                        <option key={c.id} value={c.id} disabled={!libre}>
-                          {c.name}
-                          {libre ? "" : " (ya está en el plano)"}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <span className="edu-planoed__ayuda">
+                <>
+                  <label className="edu-planoed__campo">
+                    <span>Unidad de esta sede</span>
+                    <select
+                      className="edu-input edu-input--sm"
+                      value={seleccionado.resourceId ?? ""}
+                      onChange={(e) => ligar(seleccionado.id, e.target.value || null)}
+                    >
+                      <option value="">— sin ligar —</option>
+                      {chairs.map((c) => {
+                        const ocupadoPor = usados.get(c.id);
+                        const libre = ocupadoPor === undefined || ocupadoPor === seleccionado.id;
+                        return (
+                          <option key={c.id} value={c.id} disabled={!libre}>
+                            {c.name}
+                            {libre ? "" : " (ya está en el plano)"}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                  {/* La ayuda va FUERA del <label>: es un párrafo, y un
+                      párrafo dentro de una etiqueta no es HTML válido. */}
+                  <FloorPanelHelp>
                     Un sillón sin ligar se dibuja, pero <strong>no se pinta en vivo</strong>: el
                     plano no sabe a qué unidad mirar.
-                  </span>
-                </label>
+                  </FloorPanelHelp>
+                </>
               )}
 
               <div className="edu-planoed__botones">
@@ -638,19 +611,19 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
               </div>
             </>
           ) : (
-            <p className="edu-planoed__ayuda">
+            <FloorPanelHelp>
               Haz clic en un elemento del piso para girarlo, borrarlo o ligarlo a su unidad.
-            </p>
+            </FloorPanelHelp>
           )}
 
-          <div className="edu-planoed__faltan">
-            <p className="edu-planoed__ctitulo">Sillones de {campus.name}</p>
+          <FloorPanelGroup divider>
+            <FloorPanelTitle>Sillones de {campus.name}</FloorPanelTitle>
             {chairs.length === 0 ? (
-              <p className="edu-planoed__ayuda">
+              <FloorPanelHelp>
                 Esta sede no tiene unidades activas. Se dan de alta en Sillones.
-              </p>
+              </FloorPanelHelp>
             ) : revision.sinDibujar.length === 0 ? (
-              <p className="edu-planoed__ayuda">Están los {chairs.length} en el plano. </p>
+              <FloorPanelHelp>Están los {chairs.length} en el plano.</FloorPanelHelp>
             ) : (
               <ul className="edu-planoed__lista">
                 {revision.sinDibujar.map((c) => (
@@ -667,9 +640,9 @@ export function EduPlanoEditor({ campus, chairs, layout }: EduPlanoEditorProps) 
                 ))}
               </ul>
             )}
-          </div>
-        </aside>
-      </div>
+          </FloorPanelGroup>
+        </FloorPanel>
+      </FloorWorkbench>
     </div>
   );
 }

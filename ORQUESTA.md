@@ -1,3 +1,204 @@
+## [RESCATE 2-SEP] — Cuatro piezas sueltas del reinicio, en una sola rama ✅ (2026-09-02) · rama `integ/rescate-2sep` → PR contra main, SIN mergear
+
+Un reinicio dejó fuera de main el trabajo de un día: dos worktrees sin commitear y dos ramas
+sin PR. Esto lo junta todo en una rama, sin perder nada y sin revertir nada de lo que main
+ganó mientras tanto.
+
+### QUÉ SE RESCATÓ
+
+| # | Pieza | De dónde venía | Cómo entró |
+|---|---|---|---|
+| A | Home admin rediseñado + la gráfica de ingresos que cuadra con el KPI | repo principal, SIN COMMITEAR | primer commit de la rama |
+| B | El look del televisor de recepción (/live/[slug]) | worktree `live-publica-look`, 15 archivos SIN COMMITEAR | commit de rescate + porte |
+| C | La capa visual del plano sale a `src/components/floor-plan/` | rama `feat/clinica-visual-plano` | cherry-pick |
+| D | La dirección firma sus propias autorizaciones | rama `fix/edu-direccion-autofirma` | merge |
+
+Se borraron de la raíz del repo 6 `clipboard-*.png` que no eran de nadie.
+
+### LO PRIMERO: ASEGURAR LO SUELTO
+
+El worktree `live-publica-look` tenía 15 archivos sin commitear y CERO commits: un `git
+checkout` de más y no había forma de recuperarlos. Se commitearon TAL CUAL en su propia rama
+(`feat/live-publica-look`, commit `3fe6b235`) antes de tocar nada más. Ese commit no se
+mergea: es el respaldo. Lo que llega a esta rama es el porte, encima de la capa nueva.
+
+### 🔴 EL SUPUESTO QUE NO ERA: NO HABÍA BORRADO-VS-MODIFICADO
+
+La instrucción avisaba de un conflicto borrado-vs-modificado en `floor-look.tsx`. No lo hubo,
+y por una razón que cambia el trabajo: **`floor-look.tsx` no existe en la rama del plano ni en
+su base — nació en MAIN**, con el PR del 3D (`0e49c7ec`, `feat/clinica-visual-look`).
+
+Lo que había en realidad son DOS ramas que resolvieron el MISMO problema en paralelo, sin
+saber una de otra:
+
+  · `feat/clinica-visual-look` → `floor-look.tsx` (losa, sombras, contadores, leyenda,
+    tarjeta del sillón). **Ya estaba en main.**
+  · `feat/clinica-visual-plano` → `src/components/floor-plan/` (la capa compartida con el
+    instituto: hoja de estilos, `floor-chrome.tsx`, `iso-canvas.tsx`).
+
+Un merge las habría dejado a las dos vivas, pintando lo mismo de dos formas. Se resolvió como
+pedía la instrucción: **manda `src/components/floor-plan/`, y `floor-look.tsx` y su hoja se
+BORRAN** (837 líneas). Lo que floor-look tenía y la capa compartida no —la losa con grosor y
+las sombras de contacto— subió a la capa, en `floor-plan/floor-ground.tsx`.
+
+### Y LA OTRA TRAMPA: LA RAMA SQUASHEADA CONFLICTABA CONSIGO MISMA
+
+`feat/clinica-visual-plano` traía 3 commits, pero los 2 primeros son los de
+`feat/edu-clinica-plano`, que main ya tenía **squasheados** (PR #166). Sin historia común, un
+`git merge` daba 13 conflictos —cinco de ellos `add/add` de archivos idénticos— por contenido
+que ya estaba bien en main. Se comprobó primero que main y `9dc0751f` son idénticos en todas
+las rutas del plano (`git diff` vacío) y se hizo **cherry-pick del único commit nuevo**
+(`c2cf5a87`). De 13 conflictos se pasó a 5, ninguno en `schema.prisma`.
+
+### 🔴 UN FALLO REAL DEL COMMIT PORTADO: EL PISO SIN COLOR EN EL DENTAL
+
+`c2cf5a87` se escribió contra el instituto, que monta el lienzo dentro de `FloorCanvasBox` —y
+ahí es donde vive la clase `.fp`, que traduce los `--fp-*` del anfitrión a los `--fpc-*` que
+leen `.tile`, `.chairLabel` y `.selection`—. El editor del dental NO usa esa caja: dibuja el
+SVG a pelo. Aplicado tal cual, en Mi Clínica Visual las baldosas se quedaban **sin relleno** y
+la etiqueta del sillón sin halo.
+
+Se arregló en la capa, no en el anfitrión: `IsoTiles`, `IsoElement`, `IsoGhost`, `FloorSlab` y
+`FloorShadows` llevan ahora `.fp` **en su propio `<g>`**. Son variables CSS: heredan hacia
+dentro del SVG sin pintar nada, así que el dibujo tiene color en cualquier pantalla, esté o no
+dentro de `FloorCanvasBox`.
+
+### CÓMO SE PORTÓ EL LOOK (pieza B) — qué se conservó y qué NO
+
+**El aspecto se conserva entero. Lo que se tiró son las copias.** El trabajo del worktree
+resolvía, por su cuenta, tres cosas que la capa compartida ya resuelve:
+
+| Lo que traía `live-publica-look` | Dónde vive ahora | Qué pasó |
+|---|---|---|
+| `FloorTiles` (baldosas memoizadas) | `iso-canvas.tsx` → `IsoTiles` | ya estaba, y también memoizado |
+| `ChairLabel` + `FloorFurniture` | `iso-canvas.tsx` → `IsoElement` | ya estaba (`label`, `labelBad`, `drawOpts`) |
+| `FloorSlab`, `FloorShadows` | **`floor-plan/floor-ground.tsx`** (nuevo) | SUBIERON a la capa, verbatim |
+| `LiveCounters` | `floor-chrome.tsx` → `FloorCounters` | ya soportaba `detail` y `ariaLabel` |
+| `FloorLegend(mode)` | `floor-chrome.tsx` → `FloorLegend(items)` | se le añadió `title` opcional |
+| `ChairCard` | **`clinic-layout/components/chair-card.tsx`** (nuevo) | rehecha sobre `FloorPopCard` y familia |
+| `floor-tokens.module.css` | igual, + el mapa `--fp-*` | **es la pieza clave, ver abajo** |
+
+**LO QUE SÍ SE PERDIÓ: nada del aspecto. Tres duplicados de código (`FloorTiles`,
+`ChairLabel`, `FloorFurniture`, ~200 líneas) que la capa compartida ya hacía igual o mejor.**
+La única diferencia visible que se buscó a propósito: la rotación del mueble ya **no gira la
+etiqueta ni el recuadro de selección** —a 90° el nombre del sillón se leía de lado—, que es un
+arreglo que la capa traía del instituto.
+
+**`floor-tokens.module.css` es lo que hace que el porte tenga sentido.** El worktree ya había
+visto el problema: el panel y el televisor pintan el MISMO piso y cada uno guardaba su copia
+de los colores. La hoja los saca a un solo sitio (`.mcTokens`) y aquí además **traduce la
+paleta del dental a los `--fp-*` que lee la capa compartida**. Un solo archivo manda en el
+color de las dos pantallas, en claro y en oscuro. El bloque `--fp-*` NO se repite en el bloque
+oscuro a propósito: cada uno apunta a un `--mc-*`, y la sustitución se resuelve en el
+elemento, donde el bloque oscuro ya los volvió a declarar.
+
+Consecuencia: `clinic-layout.module.css` pierde 150 líneas de tokens y `live-public.module.css`
+pierde su segunda paleta (violeta y blancos propios) — el televisor pasa a verse **igual que el
+panel**, que era el objetivo. `/live/layout.tsx` enciende `.mcTokens` para las cuatro
+superficies del segmento (la página, su boundary, el gate de contraseña y el recorrido 3D), y
+tres colores escritos a mano (`#EF4444`, `#4A90E2`) pasan a token.
+
+Además el televisor **estrena lo que solo tenía el panel**: la losa, las sombras de contacto,
+el nombre del sillón sobre el mueble, el sillón dibujado como ocupado, los contadores por
+estado y la leyenda (en modo `public`: los mismos colores, sin prometer un clic que en una
+sala de espera nadie va a dar).
+
+### LO QUE SE DEFENDIÓ DE MAIN (y el porte NO revierte)
+
+`c2cf5a87` es anterior a los PR #171 y #172 del 3D. Al resolver los conflictos se conservó
+**todo** lo que main ganó después:
+
+  · el mundo 3D de En Vivo (`piso3D`, `LiveWorld`, el botón 3D ↔ 2D, `elegirSillon3D`);
+  · la tarjeta del sillón y `pickedCard`, con su botón al expediente;
+  · el aviso de "el piso muestra AHORA" cuando alguien viaja por la línea de tiempo;
+  · el `viewBox` calculado con `isoViewBox` (el commit portado lo tenía a mano, `0 0 1920 1080`);
+  · la etiqueta en ROJO del sillón sin ligar → pasa a `labelBad` de la capa compartida;
+  · **el estado escrito en el idioma del panel.** El commit portado reescribía `live-mode.tsx`
+    con `STATUS_LABELS`, que es un objeto en español: una clínica en inglés habría leído
+    "Ocupado". Se conservó el `t(STATE_LABEL_KEY[…])` de main.
+  · **el resaltado del sillón elegido** (clic en el mundo 3D → su tarjeta se marca y se trae a
+    la vista). Para no perderlo Y usar igual la capa compartida, `FloorChairCard` estrena dos
+    props opcionales: `highlighted` y `cardRef`. Aditivas — el instituto no se entera.
+
+Los contadores del commit portado iban en la barra de arriba; main ya los pinta en el panel de
+la derecha. Se quedan donde main los puso (dos juegos a la vez se taparían), pero **pintados
+por `FloorCounters`**, la pieza compartida. Con eso `container-type: inline-size` no entra en
+la barra superior, que es donde habría atrapado a los `position: fixed` de dentro.
+
+### `src/app/dev-live-look/` — QUÉ SE HIZO
+
+Es un banco de pruebas: monta el `LivePublicClient` REAL con el plano de demostración y citas
+de mentira, sustituyendo `window.fetch`, para poder VER el televisor sin base de datos, sin
+clínica y sin sesión. Vive bajo `src/app/`, así que Next lo publicaría como la ruta
+**/dev-live-look de producción** — una pantalla con datos falsos y una clínica inventada,
+servida a cualquiera que teclee la URL.
+
+**Se commitea (es la única forma cómoda de mirar el televisor) y se BLOQUEA, no se mueve:**
+
+```tsx
+if (process.env.NODE_ENV === "production") notFound();
+```
+
+La guardia es lo PRIMERO del componente de servidor: en el despliegue devuelve el 404 de
+siempre, no se construye ni un dato de mentira y el arnés ni siquiera se monta — así que el
+`window.fetch` que sustituye tampoco llega a tocarse. Se prefirió bloquear a sacarlo de
+`src/app/`: fuera de ahí deja de ser una ruta y el banco de pruebas no se puede usar, que es
+justo para lo que existe. En `npm run dev` sigue abriéndose en `/dev-live-look` (y `?dark=1`).
+
+Se le quitó además la sonda que montaba la raíz del panel para leer los tokens: ahora los
+tokens son una hoja propia y el layout de /live ya los enciende.
+
+### GATES
+
+  · **`git diff main -- prisma/schema.prisma` → VACÍO.** No se revierte ni un modelo. La rama
+    del plano estaba 147 líneas atrás (le faltaba el bloque del CRM que main añadió después);
+    el cherry-pick del único commit nuevo no toca el archivo, así que el bloque sigue entero.
+    `EduCampusLayout` ya estaba en main, idéntico.
+  · **SQL: no hay nada que aplicar.** `sql/edu-clinica-plano.sql` ya está en main y es
+    idéntico (`git diff` vacío, 182 líneas). La integración no necesita SQL nuevo.
+  · **Aislamiento por clínica/instituto:** las dos rutas de API que cambian son las del home
+    (pieza A) y las dos filtran por `invoice: { clinicId: session.clinic.id }`. En el
+    instituto, `autorizaciones.ts` saca el `institutionId` de `requireInstitution(ctx)`, que
+    **lanza 401** si falta en vez de dejarlo pasar: ningún `undefined` llega a un `where`. Las
+    rutas del plano no se tocaron. El enmascarado del paciente tampoco: `maskPatient` se llama
+    en los mismos sitios con la misma bandera, en el panel y en el televisor.
+
+### BUILD Y PRUEBAS
+
+```
+$env:NODE_OPTIONS="--max-old-space-size=8192"; npx next build   → EXIT 0
+npm run test:edu                                                → EXIT 0  (36 archivos, 1 221 pruebas)
+npm run test:home-revenue                                       → EXIT 0  (10 pruebas)
+npx tsc --noEmit                                                → limpio fuera de __tests__
+```
+
+Los errores de `tsc` que quedan están todos en `__tests__` y son los MISMOS que en main (Set
+sin `downlevelIteration`, un `rotation: number`, una comparación de literales): línea base sin
+tocar, y `next build` no mira los tipos de esa carpeta.
+
+Se reforzó la guardia de vocabulario del instituto para que vigile también el archivo nuevo de
+la capa (`floor-ground.tsx`): si a la capa compartida se le cuela "estudiante", "sede",
+"doctor" o "paciente", la prueba se pone roja. La otra guardia —"los dos verticales montan LA
+MISMA capa"— pasa de verdad: `live-mode.tsx` monta ahora `FloorChairCard`, no una copia.
+
+### QUÉ MIRAR ANTES DE MERGEAR
+
+  1. **/dashboard/clinic-layout, modo Armar** — que las baldosas tengan color (claro Y oscuro),
+     que la losa y las sombras sigan ahí, que el catálogo de la izquierda salga a TRES por fila
+     y que arrastrar un mueble no dé tirones.
+  2. **El mismo editor, En Vivo** — contadores arriba, leyenda abajo a la izquierda, y clic en
+     un sillón abre su tarjeta con el botón al expediente.
+  3. **El botón 3D ↔ 2D**, y que al clicar un sillón en el mundo su tarjeta del panel derecho
+     se marque y se traiga a la vista.
+  4. **/live/[slug]** — que se vea como el panel: losa, sombras, nombre del sillón, contadores
+     y leyenda. Y el toggle claro/oscuro de la propia pantalla.
+  5. **/live/[slug] con `Mostrar nombres` APAGADO** — que siga diciendo "J.P." y no el nombre
+     completo, en el panel de sillones, en el globo del ratón y sobre el piso.
+  6. **/instituto/clinica y /instituto/clinica/plano** — que se vean igual que antes: el
+     instituto solo hereda dos props opcionales nuevas que no usa.
+  7. **/dev-live-look en un despliegue** — tiene que dar 404.
+
+
 ═══════════════════════════════════════════════════════════════════════════
 ## [Live-Dental-3D · ARREGLOS] — El día de la clínica, el humo del plano y el piso cortado ✅ (2026-09-02) · rama `fix/live-fecha-local` → PR contra main
 ═══════════════════════════════════════════════════════════════════════════
@@ -386,6 +587,224 @@ son de no tener `DATABASE_URL` al prerenderizar en local). `tsc --noEmit` sin un
 error fuera de los `__tests__` que ya venían rotos en main. ESLint sin errores (solo los
 avisos de `t` y del `<img>` que ya estaban). `three.js` sigue en su propio trozo: el
 First Load de `/live/[slug]` es 118 kB y el de `/dashboard/clinic-layout` 166 kB.
+## [Institucional · AUTOFIRMA DE DIRECCIÓN] — la dirección puede firmar lo que ella misma mandó, y queda escrito ✅ (2026-09-02) · rama `fix/edu-direccion-autofirma` → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin tuberías) · `npm run test:edu` VERDE (36 archivos,
+1 210 pruebas, 0 fallos) · GUARDIA EXIT 0 (7 archivos, los 7 PROPIOS del vertical).
+SQL: **ninguno** — es lógica, no schema. Columnas nuevas: **ninguna**.
+Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Migración de datos: **ninguna**. Nada del dental se tocó.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · LA REGLA, EN UNA LÍNEA
+───────────────────────────────────────────────────────────────────────────
+
+**"Nadie firma su propia petición" sigue en pie para TODOS, menos para
+DIRECCIÓN.** La dirección puede autorizar, rechazar o pedir cambios sobre una
+petición que mandó ella, y esas peticiones entran al lote como cualquier otra.
+Para el DOCENTE —y para el alumno, y para caja, y para cualquier rol que el
+enum gane mañana— no cambió absolutamente nada: mismo bloqueo, mismo texto,
+misma exclusión del lote.
+
+**La exención va por ROL de la sesión, no por permiso.** `ctx.role ===
+"DIRECCION"`. Encenderle `autorizaciones.decide` a un docente desde la pantalla
+de permisos le da la bandeja, NO la exención. Si la exención colgara de esa
+casilla, la separación de funciones que sostiene la Ola 4 entera se apagaría
+con un clic y quien lo diera no tendría cómo saber que además la estaba
+apagando.
+
+**Por qué la dirección sí.** Es la única figura que responde por la escuela
+entera y la única que no tiene a nadie encima. Con la regla puesta también
+sobre ella, una petición suya sobre un estudiante SIN supervisor vigente se
+quedaba sin NADIE con alcance para firmarla, y la única salida que el producto
+sabía ofrecerle era que se nombrara un superior que no existe. Lo que sustituye
+a la regla no es nada: es la TRAZA.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · DÓNDE VIVÍA LA REGLA (tres veces) Y DÓNDE VIVE AHORA (una)
+───────────────────────────────────────────────────────────────────────────
+
+La regla estaba escrita TRES veces, con tres comparaciones sueltas
+`requestedById === ctx.eduUserId`, y las tres tenían que decir lo mismo para
+siempre. Ahora vive UNA vez en el módulo puro y los tres sitios la llaman:
+
+    ANTES (3 comparaciones sueltas)             AHORA (1 función, 3 llamadas)
+    ─────────────────────────────────────────   ─────────────────────────────────
+    autorizaciones.ts ~516 · la bandeja         eduApprovalBatchSkipFor(ctx, …)
+      const propia = a.requestedById === …        (bandeja Y lote, misma función)
+    autorizaciones.ts ~1080 · la individual     eduApprovalOwnBlocked(ctx, …)
+      if (actual.requestedById === …) throw       + EDU_APPROVAL_OWN_DENIED
+    autorizaciones.ts ~1306 · el lote           eduApprovalBatchSkipFor(ctx, …)
+      if (f.requestedById === …) skip
+
+Lo nuevo en `src/lib/edu/autorizaciones-core.ts` (puro, client-safe, sin
+Prisma), sección **5 bis · LO PROPIO**:
+
+    eduApprovalRoleSignsOwn(role)          ¿este ROL firma lo suyo? Solo DIRECCION.
+    eduApprovalIsOwn(actor, requestedById) ¿la mandó quien mira? — el HECHO
+    eduApprovalOwnBlocked(actor, req)      ¿se le cierra? — la CONSECUENCIA
+    eduApprovalBatchSkipFor(actor, fila)   el motivo del lote, con lo propio ya juzgado
+    EDU_APPROVAL_OWN_DENIED                el 409 del docente, palabra por palabra
+
+El HECHO y la CONSECUENCIA van separados a propósito: la dirección tiene que
+poder VER que una petición es suya —y que firmarla quedará marcado— sin que eso
+le cierre nada. Por eso la fila viaja con `own` (la mandé yo) **y** con
+`batchSkip` (por qué no la puedo firmar de golpe), que ya no son lo mismo.
+
+`eduApprovalBatchSkipFor` juzga lo propio ANTES que todo lo demás, igual que
+antes: a quien no puede firmarla no se le explica que además es una urgencia.
+Y no toca la Ola 14 — una receta propia de la dirección sigue fuera del lote
+por ser receta, y sigue pidiendo `recetas.issue` y la cédula.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LA TRAZA: LA MARCA, SIN COLUMNA NUEVA
+───────────────────────────────────────────────────────────────────────────
+
+Los dos ids ya se guardaban: `requestedById` al pedir y `decidedById` al
+decidir. La marca es la COMPARACIÓN de esos dos, derivada AL LEER:
+
+    eduApprovalSelfDecided({ requestedById, decidedById })  →  boolean
+    EDU_APPROVAL_SELF_SIGNED_MARK   "Firmada por Dirección sobre una petición propia"
+    EDU_APPROVAL_SELF_DECIDED_MARK  "Decidida por Dirección sobre una petición propia"
+    eduApprovalSelfMark(status)     elige una de las dos
+
+Una columna "fue autofirma" habría sido un TERCER dato que mantener de acuerdo
+con esos dos, y el día que discrepara ganaría el que nadie comprueba. Lo único
+que hizo falta fue pedir `decidedById: true` en el `APPROVAL_SELECT` que ya
+existía: cero consultas nuevas, cero migración.
+
+**La marca no miente sobre lo que pasó.** Un RECHAZO sobre una petición propia
+no dice "firmada": dice "decidida". `EXPIRED` sí dice "firmada" — la firma
+existió y fue suya, y luego caducó porque el contenido cambió.
+
+Dónde se lee (las tres superficies):
+
+    · LA BANDEJA (/instituto/autorizaciones) — `bandeja-screen.tsx`
+      · antes de firmar: a la dirección, sobre su propia petición pendiente,
+        una línea gris: «La mandaste tú. Puedes decidirla: quedará marcada
+        "Firmada por Dirección sobre una petición propia".» No es una
+        advertencia y no bloquea nada: es la traza que ella está eligiendo
+        dejar. Al docente esa línea NO le sale nunca.
+      · después: la marca, en la tarjeta, cuando la fila trae `selfDecided`.
+    · EL DETALLE / EL EXPEDIENTE DEL CASO — `caso-autorizaciones.tsx`
+      La lista de autorizaciones del caso ES el historial del expediente (no
+      hay otro). Debajo del "pedida por … · firmada por …" sale la marca en
+      ámbar (`.edu-auth-historial__marca`, clase nueva, tokens ya existentes).
+    · FIRMAR DESDE LA FICHA — `caso-acciones.tsx`
+      La propia de la dirección ya se ofrece con sus tres botones, con la misma
+      advertencia previa. La del docente sigue con «La mandaste tú: la firma tu
+      docente supervisor.»
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · LOS TEXTOS
+───────────────────────────────────────────────────────────────────────────
+
+    QUÉ                                    DOCENTE (y demás)   DIRECCIÓN
+    ─────────────────────────────────────  ──────────────────  ─────────────────
+    409 al decidir lo propio               igual, palabra por   ya no ocurre
+                                           palabra
+    motivo del lote "propia"               igual                ya no ocurre
+    nota del grupo ("no entran en el       igual                sin "o las
+    lote: son urgencias o recetas…")                            mandaste tú"
+    aviso en la tarjeta                    ninguno (como        línea gris con
+                                           antes)               la marca futura
+    marca en el caso y en la bandeja       no la puede          sí
+                                           producir
+
+El 409 del docente está FIJADO por una prueba con el texto completo: lo que
+cambió es a quién se le aplica la regla, no lo que lee el docente cuando le
+aplica.
+
+La nota del grupo dejó de decirle a la dirección "o las mandaste tú" porque ya
+no la frena nada; para el docente se conserva tal cual.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · LO QUE **NO** CAMBIÓ
+───────────────────────────────────────────────────────────────────────────
+
+· El ALCANCE. `eduVisibility(ctx, "cases")` decide qué filas se ven y se
+  firman, exactamente igual: un docente que ya rotó sigue sin ver (ni firmar)
+  lo de los estudiantes que entregó, y caja sigue sin ver nada.
+· El HASH. Se sigue recalculando al firmar sobre lo que el firmante tiene
+  delante, y una firma sobre contenido editado sigue caducando sola.
+· Las URGENCIAS y las RECETAS siguen fuera del lote para todo el mundo,
+  dirección incluida.
+· Los tres permisos de la Ola 4 y su reparto por rol: intactos.
+· El endpoint, la ruta y la forma de la respuesta: intactos. La fila del JSON
+  ganó dos booleanos (`own`, `selfDecided`).
+· Consecuencia que conviene saber: como la RECETA usa el mismo mecanismo de la
+  Ola 4, la dirección que proponga una receta ahora puede expedirla ella misma
+  —con su cédula, y con la marca puesta—. Sigue exigiendo `recetas.issue` y se
+  lee una por una.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · PRUEBAS (+8, todas en el archivo de la Ola 4)
+───────────────────────────────────────────────────────────────────────────
+
+`src/lib/edu/__tests__/edu-autorizaciones.test.ts`, sección **5 bis**. Sin base
+de datos, como todo el archivo: lo que se prueba son funciones puras, que es
+justo donde ahora vive la regla.
+
+    · la DIRECCIÓN decide una petición propia y queda registrada como tal
+    · el DOCENTE sigue sin poder, con EL MISMO mensaje (texto completo fijado)
+    · la exención va por ROL: un docente con "autorizaciones.decide" por
+      override NO queda exento
+    · SOLO la dirección está exenta — recorre EDU_ROLES entero, así que un rol
+      nuevo nace del lado bloqueado
+    · el LOTE de la dirección SÍ incluye las propias; el del docente NO
+    · una propia que además es urgencia o receta: al docente "propia", a la
+      dirección el otro motivo
+    · LA MARCA sale cuando decidedById === requestedById y NO sale cuando no
+      (ni con la fila sin decidir, ni con ids vacíos)
+    · la marca no miente: un rechazo dice "decidida", no "firmada"
+
+Total del vertical: **1 210 pruebas en 36 archivos**, verde.
+
+───────────────────────────────────────────────────────────────────────────
+### 7 · CÓMO SE VERIFICÓ, Y LO QUE **NO** SE PUDO VERIFICAR
+───────────────────────────────────────────────────────────────────────────
+
+    npm run build (sin tuberías)                      EXIT 0
+    npm run test:edu                                  EXIT 0 · 1 210 pruebas
+    EDU_GUARD_SHARED="ORQUESTA.md" node edu-guard.cjs EXIT 0 · 0 prohibidos
+    npx tsc --noEmit                                  sin errores nuevos
+
+**No se pudo hacer el recorrido con sesión real.** `getEduContext()` exige una
+sesión de **Supabase**, y en esta máquina no hay `.env` local ni proyecto de
+Supabase (el único `.env.e2e` apunta a producción, y `seed:edu-demo` no crea
+cuentas de Supabase a propósito). Entrar a `/instituto` como Dirección para
+mandar un plan y firmarlo habría pedido credenciales de producción.
+
+Lo que sí se hizo, que es la receta que ya usa este repo para ver UI detrás de
+un login que no se puede fabricar: **renderizar los componentes REALES**
+(`bandeja-screen.tsx` y `caso-autorizaciones.tsx`) con `react-dom/server`, con
+el `edu-theme.css` de verdad, servirlos por HTTP y mirarlos en Chrome — en
+claro y en oscuro. Lo que se vio, y quedó en la captura:
+
+    · DIRECCIÓN, petición SUYA: los tres botones ACTIVOS, la línea gris «La
+      mandaste tú. Puedes decidirla: quedará marcada "Firmada por Dirección
+      sobre una petición propia"», el botón de lote diciendo "Autorizar las 2
+      que se pueden" (la suya cuenta) y la nota del grupo SIN "las mandaste tú".
+    · DOCENTE, petición SUYA: nota del grupo con "…o las mandaste tú", su
+      propia fuera del lote. Idéntico a antes.
+    · EXPEDIENTE DEL CASO: "Firmada por Dirección sobre una petición propia"
+      bajo la autorizada, "Decidida por Dirección sobre una petición propia"
+      bajo la rechazada, y NADA bajo la que firmó el docente.
+
+Los archivos del render (`_render.tmp.tsx`, `_render-stub.tmp.ts`) se borraron
+antes de commitear; `git status` quedó con los 7 archivos del cambio y nada más.
+
+───────────────────────────────────────────────────────────────────────────
+### 8 · ARCHIVOS (7)
+───────────────────────────────────────────────────────────────────────────
+
+    src/lib/edu/autorizaciones-core.ts            +137  la regla y la marca, puras
+    src/lib/edu/autorizaciones.ts                  ~96  los tres puntos, ahora llamadas
+    src/lib/edu/__tests__/edu-autorizaciones.test.ts +148  sección 5 bis (+8 pruebas)
+    src/components/edu/autorizaciones/bandeja-screen.tsx  +41  aviso previo y marca
+    src/components/edu/autorizaciones/caso-autorizaciones.tsx +9  la marca del caso
+    src/components/edu/casos/caso-acciones.tsx     +20  firmar lo propio desde la ficha
+    src/app/instituto/edu-theme.css                +21  .edu-auth-historial__marca
 
 ═══════════════════════════════════════════════════════════════════════════
 ## [Institucional · INTEGRACIÓN 6] — La valoración, la ventana de la agenda y el plano de la clínica, en una sola rama ✅ (2026-09-02) · rama `edu/integracion6` → PR contra main, SIN mergear
@@ -35575,3 +35994,218 @@ el fantasma), y el clic sobre un sillón con citas reales. Se leyó el código y
    la puerta de una pantalla no es un cambio de aspecto.
 3. **No se migró ningún plano guardado.** `LayoutElement` y `LayoutMetadata` están igual: lo
    que hay en la base de las 11 clínicas se lee y se guarda exactamente como antes.
+═══════════════════════════════════════════════════════════════════════════
+## [Clinica-Visual-Plano] — "Mi Clínica Visual" del dental se ve como el plano del instituto, porque los dos pintan LA MISMA capa ✅ (2026-09-02) · rama `feat/clinica-visual-plano` (sale de `feat/edu-clinica-plano`, NO de main)
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npx next build` EXIT 0 (leído entero) · `npm run test:edu` EXIT 0 — 36 archivos, 1 191 pruebas
+SQL: **ninguno**. Variables de entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**.
+Migración de datos: **ninguna, y no hace falta** (ver el punto 4).
+
+OBJETIVO: llevar al dental los gráficos que estrenó el vertical institucional en su plano,
+en los DOS modos de /dashboard/clinic-layout (armar y en vivo), **sin copiarlos**. Copiar
+habría dejado dos pantallas gemelas que se separan en el primer arreglo y obligan a pedir el
+mismo cambio dos veces.
+
+═══════════════════════════════════════════════════════════════════════════
+### 1 · QUÉ SE EXTRAJO Y DÓNDE ESTÁ
+
+Carpeta NUEVA y neutral — ni `components/edu/` ni `app/dashboard/`:
+
+    src/components/floor-plan/floor-plan.module.css   la hoja (tokens, cajas, baldosas)
+    src/components/floor-plan/floor-chrome.tsx        29 piezas de presentación
+    src/components/floor-plan/iso-canvas.tsx          IsoTiles · IsoElement · IsoGhost
+
+Vive al lado de `src/lib/floor-plan/` (la matemática isométrica y el catálogo), que YA era
+compartido desde que el instituto montó su editor. Lo que faltaba era la mitad visual.
+
+**Lo que se fue ahí dentro** — con quién lo tenía antes:
+
+| Pieza | Lo tenía el instituto | Lo tenía el dental |
+|---|---|---|
+| Contadores por estado (libre/próximo/ocupado) | `edu-plano__count*` | **no existía** |
+| Pulso "En vivo · hh:mm:ss" con punto | `edu-plano__pulso` | `LiveClock` (reloj a secas) |
+| Ficha flotante de un sillón | `edu-plano__tarjeta*` (17 clases) | `LiveTooltip` |
+| Tarjeta por sillón + sus citas | `edu-plano__hsillon*` (14 clases) | `LiveStatusPanel` |
+| Leyenda de estados | `edu-plano__leyenda*` | `timelineLegend` |
+| Paleta de elementos del catálogo | `edu-planoed__item*` | `elementCard*` |
+| Paneles (catálogo, propiedades) | `edu-planoed__catalogo/props` | `sidebar` / `propertiesPanel` |
+| **Baldosas + mueble + etiqueta + fantasma + selección** | `edu-planoed__tile/el/etiqueta/ghost/sel` | `tile/chairLabel/ghostElement/elementSelected` |
+| Caja del mundo 3D (le impone el alto al visor) | `edu-plano__mundo` | — |
+
+🔴 El dibujo del piso estaba **TRES veces**: el editor del dental, el editor del instituto y
+el televisor `/live/[slug]`. Tres bucles calcados sobre las mismas cadenas SVG del catálogo.
+Ahora es uno.
+
+**Dos cosas se arreglaron al unificar**, y las dos se ven:
+
+  · **La rotación ya solo envuelve al dibujo.** El editor del dental giraba el grupo entero y
+    con él la etiqueta del sillón y la caja de selección: a 90° el nombre se leía de lado. El
+    instituto ya lo hacía bien; gana el que lo hacía bien. El mueble gira exactamente igual.
+  · **El suelo se memoiza.** 32×24 son 768 polígonos que el dental reconstruía en CADA render
+    —incluido cada fotograma de un arrastre—. `IsoTiles` va con `memo` sobre cuatro números.
+
+═══════════════════════════════════════════════════════════════════════════
+### 2 · QUÉ QUEDÓ PROPIO DE CADA UNO (y por qué)
+
+**a) El TEMA no se comparte.** La capa neutral no conoce un solo color: lee tokens `--fp-*`
+de su ancestro. Cada producto los mapea en UN bloque de su propia hoja:
+
+    .page       (clinic-layout.module.css) → --fp-accent: var(--blue)   [violeta]
+    .edu-plano  (edu-theme.css)            → --fp-accent: var(--edu-600) [azul]
+    .live       (live-public.module.css)   → el televisor, que no tiene panel detrás
+
+Así el instituto NO arrastra su azul al dental ni al revés. Lo que viaja es la forma.
+Del dental se mapean además las **baldosas translúcidas** y el color de la etiqueta: debajo
+del lienzo hay un degradado radial que se ve a través, y el gris opaco de la capa neutral lo
+habría apagado. El lienzo del dental queda como estaba.
+
+**b) El VOCABULARIO no se comparte** — está prohibido por prueba. `floor-chrome.tsx` no dice
+"estudiante" ni "doctor", ni "sede" ni "sucursal", ni "paciente". Todo texto entra por prop:
+el dental lo resuelve con su `t()` (es/en) y el instituto lo escribe en su castellano.
+`edu-clinica-plano.test.ts` lee los tres archivos compartidos SIN comentarios y se pone roja
+si alguna de esas nueve palabras aparece en el código.
+
+**c) El COMPORTAMIENTO no se comparte.** El arrastre del dental (RAF sobre un `viewBox` fijo,
+herramienta de mano, autoguardado, historial, optimizador, En Vivo) y el del instituto (SVG a
+tamaño real, el hueco se desplaza solo, guardar a mano, ligar sillón↔EduChair) siguen cada uno
+en su archivo. Unificarlos sería reescribir el editor que once clínicas usan hoy — que es
+exactamente lo que NO se pidió.
+
+**d) Piezas que se quedan donde estaban** porque solo tienen un dueño: la **línea de tiempo**
+por carriles y la **sala de espera** con su llamado por turnos son del dental (el instituto
+no las tiene); el **selector de sede**, el **aviso del respaldo de tarjetas** y la **liga
+sillón↔unidad** son del instituto.
+
+`edu-theme.css`: el bloque del plano pasa de **931 a 236 líneas**. Lo que queda es lo de
+arriba más el mapa de tokens.
+
+═══════════════════════════════════════════════════════════════════════════
+### 3 · QUÉ CAMBIA EN PANTALLA
+
+**MODO ARMAR** (se ve mejor, se comporta igual — colocar, mover, borrar, girar, deshacer,
+autoguardar, crear sillón al soltar, borrar sillón con su Resource: **sin tocar**):
+  · el catálogo son tarjetas con borde, hueco y estado activo, y ahora son `<button>`
+    (se llega con el tabulador y se ve el foco; antes eran `<div>` no enfocables);
+  · la etiqueta del sillón pasa de 10 px a 12 px, con halo, y **ya no gira** con el mueble;
+  · la marca de selección es un recuadro redondeado que tampoco gira;
+  · el catálogo y el panel de propiedades comparten las cabeceras y las ayudas.
+
+**MODO EN VIVO**, lo único NUEVO de verdad:
+  · **contadores por estado en la barra** (`4 libres · 1 próximo · 3 ocupados`), calculados
+    con los MISMOS `appointments` y el mismo `viewTime` que pintan los halos, así que no
+    pueden contradecir al piso ni cuando se viaja por la línea de tiempo. Cuentan solo los
+    sillones colocados y con unidad existente — el mismo criterio del panel derecho;
+  · el reloj es ahora el **pulso** (punto verde + "En vivo · hh:mm:ss");
+  · las tarjetas por sillón, la ficha flotante y la leyenda son las del instituto.
+
+♿ **Los tres colores de estado se separan en dos familias, a propósito.** Los vivos
+(`STATUS_COLORS`: #10B981 / #F59E0B / #EF4444) siguen rellenando halos y anillos DENTRO del
+SVG y no se han tocado. Para TEXTO se usan los oscuros del instituto (#15803d / #b45309 /
+#b3261e, ≥ 4.9:1 sobre blanco) y —esto es nuevo también para el instituto— una variante
+CLARA en modo oscuro: el verde #15803d sobre un panel #19203a daba 2.3:1 y no se leía.
+
+Responsive con `@container`, no `@media`: el banco de trabajo del editor (`.workbench`) y la
+barra del dental (`.topbar`, donde los contadores se retiran por debajo de 1 260 px antes que
+empujar fuera de pantalla el indicador de guardado). ⚠️ El contenedor de consulta se declara
+SOLO en esas dos cajas, que no tienen ningún `position: fixed` dentro: `.callBanner` de la
+sala de espera y `.tooltip` sí lo son, y un contenedor de consulta los habría encerrado.
+
+═══════════════════════════════════════════════════════════════════════════
+### 4 · EL FORMATO DEL PLANO ES EL MISMO EN LOS DOS. NO HAY NADA QUE MIGRAR.
+
+Se verificó antes de escribir código. `src/lib/edu/plano-core.ts` lo dice en su cabecera y el
+código lo confirma: el instituto guarda `LayoutElement[]` + `LayoutMetadata` de
+`src/lib/floor-plan/element-types.ts`, **byte a byte la misma forma** que `ClinicLayout` del
+dental, y sanea con el mismo `sanitizeElements`. Lo único que cambia de significado es
+`LayoutElement.resourceId`: en el dental apunta a un `Resource(kind=CHAIR)` y en el instituto
+a un `EduChair.id`.
+
+🔴 **Ningún plano guardado se toca.** Este trabajo no escribe en `ClinicLayout` ni cambia el
+`PUT /api/clinic-layout`: las once clínicas abren mañana el mismo JSON que guardaron ayer y
+ven el mismo piso, mejor pintado.
+
+═══════════════════════════════════════════════════════════════════════════
+### 5 · EL 3D COMPARTIDO: NO SE TOCÓ
+
+`Clinic3DClient.tsx`, `Clinic3DHud.tsx` y `live-layer.ts` quedan **exactamente** como los dejó
+`feat/edu-clinica-plano`. Se leyó el diff (+224/+51/+25) antes de decidir: todo lo que añadió
+el instituto cuelga de `isHosted`, que es `false` cuando no se pasa `host`, y ningún llamador
+del dental la pasa. El dental no necesita nada distinto ahí.
+
+⛔ **`/dashboard/clinic-layout/3d` no se tocó**, ni su `Clinic3DMount.tsx`. Las pruebas del
+instituto que vigilan que ese archivo NO pase `host` siguen verdes.
+
+**Lo que NO hice, y lo digo:** no empotré el mundo 3D dentro del modo En Vivo del dental. La
+fontanería existe (`Clinic3DHost`) y el instituto demuestra que funciona, pero eso es una
+función nueva, no un cambio de aspecto, y el encargo decía que el modo En Vivo es "el piso con
+el estado de cada sillón, la sala de espera y la agenda del día". El dental ya tiene su
+recorrido en su propia página. **Si lo quieres dentro, es una tarde y un archivo — dilo.**
+
+═══════════════════════════════════════════════════════════════════════════
+### 6 · `/live/[slug]` SÍ SE LLEVA EL CAMBIO, Y ESTO ES LO QUE PASA
+
+El televisor de recepción comparte con el panel `LiveStatusPanel`, `LiveTooltip`,
+`LiveTimeline` y `WaitingRoom`, así que hereda el aspecto nuevo. Se dejó a propósito: tener la
+pantalla de recepción con una piel y el panel con otra era la incoherencia que este trabajo
+viene a quitar. Además pierde su copia del bucle de baldosas.
+
+🔴 **El enmascarado NO se toca ni se relaja.** `liveModeShowPatientNames` sigue decidiendo en
+el servidor y `maskPatient(nombre, showFullNames)` sigue llamándose en los mismos tres sitios,
+con los mismos argumentos. Lo que cambió es de qué color es la caja. El televisor tampoco
+empieza a pintar el nombre del sillón: `IsoElement` solo pinta etiqueta si se le pasa, y ahí
+no se le pasa.
+
+═══════════════════════════════════════════════════════════════════════════
+### 7 · LA GUARDIA DEL INSTITUTO NO APLICA AQUÍ, Y NO SE RODEÓ
+
+`scripts/edu-guard.cjs` existe para que una ola del INSTITUTO no toque el dental. Este trabajo
+va en la dirección contraria: es un cambio del dental que además reengancha al instituto, y lo
+pediste tú. Corriéndolo marcaría prohibidos `src/components/floor-plan/`,
+`src/app/dashboard/clinic-layout/**`, `src/app/live/**` y `src/i18n/dictionaries/*.json`, que
+es justo lo que esta rama tiene que tocar.
+
+**No se añadió ni un renglón a `SHARED_FILES` ni a `OWN_PREFIXES`.** Ampliar esa lista para
+que pase esta rama la dejaría más permisiva para la próxima ola del instituto, que es
+exactamente lo que la guardia impide. El archivo se queda como está y esta rama simplemente no
+es un trabajo del vertical institucional.
+
+═══════════════════════════════════════════════════════════════════════════
+### 8 · PRUEBAS
+
+`npm run test:edu` → **36 archivos, 1 191 pruebas, EXIT 0**. Tres nuevas en
+`edu-clinica-plano.test.ts`:
+
+  · la capa compartida no escribe una palabra de ningún vertical (nueve prohibidas, leyendo
+    los archivos SIN comentarios — la regla es que no salgan por pantalla, no que no se
+    puedan nombrar para explicar la regla);
+  · los cinco archivos de los dos productos importan la capa, y **ninguno** vuelve a dibujar
+    el suelo por su cuenta;
+  · la regla que le impone el alto al visor del dental se mudó de `edu-theme.css` a la capa
+    compartida (`.world > div`), sigue sin `!important` y la pantalla sigue usándola.
+
+`edu-theme.test.ts` (el candado de choques de nombres) verde: ⚠️ `.edu-plano` y `.edu-planoed`
+van en UN solo bloque agrupado, no en dos con uno pisando al otro — un selector agrupado
+declara las dos clases y la segunda declaración habría contado como choque.
+
+Se revisó la capa **en el navegador**, con las paletas de los dos productos y en los dos
+temas, sobre un HTML estático con el módulo CSS: contadores, pulso roto, paleta con item
+activo, lienzo con etiqueta y selección, ficha flotante, tarjetas por sillón con renglón en
+curso, y la leyenda. Legible en los cuatro cuadrantes.
+
+═══════════════════════════════════════════════════════════════════════════
+### 9 · QUÉ HAY QUE PROBAR A MANO
+
+  1. **/dashboard/clinic-layout, modo Edición**: arrastrar un elemento del catálogo al piso,
+     moverlo, girarlo con `R`, borrarlo con `Supr`, `⌘Z`, la mano (`H`) y el zoom. Que el
+     indicador de guardado pase por "sin guardar" → "guardado hace un momento".
+  2. **Un sillón girado a 90°**: el mueble gira, el nombre y el recuadro NO. Es el cambio
+     visual más notorio del modo Edición.
+  3. **Modo En Vivo**: que los tres contadores cuadren con los halos del piso y con el panel
+     de la derecha, y que sigan cuadrando al mover la línea de tiempo al pasado.
+  4. **Ventana estrecha (~1 100 px)**: los contadores desaparecen y no se rompe la barra.
+  5. **Modo oscuro** en las dos pantallas.
+  6. **/live/[slug] con `Mostrar nombres` APAGADO**: que siga diciendo "J.P." y no el nombre
+     completo, en el panel de sillones y en el globo al pasar el ratón.
+  7. **/instituto/clinica y /instituto/clinica/plano**: que se vean igual que antes (es el
+     mismo diseño, servido desde otro archivo) y que ligar un sillón a su unidad siga
+     funcionando.

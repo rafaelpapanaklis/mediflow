@@ -560,6 +560,82 @@
 .kpi__delta--up   { color: var(--success); }
 .kpi__delta--down { color: var(--danger); }
 .kpi__delta-sub   { color: var(--text-3); margin-left: 4px; font-weight: 400; }
+/* Flecha + porcentaje viajan juntos (antes eran hermanos sueltos del flex).
+   Sin fondo por default: las ~290 tarjetas del panel se ven igual que siempre. */
+.kpi__delta-pill  { display: inline-flex; align-items: center; gap: 4px; }
+
+/* KPI con acento (opt-in vía prop `accent`) — sólo tiñe el chip del icono; el
+   hero conserva el degradado de marca, que manda sobre cualquier acento. */
+.kpi--accent:not(.kpi--hero) .kpi__icon {
+  background: var(--kpi-accent-soft, var(--brand-soft));
+  color: var(--kpi-accent, var(--brand));
+  border-color: transparent;
+}
+
+/* Sparkline a pie de tarjeta: sangra hasta el borde (el .kpi recorta con
+   overflow:hidden, así que respeta el radio de la esquina). */
+.kpi__spark {
+  margin: 14px -18px -18px;
+  line-height: 0;
+}
+
+/* ── Fila de KPIs del home admin ──────────────────────────────────
+   Acotado a .home-kpis: el resto del panel usa .kpi tal cual. */
+.home-kpis .kpi {
+  display: flex;
+  flex-direction: column;
+  padding-top: 20px; /* deja respirar la barra de acento */
+}
+.home-kpis .kpi::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--kpi-accent, var(--brand));
+  opacity: 0.85;
+}
+.home-kpis .kpi--hero {
+  border-color: var(--border-brand);
+  /* Capa de fondo, no pseudo-elemento: un ::after se pintaría ENCIMA del
+     número y del sparkline. */
+  background:
+    radial-gradient(120% 95% at 100% 0%, var(--brand-soft), transparent 62%),
+    var(--bg-elev);
+}
+.home-kpis .kpi--hero::before {
+  background: var(--brand-grad);
+  opacity: 1;
+}
+.home-kpis .kpi__top    { margin-bottom: 10px; }
+.home-kpis .kpi__label  { font-size: 11px; letter-spacing: 0.06em; }
+.home-kpis .kpi__value  { font-size: clamp(25px, 2.1vw, 32px); }
+.home-kpis .kpi__delta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 3px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+.home-kpis .kpi__delta-pill {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--success-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.home-kpis .kpi__delta--down .kpi__delta-pill { background: var(--danger-soft); }
+/* El "vs …" baja a su propia línea: cabe completo y deja de empujar al pill. */
+.home-kpis .kpi__delta-sub {
+  flex-basis: 100%;
+  margin-left: 0;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.home-kpis .kpi__spark {
+  margin-top: auto;
+  padding-top: 16px;
+}
 
 /* Badge (nuevo) --------------------------------------------------- */
 .badge-new {

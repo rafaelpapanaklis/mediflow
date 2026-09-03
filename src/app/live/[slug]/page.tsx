@@ -135,9 +135,9 @@ function LiveUnavailable({
     <div className={liveStyles.errorWrap}>
       <div className={liveStyles.errorCard}>
         {isError ? (
-          <AlertCircle size={32} aria-hidden style={{ color: "#EF4444" }} />
+          <AlertCircle size={32} aria-hidden style={{ color: "var(--mc-ocupado)" }} />
         ) : (
-          <Building2 size={32} aria-hidden style={{ color: "#4A90E2" }} />
+          <Building2 size={32} aria-hidden style={{ color: "var(--mc-brand)" }} />
         )}
         <h1>
           {isError

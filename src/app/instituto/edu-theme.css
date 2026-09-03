@@ -3217,6 +3217,27 @@ select.edu-input {
   font-style: italic;
 }
 
+/* La MARCA de la autofirma de la dirección (quien decidió es quien pidió).
+   Ámbar y no rojo: no es un error ni una alarma — es un dato de la traza
+   que tiene que saltar a la vista de quien audita el caso, sin gritarle a
+   quien lo abre por otra razón. Usa los mismos tokens que el aviso de la
+   tarjeta, así que no define ni un color nuevo. */
+.edu-auth-historial__marca {
+  margin: 4px 0 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--edu-amber-700);
+  background: var(--edu-amber-50);
+}
+
+.dark .edu-auth-historial__marca {
+  color: var(--edu-amber-300);
+  background: rgba(180, 83, 9, 0.14);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    13 · OLA 3B — DICTADO, APOYO DE IA Y CONSENTIMIENTOS.
 
@@ -7939,62 +7960,70 @@ a.edu-ini-acceso:hover {
   display: none;
 }
 
-
 /* ═══════════════════════════════════════════════════════════════════════
    EL PLANO DE LA CLÍNICA (/instituto/clinica y /instituto/clinica/plano).
 
-   Dos prefijos propios y nuevos: `edu-plano` (el piso en vivo) y
-   `edu-planoed` (el editor). Ninguno existe en el resto de la hoja — lo
-   comprueba edu-theme.test.ts, que se puso roja en producción el día que
-   dos olas llamaron igual a dos cosas distintas. ⚠️ `edu-planrecibo` (el
-   recibo del plan de pagos) se parece de lejos y NO tiene nada que ver.
+   ═══════════════════════════════════════════════════════════════════════
+   🔴 CASI TODO ESTE BLOQUE SE FUE, Y ESO ES EL ARREGLO
 
-   ── EL ALTO DEL MUNDO SE LE IMPONE DESDE AQUÍ ───────────────────────────
-   🔴 `Clinic3DClient` es del dental y su raíz lleva `h-[100dvh]` en línea:
-   está hecho para ocupar una pantalla entera, que es lo que hace en
-   /dashboard/clinic-layout/3d. Aquí vive DENTRO de una pantalla que además
-   tiene el horario debajo, así que el alto lo pone el anfitrión con
-   `.edu-plano__mundo > div`. Gana sin `!important` por especificidad
-   (clase + elemento, 0-1-1, contra la utilidad de Tailwind, 0-1-0), que es
-   la forma correcta de pisar una utilidad: repintar el archivo del dental
-   desde fuera dejaría sin repintar la próxima clase que añada.
+   La barra, los contadores, el pulso, la ficha que se abre, la rejilla de
+   tarjetas del horario, la leyenda, el catálogo de elementos, las baldosas
+   isométricas y la caja del mundo 3D vivían aquí, en `edu-plano*` y
+   `edu-planoed*`. El dental tenía su propia versión de casi todas, con
+   otros números y otros nombres. Dos hojas que se parecen se separan en el
+   primer retoque: quien pide "que el estado también se lea escrito" lo
+   pide dos veces y la segunda se olvida.
+
+   Ahora las pinta src/components/floor-plan/floor-plan.module.css, que no
+   es de ningún producto y no conoce ningún color: lee los tokens `--fp-*`
+   de su ancestro. El bloque de abajo es el ÚNICO sitio del instituto que
+   los define, y por eso el dental no se lleva el tema del instituto ni al
+   revés — entre los dos productos viaja la FORMA, no la paleta.
+
+   Lo que se queda aquí es lo que solo tiene sentido en una escuela: el
+   selector de SEDE, el aviso del respaldo de tarjetas, el encabezado del
+   horario y las cuatro piezas sueltas del editor.
 
    ⚠️ NADA de `container-type` en esta pantalla. El visor pide pantalla
-   completa sobre su propio contenedor y un contenedor de consulta atraparía
-   ese `fixed` dentro de la columna. Aquí se usa @media, como el resto de la
-   hoja.
+   completa sobre su propio contenedor y un contenedor de consulta
+   atraparía ese `fixed` dentro de la columna. (El banco de trabajo del
+   editor SÍ lo declara, pero en su propia caja y allí no hay ningún
+   `fixed`.)
 
-   ♿ Los tres colores de estado son los MISMOS del tablero de tarjetas
-   (verde #15803d, ámbar #b45309, rojo #b3261e, todos ≥ 4.9:1 sobre
-   blanco), y el estado nunca se dice solo con color: la tarjeta que se
-   abre y cada renglón del horario llevan su palabra escrita.
+   ♿ Los tres colores de estado ya no se declaran aquí: los pone la capa
+   compartida, con el mismo criterio y además con variante para oscuro
+   —donde el verde #15803d sobre un panel #19203a no se leía—. Y el estado
+   nunca se dice solo con color: la ficha y cada renglón del horario
+   llevan su palabra escrita.
    ═══════════════════════════════════════════════════════════════════════ */
-.edu-plano {
-  --plano-libre: #15803d;
-  --plano-libre-soft: rgba(21, 128, 61, 0.09);
-  --plano-proximo: #b45309;
-  --plano-proximo-soft: rgba(180, 83, 9, 0.1);
-  --plano-ocupado: #b3261e;
-  --plano-ocupado-soft: rgba(179, 38, 30, 0.09);
+.edu-plano,
+.edu-planoed {
+  /* El tema del INSTITUTO, traducido para la capa compartida. */
+  --fp-surface: var(--edu-surface);
+  --fp-surface-2: var(--edu-surface-2);
+  --fp-line: var(--edu-line);
+  --fp-text-1: var(--edu-text-1);
+  --fp-text-2: var(--edu-text-2);
+  --fp-text-3: var(--edu-text-3);
+  --fp-radius: var(--edu-radius);
+  --fp-shadow-1: var(--edu-shadow-1);
+  --fp-shadow-2: var(--edu-shadow-2);
+  --fp-accent: var(--edu-600);
+  --fp-accent-soft: var(--edu-100);
+  --fp-accent-line: var(--edu-line-brand);
 
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
+/* ⚠️ Las dos clases van en UN solo bloque agrupado y no en dos, con uno
+   de ellos pisando al otro para cambiarle el hueco. edu-theme.test.ts
+   cuenta como choque que una misma clase se declare dos veces en primer
+   nivel —pasó en producción y salió una pantalla torcida—, y un selector
+   agrupado declara las dos. Si algún día una necesita algo distinto, va
+   en su propio nombre, no en una segunda declaración de esta. */
 
-/* ── La barra ────────────────────────────────────────────────────────── */
-.edu-plano__bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 16px;
-  padding: 12px 14px;
-  background: var(--edu-surface);
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-  box-shadow: var(--edu-shadow-1);
-}
-
+/* ── El selector de sede (solo el instituto tiene sedes) ─────────────── */
 .edu-plano__sede {
   display: flex;
   align-items: center;
@@ -8016,306 +8045,22 @@ a.edu-ini-acceso:hover {
   max-width: 240px;
 }
 
-.edu-plano__counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  align-items: center;
-}
-
-.edu-plano__count {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  font-size: 13px;
-  color: var(--edu-text-2);
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--edu-line);
-  white-space: nowrap;
-}
-
-.edu-plano__count b {
-  font-size: 16px;
-  font-variant-numeric: tabular-nums;
-  color: var(--edu-text-1);
-}
-
-.edu-plano__count--libre {
-  border-color: rgba(21, 128, 61, 0.4);
-  background: var(--plano-libre-soft);
-}
-
-.edu-plano__count--proximo {
-  border-color: rgba(180, 83, 9, 0.4);
-  background: var(--plano-proximo-soft);
-}
-
-.edu-plano__count--ocupado {
-  border-color: rgba(179, 38, 30, 0.4);
-  background: var(--plano-ocupado-soft);
-}
-
-.edu-plano__pulso {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-right: auto;
-  font-size: 12.5px;
-  color: var(--edu-text-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.edu-plano__punto {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--plano-libre);
-  box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.18);
-}
-
-.edu-plano__pulso--roto {
-  color: var(--plano-ocupado);
-}
-
-.edu-plano__pulso--roto .edu-plano__punto {
-  background: var(--plano-ocupado);
-  box-shadow: 0 0 0 3px rgba(179, 38, 30, 0.18);
-}
-
-.edu-plano__acciones {
+.edu-plano__acciones,
+.edu-planoed__acciones {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
 
-.edu-plano__nota {
-  margin: 0;
-  padding: 9px 12px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--edu-text-2);
-  background: var(--edu-surface-2);
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-}
-
-/* ── El mundo ────────────────────────────────────────────────────────── */
-.edu-plano__mundo {
-  position: relative;
-  border-radius: var(--edu-radius);
-  overflow: hidden;
-  border: 1px solid var(--edu-line);
-  background: #0b0d11;
-  /* Alto del piso: cabe con la barra arriba y deja ver que abajo sigue el
-     horario (si ocupara la pantalla entera, nadie bajaría). */
-  height: clamp(420px, 62dvh, 760px);
-}
-
-/* 🔴 El visor del dental trae `h-[100dvh]` en su raíz. Ver la nota de
-   arriba: se le impone el alto del hueco, sin !important. */
-.edu-plano__mundo > div {
-  height: 100%;
-  width: 100%;
-}
-
-.edu-plano__cargando {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  height: 100%;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 14px;
-}
-
-.edu-plano__spin {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 2px solid rgba(255, 255, 255, 0.28);
-  border-top-color: #ffffff;
-  animation: edu-plano-giro 0.9s linear infinite;
-}
-
-@keyframes edu-plano-giro {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .edu-plano__spin {
-    animation: none;
-  }
-}
-
-/* 🔴 EL ENLACE DEL DENTAL YA NO SE ESCONDE DESDE AQUÍ, Y ESO ES EL ARREGLO.
-   Aquí vivía una regla que tapaba por `href` el "Volver al editor" que el
-   HUD del visor cablea a /dashboard/clinic-layout. Funcionaba, pero era una
-   tirita: bastaba que el dental cambiara la constante para que el enlace
-   reapareciera en la pantalla de una escuela. Desde la ola de la vista de
-   estado, `Clinic3DHud` recibe la prop opcional `host` y NO PINTA ese
-   enlace (ni el mando de dron, ni el minimapa, ni VR) cuando el mundo lo
-   monta otro producto. Hay prueba que lo vigila en edu-clinica-plano.test.ts.
-   Su sitio lo ocupa el botón "Acomodar el plano" de la barra de arriba. */
-
-/* ── La tarjeta que se abre al clicar ────────────────────────────────── */
-.edu-plano__tarjeta {
-  position: absolute;
-  /* Debajo de la fila de botones del HUD (dron, minimapa, pantalla
-     completa), que vive en la misma esquina y mide ~44 px. */
-  top: 58px;
-  right: 14px;
-  /* Por ENCIMA del HUD del dental, que es z-30 dentro del mismo contexto
-     de apilado. Con un z-index menor la tarjeta se pinta debajo de sus
-     botones y se lee a medias. */
-  z-index: 40;
-  width: min(330px, calc(100% - 28px));
-  max-height: calc(100% - 72px);
-  overflow-y: auto;
-  padding: 12px 14px;
-  border-radius: var(--edu-radius);
-  border: 1px solid var(--edu-line);
-  border-left: 4px solid var(--plano-libre);
-  background: var(--edu-surface);
-  box-shadow: var(--edu-shadow-2);
-}
-
-.edu-plano__tarjeta--proximo {
-  border-left-color: var(--plano-proximo);
-}
-
-.edu-plano__tarjeta--ocupado {
-  border-left-color: var(--plano-ocupado);
-}
-
-.edu-plano__thead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.edu-plano__tsillon {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--edu-text-1);
-}
-
-.edu-plano__testado {
-  display: inline-block;
-  margin-top: 3px;
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--plano-libre);
-}
-
-.edu-plano__testado--proximo {
-  color: var(--plano-proximo);
-}
-
-.edu-plano__testado--ocupado {
-  color: var(--plano-ocupado);
-}
-
-.edu-plano__tcerrar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid var(--edu-line);
-  background: transparent;
-  color: var(--edu-text-2);
-  cursor: pointer;
-}
-
-.edu-plano__tcerrar:hover {
-  background: var(--edu-surface-2);
-}
-
-.edu-plano__tbody {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 10px;
-}
-
-.edu-plano__tetiqueta {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--edu-text-3);
-}
-
-.edu-plano__tnombre {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: var(--edu-text-1);
-}
-
-.edu-plano__tnombre--mudo {
-  color: var(--edu-text-2);
-  font-style: italic;
-}
-
-.edu-plano__tdato {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--edu-text-2);
-}
-
-.edu-plano__tclave {
-  font-weight: 700;
-  color: var(--edu-text-3);
-}
-
-.edu-plano__treloj {
-  margin: 4px 0 0;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  color: var(--edu-text-2);
-}
-
-.edu-plano__treloj--fuerte {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--edu-text-1);
-}
-
-.edu-plano__tlista {
-  list-style: none;
-  margin: 6px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 12.5px;
-  color: var(--edu-text-2);
-}
-
-.edu-plano__tlista b {
-  font-variant-numeric: tabular-nums;
-  color: var(--edu-text-1);
-}
-
-.edu-plano__tbody .edu-btn {
+/* Los botones que cierran la ficha del sillón: pegados a la izquierda y
+   despegados del dato de arriba. */
+.edu-plano__tcta {
   align-self: flex-start;
   margin-top: 8px;
 }
 
-/* ── El horario de hoy ───────────────────────────────────────────────── */
+/* ── El encabezado del horario de hoy ────────────────────────────────── */
 .edu-plano__horario {
   display: flex;
   flex-direction: column;
@@ -8341,194 +8086,7 @@ a.edu-ini-acceso:hover {
   color: var(--edu-text-2);
 }
 
-.edu-plano__hgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 10px;
-}
-
-.edu-plano__hsillon {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  background: var(--edu-surface);
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-}
-
-.edu-plano__hsillonhead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.edu-plano__hnombre {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-weight: 700;
-  font-size: 13.5px;
-  color: var(--edu-text-1);
-  cursor: pointer;
-  text-align: left;
-}
-
-.edu-plano__hnombre:hover {
-  text-decoration: underline;
-}
-
-.edu-plano__hnum {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: 7px;
-  background: var(--edu-surface-2);
-  border: 1px solid var(--edu-line);
-  font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
-}
-
-.edu-plano__hbolita {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--plano-libre);
-  flex: none;
-}
-
-.edu-plano__hbolita--proximo {
-  background: var(--plano-proximo);
-}
-
-.edu-plano__hbolita--ocupado {
-  background: var(--plano-ocupado);
-}
-
-.edu-plano__hvacio {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--edu-text-3);
-}
-
-.edu-plano__hlista {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.edu-plano__hfila {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  background: var(--edu-surface-2);
-}
-
-.edu-plano__hfila--curso {
-  background: var(--plano-ocupado-soft);
-  box-shadow: inset 2px 0 0 var(--plano-ocupado);
-}
-
-.edu-plano__hhora {
-  font-size: 12.5px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--edu-text-1);
-  white-space: nowrap;
-}
-
-.edu-plano__hfin {
-  font-weight: 400;
-  color: var(--edu-text-3);
-}
-
-.edu-plano__hquien {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.edu-plano__hpaciente {
-  font-size: 12.5px;
-  color: var(--edu-text-1);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.edu-plano__hest {
-  font-size: 11.5px;
-  color: var(--edu-text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.edu-plano__hestado {
-  font-size: 10.5px;
-  white-space: nowrap;
-}
-
-/* ── Leyenda y respaldo ──────────────────────────────────────────────── */
-.edu-plano__leyenda {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  font-size: 12.5px;
-  color: var(--edu-text-2);
-}
-
-.edu-plano__leyenda li {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.edu-plano__leyenda-ayuda {
-  color: var(--edu-text-3);
-}
-
-.edu-plano__leyenda kbd {
-  padding: 1px 5px;
-  border-radius: 5px;
-  border: 1px solid var(--edu-line);
-  background: var(--edu-surface-2);
-  font-size: 11px;
-  font-family: inherit;
-}
-
-.edu-plano__bolita {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--plano-libre);
-}
-
-.edu-plano__bolita--proximo {
-  background: var(--plano-proximo);
-}
-
-.edu-plano__bolita--ocupado {
-  background: var(--plano-ocupado);
-}
-
+/* ── El aviso del respaldo de tarjetas ───────────────────────────────── */
 .edu-plano__modo {
   display: flex;
   flex-wrap: wrap;
@@ -8550,31 +8108,14 @@ a.edu-ini-acceso:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   EL EDITOR DEL PLANO (/instituto/clinica/plano) — prefijo `edu-planoed`.
+   EL EDITOR DEL PLANO (/instituto/clinica/plano) — lo que le queda propio.
 
-   Tres columnas: catálogo · lienzo · propiedades. El LIENZO se desplaza
-   (el SVG se dibuja a su tamaño real y el hueco tiene scroll) en vez de
-   arrastrarse: así no hay un estado de "pan" que mantener ni una
-   herramienta de mano que pelearse con la de mover.
+   Las tres columnas, los paneles, el catálogo, el hueco del lienzo y todo
+   el dibujo isométrico los pone la capa compartida. Aquí solo viven la
+   ficha de la sede, el contador de ligas, el zoom y el formulario de
+   ligar un sillón a su unidad — que es LA razón de que este editor exista
+   y no sea el del dental.
    ═══════════════════════════════════════════════════════════════════════ */
-.edu-planoed {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.edu-planoed__bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  padding: 10px 12px;
-  background: var(--edu-surface);
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-  box-shadow: var(--edu-shadow-1);
-}
-
 .edu-planoed__sede {
   font-size: 13.5px;
   font-weight: 700;
@@ -8596,6 +8137,10 @@ a.edu-ini-acceso:hover {
   color: #b3261e;
 }
 
+.dark .edu-planoed__alerta {
+  color: #fb7185;
+}
+
 .edu-planoed__zoom {
   display: inline-flex;
   align-items: center;
@@ -8604,133 +8149,26 @@ a.edu-ini-acceso:hover {
   color: var(--edu-text-3);
 }
 
-.edu-planoed__acciones {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
 .edu-planoed__estado {
   margin: 0;
   font-size: 12.5px;
   color: var(--edu-text-3);
 }
 
-.edu-planoed__cuerpo {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 250px;
-  gap: 12px;
-  align-items: start;
-}
-
-@media (max-width: 1100px) {
-  .edu-planoed__cuerpo {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.edu-planoed__catalogo,
-.edu-planoed__props {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  background: var(--edu-surface);
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
+/* El alto de las tres columnas. La capa compartida solo dice que se
+   desplazan por dentro; hasta dónde crecen lo decide la pantalla. */
+.edu-planoed__columna,
+.edu-planoed__lienzo {
   max-height: 74dvh;
-  overflow-y: auto;
 }
 
-.edu-planoed__ctitulo {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--edu-text-3);
-}
-
-.edu-planoed__cayuda,
-.edu-planoed__ayuda {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--edu-text-3);
-}
-
-.edu-planoed__cayuda kbd,
-.edu-planoed__ayuda kbd {
-  padding: 1px 5px;
-  border-radius: 5px;
-  border: 1px solid var(--edu-line);
-  background: var(--edu-surface-2);
-  font-size: 11px;
-  font-family: inherit;
-}
-
-.edu-planoed__grupo {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.edu-planoed__glabel {
-  margin: 0;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--edu-text-2);
-}
-
-.edu-planoed__gitems {
-  display: grid;
-  /* 76 px y no 88: la columna del catálogo mide 220 px y su barra de
-     desplazamiento se lleva ~15, así que con 88 el `auto-fill` caía a UNA
-     columna y la lista se hacía larguísima. */
-  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
-  gap: 6px;
-}
-
-.edu-planoed__item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 6px 4px;
-  border-radius: 9px;
-  border: 1px solid var(--edu-line);
-  background: var(--edu-surface-2);
-  color: var(--edu-text-2);
-  cursor: pointer;
-  font: inherit;
-  font-size: 10.5px;
-  line-height: 1.2;
-  text-align: center;
-}
-
-.edu-planoed__item:hover {
-  border-color: var(--edu-line-brand);
-}
-
-.edu-planoed__item--on {
-  border-color: var(--edu-500);
-  background: var(--edu-100);
-  color: var(--edu-text-1);
-  font-weight: 700;
-}
-
-.edu-planoed__icono {
+.edu-planoed__svg {
   display: block;
-  width: 34px;
-  height: 34px;
+  touch-action: none;
 }
 
-.edu-planoed__ilabel {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+.edu-planoed__svg--poniendo {
+  cursor: copy;
 }
 
 .edu-planoed__tam {
@@ -8746,70 +8184,6 @@ a.edu-ini-acceso:hover {
   color: var(--edu-text-3);
 }
 
-.edu-planoed__lienzo {
-  overflow: auto;
-  max-height: 74dvh;
-  padding: 8px;
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-  background: var(--edu-surface-2);
-}
-
-.edu-planoed__svg {
-  display: block;
-  touch-action: none;
-}
-
-.edu-planoed__svg--poniendo {
-  cursor: copy;
-}
-
-.edu-planoed__tile {
-  stroke: rgba(20, 26, 43, 0.06);
-  stroke-width: 0.5;
-}
-
-.edu-planoed__tile--a {
-  fill: #eef2f7;
-}
-
-.edu-planoed__tile--b {
-  fill: #e6ecf4;
-}
-
-.edu-planoed__el {
-  cursor: move;
-}
-
-.edu-planoed__el--mov {
-  opacity: 0.72;
-}
-
-.edu-planoed__ghost {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.edu-planoed__etiqueta {
-  font-size: 12px;
-  font-weight: 700;
-  fill: #141a2b;
-  paint-order: stroke;
-  stroke: #ffffff;
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
-
-.edu-planoed__etiqueta--mala {
-  fill: #b3261e;
-}
-
-.edu-planoed__sel {
-  fill: none;
-  stroke: var(--edu-600);
-  stroke-width: 3;
-}
-
 .edu-planoed__campo {
   display: flex;
   flex-direction: column;
@@ -8822,14 +8196,6 @@ a.edu-ini-acceso:hover {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.edu-planoed__faltan {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-top: 1px solid var(--edu-line);
-  padding-top: 10px;
 }
 
 .edu-planoed__lista {
@@ -8848,21 +8214,4 @@ a.edu-ini-acceso:hover {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-}
-
-/* El editor en oscuro: el piso isométrico se dibuja con colores claros
-   (los del catálogo del dental, que son cadenas SVG con el color dentro y
-   no se pueden repintar desde aquí), así que las baldosas se quedan claras
-   a propósito — el dibujo tiene que seguir leyéndose. Lo que sí cambia es
-   el marco. */
-.dark .edu-planoed__tile--a {
-  fill: #dfe5ee;
-}
-
-.dark .edu-planoed__tile--b {
-  fill: #d6dde8;
-}
-
-.dark .edu-planoed__etiqueta {
-  stroke: #f4f6fa;
 }

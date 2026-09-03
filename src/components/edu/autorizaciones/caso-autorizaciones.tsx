@@ -7,6 +7,7 @@ import { EduModal } from "@/components/edu/edu-modal";
 import {
   EDU_APPROVAL_EMERGENCY_REASON_MIN,
   EDU_APPROVAL_REQUESTABLE_STAGES,
+  eduApprovalSelfMark,
   eduApprovalTargetForStage,
   type EduApprovalRow,
   type EduApprovalTargetOption,
@@ -197,6 +198,14 @@ export function EduCasoAutorizaciones({
                   ? ` · ${r.status === "APPROVED" ? "firmada" : "decidida"} por ${r.decidedByName} el ${r.decidedAtLabel}`
                   : ""}
               </p>
+              {/* LA TRAZA. Quien decidió es quien pidió: sale del propio
+                  registro (decidedById === requestedById), no de un campo
+                  que alguien tenga que acordarse de escribir. Solo la
+                  DIRECCIÓN puede producirla — es la única exenta de "nadie
+                  firma su propia petición". */}
+              {r.selfDecided && (
+                <p className="edu-auth-historial__marca">{eduApprovalSelfMark(r.status)}</p>
+              )}
               {r.decisionNote && <p className="edu-auth-historial__nota">“{r.decisionNote}”</p>}
               {r.status === "EXPIRED" && r.storedStatus === "APPROVED" && (
                 <p className="edu-auth-historial__nota">

@@ -112,6 +112,7 @@
     "admin": {
       "opSummary": "Operational summary",
       "kpiGroupAria": "Key indicators",
+      "revenueSparkAria": "Revenue over the last 6 months",
       "teamPerformanceTitle": "Team performance",
       "teamPerformanceSubtitle": "Appointments, completed visits and revenue generated",
       "viewFullReport": "View full report",
@@ -209,7 +210,18 @@
       "subtitleWeek": "This week",
       "subtitleMonth": "This month",
       "subtitleYear": "This year",
-      "emptyState": "Not enough history yet to chart.",
+      "payments": {
+        "one": "{count} payment",
+        "other": "{count} payments"
+      },
+      "avgPer": "{amount} per {unit} on average",
+      "unitHour": "hour",
+      "unitDay": "day",
+      "unitMonth": "month",
+      "emptyTitle": "No revenue collected in this period",
+      "emptyHint": "The chart adds up payments by the date they were collected, not issued invoices. An unpaid invoice does not show up here yet.",
+      "errorTitle": "Could not load the trend",
+      "errorHint": "Please try again in a moment.",
       "updating": "Updating…"
     },
     "teamPerf": {
@@ -7758,7 +7770,11 @@
       "dayAgenda": "Day's agenda",
       "legendOccupied": "Occupied",
       "legendUpcoming": "Upcoming",
-      "legendFree": "Free",
+      "chairFallbackLabel": "Operatory",
+    "legendHintPublic": "Green free, amber starting soon, red busy. The timeline below moves the hour.",
+    "legendFree": "Free",
+      "liveNow": "Live",
+      "countsAria": "Chairs by status",
       "backToNow": "Back to now",
       "optimizerUnknownError": "Unknown error",
       "optimizerAriaLabel": "AI schedule optimizer",

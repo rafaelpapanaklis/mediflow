@@ -1,5 +1,18 @@
 /* Vista pública /live/[slug] — fullscreen TV de sala de espera. */
 
+/* ⚠️ EL TEMA DEL PISO NO SE DECLARA AQUÍ. Esta pantalla monta las mismas
+   piezas que Mi Clínica Visual —el piso, los contadores, la leyenda, el
+   panel de sillones, la sala de espera— y tiene que verse IGUAL que el
+   panel. Los `--mc-*` y su traducción a los `--fp-*` que lee la capa
+   compartida los enciende el layout del segmento (src/app/live/layout.tsx)
+   con `.mcTokens`, desde una sola hoja: floor-tokens.module.css. Con una
+   copia aquí, el primer retoque de color separaría las dos pantallas y
+   nadie se enteraría hasta verlas juntas.
+
+   🔴 Esto NO toca el enmascarado. Quién ve el nombre completo de un
+   paciente lo sigue decidiendo `liveModeShowPatientNames` en el servidor
+   y `maskPatient` en el componente: lo que cambia es de qué color es la
+   caja. */
 .live {
   display: grid;
   grid-template-rows: 86px 1fr 200px 28px;
@@ -244,6 +257,37 @@
 }
 
 /* ─── Controles flotantes (zoom + fit + fullscreen) ─── */
+/* ── Lo que flota sobre el piso ─────────────────────────────────────────
+   Los contadores y la leyenda los pinta la capa compartida; aquí solo se
+   decide DÓNDE se colocan sobre el lienzo. Mismos huecos que el editor del
+   panel, para que el televisor y el panel se lean igual. */
+.floatCounters {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-line);
+  box-shadow: var(--mc-shadow-2);
+}
+
+.floatLegend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 12;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 9px 12px;
+  border-radius: var(--mc-radius);
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-line);
+  box-shadow: var(--mc-shadow-1);
+}
+
 .canvasControls {
   position: absolute;
   bottom: 16px;
@@ -637,11 +681,3 @@
 }
 :global(.dark) .footer strong { color: #818cf8; }
 
-/* ─── Tiles del canvas en dark — más sutiles para que las ilustraciones
-       de muebles a color destaquen sin competencia visual ─── */
-:global(.dark) .tileA { fill: rgba(255, 255, 255, 0.025); }
-:global(.dark) .tileB { fill: rgba(255, 255, 255, 0.012); }
-.tileA { fill: rgba(255, 255, 255, 0.4); }
-.tileB { fill: rgba(232, 244, 250, 0.3); }
-:global(.dark) .tileStroke { stroke: rgba(129, 140, 248, 0.08); }
-.tileStroke { stroke: rgba(74, 144, 226, 0.06); }

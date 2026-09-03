@@ -24,6 +24,23 @@ import {
   TIMELINE_END_HOUR,
   TIMELINE_START_HOUR,
 } from "@/lib/floor-plan/live-mode";
+/**
+ * Las cajas las pone la capa COMPARTIDA (src/components/floor-plan/), la
+ * misma que monta el plano del vertical institucional: la tarjeta del
+ * sillón, la barra de avance y las micro-etiquetas se ven igual en los dos
+ * productos porque son el mismo componente. Lo que NO viaja es una sola
+ * palabra —el estado sale de `t()`, aquí abajo— ni el color: la capa lee
+ * `--fp-*` del ancestro, y quien los define es floor-tokens.module.css.
+ */
+import {
+  FloorCardBody,
+  FloorCardMeta,
+  FloorCardStrong,
+  FloorChairCard,
+  FloorChairColumn,
+  FloorChairEmpty,
+  FloorProgress,
+} from "@/components/floor-plan/floor-chrome";
 import liveStyles from "./live-mode.module.css";
 
 /**
@@ -39,13 +56,6 @@ const STATE_LABEL_KEY: Record<ChairStatus, string> = {
   libre: "pages.clinicLayout.legendFree",
   proximo: "pages.clinicLayout.legendUpcoming",
   ocupado: "pages.clinicLayout.legendOccupied",
-};
-
-/** El canto de color de la tarjeta. El color vive en la hoja, no en línea. */
-const STATUS_CARD_CLASS: Record<ChairStatus, string> = {
-  libre: liveStyles.statusCardLibre,
-  proximo: liveStyles.statusCardProximo,
-  ocupado: liveStyles.statusCardOcupado,
 };
 
 interface ChairInfo {
@@ -298,7 +308,7 @@ export function LiveStatusPanel({
   // useTOptional: este componente también se monta en /live (público, sin
   // I18nProvider) — ahí cae al fallback ES en vez de lanzar.
   const t = useTOptional() ?? publicLiveFallbackT;
-  const marcadaRef = useRef<HTMLDivElement | null>(null);
+  const marcadaRef = useRef<HTMLElement | null>(null);
 
   // Traer la tarjeta marcada a la vista. `block: "nearest"` y no "center":
   // el panel es una columna larga y centrar da un salto que despista en una
@@ -321,47 +331,39 @@ export function LiveStatusPanel({
   );
 
   if (placedChairs.length === 0) {
-    return (
-      <div className={liveStyles.statusEmpty}>
-        {t("pages.clinicLayout.assignChairsHint")}
-      </div>
-    );
+    return <FloorChairEmpty>{t("pages.clinicLayout.assignChairsHint")}</FloorChairEmpty>;
   }
 
   return (
-    <div className={liveStyles.statusList}>
+    <FloorChairColumn>
       {placedChairs.map((c) => {
         const status = getChairStatus(c.resourceId, viewTime, appointments);
         const apt = getChairAppointment(c.resourceId, viewTime, appointments);
         const next = getNextChairAppointment(c.resourceId, viewTime, appointments);
-        const progress = apt ? appointmentProgress(apt, viewTime) * 100 : 0;
         const marcada = highlightChairId === c.resourceId;
         return (
-          <div
+          <FloorChairCard
             key={c.resourceId}
-            ref={marcada ? marcadaRef : undefined}
-            className={`${liveStyles.statusCard} ${STATUS_CARD_CLASS[status]}${
-              marcada ? ` ${liveStyles.statusCardPicked}` : ""
-            }`}
+            name={c.name}
+            /* El estado ESCRITO y en el idioma del panel: nunca se dice
+               solo con el punto de color. */
+            stateLabel={t(STATE_LABEL_KEY[status])}
+            tone={status}
+            highlighted={marcada}
+            cardRef={marcada ? marcadaRef : undefined}
           >
-            <div className={liveStyles.statusCardHeader}>
-              <span className={liveStyles.statusCardName}>{c.name}</span>
-              <span className={liveStyles.statusCardBadge}>
-                <span aria-hidden="true" />
-                {t(STATE_LABEL_KEY[status])}
-              </span>
-            </div>
-            <div className={liveStyles.statusCardBody}>
+            <FloorCardBody>
               {apt ? (
                 <>
-                  <div className={liveStyles.statusPatient}>{maskPatient(apt.patient, showFullNames)}</div>
-                  <div className={liveStyles.statusTreatment}>{apt.treatment}</div>
-                  <div className={liveStyles.statusBar}>
-                    <div style={{ width: `${progress}%` }} />
-                  </div>
-                  <div className={liveStyles.statusFooter}>
+                  {/* 🔴 El enmascarado es el de siempre y no se relaja: con
+                      `showPatientNames` apagado esta tarjeta enseña "J.P."
+                      igual que antes, aquí y en el televisor de /live. */}
+                  <FloorCardStrong>{maskPatient(apt.patient, showFullNames)}</FloorCardStrong>
+                  <FloorCardMeta>{apt.treatment}</FloorCardMeta>
+                  <FloorProgress value={appointmentProgress(apt, viewTime)} />
+                  <FloorCardMeta>
                     {apt.doctor} · {fmtHM(apt.start)}–{fmtHM(apt.end)}
-                  </div>
+                  </FloorCardMeta>
                   {onOpenOdontogram && (
                     <button
                       type="button"
@@ -375,20 +377,20 @@ export function LiveStatusPanel({
                 </>
               ) : next ? (
                 <>
-                  <div className={liveStyles.statusPatient}>{maskPatient(next.patient, showFullNames)}</div>
-                  <div className={liveStyles.statusTreatment}>{next.treatment}</div>
-                  <div className={liveStyles.statusFooter}>
+                  <FloorCardStrong>{maskPatient(next.patient, showFullNames)}</FloorCardStrong>
+                  <FloorCardMeta>{next.treatment}</FloorCardMeta>
+                  <FloorCardMeta>
                     {t("pages.clinicLayout.next")} · {fmtHM(next.start)}
-                  </div>
+                  </FloorCardMeta>
                 </>
               ) : (
-                <div className={liveStyles.statusFree}>{t("pages.clinicLayout.noPendingAppointments")}</div>
+                <FloorCardMeta>{t("pages.clinicLayout.noPendingAppointments")}</FloorCardMeta>
               )}
-            </div>
-          </div>
+            </FloorCardBody>
+          </FloorChairCard>
         );
       })}
-    </div>
+    </FloorChairColumn>
   );
 }
 

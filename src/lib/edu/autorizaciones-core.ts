@@ -41,6 +41,7 @@ import type {
   EduApprovalStage,
   EduApprovalStatus,
   EduCaseStatus,
+  EduRole,
 } from "@/lib/edu/types";
 import {
   EDU_APPROVAL_STAGES,
@@ -593,7 +594,8 @@ export const EDU_APPROVAL_NOTE_MIN = 8;
  *  · las URGENCIAS, que son las únicas que YA ocurrieron sin firma;
  *  · las que el alumno EDITÓ después de mandarlas, porque lo que el docente
  *    tiene delante no es lo que pidió;
- *  · las que pidió UNO MISMO — nadie firma su propia petición;
+ *  · las que pidió UNO MISMO — nadie firma su propia petición, SALVO la
+ *    dirección (ver eduApprovalRoleSignsOwn: las suyas sí entran al lote);
  *  · las que dejaron de estar pendientes mientras miraba la lista.
  */
 export type EduApprovalBatchSkip = "urgencia" | "cambio" | "propia" | "no-pendiente" | "receta";
@@ -603,6 +605,8 @@ export const EDU_APPROVAL_BATCH_SKIP_LABELS: Record<EduApprovalBatchSkip, string
     "Es una urgencia: ya ocurrió sin firma previa. Ésas se leen y se firman una por una.",
   cambio:
     "El estudiante la editó después de mandarla. Lee lo que dice ahora antes de firmarla.",
+  // El texto es el del DOCENTE, y por eso habla de otro docente: la
+  // dirección ya no ve este motivo nunca (eduApprovalRoleSignsOwn).
   propia:
     "La mandaste tú. Una firma sobre la propia petición no es una firma: que la revise otro docente.",
   "no-pendiente": "Ya no está esperando firma: alguien la decidió mientras mirabas la lista.",
@@ -631,6 +635,125 @@ export function eduApprovalBatchSkipReason(
   if (r.isEmergency) return "urgencia";
   if (r.contentChanged) return "cambio";
   return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 bis · LO PROPIO: quién puede decidir lo que él mismo mandó
+//
+// 🔴 "Nadie firma su propia petición" vivía escrita TRES veces —la bandeja,
+// la decisión individual y el lote— y las tres tenían que decir lo mismo
+// para siempre. Aquí vive UNA sola vez, y los tres sitios la llaman.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Lo mínimo de la sesión que hace falta para juzgar lo propio. */
+export interface EduApprovalActor {
+  role: EduRole;
+  eduUserId: string;
+}
+
+/**
+ * ¿Este ROL puede decidir sobre lo que él mismo mandó?
+ *
+ * 🔴 SOLO LA DIRECCIÓN, y se decide por el ROL DE LA SESIÓN, NO por un
+ * permiso. Encenderle "autorizaciones.decide" a un docente le da la
+ * bandeja, no la exención: si la exención colgara de esa casilla, la
+ * separación de funciones que sostiene toda la Ola 4 se apagaría con un
+ * clic, y quien lo diera no tendría cómo saber que además la apagaba.
+ *
+ * Por qué la dirección sí. Es la única figura que responde por la escuela
+ * entera y la única que no tiene a nadie encima: con la regla puesta también
+ * sobre ella, una petición suya sobre un alumno sin supervisor vigente se
+ * quedaba SIN NADIE que pudiera firmarla, y la única salida que sabíamos
+ * darle era que se nombrara un superior que no existe. Lo que sustituye a la
+ * regla no es nada — es la TRAZA: eduApprovalSelfDecided deja escrito, en
+ * cada sitio donde esa autorización se lee, que quien firmó fue quien pidió.
+ *
+ * ⚠️ Para el DOCENTE y para cualquier otro rol, todo sigue igual: bloqueo
+ * con el mismo mensaje y fuera del lote.
+ */
+export function eduApprovalRoleSignsOwn(role: EduRole): boolean {
+  return role === "DIRECCION";
+}
+
+/**
+ * ¿La mandó QUIEN MIRA? Es el HECHO, y va aparte de la consecuencia: la
+ * dirección tiene que poder ver que una petición es suya (y que firmarla
+ * quedará marcado) sin que eso le cierre nada.
+ */
+export function eduApprovalIsOwn(
+  actor: EduApprovalActor | null | undefined,
+  requestedById: string | null | undefined,
+): boolean {
+  if (!actor || !actor.eduUserId || !requestedById) return false;
+  return requestedById === actor.eduUserId;
+}
+
+/** ¿A QUIEN MIRA se le cierra esta petición por haberla mandado él? */
+export function eduApprovalOwnBlocked(
+  actor: EduApprovalActor | null | undefined,
+  requestedById: string | null | undefined,
+): boolean {
+  if (!actor || !eduApprovalIsOwn(actor, requestedById)) return false;
+  return !eduApprovalRoleSignsOwn(actor.role);
+}
+
+/**
+ * El motivo del lote CON lo propio ya juzgado. Es la función que usan la
+ * bandeja (para pintar) y el lote (para cerrar): si fueran dos, un día
+ * pintaríamos un botón que el servidor rebota.
+ */
+export function eduApprovalBatchSkipFor(
+  actor: EduApprovalActor | null | undefined,
+  r: EduApprovalBatchCandidate & { requestedById?: string | null },
+): EduApprovalBatchSkip | null {
+  // ANTES que todo lo demás, como estaba: a quien no puede firmarla no se
+  // le explica que además es una urgencia.
+  if (eduApprovalOwnBlocked(actor, r?.requestedById)) return "propia";
+  return eduApprovalBatchSkipReason(r);
+}
+
+/**
+ * El 409 de la decisión individual. Vive aquí, y no como literal dentro del
+ * servidor, porque es el texto que la prueba fija: el día que la dirección
+ * quedó exenta, lo que NO podía cambiar era lo que sigue leyendo el docente.
+ */
+export const EDU_APPROVAL_OWN_DENIED =
+  "No puedes decidir lo que tú mismo mandaste: una firma sobre la propia petición no es una firma. Que la revise el docente que supervisa a ese estudiante; si no tiene supervisor vigente, asígnaselo desde Docentes y él la firma.";
+
+/**
+ * LA TRAZA: ¿quien decidió es quien pidió?
+ *
+ * 🔴 Es un dato DERIVADO al leer, y por eso no hay columna nueva: los dos
+ * ids ya se guardan (`requestedById` al pedir, `decidedById` al decidir), y
+ * una columna "fue autofirma" sería un tercer dato que mantener de acuerdo
+ * con esos dos — el día que discrepe, gana la que nadie comprueba.
+ */
+export function eduApprovalSelfDecided(a: {
+  requestedById?: string | null;
+  decidedById?: string | null;
+}): boolean {
+  if (!a || !a.requestedById || !a.decidedById) return false;
+  return a.requestedById === a.decidedById;
+}
+
+/** La marca, cuando la decisión FUE una firma. */
+export const EDU_APPROVAL_SELF_SIGNED_MARK =
+  "Firmada por Dirección sobre una petición propia";
+
+/**
+ * La marca cuando la decisión NO fue una firma (rechazo o cambios pedidos).
+ * Decir "firmada" de un rechazo sería, otra vez, una traza que miente.
+ */
+export const EDU_APPROVAL_SELF_DECIDED_MARK =
+  "Decidida por Dirección sobre una petición propia";
+
+/** La marca que le toca a este estado. Las dos dicen "petición propia". */
+export function eduApprovalSelfMark(status: EduApprovalStatus): string {
+  // EXPIRED se firmó y luego caducó: la firma existió, y quien la puso fue
+  // quien pidió. Sigue siendo lo que hay que poder leer.
+  return status === "APPROVED" || status === "EXPIRED"
+    ? EDU_APPROVAL_SELF_SIGNED_MARK
+    : EDU_APPROVAL_SELF_DECIDED_MARK;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -736,6 +859,18 @@ export interface EduApprovalRow {
   contentChanged: boolean;
   /** Por qué no entra en el lote, o null si sí entra. */
   batchSkip: EduApprovalBatchSkip | null;
+  /**
+   * La mandó QUIEN LA MIRA. Es el hecho, no la consecuencia: para el
+   * docente viene con `batchSkip: "propia"` (no la puede firmar) y para la
+   * DIRECCIÓN viene sin él (sí puede, y quedará marcada).
+   */
+  own: boolean;
+  /**
+   * LA TRAZA: quien la decidió es quien la pidió. Derivado al leer
+   * (`decidedById === requestedById`), sin columna nueva. Hoy solo lo puede
+   * producir la DIRECCIÓN, que es la única exenta de "nadie firma lo suyo".
+   */
+  selfDecided: boolean;
 
   summary: EduApprovalSummary;
 }

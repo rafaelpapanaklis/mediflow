@@ -34,6 +34,7 @@ import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import { OPENABLE_TYPES } from "@/lib/floor-plan/element-types";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import type {
+  ChairStatus,
   ElementType,
   LayoutElement,
   LayoutMetadata,
@@ -48,15 +49,16 @@ import {
   LiveTimeline,
   type HoverData,
 } from "./components/live-mode";
-import {
-  ChairCard,
-  FloorLegend,
-  FloorShadows,
-  FloorSlab,
-  LiveCounters,
-  type ChairCardData,
-  type StatusCounts,
-} from "./components/floor-look";
+import { ChairCard, type ChairCardData } from "./components/chair-card";
+/* Las palabras de los tres estados. Viven fuera de la capa compartida —que
+   no conoce ni una palabra del negocio— y las lee también el televisor de
+   /live/[slug], para que los dos digan lo mismo. */
+import { COUNT_KEY, DETAIL_KEY, ESTADOS, LABEL_KEY } from "./components/floor-copy";
+/* Los tokens `--mc-*` del piso, y su traduccion a los `--fp-*` que lee la
+   capa compartida. Viven en su propia hoja porque el televisor de
+   /live/[slug] pinta el MISMO piso y necesita los mismos colores; ver la
+   cabecera de floor-tokens.module.css. */
+import mc from "./components/floor-tokens.module.css";
 import {
   ANCHO_MIN_3D,
   LiveWorld,
@@ -76,6 +78,26 @@ import {
   getNextChairAppointment,
 } from "@/lib/floor-plan/live-mode";
 import { useT } from "@/i18n/i18n-provider";
+// ── La capa visual COMPARTIDA (src/components/floor-plan) ──────────────
+// El dibujo del piso, la paleta y los contadores son los mismos que usa el
+// vertical institucional en /instituto/clinica. Vive fuera de los dos
+// productos a propósito: dos cáscaras que se parecen se separan en el
+// primer arreglo. Lo que NO se comparte es el comportamiento —el arrastre,
+// el autoguardado, el optimizador y el modo En Vivo siguen aquí— ni una
+// sola palabra: los textos entran por props, resueltos con el t() del
+// panel.
+import { IsoElement, IsoGhost, IsoTiles } from "@/components/floor-plan/iso-canvas";
+import {
+  FloorCounters,
+  FloorLegend,
+  FloorPalette,
+  FloorPaletteItem,
+  FloorPanelHelp,
+  FloorPanelTitle,
+  type FloorCountItem,
+  type FloorLegendItem,
+} from "@/components/floor-plan/floor-chrome";
+import { FloorShadows, FloorSlab } from "@/components/floor-plan/floor-ground";
 import styles from "./clinic-layout.module.css";
 
 interface Chair {
@@ -1006,14 +1028,37 @@ export function ClinicLayoutClient({
     return out;
   }, [elements, liveChairs]);
 
-  const liveCounts: StatusCounts = useMemo(() => {
-    const counts: StatusCounts = { libre: 0, proximo: 0, ocupado: 0 };
-    if (!liveMode) return counts;
+  const liveCounts = useMemo<FloorCountItem[]>(() => {
+    if (!liveMode) return [];
+    const tally: Record<ChairStatus, number> = { libre: 0, proximo: 0, ocupado: 0 };
     for (const c of placedLiveChairs) {
-      counts[getChairStatus(c.resourceId, viewTime, appointments)] += 1;
+      tally[getChairStatus(c.resourceId, viewTime, appointments)] += 1;
     }
-    return counts;
-  }, [liveMode, placedLiveChairs, viewTime, appointments]);
+    // El texto entra por prop: la capa compartida no conoce ni una palabra
+    // del negocio, y por eso la puede montar también el instituto.
+    return ESTADOS.map((estado) => ({
+      key: estado,
+      tone: estado,
+      count: tally[estado],
+      label: t(COUNT_KEY[estado]),
+      detail: t(DETAIL_KEY[estado]),
+    }));
+  }, [liveMode, placedLiveChairs, viewTime, appointments, t]);
+
+  /** Qué significa cada color. En modo Armar no hay estados: solo la
+   *  línea que explica cómo se pone un mueble. */
+  const legendItems = useMemo<FloorLegendItem[]>(
+    () =>
+      liveMode
+        ? ESTADOS.map((estado) => ({
+            key: estado,
+            tone: estado,
+            label: t(LABEL_KEY[estado]),
+            detail: t(DETAIL_KEY[estado]),
+          }))
+        : [],
+    [liveMode, t],
+  );
 
   const pickedCard: ChairCardData | null = useMemo(() => {
     if (!liveMode || !pickedChairId) return null;
@@ -1096,29 +1141,9 @@ export function ClinicLayoutClient({
   const oy = ORIG_Y + panOffset.y;
 
   /* ─── Helpers de render del canvas ─── */
-  const renderGrid = () => {
-    const cells: React.ReactElement[] = [];
-    for (let r = 0; r < GRID_ROWS; r++) {
-      for (let c = 0; c < GRID_COLS; c++) {
-        const A = toScreen(c, r, ox, oy);
-        const B = toScreen(c + 1, r, ox, oy);
-        const Cc = toScreen(c + 1, r + 1, ox, oy);
-        const D = toScreen(c, r + 1, ox, oy);
-        // Fill via CSS class para que dark mode pueda swap-ear los colores
-        // sin tocar el JSX. Inline `fill` ganaba a la regla CSS y dejaba
-        // el grid blanco en dark mode.
-        const tileClass = (c + r) % 2 === 0 ? styles.tileA : styles.tileB;
-        cells.push(
-          <polygon
-            key={`t-${c}-${r}`}
-            className={`${styles.tile} ${tileClass}`}
-            points={`${A[0]},${A[1]} ${B[0]},${B[1]} ${Cc[0]},${Cc[1]} ${D[0]},${D[1]}`}
-          />,
-        );
-      }
-    }
-    return cells;
-  };
+  // El suelo, el mueble y el fantasma los pinta la capa compartida
+  // (IsoTiles / IsoElement / IsoGhost). Aquí solo se decide QUÉ se pinta:
+  // el arrastre, el zoom y el desplazamiento siguen siendo de este archivo.
 
   /** Sort memoizado: el sort por col+row solo se recalcula si `elements`
    *  cambia. Sin esto cada render rebuild el array. Durante un drag de
@@ -1142,9 +1167,10 @@ export function ClinicLayoutClient({
       const renderCol = isMoving && movingPosition ? movingPosition.col : el.col;
       const renderRow = isMoving && movingPosition ? movingPosition.row : el.row;
       const [sx, sy] = toScreen(renderCol, renderRow, ox, oy);
-      const isSel = el.id === selectedId;
       const chair = el.resourceId ? liveChairs.find((c) => c.id === el.resourceId) : null;
-      const labelText = td.isChair ? chair?.name ?? el.name ?? "Consultorio" : null;
+      const labelText = td.isChair
+        ? chair?.name ?? el.name ?? t("pages.clinicLayout.chairFallbackLabel")
+        : null;
       // Opts dinámicos para draw():
       // - isOpen: el id está en openIds (puertas/gabinetes click-toggleable)
       // - isOccupied: solo en modo En Vivo, sólo sillones, ocupados ahora
@@ -1159,58 +1185,37 @@ export function ClinicLayoutClient({
       const topY = sy - (td.h + 1) * ISO_C * 0.9;
       const showHoverTip = !panMode && !dragType && !liveMode;
       return (
-        <g
+        <IsoElement
           key={el.id}
-          data-element-id={el.id}
-          className={isMoving ? styles.elementMoving : undefined}
+          elementId={el.id}
+          type={td}
+          col={renderCol}
+          row={renderRow}
+          rotation={el.rotation}
+          ox={ox}
+          oy={oy}
+          label={labelText}
+          selected={el.id === selectedId}
+          moving={isMoving}
+          // Con la herramienta de mano el cursor lo pone el contenedor
+          // (`grab`/`grabbing`): el `move` del elemento lo tapaba.
+          locked={panMode}
+          drawOpts={{ isOpen, isOccupied }}
           onMouseDown={(e) => onElementMouseDown(e, el.id)}
           onMouseEnter={() => {
             if (!showHoverTip) return;
-            setElementHover({
-              id: el.id,
-              cx,
-              topY,
-              label: td.label,
-              isOpen,
-            });
+            setElementHover({ id: el.id, cx, topY, label: td.label, isOpen });
           }}
           onMouseLeave={() => {
             setElementHover((h) => (h?.id === el.id ? null : h));
           }}
-          style={{ cursor: panMode ? "inherit" : "move" }}
-          transform={el.rotation !== 0 ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
-        >
-          <g dangerouslySetInnerHTML={{ __html: td.draw(sx, sy, { isOpen, isOccupied }) }} />
-          {labelText && (
-            <text
-              x={sx + 20}
-              y={sy - 64}
-              /* Un sillón sin `resourceId` se dibuja igual pero no está
-                 conectado a la agenda: no se pinta En Vivo y nunca tendrá
-                 citas. La etiqueta en rojo lo dice desde el piso, que es
-                 donde se mira; el panel de la derecha ya lo explicaba,
-                 pero solo si lo seleccionabas. */
-              className={`${styles.chairLabel}${
-                td.isChair && !el.resourceId ? ` ${styles.chairLabelLoose}` : ""
-              }`}
-              textAnchor="middle"
-            >
-              {labelText}
-            </text>
-          )}
-          {isSel && (
-            <rect
-              x={sx - 10}
-              y={sy - 88}
-              width={(td.w + 0.5) * ISO_C * 1.2}
-              height={(td.h + 1) * ISO_C}
-              className={styles.elementSelected}
-              fill="none"
-              pointerEvents="none"
-              rx={4}
-            />
-          )}
-        </g>
+          // Un sillon sin `resourceId` se dibuja igual pero no esta
+          // conectado a la agenda: no se pinta En Vivo y nunca tendra
+          // citas. La etiqueta en rojo lo dice desde el piso, que es
+          // donde se mira; el panel de la derecha ya lo explicaba, pero
+          // solo si lo seleccionabas.
+          labelBad={td.isChair && !el.resourceId}
+        />
       );
     });
   };
@@ -1219,13 +1224,7 @@ export function ClinicLayoutClient({
     if (!dragType || !dragGhost) return null;
     const td = catalog.byKey.get(dragType);
     if (!td) return null;
-    const [sx, sy] = toScreen(dragGhost.col, dragGhost.row, ox, oy);
-    return (
-      <g
-        className={styles.ghostElement}
-        dangerouslySetInnerHTML={{ __html: td.draw(sx, sy, {}) }}
-      />
-    );
+    return <IsoGhost type={td} col={dragGhost.col} row={dragGhost.row} ox={ox} oy={oy} />;
   };
 
   /** Filtro feColorMatrix para iluminación dinámica según `lightingHour`.
@@ -1267,14 +1266,14 @@ export function ClinicLayoutClient({
   if (!welcomeDismissed) {
     return (
       <>
-        <div className={styles.mobileBlock}>
+        <div className={`${styles.mobileBlock} ${mc.mcTokens}`}>
           <div className={styles.mobileBlockIcon}>
             <Monitor size={32} aria-hidden />
           </div>
           <h1>{t("pages.clinicLayout.openOnComputer")}</h1>
           <p>{t("pages.clinicLayout.editorWidthShort")}</p>
         </div>
-        <div className={styles.welcomeWrap}>
+        <div className={`${styles.welcomeWrap} ${mc.mcTokens}`}>
           <WelcomePrompt
             onLoaded={(data) => {
               const els = sanitizeElements(data.elements);
@@ -1293,7 +1292,7 @@ export function ClinicLayoutClient({
   return (
     <>
       {/* Mobile block */}
-      <div className={styles.mobileBlock}>
+      <div className={`${styles.mobileBlock} ${mc.mcTokens}`}>
         <div className={styles.mobileBlockIcon}>
           <Monitor size={32} aria-hidden />
         </div>
@@ -1301,7 +1300,7 @@ export function ClinicLayoutClient({
         <p>{t("pages.clinicLayout.editorWidthLong")}</p>
       </div>
 
-      <div className={styles.page}>
+      <div className={`${styles.page} ${mc.mcTokens}`}>
         {/* ── Topbar ── */}
         <div className={styles.topbar}>
           <div className={styles.brand}>
@@ -1534,30 +1533,27 @@ export function ClinicLayoutClient({
               </button>
               {!collapsed[group.id] && (
                 <div className={styles.categoryGrid}>
-                  {group.types.map((item) => {
-                    const placedChairs = item.isChair
-                      ? elements.filter((e) => e.type === item.key && e.resourceId).length
-                      : 0;
-                    const totalChairs = item.isChair ? liveChairs.length : 0;
-                    return (
-                      <div
-                        key={item.key}
-                        className={styles.elementCard}
-                        onMouseDown={() => onSidebarMouseDown(item.key)}
-                        title={item.label}
-                      >
-                        <svg width="40" height="40" viewBox="0 0 40 40">
-                          <g dangerouslySetInnerHTML={{ __html: item.icon }} />
-                        </svg>
-                        <span className={styles.elementCardLabel}>{item.label}</span>
-                        {item.isChair && totalChairs > 0 && (
-                          <span className={styles.elementCardChairCount}>
-                            {placedChairs}/{totalChairs}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                  <FloorPalette>
+                    {group.types.map((item) => {
+                      const placedChairs = item.isChair
+                        ? elements.filter((e) => e.type === item.key && e.resourceId).length
+                        : 0;
+                      const totalChairs = item.isChair ? liveChairs.length : 0;
+                      return (
+                        <FloorPaletteItem
+                          key={item.key}
+                          icon={item.icon}
+                          label={item.label}
+                          badge={
+                            item.isChair && totalChairs > 0
+                              ? `${placedChairs}/${totalChairs}`
+                              : undefined
+                          }
+                          onMouseDown={() => onSidebarMouseDown(item.key)}
+                        />
+                      );
+                    })}
+                  </FloorPalette>
                 </div>
               )}
             </div>
@@ -1626,7 +1622,7 @@ export function ClinicLayoutClient({
                 {/* La losa va DEBAJO de las baldosas: le da grosor al piso
                     para que deje de flotar sobre el fondo. */}
                 <FloorSlab ox={ox} oy={oy} cols={GRID_COLS} rows={GRID_ROWS} />
-                <g>{renderGrid()}</g>
+                <IsoTiles cols={GRID_COLS} rows={GRID_ROWS} ox={ox} oy={oy} />
                 {/* Las sombras, entre el piso y los muebles. */}
                 <FloorShadows
                   elements={sortedElements}
@@ -1702,8 +1698,23 @@ export function ClinicLayoutClient({
                 vez aquí sería duplicarlos —y además contradecirlos: estos
                 cuentan a la hora de la línea de tiempo y los del HUD cuentan
                 AHORA, que es lo único que sabe el piso en 3D. */}
-            {liveMode && !piso3D && <LiveCounters counts={liveCounts} t={t} />}
-            {!piso3D && <FloorLegend live={liveMode} t={t} />}
+            {liveMode && !piso3D && liveCounts.length > 0 && (
+              <div className={styles.floatCounters}>
+                <FloorCounters
+                  items={liveCounts}
+                  ariaLabel={t("pages.clinicLayout.statusCountsLabel")}
+                />
+              </div>
+            )}
+            {!piso3D && (
+              <div className={styles.floatLegend}>
+                <FloorLegend
+                  items={legendItems}
+                  title={liveMode ? t("pages.clinicLayout.legendTitle") : undefined}
+                  help={t(liveMode ? "pages.clinicLayout.legendHintLive" : "pages.clinicLayout.legendHintEdit")}
+                />
+              </div>
+            )}
             {liveMode && pickedCard && (
               <ChairCard
                 data={pickedCard}
@@ -1773,9 +1784,7 @@ export function ClinicLayoutClient({
               <MousePointer2 size={36} aria-hidden className={styles.propEmptyIcon} />
               <div>
                 <strong>{t("pages.clinicLayout.selectElement")}</strong>
-                <div style={{ fontSize: 12, marginTop: 6 }}>
-                  {t("pages.clinicLayout.selectElementHint")}
-                </div>
+                <FloorPanelHelp>{t("pages.clinicLayout.selectElementHint")}</FloorPanelHelp>
               </div>
             </div>
           ) : (
@@ -1794,7 +1803,7 @@ export function ClinicLayoutClient({
 
               {selectedType.isChair && (
                 <div className={styles.propGroup}>
-                  <div className={styles.propLabel}>{t("pages.clinicLayout.assignedChair")}</div>
+                  <FloorPanelTitle>{t("pages.clinicLayout.assignedChair")}</FloorPanelTitle>
                   <select
                     className={styles.propChairSelect}
                     value={selectedElement.resourceId ?? ""}
@@ -1820,7 +1829,7 @@ export function ClinicLayoutClient({
               )}
 
               <div className={styles.propGroup}>
-                <div className={styles.propLabel}>{t("pages.clinicLayout.position")}</div>
+                <FloorPanelTitle>{t("pages.clinicLayout.position")}</FloorPanelTitle>
                 <div className={styles.propInputRow}>
                   <input
                     type="number"
@@ -1842,7 +1851,7 @@ export function ClinicLayoutClient({
               </div>
 
               <div className={styles.propGroup}>
-                <div className={styles.propLabel}>{t("pages.clinicLayout.rotation")}</div>
+                <FloorPanelTitle>{t("pages.clinicLayout.rotation")}</FloorPanelTitle>
                 <div className={styles.propRotationRow}>
                   {[0, 90, 180, 270].map((deg) => (
                     <button
@@ -1858,7 +1867,7 @@ export function ClinicLayoutClient({
               </div>
 
               <div className={styles.propGroup}>
-                <div className={styles.propLabel}>{t("pages.clinicLayout.shortcuts")}</div>
+                <FloorPanelTitle>{t("pages.clinicLayout.shortcuts")}</FloorPanelTitle>
                 <ul className={styles.propKbdList}>
                   <li className={styles.propKbdRow}><span>{t("pages.clinicLayout.shortcutRotate")}</span><code>R</code></li>
                   <li className={styles.propKbdRow}><span>{t("common.delete")}</span><code>Del</code></li>
