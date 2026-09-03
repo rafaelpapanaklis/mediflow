@@ -3,6 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import {
+  calendarDayRangeUtc,
+  isValidDateISO,
+  todayInTz,
+} from "@/lib/agenda/time-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -41,26 +46,31 @@ export async function GET(req: NextRequest) {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-    const dateStr = req.nextUrl.searchParams.get("date");
-    const today = new Date();
-    let dayStart: Date;
-    let dayEnd: Date;
-    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      dayStart = new Date(`${dateStr}T00:00:00`);
-      dayEnd = new Date(`${dateStr}T23:59:59`);
-    } else {
-      dayStart = new Date(today);
-      dayStart.setHours(0, 0, 0, 0);
-      dayEnd = new Date(today);
-      dayEnd.setHours(23, 59, 59, 999);
-    }
+    /**
+     * 🔴 EL DIA ES EL DE LA CLINICA, NO EL DEL SERVIDOR NI EL DEL NAVEGADOR.
+     *
+     * Antes esto era `new Date(\`${dateStr}T00:00:00\`)` (sin `Z`: lo
+     * resolvia la zona del PROCESO, UTC en Vercel) o `setHours(0,0,0,0)`
+     * sobre esa misma hora. Para una clinica mexicana la jornada salia
+     * corrida seis horas: a partir de las 18:00, el modo En Vivo perdia
+     * toda la manana y ensenaba parte del dia siguiente.
+     */
+    const clinic = await prisma.clinic.findUnique({
+      where: { id: dbUser.clinicId },
+      select: { timezone: true },
+    });
+    const tz = clinic?.timezone ?? "America/Mexico_City";
+    const dateParam = req.nextUrl.searchParams.get("date");
+    const dayISO =
+      dateParam && isValidDateISO(dateParam) ? dateParam : todayInTz(tz);
+    const { startUtc: dayStart, endUtc: dayEnd } = calendarDayRangeUtc(dayISO, tz);
 
     const allDayAppointments = await prisma.appointment.findMany({
       // Visibilidad por paciente: el canvas + sala de espera exponen nombres.
       // Excluye citas de pacientes restringidos que este usuario no puede ver.
       where: {
         clinicId: dbUser.clinicId,
-        startsAt: { gte: dayStart, lte: dayEnd },
+        startsAt: { gte: dayStart, lt: dayEnd },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         AND: relatedPatientVisibilityAnd({ userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId }),
       },

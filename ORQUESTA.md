@@ -1,4 +1,134 @@
 ═══════════════════════════════════════════════════════════════════════════
+## [Live-Dental-3D · ARREGLOS] — El día de la clínica, el humo del plano y el piso cortado ✅ (2026-09-02) · rama `fix/live-fecha-local` → PR contra main
+═══════════════════════════════════════════════════════════════════════════
+
+Cuatro fallos de las pantallas En Vivo, tres de ellos **de antes** de la ola
+`[Live-Dental-3D]`. Se ven todos en `/live/[slug]` y en el modo En Vivo del panel.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · EL DÍA DE UNA CLÍNICA SE CALCULABA EN LA ZONA EQUIVOCADA
+───────────────────────────────────────────────────────────────────────────
+
+**El síntoma**: a partir de las 18:00 en México, el televisor de recepción perdía
+**toda la mañana** y enseñaba parte del día siguiente. En local, con el servidor en
+hora mexicana, salía directamente **vacío**.
+
+**Las dos mitades del fallo** (ninguna se arregla sin la otra):
+
+  · **El cliente** mandaba `?date=${new Date().toISOString().slice(0,10)}`, que es
+    la fecha **UTC**. A las 18:00 en México eso ya es mañana.
+  · **El servidor** armaba la ventana con ``new Date(`${dateStr}T00:00:00`)`` —
+    sin `Z`, así que la resolvía la zona del **proceso**, que en Vercel es UTC—
+    o, sin parámetro, con `setHours(0,0,0,0)` sobre esa misma hora.
+
+Arreglar solo el cliente movía el error de sitio: el servidor seguía dando la
+jornada corrida seis horas, y en vez de perder la mañana se perdía la tarde.
+
+**El arreglo**: el día lo decide el **servidor**, en la zona de la clínica
+(`Clinic.timezone`, que ya existía y que la agenda ya respeta).
+
+  · `src/lib/agenda/time-utils.ts` — nuevo `calendarDayRangeUtc(dateISO, tz)`,
+    hermano de `dayRangeUtc` (que devuelve el HORARIO de atención, no el día
+    natural). Fin **exclusivo**, para no perder una cita de las 23:59:30.
+  · `/api/live/[slug]` y `/api/clinic-layout/appointments` — usan
+    `todayInTz(clinic.timezone)` y ese rango. `lte` → `lt`.
+  · Los tres clientes **dejan de mandar** `?date=`. Un televisor con el reloj
+    mal, o enchufado en otro país, sigue enseñando el día de la clínica.
+
+**Medido, no deducido**: servidor arrancado con `TZ=UTC` (como Vercel), reloj
+local 20:00 en México — la franja que fallaba — y el endpoint devuelve las tres
+citas del día y la sala de espera. Antes: cero.
+
+**De regalo, la mitad cara**: el efecto que sondea las citas del panel tenía
+`viewTime` como dependencia, y el minutero lo mueve **cada 5 s**. Se desmontaba y
+volvía a montarse doce veces por minuto, con su `fetchAppointments()` de entrada
+cada vez: **12 consultas por minuto en vez de 2**. Ahora la URL no depende de la
+hora que se esté mirando, así que la dependencia se fue con ella.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · EL HUMO BLANCO DEL PLANO 3D
+───────────────────────────────────────────────────────────────────────────
+
+`scene.fog` es niebla lineal de **14 a 46 m**. A ras de suelo da profundidad y
+está bien. Desde el aire la cámara queda a cuarenta o sesenta metros, o sea que
+**el piso entero cae dentro de la niebla**: los muros perdían el blanco, los
+sillones el azul y los anillos su color — lo único que esa pantalla tiene que
+decir.
+
+Se guarda aparte y **se quita al entrar en vista aérea**; caminando vuelve tal
+cual.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · "NO SE VE SI NO LE HACES MUCHO ZOOM"
+───────────────────────────────────────────────────────────────────────────
+
+Tres causas, las tres en vista aérea:
+
+**a) El encuadre miraba solo el alto.** `fitDist` tomaba el lado más largo del
+piso y lo hacía caber en el FOV **vertical** —el único que trae la cámara—, así
+que un piso ancho y poco profundo en un monitor ancho y bajo (una recepción,
+justamente) empujaba la cámara mucho más atrás de lo necesario.
+
+Un primer intento con fórmula cerrada (ancho contra FOV horizontal, fondo contra
+el vertical comprimido por la inclinación) se pasó al otro lado y **cortaba el
+piso**: mirando en picado, el borde lejano queda mucho más lejos que el cercano y
+la huella en pantalla no es un rectángulo. Se resolvió **probando**: bisección
+sobre "¿caben las ocho esquinas de la caja del piso dentro del frustum?" —
+exacto, ~30 iteraciones UNA vez al construir, y se adapta solo a la forma del
+piso y a la proporción de la pantalla. Las esquinas incluyen la **altura del
+muro**: con solo las del suelo, un muro del fondo asomaba por encima del cuadro.
+
+**b) Las placas medían veinte píxeles.** 1.6 m se leen con la cara a dos metros y
+son un sello ilegible desde cuarenta. Como el sprite siempre encara a la cámara,
+ahora crece en proporción a la distancia (`setPlateWorldWidth`) y ocupa SIEMPRE
+los mismos píxeles, con tope para que no se coma la habitación.
+
+**c) De noche se apagaban las luces.** `night` baja el ambiente de 0.85 a 0.34 a
+partir de cierta hora. Caminando es la gracia; en el tablero que cuelga en la
+recepción llega la penumbra justo en las horas en que alguien lo mira. **Un plano
+se lee o no se lee; no tiene horario.** En vista aérea van las luces de día.
+
+⚠️ Los tres cambios y la niebla viven en `src/components/clinic-3d/`, que
+comparten dental, instituto y escuelas. Se hicieron **con permiso explícito** y
+atados al **modo aéreo**, no al anfitrión: el plano del instituto tiene el mismo
+problema, así que mejora igual, y el recorrido a pie de los tres verticales queda
+byte por byte como estaba.
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · EL PLANO 2D SE CORTABA POR ABAJO
+───────────────────────────────────────────────────────────────────────────
+
+No era CSS: era aritmética. Con el origen en (680, 260), `C = 40` y una rejilla de
+32×24, el rombo del piso va de `x = -280` a `x = 1960` y de `y = 260` a
+**`y = 1380`**… dentro de un `viewBox="0 0 1920 1080"` escrito a mano. Sobraban
+**300 px por abajo** y otros tantos por los lados: las últimas filas —el fondo de
+la clínica y con él el último consultorio— quedaban fuera del recorte, y **no
+había zoom que las trajera**, porque el recorte es del SVG, no de la cámara.
+
+`isoViewBox(cols, rows, ox, oy)` en `src/lib/floor-plan/iso.ts` lo **calcula** en
+vez de escribirlo, así que mover el origen o cambiar la rejilla no vuelve a dejar
+medio piso fuera. Sale `-328 52 2336 1376` y lo usan las dos pantallas. El plano
+se ve algo más pequeño —es el precio de que quepa entero— y los controles de zoom
+siguen ahí.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · ARCHIVOS Y CIERRE
+───────────────────────────────────────────────────────────────────────────
+
+  · `src/lib/agenda/time-utils.ts` — `calendarDayRangeUtc`
+  · `src/lib/floor-plan/iso.ts` — `isoViewBox`
+  · `src/app/api/live/[slug]/route.ts`, `src/app/api/clinic-layout/appointments/route.ts`
+  · `src/app/live/[slug]/live-public-client.tsx`, `src/app/dashboard/clinic-layout/layout-client.tsx`
+  · `src/components/clinic-3d/` — `Clinic3DClient.tsx` (niebla, luces, placas),
+    `drone-controls.ts` (encuadre), `live-layer.ts` (`setPlateWorldWidth`)
+
+`npx next build` **EXIT 0** · `tsc --noEmit` sin errores fuera de los `__tests__`
+que ya venían rotos · consola del navegador sin un solo error. Mirado en Chrome
+con el plano demo: sin humo, la clínica entera en cuadro, las placas legibles
+(`Consultorio 1 / J.P. / Dr. Ana Torres / termina 20:19`) y el enmascarado
+intacto — **`J.P.` con la bandera apagada**.
+
+═══════════════════════════════════════════════════════════════════════════
 ## [Live-Dental-3D] — Las pantallas EN VIVO del dental pintan el mundo 3D ✅ (2026-09-02) · rama `feat/live-dental-3d` → PR contra main, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
 

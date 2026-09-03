@@ -20,6 +20,39 @@ export interface Point2D {
   y: number;
 }
 
+/**
+ * EL `viewBox` QUE HACE FALTA PARA QUE NO SE CORTE NADA.
+ *
+ * 🔴 El plano se pintaba en un `viewBox="0 0 1920 1080"` escrito a mano, y
+ * la rejilla NO CABE AHI. Con el origen en (680, 260), C = 40 y una rejilla
+ * de 32x24, el rombo del piso va de x = -280 a x = 1960 y de y = 260 a
+ * **y = 1380**: sobresale 300 px por abajo y otros tantos por los lados.
+ * Todo lo que cae en las ultimas filas —el fondo de la clinica, y con el el
+ * ultimo consultorio— quedaba fuera del recorte y no habia zoom que lo
+ * trajera de vuelta, porque el recorte es del SVG, no de la camara.
+ *
+ * Se calcula en vez de escribirse para que mover el origen o cambiar el
+ * tamano de la rejilla no vuelva a dejar medio piso fuera.
+ *
+ * `alturaMax` es cuanto suben los muebles por encima del vertice frontal de
+ * su celda (las cajas isometricas se dibujan hacia ARRIBA), y el margen
+ * cubre la losa, que sobresale un poco de la rejilla.
+ */
+export function isoViewBox(
+  cols: number,
+  rows: number,
+  ox: number,
+  oy: number,
+  alturaMax = 160,
+  margen = 48,
+): string {
+  const minX = ox - rows * C - margen;
+  const maxX = ox + cols * C + margen;
+  const minY = oy - alturaMax - margen;
+  const maxY = oy + ((cols + rows) * C) / 2 + margen;
+  return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
+}
+
 export interface BoxColors {
   top?: string;
   left?: string;

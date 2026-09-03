@@ -69,6 +69,17 @@ export interface LiveLayer {
   group: THREE.Group;
   /** Aplica los estados vivos (clave = resourceId). Sin reconstruir el mundo. */
   update(states: Map<string, Chair3DState>): void;
+  /**
+   * Tamaño de las placas en METROS de mundo, o `null` para volver al fijo.
+   *
+   * 🔴 Existe por la VISTA AÉREA. Una placa de 1.6 m se lee perfecto con la
+   * cara a dos metros, y es un sello ilegible cuando la cámara mira el piso
+   * entero desde cuarenta. Como el sprite siempre encara a la cámara, basta
+   * con crecerlo en proporción a la distancia para que ocupe SIEMPRE los
+   * mismos píxeles: quien mira un plano quiere leer los rótulos, no
+   * acercarse a cada sillón. Caminando no se llama y todo sigue igual.
+   */
+  setPlateWorldWidth(width: number | null): void;
   /** Grupos paciente/doctor visibles y con patientId → candidatos del raycast (A4). */
   getInteractables(): THREE.Object3D[];
   /** Cajas-hit invisibles de sillones NO ocupados → candidatos del raycast "agendar" (A6/V3). */
@@ -232,6 +243,12 @@ export function createLiveLayer(world: WorldModel, labels?: LiveLayerLabels): Li
 
   return {
     group,
+    setPlateWorldWidth(width) {
+      const w = width && width > 0 ? width : PLATE_WORLD_W;
+      nodes.forEach((n) => {
+        n.plate.scale.set(w, w * (PLATE_H / PLATE_W), 1);
+      });
+    },
     update(states) {
       nodes.forEach((n, rid) => {
         const st = states.get(rid);

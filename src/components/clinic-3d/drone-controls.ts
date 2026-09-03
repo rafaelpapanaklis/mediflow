@@ -24,6 +24,7 @@ import {
   DRONE_MAX_POLAR,
   DRONE_MIN_POLAR,
   DRONE_PITCH,
+  WALL_HEIGHT,
   DRONE_TRANSITION_MS,
   EYE_HEIGHT,
   type WorldModel,
@@ -59,6 +60,31 @@ function smoothstep(t: number): number {
   return x * x * x * (x * (x * 6 - 15) + 10);
 }
 
+/**
+ * La distancia MAS CORTA a la que todavia cabe todo, por biseccion.
+ *
+ * No hay formula cerrada decente: la camara mira en picado, asi que el borde
+ * lejano del piso queda mucho mas lejos que el cercano y la huella en
+ * pantalla no es un rectangulo. Antes se aproximaba tomando el lado mas
+ * largo contra el FOV vertical, que sobra tanto que la clinica salia
+ * diminuta; aproximarlo por el otro lado la dejaba cortada. Probar es
+ * exacto, cuesta ~30 iteraciones UNA vez al construir, y se adapta solo a la
+ * forma del piso y a la proporcion de la pantalla.
+ */
+function resolverDistancia(cabe: (d: number) => boolean, span: number): number {
+  let alto = Math.max(4, span);
+  // Crecer hasta encontrar una distancia que si funcione (tope de guarda).
+  for (let i = 0; i < 24 && !cabe(alto); i++) alto *= 1.4;
+  if (!cabe(alto)) return alto; // pantalla degenerada: mejor lejos que cortado
+  let bajo = 0.5;
+  for (let i = 0; i < 30; i++) {
+    const medio = (bajo + alto) / 2;
+    if (cabe(medio)) alto = medio;
+    else bajo = medio;
+  }
+  return alto;
+}
+
 export function createDroneMode(opts: DroneOpts): DroneMode {
   const { camera, domElement, world } = opts;
 
@@ -72,9 +98,65 @@ export function createDroneMode(opts: DroneOpts): DroneMode {
   const cz = (minZ + maxZ) / 2;
   const span = Math.max(2, maxX - minX, maxZ - minZ);
 
-  // Distancia para que el plano completo entre en cuadro al fov de la cámara.
+  /**
+   * Distancia para que el plano completo entre en cuadro.
+   *
+   * 🔴 ANTES SE ENCUADRABA SOLO POR EL ALTO, y por eso la clínica salía
+   * diminuta con media pantalla vacía a los lados. Se tomaba el lado MÁS
+   * LARGO del piso y se le hacía caber en el FOV VERTICAL — que es el único
+   * que trae la cámara—, así que un piso ancho y poco profundo, visto en un
+   * monitor ancho y bajo (una recepción, justamente), empujaba la cámara
+   * mucho más atrás de lo necesario: se encuadraba a lo alto un tamaño que
+   * a lo ancho sobraba de largo.
+   *
+   * Ahora cada eje se mide contra el FOV que le toca y manda el que pida
+   * más distancia. El ancho contra el FOV horizontal (que es el vertical
+   * por el aspecto), y el fondo contra el vertical — comprimido por la
+   * inclinación de la cámara, porque mirando en picado la profundidad se ve
+   * acortada (de canto no ocuparía nada; a plomo ocuparía todo).
+   *
+   * El resultado NUNCA es más lejos que antes: como mucho igual. Y sigue
+   * cabiendo entero, que es lo que `DRONE_FILL` termina de asegurar.
+   */
   const fov = ((camera.fov || 72) * Math.PI) / 180;
-  const fitDist = (span * DRONE_FILL) / (2 * Math.tan(fov / 2));
+  const tanV = Math.tan(fov / 2);
+  const aspect = Number.isFinite(camera.aspect) && camera.aspect > 0 ? camera.aspect : 1;
+  const tanH = tanV * aspect;
+  const ARRIBA = new THREE.Vector3(0, 1, 0);
+
+  /**
+   * Las ocho esquinas de la caja del piso: las cuatro del suelo y las cuatro
+   * a la altura del muro. Con solo las del suelo, un muro del fondo asomaba
+   * por encima del cuadro.
+   */
+  const esquinas: THREE.Vector3[] = [];
+  for (const x of [minX, maxX]) {
+    for (const z of [minZ, maxZ]) {
+      esquinas.push(new THREE.Vector3(x, 0, z));
+      esquinas.push(new THREE.Vector3(x, WALL_HEIGHT, z));
+    }
+  }
+
+  const centroFijo = new THREE.Vector3(cx, 0, cz);
+  const camTmp = new THREE.Vector3();
+  const pTmp = new THREE.Vector3();
+  const qTmp = new THREE.Quaternion();
+  const mTmp = new THREE.Matrix4();
+
+  /** ¿A esta distancia cabe la clínica ENTERA en el cuadro? */
+  const cabeEn = (d: number): boolean => {
+    camTmp.set(cx, Math.cos(DRONE_PITCH) * d, cz + Math.sin(DRONE_PITCH) * d);
+    qTmp.setFromRotationMatrix(mTmp.lookAt(camTmp, centroFijo, ARRIBA)).invert();
+    for (const e of esquinas) {
+      pTmp.copy(e).sub(camTmp).applyQuaternion(qTmp);
+      const prof = -pTmp.z; // la cámara mira hacia -Z en su propio espacio
+      if (prof <= 0.01) return false; // detrás de la cámara
+      if (Math.abs(pTmp.y) > tanV * prof) return false;
+      if (Math.abs(pTmp.x) > tanH * prof) return false;
+    }
+    return true;
+  };
+  const fitDist = resolverDistancia(cabeEn, span) * DRONE_FILL;
   const center = new THREE.Vector3(cx, 0, cz);
   // Posición aérea: arriba y "al sur" (+Z) según la inclinación inicial.
   const aerial = new THREE.Vector3(

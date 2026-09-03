@@ -15,7 +15,7 @@ import {
   Box,
   Map as MapIcon,
 } from "lucide-react";
-import { toScreen } from "@/lib/floor-plan/iso";
+import { isoViewBox, toScreen } from "@/lib/floor-plan/iso";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import type {
   LayoutElement,
@@ -70,6 +70,11 @@ interface ApiResponse {
 
 const ORIG_X = 680;
 const ORIG_Y = 260;
+/** Las mismas que se recorren al pintar las baldosas, aqui con nombre. */
+const GRID_COLS = 32;
+const GRID_ROWS = 24;
+/** El recorte del SVG, calculado para que el piso entero quepa (isoViewBox). */
+const VIEW_BOX = isoViewBox(GRID_COLS, GRID_ROWS, ORIG_X, ORIG_Y);
 
 /**
  * EL PISO DEL TELEVISOR ES EL MUNDO 3D.
@@ -355,8 +360,10 @@ export function LivePublicClient({
       const ac = new AbortController();
       const timeoutId = setTimeout(() => ac.abort(), 10_000);
       try {
-        const dateStr = new Date().toISOString().slice(0, 10);
-        const res = await fetch(`/api/live/${slug}?date=${dateStr}`, {
+        // Sin `?date=`: el dia lo decide el SERVIDOR, en la zona de la
+        // clinica. Mandar aqui `toISOString()` era mandar la fecha UTC, y
+        // en Mexico a partir de las 18:00 eso es manana.
+        const res = await fetch(`/api/live/${slug}`, {
           cache: "no-store",
           signal: ac.signal,
         });
@@ -835,7 +842,7 @@ export function LivePublicClient({
           ) : (
             <svg
               className={liveStyles.svgRoot}
-              viewBox="0 0 1920 1080"
+              viewBox={VIEW_BOX}
               preserveAspectRatio="xMidYMid meet"
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -845,8 +852,8 @@ export function LivePublicClient({
             >
               {/* Floor tiles */}
               <g>
-                {Array.from({ length: 24 }).map((_, r) =>
-                  Array.from({ length: 32 }).map((__, c) => {
+                {Array.from({ length: GRID_ROWS }).map((_, r) =>
+                  Array.from({ length: GRID_COLS }).map((__, c) => {
                     const A = toScreen(c, r, ox, oy);
                     const B = toScreen(c + 1, r, ox, oy);
                     const Cc = toScreen(c + 1, r + 1, ox, oy);
