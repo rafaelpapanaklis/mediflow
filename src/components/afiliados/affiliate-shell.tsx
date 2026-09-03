@@ -26,6 +26,7 @@ import {
   LogOut,
   Menu,
   SlidersHorizontal,
+  Target,
   Users,
   X,
 } from "lucide-react";
@@ -43,6 +44,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/afiliados/inicio", label: "Inicio", icon: Home },
   { href: "/afiliados/herramientas", label: "Herramientas", icon: SlidersHorizontal },
   { href: "/afiliados/mi-pagina", label: "Mi página", icon: Globe },
+  // Su propia libreta de negocios recomendados. Cae en la MISMA tabla que
+  // /admin/crm, marcada con su affiliateId: aquí ve sólo lo suyo.
+  { href: "/afiliados/crm", label: "Mi CRM", icon: Target },
   // La ruta se queda en /afiliados/equipo (links viejos, marcadores), pero la
   // pantalla ya no registra vendedores: invita afiliados y mide la red.
   { href: "/afiliados/equipo", label: "Mi red", icon: Users },
