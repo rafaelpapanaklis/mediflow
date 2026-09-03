@@ -7,6 +7,11 @@ import { EduModal } from "@/components/edu/edu-modal";
 import {
   EDU_APPROVAL_EMERGENCY_REASON_MIN,
   EDU_APPROVAL_REQUESTABLE_STAGES,
+  // El mapa de tonos por estado vive en el módulo puro desde que lo pinta
+  // también el HISTORIAL (/instituto/autorizaciones/historial): dos mapas
+  // iguales terminan discrepando, y entonces la misma fila sale ámbar en
+  // una pantalla y roja en la otra.
+  EDU_APPROVAL_STATUS_TAG,
   eduApprovalSelfMark,
   eduApprovalTargetForStage,
   type EduApprovalRow,
@@ -47,14 +52,6 @@ export interface EduCasoAutorizacionesProps {
 interface CasoPayload {
   targets: { records: EduApprovalTargetOption[]; appointments: EduApprovalTargetOption[] };
 }
-
-const TAG_POR_ESTADO: Record<string, string> = {
-  PENDING: "edu-tag--info",
-  APPROVED: "edu-tag--ok",
-  CHANGES_REQUESTED: "edu-tag--warn",
-  REJECTED: "edu-tag--danger",
-  EXPIRED: "edu-tag--danger",
-};
 
 export function EduCasoAutorizaciones({
   caseId,
@@ -183,7 +180,7 @@ export function EduCasoAutorizaciones({
                   {r.stageLabel}
                   {r.isEmergency ? " · urgencia" : ""}
                 </span>
-                <span className={`edu-tag ${TAG_POR_ESTADO[r.status] ?? "edu-tag--muted"}`}>
+                <span className={`edu-tag ${EDU_APPROVAL_STATUS_TAG[r.status] ?? "edu-tag--muted"}`}>
                   {EDU_APPROVAL_STATUS_LABELS[r.status]}
                 </span>
               </div>

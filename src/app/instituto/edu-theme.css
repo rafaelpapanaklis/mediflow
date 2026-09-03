@@ -8269,3 +8269,109 @@ a.edu-ini-acceso:hover {
   justify-content: space-between;
   gap: 8px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL HISTORIAL DE AUTORIZACIONES — /instituto/autorizaciones/historial
+
+   Bloque ADITIVO al final del archivo: no se toca ni una regla anterior.
+   Reusa casi todo — `.edu-toolbar` para los filtros, `.edu-auth-historial*`
+   para el renglón (es LITERALMENTE el de la ficha del caso), `.edu-tag`
+   para el estado — y solo declara lo que la lista de la ficha no necesita:
+   que la fila entera sea un enlace, y que se abra en dos columnas cuando
+   hay sitio.
+
+   ⚠️ NOMBRES: prefijo `edu-authhist`, distinto de `edu-auth-historial`
+   (la lista de la ficha) y de `edu-historia` (la línea de tiempo del
+   resumen del paciente). La prueba edu-theme.test.ts falla si dos bloques
+   de primer nivel declaran la misma clase.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* La barra del botón «Historial», encima de la bandeja. */
+.edu-authhist__barra {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* La casilla «Las que decidí yo» dentro de la barra de filtros: se alinea
+   con los campos de al lado, que llevan etiqueta encima. */
+.edu-authhist__mias {
+  align-self: end;
+  padding-bottom: 9px;
+}
+
+/* 🔴 @container Y NO @media. Lo que decide si el renglón cabe en dos
+   columnas es el ancho de ESTA lista, no el del navegador: dentro del
+   panel, el menú abierto se lleva ~240 px y un @media de 900px daría dos
+   columnas donde solo caben una y media.
+
+   Es seguro poner contención aquí porque dentro NO hay nada
+   `position: fixed` — la contención de `container-type` atraparía un modal
+   (por eso ni `.edu-shell` ni `.edu-body` la llevan) y esta pantalla no
+   abre ninguno: no se decide nada, se busca. */
+.edu-authhist {
+  container-type: inline-size;
+  container-name: edu-authhist;
+}
+
+/* La fila ENTERA es el enlace al caso. Se pinta como bloque y no como
+   enlace: subrayarla o teñirla de azul convertiría una lista de auditoría
+   en un muro de enlaces ilegible. Lo que dice que se puede pulsar es el
+   fondo al pasar por encima y el foco visible del teclado. */
+.edu-authhist__fila {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin: -6px -8px;
+  transition: background-color 0.12s ease;
+}
+
+.edu-authhist__fila:hover {
+  background: var(--edu-surface-2);
+}
+
+/* El foco del TECLADO se ve entero, no solo en el texto: la fila es el
+   objetivo, así que el anillo tiene que rodear la fila. */
+.edu-authhist__fila:focus-visible {
+  outline: 2px solid var(--edu-500);
+  outline-offset: 1px;
+  background: var(--edu-surface-2);
+}
+
+.edu-authhist__quien {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+/* El folio, en el tono secundario y sin negrita: acompaña al nombre, no
+   compite con él. */
+.edu-authhist__folio {
+  font-weight: 500;
+  font-size: 12.5px;
+  color: var(--edu-text-3);
+}
+
+/* Las dos líneas de CONTEXTO de cada fila. Apiladas por defecto (móvil
+   primero, como toda la hoja). */
+.edu-authhist__datos {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A partir de ~640 px de la PROPIA lista caben lado a lado. Lo que NO se
+   reparte en columnas es lo que se lee de verdad: el título de lo que se
+   autorizó, la nota de la decisión, el aviso de urgencia y la marca de la
+   autofirma siguen a lo ancho. */
+@container edu-authhist (min-width: 640px) {
+  .edu-authhist__datos {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 18px;
+    align-items: start;
+  }
+}

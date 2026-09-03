@@ -1,4 +1,236 @@
 ═══════════════════════════════════════════════════════════════════════════
+## [Institucional · HISTORIAL DE AUTORIZACIONES] — Lo que ya se firmó, se rechazó o se devolvió, con el mismo recorte que la bandeja ✅ (2026-09-03) · rama `feat/edu-autorizaciones-historial` → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+BUILD EXIT 0 (completo, sin tuberías, 472/472 páginas) · `npm run test:edu` VERDE (38 archivos,
+1 279 pruebas, 0 fallos) · GUARDIA EXIT 0.
+SQL: **ninguno** — el dato ya existe (`edu_case_approvals`, Ola 4). Variables de
+entorno nuevas: **ninguna**. Dependencias nuevas: **ninguna**. Migración de
+Prisma: **ninguna** (el schema no se toca).
+Archivos tocados vs `origin/main`: 12 — 11 PROPIOS del vertical y 1 compartido
+declarado (`ORQUESTA.md`). Cero prohibidos.
+
+───────────────────────────────────────────────────────────────────────────
+### 0 · QUÉ ES ESTO, EN UNA FRASE
+───────────────────────────────────────────────────────────────────────────
+**La bandeja se vacía; el historial no.** En cuanto el docente firma, la tarjeta
+desaparece de `/instituto/autorizaciones` — que está bien para trabajar de pie con
+guantes, y es terrible para responder tres meses después. Esta ola es la otra
+mitad: `/instituto/autorizaciones/historial`, con **todo lo que YA se decidió**
+—firmado, rechazado, devuelto con cambios o vencido por edición—, quién lo pidió,
+quién lo decidió, a qué hora y con qué motivo escrito.
+
+Es la pantalla de una acreditación, de una queja y del docente que quiere volver a
+mirar lo que decidió la semana pasada.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · 🔴 EL ALCANCE ES EL DE LA BANDEJA. NO HAY UNO NUEVO.
+───────────────────────────────────────────────────────────────────────────
+El punto único sigue siendo `src/lib/edu/visibility.ts`. **`visibility.ts` no se
+tocó ni una línea**, y ésa es la mitad de la garantía: si esta ola hubiera escrito
+su propio recorte, tarde o temprano uno de los dos olvidaría la vigencia de la
+asignación y un docente que ya rotó leería lo de los alumnos que entregó.
+
+    quién       qué ve en el historial
+    ──────────  ────────────────────────────────────────────────────────
+    DIRECCION   todo el instituto, todas las sedes
+    DOCENTE     solo lo de sus estudiantes VIGENTES (su misma bandeja)
+    ALUMNO      solo lo de SUS casos
+    CAJA        nada: 403 en la API por la key, y cero filas por alcance
+
+**🔴 UN FILTRO NO ES UNA LLAVE.** Todos los filtros —`?estudiante=` incluido—
+entran DENTRO del `where` ya recortado, nunca al lado. El id del alumno viaja como
+`studentExtra` de `eduCaseScopeWhere`, o sea que **se fusiona con el filtro del
+alcance en el MISMO objeto `student`**: para un docente queda
+`{ id: <ajeno>, supervisors: { some: { supervisorUserId: <él>, …vigencia } } }`,
+que es un AND imposible. La consulta devuelve **vacío**, no 403. Un 403 con pista
+le confirmaría a quien lo teclea que ese estudiante existe, que es media fuga.
+
+**Encender `autorizaciones.view` por override no amplía nada.** La key abre la
+pantalla; el alcance lo decide `eduVisibility(ctx, "cases")`, que mira el ROL y el
+RECURSO y no los permisos. Está probado con caja y la key encendida a mano.
+
+**Las OPCIONES de los filtros también son datos** (la lección del P1-4 de la
+auditoría): `listEduApprovalHistoryStudents` sale del MISMO alcance, así que al
+docente le viajan SUS vigentes —ni el alumno de otro docente ni el que él
+entregó— y al alumno no le viaja ninguna lista. El desplegable de «Quién decidió»
+solo existe con la clínica entera; para el docente está «Las que decidí yo», que
+se resuelve con el id de la SESIÓN y **gana** al `?docente=` de la URL.
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · LO QUE SE CONSTRUYÓ
+───────────────────────────────────────────────────────────────────────────
+**2.1 · `listEduApprovalHistory(ctx, filtros, tz, now)`** (`src/lib/edu/autorizaciones.ts`).
+Todas las NO pendientes de los casos que el alcance permite, más recientes primero.
+Filtros: estado · etapa · estudiante · quién decidió · «las que decidí yo» ·
+especialidad · rango de fechas de DECISIÓN · paciente (nombre o folio). Tope
+`EDU_APPROVAL_MAX_ROWS` (300, el mismo de la bandeja) con `truncated`.
+
+Cada fila es un `EduApprovalRow` — **el mismo tipo que ya pinta la ficha del caso**,
+así que trae etapa, paciente y folio, estudiante y matrícula, especialidad, quién
+pidió y cuándo, quién decidió y cuándo, estado efectivo, nota de la decisión,
+urgencia con su motivo, la marca de **petición propia** (`selfDecided`) y el id del
+caso y del paciente para el enlace.
+
+**2.2 · `eduApprovalHistoryWhere(...)`** (`autorizaciones-core.ts`, módulo PURO).
+El `where` completo —tenant + alcance + filtros— vive en el módulo puro **para
+poderlo MIRAR sin base de datos**, igual que `eduStudentWhere` en `padron-core.ts`.
+Es lo que deja escribir la prueba que arma el `where` de un docente con el
+`?estudiante=` de un alumno ajeno y verifica, sobre el objeto, que la consulta no
+puede devolver esa fila. Una pantalla vacía puede estarlo por diez razones; un AND
+imposible, por una.
+
+**2.3 · API** — `GET /api/instituto/autorizaciones?historial=1&…`, en el MISMO
+endpoint y detrás del MISMO `eduApiGuard("autorizaciones.view")`. Todos los filtros
+van en la query y los lee **el mismo parser** que la pantalla
+(`parseEduApprovalHistoryFilters`): un enlace pegado en un correo significa lo que
+enseñaba.
+
+**2.4 · Pantalla** — botón **«Historial»** arriba de la bandeja (siempre, también
+con la bandeja vacía: es justo cuando alguien se pregunta «¿y lo que firmé ayer?»)
+y `/instituto/autorizaciones/historial` con filtros arriba, contador, aviso de
+truncado que dice «acota con los filtros», vacío que explica que aquí solo sale lo
+YA decidido, y la lista abajo. **Clic en cualquier punto de la fila → el caso.**
+Para el ALUMNO es la MISMA pantalla, con los desplegables de estudiante/docente
+ausentes — no por un `if` de rol, sino porque llegan vacíos del servidor.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · LAS CUATRO TRAMPAS QUE SE ENCONTRARON (y que valen para el repo entero)
+───────────────────────────────────────────────────────────────────────────
+**3.1 · 🔴 En Postgres, un `ORDER BY … DESC` pone los NULL PRIMERO.** La fecha que
+se pinta en el historial es `decidedAt ?? requestedAt`: hay filas que **nadie
+decidió** —cuando el alumno REENVÍA, la anterior se cierra como
+`CHANGES_REQUESTED` y queda adrede sin `decidedById`—. Con un solo `findMany`
+ordenado por `decidedAt: "desc"`, el historial **empezaría justo por esas**, y las
+de febrero encabezarían la lista de hoy. Prisma no sabe ordenar por una expresión y
+`nulls: "last"` las hunde todas al fondo, que es otra mentira.
+
+Arreglo (el patrón ya documentado para `paidAt ?? createdAt`): **dos consultas con
+`where` disjuntos** (`decidedAt` no nulo / nulo), cada una con SU orden y SU
+`take: MAX + 1`, mezcladas en JS con `eduCompareApprovalHistory`. La unión contiene
+con certeza el top-N real, porque una fila que entra en el top verdadero no puede
+ser desplazada por otra de su propia tanda.
+
+**3.2 · Un día de calendario que existe no es un día bien formado.** `2026-13-45`
+pasa el patrón `\d{4}-\d{2}-\d{2}`. Río abajo, `eduDayRange` devuelve null y el
+filtro **desaparece en silencio**: la consulta sale bien pero la pantalla sigue
+enseñando el filtro puesto y el botón «Limpiar» encendido, diciendo que filtra por
+algo que no filtra. Se descarta en el parseo con un round-trip por `Date.UTC`.
+⚠️ `parseEduCasosPanelFilters` (casos-core.ts) tiene hoy el mismo agujero cosmético;
+no se tocó porque está fuera de esta ola.
+
+**3.3 · El target de TypeScript del repo no deja recorrer iteradores.**
+`for (const [k,v] of url.searchParams.entries())` compila en el editor y **tumba el
+build** con `TS2802 … '--downlevelIteration'`. Mismo cuento con `matchAll` y con
+`Object.fromEntries(params.entries())`. Se usa `forEach` y `exec` en bucle. Es la
+razón por la que el `tsc --noEmit` previo no vale como puerta: hay que correr el
+build de verdad, y correrlo AL FINAL.
+
+**3.4 · Una prueba que dice «el visor no usa @container» y en realidad dice «nadie
+más abajo puede usar @container».** `edu-visor.test.ts` barría desde `.edu-vsr {`
+**hasta el final del archivo**, y esta ola —que sí puede usar consultas de
+contenedor, porque su lista no abre ningún modal dentro— la puso roja sin tocar el
+visor. Se acotó el barrido al final de SU sección (exigiendo que el banner exista,
+para que borrarlo falle en vez de barrer cero) y se añadió el cinturón que de
+verdad importa: **ninguna regla dentro de un `@container`, esté donde esté, puede
+apuntar a `.edu-vsr`**. Dos detalles del arnés: hay que quitar los COMENTARIOS
+antes (la propia sección del visor explica en prosa que usa "@media y NUNCA
+@container", y esa frase abre un bloque falso que se traga el visor entero) y hay
+que recortar el bloque CONTANDO LLAVES (un `slice` de N caracteres se desborda al
+siguiente y acusa al vecino).
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · LA LISTA DE SEGURIDAD, PROBADA UNA POR UNA
+───────────────────────────────────────────────────────────────────────────
+27 pruebas puras + **18 de INTEGRACIÓN contra un Postgres real**
+(`edu-autorizaciones-historial.integration.test.ts`, se SALTAN sin `DATABASE_URL`).
+Los fixtures tienen **dos institutos y dos docentes** a propósito: con un solo
+instituto, un `where` al que se le hubiera caído el `institutionId` pasaría igual
+—no hay filas de nadie más que encontrar— y la prueba diría verde con la fuga
+puesta; con un solo docente, «no ve lo del otro» no se puede ni escribir.
+
+    #   lo que se afirma                                    resultado
+    ──  ──────────────────────────────────────────────────  ─────────
+    1   DIRECCION ve todo su instituto y ni un id del otro  ✅ 5 filas, 0 ajenas
+    2   DOCENTE A no ve nada de los alumnos del DOCENTE B   ✅ y simétrico
+    3   asignación TERMINADA deja de dar acceso              ✅ (dirección sí la ve)
+    4   DOCENTE + ?estudiante=<de otro docente>             ✅ VACÍO, sin 403
+    5   ?estudiante= de OTRO INSTITUTO                      ✅ VACÍO (los 2 roles)
+    6   ALUMNO solo lo de SUS casos                          ✅
+    7   ALUMNO + ?estudiante=<otro>                          ✅ VACÍO
+    8   CAJA: ni una fila, y su desplegable vacío            ✅
+    9   CAJA: 403 real en la API antes de leer               ✅ (assert + fuente)
+    10  override de la key NO amplía el alcance              ✅
+    11  desplegables recortados por el MISMO alcance         ✅ (P1-4)
+    12  ningún PENDING se cuela (ni con ?estado=PENDING)     ✅
+    13  «las decidí yo» sale de la sesión, gana a la URL     ✅
+    14  lo que nadie decidió no encabeza la lista            ✅
+    15  el buscador no cuela comodines de LIKE               ✅
+
+**Lo que NO está probado y hay que saberlo:** el 403 de CAJA se comprueba sobre
+`assertEduPermission` + el orden del código fuente del endpoint, no con una
+petición HTTP real — no hay Supabase local y `eduApiGuard` necesita sesión. Es la
+misma limitación que arrastran todas las pruebas del vertical.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · QUÉ HAY QUE PROBAR A MANO
+───────────────────────────────────────────────────────────────────────────
+Se verificó en el navegador con Postgres local y un instituto sembrado (dirección,
+dos docentes, cuatro alumnos, tres pacientes, nueve autorizaciones decididas + una
+pendiente), montando la pantalla REAL con el loader REAL. En producción, repetir:
+
+ 1. Entra como **DIRECCIÓN** → Autorizaciones → botón «Historial». Tiene que salir
+    todo el instituto, y una autorización que ella misma pidió y firmó con la marca
+    ámbar **«Firmada por Dirección sobre una petición propia»**.
+ 2. Entra como **DOCENTE** → el mismo botón. Solo lo de sus alumnos vigentes; el
+    desplegable «Estudiante» solo trae a los suyos y **no hay** «Quién decidió»
+    (para lo suyo está la casilla «Las que decidí yo»).
+ 3. Entra como **ESTUDIANTE** → solo lo suyo, y **sin** los desplegables de
+    estudiante ni de docente.
+ 4. En los tres, pega en la URL `?estudiante=<id de un alumno ajeno>`: tiene que
+    salir **«0 autorizaciones · Ninguna autorización coincide»**, sin 403 y sin
+    ninguna pista de que ese id exista.
+ 5. Comprueba que **lo que sigue esperando firma NO sale aquí** (está en la
+    bandeja) y que **una firma cuyo texto se editó después** sale como «Vencido por
+    edición».
+ 6. Clic en cualquier punto de una fila → la pestaña Casos de ese paciente.
+ 7. **Modo claro y oscuro**, y en un teléfono: los filtros se apilan y las dos
+    líneas de contexto también (es `@container` sobre la propia lista, no `@media`:
+    lo que decide es el ancho de la lista, y el menú abierto se lleva 240 px).
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · LOS 12 ARCHIVOS
+───────────────────────────────────────────────────────────────────────────
+    src/lib/edu/autorizaciones-core.ts          + sección 6: filtros, parseo de la
+                                                  URL, comparador y el `where`
+    src/lib/edu/autorizaciones.ts               + listEduApprovalHistory
+                                                  + listEduApprovalHistoryStudents
+                                                  · loadTargets gana el modo
+                                                    "titulo" (el historial no manda
+                                                    el texto de 300 notas)
+    src/app/api/instituto/autorizaciones/route.ts  + rama ?historial=1
+    src/app/instituto/(panel)/autorizaciones/historial/page.tsx   NUEVA
+    src/components/edu/autorizaciones/historial-screen.tsx        NUEVA
+    src/components/edu/autorizaciones/bandeja-screen.tsx   + botón «Historial»
+    src/components/edu/autorizaciones/caso-autorizaciones.tsx  usa el mapa de tonos
+                                                  compartido (era local)
+    src/app/instituto/edu-theme.css             + sección al final (5 clases)
+    src/lib/edu/__tests__/edu-autorizaciones-historial.test.ts             NUEVA
+    src/lib/edu/__tests__/edu-autorizaciones-historial.integration.test.ts NUEVA
+    src/lib/edu/__tests__/edu-visor.test.ts     acotada (ver 3.4)
+    ORQUESTA.md                                 este bloque
+
+⚠️ **Detalle que puede sorprender:** el historial incluye `EXPIRED` («Vencido por
+edición»), que no estaba en la lista de tres estados del encargo. Entra a propósito:
+no está pendiente, y una firma que dejó de valer porque el texto cambió es justo lo
+que busca quien audita. Dejarla fuera haría que el historial dijera «Autorizado» de
+algo que el gate rechaza.
+
+⚠️ **Y un techo que conviene anotar:** el desplegable de estudiantes trae como mucho
+300 filas. Con el instituto de 120 alumnos sobra; una escuela de 400 no vería al
+alumno 301 en el filtro (las FILAS sí salen, es solo la opción). Mismo techo que ya
+tienen los desplegables de la agenda y de /casos.
+
+═══════════════════════════════════════════════════════════════════════════
 ## [Institucional · INTEGRACIÓN 7] — Dos ramas, un solo merge: la autofirma que main ya tenía y el sillón que ahora sí se arrastra ✅ (2026-09-02) · rama `edu/integracion7` → PR contra main, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
 BUILD EXIT 0 (completo, sin tuberías, 470/470 páginas) · `npm run test:edu` VERDE

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { History } from "lucide-react";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
   EDU_APPROVAL_BATCH_MAX,
@@ -433,6 +434,22 @@ export function EduBandejaScreen({
 
   return (
     <>
+      {/* EL HISTORIAL. Va ARRIBA y siempre, incluso con la bandeja vacía:
+          una bandeja vacía es justo cuando alguien se pregunta "¿y lo que
+          firmé ayer?". Lo ven los tres roles que tienen
+          "autorizaciones.view" —el alumno también, para leer lo que le
+          devolvieron con cambios—; lo que cada uno encuentra ahí lo decide
+          el alcance, no este enlace. */}
+      <div className="edu-authhist__barra">
+        <Link
+          href="/instituto/autorizaciones/historial"
+          className="edu-btn edu-btn--ghost edu-btn--sm"
+        >
+          <History size={15} />
+          Historial
+        </Link>
+      </div>
+
       {flash && (
         <div className="edu-banner edu-alert--ok" role="status">
           <div>

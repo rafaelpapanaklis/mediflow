@@ -372,10 +372,58 @@ test("el modal mide contra la VENTANA con dvh, no con vh fijo", () => {
 test("la hoja del visor no usa consultas de contenedor", () => {
   // Es `position: fixed` y `container-type` CREA contención: un contenedor
   // de consulta encima la atraparía dentro de la columna del panel.
+  //
+  // ⚠️ El barrido llega hasta el FINAL DE SU SECCIÓN, no hasta el final del
+  // archivo. Antes miraba `slice(desde)` entero, y eso decía otra cosa: que
+  // NINGUNA sección posterior de la hoja podía usar `@container` nunca —
+  // aunque no tuviera nada que ver con el visor. La primera que lo necesitó
+  // (el historial de autorizaciones, que sí puede: no abre ningún modal
+  // dentro de su contenedor) puso roja esta prueba sin tocar el visor.
+  // El corte es el banner de la siguiente sección, y se EXIGE que exista:
+  // si alguien lo borra, esto falla en vez de barrer cero renglones y
+  // pasar por vacío.
   const css = crudo(TEMA);
   const desde = css.indexOf(".edu-vsr {");
   assert.ok(desde > 0, "no se encontró el bloque del visor en edu-theme.css");
-  assert.equal(/@container/.test(css.slice(desde)), false, "el bloque del visor usa @container");
+  const hasta = css.indexOf("/* ═══", desde);
+  assert.ok(hasta > desde, "el visor ya no está delimitado por un banner de sección");
+  assert.equal(
+    /@container/.test(css.slice(desde, hasta)),
+    false,
+    "el bloque del visor usa @container",
+  );
+
+  // Y el cinturón que de verdad importa, en TODA la hoja: ninguna regla
+  // dentro de un `@container` puede apuntar a una clase del visor, esté
+  // donde esté escrita.
+  //
+  // Dos detalles que hacen la diferencia entre una prueba y un fastidio:
+  //  · SIN COMENTARIOS. La propia sección del visor explica en prosa que
+  //    usa "@media y NUNCA @container"; leyéndola cruda, esa frase abre un
+  //    bloque falso que se traga el visor entero y acusa al archivo de lo
+  //    que dice, no de lo que hace.
+  //  · el bloque se recorta CONTANDO LLAVES: un `slice` de N caracteres se
+  //    desborda al siguiente bloque y acusa al vecino.
+  const reglas = sinComentarios(css);
+  // `exec` en bucle y no `matchAll`: el target de TypeScript del repo no
+  // deja recorrer el iterador que devuelve matchAll.
+  const re = /@container[^{]*\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(reglas)) !== null) {
+    const inicio = m.index;
+    let i = inicio + m[0].length;
+    let nivel = 1;
+    while (i < reglas.length && nivel > 0) {
+      if (reglas[i] === "{") nivel += 1;
+      else if (reglas[i] === "}") nivel -= 1;
+      i += 1;
+    }
+    assert.equal(nivel, 0, "un @container quedó sin cerrar en edu-theme.css");
+    assert.ok(
+      !reglas.slice(inicio, i).includes(".edu-vsr"),
+      "una consulta de contenedor está pintando el visor: es position:fixed",
+    );
+  }
 });
 
 test("el reparto se apaga solo cuando no hay 2×2 que cuadrar", () => {

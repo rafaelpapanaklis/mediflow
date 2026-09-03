@@ -46,11 +46,13 @@ import {
 import {
   eduCaseScopeWhere,
   eduScopeIsEmpty,
+  eduStudentScopeWhere,
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
 import {
   EDU_APPROVAL_BATCH_MAX,
+  EDU_APPROVAL_HISTORY_EMPTY_FILTERS,
   EDU_APPROVAL_EMERGENCY_REASON_MAX,
   EDU_APPROVAL_EMERGENCY_REASON_MIN,
   EDU_APPROVAL_MAX_ROWS,
@@ -59,6 +61,7 @@ import {
   EDU_APPROVAL_OWN_DENIED,
   eduApprovalBatchSkipFor,
   eduApprovalContentChanged,
+  eduApprovalHistoryWhere,
   eduApprovalDecisionNeedsNote,
   eduApprovalEffectiveStatus,
   eduApprovalIsOwn,
@@ -70,11 +73,13 @@ import {
   eduApprovalWaitedLabel,
   eduApprovalWaitedMinutes,
   eduCaseGateVerdict,
+  eduCompareApprovalHistory,
   parseEduApprovalDecision,
   parseEduApprovalStage,
   parseEduApprovalTarget,
   type EduApprovalActor,
   type EduApprovalBatchSkip,
+  type EduApprovalHistoryFilters,
   type EduApprovalRow,
   type EduApprovalSnapshot,
   type EduApprovalSummary,
@@ -365,6 +370,23 @@ function claveTarget(targetType: string, targetId: string): string {
   return `${targetType}:${targetId}`;
 }
 
+/** Cuánto resumen arma `loadTargets`. Ver el parámetro `resumen`. */
+type ModoResumen = "completo" | "titulo" | "ninguno";
+
+const SIN_RESUMEN: EduApprovalSummary = { title: "", lines: [] };
+
+/**
+ * Arma el resumen según el modo, SIN un segundo constructor de títulos.
+ *
+ * El `build` se llama perezosamente: en modo "ninguno" no se ejecuta, así
+ * que el gate no formatea ni una fecha dentro de su transacción.
+ */
+function segunModo(modo: ModoResumen, build: () => EduApprovalSummary): EduApprovalSummary {
+  if (modo === "ninguno") return SIN_RESUMEN;
+  const s = build();
+  return modo === "titulo" ? { title: s.title, lines: [] } : s;
+}
+
 /**
  * Lee de golpe TODAS las filas apuntadas y devuelve su hash y su resumen.
  *
@@ -383,11 +405,24 @@ async function loadTargets(
   refs: { targetType: string; targetId: string }[],
   timeZone: string,
   /**
-   * El GATE corre DENTRO de la transacción que mueve un caso y solo necesita
-   * el hash. Armar los resúmenes ahí sería formatear fechas con Intl con una
-   * transacción abierta, para tirar el resultado en la línea siguiente.
+   * CUÁNTO resumen hace falta. Tres modos, y cada uno tiene un dueño:
+   *
+   *  · "completo" — LA BANDEJA. El docente firma lo que lee en la tarjeta,
+   *    así que van todos los campos (recortados a RESUMEN_MAX).
+   *  · "titulo"   — EL HISTORIAL. Su renglón pinta el título y nada más;
+   *    mandar los cinco campos de 300 filas serían megabytes de JSON para
+   *    un texto que la pantalla no enseña.
+   *  · "ninguno"  — EL GATE, que corre DENTRO de la transacción que mueve
+   *    un caso y solo necesita el hash. Armar resúmenes ahí sería formatear
+   *    fechas con Intl con una transacción abierta, para tirar el resultado
+   *    en la línea siguiente.
+   *
+   * ⚠️ El TÍTULO se saca del mismo constructor que el resumen completo y
+   * después se le quitan los renglones. Escribir un "constructor de título"
+   * aparte es cómo se llega a que la misma autorización se llame de dos
+   * maneras distintas en dos pantallas.
    */
-  conResumen = true,
+  resumen: ModoResumen = "completo",
 ): Promise<Map<string, TargetInfo>> {
   const recordIds = new Set<string>();
   const apptIds = new Set<string>();
@@ -419,20 +454,18 @@ async function loadTargets(
       : Promise.resolve([] as PrescriptionTarget[]),
   ]);
 
-  const SIN_RESUMEN: EduApprovalSummary = { title: "", lines: [] };
-
   const out = new Map<string, TargetInfo>();
   for (const r of records) {
     out.set(claveTarget("EduRecord", r.id), {
       hash: eduApprovalHash(recordSnapshot(r)),
-      summary: conResumen ? recordSummary(r) : SIN_RESUMEN,
+      summary: segunModo(resumen, () => recordSummary(r)),
       patientId: r.patientId,
     });
   }
   for (const a of appts) {
     out.set(claveTarget("EduAppointment", a.id), {
       hash: eduApprovalHash(appointmentSnapshot(a)),
-      summary: conResumen ? appointmentSummary(a, timeZone) : SIN_RESUMEN,
+      summary: segunModo(resumen, () => appointmentSummary(a, timeZone)),
       patientId: a.patientId,
     });
   }
@@ -442,7 +475,7 @@ async function loadTargets(
       // recetas.ts al enviar (eduRecetaSnapshot): dos armados distintos
       // son dos hashes distintos del mismo papel.
       hash: eduApprovalHash(eduRecetaSnapshot(p)),
-      summary: conResumen ? prescriptionSummary(p) : SIN_RESUMEN,
+      summary: segunModo(resumen, () => prescriptionSummary(p)),
       patientId: p.patientId,
     });
   }
@@ -455,7 +488,7 @@ async function loadTargetHashes(
   institutionId: string,
   refs: { targetType: string; targetId: string }[],
 ): Promise<Map<string, string | null>> {
-  const info = await loadTargets(db, institutionId, refs, "UTC", false);
+  const info = await loadTargets(db, institutionId, refs, "UTC", "ninguno");
   const out = new Map<string, string | null>();
   for (const r of refs) {
     const k = claveTarget(r.targetType, r.targetId);
@@ -706,6 +739,155 @@ export async function getEduCaseApprovalState(
   }));
 
   return { rows, gates };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EL HISTORIAL — lo que ya se decidió
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduApprovalHistoryPage {
+  rows: EduApprovalRow[];
+  truncated: boolean;
+}
+
+/**
+ * EL HISTORIAL: todo lo que YA se decidió y le toca a quien pregunta.
+ *
+ * La bandeja contesta "¿qué me falta por firmar?" y se vacía sola. Ésta es
+ * la otra mitad y no se vacía nunca: qué se firmó, qué se rechazó, qué se
+ * devolvió con cambios, quién y cuándo. Es la pantalla de una acreditación,
+ * de una queja y del docente que quiere volver a mirar lo de la semana
+ * pasada.
+ *
+ * 🔴 EL ALCANCE ES EL MISMO Y SALE DEL MISMO SITIO. `eduVisibility(ctx,
+ * "cases")` + `eduCaseScopeWhere`, como la bandeja, como el expediente y
+ * como /casos. Aquí NO hay un segundo recorte: si lo hubiera, tarde o
+ * temprano uno de los dos olvidaría la vigencia de la asignación y un
+ * docente que ya rotó leería lo de los alumnos que entregó. CAJA sigue sin
+ * ver una sola fila aunque alguien le encienda `autorizaciones.view`.
+ *
+ * 🔴 UN FILTRO NO ES UNA LLAVE. Todos los filtros —incluido `?estudiante=`—
+ * entran DENTRO del `where` recortado (`eduApprovalHistoryWhere`), nunca al
+ * lado. Un id de otro docente da un AND imposible y la consulta devuelve
+ * vacío: ni 403, ni "no autorizado", ni ninguna otra pista de que ese
+ * estudiante exista.
+ *
+ * ⚠️ DOS CONSULTAS, y no es una optimización fallida: la fecha que se pinta
+ * es `decidedAt ?? requestedAt` (hay filas que NADIE decidió — las que un
+ * reenvío cerró) y en Postgres un `ORDER BY … DESC` pone los NULL PRIMERO.
+ * Con una sola consulta, el historial empezaría justo por lo que nadie
+ * decidió. Ver `eduCompareApprovalHistory`.
+ */
+export async function listEduApprovalHistory(
+  ctx: EduClinicaContext,
+  filters: EduApprovalHistoryFilters,
+  timeZone: string,
+  now: Date = new Date(),
+): Promise<EduApprovalHistoryPage> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "cases");
+  if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
+
+  const where = eduApprovalHistoryWhere({
+    institutionId,
+    scope,
+    filters: filters ?? EDU_APPROVAL_HISTORY_EMPTY_FILTERS,
+    // 🔴 "Las que decidí yo" se resuelve con el id de la SESIÓN. Si saliera
+    // de la URL, sería un filtro por cualquier docente disfrazado de "mías".
+    viewerUserId: ctx.eduUserId,
+    timeZone,
+    now,
+  });
+
+  const [conFecha, sinFecha] = await Promise.all([
+    prisma.eduCaseApproval.findMany({
+      where: { ...where, decidedAt: { not: null } },
+      orderBy: [{ decidedAt: "desc" }, { id: "desc" }],
+      take: EDU_APPROVAL_MAX_ROWS + 1,
+      select: APPROVAL_SELECT,
+    }),
+    prisma.eduCaseApproval.findMany({
+      // Las que nadie decidió. Si hay filtro de fechas, esta tanda sale
+      // vacía sola (un rango sobre `decidedAt` contra `decidedAt: null` no
+      // devuelve nada), y está bien: quien filtra por fecha de decisión no
+      // está preguntando por las que no tienen.
+      where: { ...where, decidedAt: null },
+      orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
+      take: EDU_APPROVAL_MAX_ROWS + 1,
+      select: APPROVAL_SELECT,
+    }),
+  ]);
+
+  // La unión contiene con CERTEZA el top-N real: una fila que entra en el
+  // top verdadero no puede ser desplazada por otra de su propia tanda, y
+  // cada tanda trajo sus N+1 mejores.
+  const ordenadas = [...conFecha, ...sinFecha]
+    .map((a) => ({
+      fila: a,
+      clave: {
+        id: a.id,
+        decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
+        requestedAt: a.requestedAt.toISOString(),
+      },
+    }))
+    .sort((x, y) => eduCompareApprovalHistory(x.clave, y.clave))
+    .map((x) => x.fila);
+
+  const page = ordenadas.slice(0, EDU_APPROVAL_MAX_ROWS);
+  // "titulo": el renglón del historial pinta el título del contenido y
+  // nada más. Los cinco campos de 300 notas serían megabytes de JSON para
+  // un texto que esta pantalla no enseña — el detalle se lee abriendo el
+  // caso, que es a donde lleva el renglón.
+  const targets = await loadTargets(prisma, institutionId, page, timeZone, "titulo");
+  const rows = page.map((a) =>
+    toRow(a, targets.get(claveTarget(a.targetType, a.targetId)) ?? TARGET_FALTA, timeZone, now, ctx),
+  );
+  // Igual que la ficha del caso: si una firma dejó de valer porque el texto
+  // cambió, se deja escrito al leerlo. Sin esto, "vencida" solo existiría
+  // en la pantalla que la calculó.
+  await persistExpired(prisma, institutionId, rows);
+
+  return { rows, truncated: ordenadas.length > EDU_APPROVAL_MAX_ROWS };
+}
+
+/**
+ * Los ESTUDIANTES que pueden salir en el desplegable del historial.
+ *
+ * 🔴 Es la lección del P1-4 de la auditoría: las OPCIONES de un filtro son
+ * datos, y mandar el padrón entero al navegador de quien no ve ni una fila
+ * es la misma fuga que mandarle las filas. Sale del MISMO alcance
+ * (`eduStudentScopeWhere`, recurso "cases"), así que:
+ *
+ *   DIRECCION → todos los del instituto;
+ *   DOCENTE   → solo los que supervisa HOY;
+ *   ALUMNO    → ninguno (un desplegable con su propio nombre es ruido, y
+ *               la pantalla ni lo pinta);
+ *   CAJA      → ninguno, aunque le enciendan la key.
+ *
+ * ⚠️ Sin `status: "ACTIVE"`, a diferencia del desplegable de la agenda: el
+ * historial mira hacia ATRÁS, y un alumno que ya se graduó tiene
+ * autorizaciones que alguien va a querer buscar. Filtrarlo aquí dejaría
+ * filas visibles imposibles de filtrar.
+ */
+export async function listEduApprovalHistoryStudents(
+  ctx: EduClinicaContext,
+  now: Date = new Date(),
+): Promise<{ id: string; matricula: string; name: string }[]> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "cases");
+  if (eduScopeIsEmpty(scope) || scope.kind === "own") return [];
+
+  const rows = await prisma.eduStudent.findMany({
+    where: eduStudentScopeWhere({ institutionId, scope, now }),
+    orderBy: [{ matricula: "asc" }],
+    take: EDU_APPROVAL_MAX_ROWS,
+    select: {
+      id: true,
+      matricula: true,
+      user: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+  return rows.map((s) => ({ id: s.id, matricula: s.matricula, name: personName(s.user) }));
 }
 
 // ═══════════════════════════════════════════════════════════════════════

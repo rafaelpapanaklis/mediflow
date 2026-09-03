@@ -37,6 +37,7 @@
  * o a "terminado"), nunca el registro clínico. Escribir siempre se puede.
  * ═══════════════════════════════════════════════════════════════════════
  */
+import type { Prisma } from "@prisma/client";
 import type {
   EduApprovalStage,
   EduApprovalStatus,
@@ -48,6 +49,13 @@ import {
   EDU_APPROVAL_STAGE_LABELS,
   EDU_APPROVAL_STATUSES,
 } from "@/lib/edu/types";
+// La sección 6 (EL HISTORIAL) arma un `where` de Prisma, y para eso
+// necesita el recorte ÚNICO del vertical. Los tres son módulos puros
+// —`visibility.ts` solo importa tipos y `padron-core`—, así que esto no
+// arrastra prisma ni "server-only" al navegador.
+import { eduCaseScopeWhere, type EduVisibilityScope } from "@/lib/edu/visibility";
+import { eduSearchTokens } from "@/lib/edu/padron-core";
+import { eduDayRange, eduSafeTimeZone } from "@/lib/edu/agenda-core";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · QUÉ SE FIRMA: la lista CERRADA de tipos apuntables
@@ -962,3 +970,339 @@ export function eduGroupApprovalsByStudent(rows: EduApprovalRow[]): EduApprovalG
 /** Lo que se le pinta a quien abrió la bandeja y no le toca nada. */
 export const EDU_APPROVAL_NONE_DETAIL =
   "Tu rol no ve autorizaciones. Caja no las ve a propósito: cobra, no autoriza actos clínicos. Las ven la dirección (todas), los docentes (las de sus estudiantes vigentes) y cada estudiante (las suyas).";
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6 · EL HISTORIAL — todo lo que YA se decidió
+//
+// La bandeja contesta "¿qué me falta por firmar?". Esto contesta la otra
+// mitad: "¿qué se firmó, qué se rechazó y qué se devolvió con cambios?",
+// que es la pregunta de una acreditación, de una queja, y del docente que
+// quiere volver a mirar lo que decidió la semana pasada.
+//
+// 🔴 NO ES UNA TABLA NUEVA NI UN ALCANCE NUEVO. Son las MISMAS filas de
+// EduCaseApproval que ya lee la bandeja, con `status` distinto de PENDING,
+// y recortadas por el MISMO `eduVisibility(ctx, "cases")`. Todo lo de aquí
+// es puro: el parseo de la URL, la query string de vuelta y el comparador
+// que ordena. Nada de esto sabe qué filas existen.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Los estados que SÍ salen en el historial: todo lo que no está esperando.
+ *
+ * ⚠️ EXPIRED entra, aunque nadie la "decida": una firma que dejó de valer
+ * porque el texto cambió después es justo lo que busca quien audita.
+ * Dejarla fuera haría que el historial dijera "Autorizado" de algo que el
+ * gate rechaza tres pantallas más allá.
+ */
+export const EDU_APPROVAL_HISTORY_STATUSES: EduApprovalStatus[] = EDU_APPROVAL_STATUSES.filter(
+  (s) => s !== "PENDING",
+);
+
+export function parseEduApprovalHistoryStatus(raw: unknown): EduApprovalStatus | null {
+  const s = parseEduApprovalStatus(raw);
+  return s && s !== "PENDING" ? s : null;
+}
+
+export interface EduApprovalHistoryFilters {
+  /** Un estado concreto, o null = todas las no pendientes. */
+  status: EduApprovalStatus | null;
+  stage: EduApprovalStage | null;
+  /** El ESTUDIANTE dueño del caso (EduStudent.id). */
+  studentId: string | null;
+  /** Quién DECIDIÓ (EduUser.id del docente o de la dirección). */
+  decidedByUserId: string | null;
+  /** La especialidad = EduCase.programId. */
+  programId: string | null;
+  /** Rango de la DECISIÓN, en días de calendario del instituto (AAAA-MM-DD). */
+  desdeISO: string | null;
+  hastaISO: string | null;
+  /** Paciente: nombre o folio. Va contra el searchIndex del paciente. */
+  q: string | null;
+  /** "Las que decidí yo". Se resuelve con el id de la SESIÓN, no de la URL. */
+  soloMias: boolean;
+}
+
+export const EDU_APPROVAL_HISTORY_EMPTY_FILTERS: EduApprovalHistoryFilters = {
+  status: null,
+  stage: null,
+  studentId: null,
+  decidedByUserId: null,
+  programId: null,
+  desdeISO: null,
+  hastaISO: null,
+  q: null,
+  soloMias: false,
+};
+
+function histFirst(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value.length > 0 ? String(value[0]) : null;
+  if (typeof value === "string") return value;
+  return null;
+}
+
+/** Un id de la URL: cuid o nada. Lo que no encaja se descarta en silencio. */
+function histId(value: string | string[] | undefined): string | null {
+  const raw = histFirst(value);
+  if (!raw) return null;
+  const v = raw.trim();
+  if (!v || v.length > 40) return null;
+  return /^[A-Za-z0-9_-]+$/.test(v) ? v : null;
+}
+
+const HIST_DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Un día de CALENDARIO de la URL, y que EXISTA.
+ *
+ * ⚠️ La forma no basta: "2026-13-45" pasa el patrón y es un día que no
+ * existe. Más abajo, `eduDayRange` lo convertiría en null y el filtro
+ * desaparecería en silencio — la consulta saldría bien pero la pantalla
+ * seguiría enseñando el filtro puesto y el botón «Limpiar» encendido,
+ * diciendo que filtra por algo que no filtra. Se descarta AQUÍ.
+ */
+function histDay(value: string | string[] | undefined): string | null {
+  const raw = histFirst(value);
+  if (!raw) return null;
+  const m = HIST_DAY_RE.exec(raw.trim());
+  if (!m) return null;
+  const [, y, mes, dia] = m;
+  const d = new Date(Date.UTC(Number(y), Number(mes) - 1, Number(dia)));
+  // El round-trip descarta el 31 de febrero, el mes 13 y el día 45: el
+  // Date los desborda al mes siguiente y ya no vuelve al mismo texto.
+  return d.toISOString().slice(0, 10) === m[0] ? m[0] : null;
+}
+
+function histQ(value: string | string[] | undefined): string | null {
+  const raw = histFirst(value);
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().slice(0, 60);
+  return v.length > 0 ? v : null;
+}
+
+/**
+ * Lee los filtros de la query string. Lo que no reconoce, lo tira.
+ *
+ * 🔴 Aquí NO se lee ningún institutionId, ningún rol y ningún alcance: el
+ * tenant sale de la sesión y el recorte de visibility.ts. Un `?estudiante=`
+ * de otro docente entra tal cual —es un id, se parsea— y muere DENTRO de la
+ * consulta, que lo mete en el MISMO objeto `student` donde ya vive el
+ * recorte: el AND de los dos no devuelve una fila. Contestar 403 aquí sería
+ * confirmarle a quien lo teclea que ese id existe.
+ */
+export function parseEduApprovalHistoryFilters(
+  searchParams: Record<string, string | string[] | undefined> | undefined | null,
+): EduApprovalHistoryFilters {
+  const sp = searchParams ?? {};
+  const desde = histDay(sp.desde);
+  const hasta = histDay(sp.hasta);
+  // Un rango al revés se ignora ENTERO. Quedarse con un lado inventaría un
+  // filtro que nadie pidió, y en una pantalla de auditoría eso es peor que
+  // no filtrar: se lee como "no hay nada" cuando sí lo hay.
+  const alReves = Boolean(desde && hasta && desde > hasta);
+  return {
+    status: parseEduApprovalHistoryStatus(histFirst(sp.estado)),
+    stage: parseEduApprovalStage(histFirst(sp.etapa)),
+    studentId: histId(sp.estudiante),
+    decidedByUserId: histId(sp.docente),
+    programId: histId(sp.especialidad),
+    desdeISO: alReves ? null : desde,
+    hastaISO: alReves ? null : hasta,
+    q: histQ(sp.q),
+    soloMias: histFirst(sp.mias) === "1",
+  };
+}
+
+/**
+ * La query string equivalente. Solo lo que difiere del default: un enlace
+ * que se puede leer es un enlace que se puede pegar en un correo, y eso es
+ * media pantalla — "mándame lo que rechazaste de endodoncia en marzo".
+ */
+export function eduApprovalHistoryQuery(f: EduApprovalHistoryFilters): string {
+  const p = new URLSearchParams();
+  if (f.status) p.set("estado", f.status);
+  if (f.stage) p.set("etapa", f.stage);
+  if (f.studentId) p.set("estudiante", f.studentId);
+  if (f.decidedByUserId) p.set("docente", f.decidedByUserId);
+  if (f.programId) p.set("especialidad", f.programId);
+  if (f.desdeISO) p.set("desde", f.desdeISO);
+  if (f.hastaISO) p.set("hasta", f.hastaISO);
+  if (f.q) p.set("q", f.q);
+  if (f.soloMias) p.set("mias", "1");
+  return p.toString();
+}
+
+export function eduHasApprovalHistoryFilters(f: EduApprovalHistoryFilters): boolean {
+  return Boolean(
+    f.status ||
+      f.stage ||
+      f.studentId ||
+      f.decidedByUserId ||
+      f.programId ||
+      f.desdeISO ||
+      f.hastaISO ||
+      f.q ||
+      f.soloMias,
+  );
+}
+
+/**
+ * EL SELLO por el que se ordena el historial: cuándo quedó como quedó.
+ *
+ * Casi siempre es `decidedAt`. Es null en las que NADIE decidió: cuando el
+ * alumno REENVÍA, la anterior se cierra como CHANGES_REQUESTED y queda
+ * adrede sin `decidedById` (no se le atribuye a un docente una decisión que
+ * no tomó). Ésas se ordenan por su `requestedAt`, el único instante que la
+ * fila tiene propio.
+ */
+export function eduApprovalHistoryStamp(row: {
+  decidedAt: string | null;
+  requestedAt: string;
+}): string {
+  return row.decidedAt ?? row.requestedAt;
+}
+
+/**
+ * El comparador del historial: lo más reciente arriba.
+ *
+ * 🔴 POR QUÉ ORDENA JAVASCRIPT Y NO POSTGRES. La fecha que se PINTA es
+ * `decidedAt ?? requestedAt`, y Prisma no sabe ordenar por una expresión.
+ * Peor: en Postgres un `ORDER BY x DESC` pone los NULL **primero**, así que
+ * `orderBy: { decidedAt: "desc" }` encabezaría el historial con justo las
+ * filas que nadie decidió. La consulta trae DOS tandas con `where`
+ * disjuntos (`decidedAt` no nulo / nulo), cada una con su propio orden y su
+ * propio `take`, y aquí se mezclan: la unión contiene con certeza el top-N
+ * real, porque una fila que entra en el top verdadero no puede ser
+ * desplazada por otra de su misma tanda.
+ *
+ * Desempate por `id` para que dos filas del mismo instante no cambien de
+ * sitio entre dos recargas.
+ */
+export function eduCompareApprovalHistory(
+  a: { id: string; decidedAt: string | null; requestedAt: string },
+  b: { id: string; decidedAt: string | null; requestedAt: string },
+): number {
+  const sa = eduApprovalHistoryStamp(a);
+  const sb = eduApprovalHistoryStamp(b);
+  if (sa !== sb) return sa < sb ? 1 : -1;
+  return a.id < b.id ? 1 : -1;
+}
+
+/**
+ * El tono del tag por estado.
+ *
+ * Vive AQUÍ y no en la pantalla porque lo pintan dos: la ficha del caso
+ * (`caso-autorizaciones.tsx`) y el historial. Dos mapas iguales terminan
+ * discrepando el día que alguien cambia uno, y entonces la misma fila sale
+ * ámbar en una pantalla y roja en la otra.
+ */
+export const EDU_APPROVAL_STATUS_TAG: Record<EduApprovalStatus, string> = {
+  PENDING: "edu-tag--info",
+  APPROVED: "edu-tag--ok",
+  CHANGES_REQUESTED: "edu-tag--warn",
+  REJECTED: "edu-tag--danger",
+  EXPIRED: "edu-tag--danger",
+};
+
+/**
+ * 🔴 EL `where` DEL HISTORIAL — el punto donde se cierra TODO.
+ *
+ * Vive aquí, en el módulo puro, y no dentro de la consulta, por la misma
+ * razón que `eduStudentWhere` vive en padron-core: así se puede MIRAR sin
+ * base de datos. Una prueba arma el `where` de un docente con el
+ * `?estudiante=` de un alumno ajeno y comprueba, sobre el objeto, que el
+ * id ajeno quedó DENTRO del mismo `student` donde vive el recorte — es
+ * decir, que la consulta no puede devolver esa fila. Eso no se puede
+ * comprobar mirando una pantalla.
+ *
+ * Las tres cerraduras, en este orden:
+ *
+ *  1. `institutionId` de la SESIÓN, siempre. Un undefined aquí BORRA el
+ *     filtro de tenant en Prisma y devuelve las filas de todos los
+ *     institutos; por eso `eduCaseScopeWhere` revienta si le falta.
+ *  2. `case: eduCaseScopeWhere(...)` — EL ALCANCE, el mismo de la bandeja y
+ *     del expediente. No hay un segundo recorte escrito a mano en ningún
+ *     sitio de este archivo.
+ *  3. Los FILTROS, que solo pueden ACOTAR. El más delicado es
+ *     `studentId`: entra como `studentExtra` de `eduCaseScopeWhere`, o sea
+ *     que se FUSIONA con el filtro del alcance en el mismo objeto
+ *     `student`. Para la dirección (`scope.kind === "all"`) es el único
+ *     filtro y funciona; para un docente se suma a `supervisors.some(…)` y
+ *     para un alumno a `userId`, y en los dos casos un id ajeno da un AND
+ *     imposible: cero filas, sin 403 y sin pista de que ese id exista.
+ *
+ * ⚠️ `decidedByUserId` NO abre nada: filtra por quién decidió DENTRO de lo
+ * que ya se ve. Un docente que teclee el id de un colega verá, como mucho,
+ * lo que ese colega decidió sobre SUS PROPIOS alumnos vigentes — filas que
+ * ya podía leer enteras.
+ */
+export interface EduApprovalHistoryWhereInput {
+  institutionId: string;
+  scope: EduVisibilityScope;
+  filters: EduApprovalHistoryFilters;
+  /** El id de la SESIÓN, para "las que decidí yo". Nunca sale de la URL. */
+  viewerUserId: string;
+  timeZone: string;
+  now: Date;
+}
+
+export function eduApprovalHistoryWhere({
+  institutionId,
+  scope,
+  filters,
+  viewerUserId,
+  timeZone,
+  now,
+}: EduApprovalHistoryWhereInput): Prisma.EduCaseApprovalWhereInput {
+  const where: Prisma.EduCaseApprovalWhereInput = {
+    institutionId,
+    // El historial es lo que YA no espera. Un `status` concreto tiene que
+    // ser uno de los decididos: `parseEduApprovalHistoryStatus` ya descarta
+    // PENDING, así que `?estado=PENDING` cae a null y vuelve al `not`.
+    status: filters.status ? filters.status : { not: "PENDING" },
+    case: {
+      ...eduCaseScopeWhere({
+        institutionId,
+        scope,
+        now,
+        studentExtra: filters.studentId ? { id: filters.studentId } : undefined,
+      }),
+      ...(filters.programId ? { programId: filters.programId } : {}),
+    },
+  };
+
+  if (filters.stage) where.stage = filters.stage;
+
+  // "Las que decidí yo" GANA sobre el desplegable de docente: es el filtro
+  // de la sesión y el otro es texto de la URL. Si los dos vinieran puestos
+  // y se aplicaran los dos, un `?docente=<otro>&mias=1` no devolvería nada
+  // y parecería un error del sistema.
+  if (filters.soloMias) where.decidedById = viewerUserId;
+  else if (filters.decidedByUserId) where.decidedById = filters.decidedByUserId;
+
+  const tz = eduSafeTimeZone(timeZone);
+  const and: Prisma.EduCaseApprovalWhereInput[] = [];
+
+  // El rango va sobre la DECISIÓN y en días de CALENDARIO del instituto:
+  // una firma de las 20:00 en Tijuana pintada en UTC cae al día siguiente,
+  // y quien filtra "el 3 de marzo" no la encontraría el 3 de marzo.
+  // Extremo derecho EXCLUSIVO (< medianoche del día siguiente).
+  if (filters.desdeISO) {
+    const r = eduDayRange(filters.desdeISO, tz);
+    if (r) and.push({ decidedAt: { gte: r.from } });
+  }
+  if (filters.hastaISO) {
+    const r = eduDayRange(filters.hastaISO, tz);
+    if (r) and.push({ decidedAt: { lt: r.to } });
+  }
+
+  // El paciente, por nombre o folio. Contra `searchIndex`, que es la
+  // columna SIN ACENTOS de la Ola 1B: buscar "Rodriguez" tiene que
+  // encontrar a "Rodríguez". Cada palabra por separado y todas (AND), como
+  // en el resto del vertical.
+  for (const token of eduSearchTokens(filters.q)) {
+    and.push({ case: { patient: { searchIndex: { contains: token } } } });
+  }
+
+  if (and.length > 0) where.AND = and;
+  return where;
+}
