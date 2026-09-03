@@ -8,6 +8,8 @@ import {
 import { aggregateAdminPeriodKpis } from "@/lib/agenda/server";
 import {
   periodRangeUtc,
+  getTzParts,
+  tzLocalToUtc,
   type AdminPeriod,
 } from "@/lib/agenda/time-utils";
 import type {
@@ -38,7 +40,13 @@ export async function GET(req: NextRequest) {
   const data: HomeAdminData = {
     period,
     kpis: [
-      formatRevenueKpi(kpisCurrent.revenueMXN, kpisPrev.revenueMXN, period),
+      // El comparativo de ingresos va contra el MISMO TRAMO del periodo
+      // anterior (ver aggregatePreviousPeriodKpis): el dinero se acumula con el
+      // calendario, así que medir 2 días contra un mes entero daba siempre un
+      // "-97%" que no significaba nada. Los conteos de citas sí se comparan
+      // periodo completo contra periodo completo: una cita futura ya está
+      // agendada y cuenta desde hoy.
+      formatRevenueKpi(kpisCurrent.revenueMXN, kpisPrev.revenueSamePartMXN, period),
       formatCountKpi("Citas", kpisCurrent.appointments, kpisPrev.appointments, period),
       formatOccupancyKpi(kpisCurrent, kpisPrev),
       formatNoShowKpi(kpisCurrent.noShows, kpisPrev.noShows, period),
@@ -68,7 +76,7 @@ function formatRevenueKpi(
   return {
     label,
     value: `$${current.toLocaleString("es-MX", { maximumFractionDigits: 0 })}`,
-    delta: deltaPct(current, prev, periodLabel(period)),
+    delta: deltaPct(current, prev, `vs mismo periodo del ${periodLabel(period)} anterior`),
   };
 }
 
@@ -81,7 +89,7 @@ function formatCountKpi(
   return {
     label,
     value: current.toString(),
-    delta: deltaPct(current, prev, periodLabel(period)),
+    delta: deltaPct(current, prev, `vs ${periodLabel(period)} anterior`),
   };
 }
 
@@ -127,10 +135,11 @@ function formatNoShowKpi(
   };
 }
 
+/** `sub` es el texto COMPLETO que va bajo el porcentaje ("vs …"). */
 function deltaPct(
   current: number,
   prev: number,
-  pLabel: string,
+  sub: string,
 ): { value: string; direction: "up" | "down"; sub: string } | undefined {
   if (prev === 0) return undefined;
   const pct = ((current - prev) / prev) * 100;
@@ -138,7 +147,7 @@ function deltaPct(
   return {
     value: `${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%`,
     direction: pct >= 0 ? "up" : "down",
-    sub: `vs ${pLabel} anterior`,
+    sub,
   };
 }
 
@@ -146,6 +155,17 @@ function periodLabel(p: AdminPeriod): string {
   return p === "day" ? "día" : p === "month" ? "mes" : p === "quarter" ? "trimestre" : "año";
 }
 
+/**
+ * KPIs del periodo ANTERIOR, con dos ventanas distintas a propósito:
+ *
+ *  - Conteos (citas, completadas, no-shows): periodo anterior COMPLETO. Una
+ *    cita futura ya está agendada, así que el periodo en curso también se
+ *    cuenta completo y la comparación es pareja.
+ *  - Ingresos (`revenueSamePartMXN`): sólo el MISMO TRAMO ya transcurrido. El
+ *    dinero entra con el calendario: comparar los 2 días que van del mes contra
+ *    los 30 del mes pasado daba un "-97%" garantizado cada día 2, que se leía
+ *    como una caída del negocio en vez de como el mes recién empezado.
+ */
 async function aggregatePreviousPeriodKpis(
   period: AdminPeriod,
   clinicId: string,
@@ -155,8 +175,11 @@ async function aggregatePreviousPeriodKpis(
   const length = to.getTime() - from.getTime();
   const prevFrom = new Date(from.getTime() - length);
   const prevTo = from;
+  // Tramo ya corrido del periodo actual, proyectado sobre el anterior.
+  const elapsed = Math.max(0, Math.min(Date.now(), to.getTime()) - from.getTime());
+  const prevSameTo = new Date(Math.min(prevFrom.getTime() + elapsed, prevTo.getTime()));
 
-  const [appts, completed, noShows, invoiced] = await Promise.all([
+  const [appts, completed, noShows, invoicedSamePart] = await Promise.all([
     prisma.appointment.count({
       where: {
         clinicId,
@@ -181,7 +204,7 @@ async function aggregatePreviousPeriodKpis(
     prisma.payment.aggregate({
       where: {
         invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
-        paidAt: { gte: prevFrom, lt: prevTo },
+        paidAt: { gte: prevFrom, lt: prevSameTo },
         method: { not: "refund" },
       },
       _sum: { amount: true },
@@ -192,46 +215,76 @@ async function aggregatePreviousPeriodKpis(
     appointments: appts,
     completed,
     noShows,
-    revenueMXN: Number(invoiced._sum.amount ?? 0),
+    revenueSamePartMXN: Number(invoicedSamePart._sum.amount ?? 0),
   };
 }
 
+/**
+ * Ingresos de los últimos 6 meses (el actual incluido) para el sparkline de la
+ * tarjeta de ingresos. Antes eran 6 `aggregate` EN SERIE — seis viajes a la
+ * base en cada carga del home. Ahora es una query y el agrupamiento se hace en
+ * JS por clave de mes en la zona de la clínica (a prueba de husos y DST), el
+ * mismo patrón que la serie de la gráfica.
+ */
 async function buildRevenueSeries(
   clinicId: string,
   timezone: string,
 ): Promise<HomeAdminData["revenueSeries"]> {
   const now = new Date();
-  const out: HomeAdminData["revenueSeries"] = [];
+  const np = getTzParts(now, timezone);
 
+  const months: Array<{ key: string; month: string }> = [];
   for (let i = 5; i >= 0; i--) {
-    const ref = new Date(now.getTime());
-    ref.setMonth(ref.getMonth() - i);
-    const { from, to } = periodRangeUtc("month", timezone, ref);
+    const ref = new Date(Date.UTC(np.year, np.month - 1 - i, 15, 12));
+    const y = ref.getUTCFullYear();
+    const m = ref.getUTCMonth() + 1;
+    months.push({
+      key: `${y}-${pad2(m)}`,
+      month: new Intl.DateTimeFormat("es-MX", { timeZone: "UTC", month: "short" })
+        .format(ref)
+        .replace(".", "")
+        .replace(/^./, (c) => c.toUpperCase()),
+    });
+  }
 
-    const agg = await prisma.payment.aggregate({
+  const firstMonth = new Date(Date.UTC(np.year, np.month - 1 - 5, 1, 12));
+  const from = tzLocalToUtc(
+    `${firstMonth.getUTCFullYear()}-${pad2(firstMonth.getUTCMonth() + 1)}-01`,
+    0,
+    0,
+    timezone,
+  );
+  // Igual que el KPI y que la gráfica: la ventana llega al FIN del mes en
+  // curso, no a "ahora".
+  const { to } = periodRangeUtc("month", timezone, now);
+
+  const payments = await prisma.payment
+    .findMany({
       where: {
         invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
         paidAt: { gte: from, lt: to },
         method: { not: "refund" },
       },
-      _sum: { amount: true },
-    }).catch(() => ({ _sum: { amount: null as number | null } }));
-
-    const monthLabel = new Intl.DateTimeFormat("es-MX", {
-      timeZone: timezone,
-      month: "short",
+      select: { amount: true, paidAt: true },
     })
-      .format(from)
-      .replace(".", "")
-      .replace(/^./, (c) => c.toUpperCase());
-
-    out.push({
-      month: monthLabel,
-      value: Number(agg._sum.amount ?? 0),
+    .catch((err) => {
+      console.error("[home admin] revenue series query failed:", err);
+      return [] as Array<{ amount: number; paidAt: Date | null }>;
     });
+
+  const sums: Record<string, number> = {};
+  for (const p of payments) {
+    if (!p.paidAt) continue;
+    const tp = getTzParts(p.paidAt, timezone);
+    const key = `${tp.year}-${pad2(tp.month)}`;
+    sums[key] = (sums[key] ?? 0) + Number(p.amount ?? 0);
   }
 
-  return out;
+  return months.map((m) => ({ month: m.month, value: sums[m.key] ?? 0 }));
+}
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
 }
 
 async function buildAlerts(

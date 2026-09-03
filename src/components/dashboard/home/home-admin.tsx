@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   DollarSign, Calendar, TrendingUp, UserX, ChevronRight,
 } from "lucide-react";
-import { KpiCard } from "@/components/ui/design-system/kpi-card";
+import { KpiCard, type KpiAccent } from "@/components/ui/design-system/kpi-card";
 import { HomeSection } from "./home-section";
 import { Greeting } from "./parts/greeting";
 import { AdminPeriodToggle } from "./parts/admin-period-toggle";
@@ -32,6 +32,16 @@ function iconForKpi(label: string) {
   return DollarSign;
 }
 
+/** Un color por métrica: la fila deja de ser cuatro cajas iguales. */
+function accentForKpi(label: string): KpiAccent {
+  const l = label.toLowerCase();
+  if (l.includes("ingreso") || l.includes("revenue")) return "brand";
+  if (l.includes("cita")) return "info";
+  if (l.includes("ocupación") || l.includes("ocup")) return "success";
+  if (l.includes("no-show") || l.includes("no show")) return "warning";
+  return "brand";
+}
+
 export function HomeAdmin({ clinic, data, period }: Props) {
   const t = useT();
   const router = useRouter();
@@ -56,6 +66,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
       <div
         role="group"
         aria-label={t("home.admin.kpiGroupAria")}
+        className="home-kpis"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -74,6 +85,11 @@ export function HomeAdmin({ clinic, data, period }: Props) {
               icon={iconForKpi(k.label)}
               delta={k.delta}
               hero={i === 0}
+              accent={accentForKpi(k.label)}
+              // El sparkline sólo en ingresos: son los 6 meses que el endpoint
+              // ya traía y que hasta ahora no se pintaban en ningún lado.
+              sparkline={i === 0 ? data.revenueSeries.map((p) => p.value) : undefined}
+              sparklineLabel={i === 0 ? t("home.admin.revenueSparkAria") : undefined}
             />
           ))
         )}
@@ -98,12 +114,9 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         }}
         className="mf-home-admin-grid"
       >
-        <RevenueTrendCard
-          initialData={data.revenueSeries.map((p) => ({
-            label: p.month,
-            value: p.value,
-          }))}
-        />
+        {/* La gráfica arranca en el mismo periodo que los KPIs de arriba: su
+            total es el número de la tarjeta de ingresos, no otro recorte. */}
+        <RevenueTrendCard period={period} />
 
         <UpcomingAppointmentsCard />
       </div>
@@ -153,7 +166,14 @@ function KpiPlaceholderGrid() {
   return (
     <>
       {placeholders.map((p, i) => (
-        <KpiCard key={p.label} label={p.label} value="—" icon={p.icon} hero={i === 0} />
+        <KpiCard
+          key={p.label}
+          label={p.label}
+          value="—"
+          icon={p.icon}
+          hero={i === 0}
+          accent={accentForKpi(p.label)}
+        />
       ))}
     </>
   );

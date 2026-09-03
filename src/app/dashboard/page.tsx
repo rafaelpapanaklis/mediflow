@@ -43,8 +43,8 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
   // MULTI-CLÍNICA: `key={clinic.id}` en cada vista del home. Al cambiar de
   // sucursal el server ya re-renderiza con los datos correctos, pero React
   // REUTILIZA los componentes cliente y conserva su estado interno — la
-  // gráfica de ingresos (useState(initialData) + fetch sólo al montar) seguía
-  // pintando la serie de la clínica ANTERIOR mientras los KPIs ya iban en $0.
+  // gráfica de ingresos (serie en useState + fetch al montar y al cambiar de
+  // periodo) seguía pintando la de la clínica ANTERIOR con los KPIs ya en $0.
   // Con la key, el árbol se re-monta al cambiar de clínica y el estado muere.
   if (role === "RECEPTIONIST") {
     const data = await fetchReceptionistData();

@@ -112,6 +112,7 @@
     "admin": {
       "opSummary": "Resumen operativo",
       "kpiGroupAria": "Indicadores clave",
+      "revenueSparkAria": "Ingresos de los últimos 6 meses",
       "teamPerformanceTitle": "Performance del equipo",
       "teamPerformanceSubtitle": "Citas, completadas e ingresos generados",
       "viewFullReport": "Ver reporte completo",
@@ -209,7 +210,18 @@
       "subtitleWeek": "Esta semana",
       "subtitleMonth": "Este mes",
       "subtitleYear": "Este año",
-      "emptyState": "Aún no hay suficiente historial para graficar.",
+      "payments": {
+        "one": "{count} cobro",
+        "other": "{count} cobros"
+      },
+      "avgPer": "promedio {amount} por {unit}",
+      "unitHour": "hora",
+      "unitDay": "día",
+      "unitMonth": "mes",
+      "emptyTitle": "Sin ingresos cobrados en este periodo",
+      "emptyHint": "La gráfica suma pagos por su fecha de cobro, no facturas emitidas. Una factura pendiente todavía no aparece aquí.",
+      "errorTitle": "No se pudo cargar la tendencia",
+      "errorHint": "Vuelve a intentarlo en un momento.",
       "updating": "Actualizando…"
     },
     "teamPerf": {
