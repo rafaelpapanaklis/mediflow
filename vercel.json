@@ -1,4 +1,5 @@
 {
+  "ignoreCommand": "node scripts/vercel-ignore-build.cjs",
   "functions": {
     "src/app/api/patients/*/dicom-set/*/lite/route.ts": {
       "memory": 3009,

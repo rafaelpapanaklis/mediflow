@@ -1,0 +1,31 @@
+{
+  "model": "opusplan",
+  "effortLevel": "high",
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push -u origin:*)",
+      "Bash(node scripts/:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/git-guard.cjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
