@@ -7,12 +7,14 @@ type CardProps = {
   children: ReactNode;
   noPad?: boolean;
   className?: string;
+  /** Ancla para enlazar a la tarjeta desde otro punto de la misma pantalla. */
+  id?: string;
 };
 
-export function CardNew({ title, sub, action, children, noPad, className }: CardProps) {
+export function CardNew({ title, sub, action, children, noPad, className, id }: CardProps) {
   const cls = ["card", className].filter(Boolean).join(" ");
   return (
-    <div className={cls}>
+    <div className={cls} id={id}>
       {(title || action) && (
         <div className="card__header">
           <div>

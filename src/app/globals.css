@@ -54,6 +54,13 @@
     --border-strong: rgba(15,10,30,0.20);
     --border-brand:  rgba(124,58,237,0.30);
 
+    /* Pastilla del switch APAGADO. .switch la pintaba con blanco al 10 %:
+       se diseñó para fondo oscuro y sobre el panel CLARO desaparecía, así que
+       no se distinguía «apagado» de «no hay switch». Gris violáceo SÓLIDO,
+       ~3.3:1 contra la tarjeta blanca y contra la perilla blanca. */
+    --switch-off:      #8F8AA4;
+    --switch-off-ring: rgba(15,10,30,0.20);
+
     --brand:         #7c3aed;
     --brand-soft:    rgba(124,58,237,0.10);
     --brand-softer:  rgba(124,58,237,0.04);
@@ -183,6 +190,11 @@
     --border-soft:   rgba(255,255,255,0.06);
     --border-strong: rgba(255,255,255,0.10);
     --border-brand:  rgba(124,58,237,0.30);
+
+    /* Par oscuro de la pastilla apagada: ~2.9:1 contra la tarjeta (#121020)
+       y 6.4:1 contra la perilla blanca. */
+    --switch-off:      #5F5C70;
+    --switch-off-ring: rgba(255,255,255,0.16);
 
     --brand:         #7c3aed;
     --brand-soft:    rgba(124,58,237,0.12);
@@ -1126,9 +1138,13 @@
   width: 36px;
   height: 20px;
   border-radius: 10px;
-  background: rgba(255,255,255,0.1);
+  /* OFF: token sólido + anillo INTERIOR. El anillo va por box-shadow y no por
+     `border`: con box-sizing:border-box un borde real encoge la caja de
+     posicionamiento y descuadra la perilla absoluta (top/left 2px). */
+  background: var(--switch-off);
+  box-shadow: inset 0 0 0 1px var(--switch-off-ring);
   cursor: pointer;
-  transition: background .15s;
+  transition: background .15s, box-shadow .15s;
   border: none;
   flex-shrink: 0;
 }
@@ -1144,6 +1160,7 @@
   height: 16px;
   border-radius: 50%;
   background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
   transition: transform .2s;
 }
 .switch--on .switch__thumb { transform: translateX(16px); }

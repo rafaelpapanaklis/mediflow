@@ -36209,3 +36209,289 @@ curso, y la leyenda. Legible en los cuatro cuadrantes.
   7. **/instituto/clinica y /instituto/clinica/plano**: que se vean igual que antes (es el
      mismo diseño, servido desde otro archivo) y que ligar un sillón a su unidad siga
      funcionando.
+
+## [WhatsApp-Toggles] — los interruptores se ven cuando están apagados y se guardan solos, y el $0.00 del saldo de IA se explica ✅ (2026-09-03) · rama `fix/whatsapp-toggles-autosave`
+
+═══════════════════════════════════════════════════════════════════════════
+BUILD `npx next build` **EXIT 0** (completo, sin pipes, 470/470 páginas) · SIN SQL · SIN envs nuevas
+`npx tsc --noEmit`: **0 errores fuera de `__tests__`** (los 15 que salen son deuda preexistente de barber/edu, que el build ya ignora)
+⛔ **CERO cambios en la lógica de cobro de IA** — `src/lib/ai-billing/*`, `src/lib/whatsapp/bot/ai.ts` y `src/lib/whatsapp/bot/*` no aparecen en `git diff --name-only`
+⛔ El botón de guardar del MENSAJE del recordatorio sigue siendo manual · el resto del formulario del bot sigue con su botón de Guardar
+**7 archivos tocados**, ninguno nuevo.
+
+OBJETIVO: (1) que un interruptor apagado se distinga de "no hay interruptor" en los dos temas,
+(2) que los recordatorios de WhatsApp y el interruptor principal del bot se guarden al tocarlos
+—con confirmación y con vuelta atrás si falla—, y (3) que el $0.00 del saldo de IA diga por qué
+es cero en vez de quedarse mudo.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · LO QUE NO ESTABA EN EL ENCARGO: `PATCH /api/clinic` NUNCA GUARDÓ ESOS TRES CAMPOS
+───────────────────────────────────────────────────────────────────────────
+
+El encargo decía que el problema era el botón. El problema era peor: **el botón tampoco
+guardaba**.
+
+`src/app/api/clinic/route.ts` arma su `data` campo por campo (`if (body.x !== undefined)
+data.x = …`) y en esa lista **no están** `waReminderMsg`, `waReminder24h` ni `waReminder1h`.
+Aparecen solo en el `select` de la respuesta. O sea que el `PATCH` llegaba, `data` quedaba
+`{}`, `prisma.clinic.update` devolvía la fila **intacta** con 200, y la pantalla pintaba
+«Configuración guardada». Recargabas y volvía todo como estaba — con toast de éxito incluido.
+
+Y había una segunda mentira encima: `saveSettings()` hacía `await fetch(...)` **sin mirar
+`res.ok`**, así que un 403 (una recepcionista, que tiene `whatsapp.view` pero no
+`settings.edit`) también pintaba el toast verde.
+
+> ⚠️ **No se tocó el endpoint.** `PATCH /api/settings` ya tiene los tres campos en su
+> whitelist (`route.ts:46`), acepta actualizaciones parciales (`for (const key of allowed) if
+> (key in body)`), aísla por `ctx.clinicId` y exige el mismo permiso `settings.edit`. Es
+> además el endpoint que ya usan las secciones Recordatorios y Recall de Ajustes. La pantalla
+> de WhatsApp pasa a pegarle a ese. `api/clinic` ya no se menciona en el chunk compilado de
+> `/dashboard/whatsapp` (0 ocurrencias).
+
+Consecuencia honesta del arreglo: quien no tenga `settings.edit` **ahora ve un error** donde
+antes veía un falso «guardado». El toast lo dice con palabras: «No tienes permiso para cambiar
+los recordatorios».
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · TAREA 1 · EL INTERRUPTOR APAGADO: UN TOKEN, NO UN BLANCO AL 10 %
+───────────────────────────────────────────────────────────────────────────
+
+`.switch` pintaba el estado OFF con `rgba(255,255,255,0.1)`. Eso se diseñó para fondo oscuro:
+**sobre una tarjeta blanca es blanco sobre blanco**. Medido en el navegador con el CSS
+compilado del build, la pastilla apagada daba **1.00 : 1** contra la tarjeta en tema claro —
+literalmente invisible— y **1.30 : 1** en oscuro.
+
+Ahora el color sale de un par de tokens declarados junto a los `--border-*`, uno por tema:
+
+| | claro (`:root`, L61) | oscuro (`.dark`, L196) |
+|---|---|---|
+| `--switch-off` | `#8F8AA4` | `#5F5C70` |
+| `--switch-off-ring` | `rgba(15,10,30,0.20)` | `rgba(255,255,255,0.16)` |
+
+**Contraste medido, antes → después** (pastilla apagada contra el fondo real de cada
+superficie / perilla blanca contra la pastilla):
+
+```
+                          ANTES              DESPUÉS
+CLARO  tarjeta .card      1.00 / 1.00   →    3.31 / 3.31
+CLARO  anidado bg-elev-2  1.01 / 1.13   →    2.88 / 3.31
+CLARO  modal              1.00 / 1.00   →    3.31 / 3.31
+CLARO  fila success-soft  1.02 / 1.18   →    2.77 / 3.31
+OSCURO tarjeta .card      1.30 / 14.45  →    2.90 / 6.46
+OSCURO anidado bg-elev-2  1.33 / 13.16  →    2.71 / 6.46
+OSCURO modal              1.30 / 14.45  →    2.90 / 6.46
+OSCURO fila success-soft  1.33 / 12.96  →    2.67 / 6.46
+```
+
+Tres decisiones que conviene dejar escritas:
+
+> ⚠️ **El anillo va por `box-shadow: inset`, no por `border`.** Con `box-sizing: border-box`
+> un borde real encoge la caja de posicionamiento, y la perilla está en `position:absolute`
+> con `top/left: 2px`: un borde de 1 px la habría dejado a 3 px de arriba y 1 px de abajo.
+> Comprobado en el navegador que sigue centrada: `L2 T2 R18 B2` apagada, `L18 T2 R2 B2`
+> encendida, caja `36×20`, exactamente como antes.
+
+> ⚠️ **`.switch--on` no se tocó.** Declara `background` y `box-shadow` y va DESPUÉS en el
+> archivo, así que pisa tanto el token como el anillo: el estado encendido queda idéntico.
+
+> ⚠️ **El anillo no mata el foco del modal de permisos.** Ahí el botón lleva
+> `peer-focus-visible:shadow-[var(--ring)]`, cuyo selector generado
+> (`.peer:focus-visible ~ …`) tiene especificidad 0-3-0 contra el 0-1-0 de `.switch`: el ring
+> sigue ganando al enfocar.
+
+La perilla suma `box-shadow: 0 1px 2px rgba(0,0,0,0.25)` — ni el tamaño ni el `translateX(16px)`
+se rozaron. Es lo que la recorta contra la pastilla en los dos estados.
+
+**Dónde vive `.switch` (todas revisadas en los dos temas):**
+
+| Pantalla | Archivo |
+|---|---|
+| Ajustes → Recordatorios de cita | `dashboard/settings/reminders-section.tsx:126` |
+| Ajustes → Recall (revisión) | `dashboard/settings/recall-section.tsx:115` |
+| Ajustes → perfil público de la clínica | `dashboard/settings/settings-client.tsx:628` |
+| Ajustes → auto-aprobar cambios del paciente | `dashboard/settings/settings-client.tsx:676` |
+| WhatsApp → 24 h / 1 h antes | `dashboard/whatsapp/whatsapp-client.tsx:461` |
+| Equipo → modal de permisos (2 sitios) | `components/dashboard/team/permissions-modal.tsx:172, 238` |
+| Importar pacientes → «Omitir duplicados» | `components/import/step-review.tsx:71` |
+| **nuevas** Bot de WhatsApp (4 interruptores) | `dashboard/whatsapp/bot/bot-client.tsx:91` |
+| **nueva** Saldo de IA → recarga automática | `dashboard/whatsapp/bot/saldo/saldo-client.tsx:808` |
+
+Ningún otro archivo define un `.switch` global: los de `barber/team`, `realty/properties` y
+`realty/team` son módulos CSS y salen con el nombre hasheado.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · TAREA 1b · LOS DOS DUPLICADOS, BORRADOS
+───────────────────────────────────────────────────────────────────────────
+
+Había **dos** copias del interruptor con estilos inline, no una: `bot-client.tsx` (con el
+comentario que explicaba por qué) y `saldo-client.tsx` («Mismo patrón que la página del bot»).
+Las dos usaban `#94a3b8` para el OFF. Ahora las dos son un envoltorio de doce líneas que solo
+pone `.switch` / `.switch--on` y la perilla; `#94a3b8` ya no aparece en el chunk compilado del
+bot. **Se ve igual o mejor**: la copia daba 2.56 : 1 contra la tarjeta blanca, el token da
+3.31 : 1, y en oscuro la copia se quedaba en un gris claro pensado para tema claro.
+
+El envoltorio se conserva (no se inlineó el markup en cada sitio) porque hay 5 llamadas entre
+las dos pantallas y `ToggleRow` no cambia.
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · TAREA 2 · LOS RECORDATORIOS SE GUARDAN AL TOCARLOS
+───────────────────────────────────────────────────────────────────────────
+
+`saveToggle(key, field, next, set, toastKey)` en `whatsapp-client.tsx`:
+
+1. mueve el interruptor **antes** de pedir nada (optimista);
+2. marca ese interruptor como ocupado → queda `disabled` mientras su PATCH vuela, así dos
+   clics rápidos no dejan respuestas pisándose ni un revert contra un valor que ya cambió;
+3. manda **solo su propio campo**: `JSON.stringify({ [field]: next })`;
+4. si responde no-OK **o si el fetch ni siquiera responde**, devuelve el interruptor a donde
+   estaba y avisa. Nunca queda la pantalla diciendo algo distinto de lo guardado.
+
+> ⚠️ **Por qué solo su campo.** Mandar también `waReminderMsg` guardaría de rondón el texto
+> que la clínica esté escribiendo en el textarea y no haya confirmado. El botón «Guardar
+> configuración» ahora manda **únicamente** `waReminderMsg`, y los interruptores únicamente lo
+> suyo: cada cosa se guarda por su cuenta.
+
+Seis llaves nuevas, en `es.json` **y** `en.json`, con el mismo nombre:
+`reminder24hOnToast`, `reminder24hOffToast`, `reminder1hOnToast`, `reminder1hOffToast`,
+`reminderToggleError`, `reminderToggleForbidden`.
+
+De paso, el botón manda un `aria-checked` con `role="switch"` en vez de `aria-pressed` (que es
+para botones de dos estados, no para interruptores).
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · TAREA 3 · EL INTERRUPTOR PRINCIPAL DEL BOT
+───────────────────────────────────────────────────────────────────────────
+
+`toggleEnabled()` en `bot-client.tsx`, mismo patrón, con tres cuidados propios:
+
+- **Manda `{ enabled }` y nada más.** Comprobado ejecutando el helper del servidor:
+  `buildConfigUpdate({ enabled: false })` → `{"enabled":false}`, una sola llave. Los horarios,
+  las FAQs y los mensajes a medio escribir no viajan.
+- **La respuesta no pisa el formulario.** Solo se sincroniza `enabled` con el DTO que devuelve
+  el servidor; hacer `editableFromConfig(data.config)` entero habría borrado lo que el usuario
+  esté escribiendo en ese momento.
+- **El gate de permisos sigue primero.** `if (!canEdit) return noPermissionToast()` antes de
+  mover nada, y el `ToggleRow` va `disabled` sin permiso. Un 403 del servidor (permiso que
+  cambia a mitad de sesión) ahora dice «No tienes permiso para configurar el bot de WhatsApp»
+  en vez de enseñar el JSON crudo `{"error":"Permiso requerido: whatsapp.send"}`; y un fallo
+  de red ya no filtra el `Failed to fetch` en inglés que tira el navegador.
+
+El resto del formulario del bot **sigue con su botón de Guardar**. Esta pantalla no usa i18n
+(está en español fijo de punta a punta), así que los toasts nuevos siguen ese mismo criterio:
+meter dos llaves sueltas dejaría media pantalla traducida.
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · TAREA 4 · EL $0.00 EXPLICADO — SOLO COPY, EL MOTOR NO SE TOCÓ
+───────────────────────────────────────────────────────────────────────────
+
+Se confirmó lo del encargo antes de escribir nada: el único sitio que gasta saldo es
+`src/lib/whatsapp/bot/ai.ts:57`, que llama a `chatMetered` **solo si `canSpend()` da true**
+(`wallet.ts:29`: monedero `ACTIVE` y `balanceCents > 0`, o sobregiro con tarjeta guardada). Con
+el monedero en cero y pausado el bot ni llama a Claude: cae a la FAQ por reglas o al handoff.
+**No se tocó ni una línea de esa lógica ni del gate.**
+
+Lo que cambió es lo que se lee:
+
+- **En el hero**, cuando el monedero está parado (pausado **o** en cero) aparece un bloque con
+  el motivo concreto —«Tu monedero está pausado» / «Te quedaste sin saldo»—, la consecuencia
+  («El bot no está usando IA: responde solo las preguntas frecuentes que tengas configuradas o
+  pasa la conversación a una persona. Mientras tanto no se te cobra nada.»), la nota de alcance
+  («Tu saldo se usa solo cuando el bot responde con IA. Los recordatorios y las plantillas de
+  WhatsApp los cobra Meta a la tarjeta de tu clínica: no salen de aquí.») y el CTA.
+- **En «Consumo de IA»**, el estado vacío ya no dice «Aún no hay consumo de IA.» a secas: dice
+  **$0.00 · gastado en IA hasta hoy** y debajo las dos explicaciones.
+- El aviso viejo de «Saldo bajo» se conserva para el caso en que sí hay saldo pero es poco.
+
+> ⚠️ **La nota de alcance se repite en el hero a propósito.** Para un administrador, la tarjeta
+> de «Consumo de IA» queda debajo de Recargar y de Recarga automática — fuera de pantalla.
+> Quien mira el $0.00 lo mira arriba.
+
+**El CTA no inventa ruta:** lleva a la tarjeta «Recargar saldo» de esa misma pantalla, que es
+donde ya viven Tarjeta / MercadoPago / SPEI. Para eso `CardNew` acepta ahora un `id` opcional
+(prop aditiva, cinco líneas) y el botón hace `scrollIntoView({ block: "center" })` — con
+`center` en vez de un ancla `#`, que la barra superior fija taparía. Si quien mira no es
+administrador esa tarjeta no se pinta, así que en su lugar se lee «Pídele a un administrador de
+la clínica que recargue el saldo».
+
+───────────────────────────────────────────────────────────────────────────
+### 7 · CÓMO SE COMPROBÓ (Y CON QUÉ, PORQUE AQUÍ NO HAY BASE DE DATOS)
+───────────────────────────────────────────────────────────────────────────
+
+**El interruptor**, en un HTML servido por HTTP con el **CSS compilado del build** (preflight
+de Tailwind + `globals.css` tal cual se sirve), pintando la pastilla en las cuatro superficies
+donde vive de verdad —`.card`, `bg-elev-2`, modal y fila `success-soft`—, por duplicado dentro
+de un `.dark`. De ahí salen los números de la sección 2. Y una segunda copia de la misma página
+con el `.switch` ANTERIOR para tener el punto de partida medido, no supuesto.
+
+**El comportamiento**, con una page temporal `src/app/dev-wa-switches/page.tsx` (fuera del
+matcher del middleware, así que arranca sin `DATABASE_URL`) que monta los **componentes
+reales** —`WhatsAppClient`, `BotClient`, `SaldoClient`— con un `fetch` de mentira que registra
+cada petición y sabe fallar de tres maneras: OK, 403 y sin red. **Borrada antes de commitear**
+(`git status` limpio, y la ruta no aparece en la tabla del build final).
+
+Lo que devolvió ese arnés, literal:
+
+```
+(e)  textarea = "TEXTO EDITADO SIN GUARDAR"  →  clic en el switch de 24 h
+     peticiones: [ PATCH /api/settings  body {"waReminder24h": false} ]   ← una sola, sin el mensaje
+     toast: "Recordatorio de 24 h desactivado"      switch: switch--on → switch
+
+(c)  con el PATCH retenido a propósito:
+     antes:   switch            disabled=false
+     durante: switch switch--on disabled=true      ← se movió ya, y se bloquea mientras vuela
+     después: switch            disabled=false     ← el fetch falla y vuelve solo
+     toast: "No se pudo guardar: el interruptor volvió como estaba"
+     403 →  toast: "No tienes permiso para cambiar los recordatorios"
+
+(d)  bot con nombre y saludo A MEDIO ESCRIBIR  →  clic en "Bot activado"
+     peticiones: [ PATCH /api/whatsapp/bot  body {"enabled": true} ]      ← una sola llave
+     servidor simulado: enabled=true, botName="Asistente"                 ← lo editado NO se guardó
+     los campos siguen con el texto del usuario; toast: "Bot activado"
+     sin red → vuelve a ON + "No se pudo guardar: el interruptor se quedó como estaba"
+     403     → vuelve a OFF + "No tienes permiso para configurar el bot de WhatsApp"
+```
+
+───────────────────────────────────────────────────────────────────────────
+### 8 · VERIFICACIÓN FINAL, PUNTO POR PUNTO
+───────────────────────────────────────────────────────────────────────────
+
+- **(a) El apagado SE VE en claro y en oscuro.** ✅ **Comprobado en el navegador**, con
+  números y captura, en las cuatro superficies y en los dos temas (sección 2). Pasa de
+  1.00 : 1 a 3.31 : 1 en claro y de 1.30 : 1 a 2.90 : 1 en oscuro; la perilla blanca se
+  recorta 3.31 : 1 en claro y 6.46 : 1 en oscuro.
+- **(b) Apagar «24 horas antes» → toast → recargar → sigue apagado.** ⚠️ **La mitad se
+  comprobó, la otra no se puede aquí.** Comprobado: sale UN PATCH a `/api/settings` con
+  `{"waReminder24h": false}` y el toast correcto. No comprobable en local: que la fila quede
+  escrita, porque no hay `DATABASE_URL` ni sesión. Lo que sostiene esa mitad es que el campo
+  está en la whitelist de `/api/settings` (`route.ts:46`) y que la página lo lee de la fila
+  para pintar el estado inicial (`whatsapp/page.tsx:40`, `waReminder24h ?? true`). **Es
+  justo lo que hay que probar a mano primero**, porque hasta hoy no se guardaba (sección 1).
+- **(c) Cortar la red y apagar un switch → vuelve solo + toast de error.** ✅ **Ejecutado**
+  con el fetch retenido: se movió, se bloqueó, volvió y avisó (sección 7).
+- **(d) Apagar/encender el bot persiste sin pulsar Guardar.** ⚠️ Igual que (b): el PATCH sale
+  con `{"enabled": true}` y solo eso —comprobado también del lado del servidor, ejecutando
+  `buildConfigUpdate`—, pero la escritura real necesita base de datos.
+- **(e) Editar el mensaje SIN guardarlo y tocar un switch → el mensaje NO se guarda de
+  rondón.** ✅ **Ejecutado**: el cuerpo del PATCH del interruptor es `{"waReminder24h":false}`,
+  sin `waReminderMsg` (sección 7). Se ve igual en el bundle compilado.
+- **(f) La pantalla de saldo explica el $0.00.** ✅ **Comprobado en el navegador** con el
+  componente real y el monedero en `PAUSED` + $0.00, en claro y en oscuro (sección 6).
+
+───────────────────────────────────────────────────────────────────────────
+### 9 · QUÉ HAY QUE PROBAR A MANO, Y QUÉ SE DEJÓ FUERA
+───────────────────────────────────────────────────────────────────────────
+
+1. **La persistencia de verdad** (b) y (d): apagar «24 horas antes», recargar, y que siga
+   apagado. Es el punto que más conviene mirar: hasta este commit **nunca** se guardó.
+2. **Una recepcionista** en `/dashboard/whatsapp`: tiene `whatsapp.view` pero no
+   `settings.edit`, así que al tocar un interruptor verá «No tienes permiso para cambiar los
+   recordatorios» donde antes veía un falso «Configuración guardada». Si se quiere que ni
+   pueda tocarlo, hace falta pasarle el permiso a la pantalla como prop — **no se hizo**: no
+   se pidió y obliga a tocar el server component.
+3. Las otras pantallas con `.switch` (tabla de la sección 2), sobre todo el **modal de
+   permisos del equipo** y el paso 6 de **importar pacientes**, que son las dos que van sobre
+   superficies distintas.
+4. **Lo que NO se hizo:** no se tocó la lógica de cobro ni el gate del monedero; no se
+   convirtió el resto del formulario del bot en autosave; los otros tres interruptores del bot
+   (FAQ / agendar / derivar) siguen con el botón de Guardar; y `/api/clinic` se dejó como
+   está —sigue sin escribir `waReminder*`, que ahora ya no le pide nadie—.
