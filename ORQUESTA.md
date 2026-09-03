@@ -1,4 +1,263 @@
 ═══════════════════════════════════════════════════════════════════════════
+## [Live-Dental-3D] — Las pantallas EN VIVO del dental pintan el mundo 3D ✅ (2026-09-02) · rama `feat/live-dental-3d` → PR contra main, SIN mergear
+═══════════════════════════════════════════════════════════════════════════
+
+**Qué se pidió**: que el televisor de recepción (`/live/[slug]`) y el modo En Vivo del
+panel (`/dashboard/clinic-layout`) dejen de pintar el isométrico 2D y pinten el mismo
+mundo 3D que el instituto usa como "Clínica en vivo" — vista de estado con cámara de
+dron, no un paseo en primera persona.
+
+**Qué NO se pidió y no se hizo**: no se tocó `/dashboard/clinic-layout/3d` ni
+`/live/[slug]/3d` (los recorridos a pie siguen igual), no se tocó el modo ARMAR (sigue
+en 2D, arrastrando en la rejilla), y **no se tocó ni un renglón de
+`src/components/clinic-3d/`**, ni de `src/components/edu/`, `src/app/instituto/` o
+`src/lib/edu/`.
+
+───────────────────────────────────────────────────────────────────────────
+### 1 · EL DIAGNÓSTICO QUE HACÍA FALTA
+───────────────────────────────────────────────────────────────────────────
+
+Un intento anterior falló tratando de que el isométrico 2D del dental "se pareciera" al
+instituto. No puede: son motores distintos. La Clínica en vivo del instituto **no es
+2D** — monta `Clinic3DClient` (el mundo 3D del propio dental) como VISTA DE ESTADO, con
+la prop `host`: cámara aérea, sin WASD, sin mano, sin mira, sin VR.
+
+O sea: la pieza que hacía falta ya era nuestra, y ya estaba montada dos veces en este
+mismo producto (`/dashboard/clinic-layout/3d` y `/live/[slug]/3d`). Aquí se monta una
+TERCERA vez, en otro sitio. **No hay visor nuevo y no va a haberlo.**
+
+───────────────────────────────────────────────────────────────────────────
+### 2 · QUÉ SE MONTÓ Y DÓNDE
+───────────────────────────────────────────────────────────────────────────
+
+**Pieza nueva — `src/app/dashboard/clinic-layout/components/live-world.tsx`** (la única).
+El equivalente dental de `src/components/edu/clinica/plano-mundo.tsx`: un envoltorio
+delgado que carga `Clinic3DClient` por `dynamic({ssr:false})` y le pasa `host`. Vive en
+`clinic-layout/components/` porque es exactamente donde ya viven las piezas que
+comparten el panel y la vista pública (`live-mode.tsx`, `waiting-room.tsx`, que
+`/live/[slug]` ya importaba desde ahí). Exporta además `hayWebGL()`, `ANCHO_MIN_3D` y
+`useMundoEstable()`.
+
+**1 · `/live/[slug]` — el televisor de recepción.**
+El piso pasa a ser el mundo. Se conserva TODO lo demás: el reloj grande, el panel
+derecho de sillones, la sala de espera, la línea de tiempo del día, el pie y los
+contadores (los del HUD del visor, ver §5). El botón del encabezado **sigue estando** y
+ahora dice **"Recorrer a pie"** en vez de "Recorrer en 3D": lleva al mismo
+`/live/[slug]/3d` de siempre, pero anunciar "el 3D" cuando el piso YA es 3D era mentir —
+lo que ofrece ese botón es meterse dentro y caminarlo.
+
+**2 · `/dashboard/clinic-layout` — el modo En Vivo.**
+Igual: el piso de En Vivo pasa a ser el mundo; el modo Edición **no se toca**. Se
+conservan la línea de tiempo, el panel de estado, la sala de espera y la tarjeta del
+sillón (`ChairCard`), que ahora también se abre clicando el sillón EN 3D.
+
+En las dos pantallas hay un botón **Piso 3D ↔ Plano 2D**, y la elección se guarda en
+`localStorage` (por slug en el televisor, por clínica en el panel): cada pantalla decide
+la suya.
+
+───────────────────────────────────────────────────────────────────────────
+### 3 · EL ENMASCARADO PÚBLICO: LAS DOS PROPS, Y POR QUÉ
+───────────────────────────────────────────────────────────────────────────
+
+En `/live/[slug]` el visor recibe **`publicMode` Y `host`**. No es redundante, y el
+orden de precedencia está escrito dentro de `Clinic3DClient`:
+
+  · **`publicMode` manda en LOS DATOS.** Sondea `/api/live/[slug]` —el MISMO endpoint
+    que ya pintaba el 2D, enmascarado en el servidor según `liveModeShowPatientNames`— y
+    lo traduce con `public-live-adapter.ts`, que fuerza `patientId: null`. Sin
+    `patientId` la capa viva no marca ningún avatar como interactuable: en público es
+    imposible abrir un expediente. Además apaga el multijugador y la interacción.
+  · **`host` manda en LA CÁMARA y en el clic**: vista aérea, sin caminar, y el clic lo
+    resuelve quien monta (no una ruta del dental).
+
+Quitar `publicMode` habría hecho que una página SIN SESIÓN pidiera el estado PRIVADO del
+dueño (nombres completos y `patientId`). Es exactamente la fuga que el adaptador existe
+para impedir. **No se relajó, y se dejó escrito en el archivo por qué.**
+
+**Medido en el navegador, no deducido** (clínica de prueba con
+`liveModeShowPatientNames = false`): la placa flotante del sillón ocupado lee
+`Consultorio 1 / J.P. / Dr. Ana Torres / termina 19:16`. **"J.P.", como hoy.**
+
+**El clic público no estrena ni un dato.** No abre ninguna ficha nueva: marca el sillón
+en el panel de la derecha y lo trae a la vista (prop opcional `highlightChairId` en
+`LiveStatusPanel`, y el marcado se apaga solo a los 12 s — en un televisor nadie va a
+volver a cerrarlo). Se enseña lo que la pantalla ya estaba enseñando.
+
+───────────────────────────────────────────────────────────────────────────
+### 4 · RENDIMIENTO: ES UN TELEVISOR ENCENDIDO DURANTE HORAS
+───────────────────────────────────────────────────────────────────────────
+
+**a) La identidad de las props del mundo (`useMundoEstable`) — esto no es higiene.**
+`Clinic3DClient` recalcula el mundo con un `useMemo` sobre `initialElements`,
+`initialMetadata` e `initialChairs`, y su efecto depende de ese mundo: si cambian de
+IDENTIDAD, **destruye la escena, suelta el contexto WebGL y reconstruye treinta
+sillones**. En el instituto eso no pasa porque sus props vienen del servidor y no se
+mueven. Aquí SÍ: `sanitizeLiveData` devuelve arrays nuevos en CADA sondeo (30 s) aunque
+el plano no haya cambiado una silla. Pasarlos tal cual era reconstruir el mundo dos
+veces por minuto, para siempre. Se congela la identidad contra una FIRMA del contenido
+(tipo/posición/giro/`resourceId` de cada elemento, `gridSize`, y nombre/color de cada
+sillón); cuando el dueño mueve un sillón de verdad, la firma cambia, el mundo se rehace
+UNA vez y la pantalla se entera sola. La firma se calcula con las tres dependencias
+sueltas y **no** con un objeto armado en el padre, porque el televisor re-renderiza una
+vez por segundo (el reloj) y así se calcula una vez cada 30 s, no sesenta por minuto.
+
+**b) El latido es UNO SOLO.** Con el piso en 3D, quien sondea es el VISOR (modo público
+→ el mismo `/api/live/[slug]`) y entrega cada payload por `host.onState`; la pantalla lo
+sanea con la misma función y de ahí salen el panel, la sala de espera y la línea de
+tiempo. Así el piso y lo que se lee al lado son SIEMPRE la misma foto, y no hay dos
+consultas cada 30 s contra las mismas tablas. La primera lectura sí la hace la pantalla
+(es la que trae el plano con el que se construye el mundo), y también la de volver a la
+pestaña. Con el plano 2D montado late la pantalla, como siempre. Nunca los dos.
+
+**c) El isométrico se DESMONTA, no se esconde.** Son 768 baldosas más los muebles
+reconciliándose en cada render, y estas pantallas re-renderizan cada segundo. Un
+`display:none` ahorraría el pintado pero no el trabajo de React.
+
+**d) `hayWebGL()` pregunta UNA vez y suelta el contexto** (`WEBGL_lose_context`). Corre
+en cada `resize`; sin eso, mover la ventana unas cuantas veces agotaba el cupo (~16
+contextos vivos) y contestaba "este navegador no puede" en un navegador que sí podía. Es
+la misma lección que costó verla en el plano del instituto.
+
+**e) Los gestos del 2D no corren sobre el 3D**: la rueda, el pan con el ratón y los
+atajos `+ − 0` quedan desenganchados con el mundo montado (si no, además de orbitar se
+movía —y se guardaba en `localStorage`— el zoom de un plano que no se ve). `F`
+(pantalla completa) sigue en los dos.
+
+───────────────────────────────────────────────────────────────────────────
+### 5 · LOS DOS CHOQUES DE CSS, Y CÓMO SE RESOLVIERON
+───────────────────────────────────────────────────────────────────────────
+
+1. **El visor trae `h-[100dvh]` escrito en su raíz** — está pensado para ocupar la
+   pantalla, no una columna. Se le impone el alto del hueco con `.world3d > div` /
+   `.stage3d > div`, que gana por especificidad (clase + elemento, 0-1-1) a la utilidad
+   de Tailwind (0-1-0) **sin `!important`**. Es la misma solución que el plano del
+   instituto: repintar el archivo del dental desde fuera dejaría sin repintar la próxima
+   clase que le añadan.
+2. **El HUD del visor se pinta con `z-20`** sobre todo el hueco. Sin un contexto de
+   apilamiento propio competía de tú a tú con los flotantes de estas pantallas y tapaba
+   la tarjeta del sillón (z-14) y el aviso de la hora (z-6). Con `isolation: isolate` en
+   el envoltorio, el visor entero queda por debajo de ellos.
+
+Y el único encimado real: **los contadores del HUD viven abajo a la derecha**, justo
+donde estaban los controles flotantes del televisor. En 3D los controles suben
+(`.canvasControls3d`). Los contadores y la leyenda del piso los pinta el HUD, así que en
+3D se ocultan `LiveCounters` y `FloorLegend` del panel: duplicarlos era además
+contradecirlos (los del panel cuentan a la hora de la línea de tiempo; los del HUD
+cuentan AHORA).
+
+───────────────────────────────────────────────────────────────────────────
+### 6 · EL PISO EN 3D ENSEÑA "AHORA", Y SE DICE EN VOZ ALTA
+───────────────────────────────────────────────────────────────────────────
+
+La línea de tiempo deja viajar la hora, y el panel y la línea la siguen. **El mundo no
+puede**: su estado sale de su propio sondeo y no hay forma de empujarle un estado
+"a las 10:09" sin tocar `clinic-3d`. Callarlo sería dejar dos relojes distintos en la
+misma pantalla, así que cuando la hora se aleja más de 90 s aparece un aviso sobre el
+piso: *"El piso muestra **ahora** (19:07); abajo estás viendo las 10:09"* + **Volver a
+ahora**. Quien quiera mirar otra hora en el piso tiene el botón Plano 2D al lado.
+
+───────────────────────────────────────────────────────────────────────────
+### 7 · EL RESPALDO
+───────────────────────────────────────────────────────────────────────────
+
+Se cae al plano 2D de siempre, y se decide en el CLIENTE (el servidor no sabe si hay
+WebGL): sin WebGL, con menos de 768 px de ancho, sin elementos en el plano (ahí el visor
+enseñaría su propia pantalla de "clínica vacía", que aquí no viene a cuento), o si
+alguien pulsó **Plano 2D**. En el televisor eso importa: un mundo 3D en el teléfono de
+alguien de pie no es la pantalla correcta.
+
+───────────────────────────────────────────────────────────────────────────
+### 8 · LO QUE SE MIRÓ EN EL NAVEGADOR (no se dedujo)
+───────────────────────────────────────────────────────────────────────────
+
+Con Postgres local, una clínica sembrada (`demo3d`, 49 elementos del layout demo, 3
+sillones, una cita EN CURSO, una próxima, una lejana y una en sala de espera) y el build
+de producción servido con `next start`:
+
+  · **El piso 3D pinta**, encuadrando la clínica entera desde el aire, sin overlay de
+    "haz clic para entrar", sin mira y sin los mandos de dron/minimapa/VR.
+  · **Los tres estados, con su color**: `Consultorio 1` con anillo rojo y placa
+    `J.P. / Dr. Ana Torres / termina 19:16`; `Consultorio 2` ámbar, `Próxima cita`;
+    `Consultorio 3` verde, `Libre`. El HUD dice `Ocupados 1 · Libres 2 / 3`.
+  · **El enmascarado**: con la bandera apagada, `J.P.` — como hoy.
+  · **El clic en un sillón** marca su tarjeta en el panel de la derecha.
+  · **El aviso de la hora** al mover la línea de tiempo, con su botón.
+  · **El botón Plano 2D** devuelve el isométrico con sus controles completos, y la
+    elección sobrevive en `localStorage`.
+  · **Sin fuga de contexto WebGL**: once montajes/desmontajes seguidos del mundo y el
+    navegador sigue concediendo contextos nuevos; heap en 33 MB.
+  · **Consola limpia**: cero errores. Solo los `THREE.Clock`/`PCFSoftShadowMap` que el
+    visor ya emitía y los scripts de Vercel que no existen en local.
+  · **El latido se para con la pestaña oculta** (se comprobó: los contadores se quedan
+    en el estado inicial hasta que la pestaña vuelve a estar visible).
+
+Lo que **no** se pudo mirar así: `/dashboard/clinic-layout` pide sesión y aquí no hay
+Supabase. De esa pantalla se verificó por separado, con las reglas EXACTAS del CSS
+module, lo único que era específico suyo: que `.stage3d > div` somete el `h-[100dvh]`
+del visor dentro del ancestro con `container-type: inline-size`, y que con `isolation`
+la tarjeta del sillón y el aviso quedan por encima del HUD (`elementFromPoint` devuelve
+la tarjeta y el aviso, no el HUD). El resto de esa pantalla es el mismo camino ya
+probado en el televisor.
+
+───────────────────────────────────────────────────────────────────────────
+### 9 · LO QUE NO SE HIZO, Y SE DICE
+───────────────────────────────────────────────────────────────────────────
+
+1. **No se migró ningún plano guardado.** El 3D lee el MISMO `LayoutElement[]` que el
+   2D; `LayoutElement` y `LayoutMetadata` están intactos. Lo que hay en la base de las
+   11 clínicas se lee y se guarda exactamente como antes.
+2. **`src/components/clinic-3d/` no se tocó.** Ni el adaptador público. La única prop
+   que hacía falta (`host`) ya existía desde la ola del instituto.
+3. **El panel del televisor sigue enmascarando DOS veces, y ahora se nota.** El API ya
+   manda `J.P.` y `LiveStatusPanel` vuelve a llamar `maskPatient(...)` sobre eso, que lo
+   deja en `J.`. Es de antes de este bloque y **no se tocó** — es el enmascarado, y
+   destaparlo (aunque sea de `J.` a `J.P.`) es una decisión de privacidad tuya, no mía.
+   Lo que cambió es que ahora el piso (`J.P.`) y el panel (`J.`) se ven juntos en la
+   misma pantalla y la diferencia canta. **Dime si lo alineo.**
+4. **En el panel, el mundo abre canal de presencia** (`presenceChannel` del estado
+   privado) igual que `/dashboard/clinic-layout/3d`: quien tenga En Vivo abierto se verá
+   como avatar para quien esté recorriendo la clínica a pie. No se puede apagar sin
+   tocar `clinic-3d`; se deja anotado por si prefieres que no.
+5. **En público, con pantalla táctil, el clic al sillón no abre nada.** El visor corta
+   el `touchend` en modo público antes de llegar al `host` (defensa en profundidad de la
+   ola pública). Con ratón funciona, y en un televisor de recepción nadie toca. No se
+   relajó esa guardia.
+6. **El pie "Powered by DaleControl" sale dos veces** en el televisor: el del HUD del
+   visor (abajo, centrado sobre el piso) y el de la página. Quitar el del HUD es tocar
+   `clinic-3d`.
+7. **Fecha del sondeo en UTC (de antes, no se tocó).** Tanto el cliente 2D como el visor
+   piden `?date=new Date().toISOString().slice(0,10)`, que es la fecha **UTC**. En
+   México, entre las 18:00 y la medianoche la pantalla pide el día SIGUIENTE y sale
+   vacía. Se vio en vivo durante la verificación (hubo que correr el servidor con
+   `TZ=UTC` para poder mirar el piso ocupado). Es un fallo real y de antes; **queda
+   anotado, no arreglado** — no es de este bloque.
+
+───────────────────────────────────────────────────────────────────────────
+### 10 · ARCHIVOS
+───────────────────────────────────────────────────────────────────────────
+
+Nuevo:
+  · `src/app/dashboard/clinic-layout/components/live-world.tsx`
+
+Tocados:
+  · `src/app/live/[slug]/live-public-client.tsx` — el piso, el latido único, el botón
+  · `src/app/live/[slug]/live-public.module.css` — `.world3d`, aviso, controles en 3D
+  · `src/app/live/[slug]/page.tsx` — pasa `category` (escalar; la fila entera NO baja)
+  · `src/app/dashboard/clinic-layout/layout-client.tsx` — el piso de En Vivo
+  · `src/app/dashboard/clinic-layout/clinic-layout.module.css` — `.stage3d`, aviso
+  · `src/app/dashboard/clinic-layout/components/live-mode.tsx` — `highlightChairId`
+  · `src/app/dashboard/clinic-layout/components/live-mode.module.css` — la marca
+
+`git diff --name-only origin/main` no trae **nada** de `src/components/edu/`,
+`src/app/instituto/`, `src/lib/edu/` ni `src/components/clinic-3d/`.
+
+**Cierre**: `npx next build` **EXIT 0** (leído entero; los `PrismaClientInitializationError`
+son de no tener `DATABASE_URL` al prerenderizar en local). `tsc --noEmit` sin un solo
+error fuera de los `__tests__` que ya venían rotos en main. ESLint sin errores (solo los
+avisos de `t` y del `<img>` que ya estaban). `three.js` sigue en su propio trozo: el
+First Load de `/live/[slug]` es 118 kB y el de `/dashboard/clinic-layout` 166 kB.
+
+═══════════════════════════════════════════════════════════════════════════
 ## [Institucional · INTEGRACIÓN 6] — La valoración, la ventana de la agenda y el plano de la clínica, en una sola rama ✅ (2026-09-02) · rama `edu/integracion6` → PR contra main, SIN mergear
 ═══════════════════════════════════════════════════════════════════════════
 BUILD EXIT 0 (completo, sin tuberías, 467/467 páginas) · `npm run test:edu` VERDE

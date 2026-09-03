@@ -160,6 +160,89 @@
   pointer-events: auto;
 }
 
+/* ─── El piso en 3D ───────────────────────────────────────────────────
+   El hueco donde se monta el mundo. Ocupa el lienzo entero, por debajo
+   de los controles flotantes (z-index 5) y del aviso de la hora.
+
+   🔴 El visor del dental trae `h-[100dvh]` escrito en su raiz —esta
+   pensado para ocupar la pantalla, no una columna— y aqui vive dentro de
+   una rejilla. Se le impone el alto del hueco con `.world3d > div`, que
+   gana por especificidad (clase + elemento, 0-1-1) a la utilidad de
+   Tailwind (0-1-0) SIN `!important`. Es la misma solucion que el plano
+   del instituto: repintar el archivo del dental desde fuera dejaria sin
+   repintar la proxima clase que le añadan. */
+.world3d {
+  position: absolute;
+  inset: 0;
+  background: #0b0d11;
+  /* El HUD del visor se pinta con `z-20` (Tailwind) sobre TODO el hueco.
+     Sin un contexto de apilamiento propio taparia los controles flotantes
+     (z-5) y el aviso de la hora (z-6). Con `isolation` el visor entero
+     queda por debajo de ellos. */
+  isolation: isolate;
+  z-index: 0;
+}
+.world3d > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* Aviso de "el piso muestra ahora": arriba y centrado, para que no tape
+   ni los contadores del HUD (abajo a la derecha) ni su leyenda (abajo a
+   la izquierda). */
+.worldNote {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 7px 8px 7px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(15, 25, 50, 0.1);
+  box-shadow: 0 8px 26px -10px rgba(20, 40, 100, 0.32);
+  font-size: 12.5px;
+  color: #1A2540;
+}
+.worldNote strong { font-weight: 700; }
+.worldNoteBtn {
+  flex: none;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: #2A68C0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.worldNoteBtn:hover { background: #1E52A0; }
+
+/* El unico control con texto: el que alterna piso 3D / plano 2D. */
+/* Con el piso en 3D los controles suben: abajo a la derecha, justo debajo,
+   el HUD del visor pinta sus contadores de sillones. Encimarlos era la
+   unica coincidencia real entre los dos. */
+.canvasControls3d { bottom: 60px; }
+
+.canvasCtrlWide {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
 /* ─── Controles flotantes (zoom + fit + fullscreen) ─── */
 .canvasControls {
   position: absolute;
@@ -218,6 +301,7 @@
 }
 
 @media (min-width: 1920px) {
+  .canvasControls3d { bottom: 76px; }
   .canvasControls {
     bottom: 24px;
     right: 24px;

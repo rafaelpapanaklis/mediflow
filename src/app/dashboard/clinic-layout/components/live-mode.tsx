@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, FileText } from "lucide-react";
 import { useTOptional } from "@/i18n/i18n-provider";
 import { publicLiveFallbackT } from "./public-live-t";
@@ -272,6 +272,7 @@ export function LiveStatusPanel({
   appointments,
   showFullNames,
   onOpenOdontogram,
+  highlightChairId = null,
 }: {
   elements: LayoutElement[];
   chairs: ChairInfo[];
@@ -284,10 +285,29 @@ export function LiveStatusPanel({
    * backend lo hidrata) y decide cómo navegar — modal, link o tab nuevo.
    */
   onOpenOdontogram?: (apt: LiveAppointment) => void;
+  /**
+   * Sillón que hay que señalar: se le pone un canto y se trae a la vista.
+   *
+   * Lo usa el piso en 3D de /live/[slug]: al clicar un sillón en el mundo,
+   * la respuesta es la tarjeta que este panel YA estaba pintando. No es una
+   * segunda ficha ni un dato nuevo — por eso el piso público no necesita
+   * abrir nada, y por eso esta prop no toca el enmascarado.
+   */
+  highlightChairId?: string | null;
 }) {
   // useTOptional: este componente también se monta en /live (público, sin
   // I18nProvider) — ahí cae al fallback ES en vez de lanzar.
   const t = useTOptional() ?? publicLiveFallbackT;
+  const marcadaRef = useRef<HTMLDivElement | null>(null);
+
+  // Traer la tarjeta marcada a la vista. `block: "nearest"` y no "center":
+  // el panel es una columna larga y centrar da un salto que despista en una
+  // pantalla que nadie está tocando.
+  useEffect(() => {
+    if (!highlightChairId) return;
+    marcadaRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [highlightChairId]);
+
   const placedChairs = useMemo(
     () =>
       elements
@@ -315,10 +335,14 @@ export function LiveStatusPanel({
         const apt = getChairAppointment(c.resourceId, viewTime, appointments);
         const next = getNextChairAppointment(c.resourceId, viewTime, appointments);
         const progress = apt ? appointmentProgress(apt, viewTime) * 100 : 0;
+        const marcada = highlightChairId === c.resourceId;
         return (
           <div
             key={c.resourceId}
-            className={`${liveStyles.statusCard} ${STATUS_CARD_CLASS[status]}`}
+            ref={marcada ? marcadaRef : undefined}
+            className={`${liveStyles.statusCard} ${STATUS_CARD_CLASS[status]}${
+              marcada ? ` ${liveStyles.statusCardPicked}` : ""
+            }`}
           >
             <div className={liveStyles.statusCardHeader}>
               <span className={liveStyles.statusCardName}>{c.name}</span>

@@ -12,6 +12,8 @@ import {
   Crosshair,
   Sun,
   Moon,
+  Box,
+  Map as MapIcon,
 } from "lucide-react";
 import { toScreen } from "@/lib/floor-plan/iso";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
@@ -30,6 +32,13 @@ import {
 import { WaitingRoom, type WaitingRoomEntry } from "../../dashboard/clinic-layout/components/waiting-room";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { sanitizeElements, sanitizeMetadata, sanitizeChairs } from "@/lib/floor-plan/sanitize";
+import {
+  ANCHO_MIN_3D,
+  LiveWorld,
+  hayWebGL,
+  useMundoEstable,
+  type Clinic3DPick,
+} from "../../dashboard/clinic-layout/components/live-world";
 import liveStyles from "./live-public.module.css";
 
 interface Chair {
@@ -61,6 +70,36 @@ interface ApiResponse {
 
 const ORIG_X = 680;
 const ORIG_Y = 260;
+
+/**
+ * EL PISO DEL TELEVISOR ES EL MUNDO 3D.
+ *
+ * ════════════════════════════════════════════════════════════════════════
+ * Todo lo demás de esta pantalla se queda igual: el reloj grande, el panel
+ * derecho de sillones, la sala de espera, la línea de tiempo del día y el
+ * pie. Lo único que cambia es CON QUÉ se pinta el piso.
+ *
+ * 🔴 EL ENMASCARADO NO SE TOCA. El mundo entra en MODO PÚBLICO
+ * (`publicSlug`), así que sondea /api/live/[slug] —el MISMO endpoint que ya
+ * pintaba el plano 2D, enmascarado en el servidor según
+ * `liveModeShowPatientNames`— y lo traduce con `public-live-adapter.ts`, que
+ * fuerza `patientId: null`. Con la bandera apagada la placa flotante del
+ * sillón sigue leyendo "J.P.", y sin patientId no hay expediente que abrir
+ * ni aunque alguien apunte con el ratón. Esta pantalla NO relaja nada de eso
+ * y NO añade ningún dato nuevo: la tarjeta que se abre al clicar un sillón
+ * es la que ya está en el panel de la derecha.
+ */
+const LEYENDA_3D = [
+  "Clic en un sillón para verlo en el panel de la derecha",
+  "Arrastra para girar el piso · rueda para acercarte",
+];
+
+/** Fallbacks con identidad estable: un `[]` en línea reconstruye el mundo. */
+const SIN_ELEMENTOS: LayoutElement[] = [];
+const SIN_SILLONES: Chair[] = [];
+
+/** Cuánto puede alejarse la línea de tiempo de "ahora" antes de avisar. */
+const VIAJE_MS = 90_000;
 
 /**
  * Normaliza la respuesta cruda del endpoint a una forma 100% segura para
@@ -127,12 +166,15 @@ function sanitizeLiveData(raw: unknown): ApiResponse {
 export function LivePublicClient({
   slug,
   clinicName,
+  category,
   logoUrl,
   city,
   showPatientNames,
 }: {
   slug: string;
   clinicName: string;
+  /** Categoría de la clínica: manda la paleta y el catálogo del mundo 3D. */
+  category: string;
   logoUrl: string | null;
   city: string | null;
   showPatientNames: boolean;
@@ -169,6 +211,76 @@ export function LivePublicClient({
   const [spaceHeld, setSpaceHeld] = useState(false);
   const panStartRef = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
+
+  // ── El piso: mundo 3D (por defecto) o el plano 2D de siempre ──────────
+  const PISO_STORAGE_KEY = `mf:live-piso:${slug}`;
+  /**
+   * `null` = todavía no se ha medido nada (primer render, servidor incluido).
+   * Se resuelve en el efecto de abajo, en el cliente, que es donde sí se
+   * puede preguntar por WebGL y por el ancho de la ventana.
+   */
+  const [puede3D, setPuede3D] = useState<boolean | null>(null);
+  /** Lo que eligió a mano quien mira la pantalla. Manda sobre la medición. */
+  const [modoPiso, setModoPiso] = useState<"3d" | "2d" | null>(null);
+  /**
+   * Sillón tocado en el piso 3D. NO abre ninguna tarjeta nueva: resalta el
+   * que ya está en el panel de la derecha y lo trae a la vista. Así el clic
+   * no estrena ni un dato — enseña el que la pantalla ya estaba enseñando.
+   */
+  const [sillonTocado, setSillonTocado] = useState<string | null>(null);
+
+  // Hidratar la elección de piso (por slug: cada pantalla decide la suya).
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(PISO_STORAGE_KEY);
+      if (v === "3d" || v === "2d") setModoPiso(v);
+    } catch {/* localStorage bloqueado — manda la medición */}
+  }, [PISO_STORAGE_KEY]);
+
+  const elegirPiso = useCallback(
+    (v: "3d" | "2d") => {
+      setModoPiso(v);
+      try {
+        window.localStorage.setItem(PISO_STORAGE_KEY, v);
+      } catch {/* quota / SecurityError — vale para esta sesión */}
+    },
+    [PISO_STORAGE_KEY],
+  );
+
+  // ¿Puede esta pantalla pintar el mundo? (WebGL + ancho). Se remide al
+  // cambiar de tamaño; `hayWebGL()` contesta una sola vez y suelta su
+  // contexto — ver la nota en live-world.tsx.
+  useEffect(() => {
+    const medir = () => setPuede3D(hayWebGL() && window.innerWidth >= ANCHO_MIN_3D);
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, []);
+
+  /**
+   * La geometría del mundo, con la identidad congelada contra su contenido.
+   *
+   * 🔴 Sin esto el televisor se reconstruye entero dos veces por minuto:
+   * `sanitizeLiveData` devuelve arrays NUEVOS en cada sondeo aunque el plano
+   * no haya cambiado ni una silla, y el visor recalcula el mundo —y vuelve a
+   * montar su efecto: tira la escena, suelta el contexto WebGL y rehace
+   * treinta sillones— en cuanto esas props cambian de identidad. Con la
+   * firma, el mundo se rehace solo cuando el dueño mueve algo de verdad.
+   */
+  const geometria = useMundoEstable(
+    data?.layout.elements ?? SIN_ELEMENTOS,
+    data?.layout.metadata ?? null,
+    data?.chairs ?? SIN_SILLONES,
+  );
+
+  /**
+   * ¿Se pinta el mundo? Hacen falta tres cosas: que haya plano que pintar
+   * (sin elementos el visor enseña su propia pantalla de "clínica vacía",
+   * que aquí no viene a cuento), que el equipo pueda, y que quien mira no
+   * haya pedido expresamente el plano 2D.
+   */
+  const mundo =
+    geometria.elements.length > 0 && (modoPiso ? modoPiso === "3d" : puede3D === true);
 
   // Hidratar zoom/pan desde localStorage al montar (por slug).
   useEffect(() => {
@@ -295,8 +407,15 @@ export function LivePublicClient({
     // usuario minimiza el browser o cambia de tab, dejamos de hacer
     // requests innecesarios al server.
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    // 🔴 EL LATIDO ES UNO SOLO. Con el piso en 3D quien sondea es el
+    // VISOR (modo público → el MISMO /api/live/[slug]) y nos entrega cada
+    // payload por `onState`: montar aquí un segundo intervalo sería preguntar
+    // dos veces por lo mismo, cada 30 s, en una pantalla que vive encendida
+    // durante horas. La PRIMERA lectura sí se hace aquí —es la que trae el
+    // plano con el que se construye el mundo— y también la de volver a la
+    // pestaña, que refresca los paneles sin esperar al tic del visor.
     const startPolling = () => {
-      if (intervalId !== null) return;
+      if (mundo || intervalId !== null) return;
       intervalId = setInterval(fetchAll, 30_000);
     };
     const stopPolling = () => {
@@ -320,7 +439,35 @@ export function LivePublicClient({
       stopPolling();
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [slug, locked, reloadKey]);
+  }, [slug, locked, reloadKey, mundo]);
+
+  /**
+   * Cada payload del sondeo del visor: el JSON CRUDO de /api/live/[slug],
+   * el mismo que acaba de pintar los sillones del piso. Se sanea con la
+   * misma función que la lectura de aquí, así que el panel de la derecha, la
+   * sala de espera y la línea de tiempo no pueden contradecir al piso.
+   */
+  const recibirEstado = useCallback((raw: unknown) => {
+    setData(sanitizeLiveData(raw));
+    setError(null);
+  }, []);
+
+  /**
+   * Clic en un sillón del piso 3D. El pick trae `resourceId` y nada más —en
+   * el mundo viajan colores y nombres, no ids de paciente—, así que lo único
+   * que se hace con él es resaltar ese sillón en el panel de la derecha.
+   */
+  const elegirSillon = useCallback((pick: Clinic3DPick) => {
+    setSillonTocado(pick.resourceId);
+  }, []);
+
+  // El resalte es un "mira aquí", no un estado: se apaga solo. En un
+  // televisor de recepción nadie va a volver a cerrarlo.
+  useEffect(() => {
+    if (!sillonTocado) return;
+    const id = setTimeout(() => setSillonTocado(null), 12_000);
+    return () => clearTimeout(id);
+  }, [sillonTocado]);
 
   /** Llamado cuando el prompt de unlock recibe OK del server. Reanuda
    *  el polling y limpia error/locked. reloadKey fuerza re-mount del
@@ -365,7 +512,10 @@ export function LivePublicClient({
   // del page con preventDefault — por eso engancharlo a nivel native.
   useEffect(() => {
     const wrap = canvasWrapRef.current;
-    if (!wrap) return;
+    // Con el mundo montado la rueda es del visor (acerca la cámara). Sin
+    // este corte, además de orbitar se movería el zoom del plano 2D —que no
+    // se ve— y se guardaría en localStorage.
+    if (!wrap || mundo) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       // Zoom centrado en el punto del cursor: ajustamos pan para que la
@@ -387,7 +537,7 @@ export function LivePublicClient({
     };
     wrap.addEventListener("wheel", onWheel, { passive: false });
     return () => wrap.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [mundo]);
 
   // Pan: mousedown en el canvasWrap inicia drag. La barra espaciadora
   // permite pan temporal sin necesidad de tool específica (cursor "grab").
@@ -440,7 +590,15 @@ export function LivePublicClient({
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
-      if (e.key === "+" || e.key === "=") {
+      // Los atajos del lienzo 2D (zoom, encuadre, mano) no existen sobre el
+      // mundo: ahí se gira arrastrando y se acerca con la rueda. F sí, que
+      // la pantalla completa vale para los dos pisos.
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (mundo) {
+        return;
+      } else if (e.key === "+" || e.key === "=") {
         e.preventDefault();
         zoomIn();
       } else if (e.key === "-" || e.key === "_") {
@@ -449,9 +607,6 @@ export function LivePublicClient({
       } else if (e.key === "0") {
         e.preventDefault();
         fitToScreen();
-      } else if (e.key === "f" || e.key === "F") {
-        e.preventDefault();
-        toggleFullscreen();
       } else if (e.code === "Space") {
         if (!spaceHeld) setSpaceHeld(true);
       }
@@ -465,9 +620,12 @@ export function LivePublicClient({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [zoomIn, zoomOut, fitToScreen, toggleFullscreen, spaceHeld]);
+  }, [zoomIn, zoomOut, fitToScreen, toggleFullscreen, spaceHeld, mundo]);
 
   const canvasCursor = isPanning ? "grabbing" : spaceHeld ? "grab" : "default";
+
+  /** La linea de tiempo esta lejos de "ahora" (alguien viajo la hora). */
+  const viajando = Math.abs(now.getTime() - viewTime.getTime()) >= VIAJE_MS;
 
   const appointments: LiveAppointment[] = useMemo(() => {
     if (!data) return [];
@@ -618,7 +776,11 @@ export function LivePublicClient({
           <div className={liveStyles.headerClockSec}>{fmtHMS(now).slice(-2)}</div>
         </div>
         <div className={liveStyles.headerRight}>
-          {/* Entrada al recorrido PÚBLICO en 3D — mismo slug, mismo gate. */}
+          {/* El recorrido A PIE, que sigue existiendo y sigue siendo el de
+              siempre (/live/[slug]/3d: primera persona, WASD, mira). Ya no se
+              anuncia como "el 3D" porque el piso de esta pantalla YA es el
+              mundo 3D — lo que ofrece este botón es meterse dentro y
+              caminarlo. Mismo slug y mismo gate de contraseña. */}
           <a
             href={`/live/${slug}/3d`}
             className={liveStyles.fullscreenBtn}
@@ -633,10 +795,10 @@ export function LivePublicClient({
               textDecoration: "none",
               whiteSpace: "nowrap",
             }}
-            title="Recorrer la clínica en 3D"
+            title="Camina la clínica en primera persona"
           >
-            <span aria-hidden>🎮</span>
-            <span>Recorrer en 3D</span>
+            <span aria-hidden>🚶</span>
+            <span>Recorrer a pie</span>
           </a>
           <button
             type="button"
@@ -653,105 +815,171 @@ export function LivePublicClient({
         <div
           className={liveStyles.canvasWrap}
           ref={canvasWrapRef}
-          onMouseDown={onCanvasMouseDown}
-          style={{ cursor: canvasCursor }}
+          /* Con el mundo montado, arrastrar es ORBITAR: el pan del plano 2D
+             no se engancha siquiera. */
+          onMouseDown={mundo ? undefined : onCanvasMouseDown}
+          style={{ cursor: mundo ? "default" : canvasCursor }}
         >
-          <svg
-            className={liveStyles.svgRoot}
-            viewBox="0 0 1920 1080"
-            preserveAspectRatio="xMidYMid meet"
-            style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: "center center",
-              transition: isPanning ? "none" : "transform 0.08s linear",
-            }}
-          >
-            {/* Floor tiles */}
-            <g>
-              {Array.from({ length: 24 }).map((_, r) =>
-                Array.from({ length: 32 }).map((__, c) => {
-                  const A = toScreen(c, r, ox, oy);
-                  const B = toScreen(c + 1, r, ox, oy);
-                  const Cc = toScreen(c + 1, r + 1, ox, oy);
-                  const D = toScreen(c, r + 1, ox, oy);
-                  // Fill via CSS class para que el toggle dark mode pueda
-                  // swap-ear los colores sin tocar JSX. Inline `fill` ganaba
-                  // a la regla CSS y dejaba el grid blanco en dark.
-                  const tileClass = (c + r) % 2 === 0 ? liveStyles.tileA : liveStyles.tileB;
-                  return (
-                    <polygon
-                      key={`t-${c}-${r}`}
-                      className={`${tileClass} ${liveStyles.tileStroke}`}
-                      points={`${A[0]},${A[1]} ${B[0]},${B[1]} ${Cc[0]},${Cc[1]} ${D[0]},${D[1]}`}
-                      strokeWidth={0.5}
-                    />
-                  );
-                }),
-              )}
-            </g>
-            {/* Elementos */}
-            <g>
-              {elements
-                .slice()
-                .sort((a, b) => a.col + a.row - (b.col + b.row))
-                .map((el) => {
-                  const td = catalog.byKey.get(el.type);
-                  if (!td) return null;
-                  const [sx, sy] = toScreen(el.col, el.row, ox, oy);
-                  return (
-                    <g
-                      key={el.id}
-                      transform={el.rotation ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
-                      dangerouslySetInnerHTML={{ __html: td.draw(sx, sy) }}
-                    />
-                  );
-                })}
-            </g>
-            {/* Halos En Vivo */}
-            <LiveOverlay
-              elements={elements}
-              ox={ox}
-              oy={oy}
-              viewTime={viewTime}
-              appointments={appointments}
-              showFullNames={showPatientNames}
-              onHover={setHover}
-            />
-          </svg>
+          {mundo ? (
+            <div className={liveStyles.world3d}>
+              <LiveWorld
+                clinic={{ id: data.clinic.id || slug, name: clinicName, category }}
+                mundo={geometria}
+                endpoint={`/api/live/${slug}`}
+                publicSlug={slug}
+                onState={recibirEstado}
+                onPick={elegirSillon}
+                legend={LEYENDA_3D}
+              />
+            </div>
+          ) : (
+            <svg
+              className={liveStyles.svgRoot}
+              viewBox="0 0 1920 1080"
+              preserveAspectRatio="xMidYMid meet"
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: "center center",
+                transition: isPanning ? "none" : "transform 0.08s linear",
+              }}
+            >
+              {/* Floor tiles */}
+              <g>
+                {Array.from({ length: 24 }).map((_, r) =>
+                  Array.from({ length: 32 }).map((__, c) => {
+                    const A = toScreen(c, r, ox, oy);
+                    const B = toScreen(c + 1, r, ox, oy);
+                    const Cc = toScreen(c + 1, r + 1, ox, oy);
+                    const D = toScreen(c, r + 1, ox, oy);
+                    // Fill via CSS class para que el toggle dark mode pueda
+                    // swap-ear los colores sin tocar JSX. Inline `fill` ganaba
+                    // a la regla CSS y dejaba el grid blanco en dark.
+                    const tileClass = (c + r) % 2 === 0 ? liveStyles.tileA : liveStyles.tileB;
+                    return (
+                      <polygon
+                        key={`t-${c}-${r}`}
+                        className={`${tileClass} ${liveStyles.tileStroke}`}
+                        points={`${A[0]},${A[1]} ${B[0]},${B[1]} ${Cc[0]},${Cc[1]} ${D[0]},${D[1]}`}
+                        strokeWidth={0.5}
+                      />
+                    );
+                  }),
+                )}
+              </g>
+              {/* Elementos */}
+              <g>
+                {elements
+                  .slice()
+                  .sort((a, b) => a.col + a.row - (b.col + b.row))
+                  .map((el) => {
+                    const td = catalog.byKey.get(el.type);
+                    if (!td) return null;
+                    const [sx, sy] = toScreen(el.col, el.row, ox, oy);
+                    return (
+                      <g
+                        key={el.id}
+                        transform={el.rotation ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
+                        dangerouslySetInnerHTML={{ __html: td.draw(sx, sy) }}
+                      />
+                    );
+                  })}
+              </g>
+              {/* Halos En Vivo */}
+              <LiveOverlay
+                elements={elements}
+                ox={ox}
+                oy={oy}
+                viewTime={viewTime}
+                appointments={appointments}
+                showFullNames={showPatientNames}
+                onHover={setHover}
+              />
+            </svg>
+          )}
+
+          {/* 🔴 El piso en 3D enseña AHORA, siempre: su estado lo trae el
+              sondeo del visor, no la línea de tiempo. Cuando alguien mueve la
+              hora, el panel y la línea sí viajan — y decirlo es la única
+              forma de que la pantalla no se contradiga en silencio. */}
+          {mundo && viajando && (
+            <div className={liveStyles.worldNote} role="status">
+              <span>
+                El piso muestra <strong>ahora</strong> ({fmtHM(now)}); abajo estás viendo las{" "}
+                {fmtHM(viewTime)}.
+              </span>
+              <button
+                type="button"
+                className={liveStyles.worldNoteBtn}
+                onClick={() => setViewTime(new Date())}
+              >
+                Volver a ahora
+              </button>
+            </div>
+          )}
 
           {/* Controles flotantes — esquina inferior derecha del canvas. */}
-          <div className={liveStyles.canvasControls} data-no-pan="true">
-            <button
-              type="button"
-              className={liveStyles.canvasCtrlBtn}
-              onClick={zoomIn}
-              disabled={zoom >= ZOOM_MAX}
-              title="Acercar (+)"
-              aria-label="Acercar"
-            >
-              <Plus size={15} aria-hidden />
-            </button>
-            <span className={liveStyles.canvasCtrlZoom}>{Math.round(zoom * 100)}%</span>
-            <button
-              type="button"
-              className={liveStyles.canvasCtrlBtn}
-              onClick={zoomOut}
-              disabled={zoom <= ZOOM_MIN}
-              title="Alejar (−)"
-              aria-label="Alejar"
-            >
-              <Minus size={15} aria-hidden />
-            </button>
-            <span className={liveStyles.canvasCtrlDivider} aria-hidden />
-            <button
-              type="button"
-              className={liveStyles.canvasCtrlBtn}
-              onClick={fitToScreen}
-              title="Ajustar a pantalla (0)"
-              aria-label="Ajustar a pantalla"
-            >
-              <Crosshair size={15} aria-hidden />
-            </button>
+          <div
+            className={`${liveStyles.canvasControls}${
+              mundo ? ` ${liveStyles.canvasControls3d}` : ""
+            }`}
+            data-no-pan="true"
+          >
+            {/* Piso 3D ↔ plano 2D. El botón solo aparece si este equipo puede
+                pintar el mundo; si no puede, no hay nada que ofrecer y la
+                pantalla ya está en 2D. La elección se guarda por slug: cada
+                televisor decide la suya. */}
+            {puede3D && geometria.elements.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className={`${liveStyles.canvasCtrlBtn} ${liveStyles.canvasCtrlWide}`}
+                  onClick={() => elegirPiso(mundo ? "2d" : "3d")}
+                  title={mundo ? "Ver el plano en 2D" : "Ver el piso en 3D"}
+                  aria-pressed={mundo}
+                >
+                  {mundo ? <MapIcon size={14} aria-hidden /> : <Box size={14} aria-hidden />}
+                  <span>{mundo ? "Plano 2D" : "Piso 3D"}</span>
+                </button>
+                <span className={liveStyles.canvasCtrlDivider} aria-hidden />
+              </>
+            )}
+            {/* Zoom y encuadre son del lienzo isométrico: sobre el mundo se
+                gira arrastrando y se acerca con la rueda. */}
+            {!mundo && (
+              <>
+                <button
+                  type="button"
+                  className={liveStyles.canvasCtrlBtn}
+                  onClick={zoomIn}
+                  disabled={zoom >= ZOOM_MAX}
+                  title="Acercar (+)"
+                  aria-label="Acercar"
+                >
+                  <Plus size={15} aria-hidden />
+                </button>
+                <span className={liveStyles.canvasCtrlZoom}>{Math.round(zoom * 100)}%</span>
+                <button
+                  type="button"
+                  className={liveStyles.canvasCtrlBtn}
+                  onClick={zoomOut}
+                  disabled={zoom <= ZOOM_MIN}
+                  title="Alejar (−)"
+                  aria-label="Alejar"
+                >
+                  <Minus size={15} aria-hidden />
+                </button>
+                <span className={liveStyles.canvasCtrlDivider} aria-hidden />
+                <button
+                  type="button"
+                  className={liveStyles.canvasCtrlBtn}
+                  onClick={fitToScreen}
+                  title="Ajustar a pantalla (0)"
+                  aria-label="Ajustar a pantalla"
+                >
+                  <Crosshair size={15} aria-hidden />
+                </button>
+              </>
+            )}
             <button
               type="button"
               className={liveStyles.canvasCtrlBtn}
@@ -779,6 +1007,9 @@ export function LivePublicClient({
             viewTime={viewTime}
             appointments={appointments}
             showFullNames={showPatientNames}
+            /* Lo que se tocó en el piso 3D. El panel no enseña nada nuevo:
+               trae a la vista la tarjeta que ya estaba ahí. */
+            highlightChairId={sillonTocado}
           />
           <div style={{ marginTop: 14 }}>
             <WaitingRoom
@@ -805,7 +1036,9 @@ export function LivePublicClient({
         <strong>DaleControl</strong>
       </footer>
 
-      <LiveTooltip data={hover} />
+      {/* El tooltip lo alimenta el hover del plano 2D. Al cambiar de piso
+          a mitad de un hover se quedaba flotando para siempre. */}
+      <LiveTooltip data={mundo ? null : hover} />
       </div>
     </ErrorBoundary>
   );
