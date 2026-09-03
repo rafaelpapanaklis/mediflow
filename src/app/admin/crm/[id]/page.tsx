@@ -15,8 +15,13 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { crmObtener } from "@/lib/admin/crm/service";
+import { crmTextosListar } from "@/lib/admin/crm/textos-service";
 import { CrmProspectoClient } from "./prospecto-client";
+
+/** El mismo tope que el listado: es el <select> de "¿qué cuenta nació de aquí?". */
+const CLINICAS_MAX = 500;
 
 export async function generateMetadata({
   params,
@@ -53,5 +58,17 @@ export default async function Page({ params }: { params: { id: string } }) {
 
   if (!ficha) notFound();
 
-  return <CrmProspectoClient ficha={ficha} />;
+  // Las dos son accesorias y por eso van con su propio catch: sin los
+  // textos o sin la lista de cuentas la ficha sigue sirviendo entera.
+  const [clinicas, textos] = await Promise.all([
+    prisma.clinic
+      .findMany({ select: { id: true, name: true }, orderBy: { name: "asc" }, take: CLINICAS_MAX })
+      .catch((e) => {
+        console.error("[admin/crm/[id]] no se pudo leer la lista de clínicas:", e);
+        return [] as { id: string; name: string }[];
+      }),
+    crmTextosListar(),
+  ]);
+
+  return <CrmProspectoClient ficha={ficha} clinicas={clinicas} textos={textos.textos} />;
 }

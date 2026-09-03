@@ -9,10 +9,16 @@
 // de las que conviene pintar: desde ahí se llega aquí ya filtrado.
 // ═══════════════════════════════════════════════════════════════════════
 import Link from "next/link";
-import { crmDiasSinContacto, crmTelefonoLegible, crmVertical } from "@/lib/admin/crm/crm-core";
+import {
+  crmDiasSinContacto,
+  crmTelefonoLegible,
+  crmVertical,
+  CRM_DIAS_PARA_ENFRIARSE,
+} from "@/lib/admin/crm/crm-core";
 import type { CrmProspectoDTO } from "@/lib/admin/crm/service";
 import {
   CrmAccionesContacto,
+  CrmAccionesFila,
   CrmAvatar,
   CrmEtapaSelect,
   CrmOrigenChip,
@@ -25,10 +31,15 @@ export function CrmLista({
   filas,
   ahora,
   mover,
+  alEditar,
+  alTextos,
 }: {
   filas: CrmProspectoDTO[];
   ahora: Date;
   mover: (id: string, etapa: string) => void;
+  /** Abre el formulario EN SITIO, sin salir de la lista (ver crm-client). */
+  alEditar: (p: CrmProspectoDTO) => void;
+  alTextos?: (p: CrmProspectoDTO) => void;
 }) {
   if (filas.length === 0) {
     return (
@@ -49,7 +60,8 @@ export function CrmLista({
             <th>Próximo paso</th>
             <th style={{ textAlign: "right" }}>Sin contacto</th>
             <th style={{ textAlign: "right" }}>Valor / mes</th>
-            <th>Acciones</th>
+            <th>Contactar</th>
+            <th style={{ width: 210 }}>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -64,6 +76,7 @@ export function CrmLista({
                     <div style={{ minWidth: 0 }}>
                       <Link
                         href={`/admin/crm/${p.id}`}
+                        className="crm-tarjeta-nombre"
                         style={{
                           color: "var(--text-1)",
                           fontWeight: 600,
@@ -128,7 +141,20 @@ export function CrmLista({
                   <CrmSemaforoChip fecha={p.nextActionAt} nota={p.nextActionNote} ahora={ahora} />
                 </td>
 
-                <td className="mono" style={{ textAlign: "right", color: "var(--text-3)" }}>
+                {/* Los días sin contacto se tiñen a partir del umbral de
+                    "enfriándose": un 21 en gris se lee igual que un 2, y es
+                    justo la diferencia que hace que un prospecto se pierda. */}
+                <td
+                  className="mono"
+                  style={{
+                    textAlign: "right",
+                    color:
+                      dias !== null && dias >= CRM_DIAS_PARA_ENFRIARSE
+                        ? "var(--warning)"
+                        : "var(--text-3)",
+                    fontWeight: dias !== null && dias >= CRM_DIAS_PARA_ENFRIARSE ? 600 : 400,
+                  }}
+                >
                   {dias === null ? (
                     <span style={{ color: "var(--text-4)" }}>nunca</span>
                   ) : dias === 0 ? (
@@ -144,6 +170,10 @@ export function CrmLista({
 
                 <td>
                   <CrmAccionesContacto p={p} soloIconos />
+                </td>
+
+                <td>
+                  <CrmAccionesFila p={p} alEditar={alEditar} alTextos={alTextos} />
                 </td>
               </tr>
             );
