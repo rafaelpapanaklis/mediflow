@@ -34,13 +34,21 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  EDU_PLANO_AUTO_MARGEN,
+  EDU_PLANO_AUTO_PASO_COL,
+  EDU_PLANO_AUTO_PASO_ROW,
+  EDU_PLANO_AUTO_POR_FILA,
   EDU_PLANO_GRID_MAX,
   EDU_PLANO_MAX_ELEMENTOS,
+  EDU_PLANO_SILLON_H,
+  EDU_PLANO_SILLON_W,
   EDU_PLANO_TIPO_SILLON,
   eduPlanoAuto,
   eduPlanoEsSillon,
   eduPlanoEstado3D,
   eduPlanoMetadata,
+  eduPlanoPendientes,
+  eduPlanoReconciliar,
   eduPlanoRevision,
   eduPlanoValidar,
   type EduPlanoChair,
@@ -247,6 +255,411 @@ test("«qué es un sillón» lo contesta el catálogo del dental, no una lista e
   assert.equal(eduPlanoEsSillon("sillon"), true);
   assert.equal(eduPlanoEsSillon("lavabo"), false);
   assert.equal(eduPlanoEsSillon("wall_h"), false);
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// 2-BIS · LA RECONCILIACIÓN — EL SILLÓN NUEVO ENTRA AL PLANO GUARDADO
+//
+// El fallo que cierra esta sección: en cuanto la dirección guardaba SU
+// plano, el automático dejaba de usarse y las unidades dadas de alta
+// después no entraban a ningún sitio. No salían en el editor, no se
+// pintaban en vivo y su estado no se veía en el piso.
+// ═════════════════════════════════════════════════════════════════════
+
+/** Un plano guardado a mano: pared arriba y dos sillones en su rejilla. */
+function planoGuardado(cuantos: number) {
+  const elements = [
+    { id: 1, type: "wall_h", col: 0, row: 0, rotation: 0 as const, resourceId: null, name: null },
+  ];
+  for (let i = 0; i < cuantos; i++) {
+    // La misma rejilla que arma `eduPlanoAuto`: es de donde sale un plano
+    // guardado de verdad, porque la dirección parte del automático.
+    elements.push({
+      id: 10 + i,
+      type: EDU_PLANO_TIPO_SILLON,
+      col: EDU_PLANO_AUTO_MARGEN + (i % EDU_PLANO_AUTO_POR_FILA) * EDU_PLANO_AUTO_PASO_COL,
+      row:
+        EDU_PLANO_AUTO_MARGEN +
+        Math.floor(i / EDU_PLANO_AUTO_POR_FILA) * EDU_PLANO_AUTO_PASO_ROW,
+      rotation: 0 as const,
+      resourceId: `ch_${i + 1}`,
+      name: `Sillón ${i + 1}`,
+    });
+  }
+  return elements;
+}
+
+const sillonesDe = (n: number): EduPlanoChair[] =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `ch_${i + 1}`,
+    name: `Sillón ${i + 1}`,
+    number: i + 1,
+  }));
+
+test("🔴 (a) el sillón que se dio de alta DESPUÉS entra al plano guardado, junto al último y en celda libre", () => {
+  // El piso tiene dos sillones dibujados y la escuela acaba de dar de alta
+  // el tercero en /instituto/sillones.
+  const guardado = planoGuardado(2);
+  const rec = eduPlanoReconciliar({
+    elements: guardado,
+    chairs: sillonesDe(3),
+    grid: { cols: 24, rows: 16 },
+  });
+
+  assert.deepEqual(rec.agregados, ["ch_3"], "el sillón nuevo tiene que entrar solo");
+  assert.equal(rec.cambio, true, "si no se persiste, salta de celda entre dos lecturas");
+
+  const puesto = rec.elements.find((e) => e.resourceId === "ch_3");
+  assert.ok(puesto, "el sillón nuevo no está en el plano");
+  assert.equal(puesto!.type, EDU_PLANO_TIPO_SILLON);
+  assert.equal(
+    puesto!.resourceId,
+    "ch_3",
+    "🔴 ligado desde el primer momento: sin resourceId no se pinta en vivo",
+  );
+  assert.equal(puesto!.name, "Sillón 3", "el nombre viaja para que el editor lo lea");
+
+  // A CONTINUACIÓN DEL ÚLTIMO: un paso de columna de la rejilla del
+  // automático a la derecha del "Sillón 2", y en la misma fila.
+  const ultimo = guardado[guardado.length - 1];
+  assert.equal(puesto!.col, ultimo.col + EDU_PLANO_AUTO_PASO_COL, "no quedó al lado del último");
+  assert.equal(puesto!.row, ultimo.row, "no quedó en la misma fila que el último");
+
+  // Y en CELDA LIBRE: ningún otro elemento comparte su esquina.
+  const enLaMisma = rec.elements.filter((e) => e.col === puesto!.col && e.row === puesto!.row);
+  assert.equal(enLaMisma.length, 1, "el sillón nuevo cayó encima de otra cosa");
+
+  // Id propio: el mundo 3D los usa como clave.
+  const ids = new Set(rec.elements.map((e) => e.id));
+  assert.equal(ids.size, rec.elements.length, "hay ids repetidos tras reconciliar");
+
+  // Y queda MARCADO como nuevo, para que la dirección lo ponga donde va.
+  assert.deepEqual(rec.pendientes, ["ch_3"], "el sillón nuevo tiene que salir sin acomodar");
+});
+
+test("🔴 (b) reconciliar dos veces NO duplica: el que ya está dibujado se queda como está", () => {
+  const guardado = planoGuardado(2);
+  const chairs = sillonesDe(3);
+  const primera = eduPlanoReconciliar({ elements: guardado, chairs, grid: { cols: 24, rows: 16 } });
+
+  // La segunda lectura, con lo que la primera persistió.
+  const segunda = eduPlanoReconciliar({
+    elements: primera.elements,
+    chairs,
+    grid: primera.grid,
+    pendientes: primera.pendientes,
+  });
+
+  assert.deepEqual(segunda.agregados, [], "una segunda lectura volvió a agregar el sillón");
+  assert.equal(segunda.elements.length, primera.elements.length, "el plano creció solo");
+  assert.equal(segunda.cambio, false, "una lectura que no cambia nada no puede escribir");
+
+  const delTres = segunda.elements.filter((e) => e.resourceId === "ch_3");
+  assert.equal(delTres.length, 1, "el sillón nuevo se duplicó");
+  assert.equal(delTres[0].col, primera.elements.find((e) => e.resourceId === "ch_3")!.col);
+  assert.equal(delTres[0].row, primera.elements.find((e) => e.resourceId === "ch_3")!.row);
+  assert.deepEqual(segunda.pendientes, ["ch_3"], "la marca de «sin acomodar» tiene que aguantar");
+
+  // Y sigue marcado aunque la dirección lo haya movido de sitio a mano: la
+  // marca la quita el editor, no la lectura.
+  const movido = segunda.elements.map((e) =>
+    e.resourceId === "ch_3" ? { ...e, col: 15, row: 9 } : e,
+  );
+  const tercera = eduPlanoReconciliar({
+    elements: movido,
+    chairs,
+    grid: segunda.grid,
+    pendientes: [],
+  });
+  assert.deepEqual(tercera.agregados, [], "moverlo no puede hacer que entre otra vez");
+});
+
+test("🔴 (c) tres sillones nuevos entran EN EL ORDEN de Sillones (orderIndex, luego número)", () => {
+  // El plano tiene el 1 y el 2; se dan de alta el 3, el 4 y el 5. El orden
+  // en el que llegan es el de la escuela y es el que manda: quien mira la
+  // pared busca el 3 al lado del 2, no en la otra punta.
+  const rec = eduPlanoReconciliar({
+    elements: planoGuardado(2),
+    chairs: sillonesDe(5),
+    grid: { cols: 30, rows: 20 },
+  });
+
+  assert.deepEqual(rec.agregados, ["ch_3", "ch_4", "ch_5"], "no entraron en el orden de Sillones");
+
+  const puestos = ["ch_3", "ch_4", "ch_5"].map(
+    (id) => rec.elements.find((e) => e.resourceId === id)!,
+  );
+  for (const p of puestos) assert.ok(p, "falta uno de los sillones nuevos");
+
+  // Van uno tras otro por la rejilla, sin pisarse.
+  for (let i = 1; i < puestos.length; i++) {
+    const antes = puestos[i - 1];
+    const ahora = puestos[i];
+    const avanza =
+      (ahora.row === antes.row && ahora.col > antes.col) || ahora.row > antes.row;
+    assert.ok(
+      avanza,
+      `el ${i + 3} no va después del ${i + 2}: (${antes.col},${antes.row}) → (${ahora.col},${ahora.row})`,
+    );
+  }
+  const celdas = new Set(rec.elements.map((e) => `${e.col}:${e.row}`));
+  assert.equal(celdas.size, rec.elements.length, "dos elementos comparten esquina");
+
+  assert.deepEqual(rec.pendientes, ["ch_3", "ch_4", "ch_5"]);
+});
+
+test("la rejilla del automático manda: se baja de fila al llenar EDU_PLANO_AUTO_POR_FILA", () => {
+  // Una sede que estrena su séptimo sillón: el séptimo baja a la fila de
+  // abajo, exactamente como los pondría el plano automático.
+  const rec = eduPlanoReconciliar({
+    elements: planoGuardado(EDU_PLANO_AUTO_POR_FILA),
+    chairs: sillonesDe(EDU_PLANO_AUTO_POR_FILA + 1),
+    grid: { cols: 40, rows: 24 },
+  });
+
+  const septimo = rec.elements.find((e) => e.resourceId === `ch_${EDU_PLANO_AUTO_POR_FILA + 1}`)!;
+  assert.ok(septimo, "el séptimo sillón no entró");
+  assert.equal(septimo.col, EDU_PLANO_AUTO_MARGEN, "no volvió al margen izquierdo");
+  assert.equal(
+    septimo.row,
+    EDU_PLANO_AUTO_MARGEN + EDU_PLANO_AUTO_PASO_ROW,
+    "no bajó un paso de fila",
+  );
+});
+
+test("una celda ocupada por un mueble se salta: el sillón nuevo no se pone encima", () => {
+  const guardado = planoGuardado(2);
+  // Justo donde caería el tercero hay un gabinete.
+  const estorbo = {
+    id: 99,
+    type: "gabinete",
+    col: EDU_PLANO_AUTO_MARGEN + 2 * EDU_PLANO_AUTO_PASO_COL,
+    row: EDU_PLANO_AUTO_MARGEN,
+    rotation: 0 as const,
+    resourceId: null,
+    name: null,
+  };
+
+  const rec = eduPlanoReconciliar({
+    elements: [...guardado, estorbo],
+    chairs: sillonesDe(3),
+    grid: { cols: 30, rows: 20 },
+  });
+
+  const puesto = rec.elements.find((e) => e.resourceId === "ch_3")!;
+  assert.ok(
+    puesto.col !== estorbo.col || puesto.row !== estorbo.row,
+    "el sillón nuevo se puso encima del gabinete",
+  );
+  // Y tampoco se le mete dentro: el sillón mide 2×3.
+  const chocan =
+    puesto.col < estorbo.col + 1 &&
+    estorbo.col < puesto.col + EDU_PLANO_SILLON_W &&
+    puesto.row < estorbo.row + 1 &&
+    estorbo.row < puesto.row + EDU_PLANO_SILLON_H;
+  assert.equal(chocan, false, "el gabinete quedó dentro del sillón");
+});
+
+test("🔴 un sillón dado de baja NO se borra: su elemento se queda colgante", () => {
+  // El plano tiene tres dibujados y la escuela dio de baja el segundo.
+  const guardado = planoGuardado(3);
+  const activos = [sillonesDe(3)[0], sillonesDe(3)[2]]; // sin ch_2
+
+  const rec = eduPlanoReconciliar({
+    elements: guardado,
+    chairs: activos,
+    grid: { cols: 24, rows: 16 },
+    pendientes: ["ch_2"],
+  });
+
+  assert.deepEqual(rec.agregados, [], "no hay nada que agregar");
+  assert.ok(
+    rec.elements.some((e) => e.resourceId === "ch_2"),
+    "borrar el elemento del sillón de baja tira el trabajo de la dirección",
+  );
+  // Deja de estar "sin acomodar": ahora es un colgante, que es otra cosa y
+  // la marca `eduPlanoRevision`.
+  assert.deepEqual(rec.pendientes, []);
+  assert.equal(rec.cambio, true, "la marca vieja tiene que dejar de escribirse");
+  assert.deepEqual(eduPlanoRevision(rec.elements, activos).colgantes, [
+    { elementId: 11, resourceId: "ch_2" },
+  ]);
+});
+
+test("después de reconciliar NO queda ningún sillón activo fuera del plano", () => {
+  // Es la propiedad que cierra el fallo entero, escrita como la mira la
+  // pantalla: `revision.sinDibujar` vacío.
+  const chairs = sillonesDe(9);
+  const rec = eduPlanoReconciliar({
+    elements: planoGuardado(1),
+    chairs,
+    grid: { cols: 32, rows: 24 },
+  });
+  assert.deepEqual(
+    eduPlanoRevision(rec.elements, chairs).sinDibujar,
+    [],
+    "quedó un sillón activo sin dibujar tras reconciliar",
+  );
+  assert.equal(eduPlanoRevision(rec.elements, chairs).ligados, chairs.length);
+});
+
+test("un plano al que no le cabe otra fila CRECE en vez de perder el sillón", () => {
+  // Dos filas llenas en una rejilla de doce de alto: la tercera fila no
+  // cabe. Antes que dejar el sillón invisible, el piso crece.
+  const dosFilas = EDU_PLANO_AUTO_POR_FILA * 2;
+  const chairs = sillonesDe(dosFilas + 1);
+  const rec = eduPlanoReconciliar({
+    elements: planoGuardado(dosFilas),
+    chairs,
+    grid: { cols: 40, rows: 12 },
+  });
+
+  assert.equal(rec.agregados.length, 1);
+  assert.ok(rec.grid.rows > 12, "el piso tenía que crecer para que cupiera");
+  assert.ok(rec.grid.rows <= EDU_PLANO_GRID_MAX, "y no puede pasarse del tope del mundo 3D");
+  const puesto = rec.elements.find((e) => e.resourceId === `ch_${dosFilas + 1}`)!;
+  assert.ok(
+    puesto.row + EDU_PLANO_SILLON_H <= rec.grid.rows,
+    "el sillón quedó fuera de la rejilla que se declara",
+  );
+});
+
+test("los PENDIENTES sobreviven al saneo del dental, que no los conoce", () => {
+  // `sanitizeMetadata` es del dental y tira lo que no es suyo; la llave se
+  // lee del JSON crudo y se vuelve a escribir con `eduPlanoMetadata`.
+  assert.deepEqual(eduPlanoPendientes({ pendientes: ["ch_9", "ch_9", "", 3] }), ["ch_9"]);
+  assert.deepEqual(eduPlanoPendientes({ gridSize: { cols: 20, rows: 20 } }), []);
+  assert.deepEqual(eduPlanoPendientes(null), []);
+  assert.deepEqual(eduPlanoPendientes("no soy un objeto"), []);
+
+  const meta = eduPlanoMetadata({ gridSize: { cols: 20, rows: 20 } }, ["ch_9"]);
+  assert.deepEqual(meta.pendientes, ["ch_9"]);
+  assert.equal(
+    eduPlanoMetadata({ gridSize: { cols: 20, rows: 20 } }, []).pendientes,
+    undefined,
+    "sin pendientes la llave no se escribe",
+  );
+});
+
+test("🔴 la LECTURA del plano reconcilia y lo PERSISTE, sin firmarlo como si lo hubiera acomodado alguien", () => {
+  const src = fuente("src/lib/edu/plano.ts");
+
+  assert.ok(
+    src.includes("eduPlanoReconciliar"),
+    "getEduPlanoSede tiene que reconciliar: si no, el sillón nuevo no entra a un plano guardado",
+  );
+  assert.ok(
+    /persistirReconciliacion\(/.test(src) && /eduCampusLayout\.update\(/.test(src),
+    "la reconciliación tiene que escribirse; si no, el sillón salta de celda entre lecturas",
+  );
+  assert.ok(
+    /updatedAt,\s*\n/.test(src),
+    "hay que mandar `updatedAt` explícito o Prisma lo sube y la pantalla miente sobre quién acomodó el piso",
+  );
+  assert.ok(
+    !/data:\s*\{[^}]*updatedByUserId[^}]*\}/s.test(src.slice(src.indexOf("persistirReconciliacion("))),
+    "la reconciliación NO puede firmar el plano a nombre de nadie",
+  );
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// 2-TER · EL ARRASTRE Y EL GUARDADO DEL EDITOR
+//
+// Se comprueban sobre la FUENTE porque son de la pantalla y no de un
+// módulo puro: no hay DOM aquí. Lo que fijan es exactamente lo que estaba
+// roto — el movimiento se confirmaba en un `click` que con un arrastre de
+// verdad no llegaba, y el guardado era un botón que se olvida.
+// ═════════════════════════════════════════════════════════════════════
+
+const RUTA_EDITOR = "src/components/edu/clinica/plano-editor.tsx";
+
+test("🔴 el editor arrastra con Pointer Events y CONFIRMA en el pointerup", () => {
+  const src = fuente(RUTA_EDITOR);
+
+  assert.ok(src.includes("onPointerDown="), "el elemento se toma con pointerdown");
+  assert.ok(src.includes("onPointerMove="), "y se sigue con pointermove");
+  assert.ok(src.includes("onPointerUp="), "y se suelta con pointerup");
+  assert.ok(
+    src.includes("setPointerCapture"),
+    "sin capturar el puntero, salirse del sillón cancela el arrastre a media faena",
+  );
+  assert.ok(
+    !/onMouseDown=\{\(e\) => onElementoDown/.test(src),
+    "el arrastre por mousedown volvió: con dedo no funciona",
+  );
+
+  // 🔴 El gesto se lee de una REFERENCIA y no del estado. El primer
+  // `pointermove` llega antes de que React repinte: con el estado, su cierre
+  // ve `null`, descarta el movimiento y el `pointerup` lo da por "clic sin
+  // mover" — el sillón se queda quieto arrastrando rápido. Pasó de verdad.
+  const move = src.slice(src.indexOf("const onElementoMove"), src.indexOf("const onElementoUp"));
+  assert.ok(
+    move.includes("moviendoRef.current"),
+    "el pointermove tiene que leer la referencia; con el estado se pierde el primer movimiento",
+  );
+  assert.ok(
+    !/if \(!moviendo \|\|/.test(move),
+    "leer el estado `moviendo` en el manejador vuelve a abrir la carrera con el repintado",
+  );
+
+  // 🔴 El movimiento se confirma en el pointerup y NO en el click del SVG.
+  const up = src.slice(src.indexOf("const onElementoUp"), src.indexOf("const onElementoCancel"));
+  assert.ok(
+    up.includes("moviendoRef.current"),
+    "el pointerup también sale de la referencia: es el mismo gesto",
+  );
+  assert.ok(up.includes("cambiar("), "el pointerup tiene que confirmar la celda");
+  assert.ok(up.includes("dentro("), "…solo si está dentro de la rejilla");
+  assert.ok(up.includes("celdaLibre("), "…y solo si la celda está libre");
+
+  const click = src.slice(src.indexOf("const onLienzoClick"), src.indexOf("const onElementoDown"));
+  assert.ok(
+    !click.includes("moviendo"),
+    "el click del lienzo no puede seguir siendo quien confirma el movimiento",
+  );
+
+  // Clic sin mover = seleccionar, y eso NO ensucia la historia.
+  assert.ok(
+    up.includes("destino.movido") || up.includes("!destino.movido"),
+    "un clic sin arrastrar tiene que salir antes de tocar la historia",
+  );
+});
+
+test("🔴 el editor guarda solo, y un error de validación no pasa en silencio", () => {
+  const src = fuente(RUTA_EDITOR);
+
+  assert.ok(
+    src.includes("EDU_PLANO_AUTOSAVE_MS"),
+    "el guardado automático necesita su espera, y vive en plano-core",
+  );
+  assert.ok(
+    /setTimeout\(\(\) => void guardar\(\), EDU_PLANO_AUTOSAVE_MS\)/.test(src),
+    "el cambio tiene que programar el guardado (con debounce, no uno por arrastre)",
+  );
+  assert.ok(src.includes('method: "PUT"'), "se guarda contra el MISMO endpoint");
+  assert.ok(
+    src.includes("fallidaRef"),
+    "un guardado que falló no puede reintentarse solo con el mismo contenido: sería un bucle",
+  );
+  assert.ok(
+    src.includes("Guardar el plano"),
+    "el botón de guardar se queda para forzarlo",
+  );
+  // El error del servidor se pinta con SUS palabras, en grande.
+  assert.ok(
+    /edu-banner--warn[\s\S]{0,400}\{error\}/.test(src),
+    "el error del servidor tiene que verse en grande, no solo en la línea de estado",
+  );
+  assert.ok(src.includes("`Guardado ${horaCorta("), "la pantalla dice a qué hora se guardó");
+});
+
+test("el plano ya no obliga a acordarse de guardar, pero sigue avisando si te vas a medias", () => {
+  const src = fuente(RUTA_EDITOR);
+  assert.ok(src.includes("beforeunload"), "cerrar la pestaña entre el cambio y el guardado avisa");
+  assert.ok(
+    /if \(!sucio && !guardando\) return;/.test(src),
+    "el aviso tiene que cubrir también el guardado en vuelo",
+  );
 });
 
 // ═════════════════════════════════════════════════════════════════════
