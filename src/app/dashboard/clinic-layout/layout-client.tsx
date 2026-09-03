@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { toScreen, fromScreen, C as ISO_C } from "@/lib/floor-plan/iso";
+import { toScreen, fromScreen, isoViewBox, C as ISO_C } from "@/lib/floor-plan/iso";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import { OPENABLE_TYPES } from "@/lib/floor-plan/element-types";
@@ -106,6 +106,8 @@ const ORIG_X = 680;
 const ORIG_Y = 260;
 const GRID_COLS = 32;
 const GRID_ROWS = 24;
+/** El recorte del SVG, calculado para que el piso entero quepa (isoViewBox). */
+const VIEW_BOX = isoViewBox(GRID_COLS, GRID_ROWS, ORIG_X, ORIG_Y);
 const HISTORY_LIMIT = 24;
 const AUTOSAVE_DELAY_MS = 1500;
 
@@ -377,8 +379,10 @@ export function ClinicLayoutClient({
     let cancelled = false;
     const fetchAppointments = async () => {
       try {
-        const dateStr = viewTime.toISOString().slice(0, 10);
-        const res = await fetch(`/api/clinic-layout/appointments?date=${dateStr}`);
+        // Sin `?date=`: el dia lo decide el servidor, en la zona de la
+        // clinica. `viewTime.toISOString()` daba la fecha UTC — y ademas
+        // ataba este sondeo al minutero (ver la dependencia del efecto).
+        const res = await fetch("/api/clinic-layout/appointments");
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled) return;
@@ -421,7 +425,14 @@ export function ClinicLayoutClient({
       stop();
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [liveMode, viewTime]);
+    // 🔴 `viewTime` YA NO es dependencia, y esa era la mitad cara del
+    // fallo. El minutero lo mueve cada 5 s, asi que este efecto se
+    // desmontaba y volvia a montarse doce veces por minuto — con su
+    // `fetchAppointments()` de entrada cada vez. Eran 12 consultas por
+    // minuto contra las citas del dia en vez de 2. Ahora la URL no depende
+    // de la hora que se este mirando (el dia lo decide el servidor), asi
+    // que el sondeo late solo con su intervalo de 30 s.
+  }, [liveMode]);
 
   // Auto-tick viewTime cada 5s si está cerca de "now" (no estamos viajando).
   useEffect(() => {
@@ -1589,7 +1600,7 @@ export function ClinicLayoutClient({
               <svg
                 ref={svgRef}
                 className={styles.svgRoot}
-                viewBox="0 0 1920 1080"
+                viewBox={VIEW_BOX}
                 preserveAspectRatio="xMidYMid meet"
                 style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
                 onMouseDown={onSvgMouseDown}

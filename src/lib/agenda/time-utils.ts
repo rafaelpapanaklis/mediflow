@@ -71,6 +71,35 @@ export function dayRangeUtc(dateISO: string, config: ClinicTimeConfig): DayRange
   };
 }
 
+/**
+ * El DÍA DE CALENDARIO completo, de 00:00 a 00:00 del siguiente, en la zona
+ * de la clínica.
+ *
+ * Hermano de `dayRangeUtc`, que devuelve solo el HORARIO de atención
+ * (`dayStart`–`dayEnd`). Este es para lo que se mide por días naturales —
+ * el tablero En Vivo y la vista pública `/live/[slug]`, que enseñan la
+ * jornada entera, incluida una urgencia a las 7 de la mañana.
+ *
+ * 🔴 `new Date(\`${dateISO}T00:00:00\`)` NO sirve, y es como estaba: sin la
+ * `Z` lo resuelve la zona del PROCESO, que en Vercel es UTC. Una clínica en
+ * México pedía "el 2 de septiembre" y recibía la ventana
+ * `1-sep 18:00 → 2-sep 18:00` de su hora local: se le caía la tarde y se le
+ * colaba la del día anterior. El fin es EXCLUSIVO (se consulta con `lt`),
+ * que es lo que evita perder una cita de las 23:59:30.
+ */
+export function calendarDayRangeUtc(dateISO: string, timezone: string): DayRange {
+  const [y, m, d] = dateISO.split("-").map((n) => parseInt(n, 10));
+  // El día siguiente en el calendario, sin aritmética de husos: se arma en
+  // UTC a mediodía (donde ninguna zona cambia de fecha) y se lee su Y-M-D.
+  const sig = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  sig.setUTCDate(sig.getUTCDate() + 1);
+  const sigISO = `${sig.getUTCFullYear()}-${pad(sig.getUTCMonth() + 1)}-${pad(sig.getUTCDate())}`;
+  return {
+    startUtc: tzLocalToUtc(dateISO, 0, 0, timezone),
+    endUtc:   tzLocalToUtc(sigISO, 0, 0, timezone),
+  };
+}
+
 export function slotsPerDay(config: ClinicTimeConfig): number {
   const hours = config.dayEnd - config.dayStart;
   return Math.max(0, (hours * 60) / config.slotMinutes) | 0;

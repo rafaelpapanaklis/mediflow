@@ -257,7 +257,21 @@ export function Clinic3DClient({
       const fogColor = new THREE.Color(pal.fog);
       if (night) fogColor.lerp(new THREE.Color("#10141b"), 0.7);
       scene.background = fogColor.clone();
-      scene.fog = new THREE.Fog(fogColor.clone(), 14, 46);
+      /**
+       * 🔴 LA NIEBLA ES DE CAMINAR, NO DE MIRAR UN PLANO.
+       *
+       * A ras de suelo da profundidad: el fondo del pasillo se difumina y la
+       * clinica parece grande. Desde el aire hace justo lo contrario — la
+       * camara queda a cuarenta o sesenta metros, o sea que el piso ENTERO
+       * cae dentro del tramo 14-46 m y todo sale lavado de gris: los muros
+       * pierden el blanco, los sillones el azul y los anillos de estado su
+       * color, que es lo unico que esa pantalla tiene que decir.
+       *
+       * Se guarda aparte y se quita al entrar en vista aerea (ver
+       * `enterDrone`), no se borra: caminando vuelve tal cual.
+       */
+      const nieblaFps = new THREE.Fog(fogColor.clone(), 14, 46);
+      scene.fog = nieblaFps;
 
       const width = container.clientWidth || window.innerWidth;
       const height = container.clientHeight || window.innerHeight;
@@ -290,9 +304,27 @@ export function Clinic3DClient({
       domEl.style.width = "100%";
       domEl.style.height = "100%";
 
-      // ── Luces (día/noche por hora local) ──────────────────────────────────
-      scene.add(new THREE.AmbientLight(0xffffff, night ? 0.34 : 0.85));
-      const dir = new THREE.DirectionalLight(0xfff2e0, night ? 0.12 : 0.9);
+      /**
+       * ── Luces (día/noche por hora local) ────────────────────────────────
+       *
+       * 🔴 DE NOCHE SE OSCURECEN, Y EN VISTA AÉREA ESO NO PUEDE PASAR.
+       *
+       * Caminando, que a las nueve de la noche la clínica esté en penumbra
+       * es la gracia. Pero la vista aérea no es un paseo: es el tablero que
+       * cuelga en la recepción, y ahí la penumbra llega justo en las horas
+       * en que alguien la mira de verdad — con el piso en gris, los anillos
+       * de estado apagados y las placas ilegibles. Un plano se lee o no se
+       * lee; no tiene horario.
+       *
+       * Se guardan las dos intensidades y `enterDrone` pone las de día
+       * (ver la nota de la niebla, que es el mismo caso). Al volver a
+       * caminar, `exitDrone` devuelve las que tocan por la hora.
+       */
+      const luzAmbHora = night ? 0.34 : 0.85;
+      const luzDirHora = night ? 0.12 : 0.9;
+      const amb = new THREE.AmbientLight(0xffffff, luzAmbHora);
+      scene.add(amb);
+      const dir = new THREE.DirectionalLight(0xfff2e0, luzDirHora);
       dir.position.set(world.cols * 0.5 + 6, 16, world.rows * 0.5 + 6);
       dir.castShadow = true;
       dir.shadow.mapSize.set(1024, 1024);
@@ -460,6 +492,10 @@ export function Clinic3DClient({
         if (desktop) desktop.controls.enabled = false; // congela el look FPS
         if (document.pointerLockElement) document.exitPointerLock?.();
         hand?.setVisible(false);
+        // Vista de plano: sin niebla y con luz de día, mire la hora que mire.
+        scene.fog = null;
+        amb.intensity = 0.85;
+        dir.intensity = 0.9;
         drone.enter();
       };
       const exitDrone = () => {
@@ -469,6 +505,10 @@ export function Clinic3DClient({
         mode = "fps";
         setDroneActive(false);
         hand?.setVisible(true);
+        scene.fog = nieblaFps;                 // de vuelta a ras de suelo
+        amb.intensity = luzAmbHora;            // y a la luz que toca por la hora
+        dir.intensity = luzDirHora;
+        liveLayer?.setPlateWorldWidth(null);   // placas al tamano de caminar
         drone.exit(); // onExitComplete re-habilita FPS + relock al terminar
       };
       // Con anfitrión NO se alterna: de la vista aérea no se sale (ver
@@ -590,8 +630,11 @@ export function Clinic3DClient({
           ac = new AbortController();
           // Público: MISMO endpoint que la vista 2D (datos ya enmascarados);
           // dashboard: estado privado por sesión.
+          // Publico: sin `?date=`. El dia lo decide el servidor en la zona
+          // de la clinica; `toISOString()` daba la fecha UTC y en Mexico a
+          // partir de las 18:00 eso es manana.
           const url = isPublic
-            ? `/api/live/${publicSlug}?date=${new Date().toISOString().slice(0, 10)}`
+            ? `/api/live/${publicSlug}`
             : hostRef.current?.state || STATE_API;
           const res = await fetch(url, { signal: ac.signal, cache: "no-store" });
           // 401 público = cookie de desbloqueo vencida a mitad del recorrido
@@ -704,6 +747,13 @@ export function Clinic3DClient({
       // Pose del jugador en MUNDO: válida en FPS, dron y VR (el rig + el headset
       // ya están aplicados a la matriz mundial de la cámara).
       const playerWorld = new THREE.Vector3();
+      // Centro del piso: a donde apunta el dron. Sirve para medir cuanto se
+      // ha alejado la camara y escalar las placas (ver el loop).
+      const dronePivot = new THREE.Vector3(
+        (world.bounds.minX + world.bounds.maxX) / 2,
+        0,
+        (world.bounds.minZ + world.bounds.maxZ) / 2,
+      );
       const tmpQuat = new THREE.Quaternion();
       const tmpEuler = new THREE.Euler(0, 0, 0, "YXZ");
       const lastPos = camera.position.clone();
@@ -733,6 +783,25 @@ export function Clinic3DClient({
 
         // Pose REAL del jugador en MUNDO (getWorldPosition resuelve rig + headset).
         camera.getWorldPosition(playerWorld);
+
+        /**
+         * 🔴 LAS PLACAS, DEL TAMANO DE SIEMPRE EN PANTALLA.
+         *
+         * En vista aerea la camara se aleja hasta ver el piso entero, y una
+         * placa de 1.6 m acaba midiendo veinte pixeles: se ve que hay algo
+         * colgado del sillon, pero no QUE dice, que es justo lo que esa
+         * pantalla existe para contestar. Como el sprite siempre encara a la
+         * camara, crecerlo en proporcion a la distancia le deja SIEMPRE la
+         * misma altura en pantalla — la de un rotulo de mapa.
+         *
+         * El tope existe para que no se coma la habitacion al alejarse del
+         * todo, y el suelo para que de cerca no sea mas grande que el sillon.
+         * Caminando no se toca nada: `exitDrone` devuelve el tamano fijo.
+         */
+        if (droneOn && liveLayer) {
+          const dist = playerWorld.distanceTo(dronePivot);
+          liveLayer.setPlateWorldWidth(Math.max(1.6, Math.min(6, dist * 0.3)));
+        }
         tmpEuler.setFromQuaternion(camera.getWorldQuaternion(tmpQuat), "YXZ");
         const worldYaw = tmpEuler.y;
 

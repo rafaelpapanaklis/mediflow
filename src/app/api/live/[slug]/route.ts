@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { liveCookieName, verifyLiveUnlockCookie } from "@/lib/floor-plan/live-config";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
+import {
+  calendarDayRangeUtc,
+  isValidDateISO,
+  todayInTz,
+} from "@/lib/agenda/time-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +41,9 @@ export async function GET(req: NextRequest, { params }: Params) {
         liveModeEnabled: true,
         liveModePassword: true,
         liveModeShowPatientNames: true,
+        // La jornada de ESTA clinica. Sin esto el dia se calculaba en la
+        // zona del proceso (UTC en Vercel) y salia corrido seis horas.
+        timezone: true,
       },
     });
     if (!clinic) {
@@ -65,19 +73,29 @@ export async function GET(req: NextRequest, { params }: Params) {
       }
     }
 
-    const dateStr = req.nextUrl.searchParams.get("date");
-    const today = new Date();
-    let dayStart: Date;
-    let dayEnd: Date;
-    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      dayStart = new Date(`${dateStr}T00:00:00`);
-      dayEnd = new Date(`${dateStr}T23:59:59`);
-    } else {
-      dayStart = new Date(today);
-      dayStart.setHours(0, 0, 0, 0);
-      dayEnd = new Date(today);
-      dayEnd.setHours(23, 59, 59, 999);
-    }
+    /**
+     * 🔴 EL DÍA ES EL DE LA CLÍNICA, NO EL DEL SERVIDOR NI EL DEL NAVEGADOR.
+     *
+     * Antes: sin `date` se usaba `setHours(0,0,0,0)` sobre la hora del
+     * PROCESO (UTC en Vercel), y con `date` se hacía
+     * `new Date(\`${dateStr}T00:00:00\`)`, que también la resuelve el
+     * proceso. Las dos daban la jornada corrida seis horas para una clínica
+     * mexicana: a partir de las 18:00 el televisor de recepción perdía toda
+     * la mañana y enseñaba parte del día siguiente.
+     *
+     * El parámetro `date` se sigue aceptando (una pantalla puede pedir otro
+     * día), pero lo normal es que NO venga: quien sabe qué día es hoy para
+     * esta clínica es el servidor, mirando su zona.
+     */
+    const dateParam = req.nextUrl.searchParams.get("date");
+    const dayISO =
+      dateParam && isValidDateISO(dateParam)
+        ? dateParam
+        : todayInTz(clinic.timezone);
+    const { startUtc: dayStart, endUtc: dayEnd } = calendarDayRangeUtc(
+      dayISO,
+      clinic.timezone,
+    );
 
     /**
      * Cada query se envuelve en safe() — si falla por tabla/columna
@@ -118,7 +136,7 @@ export async function GET(req: NextRequest, { params }: Params) {
           prisma.appointment.findMany({
             where: {
               clinicId: clinic.id,
-              startsAt: { gte: dayStart, lte: dayEnd },
+              startsAt: { gte: dayStart, lt: dayEnd },
               status: { notIn: ["CANCELLED", "NO_SHOW"] },
             },
             orderBy: { startsAt: "asc" },
