@@ -7,6 +7,7 @@ import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
 import { formatEduDate } from "@/lib/edu/pacientes-core";
 import { EDU_PATIENT_STATUS_LABELS, EDU_SEX_LABELS } from "@/lib/edu/types";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { EduAntecedentesCard } from "@/components/edu/expediente/antecedentes-card";
 
 /**
@@ -112,9 +113,13 @@ export default async function PacienteDatosPage({ params }: { params: { id: stri
           <div>
             <span className="edu-kv__k">Lo trajo</span>
             <span className="edu-kv__v">
-              {p.origin.studentName
-                ? `${p.origin.studentMatricula} · ${p.origin.studentName}`
-                : "Llegó solo a la clínica"}
+              {p.origin.studentName ? (
+                <EduPersonaLink kind="estudiante" id={p.origin.studentId}>
+                  {p.origin.studentMatricula} · {p.origin.studentName}
+                </EduPersonaLink>
+              ) : (
+                "Llegó solo a la clínica"
+              )}
             </span>
           </div>
           {p.origin.setByName && (

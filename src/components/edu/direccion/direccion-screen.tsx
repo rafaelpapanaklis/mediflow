@@ -571,11 +571,17 @@ function BloqueAhora({
                   subPersona: s.studentId
                     ? { kind: "estudiante" as EduPersonaKind, id: s.studentId, nombre: s.studentName ?? "—" }
                     : undefined,
+                  // El título es el PACIENTE: por tituloPersona y no por el
+                  // href a mano que había, para que respete el permiso de
+                  // quien mira — misma razón que las filas de recepción.
+                  tituloPersona: s.patientId
+                    ? { kind: "paciente" as EduPersonaKind, id: s.patientId }
+                    : undefined,
                   campos: [
                     { k: "Desde", v: s.desdeLabel ?? "—" },
                     { k: "Estado", v: EDU_DIR_SILLON_LABELS[s.estado] },
                   ],
-                  href: s.patientId ? `/instituto/pacientes/${s.patientId}` : null,
+                  href: null,
                   semaforo: EDU_DIR_SILLON_SEMAFORO[s.estado],
                 })),
                 ...ahora.recepcion.map((r) => ({

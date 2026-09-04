@@ -189,8 +189,12 @@ export interface EduResumenCasoRow {
   id: string;
   status: EduCaseStatus;
   programName: string;
+  /** El id de **EduStudent** (la inscripción), para abrir su ficha. */
+  studentId: string;
   studentName: string;
   studentMatricula: string;
+  /** El id de **EduUser** del docente. `null` cuando el caso nació sin uno. */
+  supervisorUserId: string | null;
   supervisorName: string | null;
   abiertoLabel: string;
   /** Ola de Casos: en qué va y qué le falta firmar, derivado de sus
@@ -201,11 +205,15 @@ export interface EduResumenCasoRow {
 export interface EduResumenCita {
   /** "lun 31 ago 09:30", ya formateado en la zona del instituto. */
   label: string;
+  /** El id de **EduStudent**, no el de su cuenta. */
+  studentId: string;
   studentName: string;
   studentMatricula: string;
   chairName: string | null;
   /** La sede del sillón; null cuando el instituto no reparte por sedes. */
   campusName: string | null;
+  /** El id de **EduUser** del docente de la cita. */
+  supervisorUserId: string | null;
   supervisorName: string | null;
 }
 
