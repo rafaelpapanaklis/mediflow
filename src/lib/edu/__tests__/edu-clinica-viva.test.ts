@@ -677,3 +677,155 @@ test("sin sillones, el tablero es vacío y no revienta", () => {
   assert.deepEqual(board.counts, { libre: 0, proximo: 0, ocupado: 0, total: 0 });
   assert.deepEqual(board.byCampus, []);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA DE PERSONAS · LOS IDS SIGUEN AL ENMASCARADO
+//
+// 🔴 ES LA PRUEBA MÁS IMPORTANTE DE ESA OLA. La clínica en vivo y el plano
+// pintan el nombre del paciente, del estudiante y del docente, y desde esta
+// ola cada nombre es un ENLACE a su ficha. Para enlazar hace falta el id, y
+// el id viaja en el JSON del servidor al navegador.
+//
+// Ocultar el nombre y dejar el id NO OCULTA NADA: quien mira abre las
+// herramientas de desarrollo —o simplemente teclea la URL— y tiene la ficha
+// completa de la persona que la pantalla acababa de callar. Un fallo así no
+// se ve en la interfaz: la tarjeta sigue diciendo "OCUPADA" y las iniciales,
+// exactamente igual que cuando está bien.
+// ═══════════════════════════════════════════════════════════════════════
+
+test("🔴 tarjeta ENMASCARADA: patientId, studentId y supervisorUserId, los TRES en null", () => {
+  const board = buildEduVivaBoard({
+    chairs: [NORTE],
+    appointments: [
+      cita({
+        chairId: "chair_n1",
+        status: "IN_PROGRESS",
+        detail: false,
+        patientId: "pac_secreto",
+        studentId: "st_secreto",
+        supervisorUserId: "u_secreto",
+        supervisor: "Dra. Vega",
+        specialtyId: "prog_secreto",
+      }),
+    ],
+    now: AHORA,
+  });
+
+  const card = board.cards.find((c) => c.chairId === "chair_n1");
+  assert.ok(card);
+  assert.equal(card.masked, true, "la tarjeta tenía que salir callada");
+
+  assert.equal(card.patientId, null, "el id del PACIENTE se filtró en una tarjeta enmascarada");
+  assert.equal(card.studentId, null, "el id del ESTUDIANTE se filtró en una tarjeta enmascarada");
+  assert.equal(
+    card.supervisorUserId,
+    null,
+    "el id del DOCENTE se filtró en una tarjeta enmascarada",
+  );
+
+  // Y el cinturón de siempre: ningún id secreto aparece en NINGUNA parte del
+  // JSON de la tarjeta. Si mañana alguien añade un campo nuevo con un id
+  // dentro, esta línea se pone roja aunque las tres de arriba sigan verdes.
+  const json = JSON.stringify(card);
+  for (const secreto of ["pac_secreto", "st_secreto", "u_secreto", "prog_secreto"]) {
+    assert.ok(!json.includes(secreto), `"${secreto}" viajó en el JSON de una tarjeta callada`);
+  }
+});
+
+test("tarjeta NO enmascarada: los tres ids sí viajan (si no, no habría enlace)", () => {
+  const board = buildEduVivaBoard({
+    chairs: [NORTE],
+    appointments: [
+      cita({
+        chairId: "chair_n1",
+        status: "IN_PROGRESS",
+        detail: true,
+        patientId: "pac_1",
+        studentId: "st_1",
+        supervisorUserId: "u_1",
+        supervisor: "Dra. Vega",
+      }),
+    ],
+    now: AHORA,
+  });
+
+  const card = board.cards.find((c) => c.chairId === "chair_n1");
+  assert.ok(card);
+  assert.equal(card.masked, false);
+  assert.equal(card.patientId, "pac_1");
+  assert.equal(card.studentId, "st_1");
+  assert.equal(card.supervisorUserId, "u_1");
+});
+
+test("un renglón ENMASCARADO del horario tampoco lleva ids", () => {
+  // El horario del plano se calla con el MISMO eduVivaDetalle que la
+  // tarjeta: dos formas de callar lo mismo es como una de las dos se queda
+  // corta.
+  const board = buildEduVivaBoard({
+    chairs: [NORTE],
+    horario: true,
+    appointments: [
+      cita({
+        id: "callada",
+        chairId: "chair_n1",
+        status: "IN_PROGRESS",
+        detail: false,
+        patientId: "pac_secreto",
+        studentId: "st_secreto",
+      }),
+      cita({
+        id: "mia",
+        chairId: "chair_n1",
+        status: "SCHEDULED",
+        startsAt: min(90),
+        endsAt: min(140),
+        detail: true,
+        patientId: "pac_1",
+        studentId: "st_1",
+      }),
+    ],
+    now: AHORA,
+  });
+
+  const callada = (board.schedule ?? []).find((s) => s.id === "callada");
+  const mia = (board.schedule ?? []).find((s) => s.id === "mia");
+  assert.ok(callada && mia);
+
+  assert.equal(callada.masked, true);
+  assert.equal(callada.patientId, null);
+  assert.equal(callada.studentId, null);
+
+  assert.equal(mia.masked, false);
+  assert.equal(mia.patientId, "pac_1");
+  assert.equal(mia.studentId, "st_1");
+});
+
+test("un sillón LIBRE no lleva ids de nadie, ni aunque haya cita más tarde", () => {
+  // La tarjeta libre pinta la hora como PISTA y nada más: un sillón libre no
+  // tiene por qué enseñar de quién es la cita de dentro de cuatro horas, y
+  // menos un id con el que abrir su ficha.
+  const board = buildEduVivaBoard({
+    chairs: [NORTE],
+    appointments: [
+      cita({
+        chairId: "chair_n1",
+        status: "SCHEDULED",
+        startsAt: min(240),
+        endsAt: min(280),
+        detail: true,
+        patientId: "pac_1",
+        studentId: "st_1",
+        supervisorUserId: "u_1",
+      }),
+    ],
+    now: AHORA,
+  });
+
+  const card = board.cards.find((c) => c.chairId === "chair_n1");
+  assert.ok(card);
+  assert.equal(card.state, "libre");
+  assert.equal(card.patientId, null);
+  assert.equal(card.studentId, null);
+  assert.equal(card.supervisorUserId, null);
+  assert.ok(!JSON.stringify(card).includes("pac_1"));
+});

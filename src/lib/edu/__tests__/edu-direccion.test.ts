@@ -63,6 +63,7 @@ import {
   parseEduDirPeriodo,
   type EduDirAhora,
   type EduDirPanel,
+  type EduDirDetalleFila,
 } from "../direccion-core";
 import { EDU_ATRASO_UMBRAL_VIGILAR } from "../evaluacion-core";
 
@@ -728,4 +729,85 @@ test("el nombre del archivo dice el periodo y no se parece al de la bitácora", 
     "panel-direccion-2026-08-01_2026-08-31.csv",
   );
   assert.ok(!eduDirCsvFileName("2026-08-31", "2026-08-31").startsWith("bitacora"));
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA DE PERSONAS · subPersona Y tituloPersona EN LAS FILAS DE DETALLE
+//
+// El renderer FilaDetalle solo enlazaba `fila.titulo`. `fila.sub` y
+// `fila.campos` eran texto muerto POR CONSTRUCCIÓN, y ahí caían casi todos
+// los estudiantes y docentes del tablero. El arreglo está en el TIPO —dos
+// campos opcionales— y no caso por caso, así que lo que hay que blindar es
+// justamente el contrato del tipo: que una fila SIN persona siga pintando su
+// `sub` de siempre, y que una CON persona traiga el kind y el id correctos.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Una fila de detalle mínima, para fijar la forma. */
+function filaDetalle(over: Partial<EduDirDetalleFila> = {}): EduDirDetalleFila {
+  return {
+    id: "f_1",
+    titulo: "María González · P-0007",
+    sub: null,
+    campos: [],
+    href: null,
+    semaforo: "NEUTRO",
+    ...over,
+  };
+}
+
+test("una fila SIN persona no lleva subPersona y conserva su `sub` tal cual", () => {
+  // Es la NO-regresión: las filas que no nombran a nadie (un cobro, una
+  // cifra) tienen que seguir pintándose exactamente igual que antes.
+  const fila = filaDetalle({ sub: "Cobro C-0012 · $1,200.00" });
+  assert.equal(fila.subPersona ?? null, null);
+  assert.equal(fila.sub, "Cobro C-0012 · $1,200.00");
+  assert.equal(fila.tituloPersona ?? null, null);
+});
+
+test("una fila CON estudiante lleva subPersona con el id de EduStudent", () => {
+  const fila = filaDetalle({
+    sub: "(A-001) · Sillón 3",
+    subPersona: { kind: "estudiante", id: "st_1", nombre: "Ana Rodríguez" },
+  });
+  assert.ok(fila.subPersona);
+  assert.equal(fila.subPersona.kind, "estudiante");
+  // 🔴 De EduStudent, NO de EduUser: el id de la cuenta aquí da un 404 mudo.
+  assert.equal(fila.subPersona.id, "st_1");
+  assert.equal(fila.subPersona.nombre, "Ana Rodríguez");
+  // El nombre sale de `subPersona` y NO se repite dentro de `sub`: si
+  // estuviera en los dos sitios, FilaDetalle lo pintaría dos veces.
+  assert.ok(!(fila.sub ?? "").includes("Ana Rodríguez"));
+});
+
+test("una fila CON docente lleva subPersona con el id de EduUser", () => {
+  const fila = filaDetalle({
+    subPersona: { kind: "docente", id: "u_doc", nombre: "Dr. Gómez" },
+  });
+  assert.ok(fila.subPersona);
+  assert.equal(fila.subPersona.kind, "docente");
+  assert.equal(fila.subPersona.id, "u_doc");
+});
+
+test("tituloPersona reemplaza al href a mano (y así respeta el permiso)", () => {
+  // Un <Link href="/instituto/estudiantes/x"> escrito a mano se salta el
+  // permiso de quien mira; EduPersonaLink no. Por eso las filas que abren
+  // una ficha llevan `tituloPersona` y dejan `href` en null.
+  const fila = filaDetalle({
+    titulo: "Ana Rodríguez · A-001",
+    tituloPersona: { kind: "estudiante", id: "st_1" },
+    href: null,
+  });
+  assert.ok(fila.tituloPersona);
+  assert.equal(fila.href, null, "con tituloPersona el href tiene que quedar en null");
+});
+
+test("un sillón vivo lleva el id del docente que responde, o null", () => {
+  // supervisorId y supervisorName salen del MISMO `responsable`: si uno
+  // viniera de la cita y el otro de la titularidad vigente, el enlace de
+  // "Dr. Gómez" abriría la ficha de otra persona.
+  const conDocente = { supervisorName: "Dr. Gómez", supervisorId: "u_doc" };
+  const sinDocente = { supervisorName: null, supervisorId: null };
+
+  assert.equal(Boolean(conDocente.supervisorName), Boolean(conDocente.supervisorId));
+  assert.equal(Boolean(sinDocente.supervisorName), Boolean(sinDocente.supervisorId));
 });

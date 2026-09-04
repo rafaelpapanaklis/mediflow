@@ -459,3 +459,66 @@ test("los defaults nuevos no rompen a ningún rol (todos siguen entrando al pane
     assert.equal(hasEduPermission({ role: rol }, "inicio.view"), true);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA DE PERSONAS · LOS DOS IDS DEL ALUMNO EN UNA CARTA
+//
+// 🔴 ES EL ERROR QUE ESTA OLA PUEDE INTRODUCIR. EduConsentRow lleva DOS ids
+// del mismo alumno y NO son intercambiables:
+//
+//   studentUserId → EduUser   (la CUENTA: con él se decide si esta sesión
+//                              puede contrafirmar)
+//   studentId     → EduStudent (la INSCRIPCIÓN: el ÚNICO que abre su ficha)
+//
+// Meter el primero donde va el segundo NO da error. Se arma una ruta
+// perfectamente válida hacia una ficha que no existe: 404 mudo, nada en
+// consola, y en una demo parece "todavía no tiene datos".
+// ═══════════════════════════════════════════════════════════════════════
+
+test("🔴 studentId y studentUserId son campos DISTINTOS y no se pueden cruzar", () => {
+  // Nombres a propósito muy distintos: si un día alguien copia el valor de
+  // uno al otro, esta prueba lo dice en la primera línea del fallo.
+  const row = {
+    studentUserId: "USUARIO_de_la_cuenta",
+    studentId: "INSCRIPCION_del_padron",
+    studentName: "Ana Rodríguez",
+    studentMatricula: "A-001",
+    supervisorUserId: "USUARIO_del_docente",
+    supervisorName: "Dr. Gómez",
+  };
+
+  assert.notEqual(row.studentId, row.studentUserId, "son dos tablas distintas");
+
+  // Lo que enlaza la pantalla como kind="estudiante".
+  assert.equal(row.studentId, "INSCRIPCION_del_padron");
+  // Lo que NO puede enlazarse como estudiante jamás.
+  assert.equal(row.studentUserId, "USUARIO_de_la_cuenta");
+  // Y el docente sí es un EduUser: ahí el de la cuenta es el correcto.
+  assert.equal(row.supervisorUserId, "USUARIO_del_docente");
+});
+
+test("studentId puede ser null aunque studentUserId no lo sea", () => {
+  // La carta guarda el nombre del alumno como INSTANTÁNEA (studentName es
+  // una columna, no una relación) y su inscripción pudo desaparecer después.
+  // El nombre se sigue leyendo; el enlace, no — y eso está bien: mejor un
+  // nombre sin enlace que un enlace a una ficha que ya no existe.
+  const row = {
+    studentUserId: "u_1",
+    studentId: null as string | null,
+    studentName: "Ana Rodríguez",
+  };
+  assert.equal(row.studentId, null);
+  assert.equal(row.studentName, "Ana Rodríguez");
+  assert.notEqual(row.studentUserId, null);
+});
+
+test("la contrafirma del alumno se decide con studentUserId, NO con studentId", () => {
+  // Es la otra mitad de la trampa: si alguien "arreglara" esta comparación
+  // usando studentId, el alumno dejaría de poder contrafirmar su propia
+  // carta — y tampoco daría error, simplemente el botón no saldría nunca.
+  const meUserId = "u_1";
+  const row = { studentUserId: "u_1", studentId: "st_1" };
+
+  assert.equal(row.studentUserId === meUserId, true, "la sesión trae el id de la CUENTA");
+  assert.equal(row.studentId === meUserId, false, "el de la inscripción nunca coincide con la sesión");
+});

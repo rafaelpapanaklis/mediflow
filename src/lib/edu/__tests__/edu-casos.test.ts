@@ -529,3 +529,33 @@ test("fuente · el item de menú de casos existe, con su etiqueta y su permiso r
   assert.match(src, /key: "casos",\s*\n\s*href: "\/instituto\/casos"/);
   assert.match(src, /casos: "Casos"/);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA DE PERSONAS · EL DOCENTE RESPONSABLE, CLICABLE
+// ═══════════════════════════════════════════════════════════════════════
+
+test("EduCasosPanelRow lleva el id del docente responsable, o null", () => {
+  // `supervisorUserId` sale de la COLUMNA del caso, la misma de la que sale
+  // `supervisorName`: si el id viniera de otra fuente (el titular vigente
+  // del alumno, por ejemplo), el enlace de "Dra. Vega" abriría la ficha de
+  // otra persona el día que el docente rotara.
+  const conDocente = fila({ supervisorName: "Dra. Vega", supervisorUserId: "u_vega" });
+  assert.equal(conDocente.supervisorUserId, "u_vega");
+  assert.equal(Boolean(conDocente.supervisorName), Boolean(conDocente.supervisorUserId));
+
+  // Un caso puede nacer sin responsable designado: entonces los DOS son null
+  // y el nombre no se pinta ni como texto ni como enlace.
+  const sinDocente = fila({ supervisorName: null, supervisorUserId: null });
+  assert.equal(sinDocente.supervisorUserId, null);
+  assert.equal(sinDocente.supervisorName, null);
+});
+
+test("studentId (EduStudent) y supervisorUserId (EduUser) son de tablas distintas", () => {
+  // La fila lleva los dos, y es justo donde se cruzan por descuido: el
+  // estudiante se enlaza con kind="estudiante" y el docente con
+  // kind="docente". Al revés, las dos rutas dan un 404 mudo.
+  const f = fila({ studentId: "st_1", supervisorUserId: "u_1" });
+  assert.notEqual(f.studentId, f.supervisorUserId);
+  assert.equal(f.studentId, "st_1");
+  assert.equal(f.supervisorUserId, "u_1");
+});
