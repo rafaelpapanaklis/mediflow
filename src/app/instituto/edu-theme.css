@@ -118,22 +118,45 @@
   --edu-shadow-3: 0 24px 48px -20px rgba(0, 0, 0, 0.65);
 }
 
-/* El <body> lo pinta globals.css con la retícula violeta del dental. Estas
-   dos reglas la sustituyen SOLO en las páginas del vertical, vía :has(). */
+/* ── EL LIENZO DEL VERTICAL ───────────────────────────────────────────
+   El <body> lo pinta globals.css con la retícula violeta del dental.
+   Estas reglas la sustituyen SOLO en las páginas del vertical, vía :has().
+   Cuatro capas, de arriba abajo en el orden que las lee el navegador:
+     1. GRANO — un SVG de ruido fractal en data URI, 180×180 px que se
+        repite. Es lo que quita el aspecto de plástico: sin él, los
+        degradados de abajo se ven como bandas. Va en data URI y no como
+        archivo porque el CSP del repo permite `img-src 'self' data:`
+        (next.config.mjs ~119) y así no hay un asset más que servir.
+     2. LUZ ÍNDIGO desde la esquina superior izquierda.
+     3. LUZ ÁMBAR, tenue, desde la inferior derecha: la que da la
+        sensación de papel caro en vez de pantalla fría.
+     4. RETÍCULA de 64 px (el doble que el dental, que usa 32): con
+        tarjetas de vidrio encima, 32 px se lee como tela y marea.
+   El lienzo es el BODY y .edu-shell va TRANSPARENTE para dejarlo ver: si
+   .edu-shell pinta un color opaco, nada de esto existe. */
 body:has(.edu-shell),
 body:has(.edu-auth) {
-  background-color: #f5f7fb;
-  background-image: radial-gradient(
-    ellipse 1100px 560px at 50% -12%,
-    rgba(70, 101, 172, 0.09),
-    transparent 70%
-  );
+  background-color: #eff2f8;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.08 0 0 0 0 0.10 0 0 0 0 0.17 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.16'/%3E%3C/svg%3E"),
+    radial-gradient(1000px 600px at 0% -10%, rgba(70, 101, 172, 0.2), transparent 60%),
+    radial-gradient(800px 500px at 100% 105%, rgba(180, 83, 9, 0.09), transparent 60%),
+    linear-gradient(rgba(20, 26, 43, 0.065) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 26, 43, 0.065) 1px, transparent 1px);
+  background-size: 180px 180px, auto, auto, 64px 64px, 64px 64px;
   background-attachment: fixed;
 }
 
 .dark body:has(.edu-shell),
 .dark body:has(.edu-auth) {
   background-color: #10162a;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.85 0 0 0 0 0.89 0 0 0 0 0.96 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.1'/%3E%3C/svg%3E"),
+    radial-gradient(1000px 600px at 0% -10%, rgba(108, 136, 198, 0.18), transparent 60%),
+    radial-gradient(800px 500px at 100% 105%, rgba(180, 83, 9, 0.07), transparent 60%),
+    linear-gradient(rgba(226, 233, 246, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(226, 233, 246, 0.04) 1px, transparent 1px);
+  background-size: 180px 180px, auto, auto, 64px 64px, 64px 64px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -147,7 +170,7 @@ body:has(.edu-auth) {
   display: flex;
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--edu-bg);
+  background: transparent; /* el lienzo es el body: ver body:has(.edu-shell) */
 }
 
 .edu-body {
@@ -172,8 +195,12 @@ body:has(.edu-auth) {
   gap: 10px;
   min-height: 56px;
   padding: 8px 12px;
-  background: var(--edu-surface);
+  background: rgba(255, 255, 255, 0.82); /* vidrio: ver VIDRIO junto a .edu-card */
   border-bottom: 1px solid var(--edu-line);
+}
+
+.dark .edu-topbar {
+  background: rgba(25, 32, 58, 0.85);
 }
 
 .edu-topbar__title {
@@ -502,6 +529,13 @@ body:has(.edu-auth) {
     transform: none;
     visibility: visible;
     box-shadow: none;
+    background: rgba(255, 255, 255, 0.82); /* vidrio: solo en escritorio, ver VIDRIO junto a .edu-card */
+    border-right-color: rgba(255, 255, 255, 0.9);
+  }
+
+  .dark .edu-sidebar {
+    background: rgba(25, 32, 58, 0.85);
+    border-right-color: rgba(226, 233, 246, 0.1);
   }
 
   .edu-nav__item {
@@ -543,12 +577,67 @@ body:has(.edu-auth) {
   }
 }
 
+/* ── VIDRIO ───────────────────────────────────────────────────────────
+   Las tres superficies que flotan sobre el lienzo dejan pasar algo de
+   luz: barra lateral (.edu-sidebar, arriba), barra superior (.edu-topbar,
+   arriba) y tarjetas. Cada una lleva un filo interior blanco (el
+   `inset 0 1px 0` de .edu-card, o el borde claro de las otras dos) que es
+   lo que hace leer el borde como un canto de cristal y no como una caja
+   gris. El fondo y el borde de vidrio se declaran directo en la regla base
+   de cada una (arriba) para no crear un segundo dueño con el mismo nombre
+   — edu-theme.test.ts lo bloquea — así que aquí solo vive lo que sí es
+   nuevo: el desenfoque, y sus apagados.
+
+   ⛔ NO extender el vidrio a las otras ~60 superficies del archivo:
+   `backdrop-filter` crea BLOQUE CONTENEDOR y cualquier descendiente
+   `position: fixed` (.edu-modal, .edu-scrim, .edu-vsr — ninguno usa
+   portal) quedaría atrapado dentro del elemento en vez de cubrir la
+   pantalla. Estas tres no contienen ninguno de esos tres.
+
+   El desenfoque se apaga por debajo de 1024 px y con
+   prefers-reduced-transparency: en un teléfono de gama baja el blur a
+   pantalla completa cuesta cuadros, y la semitransparencia sola ya da
+   el efecto. @supports cubre al navegador que no tenga backdrop-filter:
+   sin él las superficies se quedan casi opacas, que es correcto. */
 .edu-card {
-  background: var(--edu-surface);
-  border: 1px solid var(--edu-line);
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.95);
   border-radius: var(--edu-radius);
-  box-shadow: var(--edu-shadow-1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 0 0 1px rgba(20, 26, 43, 0.07),
+    0 14px 34px -20px rgba(30, 43, 74, 0.35);
   padding: 18px;
+}
+
+.dark .edu-card {
+  background: rgba(25, 32, 58, 0.78);
+  border-color: rgba(226, 233, 246, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(226, 233, 246, 0.08),
+    0 0 0 1px rgba(226, 233, 246, 0.07),
+    0 14px 34px -20px rgba(0, 0, 0, 0.6);
+}
+
+@media (min-width: 1024px) {
+  @supports (backdrop-filter: blur(8px)) or (-webkit-backdrop-filter: blur(8px)) {
+    .edu-card,
+    .edu-sidebar,
+    .edu-topbar {
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+    }
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .edu-card,
+  .edu-sidebar,
+  .edu-topbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--edu-surface);
+  }
 }
 
 .edu-card__label {
@@ -5012,6 +5101,17 @@ button.edu-dir-money__fila:hover {
     padding: 0;
     margin: 0;
     background: #ffffff;
+  }
+
+  body:has(.edu-shell),
+  .edu-card,
+  .edu-sidebar,
+  .edu-topbar {
+    background: #ffffff !important;
+    background-image: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
   }
 
   .edu-page {
