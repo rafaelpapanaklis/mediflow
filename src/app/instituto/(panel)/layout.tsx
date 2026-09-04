@@ -115,6 +115,7 @@ export default async function InstitutoPanelLayout({
     icon: item.icon,
     section: item.section,
     label: EDU_NAV_LABELS[item.key] ?? item.key,
+    matchPrefixes: item.matchPrefixes,
   }));
 
   // ── Ola de PERSONAS · quién puede abrir la ficha de quién ─────────────

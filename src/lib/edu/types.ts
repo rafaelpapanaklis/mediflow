@@ -685,6 +685,19 @@ export interface EduNavItemDef {
   icon: string;
   section: EduNavSection;
   permission: string | null;
+  /**
+   * RUTAS QUE ENCIENDEN ESTE ITEM SIN COLGAR DE SU `href`.
+   *
+   * El sidebar enciende el item cuyo href coincide más con la ruta actual.
+   * Eso deja apagado el menú entero en una pantalla que pertenece a una
+   * sección pero vive en otra rama del árbol: /instituto/estudiantes/{id}
+   * es la ficha de alguien del PADRÓN, y no empieza por /instituto/padron.
+   *
+   * ⛔ No es un atajo para inventar items de menú: la ficha NO tiene entrada
+   * propia. Es la forma de decir "esta rama es de esta sección" sin crear
+   * una segunda pantalla en el menú que dijera lo mismo peor.
+   */
+  matchPrefixes?: string[];
 }
 
 /** Item YA resuelto que viaja del server al sidebar (serializable). */
@@ -694,6 +707,8 @@ export interface EduNavItem {
   icon: string;
   section: EduNavSection;
   label: string;
+  /** Ver EduNavItemDef.matchPrefixes. */
+  matchPrefixes?: string[];
 }
 
 /**
@@ -814,6 +829,10 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     icon: "users",
     section: "academico",
     permission: "padron.view",
+    // La ficha de un estudiante es padrón aunque su ruta no lo parezca.
+    // /instituto/docentes/{id} no necesita nada de esto: ya cuelga del href
+    // de su propio item.
+    matchPrefixes: ["/instituto/estudiantes"],
   },
   {
     key: "estructura",
