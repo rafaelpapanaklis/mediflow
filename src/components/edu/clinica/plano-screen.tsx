@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Maximize2, MapPinned, Pencil } from "lucide-react";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { EDU_CAMPUS_ALL } from "@/lib/edu/campus-core";
 import {
   EDU_VIVA_PROXIMA_MIN,
@@ -641,33 +642,50 @@ function TarjetaSillon({
           {foco === "estudiante" ? (
             <>
               <FloorPopLabel>Estudiante</FloorPopLabel>
-              <FloorPopName>{card.student}</FloorPopName>
+              <FloorPopName>
+                <EduPersonaLink kind="estudiante" id={card.studentId}>
+                  {card.student}
+                </EduPersonaLink>
+              </FloorPopName>
               {card.studentMatricula && (
                 <FloorPopData>Matrícula {card.studentMatricula}</FloorPopData>
               )}
               <FloorPopData>
-                Atendiendo a <strong>{card.patient}</strong>
+                Atendiendo a{" "}
+                <strong>
+                  <EduPersonaLink kind="paciente" id={card.patientId}>
+                    {card.patient}
+                  </EduPersonaLink>
+                </strong>
                 {card.patientFolio ? ` · ${card.patientFolio}` : ""}
               </FloorPopData>
             </>
           ) : (
             <>
               <FloorPopLabel>Paciente</FloorPopLabel>
-              <FloorPopName>{card.patient}</FloorPopName>
+              <FloorPopName>
+                <EduPersonaLink kind="paciente" id={card.patientId}>
+                  {card.patient}
+                </EduPersonaLink>
+              </FloorPopName>
               {card.patientFolio && <FloorPopData>Folio {card.patientFolio}</FloorPopData>}
               {card.caseLabel && <FloorPopData label="Caso">{card.caseLabel}</FloorPopData>}
               {card.specialty && (
                 <FloorPopData label="Especialidad">{card.specialty}</FloorPopData>
               )}
               <FloorPopData label="Estudiante">
-                {card.student}
+                <EduPersonaLink kind="estudiante" id={card.studentId}>
+                  {card.student}
+                </EduPersonaLink>
                 {card.studentMatricula ? ` · ${card.studentMatricula}` : ""}
               </FloorPopData>
             </>
           )}
 
           <FloorPopData label="Docente">
-            {card.supervisor ?? "sin docente asignado"}
+            <EduPersonaLink kind="docente" id={card.supervisorUserId}>
+              {card.supervisor ?? "sin docente asignado"}
+            </EduPersonaLink>
           </FloorPopData>
           <FloorPopClock>
             Desde {card.startLabel}
@@ -704,7 +722,10 @@ function TarjetaSillon({
             <FloorPopList>
               {siguientes.slice(0, 4).map((s) => (
                 <li key={s.id}>
-                  <b>{s.startLabel}</b> {s.patient ?? "—"}
+                  <b>{s.startLabel}</b>{" "}
+                  <EduPersonaLink kind="paciente" id={s.patientId}>
+                    {s.patient ?? "—"}
+                  </EduPersonaLink>
                   {s.specialty ? ` · ${s.specialty}` : ""}
                 </li>
               ))}
@@ -787,9 +808,19 @@ function Horario({
                       start={s.startLabel}
                       end={s.endLabel}
                       active={s.enCurso}
-                      primary={s.patient ?? "—"}
+                      primary={
+                        <EduPersonaLink kind="paciente" id={s.patientId}>
+                          {s.patient ?? "—"}
+                        </EduPersonaLink>
+                      }
                       secondary={
-                        s.masked ? "Fuera de tu supervisión" : (s.student ?? undefined)
+                        s.masked ? (
+                          "Fuera de tu supervisión"
+                        ) : (
+                          <EduPersonaLink kind="estudiante" id={s.studentId}>
+                            {s.student ?? undefined}
+                          </EduPersonaLink>
+                        )
                       }
                       tag={EDU_APPOINTMENT_STATUS_LABELS[s.status]}
                     />

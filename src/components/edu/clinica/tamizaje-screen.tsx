@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Stethoscope } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { EDU_APPOINTMENT_STATUS_LABELS } from "@/lib/edu/types";
 import { eduFormatDayShort, type EduAppointmentRow, type EduStudentOption, type EduSupervisorOption } from "@/lib/edu/agenda-core";
 
@@ -89,9 +90,16 @@ export function EduTamizajeScreen({
               <span className="edu-slot__time">
                 {eduFormatDayShort(a.dayISO)} {a.startLabel}–{a.endLabel} · {a.chairName}
               </span>
-              <span className="edu-slot__name">{a.patientName}</span>
+              <span className="edu-slot__name">
+                <EduPersonaLink kind="paciente" id={a.patientId}>
+                  {a.patientName}
+                </EduPersonaLink>
+              </span>
               <span className="edu-slot__meta">
-                Folio {a.patientFolio} · valora {a.studentMatricula}
+                Folio {a.patientFolio} · valora{" "}
+                <EduPersonaLink kind="estudiante" id={a.studentId}>
+                  {a.studentMatricula}
+                </EduPersonaLink>
                 {a.caseId ? " · ya tiene caso abierto" : ""}
               </span>
               <span className="edu-slot__tags">
@@ -194,9 +202,16 @@ function FormularioTamizaje({
     <EduModal
       title="Valoración"
       subtitle={
-        cita
-          ? `${cita.patientName} · folio ${cita.patientFolio}`
-          : "Valoración sin cita: elige el paciente que valoraste."
+        cita ? (
+          <>
+            <EduPersonaLink kind="paciente" id={cita.patientId}>
+              {cita.patientName}
+            </EduPersonaLink>{" "}
+            · folio {cita.patientFolio}
+          </>
+        ) : (
+          "Valoración sin cita: elige el paciente que valoraste."
+        )
       }
       onClose={onClose}
       busy={busy}
@@ -316,9 +331,18 @@ function FormularioTamizaje({
           ))}
         </select>
         <span className="edu-field__hint">
-          {alumno?.supervisorName
-            ? `Se propone el titular vigente de ${alumno.matricula}: ${alumno.supervisorName}. Queda guardado como el responsable del caso en este momento; quién ve el caso lo sigue decidiendo la asignación vigente estudiante–docente.`
-            : "Este estudiante no tiene titular vigente. El caso se puede abrir igual y el docente se pone después."}
+          {alumno?.supervisorName ? (
+            <>
+              Se propone el titular vigente de {alumno.matricula}:{" "}
+              <EduPersonaLink kind="docente" id={alumno.supervisorUserId}>
+                {alumno.supervisorName}
+              </EduPersonaLink>
+              . Queda guardado como el responsable del caso en este momento; quién ve el caso
+              lo sigue decidiendo la asignación vigente estudiante–docente.
+            </>
+          ) : (
+            "Este estudiante no tiene titular vigente. El caso se puede abrir igual y el docente se pone después."
+          )}
         </span>
       </div>
 

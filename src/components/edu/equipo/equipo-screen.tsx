@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Search, SlidersHorizontal, UserPlus, Users, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
   EDU_ROLES,
@@ -419,7 +420,19 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
             <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
               <div className="edu-cell edu-cell--wide">
                 <span className="edu-cell__label">Persona</span>
-                <span className="edu-cell__value edu-cell__value--strong">{p.name}</span>
+                <span className="edu-cell__value edu-cell__value--strong">
+                  {p.role === "ALUMNO" ? (
+                    <EduPersonaLink kind="estudiante" id={p.studentId}>
+                      {p.name}
+                    </EduPersonaLink>
+                  ) : p.role === "DOCENTE" ? (
+                    <EduPersonaLink kind="docente" id={p.id}>
+                      {p.name}
+                    </EduPersonaLink>
+                  ) : (
+                    p.name
+                  )}
+                </span>
                 {p.phone && <span className="edu-cell__sub">{p.phone}</span>}
               </div>
 

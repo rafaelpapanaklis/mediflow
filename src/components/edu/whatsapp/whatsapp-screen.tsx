@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Link2, RefreshCw, Send, Unplug } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_WA_CONN_DETAILS,
   EDU_WA_CONN_LABELS,
@@ -447,7 +448,10 @@ export function EduWaEnvios({
             </span>
           </div>
           <p className="edu-wa-envio__to">
-            {m.toName} · {m.toPhoneLabel}
+            <EduPersonaLink kind="paciente" id={m.patientId}>
+              {m.toName}
+            </EduPersonaLink>{" "}
+            · {m.toPhoneLabel}
           </p>
           {m.body && <p className="edu-wa-envio__body">{m.body}</p>}
           {m.errorMsg && (

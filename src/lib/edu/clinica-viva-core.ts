@@ -260,6 +260,14 @@ export interface EduVivaApptInput {
    * JSON sería la puerta trasera a la ficha que la pantalla le cierra.
    */
   patientId?: string;
+  /**
+   * El id de **EduStudent** (la inscripción), NO el de EduUser: es lo que
+   * pide la ficha del estudiante. Se calla con la misma regla que el
+   * paciente — ver `patientId` aquí arriba y `eduVivaDetalle` abajo.
+   */
+  studentId?: string;
+  /** El id de **EduUser** del docente responsable. Se calla igual. */
+  supervisorUserId?: string;
   /** El id del programa/especialidad: de ahí sale el COLOR del sillón. */
   specialtyId?: string | null;
   /** El caso en una línea ("Endodoncia unirradicular · En tratamiento"). */
@@ -302,6 +310,14 @@ export interface EduVivaCard {
    * ficha" del plano; la lista de tarjetas no lo usa.
    */
   patientId: string | null;
+  /**
+   * El id de **EduStudent** — el que abre su ficha. `null` cuando la
+   * tarjeta está callada: un id en el JSON de una tarjeta enmascarada es la
+   * puerta trasera por URL a lo que la pantalla acaba de ocultar.
+   */
+  studentId: string | null;
+  /** El id de **EduUser** del docente. `null` cuando la tarjeta está callada. */
+  supervisorUserId: string | null;
   /** El id de la especialidad (el color del sillón en el plano). */
   specialtyId: string | null;
   /** El caso en una línea. */
@@ -364,6 +380,10 @@ export interface EduVivaSlot {
   masked: boolean;
   patient: string | null;
   student: string | null;
+  /** El id de EduPatient. `null` cuando el renglón está callado. */
+  patientId: string | null;
+  /** El id de **EduStudent**. `null` cuando el renglón está callado. */
+  studentId: string | null;
   specialty: string | null;
   specialtyId: string | null;
 }
@@ -465,6 +485,8 @@ export function eduVivaCard(
     studentMatricula: null,
     specialty: null,
     patientId: null,
+    studentId: null,
+    supervisorUserId: null,
     specialtyId: null,
     caseLabel: null,
     supervisor: null,
@@ -548,6 +570,8 @@ function eduVivaDetalle(
   | "studentMatricula"
   | "specialty"
   | "patientId"
+  | "studentId"
+  | "supervisorUserId"
   | "specialtyId"
   | "caseLabel"
   | "supervisor"
@@ -567,6 +591,12 @@ function eduVivaDetalle(
       // le está atendiendo — que es exactamente lo que `specialty: null`
       // acaba de callar dos renglones más arriba.
       patientId: null,
+      // …ni el del ESTUDIANTE, ni el del DOCENTE. Misma razón exacta que el
+      // del paciente: el nombre está oculto en pantalla, pero un id que
+      // viaja en el JSON se teclea en la barra de direcciones y abre la
+      // ficha. Ocultar el nombre y dejar el id es no ocultar nada.
+      studentId: null,
+      supervisorUserId: null,
       caseLabel: null,
       supervisor: null,
       specialtyId: null,
@@ -580,6 +610,8 @@ function eduVivaDetalle(
     studentMatricula: cita.studentMatricula,
     specialty: cita.specialty,
     patientId: cita.patientId ?? null,
+    studentId: cita.studentId ?? null,
+    supervisorUserId: cita.supervisorUserId ?? null,
     specialtyId: cita.specialtyId ?? null,
     caseLabel: cita.caseLabel ?? null,
     supervisor: cita.supervisor ?? null,
@@ -656,6 +688,10 @@ export function eduVivaHorario(
       masked: !a.detail,
       patient: detalle.patient,
       student: detalle.student,
+      // Los dos ids salen del MISMO `eduVivaDetalle` que acaba de decidir
+      // si el nombre se calla: cuando calla, llegan en null.
+      patientId: detalle.patientId,
+      studentId: detalle.studentId,
       specialty: detalle.specialty,
       specialtyId: detalle.specialtyId,
     });

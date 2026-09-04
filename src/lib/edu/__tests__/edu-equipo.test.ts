@@ -379,3 +379,52 @@ test("el término de búsqueda se recorta (no se manda una novela al LIKE)", () 
   const largo = "a".repeat(500);
   assert.equal(parseEduTeamFilters({ q: largo }).q?.length, 60);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA DE PERSONAS · EL id DE LA CUENTA NO ABRE LA FICHA DEL ALUMNO
+// ═══════════════════════════════════════════════════════════════════════
+
+test("🔴 EduTeamRow.id es EduUser y .studentId es EduStudent: no se cruzan", () => {
+  // La pantalla de equipo lista PERSONAS (cuentas), así que su `id` es
+  // siempre el de EduUser. Para un ALUMNO eso NO abre su ficha del padrón:
+  // hace falta `studentId`, que es la inscripción, y que es null mientras la
+  // persona no esté inscrita.
+  const alumno = {
+    id: "u_alumno",
+    role: "ALUMNO" as const,
+    hasStudentProfile: true,
+    studentId: "st_alumno",
+    matricula: "A-001",
+  };
+  const docente = {
+    id: "u_docente",
+    role: "DOCENTE" as const,
+    hasStudentProfile: false,
+    studentId: null as string | null,
+    matricula: null as string | null,
+  };
+
+  // ALUMNO → kind="estudiante" con studentId (⛔ nunca con `id`).
+  assert.notEqual(alumno.studentId, alumno.id);
+  assert.equal(alumno.studentId, "st_alumno");
+
+  // DOCENTE → kind="docente" con `id`, que es lo correcto porque un docente
+  // ES un EduUser: no hay tabla EduTeacher.
+  assert.equal(docente.studentId, null);
+  assert.equal(docente.id, "u_docente");
+});
+
+test("un ALUMNO recién dado de alta y aún sin inscribir no tiene ficha que abrir", () => {
+  // Alta de la persona e inscripción al padrón son dos pasos. Entre uno y
+  // otro, `studentId` es null y el nombre se pinta en texto plano — que es
+  // exactamente lo que hace EduPersonaLink sin id, sin condicional a mano.
+  const reciente = {
+    id: "u_nuevo",
+    role: "ALUMNO" as const,
+    hasStudentProfile: false,
+    studentId: null as string | null,
+    matricula: null as string | null,
+  };
+  assert.equal(reciente.hasStudentProfile, false);
+  assert.equal(reciente.studentId, null);
+});

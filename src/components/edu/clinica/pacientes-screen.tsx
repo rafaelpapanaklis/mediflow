@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Search, UserPlus, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_APPOINTMENT_STATUS_LABELS,
   EDU_CASE_STATUS_LABELS,
@@ -241,10 +242,21 @@ export function EduPacientesScreen({
 
               <div className="edu-cell edu-cell--wide">
                 <span className="edu-cell__label">Paciente</span>
-                <span className="edu-cell__value edu-cell__value--strong">{p.name}</span>
+                <span className="edu-cell__value edu-cell__value--strong">
+                  <EduPersonaLink kind="paciente" id={p.id}>
+                    {p.name}
+                  </EduPersonaLink>
+                </span>
                 <span className="edu-cell__sub">
                   {p.ageYears !== null ? `${p.ageYears} años` : "Sin fecha de nacimiento"}
-                  {p.origin.studentMatricula ? ` · lo trajo ${p.origin.studentMatricula}` : ""}
+                  {p.origin.studentMatricula && (
+                    <>
+                      {" · lo trajo "}
+                      <EduPersonaLink kind="estudiante" id={p.origin.studentId}>
+                        {p.origin.studentMatricula}
+                      </EduPersonaLink>
+                    </>
+                  )}
                 </span>
               </div>
 
@@ -675,7 +687,11 @@ function FichaPaciente({
 
   return (
     <EduModal
-      title={patient.name}
+      title={
+        <EduPersonaLink kind="paciente" id={patient.id}>
+          {patient.name}
+        </EduPersonaLink>
+      }
       subtitle={`Folio ${patient.folio}`}
       onClose={onClose}
       busy={busy}
@@ -716,9 +732,13 @@ function FichaPaciente({
         <div>
           <span className="edu-kv__k">Origen actual</span>
           <span className="edu-kv__v">
-            {patient.origin.studentName
-              ? `${patient.origin.studentMatricula} · ${patient.origin.studentName}`
-              : "Llegó solo"}
+            {patient.origin.studentName ? (
+              <EduPersonaLink kind="estudiante" id={patient.origin.studentId}>
+                {patient.origin.studentMatricula} · {patient.origin.studentName}
+              </EduPersonaLink>
+            ) : (
+              "Llegó solo"
+            )}
             {patient.origin.setByName && (
               <span className="edu-cell__sub">
                 {" "}
@@ -830,8 +850,11 @@ function FichaPaciente({
             {data?.cases.map((c) => (
               <li key={c.id} className="edu-assign">
                 <span>
-                  <strong>{c.programName}</strong> · {c.studentMatricula} ·{" "}
-                  {EDU_CASE_STATUS_LABELS[c.status]}
+                  <strong>{c.programName}</strong> ·{" "}
+                  <EduPersonaLink kind="estudiante" id={c.studentId}>
+                    {c.studentMatricula}
+                  </EduPersonaLink>{" "}
+                  · {EDU_CASE_STATUS_LABELS[c.status]}
                 </span>
               </li>
             ))}

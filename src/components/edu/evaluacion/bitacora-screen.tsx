@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, Download, GraduationCap } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
+import { EduPersonaLink, useEduPersonaLinks } from "@/components/edu/persona/persona-link";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
   EDU_ATRASO_DESCRIPTIONS,
@@ -95,6 +96,9 @@ export function EduBitacoraScreen({
   } | null>(null);
   const [traspasando, setTraspasando] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  // Los mismos booleanos que usa EduPersonaLink, para esconder la ACCIÓN
+  // "Ver su ficha" cuando no hay ficha que abrir.
+  const personaLinks = useEduPersonaLinks();
 
   function recargar(mensaje: string) {
     setFlash(mensaje);
@@ -118,16 +122,38 @@ export function EduBitacoraScreen({
 
       {/* ── Quién es, y cómo va ─────────────────────────────────────── */}
       <div className="edu-fichahead">
-        <span className="edu-fichahead__folio">{page.matricula}</span>
-        <h2 className="edu-fichahead__name">{page.studentName}</h2>
-        <p className="edu-fichahead__meta">
-          {page.programName} · {page.cohortName} · {page.semester}º semestre · {page.statusLabel}
-        </p>
-        <p className="edu-fichahead__meta">
-          {page.cohortStartLabel && page.cohortEndLabel
-            ? `Ciclo del ${page.cohortStartLabel} al ${page.cohortEndLabel}`
-            : "A su generación le faltan fechas: sin ellas no se puede calcular si va atrasado."}
-        </p>
+        <div>
+          <span className="edu-fichahead__folio">{page.matricula}</span>
+          <h2 className="edu-fichahead__name">{page.studentName}</h2>
+          <p className="edu-fichahead__meta">
+            {page.programName} · {page.cohortName} · {page.semester}º semestre · {page.statusLabel}
+          </p>
+          <p className="edu-fichahead__meta">
+            {page.cohortStartLabel && page.cohortEndLabel
+              ? `Ciclo del ${page.cohortStartLabel} al ${page.cohortEndLabel}`
+              : "A su generación le faltan fechas: sin ellas no se puede calcular si va atrasado."}
+          </p>
+        </div>
+        {/* Esta bitácora es la de evaluación (casos, calificaciones); la
+            ficha académica (matrícula, generación, docente supervisor) vive
+            en /instituto/estudiantes/{id}.
+
+            ⚠️ El BOTÓN se esconde con el mismo booleano que decide el
+            enlace, y hay que preguntarlo aparte: EduPersonaLink sin permiso
+            NO desaparece, devuelve `children` en texto plano — que aquí
+            dejaría un "Ver su ficha" suelto, con pinta de rótulo huérfano y
+            sin nada que hacer. La regla del componente (pintar el nombre
+            aunque no enlace) es la correcta para un NOMBRE y la equivocada
+            para una ACCIÓN, y por eso existe useEduPersonaLinks. */}
+        {personaLinks.estudiante && (
+          <EduPersonaLink
+            kind="estudiante"
+            id={page.studentId}
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+          >
+            Ver su ficha
+          </EduPersonaLink>
+        )}
       </div>
 
       <div className="edu-kpis">
@@ -289,7 +315,11 @@ export function EduBitacoraScreen({
               >
                 <div className="edu-cell edu-cell--wide">
                   <span className="edu-cell__label">Paciente</span>
-                  <span className="edu-cell__value edu-cell__value--strong">{c.patientName}</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    <EduPersonaLink kind="paciente" id={c.patientId}>
+                      {c.patientName}
+                    </EduPersonaLink>
+                  </span>
                   <span className="edu-cell__sub">
                     {c.patientFolio} · {c.programName}
                     {c.transferredFromCaseId ? " · viene de un traspaso" : ""}
@@ -458,7 +488,14 @@ export function EduBitacoraScreen({
                   · {t.programName}
                 </p>
                 <p className="edu-traspaso__meta">
-                  {t.fromStudentName} → {t.toStudentName} · {t.atLabel}
+                  <EduPersonaLink kind="estudiante" id={t.fromStudentId}>
+                    {t.fromStudentName}
+                  </EduPersonaLink>{" "}
+                  →{" "}
+                  <EduPersonaLink kind="estudiante" id={t.toStudentId}>
+                    {t.toStudentName}
+                  </EduPersonaLink>{" "}
+                  · {t.atLabel}
                   {t.byName ? ` · lo hizo ${t.byName}` : ""}
                 </p>
                 {t.reason && <p className="edu-traspaso__motivo">{t.reason}</p>}

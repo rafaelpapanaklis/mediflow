@@ -97,7 +97,7 @@ function personName(u: { firstName: string; lastName: string; email?: string }):
 
 /** El `select` de una cita. En una constante para que la agenda, /mi-dia y
  *  la ficha del paciente no se desincronicen. */
-const APPOINTMENT_SELECT = {
+export const EDU_APPOINTMENT_SELECT = {
   id: true,
   startsAt: true,
   endsAt: true,
@@ -123,7 +123,7 @@ const APPOINTMENT_SELECT = {
   case: { select: { status: true, program: { select: { name: true } } } },
 } satisfies Prisma.EduAppointmentSelect;
 
-type AppointmentPayload = Prisma.EduAppointmentGetPayload<{ select: typeof APPOINTMENT_SELECT }>;
+export type AppointmentPayload = Prisma.EduAppointmentGetPayload<{ select: typeof EDU_APPOINTMENT_SELECT }>;
 
 /**
  * La fila que viaja a la pantalla. Las horas se formatean AQUÍ, en el
@@ -131,7 +131,7 @@ type AppointmentPayload = Prisma.EduAppointmentGetPayload<{ select: typeof APPOI
  * la suya, un alumno conectado desde otra zona vería su cita a otra hora, y
  * el primer render no coincidiría con el del servidor.
  */
-function toRow(a: AppointmentPayload, timeZone: string): EduAppointmentRow {
+export function eduAppointmentToRow(a: AppointmentPayload, timeZone: string): EduAppointmentRow {
   const z = eduUtcToZoned(a.startsAt, timeZone);
   return {
     id: a.id,
@@ -231,13 +231,13 @@ export async function listEduAgenda(
     where,
     orderBy: [{ startsAt: "asc" }],
     take: EDU_AGENDA_MAX_ROWS + 1,
-    select: APPOINTMENT_SELECT,
+    select: EDU_APPOINTMENT_SELECT,
   });
 
   return {
     days,
     truncated: rows.length > EDU_AGENDA_MAX_ROWS,
-    rows: rows.slice(0, EDU_AGENDA_MAX_ROWS).map((a) => toRow(a, timeZone)),
+    rows: rows.slice(0, EDU_AGENDA_MAX_ROWS).map((a) => eduAppointmentToRow(a, timeZone)),
   };
 }
 
@@ -343,9 +343,9 @@ export async function getEduAppointment(
 
   const a = await prisma.eduAppointment.findFirst({
     where: { ...eduAppointmentScopeWhere({ institutionId, scope, now }), id },
-    select: APPOINTMENT_SELECT,
+    select: EDU_APPOINTMENT_SELECT,
   });
-  return a ? toRow(a, timeZone) : null;
+  return a ? eduAppointmentToRow(a, timeZone) : null;
 }
 
 /**
@@ -368,9 +368,9 @@ export async function listEduPatientAppointments(
     where: { ...eduAppointmentScopeWhere({ institutionId, scope, now }), patientId: id },
     orderBy: [{ startsAt: "desc" }],
     take: 50,
-    select: APPOINTMENT_SELECT,
+    select: EDU_APPOINTMENT_SELECT,
   });
-  return rows.map((a) => toRow(a, timeZone));
+  return rows.map((a) => eduAppointmentToRow(a, timeZone));
 }
 
 /**
@@ -1160,7 +1160,7 @@ export async function listEduPendingScreenings(
     },
     orderBy: [{ startsAt: "asc" }],
     take: 100,
-    select: APPOINTMENT_SELECT,
+    select: EDU_APPOINTMENT_SELECT,
   });
-  return rows.map((a) => toRow(a, timeZone));
+  return rows.map((a) => eduAppointmentToRow(a, timeZone));
 }

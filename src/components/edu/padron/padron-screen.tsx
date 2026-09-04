@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, UserPlus, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
   EDU_STUDENT_STATUSES,
@@ -294,7 +295,11 @@ export function EduPadronScreen({
 
                 <div className="edu-cell edu-cell--wide">
                   <span className="edu-cell__label">Estudiante</span>
-                  <span className="edu-cell__value edu-cell__value--strong">{r.name}</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    <EduPersonaLink kind="estudiante" id={r.id}>
+                      {r.name}
+                    </EduPersonaLink>
+                  </span>
                   <span className="edu-cell__sub">
                     {r.email}
                     {r.userIsActive ? "" : " · cuenta desactivada"}
@@ -323,7 +328,11 @@ export function EduPadronScreen({
                   <span className="edu-cell__label">Docente vigente</span>
                   {titular ? (
                     <>
-                      <span className="edu-cell__value">{titular.name}</span>
+                      <span className="edu-cell__value">
+                        <EduPersonaLink kind="docente" id={titular.supervisorUserId}>
+                          {titular.name}
+                        </EduPersonaLink>
+                      </span>
                       {extra > 0 && <span className="edu-cell__sub">y {extra} más</span>}
                     </>
                   ) : (
@@ -674,7 +683,11 @@ function FichaAlumno({
 
   return (
     <EduModal
-      title={student.name}
+      title={
+        <EduPersonaLink kind="estudiante" id={student.id}>
+          {student.name}
+        </EduPersonaLink>
+      }
       subtitle={`${student.matricula} · ${student.programName} · ${student.cohortName}`}
       onClose={onClose}
       busy={busy}
@@ -814,7 +827,9 @@ function FichaAlumno({
             {student.supervisors.map((s) => (
               <li key={s.assignmentId} className="edu-assign">
                 <span>
-                  {s.name}
+                  <EduPersonaLink kind="docente" id={s.supervisorUserId}>
+                    {s.name}
+                  </EduPersonaLink>
                   {s.isPrimary ? " · titular" : ""}
                 </span>
                 {canAssign && (
