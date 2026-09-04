@@ -17,6 +17,7 @@ import {
   type EduApprovalRow,
 } from "@/lib/edu/autorizaciones-core";
 import { EDU_APPROVAL_STATUS_LABELS, type EduRole } from "@/lib/edu/types";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 
 /**
  * LA BANDEJA. La pantalla más importante de la Ola 4.
@@ -234,10 +235,16 @@ export function EduBandejaScreen({
         </header>
 
         <p className="edu-auth-card__quien">
-          {row.patientName} · <span className="edu-auth-card__folio">{row.patientFolio}</span>
+          <EduPersonaLink kind="paciente" id={row.patientId}>
+            {row.patientName}
+          </EduPersonaLink>{" "}
+          · <span className="edu-auth-card__folio">{row.patientFolio}</span>
         </p>
         <p className="edu-auth-card__meta">
-          {row.programName} · {row.studentMatricula} {row.studentName}
+          {row.programName} ·{" "}
+          <EduPersonaLink kind="estudiante" id={row.studentId}>
+            {row.studentMatricula} {row.studentName}
+          </EduPersonaLink>
           {row.requestedByName !== row.studentName ? ` · lo mandó ${row.requestedByName}` : ""}
         </p>
 
@@ -515,7 +522,11 @@ export function EduBandejaScreen({
               <section key={g.studentId} className="edu-auth-grupo">
                 <header className="edu-auth-grupo__head">
                   <div>
-                    <h2 className="edu-auth-grupo__name">{g.studentName}</h2>
+                    <h2 className="edu-auth-grupo__name">
+                      <EduPersonaLink kind="estudiante" id={g.studentId}>
+                        {g.studentName}
+                      </EduPersonaLink>
+                    </h2>
                     <p className="edu-auth-grupo__sub">
                       {g.studentMatricula} · {g.rows.length}{" "}
                       {g.rows.length === 1 ? "esperando" : "esperando"}

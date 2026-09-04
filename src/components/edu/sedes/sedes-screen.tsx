@@ -6,6 +6,7 @@ import { Armchair, Building2, Plus, Users } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EDU_ROLE_LABELS } from "@/lib/edu/types";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_CAMPUS_ADDRESS_MAX,
   EDU_CAMPUS_CODE_MAX,
@@ -595,7 +596,13 @@ function AccesoSede({
             <div key={p.userId} className="edu-acceso__fila">
               <div className="edu-acceso__quien">
                 <div className="edu-acceso__nombre">
-                  {p.name}
+                  {p.role === "DOCENTE" ? (
+                    <EduPersonaLink kind="docente" id={p.userId}>
+                      {p.name}
+                    </EduPersonaLink>
+                  ) : (
+                    p.name
+                  )}
                   {p.isActive ? "" : " · dada de baja"}
                 </div>
                 <div className="edu-acceso__detalle">

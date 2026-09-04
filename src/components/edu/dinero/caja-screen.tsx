@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Plus, Search, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   eduChargeTotals,
   eduLineTotalCents,
@@ -353,7 +354,11 @@ export function EduCajaScreen({
 
               <div className="edu-cell edu-cell--wide">
                 <span className="edu-cell__label">Paciente</span>
-                <span className="edu-cell__value edu-cell__value--strong">{c.patientName}</span>
+                <span className="edu-cell__value edu-cell__value--strong">
+                  <EduPersonaLink kind="paciente" id={c.patientId}>
+                    {c.patientName}
+                  </EduPersonaLink>
+                </span>
                 <span className="edu-cell__sub">{c.patientFolio}</span>
               </div>
 
@@ -897,7 +902,10 @@ function Cobrar({
           {/* ── 2 · La tarifa, dicha con su nombre ────────────────── */}
           <div className="edu-tarifa">
             <p className="edu-tarifa__quien">
-              {tarifa.patientName} <span className="edu-tarifa__folio">{tarifa.patientFolio}</span>
+              <EduPersonaLink kind="paciente" id={tarifa.patientId}>
+                {tarifa.patientName}
+              </EduPersonaLink>{" "}
+              <span className="edu-tarifa__folio">{tarifa.patientFolio}</span>
             </p>
             {tarifa.applied ? (
               <p className="edu-tarifa__lista">
@@ -1510,7 +1518,14 @@ function Recibo({
   return (
     <EduModal
       title={`Recibo ${charge.folio}`}
-      subtitle={`${charge.patientName} · ${charge.patientFolio}`}
+      subtitle={
+        <>
+          <EduPersonaLink kind="paciente" id={charge.patientId}>
+            {charge.patientName}
+          </EduPersonaLink>{" "}
+          · {charge.patientFolio}
+        </>
+      }
       onClose={onClose}
       busy={busy}
       footer={

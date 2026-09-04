@@ -19,6 +19,7 @@ import {
   type EduConsentRow,
 } from "@/lib/edu/consentimientos-core";
 import type { EduCaseOption } from "@/lib/edu/expediente-core";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -153,9 +154,20 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
               <span className="edu-consent__proc">{c.procedure}</span>
               <span className="edu-nota__who">
                 {c.caseProgramName ? `${c.caseProgramName} · ` : ""}
-                {c.studentName}
-                {c.studentMatricula ? ` (${c.studentMatricula})` : ""}
-                {c.supervisorName ? ` · responsable ${c.supervisorName}` : ""}
+                <EduPersonaLink kind="estudiante" id={c.studentId}>
+                  {c.studentName}
+                  {c.studentMatricula ? ` (${c.studentMatricula})` : ""}
+                </EduPersonaLink>
+                {c.supervisorName ? (
+                  <>
+                    {" · responsable "}
+                    <EduPersonaLink kind="docente" id={c.supervisorUserId}>
+                      {c.supervisorName}
+                    </EduPersonaLink>
+                  </>
+                ) : (
+                  ""
+                )}
               </span>
               <span className="edu-nota__who">
                 Emitida el {c.createdLabel} por {c.createdByName}
@@ -398,7 +410,11 @@ function CartaNueva({
   return (
     <EduModal
       title="Carta de consentimiento informado"
-      subtitle={patientName}
+      subtitle={
+        <EduPersonaLink kind="paciente" id={patientId}>
+          {patientName}
+        </EduPersonaLink>
+      }
       onClose={onClose}
       busy={busy}
       footer={

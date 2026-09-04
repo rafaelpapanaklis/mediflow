@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
 import { eduMoney } from "@/lib/edu/dinero-core";
 import { eduFechaLarga, type EduPlanRow } from "@/lib/edu/pagos-core";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_INSTALLMENT_STATUS_LABELS,
   EDU_PAYMENT_METHOD_LABELS,
@@ -97,7 +98,10 @@ export function EduPlanRecibo({
           <div>
             <span className="edu-kv__k">Paciente</span>
             <span className="edu-kv__v">
-              {plan.patientName} · {plan.patientFolio}
+              <EduPersonaLink kind="paciente" id={plan.patientId}>
+                {plan.patientName}
+              </EduPersonaLink>{" "}
+              · {plan.patientFolio}
             </span>
           </div>
           <div>

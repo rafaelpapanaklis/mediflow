@@ -23,6 +23,7 @@ import {
 } from "@/lib/edu/types";
 import type { EduIaEstado } from "@/lib/edu/ia-core";
 import { EduDictadoMic } from "@/components/edu/expediente/dictado-mic";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 
 /**
  * /instituto/pacientes/[id]/expediente — las notas clínicas.
@@ -249,7 +250,11 @@ export function EduExpedienteScreen({
                   {n.appointmentLabel ?? n.createdLabel}
                 </span>
                 <span className="edu-nota__who">
-                  {n.caseProgramName} · {n.studentMatricula} · escribió {n.authorName} (
+                  {n.caseProgramName} ·{" "}
+                  <EduPersonaLink kind="estudiante" id={n.studentId}>
+                    {n.studentMatricula}
+                  </EduPersonaLink>{" "}
+                  · escribió {n.authorName} (
                   {n.authorRoleLabel}
                   {mia ? ", tú" : ""})
                 </span>
@@ -584,7 +589,11 @@ function NotaNueva({
   return (
     <EduModal
       title={corrige ? "Corregir una nota firmada" : "Nota clínica nueva"}
-      subtitle={patientName}
+      subtitle={
+        <EduPersonaLink kind="paciente" id={patientId}>
+          {patientName}
+        </EduPersonaLink>
+      }
       onClose={onClose}
       busy={busy}
       footer={
