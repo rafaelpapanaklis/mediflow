@@ -547,28 +547,114 @@ export const EDU_CHARGE_STATUS_DESCRIPTIONS: Record<EduChargeStatus, string> = {
   CANCELLED: "Anulado. No se le debe nada a nadie y no cuenta en ninguna suma.",
 };
 
-/** Cómo pagó el paciente. */
-export type EduPaymentMethod = "CASH" | "CARD" | "TRANSFER" | "OTHER";
+/**
+ * Cómo pagó el paciente. Espejo 1:1 del enum `EduPaymentMethod` de
+ * prisma/schema.prisma, y lo vigila una prueba de texto
+ * (edu-caja.test.ts): si una ola agrega un valor al schema y no aquí, la
+ * prueba se pone roja antes de que nadie lo note en el mostrador.
+ *
+ * 🔴 `CARD` es LEGADO. Es lo que se guardó mientras el vertical no
+ * distinguía débito de crédito. No se borra ni se migra —una fila vieja no
+ * sabe cuál de las dos fue, y adivinarlo falsearía la forma de pago con la
+ * que el SAT cruza depósitos— pero deja de OFRECERSE: para eso está
+ * `EDU_PAYMENT_METHODS_COBRABLES`.
+ */
+export type EduPaymentMethod =
+  | "CASH"
+  | "CARD"
+  | "CARD_DEBIT"
+  | "CARD_CREDIT"
+  | "TRANSFER"
+  | "CHECK"
+  | "OTHER";
 
-export const EDU_PAYMENT_METHODS: EduPaymentMethod[] = ["CASH", "CARD", "TRANSFER", "OTHER"];
+/** Los SIETE. Para leer, para el corte y para la facturación. */
+export const EDU_PAYMENT_METHODS: EduPaymentMethod[] = [
+  "CASH",
+  "CARD",
+  "CARD_DEBIT",
+  "CARD_CREDIT",
+  "TRANSFER",
+  "CHECK",
+  "OTHER",
+];
+
+/**
+ * 🔴 LOS QUE SE OFRECEN AL COBRAR. `CARD` NO está: quien cobra hoy tiene
+ * el voucher delante y sabe si fue débito o crédito, así que elegir
+ * "Tarjeta a secas" solo serviría para volver a perder el dato.
+ */
+export const EDU_PAYMENT_METHODS_COBRABLES: EduPaymentMethod[] = [
+  "CASH",
+  "CARD_DEBIT",
+  "CARD_CREDIT",
+  "TRANSFER",
+  "CHECK",
+  "OTHER",
+];
 
 export const EDU_PAYMENT_METHOD_LABELS: Record<EduPaymentMethod, string> = {
   CASH: "Efectivo",
+  CARD: "Tarjeta (sin especificar)",
+  CARD_DEBIT: "Tarjeta de débito",
+  CARD_CREDIT: "Tarjeta de crédito",
+  TRANSFER: "Transferencia (SPEI o depósito)",
+  CHECK: "Cheque",
+  OTHER: "Otro (beca, vale, cortesía)",
+};
+
+/**
+ * La etiqueta CORTA, para los chips de una fila de tabla y los botones del
+ * bloque de formas de pago. "Transferencia (SPEI o depósito)" no cabe en
+ * una celda de 112 px, y recortarla con puntos suspensivos es peor que
+ * tener el nombre corto escrito a propósito.
+ */
+export const EDU_PAYMENT_METHOD_SHORT: Record<EduPaymentMethod, string> = {
+  CASH: "Efectivo",
   CARD: "Tarjeta",
-  TRANSFER: "Transferencia",
+  CARD_DEBIT: "Débito",
+  CARD_CREDIT: "Crédito",
+  TRANSFER: "SPEI",
+  CHECK: "Cheque",
   OTHER: "Otro",
 };
 
 export const EDU_PAYMENT_METHOD_DESCRIPTIONS: Record<EduPaymentMethod, string> = {
   CASH: "Entra al cajón y cuenta para el arqueo del turno.",
-  CARD: "Terminal. Se guarda la autorización en la referencia.",
-  TRANSFER: "SPEI o depósito. Se guarda el folio en la referencia.",
-  OTHER: "Beca, intercambio o vale. Existe para no obligar a mentir en el método.",
+  CARD: "Legado: se cobró con tarjeta y no se anotó si fue débito o crédito. Ya no se ofrece.",
+  CARD_DEBIT: "Terminal, débito. Se guarda la autorización en la referencia. Forma 28 del SAT.",
+  CARD_CREDIT:
+    "Terminal, crédito. Admite meses sin intereses del banco: la escuela recibe el total hoy. Forma 04 del SAT.",
+  TRANSFER: "SPEI o depósito. Se guarda la clave de rastreo en la referencia. Forma 03 del SAT.",
+  CHECK: "Cheque. Se guarda el número y el banco en la referencia, que es obligatoria. Forma 02 del SAT.",
+  OTHER: "Beca, intercambio, vale o cortesía. Exige escribir el motivo: existe para no obligar a mentir en el método.",
 };
+
+/**
+ * 🔴 MESES SIN INTERESES DEL BANCO, no del instituto. Es un atributo
+ * INFORMATIVO de un pago con tarjeta de CRÉDITO: la escuela cobra el total
+ * el mismo día y quien financia al paciente es el banco. El plan de pagos
+ * de la ESCUELA es otra cosa (EduPaymentPlan) y sí parte el cobro en
+ * mensualidades que hay que ir cobrando.
+ *
+ * Los plazos son los que ofrecen las terminales bancarias en México.
+ */
+export const EDU_MSI_OPTIONS: number[] = [3, 6, 9, 12, 18];
+
+/**
+ * Cuántas formas de pago admite UNA operación. Tres cubre el caso real del
+ * mostrador (efectivo + dos tarjetas) sin convertir el formulario en una
+ * hoja de cálculo — y cada forma es su propia fila de EduPayment, así que
+ * el corte y el CFDI las ven todas.
+ */
+export const EDU_MAX_PAGOS_POR_OPERACION = 3;
 
 /**
  * El único método que se CUENTA en el arqueo del cajón. Los demás entran al
  * corte como información, pero no hay billetes que contar.
+ *
+ * ⚠️ Sigue siendo SOLO efectivo con los métodos nuevos: un cobro con
+ * tarjeta no mete un peso en el cajón, lo abone el banco cuando lo abone.
  */
 export const EDU_CASH_METHOD: EduPaymentMethod = "CASH";
 

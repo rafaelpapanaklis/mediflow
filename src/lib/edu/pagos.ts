@@ -37,10 +37,10 @@ import { eduSearchTokens } from "@/lib/edu/padron-core";
 import { eduUserDisplayName } from "@/lib/edu-auth";
 import {
   EDU_CAJA_MAX_ROWS,
-  EDU_MAX_CHARGE_CENTS,
   eduMoney,
-  parseEduMoneyCentsMax,
-  parseEduPaymentMethod,
+  eduPagosFailed,
+  parseEduPagosDivididos,
+  type EduPagoValidado,
 } from "@/lib/edu/dinero-core";
 import { eduApplyEduPaymentInTx, getEduOpenCashSession } from "@/lib/edu/caja";
 import {
@@ -63,7 +63,6 @@ import {
   type EduPlanRow,
   type EduPlanesPage,
 } from "@/lib/edu/pagos-core";
-import { EDU_CASH_METHOD, type EduPaymentMethod } from "@/lib/edu/types";
 
 export { EduPadronError as EduPagosError };
 
@@ -131,6 +130,15 @@ const PLAN_SELECT = {
           receivedBy: { select: { firstName: true, lastName: true, email: true } },
         },
       },
+      // 🔴 TODAS las formas con las que se cubrió. Desde que una
+      // mensualidad se puede pagar entre efectivo y tarjeta, la fila de
+      // arriba (el pago que la LIQUIDÓ) es solo una de ellas: enseñar
+      // únicamente esa diría "pagada con crédito $133.33" de una
+      // mensualidad de $333.33, que es falso a medias.
+      payments: {
+        orderBy: { paidAt: "asc" },
+        select: { method: true, amountCents: true, reference: true, msiMonths: true },
+      },
     },
   },
 } satisfies Prisma.EduPaymentPlanSelect;
@@ -156,6 +164,12 @@ function toPlanRow(p: PlanPayload, todayISO: string): EduPlanRow {
       paidAt: iso(paidAt),
       method: i.payment?.method ?? null,
       receivedByName: i.payment ? persona(i.payment.receivedBy) : null,
+      payments: i.payments.map((p) => ({
+        method: p.method,
+        amountCents: p.amountCents,
+        reference: p.reference,
+        msiMonths: p.msiMonths,
+      })),
     };
   });
 
@@ -295,34 +309,36 @@ export interface EduPlanCreateInput {
    * El enganche, opcional, que se cobra EN EL MOMENTO como un pago normal
    * (con su método, su turno y su corte). Lo que se difiere a meses es lo
    * que queda DESPUÉS de él.
+   *
+   * Admite UN objeto (como siempre) o una LISTA de hasta tres formas: un
+   * enganche de $2,000 puede entrar mitad en efectivo y mitad con tarjeta,
+   * igual que cualquier otro pago del mostrador.
    */
   enganche?: unknown;
 }
 
-interface EngancheValidado {
-  method: EduPaymentMethod;
-  amountCents: number;
-  reference: string | null;
-  notes: string | null;
-}
-
-function parseEnganche(raw: unknown): EngancheValidado | null {
+/**
+ * El enganche, leído por la ÚNICA función que valida formas de pago.
+ *
+ * `null` = no hay enganche (que es lo normal). El tope es el SALDO del
+ * cobro y no el enganche mismo: que además tenga que ser MENOR que el
+ * saldo —un enganche que se lo come todo es liquidar, no diferir— lo
+ * comprueba quien llama, con su propio mensaje.
+ */
+function parseEnganche(raw: unknown, saldoCents: number): EduPagoValidado[] | null {
   if (raw === undefined || raw === null || raw === "") return null;
-  if (typeof raw !== "object" || Array.isArray(raw)) {
-    throw new EduPadronError("El enganche no es válido.");
+  const cuerpo = Array.isArray(raw) ? { payments: raw } : { payment: raw };
+  // `canRefund: true` y el rechazo EXPLÍCITO justo debajo: sin él, un
+  // enganche con `isRefund` salía con "Tu cuenta no puede devolver dinero
+  // (permiso caja.refund)", que culpa a un permiso cuando el motivo real
+  // es que aquí no se devuelve NUNCA, se tenga el permiso o no.
+  const r = parseEduPagosDivididos(cuerpo, saldoCents, { exacto: false, canRefund: true });
+  // La guarda y no `!r.ok`: con strict:false el booleano no estrecha.
+  if (eduPagosFailed(r)) throw new EduPadronError(r.error, 400);
+  if (r.pagos.some((p) => p.isRefund)) {
+    throw new EduPadronError("Un enganche no puede ser una devolución.", 400);
   }
-  const r = raw as Record<string, unknown>;
-  const method = r.method === undefined ? EDU_CASH_METHOD : parseEduPaymentMethod(r.method);
-  if (!method) throw new EduPadronError("Ese método de pago no existe.");
-  const amountCents = parseEduMoneyCentsMax(r.amountCents, EDU_MAX_CHARGE_CENTS);
-  if (amountCents === null) throw new EduPadronError("El enganche no es una cantidad válida.");
-  if (amountCents <= 0) throw new EduPadronError("El enganche tiene que ser mayor que cero.");
-  return {
-    method,
-    amountCents,
-    reference: eduOptionalText(r.reference, 80) ?? null,
-    notes: eduOptionalText(r.notes, 300) ?? null,
-  };
+  return r.pagos;
 }
 
 /**
@@ -360,7 +376,6 @@ export async function createEduPaymentPlan(
   // La guarda y no `!pedido.ok`: con strict:false el booleano no estrecha.
   if (eduPlanRequestFailed(pedido)) throw new EduPadronError(pedido.error, 400);
   const { months } = pedido.plan;
-  const enganche = parseEnganche(input.enganche);
 
   const cobro = await prisma.eduCharge.findFirst({
     where: {
@@ -378,12 +393,17 @@ export async function createEduPaymentPlan(
   if (saldo <= 0) {
     throw new EduPadronError("Ese cobro ya está liquidado: no hay nada que diferir.", 409);
   }
-  if (enganche && enganche.amountCents >= saldo) {
+  // El enganche se lee AQUÍ, con el saldo ya en la mano: su tope es el
+  // saldo del cobro, y sin él no habría contra qué validar la suma de sus
+  // formas.
+  const enganche = parseEnganche(input.enganche, saldo);
+  const engancheCents = enganche ? enganche.reduce((a, p) => a + p.amountCents, 0) : 0;
+  if (enganche && engancheCents >= saldo) {
     throw new EduPadronError(
-      `El enganche (${eduMoney(enganche.amountCents)}) no puede ser el saldo completo (${eduMoney(saldo)}): eso es liquidar el cobro, no diferirlo.`,
+      `El enganche (${eduMoney(engancheCents)}) no puede ser el saldo completo (${eduMoney(saldo)}): eso es liquidar el cobro, no diferirlo.`,
     );
   }
-  const restanteEstimado = saldo - (enganche?.amountCents ?? 0);
+  const restanteEstimado = saldo - engancheCents;
   if (restanteEstimado < months) {
     throw new EduPadronError(
       `Con ${eduMoney(restanteEstimado)} por diferir no alcanza ni un centavo por mensualidad en ${months} meses. Baja los meses o el enganche.`,
@@ -440,16 +460,21 @@ export async function createEduPaymentPlan(
     // 3 · El enganche, si hay: un pago NORMAL, por el único camino que
     //     toca paidCents. Entra al turno abierto y a su corte, como
     //     cualquier dinero del mostrador.
+    //     Y una FILA POR FORMA: un enganche partido entre efectivo y
+    //     tarjeta son dos pagos reales, cada uno con su método en el
+    //     corte. El `restante` sale del ÚLTIMO balance recalculado, no de
+    //     restar a mano.
     let restante = saldo;
-    if (enganche) {
+    for (const p of enganche ?? []) {
       const aplicado = await eduApplyEduPaymentInTx(tx, {
         institutionId,
         chargeId: id,
-        method: enganche.method,
-        amountCents: enganche.amountCents,
+        method: p.method,
+        amountCents: p.amountCents,
         isRefund: false,
-        reference: enganche.reference,
-        notes: enganche.notes,
+        reference: p.reference,
+        notes: p.notes,
+        msiMonths: p.msiMonths,
         paidAt: now,
         receivedByUserId: ctx.eduUserId,
         cashSessionId: sesion?.id ?? null,
@@ -516,6 +541,17 @@ export interface EduInstallmentPayInput {
   method?: unknown;
   reference?: unknown;
   notes?: unknown;
+  msiMonths?: unknown;
+  /**
+   * 🔴 PAGO DIVIDIDO DE UNA MENSUALIDAD: de 1 a 3 formas cuya suma es
+   * EXACTAMENTE el monto congelado de la fila. Se divide entre FORMAS,
+   * jamás entre MESES: media mensualidad hoy y media el mes que viene
+   * serían dos verdades sobre la misma fecha de vencimiento.
+   *
+   * Sin `payments`, se lee el pago único de siempre (`method`,
+   * `reference`) y el monto lo sigue poniendo el servidor.
+   */
+  payments?: unknown;
 }
 
 /**
@@ -535,6 +571,7 @@ export async function payEduInstallment(
   now: Date = new Date(),
 ): Promise<{
   paymentId: string;
+  paymentIds: string[];
   number: number;
   months: number;
   amountCents: number;
@@ -592,36 +629,78 @@ export async function payEduInstallment(
     );
   }
 
-  const method = input.method === undefined ? EDU_CASH_METHOD : parseEduPaymentMethod(input.method);
-  if (!method) throw new EduPadronError("Ese método de pago no existe.");
-  const reference = eduOptionalText(input.reference, 80) ?? null;
-  const notes = eduOptionalText(input.notes, 300) ?? null;
+  // 🔴 EXACTO. La suma de las formas tiene que dar el monto congelado de
+  // la mensualidad, ni un centavo más ni uno menos: un abono parcial
+  // dejaría la fila sin liquidar y el cobro con un pago que no cuadra con
+  // ninguna mensualidad. El monto sigue sin teclearse cuando viene una
+  // sola forma — se lo pone el servidor aquí abajo.
+  const cuerpo =
+    input.payments !== undefined
+      ? { payments: input.payments }
+      : {
+          payment: {
+            method: input.method,
+            reference: input.reference,
+            notes: input.notes,
+            msiMonths: input.msiMonths,
+            amountCents: fila.amountCents,
+          },
+        };
+  // `canRefund: true` y el rechazo explícito debajo, por lo mismo que el
+  // enganche: el motivo no es un permiso, es que una mensualidad no se
+  // devuelve por aquí (para eso se cancela el plan).
+  const leidos = parseEduPagosDivididos(cuerpo, fila.amountCents, {
+    exacto: true,
+    canRefund: true,
+  });
+  // La guarda y no `!leidos.ok`: con strict:false el booleano no estrecha.
+  if (eduPagosFailed(leidos)) throw new EduPadronError(leidos.error, 400);
+  if (leidos.pagos.some((p) => p.isRefund)) {
+    throw new EduPadronError(
+      "Una mensualidad no se devuelve desde aquí: cancela el plan (permiso caja.refund) y devuelve el dinero desde el recibo del cobro.",
+      400,
+    );
+  }
+  const pagos = leidos.pagos;
 
   const sesion = await getEduOpenCashSession(ctx);
 
   const resultado = await prisma.$transaction(async (tx) => {
-    // El pago, por el ÚNICO camino que recalcula el cobro. 🔴 El monto es
-    // el congelado de la fila: nadie lo tecleó.
-    const aplicado = await eduApplyEduPaymentInTx(tx, {
-      institutionId,
-      chargeId: fila.plan.chargeId,
-      method,
-      amountCents: fila.amountCents,
-      isRefund: false,
-      reference,
-      notes,
-      paidAt: now,
-      receivedByUserId: ctx.eduUserId,
-      cashSessionId: sesion?.id ?? null,
-    });
+    // Los pagos, por el ÚNICO camino que recalcula el cobro. 🔴 El monto
+    // total es el congelado de la fila: nadie lo tecleó. Cada forma lleva
+    // el `installmentId` para que el recibo pueda decir "Mensualidad 2 de
+    // 3" en las tres filas, no solo en la última.
+    const ids: string[] = [];
+    let aplicado: Awaited<ReturnType<typeof eduApplyEduPaymentInTx>> | null = null;
+    for (const p of pagos) {
+      aplicado = await eduApplyEduPaymentInTx(tx, {
+        institutionId,
+        chargeId: fila.plan.chargeId,
+        method: p.method,
+        amountCents: p.amountCents,
+        isRefund: false,
+        reference: p.reference,
+        notes: p.notes,
+        msiMonths: p.msiMonths,
+        installmentId: fila.id,
+        paidAt: now,
+        receivedByUserId: ctx.eduUserId,
+        cashSessionId: sesion?.id ?? null,
+      });
+      ids.push(aplicado.paymentId);
+    }
 
     // 🔴 La mensualidad se RECLAMA: solo se engancha si SIGUE sin pago y
     // su plan sigue activo. Si otra caja la cobró hace un instante, esto
-    // devuelve 0, la transacción entera se revierte y el pago de arriba
-    // nunca existió.
+    // devuelve 0, la transacción entera se revierte y los pagos de arriba
+    // nunca existieron.
+    //
+    // El que la LIQUIDA es el ÚLTIMO: es el que completó el monto, y es el
+    // que la relación 1:1 (`paymentId`) puede guardar. Las demás formas
+    // quedan colgadas por `installmentId`, que admite varias.
     const link = await tx.eduInstallment.updateMany({
       where: { id: fila.id, institutionId, paymentId: null, plan: { status: "ACTIVO" } },
-      data: { paymentId: aplicado.paymentId },
+      data: { paymentId: ids[ids.length - 1] },
     });
     if (link.count === 0) {
       throw new EduPadronError(
@@ -642,9 +721,10 @@ export async function payEduInstallment(
     }
 
     return {
-      paymentId: aplicado.paymentId,
-      chargeStatus: aplicado.status,
-      balanceCents: aplicado.balanceCents,
+      paymentId: ids[ids.length - 1],
+      paymentIds: ids,
+      chargeStatus: aplicado?.status ?? "",
+      balanceCents: aplicado?.balanceCents ?? 0,
       planSettled: sinPagar === 0,
     };
   });

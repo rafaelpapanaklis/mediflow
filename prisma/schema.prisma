@@ -13615,8 +13615,20 @@ enum EduChargeStatus {
 /// intercambio o un vale no son efectivo ni tarjeta.
 enum EduPaymentMethod {
   CASH
+  /// 🔴 LEGADO. "Tarjeta (sin especificar)": es lo que se guardó mientras
+  /// el vertical no distinguía débito de crédito. NO se ofrece en ningún
+  /// selector nuevo y NO se migra —una fila vieja no sabe cuál de las dos
+  /// fue, e inventarlo sería falsear el documento fiscal que la cita—.
+  /// Se conserva para poder leer, sumar en el corte y facturar lo de antes.
   CARD
+  /// El SAT las separa: débito es la forma 28 y crédito la 04. Por eso son
+  /// dos valores y no un "tipo de tarjeta" aparte: la forma de pago del
+  /// CFDI se deduce del método, y un solo CARD obligaba a adivinarla.
+  CARD_DEBIT
+  CARD_CREDIT
   TRANSFER
+  /// Forma 02 del SAT. Exige la referencia (número de cheque y banco).
+  CHECK
   OTHER
 }
 
@@ -13905,6 +13917,18 @@ model EduPayment {
   /// Autorización de la terminal, folio de la transferencia… texto libre.
   reference     String?          @db.VarChar(80)
   notes         String?          @db.VarChar(300)
+  /// 🔴 MESES SIN INTERESES DEL BANCO. Solo con CARD_CREDIT: 3, 6, 9, 12
+  /// o 18. Es INFORMATIVO y no cambia un centavo de este pago — la escuela
+  /// recibe el total hoy y quien financia es el banco. NO confundirlo con
+  /// el plan de pagos de la ESCUELA (EduPaymentPlan), que sí parte el
+  /// cobro en mensualidades que se cobran mes a mes.
+  msiMonths     Int?
+  /// 🔴 PAGO DIVIDIDO DE UNA MENSUALIDAD. La mensualidad que este pago
+  /// ayudó a cubrir, cuando una fila del plan se paga entre varias formas
+  /// (efectivo + tarjeta). Todas las filas de la operación la apuntan; la
+  /// que la LIQUIDÓ es la que además queda enganchada en
+  /// `EduInstallment.paymentId` (relación 1:1, la de abajo).
+  installmentId String?
   /// Cuándo entró (o salió) el dinero. Es un INSTANTE.
   paidAt        DateTime         @default(now()) @db.Timestamptz(3)
   receivedByUserId String
@@ -13921,11 +13945,19 @@ model EduPayment {
   cashSession EduCashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   /// Pagos a meses: la mensualidad que ESTE pago liquidó, si fue el pago
   /// de una. Back-relation obligatoria; la FK vive en EduInstallment.
-  installment EduInstallment?
+  ///
+  /// 🔴 Las DOS relaciones con EduInstallment van NOMBRADAS. Desde que la
+  /// mensualidad puede pagarse entre varias formas hay dos vínculos
+  /// distintos entre las mismas tablas y Prisma no puede adivinar cuál es
+  /// cuál: "SettledBy" es la 1:1 del pago que la liquidó, "Payments" es la
+  /// N:1 de todas las filas de la operación. Nombrarlas NO cambia la base.
+  installment   EduInstallment? @relation("EduInstallmentSettledBy")
+  installmentOf EduInstallment? @relation("EduInstallmentPayments", fields: [installmentId], references: [id], onDelete: SetNull)
 
   @@index([institutionId, chargeId], map: "edu_payments_charge_idx")
   @@index([institutionId, paidAt], map: "edu_payments_fecha_idx")
   @@index([institutionId, cashSessionId], map: "edu_payments_session_idx")
+  @@index([institutionId, installmentId], map: "edu_payments_installment_idx")
   @@map("edu_payments")
 }
 
@@ -15932,7 +15964,11 @@ model EduInstallment {
 
   institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   plan        EduPaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  payment     EduPayment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  payment     EduPayment?    @relation("EduInstallmentSettledBy", fields: [paymentId], references: [id], onDelete: SetNull)
+  /// TODAS las filas del pago de esta mensualidad. Una mensualidad se
+  /// puede dividir entre FORMAS (efectivo + tarjeta) pero jamás entre
+  /// MESES: la suma de estas filas es EXACTAMENTE `amountCents`.
+  payments    EduPayment[]   @relation("EduInstallmentPayments")
 
   /// Un plan no puede tener dos mensualidades con el mismo número.
   @@unique([planId, number], map: "edu_installments_numero_key")

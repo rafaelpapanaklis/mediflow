@@ -8,7 +8,7 @@ import { EDU_CAJA_MAX_ROWS, parseEduChargeFilters } from "@/lib/edu/dinero-core"
 import { getEduOpenCashSession, listEduCharges } from "@/lib/edu/caja";
 import { getEduPatient } from "@/lib/edu/pacientes";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
-import { eduSafeTimeZone } from "@/lib/edu/agenda-core";
+import { eduSafeTimeZone, eduTodayISO } from "@/lib/edu/agenda-core";
 import { getEduCampusScope } from "@/lib/edu/campus";
 import { eduWithCampus } from "@/lib/edu/campus-core";
 import { EduDenied } from "@/components/edu/edu-denied";
@@ -96,7 +96,7 @@ export default async function InstitutoCajaPage({
     canCharge && cobrarId ? await getEduPatient(ctx, cobrarId) : null;
 
   const [page, turno] = await Promise.all([
-    listEduCharges(cctx, filters),
+    listEduCharges(cctx, filters, { timeZone: ctx.institution.timezone }),
     getEduOpenCashSession(ctx),
   ]);
 
@@ -143,6 +143,11 @@ export default async function InstitutoCajaPage({
         canRefund={canRefund}
         canCorte={canCorte}
         canInvoice={canInvoice}
+        // 🔴 El hoy del INSTITUTO, calculado aquí. La vista previa del plan
+        // a meses arma sus fechas con ESTE día y no con el del navegador:
+        // si no, el calendario que ve el mostrador podría no ser el que
+        // guarda el servidor.
+        todayISO={eduTodayISO(zona)}
         cobrarPreseleccion={
           pacienteACobrar
             ? { id: pacienteACobrar.id, folio: pacienteACobrar.folio, name: pacienteACobrar.name }

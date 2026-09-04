@@ -21,7 +21,11 @@ export async function GET(request: Request) {
       params[key] = value;
     });
     const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
-    const page = await listEduCharges(cctx, parseEduChargeFilters(params));
+    const page = await listEduCharges(cctx, parseEduChargeFilters(params), {
+      // La zona del INSTITUTO, de la sesión: con ella se deriva si una
+      // mensualidad está vencida y se escribe la hora de cada pago.
+      timeZone: g.ctx.institution.timezone,
+    });
     return NextResponse.json(page);
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/caja/cobros");

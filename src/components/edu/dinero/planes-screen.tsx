@@ -6,12 +6,20 @@ import Link from "next/link";
 import { Search, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
+import {
+  EduFormasPago,
+  eduNuevoPagoDraft,
+  eduSerializarPagos,
+  eduValidarPagos,
+  type EduPagoDraft,
+} from "@/components/edu/dinero/formas-pago";
 import { eduMoney } from "@/lib/edu/dinero-core";
 import {
   eduFechaLarga,
   eduInstallmentsDueBetween,
   eduInstallmentsVencidas,
   eduPlanAddDaysISO,
+  eduPlanRangoMeses,
   type EduInstallmentConPlan,
   type EduPlanFilters,
   type EduPlanRow,
@@ -19,12 +27,11 @@ import {
 } from "@/lib/edu/pagos-core";
 import {
   EDU_INSTALLMENT_STATUS_LABELS,
-  EDU_PAYMENT_METHODS,
   EDU_PAYMENT_METHOD_LABELS,
+  EDU_PAYMENT_METHOD_SHORT,
   EDU_PAYMENT_PLAN_STATUSES,
   EDU_PAYMENT_PLAN_STATUS_LABELS,
   type EduInstallmentStatus,
-  type EduPaymentMethod,
   type EduPaymentPlanStatus,
 } from "@/lib/edu/types";
 
@@ -546,22 +553,25 @@ function PlanDetalle({
   onDone: (mensaje: string) => void;
 }) {
   const [modo, setModo] = useState<"ver" | "cobrar" | "cancelar">("ver");
-  const [metodo, setMetodo] = useState<EduPaymentMethod>("CASH");
-  const [referencia, setReferencia] = useState("");
+  // 🔴 Hasta tres formas para UNA mensualidad, y su suma tiene que dar
+  // EXACTAMENTE su monto: se divide entre FORMAS, jamás entre MESES.
+  const [pagos, setPagos] = useState<EduPagoDraft[]>([]);
   const [motivo, setMotivo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const siguiente = plan.installments.find((i) => i.status !== "PAGADA") ?? null;
+  const errorPagos =
+    modo === "cobrar" && siguiente ? eduValidarPagos(pagos, siguiente.amountCents, true) : null;
 
   async function cobrar() {
-    if (!siguiente) return;
+    if (!siguiente || errorPagos) return;
     setError(null);
     setBusy(true);
     try {
       const res = await eduRequest<{ number: number; months: number; planSettled: boolean }>(
         `/api/instituto/caja/mensualidades/${siguiente.id}/pagar`,
-        { method: "POST", body: { method: metodo, reference: referencia.trim() || null } },
+        { method: "POST", body: { payments: eduSerializarPagos(pagos) } },
       );
       onDone(
         res.planSettled
@@ -636,9 +646,18 @@ function PlanDetalle({
           </span>
         </div>
         <div>
-          <span className="edu-kv__k">Mensualidad</span>
+          <span className="edu-kv__k">Mensualidades</span>
+          {/* Dicho como lo diría una persona. "Mensualidad $333.33 × 3,
+              día 15" no le contestaba al mostrador la única pregunta que
+              le hacen: desde cuándo y hasta cuándo paga. */}
           <span className="edu-kv__v">
-            {eduMoney(plan.installmentCents)} × {plan.months}, día {plan.dueDay}
+            {plan.months} de {eduMoney(plan.installmentCents)} · cada día {plan.dueDay}
+            {plan.installments.length > 0
+              ? ` · ${eduPlanRangoMeses(
+                  plan.installments[0].dueDateISO,
+                  plan.installments[plan.installments.length - 1].dueDateISO,
+                )}`
+              : ""}
           </span>
         </div>
         <div>
@@ -656,12 +675,36 @@ function PlanDetalle({
               </span>
               <span className="edu-linea__sub">
                 Vence {eduFechaLarga(i.dueDateISO)}
-                {i.status === "PAGADA" && i.method
-                  ? ` · pagada con ${EDU_PAYMENT_METHOD_LABELS[i.method].toLowerCase()}${
-                      i.receivedByName ? ` (recibió ${i.receivedByName})` : ""
-                    }`
+                {i.status === "PAGADA" && i.receivedByName
+                  ? ` · la recibió ${i.receivedByName}`
                   : ""}
               </span>
+              {/* 🔴 TODAS las formas, no solo la que la liquidó: una
+                  mensualidad pagada mitad en efectivo y mitad con crédito
+                  se lee entera o no se lee.
+                  
+                  ⚠️ Y CON FALLBACK al método del pago que la liquidó. El
+                  desglose sale de `EduPayment.installmentId`, una columna
+                  que NACE VACÍA: toda mensualidad cobrada ANTES de aplicar
+                  sql/edu-formas-pago.sql tiene ese enganche en null. Sin
+                  este fallback, la cartera vieja perdería el "pagada con
+                  efectivo" que hoy sí enseña. */}
+              {i.status === "PAGADA" && (
+                <span className="edu-fp__desglose">
+                  {i.payments.length > 0
+                    ? i.payments
+                        .map(
+                          (pg) =>
+                            `${EDU_PAYMENT_METHOD_SHORT[pg.method]} ${eduMoney(pg.amountCents)}${
+                              pg.msiMonths ? ` (${pg.msiMonths} MSI)` : ""
+                            }`,
+                        )
+                        .join(" · ")
+                    : i.method
+                      ? `Pagada con ${EDU_PAYMENT_METHOD_LABELS[i.method].toLowerCase()}`
+                      : ""}
+                </span>
+              )}
             </div>
             <span className={`edu-tag ${TAG_BY_INSTALLMENT[i.status]}`}>
               {EDU_INSTALLMENT_STATUS_LABELS[i.status]}
@@ -696,7 +739,10 @@ function PlanDetalle({
             <button
               type="button"
               className="edu-btn edu-btn--primary edu-btn--sm"
-              onClick={() => setModo("cobrar")}
+              onClick={() => {
+                setPagos([eduNuevoPagoDraft(siguiente.amountCents)]);
+                setModo("cobrar");
+              }}
             >
               Cobrar la {siguiente.number} de {plan.months} · {eduMoney(siguiente.amountCents)}
             </button>
@@ -714,47 +760,28 @@ function PlanDetalle({
       )}
 
       {modo === "cobrar" && siguiente && (
-        <div className="edu-formgrid edu-formgrid--2">
-          <div className="edu-field">
-            <label className="edu-field__label" htmlFor="edu-mens-metodo">
-              Método
-            </label>
-            <select
-              id="edu-mens-metodo"
-              className="edu-input"
-              value={metodo}
-              onChange={(e) => setMetodo(e.target.value as EduPaymentMethod)}
-            >
-              {EDU_PAYMENT_METHODS.map((m) => (
-                <option key={m} value={m}>
-                  {EDU_PAYMENT_METHOD_LABELS[m]}
-                </option>
-              ))}
-            </select>
-            <span className="edu-field__hint">
-              El monto no se teclea: se cobra exactamente {eduMoney(siguiente.amountCents)}, el de
-              la mensualidad.
-            </span>
-          </div>
-          <div className="edu-field">
-            <label className="edu-field__label" htmlFor="edu-mens-ref">
-              Referencia (opcional)
-            </label>
-            <input
-              id="edu-mens-ref"
-              className="edu-input"
-              value={referencia}
-              onChange={(e) => setReferencia(e.target.value)}
-              placeholder="Autorización de la terminal"
-              autoComplete="off"
-            />
-          </div>
+        <>
+          <p className="edu-note">
+            Se cobra EXACTAMENTE {eduMoney(siguiente.amountCents)}, el monto congelado de la
+            mensualidad {siguiente.number} de {plan.months} (vence el{" "}
+            {eduFechaLarga(siguiente.dueDateISO)}). El monto no se teclea: se puede dividir entre
+            formas de pago, nunca entre meses.
+          </p>
+          <EduFormasPago
+            objetivoCents={siguiente.amountCents}
+            exacto
+            value={pagos}
+            onChange={setPagos}
+            idPrefix="edu-mens"
+            disabled={busy}
+          />
+          {errorPagos && <p className="edu-note">{errorPagos}</p>}
           <div className="edu-actions">
             <button
               type="button"
               className="edu-btn edu-btn--primary edu-btn--sm"
               onClick={cobrar}
-              disabled={busy}
+              disabled={busy || Boolean(errorPagos)}
             >
               {busy
                 ? "Cobrando…"
@@ -769,7 +796,7 @@ function PlanDetalle({
               Volver
             </button>
           </div>
-        </div>
+        </>
       )}
 
       {modo === "cancelar" && (

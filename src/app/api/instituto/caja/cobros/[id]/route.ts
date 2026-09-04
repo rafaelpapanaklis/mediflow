@@ -16,7 +16,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   if ("response" in g) return g.response;
 
   try {
-    const cobro = await getEduCharge(g.ctx, params.id);
+    const cobro = await getEduCharge(g.ctx, params.id, {
+      timeZone: g.ctx.institution.timezone,
+    });
     if (!cobro) {
       return NextResponse.json({ error: "Ese cobro no existe." }, { status: 404 });
     }

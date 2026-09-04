@@ -132,6 +132,51 @@ export function eduPlanDueDates(
   return out;
 }
 
+/** Una mensualidad de la VISTA PREVIA: número, fecha, monto. */
+export interface EduPlanCalendarioFila {
+  number: number;
+  dueDateISO: string;
+  amountCents: number;
+  /**
+   * true = el día de corte no cabía en ese mes y se RECORTÓ (corte 31 →
+   * 30 de noviembre). La pantalla lo DICE antes de emitir: un plan armado
+   * un 31 con fechas 31/30/31 sorprendía al paciente y a la caja.
+   */
+  recortado: boolean;
+}
+
+/**
+ * 🔴 EL CALENDARIO COMPLETO, ANTES DE EMITIR: fechas Y montos juntos.
+ *
+ * Es `eduPlanDueDates` + `eduPlanSplitCents` en una sola forma, y existe
+ * porque la vista previa enseñaba los montos SIN una sola fecha: desde el
+ * mostrador no había manera de contestar "¿y cada cuándo pago?" hasta que
+ * el plan ya estaba emitido. Las dos funciones que hay debajo son las
+ * MISMAS que usa el servidor, así que lo que se enseña aquí es lo que se
+ * va a guardar, centavo por centavo y día por día.
+ *
+ * `null` = la entrada no da un plan válido (meses fuera de rango, día de
+ * corte imposible, o un restante que no alcanza ni un centavo al mes).
+ */
+export function eduPlanCalendario(
+  startISO: string,
+  dueDay: number,
+  months: number,
+  restanteCents: number,
+): EduPlanCalendarioFila[] | null {
+  const fechas = eduPlanDueDates(startISO, dueDay, months);
+  if (!fechas) return null;
+  const montos = eduPlanSplitCents(restanteCents, months);
+  if (!montos) return null;
+  return fechas.map((dueDateISO, i) => ({
+    number: i + 1,
+    dueDateISO,
+    amountCents: montos[i],
+    // El día que se pintó no es el que se pidió: el mes no lo aguantaba.
+    recortado: Number(dueDateISO.slice(8, 10)) < dueDay,
+  }));
+}
+
 /**
  * "AAAA-MM-DD" + n días → "AAAA-MM-DD". Aritmética de calendario en UTC
  * (un día de calendario no tiene zona), para la ventana de "vence esta
@@ -161,10 +206,21 @@ export function eduPlanAddDaysISO(dayISO: string, days: number): string | null {
  * Las dos fechas son "AAAA-MM-DD", que comparan bien como texto.
  */
 export function eduInstallmentStatus(
-  inst: { paidAt: string | Date | null; dueDateISO: string },
+  inst: {
+    paidAt?: string | Date | null;
+    /**
+     * Para el llamador que solo leyó SI hay pago y no cuándo (la caja
+     * deriva el plan de un cobro desde `paymentId`, sin traerse el pago
+     * entero). Existe para que ese llamador no tenga que inventarse una
+     * fecha falsa ni copiar la regla: la regla vive aquí y en un solo
+     * sitio.
+     */
+    pagada?: boolean;
+    dueDateISO: string;
+  },
   todayISO: string,
 ): EduInstallmentStatus {
-  if (inst.paidAt) return "PAGADA";
+  if (inst.pagada || inst.paidAt) return "PAGADA";
   return inst.dueDateISO < todayISO ? "VENCIDA" : "PENDIENTE";
 }
 
@@ -280,9 +336,25 @@ export interface EduInstallmentRow {
   /** Derivado en la lectura con eduInstallmentStatus. */
   status: EduInstallmentStatus;
   paidAt: string | null;
-  /** Cómo se pagó y quién lo recibió, cuando está pagada. */
+  /**
+   * Cómo se pagó y quién lo recibió, cuando está pagada. Es lo del pago
+   * que la LIQUIDÓ; si se pagó entre varias formas, el desglose completo
+   * está en `payments` (y `method` es el de la última forma registrada).
+   */
   method: EduPaymentMethod | null;
   receivedByName: string | null;
+  /**
+   * TODAS las formas con las que se cubrió esta mensualidad. Una sola
+   * cuando se pagó de un tirón; hasta tres cuando se dividió (efectivo +
+   * tarjeta). Su suma es EXACTAMENTE `amountCents`: una mensualidad se
+   * divide entre FORMAS, jamás entre meses.
+   */
+  payments: {
+    method: EduPaymentMethod;
+    amountCents: number;
+    reference: string | null;
+    msiMonths: number | null;
+  }[];
 }
 
 export interface EduPlanRow {
@@ -331,7 +403,15 @@ export interface EduPlanesPage {
  * clasificadas. Puro para que el resumen del recibo, el de caja y el de
  * la ficha no puedan discrepar.
  */
-export function eduPlanResumen(installments: EduInstallmentRow[]): {
+export function eduPlanResumen(
+  /**
+   * Lo MÍNIMO que hace falta y no la fila entera, para que la caja pueda
+   * derivar el plan de un cobro sin fabricar `EduInstallmentRow`
+   * completas (con su desglose de pagos) solo para sumar tres números.
+   * Una `EduInstallmentRow[]` sigue encajando aquí sin cambiar nada.
+   */
+  installments: Pick<EduInstallmentRow, "amountCents" | "dueDateISO" | "status">[],
+): {
   planCents: number;
   paidCount: number;
   pendingCents: number;
@@ -427,4 +507,46 @@ const FECHA_LARGA = new Intl.DateTimeFormat("es-MX", {
 export function eduFechaLarga(dayISO: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dayISO)) return "—";
   return FECHA_LARGA.format(new Date(`${dayISO}T12:00:00.000Z`));
+}
+
+const FECHA_CORTA = new Intl.DateTimeFormat("es-MX", {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "short",
+});
+
+/** "2026-10-15" → "15 oct". Para una celda de tabla, donde no cabe más. */
+export function eduFechaCorta(dayISO: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayISO)) return "—";
+  return FECHA_CORTA.format(new Date(`${dayISO}T12:00:00.000Z`)).replace(".", "");
+}
+
+const MES_LARGO = new Intl.DateTimeFormat("es-MX", { timeZone: "UTC", month: "long" });
+const MES_Y_ANO = new Intl.DateTimeFormat("es-MX", {
+  timeZone: "UTC",
+  month: "long",
+  year: "numeric",
+});
+
+/**
+ * "de octubre a diciembre de 2026" — el plan dicho como lo diría una
+ * persona, en vez de "día 15" a secas.
+ *
+ * Con el año repetido solo al final cuando las dos fechas caen en el
+ * mismo: "de octubre de 2026 a marzo de 2027" cuando no. Y un plan de una
+ * sola mensualidad (que el mínimo no permite, pero la función sí puede
+ * recibir) dice "en octubre de 2026" y no "de octubre a octubre".
+ */
+export function eduPlanRangoMeses(desdeISO: string, hastaISO: string): string {
+  const ok = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d ?? "");
+  if (!ok(desdeISO) || !ok(hastaISO)) return "—";
+  const desde = new Date(`${desdeISO}T12:00:00.000Z`);
+  const hasta = new Date(`${hastaISO}T12:00:00.000Z`);
+  if (desdeISO.slice(0, 7) === hastaISO.slice(0, 7)) {
+    return `en ${MES_Y_ANO.format(desde)}`;
+  }
+  if (desdeISO.slice(0, 4) === hastaISO.slice(0, 4)) {
+    return `de ${MES_LARGO.format(desde)} a ${MES_Y_ANO.format(hasta)}`;
+  }
+  return `de ${MES_Y_ANO.format(desde)} a ${MES_Y_ANO.format(hasta)}`;
 }
