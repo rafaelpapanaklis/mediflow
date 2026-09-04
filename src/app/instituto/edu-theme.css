@@ -2726,8 +2726,12 @@ select.edu-input {
   --edu-cols: 104px minmax(170px, 2fr) minmax(120px, 1fr) 96px 96px 96px;
 }
 
+/* Ocho columnas desde que hay "Pago": con qué se pagó, o el plan a meses
+   con su próxima fecha. La tarifa cede ancho —es la que menos se mira— y
+   "Pago" se lleva el hueco: "A meses · 1/3 · próx. 15 oct" no cabe en
+   112 px sin partirse en tres renglones. */
 .edu-table--cobros {
-  --edu-cols: 96px minmax(150px, 1.6fr) minmax(130px, 1.2fr) 112px 112px 112px 96px;
+  --edu-cols: 92px minmax(140px, 1.5fr) minmax(110px, 1fr) 104px 104px minmax(140px, 1.2fr) 104px 92px;
 }
 
 .edu-table--corte {
@@ -8368,4 +8372,237 @@ a.edu-ini-acceso:hover {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FORMAS DE PAGO — el bloque de <EduFormasPago> y el calendario del plan.
+   ADITIVO al final de la hoja: nada de aquí arriba se reordena ni se toca.
+
+   Cabe en 390 px (los seis métodos en 3 columnas, el monto y su campo
+   contextual apilados) y en >= 720 px los métodos se ponen en una sola
+   fila de seis. La rejilla de campos la pone .edu-formgrid--2, que ya
+   existe y ya es responsive.
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-fp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edu-fp__fila {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface-2);
+}
+
+.edu-fp__cabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.edu-fp__num {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+/* Tres columnas en el teléfono, seis desde 720 px. Nunca un scroll
+   horizontal: un método que se sale de la pantalla es un método que
+   nadie elige. */
+.edu-fp__metodos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+@media (min-width: 720px) {
+  .edu-fp__metodos {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.edu-fp__metodo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: 8px 6px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  background: var(--edu-surface);
+  color: var(--edu-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+
+.edu-fp__metodo:hover:not(:disabled) {
+  background: var(--edu-hover);
+}
+
+.edu-fp__metodo:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.edu-fp__metodo:focus-visible {
+  outline: none;
+  box-shadow: var(--edu-ring);
+}
+
+/* El elegido. Se marca con aria-pressed y no con una clase: el estado ya
+   está dicho para quien usa lector de pantalla, y así no hay dos fuentes
+   de verdad sobre cuál está activo. */
+.edu-fp__metodo[aria-pressed="true"] {
+  border-color: var(--edu-line-brand);
+  background: var(--edu-hover);
+  color: var(--edu-text-1);
+  box-shadow: inset 0 0 0 1px var(--edu-line-brand);
+}
+
+/* El cambio, en grande: es el número que quien cobra tiene que leer de
+   un vistazo mientras cuenta billetes. */
+.edu-fp__cambio {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(21, 128, 61, 0.3);
+  background: #e3f5e9;
+  color: #14612f;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.dark .edu-fp__cambio {
+  background: rgba(21, 128, 61, 0.2);
+  color: #b7e8c7;
+}
+
+.edu-fp__pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.edu-fp__resto {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--edu-text-2);
+}
+
+.edu-fp__resto--ok {
+  color: var(--edu-ok);
+}
+
+.edu-fp__resto--falta,
+.edu-fp__resto--sobra {
+  color: var(--edu-danger);
+}
+
+/* Los chips de meses sin intereses DEL BANCO. Reusan .edu-fp__metodo
+   porque son el mismo gesto (elegir uno de varios) y tienen que verse
+   igual; lo único suyo es la rejilla. */
+.edu-msi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.edu-msi .edu-fp__metodo {
+  min-height: 38px;
+  min-width: 56px;
+  padding: 6px 10px;
+}
+
+/* ── EL CALENDARIO DEL PLAN, ANTES DE EMITIR ────────────────────────────
+   Fechas Y montos juntos: la vista previa enseñaba los montos sin una
+   sola fecha, y desde el mostrador no había forma de contestar "¿y cada
+   cuándo pago?" hasta que el plan ya estaba emitido. */
+.edu-calendario {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface-2);
+}
+
+.edu-calendario__fila {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 6px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--edu-text-2);
+}
+
+.edu-calendario__fila + .edu-calendario__fila {
+  border-top: 1px solid var(--edu-line);
+}
+
+.edu-calendario__n {
+  min-width: 22px;
+  font-weight: 700;
+  color: var(--edu-text-3);
+}
+
+.edu-calendario__fecha {
+  flex: 1;
+  min-width: 0;
+  color: var(--edu-text-1);
+}
+
+.edu-calendario__monto {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--edu-text-1);
+}
+
+.edu-calendario__nota {
+  display: block;
+  font-size: 11.5px;
+  color: var(--edu-amber-700);
+}
+
+.edu-calendario__pie {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 6px 2px;
+  border-top: 1px solid var(--edu-line-strong);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+}
+
+/* Una mensualidad dentro del recibo del cobro, con su estado. */
+.edu-calendario__fila--vencida {
+  background: var(--edu-amber-50);
+}
+
+/* El desglose "Efectivo $200 · Crédito $133.33 (3 MSI)" de una
+   mensualidad ya pagada. */
+.edu-fp__desglose {
+  display: block;
+  font-size: 11.5px;
+  color: var(--edu-text-3);
 }

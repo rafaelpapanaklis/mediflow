@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { addEduPayment } from "@/lib/edu/caja";
+import { eduPagosPideDevolucion } from "@/lib/edu/dinero-core";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,14 @@ export async function POST(request: Request, { params }: { params: { id: string 
       { role: g.ctx.role, permissionsOverride: g.ctx.user.permissionsOverride },
       "caja.refund",
     );
-    if (body.isRefund && !canRefund) {
+    // La devolución puede venir en las TRES formas del cuerpo: en la raíz
+    // (el pago único de siempre), dentro de `payment` o dentro de
+    // `payments`. Se pregunta con el MISMO helper que usa la capa de datos
+    // —escribirlo a mano aquí es donde estaba el bug del `??`, que no cae
+    // al lado derecho cuando el izquierdo es `false`—. `addEduPayment` lo
+    // vuelve a comprobar (ninguna ruta futura puede saltárselo); esto solo
+    // contesta con un mensaje que se entiende.
+    if (eduPagosPideDevolucion(body) && !canRefund) {
       return NextResponse.json(
         { error: "Tu cuenta no tiene el permiso caja.refund." },
         { status: 403 },
