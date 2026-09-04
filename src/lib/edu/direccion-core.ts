@@ -65,6 +65,7 @@ import {
   EDU_ATRASO_UMBRAL_VIGILAR,
   type EduAtrasoEstado,
 } from "@/lib/edu/evaluacion-core";
+import type { EduPersonaKind } from "@/lib/edu/persona-core";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · TOPES Y UMBRALES
@@ -969,11 +970,29 @@ export interface EduDirDetalleFila {
   id: string;
   /** Lo primero que se lee (el nombre del paciente, el folio del cobro…). */
   titulo: string;
+  /**
+   * Cuando el propio `titulo` ES una persona con ficha propia — un docente
+   * en una lista que no tenía otro destino, por ejemplo—: FilaDetalle lo
+   * pinta con EduPersonaLink en vez de un `<Link href>` a `href`, y es
+   * EduPersonaLink quien construye la URL — nunca a mano, y nunca sin pasar
+   * por el permiso de quien mira. Gana sobre `href` cuando los dos vienen.
+   */
+  tituloPersona?: { kind: EduPersonaKind; id: string } | null;
   /** La segunda línea. */
   sub: string | null;
+  /**
+   * Cuando el NOMBRE de una persona vive dentro de `sub` —el estudiante o
+   * el docente que casi nunca llegan a `titulo`—: se saca de ahí y `sub` se
+   * queda con el RESTO del texto, SIN el nombre, para no repetirlo.
+   * FilaDetalle pinta el nombre con EduPersonaLink delante y `sub` después.
+   * Sin subPersona, `sub` se pinta tal cual, como siempre: nada de
+   * regresiones en las filas que no tienen persona.
+   */
+  subPersona?: { kind: EduPersonaKind; id: string; nombre: string } | null;
   /** Hasta tres pares dato/valor, ya formateados. */
   campos: { k: string; v: string }[];
-  /** Adónde lleva tocar la fila, dentro del panel. null = no lleva a nada. */
+  /** Adónde lleva tocar el título, dentro del panel. null = no lleva a nada.
+   *  Se ignora cuando hay `tituloPersona`. */
   href: string | null;
   /** Color de la fila cuando la lista es un control. */
   semaforo: EduDirSemaforo;

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
+import type { EduPersonaKind } from "@/lib/edu/persona-core";
 import { eduMoney } from "@/lib/edu/dinero-core";
 import { eduHoursLabel } from "@/lib/edu/evaluacion-core";
 import {
@@ -564,7 +566,11 @@ function BloqueAhora({
                 ...ocupados.map((s) => ({
                   id: `s-${s.chairId}`,
                   titulo: `${s.patientName ?? "—"}${s.patientFolio ? ` · ${s.patientFolio}` : ""}`,
-                  sub: `Sillón ${s.number} · ${s.studentName ?? "—"}`,
+                  sub: s.studentId ? `Sillón ${s.number}` : `Sillón ${s.number} · ${s.studentName ?? "—"}`,
+                  // s.studentId es EduStudent, no la cuenta del estudiante.
+                  subPersona: s.studentId
+                    ? { kind: "estudiante" as EduPersonaKind, id: s.studentId, nombre: s.studentName ?? "—" }
+                    : undefined,
                   campos: [
                     { k: "Desde", v: s.desdeLabel ?? "—" },
                     { k: "Estado", v: EDU_DIR_SILLON_LABELS[s.estado] },
@@ -575,11 +581,17 @@ function BloqueAhora({
                 ...ahora.recepcion.map((r) => ({
                   id: `r-${r.appointmentId}`,
                   titulo: `${r.patientName} · ${r.patientFolio}`,
-                  sub: `En recepción · ${r.studentName}`,
+                  sub: "En recepción",
+                  // r.studentId es EduStudent, no la cuenta del estudiante.
+                  subPersona: { kind: "estudiante" as EduPersonaKind, id: r.studentId, nombre: r.studentName },
                   campos: [
                     { k: "Llegó", v: r.desdeLabel },
                     { k: "Lleva", v: eduDirEsperaLabel(r.esperaMinutos) },
                   ],
+                  // Por `tituloPersona` y NO por un href a mano: así la ruta
+                  // la arma persona-core (un solo sitio) y el enlace respeta
+                  // el permiso de quien mira, que un <Link> pelado no mira.
+                  tituloPersona: { kind: "paciente" as EduPersonaKind, id: r.patientId },
                   href: null,
                   semaforo: "NEUTRO" as EduDirSemaforo,
                 })),
@@ -595,18 +607,33 @@ function BloqueAhora({
             abrirLocal(
               "Atendiendo ahora",
               "Los estudiantes que tienen un paciente en el sillón en este momento.",
-              ocupados.map((s) => ({
-                id: `a-${s.chairId}`,
-                titulo: s.studentName ?? "—",
-                sub: `${s.programName ?? "Sin especialidad"} · Sillón ${s.number}`,
-                campos: [
-                  { k: "Paciente", v: s.patientName ?? "—" },
-                  { k: "Desde", v: s.desdeLabel ?? "—" },
-                  { k: "Docente", v: s.supervisorName ?? "Sin docente responsable" },
-                ],
-                href: s.studentId ? `/instituto/evaluacion/${s.studentId}` : null,
-                semaforo: s.supervisorName ? "NEUTRO" : ("ACTUAR" as EduDirSemaforo),
-              })),
+              ocupados.map((s) => {
+                // El docente responsable dispara el semáforo de esta fila
+                // (sin él es ACTUAR): por eso es el que se saca de `campos`
+                // y se vuelve el subPersona — con el id de EduUser, no el
+                // de EduStudent. El paciente se queda en campos, en texto
+                // plano: subPersona es un solo slot por fila.
+                const tieneDocente = Boolean(s.supervisorId && s.supervisorName);
+                return {
+                  id: `a-${s.chairId}`,
+                  titulo: s.studentName ?? "—",
+                  sub: `${s.programName ?? "Sin especialidad"} · Sillón ${s.number}`,
+                  subPersona: tieneDocente
+                    ? {
+                        kind: "docente" as EduPersonaKind,
+                        id: s.supervisorId as string,
+                        nombre: s.supervisorName as string,
+                      }
+                    : undefined,
+                  campos: [
+                    { k: "Paciente", v: s.patientName ?? "—" },
+                    { k: "Desde", v: s.desdeLabel ?? "—" },
+                    ...(tieneDocente ? [] : [{ k: "Docente", v: "Sin docente responsable" }]),
+                  ],
+                  href: s.studentId ? `/instituto/evaluacion/${s.studentId}` : null,
+                  semaforo: s.supervisorName ? "NEUTRO" : ("ACTUAR" as EduDirSemaforo),
+                };
+              }),
             )
           }
         />
@@ -632,11 +659,15 @@ function BloqueAhora({
               ahora.docentes.map((d) => ({
                 id: d.userId,
                 titulo: d.name,
+                // A su FICHA, no a la lista — y sin construir la URL a
+                // mano: eso lo hace EduPersonaLink (con el permiso de quien
+                // mira ya cableado). d.userId es EduUser.
+                tituloPersona: { kind: "docente" as EduPersonaKind, id: d.userId },
                 sub: d.porTitularidad
                   ? "Responde por ser el titular vigente de su estudiante"
                   : "Figura como supervisor en la cita",
                 campos: [{ k: "Sillones", v: String(d.sillones) }],
-                href: "/instituto/docentes",
+                href: null,
                 semaforo: "NEUTRO" as EduDirSemaforo,
               })),
             )
@@ -670,14 +701,29 @@ function BloqueAhora({
                 </>
               ) : (
                 <>
-                  <p className="edu-dir-sillon__quien">{s.patientName}</p>
+                  <p className="edu-dir-sillon__quien">
+                    <EduPersonaLink kind="paciente" id={s.patientId}>
+                      {s.patientName}
+                    </EduPersonaLink>
+                  </p>
                   <p className="edu-dir-sillon__meta">
-                    {s.studentName}
+                    <EduPersonaLink kind="estudiante" id={s.studentId}>
+                      {s.studentName}
+                    </EduPersonaLink>
                     {s.programName ? ` · ${s.programName}` : ""}
                   </p>
                   <p className="edu-dir-sillon__meta">
                     Desde las {s.desdeLabel}
-                    {s.supervisorName ? ` · ${s.supervisorName}` : " · sin docente"}
+                    {s.supervisorName ? (
+                      <>
+                        {" · "}
+                        <EduPersonaLink kind="docente" id={s.supervisorId}>
+                          {s.supervisorName}
+                        </EduPersonaLink>
+                      </>
+                    ) : (
+                      " · sin docente"
+                    )}
                   </p>
                   <p className="edu-dir-sillon__estado">
                     {s.esperaMinutos === null
@@ -1384,7 +1430,11 @@ function FilaDetalle({ fila, onNavegar }: { fila: EduDirDetalleFila; onNavegar: 
   return (
     <div className={clase}>
       <p className="edu-dir-detalle__titulo">
-        {fila.href ? (
+        {fila.tituloPersona ? (
+          <EduPersonaLink kind={fila.tituloPersona.kind} id={fila.tituloPersona.id}>
+            {fila.titulo}
+          </EduPersonaLink>
+        ) : fila.href ? (
           <Link href={fila.href} onClick={onNavegar}>
             {fila.titulo}
           </Link>
@@ -1392,7 +1442,17 @@ function FilaDetalle({ fila, onNavegar }: { fila: EduDirDetalleFila; onNavegar: 
           fila.titulo
         )}
       </p>
-      {fila.sub && <p className="edu-dir-detalle__sub">{fila.sub}</p>}
+      {(fila.sub || fila.subPersona) && (
+        <p className="edu-dir-detalle__sub">
+          {fila.subPersona && (
+            <EduPersonaLink kind={fila.subPersona.kind} id={fila.subPersona.id}>
+              {fila.subPersona.nombre}
+            </EduPersonaLink>
+          )}
+          {fila.subPersona && fila.sub ? " · " : ""}
+          {fila.sub}
+        </p>
+      )}
       {fila.campos.length > 0 && (
         <p className="edu-dir-detalle__campos">
           {fila.campos.map((c) => (

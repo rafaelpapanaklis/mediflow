@@ -1589,7 +1589,11 @@ export async function getEduDireccionDetalle(
           completedAt: true,
           patient: { select: { firstName: true, lastName: true, folio: true } },
           student: {
-            select: { user: { select: { firstName: true, lastName: true } }, matricula: true },
+            select: {
+              id: true,
+              user: { select: { firstName: true, lastName: true } },
+              matricula: true,
+            },
           },
           chair: { select: { name: true, number: true } },
         },
@@ -1598,7 +1602,10 @@ export async function getEduDireccionDetalle(
       return pagina(base, filas, EDU_DIR_MAX_DETALLE, (a) => ({
         id: a.id,
         titulo: `${persona(a.patient)} · ${a.patient.folio}`,
-        sub: `${persona(a.student.user)} (${a.student.matricula}) · Sillón ${a.chair.number}`,
+        sub: `(${a.student.matricula}) · Sillón ${a.chair.number}`,
+        // El id es el de EduStudent (a.student.id), NO el de la cuenta:
+        // eso es lo que espera kind="estudiante".
+        subPersona: { kind: "estudiante", id: a.student.id, nombre: persona(a.student.user) },
         campos: [
           { k: "Cuándo", v: `${fecha(a.startsAt, tz)} ${eduFormatTime(a.startsAt, tz)}` },
           { k: "Estado", v: EDU_APPOINTMENT_STATUS_LABELS[a.status as EduAppointmentStatus] },
@@ -1640,7 +1647,11 @@ export async function getEduDireccionDetalle(
           closedAt: true,
           patient: { select: { firstName: true, lastName: true, folio: true } },
           student: {
-            select: { user: { select: { firstName: true, lastName: true } }, matricula: true },
+            select: {
+              id: true,
+              user: { select: { firstName: true, lastName: true } },
+              matricula: true,
+            },
           },
           program: { select: { name: true } },
           grades: { select: { id: true, correctsId: true } },
@@ -1650,7 +1661,9 @@ export async function getEduDireccionDetalle(
       return pagina(base, filas, EDU_DIR_MAX_DETALLE, (c) => ({
         id: c.id,
         titulo: `${persona(c.patient)} · ${c.patient.folio}`,
-        sub: `${c.program.name} · ${persona(c.student.user)} (${c.student.matricula})`,
+        sub: `${c.program.name} · (${c.student.matricula})`,
+        // c.student.id es EduStudent, no EduUser.
+        subPersona: { kind: "estudiante", id: c.student.id, nombre: persona(c.student.user) },
         campos: [
           { k: "Estado", v: EDU_CASE_STATUS_LABELS[c.status] },
           { k: "Abierto", v: fecha(c.openedAt, tz) },
@@ -1756,7 +1769,11 @@ export async function getEduDireccionDetalle(
               patient: { select: { firstName: true, lastName: true, folio: true } },
               program: { select: { name: true } },
               student: {
-                select: { matricula: true, user: { select: { firstName: true, lastName: true } } },
+                select: {
+                  id: true,
+                  matricula: true,
+                  user: { select: { firstName: true, lastName: true } },
+                },
               },
             },
           },
@@ -1768,7 +1785,13 @@ export async function getEduDireccionDetalle(
         return {
           id: a.id,
           titulo: `${persona(a.case.patient)} · ${a.case.patient.folio}`,
-          sub: `${a.case.program.name} · ${persona(a.case.student.user)} (${a.case.student.matricula})`,
+          sub: `${a.case.program.name} · (${a.case.student.matricula})`,
+          // a.case.student.id es EduStudent, no EduUser.
+          subPersona: {
+            kind: "estudiante",
+            id: a.case.student.id,
+            nombre: persona(a.case.student.user),
+          },
           campos: [
             { k: "Etapa", v: etapaLabel(a.stage) },
             { k: "Esperando", v: eduDirEsperaLabel(min) },
@@ -1848,7 +1871,15 @@ export async function getEduDireccionDetalle(
           { k: "Correo", v: s.user.email },
           { k: "Qué falta", v: "Asignarle un docente supervisor" },
         ],
-        href: "/instituto/docentes",
+        // Antes llevaba a /instituto/docentes (la LISTA). Esta fila es del
+        // ESTUDIANTE (s.id, EduStudent) al que le falta el supervisor, así
+        // que tiene que abrir SU ficha, no la de un docente que no tiene.
+        //
+        // Por `tituloPersona` y NO por un href a mano: la ruta la arma
+        // persona-core (un solo sitio) y el enlace respeta el permiso de
+        // quien mira. Un <Link> escrito aquí se lo saltaría.
+        tituloPersona: { kind: "estudiante" as const, id: s.id },
+        href: null,
         semaforo: "ACTUAR",
       }));
     }
