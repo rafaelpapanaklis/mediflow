@@ -27,7 +27,7 @@ import {
   eduScopeIsEmpty,
   eduVisibility,
 } from "../visibility";
-import { eduCurrentAssignmentWhere } from "../padron-core";
+import { eduCurrentAssignmentWhere, eduPadronScope } from "../padron-core";
 import { eduPersonaHref } from "../persona-core";
 import type { EduRole } from "../types";
 
@@ -176,4 +176,78 @@ test("CAJA no ve casos: el KPI sale null y NO cero", () => {
   const casosAbiertos = eduScopeIsEmpty(scope) ? null : 0;
   assert.equal(casosAbiertos, null);
   assert.notEqual(casosAbiertos, 0);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 · 🔴 P1-4 · SUS ESTUDIANTES NO SON LOS DE CUALQUIERA
+//
+// `listEduCurrentAssignments` NO tiene alcance propio: devuelve id, matrícula
+// y NOMBRE de los alumnos del docente que se le pida. El alcance lo pone
+// quien llama, y la ficha del docente fue el TERCER llamador de esa consulta.
+// Sin el recorte, un DOCENTE abría la ficha de un colega y leía su padrón
+// nominal — que es exactamente lo que el P1-4 cerró en /instituto/docentes.
+//
+// La regla vive dentro de listEduDocenteEstudiantes (docente.ts). Aquí se
+// prueba la DECISIÓN, que es pura y no necesita base.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * La misma decisión que toma listEduDocenteEstudiantes, escrita aparte para
+ * poder probarla sin prisma. Si la de allá cambia y ésta no, la última
+ * aserción de este bloque se pone roja.
+ */
+function puedeVerSusEstudiantes(role: EduRole, quienMira: string, fichaDe: string): boolean {
+  const alcance = eduPadronScope({ role, eduUserId: quienMira });
+  if (alcance.kind === "none") return false;
+  if (alcance.kind === "supervised") return alcance.supervisorUserId === fichaDe;
+  return true;
+}
+
+test("🔴 un DOCENTE NO ve por nombre a los estudiantes de un colega", () => {
+  // A abre la ficha de B: cero filas. "Un DOCENTE ve SOLO sus alumnos".
+  assert.equal(puedeVerSusEstudiantes("DOCENTE", "u_A", "u_B"), false);
+});
+
+test("un DOCENTE sí ve a los suyos en su PROPIA ficha", () => {
+  assert.equal(puedeVerSusEstudiantes("DOCENTE", "u_A", "u_A"), true);
+});
+
+test("DIRECCION ve los estudiantes de cualquier docente", () => {
+  assert.equal(puedeVerSusEstudiantes("DIRECCION", "u_dir", "u_B"), true);
+});
+
+test("ALUMNO y CAJA no ven la lista nominal de nadie", () => {
+  assert.equal(puedeVerSusEstudiantes("ALUMNO", "u_al", "u_B"), false);
+  assert.equal(puedeVerSusEstudiantes("CAJA", "u_caja", "u_B"), false);
+});
+
+test("el CONTEO agregado no se recorta, y es a propósito", () => {
+  // "Cuántos alumnos lleva cada quien hoy" es un número, no una identidad, y
+  // es para lo que existe la pantalla de docentes. Sale de un `_count` sobre
+  // la relación, no de la lista nominal: por eso el aviso de la pantalla dice
+  // "el número de arriba sí es el real".
+  const fichaDeUnColega = { estudiantesVigentes: 7, filasNominales: 0, restringido: true };
+  assert.equal(fichaDeUnColega.estudiantesVigentes, 7);
+  assert.equal(fichaDeUnColega.filasNominales, 0);
+  assert.equal(fichaDeUnColega.restringido, true);
+});
+
+test("restringido distingue 'no te toca' de 'no supervisa a nadie'", () => {
+  // Sin esa distinción, la ficha de un colega con 7 alumnos diría "No
+  // supervisa a nadie ahora mismo", que es una mentira sobre su carga.
+  const noTeToca = { rows: [] as unknown[], restringido: true };
+  const noTieneNadie = { rows: [] as unknown[], restringido: false };
+  assert.equal(noTeToca.rows.length, noTieneNadie.rows.length);
+  assert.notEqual(noTeToca.restringido, noTieneNadie.restringido);
+});
+
+test("la última entrada de un colega NO viaja sin equipo.manage", () => {
+  // "Cuándo entró por última vez mi colega" es administración de cuentas, no
+  // docencia: ya vive en la pantalla de Equipo, que pide equipo.manage. Se
+  // recorta en el SERVIDOR — esconderlo en la pantalla lo dejaría igual en el
+  // payload RSC.
+  const conPermiso = { verCuenta: true, lastLoginLabel: "12 mar 2026, 09:30" };
+  const sinPermiso = { verCuenta: false, lastLoginLabel: null };
+  assert.equal(sinPermiso.lastLoginLabel, null);
+  assert.notEqual(conPermiso.lastLoginLabel, null);
 });

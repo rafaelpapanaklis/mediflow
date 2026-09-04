@@ -20,11 +20,19 @@ export default async function DocenteResumenPage({ params }: { params: { id: str
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   if (!hasEduPermission(permUser, "docentes.view")) notFound();
 
-  const docente = await getEduDocenteFicha(ctx, params.id, ctx.institution.timezone);
+  // `equipo.manage` es el permiso que YA enseña la última entrada en la
+  // pantalla de Equipo. Sin él el dato ni sale del servidor.
+  const docente = await getEduDocenteFicha(ctx, params.id, ctx.institution.timezone, {
+    verCuenta: hasEduPermission(permUser, "equipo.manage"),
+  });
   if (!docente) notFound();
 
   const vePadron = hasEduPermission(permUser, "padron.view");
-  const estudiantes = vePadron ? await listEduDocenteEstudiantes(ctx, docente.id) : [];
+  // 🔴 El recorte del P1-4 vive DENTRO de listEduDocenteEstudiantes: un
+  // DOCENTE que abre la ficha de un colega recibe `restringido` y cero filas.
+  const estudiantes = vePadron
+    ? await listEduDocenteEstudiantes(ctx, docente.id)
+    : { rows: [], restringido: true };
 
   return (
     <div className="edu-stack">
@@ -60,12 +68,14 @@ export default async function DocenteResumenPage({ params }: { params: { id: str
             </p>
           </div>
           <div className="edu-kpi">
-            <p className="edu-kpi__label">Última entrada</p>
+            <p className="edu-kpi__label">Estado de la cuenta</p>
             <p className="edu-kpi__value edu-kpi__value--texto">
-              {docente.lastLoginLabel ?? "Nunca"}
+              {docente.isActive ? "Activa" : "Desactivada"}
             </p>
             <p className="edu-kpi__note">
-              {docente.isActive ? "Cuenta activa." : "Cuenta desactivada."}
+              {docente.lastLoginLabel
+                ? `Última entrada: ${docente.lastLoginLabel}.`
+                : "La última entrada solo la ve quien administra el equipo."}
             </p>
           </div>
         </div>
@@ -75,13 +85,18 @@ export default async function DocenteResumenPage({ params }: { params: { id: str
         <section className="edu-section">
           <div className="edu-section__head">
             <h2 className="edu-section__title">Sus estudiantes</h2>
-            <span className="edu-count">{estudiantes.length}</span>
+            <span className="edu-count">{estudiantes.rows.length}</span>
           </div>
-          {estudiantes.length === 0 ? (
+          {estudiantes.restringido ? (
+            <p className="edu-note">
+              Sus estudiantes no te tocan: un docente ve por nombre solo a los suyos. El número de
+              arriba sí es el real.
+            </p>
+          ) : estudiantes.rows.length === 0 ? (
             <p className="edu-note">No supervisa a nadie ahora mismo.</p>
           ) : (
             <ul className="edu-chiplist">
-              {estudiantes.slice(0, 12).map((a) => (
+              {estudiantes.rows.slice(0, 12).map((a) => (
                 <li key={a.assignmentId} className="edu-assign">
                   <span>
                     {/* kind="estudiante" quiere el id de EduStudent, y eso es

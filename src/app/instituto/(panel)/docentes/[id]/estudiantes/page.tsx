@@ -20,6 +20,12 @@ export default async function DocenteEstudiantesPage({ params }: { params: { id:
   if (!ctx) redirect("/instituto/login");
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
+  // 🔴 DOS permisos, no uno. `docentes.view` es la puerta de la FICHA (quién
+  // es esta persona) y el de abajo la de ESTA pestaña. Que el layout ya
+  // exigiera el primero no basta: una página que se apoya en su layout para
+  // cerrar la puerta es una página abierta el día que alguien la mueve de
+  // sitio, y ALUMNO lleva casos.view y agenda.view por defecto.
+  if (!hasEduPermission(permUser, "docentes.view")) notFound();
   if (!hasEduPermission(permUser, "padron.view")) {
     return (
       <EduDenied
@@ -32,7 +38,10 @@ export default async function DocenteEstudiantesPage({ params }: { params: { id:
   const docente = await getEduDocenteFicha(ctx, params.id, ctx.institution.timezone);
   if (!docente) notFound();
 
-  const estudiantes = await listEduDocenteEstudiantes(ctx, docente.id);
+  // 🔴 El recorte del P1-4 vive DENTRO del loader: un DOCENTE que abre la
+  // ficha de un colega recibe `restringido` y cero filas, no el padrón
+  // nominal ajeno.
+  const { rows: estudiantes, restringido } = await listEduDocenteEstudiantes(ctx, docente.id);
 
   return (
     <div className="edu-stack">
@@ -42,7 +51,15 @@ export default async function DocenteEstudiantesPage({ params }: { params: { id:
           <span className="edu-count">{estudiantes.length}</span>
         </div>
 
-        {estudiantes.length === 0 ? (
+        {restringido ? (
+          <div className="edu-empty">
+            <p className="edu-empty__title">Sus estudiantes no te tocan</p>
+            <p className="edu-empty__detail">
+              Un docente ve por nombre solo a los suyos. El número de estudiantes vigentes que
+              aparece en el Resumen sí es el real: cuántos lleva cada quien no es una identidad.
+            </p>
+          </div>
+        ) : estudiantes.length === 0 ? (
           <div className="edu-empty">
             <p className="edu-empty__title">No supervisa a nadie ahora mismo</p>
             <p className="edu-empty__detail">

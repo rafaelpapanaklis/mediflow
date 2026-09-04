@@ -26,6 +26,12 @@ export default async function DocenteAgendaPage({ params }: { params: { id: stri
   if (!ctx) redirect("/instituto/login");
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
+  // 🔴 DOS permisos, no uno. `docentes.view` es la puerta de la FICHA (quién
+  // es esta persona) y el de abajo la de ESTA pestaña. Que el layout ya
+  // exigiera el primero no basta: una página que se apoya en su layout para
+  // cerrar la puerta es una página abierta el día que alguien la mueve de
+  // sitio, y ALUMNO lleva casos.view y agenda.view por defecto.
+  if (!hasEduPermission(permUser, "docentes.view")) notFound();
   if (!hasEduPermission(permUser, "agenda.view")) {
     return (
       <EduDenied

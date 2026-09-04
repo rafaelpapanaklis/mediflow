@@ -27,7 +27,11 @@ import {
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
-import { eduCurrentAssignmentWhere, type EduAssignmentRow } from "@/lib/edu/padron-core";
+import {
+  eduCurrentAssignmentWhere,
+  eduPadronScope,
+  type EduAssignmentRow,
+} from "@/lib/edu/padron-core";
 import { EDU_APPOINTMENT_SELECT, eduAppointmentToRow } from "@/lib/edu/agenda";
 import { eduCleanId, eduSafeTimeZone, type EduAppointmentRow } from "@/lib/edu/agenda-core";
 import { EDU_CASE_CLOSED_STATUSES } from "@/lib/edu/types";
@@ -61,6 +65,13 @@ export interface EduDocenteFicha {
    * ⚠️ Se formatea en el servidor y no se recorta el ISO en la pantalla:
    * `lastLogin.slice(0, 10)` da el día en UTC, y una entrada de las 19:00 en
    * Tijuana quedaría fechada al día siguiente.
+   *
+   * 🔴 Y SOLO VIAJA PARA QUIEN YA LO VE EN OTRA PANTALLA. "Cuándo entró por
+   * última vez mi colega" es un dato de administración de cuentas, no de
+   * docencia: ya existe en la pantalla de Equipo (EduTeamRow.lastLogin), que
+   * pide `equipo.manage`. Esta ficha la abre cualquiera con `docentes.view`
+   * —todos los docentes entre sí—, así que sin este recorte la ola habría
+   * repartido un dato nuevo sobre los compañeros sin que nadie lo pidiera.
    */
   lastLoginLabel: string | null;
   createdAt: string;
@@ -98,6 +109,14 @@ export async function getEduDocenteFicha(
   ctx: EduClinicaContext,
   userId: string,
   timeZone: string,
+  /**
+   * `verCuenta` = quien mira tiene `equipo.manage`, el permiso que ya enseña
+   * la última entrada en la pantalla de Equipo. Se recibe ya resuelto —el
+   * permiso se comprueba en la página, que es quien tiene la sesión— y aquí
+   * decide si el dato SALE del servidor, no si se pinta. Esconderlo en la
+   * pantalla lo dejaría igual en el payload RSC.
+   */
+  opciones: { verCuenta?: boolean } = {},
   now: Date = new Date(),
 ): Promise<EduDocenteFicha | null> {
   const institutionId = requireInstitution(ctx);
@@ -167,8 +186,9 @@ export async function getEduDocenteFicha(
     phone: docente.phone,
     cedulaProfesional: docente.cedulaProfesional,
     isActive: docente.isActive,
-    lastLogin: docente.lastLogin ? docente.lastLogin.toISOString() : null,
-    lastLoginLabel: docente.lastLogin ? eduFechaHora(docente.lastLogin, zona) : null,
+    lastLogin: opciones.verCuenta && docente.lastLogin ? docente.lastLogin.toISOString() : null,
+    lastLoginLabel:
+      opciones.verCuenta && docente.lastLogin ? eduFechaHora(docente.lastLogin, zona) : null,
     createdAt: docente.createdAt.toISOString(),
     estudiantesVigentes: docente._count.supervisees,
     casosAbiertos,
@@ -205,15 +225,51 @@ function eduFechaHora(d: Date, timeZone: string): string {
  * tercer parámetro. Un segundo listado aquí sería el sitio donde, dentro de
  * seis meses, se olvidaría el `startsAt` y aparecerían asignaciones que
  * todavía no empiezan.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 P1-4 DE LA AUDITORÍA — Y EL RECORTE VIVE AQUÍ, NO EN LAS PÁGINAS.
+ *
+ * `listEduCurrentAssignments` NO tiene alcance propio: devuelve el id, la
+ * matrícula y el NOMBRE de cada alumno del docente que se le pida. El
+ * alcance lo pone quien llama, y hasta ahora lo ponían a mano los dos
+ * llamadores que había (/instituto/docentes y su API). Esta ficha era un
+ * TERCER llamador, y sin esta función un DOCENTE abría la ficha de un
+ * colega y leía el padrón nominal de sus alumnos — que es exactamente lo
+ * que el P1-4 cerró.
+ *
+ * Va DENTRO de la función y no repetido en las dos páginas: un tercer sitio
+ * que decide lo mismo es cómo se llega a que el cuarto se olvide.
+ *
+ * La regla, que es la de `eduPadronScope` y ninguna nueva:
+ *   · DIRECCION           → los alumnos del docente que se está mirando;
+ *   · DOCENTE, su PROPIA ficha → los suyos;
+ *   · DOCENTE, la ficha de OTRO → ninguno. "Un DOCENTE ve SOLO sus alumnos".
+ *   · ALUMNO y CAJA       → ninguno (no llegan: el layout ya cortó).
+ *
+ * ⚠️ El CONTEO agregado de la cabecera (`estudiantesVigentes`, que sale de
+ * un `_count`) NO se recorta, igual que en /instituto/docentes: "cuántos
+ * alumnos lleva cada quien hoy" es un número, no una identidad, y es para
+ * lo que existe la pantalla de docentes.
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * `restringido: true` = hay alumnos pero no te toca verlos por nombre. La
+ * pantalla lo dice en vez de fingir que el docente no supervisa a nadie.
  */
 export async function listEduDocenteEstudiantes(
   ctx: EduClinicaContext,
   userId: string,
   now: Date = new Date(),
-): Promise<EduAssignmentRow[]> {
+): Promise<{ rows: EduAssignmentRow[]; restringido: boolean }> {
   const id = eduCleanId(userId);
-  if (!id) return [];
-  return listEduCurrentAssignments(ctx, now, id);
+  if (!id) return { rows: [], restringido: false };
+
+  const alcance = eduPadronScope(ctx);
+  if (alcance.kind === "none") return { rows: [], restringido: true };
+  if (alcance.kind === "supervised" && alcance.supervisorUserId !== id) {
+    return { rows: [], restringido: true };
+  }
+
+  return { rows: await listEduCurrentAssignments(ctx, now, id), restringido: false };
 }
 
 /**
