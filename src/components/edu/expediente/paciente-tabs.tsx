@@ -29,7 +29,22 @@ export interface EduPacienteTab {
   label: string;
 }
 
-export function EduPacienteTabs({ tabs }: { tabs: EduPacienteTab[] }) {
+export function EduPacienteTabs({
+  tabs,
+  ariaLabel = "Secciones del paciente",
+}: {
+  tabs: EduPacienteTab[];
+  /**
+   * El rótulo del <nav> para el lector de pantalla. Por omisión el de
+   * siempre; la ficha de un estudiante o la de un docente pasan el suyo.
+   *
+   * ⛔ El componente NO se renombra ni se mueve de archivo aunque ya sirva a
+   * tres fichas: hay olas en paralelo tocando esta carpeta y un `git mv`
+   * aquí les cuesta el merge. El nombre se corrige cuando no haya nadie más
+   * dentro.
+   */
+  ariaLabel?: string;
+}) {
   const pathname = usePathname() ?? "";
 
   // Activo = el href que COINCIDE MÁS (el más largo), igual que el sidebar
@@ -43,7 +58,7 @@ export function EduPacienteTabs({ tabs }: { tabs: EduPacienteTab[] }) {
   }
 
   return (
-    <nav className="edu-tabs" aria-label="Secciones del paciente">
+    <nav className="edu-tabs" aria-label={ariaLabel}>
       {tabs.map((t) => {
         const on = t.href === activo;
         return (

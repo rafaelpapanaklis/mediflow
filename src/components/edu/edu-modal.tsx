@@ -23,7 +23,18 @@ import { X } from "lucide-react";
  * diálogos por esto habría traído dependencias nuevas al vertical.
  */
 export interface EduModalProps {
-  title: string;
+  /**
+   * ReactNode y no string: el <h2 id={titleId}> lo pinta tal cual, y las
+   * fichas de persona necesitan poner el nombre del paciente como enlace en
+   * el título del modal (EduPersonaLink). Nadie manipula este valor como
+   * cadena —se comprobaron los usos— así que ensanchar el tipo no rompe a
+   * ninguno de los que ya pasan un string.
+   *
+   * ⚠️ Sigue siendo el rótulo de aria-labelledby: si un día lleva algo que
+   * no es texto (un icono suelto), el lector de pantalla anuncia el modal
+   * vacío. Texto, o texto envuelto.
+   */
+  title: React.ReactNode;
   subtitle?: string;
   onClose: () => void;
   children: React.ReactNode;

@@ -8369,3 +8369,80 @@ a.edu-ini-acceso:hover {
   justify-content: space-between;
   gap: 8px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL NOMBRE DE UNA PERSONA · .edu-persona
+
+   Bloque ADITIVO al final del archivo, como todas las olas: no reordena ni
+   pisa nada. `.edu-persona` no existía —se comprobó con grep antes de
+   escribirlo, y edu-theme.test.ts lo vuelve a comprobar en cada gate.
+
+   🔴 NO ES .edu-link (~5520). Aquél es un enlace de TEXTO dentro de una
+   nota ("Ver toda su agenda") y por eso va azul y subrayado. Éste es un
+   NOMBRE PROPIO dentro de una tabla, una tarjeta o un renglón de agenda: si
+   se pintara igual, media pantalla del panel se leería como un directorio
+   de los noventa y el ojo dejaría de encontrar lo que importa. En reposo
+   hereda color y peso de lo que lo rodea —sigue siendo un nombre— y solo al
+   apuntarlo o al enfocarlo con el teclado admite que además es un enlace.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-persona {
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  /* Para que el anillo del foco no salga con esquinas de navaja sobre un
+     nombre de una línea. */
+  border-radius: 3px;
+}
+
+.edu-persona:hover {
+  color: var(--edu-500);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* En recepción se navega con el teclado: el foco tiene que verse desde el
+   otro lado del mostrador, no solo cambiar de color. El outline repite el
+   del panel (~840) a propósito — un anillo distinto por clase sería otra
+   forma de decir lo mismo. */
+.edu-persona:focus-visible {
+  color: var(--edu-500);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  outline: 2px solid var(--edu-600);
+  outline-offset: 2px;
+  box-shadow: var(--edu-ring);
+}
+
+/* Paridad clara/oscuro completa, aunque hoy .dark no se aplique en
+   /instituto: es la regla del archivo (ver la nota de ~96). Mismo relevo
+   que usa .edu-link — --edu-500 no se redefine en oscuro, se cambia por
+   --edu-300, que sí contrasta contra #10162a. */
+.dark .edu-persona:hover,
+.dark .edu-persona:focus-visible {
+  color: var(--edu-300);
+}
+
+.dark .edu-persona:focus-visible {
+  outline-color: var(--edu-300);
+}
+
+/* EL PAPEL. Un recibo, una receta o un expediente impreso no llevan enlaces
+   azules: sobre papel un enlace no es nada, solo tinta rara encima del
+   nombre de un paciente.
+
+   Va en su PROPIO bloque en vez de dentro del @media print de ~5089 por la
+   misma razón que el de ~6134, que ya hizo esto mismo: el archivo se escribe
+   por apéndices, hay olas en paralelo tocándolo, y un cambio a mitad de
+   archivo les cuesta un conflicto para no ganar nada. */
+@media print {
+  .edu-persona,
+  .edu-persona:hover,
+  .edu-persona:focus-visible {
+    color: inherit;
+    text-decoration: none;
+    outline: none;
+    box-shadow: none;
+  }
+}
