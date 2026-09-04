@@ -668,6 +668,7 @@ function ahoraDePrueba(): EduDirAhora {
         esperaMinutos: 22,
         esperaEtapa: "Procedimiento",
         supervisorName: "Dr. Gómez",
+        supervisorId: "u1",
       },
     ],
     recepcion: [],

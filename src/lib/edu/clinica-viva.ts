@@ -239,9 +239,13 @@ export async function getEduClinicaViva(
       // El DOCENTE de la cita. Se cae al del caso cuando la cita no lo
       // lleva: son la misma persona en el caso normal, y la cita solo lo
       // guarda aparte cuando ese día supervisa otro.
-      supervisor: { select: { firstName: true, lastName: true } },
+      supervisor: { select: { id: true, firstName: true, lastName: true } },
       student: {
         select: {
+          // `id` es el de EduStudent —el que abre su ficha— y `userId` el de
+          // su cuenta. Los dos, porque `eduScopeCoversStudent` necesita el
+          // segundo y la ficha el primero. Confundirlos manda a un 404.
+          id: true,
           userId: true,
           matricula: true,
           user: { select: { firstName: true, lastName: true } },
@@ -262,7 +266,7 @@ export async function getEduClinicaViva(
           status: true,
           program: { select: { id: true, name: true } },
           procedure: { select: { name: true } },
-          supervisor: { select: { firstName: true, lastName: true } },
+          supervisor: { select: { id: true, firstName: true, lastName: true } },
         },
       },
     },
@@ -286,12 +290,19 @@ export async function getEduClinicaViva(
     // puro, que es el único que decide qué se calla (misma regla que el
     // nombre del paciente, dos renglones más abajo).
     patientId: a.patient?.id ?? undefined,
+    // El de EduStudent, no el de la cuenta: es lo que abre su ficha.
+    studentId: a.student?.id ?? undefined,
     specialtyId: a.case?.program?.id ?? a.student?.program?.id ?? null,
     caseLabel: eduVivaCaso(a),
     supervisor:
       persona(a.supervisor ?? a.case?.supervisor ?? null) === "—"
         ? null
         : persona(a.supervisor ?? a.case?.supervisor ?? null),
+    // 🔴 EL MISMO orden de preferencia que el NOMBRE de dos renglones
+    // arriba (la cita primero, el caso después). Si el id saliera de una
+    // fuente y el nombre de la otra, el enlace de "Dra. X" abriría la ficha
+    // de otra persona el día que el docente de la cita no es el del caso.
+    supervisorUserId: (a.supervisor ?? a.case?.supervisor ?? null)?.id ?? undefined,
     // 🔴 AQUÍ Y EN NINGÚN OTRO SITIO se decide si el nombre del paciente
     // sale de este proceso. Con el MISMO predicado de vigencia que el resto
     // del vertical: una asignación cerrada ayer ya no cuenta.

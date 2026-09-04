@@ -482,6 +482,7 @@ export async function getEduDireccionAhora(
           esperaMinutos: null,
           esperaEtapa: null,
           supervisorName: null,
+          supervisorId: null,
         };
       }
 
@@ -535,6 +536,8 @@ export async function getEduDireccionAhora(
         esperaMinutos,
         esperaEtapa: espera ? etapaLabel(espera.stage) : null,
         supervisorName: responsable?.name ?? null,
+        // Del MISMO `responsable` que el nombre, no de otra fuente.
+        supervisorId: responsable?.userId ?? null,
       };
     });
 
@@ -543,8 +546,12 @@ export async function getEduDireccionAhora(
     .filter((c) => !enSillonIds.has(c.id) && c.status === "CHECKED_IN")
     .map((c) => ({
       appointmentId: c.id,
+      patientId: c.patientId,
       patientName: persona(c.patient),
       patientFolio: c.patient.folio,
+      // `c.student.id` (EduStudent) y `c.studentId` son la misma columna;
+      // se toma la de la cita, que ya venía en el select.
+      studentId: c.studentId,
       studentName: persona(c.student.user),
       programName: c.student.program?.name ?? null,
       chairName: `${c.chair.number} · ${c.chair.name}`,

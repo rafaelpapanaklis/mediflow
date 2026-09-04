@@ -701,12 +701,23 @@ export interface EduDirSillonVivo {
   esperaMinutos: number | null;
   esperaEtapa: string | null;
   supervisorName: string | null;
+  /**
+   * El id de **EduUser** del docente que responde por el sillón — el mismo
+   * de `supervisorName`, venga de la cita o de la titularidad vigente. Si
+   * uno saliera de una fuente y el otro de la otra, el enlace abriría la
+   * ficha de un docente distinto del que se lee.
+   */
+  supervisorId: string | null;
 }
 
 export interface EduDirRecepcionFila {
   appointmentId: string;
+  /** El id de EduPatient. La sala de espera es de dirección: nada se calla. */
+  patientId: string;
   patientName: string;
   patientFolio: string;
+  /** El id de **EduStudent** (no el de su cuenta). */
+  studentId: string;
   studentName: string;
   programName: string | null;
   chairName: string;

@@ -229,7 +229,7 @@ export async function listEduTeam(
       permissionsOverride: true,
       lastLogin: true,
       createdAt: true,
-      studentProfile: { select: { matricula: true } },
+      studentProfile: { select: { id: true, matricula: true } },
     },
   });
 
@@ -249,6 +249,8 @@ export async function listEduTeam(
       // así que quien lo recibe es quien puede escribirlo.
       permissionsOverride: u.permissionsOverride ?? [],
       hasStudentProfile: Boolean(u.studentProfile),
+      // El de EduStudent. `u.id` es el de la cuenta y NO sirve para la ficha.
+      studentId: u.studentProfile?.id ?? null,
       matricula: u.studentProfile?.matricula ?? null,
       lastLogin: iso(u.lastLogin),
       createdAt: u.createdAt.toISOString(),

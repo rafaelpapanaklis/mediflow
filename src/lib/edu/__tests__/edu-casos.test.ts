@@ -340,6 +340,7 @@ function fila(sobre: Partial<EduCasosPanelRow>): EduCasosPanelRow {
     studentName: "Alumno Uno",
     studentMatricula: "A-001",
     supervisorName: "Dra. Vega",
+    supervisorUserId: "u_vega",
     programName: "Endodoncia",
     cohortName: "2026-A",
     semester: 3,
