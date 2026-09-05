@@ -20,6 +20,7 @@ import {
   eduAgeYears,
   eduHasPatientFilters,
   eduPatientFullName,
+  eduPatientOptionsPageOf,
   eduPatientSearchTokens,
   eduPhoneSearchToken,
   normalizeEduEmail,
@@ -28,6 +29,7 @@ import {
   parseEduPatientFilters,
   parseEduPatientStatus,
   parseEduSex,
+  type EduPatientOption,
 } from "../pacientes-core";
 import {
   EDU_PATIENT_STATUSES,
@@ -218,4 +220,29 @@ test("el nombre completo no deja el espacio de más cuando falta el apellido", (
   assert.equal(eduPatientFullName({ firstName: "Ana", lastName: "López" }), "Ana López");
   assert.equal(eduPatientFullName({ firstName: "Ana", lastName: "" }), "Ana");
   assert.equal(eduPatientFullName({ firstName: "", lastName: "" }), "Sin nombre");
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// El <select> de pacientes (agendar): el 301 tiene que ser VISIBLE
+// ─────────────────────────────────────────────────────────────────────
+
+function opcionesDePrueba(n: number): EduPatientOption[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `p${i}`,
+    folio: String(i).padStart(4, "0"),
+    name: `Paciente ${i}`,
+    status: "ACTIVE" as const,
+  }));
+}
+
+test("🔴 con 301 opciones el corte queda marcado (antes se perdía en silencio)", () => {
+  const pagina = eduPatientOptionsPageOf(opcionesDePrueba(301));
+  assert.equal(pagina.truncated, true);
+  assert.equal(pagina.rows.length, 300);
+});
+
+test("con 300 opciones justas no hay corte que avisar", () => {
+  const pagina = eduPatientOptionsPageOf(opcionesDePrueba(300));
+  assert.equal(pagina.truncated, false);
+  assert.equal(pagina.rows.length, 300);
 });

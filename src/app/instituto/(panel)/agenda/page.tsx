@@ -126,7 +126,9 @@ export default async function InstitutoAgendaPage({
     canManage ? listEduStudentOptions(ctx, now) : Promise.resolve([]),
     canManage ? listEduSupervisorOptions(ctx) : Promise.resolve([]),
     listEduPrograms(ctx),
-    canManage ? listEduPatientOptions(ctx, now) : Promise.resolve([]),
+    canManage
+      ? listEduPatientOptions(ctx, now)
+      : Promise.resolve({ rows: [], truncated: false }),
   ]);
 
   return (
@@ -195,7 +197,8 @@ export default async function InstitutoAgendaPage({
         students={alumnos}
         supervisors={docentes}
         programs={programas.map((p) => ({ id: p.id, name: p.name }))}
-        patients={pacientes.map((p) => ({ id: p.id, folio: p.folio, name: p.name }))}
+        patients={pacientes.rows.map((p) => ({ id: p.id, folio: p.folio, name: p.name }))}
+        patientsTruncated={pacientes.truncated}
         canManage={canManage}
         todayISO={eduTodayISO(tz, now)}
         timezone={tz}

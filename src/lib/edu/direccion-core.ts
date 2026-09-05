@@ -679,6 +679,8 @@ export interface EduDirCifra {
    * bloque de cuatro, y meterla como texto la dejaría sin poder abrirse.
    */
   sub: EduDirCifra | null;
+  /** Unidad de `raw` para el CSV (periodo anterior = raw - delta). Ausente = "conteo". */
+  unidad?: "conteo" | "dinero";
 }
 
 // ── El bloque EN VIVO ───────────────────────────────────────────────────
@@ -1092,7 +1094,11 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
         eduCsvRow([
           c.label,
           c.value,
-          c.variacion ? c.raw - c.variacion.delta : "",
+          c.variacion
+            ? c.unidad === "dinero"
+              ? eduMoney(c.raw - c.variacion.delta)
+              : c.raw - c.variacion.delta
+            : "",
           c.variacion ? c.variacion.texto : "",
         ]),
       );

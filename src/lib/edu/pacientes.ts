@@ -44,9 +44,11 @@ import {
   parseEduAntecedentes,
   parseEduPatientStatus,
   parseEduSex,
+  eduPatientOptionsPageOf,
   type EduAntecedentesInput,
   type EduPatientFilters,
   type EduPatientOption,
+  type EduPatientOptionsPage,
   type EduPatientRow,
   type EduPatientsPage,
 } from "@/lib/edu/pacientes-core";
@@ -72,6 +74,7 @@ export type {
   EduPatientRow,
   EduPatientsPage,
   EduPatientOption,
+  EduPatientOptionsPage,
   EduPatientOrigin,
 } from "@/lib/edu/pacientes-core";
 
@@ -271,23 +274,25 @@ export async function getEduPatient(
 export async function listEduPatientOptions(
   ctx: EduClinicaContext,
   now: Date = new Date(),
-): Promise<EduPatientOption[]> {
+): Promise<EduPatientOptionsPage> {
   const institutionId = requireInstitution(ctx);
   const scope = eduVisibility(ctx, "patients");
-  if (eduScopeIsEmpty(scope)) return [];
+  if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
 
   const rows = await prisma.eduPatient.findMany({
     where: eduPatientScopeWhere({ institutionId, scope, now }),
     orderBy: [{ folio: "asc" }],
-    take: EDU_CLINICA_MAX_ROWS,
+    take: EDU_CLINICA_MAX_ROWS + 1,
     select: { id: true, folio: true, firstName: true, lastName: true, status: true },
   });
-  return rows.map((p) => ({
-    id: p.id,
-    folio: p.folio,
-    name: eduPatientFullName(p),
-    status: p.status,
-  }));
+  return eduPatientOptionsPageOf(
+    rows.map((p) => ({
+      id: p.id,
+      folio: p.folio,
+      name: eduPatientFullName(p),
+      status: p.status,
+    })),
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════

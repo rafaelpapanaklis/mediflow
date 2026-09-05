@@ -207,7 +207,7 @@ test("un sillón SIN ligar se acepta (se dibuja primero y se liga después) y se
 
 test("un sillón que se dio de baja DESPUÉS de dibujarlo sale como colgante, no rompe el guardado", () => {
   const elements = [
-    { id: 1, type: "sillon", col: 3, row: 3, rotation: 0, resourceId: "ch_borrado", name: "Sillón 9" },
+    { id: 1, type: "sillon", col: 3, row: 3, rotation: 0 as const, resourceId: "ch_borrado", name: "Sillón 9" },
   ];
   // La LECTURA lo marca…
   const rev = eduPlanoRevision(elements, SILLONES);
@@ -719,7 +719,7 @@ test("🔴 el id del paciente NO viaja en el estado del mundo", () => {
   // El mundo es un JSON que sale al navegador cada veinte segundos para los
   // treinta sillones. El id solo hace falta cuando alguien clica una figura,
   // y para eso la pantalla usa el tablero del mismo payload.
-  assert.equal((estado as Record<string, unknown>).patientId, undefined);
+  assert.equal((estado as unknown as Record<string, unknown>).patientId, undefined);
 });
 
 test("un sillón LIBRE no manda a nadie (ni el nombre de quien llega en cuatro horas)", () => {
@@ -840,7 +840,7 @@ test("🔴 ni ALUMNO ni CAJA llegan al plano: ni el permiso ni el alcance", () =
 test("🔴 «acomodar el plano» es una key APARTE y solo la lleva quien dirige", () => {
   assert.ok("clinica.edit" in EDU_ALL_PERMISSIONS);
   const desc = EDU_ALL_PERMISSIONS["clinica.edit"];
-  assert.ok(desc && desc.length > 8 && desc !== "clinica.edit", "la casilla tiene que explicarse");
+  assert.ok(desc && desc.length > 8 && (desc as string) !== "clinica.edit", "la casilla tiene que explicarse");
 
   const conLaKey = (Object.keys(EDU_ROLE_DEFAULTS) as EduRole[]).filter((r) =>
     EDU_ROLE_DEFAULTS[r].includes("clinica.edit"),

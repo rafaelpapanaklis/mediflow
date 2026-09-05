@@ -15,6 +15,7 @@ import {
 import {
   EDU_APPOINTMENT_DEFAULT_MINUTES,
   EDU_APPOINTMENT_TRANSITIONS,
+  EDU_CLINICA_MAX_ROWS,
   eduFormatDayShort,
   type EduAppointmentRow,
   type EduChairOption,
@@ -60,6 +61,7 @@ export function EduAgendaAlta({
   students,
   supervisors,
   patients,
+  patientsTruncated,
   dayISO,
   slot,
   onClose,
@@ -69,6 +71,7 @@ export function EduAgendaAlta({
   students: EduStudentOption[];
   supervisors: EduSupervisorOption[];
   patients: { id: string; folio: string; name: string }[];
+  patientsTruncated: boolean;
   dayISO: string;
   /** El hueco que se tocó en la rejilla, si el alta nace de ahí. */
   slot: { chairId: string; startLabel: string } | null;
@@ -182,6 +185,12 @@ export function EduAgendaAlta({
             </option>
           ))}
         </select>
+        {patientsTruncated && (
+          <span className="edu-field__hint">
+            Se muestran los primeros {EDU_CLINICA_MAX_ROWS} pacientes por folio. Si no está el
+            que buscas, ábrelo desde Pacientes.
+          </span>
+        )}
       </div>
 
       <div className="edu-formgrid edu-formgrid--2">

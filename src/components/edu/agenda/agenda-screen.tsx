@@ -147,6 +147,7 @@ export interface EduAgendaScreenProps {
   supervisors: EduSupervisorOption[];
   programs: { id: string; name: string }[];
   patients: { id: string; folio: string; name: string }[];
+  patientsTruncated: boolean;
   canManage: boolean;
   todayISO: string;
   /** La zona del INSTITUTO (o de la sede). Solo se usa para el choque. */
@@ -170,6 +171,7 @@ export function EduAgendaScreen({
   supervisors,
   programs,
   patients,
+  patientsTruncated,
   canManage,
   todayISO,
   timezone,
@@ -972,6 +974,7 @@ export function EduAgendaScreen({
           students={students}
           supervisors={supervisors}
           patients={patients}
+          patientsTruncated={patientsTruncated}
           dayISO={query.dayISO}
           slot={alta}
           onClose={() => {
