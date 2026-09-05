@@ -162,6 +162,107 @@
   color: var(--text-3);
 }
 
+/* Fila de la conversación: el botón que la abre + sus acciones (renombrar,
+   borrar). El item era antes un <button> suelto; los botones de acción no
+   pueden anidarse dentro de otro botón, así que la fila pasa a ser el
+   contenedor y el item, uno de sus hijos. */
+.convRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 7px;
+}
+/* min-width:0 es obligatorio: sin él, el .convItemTitle con overflow:hidden no
+   puede encogerse por debajo de su contenido y la fila desborda el aside en vez
+   de recortar el título con puntos suspensivos. */
+.convRow > .convItem {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+.convActions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  padding-right: 4px;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+.convRow:hover .convActions,
+.convRow:focus-within .convActions { opacity: 1; }
+/* En táctil no hay hover: las acciones se quedan visibles. */
+@media (hover: none) {
+  .convActions { opacity: 1; }
+}
+.convAction {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.convAction:hover { background: var(--bg-elev-2); color: var(--text-1); }
+.convAction:focus-visible { outline: none; box-shadow: var(--ring); }
+.convActionDanger:hover { color: var(--danger); }
+
+.convRename {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 4px 4px 10px;
+}
+.convRenameInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-brand, var(--border-soft));
+  border-radius: 6px;
+}
+.convRenameInput:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* La conversación abierta no se pudo leer. Ocupa el sitio de la pantalla de
+   bienvenida: pintar la bienvenida aquí haría creer que está vacía. */
+.loadFailed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 48px 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+/* Cargando el historial (listado o una conversación) */
+.convListLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.spin { animation: aiSpin 900ms linear infinite; }
+@keyframes aiSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* Estado vacío (sin conversaciones) — botón primario compacto */
 .emptyStartBtn {
   margin-top: 4px;
@@ -264,6 +365,23 @@
 /* ─── Cupo de IA (banner + medidor del mes) ─────────────────
    Banda secundaria bajo el header del chat, no scrollea con los
    mensajes. Sin anchos fijos: todo fluye y el texto largo elide. */
+/* Aviso de PERSISTENCIA del historial. No es el error del chat (ese va en
+   .errorBubble, dentro del hilo): esto avisa de que no se puede leer o guardar
+   el historial —normalmente porque falta aplicar el .sql en Supabase— mientras
+   preguntarle a la IA sigue funcionando. Tono de advertencia, no de error. */
+.historyNotice {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 22px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--warning, var(--text-2));
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border-soft);
+}
+
 .quotaStrip {
   flex-shrink: 0;
   padding: 10px 22px 11px;
