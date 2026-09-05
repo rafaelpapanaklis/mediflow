@@ -3,9 +3,14 @@
  * git-guard.cjs — hook PreToolUse (Bash|PowerShell) de Claude Code.
  *
  * Lee el payload JSON del hook por stdin y BLOQUEA (exit 2 + mensaje en stderr):
- *   1. push a main en cualquiera de sus formas, salvo desde el clon principal.
- *   2. cualquier push forzado (--force, --force-with-lease, -f).
- *   3. git reset --hard fuera del clon principal.
+ *   1. push a main en cualquiera de sus formas, en CUALQUIER cwd (clon principal
+ *      incluido), salvo que el comando lleve la llave INTEGRACION_OLA=1 como
+ *      prefijo de entorno o que process.env.INTEGRACION_OLA === '1'.
+ *   2. gh pr merge (con cualquier flag): siempre, con o sin llave.
+ *   3. git merge en main del clon principal sin la llave (paso previo al push suelto).
+ *   4. cualquier push forzado (--force, --force-with-lease, -f).
+ *   5. push --all / --mirror / --branches fuera del clon principal.
+ *   6. git reset --hard fuera del clon principal.
  * Todo lo demas pasa (exit 0). Si algo no se puede parsear, deja pasar.
  */
 
@@ -14,6 +19,25 @@ const path = require('node:path');
 
 const CLON_PRINCIPAL = 'c:/users/rafael/documents/github/mediflow';
 const RAMAS_PROTEGIDAS = new Set(['main', 'master']);
+
+/** Llave de la pestana Integracion de NEXUS: sin ella, main no se toca. */
+const NOMBRE_LLAVE = 'INTEGRACION_OLA';
+const RE_ASIGNACION = /^(?:\$env:)?[A-Za-z_][A-Za-z0-9_]*=/;
+const RE_LLAVE = new RegExp(`^(?:\\$env:)?${NOMBRE_LLAVE}=1$`, 'i');
+const RE_NOMBRE_LLAVE_PS = new RegExp(`^\\$env:${NOMBRE_LLAVE}$`, 'i');
+
+const MSG_PUSH_MAIN =
+  'Push a main bloqueado. La integración sale del prompt de la pestaña Integración de NEXUS, ' +
+  'que lleva la llave INTEGRACION_OLA=1.\n' +
+  'Tu terminal termina en: git push -u origin <tu-rama> + gh pr create.';
+
+const MSG_GH_MERGE =
+  'gh pr merge bloqueado: los PR no se fusionan uno por uno, ni con llave.\n' +
+  'La integración sale del prompt de la pestaña Integración de NEXUS.';
+
+const MSG_MERGE_EN_MAIN =
+  'git merge en main del clon principal bloqueado: es el paso previo al push suelto a main.\n' +
+  'La integración sale del prompt de la pestaña Integración de NEXUS, que lleva la llave INTEGRACION_OLA=1.';
 
 /** Comandos que solo imprimen texto: lo que lleven dentro no se ejecuta. */
 const SOLO_IMPRIMEN = new Set(['echo', 'printf', 'cat', 'write-host', 'write-output', 'type']);
@@ -74,6 +98,11 @@ function esGit(token) {
   return base.replace(/\.(exe|cmd|bat)$/, '') === 'git';
 }
 
+function esGh(token) {
+  const base = String(token).replace(/\\/g, '/').split('/').pop().toLowerCase();
+  return base.replace(/\.(exe|cmd|bat)$/, '') === 'gh';
+}
+
 function esRutaAbsoluta(p) {
   return /^([a-z]:|\/|\\\\)/i.test(String(p).replace(/\\/g, '/'));
 }
@@ -113,25 +142,57 @@ function esFlagTodasLasRamas(token) {
  * @param {string} command
  * @param {string} cwd
  * @param {(cwd: string) => string|null} getBranch
- * @param {number} [profundidad]
+ * @param {{llave?: boolean, profundidad?: number}} [opts] llave = INTEGRACION_OLA=1 en el entorno
  * @returns {{block: boolean, reason?: string}}
  */
-function decide(command, cwd, getBranch, profundidad = 0) {
+function decide(command, cwd, getBranch, opts = {}) {
   if (!command || typeof command !== 'string') return { block: false };
+  const profundidad = opts.profundidad || 0;
   if (profundidad > 3) return { block: false };
   let cwdActual = cwd || '';
+  let llave = opts.llave === true;
 
   for (const segmento of splitSegments(limpiarComando(command))) {
     let tokens = tokenize(segmento);
     if (tokens.length === 0) continue;
 
-    // `cd <ruta>` cambia el cwd efectivo; el resto del segmento se sigue analizando.
-    while (tokens.length && /^(cd|chdir|set-location|sl)$/i.test(tokens[0])) {
-      let consumidos = 1;
-      if (tokens[1] === '/d' || tokens[1] === '-d') consumidos = 2; // cd /d de cmd.exe
-      const destino = tokens[consumidos];
-      if (destino) cwdActual = resolverCwd(cwdActual, destino);
-      tokens = tokens.slice(destino ? consumidos + 1 : consumidos);
+    // Prefijos que no son el comando: `cd <ruta>` mueve el cwd efectivo y
+    // `VAR=valor` / `export VAR=valor` / `$env:VAR = valor` declaran entorno.
+    // Si la declaracion es la llave, queda activa para lo que venga detras.
+    for (let cambio = true; cambio && tokens.length; ) {
+      cambio = false;
+
+      if (/^(cd|chdir|set-location|sl)$/i.test(tokens[0])) {
+        let consumidos = 1;
+        if (tokens[1] === '/d' || tokens[1] === '-d') consumidos = 2; // cd /d de cmd.exe
+        const destino = tokens[consumidos];
+        if (destino) cwdActual = resolverCwd(cwdActual, destino);
+        tokens = tokens.slice(destino ? consumidos + 1 : consumidos);
+        cambio = true;
+        continue;
+      }
+
+      // `export VAR=1`, `set VAR=1`: el verbo se descarta, la asignacion se mira abajo.
+      if (/^(export|set|setx|env)$/i.test(tokens[0]) && tokens[1] && RE_ASIGNACION.test(tokens[1])) {
+        tokens = tokens.slice(1);
+        cambio = true;
+        continue;
+      }
+
+      // PowerShell con espacios: `$env:INTEGRACION_OLA = '1'`.
+      if (RE_NOMBRE_LLAVE_PS.test(tokens[0]) && tokens[1] === '=') {
+        if (String(tokens[2]) === '1') llave = true;
+        tokens = tokens.slice(3);
+        cambio = true;
+        continue;
+      }
+
+      if (RE_ASIGNACION.test(tokens[0])) {
+        if (RE_LLAVE.test(tokens[0])) llave = true;
+        tokens = tokens.slice(1);
+        cambio = true;
+        continue;
+      }
     }
     if (tokens.length === 0) continue;
 
@@ -142,9 +203,22 @@ function decide(command, cwd, getBranch, profundidad = 0) {
     if (WRAPPERS.has(primero.replace(/\.exe$/, ''))) {
       const iFlag = tokens.findIndex((t) => /^(-c|--command|-command|\/c|\/k|-e)$/i.test(t));
       if (iFlag !== -1 && tokens[iFlag + 1]) {
-        const dentro = decide(tokens.slice(iFlag + 1).join(' '), cwdActual, getBranch, profundidad + 1);
+        const dentro = decide(tokens.slice(iFlag + 1).join(' '), cwdActual, getBranch, {
+          llave,
+          profundidad: profundidad + 1,
+        });
         if (dentro.block) return dentro;
         continue;
+      }
+    }
+
+    // `gh pr merge` (con cualquier flag) se bloquea SIEMPRE, con o sin llave:
+    // los PR no se fusionan uno por uno.
+    const iGh = tokens.findIndex(esGh);
+    if (iGh !== -1) {
+      const pos = tokens.slice(iGh + 1).filter((t) => !String(t).startsWith('-'));
+      if (/^pr$/i.test(pos[0] || '') && /^merge$/i.test(pos[1] || '')) {
+        return { block: true, reason: MSG_GH_MERGE };
       }
     }
 
@@ -212,15 +286,19 @@ function decide(command, cwd, getBranch, profundidad = 0) {
         if (rama && RAMAS_PROTEGIDAS.has(rama.toLowerCase())) esMain = true;
       }
 
-      if (esMain && !enClon) {
-        return {
-          block: true,
-          reason:
-            `Push a main bloqueado desde ${cwdSegmento || '(cwd desconocido)'}.\n` +
-            'Los worktrees y clones secundarios empujan SIEMPRE a su propia rama:\n' +
-            '  git push -u origin <tu-rama>\n' +
-            'La integracion a main la hace Rafael en un solo push desde el clon principal.',
-        };
+      // Sin llave, main no se toca desde ningun cwd: el clon principal tampoco.
+      if (esMain && !llave) {
+        return { block: true, reason: MSG_PUSH_MAIN };
+      }
+    }
+
+    // `git merge` en main del clon principal es el paso previo al push suelto.
+    // --abort/--continue/--quit solo cierran un merge en curso: pasan.
+    if (sub === 'merge' && !llave && isMainClone(cwdSegmento)) {
+      const cierra = args.some((a) => a === '--abort' || a === '--continue' || a === '--quit');
+      const rama = cierra ? null : getBranch(cwdSegmento);
+      if (rama && RAMAS_PROTEGIDAS.has(rama.toLowerCase())) {
+        return { block: true, reason: MSG_MERGE_EN_MAIN };
       }
     }
 
@@ -271,7 +349,8 @@ function main() {
   try {
     const command = payload && payload.tool_input && payload.tool_input.command;
     const cwd = (payload && payload.cwd) || process.cwd();
-    const veredicto = decide(command, cwd, ramaActual);
+    const llave = process.env[NOMBRE_LLAVE] === '1';
+    const veredicto = decide(command, cwd, ramaActual, { llave });
     if (veredicto.block) {
       process.stderr.write('[git-guard] ' + veredicto.reason + '\n');
       process.exit(2);
