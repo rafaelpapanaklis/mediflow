@@ -12,6 +12,7 @@ import {
   EDU_APPOINTMENT_TYPE_LABELS,
   type EduAppointmentStatus,
 } from "@/lib/edu/types";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { EduDenied } from "@/components/edu/edu-denied";
 
 /**
@@ -50,8 +51,19 @@ function Cita({ a, conSede }: { a: EduAppointmentRow; conSede: boolean }) {
             {eduFormatDayShort(a.dayISO)} · {a.startLabel}–{a.endLabel}
           </span>
           <span className="edu-nota__who">
-            {a.studentMatricula} · {a.studentName}
-            {a.supervisorName ? ` · supervisa ${a.supervisorName}` : ""}
+            <EduPersonaLink kind="estudiante" id={a.studentId}>
+              {a.studentMatricula} · {a.studentName}
+            </EduPersonaLink>
+            {a.supervisorName ? (
+              <>
+                {" · supervisa "}
+                <EduPersonaLink kind="docente" id={a.supervisorUserId}>
+                  {a.supervisorName}
+                </EduPersonaLink>
+              </>
+            ) : (
+              ""
+            )}
           </span>
         </div>
         <span className={`edu-tag ${TAG_BY_STATUS[a.status]}`}>

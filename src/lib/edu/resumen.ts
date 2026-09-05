@@ -82,8 +82,16 @@ function stampLabel(d: Date, timeZone: string): string {
 /** El `select` de las dos citas del resumen (última y próxima). */
 const CITA_RESUMEN_SELECT = {
   startsAt: true,
+  // `supervisorUserId` es la columna de la CITA y `student.id` el de
+  // EduStudent: los dos ids que abren una ficha de persona. El de la cuenta
+  // del alumno NO sirve para eso (daría un 404 mudo).
+  supervisorUserId: true,
   student: {
-    select: { matricula: true, user: { select: { firstName: true, lastName: true, email: true } } },
+    select: {
+      id: true,
+      matricula: true,
+      user: { select: { firstName: true, lastName: true, email: true } },
+    },
   },
   chair: { select: { name: true, campus: { select: { name: true } } } },
   supervisor: { select: { firstName: true, lastName: true, email: true } },
@@ -91,7 +99,9 @@ const CITA_RESUMEN_SELECT = {
 
 type CitaResumenPayload = {
   startsAt: Date;
+  supervisorUserId: string | null;
   student: {
+    id: string;
     matricula: string;
     user: { firstName: string; lastName: string; email: string };
   };
@@ -107,12 +117,15 @@ function toCita(
   if (!c) return null;
   return {
     label: stampLabel(c.startsAt, timeZone),
+    studentId: c.student.id,
     studentName: personName(c.student.user),
     studentMatricula: c.student.matricula,
     chairName: c.chair?.name ?? null,
     // La sede solo se dice cuando hay MÁS de una: "Sillón 3 · Sede única"
     // es ruido en la escuela chica, que son casi todas (regla de la Ola 11).
     campusName: multiSede ? (c.chair?.campus.name ?? null) : null,
+    // Del MISMO sitio que el nombre: la columna de la cita.
+    supervisorUserId: c.supervisorUserId,
     supervisorName: c.supervisor ? personName(c.supervisor) : null,
   };
 }
@@ -187,6 +200,7 @@ export async function getEduPatientResumen(
             program: { select: { name: true } },
             student: {
               select: {
+                id: true,
                 matricula: true,
                 user: { select: { firstName: true, lastName: true, email: true } },
                 // El titular VIGENTE del alumno: decide el aviso "sin
@@ -403,8 +417,11 @@ export async function getEduPatientResumen(
           id: c.id,
           status: c.status,
           programName: c.program.name,
+          studentId: c.student.id,
           studentName: personName(c.student.user),
           studentMatricula: c.student.matricula,
+          // La columna del caso, la misma de la que sale el nombre.
+          supervisorUserId: c.supervisorUserId,
           supervisorName: c.supervisor ? personName(c.supervisor) : null,
           abiertoLabel: eduFormatDayShort(eduUtcToZoned(c.openedAt, tz).dayISO),
           espera: eduCasoEsperando(c.status, approvalsPorCaso.get(c.id) ?? []),

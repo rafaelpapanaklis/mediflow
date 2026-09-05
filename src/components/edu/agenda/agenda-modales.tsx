@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_APPOINTMENT_STATUS_LABELS,
   EDU_APPOINTMENT_TYPES,
@@ -308,9 +309,17 @@ export function EduAgendaAlta({
           ))}
         </select>
         <span className="edu-field__hint">
-          {alumno?.supervisorName
-            ? `Se propone el titular vigente de ${alumno.matricula}: ${alumno.supervisorName}.`
-            : "Este estudiante no tiene titular vigente. Asígnale uno en Estudiantes si hace falta."}
+          {alumno?.supervisorName ? (
+            <>
+              Se propone el titular vigente de {alumno.matricula}:{" "}
+              <EduPersonaLink kind="docente" id={alumno.supervisorUserId}>
+                {alumno.supervisorName}
+              </EduPersonaLink>
+              .
+            </>
+          ) : (
+            "Este estudiante no tiene titular vigente. Asígnale uno en Estudiantes si hace falta."
+          )}
         </span>
       </div>
 
@@ -418,7 +427,11 @@ export function EduAgendaDetalle({
 
   return (
     <EduModal
-      title={row.patientName}
+      title={
+        <EduPersonaLink kind="paciente" id={row.patientId}>
+          {row.patientName}
+        </EduPersonaLink>
+      }
       subtitle={`${eduFormatDayShort(row.dayISO)} · ${row.startLabel}–${row.endLabel} · ${row.chairName}`}
       onClose={onClose}
       busy={busy}
@@ -457,7 +470,9 @@ export function EduAgendaDetalle({
         <div>
           <span className="edu-kv__k">Estudiante</span>
           <span className="edu-kv__v">
-            {row.studentMatricula} · {row.studentName}
+            <EduPersonaLink kind="estudiante" id={row.studentId}>
+              {row.studentMatricula} · {row.studentName}
+            </EduPersonaLink>
           </span>
         </div>
         <div>
@@ -466,7 +481,11 @@ export function EduAgendaDetalle({
         </div>
         <div>
           <span className="edu-kv__k">Docente</span>
-          <span className="edu-kv__v">{row.supervisorName ?? "Sin docente asignado"}</span>
+          <span className="edu-kv__v">
+            <EduPersonaLink kind="docente" id={row.supervisorUserId}>
+              {row.supervisorName ?? "Sin docente asignado"}
+            </EduPersonaLink>
+          </span>
         </div>
         <div>
           <span className="edu-kv__k">Tipo</span>

@@ -1015,6 +1015,8 @@ function toCasoPanelRow(c: CasoPanelPayload, tz: string): EduCasosPanelRow {
     studentName: personName(c.student.user),
     studentMatricula: c.student.matricula,
     supervisorName: c.supervisor ? personName(c.supervisor) : null,
+    // El id de la columna del caso, la misma de la que sale el nombre.
+    supervisorUserId: c.supervisorUserId,
     programName: c.program.name,
     cohortName: c.student.cohort?.name ?? null,
     semester: c.student.semester,

@@ -101,6 +101,12 @@ export interface EduTeamRow {
   permissionsOverride: string[];
   /** Ya tiene ficha académica (solo los ALUMNO la tienen). */
   hasStudentProfile: boolean;
+  /**
+   * 🔴 El id de **EduStudent**, que NO es `id` (ese es el de EduUser). Es el
+   * único que abre /instituto/estudiantes/{id}: pasar el de la cuenta da un
+   * 404 mudo. `null` para quien no es alumno.
+   */
+  studentId: string | null;
   matricula: string | null;
   lastLogin: string | null;
   createdAt: string;

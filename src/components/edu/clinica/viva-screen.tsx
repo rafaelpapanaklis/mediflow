@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { EDU_CAMPUS_ALL } from "@/lib/edu/campus-core";
 import {
   EDU_VIVA_PROXIMA_MIN,
@@ -328,10 +329,16 @@ function Tarjeta({
             </>
           ) : (
             <>
-              <p className="edu-viva__paciente">{card.patient}</p>
+              <p className="edu-viva__paciente">
+                <EduPersonaLink kind="paciente" id={card.patientId}>
+                  {card.patient}
+                </EduPersonaLink>
+              </p>
               {card.patientFolio && <p className="edu-viva__folio">{card.patientFolio}</p>}
               <p className="edu-viva__meta">
-                {card.student}
+                <EduPersonaLink kind="estudiante" id={card.studentId}>
+                  {card.student}
+                </EduPersonaLink>
                 {card.studentMatricula ? ` · ${card.studentMatricula}` : ""}
               </p>
               {card.specialty && <p className="edu-viva__esp">{card.specialty}</p>}
@@ -369,9 +376,15 @@ function Tarjeta({
             </>
           ) : (
             <>
-              <p className="edu-viva__paciente">{card.patient}</p>
+              <p className="edu-viva__paciente">
+                <EduPersonaLink kind="paciente" id={card.patientId}>
+                  {card.patient}
+                </EduPersonaLink>
+              </p>
               <p className="edu-viva__meta">
-                {card.student}
+                <EduPersonaLink kind="estudiante" id={card.studentId}>
+                  {card.student}
+                </EduPersonaLink>
                 {card.studentMatricula ? ` · ${card.studentMatricula}` : ""}
               </p>
               {card.specialty && <p className="edu-viva__esp">{card.specialty}</p>}

@@ -189,7 +189,41 @@ const CONSENT_SELECT = {
 
 type ConsentPayload = Prisma.EduConsentGetPayload<{ select: typeof CONSENT_SELECT }>;
 
-function toRow(c: ConsentPayload, timeZone: string, meUserId: string, now: Date): EduConsentRow {
+/**
+ * userId (EduUser) → id (EduStudent), para las filas de la pantalla.
+ *
+ * Una consulta por página, no una por fila. Sale del `studentUserId` que
+ * guarda la CARTA —no de `case.student`— porque esa es la columna de la que
+ * salen también `studentName` y `studentMatricula`: si el id viniera del
+ * caso, el enlace podría abrir la ficha de alguien distinto del nombre que
+ * se está leyendo el día que las dos columnas no coincidan.
+ *
+ * `userId` es `@unique` en EduStudent, así que el mapa es uno a uno.
+ * `institutionId` va en el where aunque `userId` ya sea único: un id de otra
+ * institución tiene que devolver vacío, no la fila de la vecina.
+ */
+async function mapaEstudiantePorUsuario(
+  institutionId: string,
+  userIds: (string | null)[],
+): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(userIds.filter((v): v is string => typeof v === "string" && v !== "")));
+  const mapa = new Map<string, string>();
+  if (ids.length === 0) return mapa;
+  const filas = await prisma.eduStudent.findMany({
+    where: { institutionId, userId: { in: ids } },
+    select: { id: true, userId: true },
+  });
+  for (const f of filas) mapa.set(f.userId, f.id);
+  return mapa;
+}
+
+function toRow(
+  c: ConsentPayload,
+  timeZone: string,
+  meUserId: string,
+  now: Date,
+  estudiantePorUsuario: Map<string, string>,
+): EduConsentRow {
   const estado = eduConsentEstado(c, now);
   const firmado = c.signedAt !== null;
   const vivo = c.revokedAt === null;
@@ -205,6 +239,7 @@ function toRow(c: ConsentPayload, timeZone: string, meUserId: string, now: Date)
     caseProgramName: c.case ? c.case.program.name : null,
 
     studentUserId: c.studentUserId,
+    studentId: c.studentUserId ? estudiantePorUsuario.get(c.studentUserId) ?? null : null,
     studentName: c.studentName,
     studentMatricula: c.studentMatricula,
     supervisorUserId: c.supervisorUserId,
@@ -275,7 +310,12 @@ export async function listEduPatientConsents(
     select: CONSENT_SELECT,
   });
 
-  return rows.map((r) => toRow(r, timeZone, ctx.eduUserId, now));
+  const estudiantePorUsuario = await mapaEstudiantePorUsuario(
+    institutionId,
+    rows.map((r) => r.studentUserId),
+  );
+
+  return rows.map((r) => toRow(r, timeZone, ctx.eduUserId, now, estudiantePorUsuario));
 }
 
 // ═══════════════════════════════════════════════════════════════════════

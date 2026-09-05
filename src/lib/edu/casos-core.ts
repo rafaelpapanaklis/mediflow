@@ -281,6 +281,8 @@ export interface EduCasosPanelRow {
   /** El docente RESPONSABLE del caso (columna del caso, congelada al
    *  abrirlo). null = el caso nació sin responsable designado. */
   supervisorName: string | null;
+  /** Su id de **EduUser** (no hay EduTeacher), para abrir su ficha. */
+  supervisorUserId: string | null;
 
   programName: string;
   /** La generación del ALUMNO ("2026-A"). El caso no guarda generación:

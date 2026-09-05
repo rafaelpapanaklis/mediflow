@@ -14,6 +14,7 @@ import {
   type EduPagoDraft,
 } from "@/components/edu/dinero/formas-pago";
 import { eduMoney } from "@/lib/edu/dinero-core";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   eduFechaLarga,
   eduInstallmentsDueBetween,
@@ -442,7 +443,10 @@ function UrgenciaLista({
           {items.slice(0, 8).map(({ plan, installment }) => (
             <div className="edu-pago" key={installment.id}>
               <span className="edu-pago__q">
-                {plan.patientName} · {plan.chargeFolio} · mensualidad {installment.number} de{" "}
+                <EduPersonaLink kind="paciente" id={plan.patientId}>
+                  {plan.patientName}
+                </EduPersonaLink>{" "}
+                · {plan.chargeFolio} · mensualidad {installment.number} de{" "}
                 {plan.months} · vence {eduFechaLarga(installment.dueDateISO)}
               </span>
               <span className="edu-precio">{eduMoney(installment.amountCents)}</span>
@@ -474,7 +478,11 @@ function PlanFila({ plan, onVer }: { plan: EduPlanRow; onVer: () => void }) {
 
       <div className="edu-cell edu-cell--wide">
         <span className="edu-cell__label">Paciente</span>
-        <span className="edu-cell__value edu-cell__value--strong">{plan.patientName}</span>
+        <span className="edu-cell__value edu-cell__value--strong">
+          <EduPersonaLink kind="paciente" id={plan.patientId}>
+            {plan.patientName}
+          </EduPersonaLink>
+        </span>
         <span className="edu-cell__sub">{plan.patientFolio}</span>
       </div>
 
@@ -606,7 +614,14 @@ function PlanDetalle({
   return (
     <EduModal
       title={`Plan de pagos · ${plan.chargeFolio}`}
-      subtitle={`${plan.patientName} · ${plan.patientFolio}`}
+      subtitle={
+        <>
+          <EduPersonaLink kind="paciente" id={plan.patientId}>
+            {plan.patientName}
+          </EduPersonaLink>{" "}
+          · {plan.patientFolio}
+        </>
+      }
       onClose={onClose}
       busy={busy}
       footer={

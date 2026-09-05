@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Settings2 } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_AI_FEATURE_DESCRIPTIONS,
   EDU_ROLE_LABELS,
@@ -179,7 +180,15 @@ export function EduIaScreen({ panel, contratoHasta }: EduIaScreenProps) {
                 <div key={`${p.userId ?? "baja"}-${p.userName}`} className="edu-row">
                   <div className="edu-cell edu-cell--wide">
                     <span className="edu-cell__label">Persona</span>
-                    <span className="edu-cell__value edu-cell__value--strong">{p.userName}</span>
+                    <span className="edu-cell__value edu-cell__value--strong">
+                      {p.userRole === "DOCENTE" ? (
+                        <EduPersonaLink kind="docente" id={p.userId}>
+                          {p.userName}
+                        </EduPersonaLink>
+                      ) : (
+                        p.userName
+                      )}
+                    </span>
                     {p.userId === null && (
                       <span className="edu-cell__sub">La cuenta ya no existe</span>
                     )}

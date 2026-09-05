@@ -15,7 +15,9 @@ import {
   type EduNavItem,
 } from "@/lib/edu/types";
 import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduPersonaLinksAllowed } from "@/lib/edu/persona-core";
 import { EduShell } from "@/components/edu/edu-shell";
+import { EduPersonaLinksProvider } from "@/components/edu/persona/persona-link";
 import "../edu-theme.css";
 
 export const metadata: Metadata = {
@@ -113,7 +115,22 @@ export default async function InstitutoPanelLayout({
     icon: item.icon,
     section: item.section,
     label: EDU_NAV_LABELS[item.key] ?? item.key,
+    matchPrefixes: item.matchPrefixes,
   }));
+
+  // ── Ola de PERSONAS · quién puede abrir la ficha de quién ─────────────
+  // Los tres booleanos se resuelven AQUÍ, en el servidor y una sola vez, por
+  // la misma razón que la navegación y el alcance por sede: para que exista
+  // UN sitio donde se decide. El componente que pinta el nombre
+  // (EduPersonaLink) solo lee el contexto; si preguntara por su cuenta,
+  // habría noventa sitios decidiendo lo mismo.
+  //
+  // 🔴 Esto decide si se PINTA un enlace, no si se puede entrar: cada ficha
+  // vuelve a exigir su permiso en el servidor. Un nombre que no enlaza no es
+  // un candado, igual que un item de menú escondido nunca lo fue.
+  const personaLinks = eduPersonaLinksAllowed((k) =>
+    hasEduPermission(permUser, k as EduPermissionKey),
+  );
 
   const nombre = eduUserDisplayName(ctx.user);
   const iniciales =
@@ -139,7 +156,10 @@ export default async function InstitutoPanelLayout({
       sectionOrder={EDU_NAV_SECTION_ORDER}
       sectionLabels={EDU_NAV_SECTION_LABELS}
     >
-      {children}
+      {/* `children` sigue entrando como SLOT: el proveedor es un cliente, pero
+          recibe el árbol ya construido por este Server Component, así que las
+          pantallas del panel siguen siendo server. Mismo patrón que EduShell. */}
+      <EduPersonaLinksProvider value={personaLinks}>{children}</EduPersonaLinksProvider>
     </EduShell>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { eduIndexMatches, eduSearchTokens } from "@/lib/edu/padron-core";
 import type { EduAssignmentRow, EduTeacherRow } from "@/lib/edu/padron-core";
 
@@ -171,7 +172,11 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
             <div key={t.id} className={`edu-row ${t.isActive ? "" : "edu-row--off"}`}>
               <div className="edu-cell edu-cell--wide">
                 <span className="edu-cell__label">Docente</span>
-                <span className="edu-cell__value edu-cell__value--strong">{t.name}</span>
+                <span className="edu-cell__value edu-cell__value--strong">
+                  <EduPersonaLink kind="docente" id={t.id}>
+                    {t.name}
+                  </EduPersonaLink>
+                </span>
                 {t.phone && <span className="edu-cell__sub">{t.phone}</span>}
               </div>
 
@@ -218,7 +223,9 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
                       {alumnos.map((a) => (
                         <li key={a.assignmentId} className="edu-assign">
                           <span>
-                            {a.matricula} · {a.name}
+                            <EduPersonaLink kind="estudiante" id={a.studentId}>
+                              {a.matricula} · {a.name}
+                            </EduPersonaLink>
                             {a.isPrimary ? " · titular" : ""}
                           </span>
                           {canAssign && (

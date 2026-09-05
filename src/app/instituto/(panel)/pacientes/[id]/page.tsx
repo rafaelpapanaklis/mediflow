@@ -13,6 +13,7 @@ import {
   EDU_RESUMEN_TIMELINE_TAB,
 } from "@/lib/edu/resumen-core";
 import { EDU_CASE_STATUS_LABELS } from "@/lib/edu/types";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 
 /**
  * Pestaña RESUMEN — la portada de la ficha desde la Ola 12.
@@ -83,7 +84,10 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
             </span>
             {r.ultimaVisita && (
               <span className="edu-kpi__sub">
-                con {r.ultimaVisita.studentMatricula} · {r.ultimaVisita.studentName}
+                con{" "}
+                <EduPersonaLink kind="estudiante" id={r.ultimaVisita.studentId}>
+                  {r.ultimaVisita.studentMatricula} · {r.ultimaVisita.studentName}
+                </EduPersonaLink>
               </span>
             )}
           </div>
@@ -93,15 +97,17 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
               {r.proximaCita ? r.proximaCita.label : "No tiene"}
             </span>
             <span className="edu-kpi__sub">
-              {r.proximaCita
-                ? [
-                    r.proximaCita.chairName,
-                    r.proximaCita.campusName,
-                    `${r.proximaCita.studentMatricula} · ${r.proximaCita.studentName}`,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")
-                : "Nadie lo tiene agendado: se le agenda desde aquí arriba o se le pierde la pista."}
+              {r.proximaCita ? (
+                <>
+                  {[r.proximaCita.chairName, r.proximaCita.campusName].filter(Boolean).join(" · ")}
+                  {r.proximaCita.chairName || r.proximaCita.campusName ? " · " : ""}
+                  <EduPersonaLink kind="estudiante" id={r.proximaCita.studentId}>
+                    {r.proximaCita.studentMatricula} · {r.proximaCita.studentName}
+                  </EduPersonaLink>
+                </>
+              ) : (
+                "Nadie lo tiene agendado: se le agenda desde aquí arriba o se le pierde la pista."
+              )}
             </span>
           </div>
         </div>
@@ -129,8 +135,20 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
               {r.casos!.map((c) => (
                 <div key={c.id} className="edu-assign">
                   <span>
-                    <strong>{c.programName}</strong> · {c.studentMatricula} · {c.studentName}
-                    {c.supervisorName ? ` · supervisa ${c.supervisorName}` : " · sin docente en el caso"}
+                    <strong>{c.programName}</strong> ·{" "}
+                    <EduPersonaLink kind="estudiante" id={c.studentId}>
+                      {c.studentMatricula} · {c.studentName}
+                    </EduPersonaLink>
+                    {c.supervisorName ? (
+                      <>
+                        {" · supervisa "}
+                        <EduPersonaLink kind="docente" id={c.supervisorUserId}>
+                          {c.supervisorName}
+                        </EduPersonaLink>
+                      </>
+                    ) : (
+                      " · sin docente en el caso"
+                    )}
                     {` · desde ${c.abiertoLabel}`}
                   </span>
                   <span className="edu-fichacaso__tags">

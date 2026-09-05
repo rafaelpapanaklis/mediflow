@@ -171,13 +171,25 @@ export function EduShell({
    * generaciones" a la vez, porque el href del primero es prefijo del
    * segundo. Dos items activos no es un detalle estético: le dice a la
    * persona que está en dos sitios. Gana el href más largo que coincide.
+   *
+   * Y una ruta puede pertenecer a una sección sin colgar de su href: la
+   * ficha de un estudiante (/instituto/estudiantes/{id}) es padrón, pero
+   * empieza por otra cosa y dejaría el menú entero apagado. Eso lo dicen
+   * los `matchPrefixes` del item, que compiten con la MISMA regla: gana el
+   * texto más largo que coincide, venga del href o de un prefijo.
    */
   const activeKey = (() => {
     if (!pathname) return null;
+    const coincide = (ruta: string): boolean =>
+      pathname === ruta || pathname.startsWith(ruta + "/");
+
     let mejor: { key: string; largo: number } | null = null;
     for (const item of items) {
-      if (pathname !== item.href && !pathname.startsWith(item.href + "/")) continue;
-      if (!mejor || item.href.length > mejor.largo) mejor = { key: item.key, largo: item.href.length };
+      const candidatos = [item.href, ...(item.matchPrefixes ?? [])];
+      for (const ruta of candidatos) {
+        if (!coincide(ruta)) continue;
+        if (!mejor || ruta.length > mejor.largo) mejor = { key: item.key, largo: ruta.length };
+      }
     }
     return mejor?.key ?? null;
   })();

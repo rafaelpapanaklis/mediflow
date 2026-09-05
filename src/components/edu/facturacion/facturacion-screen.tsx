@@ -7,6 +7,7 @@ import { Download, FileText, Plus, Search } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import { eduMoney } from "@/lib/edu/dinero-core";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_CANCEL_MOTIVES,
   EDU_FISCAL_ENV_LABELS,
@@ -259,7 +260,10 @@ export function EduFacturacionScreen({
                   {f.receptorLegalName}
                 </span>
                 <span className="edu-cell__sub">
-                  {f.receptorRfc} · {f.patientName}
+                  {f.receptorRfc} ·{" "}
+                  <EduPersonaLink kind="paciente" id={f.patientId}>
+                    {f.patientName}
+                  </EduPersonaLink>
                 </span>
               </div>
 
@@ -463,9 +467,17 @@ function EmitirFactura({
     <EduModal
       title="Facturar un cobro"
       subtitle={
-        elegido
-          ? `Cobro ${elegido.folio} · ${elegido.patientName} · ${eduMoney(elegido.totalCents)}`
-          : "Elige el cobro que se va a facturar."
+        elegido ? (
+          <>
+            Cobro {elegido.folio} ·{" "}
+            <EduPersonaLink kind="paciente" id={elegido.patientId}>
+              {elegido.patientName}
+            </EduPersonaLink>{" "}
+            · {eduMoney(elegido.totalCents)}
+          </>
+        ) : (
+          "Elige el cobro que se va a facturar."
+        )
       }
       onClose={onClose}
       busy={busy}
@@ -553,7 +565,10 @@ function EmitirFactura({
             <span className="edu-linea__desc">
               <span className="edu-linea__name">Cobro {elegido.folio}</span>
               <span className="edu-linea__sub">
-                {elegido.patientFolio} · {elegido.patientName}
+                {elegido.patientFolio} ·{" "}
+                <EduPersonaLink kind="paciente" id={elegido.patientId}>
+                  {elegido.patientName}
+                </EduPersonaLink>
                 {elegido.balanceCents > 0
                   ? ` · queda a deber ${eduMoney(elegido.balanceCents)}`
                   : ""}
@@ -876,7 +891,10 @@ function DetalleFactura({
           <div className="edu-kv">
             <span className="edu-kv__k">Paciente</span>
             <span className="edu-kv__v">
-              {factura.patientFolio} · {factura.patientName}
+              {factura.patientFolio} ·{" "}
+              <EduPersonaLink kind="paciente" id={factura.patientId}>
+                {factura.patientName}
+              </EduPersonaLink>
             </span>
           </div>
           <div className="edu-kv">

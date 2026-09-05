@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { eduRequest } from "@/components/edu/edu-http";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_APPOINTMENT_STATUS_LABELS,
   EDU_APPOINTMENT_TYPE_LABELS,
@@ -129,11 +130,32 @@ export function EduMiDiaScreen({
         <span className="edu-slot__time">
           {a.startLabel}–{a.endLabel} · {a.chairName}
         </span>
-        <span className="edu-slot__name">{a.patientName}</span>
+        <span className="edu-slot__name">
+          <EduPersonaLink kind="paciente" id={a.patientId}>
+            {a.patientName}
+          </EduPersonaLink>
+        </span>
         <span className="edu-slot__meta">
           Folio {a.patientFolio}
-          {scopeKind === "own" ? "" : ` · ${a.studentMatricula} ${a.studentName}`}
-          {a.supervisorName ? ` · supervisa ${a.supervisorName}` : " · sin docente asignado"}
+          {scopeKind === "own" ? null : (
+            <>
+              {" · "}
+              <EduPersonaLink kind="estudiante" id={a.studentId}>
+                {a.studentMatricula} {a.studentName}
+              </EduPersonaLink>
+            </>
+          )}
+          {" · "}
+          {a.supervisorName ? (
+            <>
+              supervisa{" "}
+              <EduPersonaLink kind="docente" id={a.supervisorUserId}>
+                {a.supervisorName}
+              </EduPersonaLink>
+            </>
+          ) : (
+            "sin docente asignado"
+          )}
         </span>
         {/* Ola 12 · en qué va el caso, de un golpe. Una cita suelta lo
             dice también: "sin caso" es información, no un hueco. */}

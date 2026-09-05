@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_ATRASO_DESCRIPTIONS,
   EDU_ATRASO_LABELS,
@@ -360,7 +361,11 @@ export function EduEvaluacionScreen({
             <div key={r.studentId} className="edu-row">
               <div className="edu-cell edu-cell--wide">
                 <span className="edu-cell__label">Estudiante</span>
-                <span className="edu-cell__value edu-cell__value--strong">{r.studentName}</span>
+                <span className="edu-cell__value edu-cell__value--strong">
+                  <EduPersonaLink kind="estudiante" id={r.studentId}>
+                    {r.studentName}
+                  </EduPersonaLink>
+                </span>
                 <span className="edu-cell__sub">
                   {r.matricula} · {r.semester}º semestre ·{" "}
                   {EDU_STUDENT_STATUS_LABELS[r.status as EduStudentStatus] ?? r.status}

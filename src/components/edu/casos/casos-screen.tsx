@@ -12,6 +12,7 @@ import {
   type EduCasosPanelRow,
 } from "@/lib/edu/casos-core";
 import { EDU_CASE_STATUSES, EDU_CASE_STATUS_LABELS, type EduCaseStatus } from "@/lib/edu/types";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 
 /**
  * /instituto/casos — TODOS los casos de la clínica, en una tabla.
@@ -331,14 +332,20 @@ export function EduCasosScreen({
 
                 <div className="edu-cell">
                   <span className="edu-cell__label">Estudiante</span>
-                  <span className="edu-cell__value">{c.studentName}</span>
+                  <span className="edu-cell__value">
+                    <EduPersonaLink kind="estudiante" id={c.studentId}>
+                      {c.studentName}
+                    </EduPersonaLink>
+                  </span>
                   <span className="edu-cell__sub">{c.studentMatricula}</span>
                 </div>
 
                 <div className="edu-cell">
                   <span className="edu-cell__label">Docente</span>
                   <span className="edu-cell__value">
-                    {c.supervisorName ?? "Sin responsable designado"}
+                    <EduPersonaLink kind="docente" id={c.supervisorUserId}>
+                      {c.supervisorName ?? "Sin responsable designado"}
+                    </EduPersonaLink>
                   </span>
                 </div>
 

@@ -414,7 +414,24 @@ export interface EduConsentRow {
   caseId: string | null;
   caseProgramName: string | null;
 
+  /**
+   * 🔴 LOS DOS IDS DEL ALUMNO, Y NO SON INTERCAMBIABLES.
+   *
+   * `studentUserId` es el de **EduUser** (la cuenta): es con el que se
+   * compara `ctx.eduUserId` para decidir si esta sesión puede contrafirmar.
+   * `studentId` es el de **EduStudent** (la inscripción): es el ÚNICO que
+   * abre /instituto/estudiantes/{id}.
+   *
+   * Meter el primero donde va el segundo da un 404 mudo —ningún error en
+   * consola, simplemente no existe esa ficha—, así que están juntos y
+   * nombrados a propósito para que la confusión salte a la vista.
+   *
+   * `studentId` puede venir `null` aunque `studentUserId` no lo esté: la
+   * carta guarda el nombre del alumno como INSTANTÁNEA y su inscripción
+   * pudo desaparecer después. El nombre se sigue leyendo; el enlace no.
+   */
   studentUserId: string | null;
+  studentId: string | null;
   studentName: string;
   studentMatricula: string | null;
   supervisorUserId: string | null;

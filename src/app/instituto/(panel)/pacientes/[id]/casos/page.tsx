@@ -16,6 +16,7 @@ import {
   EDU_CASE_STATUS_LABELS,
 } from "@/lib/edu/types";
 import { listEduProcedures } from "@/lib/edu/tarifas";
+import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduCasoAutorizaciones } from "@/components/edu/autorizaciones/caso-autorizaciones";
 import { EduCasoAcciones } from "@/components/edu/casos/caso-acciones";
@@ -158,8 +159,19 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
                     <div>
                       <span className="edu-nota__when">{c.programName}</span>
                       <span className="edu-nota__who">
-                        {c.studentMatricula} · {c.studentName}
-                        {c.supervisorName ? ` · supervisa ${c.supervisorName}` : ""}
+                        <EduPersonaLink kind="estudiante" id={c.studentId}>
+                          {c.studentMatricula} · {c.studentName}
+                        </EduPersonaLink>
+                        {c.supervisorName ? (
+                          <>
+                            {" · supervisa "}
+                            <EduPersonaLink kind="docente" id={c.supervisorUserId}>
+                              {c.supervisorName}
+                            </EduPersonaLink>
+                          </>
+                        ) : (
+                          ""
+                        )}
                       </span>
                     </div>
                     <span className={`edu-tag ${cerrado ? "edu-tag--muted" : "edu-tag--ok"}`}>
