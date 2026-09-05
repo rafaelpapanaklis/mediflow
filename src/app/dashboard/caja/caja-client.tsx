@@ -552,8 +552,12 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {caja.withdrawals.map(w => (
                       <div key={w.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, borderBottom: "1px solid var(--border-soft)", paddingBottom: 6 }}>
-                        <span style={{ color: "var(--text-2)" }}>{w.reason} <span style={{ color: "var(--text-3)" }}>· {fmtTime(w.recordedAt)} · {w.recordedByName}</span></span>
-                        <span style={{ color: "var(--danger)", fontWeight: 600, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>−{fmtMXNdec(w.amount)}</span>
+                        {/* El motivo es texto libre del operador: sin minWidth:0
+                            empujaba el importe fuera de la tarjeta, que `.card`
+                            recorta con overflow:hidden. Cede el motivo (…), nunca
+                            la cifra. El title deja leer el motivo completo. */}
+                        <span title={`${w.reason} · ${fmtTime(w.recordedAt)} · ${w.recordedByName}`} style={{ color: "var(--text-2)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.reason} <span style={{ color: "var(--text-3)" }}>· {fmtTime(w.recordedAt)} · {w.recordedByName}</span></span>
+                        <span style={{ color: "var(--danger)", fontWeight: 600, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>−{fmtMXNdec(w.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -941,8 +945,10 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
 function SumRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-sm)" }}>
-      <span style={{ color: "var(--text-3)", fontSize: 12.5 }}>{label}</span>
-      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14.5 : 13, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{value}</span>
+      {/* La celda del grid puede quedar en 160px: si algo cede es la etiqueta,
+          nunca el importe (de ahi el flexShrink:0 del segundo span). */}
+      <span title={label} style={{ color: "var(--text-3)", fontSize: 12.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14.5 : 13, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
     </div>
   );
 }
@@ -950,8 +956,8 @@ function SumRow({ label, value, strong }: { label: string; value: string; strong
 function CloseLine({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: strong ? "7px 0 5px" : "5px 0", borderTop: strong ? "1px solid var(--border-soft)" : "none", marginTop: strong ? 4 : 0 }}>
-      <span style={{ color: "var(--text-2)", fontSize: 12.5, fontWeight: strong ? 600 : 400 }}>{label}</span>
-      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14 : 13, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{value}</span>
+      <span title={label} style={{ color: "var(--text-2)", fontSize: 12.5, fontWeight: strong ? 600 : 400, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14 : 13, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
     </div>
   );
 }

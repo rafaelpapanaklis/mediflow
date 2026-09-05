@@ -596,28 +596,30 @@ export function SaldoClient() {
               )}
             </div>
           ) : (
-            <table className="table-new">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Detalle</th>
-                  <th className="mono">Tokens</th>
-                  <th className="mono">Costo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.usage.map((u) => (
-                  <tr key={u.id}>
-                    <td>{formatRelativeDate(u.createdAt)}</td>
-                    <td>{featureLabel(u.feature)}</td>
-                    <td className="mono">
-                      {(u.inputTokens + u.outputTokens).toLocaleString("es-MX")}
-                    </td>
-                    <td className="mono">{fmtMXNdec(u.billedCents / 100)}</td>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table-new">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Detalle</th>
+                    <th className="mono">Tokens</th>
+                    <th className="mono">Costo</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.usage.map((u) => (
+                    <tr key={u.id}>
+                      <td>{formatRelativeDate(u.createdAt)}</td>
+                      <td>{featureLabel(u.feature)}</td>
+                      <td className="mono">
+                        {(u.inputTokens + u.outputTokens).toLocaleString("es-MX")}
+                      </td>
+                      <td className="mono">{fmtMXNdec(u.billedCents / 100)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardNew>
 
@@ -628,34 +630,36 @@ export function SaldoClient() {
               Aún no hay movimientos.
             </div>
           ) : (
-            <table className="table-new">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Origen</th>
-                  <th className="mono">Monto</th>
-                  <th className="mono">Saldo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.transactions.map((t) => {
-                  const positive = t.amountCents >= 0;
-                  return (
-                    <tr key={t.id}>
-                      <td>{formatRelativeDate(t.createdAt)}</td>
-                      <td>{txTypeLabel(t.type)}</td>
-                      <td>{txSourceLabel(t.source)}</td>
-                      <td className="mono" style={{ color: positive ? "#16a34a" : "#dc2626" }}>
-                        {positive ? "+" : ""}
-                        {fmtMXNdec(t.amountCents / 100)}
-                      </td>
-                      <td className="mono">{fmtMXNdec(t.balanceAfterCents / 100)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table-new">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Origen</th>
+                    <th className="mono">Monto</th>
+                    <th className="mono">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.transactions.map((t) => {
+                    const positive = t.amountCents >= 0;
+                    return (
+                      <tr key={t.id}>
+                        <td>{formatRelativeDate(t.createdAt)}</td>
+                        <td>{txTypeLabel(t.type)}</td>
+                        <td>{txSourceLabel(t.source)}</td>
+                        <td className="mono" style={{ color: positive ? "#16a34a" : "#dc2626" }}>
+                          {positive ? "+" : ""}
+                          {fmtMXNdec(t.amountCents / 100)}
+                        </td>
+                        <td className="mono">{fmtMXNdec(t.balanceAfterCents / 100)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardNew>
       </div>

@@ -10,6 +10,7 @@ import { manifestOf, plantillaInstrumentada, plantillaLeeManifiesto, plantillaPi
 import { prepararImagen } from "@/lib/image-client";
 import { LandingUpgradeBanner } from "@/components/dashboard/landing-upgrade-banner";
 import type { AccountManagerCardData } from "@/lib/account-manager/get-for-clinic";
+import styles from "./landing.module.css";
 
 /** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
     puñado de mensajes, no uno por tecla. */
@@ -390,7 +391,11 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
   }
 
   return (
-    <div className="flex-1 min-w-0 p-4 sm:p-6 flex gap-6 items-start">
+    /* Sólo padding VERTICAL: el lateral ya lo pone el <main> del layout
+       (clamp(12px,1.5vw,28px)) y duplicarlo le quitaba hasta 48 px de ancho
+       útil a la pantalla. `.shell` declara además el contenedor de consulta
+       del que depende la vista previa. */
+    <div className={`flex-1 min-w-0 py-4 sm:py-6 flex gap-6 items-start ${styles.shell}`}>
       <div className="flex-1 min-w-0 space-y-5 max-w-4xl">
 
       {/* Header */}
@@ -504,7 +509,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <p className={`${HELP_CLS} mt-0.5`}>{t("pages.landing.templateHelp")}</p>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className={styles.templateGrid}>
             {TEMPLATES.map(tpl => {
               const selected = templateSel === tpl.id;
               return (
@@ -857,7 +862,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                 <span className="text-[12.5px] font-semibold text-[color:var(--text-3)]">{t("pages.landing.serviceN", { n: i+1 })}</span>
                 <button aria-label={t("common.delete")} onClick={() => removeService(i)} className={BTN_ICON_DANGER}><Trash2 size={16} strokeWidth={1.75}/></button>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className={styles.serviceGrid}>
                 <div>
                   <label className={LABEL_CLS}>{t("pages.landing.emojiIcon")}</label>
                   <input value={svc.icon} onChange={e => updateService(i,"icon",e.target.value)}
@@ -1182,7 +1187,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
           /landing-preview, que es la ruta DINÁMICA: /[slug] es ISR y no puede
           leer ?preview=. Se oculta por debajo de xl: en pantalla chica el
           editor ya ocupa todo. */}
-      <aside className="hidden xl:block w-[420px] shrink-0">
+      {/* `xl:` mide viewport: a 1280 con el sidebar abierto el aside de 420 px
+          entraba igual y dejaba la columna de trabajo en ~539 px. La clase del
+          módulo añade el corte que faltaba, por ancho de CONTENEDOR. */}
+      <aside className={`hidden xl:block w-[420px] shrink-0 ${styles.preview}`}>
         <div className="sticky top-4 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-semibold text-[color:var(--text-1)]">Vista previa</span>

@@ -30,10 +30,22 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── Rejilla de la pantalla ─────────────────────────────────────────── */
+/* ⚠️ `minmax(0, …)` en la columna del lienzo y en la fila del lienzo, no
+   `1fr` pelado: `1fr` es `minmax(auto, 1fr)`, y el mínimo `auto` lo fija el
+   contenido. La topbar ocupa `grid-column: 1 / -1`, así que su ancho
+   min-content (con el modo Edición pasa de 1400 px) se repartía a la única
+   pista con mínimo intrínseco —la del centro— y estiraba la rejilla ENTERA
+   por encima del ancho del `<main>`. Como `.page` recorta (`overflow:
+   hidden`), lo que sobraba —el panel de propiedades de la derecha— quedaba
+   fuera de la pantalla sin barra de scroll que lo rescatara. Con el mínimo
+   en 0 la rejilla nunca supera su caja y es la topbar la que se envuelve.
+   La fila de la topbar es `auto` (antes 52 px fijos) para que al envolverse
+   crezca en vez de recortar; `.topbar` conserva `min-height: 52px`, así que
+   mientras quepa en una línea mide exactamente lo mismo que antes. */
 .page {
   display: grid;
-  grid-template-columns: 232px 1fr 268px;
-  grid-template-rows: 52px 1fr;
+  grid-template-columns: 232px minmax(0, 1fr) 268px;
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
   background: var(--mc-ground);
@@ -43,12 +55,23 @@
 }
 
 /* ── Topbar ─────────────────────────────────────────────────────────── */
+/* La topbar del modo Edición lleva 17 controles en una fila (marca, pill de
+   clínica, Edición/En Vivo, Compartir, Mi Clínica 3D, iluminación, guardado,
+   Deshacer, zoom ×4, herramientas y los atajos): ni con el sidebar del panel
+   colapsado caben en una línea. Sin `flex-wrap` los de la derecha se salían
+   de la caja recortada y quedaban INALCANZABLES. Ahora se envuelve.
+   `min-height` en vez de altura fija: en una línea mide 52 px como siempre
+   (32 px de botón + 2×6 de padding + 1 de borde = 45 < 52, y `align-items:
+   center` los deja en el mismo eje que antes), y al partirse crece. */
 .topbar {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  padding: 0 14px;
+  row-gap: 8px;
+  min-height: 52px;
+  padding: 6px 14px;
   background: var(--mc-surface);
   border-bottom: 1px solid var(--mc-line);
   box-shadow: var(--mc-shadow-1);
@@ -95,6 +118,23 @@
   white-space: nowrap;
 }
 .spacer { flex: 1; }
+
+/* El bloque derecho (guardado + deshacer + zoom + herramientas + atajos) es
+   UN item de la topbar, no doce sueltos: así baja entero a la segunda línea
+   en vez de partirse a mitad del zoom (Zoom− arriba y el 100% abajo).
+   `margin-left: auto` solo hace algo cuando baja: mientras comparta línea
+   con `.spacer`, es el spacer quien se come el hueco —el reparto de
+   `flex-grow` ocurre antes que los márgenes automáticos— y el resultado es
+   pixel por pixel el de siempre. */
+.topbarRight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  row-gap: 8px;
+  margin-left: auto;
+}
 
 .savedIndicator {
   display: inline-flex;

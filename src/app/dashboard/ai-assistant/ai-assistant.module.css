@@ -11,7 +11,16 @@
   --st-danger: var(--danger);       /* estado "grabando" del mic */
 
   display: grid;
-  grid-template-columns: 280px 1fr;
+  /* minmax(0, …) en LAS DOS pistas — a 1280 px el <main> del panel mide 1031 px,
+     no 1280: el sidebar del dashboard se lleva ~196 px y el padding otros ~38.
+     Con `280px 1fr` la segunda pista es `minmax(auto, 1fr)`, así que cualquier
+     hijo del chat con un mínimo intrínseco grande (una tabla en una respuesta,
+     una URL sin espacios) empujaba la rejilla entera por encima del contenedor
+     y el panel derecho se salía de la pantalla. Con los dos mínimos a 0 la
+     rejilla nunca pide más de lo que tiene: la pista del historial sigue
+     resolviendo a 280 px siempre que quepa (a 1440 la pantalla es idéntica) y
+     lo intrínsecamente ancho scrollea dentro del chat, no en el documento. */
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
   /* dvh evita el salto del bottom bar de Safari iOS. */
   height: calc(100vh - 64px);
   height: calc(100dvh - 64px);

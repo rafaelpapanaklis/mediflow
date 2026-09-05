@@ -54,6 +54,7 @@ import { DrawerWhatsAppChat } from "./drawers/DrawerWhatsAppChat";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
 import { ModalCompare, type CompareSet } from "./drawers/ModalCompare";
 import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
+import layout from "./ortho-redesign-layout.module.css";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
@@ -291,7 +292,9 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   const tStatus = props.treatmentStatus ?? "en-tratamiento";
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 px-4 sm:px-6 lg:px-8 xl:px-12 2xl:px-16 py-6 min-h-[calc(100vh-200px)] overflow-x-hidden">
+    <div
+      className={`bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 py-6 min-h-[calc(100vh-200px)] overflow-x-hidden ${layout.shell}`}
+    >
       <div className="max-w-[1920px] mx-auto">
         {props.patientHeader ? (
           <div className="mb-4 lg:mb-6">
@@ -312,9 +315,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           </div>
         ) : null}
       </div>
-      <div
-        className="max-w-[1920px] mx-auto grid gap-4 lg:gap-6 grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] xl:grid-cols-[240px_minmax(0,1fr)_360px]"
-      >
+      <div className={`max-w-[1920px] mx-auto ${layout.grid}`}>
         {/* Sub-sidebar contextual del módulo (lg+) */}
         <OrthodonticsModuleSidebar treatmentStatus={tStatus} />
 

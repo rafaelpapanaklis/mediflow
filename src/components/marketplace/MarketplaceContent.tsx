@@ -212,7 +212,15 @@ export function MarketplaceContent({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
+      {/* El número de columnas lo decide el ANCHO DEL CONTENEDOR, no el del
+          viewport: con `lg:grid-cols-3` (viewport >= 1024) a 1280 caían siempre
+          3 tarjetas aunque el <main> midiera 983 px por el sidebar abierto.
+          Con 340 px de pista mínima: 983 px -> 2 columnas de ~484; 1111 px
+          (1280 colapsado) y 1132 px (1440 abierto) -> 3 columnas, igual que
+          hoy. `auto-fill` (y no `auto-fit`) conserva el ancho de tarjeta
+          cuando el filtro deja pocos resultados. `min(340px, 100%)` evita el
+          desborde en móvil. */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(340px,100%),1fr))] gap-4 pb-24">
         {filtered.map((m) => {
           const status = computeStatus(m, clinicModules, trialStatus, now);
           return (
