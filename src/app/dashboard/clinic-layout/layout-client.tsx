@@ -1410,6 +1410,11 @@ export function ClinicLayoutClient({
 
           <span className={styles.spacer} />
 
+          {/* Todo lo de la derecha va en UN contenedor para que, cuando la
+              topbar no quepa en una línea (a 1280 con el sidebar abierto el
+              hueco real es de 1031 px), baje entero y no se parta el grupo
+              del zoom. Ver `.topbarRight` en el CSS. */}
+          <div className={styles.topbarRight}>
           {/* Indicador autosave */}
           <span className={styles.savedIndicator}>
             <span
@@ -1504,6 +1509,7 @@ export function ClinicLayoutClient({
               </span>
             </>
           )}
+          </div>
         </div>
 
         {/* ── Sidebar (paleta) ── */}

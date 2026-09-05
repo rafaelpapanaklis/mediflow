@@ -49,6 +49,50 @@ const TONE_COLOR: Record<"warning" | "danger", string> = {
   danger: "var(--danger)",
 };
 
+/**
+ * Ancho de cada carácter en `em`, aproximado para la fuente del panel con
+ * `font-variant-numeric: tabular-nums`. Los dígitos van un pelo generosos
+ * (0.56 em, el avance real ronda 0.52) para que el ajuste tenga colchón; el
+ * `letter-spacing: -0.01em` de .kpi__value juega también a favor.
+ */
+function charEm(ch: string): number {
+  if (ch >= "0" && ch <= "9") return 0.56;
+  if (ch === "," || ch === "." || ch === " ") return 0.28;
+  return 0.6; // $, −, %, letras sueltas de una unidad
+}
+
+/**
+ * Tamaño de letra del número que GARANTIZA que el importe entra en la tarjeta.
+ *
+ * Por qué existe: `.kpi` (globals.css) trae `overflow: hidden` y `.kpi__value`
+ * un `font-size: 28px` fijo. A 1280 px con el sidebar abierto el `<main>` mide
+ * 1031 px, así que una rejilla `repeat(auto-fit, minmax(150px,1fr))` deja
+ * tarjetas de ~160 px — 124 px de contenido — y "$40,707.00" pide ~133 px: el
+ * número se cortaba a media cifra ("$40,707.0"), sin puntos suspensivos que
+ * avisaran. Un importe cortado se lee MAL, no se lee incompleto.
+ *
+ * Cómo: la tarjeta declara un contenedor de consulta y el número se mide
+ * contra el ancho de ESE contenedor (`cqi`), no contra el viewport. El tope
+ * sigue siendo 28 px, así que un valor corto se ve exactamente igual que
+ * siempre; sólo los valores largos en tarjetas estrechas bajan lo justo.
+ * El tope se puede subir por CSS var (`--kpi-value-max`) sin tocar este
+ * archivo: así el home conserva su `clamp(25px, 2.1vw, 32px)`.
+ */
+function fitValueFontSize(value: string): string | undefined {
+  // Sólo los valores de una sola palabra (importes, porcentajes, conteos) se
+  // ajustan. Un valor con espacios puede repartirse en dos líneas como hasta
+  // ahora, y medirlo por su largo total lo encogería sin motivo.
+  if (!value || /\s/.test(value)) return undefined;
+  let em = 0;
+  for (const ch of value) em += charEm(ch);
+  if (em <= 0) return undefined;
+  // 100cqi = ancho de contenido de la tarjeta ⇒ este es el tamaño exacto al
+  // que el string ocupa justo ese ancho. El clamp lo topa arriba (nada crece)
+  // y abajo (nunca ilegible).
+  const cqi = (100 / em).toFixed(2);
+  return `clamp(13px, ${cqi}cqi, var(--kpi-value-max, 28px))`;
+}
+
 const ACCENT_VARS: Record<KpiAccent, { color: string; soft: string }> = {
   brand:   { color: "var(--brand)",   soft: "var(--brand-soft)" },
   info:    { color: "var(--info)",    soft: "var(--info-soft)" },
@@ -78,6 +122,7 @@ export function KpiCard({
         "--kpi-accent-soft": ACCENT_VARS[accent].soft,
       } as CSSProperties)
     : undefined;
+  const fitFontSize = fitValueFontSize(value);
 
   return (
     <div className={cls} style={accentStyle}>
@@ -89,7 +134,23 @@ export function KpiCard({
           </div>
         )}
       </div>
-      <div className="kpi__value" style={tone ? { color: TONE_COLOR[tone] } : undefined}>{value}</div>
+      {/* El envoltorio es el CONTENEDOR de consulta del número. No puede serlo
+          la propia .kpi: `container-type` implica `contain: inline-size` y una
+          tarjeta que en algún sitio se dimensione por su contenido colapsaría.
+          Este div es de bloque, así que su ancho sale del padre (el contenido
+          de la tarjeta) y nunca de sus hijos: cero riesgo, y `cqi` mide justo
+          el hueco real que tiene el importe. */}
+      <div style={{ containerType: "inline-size" }}>
+        <div
+          className="kpi__value"
+          style={{
+            ...(fitFontSize ? { fontSize: fitFontSize, whiteSpace: "nowrap" as const } : null),
+            ...(tone ? { color: TONE_COLOR[tone] } : null),
+          }}
+        >
+          {value}
+        </div>
+      </div>
       {hint && (
         <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6, lineHeight: 1.3 }}>
           {hint}

@@ -1,0 +1,72 @@
+/* src/components/dashboard/home/home.module.css
+   ────────────────────────────────────────────────────────────────────
+   Recortes por ancho en la HOME del panel.
+
+   1) El <main> del layout ya aplica `padding: clamp(12px,1.5vw,28px)`.
+      HomeShell añadía OTRO `clamp(16px,2vw,24px)` lateral encima: a 1280 con
+      el sidebar abierto el contenido pasaba de 1031 px a ~983 px. Aquí se
+      queda SOLO el padding vertical; el lateral lo pone el <main>.
+
+   2) Los grids del home se partían en una columna con un `@media
+      (max-width: 1023.98px)` de globals.css, que mide el VIEWPORT. Con el
+      sidebar abierto el viewport y el contenedor no se parecen: a 1280 px de
+      viewport el contenedor real son 1031 px y la media query no dispara
+      nunca — la columna derecha se quedaba en ~338 px y el nombre del
+      paciente de "Próximas citas" se cortaba con puntos suspensivos.
+      Se mide el CONTENEDOR (`@container home`), no el viewport.
+
+      La regla de globals.css sigue viva y sigue mandando en móvil (lleva
+      `!important`); esto sólo cubre el hueco de 1024 px para arriba.
+
+      El contenedor se declara aquí, en `.shell`. Todo el overlay del subárbol
+      del home (menú de la fila de citas y popover de alergias) sale por
+      Portal de Radix, así que ninguno cuelga del DOM de `.shell`: declarar
+      `container-type` no le cambia el bloque contenedor a ningún
+      `position: fixed`. El único `position: absolute` del subárbol
+      (revenue-trend-card) ya tiene su propio ancestro `position: relative`.
+   ──────────────────────────────────────────────────────────────────── */
+
+.shell {
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+  /* Sin padding lateral: ese lo pone el <main> del layout. */
+  padding: clamp(16px, 2.4vw, 28px) 0 clamp(24px, 2.8vw, 32px);
+  container-type: inline-size;
+  container-name: home;
+}
+
+/* Admin y recepción: contenido principal 2fr + panel lateral 1fr. */
+.gridMain {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* Doctor: dos columnas iguales. */
+.gridEven {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* 1100 px de CONTENEDOR: por debajo, la columna de 1fr baja de ~360 px y la
+   fila de "Próximas citas" (chip de hora 82 + pill de estado ~95 + gaps) deja
+   el nombre en ~105 px. A 1031 px (viewport 1280, sidebar abierto) colapsa; a
+   1159 / 1180 / 1314 px sigue en dos columnas, igual que hoy. */
+@container home (max-width: 1100px) {
+  .gridMain {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Las dos columnas iguales del doctor aguantan mucho más (507 px cada una a
+   1031 px de contenedor), así que su corte se queda donde estaba: el
+   equivalente en contenedor del viejo corte de 1024 px de viewport. */
+@container home (max-width: 960px) {
+  .gridEven {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

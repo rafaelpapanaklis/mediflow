@@ -43,14 +43,24 @@ function CompactRow({ implant, expanded, onToggle, onAction }: CompactRowProps) 
         className="w-full flex items-center justify-between gap-3 px-3 py-2 hover:bg-[var(--bg-elev,theme(colors.gray.50))] dark:hover:bg-gray-800/40"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className={`h-2 w-2 rounded-full ${STATUS_DOT[implant.currentStatus]}`} />
-          <span className="font-mono text-sm font-bold text-blue-700 dark:text-blue-300 min-w-[28px]">
+          <span className={`h-2 w-2 rounded-full flex-shrink-0 ${STATUS_DOT[implant.currentStatus]}`} />
+          <span className="font-mono text-sm font-bold text-blue-700 dark:text-blue-300 min-w-[28px] flex-shrink-0">
             {implant.toothFdi}
           </span>
-          <span className="text-sm text-[var(--text-1,theme(colors.gray.900))] truncate">
+          {/* Dato principal: prioridad de flex más alta (flex-1 + min-w-0) para
+              que absorba el achique antes que los accesorios de al lado. */}
+          <span
+            className="text-sm text-[var(--text-1,theme(colors.gray.900))] truncate flex-1 min-w-0"
+            title={`${brand} ${implant.modelName}`}
+          >
             {brand} {implant.modelName}
           </span>
-          <span className="text-xs text-[var(--text-3,theme(colors.gray.500))] truncate hidden sm:inline">
+          {/* Accesorio: no se le quita prioridad al nombre — se recorta él
+              primero, con un tope de ancho razonable en vez de crecer libre. */}
+          <span
+            className="text-xs text-[var(--text-3,theme(colors.gray.500))] truncate hidden sm:inline flex-shrink-0 max-w-[110px]"
+            title={`⌀${String(implant.diameterMm)}×${String(implant.lengthMm)}mm`}
+          >
             ⌀{String(implant.diameterMm)}×{String(implant.lengthMm)}mm
           </span>
         </div>

@@ -104,6 +104,8 @@ function DeltaPill({ pct, absolute }: { pct: number; absolute?: string }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
+        flexWrap: "wrap",
+        rowGap: 2,
         gap: 4,
         fontVariantNumeric: "tabular-nums",
         ...(isFlat ? { color: "var(--text-3)" } : null),

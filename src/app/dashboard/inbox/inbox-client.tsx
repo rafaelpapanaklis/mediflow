@@ -372,6 +372,32 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  // ── Ancho REAL del panel (no del viewport) ────────────────────────────────
+  // El <main> del dashboard mide 1031 px a viewport 1280 con el sidebar del
+  // panel abierto, así que el @media (max-width:1199px) del CSS nunca disparaba
+  // ahí y la conversación se quedaba con 383 px: encabezado del paciente
+  // recortado y botón de enviar cortado. Medimos .page y marcamos data-narrow.
+  // No se usa @container porque container-type volvería a .page bloque
+  // contenedor de sus cinco position:fixed (drawer, los dos backdrops, el FAB y
+  // el detalle de móvil) y eso sí cambiaría dónde se ven.
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [narrowPanel, setNarrowPanel] = useState(false);
+  useIsoLayoutEffect(() => {
+    const el = pageRef.current;
+    if (!el) return;
+    // 1140: por debajo, 264+384 fijos dejan la conversación por debajo de los
+    // ~490 px que necesita el composer en modo "Nota interna". Por encima
+    // (1159 y 1180) el reparto queda exactamente como hoy.
+    const measure = (w: number) => setNarrowPanel(w > 0 && w < 1140);
+    measure(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const box = entries[0];
+      measure(box ? box.contentRect.width : el.getBoundingClientRect().width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // Menús flotantes del header de conversación (uno abierto a la vez).
   const [openMenu, setOpenMenu] = useState<null | "snooze" | "assign" | "more">(null);
   // Equipo para asignar (lazy vía /api/team/light). "error" = sin acceso →
@@ -1591,7 +1617,9 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
 
   return (
     <div
+      ref={pageRef}
       className={styles.page}
+      data-narrow={narrowPanel ? "true" : undefined}
       data-mobile-sidebar-open={mobileSidebarOpen || undefined}
       data-mobile-detail-open={activeThreadId ? "true" : undefined}
     >
