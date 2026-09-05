@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-700";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { JsonLd } from "@/components/blog/json-ld";
@@ -29,13 +29,6 @@ import "@/app/herramientas/herramientas.css";
 // Server component: no hay estado ni handlers. Lo único cliente de la sección es
 // el tool.tsx de cada carpeta.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 export function ToolPageShell({
   tool,

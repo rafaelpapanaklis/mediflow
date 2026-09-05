@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-700";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { DirectoryExplorer } from "@/components/directory/DirectoryExplorer";
@@ -10,13 +10,6 @@ import { CategoryCityLinks } from "@/components/directory/CityLinks";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { DIRECTORY_CATEGORIES, getCategoryBySlug } from "@/lib/directory/types";
 import "@/components/public/landing/sales/sales.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 interface Props {
   params: { categoria: string };

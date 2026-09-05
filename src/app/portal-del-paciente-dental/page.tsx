@@ -1,17 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-800";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { PRODUCTO_MODULES } from "@/lib/producto/data";
 import { ProductoPage } from "@/components/producto/producto-page";
 import { PortalHero, Portal1, Portal2, Portal3, Portal4 } from "@/components/producto/mockups/portal";
 import "../producto.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 const M = PRODUCTO_MODULES["portal-del-paciente-dental"];
 

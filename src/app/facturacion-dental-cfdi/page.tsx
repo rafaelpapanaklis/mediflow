@@ -1,17 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-800";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { PRODUCTO_MODULES } from "@/lib/producto/data";
 import { ProductoPage } from "@/components/producto/producto-page";
 import { FacturacionHero, Facturacion1, Facturacion2, Facturacion3, Facturacion4 } from "@/components/producto/mockups/facturacion";
 import "../producto.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 // OJO: este módulo NO promete timbrado ante el SAT. La primera pregunta del FAQ
 // responde "No" a propósito (ver src/lib/producto/data.ts) — no cambiarla.

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Inter } from "next/font/google";
+// Misma fuente y patrón que la home (src/app/page.tsx): todo vive bajo `.mfh`.
+import { inter } from "@/fonts/inter-400-700";
 import { MapPin } from "lucide-react";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
@@ -10,14 +11,6 @@ import { TopCombosFooter } from "@/components/directory/CityLinks";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import "@/components/public/landing/sales/sales.css";
-
-// Misma fuente y patrón que la home (src/app/page.tsx): todo vive bajo `.mfh`.
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Encuentra tu clínica y reserva en línea | DaleControl",
