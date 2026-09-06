@@ -80,10 +80,22 @@ un worktree: reemplazarías el junction por una copia de disco.
 `test:edu` es el único con descubrimiento automático (`node scripts/edu-tests.cjs`) y falla si no
 encuentra ningún test. Los `.cjs` de `scripts/` se corren con `node --test scripts/<x>.test.cjs`.
 
-**Tipos.** `next.config.mjs` tiene `eslint.ignoreDuringBuilds: true` (el lint es un gate aparte:
-`npm run lint`), pero **NO** hay `typescript.ignoreBuildErrors`. Y `tsconfig.json` incluye `**/*.ts`,
-así que **tus `__tests__` sí entran al type-check de `next build`**: un tipo roto en un test te tumba la
-build. Lo que sí afloja es `"strict": false` y `"skipLibCheck": true`.
+**Tipos: el gate es `npm run typecheck`, NO el build.** `next.config.mjs` tiene
+`eslint.ignoreDuringBuilds: true` (el lint es un gate aparte: `npm run lint`) y **NO** hay
+`typescript.ignoreBuildErrors`. Aun así, **`next build` NO te tumba por un tipo roto en `__tests__`**.
+`tsconfig.json` incluye `**/*.ts` y los archivos de prueba **sí** entran en el programa del build (228
+de ellos en `.next/cache/.tsbuildinfo`, incluidos los que tenían errores), el paso «Checking validity
+of types» **sí** corre… y el build sale con exit 0 igual. Medido el 5-sep-2026: con 12 errores de `tsc`
+en `__tests__` el build pasó 9 veces seguidas, y metiendo a mano un `const x: number = "texto"` en
+`src/lib/barber/__tests__/i18n-alcance.test.ts` el build volvió a pasar (exit 0) mientras `tsc` sobre
+ese mismo archivo daba error. **La causa se desconoce** — no la inventes ni la des por arreglada.
+
+Por eso el chequeo de tipos tiene su propio comando: **`npm run typecheck`** (= `tsc --noEmit`), que sí
+falla con esos errores. Tarda **~4 min** (contra los ~12 del build) y se corre **ANTES** del build, no
+después: atrapa en cuatro minutos lo que el build no ve ni en doce. Lo que sí afloja el chequeo es
+`"strict": false` y `"skipLibCheck": true`; `tsconfig.json` declara `"target": "es2022"` — sin `target`,
+`tsc` heredaba ES5 e inventaba errores falsos (`for…of` sobre `Set`/`Map`, flag `s` de regex) que el
+build nunca ve.
 
 **Base de datos.** Menos de 7 consultas por `Promise.all`: el pooler se satura y empiezan los timeouts.
 Si necesitas más, parte en tandas.
