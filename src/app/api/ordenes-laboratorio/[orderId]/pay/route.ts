@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createPreference } from "@/lib/mercadopago";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,13 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest, { params }: { params: { orderId: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // EQ-07: pagar es parte de "Hacer y pagar pedidos" — la misma key que ya
+  // exigen su gemela de compras (/api/compras/orders/[orderId]/pay) y el alta
+  // de esta misma orden (/api/dental-labs/[labId]/ordenes). Quien no puede
+  // pedirle al laboratorio tampoco puede pagarle.
+  const denied = denyIfMissingPermission(ctx, "suppliers.order");
+  if (denied) return denied;
 
   // Multi-tenant: la orden debe pertenecer a ESTA clínica.
   const order = await prisma.dentalLabOrder.findFirst({
