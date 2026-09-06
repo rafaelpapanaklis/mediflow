@@ -47,6 +47,14 @@ export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  // Permiso granular (P1-3): "Ver lista de pacientes". El POST de aquí abajo y
+  // todo /api/patients/[id] ya lo exigían; este GET era la única puerta del
+  // padrón sin gate. La pantalla redirige, pero un `fetch('/api/patients?v=2')`
+  // devolvía nombre, teléfono, email y saldo de la clínica entera. Va ANTES del
+  // reparto legacy/v2 para cubrir las dos formas de la respuesta.
+  const deniedPerm = denyIfMissingPermission(ctx, "patients.view");
+  if (deniedPerm) return deniedPerm;
+
   const sp = req.nextUrl.searchParams;
   const isV2 = sp.get("v") === "2";
 

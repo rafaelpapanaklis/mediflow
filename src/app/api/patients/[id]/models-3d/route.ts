@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
@@ -137,6 +138,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
+  // EQ-07 — "Ver radiografías" (xrays.view). Estos archivos son el OTRO MEDIO
+  // de la misma tabla PatientFile que sirve /api/xrays: su `NOT` es el espejo
+  // exacto de este filtro, así que es un solo cajón de archivos del paciente y
+  // le toca un solo interruptor. Sin este gate un READONLY —que no tiene ningún
+  // xrays.*— no veía la pestaña pero recibía 200 con las signed URLs de STL,
+  // DICOM y sets CBCT. Recepción SÍ lo tiene por default y no pierde nada.
+  const deniedPerm = denyIfMissingPermission(ctx, "xrays.view");
+  if (deniedPerm) return deniedPerm;
+
   // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
   const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
   if (denied) return denied;
@@ -204,6 +214,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // EQ-07 — "Subir radiografías y archivos del paciente" (xrays.upload), el
+  // mismo permiso que exige POST /api/xrays. Escribir contra el bucket consume
+  // el cupo de almacenamiento del plan (hasta 2 GB por archivo), así que la
+  // escritura pide la clave de ESCRITURA, no la de lectura. Recepción la tiene
+  // por default —es quien sube los estudios—; READONLY no.
+  const deniedPerm = denyIfMissingPermission(ctx, "xrays.upload");
+  if (deniedPerm) return deniedPerm;
 
   // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
   const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });

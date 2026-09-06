@@ -181,10 +181,16 @@ export async function applyInvoiceOnlinePayment(params: {
     // El dinero YA se cobró en Stripe: registramos el Payment siempre, pero
     // si la factura está cancelada o ya saldada NO tocamos status/saldo y lo
     // dejamos señalado para devolución manual desde el dashboard.
+    //
+    // "Ya saldada" se decide por el invariante total − paid, no por la columna
+    // `balance`: con un balance en 0 sobre una factura que en realidad no se
+    // cobró (fila legada, o el piso en 0 de un total bajado), el pago REAL del
+    // paciente se archivaba como anomalía y nunca se aplicaba.
+    const pending = round2(invoice.total - invoice.paid);
     const anomaly =
       invoice.status === "CANCELLED"
         ? "factura cancelada"
-        : invoice.balance <= 0
+        : pending <= 0
           ? "factura ya saldada"
           : null;
 
@@ -205,9 +211,27 @@ export async function applyInvoiceOnlinePayment(params: {
       return { applied: true, reason: "anomaly" };
     }
 
+    // El saldo sale del INVARIANTE total − paid, nunca de `balance − amount`:
+    // esa resta arrastra cualquier desincronización de la columna y, sobre todo,
+    // ignora lo que ya se cobró por otra vía mientras el paciente tenía abierto
+    // el Checkout.
     const newPaid = round2(invoice.paid + amount);
-    const newBalance = round2(Math.max(0, invoice.balance - amount));
+    const newBalance = round2(Math.max(0, invoice.total - newPaid));
     const fullyPaid = newBalance <= 0;
+
+    // Excedente: el paciente pagó MÁS de lo que quedaba (factura de $1,000, la
+    // recepción cobró $400 en efectivo y el webhook llega por los $1,000). El
+    // dinero ya se cobró en Stripe, así que se registra tal cual —paid > total
+    // es la verdad de lo que entró— pero el Payment queda MARCADO para
+    // devolverlo, igual que las otras dos anomalías de arriba. Antes el saldo
+    // se iba a 0, la factura quedaba PAID y nada señalaba los $400 de más.
+    const excess = round2(newPaid - invoice.total);
+    if (excess > 0) {
+      console.error(
+        "[online-payment] pago en línea superior al saldo — requiere devolución parcial",
+        { invoiceId: invoice.id, reference: params.reference, amount, excess },
+      );
+    }
 
     await tx.payment.create({
       data: {
@@ -215,7 +239,9 @@ export async function applyInvoiceOnlinePayment(params: {
         amount,
         method: ONLINE_PAYMENT_METHOD,
         reference: params.reference,
-        notes: "Pago en línea desde el portal del paciente",
+        notes: excess > 0
+          ? `⚠️ Pago en línea con excedente de $${excess.toFixed(2)} sobre el saldo — revisar/devolver`
+          : "Pago en línea desde el portal del paciente",
       },
     });
     await tx.invoice.update({
@@ -228,6 +254,6 @@ export async function applyInvoiceOnlinePayment(params: {
         ...(fullyPaid ? { paidAt: new Date() } : {}),
       },
     });
-    return { applied: true };
+    return { applied: true, ...(excess > 0 ? { reason: "overpaid" } : {}) };
   });
 }

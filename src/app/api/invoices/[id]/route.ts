@@ -9,6 +9,7 @@ import { findInvalidLineDiscount, LINE_DISCOUNT_ERROR } from "@/lib/validations"
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { stripNestedPatientSecrets } from "@/lib/patient-secrets";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { CASH_METHOD } from "@/lib/caja";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -17,6 +18,40 @@ async function getCtx() {
   const ctx = await getAuthContext();
   if (!ctx) return null;
   return { clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride };
+}
+
+/**
+ * Aviso cuando un cobro en EFECTIVO cae fuera de un turno de caja abierto.
+ *
+ * NO bloquea: una clínica que no usa Caja —o que ya hizo su corte y cobra una
+ * urgencia a las 20:30— se quedaría sin poder cobrar, y eso es peor que el
+ * descuadre. Se registra y se MARCA, que es lo que hace rastreable el dinero:
+ * el arqueo se deriva de los Payment (lib/caja.ts) y la sugerencia de apertura
+ * solo mira desde las 00:00 de HOY, así que el efectivo cobrado después del
+ * corte no entra ni en el corte de hoy ni en la sugerencia de mañana.
+ * Solo aplica a efectivo: lo demás no vive en el cajón.
+ *
+ * Se mira SOLO si hay caja abierta, no si el `paidAt` cae dentro de su ventana:
+ * el modal de cobro manda la fecha como `new Date("AAAA-MM-DD")`, o sea
+ * medianoche UTC = 18:00 del día ANTERIOR en México, así que comparar contra
+ * `openedAt` marcaría prácticamente todos los cobros del día y el aviso dejaría
+ * de significar nada. Ese desfase es un problema real —y aparte— del payload
+ * del modal; va en el reporte, no parcheado aquí a ciegas.
+ *
+ * Mismo criterio de "caja abierta" que getOpenRegister (lib/caja.ts): la más
+ * reciente, por si quedaran dos filas OPEN de una doble apertura.
+ */
+async function cashOutsideRegisterWarning(
+  clinicId: string,
+  method: unknown,
+): Promise<string | null> {
+  if (method !== CASH_METHOD) return null;
+  const open = await prisma.cashRegister.findFirst({
+    where:   { clinicId, status: "OPEN" },
+    orderBy: { openedAt: "desc" },
+    select:  { id: true },
+  });
+  return open ? null : "Efectivo cobrado sin caja abierta — no entra en ningún corte";
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -57,7 +92,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (denied) return denied;
   }
   const { amount: rawAmount, method, reference, notes, paidAt } = await req.json();
-  const amount = Number(rawAmount);
+  // El dinero se redondea a centavos EN LA PUERTA, igual que el pago en línea
+  // del portal (online-payment.ts): un monto con más decimales arrastra el ruido
+  // a paid, de paid a balance y de ahí al saldo fantasma.
+  const amount = round2(Number(rawAmount));
   if (!isFinite(amount) || amount <= 0) return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 });
   // paidAt es opcional. Permite back-date para registrar pagos pasados; si
   // viene inválido, ignoramos y usamos default(now()).
@@ -70,6 +108,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (validPaidAt && validPaidAt.getTime() > Date.now() + 60_000) {
     return NextResponse.json({ error: "La fecha de pago no puede ser futura" }, { status: 400 });
   }
+  // Efectivo fuera del turno de caja: se calcula ANTES de la transacción (es una
+  // lectura, no tiene por qué alargar el lock) y viaja a la nota del Payment.
+  const cashWarning = await cashOutsideRegisterWarning(clinicId, method);
 
   // Lectura + escritura en la MISMA transacción con lock de fila (FOR UPDATE):
   // serializa contra el webhook de pago en línea del portal del paciente
@@ -81,16 +122,32 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!invoice) return { error: "Not found", status: 404 };
     if (invoice.status === "DRAFT") return { error: "Confirma la factura antes de registrar pagos", status: 400 };
     if (invoice.status === "CANCELLED") return { error: "Esta factura está cancelada", status: 400 };
-    if (amount > invoice.balance) return { error: "El monto excede el saldo pendiente", status: 400 };
-    const newPaid = invoice.paid + amount;
-    const newBalance = invoice.total - newPaid;
+    // Saldo REAL por el invariante total − paid, no por la columna `balance`:
+    // esa arrastra el ruido de los abonos anteriores (41.62999999999988 donde la
+    // pantalla dice $41.63) y con ella el servidor rechazaba el ÚLTIMO abono de
+    // 1 de cada 6 planes de pago. La tolerancia de 1¢ es la misma que usa la
+    // guarda de integridad del timbrado (/api/cfdi) y cubre de sobra el
+    // `balance + 0.001` que ya tolera el modal de cobro.
+    // La tolerancia solo aplica cuando QUEDA saldo: sobre una factura ya
+    // cubierta, un centavo tampoco entra.
+    const pending = round2(invoice.total - invoice.paid);
+    if (pending <= 0 || amount > pending + 0.01) return { error: "El monto excede el saldo pendiente", status: 400 };
+    // round2 en los DOS: sin él, $1,000.01 en 6 abonos dejaba paid en
+    // 1000.0099999999999 y balance en 1.1e-13 → factura PARTIAL con saldo
+    // fantasma e imposible de cerrar. Los otros escritores ya redondeaban.
+    const newPaid = round2(invoice.paid + amount);
+    const newBalance = round2(invoice.total - newPaid);
     const newStatus = newBalance <= 0 ? "PAID" : "PARTIAL";
-    await tx.payment.create({ data: { invoiceId: params.id, amount, method, reference, notes, ...(validPaidAt ? { paidAt: validPaidAt } : {}) } });
+    await tx.payment.create({ data: { invoiceId: params.id, amount, method, reference, notes: cashWarning ? `${notes ? notes + " · " : ""}⚠️ ${cashWarning}` : notes, ...(validPaidAt ? { paidAt: validPaidAt } : {}) } });
     await tx.invoice.updateMany({ where: { id: params.id, clinicId }, data: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus as any, paidAt: newStatus === "PAID" ? (validPaidAt ?? new Date()) : undefined, paymentMethod: method } });
     return { invoice, newPaid, newBalance, newStatus };
   });
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
   const { invoice, newPaid, newBalance, newStatus } = result;
+
+  if (cashWarning) {
+    console.error(`[invoices] ${cashWarning}`, { invoiceId: params.id, clinicId, amount });
+  }
 
   await logMutation({
     req,
@@ -100,12 +157,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     entityId: params.id,
     action: "update",
     before: { paid: invoice.paid, balance: invoice.balance, status: invoice.status },
-    after: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, payment: { amount, method } },
+    after: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, payment: { amount, method }, ...(cashWarning ? { cashWarning } : {}) },
   });
 
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, ...(cashWarning ? { warning: cashWarning } : {}) });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -129,8 +186,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: "Solo se pueden editar facturas en borrador" }, { status: 400 });
   }
 
+  // El ESTADO no se fija desde aquí. Este endpoint pide "billing.edit" —que
+  // RECEPTIONIST tiene por default— mientras que /cancel exige "billing.refund"
+  // y además rechaza las facturas con status PAID o con paid > 0. Escribir
+  // `status` a pelo puenteaba las dos guardas: un PATCH {status:"CANCELLED"}
+  // sobre una factura cobrada de $5,000 la borraba de la caja y de todos los
+  // reportes dejando `paid` en 5,000; un {status:"PENDING"} sobre una cancelada
+  // la volvía timbrable (CFDI de una factura anulada ante el SAT); y un
+  // {status:"PAID"} dejaba la píldora PAGADA junto a un saldo de $5,000.
+  // Cada transición tiene su endpoint dedicado, con su permiso y sus reglas.
+  // Reenviar el MISMO status que ya tiene no es una transición: se ignora.
+  if (body.status !== undefined && body.status !== invoice.status) {
+    return NextResponse.json({
+      error: "El estado de la factura no se cambia desde aquí: usa /confirm (borrador → pendiente), /mark-paid, /refund o /cancel.",
+    }, { status: 400 });
+  }
+
   const updateData: any = {};
-  if (body.status) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
   if (body.items) {
     // Sin esta validación, un body.items no-arreglo se guardaría tal cual en el

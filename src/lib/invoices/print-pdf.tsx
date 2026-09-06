@@ -8,7 +8,7 @@
 // clínica que pase el caller (mismo patrón que lib/quotes/quote-pdf).
 
 import { prisma } from "@/lib/prisma";
-import { itemQuantity, itemUnitPrice, itemLineTotal, round2 } from "@/lib/invoice-totals";
+import { itemQuantity, itemUnitPrice, itemLineTotal, invoicePrintTotals, round2 } from "@/lib/invoice-totals";
 import {
   renderToBuffer,
   Document,
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
 
 interface ComprobanteProps {
   clinic: { name: string; address: string | null; city: string | null; state: string | null; phone: string | null; email: string | null; rfcEmisor: string | null };
-  invoice: { invoiceNumber: string; createdAt: Date; status: string; subtotal: number; discount: number; total: number; paid: number; balance: number; cfdiUuid: string | null };
+  invoice: { invoiceNumber: string; createdAt: Date; status: string; subtotal: number; discount: number; total: number; paid: number; balance: number; cfdiUuid: string | null; taxRate: number | null; taxIncluded: boolean | null };
   patient: { name: string; rfc: string | null; razonSocial: string | null; regimen: string | null; cp: string | null };
   items: { description: string; quantity: number; unitPrice: number; total: number }[];
   payments: { amount: number; method: string; reference: string | null; paidAt: Date }[];
@@ -130,6 +130,9 @@ interface ComprobanteProps {
 
 function ComprobanteDocument(p: ComprobanteProps) {
   const sello = estadoSello(p.invoice.status, p.invoice.paid, p.invoice.balance);
+  // Renglones de dinero que hacen cuadrar el documento: con "IVA agregado" las
+  // líneas suman la base y el TOTAL trae el impuesto encima.
+  const totales = invoicePrintTotals(p.invoice);
   const clinicAddr = [p.clinic.address, [p.clinic.city, p.clinic.state].filter(Boolean).join(", ")].filter(Boolean);
 
   return (
@@ -191,17 +194,27 @@ function ComprobanteDocument(p: ComprobanteProps) {
 
         {/* Totales */}
         <View style={styles.totals}>
+          {/* El Subtotal se imprime en cuanto hay ALGO entre las líneas y el
+              TOTAL: un descuento o el IVA agregado. Sin el renglón de IVA el
+              comprobante no cuadraba (conceptos $1,000, descuento $100 → TOTAL
+              $1,044) y nada en la hoja explicaba la diferencia. */}
+          {(p.invoice.discount > 0 || totales.tax > 0) ? (
+            <View style={styles.totalLine}>
+              <Text style={styles.totalLabel}>Subtotal</Text>
+              <Text style={styles.totalValue}>{fmtMXN(p.invoice.subtotal)}</Text>
+            </View>
+          ) : null}
           {p.invoice.discount > 0 ? (
-            <>
-              <View style={styles.totalLine}>
-                <Text style={styles.totalLabel}>Subtotal</Text>
-                <Text style={styles.totalValue}>{fmtMXN(p.invoice.subtotal)}</Text>
-              </View>
-              <View style={styles.totalLine}>
-                <Text style={styles.totalLabel}>Descuento</Text>
-                <Text style={[styles.totalValue, { color: "#b45309" }]}>−{fmtMXN(p.invoice.discount)}</Text>
-              </View>
-            </>
+            <View style={styles.totalLine}>
+              <Text style={styles.totalLabel}>Descuento</Text>
+              <Text style={[styles.totalValue, { color: "#b45309" }]}>−{fmtMXN(p.invoice.discount)}</Text>
+            </View>
+          ) : null}
+          {totales.tax > 0 ? (
+            <View style={styles.totalLine}>
+              <Text style={styles.totalLabel}>IVA ({totales.rate}%)</Text>
+              <Text style={styles.totalValue}>{fmtMXN(totales.tax)}</Text>
+            </View>
           ) : null}
           <View style={styles.grandRow}>
             <Text style={styles.grandLabel}>TOTAL</Text>
@@ -257,6 +270,8 @@ export async function buildInvoicePrintPdf(
     select: {
       invoiceNumber: true, createdAt: true, status: true,
       subtotal: true, discount: true, total: true, paid: true, balance: true, cfdiUuid: true,
+      // Sin estas dos el comprobante no sabía si el TOTAL trae IVA agregado.
+      taxRate: true, taxIncluded: true,
       items: true,
       clinic:  { select: { name: true, address: true, city: true, state: true, phone: true, email: true, rfcEmisor: true } },
       patient: { select: { firstName: true, lastName: true, rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } },
@@ -311,6 +326,8 @@ export async function buildInvoicePrintPdf(
       paid:          invoice.paid,
       balance:       invoice.balance,
       cfdiUuid:      invoice.cfdiUuid,
+      taxRate:       invoice.taxRate,
+      taxIncluded:   invoice.taxIncluded,
     },
     patient: {
       name:        `${invoice.patient?.firstName ?? ""} ${invoice.patient?.lastName ?? ""}`.trim() || "Paciente",

@@ -197,6 +197,9 @@ export async function POST(req: NextRequest) {
           curp:      patient.curp,
           rfcPaciente: patient.rfcPaciente,
           address:   patient.address,
+          // Constancia de que se revocó el enlace del portal, sin escribir el
+          // token en claro en la bitácora (sigue siendo un bearer).
+          portalLinkRevoked: patient.portalToken != null,
         };
 
         const ANON = "[ANONIMIZADO]";
@@ -219,6 +222,13 @@ export async function POST(req: NextRequest) {
             currentMedications: [],
             tags:               [],
             notes:              null,
+            // El enlace del portal es un BEARER: sobrevivía a la cancelación y
+            // seguía sirviendo dob, gender, bloodType, patientNumber y el
+            // historial de citas hasta que expiraba solo (30 días). Se invalida
+            // aquí — y el GET del portal rechaza además a todo paciente con
+            // deletedAt, para que fallar en un lado no vuelva a abrirlo.
+            portalToken:       null,
+            portalTokenExpiry: null,
             deletedAt:    new Date(),
             anonymizedAt: new Date(),
             status:       "ARCHIVED",
