@@ -94,6 +94,7 @@ import {
   eduDirSemaforoDeFirmas,
   eduDirSillonEstado,
   eduDirVariacion,
+  eduDirVariacionEn,
   eduDirVentana,
   eduDirWeekdayCounts,
   parseEduDirInicioPeriodo,
@@ -1118,7 +1119,8 @@ export async function getEduDireccionPanel(
       raw: cobradoCents,
       note: "Pagos menos devoluciones, por la fecha del pago.",
       semaforo: "NEUTRO",
-      variacion: eduDirVariacion(cobradoCents, cobradoPrevCents),
+      unidad: "dinero",
+      variacion: eduDirVariacionEn(cobradoCents, cobradoPrevCents, "dinero"),
       sub: null,
     },
   ];

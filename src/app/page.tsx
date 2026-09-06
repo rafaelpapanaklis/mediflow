@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-800";
 import {
   Hero, SocialProofBar, Funciones, PricingSection, WhatsappCta, ModulesTrio, FeaturesGrid,
   ModulePages, Comparison, Testimonials, TrustFaq, FinalCta, ScrollReveal, TawkChat,
@@ -10,16 +10,6 @@ import { SalesFooter } from "@/components/public/landing/sales/footer";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { getResolvedPlans } from "@/lib/plans";
 import "@/components/public/landing/sales/v2/landing-v2.css";
-
-// Solo los pesos que la landing usa de verdad: un grep de fontWeight sobre
-// v2 + footer + nav no encuentra ni un 900 (el máximo es 800), así que ese
-// @font-face sobraba.
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 

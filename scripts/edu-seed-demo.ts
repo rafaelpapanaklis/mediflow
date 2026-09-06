@@ -1946,10 +1946,10 @@ async function medir(db: PrismaClient, inst: string): Promise<void> {
   anota({
     pantalla: "/instituto/agenda · HOY, 3 sedes (32 sillones)",
     ms: ag.ms,
-    filas: a.page.rows.length + a.sillones.length + a.alumnos.length + a.docentes.length + a.programas.length + a.pacientes.length,
-    leidas: a.page.rows.length + a.sillones.length + a.alumnos.length + a.docentes.length + a.programas.length + a.pacientes.length,
+    filas: a.page.rows.length + a.sillones.length + a.alumnos.length + a.docentes.length + a.programas.length + a.pacientes.rows.length,
+    leidas: a.page.rows.length + a.sillones.length + a.alumnos.length + a.docentes.length + a.programas.length + a.pacientes.rows.length,
     kb: kb(a),
-    nota: `citas ${a.page.rows.length}${a.page.truncated ? " (CORTADA en 500)" : ""} · sillones ${a.sillones.length} · pacientes en el <select> ${a.pacientes.length}`,
+    nota: `citas ${a.page.rows.length}${a.page.truncated ? " (CORTADA en 500)" : ""} · sillones ${a.sillones.length} · pacientes en el <select> ${a.pacientes.rows.length}${a.pacientes.truncated ? " (CORTADOS)" : ""}`,
   });
 
   for (const primeraSede of sede.options ?? []) {

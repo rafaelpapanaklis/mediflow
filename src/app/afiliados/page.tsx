@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Inter } from "next/font/google";
+// Mismos pesos que la landing v4 (400–800): al coincidir la configuración,
+// next/font sirve EL MISMO archivo que ya cachea la home. Ni una fuente extra.
+import { inter } from "@/fonts/inter-400-800";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
@@ -23,15 +25,6 @@ import { MIN_PAID_INVOICES, SUSTAIN_MONTHS } from "@/lib/affiliates/network-bonu
 import { fmtMxn, getPublicOffer } from "@/lib/affiliates/public-offer";
 import type { PlanKey } from "@/lib/affiliates/payout-core";
 import "./afiliados.css";
-
-// Mismos pesos que la landing v4 (400–800): al coincidir la configuración,
-// next/font sirve EL MISMO archivo que ya cachea la home. Ni una fuente extra.
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 const TITLE = "Programa de afiliados: gana comisiones recomendando DaleControl";
 const DESCRIPTION =

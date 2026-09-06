@@ -27,12 +27,27 @@
  * límite CON margen.
  * ═══════════════════════════════════════════════════════════════════════
  */
-import type { EduChargeStatus, EduPaymentMethod, EduFeeRule } from "@/lib/edu/types";
+import type {
+  EduChargeStatus,
+  EduInstallmentStatus,
+  EduPaymentMethod,
+  EduFeeRule,
+} from "@/lib/edu/types";
 import {
+  EDU_CASH_METHOD,
   EDU_CHARGE_STATUSES,
   EDU_FEE_RULES,
+  EDU_MAX_PAGOS_POR_OPERACION,
+  EDU_MSI_OPTIONS,
   EDU_PAYMENT_METHODS,
+  EDU_PAYMENT_METHODS_COBRABLES,
+  EDU_PAYMENT_METHOD_LABELS,
+  EDU_PAYMENT_METHOD_SHORT,
 } from "@/lib/edu/types";
+// Puro y client-safe (recorta y acota texto). Se importa en vez de
+// recortar a mano para que el "" de un input y el null de la base
+// signifiquen lo mismo aquí que en el resto del vertical.
+import { eduOptionalText } from "@/lib/edu/agenda-core";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · TOPES
@@ -276,6 +291,314 @@ export function parseEduChargeStatus(raw: unknown): EduChargeStatus | null {
 export function parseEduFeeRule(raw: unknown): EduFeeRule | null {
   if (typeof raw !== "string") return null;
   return (EDU_FEE_RULES as string[]).includes(raw) ? (raw as EduFeeRule) : null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 4b · 🔴 EL PAGO DIVIDIDO: hasta TRES formas en UNA operación
+//
+// Lo que se vio en el mostrador: el paciente trae $500 en efectivo y el
+// resto con tarjeta, y la caja solo aceptaba UN método. La salida era
+// mentir en el método (todo "efectivo") o partir el cobro en dos, que
+// descuadra el recibo y el CFDI.
+//
+// La forma de arreglarlo NO es una columna nueva con "el otro método":
+// cada forma es su PROPIA fila de EduPayment, con su método, su monto
+// POSITIVO y su referencia. Así el corte las cuenta una por una, la
+// factura las ve todas y no hay ningún número que sumar a mano.
+//
+// Esta función es la ÚNICA que valida esa lista, y la usan LOS DOS LADOS:
+// el servidor antes de abrir la transacción y la pantalla mientras se
+// teclea. Si fueran dos validaciones distintas, la pantalla dejaría
+// apretar un botón que el servidor rebota.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Una forma de pago YA validada. Lo que se escribe, fila por fila. */
+export interface EduPagoValidado {
+  method: EduPaymentMethod;
+  /** Centavos POSITIVOS, también en una devolución: el signo es isRefund. */
+  amountCents: number;
+  isRefund: boolean;
+  reference: string | null;
+  notes: string | null;
+  /** Meses sin intereses DEL BANCO. Solo con CARD_CREDIT. */
+  msiMonths: number | null;
+}
+
+export type EduPagosFailure = { ok: false; error: string };
+export type EduPagosResult =
+  | { ok: true; pagos: EduPagoValidado[]; sumaCents: number; restanteCents: number }
+  | EduPagosFailure;
+
+/**
+ * 🔴 La guarda viaja JUNTO a la unión: el tsconfig del repo corre con
+ * strict:false y ahí TypeScript NO estrecha una unión por su discriminante
+ * booleano — `if (!r.ok) r.error` revienta en el build con TS2339. Mismo
+ * patrón que `eduPlanRequestFailed` (pagos-core.ts).
+ */
+export function eduPagosFailed(r: EduPagosResult): r is EduPagosFailure {
+  return r.ok === false;
+}
+
+function enteroDe(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw.trim()) : NaN;
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
+  return n;
+}
+
+/**
+ * Lee las formas de pago de una operación y las valida TODAS o ninguna.
+ *
+ * Acepta las dos formas del cuerpo, a propósito:
+ *   · `payments: [ … ]` — de 1 a EDU_MAX_PAGOS_POR_OPERACION;
+ *   · `payment: { … }`  — el pago único de siempre, que se envuelve en una
+ *     lista de uno. Los clientes viejos (y las pruebas viejas) siguen
+ *     funcionando sin tocar una línea.
+ *
+ * Las reglas, y por qué:
+ *   · métodos REPETIDOS sí se permiten: dos tarjetas distintas son dos
+ *     formas legítimas, y prohibirlo obligaría a mentir en una;
+ *   · `CARD` (legado) se RECHAZA con un mensaje que dice qué elegir: la
+ *     fila vieja se puede leer, pero no se puede crear una nueva sin saber
+ *     si fue débito o crédito;
+ *   · `msiMonths` con un método que no sea crédito es un ERROR y no se
+ *     ignora en silencio: ignorarlo perdería un dato que alguien tecleó;
+ *   · `OTHER` exige el motivo y `CHECK` exige la referencia, porque un
+ *     "otro" sin explicar y un cheque sin número son un agujero en el
+ *     arqueo el día que haya que buscarlos;
+ *   · una DEVOLUCIÓN no se divide: es UN movimiento, y partirlo en tres
+ *     haría imposible cuadrarlo contra el pago que revierte.
+ *
+ * Devuelve el error ESCRITO para una persona en vez de lanzar: este módulo
+ * es puro y quien llama decide el status HTTP.
+ */
+export function parseEduPagosDivididos(
+  raw: unknown,
+  objetivoCents: number,
+  opts: { exacto: boolean; canRefund?: boolean },
+): EduPagosResult {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return { ok: false, error: "La forma de pago no es válida." };
+  }
+  const r = raw as Record<string, unknown>;
+
+  let lista: unknown[];
+  if (r.payments !== undefined && r.payments !== null) {
+    if (!Array.isArray(r.payments)) {
+      return { ok: false, error: "Las formas de pago tienen que venir en una lista." };
+    }
+    lista = r.payments;
+  } else if (r.payment !== undefined && r.payment !== null && r.payment !== "") {
+    lista = [r.payment];
+  } else {
+    return { ok: false, error: "No viene ninguna forma de pago." };
+  }
+
+  if (lista.length === 0) {
+    return { ok: false, error: "Elige al menos una forma de pago." };
+  }
+  if (lista.length > EDU_MAX_PAGOS_POR_OPERACION) {
+    return {
+      ok: false,
+      error: `Un pago se divide en ${EDU_MAX_PAGOS_POR_OPERACION} formas como mucho; llegaron ${lista.length}.`,
+    };
+  }
+
+  const pagos: EduPagoValidado[] = [];
+  let sumaCents = 0;
+  let hayDevolucion = false;
+
+  for (let i = 0; i < lista.length; i++) {
+    // Con una sola forma, decir "(forma 1)" sobra y confunde.
+    const cual = lista.length > 1 ? ` (forma ${i + 1} de ${lista.length})` : "";
+    const item = lista[i];
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      return { ok: false, error: `Esa forma de pago no es válida${cual}.` };
+    }
+    const p = item as Record<string, unknown>;
+
+    const method = p.method === undefined ? EDU_CASH_METHOD : parseEduPaymentMethod(p.method);
+    if (!method) return { ok: false, error: `Ese método de pago no existe${cual}.` };
+    if (!(EDU_PAYMENT_METHODS_COBRABLES as string[]).includes(method)) {
+      return {
+        ok: false,
+        error: `“${EDU_PAYMENT_METHOD_LABELS[method]}” ya no se puede elegir${cual}: elige débito o crédito.`,
+      };
+    }
+
+    const amountCents = parseEduMoneyCentsMax(p.amountCents, EDU_MAX_CHARGE_CENTS);
+    if (amountCents === null) {
+      return {
+        ok: false,
+        error: `Ese monto no es una cantidad válida${cual} (máximo ${eduMoney(EDU_MAX_CHARGE_CENTS)}).`,
+      };
+    }
+    if (amountCents <= 0) {
+      return { ok: false, error: `El monto tiene que ser mayor que cero${cual}.` };
+    }
+
+    let msiMonths: number | null = null;
+    if (p.msiMonths !== undefined && p.msiMonths !== null && p.msiMonths !== "") {
+      if (method !== "CARD_CREDIT") {
+        return {
+          ok: false,
+          error: `Los meses sin intereses los da el banco con tarjeta de crédito${cual}: con ${EDU_PAYMENT_METHOD_LABELS[
+            method
+          ].toLowerCase()} no aplican.`,
+        };
+      }
+      const n = enteroDe(p.msiMonths);
+      if (n === null || !EDU_MSI_OPTIONS.includes(n)) {
+        return {
+          ok: false,
+          error: `Los meses sin intereses del banco solo pueden ser ${EDU_MSI_OPTIONS.join(", ")}${cual}.`,
+        };
+      }
+      msiMonths = n;
+    }
+
+    const reference = eduOptionalText(p.reference, 80) ?? null;
+    const notes = eduOptionalText(p.notes, 300) ?? null;
+    if (method === "OTHER" && (notes === null || notes.length < 3)) {
+      return {
+        ok: false,
+        error: `“Otro” pide que escribas el motivo${cual}: una beca, un vale, una cortesía (al menos 3 letras).`,
+      };
+    }
+    if (method === "CHECK" && reference === null) {
+      return {
+        ok: false,
+        error: `Un cheque pide su referencia${cual}: el número y el banco.`,
+      };
+    }
+
+    const isRefund = Boolean(p.isRefund);
+    if (isRefund) {
+      if (lista.length > 1) {
+        return {
+          ok: false,
+          error: "Una devolución no se divide en varias formas: es un solo movimiento.",
+        };
+      }
+      if (!opts.canRefund) {
+        return { ok: false, error: "Tu cuenta no puede devolver dinero (permiso caja.refund)." };
+      }
+      hayDevolucion = true;
+    }
+
+    pagos.push({ method, amountCents, isRefund, reference, notes, msiMonths });
+    sumaCents += amountCents;
+  }
+
+  if (sumaCents > objetivoCents) {
+    return {
+      ok: false,
+      error: hayDevolucion
+        ? `No puedes devolver ${eduMoney(sumaCents)}: el paciente solo ha pagado ${eduMoney(objetivoCents)}.`
+        : `Las formas de pago suman ${eduMoney(sumaCents)} y como mucho caben ${eduMoney(
+            objetivoCents,
+          )}. Sobran ${eduMoney(sumaCents - objetivoCents)}.`,
+    };
+  }
+  if (opts.exacto && sumaCents !== objetivoCents) {
+    return {
+      ok: false,
+      error: `Faltan ${eduMoney(objetivoCents - sumaCents)}: se cobra ${eduMoney(
+        objetivoCents,
+      )} exactos. Una mensualidad se divide entre FORMAS de pago, nunca entre meses.`,
+    };
+  }
+
+  return { ok: true, pagos, sumaCents, restanteCents: objetivoCents - sumaCents };
+}
+
+/**
+ * 🔴 ¿ESTE CUERPO PIDE UNA DEVOLUCIÓN? Con la MISMA precedencia con la que
+ * `parseEduPagosDivididos` decide qué lista lee: `payments` gana a
+ * `payment`, y `payment` gana al pago suelto de la raíz.
+ *
+ * Existe porque quien llama tiene que elegir el TOPE **antes** de validar
+ * —devolver se topa con lo pagado, cobrar con el saldo— y esa decisión no
+ * puede leer el cuerpo con otra regla que la del parser.
+ *
+ * El bug que cierra, encontrado por el refutador: la forma "obvia"
+ * (`Boolean(raw.isRefund ?? raw.payment?.isRefund)`) NO cae al lado
+ * derecho cuando el izquierdo es `false` —`??` solo mira null y
+ * undefined—, así que un cuerpo con `isRefund: false` en la raíz y
+ * `payment.isRefund: true` dentro elegía el tope del COBRO para una
+ * DEVOLUCIÓN. No llegaba a sacar dinero de más (el candado de
+ * `eduApplyEduPaymentInTx` lo paraba), pero fallaba con "otro movimiento
+ * entró antes" sin que hubiera entrado ninguno: un error que miente.
+ */
+export function eduPagosPideDevolucion(raw: unknown): boolean {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return false;
+  const r = raw as Record<string, unknown>;
+  if (Array.isArray(r.payments)) {
+    return r.payments.some((p) => Boolean((p as { isRefund?: unknown } | null)?.isRefund));
+  }
+  if (r.payment !== undefined && r.payment !== null && r.payment !== "") {
+    return Boolean((r.payment as { isRefund?: unknown }).isRefund);
+  }
+  return Boolean(r.isRefund);
+}
+
+/**
+ * EL CAMBIO del efectivo: lo recibido menos lo que se cobra.
+ *
+ * `null` = todavía no alcanza (o no es un número), y la pantalla escribe
+ * "faltan $X" en vez de un cambio negativo. Un cambio en rojo delante del
+ * paciente se lee como "el sistema le debe dinero", que no es lo que pasa.
+ *
+ * 🔴 El recibido NO viaja al servidor y NO se guarda: el pago es lo que se
+ * cobra, no lo que se puso sobre el mostrador. Esto es aritmética de
+ * pantalla para que nadie tenga que hacerla de cabeza.
+ */
+export function eduCambioCents(recibidoCents: number, aCobrarCents: number): number | null {
+  if (!Number.isFinite(recibidoCents) || !Number.isFinite(aCobrarCents)) return null;
+  if (recibidoCents < 0 || aCobrarCents < 0) return null;
+  if (recibidoCents < aCobrarCents) return null;
+  return recibidoCents - aCobrarCents;
+}
+
+export interface EduPagoParaResumen {
+  method: EduPaymentMethod;
+  isRefund: boolean;
+  amountCents: number;
+}
+
+/**
+ * Los métodos DISTINTOS con los que se pagó, de mayor a menor monto.
+ *
+ * Las devoluciones NO cuentan: la fila de la lista tiene que decir cómo
+ * pagó el paciente, y un reembolso en efectivo de un cobro con tarjeta
+ * pondría "Efectivo" en un cobro que nadie pagó en efectivo.
+ */
+export function eduMetodosDistintos(pagos: EduPagoParaResumen[]): EduPaymentMethod[] {
+  if (!Array.isArray(pagos)) return [];
+  const suma = new Map<EduPaymentMethod, number>();
+  for (const p of pagos) {
+    if (!p || p.isRefund) continue;
+    if (!(EDU_PAYMENT_METHODS as string[]).includes(p.method)) continue;
+    const monto = Number.isFinite(p.amountCents) ? p.amountCents : 0;
+    suma.set(p.method, (suma.get(p.method) ?? 0) + monto);
+  }
+  const pares: [EduPaymentMethod, number][] = [];
+  suma.forEach((total, method) => pares.push([method, total]));
+  return pares
+    .sort(
+      (a, b) =>
+        b[1] - a[1] ||
+        // Empate: el orden del enum, para que la misma pareja de métodos
+        // se pinte siempre igual y la lista no "baile" entre recargas.
+        EDU_PAYMENT_METHODS.indexOf(a[0]) - EDU_PAYMENT_METHODS.indexOf(b[0]),
+    )
+    .map(([m]) => m);
+}
+
+/** "Efectivo" · "Efectivo + Crédito" · "—" si no se ha pagado nada. */
+export function eduMetodosResumen(pagos: EduPagoParaResumen[]): string {
+  const metodos = eduMetodosDistintos(pagos);
+  if (metodos.length === 0) return "—";
+  return metodos.map((m) => EDU_PAYMENT_METHOD_SHORT[m]).join(" + ");
 }
 
 /**
@@ -524,7 +847,18 @@ export interface EduPaymentRow {
   reference: string | null;
   notes: string | null;
   paidAt: string;
+  /**
+   * El INSTANTE ya escrito, en la zona del INSTITUTO y por el servidor:
+   * "15 de septiembre de 2026, 13:40". Formatearlo en el cliente pintaría
+   * la zona del navegador y rompería la hidratación.
+   */
+  paidAtLabel: string;
   receivedByName: string;
+  /** Meses sin intereses DEL BANCO, si los hubo (solo con crédito). */
+  msiMonths: number | null;
+  /** Si este pago fue de una mensualidad: cuál, y de cuántas. */
+  installmentNumber: number | null;
+  installmentMonths: number | null;
 }
 
 export interface EduChargeRow {
@@ -550,11 +884,50 @@ export interface EduChargeRow {
   items: EduChargeItemRow[];
   payments: EduPaymentRow[];
   /**
+   * Con qué se pagó, sin repetir y de mayor a menor monto. La fila de la
+   * lista pinta "Efectivo + Crédito" sin abrir el recibo.
+   */
+  methods: EduPaymentMethod[];
+  /**
    * Pagos a meses: el plan ACTIVO del cobro, si hay (a lo sumo uno). Con
    * esto el recibo enlaza al plan y esconde el pago suelto — que el
    * servidor rebotaría igual: un cobro diferido se cobra por mensualidad.
    */
   activePlanId: string | null;
+  /**
+   * 🔴 EL PLAN, YA DERIVADO. Es lo que arregla el "no se sabe cada cuándo
+   * paga": con solo el `activePlanId` la lista de Caja no podía decir ni
+   * cuántas van ni cuándo vence la siguiente, y el calendario quedaba dos
+   * clics más lejos. Se deriva en la lectura (con el hoy del INSTITUTO,
+   * como todo lo de VENCIDA), no se guarda.
+   *
+   * `null` = este cobro no tiene plan activo.
+   */
+  plan: {
+    id: string;
+    months: number;
+    paidCount: number;
+    /** La mensualidad "pareja"; la PRIMERA puede traer los centavos de más. */
+    installmentCents: number;
+    /** La siguiente sin pagar, "AAAA-MM-DD". null = no queda ninguna. */
+    nextDueISO: string | null;
+    overdueCount: number;
+    pendingCents: number;
+    /**
+     * El calendario COMPLETO, para pintarlo dentro del recibo del cobro y
+     * poder cobrar la siguiente ahí mismo. Viaja aquí y no se pide en una
+     * segunda consulta porque ya se leyó para derivar los números de
+     * arriba: pedirlo otra vez sería un viaje de red para dibujar lo que
+     * ya está en la mano.
+     */
+    installments: {
+      id: string;
+      number: number;
+      amountCents: number;
+      dueDateISO: string;
+      status: EduInstallmentStatus;
+    }[];
+  } | null;
 }
 
 export interface EduChargesPage {
@@ -633,9 +1006,10 @@ export interface EduCortePaymentInput {
  * propia columna. Un corte que enseña un solo neto esconde que hubo que
  * devolver $1,500, que es justo el número por el que pregunta la dirección.
  *
- * Devuelve SIEMPRE los cuatro métodos, también en cero. Una tabla de corte
+ * Devuelve SIEMPRE los SIETE métodos, también en cero. Una tabla de corte
  * a la que le faltan renglones obliga a leerla dos veces para saber si
- * "no hubo tarjeta" o "se me olvidó mirar".
+ * "no hubo tarjeta" o "se me olvidó mirar". Cuál de los siete se PINTA lo
+ * decide `eduCorteMethodsVisibles`, aquí abajo.
  */
 export function eduCorteMethods(pagos: EduCortePaymentInput[]): EduCorteMethodRow[] {
   const base = new Map<EduPaymentMethod, EduCorteMethodRow>();
@@ -651,6 +1025,51 @@ export function eduCorteMethods(pagos: EduCortePaymentInput[]): EduCorteMethodRo
     row.count += 1;
   }
   return EDU_PAYMENT_METHODS.map((m) => base.get(m) as EduCorteMethodRow);
+}
+
+/**
+ * QUÉ RENGLONES SE PINTAN en el corte.
+ *
+ * Los COBRABLES siempre, también en cero (ver arriba: una tabla con
+ * huecos obliga a leerla dos veces). El legado `CARD` —"Tarjeta (sin
+ * especificar)"— SOLO si de verdad hubo movimientos con él: un renglón
+ * permanente en cero de un método que ya nadie puede elegir es ruido en
+ * la hoja que alguien firma al cerrar el turno.
+ */
+export function eduCorteMethodsVisibles(rows: EduCorteMethodRow[]): EduCorteMethodRow[] {
+  const porMetodo = new Map<EduPaymentMethod, EduCorteMethodRow>();
+  for (const r of rows ?? []) {
+    if (r) porMetodo.set(r.method, r);
+  }
+  const vacio = (method: EduPaymentMethod): EduCorteMethodRow => ({
+    method,
+    chargedCents: 0,
+    refundedCents: 0,
+    netCents: 0,
+    count: 0,
+  });
+  return EDU_PAYMENT_METHODS.filter((m) => {
+    if ((EDU_PAYMENT_METHODS_COBRABLES as string[]).includes(m)) return true;
+    return (porMetodo.get(m)?.count ?? 0) > 0;
+  }).map((m) => porMetodo.get(m) ?? vacio(m));
+}
+
+/**
+ * LA TERMINAL: débito + crédito + el legado `CARD`, en NETO.
+ *
+ * Es el número que se compara contra el corte que imprime la terminal
+ * bancaria al final del día, y que desde que hay dos renglones de tarjeta
+ * habría que sumar de cabeza. El efectivo esperado del cajón NO cambia por
+ * esto: sigue siendo solo `EDU_CASH_METHOD`, porque una tarjeta no mete un
+ * peso en el cajón.
+ */
+export function eduCorteTerminalCents(rows: EduCorteMethodRow[]): number {
+  const TERMINAL: EduPaymentMethod[] = ["CARD_DEBIT", "CARD_CREDIT", "CARD"];
+  let total = 0;
+  for (const r of rows ?? []) {
+    if (r && TERMINAL.includes(r.method)) total += r.netCents;
+  }
+  return total;
 }
 
 /**

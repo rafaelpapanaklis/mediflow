@@ -77,7 +77,7 @@ export default async function InstitutoTamizajePage() {
 
       <EduTamizajeScreen
         pendientes={pendientes}
-        patients={pacientes.map((p) => ({
+        patients={pacientes.rows.map((p) => ({
           id: p.id,
           folio: p.folio,
           name: p.name,

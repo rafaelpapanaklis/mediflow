@@ -147,6 +147,21 @@ const SHARED_FILES = [
   // todos los verticales a la vez:
   //   EDU_GUARD_SHARED="src/app/admin/admin-nav.tsx" node scripts/edu-guard.cjs
   "src/app/admin/admin-nav.tsx",
+  // `tsconfig.json` es del REPO ENTERO, no del dental — pero cualquier
+  // cambio ahí afecta el type-check de los cuatro verticales a la vez, así
+  // que se declara igual. La chore "deuda chica" le agrega `target: ES2022`
+  // a `compilerOptions`: con `noEmit: true` y Next compilando con SWC, eso
+  // solo cambia CONTRA QUÉ se chequean los tipos, no el JS que se sirve —
+  // mata 8 de los 12 errores de `tsc` (Set/Map/regex necesitan es2015+):
+  //   EDU_GUARD_SHARED="tsconfig.json" node scripts/edu-guard.cjs
+  "tsconfig.json",
+  // `src/lib/barber/__tests__/dinero-sumas.test.ts` es de OTRO vertical
+  // (barber, no dental), pero la misma chore de arriba corrige ahí un
+  // objeto de prueba con propiedades de más (`id`, `durationMin`) que
+  // `totalServicePrice` no declara — una línea, un test, cero impacto en
+  // producción de ningún vertical. Se declara para que el cambio se vea:
+  //   EDU_GUARD_SHARED="src/lib/barber/__tests__/dinero-sumas.test.ts" node scripts/edu-guard.cjs
+  "src/lib/barber/__tests__/dinero-sumas.test.ts",
 ];
 
 function isOwn(p) {

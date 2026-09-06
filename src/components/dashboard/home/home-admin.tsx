@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { KpiCard, type KpiAccent } from "@/components/ui/design-system/kpi-card";
 import { HomeSection } from "./home-section";
+import styles from "./home.module.css";
 import { Greeting } from "./parts/greeting";
 import { AdminPeriodToggle } from "./parts/admin-period-toggle";
 import { TeamPerformanceTable } from "./parts/team-performance-table";
@@ -72,6 +73,12 @@ export function HomeAdmin({ clinic, data, period }: Props) {
           gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 16,
           marginBottom: 20,
+          // El home pinta sus KPIs más grandes que el resto del panel: la regla
+          // `.home-kpis .kpi__value` de globals.css. Desde que KpiCard ajusta el
+          // número al ancho de su tarjeta lo hace con un tope inline, así que el
+          // tope del home viaja por esta variable — mismo valor de siempre, y sin
+          // tocar globals.css.
+          ["--kpi-value-max" as string]: "clamp(25px, 2.1vw, 32px)",
         }}
       >
         {data.kpis.length === 0 ? (
@@ -105,15 +112,11 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         <AdminPeriodToggle value={period} />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
-          gap: 16,
-          marginBottom: 24,
-        }}
-        className="mf-home-admin-grid"
-      >
+      {/* El reparto 2fr/1fr y su colapso a una columna viven en el .module.css:
+          se miden contra el CONTENEDOR (HomeShell), no contra el viewport. En
+          estilo inline el @media de globals.css no podía competir salvo por su
+          !important, y aun así medía la pantalla y no la caja real. */}
+      <div className={`${styles.gridMain} mf-home-admin-grid`}>
         {/* La gráfica arranca en el mismo periodo que los KPIs de arriba: su
             total es el número de la tarjeta de ingresos, no otro recorte. */}
         <RevenueTrendCard period={period} />

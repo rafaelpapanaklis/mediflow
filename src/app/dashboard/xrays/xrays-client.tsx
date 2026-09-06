@@ -794,9 +794,9 @@ export function XraysClient({
         )}
         <div className={styles.topbarSpacer} />
         {selectedPatient && (
-          <div className={styles.topbarPatient}>
+          <div className={styles.topbarPatient} title={`${selectedPatient.firstName} ${selectedPatient.lastName}`}>
             <span className={styles.topbarPatientAvatar}>{getInitials(selectedPatient)}</span>
-            <strong>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
+            <strong className={styles.topbarPatientName}>{selectedPatient.firstName} {selectedPatient.lastName}</strong>
             <span className={styles.topbarPatientId}>· {selectedPatient.patientNumber}</span>
           </div>
         )}

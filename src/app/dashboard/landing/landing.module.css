@@ -1,0 +1,47 @@
+/* src/app/dashboard/landing/landing.module.css
+   ────────────────────────────────────────────────────────────────────
+   Recortes por ancho en /dashboard/landing.
+
+   `.shell` declara el contenedor de consulta. En el subárbol de esta pantalla
+   no hay ni un `position: fixed` (los toasts son de react-hot-toast y viven en
+   el <Toaster/> de la raíz, fuera de aquí), así que declarar `container-type`
+   no le cambia el bloque contenedor a nadie. El lienzo `fixed inset-0` del
+   editor vive en landing/editor/, que es otra ruta y no cuelga de esto.
+
+   La vista previa se ocultaba con `hidden xl:block`, y `xl` mide el VIEWPORT
+   (≥1280). A 1280 con el sidebar abierto el contenedor real son 1031 px: el
+   aside de 420 px entraba igual y dejaba la columna de trabajo en ~539 px.
+   Ahora también tiene que caber en el CONTENEDOR. Se conservan las utilidades
+   `hidden xl:block` en el JSX como suelo (si el navegador no soportara
+   @container el comportamiento sería exactamente el de hoy) y esta regla sólo
+   añade el corte que faltaba, con !important porque el orden entre las
+   utilidades de Tailwind y los CSS Modules no está garantizado.
+   ──────────────────────────────────────────────────────────────────── */
+
+.shell {
+  container-type: inline-size;
+  container-name: landing;
+}
+
+@container landing (max-width: 1099.98px) {
+  .preview {
+    display: none !important;
+  }
+}
+
+/* Selector de plantillas: `grid-cols-2 lg:grid-cols-4` también medía viewport
+   y dejaba miniaturas de ~125 px. auto-fit reparte por el ancho REAL de la
+   columna y no necesita consulta ninguna. */
+.templateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+/* Icono / precio / duración de cada servicio: `grid-cols-3` fijo llegaba a
+   ~148 px por input. Mismo patrón. */
+.serviceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}

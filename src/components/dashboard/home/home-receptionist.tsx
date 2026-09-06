@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { HomeSection } from "./home-section";
+import styles from "./home.module.css";
 import { Greeting } from "./parts/greeting";
 import { TodayAppointmentRow } from "./parts/today-appointment-row";
 import { ActionItemRow } from "./parts/action-item-row";
@@ -77,15 +78,9 @@ export function HomeReceptionist({ user, data }: Props) {
         <HomeQuickActions />
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
-          gap: 16,
-          marginBottom: 24,
-        }}
-        className="mf-home-receptionist-grid"
-      >
+      {/* Mismo criterio que el home de admin: el colapso a una columna lo
+          decide el ancho del CONTENEDOR (ver home.module.css). */}
+      <div className={`${styles.gridMain} mf-home-receptionist-grid`}>
         <HomeSection
           title={t("home.recep.todayTitle")}
           subtitle={

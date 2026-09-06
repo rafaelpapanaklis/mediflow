@@ -34,7 +34,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
-import { eduCleanId, eduOptionalText, eduSafeTimeZone } from "@/lib/edu/agenda-core";
+import { eduCleanId, eduOptionalText, eduSafeTimeZone, eduTodayISO } from "@/lib/edu/agenda-core";
 import { eduPatientFullName } from "@/lib/edu/pacientes-core";
 // Ola 1B: el MISMO troceador que usan el padrón y los pacientes. Si la caja
 // partiera el término a su manera, el buscador del mostrador encontraría
@@ -51,16 +51,21 @@ import {
   eduCorteMethods,
   eduCorteSpanDays,
   eduLineTotalCents,
+  eduMetodosDistintos,
   eduMoney,
+  eduPagosFailed,
+  eduPagosPideDevolucion,
   eduResolveChargeView,
   parseEduMoneyCentsMax,
-  parseEduPaymentMethod,
+  parseEduPagosDivididos,
   type EduCashSessionRow,
   type EduChargeFilters,
   type EduChargeRow,
   type EduChargesPage,
   type EduCorte,
+  type EduPagoValidado,
 } from "@/lib/edu/dinero-core";
+import { eduInstallmentStatus, eduPlanResumen } from "@/lib/edu/pagos-core";
 import { resolveEduChargeLines, type EduLineaCliente } from "@/lib/edu/tarifas";
 import {
   eduCaseScopeWhere,
@@ -152,23 +157,88 @@ const CHARGE_SELECT = {
       reference: true,
       notes: true,
       paidAt: true,
+      // Meses sin intereses DEL BANCO (solo con crédito): el recibo lo
+      // dice porque el paciente lo va a preguntar.
+      msiMonths: true,
       receivedBy: { select: { firstName: true, lastName: true, email: true } },
+      // Si el pago fue de una mensualidad, cuál y de cuántas: "Mensualidad
+      // 2 de 3" en el recibo, sin tener que abrir el plan.
+      installmentOf: { select: { number: true, plan: { select: { months: true } } } },
     },
   },
   // Pagos a meses: el plan ACTIVO, si hay (a lo sumo uno — lo garantiza la
   // transacción que crea planes). Con esto el recibo puede decir "este
   // cobro se paga a meses" y esconder el pago suelto que el servidor
   // rebotaría de todos modos.
+  //
+  // 🔴 Y con SU CALENDARIO: sin las mensualidades, la lista de Caja no
+  // podía decir ni cuántas van ni cuándo vence la siguiente, y esa era
+  // exactamente la queja del mostrador ("no se sabe cada cuándo paga").
+  // No se guarda ningún resumen: se deriva aquí, en la lectura.
   paymentPlans: {
     where: { status: "ACTIVO" },
+    // Con `take: 1` sin orden, dos planes activos (la carrera de
+    // milisegundos que documenta createEduPaymentPlan) darían uno
+    // arbitrario y la fila "bailaría" entre recargas. El más reciente es
+    // el que alguien acaba de armar.
+    orderBy: { createdAt: "desc" },
     take: 1,
-    select: { id: true },
+    select: {
+      id: true,
+      months: true,
+      installmentCents: true,
+      installments: {
+        orderBy: { number: "asc" },
+        // El `number` se LEE. Deducirlo del índice del array se apoya en
+        // que no haya huecos, y el índice único (planId, number) impide
+        // DUPLICADOS, no huecos: el día que hubiera uno, el botón diría
+        // "Cobrar la 2 de 3" y mandaría el id de la 3.
+        select: { id: true, number: true, amountCents: true, dueDate: true, paymentId: true },
+      },
+    },
   },
 } satisfies Prisma.EduChargeSelect;
 
 type ChargePayload = Prisma.EduChargeGetPayload<{ select: typeof CHARGE_SELECT }>;
 
-function toChargeRow(c: ChargePayload): EduChargeRow {
+/**
+ * Lo que hace falta para pintar un cobro y que NO está en la fila: el
+ * "hoy" del INSTITUTO (con el que se deriva VENCIDA) y el formateador de
+ * INSTANTES en su zona. Los dos se arman UNA vez por lectura y no una por
+ * pago: un Intl.DateTimeFormat por celda son trescientos objetos para
+ * pintar una lista de cien cobros.
+ */
+interface ChargeCtx {
+  todayISO: string;
+  fechaHora: Intl.DateTimeFormat;
+}
+
+function chargeCtx(timeZoneCrudo: string | undefined, now: Date = new Date()): ChargeCtx {
+  const zona = eduSafeTimeZone(timeZoneCrudo ?? EDU_TIMEZONE_FALLBACK);
+  return {
+    todayISO: eduTodayISO(zona, now),
+    fechaHora: new Intl.DateTimeFormat("es-MX", {
+      timeZone: zona,
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+  };
+}
+
+/**
+ * ⚠️ La zona por DEFECTO, para el llamador que todavía no la pasa. No es
+ * un adorno: sin ella, `eduSafeTimeZone(undefined)` cae a UTC y a las
+ * 23:30 de México una mensualidad que vence mañana ya se pintaría vencida.
+ * Es la misma zona con la que nacen los institutos.
+ */
+const EDU_TIMEZONE_FALLBACK = "America/Mexico_City";
+
+function toChargeRow(c: ChargePayload, ctx: ChargeCtx): EduChargeRow {
+  const plan = c.paymentPlans[0] ?? null;
   return {
     id: c.id,
     folio: c.folio,
@@ -207,9 +277,50 @@ function toChargeRow(c: ChargePayload): EduChargeRow {
       reference: p.reference,
       notes: p.notes,
       paidAt: p.paidAt.toISOString(),
+      // 🔴 El instante, escrito AQUÍ y en la zona del instituto. En el
+      // cliente pintaría la del navegador y rompería la hidratación.
+      paidAtLabel: ctx.fechaHora.format(p.paidAt),
       receivedByName: persona(p.receivedBy),
+      msiMonths: p.msiMonths,
+      installmentNumber: p.installmentOf?.number ?? null,
+      installmentMonths: p.installmentOf?.plan.months ?? null,
     })),
-    activePlanId: c.paymentPlans[0]?.id ?? null,
+    methods: eduMetodosDistintos(c.payments),
+    activePlanId: plan?.id ?? null,
+    // 🔴 El plan, DERIVADO en la lectura: el estado de cada mensualidad
+    // sale del calendario contra el hoy del INSTITUTO (eduInstallmentStatus)
+    // y los números salen de las mensualidades (eduPlanResumen). Los mismos
+    // dos helpers que usa la pantalla de Pagos a meses: si se derivara
+    // aquí a mano, un día las dos pantallas dirían cosas distintas del
+    // mismo plan.
+    plan: plan
+      ? (() => {
+          const filas = plan.installments.map((i) => {
+            const dueDateISO = i.dueDate.toISOString().slice(0, 10);
+            return {
+              id: i.id,
+              number: i.number,
+              amountCents: i.amountCents,
+              dueDateISO,
+              status: eduInstallmentStatus(
+                { pagada: i.paymentId !== null, dueDateISO },
+                ctx.todayISO,
+              ),
+            };
+          });
+          const resumen = eduPlanResumen(filas);
+          return {
+            id: plan.id,
+            months: plan.months,
+            installmentCents: plan.installmentCents,
+            paidCount: resumen.paidCount,
+            nextDueISO: resumen.nextDueISO,
+            overdueCount: resumen.overdueCount,
+            pendingCents: resumen.pendingCents,
+            installments: filas,
+          };
+        })()
+      : null,
   };
 }
 
@@ -277,9 +388,24 @@ function chargesWhere(
   return where;
 }
 
+/**
+ * La zona del INSTITUTO (`ctx.institution.timezone`), que la pasa la
+ * página o el endpoint. Se necesita para dos cosas de la lectura: el
+ * "hoy" con el que se deriva si una mensualidad está VENCIDA, y la hora a
+ * la que se pintan los instantes de cada pago.
+ *
+ * Es OPCIONAL para no romper a ningún llamador de golpe; sin ella se cae
+ * a la zona con la que nacen los institutos, que es la correcta en el
+ * 99 % de los casos y nunca UTC.
+ */
+export interface EduChargeReadOptions {
+  timeZone?: string;
+}
+
 export async function listEduCharges(
   ctx: EduClinicaContext,
   filters: EduChargeFilters,
+  options: EduChargeReadOptions = {},
 ): Promise<EduChargesPage> {
   requireDinero(ctx);
   const sesion = filters.soloTurno ? await getEduOpenCashSession(ctx) : null;
@@ -297,7 +423,8 @@ export async function listEduCharges(
     select: CHARGE_SELECT,
   });
 
-  const visibles = rows.slice(0, EDU_CAJA_MAX_ROWS).map(toChargeRow);
+  const cctx = chargeCtx(options.timeZone);
+  const visibles = rows.slice(0, EDU_CAJA_MAX_ROWS).map((r) => toChargeRow(r, cctx));
 
   // 🔴 Los cancelados NO suman. Ni al total, ni al pagado, ni al saldo:
   // un cobro anulado no es dinero de la escuela ni deuda del paciente.
@@ -325,6 +452,7 @@ export async function listEduCharges(
 export async function getEduCharge(
   ctx: EduClinicaContext,
   chargeId: string,
+  options: EduChargeReadOptions = {},
 ): Promise<EduChargeRow | null> {
   const institutionId = requireDinero(ctx);
   const id = eduCleanId(chargeId);
@@ -337,13 +465,14 @@ export async function getEduCharge(
     },
     select: CHARGE_SELECT,
   });
-  return c ? toChargeRow(c) : null;
+  return c ? toChargeRow(c, chargeCtx(options.timeZone)) : null;
 }
 
 /** Los cobros de UN paciente (la ficha, y el histórico de caja). */
 export async function listEduPatientCharges(
   ctx: EduClinicaContext,
   patientId: string,
+  options: EduChargeReadOptions = {},
 ): Promise<EduChargeRow[]> {
   const institutionId = requireDinero(ctx);
   const id = eduCleanId(patientId);
@@ -358,7 +487,8 @@ export async function listEduPatientCharges(
     take: EDU_CAJA_MAX_ROWS,
     select: CHARGE_SELECT,
   });
-  return rows.map(toChargeRow);
+  const cctx = chargeCtx(options.timeZone);
+  return rows.map((r) => toChargeRow(r, cctx));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -390,6 +520,8 @@ export interface EduPaymentInput {
   reference?: unknown;
   notes?: unknown;
   isRefund?: unknown;
+  /** Meses sin intereses DEL BANCO. Solo con tarjeta de crédito. */
+  msiMonths?: unknown;
 }
 
 export interface EduChargeInput {
@@ -397,8 +529,16 @@ export interface EduChargeInput {
   caseId?: unknown;
   items?: unknown;
   notes?: unknown;
-  /** Pago inmediato, que es lo normal en un mostrador. Opcional. */
+  /**
+   * Pago inmediato, que es lo normal en un mostrador. Opcional.
+   *
+   * Las dos formas valen: `payment` (una sola, como siempre) y `payments`
+   * (de 1 a 3 formas — efectivo + tarjeta, dos tarjetas…). Las valida la
+   * misma función, `parseEduPagosDivididos`, y cada forma acaba en su
+   * PROPIA fila de EduPayment: el corte y el CFDI las ven todas.
+   */
   payment?: EduPaymentInput;
+  payments?: unknown;
   /** P2-10. La clave de idempotencia del cliente: dos POST con la misma
    *  clave son UN cobro. Opcional — un POST sin clave cobra igual. */
   idempotencyKey?: unknown;
@@ -554,13 +694,25 @@ export async function createEduCharge(
   const caseId = await resolverCaso(ctx, institutionId, patientId, input.caseId, now);
   const sesion = await getEduOpenCashSession(ctx);
 
-  // El pago inmediato, si viene.
-  const pago = input.payment ? parsePago(input.payment, totals.totalCents, options.canRefund) : null;
-  if (pago?.isRefund) {
+  // El pago inmediato, si viene. Una o hasta tres formas; se validan
+  // TODAS o ninguna, y `exacto: false` porque un cobro puede quedar
+  // abonado en parte (eso es "queda a deber").
+  //
+  // ⚠️ "No viene pago" son TRES formas y las tres tienen que seguir
+  // emitiendo el cobro con saldo (es el "queda a deber" de siempre): sin
+  // la clave, con `payment: null` —lo que mandaban los clientes viejos— y
+  // con una lista vacía. Solo se valida cuando hay algo que validar.
+  const traePago =
+    (Array.isArray(input.payments) && input.payments.length > 0) ||
+    (input.payment !== undefined && input.payment !== null);
+  const pagos: EduPagoValidado[] = traePago
+    ? leerPagos(input, totals.totalCents, { exacto: false, canRefund: options.canRefund })
+    : [];
+  if (pagos.some((p) => p.isRefund)) {
     throw new EduPadronError("Un cobro no nace con una devolución.");
   }
 
-  const paidCents = pago?.amountCents ?? 0;
+  const paidCents = pagos.reduce((a, p) => a + p.amountCents, 0);
   const status = eduChargeStatusFor({
     cancelled: false,
     totalCents: totals.totalCents,
@@ -624,20 +776,26 @@ export async function createEduCharge(
           })),
         });
 
-        if (pago) {
-          await tx.eduPayment.create({
-            data: {
+        // 🔴 UNA FILA POR FORMA DE PAGO, en la MISMA transacción que el
+        // cobro. Aquí no hace falta el candado de `eduApplyEduPaymentInTx`
+        // (el updateMany condicional): el cobro se está CREANDO en esta
+        // misma transacción con su `paidCents` y su `balanceCents` ya
+        // calculados, así que no hay una fila previa con la que competir.
+        if (pagos.length > 0) {
+          await tx.eduPayment.createMany({
+            data: pagos.map((p) => ({
               institutionId,
               chargeId: cobro.id,
-              method: pago.method,
-              amountCents: pago.amountCents,
+              method: p.method,
+              amountCents: p.amountCents,
               isRefund: false,
-              reference: pago.reference,
-              notes: pago.notes,
+              reference: p.reference,
+              notes: p.notes,
+              msiMonths: p.msiMonths,
               paidAt: now,
               receivedByUserId: ctx.eduUserId,
               cashSessionId: sesion?.id ?? null,
-            },
+            })),
           });
         }
 
@@ -677,41 +835,40 @@ export async function createEduCharge(
   throw new EduPadronError("No se pudo asignar un folio de cobro. Intenta de nuevo.", 409);
 }
 
-interface PagoValidado {
-  method: EduPaymentMethod;
-  amountCents: number;
-  isRefund: boolean;
-  reference: string | null;
-  notes: string | null;
+/**
+ * 🔴 Las formas de pago de una operación, leídas y validadas por la ÚNICA
+ * función que sabe hacerlo (`parseEduPagosDivididos`, en dinero-core, la
+ * misma que corre en la pantalla). Aquí solo se traduce su error escrito a
+ * un EduPadronError con su status.
+ *
+ * `parsePago` (una forma, un método) ya no existe: era el sitio donde el
+ * mostrador se quedaba sin poder cobrar mitad efectivo y mitad tarjeta.
+ */
+/**
+ * EL CUERPO DE UN PAGO, en la forma que entiende el parser.
+ *
+ * `addEduPayment` acepta tres: `{payments:[…]}`, `{payment:{…}}` y —el de
+ * siempre— el pago EN LA RAÍZ. Las dos primeras pasan tal cual; la tercera
+ * se envuelve. Se hace en UNA función porque tanto el tope como la
+ * validación tienen que mirar exactamente el mismo cuerpo.
+ */
+function cuerpoPago(input: EduPaymentInput & { payment?: EduPaymentInput; payments?: unknown }) {
+  if (input.payments !== undefined || input.payment !== undefined) return input;
+  return { payment: input };
 }
 
-function parsePago(input: EduPaymentInput, maxCents: number, canRefund?: boolean): PagoValidado {
-  const method = input.method === undefined ? EDU_CASH_METHOD : parseEduPaymentMethod(input.method);
-  if (!method) throw new EduPadronError("Ese método de pago no existe.");
-
-  const amountCents = parseEduMoneyCentsMax(input.amountCents, EDU_MAX_CHARGE_CENTS);
-  if (amountCents === null) throw new EduPadronError("Ese monto no es una cantidad válida.");
-  if (amountCents <= 0) throw new EduPadronError("El monto tiene que ser mayor que cero.");
-
-  const isRefund = Boolean(input.isRefund);
-  if (isRefund && !canRefund) {
-    throw new EduPadronError("Tu cuenta no puede devolver dinero (permiso caja.refund).", 403);
+function leerPagos(
+  raw: unknown,
+  objetivoCents: number,
+  opts: { exacto: boolean; canRefund?: boolean },
+): EduPagoValidado[] {
+  const r = parseEduPagosDivididos(raw, objetivoCents, opts);
+  if (eduPagosFailed(r)) {
+    // 403 solo para el permiso; lo demás es un 400 de captura.
+    const status = /caja\.refund/.test(r.error) ? 403 : 400;
+    throw new EduPadronError(r.error, status);
   }
-  if (amountCents > maxCents) {
-    throw new EduPadronError(
-      isRefund
-        ? `No puedes devolver ${eduMoney(amountCents)}: el paciente solo ha pagado ${eduMoney(maxCents)}.`
-        : `No puedes cobrar ${eduMoney(amountCents)}: el saldo es ${eduMoney(maxCents)}.`,
-    );
-  }
-
-  return {
-    method,
-    amountCents,
-    isRefund,
-    reference: eduOptionalText(input.reference, 80) ?? null,
-    notes: eduOptionalText(input.notes, 300) ?? null,
-  };
+  return r.pagos;
 }
 
 /**
@@ -738,6 +895,15 @@ export interface EduPagoAplicar {
   isRefund: boolean;
   reference: string | null;
   notes: string | null;
+  /** Meses sin intereses DEL BANCO. Solo con CARD_CREDIT; informativo. */
+  msiMonths?: number | null;
+  /**
+   * La mensualidad que esta fila ayuda a cubrir, si el pago es de un plan
+   * a meses. Lo pone `payEduInstallment` en TODAS las formas de la
+   * operación; la que además la LIQUIDA queda enganchada aparte, en
+   * `EduInstallment.paymentId`.
+   */
+  installmentId?: string | null;
   paidAt: Date;
   receivedByUserId: string;
   /** El turno ABIERTO AL PAGAR (o null): lo consulta el llamador. */
@@ -789,6 +955,8 @@ export async function eduApplyEduPaymentInTx(
       isRefund: pago.isRefund,
       reference: pago.reference,
       notes: pago.notes,
+      msiMonths: pago.msiMonths ?? null,
+      installmentId: pago.installmentId ?? null,
       paidAt: pago.paidAt,
       receivedByUserId: pago.receivedByUserId,
       cashSessionId: pago.cashSessionId,
@@ -856,10 +1024,10 @@ export async function eduApplyEduPaymentInTx(
 export async function addEduPayment(
   ctx: EduClinicaContext,
   chargeId: string,
-  input: EduPaymentInput,
+  input: EduPaymentInput & { payment?: EduPaymentInput; payments?: unknown },
   options: { canRefund?: boolean } = {},
   now: Date = new Date(),
-): Promise<{ id: string; status: string; balanceCents: number }> {
+): Promise<{ id: string; ids: string[]; status: string; balanceCents: number }> {
   const institutionId = requireDinero(ctx);
   const id = eduCleanId(chargeId);
   if (!id) throw new EduPadronError("Ese cobro no es válido.", 400);
@@ -876,7 +1044,13 @@ export async function addEduPayment(
     throw new EduPadronError("Ese cobro está cancelado: no admite pagos ni devoluciones.", 409);
   }
 
-  const esDevolucion = Boolean(input.isRefund);
+  // ¿Es una devolución? El TOPE hay que elegirlo ANTES de validar y no es
+  // el mismo: devolver se topa con lo pagado, cobrar con el saldo. Se
+  // pregunta con el helper que usa la MISMA precedencia que el parser
+  // (`payments` > `payment` > la raíz) — escribirlo a mano aquí es
+  // exactamente donde estaba el bug del `??`, que no cae al lado derecho
+  // cuando el izquierdo es `false`.
+  const esDevolucion = eduPagosPideDevolucion(cuerpoPago(input));
   const tope = esDevolucion
     ? cobro.paidCents
     : Math.max(0, cobro.totalCents - cobro.paidCents);
@@ -886,7 +1060,20 @@ export async function addEduPayment(
       409,
     );
   }
-  const pago = parsePago(input, tope, options.canRefund);
+  const pagos = leerPagos(cuerpoPago(input), tope, {
+    exacto: false,
+    canRefund: options.canRefund,
+  });
+  // El invariante que hace que el tope de arriba sea el correcto. Por
+  // construcción no puede fallar (el helper y el parser leen el cuerpo
+  // igual); está escrito para que, si algún día uno de los dos cambia, se
+  // rompa aquí con un mensaje y no con un tope equivocado en silencio.
+  if (pagos.some((p) => p.isRefund) !== esDevolucion) {
+    throw new EduPadronError(
+      "Ese movimiento mezcla un cobro y una devolución. Mándalos por separado.",
+      400,
+    );
+  }
 
   const sesion = await getEduOpenCashSession(ctx);
 
@@ -901,27 +1088,42 @@ export async function addEduPayment(
     });
     if (plan) {
       throw new EduPadronError(
-        pago.isRefund
+        esDevolucion
           ? "Ese cobro tiene un plan de pagos activo. Cancela primero el plan (pide el mismo permiso) y después devuelve el dinero."
           : "Ese cobro se paga a meses: cóbralo por sus mensualidades, en Caja → Pagos a meses. Si el plan ya no va, cancélalo y el saldo vuelve a cobrarse normal.",
         409,
       );
     }
 
-    const aplicado = await eduApplyEduPaymentInTx(tx, {
-      institutionId,
-      chargeId: id,
-      method: pago.method,
-      amountCents: pago.amountCents,
-      isRefund: pago.isRefund,
-      reference: pago.reference,
-      notes: pago.notes,
-      paidAt: now,
-      receivedByUserId: ctx.eduUserId,
-      cashSessionId: sesion?.id ?? null,
-    });
+    // 🔴 UNA FILA POR FORMA, EN ORDEN Y EN LA MISMA TRANSACCIÓN. Cada
+    // llamada reclama SU parte del tope con el updateMany condicional del
+    // helper: si la suma pasó la validación de arriba pero otro pago entró
+    // en medio, la forma que ya no cabe revienta la transacción ENTERA y
+    // no queda medio pago escrito.
+    const ids: string[] = [];
+    let status = "";
+    let balanceCents = 0;
+    for (const p of pagos) {
+      const aplicado = await eduApplyEduPaymentInTx(tx, {
+        institutionId,
+        chargeId: id,
+        method: p.method,
+        amountCents: p.amountCents,
+        isRefund: p.isRefund,
+        reference: p.reference,
+        notes: p.notes,
+        msiMonths: p.msiMonths,
+        paidAt: now,
+        receivedByUserId: ctx.eduUserId,
+        cashSessionId: sesion?.id ?? null,
+      });
+      ids.push(aplicado.paymentId);
+      status = aplicado.status;
+      balanceCents = aplicado.balanceCents;
+    }
 
-    return { id: aplicado.paymentId, status: aplicado.status, balanceCents: aplicado.balanceCents };
+    // `id` = el primero, para no romper a ningún cliente que ya lo lee.
+    return { id: ids[0], ids, status, balanceCents };
   });
 
   return resultado;

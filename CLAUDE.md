@@ -37,9 +37,12 @@ sin `| tail`, sin `| head`, sin recortes. Si muere con **exit 134** es el heap d
 repite con `NODE_OPTIONS=--max-old-space-size=8192 npm run build`.
 
 **(b) Push SIEMPRE a tu rama:** `git push -u origin <tu-rama>`.
-⛔ Nunca `HEAD:main`, nunca `push origin main`, nunca `--force`. La integración a `main` la hace Rafael
-en un solo push desde el clon principal. El hook `scripts/git-guard.cjs` bloquea estas formas desde
-cualquier worktree; si te sale `[git-guard]`, no lo rodees: empuja a tu rama.
+⛔ Nunca `HEAD:main`, nunca `push origin main`, nunca `--force`. La integración a `main` la hace **solo
+el prompt de la pestaña Integración de NEXUS**, que lleva la llave `INTEGRACION_OLA=1`; sin esa llave el
+hook `scripts/git-guard.cjs` bloquea el push a `main` desde **cualquier** cwd, clon principal incluido.
+También bloquea `gh pr merge` siempre (los PR no se fusionan uno por uno, ni con llave) y `git merge`
+estando en `main` del clon principal. Una terminal de tarea termina en `git push -u origin <tu-rama>` +
+`gh pr create`, y **nunca** fusiona ni pide que fusiones. Si te sale `[git-guard]`, no lo rodees.
 
 **(c) Aísla TODO por `clinicId`.** Cada consulta de Prisma lleva su filtro de tenant, y el `clinicId`
 sale de la sesión, nunca del cliente. ⛔ `clinicId: undefined` **no filtra nada**: Prisma descarta la
@@ -54,10 +57,19 @@ mano en un componente rompe eso.
 **(e) SQL a mano.** Todo script vive en `sql/` (hoy 151 archivos). Lo entregas en un bloque copy-paste
 para que Rafael lo pegue. ⛔ La terminal **nunca** aplica SQL contra la base.
 
-**(f) Reporte final por append, sin leer.** Al cerrar una tarea, añade tu bloque al final de
-`C:\Users\Rafael\ClauCode\MediFlow\ORQUESTA.md` bajo `## [nombre de tarea] — fecha`. Append puro: no
-leas el archivo (pesa megas y te come el contexto). **ORQUESTA.md ya no vive en el repo**; el histórico
-hasta el 3-sep-2026 está en `C:\Users\Rafael\ClauCode\MediFlow\orquesta-archivo\`.
+**(f) Reporte final con la utilidad, sin leer ORQUESTA.md.** Al cerrar una tarea, escribe el cuerpo en un
+`.md` temporal (`os.tmpdir()`) y ejecútala:
+
+```
+node C:/Users/Rafael/ClauCode/nexus/scripts/tablero/orquesta-append.cjs --titulo "<tarea de tu línea TABLERO>" --archivo <ese .md>
+```
+
+(o pasa el cuerpo por stdin). Ella antepone la etiqueta WS/T y la fecha y degrada tus `##` a `###`: el
+encabezado queda `## [WSn-Tn · tarea] — fecha`, así que dentro usa **solo `###`**. Mínimo: qué hiciste,
+archivos, rama + SHA + PR, gates, qué falta, desviaciones. Si la utilidad faltara, avisa y haz append
+puro con ese mismo encabezado. ⛔ Nunca leas `ORQUESTA.md` (pesa megas y te come el contexto).
+**Ya no vive en el repo**; el histórico hasta el 3-sep-2026 está en
+`C:\Users\Rafael\ClauCode\MediFlow\orquesta-archivo\`.
 
 **(g) Sin archivos temporales en la raíz.** Ni `salida.txt`, ni `build.log`, ni `tmp-*.js`. Lo temporal
 va a `os.tmpdir()`. La raíz se queda como está.
@@ -80,10 +92,22 @@ un worktree: reemplazarías el junction por una copia de disco.
 `test:edu` es el único con descubrimiento automático (`node scripts/edu-tests.cjs`) y falla si no
 encuentra ningún test. Los `.cjs` de `scripts/` se corren con `node --test scripts/<x>.test.cjs`.
 
-**Tipos.** `next.config.mjs` tiene `eslint.ignoreDuringBuilds: true` (el lint es un gate aparte:
-`npm run lint`), pero **NO** hay `typescript.ignoreBuildErrors`. Y `tsconfig.json` incluye `**/*.ts`,
-así que **tus `__tests__` sí entran al type-check de `next build`**: un tipo roto en un test te tumba la
-build. Lo que sí afloja es `"strict": false` y `"skipLibCheck": true`.
+**Tipos: el gate es `npm run typecheck`, NO el build.** `next.config.mjs` tiene
+`eslint.ignoreDuringBuilds: true` (el lint es un gate aparte: `npm run lint`) y **NO** hay
+`typescript.ignoreBuildErrors`. Aun así, **`next build` NO te tumba por un tipo roto en `__tests__`**.
+`tsconfig.json` incluye `**/*.ts` y los archivos de prueba **sí** entran en el programa del build (228
+de ellos en `.next/cache/.tsbuildinfo`, incluidos los que tenían errores), el paso «Checking validity
+of types» **sí** corre… y el build sale con exit 0 igual. Medido el 5-sep-2026: con 12 errores de `tsc`
+en `__tests__` el build pasó 9 veces seguidas, y metiendo a mano un `const x: number = "texto"` en
+`src/lib/barber/__tests__/i18n-alcance.test.ts` el build volvió a pasar (exit 0) mientras `tsc` sobre
+ese mismo archivo daba error. **La causa se desconoce** — no la inventes ni la des por arreglada.
+
+Por eso el chequeo de tipos tiene su propio comando: **`npm run typecheck`** (= `tsc --noEmit`), que sí
+falla con esos errores. Tarda **~4 min** (contra los ~12 del build) y se corre **ANTES** del build, no
+después: atrapa en cuatro minutos lo que el build no ve ni en doce. Lo que sí afloja el chequeo es
+`"strict": false` y `"skipLibCheck": true`; `tsconfig.json` declara `"target": "es2022"` — sin `target`,
+`tsc` heredaba ES5 e inventaba errores falsos (`for…of` sobre `Set`/`Map`, flag `s` de regex) que el
+build nunca ve.
 
 **Base de datos.** Menos de 7 consultas por `Promise.all`: el pooler se satura y empiezan los timeouts.
 Si necesitas más, parte en tandas.

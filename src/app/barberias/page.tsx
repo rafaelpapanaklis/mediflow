@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, Inter } from "next/font/google";
+import { inter, sign } from "@/fonts/barber";
 import { getBarberDict } from "@/i18n/dictionaries/barber";
 import { makeBarberT } from "@/lib/barber/i18n";
 import { getBarberPlans } from "@/lib/barber/plans";
@@ -63,25 +63,6 @@ import "@/components/public/barberias/barberias.css";
    sesión) y leer Accept-Language la volvería dinámica. Mismo criterio que
    las páginas públicas del dental.
    ═══════════════════════════════════════════════════════════════════════ */
-
-// display: "fallback" y no "swap": 100 ms de bloqueo y luego, si la fuente
-// no llegó, el respaldo ajustado. En la práctica el archivo (precargado,
-// 50 KB) ya está cuando se pinta el primer frame y el H1 nace en Inter: sin
-// el re-layout del swap ni el salto de líneas que daba CLS 0.18 en móvil.
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "600", "700", "800"],
-  variable: "--font-inter",
-  display: "fallback",
-});
-
-// Letrero de barbería: un solo peso, solo para etiquetas e insignias.
-const sign = Bebas_Neue({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-sign",
-  display: "fallback",
-});
 
 export const revalidate = 600;
 

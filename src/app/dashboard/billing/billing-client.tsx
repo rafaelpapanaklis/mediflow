@@ -308,86 +308,93 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             {invoices.length === 0 ? t("billing.billingClient.emptyNoInvoices") : t("billing.billingClient.emptyNoResults")}
           </div>
         ) : (
-          <table className="table-new">
-            <thead>
-              <tr>
-                <th>{t("billing.billingClient.thFolio")}</th>
-                <th>{t("billing.billingClient.thPatient")}</th>
-                <th>{t("common.date")}</th>
-                <th style={{ textAlign: "right" }}>{t("common.total")}</th>
-                <th style={{ textAlign: "right" }}>{t("billing.billingClient.thPaid")}</th>
-                <th style={{ textAlign: "right" }}>{t("billing.billingClient.thBalance")}</th>
-                <th>{t("common.status")}</th>
-                <th>{t("billing.billingClient.thCfdi")}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(inv => {
-                // La píldora dice "Vencido" cuando la factura LO ESTÁ (dueDate +
-                // saldo), aunque su status siga en PENDING/PARTIAL.
-                const badge = invoiceStatusBadge(isOverdue(inv) ? "OVERDUE" : inv.status);
-                const fullName = patientNameOf(inv);
-                const isDraft = inv.status === "DRAFT";
-                const canPay  = !["PAID", "CANCELLED"].includes(inv.status) && !isDraft;
-                return (
-                  <tr
-                    key={inv.id}
-                    onClick={() => setDetailInvoice(inv)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <td className="mono" style={{ color: "var(--text-2)" }}>
-                      {isDraft && "📝 "}{inv.invoiceNumber}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <AvatarNew name={fullName} size="sm" />
-                        <span style={{ color: "var(--text-1)" }}>{fullName}</span>
-                      </div>
-                    </td>
-                    <td className="mono" style={{ color: "var(--text-2)" }}>
-                      {formatRelativeDate(inv.createdAt)}
-                    </td>
-                    <td className="mono" style={{ textAlign: "right", color: "var(--text-1)" }}>
-                      {fmtMXNdec(inv.total)}
-                    </td>
-                    <td className="mono" style={{ textAlign: "right", color: "var(--success)" }}>
-                      {fmtMXNdec(inv.paid)}
-                    </td>
-                    <td className="mono" style={{ textAlign: "right", color: inv.balance > 0 ? "var(--warning)" : "var(--text-3)" }}>
-                      {fmtMXNdec(inv.balance)}
-                    </td>
-                    <td>
-                      <BadgeNew tone={badge.tone} dot>{t(badge.labelKey)}</BadgeNew>
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {/* Indicador compartido con la ficha del paciente — ver
-                          invoice-cfdi-badge.tsx (mismo badge/botón en ambas). */}
-                      <InvoiceCfdiBadge
-                        cfdiUuid={inv.cfdiUuid}
-                        facturApiEnabled={clinic.facturApiEnabled}
-                        onStamp={() => openCfdiModal(inv)}
-                      />
-                    </td>
-                    <td
-                      style={{ textAlign: "right", whiteSpace: "nowrap" }}
-                      onClick={(e) => e.stopPropagation()}
+          // La tabla tiene 9 columnas: su min-content (~1150px) no cabe en el
+          // ancho util del panel a 1280 (1031px). `.card` (CardNew) trae
+          // overflow:hidden, asi que sin este envoltorio las columnas de CFDI y
+          // accion se recortaban sin barra para alcanzarlas. Mismo patron que
+          // src/app/dashboard/compras/[orderId]/page.tsx.
+          <div style={{ overflowX: "auto" }}>
+            <table className="table-new">
+              <thead>
+                <tr>
+                  <th>{t("billing.billingClient.thFolio")}</th>
+                  <th>{t("billing.billingClient.thPatient")}</th>
+                  <th>{t("common.date")}</th>
+                  <th style={{ textAlign: "right" }}>{t("common.total")}</th>
+                  <th style={{ textAlign: "right" }}>{t("billing.billingClient.thPaid")}</th>
+                  <th style={{ textAlign: "right" }}>{t("billing.billingClient.thBalance")}</th>
+                  <th>{t("common.status")}</th>
+                  <th>{t("billing.billingClient.thCfdi")}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(inv => {
+                  // La píldora dice "Vencido" cuando la factura LO ESTÁ (dueDate +
+                  // saldo), aunque su status siga en PENDING/PARTIAL.
+                  const badge = invoiceStatusBadge(isOverdue(inv) ? "OVERDUE" : inv.status);
+                  const fullName = patientNameOf(inv);
+                  const isDraft = inv.status === "DRAFT";
+                  const canPay  = !["PAID", "CANCELLED"].includes(inv.status) && !isDraft;
+                  return (
+                    <tr
+                      key={inv.id}
+                      onClick={() => setDetailInvoice(inv)}
+                      style={{ cursor: "pointer" }}
                     >
-                      {canPay ? (
-                        <button
-                          type="button"
-                          onClick={(e) => openPaymentForRow(e, inv)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                        >
-                          {t("billing.billingClient.registerPayment")}
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <td className="mono" style={{ color: "var(--text-2)" }}>
+                        {isDraft && "📝 "}{inv.invoiceNumber}
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <AvatarNew name={fullName} size="sm" />
+                          <span style={{ color: "var(--text-1)" }}>{fullName}</span>
+                        </div>
+                      </td>
+                      <td className="mono" style={{ color: "var(--text-2)" }}>
+                        {formatRelativeDate(inv.createdAt)}
+                      </td>
+                      <td className="mono" style={{ textAlign: "right", color: "var(--text-1)" }}>
+                        {fmtMXNdec(inv.total)}
+                      </td>
+                      <td className="mono" style={{ textAlign: "right", color: "var(--success)" }}>
+                        {fmtMXNdec(inv.paid)}
+                      </td>
+                      <td className="mono" style={{ textAlign: "right", color: inv.balance > 0 ? "var(--warning)" : "var(--text-3)" }}>
+                        {fmtMXNdec(inv.balance)}
+                      </td>
+                      <td>
+                        <BadgeNew tone={badge.tone} dot>{t(badge.labelKey)}</BadgeNew>
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {/* Indicador compartido con la ficha del paciente — ver
+                            invoice-cfdi-badge.tsx (mismo badge/botón en ambas). */}
+                        <InvoiceCfdiBadge
+                          cfdiUuid={inv.cfdiUuid}
+                          facturApiEnabled={clinic.facturApiEnabled}
+                          onStamp={() => openCfdiModal(inv)}
+                        />
+                      </td>
+                      <td
+                        style={{ textAlign: "right", whiteSpace: "nowrap" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {canPay ? (
+                          <button
+                            type="button"
+                            onClick={(e) => openPaymentForRow(e, inv)}
+                            className="btn-new btn-new--ghost btn-new--sm"
+                          >
+                            {t("billing.billingClient.registerPayment")}
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </CardNew>
 

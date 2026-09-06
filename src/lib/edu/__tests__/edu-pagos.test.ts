@@ -36,11 +36,15 @@ import {
   type EduPaymentPlanStatus,
   type EduRole,
 } from "../types";
+import { eduPagosFailed, parseEduPagosDivididos } from "../dinero-core";
 import {
   EDU_PLAN_MAX_MONTHS,
   EDU_PLAN_MIN_MONTHS,
+  eduFechaCorta,
   eduFechaLarga,
   eduInstallmentStatus,
+  eduPlanCalendario,
+  eduPlanRangoMeses,
   eduInstallmentsDueBetween,
   eduInstallmentsVencidas,
   eduPlanAddDaysISO,
@@ -230,6 +234,8 @@ function mensualidad(
     paidAt,
     method: paid ? "CASH" : null,
     receivedByName: paid ? "Caja Uno" : null,
+    // El desglose por formas de pago: una sola cuando se pagó de un tirón.
+    payments: paid ? [{ method: "CASH" as const, amountCents, reference: null, msiMonths: null }] : [],
   };
 }
 
@@ -466,4 +472,125 @@ test("el reparto de las keys por rol no cambió: cobra caja, cancela quien devue
   assert.ok(EDU_ROLE_DEFAULTS.CAJA.includes("caja.charge"));
   assert.ok(!EDU_ROLE_DEFAULTS.ALUMNO.includes("caja.view"));
   assert.ok(!EDU_ROLE_DEFAULTS.DOCENTE.includes("caja.view"));
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// 8 · 🔴 EL CALENDARIO, ANTES DE EMITIR
+//
+// La vista previa enseñaba montos y NINGUNA fecha: desde el mostrador no
+// se podía contestar "¿y cada cuándo pago?" hasta que el plan ya estaba
+// emitido. `eduPlanCalendario` junta las dos funciones que ya existían
+// (fechas + reparto) en la forma que pinta la pantalla, y es la MISMA
+// aritmética que corre en el servidor.
+// ═════════════════════════════════════════════════════════════════════
+
+test("el calendario trae número, fecha y monto, y su suma es EXACTA", () => {
+  const cal = eduPlanCalendario("2026-09-03", 15, 3, 100000);
+  assert.ok(cal);
+  assert.deepEqual(
+    cal.map((f) => f.dueDateISO),
+    ["2026-10-15", "2026-11-15", "2026-12-15"],
+    "la primera SIEMPRE es del mes siguiente",
+  );
+  assert.deepEqual(
+    cal.map((f) => f.amountCents),
+    [33334, 33333, 33333],
+    "la diferencia entera va COMPLETA en la primera",
+  );
+  assert.equal(
+    cal.reduce((a, f) => a + f.amountCents, 0),
+    100000,
+    "centavo por centavo",
+  );
+  assert.deepEqual(
+    cal.map((f) => f.number),
+    [1, 2, 3],
+  );
+});
+
+test('🔴 el día 31 se RECORTA al mes que lo aguante, y el calendario lo DICE', () => {
+  // El caso que sorprendía al paciente después de firmar: un plan armado
+  // un 31 con fechas 31/30/31 sin que nadie lo viera venir.
+  const cal = eduPlanCalendario("2026-10-31", 31, 3, 90000);
+  assert.ok(cal);
+  assert.deepEqual(
+    cal.map((f) => f.dueDateISO),
+    ["2026-11-30", "2026-12-31", "2027-01-31"],
+  );
+  assert.deepEqual(
+    cal.map((f) => f.recortado),
+    [true, false, false],
+    "solo noviembre se recortó: la pantalla marca ESE renglón y no los tres",
+  );
+});
+
+test("un calendario imposible devuelve null en vez de inventar fechas", () => {
+  assert.equal(eduPlanCalendario("2026-09-03", 15, 1, 100000), null, "1 mes no es un plan");
+  assert.equal(eduPlanCalendario("2026-09-03", 15, 3, 2), null, "2 centavos entre 3 no alcanza");
+  assert.equal(eduPlanCalendario("no-fecha", 15, 3, 100000), null);
+  assert.equal(eduPlanCalendario("2026-09-03", 32, 3, 100000), null);
+});
+
+test("el rango de meses se dice como lo diría una persona", () => {
+  assert.equal(eduPlanRangoMeses("2026-10-15", "2026-12-15"), "de octubre a diciembre de 2026");
+  assert.equal(
+    eduPlanRangoMeses("2026-11-15", "2027-02-15"),
+    "de noviembre de 2026 a febrero de 2027",
+    "con dos años, cada mes lleva el suyo",
+  );
+  assert.equal(eduPlanRangoMeses("2026-10-15", "2026-10-15"), "en octubre de 2026");
+  assert.equal(eduPlanRangoMeses("x", "2026-10-15"), "—");
+});
+
+test("la fecha corta cabe en una celda de tabla", () => {
+  assert.equal(eduFechaCorta("2026-10-15"), "15 oct");
+  assert.equal(eduFechaCorta("no-fecha"), "—");
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// 9 · UNA MENSUALIDAD SE DIVIDE ENTRE FORMAS, JAMÁS ENTRE MESES
+// ═════════════════════════════════════════════════════════════════════
+
+test("🔴 el pago de una mensualidad tiene que sumar EXACTO su monto", () => {
+  const monto = 33334;
+  const justo = parseEduPagosDivididos(
+    {
+      payments: [
+        { method: "CASH", amountCents: "200" },
+        { method: "CARD_CREDIT", amountCents: "133.34", msiMonths: 3 },
+      ],
+    },
+    monto,
+    { exacto: true },
+  );
+  assert.equal(justo.ok, true);
+  assert.equal(justo.ok && justo.sumaCents, monto);
+
+  // Un centavo de menos NO liquida la mensualidad: dejaría la fila sin
+  // pagar y el cobro con un pago que no cuadra con ninguna mensualidad.
+  const casi = parseEduPagosDivididos(
+    { payments: [{ method: "CASH", amountCents: "333.33" }] },
+    monto,
+    { exacto: true },
+  );
+  assert.equal(casi.ok, false);
+  assert.match(eduPagosFailed(casi) ? casi.error : "", /Faltan \$0\.01/);
+});
+
+test("el estado de una mensualidad SIGUE derivándose del calendario, no del pago dividido", () => {
+  // Tres formas de pago no cambian la regla: lo que la marca PAGADA es
+  // que exista el pago que la liquidó, y VENCIDA lo dice la fecha.
+  assert.equal(
+    eduInstallmentStatus({ pagada: true, dueDateISO: "2026-01-01" }, "2030-01-01"),
+    "PAGADA",
+  );
+  assert.equal(
+    eduInstallmentStatus({ pagada: false, dueDateISO: "2026-01-01" }, "2026-01-01"),
+    "PENDIENTE",
+    "vence hoy es hoy",
+  );
+  assert.equal(
+    eduInstallmentStatus({ pagada: false, dueDateISO: "2026-01-01" }, "2026-01-02"),
+    "VENCIDA",
+  );
 });

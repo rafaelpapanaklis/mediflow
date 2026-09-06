@@ -8,6 +8,7 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import {
   EDU_INSTALLMENT_STATUS_LABELS,
   EDU_PAYMENT_METHOD_LABELS,
+  EDU_PAYMENT_METHOD_SHORT,
   EDU_PAYMENT_PLAN_STATUS_LABELS,
 } from "@/lib/edu/types";
 
@@ -161,11 +162,27 @@ export function EduPlanRecibo({
                     ? EDU_INSTALLMENT_STATUS_LABELS[i.status]
                     : "—"}
                 </td>
+                {/* 🔴 EL DESGLOSE POR FORMAS. Una mensualidad se puede
+                    cubrir entre efectivo y tarjeta, y el papel que firma
+                    el paciente tiene que decir las dos: con solo el pago
+                    que la liquidó, el recibo diría "crédito $133.33" de
+                    una mensualidad de $333.33. */}
                 <td>
                   {i.status === "PAGADA"
                     ? [
                         paidLabels[i.id] ?? null,
-                        i.method ? EDU_PAYMENT_METHOD_LABELS[i.method] : null,
+                        i.payments.length > 0
+                          ? i.payments
+                              .map(
+                                (pg) =>
+                                  `${EDU_PAYMENT_METHOD_SHORT[pg.method]} ${eduMoney(pg.amountCents)}${
+                                    pg.msiMonths ? ` (${pg.msiMonths} MSI)` : ""
+                                  }`,
+                              )
+                              .join(" · ")
+                          : i.method
+                            ? EDU_PAYMENT_METHOD_LABELS[i.method]
+                            : null,
                         i.receivedByName ? `recibió ${i.receivedByName}` : null,
                       ]
                         .filter(Boolean)

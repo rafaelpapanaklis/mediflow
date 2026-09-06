@@ -67,7 +67,12 @@ test("basura suma cero, igual que el `Number(x) || 0` que sustituye", () => {
   assert.equal(sumMoney([null, undefined, NaN, "abc", Infinity]), 0);
   assert.equal(sumMoney([10, null, NaN, 5.5]), 15.5);
   assert.equal(totalServicePrice([]), 0);
-  assert.equal(totalServicePrice([{ id: "a", durationMin: 30, price: Number.NaN }]), 0);
+  // El servicio va en una variable, no inline: el literal fresco dispara el
+  // chequeo de propiedades excedentes de TS contra `{ price: number }`, y lo
+  // que se prueba aquí es justo que la función traga el objeto COMPLETO que
+  // le pasa la agenda (id y durationMin incluidos), igual que arriba.
+  const servicioBasura = { id: "a", durationMin: 30, price: Number.NaN };
+  assert.equal(totalServicePrice([servicioBasura]), 0);
 });
 
 test("los negativos (líneas de crédito de membresía) restan exacto", () => {

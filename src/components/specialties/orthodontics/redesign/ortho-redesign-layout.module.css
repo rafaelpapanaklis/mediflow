@@ -1,0 +1,65 @@
+/* Layout del rediseño de Ortodoncia (shell con sangrado + rejilla de 3 columnas).
+ *
+ * Los cortes de este layout miran el ANCHO REAL DEL CONTENEDOR, no el del
+ * viewport. Antes estaban atados a los breakpoints de Tailwind (`xl` = 1280 px
+ * de viewport): a 1280 con el sidebar del panel abierto el contenedor real de
+ * esta pestaña mide ~975 px (1031 px de <main> menos los 28 px de padding por
+ * lado del shell de la ficha), pero el layout ya aplicaba los valores de
+ * "pantalla ancha" (240 + 360 de columnas laterales + 48 px de padding por
+ * lado encima del que ya pone la ficha) y dejaba la columna central en ~279 px.
+ *
+ * NO se usa `@container` a propósito: `container-type` convierte al elemento en
+ * bloque contenedor de sus descendientes `position: fixed` (y, por el
+ * `contain: layout` implícito, también de los `absolute`). Dentro de esta
+ * rejilla vive el visor a pantalla completa de SectionPhotos
+ * (`fixed inset-0 bg-slate-950/90`, sections/SectionPhotos.tsx), que dejaría de
+ * cubrir la pantalla para cubrir sólo la rejilla. En su lugar se usa el patrón
+ * clamp() + porcentaje: el porcentaje se resuelve contra el contenedor y
+ * `(100% - Npx) * 1000` satura la clamp hacia su mínimo cuando el contenedor
+ * mide menos de N px y hacia su máximo cuando mide más. Es un corte por
+ * contenedor sin efectos colaterales sobre el posicionamiento.
+ */
+
+/* Envoltorio con sangrado (-m-4 sm:-m-6 en el JSX).
+ * Escalera de padding decidida por el ancho del contenedor:
+ *   < 1040 px -> 16   (aquí se recupera el doble padding: la ficha ya pone 28)
+ *   < 1290 px -> 48   (lo de hoy a 1280 colapsado y a 1440 en ambos estados)
+ *   >= 1290   -> 64   (equivalente a 2xl:px-16)
+ */
+.shell {
+  padding-inline: max(
+    clamp(16px, (100% - 1040px) * 1000, 48px),
+    clamp(0px, (100% - 1290px) * 1000, 64px)
+  );
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* El sub-sidebar del módulo es `hidden lg:block`, así que por debajo de lg todo
+ * apila en una sola columna: ese corte sí es de viewport y se queda como estaba. */
+@media (min-width: 1024px) {
+  .grid {
+    gap: 24px;
+    /* Escalera por ancho de la propia rejilla:
+     *   < 900 px  -> 170 / 250  (viewport ~1024, donde antes la central caía a ~139 px)
+     *   < 1023 px -> 200 / 300  (1280 con el sidebar abierto: rejilla de 991 px)
+     *   >= 1023   -> 240 / 360  (lo de hoy: 1280 colapsado, 1440 abierto y colapsado)
+     */
+    --ortho-nav-w: max(
+      clamp(170px, (100% - 900px) * 1000, 200px),
+      clamp(0px, (100% - 1023px) * 1000, 240px)
+    );
+    --ortho-rail-w: max(
+      clamp(250px, (100% - 900px) * 1000, 300px),
+      clamp(0px, (100% - 1023px) * 1000, 360px)
+    );
+    grid-template-columns:
+      var(--ortho-nav-w)
+      minmax(0, 1fr)
+      var(--ortho-rail-w);
+  }
+}

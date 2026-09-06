@@ -24,7 +24,14 @@
   --text-3: #7d7892;
 
   display: grid;
-  grid-template-columns: 240px 1fr 340px;
+  /* minmax(0, …): sin esto, el "automatic minimum size" de cada pista deja
+     que el contenido intrínseco (texto largo, etc.) empuje la pista más
+     ancha que su tamaño nominal — el viewport de 1280px con sidebar abierto
+     deja sólo ~1031px reales y el @media de más abajo (basado en viewport,
+     no en el contenedor) nunca colapsa a esa anchura, así que sin el clamp
+     los paneles laterales (con overflow:hidden propio) recortaban contenido
+     en vez de que el central se ajustara al espacio libre real. */
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr) minmax(0, 340px);
   grid-template-rows: 56px 1fr;
   /* Fallback 100vh; 100dvh evita salto cuando aparece el bottom bar
      de Safari iOS al hacer scroll en mobile. */
@@ -72,6 +79,14 @@
   border: 1px solid var(--brand-soft);
   border-radius: 999px;
   font-size: 12px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.topbarPatientName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .topbarPatientAvatar {
   width: 22px;

@@ -230,7 +230,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
         sidebarCollapsed={(user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? []}
         isExpired={isExpired}
       />
-      <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
+      {/* min-w-0 — CAUSA RAÍZ del scroll horizontal del panel a 1280. Un hijo de
+          flex trae `min-width: auto`, así que esta columna NO podía encogerse por
+          debajo del min-content de la pantalla que renderiza: una tabla ancha o una
+          rejilla de columnas fijas la estiraba y el desborde salía por el <body>,
+          arrastrando breadcrumb y topbar fuera de la pantalla. Con min-w-0 la
+          columna se queda en el ancho disponible y cada pantalla se hace cargo de
+          su propio ancho intrínseco (scroll dentro de su contenedor, o apilado). */}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <GlobalAnnouncementBanner />
         <Topbar
           clinicName={clinic.name}

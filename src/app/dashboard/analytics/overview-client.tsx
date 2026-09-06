@@ -58,15 +58,35 @@ export function OverviewClient({ data }: Props) {
         <DataCollectingBanner progress={data.dataProgress} count={data.totalAppts} />
       )}
 
-      {/* Top row: Gauge + 3 KPIs */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "260px repeat(3, 1fr)",
-          gap: 14,
-          marginBottom: 14,
-        }}
-      >
+      {/* Top row: Gauge + 3 KPIs.
+          Envoltorio con container-type: inline-size para que el layout
+          responda al ancho REAL del contenido (dentro de AnalyticsLayout,
+          que reparte 220px al tab-sidebar), no al viewport. Sin
+          descendientes position:fixed aquí (gauge y AnalyticsCard son
+          estáticos), así que es un sitio limpio para el contenedor. */}
+      <div style={{ containerType: "inline-size" }}>
+        <style>{`
+          @container (max-width: 820px) {
+            .ov-top-row { grid-template-columns: 1fr; }
+            .ov-kpi-trio {
+              display: grid;
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              gap: 14px;
+            }
+          }
+          @container (max-width: 480px) {
+            .ov-kpi-trio { grid-template-columns: 1fr; }
+          }
+        `}</style>
+        <div
+          className="ov-top-row"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(220px, 260px) repeat(3, minmax(0, 1fr))",
+            gap: 14,
+            marginBottom: 14,
+          }}
+        >
         {scoreLoading ? (
           <div
             style={{
@@ -88,35 +108,44 @@ export function OverviewClient({ data }: Props) {
           <EfficiencyGauge score={score?.today ?? 0} monthAverage={score?.monthAverage ?? 0} />
         )}
 
-        <AnalyticsCard
-          className="kpi--hero"
-          label={t("analytics.overview.apptsThisMonth")}
-          value={data.monthAppts.toLocaleString("es-MX")}
-          delta={data.apptsDeltaPct !== 0 ? { pct: data.apptsDeltaPct } : null}
-          hint={t("analytics.overview.vsPrevMonth")}
-          icon={<Calendar size={16} strokeWidth={1.75} aria-hidden />}
-          tone="brand"
-        />
-        <AnalyticsCard
-          label={t("analytics.overview.completed")}
-          value={data.completedMonth.toLocaleString("es-MX")}
-          delta={data.completedDeltaPct !== 0 ? { pct: data.completedDeltaPct } : null}
-          hint={t("analytics.overview.vsPrevMonth")}
-          icon={<CheckCircle2 size={16} strokeWidth={1.75} aria-hidden />}
-          tone="success"
-        />
-        <AnalyticsCard
-          label={t("analytics.overview.noShows")}
-          value={`${data.noShowRate.toFixed(1)}%`}
-          delta={
-            data.noShowDeltaPct !== 0
-              ? { pct: data.noShowDeltaPct, absolute: t("analytics.overview.apptsCount", { count: data.noShowMonth }) }
-              : null
-          }
-          hint={t("analytics.overview.ofMonthTotal")}
-          icon={<AlertCircle size={16} strokeWidth={1.75} aria-hidden />}
-          tone={data.noShowRate > 10 ? "danger" : data.noShowRate > 5 ? "warning" : "neutral"}
-        />
+        {/* display: contents por defecto: a 1440px (y en general mientras
+            .ov-top-row siga en 4 columnas) este wrapper es invisible para el
+            grid — las 3 tarjetas quedan como items directos, igual que hoy.
+            Solo cuando @container activa .ov-kpi-trio (arriba) este div pasa
+            a ser su propia rejilla de 3 columnas, ya sin competir por ancho
+            con la columna fija del gauge. */}
+        <div className="ov-kpi-trio" style={{ display: "contents" }}>
+          <AnalyticsCard
+            className="kpi--hero"
+            label={t("analytics.overview.apptsThisMonth")}
+            value={data.monthAppts.toLocaleString("es-MX")}
+            delta={data.apptsDeltaPct !== 0 ? { pct: data.apptsDeltaPct } : null}
+            hint={t("analytics.overview.vsPrevMonth")}
+            icon={<Calendar size={16} strokeWidth={1.75} aria-hidden />}
+            tone="brand"
+          />
+          <AnalyticsCard
+            label={t("analytics.overview.completed")}
+            value={data.completedMonth.toLocaleString("es-MX")}
+            delta={data.completedDeltaPct !== 0 ? { pct: data.completedDeltaPct } : null}
+            hint={t("analytics.overview.vsPrevMonth")}
+            icon={<CheckCircle2 size={16} strokeWidth={1.75} aria-hidden />}
+            tone="success"
+          />
+          <AnalyticsCard
+            label={t("analytics.overview.noShows")}
+            value={`${data.noShowRate.toFixed(1)}%`}
+            delta={
+              data.noShowDeltaPct !== 0
+                ? { pct: data.noShowDeltaPct, absolute: t("analytics.overview.apptsCount", { count: data.noShowMonth }) }
+                : null
+            }
+            hint={t("analytics.overview.ofMonthTotal")}
+            icon={<AlertCircle size={16} strokeWidth={1.75} aria-hidden />}
+            tone={data.noShowRate > 10 ? "danger" : data.noShowRate > 5 ? "warning" : "neutral"}
+          />
+        </div>
+        </div>
       </div>
 
       {/* Second row: tiempos */}

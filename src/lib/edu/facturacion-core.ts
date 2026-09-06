@@ -325,12 +325,17 @@ export function parseEduReceptor(
 
 const FORMA_POR_METODO: Record<EduPaymentMethod, string | null> = {
   CASH: "01", // Efectivo
-  // Tarjeta: el SAT distingue crédito (04) de débito (28) y el vertical
-  // guarda un solo "CARD". Se PROPONE crédito, que es lo más común en una
-  // terminal de clínica, y el modal lo deja cambiar: proponer no es
-  // decidir, y quien cobró tiene el voucher a la vista.
+  // 🔴 Tarjeta LEGADA. El SAT distingue crédito (04) de débito (28) y las
+  // filas viejas del vertical guardaron un solo "CARD" sin decir cuál.
+  // Se PROPONE crédito, que es lo más común en una terminal de clínica, y
+  // el modal lo deja cambiar: proponer no es decidir, y quien cobró tiene
+  // el voucher a la vista. Los pagos NUEVOS ya no caen aquí: se cobran con
+  // CARD_DEBIT o CARD_CREDIT y la clave sale exacta.
   CARD: "04",
+  CARD_DEBIT: "28", // Tarjeta de débito
+  CARD_CREDIT: "04", // Tarjeta de crédito
   TRANSFER: "03", // Transferencia electrónica de fondos
+  CHECK: "02", // Cheque nominativo
   // "Otro" no se traduce: puede ser un vale, una beca, una compensación.
   // Que lo diga quien cobró.
   OTHER: null,
@@ -340,21 +345,54 @@ export interface EduPagoParaForma {
   method: EduPaymentMethod;
   isRefund: boolean;
   paidAt: string | Date;
+  /** Centavos POSITIVOS del pago. Es lo que decide en un pago mixto. */
+  amountCents: number;
 }
 
 /**
- * La forma de pago SUGERIDA: la del último pago real (las devoluciones no
- * cuentan). Sin pagos, o con un pago de método "Otro", devuelve null.
+ * La forma de pago SUGERIDA en un pago MIXTO: la del método con MAYOR
+ * monto neto (las devoluciones no cuentan). Sin pagos, o si el que gana
+ * es "Otro", devuelve null y el modal obliga a elegirla.
+ *
+ * 🔴 Cambió de "el último pago" a "el de mayor monto" cuando el vertical
+ * empezó a admitir hasta tres formas en una operación. Es la regla del
+ * SAT para un CFDI con pago mixto —la forma de pago es la del importe
+ * mayor— y además la de sentido común: con $900 en efectivo y $100 con
+ * tarjeta, decir "tarjeta" porque se registró de segunda sería describir
+ * mal la operación en un documento fiscal.
+ *
+ * Empate exacto entre dos métodos: gana el MÁS RECIENTE, que es la regla
+ * anterior aplicada solo al desempate — arbitraria pero estable, y así el
+ * mismo cobro sugiere siempre lo mismo.
  */
 export function eduSugerirFormaPago(pagos: EduPagoParaForma[]): string | null {
   if (!Array.isArray(pagos)) return null;
-  const reales = pagos
-    .filter((p) => p && !p.isRefund)
-    .slice()
-    .sort((a, b) => new Date(a.paidAt).getTime() - new Date(b.paidAt).getTime());
-  const ultimo = reales[reales.length - 1];
-  if (!ultimo) return null;
-  return FORMA_POR_METODO[ultimo.method] ?? null;
+
+  // Por método: cuánto suma y cuál fue su pago más reciente.
+  const porMetodo = new Map<EduPaymentMethod, { total: number; ultimo: number }>();
+  for (const p of pagos) {
+    if (!p || p.isRefund) continue;
+    const monto = Number.isFinite(p.amountCents) ? Number(p.amountCents) : 0;
+    if (monto <= 0) continue;
+    const cuando = new Date(p.paidAt).getTime();
+    const previo = porMetodo.get(p.method);
+    porMetodo.set(p.method, {
+      total: (previo?.total ?? 0) + monto,
+      ultimo: Math.max(previo?.ultimo ?? Number.NEGATIVE_INFINITY, Number.isFinite(cuando) ? cuando : 0),
+    });
+  }
+
+  let ganador: EduPaymentMethod | null = null;
+  let mejor = { total: 0, ultimo: Number.NEGATIVE_INFINITY };
+  // forEach y no `for…of`: el target del repo no permite iterar un Map.
+  porMetodo.forEach((dato, method) => {
+    if (dato.total > mejor.total || (dato.total === mejor.total && dato.ultimo > mejor.ultimo)) {
+      ganador = method;
+      mejor = dato;
+    }
+  });
+  if (!ganador) return null;
+  return FORMA_POR_METODO[ganador] ?? null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
