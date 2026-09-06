@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { getVisiblePatientClinicIds, clinicScopeFilter, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
@@ -49,6 +50,15 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!["SUPER_ADMIN", "ADMIN", "DOCTOR", "RECEPTIONIST"].includes(user.role)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+
+  // PERMISOS-CONSISTENCIA — este timeline ES el expediente: entrega la primera
+  // línea del `subjective` de cada nota y los CIE-10 con código, descripción y
+  // nota libre. Su hermana /api/clinical (y /api/records, y el export CDA) ya
+  // exigen "medicalRecord.view"; aquí sólo se miraba el ROL, así que la ficha
+  // SSR mandaba `records: []` a quien no tiene el permiso y la pestaña
+  // "Historia clínica" se lo devolvía igual por fetch.
+  const deniedPerm = denyIfMissingPermission(user, "medicalRecord.view");
+  if (deniedPerm) return deniedPerm;
 
   // MULTI-CLÍNICA · FASE 2 — la historia se puede LEER desde una sede vinculada.
   // clinicalScope es el filtro ampliado que usan las fuentes CLÍNICAS de abajo;
@@ -207,7 +217,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     }) : Promise.resolve([]),
     wantDiagnosis ? prisma.medicalRecordDiagnosis.findMany({
       where: {
-        medicalRecord: { clinicId: clinicalScope, patientId: params.id },
+        // Un CIE-10 es un trozo de su medicalRecord: el mismo filtro que la
+        // fuente SOAP de arriba, o la nota privada no sale y su diagnóstico sí
+        // (código, descripción, nota libre y nombre del autor). Los dos van en
+        // el mismo AND: cada uno puede ocupar `OR` y se pisarían.
+        medicalRecord: {
+          AND: [sharedRecordScope(user.clinicId, visibleClinicIds), ownPrivateRecordsOnly(user.id)],
+          patientId: params.id,
+        },
         ...dateRange<"createdAt">("createdAt"),
       },
       select: {
