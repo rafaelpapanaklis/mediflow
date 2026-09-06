@@ -467,18 +467,28 @@ test("ganado y perdido son los únicos estados que cierran para el socio", () =>
 test("un valor fuera de catálogo se ignora en vez de llegar a la consulta", () => {
   const f = crmFiltrosDesdeQuery({
     giro: "NO_EXISTE",
-    etapa: "DROP TABLE",
     fuente: "'; --",
     estado: "loquesea",
     orden: "por_las_ganas",
     vista: "carrusel",
   });
   assert.equal(f.vertical, "");
-  assert.equal(f.etapa, "");
   assert.equal(f.fuente, "");
   assert.equal(f.estado, "");
   assert.equal(f.orden, "prioridad");
   assert.equal(f.vista, "");
+});
+
+test("la etapa SÍ acepta un valor fuera del catálogo, y es a propósito", () => {
+  // La columna es TEXT y el catálogo se retoca desde TypeScript: una fila
+  // editada a mano en Supabase puede tener una etapa que hoy no aparece en
+  // la lista, y el tablero le pinta su propia columna. Si aquí se
+  // descartara, el botón "y N más — verlos en la lista" de esa columna
+  // llevaría a la lista SIN filtro y enseñaría la libreta entera.
+  assert.equal(crmFiltrosDesdeQuery({ etapa: "NEGOCIACION_2" }).etapa, "NEGOCIACION_2");
+  assert.equal(crmFiltrosDesdeQuery({ etapa: "DEMO" }).etapa, "DEMO");
+  // Pero acotada: no se convierte en un campo de texto libre sin límite.
+  assert.equal(crmFiltrosDesdeQuery({ etapa: "x".repeat(500) }).etapa.length, 60);
 });
 
 test("lo que sí está en catálogo pasa tal cual", () => {
@@ -687,6 +697,32 @@ test("mayor valor: sin valor puesto NO es valor cero, va al final", () => {
     [...filas].sort(crmComparar("valor")).map((f) => f.name),
     ["Mil", "Cero", "Sin poner"],
   );
+});
+
+test("dos prospectos con el MISMO nombre siguen teniendo un orden fijo", () => {
+  // El caso que rompe la paginación: el nombre no es único (la tabla no
+  // tiene unique y dar de alta no deduplica), así que dos "Clínica Dental
+  // Sonrisa" empatan en todos los criterios. Sin un desempate total, la
+  // base puede resolverlos de una forma para la página 1 y de otra para la
+  // 2: una fila sale dos veces y su gemela no sale nunca, con el contador
+  // diciendo tan tranquilo "120 de 120".
+  const gemelas = [
+    { id: "ckz9", name: "Clínica Dental Sonrisa", nextActionAt: null, monthlyValue: null, lastContactAt: null },
+    { id: "cka1", name: "Clínica Dental Sonrisa", nextActionAt: null, monthlyValue: null, lastContactAt: null },
+  ];
+  for (const orden of ["prioridad", "sin-contacto", "valor", "nombre", "reciente", "nuevos"] as const) {
+    assert.deepEqual(
+      [...gemelas].sort(crmComparar(orden)).map((f) => f.id),
+      ["cka1", "ckz9"],
+      `el orden "${orden}" no es total: dos filas con el mismo nombre quedan al azar`,
+    );
+    // Y da igual en qué orden lleguen: el resultado es el mismo.
+    assert.deepEqual(
+      [...gemelas].reverse().sort(crmComparar(orden)).map((f) => f.id),
+      ["cka1", "ckz9"],
+      `el orden "${orden}" depende de cómo venían las filas`,
+    );
+  }
 });
 
 test("todos los órdenes desempatan por nombre, o la página 2 repetiría filas", () => {

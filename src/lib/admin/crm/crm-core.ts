@@ -1209,7 +1209,15 @@ export function crmFiltrosDesdeQuery(sp: CrmQueryEntrada): CrmFiltros {
     q: unValor(sp, c.q).slice(0, 120),
     vertical: crmEsVertical(vertical) ? vertical : "",
     fuente: crmEsFuente(fuente) ? fuente : "",
-    etapa: crmEsEtapa(etapa) ? etapa : "",
+    // La etapa NO se valida contra el catálogo, a diferencia del giro y la
+    // fuente, y es a propósito: la columna es TEXT y el catálogo se retoca
+    // desde TypeScript (ver la cabecera de este archivo), así que una fila
+    // editada a mano en Supabase puede tener una etapa que hoy no está en
+    // la lista — y el tablero le pinta su columna. Si aquí se descartara,
+    // el botón "verlos en la lista" de esa columna llevaría a la lista SIN
+    // filtro y enseñaría la libreta entera. `crmEtapa` ya sabe pintar una
+    // etapa desconocida con su etiqueta cruda.
+    etapa: etapa.slice(0, 60),
     // El origen es un id de socio y no hay catálogo que consultar sin
     // tocar la base: se acepta cualquier texto corto y, si no existe, el
     // filtro simplemente no encuentra nada (y la ficha lo dice).
@@ -1351,6 +1359,8 @@ export function crmLimiteFrio(ahora: Date = new Date()): Date {
 
 /** Lo que hace falta para ordenar una fila por cualquiera de los criterios. */
 export interface CrmOrdenable extends CrmProspectoResumible {
+  /** El desempate final. Ver `crmComparar`: sin él la paginación miente. */
+  id?: string | null;
   name?: string | null;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
@@ -1362,7 +1372,26 @@ function textoFecha(v: string | Date | null | undefined): string {
 }
 
 function cmpNombre(a: CrmOrdenable, b: CrmOrdenable): number {
-  return String(a?.name ?? "").localeCompare(String(b?.name ?? ""), "es");
+  return String(a?.name ?? "").localeCompare(String(b?.name ?? ""), "es") || cmpId(a, b);
+}
+
+/**
+ * EL DESEMPATE FINAL, y el único que de verdad desempata: el id.
+ *
+ * Ninguna de las demás columnas es única. El nombre TAMPOCO: la tabla no
+ * tiene índice único sobre él y dar de alta no deduplica (sólo la
+ * importación pegada evita repetidos), así que dos "Clínica Dental
+ * Sonrisa" —una de Puebla, otra de Mérida— empatan en todos los criterios.
+ *
+ * Con un orden que no es TOTAL, la base puede resolver el empate de una
+ * forma para `LIMIT 50 OFFSET 0` (top-N heapsort) y de otra para
+ * `LIMIT 50 OFFSET 50` (ordenación completa): la misma fila sale en la
+ * página 1 y en la 2, y su gemela no sale en ninguna. Y el contador
+ * seguiría diciendo "120 de 120", que es exactamente la clase de mentira
+ * silenciosa que esta pantalla existe para no contar.
+ */
+function cmpId(a: CrmOrdenable, b: CrmOrdenable): number {
+  return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
 }
 
 /**

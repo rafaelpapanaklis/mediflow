@@ -112,7 +112,6 @@ export function CrmClient({
     total,
     totalGeneral,
     totalPaginas,
-    porEtapa,
     resumen,
     socios,
     recomendacionesSinTocar,
@@ -131,6 +130,23 @@ export function CrmClient({
   useEffect(() => {
     setHoyToca(listado.hoyToca);
   }, [listado.hoyToca]);
+
+  // Las cuentas por etapa también se pintan por adelantado. Son las que
+  // salen en la cabecera de cada columna del tablero y las que deciden el
+  // "y N más": si se quedaran con el número del servidor mientras la
+  // tarjeta ya se movió, la columna diría 8 sobre 7 tarjetas y ofrecería
+  // ver "1 más" que no existe.
+  const [porEtapa, setPorEtapa] = useState<Record<string, number>>(listado.porEtapa);
+  useEffect(() => {
+    setPorEtapa(listado.porEtapa);
+  }, [listado.porEtapa]);
+
+  // Y el total de "hay que atenderlos", por lo mismo: es la cifra de la
+  // cabecera de "Hoy toca" y la del botón de ver el resto.
+  const [pendientes, setPendientes] = useState(listado.resumen.vencidos + listado.resumen.paraHoy);
+  useEffect(() => {
+    setPendientes(listado.resumen.vencidos + listado.resumen.paraHoy);
+  }, [listado.resumen.vencidos, listado.resumen.paraHoy]);
 
   // "Ahora" se congela por render de datos: si se recalculara en cada
   // pintado, un prospecto podría cambiar de "hoy" a "vencido" a media
@@ -200,6 +216,14 @@ export function CrmClient({
     };
     setFilas((prev) => prev.map(cambiar));
     setHoyToca((prev) => prev.map(cambiar));
+    if (anterior && anterior !== etapa) {
+      const desde: string = anterior;
+      setPorEtapa((prev) => ({
+        ...prev,
+        [desde]: Math.max(0, (prev[desde] ?? 0) - 1),
+        [etapa]: (prev[etapa] ?? 0) + 1,
+      }));
+    }
     return anterior;
   }
 
@@ -229,10 +253,25 @@ export function CrmClient({
   }
 
   function reprogramar(p: CrmProspectoDTO, fecha: string | null) {
+    const nuevaFecha = fecha ? `${fecha}T12:00:00.000Z` : null;
     const pintar = (f: CrmProspectoDTO) =>
-      f.id === p.id ? { ...f, nextActionAt: fecha ? `${fecha}T12:00:00.000Z` : null } : f;
+      f.id === p.id ? { ...f, nextActionAt: nuevaFecha } : f;
     setFilas((prev) => prev.map(pintar));
-    setHoyToca((prev) => prev.map(pintar));
+
+    // Posponer o dar por hecho saca la fila de "Hoy toca" AL INSTANTE. Si
+    // sólo se repintara, se quedaría ahí diciendo "En 7 días" debajo de un
+    // encabezado que sigue contándola, hasta que volviera el servidor —
+    // que es justo el momento en que uno duda de si el botón funcionó.
+    const sigueTocando =
+      nuevaFecha !== null && ["vencido", "hoy"].includes(crmSemaforo(nuevaFecha, ahora));
+    setHoyToca((prev) => {
+      const estaba = prev.some((f) => f.id === p.id);
+      if (estaba && !sigueTocando) {
+        setPendientes((n) => Math.max(0, n - 1));
+        return prev.filter((f) => f.id !== p.id);
+      }
+      return prev.map(pintar);
+    });
     startTransition(async () => {
       const r = await programarSeguimientoAccion(p.id, fecha, p.nextActionNote);
       if (!r.ok) {
@@ -322,7 +361,7 @@ export function CrmClient({
                 conFiltros(
                   filtros.estado === "pendientes"
                     ? { estado: "" }
-                    : { estado: "pendientes", orden: "prioridad", vista: "lista" },
+                    : { estado: "pendientes", etapa: "", orden: "prioridad", vista: "lista" },
                 )
               }
             >
@@ -343,7 +382,11 @@ export function CrmClient({
               activo={filtros.estado === "abiertos"}
               titulo="Ver todo lo que sigue vivo"
               onClick={() =>
-                conFiltros({ estado: filtros.estado === "abiertos" ? "" : "abiertos" })
+                conFiltros(
+                  filtros.estado === "abiertos"
+                    ? { estado: "" }
+                    : { estado: "abiertos", etapa: "" },
+                )
               }
             >
               <KpiCard
@@ -360,7 +403,7 @@ export function CrmClient({
                 conFiltros(
                   filtros.estado === "frios"
                     ? { estado: "" }
-                    : { estado: "frios", orden: "sin-contacto", vista: "lista" },
+                    : { estado: "frios", etapa: "", orden: "sin-contacto", vista: "lista" },
                 )
               }
             >
@@ -379,7 +422,7 @@ export function CrmClient({
                 conFiltros(
                   filtros.etapa === "GANADO"
                     ? { etapa: "" }
-                    : { etapa: "GANADO", orden: "reciente", vista: "lista" },
+                    : { etapa: "GANADO", estado: "", orden: "reciente", vista: "lista" },
                 )
               }
             >
@@ -436,7 +479,7 @@ export function CrmClient({
             <div style={{ marginBottom: 18 }}>
               <CardNew
                 noPad
-                title={`Hoy toca (${resumen.vencidos + resumen.paraHoy})`}
+                title={`Hoy toca (${pendientes})`}
                 sub="Lo vencido primero. Escribe, marca, edita o posponlo sin salir de aquí."
               >
                 <div style={{ display: "flex", flexDirection: "column" }}>
@@ -450,7 +493,7 @@ export function CrmClient({
                       alTextos={abrirTextos}
                     />
                   ))}
-                  {resumen.vencidos + resumen.paraHoy > hoyToca.length && (
+                  {pendientes > hoyToca.length && (
                     <button
                       type="button"
                       onClick={() =>
@@ -467,8 +510,7 @@ export function CrmClient({
                         textAlign: "left",
                       }}
                     >
-                      Ver los {resumen.vencidos + resumen.paraHoy - hoyToca.length} restantes en la
-                      lista →
+                      Ver los {pendientes - hoyToca.length} restantes en la lista →
                     </button>
                   )}
                 </div>
@@ -715,10 +757,16 @@ function SinResultados({
  * bajar a los selectores a reproducirlo a mano: "hay 7 por atender" y
  * ahora hay que ir a buscarlos. Aquí el número ES el filtro.
  *
- * ENCENDERLO deja la pantalla como conviene para eso (la vista de lista y
- * el orden que tiene sentido para ese número); APAGARLO sólo quita el
- * filtro y no toca nada más. Un botón que al apagarse te reordena la
- * lista se siente estropeado aunque haga lo que dice.
+ * ENCENDERLO deja la pantalla como conviene para eso: la vista de lista,
+ * el orden que tiene sentido para ese número, y el OTRO eje de filtro
+ * limpio. Eso último no es un detalle — "En el embudo" filtra por
+ * situación (abiertos) y "Ya son clientes" por etapa (ganados), y
+ * encender los dos daba una lista vacía POR CONSTRUCCIÓN, con las dos
+ * tarjetas encendidas enseñando números que no se podían ver.
+ *
+ * APAGARLO sólo quita su filtro y no toca nada más: un botón que al
+ * apagarse te reordena la lista se siente estropeado aunque haga lo que
+ * dice.
  *
  * Va como <div role="button"> y no como <button>: dentro vive la tarjeta
  * entera del KPI, con sus divs, y un <div> dentro de un <button> es HTML

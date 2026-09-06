@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from "react";
 import { LayoutGrid, List, Search, X } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/use-command-palette";
 import {
+  crmEtapa,
   crmFiltrosActivos,
   crmFiltrosCon,
   crmFiltrosLimpios,
@@ -80,39 +81,71 @@ export function CrmBarraFiltros({
   const caja = useRef<HTMLInputElement>(null);
   const ultimoEnviado = useRef(filtros.q);
 
+  /**
+   * Los filtros VIGENTES, contando lo que se acaba de pedir y el servidor
+   * todavía no ha contestado.
+   *
+   * Hace falta por una carrera concreta: se teclea "abc", 100 ms después
+   * se elige otro giro en el selector, y a los 350 ms salta el temporizador
+   * del tecleo. Si ese temporizador compusiera la búsqueda sobre las props
+   * —que siguen siendo las de antes, porque la ida y vuelta al servidor no
+   * ha terminado— reescribiría la URL con el giro VIEJO y se comería la
+   * elección recién hecha, además sin dejar entrada en el historial para
+   * deshacerla. Con esta referencia, el tecleo se compone siempre sobre lo
+   * último que se pidió.
+   *
+   * Se sincroniza desde las props sólo cuando llega un objeto NUEVO (una
+   * respuesta de verdad), no en cada pintado.
+   */
+  const vigentes = useRef(filtros);
+  useEffect(() => {
+    vigentes.current = filtros;
+  }, [filtros]);
+
   useEffect(() => {
     if (tecleado === ultimoEnviado.current) return;
     ultimoEnviado.current = tecleado;
+    const siguiente = crmFiltrosCon(vigentes.current, { q: tecleado });
+    vigentes.current = siguiente;
     // `reemplazar`: teclear no debe dejar una entrada en el historial por
     // letra, o el botón de atrás tardaría veinte clics en salir.
-    alCambiar(crmFiltrosCon(filtros, { q: tecleado }), { reemplazar: true });
-    // Sólo depende de lo tecleado: meter `filtros` aquí volvería a
-    // navegar en cuanto el servidor conteste, en bucle.
+    alCambiar(siguiente, { reemplazar: true });
+    // Sólo depende de lo tecleado; el resto se lee de las referencias de
+    // arriba a propósito, para no volver a navegar en cuanto conteste el
+    // servidor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tecleado]);
 
   /**
    * El camino de vuelta: la URL cambió por algo que NO fue teclear (el
-   * botón de atrás, "Quitar todos", la ficha de «Buscando»). Se copia a
-   * la caja sólo si NADIE está escribiendo en ella — si se copiara
-   * siempre, una respuesta del servidor que va una letra por detrás
-   * borraría la letra recién tecleada.
+   * botón de atrás, "Quitar todos", la ficha de «Buscando»). Se copia a la
+   * caja, pero SÓLO si no hay tecleo pendiente de enviar.
+   *
+   * La condición es `texto === ultimoEnviado`, y no "¿tiene el foco?", que
+   * era lo que había antes y fallaba en un caso real: se teclea, se vuelve
+   * atrás con Alt+← sin sacar el cursor de la caja, y como el foco seguía
+   * dentro el efecto se saltaba para siempre —sólo depende de `filtros.q`,
+   * que ya había cambiado—. La lista se quedaba sin filtro y la caja
+   * seguía diciendo "sonrisa" hasta que se tecleara otra letra.
    */
   useEffect(() => {
-    if (caja.current && caja.current === document.activeElement) return;
+    if (texto !== ultimoEnviado.current) return; // hay tecleo sin mandar: no se pisa
+    if (filtros.q === texto) return;
     ultimoEnviado.current = filtros.q;
     setTexto(filtros.q);
-  }, [filtros.q]);
+  }, [filtros.q, texto]);
 
   function limpiarBusqueda() {
     setTexto("");
     ultimoEnviado.current = "";
-    alCambiar(crmFiltrosCon(filtros, { q: "" }), { reemplazar: true });
+    poner({ q: "" }, { reemplazar: true });
     caja.current?.focus();
   }
 
-  function poner(cambios: Partial<CrmFiltros>) {
-    alCambiar(crmFiltrosCon(filtros, cambios));
+  function poner(cambios: Partial<CrmFiltros>, opciones?: { reemplazar?: boolean }) {
+    const siguiente = crmFiltrosCon(vigentes.current, cambios);
+    vigentes.current = siguiente;
+    alCambiar(siguiente, opciones);
   }
 
   const activos = crmFiltrosActivos(
@@ -220,6 +253,12 @@ export function CrmBarraFiltros({
             opciones={[
               { valor: "", texto: "Todas las etapas" },
               ...CRM_ETAPAS.map((e) => ({ valor: e.id, texto: e.label, titulo: e.ayuda })),
+              // Una etapa fuera del catálogo (editada a mano en la base)
+              // se ofrece igual, para no dejar el selector en blanco ni
+              // "cambiarla" sola al abrirlo. Mismo trato que CrmEtapaSelect.
+              ...(filtros.etapa && !CRM_ETAPAS.some((e) => e.id === filtros.etapa)
+                ? [{ valor: filtros.etapa, texto: crmEtapa(filtros.etapa).label }]
+                : []),
             ]}
           />
         )}

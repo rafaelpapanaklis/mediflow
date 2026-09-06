@@ -1,12 +1,12 @@
 -- ═══════════════════════════════════════════════════════════════════════
 -- CRM DE VENTAS — LOS ÍNDICES DE LA LISTA FILTRADA Y PAGINADA
 --
--- SEIS ÍNDICES Y NADA MÁS. Ni una tabla, ni una columna, ni un enum, ni
+-- SIETE ÍNDICES Y NADA MÁS. Ni una tabla, ni una columna, ni un enum, ni
 -- una fila, ni un DROP, ni un ALTER. Sólo toca "crm_prospects", que es
 -- una tabla propia del CRM de /admin y de /afiliados/crm.
 --
 -- Cómo aplicarlo: Supabase → SQL Editor → pegar TODO → Run. Una sola vez.
--- ADITIVO e idempotente: `IF NOT EXISTS` en los seis. Correrlo dos veces
+-- ADITIVO e idempotente: `IF NOT EXISTS` en los siete. Correrlo dos veces
 -- no hace nada la segunda.
 --
 -- ⚠️ NO ES BLOQUEANTE PARA EL DEPLOY, y conviene saberlo. Aquí no hay
@@ -34,7 +34,7 @@
 --
 -- Nota sobre CONCURRENTLY: NO se usa, a propósito. CONCURRENTLY no puede
 -- ir dentro de una transacción y el editor de Supabase envuelve los lotes
--- en una, así que obligaría a seis "Run" separados. Con una libreta de
+-- en una, así que obligaría a siete "Run" separados. Con una libreta de
 -- ventas de una persona (miles de filas, no millones) un CREATE INDEX
 -- normal tarda milisegundos y el bloqueo de escritura no se nota. Si
 -- algún día esta tabla llega a cientos de miles de filas, se corre cada
@@ -54,7 +54,7 @@
 -- trabajo a Postgres, y sobre "crm_prospects" sólo había cinco índices de
 -- una columna: stage, nextActionAt, vertical, createdAt y affiliateId.
 --
--- Los seis de abajo cubren, en este orden de importancia:
+-- Los siete de abajo cubren, en este orden de importancia:
 --
 --   1. LOS TRES CONTADORES DE ARRIBA, que se calculan en CADA carga de la
 --      pantalla (vencidos, para hoy, enfriándose) y además el badge del
@@ -107,8 +107,14 @@ CREATE INDEX IF NOT EXISTS "crm_prospects_nextActionAt_stage_idx"
 -- Ojo con lo que NO cubre: "nunca contactados" es `lastContactAt IS NULL`
 -- y ése sí lo resuelve este mismo índice, porque un B-tree de Postgres
 -- indexa los NULL.
+-- El NULLS FIRST no es decoración: un B-tree normal es ASC NULLS LAST, y
+-- el orden "Más abandonados" pide `ORDER BY "lastContactAt" ASC NULLS
+-- FIRST` (el que nunca se contactó va arriba, ver orderByDeOrden). Sin
+-- que el índice esté construido en ESE orden, Postgres no lo puede usar
+-- para ordenar y se come una ordenación completa de la tabla. Para los
+-- contadores (`< limite` y `IS NULL`) daría igual; para el orden, no.
 CREATE INDEX IF NOT EXISTS "crm_prospects_lastContactAt_stage_idx"
-  ON "crm_prospects" ("lastContactAt", "stage");
+  ON "crm_prospects" ("lastContactAt" ASC NULLS FIRST, "stage");
 
 
 -- ── 3. "Movidos hace poco" ─────────────────────────────────────────────
@@ -120,11 +126,17 @@ CREATE INDEX IF NOT EXISTS "crm_prospects_updatedAt_idx"
   ON "crm_prospects" ("updatedAt");
 
 
--- ── 4. Alfabético, y el desempate de todo lo demás ─────────────────────
--- El orden "Nombre (A-Z)" y, sobre todo, el segundo criterio de CADA uno
--- de los otros órdenes: sin un desempate estable, dos filas con el mismo
--- valor pueden salir en distinto orden en dos consultas seguidas, y
--- entonces una se repite en la página 2 y otra no sale nunca.
+-- ── 4. Alfabético ──────────────────────────────────────────────────────
+-- El orden "Nombre (A-Z)".
+--
+-- Lo que este índice NO hace, para que no se le pida: no sirve como
+-- segundo criterio de los otros órdenes. Un índice de una sola columna
+-- nunca puede resolver un desempate; eso lo hace un nodo de ordenación
+-- incremental. Y el desempate que de verdad importa —el que evita que una
+-- fila se repita en la página 1 y falte en la 2— no es el nombre sino el
+-- ID, que va el último en TODOS los órdenes (ver orderByDeOrden en
+-- service.ts y cmpId en crm-core.ts): el nombre no es único, y dos
+-- "Clínica Dental Sonrisa" empatarían hasta el final.
 CREATE INDEX IF NOT EXISTS "crm_prospects_name_idx"
   ON "crm_prospects" ("name");
 
@@ -137,7 +149,18 @@ CREATE INDEX IF NOT EXISTS "crm_prospects_source_idx"
   ON "crm_prospects" ("source");
 
 
--- ── 6. Las recomendaciones de socios sin contactar ─────────────────────
+-- ── 6. "Mayor valor" ───────────────────────────────────────────────────
+-- `ORDER BY "monthlyValue" DESC NULLS LAST, "name" ASC, "id" ASC`. Es el
+-- orden con los grupos de empate MÁS grandes de todos —el valor mensual
+-- está sin poner en la mayoría de las filas, y todas ellas empatan— y por
+-- tanto el que más caro sale de ordenar a mano. Las tres columnas van en
+-- el índice, y en el mismo sentido que la consulta, para que Postgres
+-- pueda leer la página ya ordenada en vez de ordenar la tabla entera.
+CREATE INDEX IF NOT EXISTS "crm_prospects_monthlyValue_name_id_idx"
+  ON "crm_prospects" ("monthlyValue" DESC NULLS LAST, "name" ASC, "id" ASC);
+
+
+-- ── 7. Las recomendaciones de socios sin contactar ─────────────────────
 -- El aviso de arriba de la pantalla (`affiliateId IS NOT NULL AND stage =
 -- 'NUEVO'`), agrupado por socio. Aquí SÍ manda la igualdad primero,
 -- porque "affiliateId" es muy selectivo y "stage" es una igualdad de
@@ -151,7 +174,7 @@ CREATE INDEX IF NOT EXISTS "crm_prospects_affiliateId_stage_idx"
 
 
 -- ═══════════════════════════════════════════════════════════════════════
--- Verificación post-aplicación: tiene que devolver SEIS filas.
+-- Verificación post-aplicación: tiene que devolver SIETE filas.
 -- ═══════════════════════════════════════════════════════════════════════
 SELECT indexname
 FROM pg_indexes
@@ -163,6 +186,7 @@ WHERE schemaname = 'public'
     'crm_prospects_updatedAt_idx',
     'crm_prospects_name_idx',
     'crm_prospects_source_idx',
+    'crm_prospects_monthlyValue_name_id_idx',
     'crm_prospects_affiliateId_stage_idx'
   )
 ORDER BY indexname;

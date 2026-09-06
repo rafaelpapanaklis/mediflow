@@ -325,23 +325,30 @@ function whereDeEstado(estado: CrmEstadoId, ahora: Date): Record<string, any> | 
  *     abandonado de todos, no el que menos.
  *   · valor → sin valor puesto NO es valor cero; va al final.
  *
- * Todos desempatan por nombre para que la página 2 no repita ni se salte
- * filas cuando dos valen lo mismo.
+ * Y todos terminan en el ID. El nombre NO basta como desempate —no es
+ * único, y dos "Clínica Dental Sonrisa" empatarían hasta el final—, así
+ * que sin el id el orden no sería TOTAL y la página 2 podría repetir una
+ * fila y saltarse otra. Ver `cmpId` en crm-core, que hace lo mismo del
+ * lado de la memoria.
  */
 function orderByDeOrden(orden: CrmOrden): Record<string, any>[] {
+  // El id va SIEMPRE el último. Ver `cmpId` en crm-core: es el único
+  // desempate que desempata de verdad, y sin él la paginación puede
+  // repetir una fila en la página 1 y saltársela en la 2 sin avisar.
+  const id = { id: "asc" };
   switch (orden) {
     case "reciente":
-      return [{ updatedAt: "desc" }, { name: "asc" }];
+      return [{ updatedAt: "desc" }, { name: "asc" }, id];
     case "nuevos":
-      return [{ createdAt: "desc" }, { name: "asc" }];
+      return [{ createdAt: "desc" }, { name: "asc" }, id];
     case "sin-contacto":
-      return [{ lastContactAt: { sort: "asc", nulls: "first" } }, { name: "asc" }];
+      return [{ lastContactAt: { sort: "asc", nulls: "first" } }, { name: "asc" }, id];
     case "valor":
-      return [{ monthlyValue: { sort: "desc", nulls: "last" } }, { name: "asc" }];
+      return [{ monthlyValue: { sort: "desc", nulls: "last" } }, { name: "asc" }, id];
     case "nombre":
-      return [{ name: "asc" }];
+      return [{ name: "asc" }, id];
     default:
-      return [{ nextActionAt: { sort: "asc", nulls: "last" } }, { name: "asc" }];
+      return [{ nextActionAt: { sort: "asc", nulls: "last" } }, { name: "asc" }, id];
   }
 }
 
@@ -562,11 +569,24 @@ export async function crmListar(
 
   // ── Ronda 3: lo accesorio, SÓLO de lo que se va a pintar ─────────────
   const paraEnriquecer = [...crudas, ...hoyTocaCrudas];
+  // `groupBy` no promete ningún orden, así que se ordena ANTES de recortar:
+  // sin esto, con más de CRM_SOCIOS_MAX socios el selector enseñaría 200
+  // cualesquiera, y podrían ser otros 200 en la siguiente carga de la MISMA
+  // URL. Se ordenan por cuántos ha traído cada uno: si hay que dejar fuera
+  // a alguien, que sean los que menos han recomendado.
+  const sociosOrdenados = (gruposSocios as any[])
+    .slice()
+    .sort((a, b) => (b._count?._all ?? 0) - (a._count?._all ?? 0))
+    .slice(0, CRM_SOCIOS_MAX);
+  const sinTocarOrdenados = (gruposSinTocar as any[])
+    .slice()
+    .sort((a, b) => (b._count?._all ?? 0) - (a._count?._all ?? 0));
+
   const idsSocios = Array.from(
     new Set([
       ...paraEnriquecer.map((f) => f.affiliateId),
-      ...(gruposSocios as any[]).slice(0, CRM_SOCIOS_MAX).map((g) => g.affiliateId),
-      ...(gruposSinTocar as any[]).slice(0, 3).map((g) => g.affiliateId),
+      ...sociosOrdenados.map((g) => g.affiliateId),
+      ...sinTocarOrdenados.slice(0, 3).map((g) => g.affiliateId),
     ]),
   );
 
@@ -578,8 +598,7 @@ export async function crmListar(
   const aFila = (f: any) =>
     aDTO(f, conteos.get(f.id) ?? 0, f.affiliateId ? nombresSocios.get(f.affiliateId) ?? null : null);
 
-  const socios: CrmSocioListado[] = (gruposSocios as any[])
-    .slice(0, CRM_SOCIOS_MAX)
+  const socios: CrmSocioListado[] = sociosOrdenados
     .map((g) => ({
       id: String(g.affiliateId),
       nombre: nombresSocios.get(String(g.affiliateId)) ?? "Socio dado de baja",
@@ -588,8 +607,10 @@ export async function crmListar(
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 
   const recomendacionesSinTocar = {
-    total: (gruposSinTocar as any[]).reduce((s, g) => s + (g._count?._all ?? 0), 0),
-    socios: (gruposSinTocar as any[])
+    total: sinTocarOrdenados.reduce((s, g) => s + (g._count?._all ?? 0), 0),
+    // Los tres que MÁS han mandado sin que nadie los toque, no tres
+    // cualesquiera: el aviso sirve para saber a quién le estamos quedando mal.
+    socios: sinTocarOrdenados
       .slice(0, 3)
       .map((g) => nombresSocios.get(String(g.affiliateId)) ?? "un socio dado de baja"),
   };
