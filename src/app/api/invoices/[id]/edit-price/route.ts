@@ -109,13 +109,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
     newTotal = computeInvoiceTotal(newSubtotal, newDiscount, taxRate, taxIncluded).total;
   } else if (discountIn !== undefined) {
-    // Solo descuento → total = Σ(conceptos) − descuento. El subtotal se
-    // recalcula desde los conceptos reales (sana facturas legadas desincronizadas).
+    // Solo descuento → total = Σ(conceptos) − descuento, con los conceptos TAL
+    // CUAL están: la línea "Ajuste de precio" de una edición anterior es parte
+    // del precio pactado y tiene que sobrevivir al descuento. Antes esta rama
+    // heredaba `baseItems`/`itemsSum` (que la filtran para recalcularla, cosa
+    // que solo hace la rama de `total`) y el update la borraba: $3,500 − $200
+    // se guardaba como $2,800 en vez de $3,300 y se regalaban $500 sin un solo
+    // error en pantalla — la factura quedaba coherente por dentro (3,000 − 200)
+    // y ni la guarda de integridad del timbrado lo veía.
+    // El subtotal se recalcula desde esos mismos conceptos (sana facturas
+    // legadas desincronizadas) y es contra ÉL —el que enseña el modal— contra
+    // el que se valida el tope del descuento.
+    const keptSum = sumInvoiceItems(rawItems);
+    newItems    = rawItems;
+    newSubtotal = keptSum;
     newDiscount = round2(discountIn);
-    if (newDiscount > itemsSum) {
+    if (newDiscount > keptSum) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
-    newTotal = computeInvoiceTotal(itemsSum, newDiscount, taxRate, taxIncluded).total;
+    newTotal = computeInvoiceTotal(keptSum, newDiscount, taxRate, taxIncluded).total;
   }
 
   const newBalance = round2(newTotal - invoice.paid);
