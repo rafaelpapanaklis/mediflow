@@ -1,6 +1,24 @@
 import { z } from "zod";
 import { round2, itemQuantity, itemUnitPrice, itemDiscount } from "@/lib/invoice-totals";
 
+/**
+ * ¿Este valor sirve como `id` dentro del `where` de una consulta de Prisma?
+ *
+ * Es la regla (c) de CLAUDE.md aplicada a la clave primaria: `{ id: undefined }`
+ * NO filtra nada — Prisma DESCARTA la clave y el `where` se queda solo con lo
+ * que sobrevive (p. ej. `{ clinicId }`), así que un `findFirst` devuelve UNA
+ * FILA CUALQUIERA de la clínica en vez de 404. Lo mismo vale para `null`, para
+ * la cadena vacía y para cualquier cosa que no sea texto: si el id puede faltar,
+ * se corta ANTES de consultar.
+ *
+ * Vive aquí —y no en la ruta— porque un `route.ts` de App Router solo puede
+ * exportar sus handlers y la config de Next: un helper exportado ahí rompe el
+ * type-check de `next build` y además no habría cómo probarlo.
+ */
+export function isUsableWhereId(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 export const registerSchema = z.object({
   firstName:  z.string().min(2),
   lastName:   z.string().min(2),

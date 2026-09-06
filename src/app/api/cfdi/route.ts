@@ -10,6 +10,7 @@ import {
   validateRfc, CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
 } from "@/lib/facturapi";
 import { isFacturapiLive } from "@/lib/facturapi-env";
+import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 import {
@@ -89,6 +90,21 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { invoiceId, receptor, usoCfdi, paymentForm, taxMode: taxModeIn, confirmUnpaidPue } = body;
+
+  // ── QUÉ factura se timbra ─────────────────────────────────────────────────
+  // El `invoiceId` NO se validaba y con `undefined` Prisma DESCARTA la clave del
+  // `where` de abajo (regla (c) de CLAUDE.md): el findFirst quedaba en
+  // `{ clinicId }` y devolvía UNA FACTURA CUALQUIERA de la clínica. Si esa
+  // factura pasaba las guardas se timbraba DE VERDAD ante el SAT y acto seguido
+  // la $transaction reventaba en `invoice.update({ where: { id: undefined } })`:
+  // CFDI emitido, sin CfdiRecord y sin `cfdiUuid` → la factura quedaba
+  // re-timbrable (CFDI duplicado) y con FACTURAPI_ENV=live eso no se deshace.
+  // Se corta ANTES de cualquier consulta y antes de hablar con Facturapi.
+  if (!isUsableWhereId(invoiceId)) {
+    return NextResponse.json({
+      error: "Falta indicar qué factura se va a timbrar.",
+    }, { status: 400 });
+  }
 
   // Validate required receptor fields
   if (!receptor?.rfc || !receptor?.nombre || !receptor?.regimenFiscal || !receptor?.cp) {
@@ -266,6 +282,30 @@ export async function POST(req: NextRequest) {
       items,
     });
 
+    // ── El importe REAL del SAT ───────────────────────────────────────────────
+    // `result.total` es lo que Facturapi timbró DE VERDAD. Se guardaba en
+    // CfdiRecord.total y ahí moría: no se comparaba jamás contra nada, así que
+    // una diferencia entre lo cobrado y lo timbrado era invisible aunque la
+    // guarda de arriba hubiera pasado (compara nuestra PREDICCIÓN, no el hecho).
+    // El timbrado ya no se deshace, así que esto NO corta el flujo: deja
+    // constancia en el log del servidor y en el audit log, y devuelve el aviso
+    // para que quien timbró lo vea antes de entregar el comprobante.
+    const rawStamped   = Number(result.total);
+    const stampedKnown = isFinite(rawStamped) && rawStamped > 0;
+    const stampedTotal = round2(rawStamped);
+    const stampedDiff  = stampedKnown ? round2(Math.abs(stampedTotal - invoice.total)) : 0;
+    const totalWarning = stampedKnown && stampedDiff > tolerance
+      ? {
+          code:         "CFDI_STAMPED_TOTAL_DIFFERS",
+          invoiceTotal: invoice.total,
+          stampedTotal,
+          message: `El CFDI se timbró por $${stampedTotal.toFixed(2)} y la factura dice $${invoice.total.toFixed(2)}. El comprobante fiscal YA está emitido: revísalo antes de entregarlo.`,
+        }
+      : null;
+    if (totalWarning) {
+      console.error("CFDI stamped total mismatch:", { invoiceId, uuid: result.uuid, ...totalWarning });
+    }
+
     // Metering del cupo CFDI: SOLO tras timbrado exitoso. El contador del mes
     // (period en la zona horaria de la clínica) sube +1 en la MISMA transacción
     // que el CfdiRecord — jamás bloquea el timbrado; el excedente se cobra a fin
@@ -314,7 +354,10 @@ export async function POST(req: NextRequest) {
       before: { cfdiUuid: null },
       after:  {
         cfdiUuid: result.uuid,
-        cfdi: { total: result.total, paymentForm: payForm, taxMode, unpaidPueConfirmed: !fullyPaid },
+        cfdi: {
+          total: result.total, paymentForm: payForm, taxMode, unpaidPueConfirmed: !fullyPaid,
+          ...(totalWarning ? { totalMismatch: { invoiceTotal: invoice.total, stampedTotal, diff: stampedDiff } } : {}),
+        },
       },
     });
 
@@ -329,6 +372,7 @@ export async function POST(req: NextRequest) {
         overage:           q.overage,
         overagePriceCents: q.overageCents,
       },
+      ...(totalWarning ? { warning: totalWarning } : {}),
     });
 
   } catch (err: any) {

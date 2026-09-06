@@ -10,7 +10,14 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+// Dinero CON centavos: `formatCurrency` redondea a pesos enteros
+// (maximumFractionDigits: 0) y este modal enseña importes de factura, no
+// KPIs. Una factura de $2,447.25 salía con las columnas sumando $2,449 y un
+// TOTAL de $2,447, y un concepto de $0.50 se leía "$1". `fmtMXNdec` es el
+// mismo formateador que ya usa la LISTA de facturas y el PDF, así que los
+// tres sitios a un clic de distancia dicen por fin el mismo número.
+import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
@@ -271,11 +278,18 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       setCfdiId(data.cfdiId ?? null);
       setSub(null);
       toast.success(t("clinical.invoiceDetail.cfdiStampedToast"));
+      // El SAT timbró por un importe distinto al de la factura. El CFDI ya está
+      // emitido y no se deshace, así que no se puede bloquear nada: se avisa a
+      // quien timbró, con tiempo suficiente para leerlo, antes de que entregue el
+      // comprobante. El detalle queda además en el audit log.
+      if (data.warning?.code === "CFDI_STAMPED_TOTAL_DIFFERS" && data.warning.message) {
+        toast.error(data.warning.message, { duration: 15000 });
+      }
       // Al superar el cupo del mes: se timbra igual y se avisa que es adicional.
       if (data.quota && data.quota.overage > 0) {
         toast(
           t("clinical.invoiceDetail.cfdiOverageToast", {
-            price: formatCurrency((data.quota.overagePriceCents ?? 0) / 100),
+            price: fmtMXNdec((data.quota.overagePriceCents ?? 0) / 100),
           }),
           { icon: "🧾", duration: 6000 },
         );
@@ -340,7 +354,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   async function handleMarkPaid() {
     if (!(await confirmDialog({
       title: t("clinical.invoiceDetail.markPaid"),
-      description: t("clinical.invoiceDetail.markPaidConfirm", { balance: formatCurrency(invoice!.balance) }),
+      description: t("clinical.invoiceDetail.markPaidConfirm", { balance: fmtMXNdec(invoice!.balance) }),
       confirmText: t("clinical.invoiceDetail.markPaid"),
       cancelText: t("common.cancel"),
     }))) return;
@@ -459,12 +473,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               <div className="flex justify-between"><span className="text-muted-foreground">{t("common.date")}</span><span>{formatDate(invoice.createdAt)}</span></div>
               {(invoice.discount ?? 0) > 0 && (
                 <>
-                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.subtotal")}</span><span>{formatCurrency(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.discount")}</span><span style={{ color: "var(--warning)" }}>−{formatCurrency(invoice.discount ?? 0)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.subtotal")}</span><span>{fmtMXNdec(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.discount")}</span><span style={{ color: "var(--warning)" }}>−{fmtMXNdec(invoice.discount ?? 0)}</span></div>
                 </>
               )}
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("common.total")}</span><span className="font-bold">{formatCurrency(invoice.total)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.paid")}</span><span className="font-bold" style={{ color: "var(--success)" }}>{formatCurrency(invoice.paid)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("common.total")}</span><span className="font-bold">{fmtMXNdec(invoice.total)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.paid")}</span><span className="font-bold" style={{ color: "var(--success)" }}>{fmtMXNdec(invoice.paid)}</span></div>
               {/* Saldo. Cancelar NO pone `balance` a 0 en BD (solo cambia el
                   status y exige paid == 0), así que una factura anulada llega
                   aquí con balance == total y se pintaba en rojo como si se
@@ -476,7 +490,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                   className={isCancelled ? "font-bold text-muted-foreground" : "font-bold"}
                   style={isCancelled ? undefined : { color: "var(--danger)" }}
                 >
-                  {formatCurrency(isCancelled ? 0 : invoice.balance)}
+                  {fmtMXNdec(isCancelled ? 0 : invoice.balance)}
                 </span>
               </div>
               {invoice.paymentMethod && (
@@ -519,10 +533,10 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                       <div className="min-w-0">
                         <div className="font-medium truncate text-foreground">{it.description ?? it.name ?? t("clinical.invoiceDetail.lineItemFallback", { n: i + 1 })}</div>
                         {(it.quantity ?? 1) !== 1 && (
-                          <div className="text-[10px] text-muted-foreground">{it.quantity} × {formatCurrency(it.unitPrice ?? 0)}</div>
+                          <div className="text-[10px] text-muted-foreground">{it.quantity} × {fmtMXNdec(it.unitPrice ?? 0)}</div>
                         )}
                       </div>
-                      <div className="font-mono font-bold text-foreground">{formatCurrency(it.total ?? 0)}</div>
+                      <div className="font-mono font-bold text-foreground">{fmtMXNdec(it.total ?? 0)}</div>
                     </div>
                   ))}
                 </div>
@@ -549,7 +563,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                           </div>
                         </div>
                         <div className="font-mono font-bold" style={{ color: isRefund ? "var(--danger)" : "var(--success)" }}>
-                          {isRefund ? "−" : ""}{formatCurrency(p.amount)}
+                          {isRefund ? "−" : ""}{fmtMXNdec(p.amount)}
                         </div>
                       </div>
                     );
@@ -565,7 +579,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {isDraft && (
               <>
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={handleConfirmAndPay} disabled={busy}>
-                  {t("clinical.invoiceDetail.chargeNow", { amount: formatCurrency(invoice.total) })}
+                  {t("clinical.invoiceDetail.chargeNow", { amount: fmtMXNdec(invoice.total) })}
                 </ButtonNew>
                 <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
                   {t("clinical.invoiceDetail.editPrice")}
@@ -583,7 +597,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {isPending && (
               <>
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={() => setPaymentOpen(true)} disabled={busy}>
-                  {t("clinical.invoiceDetail.collectPayment", { amount: formatCurrency(invoice.balance) })}
+                  {t("clinical.invoiceDetail.collectPayment", { amount: fmtMXNdec(invoice.balance) })}
                 </ButtonNew>
                 <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
                   {t("clinical.invoiceDetail.markPaid")}
@@ -661,7 +675,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.refundInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.totalPaidLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.paid)}</span></p>
+            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.totalPaidLabel")} <span className="font-mono font-bold text-foreground">{fmtMXNdec(invoice.paid)}</span></p>
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.refundAmountLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} autoFocus />
@@ -679,7 +693,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <DialogFooter>
             <ButtonNew variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</ButtonNew>
             <ButtonNew variant="danger" onClick={handleRefund} disabled={busy}>
-              {busy ? t("clinical.invoiceDetail.processing") : t("clinical.invoiceDetail.refundAmountBtn", { amount: formatCurrency(Number(refundAmount) || 0) })}
+              {busy ? t("clinical.invoiceDetail.processing") : t("clinical.invoiceDetail.refundAmountBtn", { amount: fmtMXNdec(Number(refundAmount) || 0) })}
             </ButtonNew>
           </DialogFooter>
         </DialogContent>
@@ -692,7 +706,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.editPrice")}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentTotalLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.total)}</span></p>
+            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentTotalLabel")} <span className="font-mono font-bold text-foreground">{fmtMXNdec(invoice.total)}</span></p>
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.newTotalLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={editTotal} onChange={(e) => setEditTotal(e.target.value)} autoFocus />
@@ -713,7 +727,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.applyDiscount")}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
-            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentSubtotalLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></p>
+            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentSubtotalLabel")} <span className="font-mono font-bold text-foreground">{fmtMXNdec(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></p>
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.discountMxnLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={discountAmt} onChange={(e) => setDiscountAmt(e.target.value)} autoFocus />

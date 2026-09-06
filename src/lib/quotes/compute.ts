@@ -38,7 +38,15 @@ export function computeTotals(
 ): ComputedTotals {
   const items: NormalizedItem[] = (rawItems ?? []).map((it) => {
     const quantity = Math.max(1, Math.floor(Number(it.quantity) || 1));
-    const unitPrice = round2(it.unitPrice);
+    // Piso en 0, el MISMO `z.number().min(0)` que exige POST /api/invoices. Sin
+    // él, el presupuesto era una puerta trasera a la validación de facturas: una
+    // línea "Descuento cortesía −$300" —la forma natural de meter un descuento a
+    // mano— la anulaba el `Math.max(0, …)` del lineTotal de abajo (presupuesto
+    // $1,000), pero la factura derivada SÍ la restaba (itemLineTotal no tiene
+    // piso) y salía por $700: la clínica cobraba y timbraba $300 menos de lo que
+    // firmó el paciente. Un descuento se captura en el campo de descuento —de
+    // línea o global—, que sí viaja al CFDI como descuento.
+    const unitPrice = Math.max(0, round2(it.unitPrice));
     const discount = round2(Math.max(0, Number(it.discount) || 0));
     const gross = round2(unitPrice * quantity);
     const lineTotal = round2(Math.max(0, gross - discount));

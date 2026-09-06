@@ -188,23 +188,81 @@ export function invoiceTaxPortion(
 }
 
 /**
- * Total que Facturapi va a timbrar con los conceptos actuales y el modo de
+ * Desglose que Facturapi va a timbrar con los conceptos actuales y el modo de
  * impuestos elegido. Espeja el payload real:
  *  - exento           → precios tal cual, sin impuesto → base.
  *  - iva16 + incluido → tax_included:true, el bruto no cambia → base.
- *  - iva16 + agregado → tax_included:false → base × 1.16 (el CFDI siempre
- *    desglosa 16%, sin importar el taxRate interno; si difieren, la guarda
- *    lo bloquea y se corrige la factura).
+ *  - iva16 + agregado → tax_included:false → el IVA se calcula POR CONCEPTO.
+ *
+ * Ese "por concepto" es la clave. El CFDI manda `taxes` DENTRO de cada línea y
+ * el impuesto se redondea línea por línea — es lo que exige el SAT: Importe e
+ * Impuesto de cada concepto a 2 decimales, y el total es su suma. Calcularlo
+ * sobre la base agregada, `round2(base × 1.16)`, da un número DISTINTO al que de
+ * verdad se timbra en cuanto hay varios conceptos (hasta 2¢ con 8 líneas), y la
+ * guarda de integridad no podía verlo porque comparaba agregado contra agregado.
+ *
+ * La base por línea se arma con `spreadInvoiceDiscount`, que es EXACTAMENTE el
+ * descuento por concepto que viaja en el payload: así la línea de aquí y la de
+ * allá son la misma línea. Sin piso en 0 a nivel factura, a propósito: si el
+ * descuento global excede la capacidad de las líneas, Facturapi timbraría el
+ * remanente y la guarda debe verlo, no taparlo con un 0.
  */
+export function cfdiTotalBreakdown(
+  items: any[],
+  discount: number,
+  taxMode: CfdiTaxMode,
+  taxIncluded: boolean,
+): { bases: number[]; base: number; tax: number; total: number } {
+  const list = Array.isArray(items) ? items : [];
+  const extra = spreadInvoiceDiscount(list, discount);
+  const bases = list.map((it, i) =>
+    round2(round2(itemQuantity(it) * itemUnitPrice(it)) - round2(itemDiscount(it) + (extra[i] ?? 0))),
+  );
+  const base = round2(bases.reduce((a, b) => a + b, 0));
+  if (taxMode !== "iva16" || taxIncluded) return { bases, base, tax: 0, total: base };
+  const tax = round2(bases.reduce((s, b) => s + round2(b * (IVA_RATE_PCT / 100)), 0));
+  return { bases, base, tax, total: round2(base + tax) };
+}
+
+/** Importe que Facturapi va a timbrar (ver cfdiTotalBreakdown). */
 export function expectedCfdiTotal(
   items: any[],
   discount: number,
   taxMode: CfdiTaxMode,
   taxIncluded: boolean,
 ): number {
-  const { base } = computeInvoiceTotal(sumInvoiceItems(items), discount, 0, true);
-  if (taxMode === "iva16" && !taxIncluded) return round2(base * 1.16);
-  return base;
+  return cfdiTotalBreakdown(items, discount, taxMode, taxIncluded).total;
+}
+
+/**
+ * Renglones de dinero que el COMPROBANTE IMPRESO tiene que enseñar para que sus
+ * columnas cuadren con su TOTAL.
+ *
+ * Con "IVA agregado" las líneas del comprobante suman la base y el TOTAL trae el
+ * impuesto encima: sin un renglón que lo diga, el documento no cuadra y no hay
+ * nada que lo explique (conceptos $1,000, descuento $100 → TOTAL $1,044).
+ *
+ * El IVA se toma como la DIFERENCIA REAL `total − base`, no como un 16% teórico:
+ * así los renglones impresos suman SIEMPRE el total guardado, incluso en
+ * facturas viejas o con un `taxRate` intermedio. Con el IVA incluido en el
+ * precio la diferencia es 0 y no se imprime renglón: ahí las líneas ya suman el
+ * total y añadir un desglose cambiaría el documento sin necesidad.
+ */
+export function invoicePrintTotals(inv: {
+  subtotal: number;
+  discount: number;
+  total: number;
+  taxRate?: number | null;
+  taxIncluded?: boolean | null;
+}): { base: number; discount: number; tax: number; rate: number; total: number } {
+  const discount = round2(Math.max(0, Number(inv.discount) || 0));
+  const base = round2((Number(inv.subtotal) || 0) - discount);
+  const total = round2(Number(inv.total) || 0);
+  const own = Number(inv.taxRate);
+  const rate = isFinite(own) && own > 0 ? own : 0;
+  const added = inv.taxIncluded === false && rate > 0;
+  const tax = added ? round2(total - base) : 0;
+  return { base, discount, tax: tax > 0 ? tax : 0, rate, total };
 }
 
 /**
