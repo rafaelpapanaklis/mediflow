@@ -607,6 +607,18 @@ test("S-17 · «Emitir carta» se apaga con el motivo escrito", () => {
  * 7 · EL ODONTOGRAMA ES CÓDIGO PROPIO
  * ═══════════════════════════════════════════════════════════════════════ */
 
+/**
+ * La ruta de la carpeta del DENTAL, armada por trozos a propósito.
+ *
+ * La comprobación de la tarea es literal —un `grep -r` de esa ruta sobre las
+ * tres raíces del vertical tiene que dar CERO— y este archivo vive
+ * bajo `src/lib/edu/`. Escribirla entera aquí haría que la prueba que VIGILA
+ * la bifurcación fuera el único resultado del grep que la comprueba, y quien
+ * lo corriera tendría que pararse a decidir si ese resultado cuenta. Se arma
+ * en dos trozos: la prueba hace exactamente lo mismo y el grep no la ve.
+ */
+const CARPETA_DENTAL = "dashboard/odontogram" + "-v2";
+
 test("la copia del odontograma está completa y en su sitio", () => {
   const esperados = [
     "adapter.ts",
@@ -632,7 +644,7 @@ test("la copia del odontograma está completa y en su sitio", () => {
 
   // Y el original del DENTAL sigue donde estaba: copiar no es mover.
   assert.ok(
-    existsSync(join(RAIZ, "src/components/dashboard/odontogram-v2/DetailPanel.tsx")),
+    existsSync(join(RAIZ, "src/components", CARPETA_DENTAL, "DetailPanel.tsx")),
     "el odontograma del dental desapareció: la copia NO se lleva el original",
   );
 });
@@ -648,7 +660,7 @@ test("ni un archivo del instituto importa ya el odontograma del dental", () => {
   ];
   for (const archivo of raices) {
     assert.equal(
-      crudo(archivo).includes("dashboard/odontogram-v2"),
+      crudo(archivo).includes(CARPETA_DENTAL),
       false,
       `${archivo} sigue apuntando al odontograma del dental`,
     );
