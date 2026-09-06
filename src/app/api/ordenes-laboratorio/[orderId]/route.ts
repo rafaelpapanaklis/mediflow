@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import type { DentalLabOrderDTO } from "@/lib/laboratorios/types";
 import { canTransition, isTerminalLabStatus } from "@/lib/laboratorios/orders-shared";
 
@@ -98,6 +99,12 @@ export async function GET(_req: NextRequest, { params }: { params: { orderId: st
 export async function PATCH(_req: NextRequest, { params }: { params: { orderId: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // EQ-07: cancelar es irreversible (estado terminal) y es el inverso de hacer
+  // el pedido — mismo criterio con el que "prescription.create" cubre anular
+  // una receta. Misma key que el alta en /api/dental-labs/[labId]/ordenes.
+  const denied = denyIfMissingPermission(ctx, "suppliers.order");
+  if (denied) return denied;
 
   const order = await prisma.dentalLabOrder.findFirst({
     where: { id: params.orderId, clinicId: ctx.clinicId },

@@ -6,6 +6,7 @@ import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
 import { createInvoiceFromQuote } from "@/lib/quotes/create-invoice-from-quote";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: crear un presupuesto NO se queda en el presupuesto —
+  // abajo llama a createInvoiceFromQuote y nace una factura en BORRADOR que
+  // quema folio de la serie de la clínica (nextInvoiceNumber va por MÁXIMO
+  // emitido y no recicla, ni anulando la factura). El efecto real es facturar,
+  // así que pide la MISMA key que POST /api/invoices: "billing.create".
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.create");
+  if (deniedPerm) return deniedPerm;
 
   let body: Record<string, unknown>;
   try {

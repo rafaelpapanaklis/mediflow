@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import {
   sumInvoiceItems,
@@ -55,6 +56,14 @@ const Schema = z.object({
 export async function POST(req: NextRequest) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
+
+  // Permiso granular: loadClinicSession comprueba sesión y clínica, NO rol ni
+  // permisos. Esta ruta crea una Invoice con folio propio igual que
+  // POST /api/invoices, que exige "billing.create" — sin esta línea la misma
+  // acción tenía una puerta con llave y otra sin ella. session.user trae
+  // permissionsOverride justamente para esto.
+  const deniedPerm = denyIfMissingPermission(session.user, "billing.create");
+  if (deniedPerm) return deniedPerm;
 
   const body = await req.json().catch(() => null);
   const parsed = Schema.safeParse(body);

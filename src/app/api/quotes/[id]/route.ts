@@ -11,6 +11,7 @@ import {
 } from "@/lib/quotes/create-invoice-from-quote";
 import type { BillingInvoiceLite } from "@/lib/quotes/types";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: este PATCH no edita solo el presupuesto — reescribe
+  // total, descuento, ítems y saldo de la factura ligada
+  // (syncDraftInvoiceFromQuote, en la transacción de abajo). Es exactamente lo
+  // que hace PATCH /api/invoices/[id] por la otra puerta, y esa exige
+  // "billing.edit": misma acción, misma key.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.edit");
+  if (deniedPerm) return deniedPerm;
 
   const existing = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
@@ -171,6 +180,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Misma key que el PATCH: borrar el presupuesto es la otra mitad de editarlo,
+  // y su factura ligada NO se borra con él (quote.invoiceId es una columna
+  // suelta, sin FK), así que el borrado deja viva una factura en borrador con
+  // folio ya quemado. Una sola llave para toda la superficie de edición.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.edit");
+  if (deniedPerm) return deniedPerm;
 
   const existing = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
