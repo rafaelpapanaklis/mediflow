@@ -57,6 +57,7 @@ import {
   eduDirSemaforoDeAtraso,
   eduDirSillonEstado,
   eduDirVariacion,
+  eduDirVariacionEn,
   eduDirVentana,
   eduDirWeekdayCounts,
   parseEduDirDetalle,
@@ -65,6 +66,7 @@ import {
   type EduDirPanel,
   type EduDirDetalleFila,
 } from "../direccion-core";
+import { eduMoney } from "../dinero-core";
 import { EDU_ATRASO_UMBRAL_VIGILAR } from "../evaluacion-core";
 
 const TZ = "America/Mexico_City";
@@ -714,6 +716,35 @@ test("🔴 un nombre preparado no se convierte en fórmula de Excel", () => {
 test("la sub-cifra de una tarjeta también sale en el CSV (si no, «terminados» se pierde)", () => {
   const csv = buildEduDireccionCsv(panelDePrueba(), null);
   assert.ok(csv.includes("terminados"), "la segunda cifra de la tarjeta no se exportó");
+});
+
+test("🔴 «Cobrado» va en pesos, en la tarjeta y en el CSV — no en centavos pelados", () => {
+  const cobradoCents = 1_800_000;
+  const cobradoPrevCents = 1_650_001;
+  const variacion = eduDirVariacionEn(cobradoCents, cobradoPrevCents, "dinero");
+  assert.ok(variacion.texto.includes("$16,500.01"), "falta el extremo anterior en pesos");
+  assert.ok(variacion.texto.includes("$18,000.00"), "falta el extremo actual en pesos");
+  assert.ok(!variacion.texto.includes("1650001"), "la variación se escapó a centavos pelados");
+
+  const panel: EduDirPanel = {
+    ...panelDePrueba(),
+    tarjetas: [
+      {
+        detalle: "cobros",
+        label: "Cobrado",
+        value: eduMoney(cobradoCents),
+        raw: cobradoCents,
+        note: "",
+        semaforo: "NEUTRO",
+        unidad: "dinero",
+        variacion,
+        sub: null,
+      },
+    ],
+  };
+  const csv = buildEduDireccionCsv(panel, null);
+  assert.ok(csv.includes("$16,500.01"), "la fila del CSV no trae el periodo anterior en pesos");
+  assert.ok(!csv.includes("1650001"), "la fila del CSV dejó pasar los centavos pelados");
 });
 
 test("el CSV se puede armar sin el bloque en vivo (la exportación no depende de él)", () => {

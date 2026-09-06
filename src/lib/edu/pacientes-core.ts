@@ -19,6 +19,7 @@ import type { EduPatientStatus, EduSex } from "@/lib/edu/types";
 import { EDU_PATIENT_STATUSES, EDU_SEXES } from "@/lib/edu/types";
 import { eduSearchInput, eduSearchTokens } from "@/lib/edu/padron-core";
 import { eduNormalizeSearch } from "@/lib/edu/search";
+import { EDU_CLINICA_MAX_ROWS } from "@/lib/edu/agenda-core";
 
 /** El buscador y el saneo de texto se REUSAN del padrón en vez de
  *  escribirse otra vez: dos saneadores de búsqueda en el mismo vertical es
@@ -226,6 +227,20 @@ export interface EduPatientOption {
   folio: string;
   name: string;
   status: EduPatientStatus;
+}
+
+export interface EduPatientOptionsPage {
+  rows: EduPatientOption[];
+  truncated: boolean;
+}
+
+/** Recorta lo que llegó con `take: EDU_CLINICA_MAX_ROWS + 1` al tope real y
+ *  dice si sobraba — mismo patrón que `listEduAgenda`. */
+export function eduPatientOptionsPageOf(rows: EduPatientOption[]): EduPatientOptionsPage {
+  return {
+    truncated: rows.length > EDU_CLINICA_MAX_ROWS,
+    rows: rows.slice(0, EDU_CLINICA_MAX_ROWS),
+  };
 }
 
 /** El texto que se busca, sin comodines de LIKE. Se reexporta el del
