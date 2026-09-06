@@ -38,20 +38,53 @@ import {
   crmNumeroOpcional,
   crmTextoOpcional,
   crmTextoPlano,
+  crmCoincide,
+  crmComparar,
+  crmInicioDelDiaMx,
+  crmLimiteFrio,
+  crmPaginaValida,
+  crmTotalPaginas,
   crmValidarProspecto,
+  crmVistaEfectiva,
+  CRM_ETAPAS,
+  CRM_FILTROS_VACIOS,
   CRM_IMPORT_MAX,
   CRM_NOMBRE_MAX,
+  CRM_ORIGEN_AFILIADOS,
+  CRM_ORIGEN_DALECONTROL,
+  CRM_TABLERO_MAX,
+  type CrmEstadoId,
   type CrmFilaImportada,
+  type CrmFiltros,
+  type CrmOrden,
   type CrmProspectoEntrada,
+  type CrmResumen,
+  type CrmVista,
 } from "./crm-core";
 
 /**
- * Tope de filas que se mandan a la pantalla. El tablero necesita TODAS las
- * tarjetas para poder repartirlas por columna, así que no hay paginación:
- * hay tope, y cuando se pasa la pantalla lo dice en voz alta en vez de
- * esconder prospectos. Con la libreta de una persona queda lejísimos.
+ * Tope del BARRIDO en memoria de la búsqueda de texto. Ver `crmListar`:
+ * los filtros de catálogo (giro, fuente, etapa, estado, origen) los
+ * resuelve la base, pero el texto se compara aquí con `crmCoincide` para
+ * no perder acentos ni teléfonos escritos con guiones. Ese barrido se
+ * hace sobre lo que ya redujeron los filtros, y este número es el tope
+ * de lo que se lee para hacerlo.
+ *
+ * NO es un techo de la lista: sin búsqueda de texto no se toca, y la
+ * paginación llega a todas las filas siempre. Cuando el barrido sí se
+ * corta, `CrmListado.escaneoTruncado` lo dice con los números exactos
+ * para que la pantalla lo pueda enseñar en vez de callárselo.
  */
-export const CRM_LISTA_MAX = 2000;
+export const CRM_ESCANEO_MAX = 20000;
+
+/** Cuántos "hoy toca" se traen para la tarjeta de arriba. */
+export const CRM_HOY_TOCA_MAX = 12;
+
+/** Tope del selector de socios del filtro de origen. */
+const CRM_SOCIOS_MAX = 200;
+
+/** Las etapas que cierran el prospecto, para los `where` de la base. */
+const ETAPAS_TERMINALES: string[] = CRM_ETAPAS.filter((e) => e.terminal).map((e) => e.id);
 
 // ── Lo que viaja a la pantalla ──────────────────────────────────────────
 
@@ -108,11 +141,58 @@ export interface CrmActividadDTO {
   createdAt: string;
 }
 
+/** Un socio que ha recomendado algo, para el filtro de origen. */
+export interface CrmSocioListado {
+  id: string;
+  nombre: string;
+  cuantos: number;
+}
+
+/**
+ * TODO lo que necesita la pantalla, ya resuelto en el servidor. Va junto
+ * a propósito: los números de las fichas de filtro, los de las columnas
+ * del tablero y los de la paginación tienen que salir de la MISMA
+ * consulta que las filas, o la pantalla dice "37" y enseña 41.
+ */
 export interface CrmListado {
+  /** La página pedida, ya filtrada y ordenada. Nunca la libreta entera. */
   filas: CrmProspectoDTO[];
+  /** Cuántos cumplen los filtros. El de la izquierda en «37 de 1,240». */
   total: number;
-  /** true cuando hay más prospectos que `CRM_LISTA_MAX` y la lista se cortó. */
-  truncado: boolean;
+  /** Cuántos hay en la libreta, sin filtro ninguno. El de la derecha. */
+  totalGeneral: number;
+  /** Los filtros ya validados, con la página ajustada a lo que existe. */
+  filtros: CrmFiltros;
+  /** Tablero o lista, ya decidido (ver `crmVistaEfectiva`). */
+  vista: CrmVista;
+  totalPaginas: number;
+  /** Cuántos hay en cada etapa BAJO LOS FILTROS: columnas y fichas. */
+  porEtapa: Record<string, number>;
+  /** Las cuentas del embudo COMPLETO — los KPI de arriba no se filtran. */
+  resumen: CrmResumen;
+  /** A quién hay que buscar hoy. No depende del filtro puesto: es la
+   *  pregunta con la que se abre la pantalla por la mañana. */
+  hoyToca: CrmProspectoDTO[];
+  /** Los socios que han recomendado algo, para el filtro de origen. */
+  socios: CrmSocioListado[];
+  /**
+   * Recomendaciones de socios que siguen en "Sin contactar". Merecen
+   * aviso propio y no un badge más: un socio que recomienda y ve que
+   * nunca lo buscamos deja de recomendar, y estas NO entran en "hoy
+   * toca" porque nacen sin fecha de seguimiento.
+   */
+  recomendacionesSinTocar: { total: number; socios: string[] };
+  /**
+   * La búsqueda de texto tuvo que cortar el barrido. `null` = se revisó
+   * todo lo que cumplía los filtros, que es el caso normal.
+   */
+  escaneoTruncado: { escaneados: number; de: number } | null;
+  /**
+   * El tablero no cabe entero. `null` = se pintan todas las tarjetas.
+   * Nunca se esconden filas en silencio: cuando esto trae valor, la
+   * pantalla lo dice y manda a la lista, que sí llega a todas.
+   */
+  tableroTruncado: { pintadas: number; de: number } | null;
 }
 
 function iso(d: Date | null | undefined): string | null {
@@ -171,47 +251,384 @@ function actividadDTO(a: any): CrmActividadDTO {
 // ── Lectura ─────────────────────────────────────────────────────────────
 
 /**
- * Todos los prospectos, los más movidos arriba. El filtrado y la búsqueda
- * los hace la pantalla en memoria a propósito: el tablero ya necesita el
- * conjunto completo para repartirlo por columnas, y buscar en el navegador
- * evita dos trampas conocidas de Prisma — `contains` no escapa los comodines
- * de LIKE y no sabe que "55-1234-5678" y "5512345678" son el mismo número.
+ * De los filtros de la pantalla al `where` de Prisma. Todo lo que es
+ * IGUALDAD contra un catálogo se resuelve aquí, en la base: giro, fuente,
+ * etapa y quién lo trajo. Lo único que no baja a SQL es el texto libre —
+ * ver `crmListar` para el porqué.
  */
-export async function crmListar(): Promise<CrmListado> {
-  const [total, filas] = await Promise.all([
-    prisma.crmProspect.count(),
-    prisma.crmProspect.findMany({
-      orderBy: { updatedAt: "desc" },
-      take: CRM_LISTA_MAX,
+function whereDeFiltros(f: CrmFiltros, ahora: Date): Record<string, any> {
+  const partes: Record<string, any>[] = [];
+
+  if (f.vertical) partes.push({ vertical: f.vertical });
+  if (f.fuente) partes.push({ source: f.fuente });
+  if (f.etapa) partes.push({ stage: f.etapa });
+
+  if (f.origen === CRM_ORIGEN_DALECONTROL) partes.push({ affiliateId: null });
+  else if (f.origen === CRM_ORIGEN_AFILIADOS) partes.push({ affiliateId: { not: null } });
+  else if (f.origen) partes.push({ affiliateId: f.origen });
+
+  const estado = whereDeEstado(f.estado, ahora);
+  if (estado) partes.push(estado);
+
+  if (partes.length === 0) return {};
+  if (partes.length === 1) return partes[0];
+  return { AND: partes };
+}
+
+/**
+ * El filtro de situación, en SQL. ES LA ÚNICA DEFINICIÓN de qué quiere
+ * decir cada una: la usan el filtro de la lista, la tarjeta de "hoy
+ * toca" y —vía las mismas fechas— los tres contadores de arriba. Si
+ * hubiera una segunda definición en la pantalla, un día dirían cosas
+ * distintas y no habría forma de saber cuál miente.
+ *
+ * Lo que sí está repartido son las CUENTAS de fecha, y ésas viven en
+ * crm-core con sus pruebas: `crmInicioDelDiaMx` y `crmFinDelDiaMx` (día
+ * natural mexicano, no UTC — a las 19:00 de México ya es otro día en
+ * UTC y la lista de "hoy toca" se vaciaría sola cada tarde) y
+ * `crmLimiteFrio`, que tiene una prueba que lo compara día por día con
+ * `crmEstaFrio` alrededor del umbral.
+ *
+ * En Prisma, un `lt` sobre una columna que admite NULL deja fuera los
+ * NULL por sí solo — que es lo que se quiere: sin fecha no es "vencido".
+ */
+function whereDeEstado(estado: CrmEstadoId, ahora: Date): Record<string, any> | null {
+  if (!estado) return null;
+  if (estado === "cerrados") return { stage: { in: ETAPAS_TERMINALES } };
+
+  const abierto = { stage: { notIn: ETAPAS_TERMINALES } };
+  if (estado === "abiertos") return abierto;
+  if (estado === "frios") return { ...abierto, lastContactAt: { lt: crmLimiteFrio(ahora) } };
+  if (estado === "sin-tocar") return { ...abierto, lastContactAt: null };
+  if (estado === "sin-fecha") return { ...abierto, nextActionAt: null };
+  if (estado === "pendientes") return { ...abierto, nextActionAt: { lt: crmFinDelDiaMx(ahora) } };
+  if (estado === "vencidos") return { ...abierto, nextActionAt: { lt: crmInicioDelDiaMx(ahora) } };
+  if (estado === "hoy") {
+    return {
+      ...abierto,
+      nextActionAt: { gte: crmInicioDelDiaMx(ahora), lt: crmFinDelDiaMx(ahora) },
+    };
+  }
+  return null;
+}
+
+/**
+ * El `orderBy` de cada criterio. Tiene que dar la MISMA lista que
+ * `crmComparar` de crm-core, que es el que ordena cuando hay búsqueda de
+ * texto; por eso los `nulls` están puestos a mano en vez de dejados al
+ * azar del motor:
+ *
+ *   · prioridad → la fecha más vieja arriba (lo más vencido primero) y
+ *     los que no tienen próximo paso al final. Es exactamente el orden
+ *     que devuelve `crmPrioridad`.
+ *   · sin-contacto → el que nunca se contactó va PRIMERO: es el más
+ *     abandonado de todos, no el que menos.
+ *   · valor → sin valor puesto NO es valor cero; va al final.
+ *
+ * Todos desempatan por nombre para que la página 2 no repita ni se salte
+ * filas cuando dos valen lo mismo.
+ */
+function orderByDeOrden(orden: CrmOrden): Record<string, any>[] {
+  switch (orden) {
+    case "reciente":
+      return [{ updatedAt: "desc" }, { name: "asc" }];
+    case "nuevos":
+      return [{ createdAt: "desc" }, { name: "asc" }];
+    case "sin-contacto":
+      return [{ lastContactAt: { sort: "asc", nulls: "first" } }, { name: "asc" }];
+    case "valor":
+      return [{ monthlyValue: { sort: "desc", nulls: "last" } }, { name: "asc" }];
+    case "nombre":
+      return [{ name: "asc" }];
+    default:
+      return [{ nextActionAt: { sort: "asc", nulls: "last" } }, { name: "asc" }];
+  }
+}
+
+/** Las cuentas del embudo COMPLETO, armadas con agregados y no leyendo filas. */
+function resumenDeAgregados(
+  grupos: { stage: string; cuantos: number; valor: number }[],
+  vencidos: number,
+  paraHoy: number,
+  frios: number,
+): CrmResumen {
+  const porId = new Map(grupos.map((g) => [g.stage, g]));
+  let abiertos = 0;
+  let valorAbierto = 0;
+  for (const g of grupos) {
+    // Una etapa fuera del catálogo (edición a mano en Supabase) cuenta
+    // como abierta, igual que en `crmResumen`: no cierra nada.
+    if (!crmEtapaEsTerminal(g.stage)) {
+      abiertos += g.cuantos;
+      valorAbierto += g.valor;
+    }
+  }
+  return {
+    porEtapa: CRM_ETAPAS.map((etapa) => ({
+      etapa,
+      cuantos: porId.get(etapa.id)?.cuantos ?? 0,
+      valorMensual: porId.get(etapa.id)?.valor ?? 0,
+    })),
+    abiertos,
+    valorAbierto,
+    vencidos,
+    paraHoy,
+    frios,
+    ganados: porId.get("GANADO")?.cuantos ?? 0,
+    perdidos: porId.get("PERDIDO")?.cuantos ?? 0,
+  };
+}
+
+/**
+ * LA CONSULTA DE LA PANTALLA. Devuelve UNA página, no la libreta entera.
+ *
+ * ── QUÉ CAMBIÓ Y POR QUÉ ───────────────────────────────────────────────
+ * Antes esto traía hasta 2.000 filas completas de una vez y la pantalla
+ * filtraba, ordenaba y paginaba en el navegador. Eso tenía dos costes que
+ * se notaban justo cuando la libreta empieza a servir: un techo silencioso
+ * a las 2.000 (el prospecto 2.001 no existía para la pantalla) y un
+ * arranque cada vez más lento, porque las 2.000 filas viajan enteras
+ * dentro del HTML — con notas, etiquetas y todo. Ahora los filtros, el
+ * orden y el corte de página los hace la base y sólo cruza la red lo que
+ * de verdad se va a pintar.
+ *
+ * ── LA ÚNICA EXCEPCIÓN: LA BÚSQUEDA DE TEXTO ───────────────────────────
+ * El texto NO baja a SQL, y no es por comodidad. `contains` de Prisma no
+ * sabe que "Clínica" y "clinica" son la misma palabra (haría falta la
+ * extensión `unaccent`, que este repo evita a propósito — ver
+ * sql/edu-ola-1b.sql), no sabe que "55-1234-5678" y "5512345678" son el
+ * mismo teléfono, y no escapa los comodines de LIKE: un "%" tecleado
+ * devolvería la tabla entera. Hay una prueba que fija ese comportamiento
+ * (crm-core.test.ts, «un comodín de LIKE es texto, no un patrón»).
+ *
+ * Así que se hace lo que sí escala de verdad: los filtros de catálogo
+ * REDUCEN en la base, y el texto se compara con `crmCoincide` sobre lo
+ * que quedó — en el servidor, no en el navegador de nadie. Buscar dentro
+ * de "clínicas dentales de Puebla" barre las de Puebla, no la libreta.
+ * El barrido tiene tope (`CRM_ESCANEO_MAX`) y cuando se corta lo DICE con
+ * los números exactos: `escaneoTruncado`.
+ *
+ * ── LAS RONDAS ────────────────────────────────────────────────────────
+ * Tres viajes a la base, ninguno con más de 6 consultas a la vez (el
+ * pooler de Supabase se satura por encima de eso):
+ *   1. las cuentas del embudo completo, los socios y —sin búsqueda— el
+ *      total que cumple los filtros;
+ *   2. la página (o el barrido) y la lista de "hoy toca";
+ *   3. lo accesorio SÓLO de las filas que se van a pintar: cuántas
+ *      anotaciones tiene cada una y quién la recomendó.
+ * La ronda 3 es la que antes se hacía sobre 2.000 ids y ahora se hace
+ * sobre 50.
+ */
+export async function crmListar(
+  filtros: CrmFiltros = CRM_FILTROS_VACIOS,
+  ahora: Date = new Date(),
+): Promise<CrmListado> {
+  const where = whereDeFiltros(filtros, ahora);
+  const hayTexto = filtros.q.trim().length > 0;
+  const orderBy = orderByDeOrden(filtros.orden);
+
+  const inicioDia = crmInicioDelDiaMx(ahora);
+  const finDia = crmFinDelDiaMx(ahora);
+  const abierto = { stage: { notIn: ETAPAS_TERMINALES } };
+
+  // ── Ronda 1: las cuentas ─────────────────────────────────────────────
+  const conteoFiltrado = hayTexto
+    ? Promise.resolve(null)
+    : prisma.crmProspect.groupBy({ by: ["stage"], _count: { _all: true }, where });
+
+  const [gruposGlobal, vencidos, paraHoy, frios, gruposSocios, gruposFiltro] = await Promise.all([
+    prisma.crmProspect.groupBy({
+      by: ["stage"],
+      _count: { _all: true },
+      _sum: { monthlyValue: true },
     }),
+    prisma.crmProspect.count({ where: { ...abierto, nextActionAt: { lt: inicioDia } } }),
+    prisma.crmProspect.count({
+      where: { ...abierto, nextActionAt: { gte: inicioDia, lt: finDia } },
+    }),
+    prisma.crmProspect.count({ where: { ...abierto, lastContactAt: { lt: crmLimiteFrio(ahora) } } }),
+    prisma.crmProspect.groupBy({
+      by: ["affiliateId"],
+      _count: { _all: true },
+      where: { affiliateId: { not: null } },
+    }),
+    conteoFiltrado,
   ]);
 
-  // Cuántas anotaciones tiene cada uno, en UNA consulta. La tarjeta enseña
-  // "3 anotaciones" y sin esto serían N consultas para pintar el tablero.
-  const conteos = new Map<string, number>();
-  if (filas.length > 0) {
-    const grupos = await prisma.crmActivity
-      .groupBy({
-        by: ["prospectId"],
-        _count: { _all: true },
-        where: { prospectId: { in: filas.map((f) => f.id) } },
-      })
-      .catch(() => [] as any[]);
-    for (const g of grupos as any[]) conteos.set(g.prospectId, g._count?._all ?? 0);
+  const global = (gruposGlobal as any[]).map((g) => ({
+    stage: String(g.stage),
+    cuantos: g._count?._all ?? 0,
+    valor: Number(g._sum?.monthlyValue ?? 0) || 0,
+  }));
+  const totalGeneral = global.reduce((s, g) => s + g.cuantos, 0);
+  const resumen = resumenDeAgregados(global, vencidos, paraHoy, frios);
+
+  // La vista se decide con la libreta ENTERA, no con lo filtrado: si el
+  // tablero fuera lo normal al filtrar y la lista al quitar el filtro, la
+  // pantalla cambiaría de forma sola a media faena.
+  const vista = crmVistaEfectiva(filtros, totalGeneral);
+  const porPagina = vista === "tablero" ? CRM_TABLERO_MAX : filtros.porPagina;
+
+  // ── Ronda 2: las filas ───────────────────────────────────────────────
+  // "Hoy toca" es exactamente la situación "pendientes", así que sale del
+  // MISMO sitio que el filtro: si un día cambiara qué cuenta como
+  // pendiente, la tarjeta de arriba y el filtro de abajo cambiarían
+  // juntos en vez de discrepar.
+  const hoyTocaPromesa = prisma.crmProspect.findMany({
+    where: whereDeEstado("pendientes", ahora) ?? {},
+    orderBy: [{ nextActionAt: "asc" }, { name: "asc" }],
+    take: CRM_HOY_TOCA_MAX,
+  });
+
+  // Lo que mandaron los socios y nadie ha tocado. Va agrupado por socio y
+  // no como un `count` pelado para poder decirlos por su nombre: "3 de
+  // María" mueve a hacer algo; "3 recomendaciones", no.
+  const sinTocarPromesa = prisma.crmProspect
+    .groupBy({
+      by: ["affiliateId"],
+      _count: { _all: true },
+      where: { affiliateId: { not: null }, stage: "NUEVO" },
+    })
+    .catch(() => [] as any[]);
+
+  let crudas: any[];
+  let total: number;
+  let porEtapa: Record<string, number> = {};
+  let escaneoTruncado: { escaneados: number; de: number } | null = null;
+  let hoyTocaCrudas: any[];
+  let gruposSinTocar: any[];
+
+  if (!hayTexto) {
+    // Sin texto la base lo hace TODO: filtra, ordena, cuenta y corta.
+    const grupos = (gruposFiltro ?? []) as any[];
+    total = grupos.reduce((s, g) => s + (g._count?._all ?? 0), 0);
+    for (const g of grupos) porEtapa[String(g.stage)] = g._count?._all ?? 0;
+
+    const pagina = crmPaginaValida(filtros.pagina, total, porPagina);
+    [crudas, hoyTocaCrudas, gruposSinTocar] = await Promise.all([
+      prisma.crmProspect.findMany({
+        where,
+        orderBy,
+        skip: vista === "tablero" ? 0 : (pagina - 1) * porPagina,
+        take: porPagina,
+      }),
+      hoyTocaPromesa,
+      sinTocarPromesa,
+    ]);
+    filtros = { ...filtros, pagina };
+  } else {
+    // Con texto: la base reduce con los filtros de catálogo y el barrido
+    // se hace aquí, con las MISMAS reglas de `crmCoincide` de siempre.
+    const [candidatas, hoy, sinTocar] = await Promise.all([
+      prisma.crmProspect.findMany({ where, orderBy, take: CRM_ESCANEO_MAX + 1 }),
+      hoyTocaPromesa,
+      sinTocarPromesa,
+    ]);
+    hoyTocaCrudas = hoy;
+    gruposSinTocar = sinTocar;
+
+    const seCorto = candidatas.length > CRM_ESCANEO_MAX;
+    const revisadas = seCorto ? candidatas.slice(0, CRM_ESCANEO_MAX) : candidatas;
+
+    // Sólo el TEXTO se compara aquí. El giro, la fuente, la etapa, el
+    // origen y la situación ya vinieron resueltos por el `where`, y
+    // volver a filtrarlos en memoria sólo podría quitar filas que la
+    // base sí dejó pasar: una sola autoridad por cada cosa.
+    const coincidentes = revisadas.filter((p) => crmCoincide(p as any, filtros.q));
+    coincidentes.sort(crmComparar(filtros.orden, ahora) as any);
+
+    total = coincidentes.length;
+    for (const p of coincidentes) {
+      const id = String(p.stage);
+      porEtapa[id] = (porEtapa[id] ?? 0) + 1;
+    }
+
+    const pagina = crmPaginaValida(filtros.pagina, total, porPagina);
+    const desde = vista === "tablero" ? 0 : (pagina - 1) * porPagina;
+    crudas = coincidentes.slice(desde, desde + porPagina);
+    filtros = { ...filtros, pagina };
+
+    if (seCorto) {
+      // Cuántos había en total que cumplían los filtros de catálogo. Es
+      // una consulta más, y sólo pasa en el caso raro: mejor una consulta
+      // extra que decirle a alguien "hay muchos" sin un número.
+      const de = await prisma.crmProspect.count({ where }).catch(() => CRM_ESCANEO_MAX);
+      escaneoTruncado = { escaneados: CRM_ESCANEO_MAX, de };
+    }
   }
 
-  // Y quién recomendó cada uno. Consulta APARTE (no hay llave foránea) y
-  // con su propio catch: que no se pueda leer la tabla de socios no puede
-  // dejar sin tablero a DaleControl.
-  const socios = await nombresDeAfiliados(filas.map((f) => f.affiliateId));
+  const tableroTruncado =
+    vista === "tablero" && total > crudas.length ? { pintadas: crudas.length, de: total } : null;
+
+  // ── Ronda 3: lo accesorio, SÓLO de lo que se va a pintar ─────────────
+  const paraEnriquecer = [...crudas, ...hoyTocaCrudas];
+  const idsSocios = Array.from(
+    new Set([
+      ...paraEnriquecer.map((f) => f.affiliateId),
+      ...(gruposSocios as any[]).slice(0, CRM_SOCIOS_MAX).map((g) => g.affiliateId),
+      ...(gruposSinTocar as any[]).slice(0, 3).map((g) => g.affiliateId),
+    ]),
+  );
+
+  const [conteos, nombresSocios] = await Promise.all([
+    contarActividades(paraEnriquecer.map((f) => f.id)),
+    nombresDeAfiliados(idsSocios),
+  ]);
+
+  const aFila = (f: any) =>
+    aDTO(f, conteos.get(f.id) ?? 0, f.affiliateId ? nombresSocios.get(f.affiliateId) ?? null : null);
+
+  const socios: CrmSocioListado[] = (gruposSocios as any[])
+    .slice(0, CRM_SOCIOS_MAX)
+    .map((g) => ({
+      id: String(g.affiliateId),
+      nombre: nombresSocios.get(String(g.affiliateId)) ?? "Socio dado de baja",
+      cuantos: g._count?._all ?? 0,
+    }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+  const recomendacionesSinTocar = {
+    total: (gruposSinTocar as any[]).reduce((s, g) => s + (g._count?._all ?? 0), 0),
+    socios: (gruposSinTocar as any[])
+      .slice(0, 3)
+      .map((g) => nombresSocios.get(String(g.affiliateId)) ?? "un socio dado de baja"),
+  };
 
   return {
-    filas: filas.map((f) =>
-      aDTO(f, conteos.get(f.id) ?? 0, f.affiliateId ? socios.get(f.affiliateId) ?? null : null),
-    ),
+    filas: crudas.map(aFila),
     total,
-    truncado: total > filas.length,
+    totalGeneral,
+    filtros,
+    vista,
+    totalPaginas: crmTotalPaginas(total, porPagina),
+    porEtapa,
+    resumen,
+    hoyToca: hoyTocaCrudas.map(aFila),
+    socios,
+    recomendacionesSinTocar,
+    escaneoTruncado,
+    tableroTruncado,
   };
+}
+
+/**
+ * Cuántas cosas hay anotadas en la bitácora de cada uno, en UNA consulta.
+ * Con su propio catch: el número de anotaciones es informativo y perderlo
+ * jamás justifica dejar sin pantalla a DaleControl.
+ */
+async function contarActividades(ids: string[]): Promise<Map<string, number>> {
+  const unicos = Array.from(new Set(ids.filter(Boolean)));
+  if (unicos.length === 0) return new Map();
+  const grupos = await prisma.crmActivity
+    .groupBy({
+      by: ["prospectId"],
+      _count: { _all: true },
+      where: { prospectId: { in: unicos } },
+    })
+    .catch(() => [] as any[]);
+  const mapa = new Map<string, number>();
+  for (const g of grupos as any[]) mapa.set(g.prospectId, g._count?._all ?? 0);
+  return mapa;
 }
 
 /**
