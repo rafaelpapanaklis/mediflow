@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
-import { eduMoney, type EduCorte } from "@/lib/edu/dinero-core";
+import {
+  eduCorteMethodsVisibles,
+  eduCorteTerminalCents,
+  eduMoney,
+  type EduCorte,
+} from "@/lib/edu/dinero-core";
 import { EDU_PAYMENT_METHOD_LABELS } from "@/lib/edu/types";
 
 /**
@@ -45,6 +50,15 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
   }
 
   const { session, methods, expectedCashCents, netCents, refundedCents } = corte;
+  // Los renglones que se pintan: los cobrables siempre (también en cero) y
+  // el legado "Tarjeta (sin especificar)" solo si de verdad hubo
+  // movimientos con él — un renglón permanente en cero de algo que ya
+  // nadie puede elegir es ruido en la hoja que se firma.
+  const visibles = eduCorteMethodsVisibles(methods);
+  // La TERMINAL: débito + crédito + el legado, en neto. Es el número que
+  // se compara contra el corte que imprime la terminal bancaria, y que
+  // desde que hay dos renglones de tarjeta habría que sumar de cabeza.
+  const terminalCents = eduCorteTerminalCents(methods);
 
   return (
     <>
@@ -149,7 +163,7 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
                 <span>Neto</span>
               </div>
 
-              {methods.map((m) => (
+              {visibles.map((m) => (
                 <div className="edu-row" key={m.method}>
                   <div className="edu-cell">
                     <span className="edu-cell__label">Método</span>
@@ -177,6 +191,17 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="edu-totales">
+              <div className="edu-totales__fila edu-totales__fila--fuerte">
+                <span>Terminal (débito + crédito)</span>
+                <span className="edu-precio">{eduMoney(terminalCents)}</span>
+              </div>
+              <p className="edu-note">
+                Para cuadrar contra el corte que imprime la terminal bancaria. El efectivo
+                esperado del cajón NO incluye esto: una tarjeta no mete un peso en el cajón.
+              </p>
             </div>
           </section>
         </>

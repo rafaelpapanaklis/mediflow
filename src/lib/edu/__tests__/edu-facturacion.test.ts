@@ -78,7 +78,13 @@ import {
   hasEduPermission,
   type EduPermissionKey,
 } from "../permissions";
-import { EDU_NAV_ITEMS, EDU_NAV_LABELS, EDU_UPCOMING_AREAS, type EduRole } from "../types";
+import {
+  EDU_NAV_ITEMS,
+  EDU_NAV_LABELS,
+  EDU_UPCOMING_AREAS,
+  type EduPaymentMethod,
+  type EduRole,
+} from "../types";
 import { eduChargeScopeWhere, eduScopeIsEmpty, eduVisibility } from "../visibility";
 
 const INST = "inst_1";
@@ -423,34 +429,89 @@ test("parseEduReceptor devuelve el receptor limpio, o QUÉ campo está mal", () 
 // 5 · LA FORMA DE PAGO NO SE ADIVINA
 // ═════════════════════════════════════════════════════════════════════
 
-test("la forma de pago se SUGIERE del último pago real; sin pagos no se sugiere nada", () => {
+test("🔴 en un pago MIXTO manda el método con MAYOR monto, no el último registrado", () => {
+  // La regla del SAT para un CFDI con pago mixto es la del importe mayor.
+  // Y es la de sentido común: con $900 en efectivo y $100 con tarjeta,
+  // decir "tarjeta" porque se registró de segunda describe mal la
+  // operación en un documento fiscal.
   assert.equal(
     eduSugerirFormaPago([
-      { method: "CASH", isRefund: false, paidAt: "2026-01-01T10:00:00Z" },
-      { method: "TRANSFER", isRefund: false, paidAt: "2026-01-02T10:00:00Z" },
+      { method: "CASH", isRefund: false, paidAt: "2026-01-01T10:00:00Z", amountCents: 30000 },
+      { method: "CARD_CREDIT", isRefund: false, paidAt: "2026-01-01T10:01:00Z", amountCents: 70000 },
+    ]),
+    "04",
+    "gana el crédito: $700 contra $300",
+  );
+  assert.equal(
+    eduSugerirFormaPago([
+      { method: "CASH", isRefund: false, paidAt: "2026-01-01T10:00:00Z", amountCents: 90000 },
+      { method: "CARD_DEBIT", isRefund: false, paidAt: "2026-01-01T10:01:00Z", amountCents: 10000 },
+    ]),
+    "01",
+    "gana el efectivo aunque la tarjeta se registrara después",
+  );
+  assert.equal(eduSugerirFormaPago([]), null);
+});
+
+test("con un empate exacto gana el MÁS RECIENTE: arbitrario, pero estable", () => {
+  assert.equal(
+    eduSugerirFormaPago([
+      { method: "CASH", isRefund: false, paidAt: "2026-01-01T10:00:00Z", amountCents: 50000 },
+      { method: "TRANSFER", isRefund: false, paidAt: "2026-01-01T10:05:00Z", amountCents: 50000 },
     ]),
     "03",
   );
+  // Y al revés, para que quede claro que decide la HORA y no el orden del
+  // arreglo: el mismo cobro sugiere siempre lo mismo.
   assert.equal(
-    eduSugerirFormaPago([{ method: "CASH", isRefund: false, paidAt: "2026-01-01T10:00:00Z" }]),
-    "01",
+    eduSugerirFormaPago([
+      { method: "TRANSFER", isRefund: false, paidAt: "2026-01-01T10:05:00Z", amountCents: 50000 },
+      { method: "CASH", isRefund: false, paidAt: "2026-01-01T10:00:00Z", amountCents: 50000 },
+    ]),
+    "03",
   );
-  assert.equal(eduSugerirFormaPago([]), null);
+});
+
+test("las formas nuevas tienen SU clave del SAT: débito 28, crédito 04, cheque 02", () => {
+  const uno = (method: EduPaymentMethod) =>
+    eduSugerirFormaPago([
+      { method, isRefund: false, paidAt: "2026-01-01T10:00:00Z", amountCents: 10000 },
+    ]);
+  assert.equal(uno("CASH"), "01");
+  assert.equal(uno("CARD_DEBIT"), "28");
+  assert.equal(uno("CARD_CREDIT"), "04");
+  assert.equal(uno("TRANSFER"), "03");
+  assert.equal(uno("CHECK"), "02");
+  // El legado sigue PROPONIENDO crédito: la fila vieja no sabe cuál fue y
+  // el modal lo deja cambiar. Proponer no es decidir.
+  assert.equal(uno("CARD"), "04");
 });
 
 test("una DEVOLUCIÓN no decide la forma de pago", () => {
   assert.equal(
     eduSugerirFormaPago([
-      { method: "CASH", isRefund: false, paidAt: "2026-01-01T10:00:00Z" },
-      { method: "TRANSFER", isRefund: true, paidAt: "2026-01-05T10:00:00Z" },
+      { method: "CASH", isRefund: false, paidAt: "2026-01-01T10:00:00Z", amountCents: 10000 },
+      { method: "TRANSFER", isRefund: true, paidAt: "2026-01-05T10:00:00Z", amountCents: 90000 },
     ]),
     "01",
+    "la devolución era mayor, y aun así no cuenta",
   );
 });
 
 test('🔴 el método "Otro" NO se traduce a una clave del SAT: que lo diga quien cobró', () => {
   assert.equal(
-    eduSugerirFormaPago([{ method: "OTHER", isRefund: false, paidAt: "2026-01-01T10:00:00Z" }]),
+    eduSugerirFormaPago([
+      { method: "OTHER", isRefund: false, paidAt: "2026-01-01T10:00:00Z", amountCents: 10000 },
+    ]),
+    null,
+  );
+  // Y si "Otro" es el mayor, tampoco se cae al segundo: la respuesta
+  // honesta es "no lo sé", no "pongo el que sigue".
+  assert.equal(
+    eduSugerirFormaPago([
+      { method: "OTHER", isRefund: false, paidAt: "2026-01-01T10:00:00Z", amountCents: 90000 },
+      { method: "CASH", isRefund: false, paidAt: "2026-01-01T10:01:00Z", amountCents: 10000 },
+    ]),
     null,
   );
 });

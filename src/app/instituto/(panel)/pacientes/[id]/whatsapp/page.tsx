@@ -67,7 +67,9 @@ export default async function PacienteWhatsappPage({ params }: { params: { id: s
     puedeCartas
       ? listEduPatientConsents(ctx, paciente.id, ctx.institution.timezone)
       : Promise.resolve([]),
-    puedeRecibos ? listEduPatientCharges(ctx, paciente.id) : Promise.resolve([]),
+    puedeRecibos
+      ? listEduPatientCharges(ctx, paciente.id, { timeZone: ctx.institution.timezone })
+      : Promise.resolve([]),
     listEduWaMessages(ctx, { patientId: paciente.id, take: 30 }),
   ]);
 
