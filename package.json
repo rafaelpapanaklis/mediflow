@@ -8,6 +8,8 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "//typecheck": "GATE DE TIPOS (~4 min). next build NO falla con tipos rotos en __tests__ aunque los meta en su programa; este sí. Correr ANTES del build.",
+    "typecheck": "tsc --noEmit",
     "seed": "tsx prisma/seed.ts",
     "db:seed": "tsx prisma/seed.ts",
     "smoke:dental": "tsx scripts/smoke-test-dental.ts",
