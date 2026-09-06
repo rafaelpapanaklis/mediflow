@@ -23,6 +23,7 @@
     "test:vendor-fields": "tsx --test src/lib/b2b/__tests__/vendor-fields.test.ts",
     "test:2fa-gate": "tsx --test src/lib/auth/__tests__/two-factor-gate.test.ts",
     "test:2fa-identity": "tsx --test src/lib/auth/__tests__/two-factor-identity.test.ts",
+    "test:2fa-handlers": "tsx --test src/lib/auth/__tests__/two-factor-handlers.test.ts",
     "test:patient-visibility": "tsx --test src/lib/__tests__/patient-visibility.test.ts",
     "test:public-slots": "tsx --test src/lib/public-booking/__tests__/slots.test.ts",
     "test:clinic-hours": "tsx --test src/lib/agenda/__tests__/clinic-hours.test.ts",

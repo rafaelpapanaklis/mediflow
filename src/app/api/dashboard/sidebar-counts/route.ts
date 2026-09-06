@@ -1,25 +1,17 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
 
 export const dynamic = "force-dynamic";
 
+// Contexto vía el helper CENTRAL (getAuthContext): misma resolución
+// cookie→clínica que la copia local que había aquí (Supabase + prisma a
+// mano), pero pasando por los gates de 2FA y de plan vencido que la copia se
+// saltaba. ctx.user es la fila User con permissionsOverride normalizado, así
+// que sirve tal cual para denyIfMissingPermission.
 async function getDbUser() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({
-      where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
-    });
-    if (u) return u;
-  }
-  return prisma.user.findFirst({
-    where: { supabaseId: user.id, isActive: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const ctx = await getAuthContext();
+  return ctx?.user ?? null;
 }
 
 /**
