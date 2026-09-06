@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
-import { getOpenRegister, deriveWindow, money } from "@/lib/caja";
+import { getOpenRegister, deriveWindow, buildCloseSummary, money } from "@/lib/caja";
 import { canUseCaja, verifyCajaPin } from "@/lib/caja-pin";
 
 export const runtime = "nodejs";
@@ -47,8 +47,19 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const derived = await deriveWindow(clinicId, reg.openedAt, now);
     const withdrawalsTotal = reg.withdrawals.reduce((s, w) => s + (w.amount ?? 0), 0);
-    const expectedCash = reg.openingBalance + derived.cashIncome - withdrawalsTotal;
-    const variance = countedClosingBalance - expectedCash;
+    // UN solo resumen para las tres salidas: el snapshot que se congela, el
+    // audit log y el papel que imprime el cliente. La fórmula del efectivo
+    // esperado vive en expectedCashOf (lib/caja) y ya no está escrita dos veces.
+    const summary = buildCloseSummary({
+      openedAt:       reg.openedAt,
+      closedAt:       now,
+      openingBalance: reg.openingBalance,
+      withdrawals:    withdrawalsTotal,
+      counted:        countedClosingBalance,
+      derived,
+    });
+    const expectedCash = summary.expectedCash;
+    const variance = summary.variance;
 
     await prisma.cashRegister.update({
       where: { id: reg.id },
@@ -79,7 +90,10 @@ export async function POST(req: NextRequest) {
     });
 
     revalidatePath("/dashboard/caja");
-    return NextResponse.json({ ok: true, expectedCash: money(expectedCash), variance: money(variance) });
+    // `summary` va con el mismo reloj que el snapshot: es lo que el cliente
+    // imprime. `expectedCash`/`variance` sueltos se mantienen por compatibilidad
+    // con cualquier pestaña vieja que siga abierta durante el deploy.
+    return NextResponse.json({ ok: true, expectedCash: money(expectedCash), variance: money(variance), summary });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "Error" }, { status: 400 });
   }

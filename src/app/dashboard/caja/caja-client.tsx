@@ -312,7 +312,18 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
     });
     if (!res) return;
     // Congela el resumen del corte para mostrarlo/imprimirlo (tras refresh reg = null).
-    setSummary({
+    //
+    // Se imprime el resumen FRESCO que manda el servidor: `totals` y `caja.list`
+    // vienen del render SSR y nadie los refresca (/api/caja/current no lo llama
+    // ningún cliente), mientras que el cierre recalcula la ventana con otro
+    // reloj. Mezclar los dos sacaba un arqueo que se contradice a sí mismo: un
+    // pago de $700 entre el render y el clic imprimía "Esperado $5,000 ·
+    // Contado $5,000 · Diferencia −$700", con una diferencia que no estaba en
+    // ninguna fila de la tabla impresa.
+    //
+    // El fallback a los datos del render solo cubre una pestaña abierta durante
+    // el deploy, servida por una versión que todavía no manda `summary`.
+    setSummary(res.summary ? (res.summary as CloseSummary) : {
       openedAt:         reg.openedAt,
       closedAt:         new Date().toISOString(),
       openingBalance:   totals.openingBalance,
