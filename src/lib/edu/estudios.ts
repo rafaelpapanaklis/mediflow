@@ -185,10 +185,14 @@ export async function listEduPatientStudies(
   now: Date = new Date(),
 ): Promise<EduStudyPage> {
   const institutionId = requireInstitution(ctx);
-  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return { rows: [], truncated: false };
+  // S-9: el sello de cuándo se firmaron las URLs viaja SIEMPRE, también en
+  // las respuestas vacías, para que la pantalla no tenga que tratar el
+  // caso "no hay sello" como un caso aparte.
+  const signedAt = now.toISOString();
+  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return { rows: [], truncated: false, signedAt };
 
   const paciente = await getEduClinicalPatient(ctx, patientId, now);
-  if (!paciente) return { rows: [], truncated: false };
+  if (!paciente) return { rows: [], truncated: false, signedAt };
 
   const leidas = await prisma.eduStudy.findMany({
     where: { institutionId, patientId: paciente.id },
@@ -203,7 +207,7 @@ export async function listEduPatientStudies(
   // pedirle a Storage su URL sería un viaje pagado por un archivo que nadie
   // va a abrir.
   const rows = leidas.slice(0, EDU_STUDY_MAX_ROWS);
-  if (rows.length === 0) return { rows: [], truncated };
+  if (rows.length === 0) return { rows: [], truncated, signedAt };
 
   // Sin Storage configurado se devuelve la lista con la URL vacía en vez
   // de reventar: la pantalla enseña las tarjetas y dice que el archivo no
@@ -215,6 +219,7 @@ export async function listEduPatientStudies(
 
   return {
     truncated,
+    signedAt,
     rows: rows.map((r) => toRow(r, urls.get(r.storagePath) ?? "", timeZone)),
   };
 }

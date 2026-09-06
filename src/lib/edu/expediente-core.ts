@@ -183,6 +183,22 @@ export function eduRecordText(raw: unknown, maxLength: number): string | null | 
   return v.slice(0, maxLength);
 }
 
+/**
+ * Los CINCO campos de contenido de una nota: el SOAP más el diagnóstico.
+ *
+ * Escritos una vez y no cinco veces a mano en cada sitio que los recorre:
+ * el día que el SOAP crezca, un `if` olvidado en uno de esos sitios sería
+ * un campo que se puede reescribir sin que se note (S-3).
+ */
+export const EDU_RECORD_CONTENT_FIELDS = [
+  "subjetivo",
+  "objetivo",
+  "analisis",
+  "plan",
+  "diagnostico",
+] as const;
+export type EduRecordContentField = (typeof EDU_RECORD_CONTENT_FIELDS)[number];
+
 /** ¿La nota tiene ALGO escrito? Una nota vacía no se firma. */
 export function eduRecordHasContent(r: {
   subjetivo?: string | null;

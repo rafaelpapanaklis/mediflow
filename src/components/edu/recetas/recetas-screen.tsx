@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EduModal } from "@/components/edu/edu-modal";
 import {
+  EDU_RECETA_INTEGRIDAD_LABELS,
   EDU_RECETA_MAX_ITEMS,
   EDU_RECETA_VOID_REASON_MIN,
   type EduRecetaCaseOption,
@@ -78,6 +79,12 @@ interface EditorState {
   diagnosis: string;
   indications: string;
   items: ItemForm[];
+  /**
+   * H-24 · ¿se le puede cambiar el caso a ESTA receta? Solo en BORRADOR:
+   * una PENDIENTE ya tiene su petición en la bandeja del docente del caso
+   * viejo, y moverla la dejaría colgando. El servidor lo vuelve a exigir.
+   */
+  puedeMoverCaso: boolean;
 }
 
 function posologia(it: EduRecetaRow["items"][number]): string {
@@ -122,6 +129,7 @@ export function EduRecetasScreen({
       diagnosis: "",
       indications: "",
       items: [{ ...ITEM_VACIO }],
+      puedeMoverCaso: true,
     });
   }
 
@@ -146,6 +154,7 @@ export function EduRecetasScreen({
               notes: it.notes ?? "",
             }))
           : [{ ...ITEM_VACIO }],
+      puedeMoverCaso: row.status === "BORRADOR",
     });
   }
 
@@ -172,7 +181,11 @@ export function EduRecetasScreen({
     setGuardando(true);
     try {
       const body = {
-        caseId: editor.caseId,
+        // H-24: en una edición el caso solo viaja si la receta se puede
+        // mover (BORRADOR). Antes se mandaba SIEMPRE y el servidor lo
+        // tiraba sin decir nada, así que elegir otro caso y pulsar Guardar
+        // salía "Receta guardada" sin haber movido nada.
+        ...(editor.recetaId && !editor.puedeMoverCaso ? {} : { caseId: editor.caseId }),
         diagnosis: editor.diagnosis,
         indications: editor.indications,
         items,
@@ -210,6 +223,29 @@ export function EduRecetasScreen({
       startNav(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo mandar a autorización.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /**
+   * H-24 · RETIRAR de la bandeja lo que uno mismo mandó, mientras nadie lo
+   * haya firmado. Es lo que le faltaba a quien propone: mandar una receta a
+   * autorización era irreversible desde esta pantalla, aunque se hubiera
+   * equivocado de paciente.
+   *
+   * No es "anular": una receta sin firmar nunca fue documento. Vuelve a
+   * BORRADOR y se corrige (o se deja ahí).
+   */
+  async function retirar(row: EduRecetaRow) {
+    setError(null);
+    setBusyId(row.id);
+    try {
+      await eduRequest(`/api/instituto/recetas/${row.id}/retirar`, { method: "POST" });
+      setFlash("Retirada de la bandeja. Vuelve a ser un borrador tuyo: corrígela y mándala otra vez.");
+      startNav(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo retirar la receta.");
     } finally {
       setBusyId(null);
     }
@@ -286,10 +322,24 @@ export function EduRecetasScreen({
           </p>
         )}
 
+        {/* 🔴 H-16 · LA INTEGRIDAD SE DICE EN LA TARJETA, no solo en el
+            PDF. Se recalculó en el servidor comparando el contenido de
+            ahora con la huella que se congeló al firmar: si no cuadra, esta
+            receta se editó DESPUÉS de expedirse y no se puede surtir. */}
+        {row.integridad === "alterada" && (
+          <div className="edu-alert" role="alert">
+            {EDU_RECETA_INTEGRIDAD_LABELS.alterada}
+          </div>
+        )}
+        {row.integridad === "sin_hash" && (
+          <p className="edu-note">{EDU_RECETA_INTEGRIDAD_LABELS.sin_hash}</p>
+        )}
+
         {row.status === "EXPEDIDA" && row.issuedByName && (
           <p className="edu-receta__firma">
             Expedida por <strong>{row.issuedByName}</strong> · Cédula profesional{" "}
             {row.issuedByCedula} · {row.issuedAtLabel}
+            {row.integridad === "ok" ? " · integridad verificada" : ""}
           </p>
         )}
 
@@ -327,6 +377,16 @@ export function EduRecetasScreen({
               disabled={ocupada}
             >
               Enviar a autorización
+            </button>
+          )}
+          {row.status === "PENDIENTE" && row.mine && canPropose && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              onClick={() => retirar(row)}
+              disabled={ocupada}
+            >
+              Retirar de autorización
             </button>
           )}
           {row.editable && row.mine && canPropose && (
@@ -476,7 +536,11 @@ export function EduRecetasScreen({
             </div>
           )}
 
-          {!editor.recetaId && (
+          {/* H-24 · El caso se elige al crear Y se puede CORREGIR mientras
+              la receta sea un borrador. Antes solo se preguntaba al crear:
+              un borrador abierto contra el caso equivocado se quedaba ahí
+              para siempre y lo acababa firmando el docente equivocado. */}
+          {(!editor.recetaId || editor.puedeMoverCaso) && (
             <div className="edu-field">
               <label className="edu-field__label" htmlFor="receta-caso">
                 ¿De qué caso?
@@ -487,7 +551,17 @@ export function EduRecetasScreen({
                 value={editor.caseId}
                 onChange={(e) => setEditor({ ...editor, caseId: e.target.value })}
               >
-                {cases.length !== 1 && <option value="">Elige…</option>}
+                {(cases.length !== 1 || editor.recetaId) &&
+                  !cases.some((c) => c.id === editor.caseId) && (
+                    // El caso que tiene HOY, cuando ya no está entre los
+                    // abiertos que le tocan a quien mira: se pinta para que
+                    // el desplegable no salga en blanco fingiendo que no
+                    // tiene caso, y va deshabilitado porque volver a él no
+                    // es una opción.
+                    <option value={editor.caseId}>
+                      {editor.recetaId ? "El caso actual (ya no está abierto)" : "Elige…"}
+                    </option>
+                  )}
                 {cases.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.label}
@@ -496,8 +570,19 @@ export function EduRecetasScreen({
               </select>
               <p className="edu-field__hint">
                 La receta se cuelga del caso: es lo que dice qué docente la firma y responde.
+                {editor.recetaId
+                  ? " Se puede corregir mientras sea un borrador; una vez mandada a firmar, ya no."
+                  : ""}
               </p>
             </div>
+          )}
+
+          {editor.recetaId && !editor.puedeMoverCaso && (
+            <p className="edu-note">
+              Esta receta ya está esperando firma, así que su caso no se cambia: tu docente la tiene
+              en la bandeja. Si va en otro caso, pídele que te la devuelva a borrador (o retírala tú)
+              y muévela entonces.
+            </p>
           )}
 
           <div className="edu-field">

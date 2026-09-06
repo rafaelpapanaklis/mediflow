@@ -213,6 +213,48 @@ export function eduRecetaSnapshot(receta: {
   };
 }
 
+/**
+ * ¿El contenido guardado sigue coincidiendo con la huella que se congeló
+ * al expedir?
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 ESTO ES LO QUE HACE QUE `issuedHash` NO SEA UNA COLUMNA DECORATIVA.
+ *
+ * El PDF imprimía la huella («integridad sha256 a1b2…») y NADIE la
+ * recalculaba nunca. Cualquiera que reescribiera los renglones de una
+ * receta ya expedida —la carrera del H-16, un UPDATE a mano, una migración
+ * mal hecha— dejaba un papel con la cédula de un docente, medicamentos que
+ * ese docente jamás leyó, y una cifra al pie afirmando que estaba íntegro.
+ * La manipulación era invisible Y el documento la desmentía.
+ *
+ * Ahora se recalcula AL LEER —en la pestaña y en el PDF— y se compara con
+ * lo que se guardó al firmar. Es la misma mecánica que ya usaban los
+ * consentimientos (`EduConsentIntegridad`), y a propósito: dos formas
+ * distintas de contestar la misma pregunta son dos formas de equivocarse.
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * · "ok"        el contenido es el que se firmó;
+ * · "alterada"  ya no cuadra: alguien tocó la receta después de expedirla;
+ * · "sin_hash"  se expidió antes de que se guardara la huella. No se puede
+ *               afirmar nada, y decirlo es más honesto que un check verde.
+ *
+ * Una receta que NO está expedida ni anulada no tiene huella que verificar
+ * y viaja con `null`: todavía no es un documento.
+ */
+export type EduRecetaIntegridad = "ok" | "alterada" | "sin_hash";
+
+export const EDU_RECETA_INTEGRIDAD_LABELS: Record<EduRecetaIntegridad, string> = {
+  ok: "Integridad: el contenido no ha cambiado desde que se expidió.",
+  alterada:
+    "⚠️ Integridad: ALTERADA. Lo que dice esta receta ya no coincide con la huella que se calculó al firmarla: alguien cambió el contenido después de expedirla. No la surtas y avisa a la dirección.",
+  sin_hash: "Esta receta se expidió antes de que se guardara la huella del contenido.",
+};
+
+/** La franja que va en el PDF cuando la huella no cuadra. Corta a propósito:
+ *  tiene que caber arriba, junto a la de ANULADA, y leerse de un vistazo. */
+export const EDU_RECETA_INTEGRIDAD_PDF_ALERTA =
+  "El contenido de esta receta no coincide con la huella que se calculó al expedirla. Se cambió después de firmarse: no la surtas y avisa al instituto.";
+
 // ═══════════════════════════════════════════════════════════════════════
 // 4 · QUÉ SE PUEDE HACER EN CADA ESTADO
 //
@@ -233,6 +275,60 @@ export function eduRecetaSnapshot(receta: {
  */
 export function eduRecetaEditable(status: EduPrescriptionStatus): boolean {
   return status === "BORRADOR" || status === "PENDIENTE";
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EL `where` CON EL QUE SE ESCRIBE UNA RECETA. H-16 EN UNA FUNCIÓN.
+ *
+ * Toda escritura sobre una receta ya leída va acotada a TRES cosas: el
+ * instituto, la fila, y **el estado que se leyó**. Si entre la lectura y la
+ * escritura alguien movió la receta —el docente la firmó desde su bandeja,
+ * la rechazó, el alumno la re-mandó— el `updateMany` no toca ninguna fila,
+ * devuelve `count: 0`, y quien llama contesta 409 en vez de escribir encima.
+ *
+ * Sin esto, la ventana entre `resolveReceta` y la transacción bastaba para
+ * que la edición de un alumno cayera sobre una receta ya EXPEDIDA, con
+ * `issuedByCedula` e `issuedHash` congelados de antes: un PDF con la cédula
+ * de un docente y medicamentos que ese docente nunca leyó.
+ *
+ * Vive en el módulo PURO —y no escrito a mano en cada sitio— por dos
+ * razones. Una: son tres escrituras (editar, mandar, retirar) y la cuarta
+ * que alguien agregue nacería sin guardia si la regla fuera un `if`
+ * copiado. Dos: aquí se puede PROBAR la carrera sin base de datos, que es
+ * justo lo que no tenía quien la detectara.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduRecetaWriteWhere {
+  institutionId: string;
+  id: string;
+  status: EduPrescriptionStatus;
+}
+
+export function eduRecetaWriteWhere(
+  institutionId: string,
+  id: string,
+  statusLeido: EduPrescriptionStatus,
+): EduRecetaWriteWhere {
+  return { institutionId, id, status: statusLeido };
+}
+
+/**
+ * ¿Esta escritura cae sobre la fila que se leyó?
+ *
+ * Es la MISMA comparación que hace Postgres con el `where` de arriba,
+ * escrita para poder ejecutarla en una prueba: una fila cumple el guardia
+ * solo si coincide la institución, la fila y el estado.
+ */
+export function eduRecetaWriteMatches(
+  where: EduRecetaWriteWhere,
+  fila: { institutionId: string; id: string; status: EduPrescriptionStatus },
+): boolean {
+  return (
+    fila.institutionId === where.institutionId &&
+    fila.id === where.id &&
+    fila.status === where.status
+  );
 }
 
 /**
@@ -301,6 +397,14 @@ export interface EduRecetaRow {
   voidedByName: string | null;
   voidedAtLabel: string | null;
   voidReason: string | null;
+
+  /**
+   * 🔴 Se RECALCULA al leer y se compara con `issuedHash` (ver
+   * EduRecetaIntegridad). `null` = la receta no está expedida ni anulada,
+   * así que no hay huella que verificar. NUNCA se lee de una columna: una
+   * bandera de integridad guardada la escribe quien alteró el documento.
+   */
+  integridad: EduRecetaIntegridad | null;
 
   /**
    * La última palabra del docente sobre ESTA receta (el motivo del

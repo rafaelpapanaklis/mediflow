@@ -42,6 +42,7 @@ import {
   EDU_RECORD_TEXT_MAX,
   eduClinicalScope,
   eduRecordCanTransition,
+  EDU_RECORD_CONTENT_FIELDS,
   eduRecordHasContent,
   eduRecordIsEditable,
   eduRecordStamps,
@@ -520,6 +521,32 @@ export async function updateEduRecord(
       if (!cita) throw new EduPadronError("Esa cita no es de este paciente.", 404);
       data.appointment = { connect: { id: cita.id } };
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 S-3 · REESCRIBIR UNA NOTA ENTREGADA REFRESCA LA ENTREGA.
+  //
+  // Una nota ENVIADA sigue siendo editable, y eso es deliberado: es el
+  // mismo criterio que la receta PENDIENTE —quien ve el dedazo lo corrige
+  // sin tener que pedir que se lo devuelvan—. Lo que NO era deliberado es
+  // que `submittedAt` se quedara con la hora de la PRIMERA entrega: el
+  // docente leía "entregada a las 9:10", firmaba, y lo que firmaba era un
+  // texto de las 11:40 que nunca vio marcado como nuevo.
+  //
+  // La receta tiene un hash que vence la firma cuando la editan después de
+  // mandarla (Ola 4). El expediente NO tiene esa maquinaria y no se le
+  // inventa una aquí: se hace lo mínimo que vuelve honesta la fila, que es
+  // que "entregada" diga cuándo se entregó ESTO. La bandeja del docente
+  // reordena sola y una nota tocada vuelve a subir.
+  //
+  // Solo cuenta un cambio REAL del contenido: guardar sin tocar nada —o
+  // firmar en el mismo PATCH, que ya trae su propio sello— no reabre nada.
+  // ══════════════════════════════════════════════════════════════════
+  const cambioElTexto = EDU_RECORD_CONTENT_FIELDS.some(
+    (f) => data[f] !== undefined && (data[f] as string | null) !== actual[f],
+  );
+  if (actual.status === "ENVIADA" && cambioElTexto && input.status === undefined) {
+    data.submittedAt = now;
   }
 
   let siguiente: EduRecordStatus = actual.status;
