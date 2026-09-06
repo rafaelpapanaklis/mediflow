@@ -86,6 +86,7 @@
     "test:receta-verify": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/pdf/__tests__/receta-verificacion-publica.test.ts",
     "test:quote-parity": "tsx --test src/lib/quotes/__tests__/quote-invoice-parity.test.ts",
     "test:cfdi-dinero": "tsx --test src/lib/__tests__/cfdi-dinero.test.ts",
+    "test:cfdi-timbrado-alerta": "tsx --test src/lib/__tests__/cfdi-timbrado-alerta.test.ts",
     "//test:cbct-geometry": "Necesita el tsconfig de pruebas: el test importa GeometryWarning.tsx (JSX) y el tsconfig de la app deja jsx en 'preserve' para que lo resuelva Next.",
     "test:cbct-geometry": "tsx --tsconfig tsconfig.test.json --test src/components/patient-3d/__tests__/dicom-geometry.test.ts",
     "//ws1-t2": "Los tres tests de WS1-T2 ejecutan los route handlers DE VERDAD: piden --experimental-test-module-mocks para sustituir `@/lib/prisma`, la auth y la visibilidad. Sin esa bandera `mock.module` no existe y el archivo revienta al cargar la ruta. Los helpers que deciden qué se lee (record-scope, permissions) NO se falsean: se importan reales.",
