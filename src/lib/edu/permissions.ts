@@ -996,6 +996,61 @@ export function hasEduPermission(user: EduPermissionUser, key: EduPermissionKey)
   return getEduEffectivePermissions(user).includes(key);
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * QUÉ PUEDE CORREGIR CADA QUIEN EN LA FICHA DEL PACIENTE (H-02)
+ *
+ * Punto ÚNICO de las dos llaves. Lo leen el endpoint (PATCH
+ * /api/instituto/pacientes/[id]), la pestaña Datos y el modal de la lista;
+ * si cada uno lo resolviera a su manera, uno de los tres acabaría abriendo
+ * o cerrando de más.
+ *
+ * 🔴 DOS LLAVES, COMO EN LOS ANTECEDENTES. Es el mismo patrón que ya usa
+ * pacientes/[id]/antecedentes/route.ts, y por la misma razón escrita allí:
+ *
+ *   · `pacientes.manage`  → CAJA y DIRECCIÓN. La ficha entera: folio,
+ *     nombre, apellidos, sexo, nacimiento, estado y notas de recepción,
+ *     además del contacto.
+ *   · `expediente.write`  → ALUMNO, DOCENTE y DIRECCIÓN. SOLO el CONTACTO
+ *     (teléfono y correo). El alumno tiene al paciente en el sillón, el
+ *     paciente le dicta su teléfono nuevo, y hasta hoy no tenía dónde
+ *     escribirlo: tenía que ir a buscar a alguien de caja. Muerde de verdad
+ *     en WhatsApp, donde ES ÉL quien manda la carta de consentimiento y la
+ *     pantalla le decía "el teléfono no tiene 10 dígitos" sin dejarle
+ *     arreglarlo.
+ *
+ * 🔴 NO SE INVENTÓ UNA KEY NUEVA ("pacientes.contacto"), y es deliberado —
+ * la misma decisión, con las mismas palabras, que tomó la ola de los
+ * antecedentes: una key nueva NO le llega a nadie que ya tenga
+ * `permissionsOverride` guardado (el override REEMPLAZA al default), así
+ * que habría exigido un backfill en SQL contra la base de cada escuela para
+ * que sirviera de algo. Las dos keys existentes cubren EXACTAMENTE a los
+ * cuatro roles que la decisión pide —caja y dirección todo, docente y
+ * alumno el contacto— y a nadie más.
+ *
+ * ⚠️ El permiso abre la puerta; el ALCANCE decide de QUIÉN. Un alumno solo
+ * corrige el teléfono de SUS pacientes: `updateEduPatient` busca la fila con
+ * `eduPatientScopeWhere`, así que el paciente de otro alumno contesta 404,
+ * igual que uno que no existe.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduPatientEditAbilities {
+  /** Los nueve campos de la ficha (`pacientes.manage`). */
+  manage: boolean;
+  /** Teléfono y correo, y nada más (`pacientes.manage` o `expediente.write`). */
+  contacto: boolean;
+}
+
+export function eduPatientEditAbilities(user: EduPermissionUser): EduPatientEditAbilities {
+  const manage = hasEduPermission(user, "pacientes.manage");
+  return { manage, contacto: manage || hasEduPermission(user, "expediente.write") };
+}
+
+/** El 403 con el motivo escrito, para que la pantalla lo pueda enseñar tal
+ *  cual en vez de un "sin permiso" pelado. */
+export const EDU_PATIENT_EDIT_FORBIDDEN =
+  "Corregir la ficha del paciente pide pacientes.manage (recepción) para los datos de identidad, o expediente.write para el teléfono y el correo, y tu cuenta no tiene ninguno.";
+
 /** Error tipado que lanzan los asserts; las APIs lo mapean a 403. */
 export class EduForbiddenError extends Error {
   readonly permission: EduPermissionKey;

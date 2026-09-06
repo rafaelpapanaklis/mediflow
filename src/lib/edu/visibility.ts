@@ -63,7 +63,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 import type { Prisma } from "@prisma/client";
-import type { EduCaseStatus, EduRole } from "@/lib/edu/types";
+import type { EduCaseStatus, EduRole, EduStudentStatus } from "@/lib/edu/types";
 import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
 import type { EduCampusAware } from "@/lib/edu/campus-core";
 
@@ -296,6 +296,55 @@ function requireInstitutionId(institutionId: string, fn: string): void {
 }
 
 /**
+ * ═══════════════════════════════════════════════════════════════════════
+ * H-07 · EL QUE YA NO ESTÁ EN LA ESCUELA NO VE A SUS PACIENTES
+ *
+ * Marcar a un alumno como *Egresado* escribe `EduStudent.status =
+ * GRADUATED` y `graduatedAt`, y nada más: no toca `EduUser.isActive`. Como
+ * la sesión solo exige `isActive: true` (edu-auth.ts) y el recorte de
+ * pacientes filtraba SOLO por `userId`, el egresado seguía entrando al
+ * panel y seguía abriendo la ficha, el expediente, el odontograma y las
+ * radiografías de sus pacientes — hasta que alguien de dirección se
+ * acordara de ir a OTRA pantalla (/instituto/equipo) a dar de baja la
+ * cuenta a mano. El padrón ni siquiera avisaba de que faltaba.
+ *
+ * Los dos estados que cierran son los TERMINALES: se acabó la relación con
+ * la escuela.
+ *   · GRADUATED  — terminó la especialidad.
+ *   · WITHDRAWN  — baja definitiva.
+ * ON_LEAVE NO cierra, y no es un olvido: una baja temporal vuelve, sus
+ * casos siguen siendo suyos y quitarle la ficha del paciente que retomará
+ * en marzo sería romper su tratamiento, no protegerlo.
+ *
+ * 🔴 SE APLICA SOLO AL RECURSO "PACIENTES", y no en `eduStudentScopeFilter`
+ * —que es donde cabría—, porque ese helper alimenta a CUATRO
+ * constructores y los otros tres tienen decisiones escritas en contra:
+ *
+ *   · `eduCaseScopeWhere` — la LISTA DE CASOS del alumno conserva a
+ *     propósito los que entregó: es su historia académica. Cerrarla el día
+ *     de la graduación le quitaría el registro de lo que hizo.
+ *   · `eduStudentScopeWhere` — con él se leen su BITÁCORA y su EVALUACIÓN
+ *     (evaluacion.ts, rubricas.ts), que son UNA fila: la suya. Un egresado
+ *     que no puede abrir su propia calificación no tiene dónde consultar
+ *     con qué terminó.
+ *   · `eduAppointmentScopeWhere` — sus citas pasadas son su registro de
+ *     asistencia, por la misma razón que el traspaso no se las lleva.
+ *
+ * Lo que hay que cerrar es el PACIENTE, y cerrarlo cierra con él todo lo
+ * que cuelga de él: la ficha, el expediente, el odontograma, los estudios,
+ * los consentimientos y las recetas resuelven el paciente por este mismo
+ * `where`. Es la misma frontera que ya usa el traspaso.
+ *
+ * ⚠️ Esto NO desactiva la cuenta: el egresado sigue pudiendo entrar al
+ * panel, y ve un panel sin pacientes (la pantalla se lo DICE, no lo deja
+ * en un vacío que miente). Apagar la cuenta es una decisión de dirección y
+ * se hace en /instituto/equipo — lo que la ola añade es que el padrón lo
+ * AVISE al marcar el egreso, en vez de callárselo.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+const EDU_STUDENT_FUERA: EduStudentStatus[] = ["GRADUATED", "WITHDRAWN"];
+
+/**
  * El filtro sobre el ALUMNO dueño de la fila. Devuelve `null` cuando el
  * alcance no recorta ("all"), para no meter un `student: {}` inútil.
  *
@@ -427,8 +476,13 @@ export function eduPatientScopeWhere({
   if (eduScopeIsEmpty(scope)) return nada(institutionId);
   if (scope.kind === "all") return { institutionId };
 
-  const student = eduStudentScopeFilter(scope, institutionId, now);
-  if (!student) return nada(institutionId);
+  const base = eduStudentScopeFilter(scope, institutionId, now);
+  if (!base) return nada(institutionId);
+  // 🔴 H-07 · y AQUÍ, solo aquí, el estado académico del alumno. Ver el
+  // bloque de arriba: el que ya no está en la escuela deja de alcanzar a
+  // sus pacientes, y conserva su historia (casos, citas, evaluación).
+  const student: Prisma.EduStudentWhereInput =
+    scope.kind === "own" ? { ...base, status: { notIn: EDU_STUDENT_FUERA } } : base;
 
   return {
     institutionId,

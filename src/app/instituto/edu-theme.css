@@ -8683,3 +8683,70 @@ a.edu-ini-acceso:hover {
     box-shadow: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL FORMULARIO DE LA FICHA DEL PACIENTE — .edu-fichaform*
+   (ola de «se puede corregir»; H-01, H-02, H-09, H-28)
+
+   Bloque NUEVO al final del archivo y no un retoque de los de arriba: la
+   hoja se escribe por apéndices, hay olas en paralelo tocándola, y mover
+   una regla a mitad de archivo les cuesta un conflicto para no ganar nada.
+   Es el mismo criterio que ya usan los bloques de ~6134 y el de .edu-persona.
+
+   Tres piezas, y las tres existen por la misma razón de producto: un campo
+   deshabilitado o un botón gris tienen que decir POR QUÉ. Es el patrón que
+   el vertical ya defiende en la pestaña WhatsApp de la ficha — «un botón
+   que no está no se puede preguntar por qué no está».
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* EL MOTIVO. El texto que va debajo de un bloque que no se puede tocar, o
+   al lado de un «Guardar» apagado. Se lee como una nota, no como un error:
+   no ha pasado nada malo, es que ese campo no es tuyo. */
+.edu-fichaform__motivo {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+}
+
+/* …salvo cuando SÍ es un alto: el estado que contradice a los casos (H-28)
+   bloquea el guardado, así que se lee con el color de aviso y no en gris,
+   que es como se lee «esto es informativo, sigue». */
+.edu-fichaform__motivo--alto {
+  color: var(--edu-amber-700);
+  font-weight: 600;
+}
+
+.dark .edu-fichaform__motivo--alto {
+  color: var(--edu-amber-300);
+}
+
+/* EL CHIP DEL TELÉFONO QUE NO SIRVE PARA WHATSAPP (H-09). Va pegado bajo el
+   campo, donde se está editando, y no en la pestaña WhatsApp — que es
+   adonde se llega cuando el recordatorio ya no salió. Es un aviso sobre una
+   fila VIEJA: desde esta ola el saneo no deja guardar un teléfono así. */
+.edu-fichaform__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--edu-amber-300);
+  background: var(--edu-amber-50);
+  color: var(--edu-amber-900);
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.35;
+  /* Se envuelve: el motivo es una frase, no una etiqueta de dos palabras, y
+     en un teléfono de 320 px una píldora que no rompe se sale de la caja. */
+  white-space: normal;
+  max-width: 100%;
+}
+
+.dark .edu-fichaform__chip {
+  border-color: rgba(252, 211, 77, 0.42);
+  background: rgba(180, 83, 9, 0.16);
+  color: var(--edu-amber-300);
+}

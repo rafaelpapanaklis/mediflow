@@ -16,9 +16,14 @@
  */
 import type { Prisma } from "@prisma/client";
 import type { EduPatientStatus, EduSex } from "@/lib/edu/types";
-import { EDU_PATIENT_STATUSES, EDU_SEXES } from "@/lib/edu/types";
-import { eduSearchInput, eduSearchTokens } from "@/lib/edu/padron-core";
+import { EDU_PATIENT_STATUSES, EDU_PATIENT_STATUS_LABELS, EDU_SEXES } from "@/lib/edu/types";
+import { eduDateInputValue, eduSearchInput, eduSearchTokens } from "@/lib/edu/padron-core";
 import { eduNormalizeSearch } from "@/lib/edu/search";
+// 🔴 La regla del teléfono se IMPORTA, no se copia: `eduWaPhone` es la que
+// decide si Meta puede entregar, y el saneo de la ficha tiene que ser
+// exactamente la misma (H-09). whatsapp-core es puro y client-safe —solo
+// importa tipos de Prisma— así que no arrastra runtime al navegador.
+import { eduWaPhone } from "@/lib/edu/whatsapp-core";
 import { EDU_CLINICA_MAX_ROWS } from "@/lib/edu/agenda-core";
 
 /** El buscador y el saneo de texto se REUSAN del padrón en vez de
@@ -46,11 +51,23 @@ export function normalizeEduFolio(raw: unknown): string | null {
 }
 
 /**
- * Teléfono: se guardan SOLO los dígitos (y un "+" inicial si venía).
+ * Teléfono, con SOLO los dígitos (y un "+" inicial si venía).
  *
  * 🔴 Se normaliza al guardar porque si no, buscar "5544332211" no
  * encuentra al que se capturó como "55 4433 2211" — el `contains` de Prisma
  * compara el texto tal cual. Ese bug ya se pagó en el dental.
+ *
+ * ⚠️ ESTA ES LA REGLA ANCHA, y lo es a propósito. La comparten el CONTACTO
+ * DE EMERGENCIA (más abajo, en parseEduAntecedentes) y el teléfono de una
+ * cuenta del equipo (equipo-core.ts). A esos dos números alguien los MARCA:
+ * un número extranjero, uno con extensión o uno de casa siguen sirviendo
+ * para llamar. Estrecharla aquí bloquearía el guardado ENTERO de los
+ * antecedentes —el bloque de las alergias— de cualquier paciente viejo cuyo
+ * contacto de emergencia no fueran diez dígitos exactos, que es lo contrario
+ * de lo que ese bloque existe para hacer.
+ *
+ * Para el teléfono DEL PACIENTE, que es por donde sale el WhatsApp, la
+ * regla estrecha es `normalizeEduWaPhone`, aquí debajo.
  */
 export function normalizeEduPhone(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -61,6 +78,58 @@ export function normalizeEduPhone(raw: unknown): string | null {
   if (digits.length === 0) return null;
   const v = `${plus}${digits}`;
   return v.length > 30 ? null : v;
+}
+
+/**
+ * El teléfono DEL PACIENTE: diez dígitos nacionales, o null. Sin término
+ * medio (H-09 de la auditoría).
+ *
+ * 🔴 QUÉ ARREGLA. `normalizeEduPhone` acepta UN dígito: recepción tecleaba
+ * "55", se guardaba, y a partir de ahí todo el WhatsApp de ese paciente
+ * estaba muerto en silencio —el recordatorio de la cita, la carta de
+ * consentimiento, el recibo—. El único sitio donde alguien se enteraba era
+ * la pestaña WhatsApp, y ahí ya era tarde. El mensaje de error tampoco
+ * decía la verdad ("no tiene números suficientes" para algo que se guardaba
+ * igual).
+ *
+ * 🔴 LA REGLA NO SE ESCRIBE AQUÍ: es `eduWaPhone` (whatsapp-core.ts), la
+ * misma que decide si Meta puede entregar. Duplicarla es cómo se llega a
+ * que el saneo acepte lo que el envío rechaza — que es exactamente el
+ * agujero que esto cierra. Como efecto, lo que se guarda son SIEMPRE los
+ * diez dígitos nacionales: el "+52" y el "+521" se limpian igual que al
+ * mandar, así que `eduWaPhone(paciente.phone)` nunca vuelve a dar null para
+ * un teléfono capturado desde hoy.
+ *
+ * ⚠️ Se aplica SOLO a `EduPatient.phone`. Ver la nota de la función de
+ * arriba: el contacto de emergencia y el del equipo se marcan, no se
+ * whatsappean.
+ */
+export function normalizeEduWaPhone(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return eduWaPhone(trimmed);
+}
+
+/** El motivo, escrito para una persona. Lo usan el servidor (al rechazar) y
+ *  la pantalla (como pista bajo el campo): un mensaje único no puede
+ *  contradecirse consigo mismo. */
+export const EDU_PHONE_HELP =
+  "Diez dígitos: lada y número, sin el +52. Es lo que WhatsApp necesita para poder entregar.";
+
+/**
+ * ¿Este teléfono YA GUARDADO sirve para WhatsApp? Devuelve el aviso escrito,
+ * o null si sirve (o si no hay teléfono, que no es lo mismo que uno malo).
+ *
+ * Existe para las filas VIEJAS: `normalizeEduWaPhone` cierra la puerta desde
+ * hoy, pero en la base ya hay pacientes con "55" guardado de antes, y la
+ * ficha tiene que decirlo donde se ve —no en la pestaña WhatsApp, que es
+ * adonde se llega cuando ya es tarde—.
+ */
+export function eduPhoneWaWarning(phone: string | null | undefined): string | null {
+  if (!phone || !String(phone).trim()) return null;
+  if (eduWaPhone(phone)) return null;
+  return "Este teléfono no tiene 10 dígitos: WhatsApp no le puede entregar nada.";
 }
 
 /** Correo, en minúsculas y con una forma mínimamente creíble. */
@@ -282,6 +351,172 @@ export function eduPatientSearchAnd(
     and.push({ OR: or });
   }
   return and;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3B · EL FORMULARIO DE LA FICHA — LOS NUEVE CAMPOS, UNA SOLA VEZ
+//
+// 🔴 QUÉ ARREGLA ESTO (H-01 de la auditoría). El servidor sabía editar los
+// nueve campos desde la Ola 2 y NINGUNA pantalla le mandaba cuatro de
+// ellos: nombre, apellidos, folio y sexo se capturaban una vez en el alta y
+// no se corregían nunca, desde ningún sitio. Una "Maria Lopes" mal tecleada
+// quedaba impresa para siempre en el expediente, en las cartas NOM-004, en
+// las recetas y en los recibos.
+//
+// 🔴 POR QUÉ VIVE AQUÍ, EN EL MÓDULO PURO, Y NO EN EL COMPONENTE. La lista
+// de campos la comparten DOS pantallas —el modal de /instituto/pacientes y
+// la pestaña Datos de la ficha— y la razón por la que la pestaña Datos era
+// de solo lectura estaba escrita y era buena: dos formularios para la misma
+// ficha es cómo uno de los dos se queda sin el campo nuevo. La respuesta no
+// es tener uno solo en un solo sitio: es tener una sola DEFINICIÓN montada
+// en dos. Un campo nuevo se agrega a EDU_PATIENT_FORM_FIELDS y las dos
+// pantallas lo mandan, o ninguna.
+//
+// 🔴 Y POR QUÉ EL DIFF (H-10). El modal pedía la ficha fresca al abrirse,
+// tiraba la respuesta y guardaba con los valores viejos de la lista: a las
+// 9:00 se pintó la lista, a las 9:20 el último caso cerrado puso al
+// paciente en DISCHARGED, y a las 9:25 corregir el correo lo resucitaba a
+// ACTIVE. La regla es la del `patient-update-core` del dental —reescrita
+// aquí, sin importar nada de allá—: CAMPO AUSENTE NO SE ESCRIBE. Solo viaja
+// lo que la persona cambió de verdad, así que dos personas que corrigen
+// campos distintos no se pisan.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Los NUEVE campos de la ficha, en el orden en que se leen en pantalla. */
+export const EDU_PATIENT_FORM_FIELDS = [
+  "folio",
+  "firstName",
+  "lastName",
+  "sex",
+  "birthDate",
+  "phone",
+  "email",
+  "status",
+  "notes",
+] as const;
+
+export type EduPatientFormField = (typeof EDU_PATIENT_FORM_FIELDS)[number];
+
+/**
+ * Los campos de CONTACTO: los que un alumno o un docente pueden corregir
+ * con el paciente en el sillón (H-02).
+ *
+ * 🔴 SON DOS Y NO MÁS. El teléfono y el correo son cómo se le avisa al
+ * paciente; el resto —folio, nombre, apellidos, sexo, nacimiento, estado y
+ * las notas de recepción— es identidad administrativa y sigue siendo de
+ * `pacientes.manage`. El nacimiento entra en el segundo grupo a propósito:
+ * decide la edad que sale impresa en una carta de consentimiento, no es un
+ * dato de contacto.
+ */
+export const EDU_PATIENT_CONTACT_FIELDS: readonly EduPatientFormField[] = ["phone", "email"];
+
+/** ¿Este campo lo puede tocar quien solo tiene la llave del contacto? */
+export function eduPatientFieldIsContact(field: string): field is EduPatientFormField {
+  return (EDU_PATIENT_CONTACT_FIELDS as readonly string[]).includes(field);
+}
+
+/**
+ * Los nueve campos tal como los teclea una persona: TODO cadena, incluidos
+ * el `<select>` del sexo y el del estado. Es lo que un `<input>` devuelve, y
+ * mantenerlo así evita el baile de null/""/undefined dentro del componente.
+ */
+export type EduPatientFormValues = Record<EduPatientFormField, string>;
+
+/** El estado inicial del formulario, SIEMPRE a partir de la fila guardada. */
+export function eduPatientFormValues(row: EduPatientRow): EduPatientFormValues {
+  return {
+    folio: row.folio,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    sex: row.sex,
+    birthDate: eduDateInputValue(row.birthDate),
+    phone: row.phone ?? "",
+    email: row.email ?? "",
+    status: row.status,
+    notes: row.notes ?? "",
+  };
+}
+
+/** Los campos que se VACÍAN a null en vez de guardarse como "". Folio,
+ *  nombre, apellidos, sexo y estado no están: son obligatorios y el
+ *  servidor rechaza vaciarlos. */
+const ANULABLES: readonly EduPatientFormField[] = ["birthDate", "phone", "email", "notes"];
+
+/**
+ * SOLO lo que cambió. Un campo que no aparece en el objeto que devuelve
+ * esta función no se escribe: es la regla entera de H-10.
+ *
+ * ⚠️ Compara contra la fila FRESCA que la pantalla acaba de leer, no contra
+ * la que se pintó hace veinte minutos. Quien la llame con una fila vieja
+ * vuelve a tener el bug, y por eso el modal ya no monta el formulario hasta
+ * que la respuesta del GET llegó.
+ */
+export function eduPatientFormDiff(
+  row: EduPatientRow,
+  values: EduPatientFormValues,
+): Partial<Record<EduPatientFormField, string | null>> {
+  const base = eduPatientFormValues(row);
+  const diff: Partial<Record<EduPatientFormField, string | null>> = {};
+  for (const campo of EDU_PATIENT_FORM_FIELDS) {
+    const antes = base[campo].trim();
+    const ahora = (values[campo] ?? "").trim();
+    if (antes === ahora) continue;
+    diff[campo] = ahora === "" && ANULABLES.includes(campo) ? null : ahora;
+  }
+  return diff;
+}
+
+/** ¿Hay algo que mandar? Con el diff vacío no se llama al endpoint: el
+ *  servidor contesta "No mandaste ningún cambio" y sería un error donde no
+ *  hubo ninguno. */
+export function eduPatientFormHasChanges(
+  diff: Partial<Record<EduPatientFormField, string | null>>,
+): boolean {
+  return Object.keys(diff).length > 0;
+}
+
+// ── El estado del paciente contra sus casos (H-28) ──────────────────────
+
+/**
+ * Los dos estados que dicen "este paciente ya no está en tratamiento".
+ * Ponerlos a mano con casos abiertos deja la etiqueta del encabezado y el
+ * filtro de la lista mintiendo hasta que alguien mueva un caso.
+ */
+export const EDU_PATIENT_STATUSES_SIN_CASOS_ABIERTOS: readonly EduPatientStatus[] = [
+  "DISCHARGED",
+  "INACTIVE",
+];
+
+/**
+ * El motivo escrito por el que ESTE estado no se puede poner, o null si se
+ * puede.
+ *
+ * 🔴 Se comprueba en los DOS lados con esta misma función: la pantalla para
+ * decirlo antes de pulsar Guardar, y el servidor al guardar —porque entre
+ * que se pintó la pantalla y se pulsó Guardar alguien pudo abrir un caso, y
+ * porque el endpoint no puede confiar en que el body venga de esa pantalla.
+ *
+ * ⚠️ NO bloquea el estado que ya trae la fila: si un paciente quedó
+ * DISCHARGED con casos abiertos por un dato viejo, corregirle el teléfono no
+ * puede quedar atrapado detrás de un estado que nadie está cambiando. Por
+ * eso quien llama solo pasa el estado cuando de verdad lo está cambiando —y
+ * el diff de arriba hace exactamente eso.
+ */
+export function eduPatientStatusConflict(
+  status: EduPatientStatus,
+  openCases: number,
+): string | null {
+  if (openCases <= 0) return null;
+  if (!EDU_PATIENT_STATUSES_SIN_CASOS_ABIERTOS.includes(status)) return null;
+  const label = EDU_PATIENT_STATUS_LABELS[status];
+  const n = `${openCases} caso${openCases === 1 ? "" : "s"} abierto${openCases === 1 ? "" : "s"}`;
+  // 🔴 NO dice "ciérralos tú". Quien edita el estado es CAJA (el campo es
+  // `pacientes.manage`) y caja no puede cerrar un caso: no lleva ninguna key
+  // de casos y su alcance para el recurso "cases" es "none". Un mensaje que
+  // le manda a hacer lo único que no puede hacer es un callejón sin salida,
+  // así que lo que dice es DE QUIÉN depende.
+  return `No se puede poner «${label}»: el paciente tiene ${n}. El estado se pone solo cuando el docente responsable los cierra o los traspasa.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
