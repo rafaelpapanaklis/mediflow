@@ -26,6 +26,76 @@
    un contenedor de consulta encima lo atraparía dentro de la columna en
    vez de cubrir la pantalla. Por eso este vertical mide la VENTANA.
 
+   ⚠️ ESO VALE PARA EL CHROME, NO PARA EL CONTENIDO. A partir de 1024 px el
+   cajón deja de ser `fixed` y pasa a ser una COLUMNA de 252 px en el flujo
+   (ver `.edu-sidebar`), así que al contenido le quedan `ventana − 316`. Un
+   `@media (min-width: 1180px)` que gobierne una rejilla se dispara cuando
+   esa rejilla mide 864. Las cajas de contenido que tienen ancho mínimo se
+   miden a SÍ MISMAS con `@container`: `.edu-ag` (la agenda),
+   `.edu-tablewrap` (todas las listas) y `.edu-fichahero` (la cabecera de
+   la ficha). Nunca `.edu-page` ni `.edu-shell`: los modales del vertical
+   se montan DENTRO de la página y son `position: fixed`.
+
+   ═══════════════════════════════════════════════════════════════════════
+   LAS DIEZ REGLAS DE UNA PANTALLA NUEVA (léelas antes de maquetar)
+   Salieron de la auditoría de Pacientes: un botón «Expediente» quedaba
+   recortado e INALCANZABLE entre 1180 y 1235 px de ventana, y nadie lo vio
+   porque se prueba en 1366 y en un teléfono. Cada regla es una factura ya
+   pagada, no una preferencia.
+   ═══════════════════════════════════════════════════════════════════════
+
+    1. A partir de 1024 px el contenido NO mide lo que la ventana. Mide
+       `ventana − 252 (cajón) − 64 (padding de .edu-main) − barra de
+       scroll`. Antes de escribir `@media (min-width: X)` para contenido,
+       resta 316 y pregúntate si ESO cabe.
+
+    2. Si una rejilla tiene ancho mínimo, mídela con `@container`, no con
+       `@media`. El aviso de arriba protege al CAJÓN, no al contenido:
+       `container-type` es seguro en cualquier caja que no tenga un
+       `position: fixed` dentro. Precedentes propios: `.edu-ag`,
+       `.edu-odo__lienzo` y `.edu-tablewrap`.
+
+    3. Suma las pistas antes de declararlas.
+       `Σ(mínimos) + Σ(gaps) + padding + bordes` es el ancho mínimo real de
+       la tabla. Ese número —y no uno redondo— es el umbral de la forma
+       renglón. Los 26 umbrales de este archivo están calculados así y
+       tabulados junto a `.edu-tablewrap`.
+
+    4. `overflow: hidden` que redondea esquinas RECORTA datos. Si algo
+       puede no caber, el contenedor lleva `overflow-x: auto` y el radio se
+       muda al envoltorio. Recortar sin scroll deja un botón INALCANZABLE,
+       no solo feo.
+
+    5. Ninguna tira horizontal (pestañas, filtros, chips) se queda sin
+       pista de que hay más. Si escondes la barra con
+       `scrollbar-width: none`, pon un desvanecido y devuélvela fina en
+       `@media (hover: hover) and (pointer: fine)`: con ratón no se
+       arrastra a ciegas.
+
+    6. Al cambiar el ancho de UNA columna, recalcula la SUMA. El corte de
+       «Expediente» nació de subir una pista de 96 a 210 px sin volver a
+       sumar las seis.
+
+    7. El rótulo de un botón manda sobre el ancho de su columna, y a la
+       inversa. Un rótulo largo («Expediente») empuja la rejilla; uno corto
+       («Ver») la libera. Elige el rótulo por lo que HACE y después
+       dimensiona la pista, con `max-content` de suelo y no con un número
+       heredado.
+
+    8. La forma que no se puede romper va en la base; la de escritorio se
+       PIDE. Apilado por defecto, fila dentro del `@container`. Así el peor
+       caso es «ocupa más alto», nunca «se sale».
+
+    9. Un texto que viene de la base lleva `overflow-wrap: anywhere` (o
+       truncado con `title`). Un correo de 40 caracteres es UN solo token y
+       fija el `min-content` de su columna. Ya lo hacen `.edu-cell__value`
+       y `.edu-cell__sub`; repítelo en toda caja nueva.
+
+   10. Prueba en SIETE anchos, no en el tuyo:
+       360 · 390 · 768 · 1024 · 1200 · 1366 · 1536.
+       El 1200 es el que falta siempre y es el que rompió Pacientes. La
+       banda 1180-1235 no la ve nadie que solo pruebe en 1366.
+
    ♿ CONTRASTE (medido sobre blanco #FFFFFF, no supuesto):
      indigo-400 #6C88C6 → 3.51  ✗ no pasa AA en texto chico
      indigo-500 #4665AC → 5.65  ✓
@@ -1210,8 +1280,133 @@ select.edu-input {
   gap: 8px;
 }
 
-@media (min-width: 1180px) {
-  .edu-table {
+/* ── EL ENVOLTORIO QUE SE MIDE A SÍ MISMO ───────────────────────────────
+   Regla 2 y regla 4. Una lista dentro de `.edu-tablewrap`:
+     · se mide a SÍ MISMA (`@container`), no a la ventana, así que deja de
+       importar cuánto vale el cajón, el padding o el escalado de Windows;
+     · si algún día NO cabe, SE DESPLAZA en vez de recortar.
+
+   🔴 EL CONTENEDOR ES EL ENVOLTORIO, NO LA TABLA. Una consulta de
+   contenedor no puede dar estilo a su propio contenedor, y la forma
+   renglón necesita tocar `.edu-table` (fondo, borde, radio, `fit-content`).
+   Por eso hacen falta dos cajas y no una.
+
+   ⚠️ `container-type` aquí es seguro: dentro de `.edu-table` solo hay
+   `div`, `span`, `a` y `button`. Los modales del vertical (`.edu-modal`,
+   `position: fixed`) se montan como HERMANOS de la tabla, nunca dentro.
+   El mismo razonamiento con el que la agenda justifica `.edu-ag`. */
+.edu-tablewrap {
+  container-type: inline-size;
+  container-name: edu-tabla;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Umbral de Pacientes, sumado pista a pista (regla 3):
+      96 (folio) + 160 (paciente) + 128 (contacto) + 122 (estado)
+   + 92 (casos) + 150 (acciones)                      = 748 px de pistas
+   + 5 huecos × 12 px                                 =  60 px
+   + padding 12px 16px de .edu-row                    =  32 px
+   + borde de .edu-table                              =   2 px
+   ──────────────────────────────────────────────────────────────────
+                                                        842 px
+
+   Antes hacían falta 922, la forma renglón se estrenaba a 1180 px de
+   ventana —donde el contenido mide 864— y el botón quedaba 41 px fuera,
+   recortado por un `overflow: hidden`. Los 80 px que sobran ahora salen
+   de acortar los rótulos y de bajar dos suelos que estaban de más; ver el
+   bloque de `.edu-table--pacientes`. */
+
+@container edu-tabla (min-width: 842px) {
+  .edu-table--pacientes {
+    gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace. */
+    min-width: fit-content;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+  }
+
+  .edu-table--pacientes .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow era exactamente el que recortaba «Expediente» sin dejar
+       scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  .edu-table--pacientes .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .edu-table--pacientes .edu-row:last-child {
+    border-bottom: 0;
+    /* La última fila puede ser `.edu-row--off`, que sí tiene fondo propio:
+       sin este radio sus esquinas cuadradas asoman por el redondeo. */
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
+  }
+
+  .edu-table--pacientes .edu-cell--wide,
+  .edu-table--pacientes .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  .edu-table--pacientes .edu-cell__label {
+    display: none;
+  }
+
+  .edu-table--pacientes .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* ── Las demás listas: forma renglón por VENTANA, con SU umbral ─────────
+   Estas 25 tablas todavía no tienen envoltorio en su pantalla, así que no
+   hay contenedor contra el que medir y siguen leyendo la ventana. Lo que
+   sí se corrige es el NÚMERO: hasta ahora las 26 se estrenaban a 1180 px
+   —el mismo para una tabla de 5 columnas que para una de 8— y quince de
+   ellas necesitaban más de los 864 px de contenido que hay a esa ventana.
+   `Casos` (1042 px) se estrenaba 178 px antes de caber y se recortaba
+   hasta los 1358.
+
+   Cada umbral es `Σ(pistas) + Σ(huecos) + padding + bordes` (regla 3)
+   redondeado hacia ARRIBA al cubo, más los 316 px que el panel le quita a
+   la ventana en escritorio (regla 1: 252 del cajón + 64 del padding).
+
+   👉 PARA GRADUAR UNA DE ESTAS A `@container`: envuelve su `.edu-table` en
+   un `<div className="edu-tablewrap">` en su pantalla y muévela al bloque
+   de arriba con su propio umbral SIN los 316. Es una línea de marcado por
+   pantalla, y entonces esa lista también se desplaza en vez de recortar. */
+
+/* Cubo 700 px de contenido → 1016 px de ventana. iapersonas 670 · iaprecios 670 · creds 680 · usosillones 682 · docentes 700 */
+@media (min-width: 1016px) {
+  :is(.edu-table--iapersonas,
+     .edu-table--iaprecios,
+     .edu-table--creds,
+     .edu-table--usosillones,
+     .edu-table--docentes) {
     gap: 0;
     background: var(--edu-surface);
     border: 1px solid var(--edu-line);
@@ -1220,7 +1415,11 @@ select.edu-input {
     overflow: hidden;
   }
 
-  .edu-rowhead {
+  :is(.edu-table--iapersonas,
+     .edu-table--iaprecios,
+     .edu-table--creds,
+     .edu-table--usosillones,
+     .edu-table--docentes) .edu-rowhead {
     display: grid;
     grid-template-columns: var(--edu-cols);
     gap: 12px;
@@ -1235,7 +1434,11 @@ select.edu-input {
     color: var(--edu-text-3);
   }
 
-  .edu-row {
+  :is(.edu-table--iapersonas,
+     .edu-table--iaprecios,
+     .edu-table--creds,
+     .edu-table--usosillones,
+     .edu-table--docentes) .edu-row {
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
@@ -1246,20 +1449,435 @@ select.edu-input {
     box-shadow: none;
   }
 
-  .edu-row:last-child {
+  :is(.edu-table--iapersonas,
+     .edu-table--iaprecios,
+     .edu-table--creds,
+     .edu-table--usosillones,
+     .edu-table--docentes) .edu-row:last-child {
     border-bottom: 0;
   }
 
-  .edu-cell--wide,
-  .edu-cell__actions {
+  :is(.edu-table--iapersonas,
+     .edu-table--iaprecios,
+     .edu-table--creds,
+     .edu-table--usosillones,
+     .edu-table--docentes) .edu-cell--wide,
+  :is(.edu-table--iapersonas,
+     .edu-table--iaprecios,
+     .edu-table--creds,
+     .edu-table--usosillones,
+     .edu-table--docentes) .edu-cell__actions {
     grid-column: auto;
   }
 
-  .edu-cell__label {
+  :is(.edu-table--iapersonas,
+     .edu-table--iaprecios,
+     .edu-table--creds,
+     .edu-table--usosillones,
+     .edu-table--docentes) .edu-cell__label {
     display: none;
   }
 
-  .edu-cell__actions {
+  :is(.edu-table--iapersonas,
+     .edu-table--iaprecios,
+     .edu-table--creds,
+     .edu-table--usosillones,
+     .edu-table--docentes) .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Cubo 780 px de contenido → 1096 px de ventana. corte 702 · notas 736 · sillones 742 · turnos 766 · procedimientos 776 */
+@media (min-width: 1096px) {
+  :is(.edu-table--corte,
+     .edu-table--notas,
+     .edu-table--sillones,
+     .edu-table--turnos,
+     .edu-table--procedimientos) {
+    gap: 0;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+    overflow: hidden;
+  }
+
+  :is(.edu-table--corte,
+     .edu-table--notas,
+     .edu-table--sillones,
+     .edu-table--turnos,
+     .edu-table--procedimientos) .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  :is(.edu-table--corte,
+     .edu-table--notas,
+     .edu-table--sillones,
+     .edu-table--turnos,
+     .edu-table--procedimientos) .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  :is(.edu-table--corte,
+     .edu-table--notas,
+     .edu-table--sillones,
+     .edu-table--turnos,
+     .edu-table--procedimientos) .edu-row:last-child {
+    border-bottom: 0;
+  }
+
+  :is(.edu-table--corte,
+     .edu-table--notas,
+     .edu-table--sillones,
+     .edu-table--turnos,
+     .edu-table--procedimientos) .edu-cell--wide,
+  :is(.edu-table--corte,
+     .edu-table--notas,
+     .edu-table--sillones,
+     .edu-table--turnos,
+     .edu-table--procedimientos) .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  :is(.edu-table--corte,
+     .edu-table--notas,
+     .edu-table--sillones,
+     .edu-table--turnos,
+     .edu-table--procedimientos) .edu-cell__label {
+    display: none;
+  }
+
+  :is(.edu-table--corte,
+     .edu-table--notas,
+     .edu-table--sillones,
+     .edu-table--turnos,
+     .edu-table--procedimientos) .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Cubo 880 px de contenido → 1196 px de ventana. facturas 820 · diralumnos 860 · programas 872 · requisitos 872 · bitacora 874 · iausos 876 */
+@media (min-width: 1196px) {
+  :is(.edu-table--facturas,
+     .edu-table--diralumnos,
+     .edu-table--programas,
+     .edu-table--requisitos,
+     .edu-table--bitacora,
+     .edu-table--iausos) {
+    gap: 0;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+    overflow: hidden;
+  }
+
+  :is(.edu-table--facturas,
+     .edu-table--diralumnos,
+     .edu-table--programas,
+     .edu-table--requisitos,
+     .edu-table--bitacora,
+     .edu-table--iausos) .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  :is(.edu-table--facturas,
+     .edu-table--diralumnos,
+     .edu-table--programas,
+     .edu-table--requisitos,
+     .edu-table--bitacora,
+     .edu-table--iausos) .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  :is(.edu-table--facturas,
+     .edu-table--diralumnos,
+     .edu-table--programas,
+     .edu-table--requisitos,
+     .edu-table--bitacora,
+     .edu-table--iausos) .edu-row:last-child {
+    border-bottom: 0;
+  }
+
+  :is(.edu-table--facturas,
+     .edu-table--diralumnos,
+     .edu-table--programas,
+     .edu-table--requisitos,
+     .edu-table--bitacora,
+     .edu-table--iausos) .edu-cell--wide,
+  :is(.edu-table--facturas,
+     .edu-table--diralumnos,
+     .edu-table--programas,
+     .edu-table--requisitos,
+     .edu-table--bitacora,
+     .edu-table--iausos) .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  :is(.edu-table--facturas,
+     .edu-table--diralumnos,
+     .edu-table--programas,
+     .edu-table--requisitos,
+     .edu-table--bitacora,
+     .edu-table--iausos) .edu-cell__label {
+    display: none;
+  }
+
+  :is(.edu-table--facturas,
+     .edu-table--diralumnos,
+     .edu-table--programas,
+     .edu-table--requisitos,
+     .edu-table--bitacora,
+     .edu-table--iausos) .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Cubo 900 px de contenido → 1216 px de ventana. generaciones 894 · equipo 894 · padron 896 */
+@media (min-width: 1216px) {
+  :is(.edu-table--generaciones,
+     .edu-table--equipo,
+     .edu-table--padron) {
+    gap: 0;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+    overflow: hidden;
+  }
+
+  :is(.edu-table--generaciones,
+     .edu-table--equipo,
+     .edu-table--padron) .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  :is(.edu-table--generaciones,
+     .edu-table--equipo,
+     .edu-table--padron) .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  :is(.edu-table--generaciones,
+     .edu-table--equipo,
+     .edu-table--padron) .edu-row:last-child {
+    border-bottom: 0;
+  }
+
+  :is(.edu-table--generaciones,
+     .edu-table--equipo,
+     .edu-table--padron) .edu-cell--wide,
+  :is(.edu-table--generaciones,
+     .edu-table--equipo,
+     .edu-table--padron) .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  :is(.edu-table--generaciones,
+     .edu-table--equipo,
+     .edu-table--padron) .edu-cell__label {
+    display: none;
+  }
+
+  :is(.edu-table--generaciones,
+     .edu-table--equipo,
+     .edu-table--padron) .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Cubo 980 px de contenido → 1296 px de ventana. rubricas 906 · especialidades 928 · evaluacion 966 · planes 976 */
+@media (min-width: 1296px) {
+  :is(.edu-table--rubricas,
+     .edu-table--especialidades,
+     .edu-table--evaluacion,
+     .edu-table--planes) {
+    gap: 0;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+    overflow: hidden;
+  }
+
+  :is(.edu-table--rubricas,
+     .edu-table--especialidades,
+     .edu-table--evaluacion,
+     .edu-table--planes) .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  :is(.edu-table--rubricas,
+     .edu-table--especialidades,
+     .edu-table--evaluacion,
+     .edu-table--planes) .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  :is(.edu-table--rubricas,
+     .edu-table--especialidades,
+     .edu-table--evaluacion,
+     .edu-table--planes) .edu-row:last-child {
+    border-bottom: 0;
+  }
+
+  :is(.edu-table--rubricas,
+     .edu-table--especialidades,
+     .edu-table--evaluacion,
+     .edu-table--planes) .edu-cell--wide,
+  :is(.edu-table--rubricas,
+     .edu-table--especialidades,
+     .edu-table--evaluacion,
+     .edu-table--planes) .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  :is(.edu-table--rubricas,
+     .edu-table--especialidades,
+     .edu-table--evaluacion,
+     .edu-table--planes) .edu-cell__label {
+    display: none;
+  }
+
+  :is(.edu-table--rubricas,
+     .edu-table--especialidades,
+     .edu-table--evaluacion,
+     .edu-table--planes) .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Cubo 1060 px de contenido → 1376 px de ventana. cobros 1004 · casos 1042 */
+@media (min-width: 1376px) {
+  :is(.edu-table--cobros,
+     .edu-table--casos) {
+    gap: 0;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+    overflow: hidden;
+  }
+
+  :is(.edu-table--cobros,
+     .edu-table--casos) .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  :is(.edu-table--cobros,
+     .edu-table--casos) .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  :is(.edu-table--cobros,
+     .edu-table--casos) .edu-row:last-child {
+    border-bottom: 0;
+  }
+
+  :is(.edu-table--cobros,
+     .edu-table--casos) .edu-cell--wide,
+  :is(.edu-table--cobros,
+     .edu-table--casos) .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  :is(.edu-table--cobros,
+     .edu-table--casos) .edu-cell__label {
+    display: none;
+  }
+
+  :is(.edu-table--cobros,
+     .edu-table--casos) .edu-cell__actions {
     justify-content: flex-end;
   }
 }
@@ -1843,12 +2461,38 @@ select.edu-input {
 
 /* Anchos de las tablas de esta ola (mismo mecanismo que .edu-table--padron:
    la rejilla del renglón a partir de 1180 px). */
-/* Ola 3: la última columna pasó de 96 a 210 px porque ahora lleva DOS
+/* Ola 3: la última columna pasó de 96 a 210 px porque ahora llevaba DOS
    botones ("Ficha" y "Expediente"). Con 96 px el segundo caía a otro
    renglón y la fila crecía al doble de alto — el error de medir el ancho
-   con el contenido de ayer. */
+   con el contenido de ayer.
+
+   Y el error de la vuelta siguiente: subir esa pista 114 px sin volver a
+   sumar las seis (regla 6). El mínimo de la tabla pasó de ~808 a 922 px,
+   la forma renglón se estrenaba a 1180 —donde hay 864— y «Expediente»
+   quedaba 41 px fuera, RECORTADO por un `overflow: hidden`.
+
+   Ahora la pista mide 150: los rótulos son «Editar» y «Ver» (132 px
+   naturales, contra los 186 de «Ficha»+«Expediente»), que es lo que esos
+   dos botones hacen de verdad — el rótulo manda sobre la pista, no al
+   revés (regla 7).
+
+   Y de paso bajan dos suelos que estaban de sobra: FOLIO de 104 a 96 (un
+   «P-0042» mide 50 px) y CONTACTO de 140 a 128 (el correo va debajo, con
+   `overflow-wrap: anywhere`, y la pista sigue siendo `1.3fr`: crece sola
+   en cuanto hay sitio). Eso deja el mínimo en **842 px**, y esos 22 px de
+   holgura NO son cosmética: con la BARRA DE SCROLL CLÁSICA de 15 px —la
+   de Linux y Windows, que es donde trabaja la dirección de un instituto—
+   a 1180 px de ventana el contenido no mide 864 sino 849. Con 862 la fila
+   se habría quedado en tarjetas justo en la franja del portátil. Medido a
+   1180: 842 ≤ 849. ✓
+
+   ESTADO va en `minmax(122px, max-content)` y no en `122px` a secas:
+   `.edu-tag` lleva `white-space: nowrap`, así que una etiqueta larga
+   («Dado de alta») se salía de su pista y se encimaba con «Casos». Con
+   `max-content` la pista crece lo que haga falta y el envoltorio se
+   desplaza si eso deja de caber. */
 .edu-table--pacientes {
-  --edu-cols: 104px minmax(160px, 1.8fr) minmax(140px, 1.3fr) 122px 92px 210px;
+  --edu-cols: 96px minmax(160px, 1.8fr) minmax(128px, 1.3fr) minmax(122px, max-content) 92px 150px;
 }
 
 .edu-table--sillones {
@@ -1911,14 +2555,315 @@ select.edu-input {
   color: var(--edu-text-2);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   LA CABECERA DE LA FICHA DEL PACIENTE — `.edu-fichahero`
+   ═══════════════════════════════════════════════════════════════════════
+   Sustituye a `.edu-fichahead` SOLO en /instituto/pacientes/[id]. El
+   `.edu-fichahead` de arriba SE QUEDA: lo usan otras tres pantallas (la
+   ficha del estudiante, la del docente y la bitácora) y borrarlo las
+   dejaría sin encabezado.
+
+   Qué tenía de malo el plano: era `--edu-surface` liso —la misma
+   superficie que una tarjeta cualquiera de la lista de la que vienes—, el
+   nombre medía 19 px contra los 27 del título de esa lista, y edad, sexo,
+   teléfono, correo, estado y casos se unían con `.join(" · ")` en UNA
+   línea gris de 13 px: el teléfono, que es a lo que se va, pesaba lo mismo
+   que el sexo.
+
+   Cuatro efectos, todos con tokens que ya existían en esta hoja:
+     1. banda de 3 px con el degradado de la marca (`::before`);
+     2. baño radial índigo desde la esquina del avatar (`::after`,
+        `z-index: -1`, para no tocar el contraste del texto);
+     3. recuadro de INICIALES de 72 px — el patrón de
+        `.edu-whoami__avatar`, escalado. No es una foto: el vertical no
+        guarda la cara de nadie;
+     4. los datos clave como píldoras, no como una línea de texto.
+
+   ⚠️ SIN `overflow: hidden` (regla 4). El redondeo de la banda y del baño
+   se resuelve con `border-radius` en los propios pseudoelementos, que es
+   gratis; un `overflow: hidden` aquí es exactamente la trampa que dejó
+   «Expediente» inalcanzable en la lista.
+
+   ⚠️ `container-type` es seguro: dentro solo hay texto, píldoras y un
+   enlace. Los modales de las acciones los monta `EduPacienteAcciones`,
+   que es HERMANO de esta cabecera, no hijo. */
+.edu-fichahero {
+  position: relative;
+  z-index: 0;
+  container-type: inline-size;
+  container-name: edu-fichahero;
+  padding: 16px 18px 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  /* Sube de shadow-1 a shadow-2: la cabecera FLOTA sobre el lienzo, no es
+     una tarjeta más de la pila. */
+  box-shadow: var(--edu-shadow-2);
+}
+
+.edu-fichahero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--edu-600), var(--edu-400));
+  border-radius: var(--edu-radius) var(--edu-radius) 0 0;
+}
+
+.edu-fichahero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(120% 90% at 0% 0%, rgba(70, 101, 172, 0.09), transparent 55%);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.dark .edu-fichahero::after {
+  background: radial-gradient(120% 90% at 0% 0%, rgba(155, 176, 220, 0.14), transparent 55%);
+}
+
+/* APILADO POR DEFECTO (regla 8): la forma que no se puede romper es la
+   base; la fila se PIDE abajo, y solo cuando la cabecera se ha medido a sí
+   misma y sabe que cabe. */
+.edu-fichahero__main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "avatar info"
+    "datos  datos";
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 4px;
+}
+
+.edu-fichahero__avatar {
+  grid-area: avatar;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  border-radius: 999px;
+  background: var(--edu-100);
+  color: var(--edu-700);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  /* El anillo: un aro índigo tenue en vez de un borde duro. */
+  box-shadow: 0 0 0 3px rgba(70, 101, 172, 0.16);
+}
+
+.dark .edu-fichahero__avatar {
+  background: var(--edu-800);
+  color: var(--edu-200);
+  box-shadow: 0 0 0 3px rgba(155, 176, 220, 0.22);
+}
+
+.edu-fichahero__info {
+  grid-area: info;
+  min-width: 0;
+}
+
+.edu-fichahero__folio {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+/* Igual o MAYOR que `.edu-page__title` (22 px, 27 en escritorio): el
+   título del paciente no puede ser más chico que el de la lista de la que
+   vienes. */
+.edu-fichahero__name {
+  margin: 2px 0 0;
+  font-size: clamp(22px, 2.2vw, 27px);
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+/* `display: block` y no el `inline` de un <span> pelado: en inline el
+   `margin-top` no se aplica y la píldora se pegaba al nombre. */
+.edu-fichahero__estado {
+  display: block;
+  margin-top: 6px;
+}
+
+/* Los datos clave: píldoras envolvibles con icono, no un `join(" · ")`.
+   Cada una es una unidad que el ojo encuentra sola. */
+.edu-fichahero__datos {
+  grid-area: datos;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.edu-fichadato {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--edu-text-2);
+  overflow-wrap: anywhere;
+}
+
+.edu-fichadato svg {
+  flex-shrink: 0;
+  color: var(--edu-text-3);
+}
+
+/* El teléfono es un enlace `tel:`: en un portátil con la app de llamadas
+   y en cualquier teléfono, marca. Es el dato al que se viene. */
+a.edu-fichadato {
+  text-decoration: none;
+  border-color: var(--edu-line-brand);
+  color: var(--edu-700);
+}
+
+a.edu-fichadato:hover {
+  background: var(--edu-50);
+  border-color: var(--edu-500);
+}
+
+.dark a.edu-fichadato {
+  color: var(--edu-200);
+}
+
+.dark a.edu-fichadato:hover {
+  background: var(--edu-hover);
+}
+
+/* Los KPI de la cabecera: próxima cita, última visita y —solo con permiso
+   y alcance— el saldo. Se ven en LAS DIEZ pestañas, no solo en Resumen. */
+.edu-fichahero__kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--edu-line);
+}
+
+.edu-fichakpi {
+  flex: 1 1 190px;
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+}
+
+.edu-fichakpi--alerta {
+  border-color: rgba(180, 83, 9, 0.35);
+  background: var(--edu-amber-50);
+}
+
+.dark .edu-fichakpi--alerta {
+  background: rgba(180, 83, 9, 0.18);
+}
+
+.edu-fichakpi__label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--edu-text-3);
+}
+
+.edu-fichakpi__value {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--edu-text-1);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Las alertas médicas ENTRAN a la cabecera (antes colgaban sueltas
+   debajo): ganan el contraste del fondo del hero y siguen viéndose en las
+   diez pestañas, que es lo que importa de ellas. */
+.edu-fichahero__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.edu-fichahero__chips .edu-tag {
+  white-space: normal; /* una alergia larga se parte, no se desborda */
+}
+
+/* LA FILA: se estrena cuando la CABECERA mide 620, no cuando la ventana
+   pasa un número (regla 2). El avatar y el nombre a la izquierda, los
+   datos a la derecha; los chips y los KPI siguen a ancho completo. */
+@container edu-fichahero (min-width: 620px) {
+  .edu-fichahero__main {
+    grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-areas: "avatar info datos";
+    align-items: center;
+  }
+
+  .edu-fichahero__datos {
+    justify-content: flex-end;
+  }
+
+  .edu-fichahero__avatar {
+    width: 72px;
+    height: 72px;
+    font-size: 26px;
+  }
+}
+
 /* ── Pestañas.
    En el teléfono se desplazan en horizontal en vez de envolverse en tres
    renglones: una tira que se arrastra con el pulgar se lee como pestañas;
-   tres renglones de píldoras, no. `scrollbar-width: none` quita la barra
-   en escritorio (donde no hace falta, porque caben). ── */
+   tres renglones de píldoras, no.
+
+   🔴 EL COMENTARIO QUE HABÍA AQUÍ DECÍA «en escritorio no hace falta,
+   porque caben». Con diez pestañas ya no caben: la tira mide 1118 px y
+   `.edu-page` la topa en 1100. La última («Recetas») salía cortada como
+   «R» a 1366 px, y como `scrollbar-width: none` esconde la barra y no
+   había ni degradado ni flecha, con un ratón no había NINGUNA pista de
+   que hubiera más (regla 5). Se arregla por tres vías a la vez:
+
+     · con RATÓN (`hover: hover` y `pointer: fine`) la tira se colapsa en
+       un «Más ▾» —lo hace `EduPacienteTabs`, midiendo la fila real con un
+       ResizeObserver— y además se le devuelve una barra fina, por si
+       alguien desactiva el JS;
+     · con el PULGAR se queda como estaba, que es donde funcionaba, y se
+       le añade el desvanecido del borde derecho;
+     · el desvanecido solo se pinta cuando `data-desborda="1"`, o sea
+       cuando de verdad queda tira por ver. ── */
+.edu-tabsbar {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  border-bottom: 1px solid var(--edu-line);
+}
+
 .edu-tabs {
   display: flex;
   gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -1926,8 +2871,139 @@ select.edu-input {
   border-bottom: 1px solid var(--edu-line);
 }
 
+/* Dentro de `.edu-tabsbar` la línea de abajo la pone la BARRA, para que el
+   botón «Más ▾» se apoye en la misma raya que las pestañas. Suelta (la
+   ficha del estudiante y la del docente, que no colapsan) conserva la
+   suya. */
+.edu-tabsbar > .edu-tabs {
+  border-bottom: 0;
+}
+
 .edu-tabs::-webkit-scrollbar {
   display: none;
+}
+
+/* La pista de que hay más tira a la derecha. */
+.edu-tabs[data-desborda="1"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+
+/* Con ratón, la barra vuelve: fina, pero vuelve. Arrastrar a ciegas es
+   cosa del pulgar, no del trackpad. */
+@media (hover: hover) and (pointer: fine) {
+  .edu-tabs {
+    scrollbar-width: thin;
+    scrollbar-color: var(--edu-line-strong) transparent;
+  }
+
+  .edu-tabs::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+
+  .edu-tabs::-webkit-scrollbar-thumb {
+    background: var(--edu-line-strong);
+    border-radius: 999px;
+  }
+
+  .edu-tabs::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ── La capa ESPEJO que mide ────────────────────────────────────────────
+   Invisible NO es lo mismo que sin ancho: para saber cuántas pestañas
+   caben hay que tenerlas pintadas a su ancho natural. Se pinta una copia
+   con `visibility: hidden` (que sí ocupa y sí se puede medir, al revés que
+   `display: none`) dentro de una caja absoluta que la recorta, para que no
+   ensanche la barra ni cree desplazamiento. */
+.edu-tabs__medidaclip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.edu-tabs__medida {
+  display: flex;
+  gap: 6px;
+  width: max-content;
+}
+
+/* ── El desplegable «Más ▾» ─────────────────────────────────────────── */
+.edu-tabs__mas {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* El disparador es un `<button>` con la misma pinta que una pestaña.
+   SIN `max-width` y SIN `overflow: hidden`: cuando la activa cae dentro se
+   rotula «Más · Consentimientos» y crece, y recortarlo sería exactamente
+   la trampa de la regla 4. Lo que hace la barra es al revés — el botón no
+   se encoge (`.edu-tabs__mas` es `flex: 0 0 auto`) y es la TIRA la que
+   absorbe, se desplaza y enciende su desvanecido. */
+.edu-tab--mas {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Cuando la pestaña ACTIVA es una de las que se guardaron, el botón se
+   rotula «Más · Recetas» y se enciende: nunca se pierde de vista dónde
+   estás. */
+.edu-tab--masactivo {
+  color: var(--edu-600);
+  border-bottom-color: var(--edu-600);
+  background: var(--edu-surface-2);
+}
+
+.dark .edu-tab--masactivo {
+  color: var(--edu-200);
+  border-bottom-color: var(--edu-300);
+}
+
+.edu-tabs__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-3);
+}
+
+.edu-tabs__menuitem {
+  display: block;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: var(--edu-text-2);
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.edu-tabs__menuitem:hover {
+  background: var(--edu-hover);
+  color: var(--edu-text-1);
+}
+
+.edu-tabs__menuitem--on {
+  background: var(--edu-100);
+  color: var(--edu-700);
+}
+
+.dark .edu-tabs__menuitem--on {
+  background: var(--edu-800);
+  color: var(--edu-100);
 }
 
 .edu-tab {
@@ -2132,22 +3208,24 @@ select.edu-input {
 }
 
 /* ── Estudios ── */
+/* 🔴 LA GALERÍA SE MIDE A SÍ MISMA, sin `@media` y sin envoltorio.
+   Antes eran tres saltos de ventana (1fr → 2 col a 620 → 3 col a 1000) y
+   producían lo contrario de lo que dice el sentido común: a 1023 px el
+   cajón todavía es cajón y las tres columnas repartían 972 px (324 px por
+   tarjeta); a 1024 aparece la columna de 252 y las MISMAS tres columnas
+   repartían 708 (228 px por tarjeta). Ensanchar la ventana encogía las
+   miniaturas un 30 % (regla 1).
+
+   `auto-fill` + `minmax(240px, 1fr)` no necesita saber nada de la ventana
+   ni del cajón: mete las columnas que quepan a 240 px o más. No lleva
+   `@container` porque eso pediría un envoltorio en `estudios-screen.tsx`,
+   y aquí no hace falta ninguno — la rejilla intrínseca ya mide el hueco
+   real. El único cambio de aspecto: en el ancho máximo de `.edu-page`
+   (1100 px) entran cuatro tarjetas de 263 px en vez de tres de 358. */
 .edu-estudios {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
-}
-
-@media (min-width: 620px) {
-  .edu-estudios {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1000px) {
-  .edu-estudios {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 .edu-estudio {

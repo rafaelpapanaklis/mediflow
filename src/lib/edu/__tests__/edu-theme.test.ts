@@ -302,3 +302,128 @@ test("cada clase edu-historia que usa la ficha existe en el tema", () => {
     );
   }
 });
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 5 · LA REGRESIÓN QUE COSTÓ UN BOTÓN INALCANZABLE
+ * ═══════════════════════════════════════════════════════════════════════
+ * Historia, para que no se repita: la última columna de la lista de
+ * pacientes subió de 96 a 210 px porque le entró un segundo botón. Nadie
+ * volvió a sumar las seis pistas. El mínimo de la tabla pasó de ~808 a
+ * 922 px, la forma renglón seguía estrenándose a 1180 px de ventana —donde
+ * el contenido mide 864, porque el cajón se come 252 y el padding 64— y el
+ * botón «Expediente» quedaba 41 px fuera. Encima `.edu-table` llevaba un
+ * `overflow: hidden` puesto solo para redondear esquinas, así que el botón
+ * no se recortaba "feo": se volvía INALCANZABLE, sin barra y sin gesto.
+ *
+ * Estas dos pruebas son las reglas 3, 4 y 6 de la cabecera de la hoja,
+ * escritas de forma que fallen si alguien vuelve a tocar una pista sin
+ * volver a sumar.
+ */
+
+/** El ancho mínimo real de una rejilla `--edu-cols`, pista a pista. */
+function anchoMinimoDeTabla(css: string, tabla: string): number {
+  const m = new RegExp(`\\.edu-table--${tabla}\\s*\\{\\s*--edu-cols:\\s*([^;]+);`).exec(
+    sinComentarios(css),
+  );
+  assert.ok(m, `edu-theme.css ya no declara --edu-cols para .edu-table--${tabla}`);
+
+  // Separar por espacios respetando los paréntesis de minmax().
+  const pistas: string[] = [];
+  let hondo = 0;
+  let actual = "";
+  for (const ch of m![1].replace(/\s+/g, " ").trim()) {
+    if (ch === "(") hondo++;
+    if (ch === ")") hondo--;
+    if (ch === " " && hondo === 0) {
+      if (actual) pistas.push(actual);
+      actual = "";
+    } else {
+      actual += ch;
+    }
+  }
+  if (actual) pistas.push(actual);
+
+  let suma = 0;
+  for (const pista of pistas) {
+    // El SUELO de la pista: el primer argumento de minmax(), o el número
+    // a secas. Es lo que la rejilla no puede bajar.
+    const mm = /^minmax\(\s*([0-9.]+)px\s*,/.exec(pista);
+    const px = /^([0-9.]+)px$/.exec(pista);
+    assert.ok(mm || px, `pista con suelo no medible en .edu-table--${tabla}: "${pista}"`);
+    suma += parseFloat((mm ?? px)![1]);
+  }
+
+  const HUECO = 12; // gap del renglón
+  const PADDING = 32; // .edu-row: padding 12px 16px
+  const BORDE = 2; // borde de .edu-table
+  return suma + (pistas.length - 1) * HUECO + PADDING + BORDE;
+}
+
+test("la lista de pacientes no se hace renglón antes de caber (reglas 3 y 6)", () => {
+  const css = crudo(TEMA);
+  const minimo = anchoMinimoDeTabla(css, "pacientes");
+
+  const m = /@container edu-tabla \(min-width:\s*([0-9.]+)px\)/.exec(sinComentarios(css));
+  assert.ok(m, "la lista de pacientes ya no se mide con @container: ¿volvió a medir la ventana?");
+  const umbral = parseFloat(m![1]);
+
+  assert.equal(
+    umbral,
+    minimo,
+    `el umbral de la forma renglón (${umbral} px) no es la suma de las pistas ` +
+      `(${minimo} px). Si acabas de cambiar el ancho de UNA columna, vuelve a sumar las ` +
+      "SEIS y pon ese número en el @container: el corte de «Expediente» nació exactamente " +
+      "de no hacerlo (regla 6).",
+  );
+
+  // Y que quepa donde Rafael trabaja: con la ventana en 1180 px al
+  // contenido le quedan 864 (1180 − 252 del cajón − 64 del padding).
+  assert.ok(
+    minimo <= 864,
+    `la fila pide ${minimo} px y en un portátil de 1180 px solo hay 864: se vería recortada ` +
+      "en toda la franja 1180-1235. Acorta un rótulo o baja una pista (regla 7).",
+  );
+});
+
+test("ninguna tabla dentro de un envoltorio recorta con overflow: hidden (regla 4)", () => {
+  const css = sinComentarios(crudo(TEMA));
+
+  const bloque = /@container edu-tabla \([^)]*\)\s*\{([\s\S]*?)\n\}/.exec(css);
+  assert.ok(bloque, "no se encontró el bloque @container de las listas");
+  assert.ok(
+    !/overflow:\s*hidden/.test(bloque![1]),
+    "vuelve a haber un `overflow: hidden` en la forma renglón de una lista envuelta. " +
+      "Ese overflow estaba ahí solo para redondear esquinas y es lo que dejó el botón " +
+      "«Expediente» inalcanzable: el radio va en `.edu-rowhead` y en la última fila, y el " +
+      "envoltorio se desplaza (regla 4).",
+  );
+  assert.ok(
+    /min-width:\s*fit-content/.test(bloque![1]),
+    "sin `min-width: fit-content` la tabla se encoge al ancho del envoltorio y la rejilla " +
+      "se sale por debajo en vez de hacer que el envoltorio se desplace",
+  );
+});
+
+test("el envoltorio de las listas es el contenedor, y la tabla no", () => {
+  const css = sinComentarios(crudo(TEMA));
+  const wrap = /\.edu-tablewrap\s*\{([\s\S]*?)\}/.exec(css);
+  assert.ok(wrap, "falta el bloque .edu-tablewrap");
+  assert.ok(/container-type:\s*inline-size/.test(wrap![1]));
+  assert.ok(/container-name:\s*edu-tabla/.test(wrap![1]));
+  assert.ok(
+    /overflow-x:\s*auto/.test(wrap![1]),
+    "el envoltorio tiene que desplazarse: es la red de seguridad de la regla 4",
+  );
+
+  // Una consulta de contenedor NO puede dar estilo a su propio contenedor.
+  // Si alguien mueve `container-type` a `.edu-table`, la forma renglón deja
+  // de aplicarse a la tabla (fondo, borde, radio) y nadie ve por qué.
+  const tabla = /\n\.edu-table\s*\{([\s\S]*?)\}/.exec(css);
+  assert.ok(tabla, "falta el bloque base .edu-table");
+  assert.ok(
+    !/container-type/.test(tabla![1]),
+    "`.edu-table` NO puede ser el contenedor: una @container no estiliza a su propio " +
+      "contenedor, así que la tabla se quedaría sin fondo, sin borde y sin radio en " +
+      "escritorio. El contenedor es `.edu-tablewrap`.",
+  );
+});

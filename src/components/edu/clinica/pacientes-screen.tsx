@@ -223,92 +223,123 @@ export function EduPacientesScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--pacientes">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Folio</span>
-            <span>Paciente</span>
-            <span>Contacto</span>
-            <span>Estado</span>
-            <span>Casos</span>
-            <span />
-          </div>
-
-          {rows.map((p) => (
-            <div key={p.id} className={`edu-row ${p.status === "INACTIVE" ? "edu-row--off" : ""}`}>
-              <div className="edu-cell">
-                <span className="edu-cell__label">Folio</span>
-                <span className="edu-cell__value edu-cell__value--strong">{p.folio}</span>
-              </div>
-
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Paciente</span>
-                <span className="edu-cell__value edu-cell__value--strong">
-                  <EduPersonaLink kind="paciente" id={p.id}>
-                    {p.name}
-                  </EduPersonaLink>
-                </span>
-                <span className="edu-cell__sub">
-                  {p.ageYears !== null ? `${p.ageYears} años` : "Sin fecha de nacimiento"}
-                  {p.origin.studentMatricula && (
-                    <>
-                      {" · lo trajo "}
-                      <EduPersonaLink kind="estudiante" id={p.origin.studentId}>
-                        {p.origin.studentMatricula}
-                      </EduPersonaLink>
-                    </>
-                  )}
-                </span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Contacto</span>
-                <span className="edu-cell__value">{p.phone ?? "—"}</span>
-                {p.email && <span className="edu-cell__sub">{p.email}</span>}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Estado</span>
-                <span className={`edu-tag ${TAG_BY_STATUS[p.status]}`}>
-                  {EDU_PATIENT_STATUS_LABELS[p.status]}
-                </span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Casos</span>
-                <span className="edu-cell__value">
-                  {p.openCases > 0 ? `${p.openCases} abierto${p.openCases === 1 ? "" : "s"}` : "—"}
-                </span>
-                {p.totalCases > p.openCases && (
-                  <span className="edu-cell__sub">{p.totalCases} en total</span>
-                )}
-              </div>
-
-              <div className="edu-cell__actions">
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                  onClick={() => {
-                    setFlash(null);
-                    setFicha(p);
-                  }}
-                >
-                  {canManage ? "Ficha" : "Ver"}
-                </button>
-                {/* Ola 3. El modal de arriba sigue siendo el atajo para
-                    corregir un teléfono sin salir de la lista; este enlace
-                    abre la ficha COMPLETA, con el expediente, el
-                    odontograma y los estudios. Cada pestaña de allá exige
-                    su permiso: quien no lo tenga (caja) llega y no ve esas
-                    pestañas. */}
-                <Link
-                  href={`/instituto/pacientes/${p.id}`}
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                >
-                  Expediente
-                </Link>
-              </div>
+        /* `edu-tablewrap` no es decoración: es lo que hace que esta lista
+           se mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo
+           que hace que se DESPLACE en vez de recortar si algún día no
+           cabe. El botón de la última columna quedaba 41 px fuera entre
+           1180 y 1235 px de ventana, recortado por un `overflow: hidden`
+           que estaba ahí solo para redondear las esquinas: sin barra y sin
+           gesto, era inalcanzable. */
+        <div className="edu-tablewrap">
+          <div className="edu-table edu-table--pacientes">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Folio</span>
+              <span>Paciente</span>
+              <span>Contacto</span>
+              <span>Estado</span>
+              <span>Casos</span>
+              <span />
             </div>
-          ))}
+
+            {rows.map((p) => (
+              <div key={p.id} className={`edu-row ${p.status === "INACTIVE" ? "edu-row--off" : ""}`}>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Folio</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{p.folio}</span>
+                </div>
+
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Paciente</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    <EduPersonaLink kind="paciente" id={p.id}>
+                      {p.name}
+                    </EduPersonaLink>
+                  </span>
+                  <span className="edu-cell__sub">
+                    {p.ageYears !== null ? `${p.ageYears} años` : "Sin fecha de nacimiento"}
+                    {p.origin.studentMatricula && (
+                      <>
+                        {" · lo trajo "}
+                        <EduPersonaLink kind="estudiante" id={p.origin.studentId}>
+                          {p.origin.studentMatricula}
+                        </EduPersonaLink>
+                      </>
+                    )}
+                  </span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Contacto</span>
+                  <span className="edu-cell__value">{p.phone ?? "—"}</span>
+                  {p.email && <span className="edu-cell__sub">{p.email}</span>}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Estado</span>
+                  <span className={`edu-tag ${TAG_BY_STATUS[p.status]}`}>
+                    {EDU_PATIENT_STATUS_LABELS[p.status]}
+                  </span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Casos</span>
+                  <span className="edu-cell__value">
+                    {p.openCases > 0 ? `${p.openCases} abierto${p.openCases === 1 ? "" : "s"}` : "—"}
+                  </span>
+                  {p.totalCases > p.openCases && (
+                    <span className="edu-cell__sub">{p.totalCases} en total</span>
+                  )}
+                </div>
+
+                {/* ── LOS DOS BOTONES DE LA FILA ──────────────────────────
+                    Decían «Ficha» y «Expediente», y los dos mentían:
+
+                     · «Expediente» abre `/instituto/pacientes/[id]`, que es
+                       la pestaña RESUMEN. La pestaña «Expediente» de verdad
+                       es otra y exige `expediente.view`, así que quien
+                       viene de caja pulsaba «Expediente» y llegaba a una
+                       ficha donde esa pestaña ni siquiera aparece. Ahora
+                       dice «Ver», que es lo que hace: abrir la ficha.
+
+                     · «Ficha» abre un FORMULARIO DE EDICIÓN (teléfono,
+                       correo, nacimiento, estado, notas y origen). Ahora
+                       dice «Editar», la misma convención que el padrón.
+
+                    Y el rótulo se enseñaba con `canManage`, pero el modal
+                    se pone de solo lectura con `!canManage && !canOrigin`:
+                    alguien con solo `pacientes.origen` leía «Ver» y dentro
+                    podía editar. Ahora la condición es la MISMA en los dos
+                    sitios, y sin permiso de edición el botón no se pinta —
+                    ese modal no aporta nada que el perfil no enseñe mejor.
+
+                    De paso, los rótulos cortos son lo que deja caber la
+                    fila: «Editar»+«Ver» miden 132 px naturales contra los
+                    186 de «Ficha»+«Expediente», y con eso la última pista
+                    baja de 210 a 150 px y el recorte desaparece en toda la
+                    franja 1180-1366. */}
+                <div className="edu-cell__actions">
+                  {(canManage || canOrigin) && (
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      onClick={() => {
+                        setFlash(null);
+                        setFicha(p);
+                      }}
+                    >
+                      Editar
+                    </button>
+                  )}
+                  <Link
+                    href={`/instituto/pacientes/${p.id}`}
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                  >
+                    Ver
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
