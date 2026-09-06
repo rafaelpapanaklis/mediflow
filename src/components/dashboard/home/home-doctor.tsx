@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ChevronRight, FileText, Camera, FileSignature } from "lucide-react";
 import { HomeSection } from "./home-section";
+import styles from "./home.module.css";
 import { Greeting } from "./parts/greeting";
 import { HeroNextPatient } from "./parts/hero-next-patient";
 import { TodayAppointmentRow } from "./parts/today-appointment-row";
@@ -56,15 +57,9 @@ export function HomeDoctor({ user, data }: Props) {
 
       {data.nextAppointment && <HeroNextPatient appt={data.nextAppointment} />}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-          gap: 16,
-          marginBottom: 24,
-        }}
-        className="mf-home-doctor-grid"
-      >
+      {/* Dos columnas iguales; colapsa por ancho de CONTENEDOR, no de
+          viewport (ver home.module.css). */}
+      <div className={`${styles.gridEven} mf-home-doctor-grid`}>
         <HomeSection
           title={t("home.doctor.restOfDayTitle")}
           subtitle={

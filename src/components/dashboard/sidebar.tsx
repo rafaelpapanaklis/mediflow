@@ -497,16 +497,26 @@ export function Sidebar(props: SidebarProps) {
       // colapsado (icon-only) solo opacidad + title nativo.
       if (item.comingSoon) {
         const SoonIcon = item.icon;
+        const soonLabel = t(`sidebar.nav.${item.id}`);
         return (
           <div
             key={item.id}
-            title={collapsed ? "Próximamente" : undefined}
+            title={`${soonLabel} · Próximamente`}
             style={{
               display: "flex",
               alignItems: "center",
               gap: collapsed ? 0 : 10,
+              // El badge baja a una segunda línea cuando no cabe junto al
+              // nombre. A 1280 el sidebar mide 196 px y a la fila le quedan
+              // ~112 px para nombre + pastilla: "Marketplace" (74) + "PRÓXIMAMENTE"
+              // (90) no entran. Envolver conserva las dos cosas enteras; elidir
+              // cualquiera de las dos dejaba texto cortado, que es justo lo que
+              // este arreglo viene a quitar. Con sitio de sobra no envuelve y la
+              // fila se ve exactamente igual que antes.
+              flexWrap: collapsed ? "nowrap" : "wrap",
+              rowGap: 2,
               justifyContent: collapsed ? "center" : "flex-start",
-              padding: collapsed ? "8px 0" : "0 10px 0 12px",
+              padding: collapsed ? "8px 0" : "5px 10px 5px 12px",
               minHeight: 40,
               borderRadius: 8,
               color: "var(--text-2)",
@@ -522,12 +532,31 @@ export function Sidebar(props: SidebarProps) {
             <SoonIcon size={18} strokeWidth={1.75} aria-hidden style={{ flexShrink: 0 }} />
             {!collapsed && (
               <>
-                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {t(`sidebar.nav.${item.id}`)}
-                </span>
+                {/* El nombre del item es la información principal: crece con el
+                    hueco disponible (flex-basis auto = su ancho natural) y sólo
+                    elide cuando ni siquiera cabe él solo. */}
                 <span
                   style={{
-                    marginLeft: "auto",
+                    flex: "1 1 auto",
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {soonLabel}
+                </span>
+                {/* El badge es secundario, así que es el que cede el sitio: en
+                    vez de encogerse hasta quedar en "PRÓXI…" se va a la línea de
+                    abajo (`flexWrap` en la fila). `flexShrink: 0` es lo que fuerza
+                    el salto en lugar del recorte. Sin márgenes automáticos: el
+                    nombre lleva `flex-grow`, así que en una línea ya empuja el
+                    badge contra el borde derecho igual que antes, y al bajar
+                    queda alineado a la izquierda en vez de centrado. */}
+                <span
+                  style={{
+                    flexShrink: 0,
+                    whiteSpace: "nowrap",
                     fontSize: 9,
                     fontWeight: 600,
                     textTransform: "uppercase",
@@ -1370,7 +1399,22 @@ function CollapsibleSection({
         onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-2)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-3)"; }}
       >
-        {label}
+        {/* El rótulo va en su propio <span> elidible: "ADMINISTRACIÓN" es una
+            sola palabra (uppercase + letter-spacing) y no puede envolver, así
+            que sin esto lo recortaba a pelo el `overflowX:hidden` del <nav>
+            ancestro, sin puntos suspensivos. Mismo patrón que renderItem. */}
+        <span
+          title={label}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </span>
         <ChevronDown
           size={14}
           aria-hidden

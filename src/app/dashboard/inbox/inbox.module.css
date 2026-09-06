@@ -82,7 +82,10 @@
   --ib-avatar-border: #fff;    /* aro del badge de canal */
 
   display: grid;
-  grid-template-columns: 264px 384px 1fr;
+  /* minmax(0, …) en las dos pistas fijas: 264+384 eran 648 px innegociables, así
+     que con un contenedor por debajo de eso el grid pedía más de lo que había.
+     Con el mínimo en 0 nadie pide de más y el reparto sigue igual cuando sobra. */
+  grid-template-columns: minmax(0, 264px) minmax(0, 384px) minmax(0, 1fr);
   /* Fallback 100vh para browsers viejos; 100dvh evita el bottom bar de
      iOS Safari que comía 80px del viewport en mobile. */
   height: calc(100vh - 64px);
@@ -172,6 +175,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 .sidebarTop {
@@ -330,6 +334,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 .listHeader {
@@ -692,11 +697,13 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--ib-chat);
   overflow: hidden;
 }
 .convHeader {
   min-height: 64px;
+  min-width: 0;
   background: var(--ib-surface);
   border-bottom: 1px solid var(--ib-border-conv);
   display: flex;
@@ -1052,7 +1059,7 @@
   background: #000;
   margin-bottom: 6px;
 }
-.mediaAudio { display: block; max-width: 260px; width: 260px; height: 36px; margin-bottom: 6px; }
+.mediaAudio { display: block; max-width: 260px; width: 100%; height: 36px; margin-bottom: 6px; }
 .mediaDoc {
   display: inline-flex;
   align-items: center;
@@ -1278,10 +1285,16 @@
   align-items: center;
   gap: 2px;
   padding: 6px 0 12px 12px;
+  /* min-width:0 deja que la pista "icons" (auto) baje de su min-content cuando
+     el composer va justo; los botones no encogen, solo cede el texto de
+     .mentionBtn. Sin esto la rejilla pedía más ancho del que hay y .composer
+     (overflow:hidden) recortaba el botón de enviar. */
+  min-width: 0;
 }
 .composerIconBtn {
   width: 32px;
   height: 32px;
+  flex-shrink: 0;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -1297,9 +1310,14 @@
 .composerNote .composerIconBtn { color: var(--ib-amber); }
 .composerNote .composerIconBtn:hover:not(:disabled) { background: var(--ib-amber-bg-2); color: var(--ib-amber); }
 .mentionBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+  /* inline-block y no inline-flex: el rótulo es un único texto y así puede
+     elidir con "…" en vez de empujar al botón de enviar fuera del composer. */
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 32px;
   border: none;
   background: transparent;
   color: var(--ib-amber);
@@ -1316,13 +1334,23 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px 12px 0;
+  min-width: 0;
 }
-.sendHint { font-size: 11px; color: var(--ib-text-4); white-space: nowrap; }
+/* La pista cede por aquí: la pista se trunca, el botón nunca. */
+.sendHint {
+  font-size: 11px;
+  color: var(--ib-text-4);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .sendBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
+  flex-shrink: 0;
   background: var(--ib-brand);
   color: #fff;
   border: none;
@@ -1555,6 +1583,58 @@
   .mobileMenuBtn { display: inline-flex; }
 }
 
+/* ── Panel estrecho: el mismo corte, pero midiendo el CONTENEDOR ──────────────
+   El @media de arriba mide el VIEWPORT y por eso nunca disparaba en el caso que
+   duele: a viewport 1280 con el sidebar del panel abierto el <main> mide 1031 px
+   y la conversación se quedaba con 383 px — encabezado del paciente reducido a
+   ~43 px (de ahí el recorte) y composer de 351 px cuando necesita ~440 en modo
+   "Nota interna" (de ahí el botón de enviar cortado por overflow:hidden).
+
+   data-narrow lo pone inbox-client midiendo .page con un ResizeObserver. NO se
+   usa @container a propósito: container-type convierte al elemento en bloque
+   contenedor de sus descendientes position:fixed, y dentro de .page hay cinco
+   (.sidebar como drawer, .mobileBackdrop, .menuBackdrop, .fab y .detailCol en
+   móvil). Anclarlos a .page cambiaría dónde se ven — .detailCol en móvil arranca
+   con top:64px contado desde el viewport, y .menuBackdrop cubre hoy la pantalla
+   entera a CUALQUIER ancho. Medir en JS deja el contrato de position:fixed
+   exactamente como está.
+
+   Umbral 1140 px: por debajo, 264+384 fijos dejan la conversación con menos de
+   los ~490 px que pide el composer en modo nota. Por encima nada cambia
+   (1159 = 1280 colapsado, 1180 = 1440 abierto, 1314 = 1440 colapsado).
+
+   Envuelto en min-width:1200px a propósito: por debajo de 1200 ya manda el
+   @media de arriba (tablet) y el de móvil, que se quedan EXACTAMENTE como hoy.
+   Este bloque solo cubre el hueco que nadie cubría: viewport ancho + contenedor
+   estrecho porque el sidebar del panel está abierto. */
+@media (min-width: 1200px) {
+  .page[data-narrow="true"] {
+    grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+    position: relative;
+  }
+  /* absolute y no fixed: a estos anchos el sidebar GLOBAL del dashboard sigue
+     visible, y un drawer fijo al viewport se lo comería. Con .page en
+     position:relative el cajón se queda dentro del panel del Inbox — y no hace
+     falta container-type para lograrlo. */
+  .page[data-narrow="true"] .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(280px, 78%);
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform var(--dur-2) var(--ease);
+    box-shadow: var(--shadow-3);
+  }
+  .page[data-narrow="true"][data-mobile-sidebar-open="true"] .sidebar { transform: translateX(0); }
+  .page[data-narrow="true"][data-mobile-sidebar-open="true"] .mobileBackdrop {
+    display: block;
+    position: absolute;
+  }
+  .page[data-narrow="true"] .mobileMenuBtn { display: inline-flex; }
+}
+
 /* ── Móvil (≤767): lista → detalle en una columna (patrón 1c/1d) ── */
 @media (max-width: 767px) {
   .page { grid-template-columns: 1fr; }
@@ -1640,6 +1720,9 @@
   .detailCol,
   .rowRemove,
   .rowTime,
+  /* El del modo estrecho pesa (0,2,0): sin igualarlo, la animación del cajón
+     se colaba justo para quien ha pedido que no haya animaciones. */
+  .page[data-narrow="true"] .sidebar,
   .rowWait { transition: none; }
   .pulseDot,
   .needDot { animation: none; }
