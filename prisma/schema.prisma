@@ -16221,3 +16221,88 @@ model CrmTemplate {
   @@index([vertical])
   @@map("crm_templates")
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ASISTENTE IA CLÍNICO — HISTORIAL DE CONVERSACIONES (sep 2026)
+//
+// Hasta hoy el historial del Asistente IA vivía SOLO en localStorage del
+// navegador, bajo una clave global sin usuario ni clínica ("mf:ai-conversations:v1").
+// Eso fallaba en tres frentes: no se veía desde otra máquina, se perdía al
+// limpiar caché, y en un equipo compartido cualquiera veía las conversaciones
+// clínicas de otro (la clave no discriminaba ni usuario ni clínica).
+//
+// Estas dos tablas mueven el historial al servidor, aislado por clinicId +
+// userId. NO tienen relación Prisma con Clinic ni con User a propósito: es el
+// MISMO patrón de la familia Ai* del monedero (AiWallet, AiUsageEvent,
+// AiWalletTransaction, AiTopup), que declara la FK con ON DELETE CASCADE en el
+// SQL a mano (sql/ai-assistant-conversations.sql) para no tener que añadir
+// back-relations al modelo Clinic. El aislamiento efectivo NO depende de la FK:
+// lo pone el where de cada query (@/lib/ai-assistant/conversations).
+//
+// Requiere sql/ai-assistant-conversations.sql aplicado en Supabase. Sin él,
+// las rutas de /api/ai-assistant responden 503 storage_unavailable y el chat
+// sigue funcionando sin guardar (fail-open, igual que addAiTokens).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Una conversación del Asistente IA Clínico. Pertenece a UNA persona dentro de
+/// UNA clínica: la misma persona en dos sedes tiene dos historiales, igual que
+/// tiene dos filas en `users`.
+model AiConversation {
+  id       String @id @default(cuid())
+  clinicId String
+  /// users.id de quien la escribió. Obligatorio: sin dueño el historial se
+  /// volvería a compartir entre todo el equipo, que es justo el bug que esto cierra.
+  userId   String
+
+  /// Se deriva del primer mensaje (60 chars) y se puede renombrar a mano.
+  title    String
+  /// Sección de la barra lateral: clinico | admin | pacientes. Se llama
+  /// `groupKey` y no `group` porque GROUP es palabra reservada de SQL y una
+  /// columna así obliga a entrecomillar en todo DDL escrito a mano.
+  groupKey String @default("clinico")
+
+  /// id que tenía la conversación en el localStorage del navegador, cuando
+  /// llegó por la migración de una sola vez. NULL en todo lo nacido ya en la
+  /// base. Es la llave de idempotencia: el índice único de abajo hace que
+  /// reintentar la migración (dos pestañas, un 500 a medias) no duplique nada.
+  /// NULL no colisiona con NULL en Postgres, así que no estorba al resto.
+  legacyId String?
+
+  createdAt DateTime @default(now())
+  /// Lleva `@default(now())` además de `@updatedAt` para que cuadre EXACTO con
+  /// el `DEFAULT CURRENT_TIMESTAMP` del .sql escrito a mano: sin el default, un
+  /// `prisma migrate diff` contra la base pediría quitarlo. El cliente sigue
+  /// moviendo la marca en cada escritura, que es lo que ordena la barra lateral.
+  updatedAt DateTime @default(now()) @updatedAt
+
+  messages AiConversationMessage[]
+
+  /// Listado de la barra lateral: las mías, de esta clínica, por actividad reciente.
+  @@index([clinicId, userId, updatedAt])
+  @@unique([clinicId, userId, legacyId])
+  @@map("ai_conversations")
+}
+
+/// Un turno de la conversación. `role` es "user" | "assistant" (texto y no enum
+/// para no añadir un tipo al schema por dos valores).
+///
+/// clinicId/userId van DENORMALIZADOS aposta: son defensa en profundidad, para
+/// que una lectura de mensajes pueda llevar el filtro de tenant sin depender de
+/// que quien la escriba se acuerde de pasar por la conversación.
+model AiConversationMessage {
+  id             String @id @default(cuid())
+  conversationId String
+  clinicId       String
+  userId         String
+
+  role    String
+  content String @db.Text
+
+  createdAt DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([clinicId, createdAt])
+  @@map("ai_conversation_messages")
+}
