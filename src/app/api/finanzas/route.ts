@@ -5,8 +5,10 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import {
   CASH_METHOD,
   money,
+  netRevenueSeries,
   overdueInvoiceWhere,
   receivableInvoiceWhere,
+  refundPaymentWhere,
   revenuePaymentWhere,
 } from "@/lib/caja";
 import { MX_OFFSET_MS, bucketKeyOf, eachBucket } from "@/lib/analytics/query";
@@ -96,20 +98,20 @@ export async function GET(req: NextRequest) {
   try {
     const todayStart = startOfTodayMx(new Date());
 
-    // Ingresos = pagos del periodo SIN reembolsos ni facturas canceladas
-    // (revenuePaymentWhere, el mismo criterio que el home y la agenda). Antes
-    // el aggregate sumaba TODO Payment: un reembolso (method "refund", monto
-    // positivo) entraba como ingreso y la utilidad salía inflada.
+    // Cobros del periodo SIN reembolsos ni facturas canceladas
+    // (revenuePaymentWhere, el mismo criterio que el home y la agenda). Ojo:
+    // esto excluye la FILA del reembolso, no el pago original — el neto se
+    // calcula abajo con netRevenueSeries.
     const revenueWhere = revenuePaymentWhere(clinicId, { gte: from, lte: to });
 
     // Lote 1 — agregados (máx 6 promesas por Promise.all, regla del repo).
-    const [ingresosAgg, efectivoAgg, ventas, citas, porCobrarAgg, vencidoAgg] = await Promise.all([
-      // ingresos: pagos del periodo (paidAt), aislados vía invoice.clinicId.
-      prisma.payment.aggregate({
-        _sum:  { amount: true },
-        where: revenueWhere,
-      }),
+    const [efectivoAgg, ventas, citas, porCobrarAgg, vencidoAgg] = await Promise.all([
       // efectivo: mismo criterio que caja.ts (method === "cash").
+      //
+      // ⚠️ Es efectivo RECIBIDO (así se etiqueta en la UI) y va en BRUTO: el
+      // reembolso no guarda con qué método salió el dinero (ver
+      // sql/payment-refund-method.sql), así que restarle TODOS los reembolsos
+      // descontaría también los que salieron por transferencia o tarjeta.
       prisma.payment.aggregate({
         _sum:  { amount: true },
         where: { ...revenueWhere, method: CASH_METHOD },
@@ -142,11 +144,18 @@ export async function GET(req: NextRequest) {
 
     // Lote 2 — filas del periodo para serie/porDoctor (se agrupan en JS; un
     // mes son cientos de filas). Los gastos toleran tabla faltante (P2021).
-    const [paymentRows, invoiceRows, expenseRows] = await Promise.all([
-      // Misma exclusión de reembolsos/canceladas que `ingresos`: la serie
-      // diaria debe sumar lo mismo que el KPI.
+    const [paymentRows, refundRows, invoiceRows, expenseRows] = await Promise.all([
+      // El KPI de ingresos y la serie diaria salen de ESTAS MISMAS filas, así
+      // que la suma de la serie es el KPI por construcción, no por casualidad.
       prisma.payment.findMany({
         where:  revenueWhere,
+        select: { amount: true, paidAt: true },
+      }),
+      // Reembolsos del periodo (espejo exacto de revenueWhere): lo devuelto se
+      // RESTA. Sin esto, un cobro de $10,000 reembolsado completo dentro del
+      // mismo mes seguía reportando $10,000 de ingresos y de utilidad.
+      prisma.payment.findMany({
+        where:  refundPaymentWhere(clinicId, { gte: from, lte: to }),
         select: { amount: true, paidAt: true },
       }),
       prisma.invoice.findMany({
@@ -164,13 +173,12 @@ export async function GET(req: NextRequest) {
         }),
     ]);
 
+    // Ingresos NETOS del periodo (cobros − reembolsos) y su reparto por día.
+    // El reembolso resta en el día en que se devolvió el dinero.
+    const neto = netRevenueSeries(paymentRows, refundRows, (d) => bucketKeyOf(d, "day"));
+
     // serie: un punto POR DÍA del periodo (días sin datos = 0), hora MX,
     // orden cronológico (eachBucket ya lo garantiza).
-    const ingresosPorDia: Record<string, number> = {};
-    for (const p of paymentRows) {
-      const k = bucketKeyOf(p.paidAt, "day");
-      ingresosPorDia[k] = (ingresosPorDia[k] ?? 0) + (p.amount ?? 0);
-    }
     const gastosPorDia: Record<string, number> = {};
     let gastosTotal = 0;
     for (const g of expenseRows) {
@@ -180,7 +188,7 @@ export async function GET(req: NextRequest) {
     }
     const serie = eachBucket(from, to, "day").map((fecha) => ({
       fecha,
-      ingresos: money(ingresosPorDia[fecha] ?? 0),
+      ingresos: money(neto.porBucket[fecha] ?? 0),
       gastos:   money(gastosPorDia[fecha] ?? 0),
     }));
 
@@ -217,10 +225,14 @@ export async function GET(req: NextRequest) {
     }
     porDoctor.sort((a, b) => b.ingresos - a.ingresos);
 
-    const ingresos = ingresosAgg._sum.amount ?? 0;
+    const ingresos = neto.ingresos;
 
     return NextResponse.json({
       ingresos: money(ingresos),
+      // Lo devuelto en el periodo, ya restado de `ingresos`. Clave ADITIVA (el
+      // contrato no se renombra): la UI puede mostrarlo sin otra consulta y el
+      // dueño ve de dónde salió la caída del número.
+      reembolsos: money(neto.reembolsos),
       gastos:   money(gastosTotal),
       utilidad: money(ingresos - gastosTotal),
       ventas,
