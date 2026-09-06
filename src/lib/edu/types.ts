@@ -1375,3 +1375,146 @@ export const EDU_INSTALLMENT_STATUS_DESCRIPTIONS: Record<EduInstallmentStatus, s
   PAGADA: "Tiene su pago registrado. El recibo dice cuándo y quién lo recibió.",
   VENCIDA: "Pasó su fecha sin pago. Lo dice el calendario en cada lectura, no un proceso nocturno.",
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA B · LA FOTO CLÍNICA Y LOS TRES ENUMS NUEVOS DE LA FICHA.
+//
+// Los cinco son espejo 1:1 de los enums de Prisma, escritos como uniones
+// de strings para poder importarlos desde componentes "use client" sin
+// arrastrar el runtime de Prisma al navegador — igual que todos los
+// anteriores. El candado de que no se desincronicen es un chequeo de
+// TIPOS en src/lib/edu/__tests__/edu-fotos.test.ts (lo verifica
+// `tsc --noEmit`, y por lo tanto `next build`).
+//
+// Y la regla de siempre: la UI JAMÁS pinta el valor del enum.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * LA ETAPA de una foto clínica.
+ *
+ * 🔴 ES TODO EL ANTES/DESPUÉS. El comparador no empareja fotos por ningún
+ * algoritmo: ordena por `capturedAt` y propone A = la primera PRE y B = la
+ * última POST o CONTROL. Toda la inteligencia del "antes y después" está
+ * en este campo — nada más.
+ *
+ * El orden del array ES el orden en que se pinta la galería, y por eso
+ * vive aquí y no dentro de un componente.
+ */
+export type EduPhotoStage = "PRE" | "DURANTE" | "POST" | "CONTROL";
+
+export const EDU_PHOTO_STAGES: EduPhotoStage[] = ["PRE", "DURANTE", "POST", "CONTROL"];
+
+export const EDU_PHOTO_STAGE_LABELS: Record<EduPhotoStage, string> = {
+  PRE: "Antes",
+  DURANTE: "Durante",
+  POST: "Después",
+  CONTROL: "Control",
+};
+
+export const EDU_PHOTO_STAGE_DESCRIPTIONS: Record<EduPhotoStage, string> = {
+  PRE: "Cómo llegó el paciente, antes de tocar nada. Es la mitad izquierda del comparador.",
+  DURANTE: "El tratamiento en marcha: una fase, una prueba, un provisional.",
+  POST: "Al terminar el tratamiento. Es la mitad derecha del comparador.",
+  CONTROL: "Una revisión posterior: a los seis meses, al año. También sirve de “después”.",
+};
+
+/**
+ * LA VISTA: desde dónde se tomó la foto.
+ *
+ * Diez valores y no los cuarenta del dental: aquél mezcla las vistas de
+ * endodoncia, periodoncia e implantes de sus módulos de especialidad, que
+ * aquí no existen. `OTRA` es el default a propósito — obligar a clasificar
+ * antes de subir produce datos inventados, y la vista se corrige después.
+ */
+export type EduPhotoType =
+  | "FRONTAL"
+  | "SONRISA"
+  | "PERFIL_DER"
+  | "PERFIL_IZQ"
+  | "OCLUSAL_SUP"
+  | "OCLUSAL_INF"
+  | "INTRAORAL_FRONTAL"
+  | "INTRAORAL_DER"
+  | "INTRAORAL_IZQ"
+  | "OTRA";
+
+export const EDU_PHOTO_TYPES: EduPhotoType[] = [
+  "FRONTAL",
+  "SONRISA",
+  "PERFIL_DER",
+  "PERFIL_IZQ",
+  "OCLUSAL_SUP",
+  "OCLUSAL_INF",
+  "INTRAORAL_FRONTAL",
+  "INTRAORAL_DER",
+  "INTRAORAL_IZQ",
+  "OTRA",
+];
+
+export const EDU_PHOTO_TYPE_LABELS: Record<EduPhotoType, string> = {
+  FRONTAL: "Frontal",
+  SONRISA: "Sonrisa",
+  PERFIL_DER: "Perfil derecho",
+  PERFIL_IZQ: "Perfil izquierdo",
+  OCLUSAL_SUP: "Oclusal superior",
+  OCLUSAL_INF: "Oclusal inferior",
+  INTRAORAL_FRONTAL: "Intraoral frontal",
+  INTRAORAL_DER: "Intraoral derecha",
+  INTRAORAL_IZQ: "Intraoral izquierda",
+  OTRA: "Otra",
+};
+
+/**
+ * EMBARAZO / LACTANCIA del paciente.
+ *
+ * 🔴 La columna es NULLABLE y `DESCONOCIDO` está en el enum, y no es
+ * redundante: `null` = nadie preguntó · `DESCONOCIDO` = se preguntó y no
+ * se sabe. Es la misma distinción que ya hace `historyRecordedAt` con los
+ * antecedentes.
+ */
+export type EduPregnancy = "NO" | "EMBARAZO" | "LACTANCIA" | "DESCONOCIDO";
+
+export const EDU_PREGNANCY_VALUES: EduPregnancy[] = ["NO", "EMBARAZO", "LACTANCIA", "DESCONOCIDO"];
+
+export const EDU_PREGNANCY_LABELS: Record<EduPregnancy, string> = {
+  NO: "No",
+  EMBARAZO: "Embarazo",
+  LACTANCIA: "Lactancia",
+  DESCONOCIDO: "No lo sabe",
+};
+
+/** Lo que la ficha enseña cuando la columna está vacía. */
+export const EDU_PREGNANCY_SIN_DATO = "No se ha preguntado";
+
+/** Por dónde quiere que le hablen. `NINGUNO` es una respuesta, no un vacío. */
+export type EduContactPreference = "WHATSAPP" | "LLAMADA" | "CORREO" | "NINGUNO";
+
+export const EDU_CONTACT_PREFERENCES: EduContactPreference[] = [
+  "WHATSAPP",
+  "LLAMADA",
+  "CORREO",
+  "NINGUNO",
+];
+
+export const EDU_CONTACT_PREFERENCE_LABELS: Record<EduContactPreference, string> = {
+  WHATSAPP: "WhatsApp",
+  LLAMADA: "Llamada",
+  CORREO: "Correo",
+  NINGUNO: "No quiere que le contacten",
+};
+
+/**
+ * CUÁNTO, para los tres hábitos que le importan a una escuela dental.
+ * Enum y no texto libre: lo que se escribe a mano no se puede filtrar ni
+ * alertar. El detalle en palabras va en `habitsNotes`.
+ */
+export type EduHabitLevel = "NO" | "OCASIONAL" | "FRECUENTE" | "DESCONOCIDO";
+
+export const EDU_HABIT_LEVELS: EduHabitLevel[] = ["NO", "OCASIONAL", "FRECUENTE", "DESCONOCIDO"];
+
+export const EDU_HABIT_LEVEL_LABELS: Record<EduHabitLevel, string> = {
+  NO: "No",
+  OCASIONAL: "Ocasional",
+  FRECUENTE: "Frecuente",
+  DESCONOCIDO: "No lo sabe",
+};
