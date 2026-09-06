@@ -235,6 +235,45 @@ export function expectedCfdiTotal(
 }
 
 /**
+ * Qué tan lejos quedó el importe REALMENTE timbrado del total guardado.
+ *
+ *   "match"     → el CFDI salió por el importe de la factura.
+ *   "rounding"  → difieren, pero dentro de la tolerancia de redondeo por línea.
+ *   "material"  → difieren MÁS de lo que el redondeo puede explicar.
+ *   "unknown"   → Facturapi no devolvió un total legible: no se puede afirmar
+ *                 que cuadre, y eso también hay que poder verlo.
+ *
+ * Se contrasta DESPUÉS de timbrar contra `result.total` de Facturapi — el hecho,
+ * no la predicción. La guarda previa compara `expectedCfdiTotal` (criterio por
+ * concepto) contra `invoice.total` (criterio agregado) y tiene que ser permisiva
+ * para no bloquear un timbrado válido; por eso su tolerancia absorbe justo la
+ * divergencia entre ambos criterios (hasta 2¢ con 8 conceptos). Aquí esa misma
+ * tolerancia NO decide si hay constancia, solo si el aviso es para un humano:
+ * "rounding" es diferencia real y queda registrada igual. Reutilizarla como
+ * único filtro dejaba el caso común —el de la divergencia de criterio— sin
+ * rastro en ninguna parte, que es exactamente lo que había que terminar.
+ */
+export type CfdiStampedLevel = "match" | "rounding" | "material" | "unknown";
+
+export function cfdiStampedCheck(
+  stampedTotalRaw: unknown,
+  invoiceTotal: number,
+  tolerance: number,
+): { level: CfdiStampedLevel; stampedTotal: number | null; diff: number | null } {
+  const raw = Number(stampedTotalRaw);
+  // > 0 y no un total "0" fantasma: un CFDI de ingreso timbrado nunca vale 0.
+  if (!isFinite(raw) || raw <= 0) return { level: "unknown", stampedTotal: null, diff: null };
+  const stampedTotal = round2(raw);
+  const own = Number(invoiceTotal);
+  const diff = round2(Math.abs(stampedTotal - round2(isFinite(own) ? own : 0)));
+  // round2 en la diferencia: el ruido de punto flotante no es una divergencia.
+  // A partir de 1¢ sí lo es, y a partir de 1¢ hay constancia.
+  if (diff <= 0) return { level: "match", stampedTotal, diff: 0 };
+  const tol = Number(tolerance);
+  return { level: diff > (isFinite(tol) ? tol : 0) ? "material" : "rounding", stampedTotal, diff };
+}
+
+/**
  * Renglones de dinero que el COMPROBANTE IMPRESO tiene que enseñar para que sus
  * columnas cuadren con su TOTAL.
  *

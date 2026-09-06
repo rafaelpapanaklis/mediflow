@@ -14,7 +14,7 @@ import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
 import { cfdiPeriodFor, cfdiOverage } from "@/lib/cfdi-quota";
 import {
-  expectedCfdiTotal, spreadInvoiceDiscount,
+  expectedCfdiTotal, spreadInvoiceDiscount, cfdiStampedCheck,
   derivePaymentForm, resolveTaxMode, itemQuantity, itemUnitPrice,
   itemDiscount, round2, type CfdiTaxMode,
 } from "@/lib/invoice-totals";
@@ -287,14 +287,28 @@ export async function POST(req: NextRequest) {
     // CfdiRecord.total y ahí moría: no se comparaba jamás contra nada, así que
     // una diferencia entre lo cobrado y lo timbrado era invisible aunque la
     // guarda de arriba hubiera pasado (compara nuestra PREDICCIÓN, no el hecho).
-    // El timbrado ya no se deshace, así que esto NO corta el flujo: deja
-    // constancia en el log del servidor y en el audit log, y devuelve el aviso
-    // para que quien timbró lo vea antes de entregar el comprobante.
-    const rawStamped   = Number(result.total);
-    const stampedKnown = isFinite(rawStamped) && rawStamped > 0;
-    const stampedTotal = round2(rawStamped);
-    const stampedDiff  = stampedKnown ? round2(Math.abs(stampedTotal - invoice.total)) : 0;
-    const totalWarning = stampedKnown && stampedDiff > tolerance
+    //
+    // El timbrado ya no se deshace, así que esto NO corta el flujo NUNCA: el CFDI
+    // ya existe ante el SAT y tumbar la petición solo perdería el CfdiRecord.
+    // Se reparte en dos niveles, a propósito:
+    //
+    //   CONSTANCIA (toda diferencia ≥1¢, sin tolerancia) → audit log + log del
+    //     servidor. Es lo que el DUEÑO puede consultar después en
+    //     /dashboard/auditoria (admin-only) para detectar que sus CFDIs no
+    //     cuadran. Sin esto la divergencia de criterio —el caso COMÚN con IVA
+    //     agregado: hasta 2¢ con 8 conceptos, dentro de la tolerancia— no dejaba
+    //     rastro en ninguna parte.
+    //   AVISO (solo si excede la tolerancia de redondeo) → `warning` en la
+    //     respuesta, que el modal convierte en toast. Se reserva para lo que un
+    //     humano tiene que MIRAR antes de entregar el comprobante: a quien está
+    //     en el mostrador con un paciente enfrente, un centavo de redondeo no le
+    //     sirve de nada y le enseñaría un error técnico que no puede resolver.
+    const stamped = cfdiStampedCheck(result.total, invoice.total, tolerance);
+    const stampedTotal = stamped.stampedTotal;
+    const stampedRecord = stamped.level === "match"
+      ? null
+      : { invoiceTotal: invoice.total, stampedTotal, diff: stamped.diff, level: stamped.level };
+    const totalWarning = stamped.level === "material" && stampedTotal !== null
       ? {
           code:         "CFDI_STAMPED_TOTAL_DIFFERS",
           invoiceTotal: invoice.total,
@@ -302,8 +316,12 @@ export async function POST(req: NextRequest) {
           message: `El CFDI se timbró por $${stampedTotal.toFixed(2)} y la factura dice $${invoice.total.toFixed(2)}. El comprobante fiscal YA está emitido: revísalo antes de entregarlo.`,
         }
       : null;
-    if (totalWarning) {
-      console.error("CFDI stamped total mismatch:", { invoiceId, uuid: result.uuid, ...totalWarning });
+    if (stampedRecord) {
+      // error solo para lo accionable; el resto queda como warn para poder
+      // medirlo en los logs sin gritar en el 34% de los timbrados con IVA
+      // agregado, donde la diferencia es la del criterio de cálculo.
+      const log = stamped.level === "material" ? console.error : console.warn;
+      log("CFDI stamped total differs:", { invoiceId, uuid: result.uuid, ...stampedRecord });
     }
 
     // Metering del cupo CFDI: SOLO tras timbrado exitoso. El contador del mes
@@ -356,7 +374,7 @@ export async function POST(req: NextRequest) {
         cfdiUuid: result.uuid,
         cfdi: {
           total: result.total, paymentForm: payForm, taxMode, unpaidPueConfirmed: !fullyPaid,
-          ...(totalWarning ? { totalMismatch: { invoiceTotal: invoice.total, stampedTotal, diff: stampedDiff } } : {}),
+          ...(stampedRecord ? { totalMismatch: stampedRecord } : {}),
         },
       },
     });
