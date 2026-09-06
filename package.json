@@ -79,6 +79,7 @@
     "test:plan-status": "tsx --test src/lib/__tests__/plan-status.test.ts src/lib/__tests__/plan-status-guard.test.ts src/lib/clinical-shared/__tests__/trial-vs-paying.test.ts",
     "test:blog-import": "tsx --test src/lib/blog/__tests__/import-drip.test.ts",
     "test:invoice-due-date": "tsx --test src/lib/invoices/__tests__/due-date.test.ts",
+    "test:invoice-money": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/invoice-money.test.ts",
     "test:quote-invoice": "tsx --test src/lib/quotes/__tests__/invoice-from-quote-core.test.ts",
     "//test:receta-verify": "Necesita --experimental-test-module-mocks: el test ejecuta LOS DOS route handlers de la verificacion publica de recetas (el JSON y el PDF) con Prisma y el renderer sustituidos, para comprobar que enmascaran igual. Sin el flag, mock.module lanza y no corre nada. Y --tsconfig tsconfig.test.json porque el arbol del PDF es JSX (prescription-document.tsx) y el tsconfig de la app deja jsx en preserve.",
     "test:receta-verify": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/pdf/__tests__/receta-verificacion-publica.test.ts",

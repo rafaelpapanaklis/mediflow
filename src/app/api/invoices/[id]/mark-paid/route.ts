@@ -6,6 +6,8 @@ import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { round2 } from "@/lib/invoice-totals";
+import { CASH_METHOD } from "@/lib/caja";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -14,6 +16,23 @@ async function getCtx() {
   const ctx = await getAuthContext();
   if (!ctx) return null;
   return { clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role, permissionsOverride: ctx.permissionsOverride };
+}
+
+/**
+ * Aviso cuando este atajo cobra EFECTIVO sin un turno de caja abierto. Gemelo
+ * del de POST /api/invoices/[id] — mismo criterio y mismo texto: no se bloquea
+ * el cobro (dejaría sin cobrar a una clínica que no usa Caja), se marca el
+ * Payment para que el dinero sea rastreable cuando ningún corte lo recoja.
+ * Aquí el pago es siempre `now`, así que no hay fecha que comparar.
+ */
+async function cashOutsideRegisterWarning(clinicId: string, method: unknown): Promise<string | null> {
+  if (method !== CASH_METHOD) return null;
+  const open = await prisma.cashRegister.findFirst({
+    where:   { clinicId, status: "OPEN" },
+    orderBy: { openedAt: "desc" },
+    select:  { id: true },
+  });
+  return open ? null : "Efectivo cobrado sin caja abierta — no entra en ningún corte";
 }
 
 // POST /api/invoices/[id]/mark-paid — body { method?: string }
@@ -49,6 +68,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const now = new Date();
+  // Fuera de la transacción: es una lectura y no tiene por qué alargar el lock.
+  const cashWarning = await cashOutsideRegisterWarning(clinicId, payMethod);
 
   // Lectura + escritura con lock de fila (FOR UPDATE): serializa contra el
   // webhook de pago en línea del portal del paciente (online-payment.ts) y
@@ -60,27 +81,58 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (invoice.status === "DRAFT")     return { error: "Confirma la factura antes de marcarla pagada", status: 400 };
     if (invoice.status === "CANCELLED") return { error: "La factura está cancelada", status: 400 };
     if (invoice.status === "PAID")      return { error: "La factura ya está pagada", status: 400 };
-    if (invoice.balance <= 0)           return { error: "No hay saldo pendiente", status: 400 };
 
-    const amount = invoice.balance;
-    await tx.payment.create({ data: { invoiceId: params.id, amount, method: payMethod, paidAt: now } });
+    // El saldo a cobrar sale del invariante total − paid, NO de la columna
+    // `balance`: esa arrastra el ruido de los abonos anteriores y con ella este
+    // atajo creaba un Payment de $0.0000000000001 (y lo sumaba al corte).
+    const amount = round2(invoice.total - invoice.paid);
+
+    // Sin saldo y sin pagos no hay nada que saldar (factura en $0): se conserva
+    // el 400 de siempre.
+    if (amount <= 0 && invoice.paid <= 0) return { error: "No hay saldo pendiente", status: 400 };
+
+    // Saldo fantasma: la factura ya está cubierta al centavo pero se quedó en
+    // PARTIAL por ese ruido. Se salda SIN crear un Payment: no hay dinero nuevo
+    // que registrar, y bloquearla dejaría la factura imposible de cerrar.
+    if (amount <= 0) {
+      await tx.invoice.updateMany({
+        where: { id: params.id, clinicId },
+        data:  { paid: round2(invoice.paid), balance: 0, status: "PAID", paidAt: now },
+      });
+      return { invoice, amount: 0 };
+    }
+
+    await tx.payment.create({
+      data: {
+        invoiceId: params.id, amount, method: payMethod, paidAt: now,
+        ...(cashWarning ? { notes: `⚠️ ${cashWarning}` } : {}),
+      },
+    });
     await tx.invoice.updateMany({
       where: { id: params.id, clinicId },
-      data:  { paid: invoice.paid + amount, balance: 0, status: "PAID", paidAt: now, paymentMethod: payMethod },
+      data:  { paid: round2(invoice.paid + amount), balance: 0, status: "PAID", paidAt: now, paymentMethod: payMethod },
     });
     return { invoice, amount };
   });
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
   const { invoice, amount } = result;
 
+  if (cashWarning && amount > 0) {
+    console.error(`[invoices] ${cashWarning}`, { invoiceId: params.id, clinicId, amount });
+  }
+
   await logMutation({
     req, clinicId, userId: ctx.userId,
     entityType: "invoice", entityId: params.id, action: "update",
     before: { paid: invoice.paid, balance: invoice.balance, status: invoice.status },
-    after:  { paid: invoice.paid + amount, balance: 0, status: "PAID", payment: { amount, method: payMethod, shortcut: "mark-paid" } },
+    after:  {
+      paid: round2(invoice.paid + amount), balance: 0, status: "PAID",
+      payment: { amount, method: payMethod, shortcut: "mark-paid" },
+      ...(cashWarning && amount > 0 ? { cashWarning } : {}),
+    },
   });
 
   revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, ...(cashWarning && amount > 0 ? { warning: cashWarning } : {}) });
 }

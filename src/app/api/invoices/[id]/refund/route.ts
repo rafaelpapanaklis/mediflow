@@ -6,6 +6,7 @@ import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { round2 } from "@/lib/invoice-totals";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -34,7 +35,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { clinicId } = ctx;
 
   const body = await req.json().catch(() => ({}));
-  const amountRaw = Number(body?.amount);
+  // El monto se redondea a centavos en la puerta, igual que el resto de los
+  // escritores de dinero: lo que entra sin redondear sale en `paid` como
+  // 666.6700000000001 y arrastra el saldo a un fantasma imposible de cerrar.
+  const amountRaw = round2(Number(body?.amount));
   const reason = (body?.reason ?? "").toString().trim();
 
   if (!isFinite(amountRaw) || amountRaw <= 0) {
@@ -56,10 +60,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   if (invoice.status === "CANCELLED") return NextResponse.json({ error: "La factura está cancelada" }, { status: 400 });
   if (invoice.paid <= 0)              return NextResponse.json({ error: "Esta factura no tiene pagos para reembolsar" }, { status: 400 });
-  if (amountRaw > invoice.paid)       return NextResponse.json({ error: "El reembolso excede lo pagado" }, { status: 400 });
+  // Lo pagado se compara REDONDEADO: una factura legada con paid =
+  // 1000.0099999999999 rechazaba el reembolso completo de $1,000.01.
+  if (amountRaw > round2(invoice.paid)) return NextResponse.json({ error: "El reembolso excede lo pagado" }, { status: 400 });
 
-  const newPaid    = invoice.paid - amountRaw;
-  const newBalance = invoice.total - newPaid;
+  // El piso en 0 evita el −0 que deja ese mismo caso legado (1000.0099999999999
+  // − 1000.01) y que se pintaría como "−$0.00".
+  const newPaid    = round2(Math.max(0, invoice.paid - amountRaw));
+  const newBalance = round2(invoice.total - newPaid);
   const newStatus  =
     newPaid <= 0 ? "PENDING" :
     newBalance > 0 ? "PARTIAL" : "PAID";
