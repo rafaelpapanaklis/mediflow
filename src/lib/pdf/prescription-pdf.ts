@@ -10,9 +10,14 @@ import { PrescriptionDocument, type PrescriptionPdfItemProps } from "@/lib/pdf/p
  * de la página de verificación.
  *
  * Multi-tenant: si se pasa `clinicId`, la receta DEBE pertenecer a esa
- * clínica (rutas del dashboard). Sin `clinicId` es el flujo público, donde
- * la URL con el id (la misma que va en el QR impreso) actúa como bearer —
- * idéntico nivel de exposición que /portal/prescription/[id]/verify.
+ * clínica (rutas del dashboard).
+ *
+ * ⚠️ Que NO venga `clinicId` no quiere decir "público": el portal del
+ * paciente (/api/paciente/recetas/[id]/pdf) también llama sin él, con la
+ * ownership ya validada, y ahí el paciente SÍ debe ver su nombre completo y
+ * su diagnóstico. Lo público se DECLARA con `{ publicVerification: true }`,
+ * y hoy solo lo pasa GET /api/prescriptions/[id]/verify/pdf, donde el id del
+ * QR impreso actúa como bearer y no hay sesión detrás.
  */
 
 async function fetchLogoDataUrl(url: string | null): Promise<string | null> {
@@ -43,10 +48,28 @@ function fmtAge(dob: Date | null): string | null {
   return `${years} años`;
 }
 
+/**
+ * Enmascarado del nombre para la verificación PÚBLICA: nombre de pila +
+ * inicial del apellido. Es el MISMO criterio, letra por letra, que la ruta
+ * gemela GET /api/prescriptions/[id]/verify (`${firstName} ${lastName.charAt(0)}.`).
+ * Las dos tienen que dar el mismo resultado; el test las compara ejecutando
+ * las dos rutas de verdad (src/lib/pdf/__tests__/receta-verificacion-publica.test.ts).
+ */
+function maskedPatientName(firstName: string, lastName: string): string {
+  return `${firstName} ${lastName.charAt(0)}.`;
+}
+
 export async function buildPrescriptionPdf(
   id: string,
   clinicId?: string,
+  opts?: { publicVerification?: boolean },
 ): Promise<{ buffer: Buffer; fileName: string } | null> {
+  // Verificación pública = sin sesión. Lo que sale por ahí tiene que ser lo
+  // mismo que la ruta JSON gemela: apellido enmascarado y CERO diagnóstico
+  // (prisma/schema.prisma, campo `diagnosis`: "NUNCA se muestra en la
+  // verificación pública"). La edad sale del `dob` del paciente y la gemela
+  // tampoco la publica: fuera también.
+  const esPublico = opts?.publicVerification === true;
   const rx = await prisma.prescription.findFirst({
     where: clinicId ? { id, clinicId } : { id },
     include: {
@@ -114,9 +137,11 @@ export async function buildPrescriptionPdf(
     doctorEspecialidad: rx.doctor.especialidad ?? null,
     doctorCedula: rx.doctor.cedulaProfesional ?? null,
     doctorCedulaEspecialidad: rx.doctor.cedulaEspecialidad ?? null,
-    patientName: `${rx.patient.firstName} ${rx.patient.lastName}`,
-    patientAge: fmtAge(rx.patient.dob ?? null),
-    diagnosis: rx.diagnosis ?? null,
+    patientName: esPublico
+      ? maskedPatientName(rx.patient.firstName, rx.patient.lastName)
+      : `${rx.patient.firstName} ${rx.patient.lastName}`,
+    patientAge: esPublico ? null : fmtAge(rx.patient.dob ?? null),
+    diagnosis: esPublico ? null : (rx.diagnosis ?? null),
     indications: rx.indications ?? null,
     items,
     issuedAt: rx.issuedAt.toISOString(),
