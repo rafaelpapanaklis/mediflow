@@ -3,6 +3,7 @@
 // signed URLs de corta duración (TTL 5 min); NUNCA expone el storageKey.
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrls } from "@/lib/storage";
@@ -12,6 +13,14 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // EQ-07 — "Ver radiografías" (xrays.view). Es el mismo cajón de archivos del
+  // paciente que sirve /api/xrays (que ya lo exige), sólo que la otra mitad: lo
+  // que subió el propio paciente. Sin este gate un READONLY —que no tiene
+  // ningún xrays.*— no veía la pestaña pero recibía 200 con las signed URLs de
+  // sus estudios. Recepción SÍ lo tiene por default y no pierde nada.
+  const deniedPerm = denyIfMissingPermission(ctx, "xrays.view");
+  if (deniedPerm) return deniedPerm;
 
   // Visibilidad por paciente: sin esto, un usuario fuera de la lista podía leer
   // los archivos (y sus signed URLs) de un paciente restringido con solo tener

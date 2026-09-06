@@ -25,6 +25,16 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
 
   if (!patient) return NextResponse.json({ error: "Enlace inválido" }, { status: 404 });
 
+  // ARCO / LFPDPPP — cancelación: el paciente pidió su baja, se anonimizó y se
+  // archivó (deletedAt). El enlace deja de existir AQUÍ además de invalidarse
+  // al anonimizar (POST /api/arco-request): con un solo lado, olvidar el otro
+  // vuelve a abrir el expediente. Mismo criterio que el portal con cuenta, que
+  // filtra `patient: { deletedAt: null }` en todas sus queries. Mismo 404 y
+  // mismo texto que un token inexistente: no se confirma que existió.
+  if (patient.deletedAt) {
+    return NextResponse.json({ error: "Enlace inválido" }, { status: 404 });
+  }
+
   // Check token expiry
   if (patient.portalTokenExpiry && new Date(patient.portalTokenExpiry) < new Date()) {
     return NextResponse.json({ error: "Este enlace ha expirado. Solicita uno nuevo a tu médico." }, { status: 410 });
@@ -52,7 +62,11 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
       endTime:   timeHHMMInTz(a.endsAt,   patient.clinic.timezone),
       status:    a.status,
       doctor:    `Dr/a. ${a.doctor.firstName} ${a.doctor.lastName}`,
-      notes:     a.notes,
+      // `notes` NO: son las notas INTERNAS que escribe el staff sobre la cita.
+      // El contrato paciente-safe del portal con cuenta lo prohíbe por escrito
+      // (src/lib/patient-portal/types.ts, "Appointment: id, type, status,
+      // startsAt, endsAt, doctor (nombre) — nada más") y su gemela
+      // /api/paciente/appointments lo cumple con un select cerrado.
     })),
     doctor: patient.primaryDoctor ? {
       name:      `Dr/a. ${patient.primaryDoctor.firstName} ${patient.primaryDoctor.lastName}`,
