@@ -37,9 +37,12 @@ sin `| tail`, sin `| head`, sin recortes. Si muere con **exit 134** es el heap d
 repite con `NODE_OPTIONS=--max-old-space-size=8192 npm run build`.
 
 **(b) Push SIEMPRE a tu rama:** `git push -u origin <tu-rama>`.
-⛔ Nunca `HEAD:main`, nunca `push origin main`, nunca `--force`. La integración a `main` la hace Rafael
-en un solo push desde el clon principal. El hook `scripts/git-guard.cjs` bloquea estas formas desde
-cualquier worktree; si te sale `[git-guard]`, no lo rodees: empuja a tu rama.
+⛔ Nunca `HEAD:main`, nunca `push origin main`, nunca `--force`. La integración a `main` la hace **solo
+el prompt de la pestaña Integración de NEXUS**, que lleva la llave `INTEGRACION_OLA=1`; sin esa llave el
+hook `scripts/git-guard.cjs` bloquea el push a `main` desde **cualquier** cwd, clon principal incluido.
+También bloquea `gh pr merge` siempre (los PR no se fusionan uno por uno, ni con llave) y `git merge`
+estando en `main` del clon principal. Una terminal de tarea termina en `git push -u origin <tu-rama>` +
+`gh pr create`, y **nunca** fusiona ni pide que fusiones. Si te sale `[git-guard]`, no lo rodees.
 
 **(c) Aísla TODO por `clinicId`.** Cada consulta de Prisma lleva su filtro de tenant, y el `clinicId`
 sale de la sesión, nunca del cliente. ⛔ `clinicId: undefined` **no filtra nada**: Prisma descarta la
@@ -54,10 +57,19 @@ mano en un componente rompe eso.
 **(e) SQL a mano.** Todo script vive en `sql/` (hoy 151 archivos). Lo entregas en un bloque copy-paste
 para que Rafael lo pegue. ⛔ La terminal **nunca** aplica SQL contra la base.
 
-**(f) Reporte final por append, sin leer.** Al cerrar una tarea, añade tu bloque al final de
-`C:\Users\Rafael\ClauCode\MediFlow\ORQUESTA.md` bajo `## [nombre de tarea] — fecha`. Append puro: no
-leas el archivo (pesa megas y te come el contexto). **ORQUESTA.md ya no vive en el repo**; el histórico
-hasta el 3-sep-2026 está en `C:\Users\Rafael\ClauCode\MediFlow\orquesta-archivo\`.
+**(f) Reporte final con la utilidad, sin leer ORQUESTA.md.** Al cerrar una tarea, escribe el cuerpo en un
+`.md` temporal (`os.tmpdir()`) y ejecútala:
+
+```
+node C:/Users/Rafael/ClauCode/nexus/scripts/tablero/orquesta-append.cjs --titulo "<tarea de tu línea TABLERO>" --archivo <ese .md>
+```
+
+(o pasa el cuerpo por stdin). Ella antepone la etiqueta WS/T y la fecha y degrada tus `##` a `###`: el
+encabezado queda `## [WSn-Tn · tarea] — fecha`, así que dentro usa **solo `###`**. Mínimo: qué hiciste,
+archivos, rama + SHA + PR, gates, qué falta, desviaciones. Si la utilidad faltara, avisa y haz append
+puro con ese mismo encabezado. ⛔ Nunca leas `ORQUESTA.md` (pesa megas y te come el contexto).
+**Ya no vive en el repo**; el histórico hasta el 3-sep-2026 está en
+`C:\Users\Rafael\ClauCode\MediFlow\orquesta-archivo\`.
 
 **(g) Sin archivos temporales en la raíz.** Ni `salida.txt`, ni `build.log`, ni `tmp-*.js`. Lo temporal
 va a `os.tmpdir()`. La raíz se queda como está.
