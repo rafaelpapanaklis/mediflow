@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Mono, Hanken_Grotesk } from "next/font/google";
+import { sans, mono, logo } from "@/fonts/root";
 import Script from "next/script";
 import { Toaster } from "react-hot-toast";
 import { Analytics } from "@vercel/analytics/next";
@@ -11,11 +11,6 @@ import { MetaPixelPageview } from "@/components/analytics/meta-pixel-pageview";
 import { GA4_MEASUREMENT_ID, PRIVATE_PATH_PATTERN } from "@/lib/analytics/ga4";
 import { META_PIXEL_ID } from "@/lib/analytics/meta-pixel";
 import "./globals.css";
-
-const sans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"], variable: "--font-sans", display: "swap" });
-const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-mono", display: "swap" });
-// Tipografía del wordmark DaleControl (kit de marca "logo 105"): solo pesos del logo.
-const logo = Hanken_Grotesk({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-logo", display: "swap" });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 

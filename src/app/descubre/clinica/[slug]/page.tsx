@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-700";
 import { MapPin, Phone, Clock, Stethoscope, BadgeCheck, Instagram, Facebook } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { buildMetadata, SITE_URL, localBusinessLd } from "@/lib/seo";
@@ -20,13 +20,6 @@ import "@/components/public/landing/sales/sales.css";
 // Blanco + violeta (.mfh). Hero, servicios con precios, doctores, horarios,
 // reseñas verificadas y botón Reservar que reutiliza el popup del directorio.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 export const dynamic = "force-dynamic";
 

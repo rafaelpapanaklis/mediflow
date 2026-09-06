@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Inter } from "next/font/google";
+// Misma fuente y shell que /blog, /descubre y la home: todo vive bajo `.mfh`.
+import { inter } from "@/fonts/inter-400-700";
 import { Lightbulb } from "lucide-react";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
@@ -11,14 +12,6 @@ import { CASOS_DE_USO } from "@/lib/casos/data";
 import "@/components/public/landing/sales/sales.css";
 import "../blog/blog.css";
 import "./casos.css";
-
-// Misma fuente y shell que /blog, /descubre y la home: todo vive bajo `.mfh`.
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Casos de uso: cómo usan DaleControl clínicas como la tuya",

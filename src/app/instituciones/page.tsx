@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Source_Serif_4 } from "next/font/google";
+import { inter, serif } from "@/fonts/edu";
 import {
   EDU_LANDING_DINERO,
   EDU_LANDING_EXPEDIENTE,
@@ -66,23 +66,6 @@ import "@/components/public/instituciones/instituciones.css";
    idioma, y leer Accept-Language la volvería dinámica. Mismo criterio que
    el resto de las páginas públicas.
    ═══════════════════════════════════════════════════════════════════════ */
-
-const inter = Inter({
-  subsets: ["latin"],
-  // Tres pesos y no cuatro: cada peso es un archivo que hay que descargar
-  // antes de que el texto se asiente, y el 800 se usaba en un solo sitio.
-  weight: ["400", "600", "700"],
-  variable: "--font-inter-edu",
-  display: "fallback",
-});
-
-const serif = Source_Serif_4({
-  subsets: ["latin"],
-  weight: ["600"],
-  style: ["normal", "italic"],
-  variable: "--font-serif-edu",
-  display: "fallback",
-});
 
 export const revalidate = 86400;
 

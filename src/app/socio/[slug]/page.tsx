@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-700";
 import { MapPin, ShieldCheck, Headphones, ArrowRight, Star, Check } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import {
@@ -40,13 +40,6 @@ import "@/components/public/landing/sales/sales.css";
 // componentes con useSearchParams + su Suspense (el HTML estático saldría con
 // el fallback), demasiada superficie para lo que ahorra esta landing.
 export const dynamic = "force-dynamic";
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 

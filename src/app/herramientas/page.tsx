@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Inter } from "next/font/google";
+// Misma fuente y shell que /blog, /casos-de-uso y la home: todo vive bajo `.mfh`.
+import { inter } from "@/fonts/inter-400-700";
 import { Wrench } from "lucide-react";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
@@ -11,14 +12,6 @@ import { HERRAMIENTAS } from "@/lib/herramientas/data";
 import "@/components/public/landing/sales/sales.css";
 import "../blog/blog.css";
 import "./herramientas.css";
-
-// Misma fuente y shell que /blog, /casos-de-uso y la home: todo vive bajo `.mfh`.
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 const TITLE = "Herramientas gratuitas para consultorios dentales";
 

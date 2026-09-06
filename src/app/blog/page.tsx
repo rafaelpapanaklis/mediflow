@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+// Misma fuente y shell que /descubre y la home: todo vive bajo `.mfh`.
+import { inter } from "@/fonts/inter-400-700";
 import { Newspaper } from "lucide-react";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
@@ -16,14 +17,6 @@ import { BLOG_CATEGORIES } from "@/lib/blog/categories";
 import { BLOG_PAGE_SIZE } from "@/lib/blog/types";
 import "@/components/public/landing/sales/sales.css";
 import "./blog.css";
-
-// Misma fuente y shell que /descubre y la home: todo vive bajo `.mfh`.
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 export const metadata: Metadata = buildMetadata({
   title: "Blog para clínicas: gestión, pacientes y tecnología | DaleControl",

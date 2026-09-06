@@ -10,7 +10,7 @@
    - WITHOUT the Tweaks panel and WITHOUT warm/dark variants.
    ============================================================ */
 import { memo, useState, useEffect, useCallback, useRef } from "react";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { jakarta } from "@/fonts/odo";
 import { I18N, COND_BY_ID, GROUP_COLOR } from "./data";
 import type {
   Records, ToothRecord, Lang, Numbering, Dentition, ApplyKind, RemoveScope, SurfaceLetter,
@@ -26,13 +26,6 @@ import { Palette } from "./Palette";
 import { Legend } from "./Legend";
 import { DetailPanel } from "./DetailPanel";
 import "./odontogram.css";
-
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-odo",
-  display: "swap",
-});
 
 /** Immutably clone records[fdi], run fn, prune empty surfaces, return new map. */
 function applyToRecords(prev: Records, fdi: number, fn: (r: ToothRecord) => void): Records {

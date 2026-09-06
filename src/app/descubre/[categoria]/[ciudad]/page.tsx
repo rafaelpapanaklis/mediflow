@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-700";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { CategoryGrid, CATEGORY_ICONS } from "@/components/directory/CategoryGrid";
@@ -13,13 +13,6 @@ import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { getCategoryBySlug } from "@/lib/directory/types";
 import { getCityPageData, getCategoryCityCombos } from "@/lib/directory/query";
 import "@/components/public/landing/sales/sales.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 // SEO programático: páginas estáticas por combinación real (categoría × ciudad)
 // con ISR diario. Las combinaciones SIN clínicas hacen notFound() (404) — cero

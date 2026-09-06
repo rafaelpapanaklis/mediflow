@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Inter } from "next/font/google";
+import { inter } from "@/fonts/inter-400-700";
 import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
@@ -30,13 +30,6 @@ import {
 import "@/components/public/landing/sales/sales.css";
 import "../../blog/blog.css";
 import "../casos.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
 
 interface Props {
   params: { slug: string };
