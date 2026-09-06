@@ -8,7 +8,9 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
-import { formatCurrency } from "@/lib/utils";
+// Dinero CON centavos, igual que la lista de facturas y el modal de detalle:
+// `formatCurrency` redondea a pesos enteros y aquí se cobra un saldo exacto.
+import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
@@ -114,15 +116,15 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
             )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("common.total")}</span>
-              <span className="font-bold">{formatCurrency(invoice.total)}</span>
+              <span className="font-bold">{fmtMXNdec(invoice.total)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("clinical.paymentModal.paid")}</span>
-              <span className="font-bold" style={{ color: "var(--success)" }}>{formatCurrency(invoice.paid)}</span>
+              <span className="font-bold" style={{ color: "var(--success)" }}>{fmtMXNdec(invoice.paid)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("clinical.paymentModal.pendingBalance")}</span>
-              <span className="font-bold" style={{ color: "var(--danger)" }}>{formatCurrency(invoice.balance)}</span>
+              <span className="font-bold" style={{ color: "var(--danger)" }}>{fmtMXNdec(invoice.balance)}</span>
             </div>
           </div>
 
@@ -139,7 +141,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
             />
             {isOverpay && (
               <p className="text-[11px]" style={{ color: "var(--danger)" }}>
-                {t("clinical.paymentModal.overpayWarning", { balance: formatCurrency(invoice.balance) })}
+                {t("clinical.paymentModal.overpayWarning", { balance: fmtMXNdec(invoice.balance) })}
               </p>
             )}
           </div>
@@ -204,7 +206,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
         <DialogFooter>
           <ButtonNew variant="ghost" onClick={onClose} disabled={saving}>{t("common.cancel")}</ButtonNew>
           <ButtonNew variant="primary" onClick={submit} disabled={isInvalid || saving}>
-            {saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: amountNum ? " · " + formatCurrency(amountNum) : "" })}
+            {saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: amountNum ? " · " + fmtMXNdec(amountNum) : "" })}
           </ButtonNew>
         </DialogFooter>
       </DialogContent>
