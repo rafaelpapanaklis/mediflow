@@ -3,11 +3,18 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { PLAN_FREQUENCY, PLAN_FREQUENCY_DAYS, PLAN_STATUS } from "@/lib/payment-plans/status";
 import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 // GET /api/payment-plans?patientId=xxx
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: el plan de pagos es dinero del paciente (total, enganche,
+  // cuota a cuota y qué queda por cobrar). Leerlo es leer facturación, así que
+  // pide la misma key que GET /api/invoices: "billing.view".
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.view");
+  if (deniedPerm) return deniedPerm;
 
   const patientId = new URL(req.url).searchParams.get("patientId");
 
@@ -38,6 +45,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: un plan de pagos es el INSTRUMENTO DE COBRO de la
+  // clínica — arma el calendario de cuotas sobre el que luego se registran los
+  // pagos. Los tres handlers de escritura de este módulo comparten "billing.charge"
+  // (la misma key que ya exige registrar un pago en POST /api/invoices/[id]):
+  // una sola llave para toda la superficie de operar el plan, igual que el
+  // PR #190 hizo con PATCH/DELETE de /api/quotes/[id] y "billing.edit".
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.charge");
+  if (deniedPerm) return deniedPerm;
 
   const body = await req.json();
   const { patientId, invoiceId, name, totalAmount, downPayment, installments, frequency, startDate, notes } = body;
