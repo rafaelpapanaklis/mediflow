@@ -11,6 +11,9 @@ import { Label } from "@/components/ui/label";
 // Dinero CON centavos, igual que la lista de facturas y el modal de detalle:
 // `formatCurrency` redondea a pesos enteros y aquí se cobra un saldo exacto.
 import { fmtMXNdec } from "@/lib/format";
+// Fecha del cobro: "hoy" en LOCAL (no en UTC) y el instante que se guarda.
+// El porqué —y el desfase de 6 h que arreglan— está en el propio archivo.
+import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
 import { useT } from "@/i18n/i18n-provider";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
@@ -46,7 +49,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
   const t = useT();
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<PaymentMethod>("cash");
-  const [paidAt, setPaidAt]       = useState(() => new Date().toISOString().slice(0, 10));
+  const [paidAt, setPaidAt]       = useState(() => todayLocalISO());
   const [reference, setReference] = useState("");
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
@@ -56,7 +59,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
     if (!open || !invoice) return;
     setAmount(String(invoice.balance ?? 0));
     setMethod("cash");
-    setPaidAt(new Date().toISOString().slice(0, 10));
+    setPaidAt(todayLocalISO());
     setReference("");
     setNotes("");
   }, [open, invoice]);
@@ -77,7 +80,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
         body: JSON.stringify({
           amount: amountNum,
           method,
-          paidAt: paidAt ? new Date(paidAt).toISOString() : undefined,
+          paidAt: paidAtInstant(paidAt)?.toISOString(),
           reference: reference.trim() || undefined,
           notes: notes.trim() || undefined,
         }),
@@ -179,7 +182,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
                   podía capturar una fecha futura, que el servidor ahora rechaza
                   con 400. Misma expresión que el valor por defecto de arriba
                   para que el valor inicial nunca quede por encima del tope. */}
-              <DateField max={new Date().toISOString().slice(0, 10)} className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+              <DateField max={todayLocalISO()} className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>{t("clinical.paymentModal.reference")}</Label>

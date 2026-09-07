@@ -96,7 +96,10 @@ const EXPECTED: Record<Role, Record<string, boolean>> = {
     "resources.view": true, "resources.edit": false,
     "inventory.edit": false,
     "suppliers.order": false,
-    "billing.view": false, "billing.create": false, "billing.charge": false, "billing.refund": false, "billing.edit": false,
+    // El doctor PRESUPUESTA y FACTURA (el presupuesto es la cara del importe
+    // del plan que él mismo arma), pero NO toca el dinero: cobrar y reembolsar
+    // siguen siendo de recepción y administración. Ver ROLE_DEFAULT_PERMISSIONS.
+    "billing.view": true, "billing.create": true, "billing.charge": false, "billing.refund": false, "billing.edit": true,
     "analytics.view": false, "reports.view": false,
     "tvModes.view": false, "tvModes.edit": false,
     "team.view": false, "team.edit": false,

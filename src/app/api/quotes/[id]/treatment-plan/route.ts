@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { logAudit } from "@/lib/audit";
 import { distinctPhaseCount } from "@/lib/quotes/compute";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,14 @@ interface Params { params: { id: string } }
 export async function POST(_req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Crea un TreatmentPlan ACTIVE del paciente (coste total y nº de sesiones):
+  // es exactamente lo que protege "treatments.edit" — "Crear y editar planes
+  // de tratamiento". Se elige esa key y NO una billing.*: aquí no nace factura
+  // ni se quema folio, y recepción (que tiene treatments.edit por default)
+  // sigue pudiendo abrir el plan de un presupuesto aceptado, como hasta ahora.
+  const deniedPerm = denyIfMissingPermission(ctx, "treatments.edit");
+  if (deniedPerm) return deniedPerm;
 
   const quote = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
