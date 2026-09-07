@@ -232,7 +232,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (discount > subtotal) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
-    const { total } = computeInvoiceTotal(subtotal, discount, invoice.taxRate ?? 16, invoice.taxIncluded !== false);
+    // Los CONCEPTOS, no el subtotal (hallazgo 19): el IVA agregado se redondea
+    // por concepto, igual que el timbrado.
+    const { total } = computeInvoiceTotal(items, discount, invoice.taxRate ?? 16, invoice.taxIncluded !== false);
     updateData.items = items;
     updateData.subtotal = subtotal;
     updateData.discount = discount;
