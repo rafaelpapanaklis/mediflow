@@ -257,12 +257,40 @@ test("🔴 src/components/edu/fotos no importa NI UNA LÍNEA del dental", () => 
   }
 });
 
+/**
+ * EL BLOQUE DE ESTA CASILLA dentro de edu-theme.css, ACOTADO POR ARRIBA Y
+ * POR ABAJO.
+ *
+ * 🔴 Antes esto era `css.slice(css.indexOf(marca))` —de la marca al final
+ * del archivo— y era correcto mientras este bloque fuera el último. Dejó de
+ * serlo al integrar la Ola B: ws2-t3 añadió el suyo detrás, y la prueba del
+ * prefijo empezó a exigirle `.edu-fotos*` a `.edu-fichab-grupo`, que es de
+ * otra casilla y está bien como está. El fallo NO era del CSS: era de esta
+ * prueba, que llamaba "mío" a todo lo que viniera después.
+ *
+ * El corte va por la convención REAL de la hoja: los banners que ABREN el
+ * bloque de una casilla llevan su etiqueta `(wsN-tM)` en la línea de
+ * título, y los sub-banners de dentro de un bloque no la llevan ninguno.
+ * Así que el bloque termina donde empieza el banner etiquetado siguiente —y
+ * la próxima ola que apile el suyo detrás queda acotada sola, sin que nadie
+ * tenga que acordarse de tocar este archivo.
+ */
+function bloquePropio(css: string): string {
+  const marca = "===== fotos y estudios (ws2-t2) =====";
+  const i = css.indexOf(marca);
+  assert.ok(i >= 0, "falta el bloque de la casilla en edu-theme.css");
+  const resto = css.slice(i + marca.length);
+  // El banner de la casilla SIGUIENTE: una raya larga de apertura y, en la
+  // línea de abajo, un título con su etiqueta (wsN-tM).
+  const siguiente = /\/\* ═+\r?\n[^\n]*\(ws\d+-t\d+\)/.exec(resto);
+  return siguiente ? resto.slice(0, siguiente.index) : resto;
+}
+
 test("🔴 la pestaña Fotos viste con clases edu-* y tokens --edu-*", () => {
   const css = crudo("src", "app", "instituto", "edu-theme.css");
-  // El bloque de esta casilla existe y va AL FINAL de la hoja.
-  const marca = "===== fotos y estudios (ws2-t2) =====";
-  assert.ok(css.includes(marca), "falta el bloque de la casilla en edu-theme.css");
-  const bloque = css.slice(css.indexOf(marca));
+  // El bloque de esta casilla, y SOLO el de esta casilla: desde la Ola B
+  // hay otro detrás y sus clases no son de aquí (ver `bloquePropio`).
+  const bloque = bloquePropio(css);
   // Ni un token del dental (--brand, --violet-*, --bg-elev-*) en lo nuevo:
   // esos viven en globals.css y pintarían el instituto de violeta.
   assert.equal(/var\(--brand/.test(bloque), false);
@@ -287,7 +315,7 @@ test("🔴 la pestaña Fotos viste con clases edu-* y tokens --edu-*", () => {
 
 test("a 390 px la galería es de DOS columnas y el comparador se apila", () => {
   const css = crudo("src", "app", "instituto", "edu-theme.css");
-  const bloque = css.slice(css.indexOf("===== fotos y estudios (ws2-t2) ====="));
+  const bloque = bloquePropio(css);
   // 390 − 28 (padding de .edu-main) = 362 de contenido. Con
   // minmax(150px, 1fr) y 10 de hueco: floor((362+10)/(150+10)) = 2.
   assert.match(bloque, /\.edu-fotos-rejilla \{[^}]*minmax\(150px, 1fr\)/);
