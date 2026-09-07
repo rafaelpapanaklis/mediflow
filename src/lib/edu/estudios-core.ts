@@ -724,3 +724,42 @@ export function eduInstanteADiaInput(iso: unknown): string {
   if (!Number.isFinite(t)) return "";
   return new Date(t).toISOString().slice(0, 10);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ws2-t2 (afinado) · LO RETIRADO, PARA QUE EL MOTIVO SE PUEDA LEER
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Una fila de la sección plegada «Retirados».
+ *
+ * 🔴 EXISTE PORQUE EL MOTIVO ERA OBLIGATORIO, SE GUARDABA… Y NO LO LEÍA
+ * NADIE. Los dos modales prometen lo mismo con todas sus letras —«es lo que
+ * contesta la pregunta dentro de un año»— y hasta hoy esa pregunta solo se
+ * contestaba en Postgres: no había una sola consulta con
+ * `deletedAt: { not: null }` fuera del historial del odontograma.
+ *
+ * La forma es la MISMA para un estudio y para una foto a propósito: las dos
+ * bajas son la misma decisión de producto (suave, con autor y con motivo, y
+ * el binario se conserva), así que las dos se leen igual y la pantalla que
+ * las pinta no tiene que saber cuál está mirando.
+ */
+export interface EduRetiradoRow {
+  id: string;
+  /** QUÉ era: el nombre del estudio, o «Sonrisa · Antes · 12 mar». */
+  que: string;
+  /** QUIÉN lo retiró. "" si la fila perdió a su autor (usuario borrado). */
+  quien: string;
+  /** CUÁNDO, ya escrito en la zona del instituto. */
+  cuando: string;
+  /** POR QUÉ. "" solo en filas viejas anteriores al motivo obligatorio. */
+  porQue: string;
+}
+
+/**
+ * Techo de la sección «Retirados».
+ *
+ * Es corta a propósito y no paginada: esto no es un archivo histórico, es
+ * la respuesta a «¿por qué no está la panorámica que subí ayer?». Con más
+ * de esto, la pregunta ya no es de esta pantalla.
+ */
+export const EDU_RETIRADOS_MAX_ROWS = 50;

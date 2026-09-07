@@ -84,6 +84,10 @@ function fila(
     photoType,
     stage,
     capturedAt,
+    // N-7 · El día CIVIL en la zona del instituto, resuelto por el
+    // servidor. Con mediodía UTC coincide con el recorte en UTC; el modal
+    // de corregir siembra su fecha con ESTE campo y no con aquél.
+    capturedDayISO: capturedAt.slice(0, 10),
     capturedLabel: `día de ${id}`,
     mime: "image/jpeg",
     sizeBytes: 512_000,
@@ -357,8 +361,13 @@ test("🔴 la página exige el permiso AQUÍ y además el alcance clínico", () 
   // confirmaría que ese folio existe.
   assert.match(page, /getEduClinicalPatient\(ctx, params\.id\)/);
   assert.match(page, /notFound\(\)/);
-  // Y subir/corregir/retirar piden el permiso de ESCRITURA.
-  assert.match(page, /canUpload=\{hasEduPermission\(permUser, "estudios\.upload"\)\}/);
+  // Y subir/corregir/retirar piden el permiso de ESCRITURA. Se calcula en
+  // una constante porque además decide si se CONSULTAN las retiradas: una
+  // consulta cuyo resultado nadie va a ver es un viaje pagado por nadie.
+  assert.match(page, /const canUpload = hasEduPermission\(permUser, "estudios\.upload"\);/);
+  assert.match(page, /canUpload=\{canUpload\}/);
+  assert.match(page, /listEduPatientPhotosRetiradas/);
+  assert.match(page, /retiradas=\{retiradas\}/);
   // force-dynamic: las URL son firmadas y caducan.
   assert.match(page, /export const dynamic = "force-dynamic"/);
 });
@@ -375,20 +384,201 @@ test("⚠️ sin permiso los botones se DESHABILITAN con el motivo escrito, no s
   assert.match(editar, /\{SIN_PERMISO\}/);
 });
 
-test("la subida comprime en el navegador por encima de 3.5 MB, y es best-effort", () => {
-  const comp = crudo("src", "components", "edu", "fotos", "comprimir.ts");
-  assert.match(comp, /3\.5 \* 1024 \* 1024/);
+test("🔴 N-2 · la compresión del navegador es OBLIGATORIA, y el original NO se manda", () => {
+  const comp = sinComentarios(crudo("src", "components", "edu", "fotos", "comprimir.ts"));
+  // Ya no hay umbral: se comprime SIEMPRE. Sharp no va a ver esta foto —
+  // sube directo al bucket—, así que lo que sale del canvas es lo que
+  // queda en el expediente.
+  assert.equal(/3\.5 \* 1024 \* 1024/.test(comp), false, "quedó el umbral del best-effort");
+  assert.equal(/talCual/.test(comp), false, "quedó la puerta por la que se colaba el original");
+  // Los parámetros son los de sharp, IMPORTADOS y no copiados.
+  assert.match(comp, /EDU_PHOTO_MAX_EDGE/);
+  assert.match(comp, /EDU_PHOTO_JPEG_QUALITY/);
+  assert.match(comp, /EDU_PHOTO_THUMB_EDGE/);
+  assert.match(comp, /EDU_PHOTO_THUMB_QUALITY/);
+  // La orientación EXIF es AHORA la única oportunidad de aplicarse: al
+  // pasar por el canvas los metadatos se pierden y el `.rotate()` del
+  // servidor ya no está detrás.
   assert.match(comp, /imageOrientation: "from-image"/);
-  // Si el navegador no sabe decodificar (HEIC), se manda el original y que
-  // lo intente sharp: rebotar la foto por la copia pequeña sería perderla.
-  assert.match(comp, /return talCual\(file\);/);
-  // Y la cámara del teléfono, con la trasera.
+  // Y si no se puede leer, se RECHAZA con el motivo escrito.
+  assert.match(comp, /class EduFotoIlegible/);
+  assert.match(comp, /no puede leer HEIC/);
+});
+
+test("🔴 N-2 · el modal ya no promete 25 MB, y sube por los tres pasos", () => {
   const subir = crudo("src", "components", "edu", "fotos", "subir-foto.tsx");
+  // El subtítulo prometía un tope que la tubería no aguantaba.
+  assert.equal(/Hasta \$\{EDU_MAX_PHOTO_LABEL\}/.test(subir), false);
+  assert.equal(/EDU_MAX_PHOTO_LABEL/.test(subir), false, "el subtítulo sigue prometiendo el tope");
+  assert.match(subir, /sube directo al almacenamiento/);
+  // Y el binario ya no viaja en un FormData contra el route handler.
+  assert.equal(/new FormData\(\)/.test(subir), false);
+  assert.match(subir, /eduUploadPhoto/);
+
+  const cliente = sinComentarios(
+    crudo("src", "components", "edu", "fotos", "subir-foto-client.ts"),
+  );
+  // Los tres pasos, en orden, y la limpieza del huérfano.
+  const iSign = cliente.indexOf("/fotos/sign");
+  const iPut = cliente.indexOf("putConProgreso(\n        signedUrl");
+  const iConfirm = cliente.indexOf("/fotos/confirm");
+  assert.ok(iSign > 0 && iPut > iSign && iConfirm > iPut, "los tres pasos no van en orden");
+  assert.match(cliente, /\/fotos\/abort/);
+
+  // Y la cámara del teléfono, con la trasera.
   assert.match(subir, /accept="image\/\*"/);
   assert.match(subir, /capture="environment"/);
   // La etapa NO viene preseleccionada: es lo único de lo que depende el
   // comparador.
   assert.match(subir, /useState<EduPhotoStage \| "">\(""\)/);
+});
+
+test("🔴 N-12 · con UN solo caso abierto, la foto se engancha a él", () => {
+  const subir = sinComentarios(crudo("src", "components", "edu", "fotos", "subir-foto.tsx"));
+  // Se cuentan los ABIERTOS: `cases` incluye los cerrados, así que «más de
+  // uno» no describía ni lo que contaba ni lo que permitía.
+  assert.match(subir, /cases\.filter\(\(c\) => c\.isOpen\)/);
+  assert.match(subir, /abiertos\.length === 1 \? abiertos\[0\] : null/);
+  assert.match(subir, /useState\(unico \? unico\.id : ""\)/);
+});
+
+test("🔴 N-5 · el onError distingue «caducó» de «no se puede pintar»", () => {
+  const img = sinComentarios(crudo("src", "components", "edu", "fotos", "foto-img.tsx"));
+  // Primero se pide una URL NUEVA a la ruta que se escribió justo para
+  // esto y que no llamaba nadie.
+  assert.match(img, /\/fotos\/\$\{foto\.id\}\/url/);
+  // Y solo si CON LA URL NUEVA sigue fallando se declara rota: la prueba
+  // de que caducó no es un temporizador (el reloj puede ir corrido), es
+  // que el segundo intento tampoco pinta.
+  assert.match(img, /renovada\.current/);
+  assert.match(img, /edu-fotos-rota/);
+
+  // Y la galería ya NO enciende el banner de «caducaron» desde un onError.
+  const screen = sinComentarios(crudo("src", "components", "edu", "fotos", "fotos-screen.tsx"));
+  assert.equal(/onError=\{\(\) => setCaducadas\(true\)\}/.test(screen), false);
+  assert.match(screen, /no se pueden mostrar en este navegador/);
+
+  // El visor y el comparador usan el MISMO componente: los dos pintaban la
+  // URL de la carga inicial sin `onError`.
+  for (const f of ["visor.tsx", "comparador.tsx"]) {
+    const src = sinComentarios(crudo("src", "components", "edu", "fotos", f));
+    assert.match(src, /EduFotoImagen/, f);
+    assert.equal(/<img\b/.test(src), false, `${f} pinta una <img> suelta sin renovación`);
+  }
+});
+
+test("🔴 N-16 · el comparador distingue «falta una foto» de «elegiste la misma dos veces»", () => {
+  const comp = crudo("src", "components", "edu", "fotos", "comparador.tsx");
+  assert.match(comp, /mismaDosVeces/);
+  assert.match(comp, /Elegiste la misma foto en A y en B/);
+  // Y el clic en A/B abre el visor sobre LA MISMA lista que alimenta el
+  // comparador: con un filtro puesto, antes no hacía nada.
+  const screen = crudo("src", "components", "edu", "fotos", "fotos-screen.tsx");
+  assert.match(screen, /const paraComparar = filtradas\.length >= 2 \? filtradas : rows;/);
+  assert.match(screen, /onAbrir=\{\(foto\) => abrirEn\(planasComp, foto\)\}/);
+});
+
+test("🔴 N-16 · los contadores de «Vista» respetan el filtro de etapa", () => {
+  const screen = crudo("src", "components", "edu", "fotos", "fotos-screen.tsx");
+  // Contaban sobre `rows` —el total— ignorando la etapa puesta: «Sonrisa
+  // (12)» encima de una galería con dos.
+  assert.match(screen, /const porEtapa = useMemo\(/);
+  assert.match(screen, /Todas las vistas \(\{porEtapa\.length\}\)/);
+  assert.match(screen, /porEtapa\.filter\(\(f\) => f\.photoType === t\)\.length/);
+  assert.equal(/\(\{rows\.length\}\)/.test(screen), false, "sigue contando sobre el total");
+});
+
+test("🔴 N-7 · la fecha de toma no se corre un día, y solo viaja si se tocó", () => {
+  const editar = sinComentarios(crudo("src", "components", "edu", "fotos", "editar-foto.tsx"));
+  // El día viene YA resuelto en la zona del instituto, no recortado en UTC.
+  assert.equal(/eduInstanteADiaInput/.test(editar), false, "sigue recortando el instante en UTC");
+  assert.match(editar, /useState\(foto\.capturedDayISO\)/);
+  // Y venir solo a corregir la ETAPA ya no reescribe `capturedAt`.
+  assert.match(editar, /dia && dia !== foto\.capturedDayISO \? eduDiaISOaInstante\(dia\) : undefined/);
+  // El servidor manda el día civil, calculado con la MISMA función que la
+  // etiqueta que se pinta en la tarjeta.
+  const server = sinComentarios(crudo("src", "lib", "edu", "fotos.ts"));
+  assert.match(server, /capturedDayISO: eduUtcToZoned\(p\.capturedAt, eduSafeTimeZone\(timeZone\)\)\.dayISO/);
+});
+
+test("🔴 N-16 · el motivo de retirar se puede LEER, plegado y con estudios.upload", () => {
+  const ret = crudo("src", "components", "edu", "estudios", "retirados.tsx");
+  // Qué, quién, cuándo y por qué.
+  assert.match(ret, /r\.que/);
+  assert.match(ret, /r\.quien/);
+  assert.match(ret, /r\.cuando/);
+  assert.match(ret, /r\.porQue/);
+  // Plegada: lo retirado no puede abrir la pantalla.
+  assert.match(ret, /useState\(false\)/);
+  assert.match(ret, /aria-expanded=\{abierto\}/);
+
+  // Las dos pantallas la pintan SOLO con el permiso de escritura.
+  for (const t of [
+    ["src", "components", "edu", "fotos", "fotos-screen.tsx"],
+    ["src", "components", "edu", "expediente", "estudios-screen.tsx"],
+  ]) {
+    const src = crudo(...t);
+    const i = src.indexOf("<EduRetirados");
+    assert.ok(i > 0, `${t.join("/")} no pinta la sección`);
+    assert.match(src.slice(Math.max(0, i - 200), i), /canUpload && \(/);
+  }
+
+  // Y el servidor las lee con `deletedAt: { not: null }`, que hasta hoy no
+  // aparecía en ninguna consulta fuera del historial del odontograma.
+  assert.match(
+    sinComentarios(crudo("src", "lib", "edu", "fotos.ts")),
+    /deletedAt: \{ not: null \}/,
+  );
+  assert.match(
+    sinComentarios(crudo("src", "lib", "edu", "estudios.ts")),
+    /deletedAt: \{ not: null \}/,
+  );
+});
+
+test("🔴 N-13 · un estudio RETIRADO no se analiza con IA ni gasta cupo", () => {
+  const ia = sinComentarios(crudo("src", "lib", "edu", "ia.ts"));
+  // El corte va ANTES del formato, del tamaño, del freno de doble clic y
+  // del cupo: es el más barato de todos, la fila ya está leída.
+  const iCorte = ia.indexOf("if (estudio.deletedAt)");
+  const iMime = ia.indexOf("eduAnalisisMimeOk(estudio.mimeType)");
+  const iCupo = ia.indexOf("eduIaConsumo");
+  assert.ok(iCorte > 0, "no hay corte por estudio retirado");
+  assert.ok(iCorte < iMime, "se comprueba el formato antes de saber si el estudio está retirado");
+  if (iCupo > 0) assert.ok(iCorte < iCupo, "se toca el cupo de un estudio retirado");
+  // Y `getEstudioEnAlcance` lo SELECCIONA en vez de filtrarlo: leer los
+  // análisis de un estudio retirado sigue estando bien.
+  assert.match(ia, /deletedAt: true,/);
+
+  // La ruta más cara del vertical, con el mismo candado.
+  const lite = crudo("src", "app", "api", "instituto", "estudios", "[id]", "lite", "route.ts");
+  assert.match(lite, /estudio\.deletedAt/);
+});
+
+test("🔴 N-11 · el bloque «Fotos clínicas» del Resumen comprueba estudios.view", () => {
+  const page = crudo("src", "app", "instituto", "(panel)", "pacientes", "[id]", "page.tsx");
+  // `r.fotos` solo se anula por ALCANCE, nunca por permiso: a quien le
+  // apagaron `estudios.view` con un override le desaparecía la pestaña y
+  // seguía leyendo aquí el conteo con un enlace que le daba denegado.
+  assert.match(page, /const veFotos = r\.fotos !== null && hasEduPermission\(permUser, "estudios\.view"\);/);
+  assert.match(page, /\{veFotos && r\.fotos !== null && \(/);
+  // Y «Subir la primera» pide el permiso de ESCRITURA.
+  assert.match(page, /const subeFotos = hasEduPermission\(permUser, "estudios\.upload"\);/);
+});
+
+test("🔴 N-16 · el medidor habla de ARCHIVOS, no solo de estudios", () => {
+  const core = crudo("src", "lib", "edu", "almacenamiento-core.ts");
+  const i = core.indexOf("export function eduAlmTexto");
+  assert.ok(i > 0);
+  const cuerpo = core.slice(i);
+  // Decía «la subida de estudios está BLOQUEADA» y «ni una radiografía
+  // más» a alguien que lo que no podía subir era una foto.
+  assert.match(cuerpo, /la subida de archivos está BLOQUEADA/);
+  assert.equal(/ni una radiografía más/.test(cuerpo), false);
+  assert.match(cuerpo, /fotos clínicas/);
+  // Y sigue diciendo lo que la prueba de almacenamiento exige.
+  assert.match(cuerpo, /BLOQUEADA/);
+  assert.match(cuerpo, /contratar más TB/);
+  assert.match(cuerpo, /liberar espacio/);
 });
 
 // ═════════════════════════════════════════════════════════════════════

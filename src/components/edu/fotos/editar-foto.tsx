@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EduModal } from "@/components/edu/edu-modal";
-import { eduDiaISOaInstante, eduInstanteADiaInput } from "@/lib/edu/estudios-core";
+import { eduDiaISOaInstante } from "@/lib/edu/estudios-core";
 import type { EduPhotoRow } from "@/lib/edu/fotos-core";
 import {
   EDU_PHOTO_STAGE_DESCRIPTIONS,
@@ -43,7 +43,18 @@ export function EduCorregirFoto({
 }) {
   const [stage, setStage] = useState<EduPhotoStage>(foto.stage);
   const [vista, setVista] = useState<EduPhotoType>(foto.photoType);
-  const [dia, setDia] = useState(eduInstanteADiaInput(foto.capturedAt));
+  /**
+   * 🔴 N-7 · EL DÍA SALE DEL SERVIDOR, YA EN LA ZONA DEL INSTITUTO.
+   *
+   * Salía de `eduInstanteADiaInput(foto.capturedAt)`, que recorta el
+   * instante EN UTC, mientras la tarjeta pintaba el día en la zona del
+   * instituto. Coincidían mientras `capturedAt` fuera mediodía UTC —lo que
+   * escribe la subida normal—, pero quien sube puede dejar la fecha vacía
+   * y entonces se guarda el instante real: una foto subida a las 20:00 de
+   * Ciudad de México queda en 02:00Z del día siguiente, la tarjeta decía
+   * «12 mar» y este modal abría en «2026-03-13».
+   */
+  const [dia, setDia] = useState(foto.capturedDayISO);
   const [notas, setNotas] = useState(foto.notes ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,9 +68,16 @@ export function EduCorregirFoto({
         body: {
           etapa: stage,
           vista,
+          // 🔴 N-7 · LA FECHA SOLO VIAJA SI ALGUIEN LA TOCÓ. Antes se
+          // mandaba siempre, así que venir solo a corregir la ETAPA
+          // reescribía `capturedAt` con el día que este modal hubiera
+          // calculado — y movía la foto en la columna por la que ORDENA el
+          // comparador. `undefined` = "no cambies", que es la semántica del
+          // PATCH en todo el vertical.
+          //
           // Mediodía UTC: con medianoche, leída en la zona del instituto,
           // la fecha se corre un día hacia atrás.
-          capturedAt: dia ? eduDiaISOaInstante(dia) : undefined,
+          capturedAt: dia && dia !== foto.capturedDayISO ? eduDiaISOaInstante(dia) : undefined,
           notas,
         },
       });

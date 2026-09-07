@@ -10944,3 +10944,128 @@ a.edu-ini-acceso:hover {
     display: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ===== fotos y estudios · afinado (ws2-t2) =====
+
+   Lo MÍNIMO que piden dos arreglos de la auditoría, y nada más:
+
+   · `.edu-fotos-rota*` — N-5. El hueco honesto que sustituye a una foto
+     que NO se puede pintar (un HEIC sin convertir, un objeto que ya no
+     está en el bucket). Antes el `onError` encendía el banner de «los
+     enlaces caducaron» y se entraba en bucle: renovar, fallar, renovar.
+     Va sobre el MISMO fondo oscuro que `.edu-fotos-tarjeta__mini`, porque
+     ocupa exactamente su sitio y las tres superficies donde se pinta
+     —tarjeta, visor y comparador— son oscuras.
+
+   · `.edu-retirados*` — N-16. La sección PLEGADA que hace legible el
+     motivo de retirar un estudio o una foto. Va apagada de tono a
+     propósito: lo retirado no es parte del expediente vivo y no puede
+     competir visualmente con lo que sí está.
+
+   Todo con tokens `--edu-*` que EXISTEN en esta hoja (`--edu-line`,
+   `--edu-surface-2`, `--edu-text-1/2/3`, `--edu-radius`). Ni un `--brand`,
+   ni un `--violet-*`, ni un `--bg-elev-*`: esos son del dental y viven en
+   globals.css.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.edu-fotos-rota {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+  padding: 10px;
+  text-align: center;
+  color: var(--edu-100);
+  background: #10131c;
+}
+
+.edu-fotos-rota__txt {
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.edu-retirados {
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface-2);
+}
+
+.edu-retirados__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--edu-text-2);
+  cursor: pointer;
+  text-align: left;
+}
+
+.edu-retirados__head:hover {
+  color: var(--edu-text-1);
+}
+
+.edu-retirados__title {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.edu-retirados__cuerpo {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--edu-line);
+}
+
+.edu-retirados__vacio {
+  margin: 0;
+  font-size: 13px;
+  color: var(--edu-text-3);
+}
+
+.edu-retirados__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edu-retirados__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--edu-line-strong);
+  background: var(--edu-surface);
+  border-radius: 0 10px 10px 0;
+}
+
+.edu-retirados__que {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--edu-text-1);
+}
+
+.edu-retirados__meta {
+  font-size: 12px;
+  color: var(--edu-text-3);
+}
+
+/* El MOTIVO es lo único por lo que existe la sección: se lee entero, sin
+   recortar con ellipsis. Un motivo cortado a mitad de frase no contesta
+   la pregunta que esta sección vino a contestar. */
+.edu-retirados__motivo {
+  font-size: 13px;
+  color: var(--edu-text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

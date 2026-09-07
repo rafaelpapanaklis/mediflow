@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, Columns2, MoveHorizontal } from "lucide-react";
 import { eduParFotosComparador, type EduPhotoRow } from "@/lib/edu/fotos-core";
 import { EDU_PHOTO_STAGE_LABELS, EDU_PHOTO_TYPE_LABELS } from "@/lib/edu/types";
+import { EduFotoImagen, type EduFotoEstado } from "@/components/edu/fotos/foto-img";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -35,9 +36,18 @@ import { EDU_PHOTO_STAGE_LABELS, EDU_PHOTO_TYPE_LABELS } from "@/lib/edu/types";
  * ═══════════════════════════════════════════════════════════════════════
  */
 export interface EduFotosComparadorProps {
+  patientId: string;
   fotos: EduPhotoRow[];
-  /** Abrir la foto a pantalla completa (el visor lo monta la galería). */
+  /**
+   * Abrir la foto a pantalla completa (el visor lo monta la galería).
+   *
+   * 🔴 N-16 · Quien lo recibe abre el visor sobre LA MISMA lista que
+   * alimenta este comparador. Antes buscaba la foto en la lista filtrada
+   * mientras esto se alimentaba de todas: con un filtro puesto, el clic en
+   * A o en B no hacía absolutamente nada.
+   */
   onAbrir?: (foto: EduPhotoRow) => void;
+  onEstado?: (id: string, estado: EduFotoEstado) => void;
 }
 
 type Modo = "deslizador" | "lado";
@@ -50,7 +60,12 @@ function opcion(f: EduPhotoRow): string {
   return `${f.capturedLabel} · ${EDU_PHOTO_STAGE_LABELS[f.stage]} · ${EDU_PHOTO_TYPE_LABELS[f.photoType]}`;
 }
 
-export function EduFotosComparador({ fotos, onAbrir }: EduFotosComparadorProps) {
+export function EduFotosComparador({
+  patientId,
+  fotos,
+  onAbrir,
+  onEstado,
+}: EduFotosComparadorProps) {
   const par = eduParFotosComparador(fotos);
   const [aId, setAId] = useState(par.a?.id ?? "");
   const [bId, setBId] = useState(par.b?.id ?? "");
@@ -71,6 +86,12 @@ export function EduFotosComparador({ fotos, onAbrir }: EduFotosComparadorProps) 
   const a = fotos.find((f) => f.id === aId) ?? par.a;
   const b = fotos.find((f) => f.id === bId) ?? par.b;
   const hayDos = Boolean(a && b && a.id !== b.id);
+  /**
+   * N-16 · «Falta una segunda foto» y «elegiste la misma dos veces» NO son
+   * lo mismo, y el aviso decía siempre lo primero. Con veinte fotos en la
+   * galería y A = B, mandaba a subir el «después» que ya estaba subido.
+   */
+  const mismaDosVeces = Boolean(a && b && a.id === b.id && fotos.length >= 2);
 
   function cortarEn(clientX: number) {
     const r = marcoRef.current?.getBoundingClientRect();
@@ -164,7 +185,9 @@ export function EduFotosComparador({ fotos, onAbrir }: EduFotosComparadorProps) 
         <div className="edu-fotos-comp__vacio">
           {fotos.length === 0
             ? "Todavía no hay fotos que comparar."
-            : "Hace falta una segunda foto. Sube el «después» —o marca una foto ya subida como «Después»— y aquí aparecerán las dos."}
+            : mismaDosVeces
+              ? "Elegiste la misma foto en A y en B: cambia una de las dos en los desplegables de arriba y el comparador se enciende."
+              : "Hace falta una segunda foto. Sube el «después» —o marca una foto ya subida como «Después»— y aquí aparecerán las dos."}
         </div>
       ) : modo === "deslizador" ? (
         <>
@@ -186,22 +209,27 @@ export function EduFotosComparador({ fotos, onAbrir }: EduFotosComparadorProps) 
               arrastrando.current = false;
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element -- URL
-                firmada que caduca: next/image la cachearía en una ruta que
-                después contesta 403. */}
-            <img
+            <EduFotoImagen
+              patientId={patientId}
+              foto={a!}
               className="edu-fotos-comp__img"
-              src={a!.url}
               alt={`A · ${etiqueta(a!)}`}
               draggable={false}
+              onEstado={onEstado}
             />
             <div
               className="edu-fotos-comp__capa"
               style={{ clipPath: `inset(0 0 0 ${corte}%)` }}
               aria-hidden
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="edu-fotos-comp__img" src={b!.url} alt="" draggable={false} />
+              <EduFotoImagen
+                patientId={patientId}
+                foto={b!}
+                className="edu-fotos-comp__img"
+                alt=""
+                draggable={false}
+                onEstado={onEstado}
+              />
             </div>
 
             <div className="edu-fotos-comp__linea" style={{ left: `${corte}%` }} aria-hidden>
@@ -252,8 +280,14 @@ export function EduFotosComparador({ fotos, onAbrir }: EduFotosComparadorProps) 
               onClick={() => onAbrir?.(foto)}
               aria-label={`Abrir ${tag} · ${etiqueta(foto)} a pantalla completa`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="edu-fotos-comp__img" src={foto.url} alt="" draggable={false} />
+              <EduFotoImagen
+                patientId={patientId}
+                foto={foto}
+                className="edu-fotos-comp__img"
+                alt=""
+                draggable={false}
+                onEstado={onEstado}
+              />
               <span
                 className={`edu-fotos-comp__tag edu-fotos-comp__tag--${tag === "A" ? "a" : "b"}`}
               >

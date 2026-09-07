@@ -1,13 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Camera, ImagePlus, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
-import {
-  EDU_MAX_PHOTO_LABEL,
-  EDU_PHOTO_ACCEPT,
-  eduValidarFotoSubida,
-} from "@/lib/edu/fotos-core";
+import { EDU_PHOTO_ACCEPT, eduValidarFotoSubida } from "@/lib/edu/fotos-core";
 import { eduDiaISOaInstante, eduFormatBytes } from "@/lib/edu/estudios-core";
 import type { EduCaseOption } from "@/lib/edu/expediente-core";
 import {
@@ -19,20 +15,28 @@ import {
   type EduPhotoStage,
   type EduPhotoType,
 } from "@/lib/edu/types";
+import { EduFotoIlegible, eduPrepararFoto, type EduFotoPreparada } from "@/components/edu/fotos/comprimir";
 import {
-  EDU_FOTO_UMBRAL_LABEL,
-  eduPrepararFoto,
-  type EduFotoPreparada,
-} from "@/components/edu/fotos/comprimir";
+  EduFotoUploadCancelled,
+  eduUploadPhoto,
+  type EduFotoUploadPhase,
+} from "@/components/edu/fotos/subir-foto-client";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
  * SUBIR UNA FOTO CLÍNICA — desde el teléfono, con el paciente delante.
  *
- * 🔴 AQUÍ EL BINARIO SÍ PASA POR EL SERVIDOR, al revés que los estudios.
- * Una foto cabe en 25 MB y a cambio el servidor puede comprobar el MIME
- * por número mágico, encogerla a 2 400 px y sacarle miniatura — tres cosas
- * que un estudio de 2 GB no puede pagar porque sube directo al bucket.
+ * 🔴 N-2 · EL BINARIO YA NO PASA POR EL SERVIDOR. Sube DIRECTO al bucket,
+ * en los mismos tres pasos que un estudio de 2 GB, porque el cuerpo de un
+ * route handler se corta muy por debajo de lo que pesa una foto de teléfono
+ * y el `bodySizeLimit` de `next.config.mjs` solo cubre las server actions.
+ *
+ * 🔴 Y POR ESO LA COMPRESIÓN ES OBLIGATORIA Y VIVE AQUÍ. Sharp no va a ver
+ * esta foto nunca: lo que sale del canvas es exactamente lo que queda en el
+ * expediente. Si el navegador no puede decodificar el archivo (HEIC en un
+ * escritorio), NO se manda el original — se dice por qué y se ofrece la
+ * salida. Subir un binario que después nadie sabe pintar es sembrar la
+ * tarjeta rota de N-5.
  *
  * 🔴 LA ETAPA ES OBLIGATORIA Y NO TIENE VALOR POR DEFECTO EN LA PANTALLA.
  * Es el ÚNICO campo del que depende el comparador: sin etapa no hay antes
@@ -40,12 +44,6 @@ import {
  * a mano, pero dejarlo preseleccionado aquí produciría galerías enteras de
  * "Antes" que nadie eligió — y un comparador que enseña dos "antes" parece
  * que dice que no hubo tratamiento.
- *
- * 🔴 EL PUT VA POR XMLHttpRequest Y NO POR fetch: `fetch` todavía no
- * expone progreso de SUBIDA, y una foto de 20 MB por 4G sin porcentaje es
- * indistinguible de una colgada. Es la misma razón que en
- * edu-upload-client.ts, y por eso este archivo lo repite en tres líneas en
- * vez de importar aquel, que orquesta los tres pasos de los estudios.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export interface EduSubirFotoProps {
@@ -57,6 +55,14 @@ export interface EduSubirFotoProps {
   onDone: (mensaje: string) => void;
 }
 
+const FASE_LABEL: Record<EduFotoUploadPhase, string> = {
+  preparando: "Preparando la foto…",
+  firmando: "Preparando la subida…",
+  subiendo: "Subiendo",
+  reintentando: "Reintentando",
+  registrando: "Registrando…",
+};
+
 export function EduSubirFoto({
   patientId,
   cases,
@@ -64,110 +70,125 @@ export function EduSubirFoto({
   onClose,
   onDone,
 }: EduSubirFotoProps) {
+  /**
+   * N-12 · CON UN SOLO CASO ABIERTO, LA FOTO SE ENGANCHA A ÉL.
+   *
+   * El comentario de esta pantalla ya decía «con uno, la respuesta es
+   * obvia y preguntarla es un trámite» — pero el código no aplicaba esa
+   * respuesta: escondía el desplegable y dejaba `caseId` vacío, así que en
+   * el caso más común de una escuela (un paciente, un caso) NINGUNA foto
+   * quedaba ligada a su caso.
+   *
+   * Y se cuentan los ABIERTOS, no todos: `cases` incluye los cerrados, así
+   * que «más de uno» no describía ni lo que contaba ni lo que permitía.
+   */
+  const abiertos = useMemo(() => cases.filter((c) => c.isOpen), [cases]);
+  const unico = abiertos.length === 1 ? abiertos[0] : null;
+
   const [file, setFile] = useState<File | null>(null);
   const [prep, setPrep] = useState<EduFotoPreparada | null>(null);
   const [preparando, setPreparando] = useState(false);
   const [stage, setStage] = useState<EduPhotoStage | "">("");
   const [photoType, setPhotoType] = useState<EduPhotoType>("OTRA");
   const [dia, setDia] = useState(todayISO);
-  const [caseId, setCaseId] = useState("");
+  const [caseId, setCaseId] = useState(unico ? unico.id : "");
   const [notas, setNotas] = useState("");
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
+  const [fase, setFase] = useState<EduFotoUploadPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const archivoRef = useRef<HTMLInputElement | null>(null);
   const camaraRef = useRef<HTMLInputElement | null>(null);
-  // El XHR vive en una ref y no en el estado: cambiarlo no tiene por qué
-  // repintar, y en el estado se perdería entre renders justo cuando
-  // alguien pulsa "Cancelar".
-  const xhrRef = useRef<XMLHttpRequest | null>(null);
+  // El AbortController vive en una ref y no en el estado: cambiarlo no
+  // tiene por qué repintar, y en el estado se perdería entre renders justo
+  // cuando alguien pulsa "Cancelar".
+  const abortRef = useRef<AbortController | null>(null);
 
   async function elegir(f: File | null) {
     setError(null);
     setPrep(null);
     setFile(null);
     if (!f) return;
-    // La validación de CORTESÍA: el servidor vuelve a comprobarlo todo, y
-    // además contra el contenido real. Esto solo evita que alguien espere
-    // una subida que iba a rebotar igual.
+    // La validación de CORTESÍA sobre el archivo ELEGIDO: formato y tope.
+    // El servidor vuelve a comprobarlo todo sobre el binario que de verdad
+    // llega al bucket.
     //
     // 🔴 El archivo malo NO se queda seleccionado: si se quedara, «Subir»
     // seguiría encendido debajo del error y quien lo pulsara volvería a
-    // esperar para leer lo mismo desde el servidor.
+    // esperar para leer lo mismo.
     const malo = eduValidarFotoSubida({ mime: f.type, size: f.size });
     if (malo) {
       setError(malo);
       return;
     }
-    setFile(f);
     setPreparando(true);
     try {
-      setPrep(await eduPrepararFoto(f));
+      // 🔴 SE PREPARA AL ELEGIR, no al pulsar «Subir»: así el «este
+      // navegador no puede leer HEIC» sale ANTES de que la persona rellene
+      // etapa, vista, fecha y nota para nada.
+      const listo = await eduPrepararFoto(f);
+      setFile(f);
+      setPrep(listo);
+    } catch (e) {
+      setError(
+        e instanceof EduFotoIlegible
+          ? e.message
+          : "No se pudo preparar la foto. Vuelve a elegirla.",
+      );
     } finally {
       setPreparando(false);
     }
   }
 
-  function subir() {
-    if (!file || !stage) return;
-    const listo = prep ?? { blob: file, fileName: file.name, size: file.size, comprimida: false };
+  async function subir() {
+    if (!file || !prep || !stage) return;
     setError(null);
     setBusy(true);
     setPct(0);
-
-    const form = new FormData();
-    // El tercer argumento del `append` es el NOMBRE del archivo: sin él, un
-    // Blob comprimido viaja como "blob" y el path del bucket se queda con
-    // ese nombre para siempre.
-    form.append("file", listo.blob, listo.fileName);
-    form.append("etapa", stage);
-    form.append("vista", photoType);
-    // Mediodía UTC para que el día no se corra al leerlo en la zona del
-    // instituto (eduDiaISOaInstante lo explica).
-    if (dia) form.append("capturedAt", eduDiaISOaInstante(dia));
-    if (caseId) form.append("caseId", caseId);
-    if (notas.trim()) form.append("notas", notas.trim());
-
-    const xhr = new XMLHttpRequest();
-    xhrRef.current = xhr;
-    xhr.open("POST", `/api/instituto/pacientes/${patientId}/fotos`);
-    xhr.upload.onprogress = (ev) => {
-      if (ev.lengthComputable) setPct(Math.round((ev.loaded / ev.total) * 100));
-    };
-    xhr.onload = () => {
-      xhrRef.current = null;
-      setBusy(false);
-      if (xhr.status >= 200 && xhr.status < 300) {
-        onDone(
-          `La foto quedó en el expediente, en "${EDU_PHOTO_STAGE_LABELS[stage as EduPhotoStage]}".`,
-        );
-        return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      await eduUploadPhoto({
+        patientId,
+        file,
+        preparada: prep,
+        stage,
+        photoType,
+        // Mediodía UTC para que el día no se corra al leerlo en la zona del
+        // instituto (eduDiaISOaInstante lo explica).
+        capturedAt: dia ? eduDiaISOaInstante(dia) : null,
+        caseId: caseId || null,
+        notes: notas.trim() || null,
+        onProgress: setPct,
+        onPhase: (f) => setFase(f),
+        signal: controller.signal,
+      });
+      onDone(
+        `La foto quedó en el expediente, en "${EDU_PHOTO_STAGE_LABELS[stage as EduPhotoStage]}".`,
+      );
+    } catch (e) {
+      if (e instanceof EduFotoUploadCancelled) {
+        setError("Subida cancelada. No quedó nada en el expediente.");
+      } else {
+        // 🔴 El mensaje del servidor se enseña TAL CUAL: dice el tope, o
+        // que el contenido no es una imagen, o —en un 507— cuánto le queda
+        // a la escuela y a quién avisarle. Un "Error 413" no le sirve a nadie.
+        setError(e instanceof Error ? e.message : "No se pudo subir la foto.");
       }
-      // 🔴 El mensaje del servidor se enseña TAL CUAL: dice el tope (25 MB),
-      // o que el contenido no es una imagen, o —en un 507— cuánto le queda
-      // a la escuela y a quién avisarle. Un "Error 413" no le sirve a nadie.
-      setError(mensajeDelServidor(xhr));
-    };
-    xhr.onerror = () => {
-      xhrRef.current = null;
+    } finally {
+      abortRef.current = null;
       setBusy(false);
-      setError("Se cortó la conexión al subir la foto. Vuelve a intentarlo.");
-    };
-    xhr.onabort = () => {
-      xhrRef.current = null;
-      setBusy(false);
-      setError("Subida cancelada. No quedó nada en el expediente.");
-    };
-    xhr.send(form);
+      setFase(null);
+    }
   }
-
-  const pesoFinal = prep ? prep.size : file ? file.size : 0;
 
   return (
     <EduModal
       title="Subir una foto clínica"
-      subtitle={`Hasta ${EDU_MAX_PHOTO_LABEL} por foto. Se encoge en el teléfono y otra vez en el servidor.`}
+      /* 🔴 N-2 · EL SUBTÍTULO YA NO PROMETE 25 MB. Prometía un tope que la
+         tubería no aguantaba; ahora dice lo que de verdad pasa. */
+      subtitle="Se encoge aquí, en tu dispositivo, y sube directo al almacenamiento sin pasar por el servidor."
       onClose={onClose}
       busy={busy}
       footer={
@@ -176,7 +197,7 @@ export function EduSubirFoto({
             <button
               type="button"
               className="edu-btn edu-btn--danger"
-              onClick={() => xhrRef.current?.abort()}
+              onClick={() => abortRef.current?.abort()}
             >
               <X size={16} />
               Cancelar subida
@@ -189,8 +210,8 @@ export function EduSubirFoto({
           <button
             type="button"
             className="edu-btn edu-btn--primary"
-            onClick={subir}
-            disabled={busy || preparando || !file || !stage}
+            onClick={() => void subir()}
+            disabled={busy || preparando || !prep || !stage}
           >
             {busy ? "Subiendo…" : "Subir la foto"}
           </button>
@@ -249,12 +270,13 @@ export function EduSubirFoto({
 
       {preparando && <p className="edu-note">Preparando la foto…</p>}
 
-      {file && !preparando && (
+      {prep && !preparando && (
         <p className="edu-note">
-          {prep ? prep.fileName : file.name} · {eduFormatBytes(pesoFinal)}
-          {prep?.comprimida
-            ? ` (se encogió aquí desde ${eduFormatBytes(file.size)}: pesaba más de ${EDU_FOTO_UMBRAL_LABEL})`
+          {prep.fileName} · {eduFormatBytes(prep.size)}
+          {prep.originalSize > prep.size
+            ? ` (se encogió aquí desde ${eduFormatBytes(prep.originalSize)})`
             : ""}
+          {prep.thumb ? "" : " · sin miniatura: este navegador no genera WebP"}
         </p>
       )}
 
@@ -325,9 +347,11 @@ export function EduSubirFoto({
         </span>
       </div>
 
-      {/* El caso solo se pregunta si hay más de uno abierto: con uno, la
-          respuesta es obvia y preguntarla es un trámite. */}
-      {cases.length > 1 && (
+      {/* N-12 · El desplegable sale cuando hay MÁS DE UN caso entre los que
+          elegir. Con uno solo abierto no se pregunta, pero la foto SÍ se
+          engancha a él —lo que este bloque siempre dijo que hacía— y se
+          dice a cuál, para que nadie tenga que adivinarlo. */}
+      {cases.length > 1 ? (
         <div className="edu-field">
           <label className="edu-field__label" htmlFor="edu-foto-caso">
             Caso (opcional)
@@ -351,6 +375,13 @@ export function EduSubirFoto({
             La foto se ve igual desde cualquier caso del paciente: la cara es una sola.
           </span>
         </div>
+      ) : (
+        unico && (
+          <p className="edu-note">
+            Se guarda en el caso de {unico.programName} · {unico.studentMatricula}, el único
+            abierto de este paciente.
+          </p>
+        )
       )}
 
       <div className="edu-field">
@@ -371,7 +402,9 @@ export function EduSubirFoto({
 
       {busy && (
         <div className="edu-upload">
-          <span className="edu-estudio__meta">Subiendo · {pct}%</span>
+          <span className="edu-estudio__meta">
+            {fase ? FASE_LABEL[fase] : "Subiendo"} · {pct}%
+          </span>
           <div
             className="edu-progress"
             role="progressbar"
@@ -382,33 +415,11 @@ export function EduSubirFoto({
             <div className="edu-progress__bar" style={{ width: `${pct}%` }} />
           </div>
           <span className="edu-estudio__meta">
-            No cierres esta ventana. Al llegar, el servidor comprueba que de verdad es una imagen y
-            la vuelve a encoger.
+            No cierres esta ventana. Al terminar, el servidor mide el archivo y comprueba que de
+            verdad es una imagen antes de dejarlo en el expediente.
           </span>
         </div>
       )}
     </EduModal>
   );
-}
-
-/**
- * El mensaje que escribió el servidor, o uno honesto si no llegó ninguno.
- *
- * Los tres que importan y por qué se distinguen:
- *   · 413 → la FOTO es demasiado grande (25 MB);
- *   · 507 → la ESCUELA no tiene sitio (cuota del contrato). Son dos topes
- *           distintos y confundirlos manda a la persona a encoger una foto
- *           que no era el problema;
- *   · 400 → el contenido no es una imagen (número mágico).
- */
-function mensajeDelServidor(xhr: XMLHttpRequest): string {
-  try {
-    const body = JSON.parse(xhr.responseText) as { error?: unknown };
-    if (typeof body?.error === "string" && body.error) return body.error;
-  } catch {
-    /* respuesta sin JSON */
-  }
-  if (xhr.status === 403) return "Tu cuenta no tiene permiso para subir fotos a este expediente.";
-  if (xhr.status === 401) return "Tu sesión caducó. Vuelve a entrar.";
-  return `No se pudo subir la foto (HTTP ${xhr.status}). Intenta de nuevo.`;
 }

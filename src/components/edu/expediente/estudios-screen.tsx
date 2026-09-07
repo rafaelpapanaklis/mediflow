@@ -11,12 +11,14 @@ import {
   EDU_STUDY_ORDEN_NOTA,
   eduDiaISOaInstante,
   eduFormatBytes,
+  type EduRetiradoRow,
   type EduStudyRow,
 } from "@/lib/edu/estudios-core";
 import type { EduCaseOption } from "@/lib/edu/expediente-core";
 import type { EduIaEstado } from "@/lib/edu/ia-core";
 import type { Dictionary } from "@/i18n/t";
 import { EduEstudioViewer } from "@/components/edu/expediente/estudio-viewer";
+import { EduRetirados } from "@/components/edu/estudios/retirados";
 import {
   EduUploadCancelled,
   eduUploadStudy,
@@ -82,6 +84,11 @@ export interface EduEstudiosScreenProps {
    * calcule con SU reloj — que puede estar en otra zona y en otro día.
    */
   todayISO: string;
+  /**
+   * N-16 · Los RETIRADOS, para que el motivo obligatorio se pueda LEER.
+   * Llegan vacíos sin `estudios.upload`: el servidor ni los consulta.
+   */
+  retirados: EduRetiradoRow[];
 }
 
 /**
@@ -133,6 +140,7 @@ export function EduEstudiosScreen({
   dict3d,
   abrirSubida,
   todayISO,
+  retirados,
 }: EduEstudiosScreenProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -339,6 +347,18 @@ export function EduEstudiosScreen({
             );
           })}
         </div>
+      )}
+
+      {/* N-16 · El MOTIVO de retirar un estudio, por fin legible. Plegada y
+          solo con `estudios.upload`, que es el mismo permiso que hace falta
+          para retirar. */}
+      {canUpload && (
+        <EduRetirados
+          rows={retirados}
+          titulo="Retirados"
+          vacio="Ningún estudio de este paciente se ha retirado del expediente."
+          detalle="Un estudio retirado deja de salir en la galería y de contar para el almacenamiento contratado, pero ni la fila ni el archivo se borran. Aquí está por qué se retiró cada uno."
+        />
       )}
 
       {subir && (

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut } from "lucide-react";
 import type { EduPhotoRow } from "@/lib/edu/fotos-core";
 import { EDU_PHOTO_STAGE_LABELS, EDU_PHOTO_TYPE_LABELS } from "@/lib/edu/types";
+import { EduFotoImagen, type EduFotoEstado } from "@/components/edu/fotos/foto-img";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -28,16 +29,30 @@ import { EDU_PHOTO_STAGE_LABELS, EDU_PHOTO_TYPE_LABELS } from "@/lib/edu/types";
  * ⚠️ `useEffect` con `[índice, total]` y NO con el objeto de props: con el
  * objeto entero, el listener de teclado se quita y se vuelve a poner en
  * CADA render, y en medio de un repintado se pierden pulsaciones.
+ *
+ * 🔴 N-16 · LA IMAGEN VA POR `EduFotoImagen`, que renueva la URL contra
+ * `/fotos/[fotoId]/url`. Este visor usaba la URL de la carga inicial SIN
+ * `onError`: a la hora enseñaba un cuadro roto sin una palabra, y la ruta
+ * que se escribió justo para esto no la llamaba nadie.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export interface EduFotoVisorProps {
+  patientId: string;
   fotos: EduPhotoRow[];
   indice: number;
   onCerrar: () => void;
   onIr: (indice: number) => void;
+  onEstado?: (id: string, estado: EduFotoEstado) => void;
 }
 
-export function EduFotoVisor({ fotos, indice, onCerrar, onIr }: EduFotoVisorProps) {
+export function EduFotoVisor({
+  patientId,
+  fotos,
+  indice,
+  onCerrar,
+  onIr,
+  onEstado,
+}: EduFotoVisorProps) {
   const total = fotos.length;
   const foto = fotos[indice];
   const [zoom, setZoom] = useState(false);
@@ -119,13 +134,13 @@ export function EduFotoVisor({ fotos, indice, onCerrar, onIr }: EduFotoVisorProp
         </button>
 
         <div className={`edu-fotos-visor__marco ${zoom ? "edu-fotos-visor__marco--zoom" : ""}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- URL
-              firmada que caduca: next/image la cachearía y después daría
-              403. */}
-          <img
+          <EduFotoImagen
+            patientId={patientId}
+            foto={foto}
             className="edu-fotos-visor__img"
-            src={foto.url}
             alt={foto.notes ?? `${EDU_PHOTO_STAGE_LABELS[foto.stage]} · ${EDU_PHOTO_TYPE_LABELS[foto.photoType]}`}
+            loading="eager"
+            onEstado={onEstado}
           />
         </div>
 
