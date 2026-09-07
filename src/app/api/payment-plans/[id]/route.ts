@@ -3,11 +3,19 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { PLAN_STATUS } from "@/lib/payment-plans/status";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 // PATCH /api/payment-plans/[id] — register a payment on an installment
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: esto marca una cuota como COBRADA (paidAt, método) y, si
+  // era la última, cierra el plan. Registrar un pago exige "billing.charge" en
+  // POST /api/invoices/[id] y en /api/invoices/[id]/mark-paid — por esta puerta
+  // no pedía nada, así que un READONLY daba por cobrada la cuota de un paciente.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.charge");
+  if (deniedPerm) return deniedPerm;
 
   const plan = await prisma.paymentPlan.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
@@ -59,6 +67,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Misma key que el PATCH: cancelar el plan es la otra mitad de operarlo —
+  // deja de cobrarse el resto de las cuotas. Una sola llave para toda la
+  // superficie de escritura del módulo, mismo criterio con el que el PR #190
+  // le dio a DELETE /api/quotes/[id] la key de su PATCH.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.charge");
+  if (deniedPerm) return deniedPerm;
 
   const plan = await prisma.paymentPlan.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
