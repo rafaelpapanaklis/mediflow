@@ -215,6 +215,45 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
         </section>
       )}
 
+      {/* ── ws2-t2 · LAS FOTOS CLÍNICAS, en una línea ──────────────────────
+          Hasta hoy, una foto de la sonrisa subida como estudio aparecía en
+          «Últimos estudios» rotulada «Radiografía» —el servidor asume
+          RADIOGRAFIA para TODA imagen— y no había ni una palabra sobre las
+          fotos clínicas de verdad, que viven en su propia tabla y en su
+          propia pestaña. Esto lo dice: cuántas hay y de cuándo es la
+          última, con el enlace para verlas y compararlas.
+
+          Una línea y no tres miniaturas a propósito: firmar tres URLs más
+          de Storage en cada carga de la ficha para repetir lo que la
+          pestaña Fotos enseña mejor no vale lo que cuesta. */}
+      {r.fotos !== null && (
+        <section className="edu-section">
+          <div className="edu-section__head">
+            <h2 className="edu-section__title">Fotos clínicas</h2>
+            <span className="edu-count">{r.fotos.total}</span>
+          </div>
+          {r.fotos.total === 0 ? (
+            <p className="edu-note">
+              Todavía no hay fotos de este paciente.{" "}
+              <Link href={`${base}/fotos`} className="edu-link">
+                Subir la primera
+              </Link>{" "}
+              — con dos, una de «Antes» y otra de «Después», el comparador enseña el cambio.
+            </p>
+          ) : (
+            <p className="edu-note">
+              <strong>
+                {r.fotos.total} {r.fotos.total === 1 ? "foto clínica" : "fotos clínicas"}
+              </strong>
+              {r.fotos.ultimaLabel ? ` · última: ${r.fotos.ultimaLabel}` : ""} ·{" "}
+              <Link href={`${base}/fotos`} className="edu-link">
+                Verlas y comparar antes/después
+              </Link>
+            </p>
+          )}
+        </section>
+      )}
+
       {/* ── Ola de Casos · los últimos estudios, con miniatura ───────────── */}
       {r.estudios !== null && r.estudios.length > 0 && (
         <section className="edu-section">

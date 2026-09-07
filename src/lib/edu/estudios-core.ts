@@ -352,6 +352,47 @@ export interface EduStudyRow {
   createdAt: string;
   createdLabel: string;
 
+  /**
+   * ws2-t2 · LA EXTENSIÓN REAL DEL ARCHIVO, sacada del PATH que compuso el
+   * servidor ("jpg", "zip", "stl"…).
+   *
+   * 🔴 VIAJA PORQUE AHORA SE PUEDE RENOMBRAR. Hasta hoy la pantalla
+   * deducía qué visor abrir y qué icono pintar de `name`, y daba igual
+   * porque `name` era el nombre con el que se subió. Desde que se puede
+   * corregir el nombre, alguien puede dejarlo en "panorámica de Ana" —sin
+   * extensión— y entonces `eduVisorPorExtension(name)` no encontraría el
+   * visor de una tomografía que SÍ es un .zip. El path no sale del
+   * servidor nunca; su extensión, sí, que es lo único que la pantalla
+   * necesita y no puede mentir.
+   */
+  ext: string;
+
+  /**
+   * ws2-t2 · CUÁNDO SE TOMÓ (ISO), o null si nadie lo capturó.
+   *
+   * No es `createdAt`: una placa de hace un año subida hoy se ordenaba
+   * como si fuera de hoy, y el expediente contaba una historia falsa.
+   */
+  takenAt: string | null;
+  /** "mié, 12 mar" — la fecha de TOMA ya escrita, o "" si no hay. */
+  takenLabel: string;
+  /**
+   * La fecha con la que se ORDENA la galería: la de toma cuando existe y
+   * la de subida cuando no (el `COALESCE(takenAt, createdAt)` que pide el
+   * esquema). Viaja resuelta desde el servidor para que la pantalla no
+   * tenga que repetir la regla — ni equivocarse en la mitad de los sitios.
+   */
+  ordenAt: string;
+  /** true si `ordenAt` salió de `takenAt`. Es lo que deja DECIRLO. */
+  ordenPorToma: boolean;
+
+  /**
+   * ws2-t2 · Las MARCAS sobre la imagen (x/y relativos 0-1 + etiqueta).
+   * Siempre un arreglo, nunca null: una lista vacía y "no hay" son lo
+   * mismo aquí, y un null obliga a un `?? []` en cada sitio que la pinte.
+   */
+  annotations: EduStudyMark[];
+
   /** URL FIRMADA, recién generada al leer. Nunca se guarda en la base. */
   url: string;
   /** true si se puede pintar dentro de la página. */
@@ -384,4 +425,302 @@ export interface EduStudyPage {
    * puede haber un rato (una pestaña restaurada, una conexión lenta).
    */
   signedAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ws2-t2 · EL RASTRO: retirar, corregir, ordenar y anotar
+//
+// Todo lo PURO de "un estudio se puede corregir y se puede retirar" vive
+// aquí, y no dentro del route handler ni del componente, por la misma
+// razón que los topes: lo que valida el servidor y lo que ofrece la
+// pantalla tienen que ser LA MISMA regla. Un desplegable que ofrece
+// "Modelo 3D" para un `.jpg` produce un 400 que la persona lee como un
+// fallo del panel.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * 🔴 NADA SE BORRA: RETIRAR ES UNA BAJA SUAVE, Y EXIGE MOTIVO.
+ *
+ * El tope del motivo es el `@db.VarChar(500)` del esquema. Es obligatorio
+ * por lo mismo que en las fotos: sin él, "retirar" y "borrar" son la misma
+ * cosa con distinto nombre, y dentro de un año la fila dice que alguien lo
+ * quitó y no dice por qué — que es justo la pregunta que se hace.
+ */
+export const EDU_STUDY_MOTIVO_MAX = 500;
+
+/**
+ * Lo que se le contesta a quien intenta LIMPIAR (abort) un archivo que ya
+ * es parte del expediente.
+ *
+ * Antes decía solo «Ese archivo ya está registrado en el expediente» y ahí
+ * se acababa la conversación: el alumno que acababa de subir la panorámica
+ * al paciente equivocado leía un 409 y no tenía a dónde ir. Ahora dice a
+ * dónde ir. El texto vive aquí —y no dentro del handler— porque hay una
+ * prueba que lo fija: el día que alguien lo recorte a "409", la salida
+ * vuelve a desaparecer.
+ */
+export const EDU_STUDY_ABORT_YA_REGISTRADO =
+  "Ese archivo ya está registrado en el expediente, así que esta puerta no lo saca: " +
+  "aquí solo se limpia lo que se subió a medias. Si se subió por error, ábrelo en " +
+  "Estudios y usa «Retirar» — deja constancia de quién lo retiró y por qué, y el " +
+  "archivo no se destruye.";
+
+/**
+ * La lista de valores del enum, aquí y no importada de types.ts, para que
+ * este módulo siga sin depender de nada más que de su propio tipo. El
+ * candado de que no se desincronice es un chequeo de TIPOS en
+ * edu-estudios-rastro.test.ts (lo verifica `tsc --noEmit`).
+ */
+const EDU_STUDY_KINDS_SET: EduStudyKind[] = [
+  "RADIOGRAFIA",
+  "TOMOGRAFIA",
+  "FOTO",
+  "PDF",
+  "OTRO",
+  "MODELO_3D",
+];
+
+/**
+ * ¿SE PUEDE RECLASIFICAR un estudio a ese `kind`?
+ *
+ * 🔴 SOLO ENTRE LOS COMPATIBLES CON LA EXTENSIÓN, y quien lo decide es
+ * `eduResolveStudyKind`, que ya existía y ya tenía su prueba: se le
+ * pregunta, y si lo que devuelve NO es lo que se pidió, es que la
+ * extensión manda. Reimplementar la regla aquí sería tener dos.
+ *
+ * En la práctica: una imagen (.jpg/.png/.webp) puede ir y venir entre
+ * RADIOGRAFIA y FOTO —que es la corrección que de verdad se necesita,
+ * porque el servidor asume RADIOGRAFIA para toda imagen— y ningún `.zip`
+ * puede convertirse en "Foto", que es lo que haría que la galería
+ * intentara pintar 600 MB con un `<img>`.
+ *
+ * Devuelve el ERROR escrito para una persona, o null si pasa.
+ */
+export function eduValidarReclasificacion(ext: string, kind: unknown): string | null {
+  if (typeof kind !== "string" || !(EDU_STUDY_KINDS_SET as readonly string[]).includes(kind)) {
+    return "Ese tipo de estudio no existe.";
+  }
+  const resuelto = eduResolveStudyKind(ext, kind);
+  if (resuelto === kind) return null;
+  return (
+    `Un archivo .${String(ext).toLowerCase()} no se puede clasificar así: por su formato es ` +
+    `“${resuelto}”. Lo único que se corrige a mano es si una imagen es radiografía o foto ` +
+    "clínica, porque ahí el archivo no lo dice."
+  );
+}
+
+/**
+ * Los tipos que TIENEN SENTIDO ofrecerle a una persona para ese archivo.
+ *
+ * La pantalla pinta esto y no la lista entera: un desplegable con seis
+ * opciones de las que cinco rebotan no es una elección, es una trampa.
+ * Sale de la MISMA función que valida, así que no se pueden separar.
+ */
+export function eduReclasificacionesPosibles(ext: string): EduStudyKind[] {
+  return EDU_STUDY_KINDS_SET.filter((k) => eduResolveStudyKind(ext, k) === k);
+}
+
+/**
+ * La FECHA DE TOMA que manda el cliente, o null si no la manda.
+ *
+ * ⚠️ Una fecha en el FUTURO se rechaza (devuelve `false`, que quien llama
+ * traduce a 400): igual que en las fotos, una placa "tomada mañana"
+ * desordena la galería para siempre y un dedazo en el año es la forma más
+ * común de conseguirla. Se admite un día de margen para no pelearse con la
+ * zona horaria del navegador.
+ *
+ * Tres respuestas y no dos, a propósito:
+ *   · `undefined` → no vino: no se toca la columna;
+ *   · `null`      → vino vacía: se BORRA la fecha de toma (vuelve a
+ *                   ordenarse por la de subida);
+ *   · `Date`      → la fecha.
+ * `false` es "vino y no vale".
+ */
+export const EDU_STUDY_FUTURO_MS = 24 * 60 * 60 * 1000;
+
+export function eduParseTakenAt(
+  raw: unknown,
+  now: Date = new Date(),
+): Date | null | undefined | false {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const d = raw instanceof Date ? raw : new Date(String(raw));
+  const t = d.getTime();
+  if (!Number.isFinite(t)) return false;
+  if (t > now.getTime() + EDU_STUDY_FUTURO_MS) return false;
+  return d;
+}
+
+// ── EL ORDEN DE LA GALERÍA ─────────────────────────────────────────────
+
+/**
+ * La fecha con la que se ORDENA un estudio: la de TOMA si la hay, y si no
+ * la de subida.
+ *
+ * 🔴 Es el `COALESCE(takenAt, createdAt)` que pide el comentario de la
+ * columna en el esquema, escrito UNA vez. Sin esto, la mitad de las
+ * pantallas ordenaría por `createdAt` y la otra mitad por `takenAt`, y la
+ * misma radiografía saldría en dos sitios distintos de la misma lista.
+ */
+export function eduStudyOrdenISO(row: {
+  takenAt?: string | null;
+  createdAt: string;
+}): { iso: string; porToma: boolean } {
+  const t = row?.takenAt ? Date.parse(row.takenAt) : NaN;
+  if (Number.isFinite(t)) return { iso: row.takenAt as string, porToma: true };
+  return { iso: row?.createdAt ?? "", porToma: false };
+}
+
+/**
+ * La galería, de la más reciente a la más antigua POR FECHA DE TOMA.
+ *
+ * ⚠️ Se ordena en memoria y no en la consulta, y hay que decirlo: Prisma
+ * no sabe ordenar por `COALESCE(takenAt, createdAt)` sin bajar a SQL
+ * crudo, y `orderBy: [{takenAt: 'desc'}, {createdAt:'desc'}]` NO es lo
+ * mismo — pondría todas las que tienen fecha de toma antes que todas las
+ * que no, aunque la de subida sea de anteayer.
+ *
+ * La CONSECUENCIA, dicha en voz alta: el recorte de los 200 sigue siendo
+ * por fecha de SUBIDA (es lo que hace la consulta), así que lo que se
+ * pierde al truncar son los 200 subidos más recientemente, reordenados
+ * después por toma. Con 200 estudios en un paciente es un caso de
+ * laboratorio; la pantalla ya avisa de que cortó.
+ *
+ * Empates: por id, para que el orden sea ESTABLE. Sin eso, dos placas
+ * tomadas el mismo día bailan entre recarga y recarga.
+ */
+export function eduOrdenarEstudios<T extends { id: string; takenAt?: string | null; createdAt: string }>(
+  rows: T[],
+): T[] {
+  return (Array.isArray(rows) ? [...rows] : []).sort((a, b) => {
+    const ta = Date.parse(eduStudyOrdenISO(a).iso);
+    const tb = Date.parse(eduStudyOrdenISO(b).iso);
+    const va = Number.isFinite(ta) ? ta : 0;
+    const vb = Number.isFinite(tb) ? tb : 0;
+    if (va !== vb) return vb - va;
+    return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
+  });
+}
+
+/** Lo que la pantalla DICE sobre su propio orden. Un orden que no se
+ *  explica se lee como un orden roto. */
+export const EDU_STUDY_ORDEN_NOTA =
+  "Ordenados por fecha de toma cuando se registró; los que no la tienen, por la de subida.";
+
+// ── LAS ANOTACIONES SOBRE LA IMAGEN ────────────────────────────────────
+
+/**
+ * UNA MARCA sobre la imagen.
+ *
+ * 🔴 `x` e `y` son RELATIVOS (0 a 1), no píxeles, y ésa es toda la
+ * decisión: la misma radiografía se pinta a 320 px en un teléfono y a
+ * 900 en un monitor, y una marca en píxeles apuntaría a otro diente en
+ * cada pantalla. Con relativos, la marca cae donde tiene que caer sin
+ * saber nada del tamaño.
+ */
+export interface EduStudyMark {
+  /** 0 = borde izquierdo, 1 = borde derecho. */
+  x: number;
+  /** 0 = borde superior, 1 = borde inferior. */
+  y: number;
+  /** Lo que dice la marca. Recortado a 80: es una etiqueta, no una nota. */
+  label: string;
+}
+
+export const EDU_STUDY_MARK_LABEL_MAX = 80;
+/**
+ * Techo de marcas por estudio. No es una limitación técnica: cincuenta
+ * etiquetas encima de una panorámica no se leen, y el JSON de la columna
+ * tampoco es un lugar para meter un cuaderno.
+ */
+export const EDU_STUDY_MAX_MARKS = 40;
+
+function numeroEn01(v: unknown): number | null {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  // Se PINZA en vez de rechazar: un arrastre que se sale un píxel del
+  // marco es un gesto normal, no un dato corrupto.
+  return Math.min(1, Math.max(0, n));
+}
+
+/**
+ * El JSON de la columna → marcas de verdad.
+ *
+ * 🔴 NUNCA REVIENTA Y NUNCA DEVUELVE null. `annotations` es una columna
+ * Json: puede traer lo que sea (una versión vieja, algo escrito a mano,
+ * un objeto en vez de un arreglo). Lo que no encaja se DESCARTA en
+ * silencio y lo que encaja se conserva — un visor que se cae por una
+ * marca mal escrita deja al paciente sin su radiografía por una etiqueta.
+ */
+export function eduParseStudyMarks(raw: unknown): EduStudyMark[] {
+  if (!Array.isArray(raw)) return [];
+  const out: EduStudyMark[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const x = numeroEn01(o.x);
+    const y = numeroEn01(o.y);
+    if (x === null || y === null) continue;
+    const label = typeof o.label === "string" ? o.label.trim().slice(0, EDU_STUDY_MARK_LABEL_MAX) : "";
+    if (!label) continue;
+    out.push({ x, y, label });
+    if (out.length >= EDU_STUDY_MAX_MARKS) break;
+  }
+  return out;
+}
+
+/**
+ * Marcas → lo que se guarda en la columna.
+ *
+ * Devuelve `null` cuando no queda ninguna: una columna Json con `[]` y una
+ * vacía significan lo mismo y `null` es lo que ya tienen las filas que
+ * nadie ha anotado. Dos representaciones de "sin marcas" es cómo se llega
+ * a un `if` que solo mira una.
+ */
+export function eduSerializeStudyMarks(marks: unknown): EduStudyMark[] | null {
+  const limpias = eduParseStudyMarks(marks);
+  return limpias.length > 0 ? limpias : null;
+}
+
+// ── LA FECHA DE UN DÍA, SIN QUE SE CORRA UNO ───────────────────────────
+
+/**
+ * "2026-03-12" (lo que da un `<input type="date">`) → el instante que se
+ * manda al servidor.
+ *
+ * 🔴 MEDIODÍA UTC Y NO MEDIANOCHE, y no es manía: la fecha de toma se
+ * escribe en la base como un instante y se vuelve a leer en la ZONA DEL
+ * INSTITUTO (`eduUtcToZoned`). Con `T00:00:00Z`, en cualquier zona al
+ * oeste de Greenwich —México, todas— ese instante cae en el día ANTERIOR,
+ * y la placa que el alumno fechó el 12 aparece rotulada el 11. Con
+ * mediodía hay 12 horas de margen a cada lado: el día es el mismo de
+ * UTC-11 a UTC+11.
+ *
+ * Es el mismo truco que ya usa `pagos-core.ts` para las fechas de las
+ * mensualidades, y por el mismo susto.
+ *
+ * Devuelve "" si el día no tiene la forma de un día: quien llama manda
+ * `undefined` y el servidor deja la columna como estaba.
+ */
+export function eduDiaISOaInstante(dia: unknown): string {
+  const d = typeof dia === "string" ? dia.trim() : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
+  return `${d}T12:00:00.000Z`;
+}
+
+/**
+ * El instante que devuelve el servidor → lo que quiere un
+ * `<input type="date">`.
+ *
+ * Se lee en UTC (`slice(0,10)`), que es la misma convención que
+ * `eduDateInputValue` del padrón. Con lo que escribe `eduDiaISOaInstante`
+ * el viaje de ida y vuelta es exacto: mediodía UTC recorta al mismo día en
+ * el que se escribió.
+ */
+export function eduInstanteADiaInput(iso: unknown): string {
+  const s = typeof iso === "string" ? iso : "";
+  if (!s) return "";
+  const t = Date.parse(s);
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toISOString().slice(0, 10);
 }

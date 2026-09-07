@@ -222,8 +222,13 @@ export async function listEduAlmacenamientoAdmin(): Promise<EduAlmAdminRow[]> {
   if (institutos.length === 0) return [];
 
   const [porInstituto, fotosPorInstituto] = await Promise.all([
+    // ws2-t2 · Los RETIRADOS tampoco cuentan aquí. El mismo recorte que
+    // `eduAlmacenamientoWhere` aplica en el medidor de una sola escuela:
+    // el /admin y el panel de dirección no pueden contestar cosas
+    // distintas sobre el mismo instituto.
     prisma.eduStudy.groupBy({
       by: ["institutionId"],
+      where: { deletedAt: null },
       _sum: { sizeBytes: true },
       _count: { _all: true },
     }),

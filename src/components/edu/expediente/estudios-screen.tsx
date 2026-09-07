@@ -8,7 +8,8 @@ import {
   EDU_MAX_STUDY_LABEL,
   EDU_SIGNED_URL_TTL_SECONDS,
   EDU_STUDY_ACCEPT,
-  eduExtOfName,
+  EDU_STUDY_ORDEN_NOTA,
+  eduDiaISOaInstante,
   eduFormatBytes,
   type EduStudyRow,
 } from "@/lib/edu/estudios-core";
@@ -75,15 +76,25 @@ export interface EduEstudiosScreenProps {
   /** Abrir el modal de subida al llegar (viene de ?subir=1, el botón
    *  "Subir estudio" de la ficha). */
   abrirSubida?: boolean;
+  /**
+   * ws2-t2 · HOY en el calendario del INSTITUTO ("2026-09-07"), para que
+   * la fecha de toma venga puesta por defecto sin que el navegador la
+   * calcule con SU reloj — que puede estar en otra zona y en otro día.
+   */
+  todayISO: string;
 }
 
 /**
  * El icono de la tarjeta sale de la EXTENSIÓN, no del `kind` de la fila: es
  * el mismo criterio con el que se elige el visor al abrirla, y así la
  * miniatura nunca promete algo distinto de lo que se va a abrir.
+ *
+ * ws2-t2 · Y la extensión llega YA RESUELTA desde el servidor (`row.ext`,
+ * sacada del path), no de `name`: el nombre ahora se puede corregir y uno
+ * renombrado sin extensión dejaba a un .zip con icono de documento.
  */
-function iconoDeArchivo(name: string): typeof ImageIcon {
-  switch (eduExtOfName(name)) {
+function iconoDeArchivo(ext: string): typeof ImageIcon {
+  switch (String(ext).toLowerCase()) {
     case "zip":
     case "dcm":
     case "dicom":
@@ -121,6 +132,7 @@ export function EduEstudiosScreen({
   canAnalyze,
   dict3d,
   abrirSubida,
+  todayISO,
 }: EduEstudiosScreenProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -249,6 +261,11 @@ export function EduEstudiosScreen({
         </div>
       )}
 
+      {/* ws2-t2 · EL ORDEN SE DICE. La galería ordena por fecha de TOMA
+          cuando existe y por la de subida cuando no; un orden que no se
+          explica se lee como un orden roto. */}
+      {rows.length > 0 && <p className="edu-note">{EDU_STUDY_ORDEN_NOTA}</p>}
+
       {rows.length === 0 ? (
         <div className="edu-empty">
           <p className="edu-empty__title">Todavía no hay estudios</p>
@@ -261,7 +278,7 @@ export function EduEstudiosScreen({
       ) : (
         <div className="edu-estudios">
           {rows.map((e) => {
-            const Icono = iconoDeArchivo(e.name);
+            const Icono = iconoDeArchivo(e.ext);
             return (
               <article key={e.id} className="edu-estudio">
                 <button
@@ -288,8 +305,15 @@ export function EduEstudiosScreen({
                 </button>
 
                 <span className="edu-estudio__name">{e.name}</span>
+                {/* ws2-t2 · Se dice CUÁL de las dos fechas se está viendo.
+                    Un "12 mar" a secas encima de una galería que ordena por
+                    fecha de toma no distingue "tomada el 12" de "subida el
+                    12", que es justo lo que hay que distinguir. */}
                 <span className="edu-estudio__meta">
-                  {e.sizeLabel} · {e.createdLabel}
+                  {e.sizeLabel} ·{" "}
+                  {e.ordenPorToma
+                    ? `tomada ${e.takenLabel}`
+                    : `subida ${e.createdLabel} · sin fecha de toma`}
                 </span>
                 <span className="edu-estudio__meta">
                   {e.uploadedByName}
@@ -297,7 +321,12 @@ export function EduEstudiosScreen({
                 </span>
                 {e.notes && <span className="edu-estudio__notes">{e.notes}</span>}
 
-                <div className="edu-actions">
+                {/* `edu-estudios-acc` pega la fila de acciones ABAJO de
+                    la tarjeta. Sin eso, la tarjeta cuyo renglón de meta
+                    ocupa dos líneas —«subida … · sin fecha de toma»— deja
+                    su «Abrir» más bajo que el de al lado y la rejilla se
+                    ve rota aunque todas midan lo mismo. */}
+                <div className="edu-actions edu-estudios-acc">
                   <button
                     type="button"
                     className="edu-btn edu-btn--ghost edu-btn--sm"
@@ -316,6 +345,7 @@ export function EduEstudiosScreen({
         <SubirEstudio
           patientId={patientId}
           cases={cases}
+          todayISO={todayISO}
           onClose={cerrarSubida}
           onDone={(nombre) => {
             cerrarSubida();
@@ -328,7 +358,20 @@ export function EduEstudiosScreen({
         <EduEstudioViewer
           estudio={ver}
           patientId={patientId}
+          cases={cases}
           onClose={() => setVer(null)}
+          onCorregido={(mensaje) => {
+            // Se CIERRA al corregir, y no es pereza: `ver` es una copia de
+            // la fila tal como llegó del servidor. Dejar el visor abierto
+            // después de renombrar o reclasificar enseñaría los datos
+            // viejos encima del archivo, que es peor que cerrarlo.
+            setVer(null);
+            recargar(mensaje);
+          }}
+          onRetirado={(nombre) => {
+            setVer(null);
+            recargar(`"${nombre}" se retiró del expediente. Queda la constancia de por qué.`);
+          }}
           iaAnalisis={iaAnalisis}
           canAnalyze={canAnalyze}
           // S-7 · el permiso de ESCRITURA del expediente. Con solo
@@ -349,16 +392,23 @@ export function EduEstudiosScreen({
 function SubirEstudio({
   patientId,
   cases,
+  todayISO,
   onClose,
   onDone,
 }: {
   patientId: string;
   cases: EduCaseOption[];
+  todayISO: string;
   onClose: () => void;
   onDone: (nombre: string) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [caseId, setCaseId] = useState("");
+  // ws2-t2 · La fecha de TOMA, por defecto HOY en el calendario del
+  // instituto. Se pregunta AQUÍ porque después no la pregunta nadie: la
+  // placa de hace un año se sube hoy y se queda ordenada como de hoy para
+  // siempre. Se puede vaciar — "no se sabe" es una respuesta honesta.
+  const [dia, setDia] = useState(todayISO);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
@@ -383,6 +433,9 @@ function SubirEstudio({
         file,
         caseId: caseId || null,
         notes: notes.trim() || null,
+        // Mediodía UTC: con medianoche, leída en la zona del instituto, la
+        // fecha se corre un día hacia atrás (eduDiaISOaInstante lo explica).
+        takenAt: dia ? eduDiaISOaInstante(dia) : null,
         onProgress: setPct,
         onPhase: (f, i) => {
           setFase(f);
@@ -491,6 +544,25 @@ function SubirEstudio({
           </span>
         </div>
       )}
+
+      <div className="edu-field">
+        <label className="edu-field__label" htmlFor="edu-est-toma">
+          Fecha de toma
+        </label>
+        <input
+          id="edu-est-toma"
+          className="edu-input"
+          type="date"
+          value={dia}
+          max={todayISO}
+          disabled={busy}
+          onChange={(e) => setDia(e.target.value)}
+        />
+        <span className="edu-field__hint">
+          Cuándo se TOMÓ, que no es cuándo se sube. La galería ordena por ella. Si es una placa
+          vieja, cámbiala; si no se sabe, déjala vacía y se ordenará por la fecha de subida.
+        </span>
+      </div>
 
       <div className="edu-field">
         <label className="edu-field__label" htmlFor="edu-est-caso">

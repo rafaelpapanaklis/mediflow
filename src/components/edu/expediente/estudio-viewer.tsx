@@ -6,6 +6,9 @@ import { eduRequest } from "@/components/edu/edu-http";
 import { EduModal } from "@/components/edu/edu-modal";
 import { EduVisorModal } from "@/components/edu/estudios/visor-modal";
 import { eduVisorPorExtension } from "@/components/edu/estudios/visor-tipo";
+import { EduEstudioAnotaciones } from "@/components/edu/estudios/anotaciones";
+import { EduEstudioEditar } from "@/components/edu/estudios/estudio-editar";
+import type { EduCaseOption } from "@/lib/edu/expediente-core";
 import type { EduStudyRow } from "@/lib/edu/estudios-core";
 import type { EduIaEstado } from "@/lib/edu/ia-core";
 import type { Dictionary } from "@/i18n/t";
@@ -50,7 +53,10 @@ import { EduAnalisisIa } from "@/components/edu/expediente/analisis-ia";
 export function EduEstudioViewer({
   estudio,
   patientId,
+  cases,
   onClose,
+  onCorregido,
+  onRetirado,
   iaAnalisis,
   canAnalyze,
   canUpload,
@@ -58,7 +64,14 @@ export function EduEstudioViewer({
 }: {
   estudio: EduStudyRow;
   patientId: string;
+  /** Los casos del paciente DENTRO del alcance: mover un estudio a un caso
+   *  que no se puede ver sería esconderlo. */
+  cases: EduCaseOption[];
   onClose: () => void;
+  /** ws2-t2 · se corrigió algo (nombre, tipo, caso, fecha, nota). */
+  onCorregido: (mensaje: string) => void;
+  /** ws2-t2 · se retiró del expediente: baja suave, con motivo. */
+  onRetirado: (nombre: string) => void;
   /** Si el apoyo de IA está disponible, y si no, por qué. */
   iaAnalisis: EduIaEstado;
   canAnalyze: boolean;
@@ -74,7 +87,13 @@ export function EduEstudioViewer({
   const [zoom, setZoom] = useState(false);
 
   const sinUrl = !estudio.url;
-  const tipoVisor = sinUrl ? null : eduVisorPorExtension(estudio.name);
+  // 🔴 POR LA EXTENSIÓN REAL (la del path que compuso el servidor) y no
+  // por el nombre: desde ws2-t2 el nombre SE PUEDE CORREGIR, y uno
+  // renombrado a «tomografía de Ana» dejaría sin visor a un .zip que
+  // sigue siendo un .zip.
+  // `eduVisorPorExtension` se queda con lo que hay tras el último punto,
+  // así que una extensión pelada ("zip") le vale igual que un nombre.
+  const tipoVisor = sinUrl ? null : eduVisorPorExtension(estudio.ext);
 
   const subtitulo = `${estudio.sizeLabel} · subió ${estudio.uploadedByName}`;
 
@@ -89,6 +108,18 @@ export function EduEstudioViewer({
      se dimensiona para ocupar la primera pantalla, no para tapar esto. */
   const extras = (
     <>
+      {/* ws2-t2 · H-14 · CORREGIR Y RETIRAR. Va ARRIBA de las notas y del
+          apoyo de IA a propósito: quien abre un estudio para arreglarlo
+          («éste no es de este paciente») no tiene por qué recorrer el panel
+          de IA antes de encontrar el botón. */}
+      <EduEstudioEditar
+        estudio={estudio}
+        cases={cases}
+        canUpload={canUpload}
+        onCorregido={onCorregido}
+        onRetirado={onRetirado}
+      />
+
       {!notasEnElVisorCbct &&
         (canUpload ? (
           <NotasDelEstudio estudioId={estudio.id} notas={estudio.notes} />
@@ -180,15 +211,19 @@ export function EduEstudioViewer({
             configurado en este entorno, o que el objeto ya no exista en el bucket.
           </div>
         ) : estudio.isImage ? (
-          <div className={`edu-visor__marco ${zoom ? "edu-visor__marco--zoom" : ""}`}>
-            {/* <img> y no next/image a propósito: la URL es FIRMADA y
-                caduca, así que el optimizador de Next la cachearía en una
-                ruta que después devuelve 403. Además el dominio de Supabase
-                tendría que ir en next.config.js, que es un archivo del
-                dental y esta ola no lo toca. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={estudio.url} alt={estudio.name} />
-          </div>
+          /* ws2-t2 · La imagen ya no es un <img> suelto: lleva encima la
+             capa de ANOTACIONES (marcas x/y con etiqueta, columna
+             `annotations`, que existía desde la Ola B y no leía nadie).
+             Sin `estudios.upload` es solo lectura y no aparece ni un botón
+             que pudiera contestar 403. */
+          <EduEstudioAnotaciones
+            estudioId={estudio.id}
+            url={estudio.url}
+            alt={estudio.name}
+            marcas={estudio.annotations}
+            canUpload={canUpload}
+            zoom={zoom}
+          />
         ) : estudio.isPdf ? (
           <object className="edu-visor__pdf" data={estudio.url} type="application/pdf">
             <p className="edu-note">

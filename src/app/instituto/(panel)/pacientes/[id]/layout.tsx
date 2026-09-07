@@ -211,6 +211,23 @@ export default async function InstitutoPacienteLayout({
       },
       { key: "estudios", href: `${base}/estudios`, label: "Estudios", permission: "estudios.view" },
       {
+        // ws2-t2. FOTOS CLÍNICAS, separada de Estudios a propósito:
+        // «radiografía es radiografía y foto clínica es foto clínica». Es
+        // la pestaña donde se ve el antes y el después, y por eso va justo
+        // después de Estudios y antes de Consentimientos.
+        //
+        // MISMO permiso que Estudios (`estudios.view`) y ninguna key
+        // nueva: una foto clínica es un archivo del expediente, y quien
+        // puede ver una radiografía puede ver una foto. Una key nueva
+        // empieza en cero para todo el mundo y obliga a un backfill por
+        // rol — a quien tenga overrides guardados no le llegaría, y
+        // simplemente no vería la pestaña, sin error y sin pista.
+        key: "fotos",
+        href: `${base}/fotos`,
+        label: "Fotos",
+        permission: "estudios.view",
+      },
+      {
         // Ola 3B. Con permiso propio porque es la única
         // pestaña del expediente que CAJA sí puede abrir: la carta se
         // imprime y se entrega en el mostrador. Las tres de arriba siguen
