@@ -239,3 +239,62 @@ test("invoiceLineBases reparte el descuento global como el payload del CFDI", ()
   assert.equal(bases.length, 8);
   assert.equal(round2(bases.reduce((a, b) => a + b, 0)), round2(333.33 * 8 - 100));
 });
+
+test("las rutas que GUARDAN el total le pasan los conceptos, no la suma", () => {
+  // Sin esto, el helper puede estar perfecto y la factura seguir guardándose con
+  // el criterio agregado: es justo el estado en el que quedó el hallazgo 19 a
+  // medias. Se comprueba por FUENTE, ruta por ruta.
+  const rutas: Array<[string, RegExp]> = [
+    ["src/app/api/invoices/route.ts", /computeInvoiceTotal\(data\.items,/],
+    ["src/app/api/invoices/[id]/route.ts", /computeInvoiceTotal\(items,/],
+    ["src/app/api/invoices/[id]/edit-price/route.ts", /computeInvoiceTotal\(newItems,/],
+  ];
+  for (const [ruta, re] of rutas) {
+    assert.match(src(ruta), re, `${ruta} tiene que pasar los CONCEPTOS a computeInvoiceTotal`);
+  }
+  // edit-price tiene DOS ramas (editar precio / solo descuento) y las dos cuentan.
+  const editPrice = src("src/app/api/invoices/[id]/edit-price/route.ts");
+  assert.equal(
+    (editPrice.match(/computeInvoiceTotal\(newItems,/g) ?? []).length, 2,
+    "las dos ramas de edit-price tienen que calcular por concepto",
+  );
+  // Y que no quede ningún sitio guardando el total con el criterio agregado.
+  for (const [ruta] of rutas) {
+    assert.doesNotMatch(
+      src(ruta), /computeInvoiceTotal\((subtotal|newSubtotal|keptSum),/,
+      `${ruta} sigue pasando una SUMA: eso reintroduce la divergencia del hallazgo 19`,
+    );
+  }
+});
+
+test("«Editar precio»: el total guardado sigue cuadrando con el CFDI (línea de ajuste incluida)", () => {
+  // Réplica de la rama `totalIn` de edit-price: al SUBIR el precio se añade una
+  // línea "Ajuste de precio" sintética, y el IVA por concepto también corre
+  // sobre ella. Lo que tiene que seguir siendo cierto es la invariante: el total
+  // guardado es EXACTAMENTE el que se va a timbrar.
+  const baseItems = [
+    { description: "Corona", quantity: 1, unitPrice: 2750.75 },
+    { description: "Consulta", quantity: 2, unitPrice: 615.67 },
+    { description: "Rx", quantity: 3, unitPrice: 180.33 },
+  ];
+  const itemsSum = sumInvoiceItems(baseItems);
+
+  // Subir el precio → línea de ajuste.
+  const targetArriba = round2(6000 / 1.16);
+  const conAjuste = [...baseItems, {
+    description: "Ajuste de precio", quantity: 1,
+    unitPrice: round2(targetArriba - itemsSum), total: round2(targetArriba - itemsSum),
+  }];
+  assert.equal(
+    computeInvoiceTotal(conAjuste, 0, 16, false).total,
+    expectedCfdiTotal(conAjuste, 0, "iva16", false),
+  );
+
+  // Bajar el precio → descuento explícito, los conceptos no se tocan.
+  const targetAbajo = round2(3000 / 1.16);
+  const descuento = round2(itemsSum - targetAbajo);
+  assert.equal(
+    computeInvoiceTotal(baseItems, descuento, 16, false).total,
+    expectedCfdiTotal(baseItems, descuento, "iva16", false),
+  );
+});
