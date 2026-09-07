@@ -13,7 +13,7 @@
 // producto todavía no manda un WhatsApp por su cuenta, y una pantalla que
 // dijera "enviado" estaría mintiendo: lo que se registra es "se abrió".
 // ═══════════════════════════════════════════════════════════════════════
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -249,7 +249,7 @@ export function CrmSemaforoChip({
   const estado = crmSemaforo(fecha, ahora ?? new Date());
   if (estado === "sin-fecha") {
     return (
-      <span style={{ fontSize: 11, color: "var(--text-4)" }}>Sin próximo paso</span>
+      <span style={{ fontSize: 11, color: "var(--crm-text-sec)" }}>Sin próximo paso</span>
     );
   }
   return (
@@ -515,6 +515,7 @@ export function CrmTarjeta({
   alArrastrar,
   alEditar,
   alTextos,
+  mover,
 }: {
   p: CrmProspectoDTO;
   ahora: Date;
@@ -522,13 +523,66 @@ export function CrmTarjeta({
   alArrastrar?: (id: string) => void;
   alEditar?: (p: CrmProspectoDTO) => void;
   alTextos?: (p: CrmProspectoDTO) => void;
+  /**
+   * El camino de TECLADO para cambiar de etapa. Sin esto, la única salida
+   * por teclado del tablero era irse a la vista de lista. Es el mismo
+   * `mover` del padre que usa el arrastre, así que el pintado optimista,
+   * la reversión y la pregunta del motivo de pérdida siguen viviendo en
+   * un solo sitio.
+   */
+  mover?: (id: string, etapa: string) => void;
 }) {
   const [levantada, setLevantada] = useState(false);
   const v = crmVertical(p.vertical);
+  const raiz = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Apretar un control de dentro no puede levantar la tarjeta. En
+   * Firefox, hacer clic en el <select> de etapa con un padre `draggable`
+   * arranca el arrastre y el desplegable no llega a abrirse.
+   *
+   * Se apaga el atributo A MANO en el mousedown y se vuelve a encender al
+   * soltar. NO vale filtrar dentro de `onDragStart`: ese evento se
+   * dispara en el NODO FUENTE —la tarjeta, que es la que lleva
+   * `draggable`— y no en el control que hay debajo del puntero, así que
+   * `e.target` es siempre la tarjeta y el filtro no filtraría nada.
+   *
+   * Es imperativo y no estado porque son hasta sesenta tarjetas por
+   * columna: un `setState` por cada mousedown repintaría la columna
+   * entera en mitad de un clic. React no lo pisa: `draggable` viene de
+   * una prop que no cambia, así que no hay re-render que lo reponga —
+   * de eso se encarga el propio mouseup, y el siguiente mousedown fuera
+   * de un control lo vuelve a dejar bien pase lo que pase.
+   */
+  function ajustarArrastre(e: React.MouseEvent) {
+    if (!raiz.current) return;
+    const destino = e.target as HTMLElement | null;
+    // OJO: los <a> NO entran en esta lista, aunque sean interactivos. El
+    // nombre y el avatar son un <Link> que ocupa toda la franja de arriba
+    // —la zona por la que uno agarra la tarjeta— y lleva
+    // `draggable={false}` precisamente PARA que el arrastre suba hasta
+    // aquí. Meterlo aquí dejaba la tarjeta sin poder arrastrarse por su
+    // sitio natural, en todos los navegadores.
+    const enControl = !!destino?.closest?.("select, button, input, textarea");
+    raiz.current.draggable = !!arrastrable && !enControl;
+  }
+
+  /** Volver a dejarla arrastrable. Ver `ajustarArrastre`. */
+  function reponerArrastre() {
+    if (raiz.current) raiz.current.draggable = !!arrastrable;
+  }
 
   return (
     <div
+      ref={raiz}
       draggable={arrastrable}
+      onMouseDown={ajustarArrastre}
+      onMouseUp={reponerArrastre}
+      // `mouseleave` además de `mouseup`: al abrir el desplegable nativo
+      // de etapa, el `mouseup` se lo queda el menú del sistema y no llega
+      // aquí. Sin esta segunda red, la tarjeta se quedaba sin poder
+      // arrastrarse hasta el siguiente clic fuera de un control.
+      onMouseLeave={reponerArrastre}
       onDragStart={(e) => {
         setLevantada(true);
         alArrastrar?.(p.id);
@@ -536,7 +590,10 @@ export function CrmTarjeta({
         // Algunos navegadores ignoran el arrastre si no viaja nada.
         e.dataTransfer.setData("text/plain", p.id);
       }}
-      onDragEnd={() => setLevantada(false)}
+      onDragEnd={() => {
+        setLevantada(false);
+        reponerArrastre();
+      }}
       style={{
         background: "var(--bg-elev)",
         border: "1px solid var(--border-soft)",
@@ -565,19 +622,34 @@ export function CrmTarjeta({
       >
         <CrmAvatar name={p.name} vertical={p.vertical} size={30} />
         <div style={{ minWidth: 0, flex: 1 }}>
+          {/* `title`: el nombre puede medir hasta CRM_NOMBRE_MAX (160) y en
+              una columna de 200 px caben unos 25 caracteres. Sin esto, los
+              otros 135 no hay forma de leerlos sin abrir la ficha — y dos
+              prospectos con el mismo principio quedaban indistinguibles. */}
+          {/* DOS líneas, no una. En una columna elástica de ~200 px una
+              sola línea deja unos 15 caracteres, y "Clínica Dental
+              Sonrisa" y "Clínica Dental Aurora" quedan idénticas píxel a
+              píxel — que es exactamente el hallazgo de los gemelos
+              indistinguibles. Con dos líneas caben unos 34, que ya
+              separan a casi todos; para el resto está el `title`. Es el
+              mismo recorte que ya usa la nota del próximo paso. */}
           <div
+            title={p.name}
             style={{
               fontSize: 12.5,
               fontWeight: 600,
               color: "var(--text-1)",
+              lineHeight: 1.3,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
               overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
             }}
           >
             {p.name}
           </div>
           <div
+            title={[p.city, p.contactName].filter(Boolean).join(" · ") || v.label}
             style={{
               fontSize: 11,
               color: "var(--text-3)",
@@ -627,6 +699,20 @@ export function CrmTarjeta({
 
       <CrmAccionesContacto p={p} soloIconos />
 
+      {mover && (
+        // Sin borde ni fondo: un <select> con marco en cada tarjeta
+        // convierte el tablero en una pila de formularios. Sigue siendo
+        // un <select> nativo de verdad —foco, teclado y el selector a
+        // pantalla completa del móvil salen gratis—, sólo que callado.
+        <CrmEtapaSelect
+          stage={p.stage}
+          mover={(etapa) => mover(p.id, etapa)}
+          ancho="100%"
+          nombre={p.name}
+          discreto
+        />
+      )}
+
       {alEditar && (
         <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
           <CrmAccionesFila p={p} alEditar={alEditar} alTextos={alTextos} />
@@ -648,19 +734,43 @@ export function CrmEtapaSelect({
   stage,
   mover,
   ancho,
+  nombre,
+  discreto,
 }: {
   stage: string;
   mover: (etapa: string) => void;
   ancho?: number | string;
+  /**
+   * De quién es la etapa. Hace falta en cuanto hay más de uno en pantalla:
+   * en el tablero puede haber sesenta selectores por columna, y sin el
+   * nombre un lector de pantalla los lee todos igual ("Etapa del
+   * prospecto") sin decir nunca de cuál.
+   */
+  nombre?: string;
+  /** Sin marco, para las tarjetas del tablero. Mismo control, menos ruido. */
+  discreto?: boolean;
 }) {
   return (
     <select
       className="input-new"
-      aria-label="Etapa del prospecto"
+      aria-label={nombre ? `Etapa de ${nombre}` : "Etapa del prospecto"}
+      title={nombre ? `Mover ${nombre} a otra etapa` : "Mover a otra etapa"}
       value={crmEtapa(stage).id}
       onChange={(e) => mover(e.target.value)}
       onClick={(e) => e.stopPropagation()}
-      style={{ width: ancho ?? 150, height: 30, fontSize: 11.5 }}
+      style={
+        discreto
+          ? {
+              width: ancho ?? "100%",
+              height: 26,
+              fontSize: 11,
+              padding: "0 6px",
+              background: "transparent",
+              borderColor: "transparent",
+              color: "var(--text-3)",
+            }
+          : { width: ancho ?? 150, height: 30, fontSize: 11.5 }
+      }
     >
       {CRM_ETAPAS.map((e) => (
         <option key={e.id} value={e.id}>

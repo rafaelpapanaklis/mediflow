@@ -139,14 +139,26 @@ export function CrmLista({
                   <div style={{ display: "flex", gap: 9, alignItems: "center", minWidth: 0 }}>
                     <CrmAvatar name={p.name} vertical={p.vertical} size={30} />
                     <div style={{ minWidth: 0 }}>
+                      {/* Recorte + `title`. Sin ellos, un nombre de
+                          CRM_NOMBRE_MAX (160) caracteres ensanchaba la
+                          columna "Negocio" y empujaba las ocho columnas de
+                          la tabla al desplazamiento horizontal — una fila
+                          larga descuadraba la pantalla entera. Y sin
+                          `title` los caracteres que no caben no se podían
+                          leer de ninguna forma sin abrir la ficha. */}
                       <Link
                         href={`/admin/crm/${p.id}`}
                         className="crm-tarjeta-nombre"
+                        title={p.name}
                         style={{
                           color: "var(--text-1)",
                           fontWeight: 600,
                           textDecoration: "none",
                           display: "block",
+                          maxWidth: 260,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         {p.name}
@@ -154,12 +166,12 @@ export function CrmLista({
                       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         <CrmVerticalChip vertical={p.vertical} />
                         {(p.city || p.state || p.country) && (
-                          <span style={{ fontSize: 11, color: "var(--text-4)" }}>
+                          <span style={{ fontSize: 11, color: "var(--crm-text-sec)" }}>
                             {[p.city, p.state, p.country].filter(Boolean).join(", ")}
                           </span>
                         )}
                         {p.size ? (
-                          <span style={{ fontSize: 11, color: "var(--text-4)" }}>
+                          <span style={{ fontSize: 11, color: "var(--crm-text-sec)" }}>
                             {p.size} {v.medida.toLowerCase()}
                           </span>
                         ) : null}
@@ -174,7 +186,7 @@ export function CrmLista({
                     <div style={{ fontSize: 12 }}>
                       {p.contactName}
                       {p.contactRole && (
-                        <span style={{ color: "var(--text-4)" }}> · {p.contactRole}</span>
+                        <span style={{ color: "var(--crm-text-sec)" }}> · {p.contactRole}</span>
                       )}
                     </div>
                   )}
@@ -185,7 +197,7 @@ export function CrmLista({
                     <div
                       style={{
                         fontSize: 11,
-                        color: "var(--text-4)",
+                        color: "var(--crm-text-sec)",
                         maxWidth: 190,
                         overflow: "hidden",
                         textOverflow: "ellipsis",
@@ -199,7 +211,7 @@ export function CrmLista({
                 </td>
 
                 <td>
-                  <CrmEtapaSelect stage={p.stage} mover={(etapa) => mover(p.id, etapa)} />
+                  <CrmEtapaSelect stage={p.stage} mover={(etapa) => mover(p.id, etapa)} nombre={p.name} />
                 </td>
 
                 <td style={{ maxWidth: 260 }}>
@@ -217,9 +229,12 @@ export function CrmLista({
                 <td
                   style={{
                     textAlign: "right",
+                    // Se tiñe PARA que se vea, así que el color tiene
+                    // que verse: --warning da 3,19:1 sobre blanco y el
+                    // umbral es 4,5:1. Ver crm.module.css.
                     color:
                       dias !== null && dias >= CRM_DIAS_PARA_ENFRIARSE
-                        ? "var(--warning)"
+                        ? "var(--crm-warning-text)"
                         : "var(--text-3)",
                   }}
                 >
@@ -243,11 +258,29 @@ export function CrmLista({
                       `${dias} d`
                     )}
                   </div>
+                  {/* `undefined` = no se pudo leer `crm_activities` (ver
+                      `contarActividades`). Decir "sin bitácora" ahí sería
+                      afirmar algo que no se ha comprobado, que es justo lo
+                      que hacía que media migración pasara desapercibida.
+                      El aviso con el porqué está arriba de la lista. */}
                   <div
                     className="mono"
-                    style={{ fontSize: 10.5, color: "var(--text-4)", whiteSpace: "nowrap" }}
+                    title={
+                      p.actividades === undefined
+                        ? "No se pudo leer la bitácora — mira el aviso de arriba"
+                        : undefined
+                    }
+                    style={{
+                      fontSize: 10.5,
+                      color: "var(--crm-text-sec)",
+                      whiteSpace: "nowrap",
+                    }}
                   >
-                    {p.actividades ? `${p.actividades} anot.` : "sin bitácora"}
+                    {p.actividades === undefined
+                      ? "—"
+                      : p.actividades > 0
+                        ? `${p.actividades} anot.`
+                        : "sin bitácora"}
                   </div>
                 </td>
 
@@ -368,7 +401,7 @@ function ProximoPasoAtajo({
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 5 }}>
-      <CalendarClock size={11} style={{ color: "var(--text-4)", flexShrink: 0 }} aria-hidden />
+      <CalendarClock size={11} style={{ color: "var(--crm-text-sec)", flexShrink: 0 }} aria-hidden />
       <select
         className="input-new"
         value=""
@@ -387,7 +420,8 @@ function ProximoPasoAtajo({
           padding: "0 6px",
           background: "transparent",
           borderColor: "transparent",
-          color: "var(--text-4)",
+          // Es el texto de un control, no un adorno: tiene que leerse.
+          color: "var(--crm-text-sec)",
         }}
       >
         <option value="">{p.nextActionAt ? "Mover a…" : "Agendar…"}</option>

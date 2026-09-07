@@ -29,6 +29,7 @@ import {
   crmProgramarSeguimiento,
   crmRegistrarActividad,
   type CrmActividadEntrada,
+  type CrmDuplicado,
   type CrmImportResumen,
   type CrmProspectoDTO,
   type CrmResultado,
@@ -78,11 +79,17 @@ function refrescar(id?: string | null): void {
 
 export async function crearProspectoAccion(
   entrada: CrmProspectoEntrada & { tags?: string[] | string },
-): Promise<CrmResultado<CrmProspectoDTO>> {
+  opciones?: {
+    /** Ya vio el aviso de duplicado y aun así lo quiere dar de alta. */
+    permitirDuplicado?: boolean;
+  },
+): Promise<CrmResultado<CrmProspectoDTO> & { duplicado?: CrmDuplicado }> {
   const admin = await getAdminSession();
   if (!admin) return NO_AUTORIZADO;
 
-  const r = await crmCrear(entrada, admin.user.email);
+  const r = await crmCrear(entrada, admin.user.email, {
+    permitirDuplicado: opciones?.permitirDuplicado === true,
+  });
   if (!r.ok) return r;
 
   auditar("create", r.datos?.id ?? null, { id: admin.user.id, email: admin.user.email }, {

@@ -30,6 +30,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  crmColumnasDesplegadas,
+  crmCupoColumnas,
   crmDiaMx,
   crmDiasEntre,
   crmDiasSinContacto,
@@ -65,6 +67,7 @@ import {
   crmRangoTexto,
   crmTextoPlano,
   crmTotalPaginas,
+  crmVistaARecordar,
   crmVistaEfectiva,
   crmValidarProspecto,
   crmValorDeInput,
@@ -77,7 +80,11 @@ import {
   CRM_ORIGEN_AFILIADOS,
   CRM_ORIGEN_DALECONTROL,
   CRM_POR_PAGINA,
+  CRM_COL_ANCHO_MIN,
+  CRM_COL_HUECO,
+  CRM_COL_PLEGADA,
   CRM_TABLERO_COMODO,
+  CRM_TABLERO_VERTICAL,
 } from "../crm-core";
 
 // ── 1. Fechas de calendario ─────────────────────────────────────────────
@@ -793,4 +800,216 @@ test("con la libreta chica manda el tablero; en cuanto crece, la lista", () => {
 test("lo que elige la persona gana siempre sobre el tamaño", () => {
   assert.equal(crmVistaEfectiva({ ...CRM_FILTROS_VACIOS, vista: "tablero" }, 99999), "tablero");
   assert.equal(crmVistaEfectiva({ ...CRM_FILTROS_VACIOS, vista: "lista" }, 1), "lista");
+});
+
+// ── 15. La vista que se recuerda ────────────────────────────────────────
+//
+// El caso que lo motiva: pasando de CRM_TABLERO_COMODO la vista por
+// defecto es la lista, y Rafael dijo que la que usa es el tablero. Sin
+// esto tenía que pulsar "Tablero" cada mañana.
+
+test("sin nada guardado no se toca nada: manda el corte de la libreta", () => {
+  assert.equal(crmVistaARecordar(CRM_FILTROS_VACIOS, null), null);
+  assert.equal(crmVistaARecordar(CRM_FILTROS_VACIOS, undefined), null);
+});
+
+test("lo guardado se aplica sólo cuando la URL no dice nada", () => {
+  assert.equal(crmVistaARecordar(CRM_FILTROS_VACIOS, "tablero"), "tablero");
+  assert.equal(crmVistaARecordar(CRM_FILTROS_VACIOS, "lista"), "lista");
+});
+
+test("un enlace con vista puesta GANA a lo guardado, o compartir no serviría", () => {
+  const conLista = { ...CRM_FILTROS_VACIOS, vista: "lista" as const };
+  assert.equal(crmVistaARecordar(conLista, "tablero"), null);
+  const conTablero = { ...CRM_FILTROS_VACIOS, vista: "tablero" as const };
+  assert.equal(crmVistaARecordar(conTablero, "lista"), null);
+});
+
+test("basura en el almacén del navegador se ignora, no rompe la pantalla", () => {
+  assert.equal(crmVistaARecordar(CRM_FILTROS_VACIOS, "kanban"), null);
+  assert.equal(crmVistaARecordar(CRM_FILTROS_VACIOS, ""), null);
+  assert.equal(crmVistaARecordar(CRM_FILTROS_VACIOS, "{}"), null);
+});
+
+// ── 16. Cuántas columnas del tablero caben ──────────────────────────────
+//
+// Lo que se está protegiendo aquí es la queja literal de Rafael: ocho
+// columnas de 258 px fijos dentro de un contenedor de 1.182 daban cuatro
+// visibles y cuatro a ciegas. La comprobación de verdad es la de "todo
+// lo que devuelve la función CABE", que es aritmética y no opinión.
+
+/** Lo que ocupa de verdad un reparto, para poder afirmar que cabe. */
+function anchoQueOcupa(total: number, desplegadas: number): number {
+  return (
+    desplegadas * CRM_COL_ANCHO_MIN +
+    (total - desplegadas) * CRM_COL_PLEGADA +
+    (total - 1) * CRM_COL_HUECO
+  );
+}
+
+test("lo que el cupo dice que cabe, CABE — y una más ya no", () => {
+  for (const ancho of [700, 860, 1022, 1182, 1440, 1900]) {
+    const n = crmCupoColumnas(ancho, 8);
+    assert.ok(
+      anchoQueOcupa(8, n) <= ancho || n === 1,
+      `a ${ancho} px dice que caben ${n} y no caben`,
+    );
+    if (n < 8) {
+      assert.ok(
+        anchoQueOcupa(8, n + 1) > ancho,
+        `a ${ancho} px caben ${n + 1} y se está enseñando de menos`,
+      );
+    }
+  }
+});
+
+test("en un portátil normal caben más de las cuatro de antes", () => {
+  // 1.182 px es lo que queda en 1440 tras la barra lateral de /admin.
+  assert.ok(
+    crmCupoColumnas(1182, 8) >= 5,
+    "el punto de la tarea era dejar de ver 4 de 8",
+  );
+});
+
+test("nunca devuelve cero: un tablero sin ninguna abierta no es un tablero", () => {
+  assert.equal(crmCupoColumnas(0, 8), 1);
+  assert.equal(crmCupoColumnas(120, 8), 1);
+  assert.equal(crmCupoColumnas(-500, 8), 1);
+});
+
+test("con sitio de sobra no se pliega ninguna", () => {
+  assert.equal(crmCupoColumnas(4000, 8), 8);
+});
+
+test("sin columnas no hay cupo, y no truena", () => {
+  assert.equal(crmCupoColumnas(1182, 0), 0);
+});
+
+// ── 17. Cuáles se pliegan ───────────────────────────────────────────────
+
+// `string[]` y no `CrmEtapaId[]`: el tablero también pinta etapas fuera
+// del catálogo (una fila editada a mano en Supabase), y las funciones que
+// se prueban aquí trabajan con ids sueltos a propósito.
+const OCHO: string[] = CRM_ETAPAS.map((e) => e.id);
+
+/** Un embudo con forma de embudo: mucho arriba y poco abajo. */
+const EMBUDO: Record<string, number> = {
+  NUEVO: 812,
+  CONTACTADO: 40,
+  INTERESADO: 12,
+  DEMO: 3,
+  PROPUESTA: 2,
+  NEGOCIACION: 1,
+  GANADO: 8,
+  PERDIDO: 30,
+};
+
+function desplegadas(ancho: number, totales = EMBUDO, elegidas?: string[]) {
+  return crmColumnasDesplegadas({
+    columnas: OCHO,
+    totales,
+    ancho,
+    orientacion: ancho > 0 && ancho < CRM_TABLERO_VERTICAL ? "vertical" : "horizontal",
+    elegidas,
+  });
+}
+
+test("el reparto automático SIEMPRE cabe en el ancho que se le da", () => {
+  for (const ancho of [800, 900, 1022, 1182, 1440, 1900]) {
+    const abiertas = desplegadas(ancho).length;
+    assert.ok(
+      anchoQueOcupa(8, abiertas) <= ancho || abiertas === 1,
+      `a ${ancho} px abre ${abiertas} columnas y no caben`,
+    );
+  }
+});
+
+test("nunca se quedan las ocho plegadas: siempre hay de dónde arrastrar", () => {
+  for (const ancho of [0, 320, 390, 700, 1182, 4000]) {
+    assert.ok(desplegadas(ancho).length >= 1, `a ${ancho} px no queda ninguna abierta`);
+  }
+});
+
+test("lo que se pliega primero es el archivo, no el trabajo del día", () => {
+  // A 1.182 px no caben las ocho. Las que se van son las de cerrar.
+  const abiertas = desplegadas(1182);
+  assert.ok(abiertas.indexOf("NUEVO") >= 0, "se plegó la columna más llena");
+  assert.ok(abiertas.indexOf("CONTACTADO") >= 0);
+  assert.ok(abiertas.indexOf("PERDIDO") === -1, "Perdido debería plegarse antes que nada");
+});
+
+test("una columna VACÍA se pliega antes que una con trabajo dentro", () => {
+  // Mismo embudo, pero DEMO y NEGOCIACION sin nadie. Son las que sobran.
+  const conHuecos = { ...EMBUDO, DEMO: 0, NEGOCIACION: 0 };
+  const abiertas = desplegadas(1182, conHuecos);
+  assert.ok(abiertas.indexOf("DEMO") === -1, "una columna vacía no tiene nada que enseñar");
+  assert.ok(abiertas.indexOf("NEGOCIACION") === -1);
+  assert.ok(abiertas.indexOf("INTERESADO") >= 0, "se plegó una que sí tenía tarjetas");
+});
+
+test("filtrando por una sola etapa, la que queda es la que tiene las filas", () => {
+  const soloGanado: Record<string, number> = { GANADO: 300 };
+  const abiertas = desplegadas(1182, soloGanado);
+  assert.ok(abiertas.indexOf("GANADO") >= 0, "la única con filas tiene que verse");
+});
+
+test("el orden de salida es el del embudo, no el de plegado", () => {
+  const abiertas = desplegadas(1182);
+  const posiciones = abiertas.map((id) => OCHO.indexOf(id));
+  const ordenadas = [...posiciones].sort((a, b) => a - b);
+  assert.deepEqual(posiciones, ordenadas, "el embudo se lee de izquierda a derecha");
+});
+
+test("en el móvil se abre UNA y las otras siete siguen diciendo su número", () => {
+  const abiertas = desplegadas(390);
+  assert.equal(abiertas.length, 1, "en vertical se trabaja una etapa a la vez");
+  // Las otras siete no desaparecen: siguen siendo columnas del tablero,
+  // plegadas. Eso es lo que hace que el embudo entero quepa en un móvil.
+  assert.equal(OCHO.length - abiertas.length, 7);
+});
+
+test("lo que se elige a mano gana sobre la cuenta", () => {
+  const abiertas = desplegadas(1182, EMBUDO, ["PERDIDO"]);
+  assert.deepEqual(abiertas, ["PERDIDO"]);
+});
+
+test("una elección de una etapa que ya no existe no deja el tablero vacío", () => {
+  // Pasó de verdad: una etapa fuera de catálogo que después desaparece.
+  const abiertas = desplegadas(1182, EMBUDO, ["ETAPA_QUE_YA_NO_ESTA"]);
+  assert.ok(abiertas.length >= 1, "se vuelve al automático en vez de quedarse en blanco");
+  assert.ok(abiertas.indexOf("ETAPA_QUE_YA_NO_ESTA") === -1);
+});
+
+test("una etapa fuera de catálogo tiene columna, y también se le hace sitio", () => {
+  const columnas = [...OCHO, "ETAPA_VIEJA"];
+  const abiertas = crmColumnasDesplegadas({
+    columnas,
+    totales: { ...EMBUDO, ETAPA_VIEJA: 300 },
+    ancho: 1182,
+    orientacion: "horizontal",
+  });
+  assert.ok(abiertas.length >= 1);
+  assert.ok(
+    abiertas.every((id) => columnas.indexOf(id) >= 0),
+    "no se inventa columnas",
+  );
+});
+
+test("sin columnas devuelve la lista vacía en vez de reventar", () => {
+  assert.deepEqual(
+    crmColumnasDesplegadas({ columnas: [], totales: {}, ancho: 1182, orientacion: "horizontal" }),
+    [],
+  );
+});
+
+test("con TODAS vacías se pliega sólo lo que hace falta, empezando por el final", () => {
+  // Caso de laboratorio (la pantalla enseña "sin resultados" antes de
+  // llegar aquí), pero fija la regla: estar vacía adelanta a una columna
+  // en la cola de plegado, NO la pliega porque sí. Si se plegaran todas
+  // las vacías siempre, sacar la última tarjeta de una columna
+  // reacomodaría el tablero entero justo después de soltarla.
+  const abiertas = desplegadas(1182, {});
+  assert.equal(abiertas.length, crmCupoColumnas(1182, 8), "se pliega lo justo para caber");
+  assert.equal(abiertas[0], "NUEVO", "el embudo se sigue leyendo desde el principio");
+  assert.ok(abiertas.indexOf("PERDIDO") === -1, "y lo que se va es el final");
 });

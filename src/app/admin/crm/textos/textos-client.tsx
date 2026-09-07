@@ -54,6 +54,7 @@ import {
 } from "@/lib/admin/crm/textos-core";
 import type { CrmTextosListado } from "@/lib/admin/crm/textos-service";
 import { crmCopiar } from "../crm-copiar";
+import estilos from "../crm.module.css";
 import {
   actualizarTextoAccion,
   crearTextoAccion,
@@ -216,7 +217,7 @@ export function CrmTextosClient({ listado }: { listado: CrmTextosListado }) {
 
   // ── La libreta ────────────────────────────────────────────────────────
   return (
-    <div>
+    <div className={estilos.raiz}>
       <div
         style={{
           display: "flex",
@@ -234,7 +235,7 @@ export function CrmTextosClient({ listado }: { listado: CrmTextosListado }) {
               left: 10,
               top: "50%",
               transform: "translateY(-50%)",
-              color: "var(--text-4)",
+              color: "var(--crm-text-sec)",
               pointerEvents: "none",
             }}
           />
@@ -247,7 +248,7 @@ export function CrmTextosClient({ listado }: { listado: CrmTextosListado }) {
             aria-label="Buscar textos"
           />
         </div>
-        <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>
+        <span style={{ fontSize: 11.5, color: "var(--crm-text-sec)" }}>
           {textos.length} {textos.length === 1 ? "texto" : "textos"}
         </span>
         <ButtonNew
@@ -304,7 +305,7 @@ export function CrmTextosClient({ listado }: { listado: CrmTextosListado }) {
         </div>
       )}
 
-      <p style={{ fontSize: 11.5, color: "var(--text-4)", marginTop: 14, maxWidth: 760, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 11.5, color: "var(--crm-text-sec)", marginTop: 14, maxWidth: 760, lineHeight: 1.5 }}>
         Estos textos se copian y los pegas tú. No son plantillas de WhatsApp Business —esas se
         aprueban en Meta y las manda el producto—, así que aquí puedes escribir lo que quieras.
       </p>
@@ -388,7 +389,7 @@ function FilaTexto({
           {t.stage ? (
             <BadgeNew tone={crmEtapa(t.stage).tono}>{crmEtapa(t.stage).label}</BadgeNew>
           ) : (
-            <span style={{ fontSize: 11, color: "var(--text-4)" }}>Cualquier momento</span>
+            <span style={{ fontSize: 11, color: "var(--crm-text-sec)" }}>Cualquier momento</span>
           )}
         </div>
         <p
@@ -642,7 +643,7 @@ function TextoFormulario({
                 justifyContent: "space-between",
                 gap: 8,
                 fontSize: 11,
-                color: "var(--text-4)",
+                color: "var(--crm-text-sec)",
               }}
             >
               <span>Empieza con &#123;&#123;saludo&#125;&#125; y no tendrás que resolver el «Hola» a mano.</span>
@@ -712,7 +713,7 @@ function TextoFormulario({
               >
                 {previa.texto}
               </div>
-              <p style={{ fontSize: 11, color: "var(--text-4)", margin: "6px 0 0" }}>
+              <p style={{ fontSize: 11, color: "var(--crm-text-sec)", margin: "6px 0 0" }}>
                 Con un prospecto de ejemplo (Clínica Dental Sonrisa, Dra. Ana Ruiz, Puebla). El de
                 verdad se rellena desde su ficha.
               </p>

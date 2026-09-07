@@ -59,6 +59,7 @@ import {
   registrarActividadAccion,
 } from "../actions";
 import { CrmFormulario, type CrmClinicaLite } from "../crm-form";
+import estilos from "../crm.module.css";
 import { CrmTextosElegir } from "../crm-textos-panel";
 import {
   CrmAccionesContacto,
@@ -145,7 +146,11 @@ export function CrmProspectoClient({
   }
 
   return (
-    <div>
+    // `estilos.raiz` declara los tokens de color del CRM. La ficha es otra
+    // página, así que los necesita por su cuenta: sin esta clase, un
+    // `var(--crm-text-sec)` de aquí —o del formulario, que también se abre
+    // desde aquí— no resolvería a nada.
+    <div className={estilos.raiz}>
       <Link
         href="/admin/crm"
         style={{
@@ -188,12 +193,12 @@ export function CrmProspectoClient({
           >
             <CrmVerticalChip vertical={p.vertical} />
             {(p.city || p.state || p.country) && (
-              <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>
+              <span style={{ fontSize: 11.5, color: "var(--crm-text-sec)" }}>
                 {[p.city, p.state, p.country].filter(Boolean).join(", ")}
               </span>
             )}
             <CrmOrigenChip p={p} />
-            <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>
+            <span style={{ fontSize: 11.5, color: "var(--crm-text-sec)" }}>
               {crmFuenteLabel(p.source)}
             </span>
             {p.tags.map((t) => (
@@ -282,7 +287,7 @@ export function CrmProspectoClient({
                 {p.contactName ? (
                   <>
                     {p.contactName}
-                    {p.contactRole && <span style={{ color: "var(--text-4)" }}> · {p.contactRole}</span>}
+                    {p.contactRole && <span style={{ color: "var(--crm-text-sec)" }}> · {p.contactRole}</span>}
                   </>
                 ) : (
                   <Vacio>Sin nombre</Vacio>
@@ -303,7 +308,7 @@ export function CrmProspectoClient({
                 ) : (
                   <>
                     {crmFmtFecha(p.lastContactAt)}
-                    <span style={{ color: "var(--text-4)" }}>
+                    <span style={{ color: "var(--crm-text-sec)" }}>
                       {" "}
                       · {dias === 0 ? "hoy" : `hace ${dias} ${dias === 1 ? "día" : "días"}`}
                     </span>
@@ -363,7 +368,7 @@ export function CrmProspectoClient({
             </CardNew>
           )}
 
-          <p style={{ fontSize: 11, color: "var(--text-4)", margin: 0, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 11, color: "var(--crm-text-sec)", margin: 0, lineHeight: 1.5 }}>
             Dado de alta el {crmFmtFecha(p.createdAt)}
             {p.affiliateId
               ? ` por ${p.affiliateName ?? "un socio que ya no está dado de alta"}, desde el panel de afiliados`
@@ -377,8 +382,39 @@ export function CrmProspectoClient({
         {/* Derecha: bitácora */}
         <div style={{ flex: "2 1 420px", minWidth: 0, display: "flex", flexDirection: "column", gap: 14 }}>
           <Compositor prospectId={p.id} />
-          <CardNew noPad title={`Bitácora (${ficha.actividades.length})`}>
-            {ficha.actividades.length === 0 ? (
+          <CardNew
+            noPad
+            title={
+              ficha.bitacoraNoDisponible
+                ? "Bitácora (no se pudo leer)"
+                : `Bitácora (${ficha.actividades.length})`
+            }
+          >
+            {/* Una bitácora vacía y una que no se puede leer se ven
+                exactamente igual, y la segunda es media migración sin
+                aplicar. Aquí pasaba lo mismo que en la lista: el `.catch`
+                de `crmObtener` devolvía [] y la ficha decía "todavía no
+                hay nada anotado" sin haberlo comprobado. */}
+            {ficha.bitacoraNoDisponible ? (
+              <div
+                role="status"
+                style={{
+                  padding: "24px 18px",
+                  color: "var(--text-2)",
+                  fontSize: 12.5,
+                  lineHeight: 1.6,
+                }}
+              >
+                <strong style={{ color: "var(--text-1)" }}>
+                  No se pudo leer la bitácora de este prospecto.
+                </strong>{" "}
+                No es que esté vacía: es que la consulta falló. Lo más probable es que falte
+                terminar de aplicar <code>sql/crm-dalecontrol.sql</code>, que crea{" "}
+                <strong>dos</strong> tablas —<code>crm_prospects</code> y{" "}
+                <code>crm_activities</code>— y ésta es la segunda. El detalle del error está en los
+                logs del servidor.
+              </div>
+            ) : ficha.actividades.length === 0 ? (
               <div
                 style={{
                   padding: "34px 18px",
@@ -443,7 +479,7 @@ function Dato({
           gap: 5,
           fontSize: 10.5,
           fontWeight: 600,
-          color: "var(--text-4)",
+          color: "var(--crm-text-sec)",
           textTransform: "uppercase",
           letterSpacing: "0.05em",
           marginBottom: 3,
@@ -458,7 +494,7 @@ function Dato({
 }
 
 function Vacio({ children }: { children: React.ReactNode }) {
-  return <span style={{ color: "var(--text-4)" }}>{children}</span>;
+  return <span style={{ color: "var(--crm-text-sec)" }}>{children}</span>;
 }
 
 // ── Próximo paso ────────────────────────────────────────────────────────
@@ -699,9 +735,9 @@ function Anotacion({ a }: { a: CrmActividadDTO }) {
           {a.outcome && (
             <BadgeNew tone={crmResultadoTono(a.outcome)}>{crmResultadoLabel(a.outcome)}</BadgeNew>
           )}
-          <span style={{ fontSize: 11, color: "var(--text-4)" }}>{crmFmtFechaHora(a.happenedAt)}</span>
+          <span style={{ fontSize: 11, color: "var(--crm-text-sec)" }}>{crmFmtFechaHora(a.happenedAt)}</span>
           {a.authorEmail && (
-            <span style={{ fontSize: 11, color: "var(--text-4)" }}>· {a.authorEmail}</span>
+            <span style={{ fontSize: 11, color: "var(--crm-text-sec)" }}>· {a.authorEmail}</span>
           )}
         </div>
         {a.body && (

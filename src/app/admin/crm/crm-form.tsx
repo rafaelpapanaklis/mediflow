@@ -35,7 +35,8 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { useState, useTransition } from "react";
 import toast from "react-hot-toast";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { Users, X } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import {
@@ -48,7 +49,7 @@ import {
   CRM_FUENTES,
   CRM_VERTICALES,
 } from "@/lib/admin/crm/crm-core";
-import type { CrmProspectoDTO } from "@/lib/admin/crm/service";
+import type { CrmDuplicado, CrmProspectoDTO } from "@/lib/admin/crm/service";
 import { actualizarProspectoAccion, crearProspectoAccion } from "./actions";
 import { crmFmtFecha } from "./crm-ui";
 
@@ -136,8 +137,21 @@ export function CrmFormulario({
   const [c, setC] = useState<Campos>(() => desdeProspecto(prospecto));
   const [pendiente, startTransition] = useTransition();
 
+  /**
+   * El prospecto que ya estaba y se parece a éste. Se pinta ARRIBA del
+   * formulario, con su nombre y su ficha, en vez de morir en un toast que
+   * se va solo a los tres segundos: la decisión ("¿son el mismo negocio o
+   * dos sucursales?") sólo la puede tomar quien lo está escribiendo, y
+   * para tomarla necesita poder mirar al que ya estaba.
+   */
+  const [duplicado, setDuplicado] = useState<CrmDuplicado | null>(null);
+
   function set<K extends keyof Campos>(campo: K, valor: string) {
     setC((prev) => ({ ...prev, [campo]: valor }));
+    // Tocar el nombre o el teléfono invalida el aviso de duplicado: se
+    // calculó con lo de antes, y dejarlo puesto haría dudar de si el
+    // cambio sirvió de algo.
+    if (campo === "name" || campo === "phone") setDuplicado(null);
   }
 
   const entrada = {
@@ -168,7 +182,12 @@ export function CrmFormulario({
   // edita (ahí no se toca).
   const invalido = crmValidarProspecto(editando ? entrada : { ...entrada, stage: c.stage });
 
-  function guardar() {
+  /**
+   * `permitirDuplicado` sólo llega en true cuando se pulsa "Darlo de alta
+   * igual", nunca por defecto: el aviso tiene que costar un clic, o no es
+   * un aviso.
+   */
+  function guardar(permitirDuplicado = false) {
     if (invalido) {
       toast.error(invalido);
       return;
@@ -176,9 +195,13 @@ export function CrmFormulario({
     startTransition(async () => {
       const r = editando
         ? await actualizarProspectoAccion(prospecto!.id, entrada as any)
-        : await crearProspectoAccion({ ...entrada, stage: c.stage } as any);
+        : await crearProspectoAccion({ ...entrada, stage: c.stage } as any, { permitirDuplicado });
       if (!r.ok) {
-        toast.error(r.error ?? "No se pudo guardar.");
+        const repetido = (r as { duplicado?: CrmDuplicado }).duplicado ?? null;
+        setDuplicado(repetido);
+        // Con el aviso pintado arriba el toast sobra y además tapa el
+        // botón de "Darlo de alta igual".
+        if (!repetido) toast.error(r.error ?? "No se pudo guardar.");
         return;
       }
       toast.success(r.mensaje ?? "Guardado.");
@@ -212,6 +235,48 @@ export function CrmFormulario({
         </div>
 
         <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {duplicado && (
+            <div
+              role="alert"
+              style={{
+                display: "flex",
+                gap: 10,
+                padding: "11px 13px",
+                borderRadius: 10,
+                border: "1px solid var(--warning-border-strong)",
+                background: "var(--warning-soft)",
+              }}
+            >
+              <Users size={16} style={{ color: "var(--warning)", flexShrink: 0, marginTop: 1 }} aria-hidden />
+              <div style={{ minWidth: 0, fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+                <strong style={{ color: "var(--text-1)" }}>Esto ya está en la lista.</strong>{" "}
+                {duplicado.motivo === "telefono"
+                  ? "Hay un prospecto con ese mismo teléfono:"
+                  : "Hay un prospecto que se llama igual:"}{" "}
+                <Link
+                  href={`/admin/crm/${duplicado.id}`}
+                  style={{ color: "var(--brand)", fontWeight: 600 }}
+                >
+                  {duplicado.name}
+                </Link>
+                {duplicado.phone ? <span className="mono"> · {duplicado.phone}</span> : null} —{" "}
+                {crmEtapa(duplicado.stage).label}.
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ButtonNew size="sm" variant="secondary" onClick={() => guardar(true)} disabled={pendiente}>
+                    Darlo de alta igual
+                  </ButtonNew>
+                  <ButtonNew size="sm" variant="ghost" onClick={alCerrar}>
+                    Mejor no
+                  </ButtonNew>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--crm-text-sec)" }}>
+                  Dos sucursales del mismo negocio, o dos clínicas que se llaman igual en dos
+                  ciudades, son casos de verdad. Esto avisa; no lo impide.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Quién es ─────────────────────────────────────────────── */}
           <div>
             <div className="form-section__title">
@@ -608,7 +673,7 @@ export function CrmFormulario({
           <ButtonNew variant="ghost" onClick={alCerrar} disabled={pendiente}>
             Cancelar
           </ButtonNew>
-          <ButtonNew variant="primary" onClick={guardar} disabled={pendiente || !!invalido}>
+          <ButtonNew variant="primary" onClick={() => guardar()} disabled={pendiente || !!invalido}>
             {pendiente ? "Guardando…" : editando ? "Guardar cambios" : "Agregar a la lista"}
           </ButtonNew>
         </div>
@@ -638,7 +703,7 @@ function LoQueSeLlenaSolo({ p }: { p: CrmProspectoDTO }) {
         ) : (
           <>
             {crmFmtFecha(p.lastContactAt)}
-            <span style={{ color: "var(--text-4)" }}>
+            <span style={{ color: "var(--crm-text-sec)" }}>
               {" "}
               · {dias === 0 ? "hoy" : `hace ${dias} ${dias === 1 ? "día" : "días"}`}
             </span>
@@ -662,7 +727,7 @@ function LoQueSeLlenaSolo({ p }: { p: CrmProspectoDTO }) {
         <>
           {crmFmtFecha(p.createdAt)}
           {p.createdByEmail && (
-            <span style={{ color: "var(--text-4)" }}> · {p.createdByEmail}</span>
+            <span style={{ color: "var(--crm-text-sec)" }}> · {p.createdByEmail}</span>
           )}
         </>
       ),
@@ -695,7 +760,7 @@ function LoQueSeLlenaSolo({ p }: { p: CrmProspectoDTO }) {
               style={{
                 fontSize: 10.5,
                 fontWeight: 600,
-                color: "var(--text-4)",
+                color: "var(--crm-text-sec)",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
               }}
@@ -703,7 +768,7 @@ function LoQueSeLlenaSolo({ p }: { p: CrmProspectoDTO }) {
               {f.label}
             </div>
             <div style={{ fontSize: 12.5, color: "var(--text-1)", marginTop: 2 }}>{f.valor}</div>
-            <div style={{ fontSize: 11, color: "var(--text-4)", marginTop: 2, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11, color: "var(--crm-text-sec)", marginTop: 2, lineHeight: 1.4 }}>
               {f.ayuda}
             </div>
           </div>
@@ -714,5 +779,5 @@ function LoQueSeLlenaSolo({ p }: { p: CrmProspectoDTO }) {
 }
 
 function Sin({ children }: { children: React.ReactNode }) {
-  return <span style={{ color: "var(--text-4)" }}>{children}</span>;
+  return <span style={{ color: "var(--crm-text-sec)" }}>{children}</span>;
 }

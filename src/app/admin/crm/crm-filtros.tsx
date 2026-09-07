@@ -61,6 +61,7 @@ export function CrmBarraFiltros({
   totalGeneral,
   cargando,
   alCambiar,
+  alElegirVista,
 }: {
   filtros: CrmFiltros;
   /** La vista que se está pintando de verdad (puede venir del tamaño). */
@@ -71,6 +72,14 @@ export function CrmBarraFiltros({
   /** Hay una navegación en curso: se avisa sin bloquear el tecleo. */
   cargando: boolean;
   alCambiar: (siguiente: CrmFiltros, opciones?: { reemplazar?: boolean }) => void;
+  /**
+   * Se pulsó el conmutador de vista. Va aparte de `alCambiar` a propósito:
+   * es lo ÚNICO que cuenta como "elegí esta vista" y por tanto lo único
+   * que se recuerda. Un KPI que salta a la lista, o un enlace que alguien
+   * manda con `?vista=lista`, cambian la vista sin que nadie la haya
+   * elegido, y no pueden pisar la preferencia guardada.
+   */
+  alElegirVista?: (v: CrmVista) => void;
 }) {
   // ── La caja de buscar ────────────────────────────────────────────────
   // Lo tecleado se guarda AQUÍ y se pinta al instante; a la URL sólo va
@@ -166,7 +175,7 @@ export function CrmBarraFiltros({
               left: 10,
               top: "50%",
               transform: "translateY(-50%)",
-              color: "var(--text-4)",
+              color: "var(--crm-text-sec)",
               pointerEvents: "none",
             }}
           />
@@ -296,14 +305,20 @@ export function CrmBarraFiltros({
             valor="tablero"
             icono={<LayoutGrid size={13} />}
             label="Tablero"
-            alElegir={(v) => poner({ vista: v })}
+            alElegir={(v) => {
+              alElegirVista?.(v);
+              poner({ vista: v });
+            }}
           />
           <BotonVista
             actual={vista}
             valor="lista"
             icono={<List size={13} />}
             label="Lista"
-            alElegir={(v) => poner({ vista: v })}
+            alElegir={(v) => {
+              alElegirVista?.(v);
+              poner({ vista: v });
+            }}
           />
         </div>
       </div>
@@ -338,7 +353,7 @@ export function CrmBarraFiltros({
         </span>
 
         {cargando && (
-          <span style={{ fontSize: 11.5, color: "var(--text-4)" }} aria-hidden>
+          <span style={{ fontSize: 11.5, color: "var(--crm-text-sec)" }} aria-hidden>
             actualizando…
           </span>
         )}
@@ -364,7 +379,7 @@ export function CrmBarraFiltros({
               maxWidth: 280,
             }}
           >
-            <span style={{ color: "var(--text-4)" }}>{a.etiqueta}:</span>
+            <span style={{ color: "var(--crm-text-sec)" }}>{a.etiqueta}:</span>
             <span
               style={{
                 color: "var(--text-1)",
@@ -524,7 +539,7 @@ export function CrmPaginacion({
             n === null ? (
               <span
                 key={`hueco-${i}`}
-                style={{ color: "var(--text-4)", fontSize: 11, padding: "0 2px" }}
+                style={{ color: "var(--crm-text-sec)", fontSize: 11, padding: "0 2px" }}
                 aria-hidden
               >
                 …

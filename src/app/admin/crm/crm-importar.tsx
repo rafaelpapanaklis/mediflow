@@ -198,7 +198,7 @@ export function CrmImportar({ alCerrar }: { alCerrar: () => void }) {
                         <tr key={`${f.name}-${i}`}>
                           <td style={{ fontWeight: 500 }}>{f.name}</td>
                           <td style={{ color: "var(--text-3)" }}>{f.contactName ?? "—"}</td>
-                          <td className="mono" style={{ color: f.phone ? "var(--text-2)" : "var(--text-4)" }}>
+                          <td className="mono" style={{ color: f.phone ? "var(--text-2)" : "var(--crm-text-sec)" }}>
                             {f.phone ? crmTelefonoLegible(f.phone) : "—"}
                           </td>
                           <td style={{ color: "var(--text-3)" }}>{f.email ?? "—"}</td>
