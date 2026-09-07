@@ -191,7 +191,21 @@ test("🔴 P0-2 · el SALIENTE pierde al paciente aunque su cita esté suelta", 
   // casi todas.
   assert.deepEqual(
     ramaCitas.cases,
-    { none: { institutionId: INST, student: { institutionId: INST, userId: SALIENTE }, status: "TRANSFERRED" } },
+    {
+      none: {
+        institutionId: INST,
+        // H-07 · el recorte de PACIENTES (y solo el de pacientes) incluye
+        // el estado académico: un alumno egresado o de baja definitiva deja
+        // de alcanzar a los suyos. Su lista de casos y su evaluación no lo
+        // llevan, a propósito.
+        student: {
+          institutionId: INST,
+          userId: SALIENTE,
+          status: { notIn: ["GRADUATED", "WITHDRAWN"] },
+        },
+        status: "TRANSFERRED",
+      },
+    },
     "el saliente conserva la llave del paciente que entregó",
   );
 });
@@ -205,7 +219,12 @@ test("🔴 P0-2 · el ENTRANTE gana al paciente sin ninguna regla nueva", () => 
   // El caso nuevo nace ASSIGNED, así que la primera rama lo encuentra: el
   // único estado que quita el acceso es TRANSFERRED.
   assert.deepEqual(where.OR?.[0].cases.some.status, { not: "TRANSFERRED" });
-  assert.deepEqual(where.OR?.[0].cases.some.student, { institutionId: INST, userId: ENTRANTE });
+  assert.deepEqual(where.OR?.[0].cases.some.student, {
+    institutionId: INST,
+    userId: ENTRANTE,
+    // H-07 · solo en el recorte de PACIENTES. Ver edu-pacientes-edicion.test.ts.
+    status: { notIn: ["GRADUATED", "WITHDRAWN"] },
+  });
 
   // Y el candado del saliente no le estorba: el caso que el OTRO entregó no
   // es suyo, así que su `none` no lo encuentra.

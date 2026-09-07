@@ -2,15 +2,17 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, Copy, FilePlus2, PenLine } from "lucide-react";
+import { Ban, Check, Copy, FilePlus2, FileText, PenLine } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import { SignaturePad } from "@/components/ui/signature-pad";
 import {
   EDU_CONSENT_CONTENT_MAX,
+  EDU_CONSENT_EDAD_MAYORIA,
   EDU_CONSENT_ESTADO_DESCRIPTIONS,
   EDU_CONSENT_ESTADO_LABELS,
   EDU_CONSENT_ESTADO_TAGS,
+  EDU_CONSENT_INTEGRIDAD_LABELS,
   EDU_CONSENT_NAME_MAX,
   EDU_CONSENT_REASON_MAX,
   EDU_CONSENT_RELATION_MAX,
@@ -66,6 +68,8 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
   const [revocar, setRevocar] = useState<EduConsentRow | null>(null);
   const [firmar, setFirmar] = useState<{ row: EduConsentRow; comoDocente: boolean } | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
+  /** H-12: qué carta tiene abierta su ficha (el texto firmado y las firmas). */
+  const [leyendo, setLeyendo] = useState<EduConsentRow | null>(null);
 
   const casosAbiertos = useMemo(() => cases.filter((c) => c.isOpen), [cases]);
 
@@ -226,6 +230,17 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
             </div>
           )}
 
+          {/* H-12 · `expiresLabel` se calculaba y NO SE PINTABA en ninguna
+              parte, así que nadie sabía cuándo caduca la liga que acaba de
+              copiar y mandar por WhatsApp. Va pegado al botón de copiar,
+              que es el momento en que importa. */}
+          {c.publicPath && (
+            <p className="edu-note">
+              La liga para firmar caduca el <strong>{c.expiresLabel}</strong>. Después de esa fecha
+              el paciente ya no puede firmarla y hay que emitir una carta nueva.
+            </p>
+          )}
+
           <div className="edu-actions">
             {c.publicPath && (
               <button
@@ -235,6 +250,23 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
               >
                 <Copy size={15} />
                 {copiado === c.id ? "Liga copiada" : "Copiar liga de firma"}
+              </button>
+            )}
+            {/* H-12 · Releer lo que el paciente firmó. Antes, firmada la
+                carta, el texto no volvía nunca a una pantalla del
+                instituto. */}
+            {c.content && (
+              <button
+                type="button"
+                className="edu-btn edu-btn--ghost edu-btn--sm"
+                onClick={() => {
+                  setFlash(null);
+                  setError(null);
+                  setLeyendo(c);
+                }}
+              >
+                <FileText size={15} />
+                Ver la carta firmada
               </button>
             )}
             {c.puedeContrafirmarComoAlumno && (
@@ -298,6 +330,8 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
         />
       )}
 
+      {leyendo && <CartaFirmada row={leyendo} onClose={() => setLeyendo(null)} />}
+
       {firmar && (
         <Contrafirmar
           row={firmar.row}
@@ -344,6 +378,38 @@ function CartaNueva({
   const [error, setError] = useState<string | null>(null);
 
   const caso = casosAbiertos.filter((c) => c.id === caseId)[0] ?? null;
+
+  // ── H-08 · MENOR DE EDAD ────────────────────────────────────────────
+  //
+  // `patientAge` ya viajaba (se imprime dentro del texto) y NADIE lo
+  // miraba. La pantalla ahora exige el representante legal antes de dejar
+  // emitir, con el MISMO número que el servidor (EDU_CONSENT_EDAD_MAYORIA):
+  // el servidor rebota igual, pero rebotar después de teclear la carta
+  // entera es rebotar tarde.
+  //
+  // `patientAge` null = no hay fecha de nacimiento. No se puede afirmar que
+  // sea menor, así que no se bloquea; se avisa, que es lo honesto.
+  const esMenor = patientAge !== null && patientAge < EDU_CONSENT_EDAD_MAYORIA;
+  const faltaRepresentante = esMenor && !signerName.trim();
+  const faltaParentesco = Boolean(signerName.trim()) && !signerRelation.trim();
+
+  // ── S-17 · UN CASO SIN DOCENTE NO PRODUCE CARTA ─────────────────────
+  //
+  // La pantalla ya lo SABÍA y lo avisaba en rojo debajo del desplegable
+  // (`supervisorPorCaso[caso.id]` null), pero el botón no lo contemplaba:
+  // se pulsaba "Emitir carta", se esperaba, y volvía el 409 del servidor
+  // con el mismo texto que ya estaba en pantalla.
+  const sinDocente = Boolean(caso) && !supervisorPorCaso[caso!.id];
+
+  const motivoBloqueo = !caseId
+    ? "Elige el caso: de ahí salen el estudiante que atiende y el docente que responde."
+    : sinDocente
+      ? "Ese caso no tiene docente responsable. Asígnale supervisor al caso antes de emitir la carta."
+      : faltaRepresentante
+        ? `Este paciente tiene ${patientAge} ${patientAge === 1 ? "año" : "años"}: no puede firmar su propio consentimiento. Escribe el nombre de su representante legal.`
+        : faltaParentesco
+          ? "Falta el parentesco del representante legal: la NOM-004 pide quién firma y qué relación tiene con el paciente."
+          : null;
 
   // La vista previa se recalcula con el MISMO módulo puro que usa el
   // servidor. Si alguien tocó el texto (`editado`), manda lo suyo: la
@@ -426,7 +492,7 @@ function CartaNueva({
             type="button"
             className="edu-btn edu-btn--primary"
             onClick={guardar}
-            disabled={busy || !caseId}
+            disabled={busy || motivoBloqueo !== null}
           >
             {busy ? "Emitiendo…" : "Emitir carta"}
           </button>
@@ -437,6 +503,12 @@ function CartaNueva({
         <div className="edu-alert" role="alert">
           {error}
         </div>
+      )}
+
+      {/* El motivo se ESCRIBE junto al botón apagado, no se deja en un
+          tooltip: en un teléfono no hay `hover`. Mismo patrón que WhatsApp. */}
+      {!busy && motivoBloqueo && (
+        <p className="edu-note">No se puede emitir todavía: {motivoBloqueo}</p>
       )}
 
       <div className="edu-banner">
@@ -509,9 +581,28 @@ function CartaNueva({
         </span>
       </div>
 
+      {/* 🔴 H-08 · Para un MENOR el campo deja de ser opcional: se marca
+          obligatorio, se avisa arriba, y el botón no deja emitir hasta que
+          esté. El servidor rebota igual — los dos, como siempre. */}
+      {esMenor && (
+        <div className="edu-alert" role="alert">
+          Este paciente tiene {patientAge} {patientAge === 1 ? "año" : "años"}: no puede firmar su
+          propio consentimiento. Lo firma su representante legal (madre, padre o tutor), y hay que
+          escribir aquí abajo quién es y qué parentesco tiene.
+        </div>
+      )}
+      {patientAge === null && (
+        <p className="edu-note">
+          Este paciente no tiene fecha de nacimiento registrada, así que no se puede comprobar si es
+          menor de edad. Si lo es, la carta la tiene que firmar su representante legal: escríbelo
+          abajo.
+        </p>
+      )}
+
       <div className="edu-field">
         <label className="edu-field__label" htmlFor="edu-cons-rep">
-          Representante legal (solo si el paciente no firma por sí mismo)
+          Representante legal{" "}
+          {esMenor ? "(obligatorio: el paciente es menor de edad)" : "(solo si el paciente no firma por sí mismo)"}
         </label>
         <input
           id="edu-cons-rep"
@@ -520,6 +611,9 @@ function CartaNueva({
           maxLength={EDU_CONSENT_NAME_MAX}
           disabled={busy}
           autoComplete="off"
+          required={esMenor}
+          aria-required={esMenor}
+          aria-invalid={faltaRepresentante}
           onChange={(e) => {
             setSignerName(e.target.value);
             setEditado(null);
@@ -531,10 +625,10 @@ function CartaNueva({
         </span>
       </div>
 
-      {signerName.trim() && (
+      {(signerName.trim() || esMenor) && (
         <div className="edu-field">
           <label className="edu-field__label" htmlFor="edu-cons-par">
-            Parentesco o relación con el paciente
+            Parentesco o relación con el paciente{esMenor ? " (obligatorio)" : ""}
           </label>
           <input
             id="edu-cons-par"
@@ -580,6 +674,146 @@ function CartaNueva({
             </>
           )}
         </span>
+      </div>
+    </EduModal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// H-12 · LA CARTA FIRMADA, para volver a leerla
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Una firma con su imagen. `url` null = no hay PNG que enseñar. */
+function Firma({
+  quien,
+  url,
+  cuando,
+}: {
+  quien: string;
+  url: string | null;
+  cuando: string | null;
+}) {
+  if (!cuando) return null;
+  return (
+    <div className="edu-integ-firma">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="edu-integ-firma__img" src={url} alt={`Firma de ${quien}`} />
+      ) : (
+        <span className="edu-integ-firma__cuando">
+          (sin imagen: la firma se registró, el PNG no está disponible)
+        </span>
+      )}
+      <span className="edu-integ-firma__quien">{quien}</span>
+      <span className="edu-integ-firma__cuando">{cuando}</span>
+    </div>
+  );
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * EL TEXTO QUE EL PACIENTE FIRMÓ (H-12).
+ *
+ * Lo que se enseña aquí es `EduConsent.content` tal cual está guardado —el
+ * mismo que se digirió para el hash— con su HUELLA RECALCULADA en el
+ * servidor, la fecha de firma y las imágenes de las firmas con URL firmada.
+ *
+ * Hasta ahora esto no existía: firmada la carta, la liga pública se apagaba
+ * y el texto no volvía a ninguna pantalla del instituto. El permiso de caja
+ * está justificado en que "la carta se imprime y se entrega en el
+ * mostrador", y no había nada que imprimir.
+ *
+ * ⚠️ Sin PDF todavía, a propósito: el documento imprimible con las firmas
+ * incrustadas es otra ola. Lo que hay es la hoja, y se imprime con el
+ * navegador — que es infinitamente más de lo que había.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+function CartaFirmada({ row, onClose }: { row: EduConsentRow; onClose: () => void }) {
+  return (
+    <EduModal
+      title="La carta que firmó el paciente"
+      subtitle={row.procedure}
+      onClose={onClose}
+      footer={
+        <button type="button" className="edu-btn edu-btn--primary" onClick={onClose}>
+          Cerrar
+        </button>
+      }
+    >
+      <div className="edu-integ-carta">
+        {/* 🔴 La integridad, primero. Si el texto guardado ya no coincide
+            con la huella que se calculó al emitir, todo lo que se lee
+            debajo hay que leerlo con eso puesto delante. */}
+        {row.integridad === "alterado" && (
+          <div className="edu-alert" role="alert">
+            {EDU_CONSENT_INTEGRIDAD_LABELS.alterado}
+          </div>
+        )}
+        {row.integridad === "ok" && (
+          <p className="edu-note">{EDU_CONSENT_INTEGRIDAD_LABELS.ok}</p>
+        )}
+        {row.integridad === "sin_hash" && (
+          <p className="edu-note">{EDU_CONSENT_INTEGRIDAD_LABELS.sin_hash}</p>
+        )}
+
+        <div className="edu-kv edu-kv--2">
+          <div>
+            <span className="edu-kv__k">Firmada</span>
+            <span className="edu-kv__v">{row.signedLabel ?? "No llegó a firmarse"}</span>
+          </div>
+          <div>
+            <span className="edu-kv__k">Quién firmó</span>
+            <span className="edu-kv__v">
+              {row.signerName
+                ? `${row.signerName} (${row.signerRelation ?? "representante legal"})`
+                : "El paciente"}
+            </span>
+          </div>
+        </div>
+
+        {row.revokedLabel && (
+          <div className="edu-banner edu-banner--warn">
+            <div>
+              <p className="edu-banner__title">Revocada el {row.revokedLabel}</p>
+              <p className="edu-banner__detail">
+                {row.revokedReason} — La carta no se borró: se lee tal como se firmó, y eso es lo
+                que hay debajo.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="edu-integ-carta__texto">{row.content}</div>
+
+        <div className="edu-integ-firmas">
+          <Firma quien="Paciente" url={row.signatureUrl} cuando={row.signedLabel} />
+          <Firma
+            quien={row.witness1Name ?? "Testigo 1"}
+            url={row.witness1SignatureUrl}
+            cuando={row.witness1SignedAt ? "Testigo" : null}
+          />
+          <Firma
+            quien={row.witness2Name ?? "Testigo 2"}
+            url={row.witness2SignatureUrl}
+            cuando={row.witness2SignedAt ? "Testigo" : null}
+          />
+          <Firma
+            quien={row.studentName}
+            url={row.studentSignatureUrl}
+            cuando={row.studentSignedAt ? "Estudiante que atiende" : null}
+          />
+          <Firma
+            quien={row.supervisorSignedByName ?? row.supervisorName ?? "Docente responsable"}
+            url={row.supervisorSignatureUrl}
+            cuando={row.supervisorSignedAt ? "Docente responsable" : null}
+          />
+        </div>
+
+        <p className="edu-note">
+          Esto es el texto guardado, palabra por palabra: lo mismo que se digirió para calcular la
+          huella. Para dárselo al paciente, imprime esta hoja desde el navegador — el PDF con las
+          firmas incrustadas todavía no existe.
+        </p>
       </div>
     </EduModal>
   );

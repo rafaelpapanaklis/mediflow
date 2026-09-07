@@ -194,6 +194,18 @@ export interface EduVisorModalProps {
   notes: string | null;
   /** El trozo `{ patients: { models3d } }` que necesita el visor de mallas. */
   dict3d: Dictionary;
+  /**
+   * S-7 · true = quien mira NO tiene `estudios.upload`, así que el panel de
+   * notas que el visor CBCT del dental trae dentro se TAPA desde el CSS del
+   * vertical. Su "Guardar" pega contra el PATCH del instituto, que exige
+   * ese permiso: era un botón que fallaba siempre, y la nota se lee igual
+   * abajo, en la ficha del estudio.
+   *
+   * Es el mismo remedio que ya se le aplica al panel muerto de
+   * `DicomViewer2D` (.edu-vsr__lienzo--dicom), y por la misma razón: el
+   * visor es del dental y desde aquí no se le pasa una prop que no tiene.
+   */
+  notasSoloLectura?: boolean;
   onClose: () => void;
   /** Apoyo de IA y ficha del estudio: van BAJO el visor, a un
    *  desplazamiento, para que no le quiten pantalla a los cuatro paneles. */
@@ -208,6 +220,7 @@ export function EduVisorModal({
   subtitle,
   notes,
   dict3d,
+  notasSoloLectura = false,
   onClose,
   children,
 }: EduVisorModalProps) {
@@ -299,7 +312,12 @@ export function EduVisorModal({
         </div>
 
         <div className="edu-vsr__body" ref={cuerpoRef}>
-          <div className={`edu-vsr__lienzo edu-vsr__lienzo--${tipo ?? "otro"}`} ref={lienzoRef}>
+          <div
+            className={`edu-vsr__lienzo edu-vsr__lienzo--${tipo ?? "otro"}${
+              notasSoloLectura ? " edu-integ-solo-lectura" : ""
+            }`}
+            ref={lienzoRef}
+          >
             {tipo === "cbct" ? (
               <DicomSetViewer
                 url={url}

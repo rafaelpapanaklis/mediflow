@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Box, FileText, Image as ImageIcon, Layers, Upload, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import {
   EDU_MAX_STUDY_LABEL,
+  EDU_SIGNED_URL_TTL_SECONDS,
   EDU_STUDY_ACCEPT,
   eduExtOfName,
   eduFormatBytes,
@@ -58,6 +59,13 @@ export interface EduEstudiosScreenProps {
   /** El techo, para poder decir el número en vez de "hay más". */
   maxRows: number;
   cases: EduCaseOption[];
+  /**
+   * S-9 · Cuándo se firmaron las URLs de los archivos (ISO). Caducan a la
+   * hora y esta pantalla se queda abierta toda la sesión clínica: sin este
+   * dato, pasado ese rato cada miniatura da un 403 mudo que se lee como
+   * "el archivo se perdió".
+   */
+  signedAt: string;
   canUpload: boolean;
   /** Estado del apoyo de IA, resuelto en el SERVIDOR. */
   iaAnalisis: EduIaEstado;
@@ -107,6 +115,7 @@ export function EduEstudiosScreen({
   truncated,
   maxRows,
   cases,
+  signedAt,
   canUpload,
   iaAnalisis,
   canAnalyze,
@@ -126,6 +135,41 @@ export function EduEstudiosScreen({
     setFlash(mensaje);
     startNav(() => router.refresh());
   }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════════════
+   * S-9 · LA URL FIRMADA CADUCA, Y AHORA SE DICE.
+   *
+   * Los archivos se sirven con una URL firmada de una hora. El TTL es largo
+   * a propósito —esta galería se queda abierta toda la sesión clínica y una
+   * URL de cinco minutos convertiría "enséñame la radiografía otra vez" en
+   * una recarga— pero una hora TAMBIÉN se acaba, y cuando se acababa cada
+   * miniatura y cada "Abrir" contestaban un 403 mudo. Lo que veía el alumno
+   * era una galería de imágenes rotas: no "caducó el enlace", sino "se
+   * perdieron las radiografías del paciente".
+   *
+   * Se avisa un minuto ANTES de que expire y se ofrece renovar, que es un
+   * `router.refresh()`: la página es `force-dynamic` y vuelve a firmarlo
+   * todo. Y si aun así una imagen falla al cargar, el `onError` de la
+   * miniatura levanta el mismo aviso — el reloj puede ir corrido, y la
+   * prueba de que caducó es que no carga.
+   * ═══════════════════════════════════════════════════════════════════════
+   */
+  const [caducadas, setCaducadas] = useState(false);
+
+  useEffect(() => {
+    setCaducadas(false);
+    const firmadas = Date.parse(signedAt);
+    if (!Number.isFinite(firmadas)) return;
+    // Un minuto de margen: mejor avisar de sobra que servir un 403.
+    const faltan = firmadas + (EDU_SIGNED_URL_TTL_SECONDS - 60) * 1000 - Date.now();
+    if (faltan <= 0) {
+      setCaducadas(true);
+      return;
+    }
+    const t = setTimeout(() => setCaducadas(true), faltan);
+    return () => clearTimeout(t);
+  }, [signedAt]);
 
   // Al cerrar el modal que llegó abierto se limpia el ?subir=1: si se
   // quedara en la URL, un refresh del teléfono lo volvería a abrir.
@@ -167,6 +211,29 @@ export function EduEstudiosScreen({
         )}
       </div>
 
+      {caducadas && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">Los enlaces de los archivos caducaron</p>
+            <p className="edu-banner__detail">
+              Por seguridad, los archivos se sirven con un enlace temporal que dura una hora, y esta
+              pestaña lleva más abierta. Las miniaturas y los estudios que abras ahora fallarían.
+              Actualiza para renovarlos: no se pierde nada, los archivos siguen ahí.
+            </p>
+            <p>
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary edu-btn--sm"
+                onClick={() => startNav(() => router.refresh())}
+                disabled={navigating}
+              >
+                {navigating ? "Renovando…" : "Renovar los enlaces"}
+              </button>
+            </p>
+          </div>
+        </div>
+      )}
+
       {truncated && (
         <div className="edu-banner edu-banner--warn" role="status">
           <div>
@@ -206,7 +273,15 @@ export function EduEstudiosScreen({
                 >
                   {e.isImage && e.url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={e.url} alt={e.name} loading="lazy" />
+                    <img
+                      src={e.url}
+                      alt={e.name}
+                      loading="lazy"
+                      // S-9 · La prueba de que el enlace caducó es que no
+                      // carga. El reloj del navegador puede ir corrido, así
+                      // que el temporizador no es la única señal.
+                      onError={() => setCaducadas(true)}
+                    />
                   ) : (
                     <Icono size={34} />
                   )}
@@ -256,6 +331,10 @@ export function EduEstudiosScreen({
           onClose={() => setVer(null)}
           iaAnalisis={iaAnalisis}
           canAnalyze={canAnalyze}
+          // S-7 · el permiso de ESCRITURA del expediente. Con solo
+          // `estudios.view` la nota se lee y no se ofrece editarla —
+          // tampoco la del CBCT, cuyo "Guardar" contestaba 403 siempre.
+          canUpload={canUpload}
           dict3d={dict3d}
         />
       )}

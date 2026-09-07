@@ -88,6 +88,9 @@ export default async function PacienteEstudiosPage({
       truncated={page.truncated}
       maxRows={EDU_STUDY_MAX_ROWS}
       cases={cases}
+      // S-9: cuándo se firmaron las URLs. La pantalla avisa antes de que
+      // caduquen en vez de dejar que cada miniatura dé un 403 mudo.
+      signedAt={page.signedAt}
       canUpload={hasEduPermission(permUser, "estudios.upload")}
       iaAnalisis={iaAnalisis}
       canAnalyze={hasEduPermission(permUser, "estudios.analyze")}

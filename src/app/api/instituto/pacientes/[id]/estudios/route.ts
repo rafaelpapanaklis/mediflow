@@ -31,7 +31,15 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     // 🔴 `truncated` viaja en la respuesta y no solo en la pantalla: quien
     // consuma este endpoint sin pasar por el panel tiene que poder saber
     // que la galería salió cortada.
-    return NextResponse.json({ rows: page.rows, truncated: page.truncated });
+    // `signedAt` viaja también: quien consuma este endpoint sin pasar por
+    // el panel tiene que poder saber cuándo caducan las URLs que recibió
+    // (S-9). Sin él, "el archivo se perdió" y "el enlace expiró" se ven
+    // exactamente igual desde fuera.
+    return NextResponse.json({
+      rows: page.rows,
+      truncated: page.truncated,
+      signedAt: page.signedAt,
+    });
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/pacientes/[id]/estudios");
   }
