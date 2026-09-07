@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createInvoiceFromQuote, InvoiceFolioError } from "@/lib/quotes/create-invoice-from-quote";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,14 @@ interface Params { params: { id: string } }
 export async function POST(_req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: esta ruta EMITE una factura de verdad — createInvoiceFromQuote
+  // le asigna folio de la serie de la clínica y nextInvoiceNumber va por MÁXIMO
+  // emitido, no recicla ni anulando. Es exactamente lo que hace POST /api/invoices
+  // por la otra puerta, y esa exige "billing.create": misma acción, misma key.
+  // Cierra la tercera puerta que el PR #190 dejó señalada y sin tapar.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.create");
+  if (deniedPerm) return deniedPerm;
 
   const quote = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },

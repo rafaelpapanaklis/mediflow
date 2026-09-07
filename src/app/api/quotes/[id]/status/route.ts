@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { serializeQuote } from "@/lib/quotes/serialize";
 import { presentQuote } from "@/lib/quotes/present";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,14 @@ type Action = "present" | "accept" | "reject";
 export async function POST(req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: present/accept/reject son mutaciones del presupuesto, la
+  // misma superficie que PATCH y DELETE de /api/quotes/[id] — que desde el
+  // PR #190 exigen "billing.edit". Una sola llave para toda la edición del
+  // presupuesto. No pide "billing.create" a propósito: aquí no nace ninguna
+  // factura ni se quema folio; eso pasa en [id]/invoice, que sí lo exige.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.edit");
+  if (deniedPerm) return deniedPerm;
 
   let body: Record<string, unknown>;
   try {

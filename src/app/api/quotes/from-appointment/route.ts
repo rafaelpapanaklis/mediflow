@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
@@ -28,6 +29,14 @@ interface LineItem {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: es la MISMA acción que POST /api/quotes (crear un
+  // presupuesto) por otra puerta —la del modal del odontograma—, y esa ya exige
+  // "billing.create" desde el PR #190. Sin esta línea el interruptor
+  // "Facturación" del modal apagaba una puerta y dejaba la otra abierta, que es
+  // justo el agujero del hallazgo 22.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.create");
+  if (deniedPerm) return deniedPerm;
 
   let body: { appointmentId?: string; lineItems?: LineItem[]; discount?: number; title?: string };
   try {
