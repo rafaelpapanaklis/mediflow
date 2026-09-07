@@ -891,6 +891,94 @@ export function eduPatientFormHasChanges(
   return Object.keys(diff).length > 0;
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * LOS CAMPOS QUE EL SERVIDOR REBOTA: SE PARAN AQUÍ, NO EN ÁMBAR (N-16).
+ *
+ * 🔴 QUÉ ARREGLA. El CURP, el código postal y los dos teléfonos del
+ * paciente los VALIDA el servidor y los RECHAZA con un 400. La pantalla
+ * solo los avisaba en ámbar y dejaba pulsar Guardar. Y el PATCH es ATÓMICO:
+ * un CURP de 17 caracteres tumbaba el guardado ENTERO —el apellido
+ * corregido, el domicilio recién capturado, todo—, y el mensaje que subía
+ * hablaba solo del CURP. La persona veía un error sobre un campo que ni
+ * siquiera estaba mirando y volvía a pulsar.
+ *
+ * 🔴 SOLO SE MIRA LO QUE VIAJA (el diff), por la misma razón que la regla
+ * del tutor y la del estado: en la base hay CURP escritos a mano antes de
+ * que existiera la validación, y bloquear cualquier guardado suyo dejaría a
+ * recepción sin poder corregir el teléfono de ese paciente. Lo que no
+ * cambia no se manda, así que no puede rebotar.
+ *
+ * 🔴 Y EL MENSAJE NOMBRA EL CAMPO. Es la mitad del arreglo: "revisa el
+ * código postal" es accionable; "no se pudo guardar" no lo es.
+ *
+ * ⚠️ El aviso ÁMBAR de arriba (`eduCurpWarning`, `eduPhoneWaWarning`) sigue
+ * existiendo y NO es lo mismo: aquél habla del dato YA GUARDADO —el que
+ * nadie está tocando— y ése no bloquea nada. Éste habla del que se está a
+ * punto de mandar.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduPatientFormFieldError(
+  diff: Partial<Record<EduPatientFormField, string | null>>,
+): string | null {
+  const val = (campo: EduPatientFormField): string => String(diff[campo] ?? "").trim();
+
+  const curp = val("curp");
+  if (diff.curp !== undefined && curp && !eduCurpIsValid(curp)) {
+    return `El CURP no tiene la forma oficial y el guardado se rechazaría entero. ${EDU_CURP_HELP}`;
+  }
+
+  const zip = val("addressZip");
+  if (diff.addressZip !== undefined && zip && !/^\d{5}$/.test(zip)) {
+    return "El código postal son cinco dígitos, y el guardado se rechazaría entero. Complétalo o déjalo vacío.";
+  }
+
+  const phone = val("phone");
+  if (diff.phone !== undefined && phone && !normalizeEduWaPhone(phone)) {
+    return `El teléfono del paciente no sirve y el guardado se rechazaría entero. ${EDU_PHONE_HELP}`;
+  }
+
+  const phone2 = val("phone2");
+  if (diff.phone2 !== undefined && phone2 && !normalizeEduWaPhone(phone2)) {
+    return `El segundo teléfono no sirve y el guardado se rechazaría entero. ${EDU_PHONE_HELP}`;
+  }
+
+  // El del TUTOR va con la regla ANCHA, la misma que aplica el servidor: al
+  // tutor se le LLAMA, así que un número de casa o con extensión sirve. Lo
+  // único que rebota es uno sin un solo dígito.
+  const guardianPhone = val("guardianPhone");
+  if (diff.guardianPhone !== undefined && guardianPhone && !normalizeEduPhone(guardianPhone)) {
+    return "El teléfono del tutor no tiene ningún número, y el guardado se rechazaría entero.";
+  }
+
+  return null;
+}
+
+/**
+ * ¿Esta cuenta tiene ALGO que editar en la ficha del paciente? (N-9)
+ *
+ * 🔴 UNA SOLA FUNCIÓN PARA LOS DOS SITIOS, y existe porque los dos se
+ * separaron. El botón «Editar» de la lista se pintaba con
+ * `canManage || canOrigin` y el `soloLectura` del modal se calculaba con
+ * los CUATRO permisos: un alumno o un docente (contacto y clínico, sin
+ * manage ni origen) no veía ningún botón «Editar» en la lista —la promesa
+ * de H-02 se cumplía solo por la pestaña Datos—, y el comentario de la
+ * lista afirmaba que la condición ya era la misma en los dos sitios. Lo
+ * era cuando se escribió; la del modal ganó dos términos en la Ola B y la
+ * del botón no.
+ *
+ * Y al revés importa igual: ensanchar el botón sin tocar el modal abriría
+ * un formulario con campos habilitados y sin botón de guardar.
+ */
+export function eduPatientCanEditFicha(abilities: {
+  manage: boolean;
+  contacto: boolean;
+  clinico: boolean;
+  origen: boolean;
+}): boolean {
+  return abilities.manage || abilities.contacto || abilities.clinico || abilities.origen;
+}
+
 // ── El estado del paciente contra sus casos (H-28) ──────────────────────
 
 /**
@@ -1353,9 +1441,12 @@ export function eduPatientTutorConflictOnSave(
  * la misma forma (`EduAlertChip`), para que montarlos sea añadir una línea
  * al layout y no escribir la regla otra vez.
  *
- * 🔴 NO SE MONTAN EN ESTA OLA a propósito: ese layout es de otra casilla de
- * la misma ola y tocarlo desde aquí es exactamente cómo dos ramas se pisan.
- * Queda dicho en el reporte.
+ * ✅ YA ESTÁN MONTADOS. Cuando se escribió este bloque no lo estaban —el
+ * layout era de otra casilla de la misma ola— y el comentario decía «NO SE
+ * MONTAN EN ESTA OLA». La otra casilla los montó:
+ * `pacientes/[id]/layout.tsx` los pinta con su propio mapa de iconos
+ * (`Record<EduFichaChipKind, LucideIcon>`). El aviso se queda por lo que
+ * sigue siendo cierto: la unión `EduAlertChipKind` NO se amplía desde aquí.
  *
  * 🔴 Y SIGUEN LA MISMA REGLA DE TRES ESTADOS que los antecedentes: `null`
  * en `pregnancy` NO pinta nada (nadie preguntó ≠ no está embarazada), y
@@ -1387,12 +1478,28 @@ export function eduPatientFichaChips(row: {
   guardianName: string | null;
   guardianRelation: string | null;
   pregnancy: EduPregnancy | null;
+  /**
+   * 🔴 SE RECIBE Y NO SE USA PARA DECIDIR «MENOR», a propósito y con
+   * nombre propio (N-16 de la auditoría de la Ola A+B). `isChild` es la
+   * DENTICIÓN TEMPORAL: un dato clínico de la boca, no la edad de la
+   * persona. Un adulto con dentición temporal marcada llevaba en las doce
+   * pestañas un chip que decía «Menor sin tutor registrado» mientras la
+   * pestaña Datos del mismo paciente no decía nada y el servidor le dejaba
+   * guardar sin tutor — tres pantallas contradiciéndose sobre lo mismo.
+   *
+   * MENOR SE DECIDE POR EDAD Y SOLO POR EDAD, que es la MISMA regla que
+   * aplica `eduPatientTutorConflict` al guardar y la que aplica el servidor
+   * de los consentimientos al emitir una carta. La prop se queda en la
+   * firma porque el layout de la ficha la pasa en un literal —quitarla del
+   * tipo haría saltar el chequeo de propiedades de más de TypeScript y
+   * tumbaría la build de un archivo de otra casilla.
+   */
   isChild: boolean;
 }): EduFichaChip[] {
   const chips: EduFichaChip[] = [];
 
   const menor = row.ageYears !== null && row.ageYears < EDU_PATIENT_EDAD_MAYORIA;
-  if (menor || row.isChild) {
+  if (menor) {
     const quien = row.guardianName
       ? `${row.guardianName}${row.guardianRelation ? ` (${row.guardianRelation})` : ""}`
       : null;

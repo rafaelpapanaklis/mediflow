@@ -22,6 +22,7 @@ import {
   EDU_PHONE_HELP,
   eduCurpWarning,
   eduPatientFormDiff,
+  eduPatientFormFieldError,
   eduPatientFormHasChanges,
   eduPatientFormValues,
   eduPatientStatusConflict,
@@ -143,11 +144,25 @@ export interface EduPacienteDatosFormState {
   conflictoEstado: string | null;
   /** El motivo por el que ESTE guardado deja a un menor sin tutor, o null. */
   conflictoTutor: string | null;
+  /**
+   * El motivo por el que un campo que VIAJA en este guardado lo haría
+   * rebotar entero (CURP, código postal, teléfonos), o null (N-16).
+   */
+  errorCampo: string | null;
   /** ¿Se puede pulsar Guardar? */
   puedeGuardar: boolean;
-  /** Vuelve a sembrar el formulario con la fila guardada. Lo llama quien
-   *  acaba de guardar: es lo que hace que «Guardar cambios» se apague. */
-  resembrar: () => void;
+  /**
+   * Vuelve a sembrar el formulario con la fila GUARDADA. Lo llama quien
+   * acaba de guardar: es lo que hace que «Guardar cambios» se apague.
+   *
+   * 🔴 N-16 · RECIBE LA FILA, y ése es el arreglo. Sin argumento se sembraba
+   * con la `row` de las props —la de ANTES de guardar—, así que bajo el
+   * «Listo» verde seguían los valores viejos hasta que aterrizaba el
+   * `router.refresh()`. Y el saneo del servidor no es cosmético: el
+   * teléfono vuelve en diez dígitos, el folio en mayúsculas y el CURP sin
+   * espacios. Quien guarda pasa la fila que el servidor acaba de devolver.
+   */
+  resembrar: (fila?: EduPatientRow) => void;
 }
 
 export function useEduPacienteDatosForm(row: EduPatientRow): EduPacienteDatosFormState {
@@ -251,6 +266,15 @@ export function useEduPacienteDatosForm(row: EduPatientRow): EduPacienteDatosFor
     [base, diff],
   );
 
+  // 🔴 N-16 · LOS CAMPOS QUE EL SERVIDOR REBOTA PARAN EL GUARDADO AQUÍ.
+  // El CURP, el código postal y los dos teléfonos solo avisaban en ámbar y
+  // dejaban pulsar Guardar. Y el PATCH es ATÓMICO: un CURP de 17
+  // caracteres tumbaba el apellido corregido y el domicilio recién
+  // capturado, y el error que subía hablaba solo del CURP. Se mira el DIFF
+  // —lo que de verdad viaja—, así que un dato viejo malo que nadie está
+  // tocando no atrapa a nadie.
+  const errorCampo = useMemo(() => eduPatientFormFieldError(diff), [diff]);
+
   return {
     values,
     set: (campo, valor) => {
@@ -261,10 +285,14 @@ export function useEduPacienteDatosForm(row: EduPatientRow): EduPacienteDatosFor
     hayCambios,
     conflictoEstado,
     conflictoTutor,
-    puedeGuardar: hayCambios && !conflictoEstado && !conflictoTutor,
-    resembrar: () => {
-      setValues(eduPatientFormValues(row));
-      setBase(row);
+    errorCampo,
+    puedeGuardar: hayCambios && !conflictoEstado && !conflictoTutor && !errorCampo,
+    resembrar: (fila?: EduPatientRow) => {
+      // La fila que el servidor acaba de guardar si la hay; la de las props
+      // si quien llama no la tiene (el `router.refresh()` la traerá).
+      const semilla = fila ?? row;
+      setValues(eduPatientFormValues(semilla));
+      setBase(semilla);
       setSucio(false);
     },
   };
@@ -965,6 +993,16 @@ export function EduPacienteDatosFields({
           {form.conflictoTutor}
         </p>
       )}
+
+      {/* 🔴 N-16 · y el campo que haría rebotar el guardado ENTERO, al lado
+          del mismo botón y nombrándolo. Antes esto era un aviso ámbar bajo
+          el campo y el guardado salía igual: el 400 del servidor tumbaba
+          los otros treinta campos y hablaba solo del CURP. */}
+      {form.errorCampo && (
+        <p className="edu-fichaform__motivo edu-fichaform__motivo--alto" role="alert">
+          {form.errorCampo}
+        </p>
+      )}
     </>
   );
 }
@@ -998,17 +1036,18 @@ export function EduPacienteDatosCard({
     setFlash(null);
     setBusy(true);
     try {
-      await eduRequest(`/api/instituto/pacientes/${row.id}`, {
-        method: "PATCH",
-        body: form.diff,
-      });
+      const res = await eduRequest<{ row?: EduPatientRow }>(
+        `/api/instituto/pacientes/${row.id}`,
+        { method: "PATCH", body: form.diff },
+      );
       setFlash("Listo: la ficha quedó corregida.");
-      // Lo tecleado se reemplaza por lo GUARDADO. Va antes del refresh y no
-      // después: el refresh es asíncrono, y sin esto el formulario se queda
-      // con el texto crudo y «Guardar cambios» encendido cuando el saneo del
-      // servidor no cambió la fila (teclear un teléfono con espacios sobre
-      // el mismo teléfono ya guardado).
-      form.resembrar();
+      // 🔴 N-16 · Lo tecleado se reemplaza por lo que el servidor GUARDÓ, y
+      // ahora con la fila que él acaba de devolver. Va antes del refresh y
+      // no después: el refresh es asíncrono, y sin esto el formulario se
+      // quedaba enseñando los valores VIEJOS debajo del «Listo» verde —el
+      // teléfono con espacios, el folio en minúsculas, el CURP sin
+      // normalizar— hasta que la página volviera a pintarse.
+      form.resembrar(res?.row);
       // La página es de servidor: el refresh es lo que vuelve a pintar el
       // encabezado de la ficha (nombre, folio, edad) con lo recién guardado.
       router.refresh();

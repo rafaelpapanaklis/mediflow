@@ -275,7 +275,13 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
             )}
             {/* H-12 · Releer lo que el paciente firmó. Antes, firmada la
                 carta, el texto no volvía nunca a una pantalla del
-                instituto. */}
+                instituto.
+
+                🔴 N-6 · El TEXTO sí se lee aunque no se haya firmado —una
+                carta revocada antes de firmarse es una constancia y hay que
+                poder leerla—, pero el RÓTULO deja de decir «firmada» cuando
+                no lo está. `imprimible` es la firma; `content` es el texto.
+                Son dos cosas y se habían vuelto una. */}
             {c.content && (
               <button
                 type="button"
@@ -287,7 +293,7 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
                 }}
               >
                 <FileText size={15} />
-                Ver la carta firmada
+                {c.imprimible ? "Ver la carta firmada" : "Ver la carta"}
               </button>
             )}
             {/* 🔴 H-12 · EL PDF, con las firmas dentro. El permiso de caja
@@ -298,9 +304,15 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
                 se imprime o se guarda — que es lo que hace recepción de pie
                 con el paciente delante.
 
-                Sale con la MISMA condición que el texto (`c.content`), que
-                es la del gate del servidor: firmada o revocada. */}
-            {c.content && (
+                🔴 N-6 · SALE CON LA MISMA CONDICIÓN QUE EL GATE DEL
+                SERVIDOR, que es `signedAt` y viaja como `imprimible`. Colgaba
+                de `c.content`, que es «firmada O REVOCADA», y no es lo
+                mismo: una carta emitida por error y revocada ANTES de
+                firmarse —flujo querido y documentado— pintaba «PDF», y como
+                es un <a target="_blank"> y no un fetch, el 409 del servidor
+                se abría en una pestaña como JSON crudo. Con el paciente
+                delante y en el mostrador. */}
+            {c.imprimible && (
               <a
                 className="edu-btn edu-btn--ghost edu-btn--sm"
                 href={`/api/instituto/consentimientos/${c.id}/pdf`}
@@ -782,7 +794,10 @@ function Firma({
 function CartaFirmada({ row, onClose }: { row: EduConsentRow; onClose: () => void }) {
   return (
     <EduModal
-      title="La carta que firmó el paciente"
+      // 🔴 N-6 · el título dice la verdad. «La carta que firmó el paciente»
+      // sobre una carta que nadie firmó —revocada antes de la firma— es la
+      // misma mentira que ofrecía el botón «PDF».
+      title={row.imprimible ? "La carta que firmó el paciente" : "La carta, sin firmar"}
       subtitle={row.procedure}
       onClose={onClose}
       footer={
@@ -860,20 +875,31 @@ function CartaFirmada({ row, onClose }: { row: EduConsentRow; onClose: () => voi
           />
         </div>
 
-        <p className="edu-note">
-          Esto es el texto guardado, palabra por palabra: lo mismo que se digirió para calcular la
-          huella. Para dárselo al paciente,{" "}
-          <a
-            className="edu-link"
-            href={`/api/instituto/consentimientos/${row.id}/pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            descarga el PDF
-          </a>
-          : trae este mismo texto, las firmas manuscritas de todos los que firmaron y el pie de
-          integridad.
-        </p>
+        {/* 🔴 N-6 · el enlace al PDF, con la misma bandera que el botón de
+            la fila. Sin firma no hay PDF que servir, y ofrecerlo aquí sería
+            el mismo 409 en crudo por la otra puerta. */}
+        {row.imprimible ? (
+          <p className="edu-note">
+            Esto es el texto guardado, palabra por palabra: lo mismo que se digirió para calcular
+            la huella. Para dárselo al paciente,{" "}
+            <a
+              className="edu-link"
+              href={`/api/instituto/consentimientos/${row.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              descarga el PDF
+            </a>
+            : trae este mismo texto, las firmas manuscritas de todos los que firmaron y el pie de
+            integridad.
+          </p>
+        ) : (
+          <p className="edu-note">
+            Esto es el texto guardado, palabra por palabra. No hay PDF: esta carta no llegó a
+            firmarse, y un papel titulado «consentimiento informado» sobre algo que nadie autorizó
+            acaba archivado como si valiera. La constancia de la revocación está en la ficha.
+          </p>
+        )}
       </div>
     </EduModal>
   );

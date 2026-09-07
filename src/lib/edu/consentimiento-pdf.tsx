@@ -32,6 +32,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 import { createElement } from "react";
+import { EduPadronError } from "@/lib/edu/padron";
 import {
   Document,
   Image,
@@ -272,11 +273,47 @@ export function EduConsentDocument({ data }: { data: EduConsentPdfData }) {
   );
 }
 
-/** El buffer listo para la respuesta HTTP. */
+/**
+ * El buffer listo para la respuesta HTTP.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 N-16 · EL RENDER VA DENTRO DE UN try/catch, y no es defensa genérica.
+ * Toda la pieza es best-effort POR ESCRITO —si Storage no está, la firma
+ * sale como una línea con el nombre y la fecha, y el PDF lo dice— menos
+ * esta llamada, que era el único punto donde un dato malo se llevaba por
+ * delante el documento entero: unos bytes que el renderer no sabe pintar
+ * lanzaban, `eduApiError` lo traducía a un 500 genérico («No se pudo
+ * completar la operación») y ESA CARTA no se podía imprimir nunca más.
+ * Recepción, con el paciente delante, no tenía ni el papel ni una pista.
+ *
+ * El primer candado ya está antes de llegar aquí (`eduSignatureDataUrl`
+ * mira el magic number y descarta lo que no sea PNG o JPEG). Éste es el
+ * segundo, y existe porque un renderer de terceros puede lanzar por más
+ * cosas que las firmas: un tipo de letra, un texto imposible de partir.
+ * Lo que cambia es lo que ve quien pulsa: un 409 con palabras y el camino
+ * de al lado —el modal «Ver la carta firmada», que no depende del PDF— en
+ * vez de un 500 mudo.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
 export async function buildEduConsentPdf(
   data: EduConsentPdfData,
 ): Promise<{ buffer: Buffer; fileName: string }> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const buffer = await renderToBuffer(createElement(EduConsentDocument, { data }) as any);
-  return { buffer, fileName: data.fileName };
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buffer = await renderToBuffer(createElement(EduConsentDocument, { data }) as any);
+    return { buffer, fileName: data.fileName };
+  } catch (err) {
+    // Se registra ENTERO en el servidor (es lo que hace falta para
+    // arreglarlo) y sale un mensaje sin detalle técnico.
+    console.error(
+      "[instituto/consentimientos] el PDF de la carta",
+      data.consentId,
+      "no se pudo renderizar:",
+      err,
+    );
+    throw new EduPadronError(
+      "No se pudo armar el PDF de esta carta. El texto que el paciente firmó sí se puede leer y copiar desde «Ver la carta firmada», en la misma fila.",
+      409,
+    );
+  }
 }

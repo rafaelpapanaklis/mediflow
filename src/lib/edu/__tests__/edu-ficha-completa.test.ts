@@ -1174,9 +1174,17 @@ test("no-revertir · el hook calcula el diff contra `base`, y `base` viaja con `
     "la base no se mueve con los valores cuando baja una fila nueva",
   );
   // …y en la explícita, después de guardar.
+  //
+  // 🔴 N-16 · `resembrar` RECIBE LA FILA. Sembraba siempre con la `row` de
+  // las props —la de ANTES de guardar—, así que bajo el «Listo» verde
+  // seguían los valores viejos hasta que aterrizaba el `router.refresh()`.
+  // Las dos mitades (valores y base) siguen moviéndose JUNTAS, que es lo
+  // que esta prueba fija; lo que cambia es de dónde sale la semilla.
   assert.ok(
-    /resembrar: \(\) => \{\s*setValues\(eduPatientFormValues\(row\)\);\s*setBase\(row\);/.test(form),
-    "resembrar() deja la base apuntando a la fila vieja",
+    /resembrar: \(fila\?: EduPatientRow\) => \{[\s\S]{0,400}?const semilla = fila \?\? row;\s*setValues\(eduPatientFormValues\(semilla\)\);\s*setBase\(semilla\);/.test(
+      form,
+    ),
+    "resembrar() no siembra con la fila que el servidor acaba de devolver",
   );
 });
 

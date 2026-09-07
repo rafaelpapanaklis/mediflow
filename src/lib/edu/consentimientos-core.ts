@@ -509,6 +509,25 @@ export interface EduConsentRow {
    */
   content: string | null;
   /**
+   * ═══════════════════════════════════════════════════════════════════════
+   * 🔴 N-6 · ¿HAY PDF QUE SERVIR? Es `signedAt !== null`, y NADA MÁS.
+   *
+   * Existe porque `content` NO era esa condición y la pantalla creía que sí.
+   * `content` viaja «firmada O revocada»; el gate del PDF mira `signedAt`.
+   * Una carta emitida por error y revocada ANTES de firmarse —flujo querido
+   * y documentado: «el paciente dijo que no» es una constancia que hay que
+   * poder dejar— tiene `content` y no tiene firma. Con el botón colgando de
+   * `content`, recepción pulsaba «PDF» con el paciente delante y se le abría
+   * una pestaña con el JSON del 409.
+   *
+   * Un `<a target="_blank">` no tiene manejo de error: o el enlace no se
+   * pinta, o el fallo se ve en crudo. Por eso la condición viaja como
+   * BANDERA PROPIA desde el servidor —el único que sabe cuál es el gate— y
+   * no como una segunda lectura de `content` en el navegador.
+   * ═══════════════════════════════════════════════════════════════════════
+   */
+  imprimible: boolean;
+  /**
    * 🔴 RECALCULADA al leer, nunca leída de una columna. Es la MISMA
    * comprobación que ya hacía la página del paciente: si alguien tocó el
    * texto de una carta ya firmada, deja de cuadrar y se ve. `null` = la
@@ -636,4 +655,80 @@ export function eduConsentSignaturePath(
 /** La ruta pública de la carta. Punto único: la pinta el panel y la abre el paciente. */
 export function eduConsentPublicPath(token: string): string {
   return `/instituto/consentimiento/${token}`;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * N-16 · EL NOMBRE DEL PDF, CON EL FOLIO SANEADO TAMBIÉN.
+ *
+ * Se saneaba el procedimiento y NO el folio, y los dos acaban en la misma
+ * cabecera HTTP (`Content-Disposition: inline; filename="…"`). El techo del
+ * daño era pequeño —`normalizeEduFolio` ya quita CR/LF, así que la cabecera
+ * no se puede partir en dos—, pero una escuela con numeración propia puede
+ * tener folios con acentos, comillas o barras, y con cualquiera de los tres
+ * el navegador guarda el archivo con un nombre roto o lo trocea por la
+ * barra. Dos campos que salen por la misma cabecera se sanean con la MISMA
+ * función; que uno de ellos «no llegue a ser peligroso» no es una razón
+ * para tratarlo distinto — es cómo el siguiente hereda medio saneo.
+ *
+ * Vive en el módulo puro para que se pueda probar sin base de datos.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduConsentFileSlug(raw: string, max: number): string {
+  return String(raw ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, max)
+    .toLowerCase();
+}
+
+export function eduConsentPdfFileName(
+  folio: string,
+  procedure: string,
+  consentId: string,
+): string {
+  const f = eduConsentFileSlug(folio, 30);
+  const p = eduConsentFileSlug(procedure, 40);
+  return `consentimiento-${f || "paciente"}-${p || "carta"}-${String(consentId).slice(0, 8)}.pdf`;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * N-16 · EL `data:` URI DE UNA FIRMA, O NULL SI EL PDF NO SABE PINTARLA.
+ *
+ * 🔴 SE MIRA EL MAGIC NUMBER, no la extensión ni el content-type con el que
+ * se subió. `validateSignatureDataUrl` acepta PNG, JPEG y WEBP —la
+ * comprobación de entrada es de magic number, a propósito— y `guardarFirma`
+ * los sube TODOS con extensión y content-type `.png`: en el bucket hay
+ * archivos `.png` que no son PNG. Al armar el PDF se les pegaba encima un
+ * `data:image/png` y el renderer lanzaba. Resultado: 500 genérico, y esa
+ * carta no se podía imprimir NUNCA MÁS.
+ *
+ * 🔴 Y DEVOLVER NULL ES LA RESPUESTA CORRECTA, no un error. El hueco de la
+ * firma ya sabe pintarse sin imagen («firma registrada; la imagen no está
+ * disponible»): es el mismo camino que ya se recorre cuando Storage no está
+ * o el objeto se perdió. La constancia jurídica es la fecha y la evidencia
+ * de la fila; la imagen la acompaña. Perder el documento entero por una
+ * imagen sería peor — que es exactamente lo que pasaba.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduSignatureDataUrl(buf: Buffer | Uint8Array | null): string | null {
+  if (!buf || buf.length < 4) return null;
+  const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+  const esPng =
+    b.length >= 8 &&
+    b[0] === 0x89 &&
+    b[1] === 0x50 &&
+    b[2] === 0x4e &&
+    b[3] === 0x47 &&
+    b[4] === 0x0d &&
+    b[5] === 0x0a &&
+    b[6] === 0x1a &&
+    b[7] === 0x0a;
+  if (esPng) return `data:image/png;base64,${b.toString("base64")}`;
+  const esJpeg = b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  if (esJpeg) return `data:image/jpeg;base64,${b.toString("base64")}`;
+  return null;
 }

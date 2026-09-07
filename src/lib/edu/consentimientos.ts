@@ -62,6 +62,7 @@ import {
   EDU_CONSENT_TTL_DAYS,
   eduConsentCanonicalText,
   eduConsentEstado,
+  eduConsentPdfFileName,
   eduConsentPublicPath,
   eduConsentSePuedeFirmar,
   eduConsentSePuedeRevocar,
@@ -70,6 +71,7 @@ import {
   eduConsentTexto,
   eduConsentText,
   eduConsentTokenIsValid,
+  eduSignatureDataUrl,
   type EduConsentIntegridad,
   type EduConsentPublicView,
   type EduConsentRow,
@@ -330,6 +332,11 @@ function toRow(
     // texto a la lista de todas las cartas de un paciente serían decenas de
     // KB por fila que nadie va a mirar.
     content: firmado || c.revokedAt !== null ? c.content : null,
+    // 🔴 N-6 · la bandera del PDF es `signedAt`, la MISMA que aplica
+    // `getEduConsentPdfData`. `content` (firmada O revocada) no lo era, y
+    // la pantalla colgaba el botón de ahí: una carta revocada sin firmar
+    // ofrecía «PDF» y el servidor contestaba 409.
+    imprimible: firmado,
     integridad: firmado || c.revokedAt !== null ? integridad : null,
 
     signatureUrl: url(c.signatureUrl),
@@ -1217,18 +1224,6 @@ export interface EduConsentPdfData {
   fileName: string;
 }
 
-/** El nombre del archivo: folio del paciente + procedimiento, saneado. */
-function nombreArchivoPdf(folio: string, procedure: string, consentId: string): string {
-  const trozo = procedure
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
-    .toLowerCase();
-  return `consentimiento-${folio}-${trozo || "carta"}-${consentId.slice(0, 8)}.pdf`;
-}
-
 /**
  * Los datos del PDF, SI la carta le toca a quien pregunta y SI hay algo que
  * imprimir.
@@ -1366,7 +1361,16 @@ export async function getEduConsentPdfData(
     const bajadas = await Promise.all(paths.map((p) => eduStorageDownload(p)));
     paths.forEach((p, i) => {
       const buf = bajadas[i];
-      if (buf) bytes.set(p, `data:image/png;base64,${buf.toString("base64")}`);
+      if (!buf) return;
+      // 🔴 N-16 · EL `data:` SE ARMA CON EL TIPO REAL DE LOS BYTES, no con
+      // el que dice la extensión. `validateSignatureDataUrl` acepta PNG,
+      // JPEG y WEBP (la comprobación es de magic number, a propósito), y
+      // `guardarFirma` los sube TODOS con la extensión y el content-type
+      // `.png`. Aquí se les pegaba un `data:image/png` encima de unos bytes
+      // WEBP y el renderer del PDF lanzaba: 500 genérico, y esa carta no se
+      // podía imprimir NUNCA MÁS.
+      const url = eduSignatureDataUrl(buf);
+      if (url) bytes.set(p, url);
     });
   }
 
@@ -1411,6 +1415,6 @@ export async function getEduConsentPdfData(
     revokedReason: c.revokedReason,
 
     consentId: c.id,
-    fileName: nombreArchivoPdf(c.patient.folio, c.procedure, c.id),
+    fileName: eduConsentPdfFileName(c.patient.folio, c.procedure, c.id),
   };
 }

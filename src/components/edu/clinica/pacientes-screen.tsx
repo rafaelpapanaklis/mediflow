@@ -19,6 +19,9 @@ import {
 import {
   EDU_PATIENT_CSV_CLIENTE_MAX,
   EDU_PHONE_HELP,
+  eduAgeYears,
+  eduPatientCanEditFicha,
+  eduPatientTutorConflict,
   eduPatientsCsv,
   eduPatientsCsvFileName,
   eduPhoneWaWarning,
@@ -503,12 +506,17 @@ export function EduPacientesScreen({
                        correo, nacimiento, estado, notas y origen). Ahora
                        dice «Editar», la misma convención que el padrón.
 
-                    Y el rótulo se enseñaba con `canManage`, pero el modal
-                    se pone de solo lectura con `!canManage && !canOrigin`:
-                    alguien con solo `pacientes.origen` leía «Ver» y dentro
-                    podía editar. Ahora la condición es la MISMA en los dos
-                    sitios, y sin permiso de edición el botón no se pinta —
-                    ese modal no aporta nada que el perfil no enseñe mejor.
+                    🔴 N-9 · Y LA CONDICIÓN ES LA MISMA QUE LA DEL MODAL,
+                    de verdad esta vez: las dos salen de
+                    `eduPatientCanEditFicha` (pacientes-core). Aquí decía
+                    `canManage || canOrigin` y el `soloLectura` del modal
+                    miraba los CUATRO permisos — la del modal ganó dos
+                    términos en la Ola B y ésta no. Resultado: un alumno o
+                    un docente (contacto y clínico, sin manage ni origen) no
+                    veía NINGÚN botón «Editar» en la lista, y la promesa de
+                    H-02 se cumplía solo por la pestaña Datos. Al revés
+                    también importa: ensanchar ésta sin tocar aquélla abre
+                    un modal con campos habilitados y sin botón de guardar.
 
                     De paso, los rótulos cortos son lo que deja caber la
                     fila: «Editar»+«Ver» miden 132 px naturales contra los
@@ -516,7 +524,12 @@ export function EduPacientesScreen({
                     baja de 210 a 150 px y el recorte desaparece en toda la
                     franja 1180-1366. */}
                 <div className="edu-cell__actions">
-                  {(canManage || canOrigin) && (
+                  {eduPatientCanEditFicha({
+                    manage: canManage,
+                    contacto: canContacto,
+                    clinico: canClinico,
+                    origen: canOrigin,
+                  }) && (
                     <button
                       type="button"
                       className="edu-btn edu-btn--ghost edu-btn--sm"
@@ -572,9 +585,13 @@ export function EduPacientesScreen({
           students={students}
           canOrigin={canOrigin}
           onClose={() => setAlta(false)}
-          onDone={(folio) => {
+          onDone={(folio, aviso) => {
             setAlta(false);
-            recargar(`El paciente quedó registrado con el folio ${folio}.`);
+            // 🔴 N-8 · el aviso del servidor se pega al mensaje del alta. No
+            // se reescribe aquí: lo redacta quien conoce la regla.
+            recargar(
+              `El paciente quedó registrado con el folio ${folio}.${aviso ? ` ${aviso}` : ""}`,
+            );
           }}
         />
       )}
@@ -611,7 +628,8 @@ function AltaPaciente({
   students: EduStudentOption[];
   canOrigin: boolean;
   onClose: () => void;
-  onDone: (folio: string) => void;
+  /** El folio, y el AVISO del servidor si lo hubo (N-8). */
+  onDone: (folio: string, aviso?: string | null) => void;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -622,6 +640,14 @@ function AltaPaciente({
   const [sex, setSex] = useState("UNSPECIFIED");
   const [notes, setNotes] = useState("");
   const [origen, setOrigen] = useState("");
+  // 🔴 N-8 · EL TUTOR SE CAPTURA EN EL ALTA. Sin estos dos campos, exigir
+  // tutor a un menor sería un callejón sin salida: recepción teclearía la
+  // fecha de nacimiento de un niño de ocho años, el servidor contestaría
+  // 409 y no habría dónde escribir la respuesta. Son los dos únicos campos
+  // de la ficha completa que suben al alta, y suben porque la regla los
+  // exige aquí — el resto se sigue completando en la ficha.
+  const [guardianName, setGuardianName] = useState("");
+  const [guardianRelation, setGuardianRelation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -638,6 +664,16 @@ function AltaPaciente({
    * se puede hacer después es marcarlo INACTIVE, que lo deja en la lista.
    */
   const [duplicado, setDuplicado] = useState<string | null>(null);
+
+  // 🔴 N-8 · LA MISMA FUNCIÓN QUE EL SERVIDOR (`eduPatientTutorConflict`,
+  // pacientes-core), no una segunda redacción de la regla. El servidor la
+  // vuelve a aplicar y contesta 409 con este mismo texto; esto solo hace
+  // que se lea ANTES de pulsar. Sin nacimiento devuelve null y no bloquea:
+  // no se puede afirmar que alguien sea menor.
+  const conflictoTutor = eduPatientTutorConflict({
+    ageYears: eduAgeYears(birthDate || null),
+    guardianName: guardianName.trim() || null,
+  });
 
   async function guardar(allowDuplicate = false) {
     setError(null);
@@ -660,6 +696,8 @@ function AltaPaciente({
           birthDate: birthDate || null,
           sex,
           notes: notes.trim() || null,
+          guardianName: guardianName.trim() || null,
+          guardianRelation: guardianRelation.trim() || null,
           referredByStudentId: canOrigin && origen ? origen : undefined,
           allowDuplicate,
         },
@@ -672,7 +710,10 @@ function AltaPaciente({
         setDuplicado(res.aviso ?? "Puede que este paciente ya esté registrado.");
         return;
       }
-      if (res.folio) onDone(res.folio);
+      // 🔴 N-8 · el aviso NO impide nada: el paciente YA quedó registrado.
+      // Sube con el folio al mensaje de la lista, que es donde queda
+      // leyéndose después de que este modal se cierre.
+      if (res.folio) onDone(res.folio, res.aviso ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo registrar.");
     } finally {
@@ -695,7 +736,7 @@ function AltaPaciente({
             type="button"
             className="edu-btn edu-btn--primary"
             onClick={() => guardar(duplicado !== null)}
-            disabled={busy || !firstName.trim() || !lastName.trim()}
+            disabled={busy || !firstName.trim() || !lastName.trim() || conflictoTutor !== null}
           >
             {busy ? "Registrando…" : duplicado ? "Sí, es otra persona: registrar" : "Registrar"}
           </button>
@@ -716,6 +757,7 @@ function AltaPaciente({
           </div>
         </div>
       )}
+
 
       <div className="edu-formgrid edu-formgrid--2">
         <div className="edu-field">
@@ -829,6 +871,58 @@ function AltaPaciente({
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="off"
         />
+      </div>
+
+      {/* ══ TUTOR (N-8) ═══════════════════════════════════════════════
+          🔴 El bloque está SIEMPRE, no aparece y desaparece con la fecha:
+          un campo que salta a la vista a media captura es peor que uno que
+          estaba ahí desde el principio, y el tutor también se registra en
+          un adulto que no puede firmar por sí mismo. Lo que sí cambia con
+          la fecha es el AVISO. */}
+      {conflictoTutor && (
+        <div className="edu-alert" role="alert">
+          {conflictoTutor}
+        </div>
+      )}
+      <div className="edu-formgrid edu-formgrid--2">
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-p-tutor">
+            Tutor o representante legal
+          </label>
+          <input
+            id="edu-p-tutor"
+            className="edu-input"
+            value={guardianName}
+            onChange={(e) => setGuardianName(e.target.value)}
+            autoComplete="off"
+            maxLength={160}
+          />
+          <span className="edu-field__hint">
+            {birthDate
+              ? "Quien firma por el paciente cuando no puede hacerlo él. Obligatorio si es menor de edad."
+              : /* 🔴 N-8 · SIN NACIMIENTO SE ADVIERTE Y NO SE BLOQUEA: no
+                   se puede afirmar que alguien sea menor, y trancar el alta
+                   de todo paciente sin fecha —que es un dato opcional—
+                   pararía la recepción. Es la misma decisión, escrita en
+                   los mismos términos, que ya tomaron la corrección de la
+                   ficha y el servidor de los consentimientos. */
+                "Sin fecha de nacimiento no se puede saber si es menor: esto no bloquea el alta, pero sin tutor no se le puede emitir una carta de consentimiento."}
+          </span>
+        </div>
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-p-tutor-rel">
+            Parentesco
+          </label>
+          <input
+            id="edu-p-tutor-rel"
+            className="edu-input"
+            value={guardianRelation}
+            onChange={(e) => setGuardianRelation(e.target.value)}
+            autoComplete="off"
+            maxLength={60}
+            placeholder="Madre, padre, tutor legal…"
+          />
+        </div>
       </div>
 
       <OrigenField
@@ -1032,7 +1126,14 @@ function FichaModal({
   onClose: () => void;
   onDone: (mensaje: string) => void;
 }) {
-  const soloLectura = !canManage && !canContacto && !canClinico && !canOrigin;
+  // 🔴 N-9 · LA MISMA función que decide el botón «Editar» de la fila. Que
+  // sean dos expresiones distintas es exactamente cómo se separaron.
+  const soloLectura = !eduPatientCanEditFicha({
+    manage: canManage,
+    contacto: canContacto,
+    clinico: canClinico,
+    origen: canOrigin,
+  });
   // El `busy` vive AQUÍ y no en el cuerpo: es lo que impide que Escape o un
   // clic en la cortina cierren el modal a media escritura.
   const [busy, setBusy] = useState(false);
@@ -1120,7 +1221,9 @@ function FichaCuerpo({
   const origenCambio = canOrigin && origen !== (row.origin.studentId ?? "");
   const puedeEditarCampos = canManage || canContacto || canClinico;
   const hayQueGuardar = origenCambio || (form.hayCambios && puedeEditarCampos);
-  const puedeGuardar = hayQueGuardar && !form.conflictoEstado && !form.conflictoTutor;
+  // N-16 · el campo que haría rebotar el PATCH entero también para aquí.
+  const puedeGuardar =
+    hayQueGuardar && !form.conflictoEstado && !form.conflictoTutor && !form.errorCampo;
 
   async function guardar() {
     setError(null);

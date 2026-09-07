@@ -488,6 +488,34 @@ export async function getEduPatient(
  * ⚠️ El tope sigue existiendo y `truncated` sigue viajando: un desplegable
  * que baja 2 000 opciones no es un desplegable. Lo que cambia es que ahora
  * hay una forma de llegar a las que no cupieron.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 H-05 (la mitad que faltaba) · EL DESPLEGABLE NO OFRECE INACTIVOS.
+ *
+ * Un paciente duplicado NO se borra (es NOM-004) y NO se fusiona: no existe
+ * ninguna función de fusión en el vertical. Lo único que se puede hacer con
+ * él es marcarlo INACTIVE — y hasta ahora eso no servía de nada aquí: el
+ * duplicado seguía saliendo en el desplegable de agendar, así que la cita
+ * se le volvía a poner al folio muerto y el expediente se partía en dos
+ * otra vez, que es exactamente lo que H-05 vino a cerrar.
+ *
+ * 🔴 SOLO «INACTIVE», Y «DISCHARGED» NO. No es una omisión: el catálogo de
+ * estados dice qué significa cada uno y no significan lo mismo.
+ *   · INACTIVE = «Dejó de venir». Es el estado que recepción le pone al
+ *     duplicado, y agendarle una cita a alguien que dejó de venir es justo
+ *     lo que hay que parar.
+ *   · DISCHARGED = «Terminó sus tratamientos. Su historia no se borra». Un
+ *     alta clínica es el FINAL NORMAL de un caso, y ese paciente vuelve —a
+ *     un control, a una revisión, a un tratamiento nuevo—: es el pan de
+ *     cada día de una clínica de escuela. Sacarlo del desplegable no
+ *     cerraría ningún duplicado y rompería el flujo más común de esta
+ *     pantalla.
+ *
+ * ⚠️ Y NO ES UN CALLEJÓN SIN SALIDA. Al paciente que vuelve después de
+ * haberse marcado inactivo se le pone el estado de vuelta desde su ficha
+ * (pestaña Datos, campo Estado, `pacientes.manage`) y vuelve a salir aquí.
+ * Ese camino nunca choca: `eduPatientStatusConflict` solo bloquea el
+ * contrario —poner DISCHARGED o INACTIVE con casos abiertos—.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export async function listEduPatientOptions(
@@ -501,6 +529,11 @@ export async function listEduPatientOptions(
 
   const q = eduSearchInput(typeof options.q === "string" ? options.q : null);
   const where: Prisma.EduPatientWhereInput = eduPatientScopeWhere({ institutionId, scope, now });
+
+  // 🔴 H-05 · sin INACTIVE. El porqué —y por qué DISCHARGED sí sale— está
+  // entero en la cabecera de la función.
+  where.status = { not: "INACTIVE" };
+
   const and = eduPatientSearchAnd(q);
   if (and.length > 0) where.AND = and;
 
@@ -757,12 +790,277 @@ export class EduPatientDuplicateError extends EduPadronError {
   }
 }
 
+/**
+ * ── LOS TRES AYUDANTES DE LA OLA B ─────────────────────────────────
+ *
+ * Vivían dentro de `updateEduPatient` y subieron a módulo cuando el ALTA
+ * pasó a guardar los mismos 22 campos (N-16): las reglas se escriben una
+ * vez, y quien las use es cosa suya.
+ *
+ * 🔴 `vacio` DISTINGUE "no vino" DE "vacíalo", y es la mitad de la
+ * distinción NULL / DESCONOCIDO / NINGUNO. `undefined` = la clave no
+ * estaba en el body → la columna no se toca. `null` o `""` = la persona
+ * borró el campo → se escribe null, que en estas columnas significa
+ * "nadie preguntó". Sin esta separación, cualquier PATCH que no
+ * mencionara el embarazo lo borraría.
+ *
+ * ⚠️ Un texto de SOLO ESPACIOS también es vaciar. Sin el `trim` caía en
+ * `eduOptionalText`, que devuelve null tras recortarlo, y el campo salía
+ * rebotado con «no es un texto válido» — un error donde la persona solo
+ * estaba borrando. No se alcanza desde la pantalla (el diff ya recorta),
+ * sí desde la API.
+ */
+const vacio = (v: unknown) =>
+  v === null || v === "" || (typeof v === "string" && v.trim() === "");
+
+/** Un texto opcional con su tope, o null si se vació. */
+function texto(campo: EduPatientFormField, raw: unknown, max: number): string | null {
+  if (vacio(raw)) return null;
+  const v = eduOptionalText(raw, max);
+  if (v === undefined || v === null) {
+    throw new EduPadronError(`El campo «${campo}» no es un texto válido.`);
+  }
+  return v;
+}
+
+/**
+ * Un valor de enum, o null si se vació.
+ *
+ * 🔴 REBOTA lo que no reconoce en vez de guardarlo como null. Un parser
+ * que convirtiera la basura en null estaría escribiendo "nadie preguntó"
+ * encima de un dato bueno cada vez que llegara un valor mal escrito — y
+ * en `pregnancy` eso es borrar en silencio la única columna que permite
+ * alertar antes de una radiografía.
+ */
+function enumo<T>(raw: unknown, parse: (v: unknown) => T | null, que: string): T | null {
+  if (vacio(raw)) return null;
+  const v = parse(raw);
+  if (v === null) throw new EduPadronError(`Ese valor de ${que} no existe.`);
+  return v;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * LOS 22 CAMPOS DE LA OLA B, SANEADOS UNA SOLA VEZ (N-8 · N-16).
+ *
+ * 🔴 POR QUÉ EXISTE ESTA FUNCIÓN. `EduPatientInput` declara los 23 campos
+ * de la Ola B y el ALTA los TIRABA EN SILENCIO: `createEduPatient` los
+ * aceptaba en la firma y no escribía ni uno. Era una trampa para el
+ * siguiente que montara un alta completa, y sobre todo era lo que hacía
+ * IMPOSIBLE cerrar N-8: si el alta no sabe guardar `guardianName`, exigir
+ * tutor a un menor en el alta sería un callejón sin salida.
+ *
+ * Así que el alta los GUARDA, y los guarda con ESTE parser —el mismo que
+ * usa la corrección—, no con una segunda copia de las reglas. Dos parsers
+ * para las mismas 22 columnas es cómo uno de los dos acaba aceptando el
+ * CURP que el otro rechaza.
+ *
+ * ⚠️ NO decide permisos. El recorte por grupos (`options.groups`) lo aplica
+ * `updateEduPatient` ANTES de llamar aquí; el alta pide `pacientes.manage`,
+ * que abre los tres grupos. Esta función solo sanea.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduPatientOlaBData {
+  curp?: string | null;
+  phone2?: string | null;
+  contactPreference?: ReturnType<typeof parseEduContactPreference>;
+  addressStreet?: string | null;
+  addressNeighborhood?: string | null;
+  addressCity?: string | null;
+  addressState?: string | null;
+  addressZip?: string | null;
+  guardianName?: string | null;
+  guardianRelation?: string | null;
+  guardianPhone?: string | null;
+  insuranceProvider?: string | null;
+  insurancePolicy?: string | null;
+  familyHistory?: string | null;
+  personalNonPathologicalHistory?: string | null;
+  habitsTobacco?: ReturnType<typeof parseEduHabitLevel>;
+  habitsAlcohol?: ReturnType<typeof parseEduHabitLevel>;
+  habitsBruxism?: ReturnType<typeof parseEduHabitLevel>;
+  habitsNotes?: string | null;
+  pregnancy?: ReturnType<typeof parseEduPregnancy>;
+  isChild?: boolean;
+  privacyNoticeAcceptedAt?: Date | null;
+}
+
+export function parseEduPatientOlaB(
+  input: EduPatientInput,
+  now: Date = new Date(),
+): EduPatientOlaBData {
+  const data: EduPatientOlaBData = {};
+
+  // ── Identidad · CURP (NOM-024) ────────────────────────────────────
+  //
+  // 🔴 SE VALIDA EL FORMATO Y SE REBOTA, en vez de guardarlo como venga.
+  // La columna no tiene CHECK a propósito (un CURP malo no puede impedir
+  // registrar a alguien que está en el sillón), pero eso es una decisión
+  // sobre el ALTA, no sobre la corrección: aquí hay una persona
+  // capturándolo del acta y el dedazo se caza en el momento.
+  if (input.curp !== undefined) {
+    if (vacio(input.curp)) data.curp = null;
+    else {
+      const v = normalizeEduCurp(input.curp);
+      if (!v || !eduCurpIsValid(v)) {
+        throw new EduPadronError(`Ese CURP no tiene la forma oficial. ${EDU_CURP_HELP}`);
+      }
+      data.curp = v;
+    }
+  }
+
+  // ── Contacto · el SEGUNDO teléfono ────────────────────────────────
+  //
+  // 🔴 CON LA REGLA ESTRECHA, la misma que `phone` (H-09): son diez
+  // dígitos o nada. Es un teléfono DEL PACIENTE, y en cuanto exista un
+  // recordatorio que lo use tiene que poder entregarse — aceptar aquí lo
+  // que el envío rechaza es exactamente el agujero que H-09 cerró.
+  if (input.phone2 !== undefined) {
+    if (vacio(input.phone2)) data.phone2 = null;
+    else {
+      const v = normalizeEduWaPhone(input.phone2);
+      if (!v) throw new EduPadronError(`Ese segundo teléfono no sirve. ${EDU_PHONE_HELP}`);
+      data.phone2 = v;
+    }
+  }
+
+  if (input.contactPreference !== undefined) {
+    data.contactPreference = enumo(
+      input.contactPreference,
+      parseEduContactPreference,
+      "preferencia de contacto",
+    );
+  }
+
+  // ── Domicilio ──────────────────────────────────────────────────────
+  if (input.addressStreet !== undefined) {
+    data.addressStreet = texto("addressStreet", input.addressStreet, 200);
+  }
+  if (input.addressNeighborhood !== undefined) {
+    data.addressNeighborhood = texto("addressNeighborhood", input.addressNeighborhood, 120);
+  }
+  if (input.addressCity !== undefined) {
+    data.addressCity = texto("addressCity", input.addressCity, 120);
+  }
+  if (input.addressState !== undefined) {
+    data.addressState = texto("addressState", input.addressState, 120);
+  }
+  if (input.addressZip !== undefined) {
+    if (vacio(input.addressZip)) data.addressZip = null;
+    else {
+      // Cinco dígitos: el CP mexicano. Se aprieta porque es el único campo
+      // del domicilio con el que una escuela agrupa ("¿de dónde vienen
+      // nuestros pacientes?"), y una columna de agrupar con "col. centro"
+      // dentro no agrupa nada.
+      const v = String(input.addressZip).trim();
+      if (!/^\d{5}$/.test(v)) {
+        throw new EduPadronError("El código postal son cinco dígitos.");
+      }
+      data.addressZip = v;
+    }
+  }
+
+  // ── Tutor / representante legal (H-08) ─────────────────────────────
+  if (input.guardianName !== undefined) {
+    data.guardianName = texto("guardianName", input.guardianName, 160);
+  }
+  if (input.guardianRelation !== undefined) {
+    data.guardianRelation = texto("guardianRelation", input.guardianRelation, 60);
+  }
+  if (input.guardianPhone !== undefined) {
+    if (vacio(input.guardianPhone)) data.guardianPhone = null;
+    else {
+      // 🔴 REGLA ANCHA, y es deliberado. Al tutor se le LLAMA: un número de
+      // casa, uno con extensión o uno de otro país siguen sirviendo para
+      // eso. Es la misma decisión —y la misma razón escrita— que ya tomó
+      // este archivo con el contacto de emergencia de los antecedentes;
+      // apretarlo a diez dígitos habría bloqueado guardar al tutor, que es
+      // justo el dato sin el que un menor no puede firmar nada.
+      const v = normalizeEduPhone(input.guardianPhone);
+      if (!v) throw new EduPadronError("Ese teléfono del tutor no tiene números.");
+      data.guardianPhone = v;
+    }
+  }
+
+  // ── Seguro o convenio ──────────────────────────────────────────────
+  if (input.insuranceProvider !== undefined) {
+    data.insuranceProvider = texto("insuranceProvider", input.insuranceProvider, 120);
+  }
+  if (input.insurancePolicy !== undefined) {
+    data.insurancePolicy = texto("insurancePolicy", input.insurancePolicy, 60);
+  }
+
+  // ── NOM-004 · los dos antecedentes que faltaban ────────────────────
+  if (input.familyHistory !== undefined) {
+    data.familyHistory = texto("familyHistory", input.familyHistory, 2000);
+  }
+  if (input.personalNonPathologicalHistory !== undefined) {
+    data.personalNonPathologicalHistory = texto(
+      "personalNonPathologicalHistory",
+      input.personalNonPathologicalHistory,
+      2000,
+    );
+  }
+
+  // ── Hábitos ────────────────────────────────────────────────────────
+  if (input.habitsTobacco !== undefined) {
+    data.habitsTobacco = enumo(input.habitsTobacco, parseEduHabitLevel, "hábito de tabaco");
+  }
+  if (input.habitsAlcohol !== undefined) {
+    data.habitsAlcohol = enumo(input.habitsAlcohol, parseEduHabitLevel, "hábito de alcohol");
+  }
+  if (input.habitsBruxism !== undefined) {
+    data.habitsBruxism = enumo(input.habitsBruxism, parseEduHabitLevel, "bruxismo");
+  }
+  if (input.habitsNotes !== undefined) {
+    data.habitsNotes = texto("habitsNotes", input.habitsNotes, 500);
+  }
+
+  // ── Embarazo / lactancia ───────────────────────────────────────────
+  if (input.pregnancy !== undefined) {
+    data.pregnancy = enumo(input.pregnancy, parseEduPregnancy, "embarazo o lactancia");
+  }
+
+  // ── Dentición temporal ─────────────────────────────────────────────
+  //
+  // Columna NOT NULL con default false: no tiene "sin registrar", tiene un
+  // false. Se acepta el booleano y la cadena, porque el formulario manda
+  // "true"/"false" (todos sus valores son cadenas) y un cliente que use la
+  // API manda un booleano de verdad.
+  if (input.isChild !== undefined) {
+    const v = input.isChild;
+    if (v === true || v === "true") data.isChild = true;
+    else if (v === false || v === "false") data.isChild = false;
+    else throw new EduPadronError("La dentición temporal se marca o se desmarca, nada más.");
+  }
+
+  // ── Aviso de privacidad (LFPDPPP) ──────────────────────────────────
+  //
+  // Fecha y no booleano porque lo que hay que poder contestar es
+  // "¿cuándo?", y un `true` sin fecha no es constancia de nada.
+  if (input.privacyNoticeAcceptedAt !== undefined) {
+    if (vacio(input.privacyNoticeAcceptedAt)) data.privacyNoticeAcceptedAt = null;
+    else {
+      const v = parseEduCalendarDate(input.privacyNoticeAcceptedAt);
+      if (!v) {
+        throw new EduPadronError("La fecha del aviso de privacidad no es una fecha (AAAA-MM-DD).");
+      }
+      if (v.getTime() > now.getTime()) {
+        throw new EduPadronError("El aviso de privacidad no se puede aceptar en el futuro.");
+      }
+      data.privacyNoticeAcceptedAt = v;
+    }
+  }
+
+  return data;
+}
+
 export async function createEduPatient(
   ctx: EduClinicaContext,
   input: EduPatientInput,
   options: { canSetOrigin: boolean; allowDuplicate?: boolean } = { canSetOrigin: false },
   now: Date = new Date(),
-): Promise<{ id: string; folio: string }> {
+): Promise<{ id: string; folio: string; aviso: string | null }> {
   const institutionId = requireInstitution(ctx);
 
   const firstName = eduRequiredText(input.firstName, 80);
@@ -790,7 +1088,22 @@ export async function createEduPatient(
   const sex = input.sex === undefined || input.sex === null || input.sex === "" ? "UNSPECIFIED" : parseEduSex(input.sex);
   if (!sex) throw new EduPadronError("Ese valor de sexo no existe.");
 
-  const notes = eduOptionalText(input.notes, 1000) ?? null;
+  // 🔴 N-16 · LOS 22 CAMPOS DE LA OLA B SE GUARDAN, no se tiran. La firma
+  // los declaraba y el alta no escribía ni uno: una trampa para el
+  // siguiente que montara un alta completa. Con el MISMO parser que la
+  // corrección (`parseEduPatientOlaB`), así que el CURP, el CP y los
+  // teléfonos se validan igual desde los dos lados.
+  //
+  // ⚠️ Y esto es lo que hace posible N-8: sin poder guardar `guardianName`
+  // en el alta, exigir tutor a un menor sería un callejón sin salida.
+  const olaB = parseEduPatientOlaB(input, now);
+
+  // 🔴 N-16 · `texto()` Y NO `eduOptionalText(...) ?? null`. Los otros
+  // catorce textos de la ficha REBOTAN lo que no es texto; `notes` lo
+  // convertía en null, así que un `{notes: 123}` BORRABA las notas de
+  // recepción sin un solo error. Es la misma función y el mismo mensaje que
+  // el resto, en el alta y en la corrección.
+  const notes = texto("notes", input.notes, 1000);
 
   // 🔴 El ORIGEN solo lo escribe quien tiene "pacientes.origen". Que el
   // campo llegue en el body no basta: decide el precio en la Ola 5, así que
@@ -804,6 +1117,30 @@ export async function createEduPatient(
   if (input.folio && !folioTecleado) {
     throw new EduPadronError("El folio es obligatorio si lo capturas (máximo 30 caracteres, sin espacios).");
   }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 N-8 · UN MENOR TAMBIÉN NACE CON TUTOR. La regla de H-08 vivía SOLO
+  // en la corrección: el alta ponía la fecha de nacimiento por primera vez
+  // —que es literalmente lo que la regla dice que hay que bloquear— y no
+  // comprobaba nada. Recepción registraba a un niño de ocho años, salía un
+  // 201 limpio, y la ficha se quedaba sin tutor para siempre: corregirle
+  // después el teléfono ya no dispara la regla, por diseño. El 100 % de los
+  // menores dados de alta nacían en el estado que H-08 vino a cerrar.
+  //
+  // 🔴 LA MISMA FUNCIÓN, el mismo 409 y el mismo mensaje que el update
+  // (`eduPatientTutorConflict`, pacientes-core). No una segunda redacción.
+  //
+  // ⚠️ SIN FECHA DE NACIMIENTO NO SE BLOQUEA NADA, igual que en la
+  // corrección y que en el servidor de los consentimientos: no se puede
+  // afirmar que alguien sea menor, y trancar el alta de todo paciente sin
+  // nacimiento —un dato que sigue siendo opcional— pararía la recepción. Lo
+  // que sale entonces es el AVISO de abajo, que no impide registrar.
+  // ═══════════════════════════════════════════════════════════════════
+  const choqueTutor = eduPatientTutorConflict({
+    ageYears: eduAgeYears(birthDate, now),
+    guardianName: olaB.guardianName ?? null,
+  });
+  if (choqueTutor) throw new EduPadronError(choqueTutor, 409);
 
   // 🔴 EL AVISO DE DUPLICADO va DESPUÉS de sanear (para comparar teléfonos
   // ya normalizados y no "55 4433 2211" contra "5544332211") y ANTES de
@@ -825,6 +1162,10 @@ export async function createEduPatient(
     referredByStudentId,
     originSetById: referredByStudentId ? ctx.eduUserId : null,
     originSetAt: referredByStudentId ? now : null,
+    // Los 22 de la Ola B, ya saneados. Van al final: un campo que no vino
+    // en el body no está en el objeto, así que no pisa ningún default de
+    // la tabla.
+    ...olaB,
   };
 
   /** El índice sin acentos, con el folio que finalmente se le ponga. Se
@@ -833,20 +1174,35 @@ export async function createEduPatient(
   const conIndice = (folio: string) => ({
     ...data,
     folio,
-    // El alta mínima no captura CURP ni segundo teléfono (se completan en
-    // la ficha), así que entran como null y el índice los recoge en la
-    // primera edición. Se pasan EXPLÍCITAMENTE para que, el día que el
-    // alta los pida, no haya que acordarse de esta línea.
+    // 🔴 EL CURP Y EL SEGUNDO TELÉFONO ENTRAN AL ÍNDICE DESDE EL ALTA.
+    // Antes se pasaban como `null` con la nota de que el alta no los
+    // capturaba; desde N-16 sí los guarda, y un paciente registrado con
+    // CURP tiene que poder encontrarse por él sin esperar a que alguien le
+    // corrija la ficha.
     searchIndex: eduPatientSearchIndex({
       folio,
-      curp: null,
+      curp: olaB.curp ?? null,
       firstName,
       lastName,
       phone,
-      phone2: null,
+      phone2: olaB.phone2 ?? null,
       email,
     }),
   });
+
+  /**
+   * EL AVISO QUE VIAJA CON EL 201 (N-8, la mitad que no bloquea).
+   *
+   * Sin fecha de nacimiento no se puede afirmar que sea menor, así que no
+   * se bloquea — pero tampoco se calla: quien registra tiene que saber que
+   * la ficha se quedó sin la única pareja de datos con la que un
+   * consentimiento se puede firmar. Es el mismo patrón —cuerpo con campo,
+   * no error— que el aviso de duplicado.
+   */
+  const aviso =
+    birthDate === null && !(olaB.guardianName ?? null)
+      ? "Se registró sin fecha de nacimiento. Si es menor de edad, su ficha tiene que decir quién es su tutor antes de poder emitirle una carta de consentimiento."
+      : null;
 
   if (folioTecleado) {
     const dup = await prisma.eduPatient.findFirst({
@@ -858,7 +1214,7 @@ export async function createEduPatient(
       data: conIndice(folioTecleado),
       select: { id: true, folio: true },
     });
-    return created;
+    return { ...created, aviso };
   }
 
   // Folio automático. Tres intentos: si dos recepcionistas dan de alta en
@@ -867,10 +1223,11 @@ export async function createEduPatient(
   for (let intento = 0; intento < 3; intento++) {
     const folio = await nextEduFolio(institutionId);
     try {
-      return await prisma.eduPatient.create({
+      const created = await prisma.eduPatient.create({
         data: conIndice(folio),
         select: { id: true, folio: true },
       });
+      return { ...created, aviso };
     } catch (err) {
       const code = (err as { code?: string })?.code;
       if (code !== "P2002" || intento === 2) throw err;
@@ -1043,51 +1400,6 @@ export async function updateEduPatient(
     privacyNoticeAcceptedAt?: Date | null;
   } = {};
 
-  /**
-   * ── LOS TRES AYUDANTES DE LA OLA B ─────────────────────────────────
-   *
-   * 🔴 `vacio` DISTINGUE "no vino" DE "vacíalo", y es la mitad de la
-   * distinción NULL / DESCONOCIDO / NINGUNO. `undefined` = la clave no
-   * estaba en el body → la columna no se toca. `null` o `""` = la persona
-   * borró el campo → se escribe null, que en estas columnas significa
-   * "nadie preguntó". Sin esta separación, cualquier PATCH que no
-   * mencionara el embarazo lo borraría.
-   */
-  //
-  // ⚠️ Un texto de SOLO ESPACIOS también es vaciar. Sin el `trim` caía en
-  // `eduOptionalText`, que devuelve null tras recortarlo, y el campo salía
-  // rebotado con «no es un texto válido» — un error donde la persona solo
-  // estaba borrando. No se alcanza desde la pantalla (el diff ya recorta),
-  // sí desde la API.
-  const vacio = (v: unknown) =>
-    v === null || v === "" || (typeof v === "string" && v.trim() === "");
-
-  /** Un texto opcional con su tope, o null si se vació. */
-  function texto(campo: EduPatientFormField, raw: unknown, max: number): string | null {
-    if (vacio(raw)) return null;
-    const v = eduOptionalText(raw, max);
-    if (v === undefined || v === null) {
-      throw new EduPadronError(`El campo «${campo}» no es un texto válido.`);
-    }
-    return v;
-  }
-
-  /**
-   * Un valor de enum, o null si se vació.
-   *
-   * 🔴 REBOTA lo que no reconoce en vez de guardarlo como null. Un parser
-   * que convirtiera la basura en null estaría escribiendo "nadie preguntó"
-   * encima de un dato bueno cada vez que llegara un valor mal escrito — y
-   * en `pregnancy` eso es borrar en silencio la única columna que permite
-   * alertar antes de una radiografía.
-   */
-  function enumo<T>(raw: unknown, parse: (v: unknown) => T | null, que: string): T | null {
-    if (vacio(raw)) return null;
-    const v = parse(raw);
-    if (v === null) throw new EduPadronError(`Ese valor de ${que} no existe.`);
-    return v;
-  }
-
   if (input.folio !== undefined) {
     const folio = normalizeEduFolio(input.folio);
     if (!folio) throw new EduPadronError("El folio es obligatorio (máximo 30 caracteres, sin espacios).");
@@ -1141,7 +1453,10 @@ export async function updateEduPatient(
     data.sex = v;
   }
   if (input.notes !== undefined) {
-    data.notes = eduOptionalText(input.notes, 1000) ?? null;
+    // 🔴 N-16 · `texto()` como los otros catorce. `eduOptionalText(...) ?? null`
+    // convertía en null lo que no era texto, así que un `PATCH {notes: 123}`
+    // BORRABA las notas de recepción y contestaba 200.
+    data.notes = texto("notes", input.notes, 1000);
   }
   if (input.status !== undefined) {
     const v = parseEduPatientStatus(input.status);
@@ -1160,168 +1475,12 @@ export async function updateEduPatient(
 
   // ═══════════════════════════════════════════════════════════════════
   // OLA B · LOS 22 CAMPOS DE LA FICHA COMPLETA
+  //
+  // Se sanean con `parseEduPatientOlaB`, LA MISMA función que usa el alta
+  // (N-16): dos copias de estas reglas es cómo una de las dos acaba
+  // aceptando el CURP que la otra rechaza.
   // ═══════════════════════════════════════════════════════════════════
-
-  // ── Identidad · CURP (NOM-024) ────────────────────────────────────
-  //
-  // 🔴 SE VALIDA EL FORMATO Y SE REBOTA, en vez de guardarlo como venga.
-  // La columna no tiene CHECK a propósito (un CURP malo no puede impedir
-  // registrar a alguien que está en el sillón), pero eso es una decisión
-  // sobre el ALTA, no sobre la corrección: aquí hay una persona
-  // capturándolo del acta y el dedazo se caza en el momento.
-  if (input.curp !== undefined) {
-    if (vacio(input.curp)) data.curp = null;
-    else {
-      const v = normalizeEduCurp(input.curp);
-      if (!v || !eduCurpIsValid(v)) {
-        throw new EduPadronError(`Ese CURP no tiene la forma oficial. ${EDU_CURP_HELP}`);
-      }
-      data.curp = v;
-    }
-  }
-
-  // ── Contacto · el SEGUNDO teléfono ────────────────────────────────
-  //
-  // 🔴 CON LA REGLA ESTRECHA, la misma que `phone` (H-09): son diez
-  // dígitos o nada. Es un teléfono DEL PACIENTE, y en cuanto exista un
-  // recordatorio que lo use tiene que poder entregarse — aceptar aquí lo
-  // que el envío rechaza es exactamente el agujero que H-09 cerró.
-  if (input.phone2 !== undefined) {
-    if (vacio(input.phone2)) data.phone2 = null;
-    else {
-      const v = normalizeEduWaPhone(input.phone2);
-      if (!v) throw new EduPadronError(`Ese segundo teléfono no sirve. ${EDU_PHONE_HELP}`);
-      data.phone2 = v;
-    }
-  }
-
-  if (input.contactPreference !== undefined) {
-    data.contactPreference = enumo(
-      input.contactPreference,
-      parseEduContactPreference,
-      "preferencia de contacto",
-    );
-  }
-
-  // ── Domicilio ──────────────────────────────────────────────────────
-  if (input.addressStreet !== undefined) {
-    data.addressStreet = texto("addressStreet", input.addressStreet, 200);
-  }
-  if (input.addressNeighborhood !== undefined) {
-    data.addressNeighborhood = texto("addressNeighborhood", input.addressNeighborhood, 120);
-  }
-  if (input.addressCity !== undefined) {
-    data.addressCity = texto("addressCity", input.addressCity, 120);
-  }
-  if (input.addressState !== undefined) {
-    data.addressState = texto("addressState", input.addressState, 120);
-  }
-  if (input.addressZip !== undefined) {
-    if (vacio(input.addressZip)) data.addressZip = null;
-    else {
-      // Cinco dígitos: el CP mexicano. Se aprieta porque es el único campo
-      // del domicilio con el que una escuela agrupa ("¿de dónde vienen
-      // nuestros pacientes?"), y una columna de agrupar con "col. centro"
-      // dentro no agrupa nada.
-      const v = String(input.addressZip).trim();
-      if (!/^\d{5}$/.test(v)) {
-        throw new EduPadronError("El código postal son cinco dígitos.");
-      }
-      data.addressZip = v;
-    }
-  }
-
-  // ── Tutor / representante legal (H-08) ─────────────────────────────
-  if (input.guardianName !== undefined) {
-    data.guardianName = texto("guardianName", input.guardianName, 160);
-  }
-  if (input.guardianRelation !== undefined) {
-    data.guardianRelation = texto("guardianRelation", input.guardianRelation, 60);
-  }
-  if (input.guardianPhone !== undefined) {
-    if (vacio(input.guardianPhone)) data.guardianPhone = null;
-    else {
-      // 🔴 REGLA ANCHA, y es deliberado. Al tutor se le LLAMA: un número de
-      // casa, uno con extensión o uno de otro país siguen sirviendo para
-      // eso. Es la misma decisión —y la misma razón escrita— que ya tomó
-      // este archivo con el contacto de emergencia de los antecedentes;
-      // apretarlo a diez dígitos habría bloqueado guardar al tutor, que es
-      // justo el dato sin el que un menor no puede firmar nada.
-      const v = normalizeEduPhone(input.guardianPhone);
-      if (!v) throw new EduPadronError("Ese teléfono del tutor no tiene números.");
-      data.guardianPhone = v;
-    }
-  }
-
-  // ── Seguro o convenio ──────────────────────────────────────────────
-  if (input.insuranceProvider !== undefined) {
-    data.insuranceProvider = texto("insuranceProvider", input.insuranceProvider, 120);
-  }
-  if (input.insurancePolicy !== undefined) {
-    data.insurancePolicy = texto("insurancePolicy", input.insurancePolicy, 60);
-  }
-
-  // ── NOM-004 · los dos antecedentes que faltaban ────────────────────
-  if (input.familyHistory !== undefined) {
-    data.familyHistory = texto("familyHistory", input.familyHistory, 2000);
-  }
-  if (input.personalNonPathologicalHistory !== undefined) {
-    data.personalNonPathologicalHistory = texto(
-      "personalNonPathologicalHistory",
-      input.personalNonPathologicalHistory,
-      2000,
-    );
-  }
-
-  // ── Hábitos ────────────────────────────────────────────────────────
-  if (input.habitsTobacco !== undefined) {
-    data.habitsTobacco = enumo(input.habitsTobacco, parseEduHabitLevel, "hábito de tabaco");
-  }
-  if (input.habitsAlcohol !== undefined) {
-    data.habitsAlcohol = enumo(input.habitsAlcohol, parseEduHabitLevel, "hábito de alcohol");
-  }
-  if (input.habitsBruxism !== undefined) {
-    data.habitsBruxism = enumo(input.habitsBruxism, parseEduHabitLevel, "bruxismo");
-  }
-  if (input.habitsNotes !== undefined) {
-    data.habitsNotes = texto("habitsNotes", input.habitsNotes, 500);
-  }
-
-  // ── Embarazo / lactancia ───────────────────────────────────────────
-  if (input.pregnancy !== undefined) {
-    data.pregnancy = enumo(input.pregnancy, parseEduPregnancy, "embarazo o lactancia");
-  }
-
-  // ── Dentición temporal ─────────────────────────────────────────────
-  //
-  // Columna NOT NULL con default false: no tiene "sin registrar", tiene un
-  // false. Se acepta el booleano y la cadena, porque el formulario manda
-  // "true"/"false" (todos sus valores son cadenas) y un cliente que use la
-  // API manda un booleano de verdad.
-  if (input.isChild !== undefined) {
-    const v = input.isChild;
-    if (v === true || v === "true") data.isChild = true;
-    else if (v === false || v === "false") data.isChild = false;
-    else throw new EduPadronError("La dentición temporal se marca o se desmarca, nada más.");
-  }
-
-  // ── Aviso de privacidad (LFPDPPP) ──────────────────────────────────
-  //
-  // Fecha y no booleano porque lo que hay que poder contestar es
-  // "¿cuándo?", y un `true` sin fecha no es constancia de nada.
-  if (input.privacyNoticeAcceptedAt !== undefined) {
-    if (vacio(input.privacyNoticeAcceptedAt)) data.privacyNoticeAcceptedAt = null;
-    else {
-      const v = parseEduCalendarDate(input.privacyNoticeAcceptedAt);
-      if (!v) {
-        throw new EduPadronError("La fecha del aviso de privacidad no es una fecha (AAAA-MM-DD).");
-      }
-      if (v.getTime() > now.getTime()) {
-        throw new EduPadronError("El aviso de privacidad no se puede aceptar en el futuro.");
-      }
-      data.privacyNoticeAcceptedAt = v;
-    }
-  }
+  Object.assign(data, parseEduPatientOlaB(input, now));
 
   // ═══════════════════════════════════════════════════════════════════
   // 🔴 H-08 · UN MENOR TIENE QUE TENER TUTOR — comprobado al GUARDAR.
@@ -1420,11 +1579,27 @@ export async function setEduPatientOrigin(
   now: Date = new Date(),
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
+  // 🔴 N-10 · EL PACIENTE SE BUSCA DENTRO DEL ALCANCE, como sus dos
+  // hermanas (`updateEduPatient` y `updateEduPatientAntecedentes`). Era la
+  // única escritura de esta fila que se quedaba en `{ id, institutionId }`
+  // a secas — el hueco que H-11 cerró en la de al lado y que aquí siguió
+  // abierto (viene de `main`, no lo abrió la Ola B).
+  //
+  // Hoy no hay fuga: `pacientes.origen` solo lo llevan CAJA y DIRECCIÓN, y
+  // su alcance es completo. El día que una escuela le encienda esa key a un
+  // docente por `permissionsOverride` —que es editable— podría atribuirle a
+  // su alumno un paciente que ni siquiera puede ver, y en la Ola 5 ese dato
+  // decide la tarifa. Un candado que solo aguanta mientras nadie toque el
+  // catálogo de permisos no es un candado.
+  const scope = eduVisibility(ctx, "patients");
+  if (eduScopeIsEmpty(scope)) {
+    throw new EduPadronError("Ese paciente no es de este instituto.", 404);
+  }
   const id = eduCleanId(patientId);
   if (!id) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
 
   const current = await prisma.eduPatient.findFirst({
-    where: { id, institutionId },
+    where: { ...eduPatientScopeWhere({ institutionId, scope, now }), id },
     select: { id: true, referredByStudentId: true },
   });
   if (!current) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
@@ -1435,7 +1610,7 @@ export async function setEduPatientOrigin(
   }
 
   await prisma.eduPatient.update({
-    where: { id },
+    where: { id: current.id },
     data: {
       referredByStudentId: studentId,
       // Quién y cuándo se escriben JUNTOS, siempre. Al borrar el origen se
@@ -1449,7 +1624,7 @@ export async function setEduPatientOrigin(
       updatedById: ctx.eduUserId ?? null,
     },
   });
-  return { id };
+  return { id: current.id };
 }
 
 /**
