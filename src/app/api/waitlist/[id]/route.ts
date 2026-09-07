@@ -100,6 +100,24 @@ export async function PATCH(
     data.preferredWindow = parsed.data.preferredWindow;
   }
   if (parsed.data.preferredDoctorId !== undefined) {
+    // Escritura cruzada de tenant: el PATCH aceptaba cualquier UUID como
+    // doctor preferido, incluido el de OTRA clínica — y el GET de /waitlist
+    // filtra por preferredDoctorId cuando quien mira es un DOCTOR, así que la
+    // entrada quedaba apuntando fuera del tenant. Misma validación (y mismo 404)
+    // que el POST hermano de waitlist/route.ts: de esta clínica y con rol DOCTOR.
+    if (parsed.data.preferredDoctorId) {
+      const d = await prisma.user.findFirst({
+        where: {
+          id: parsed.data.preferredDoctorId,
+          clinicId: session.clinic.id,
+          role: "DOCTOR",
+        },
+        select: { id: true },
+      });
+      if (!d) {
+        return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
+      }
+    }
     data.preferredDoctorId = parsed.data.preferredDoctorId;
   }
 

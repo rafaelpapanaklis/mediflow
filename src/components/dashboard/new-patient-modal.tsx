@@ -122,15 +122,21 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     }
     setLoading(true);
     try {
-      const dupeCheck = await fetch(`/api/patients?search=${encodeURIComponent(form.firstName + " " + form.lastName)}`);
-      if (dupeCheck.ok) {
-        const existing = await dupeCheck.json();
-        if (Array.isArray(existing) && existing.length > 0) {
-          const confirmed = window.confirm(t("shell.newPatient.confirmDuplicate", { name: `${form.firstName} ${form.lastName}` }));
-          if (!confirmed) { setLoading(false); return; }
-        }
-      }
-      const res = await fetch("/api/patients", {
+      // AVISO DE DUPLICADO (hallazgo 37). Antes se preguntaba aquí al GET de
+      // pacientes con el nombre completo y SIN `v=2`, y eso caía en el handler
+      // legacy, que hace `contains` de la frase ENTERA contra cada columna por
+      // separado: firstName "Ana" no contiene "Ana García" → cero resultados →
+      // el aviso no saltó nunca y el gemelo se creaba en silencio.
+      //
+      // Ahora quien avisa es el SERVIDOR: el POST responde 409
+      // DUPLICATE_PATIENT y aquí se pregunta al usuario. Se hizo así y no
+      // arreglando la llamada previa por dos motivos: entre un GET de
+      // comprobación y el POST cabe otra alta (y la comprobación del cliente se
+      // la salta cualquier otro llamador), y un solo viaje evita que el aviso y
+      // el alta puedan discrepar. `allowDuplicate: true` es el "sí, créalo
+      // igual" tras confirmar — el aviso avisa, NO prohíbe: dos personas pueden
+      // llamarse igual y recepción tiene que poder seguir.
+      const crear = async (allowDuplicate: boolean) => fetch("/api/patients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -142,11 +148,24 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
           passportNo:  form.curpStatus === "FOREIGN" ? form.passportNo : null,
           // Solo si quedó restringida: omitido = todos lo ven (default).
           ...(visibleUserIds.length > 0 && { visibleUserIds }),
+          ...(allowDuplicate && { allowDuplicate: true }),
         }),
       });
+
+      let res = await crear(false);
       // Un solo json(): leerlo dos veces (uno para el error, otro para el
       // paciente) consume el body y perdía `code`/`limit` del 402.
-      const data = await res.json().catch(() => ({} as any));
+      let data = await res.json().catch(() => ({} as any));
+
+      if (!res.ok && data?.code === "DUPLICATE_PATIENT") {
+        const confirmed = window.confirm(
+          t("shell.newPatient.confirmDuplicate", { name: `${form.firstName} ${form.lastName}` }),
+        );
+        if (!confirmed) { setLoading(false); return; }
+        res = await crear(true);
+        data = await res.json().catch(() => ({} as any));
+      }
+
       if (!res.ok) {
         if (data?.code === "PLAN_LIMIT_PATIENTS") {
           // NO cerramos el modal ni tiramos toast: el banner explica el tope y

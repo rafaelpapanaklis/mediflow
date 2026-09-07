@@ -207,7 +207,10 @@ export function HomeReceptionist({ user, data }: Props) {
 
       <WaitlistCard
         items={data.waitlist}
-        onAdd={() => router.push("/dashboard/walkin?waitlist=1")}
+        // La página real es /dashboard/walk-in (con guion). Sin él, los dos
+        // botones de la tarjeta —"Agregar" y el CTA del estado vacío— caían en
+        // un 404 desde el inicio de recepción, todos los días.
+        onAdd={() => router.push("/dashboard/walk-in?waitlist=1")}
       />
 
       <HomeShortcutBar />

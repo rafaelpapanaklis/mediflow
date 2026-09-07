@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import {
   loadClinicSession,
   requireRole,
-  isOverlapError,
 } from "@/lib/agenda/api-helpers";
 import {
   appointmentToDTO,
@@ -15,12 +14,16 @@ import {
   fetchWaitlistCount,
 } from "@/lib/agenda/server";
 import {
-  dayRangeUtc,
+  agendaDayFetchRange,
   isValidDateISO,
+  legacyTimesToUtc,
   todayInTz,
 } from "@/lib/agenda/time-utils";
 import { scheduleViolation } from "@/lib/agenda/clinic-hours";
-import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import {
+  canOverrideOverlap,
+  isAppointmentOverlapError,
+} from "@/lib/agenda/transitions";
 import {
   ensureUserCanSeePatient,
   assertPatientVisible,
@@ -90,7 +93,9 @@ export async function GET(req: NextRequest) {
       ? session.user.id
       : undefined;
 
-  const range = dayRangeUtc(dateISO, session.timeConfig);
+  // El rango REPORTADO tiene que ser el mismo que se consultó (día natural),
+  // si no el cliente cree que le llegó 08–20 y hay citas fuera de esa ventana.
+  const range = agendaDayFetchRange(dateISO, session.timeConfig);
 
   // Visibilidad por paciente: la cita SIEMPRE se ve (el hueco del día es real),
   // pero a quien no puede ver a un paciente restringido le llega enmascarado.
@@ -167,12 +172,19 @@ export async function POST(req: NextRequest) {
   const deniedPerm = denyIfMissingPermission(session.user, "agenda.create");
   if (deniedPerm) return deniedPerm;
 
-  let body: CreateAppointmentInput;
+  let body: CreateApptBody;
   try {
-    body = (await req.json()) as CreateAppointmentInput;
+    body = (await req.json()) as CreateApptBody;
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
+
+  // La forma canónica del cuerpo es `startsAt`/`endsAt` ISO. /dashboard/appointments
+  // manda la hora de pared de la clínica (`date` + `startTime` + `durationMins`)
+  // y por eso recibía 400 `missing_startsAt` SIEMPRE (hallazgo 24). Se resuelve
+  // aquí, con la tz de la SESIÓN: el navegador no tiene la tz de la clínica y
+  // adivinarla con la del dispositivo agendaría a la hora equivocada.
+  normalizeLegacyTimes(body, session.clinic.timezone);
 
   const validation = validateCreate(body);
   if (validation) {
@@ -288,6 +300,9 @@ export async function POST(req: NextRequest) {
           endsAt,
           status: "SCHEDULED",
           type: body.reason ?? "Consulta general",
+          // El formulario de /dashboard/appointments recoge notas y hasta ahora
+          // se perdían: la ruta no las miraba (hallazgo 24).
+          notes: body.notes ?? null,
           mode: body.isTeleconsult ? "TELECONSULTATION" : "IN_PERSON",
           source: "STAFF",
           requiresValidation: false,
@@ -350,7 +365,7 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (err) {
-    if (isOverlapError(err)) {
+    if (isAppointmentOverlapError(err)) {
       const conflict = await findConflictingAppointment(
         session.clinic.id,
         body.doctorId,
@@ -379,6 +394,42 @@ export async function POST(req: NextRequest) {
     console.error("[POST /api/appointments] unexpected error", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
+}
+
+/**
+ * Cuerpo aceptado por POST: la forma canónica (`CreateAppointmentInput`) más
+ * `notes` y el trío de hora local que manda /dashboard/appointments. Es un tipo
+ * LOCAL a propósito: `CreateAppointmentInput` vive en @/lib/agenda/types y no se
+ * toca desde esta tarea.
+ */
+type CreateApptBody = CreateAppointmentInput & {
+  notes?: string | null;
+  date?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  durationMins?: number | null;
+};
+
+/**
+ * Si el cuerpo no trae `startsAt`/`endsAt` pero sí la hora de pared de la
+ * clínica, la resuelve a instantes y la escribe en el propio cuerpo, para que
+ * de aquí en adelante TODO el handler vea una sola forma. Si el trío está
+ * incompleto no inventa nada: `validateCreate` devuelve el 400 de siempre.
+ */
+function normalizeLegacyTimes(body: CreateApptBody, timezone: string): void {
+  if (body.startsAt && body.endsAt) return;
+  const resolved = legacyTimesToUtc(
+    {
+      date: body.date,
+      startTime: body.startTime,
+      endTime: body.endTime,
+      durationMins: body.durationMins,
+    },
+    timezone,
+  );
+  if (!resolved) return;
+  body.startsAt = resolved.startsAt.toISOString();
+  body.endsAt = resolved.endsAt.toISOString();
 }
 
 function validateCreate(body: Partial<CreateAppointmentInput>): string | null {

@@ -187,6 +187,10 @@ export async function eduUploadStudy({
 
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
     if (abortado(signal)) throw new EduUploadCancelled();
+    // `fetch` con `signal` lanza un AbortError (un DOMException, no nuestro
+    // EduUploadCancelled). Se traduce abajo, donde se sabe si hay path que
+    // limpiar; aquí solo se corta antes de empezar.
+
 
     if (onPhase) onPhase(intento === 1 ? "firmando" : "reintentando", intento);
     if (onProgress) onProgress(0);
@@ -194,11 +198,29 @@ export async function eduUploadStudy({
     // Cada intento pide su PROPIO path: así el anterior (que puede haber
     // dejado bytes a medias) se borra entero y nunca se mezclan dos
     // subidas en el mismo objeto.
-    const firmaRes = await fetch(`/api/instituto/pacientes/${patientId}/estudios/sign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-    });
+    // 🔴 H-26 · EL `signal` LLEGA A LAS TRES FASES, no solo al PUT.
+    //
+    // "Cancelar subida" solo abortaba el binario. Los `fetch` de /sign y de
+    // /confirm iban sin `signal`, así que cancelar durante "Registrando…"
+    // no cancelaba nada: el estudio se registraba igual y la pantalla decía
+    // «"x.jpg" quedó en el expediente» — lo contrario de lo que se pidió, y
+    // sin forma de deshacerlo (los estudios no se borran).
+    let firmaRes: Response;
+    try {
+      firmaRes = await fetch(`/api/instituto/pacientes/${patientId}/estudios/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+        signal,
+      });
+    } catch (e) {
+      // Un `fetch` abortado lanza un DOMException "AbortError", no nuestro
+      // EduUploadCancelled: se traduce, o la pantalla enseñaría el nombre
+      // de una excepción del navegador en rojo. Aquí todavía no hay `path`,
+      // así que no hay nada que limpiar del bucket.
+      if (abortado(signal)) throw new EduUploadCancelled();
+      throw e;
+    }
     if (!firmaRes.ok) {
       // 413 (muy grande), 400 (formato), 403 (permiso), 404 (no te toca):
       // son definitivos. El mensaje del servidor ya explica qué hacer.
@@ -238,16 +260,26 @@ export async function eduUploadStudy({
     if (onProgress) onProgress(100);
 
     for (let c = 1; c <= INTENTOS_CONFIRM; c++) {
-      const confirmRes = await fetch(`/api/instituto/pacientes/${patientId}/estudios/confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path,
-          name: file.name,
-          caseId: caseId || undefined,
-          notes,
-        }),
-      });
+      let confirmRes: Response;
+      try {
+        confirmRes = await fetch(`/api/instituto/pacientes/${patientId}/estudios/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path,
+            name: file.name,
+            caseId: caseId || undefined,
+            notes,
+          }),
+          signal,
+        });
+      } catch (e) {
+        // Cancelado durante "Registrando…", o la red se cayó. En los dos
+        // casos hay un objeto subido y SIN fila: se limpia.
+        await limpiar(patientId, path);
+        throw abortado(signal) ? new EduUploadCancelled() : e;
+      }
+
       if (confirmRes.ok) return (await confirmRes.json()) as { id: string };
 
       // 409: Storage todavía no lista el objeto recién subido. El objeto SÍ
@@ -256,6 +288,15 @@ export async function eduUploadStudy({
         await new Promise((r) => setTimeout(r, 1000 * c));
         continue;
       }
+
+      // 🔴 H-26 · SI /confirm FALLA DE VERDAD, SE LIMPIA EL BUCKET.
+      //
+      // Aquí se lanzaba SIN llamar a `limpiar()`: las dos únicas llamadas
+      // estaban en el fallo del PUT y en la cancelación. El objeto se
+      // quedaba en el bucket sin `EduStudy` que lo registrara — y la cuota
+      // se calcula con `SUM(EduStudy.sizeBytes)`, así que esos bytes se
+      // pagan y no aparecen en el medidor. No hay barrido de huérfanos.
+      await limpiar(patientId, path);
       throw await mensajeDeError(confirmRes, "No se pudo registrar el estudio");
     }
   }

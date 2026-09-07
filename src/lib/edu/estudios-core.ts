@@ -369,4 +369,19 @@ export interface EduStudyRow {
 export interface EduStudyPage {
   rows: EduStudyRow[];
   truncated: boolean;
+  /**
+   * S-9 · CUÁNDO SE FIRMARON estas URLs (ISO).
+   *
+   * Las URLs de los archivos caducan a la hora (EDU_SIGNED_URL_TTL_SECONDS)
+   * y esta pantalla se queda abierta TODA la sesión clínica — que es
+   * exactamente por lo que el TTL es de una hora y no de cinco minutos.
+   * Pasado ese rato, cada miniatura y cada "Abrir" contestan un 403 que se
+   * lee como "el archivo se perdió".
+   *
+   * Con este sello la pantalla sabe cuándo va a pasar y lo dice ANTES,
+   * ofreciendo actualizar. Viaja desde el servidor y no se calcula al
+   * montar el componente: entre que el servidor firma y el navegador pinta
+   * puede haber un rato (una pestaña restaurada, una conexión lenta).
+   */
+  signedAt: string;
 }

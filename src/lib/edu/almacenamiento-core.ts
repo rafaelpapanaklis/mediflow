@@ -26,11 +26,15 @@
  *
  * 🔴 LO QUE ESTE MEDIDOR CUENTA, Y LO QUE NO
  *
- * Cuenta ESTUDIOS: la suma de EduStudy.sizeBytes del instituto. El bucket
- * `edu-files` guarda además las FIRMAS de consentimiento, que no tienen
- * fila con su tamaño, así que no entran — y no se estiman: un medidor que
- * inventa bytes es peor que no tener medidor, porque se le cree. La
- * pantalla lo DICE con todas sus letras (EDU_ALM_NOTA_ALCANCE).
+ * Desde la Ola B cuenta DOS cosas y no una: la suma de EduStudy.sizeBytes
+ * MÁS la de EduClinicalPhoto.sizeBytes de las fotos que NO están dadas de
+ * baja. Las dos van a la MISMA bolsa porque la cuota es una sola: partirla
+ * en dos medidores solo consigue que alguien crea que tiene el doble.
+ *
+ * El bucket `edu-files` guarda además las FIRMAS de consentimiento, que no
+ * tienen fila con su tamaño, así que no entran — y no se estiman: un
+ * medidor que inventa bytes es peor que no tener medidor, porque se le
+ * cree. La pantalla lo DICE con todas sus letras (EDU_ALM_NOTA_ALCANCE).
  * ═══════════════════════════════════════════════════════════════════════
  */
 import { eduFormatBytes } from "@/lib/edu/estudios-core";
@@ -84,7 +88,8 @@ export const EDU_ALM_TB_MAX = 1000;
  * "todo lo que hay en el bucket", y no lo es.
  */
 export const EDU_ALM_NOTA_ALCANCE =
-  "Se cuentan los ESTUDIOS del expediente (radiografías, tomografías, fotos y PDFs). " +
+  "Se cuentan los ESTUDIOS del expediente (radiografías, tomografías y PDFs) y las FOTOS " +
+  "CLÍNICAS del paciente, sin las que estén dadas de baja. " +
   "Las firmas de consentimiento también viven en el almacenamiento, pero no se registra " +
   "su tamaño y no se estiman: este medidor no inventa bytes.";
 
@@ -95,11 +100,11 @@ export const EDU_ALM_NOTA_ALCANCE =
 /**
  * Lo que hace falta para contestar "¿cuánto llevo y cuánto me queda?".
  *
- * 🔴 `usadoBytes` NO sale de ninguna columna: se CUENTA sumando
- * EduStudy.sizeBytes del instituto cada vez que alguien pregunta (misma
- * decisión que el cupo de IA de la Ola 8 y que el avance académico de la
- * Ola 6). Un contador guardado se desincroniza el día que una escritura
- * falle a la mitad.
+ * 🔴 `usadoBytes` NO sale de ninguna columna: se CUENTA cada vez que
+ * alguien pregunta, sumando EduStudy.sizeBytes y EduClinicalPhoto.sizeBytes
+ * del instituto (misma decisión que el cupo de IA de la Ola 8 y que el
+ * avance académico de la Ola 6). Un contador guardado se desincroniza el
+ * día que una escritura falle a la mitad.
  *
  * Los dos son `number` y no `bigint` a propósito: un BigInt no se
  * serializa a JSON —revienta el route handler con "Do not know how to
@@ -108,12 +113,27 @@ export const EDU_ALM_NOTA_ALCANCE =
  * de Number.MAX_SAFE_INTEGER (9.0e15).
  */
 export interface EduAlmMedidor {
-  /** Suma de EduStudy.sizeBytes del INSTITUTO (todas sus sedes juntas). */
+  /**
+   * Lo que lleva usado el INSTITUTO (todas sus sedes juntas).
+   *
+   * Ola B: son DOS sumandos y no uno — EduStudy.sizeBytes MÁS
+   * EduClinicalPhoto.sizeBytes de las que no están dadas de baja. Sigue
+   * siendo un solo número aquí a propósito: la cuota es una bolsa, y
+   * partirla en dos medidores solo invita a que alguien crea que tiene el
+   * doble.
+   */
   usadoBytes: number;
   /** La cuota contratada, EduInstitution.storageQuotaBytes. */
   cuotaBytes: number;
   /** Cuántos estudios son. Es lo que da derecho a decir "de estudios". */
   estudios: number;
+  /**
+   * Cuántas FOTOS CLÍNICAS vivas son. OPCIONAL a propósito: la tarjeta de
+   * dirección y las pruebas que ya existen construyen medidores sin este
+   * campo, y hacerlo obligatorio las rompería sin ganar nada. Quien lo
+   * pinte usa `?? 0`.
+   */
+  fotos?: number;
 }
 
 /** Un número que se pueda sumar, o 0. Blinda la aritmética de nulls y NaN. */
@@ -140,6 +160,33 @@ export function eduAlmacenamientoWhere(institutionId: string): { institutionId: 
     throw new Error("eduAlmacenamientoWhere: falta el institutionId");
   }
   return { institutionId };
+}
+
+/**
+ * El `where` de la suma de FOTOS. Una llave más que el de estudios, y esa
+ * llave es la diferencia entera:
+ *
+ * 🔴 `deletedAt: null` — una foto dada de baja no cuenta para la cuota.
+ * Vive aquí, con su prueba, y no dentro del `aggregate`, por lo mismo que
+ * `eduAlmacenamientoWhere`: un recorte escrito a mano en el handler es un
+ * recorte que el segundo handler no copia.
+ *
+ * ⚠️ Y la contrapartida, dicha en voz alta: el BINARIO de una foto dada de
+ * baja sigue en el bucket (la baja es suave: no destruye evidencia
+ * clínica). Esos bytes se pagan y no aparecen aquí — el mismo hueco que
+ * los huérfanos de los estudios, y se cierra con el mismo barrido.
+ *
+ * 🔴 Un institutionId vacío revienta por lo mismo que arriba: en Prisma
+ * `where: { institutionId: undefined }` BORRA el filtro y devuelve las
+ * filas de TODAS las escuelas.
+ */
+export function eduAlmacenamientoFotosWhere(
+  institutionId: string,
+): { institutionId: string; deletedAt: null } {
+  if (typeof institutionId !== "string" || !institutionId) {
+    throw new Error("eduAlmacenamientoFotosWhere: falta el institutionId");
+  }
+  return { institutionId, deletedAt: null };
 }
 
 /** Lo que queda, en bytes. Nunca negativo. */
@@ -272,7 +319,7 @@ export function eduAlmRechazo(m: EduAlmMedidor, bytes: number): string {
   if (restante <= 0) {
     return (
       `El almacenamiento del instituto está lleno (${eduFormatBytes(sano(m?.cuotaBytes))} de ` +
-      "cuota) y no se pueden subir más estudios. Avísale a la dirección: hay que contratar " +
+      "cuota) y no se pueden subir más archivos. Avísale a la dirección: hay que contratar " +
       "más espacio o liberar el que hay. Lo que ya está subido no se pierde."
     );
   }

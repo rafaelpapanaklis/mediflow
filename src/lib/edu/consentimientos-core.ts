@@ -98,6 +98,28 @@ export const EDU_CONSENT_TTL_DAYS = 30;
 /** El token de la liga pública: 43 caracteres base64url de 32 bytes. */
 export const EDU_CONSENT_TOKEN_BYTES = 32;
 
+/**
+ * 🔴 LA MAYORÍA DE EDAD, escrita una vez (H-08).
+ *
+ * Debajo de esto, el consentimiento lo firma el REPRESENTANTE LEGAL y no
+ * el paciente (NOM-004 10.1.1.3). Antes no existía este número en ninguna
+ * parte del vertical: la edad se calculaba solo para imprimirla dentro del
+ * texto de la carta, y no había un solo `if` sobre los 18 años. Se emitía
+ * la carta de un paciente de nueve años sin representante y el niño la
+ * firmaba desde el teléfono.
+ *
+ * Vive en el módulo PURO para que el servidor (que bloquea) y la pantalla
+ * (que marca el campo como obligatorio antes de dejar pulsar) contesten con
+ * el mismo número. Dos copias es cómo se llega a una pantalla que exige lo
+ * que el servidor no, o al revés.
+ *
+ * ⚠️ Es la mitad comprobable del problema. La otra mitad —el paciente
+ * mayor de edad SIN capacidad para decidir— no la puede saber el sistema:
+ * no hay columna que lo diga, y el campo del representante sigue estando
+ * ahí, libre, para esos casos.
+ */
+export const EDU_CONSENT_EDAD_MAYORIA = 18;
+
 const TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
 
 /**
@@ -467,6 +489,44 @@ export interface EduConsentRow {
   createdLabel: string;
   expiresAt: string;
   expiresLabel: string;
+
+  /**
+   * ═══════════════════════════════════════════════════════════════════════
+   * H-12 · PODER RELEER LA CARTA FIRMADA, desde el panel.
+   *
+   * `EduConsent.content` se guardaba, se hasheaba y NO VOLVÍA NUNCA a una
+   * pantalla del instituto: firmada la carta, la liga pública se apaga y no
+   * quedaba ninguna otra vía. Y el permiso de caja está justificado
+   * precisamente en que "la carta se imprime y se entrega en el mostrador".
+   * No había nada que imprimir, y el paciente que pedía su copia se iba sin
+   * ella.
+   *
+   * Viaja SOLO cuando la carta ya está firmada o revocada. Antes de firmar,
+   * el documento vivo es la liga —y ahí se lee entero—; mandar el texto en
+   * la lista de todas las cartas de un paciente serían decenas de KB por
+   * fila que nadie va a mirar.
+   * ═══════════════════════════════════════════════════════════════════════
+   */
+  content: string | null;
+  /**
+   * 🔴 RECALCULADA al leer, nunca leída de una columna. Es la MISMA
+   * comprobación que ya hacía la página del paciente: si alguien tocó el
+   * texto de una carta ya firmada, deja de cuadrar y se ve. `null` = la
+   * carta todavía no es un documento firmado.
+   */
+  integridad: EduConsentIntegridad | null;
+
+  /**
+   * Las URLs FIRMADAS de los PNG de cada firma, generadas al leer y nunca
+   * guardadas. `null` = esa firma no existe, o Storage no está configurado,
+   * o el objeto se perdió — la constancia jurídica es la fecha y la
+   * evidencia de la fila; la imagen la acompaña.
+   */
+  signatureUrl: string | null;
+  witness1SignatureUrl: string | null;
+  witness2SignatureUrl: string | null;
+  studentSignatureUrl: string | null;
+  supervisorSignatureUrl: string | null;
 
   /** Lo que hace ESTA sesión: se calcula en el servidor, no en el navegador. */
   puedeContrafirmarComoAlumno: boolean;

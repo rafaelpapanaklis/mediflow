@@ -107,7 +107,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       newDiscount = 0;
       newSubtotal = round2(itemsSum + delta);
     }
-    newTotal = computeInvoiceTotal(newSubtotal, newDiscount, taxRate, taxIncluded).total;
+    // Los CONCEPTOS, no `newSubtotal` (hallazgo 19): con IVA agregado el impuesto
+    // se redondea por concepto, y `newItems` ya trae la línea de ajuste si la hubo.
+    newTotal = computeInvoiceTotal(newItems, newDiscount, taxRate, taxIncluded).total;
   } else if (discountIn !== undefined) {
     // Solo descuento → total = Σ(conceptos) − descuento, con los conceptos TAL
     // CUAL están: la línea "Ajuste de precio" de una edición anterior es parte
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (newDiscount > keptSum) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
-    newTotal = computeInvoiceTotal(keptSum, newDiscount, taxRate, taxIncluded).total;
+    newTotal = computeInvoiceTotal(newItems, newDiscount, taxRate, taxIncluded).total;
   }
 
   const newBalance = round2(newTotal - invoice.paid);

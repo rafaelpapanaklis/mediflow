@@ -14,45 +14,44 @@ import {
 } from "@/lib/edu/odontograma-core";
 
 // ═══════════════════════════════════════════════════════════════════════
-// 🔴 EL DIBUJO SE **IMPORTA** DEL DENTAL. NO SE COPIA Y NO SE TOCA.
+// 🔴 EL DIBUJO ES **DEL INSTITUTO**. Vive en src/components/edu/odontograma/
+// y ya NO se importa de la carpeta del dental bajo src/components/dashboard/.
 //
-// `src/components/dashboard/odontogram-v2/` es un módulo de presentación
-// PURO: sus piezas (Odontogram, Surface2D, ToothGlyph, OdoDefs, Palette,
-// Legend, DetailPanel, data.ts, types.ts) no importan NADA de "@/", no
-// tocan prisma, no hacen fetch y no leen `window`. Reciben props y pintan.
-// Traen los 45 hallazgos agrupados por especialidad y la clasificación
-// anatómica FDI, que es exactamente lo que una escuela de odontología
-// necesita.
+// Hasta WS2-T3 se importaba del dental, con este argumento escrito aquí:
+// "copiar la carpeta daría dos catálogos que empiezan iguales y terminan
+// distintos". Era verdad — y el otro lado de la moneda resultó ser peor:
+// significaba que un cambio en un archivo del PRODUCTO DENTAL, hecho por
+// otro equipo y por otra razón, cambiaba el odontograma clínico de una
+// escuela sin que nadie del instituto lo pidiera ni se enterara. Un
+// expediente no se mueve desde fuera.
 //
-// Lo ÚNICO acoplado al dental en esa carpeta es su raíz `App.tsx`
-// (OdontogramV2), que en modo "vivo" habla con /api/odontogram y escribe
-// en la tabla `odontogram_entries` del producto dental, más su
-// `adapter.ts`. Esos DOS archivos no se usan aquí: este componente es el
-// contenedor equivalente del vertical, y escribe en
-// /api/instituto/pacientes/[id]/odontograma.
+// Así que la carpeta se BIFURCÓ (13 archivos, con su hoja de estilo). El
+// original se queda intacto y sigue siendo del dental. El precio, escrito
+// para que nadie lo descubra solo: un hallazgo nuevo del catálogo dental
+// ya no aparece aquí hasta que alguien lo traiga a mano.
 //
-// Copiar la carpeta habría dado dos catálogos que empiezan iguales y
-// terminan distintos: el día que alguien agregue un hallazgo al del
-// dental, el del instituto seguiría sin tenerlo y nadie lo notaría hasta
-// que un alumno intentara marcarlo.
+// De los 13, DOS no se usan y no deben usarse: `App.tsx` y `adapter.ts`,
+// que son la raíz acoplada a /api/odontogram (la tabla del dental). Su
+// propia cabecera lo dice. El contenedor del vertical es ESTE archivo, y
+// escribe en /api/instituto/pacientes/[id]/odontograma.
 //
-// El CSS del dental viene entero bajo `.odo-app`, así que no se pisa con el
-// del panel; edu-theme.css solo corrige que ese contenedor está pensado
+// El CSS de la copia viene entero bajo `.odo-app`, así que no se pisa con
+// el del panel; edu-theme.css solo corrige que ese contenedor está pensado
 // para ocupar una pantalla completa (`.edu-odo .odo-app`).
 // ═══════════════════════════════════════════════════════════════════════
-import { OdoDefs } from "@/components/dashboard/odontogram-v2/OdoDefs";
-import { Odontogram } from "@/components/dashboard/odontogram-v2/Odontogram";
-import { Palette } from "@/components/dashboard/odontogram-v2/Palette";
-import { Legend } from "@/components/dashboard/odontogram-v2/Legend";
-import { COND_BY_ID } from "@/components/dashboard/odontogram-v2/data";
-import { EMPTY_RECORD } from "@/components/dashboard/odontogram-v2/types";
+import { OdoDefs } from "@/components/edu/odontograma/OdoDefs";
+import { Odontogram } from "@/components/edu/odontograma/Odontogram";
+import { Palette } from "@/components/edu/odontograma/Palette";
+import { Legend } from "@/components/edu/odontograma/Legend";
+import { COND_BY_ID } from "@/components/edu/odontograma/data";
+import { EMPTY_RECORD } from "@/components/edu/odontograma/types";
 import type {
   ApplyKind,
   Dentition,
   Records,
   SurfaceLetter,
-} from "@/components/dashboard/odontogram-v2/types";
-import "@/components/dashboard/odontogram-v2/odontogram.css";
+} from "@/components/edu/odontograma/types";
+import "@/components/edu/odontograma/odontogram.css";
 
 /**
  * El panel de detalle trae un diente en 3D (three.js). Se carga SOLO
@@ -61,9 +60,14 @@ import "@/components/dashboard/odontogram-v2/odontogram.css";
  * teléfono con datos móviles.
  */
 const DetailPanel = dynamic(
-  () => import("@/components/dashboard/odontogram-v2/DetailPanel").then((m) => m.DetailPanel),
+  () => import("@/components/edu/odontograma/DetailPanel").then((m) => m.DetailPanel),
   { ssr: false },
 );
+
+/** El motivo, escrito una vez y usado en los dos sitios donde se apaga
+ *  algo por falta de permiso: el aviso de arriba y el panel del diente. */
+const SIN_PERMISO =
+  "Estás viendo el odontograma en solo lectura: para marcar hallazgos, quitarlos o escribir la nota de un diente hace falta el permiso odontograma.edit.";
 
 export interface EduOdontogramaScreenProps {
   patientId: string;
@@ -113,12 +117,23 @@ export function EduOdontogramaScreen({
   const recordsRef = useRef(records);
   recordsRef.current = records;
 
+  /**
+   * Una escritura del odontograma, con su deshacer.
+   *
+   * El verbo viaja como opción porque la ruta tiene tres: PUT marca o quita
+   * UN hallazgo, PATCH escribe la nota de un diente y POST limpia el diente
+   * entero de una vez (H-22).
+   */
   const escribir = useCallback(
-    async (body: Record<string, unknown>, deshacer: () => void) => {
+    async (
+      body: Record<string, unknown>,
+      deshacer: () => void,
+      opciones: { method?: "PUT" | "POST"; queFalló?: string } = {},
+    ) => {
       setGuardando((n) => n + 1);
       try {
         await eduRequest(`/api/instituto/pacientes/${patientId}/odontograma`, {
-          method: "PUT",
+          method: opciones.method ?? "PUT",
           body,
         });
         setError(null);
@@ -126,7 +141,11 @@ export function EduOdontogramaScreen({
         // Se deshace lo pintado: dejar el hallazgo en pantalla haría creer
         // que quedó guardado.
         deshacer();
-        setError(err instanceof Error ? err.message : "No se pudo guardar el hallazgo.");
+        setError(
+          err instanceof Error
+            ? err.message
+            : opciones.queFalló ?? "No se pudo guardar el hallazgo.",
+        );
       } finally {
         setGuardando((n) => n - 1);
       }
@@ -224,37 +243,65 @@ export function EduOdontogramaScreen({
     [canEdit, escribir],
   );
 
+  /**
+   * 🔴 H-22 · «LIMPIAR DIENTE» ES **UNA** ESCRITURA, NO N.
+   *
+   * Antes mandaba una petición por hallazgo y le daba a todas el mismo
+   * deshacer: repintar el diente entero. Un diente con cinco hallazgos
+   * mandaba cinco peticiones y, si fallaba la tercera, volvían a pintarse
+   * los cinco — incluidos los dos que las peticiones 1 y 2 sí habían
+   * borrado en Postgres. La pantalla quedaba enseñando hallazgos que ya no
+   * existían, justo lo contrario de lo que promete la cabecera de este
+   * archivo, y solo se arreglaba recargando (cosa que nadie sabía).
+   *
+   * Ahora es un POST que borra el diente entero en una sola sentencia. Los
+   * dos únicos resultados posibles son "se limpió" y "no se limpió nada", y
+   * el deshacer de restaurar el diente entero por fin dice la verdad.
+   *
+   * 🔴 Y LIMPIA TAMBIÉN LA NOTA (H-21). La nota vive en la misma tabla con
+   * la key reservada "__nota__", así que entra en el mismo borrado. Antes
+   * se quedaba huérfana: un diente sin un solo hallazgo y con la nota de lo
+   * que ya no está.
+   */
   const limpiarDiente = useCallback(
     (fdi: number) => {
       if (!canEdit) return;
       const antes = recordsRef.current;
       const rec = antes[fdi];
       if (!rec) return;
-      const siguiente = clonar(antes, fdi, (r) => {
-        r.tooth = [];
-        r.surfaces = {};
-      });
-      setRecords(siguiente);
-      for (const condition of rec.tooth ?? []) {
-        void escribir({ tooth: fdi, surface: null, condition, present: false }, () =>
-          setRecords(antes),
-        );
-      }
-      for (const [cara, ids] of Object.entries(rec.surfaces ?? {})) {
-        for (const condition of ids) {
-          void escribir({ tooth: fdi, surface: cara, condition, present: false }, () =>
-            setRecords(antes),
-          );
-        }
-      }
+      setRecords(
+        clonar(antes, fdi, (r) => {
+          r.tooth = [];
+          r.surfaces = {};
+          r.note = "";
+        }),
+      );
+      void escribir(
+        { tooth: fdi },
+        () => setRecords(antes),
+        { method: "POST", queFalló: "No se pudo limpiar el diente." },
+      );
     },
     [canEdit, escribir],
   );
 
+  /**
+   * 🔴 H-18 · MIRAR UNA NOTA NO ES ESCRIBIRLA — el segundo cinturón.
+   *
+   * El primero está en el panel (DetailPanel: el `onBlur` no dispara si el
+   * texto no cambió). Éste es el de aquí, y hacen falta los dos: el panel
+   * puede volver a cambiar, o alguien puede llamar a `anotar` desde otro
+   * sitio, y esta función es por donde pasa TODA nota que sale a la red.
+   *
+   * Si la nota no cambió, no se manda nada. La petición reescribiría
+   * `recordedById` y `recordedAt` en el servidor, y la nota que escribió el
+   * alumno pasaría a figurar como del docente que la abrió para leerla.
+   */
   const anotar = useCallback(
     async (fdi: number, texto: string) => {
       if (!canEdit) return;
       const antes = recordsRef.current;
+      if ((antes[fdi]?.note ?? "") === texto) return;
       setRecords(clonar(antes, fdi, (r) => {
         r.note = texto;
       }));
@@ -299,8 +346,8 @@ export function EduOdontogramaScreen({
 
       {!canEdit && (
         <p className="edu-note">
-          Estás viendo el odontograma en solo lectura. Para marcar hallazgos hace falta el permiso{" "}
-          <code>odontograma.edit</code>.
+          Estás viendo el odontograma en solo lectura. Para marcar hallazgos, quitarlos o escribir
+          la nota de un diente hace falta el permiso <code>odontograma.edit</code>.
         </p>
       )}
 
@@ -392,6 +439,11 @@ export function EduOdontogramaScreen({
             onNote={(txt: string) => void anotar(selected, txt)}
             onRemove={quitar}
             onPick={pickBrush}
+            // H-21: los tres controles de escritura del panel (la × de cada
+            // hallazgo, «Limpiar diente» y la nota) se apagan CON el motivo
+            // escrito debajo, en vez de quedarse pintados sin hacer nada.
+            canEdit={canEdit}
+            disabledReason={SIN_PERMISO}
           />
         </div>
       )}

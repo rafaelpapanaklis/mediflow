@@ -29,6 +29,7 @@ export const dynamic = "force-dynamic";
 // ═══════════════════════════════════════════════════════════════════════
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { crmFiltrosDesdeQuery } from "@/lib/admin/crm/crm-core";
 import { crmListar } from "@/lib/admin/crm/service";
 import { crmTextosListar } from "@/lib/admin/crm/textos-service";
 import { CrmClient } from "./crm-client";
@@ -44,10 +45,26 @@ export const metadata: Metadata = { title: "CRM de ventas — Admin DaleControl"
  */
 const CLINICAS_MAX = 500;
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  /**
+   * Los filtros viajan en la URL y se leen AQUÍ, en el servidor, no con
+   * `useSearchParams` en el cliente: así la primera pintada ya llega
+   * filtrada y paginada desde la base, sin un parpadeo de "toda la
+   * libreta" mientras hidrata. Es lo mismo que hace
+   * /admin/barberias/soporte con su `barbershopId`.
+   *
+   * `crmFiltrosDesdeQuery` valida contra los catálogos y recorta: un
+   * `?etapa=DROP` o un `?pag=-4` no llegan nunca a la consulta.
+   */
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  const filtros = crmFiltrosDesdeQuery(searchParams);
+
   let listado;
   try {
-    listado = await crmListar();
+    listado = await crmListar(filtros);
   } catch (err) {
     // El motivo casi seguro: sql/crm-dalecontrol.sql todavía no se aplicó y
     // las tablas no existen. Se dice con esas palabras en vez de tirar la

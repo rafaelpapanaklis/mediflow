@@ -1025,3 +1025,469 @@ export function crmPrioridad(
   if (s === "proximo") return crmDiasEntre(ahora, p.nextActionAt as string);
   return 9000;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// LA VISTA: QUÉ SE ESTÁ PIDIENDO, Y CÓMO VIAJA EN LA URL
+//
+// Todo lo de aquí abajo es PURO y no sabe nada de Prisma ni de React. Lo
+// usan los dos lados a propósito:
+//
+//   · el SERVIDOR (service.ts) lo traduce a un `where` de Prisma y filtra
+//     y pagina en la base, para no mandarle al navegador miles de filas;
+//   · la PANTALLA (crm-client.tsx) lo lee de la URL para pintar las fichas
+//     de filtro puestas y para saber qué está viendo.
+//
+// Que sea el MISMO objeto en los dos sitios es lo que evita el error
+// clásico: una pantalla que dice "37 resultados" porque contó distinto de
+// como consultó el servidor.
+//
+// 🔴 POR QUÉ EL ESTADO VIVE EN LA URL Y NO EN useState. Una libreta de
+// ventas se trabaja a base de vistas guardadas: "los de Puebla que llevan
+// tres semanas sin que nadie los toque". Con el estado en memoria esa
+// vista se pierde al recargar, no se puede guardar en marcadores, no se
+// puede mandar por WhatsApp y el botón de atrás del navegador se sale de
+// la pantalla en vez de deshacer el último filtro. Con el estado en la
+// querystring las cuatro cosas salen gratis.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Las dos formas de mirar el embudo. */
+export type CrmVista = "tablero" | "lista";
+
+/** Los criterios de orden que se ofrecen. */
+export type CrmOrden = "prioridad" | "reciente" | "sin-contacto" | "valor" | "nombre" | "nuevos";
+
+/**
+ * El filtro de "en qué situación está". No es la etapa del embudo: es la
+ * pregunta de trabajo — a quién le toca hoy, quién se está enfriando, a
+ * quién no ha tocado nadie nunca.
+ */
+export type CrmEstadoId =
+  | ""
+  | "pendientes"
+  | "vencidos"
+  | "hoy"
+  | "sin-fecha"
+  | "frios"
+  | "sin-tocar"
+  | "abiertos"
+  | "cerrados";
+
+/** Valores especiales del filtro de origen; cualquier otro es un affiliateId. */
+export const CRM_ORIGEN_DALECONTROL = "__dalecontrol";
+export const CRM_ORIGEN_AFILIADOS = "__afiliados";
+
+export const CRM_ORDENES: readonly { id: CrmOrden; label: string; ayuda: string }[] = [
+  { id: "prioridad", label: "Por atender", ayuda: "Lo vencido arriba, después lo de hoy y lo que viene." },
+  { id: "sin-contacto", label: "Más abandonados", ayuda: "Los que llevan más tiempo sin que nadie les hable." },
+  { id: "reciente", label: "Movidos hace poco", ayuda: "Lo último que se tocó, arriba." },
+  { id: "nuevos", label: "Últimos dados de alta", ayuda: "Lo más nuevo de la libreta, arriba." },
+  { id: "valor", label: "Mayor valor", ayuda: "Los que más pagarían al mes, arriba." },
+  { id: "nombre", label: "Nombre (A-Z)", ayuda: "Alfabético por el nombre del negocio." },
+];
+
+const ORDENES_POR_ID = new Map<string, CrmOrden>(CRM_ORDENES.map((o) => [o.id, o.id]));
+
+export const CRM_ESTADOS: readonly { id: CrmEstadoId; label: string; ayuda: string }[] = [
+  { id: "", label: "Todos", ayuda: "Abiertos y cerrados, sin distinguir." },
+  { id: "pendientes", label: "Hay que atenderlos", ayuda: "Con seguimiento vencido o para hoy." },
+  { id: "vencidos", label: "Seguimiento vencido", ayuda: "La fecha que les pusiste ya pasó." },
+  { id: "hoy", label: "Para hoy", ayuda: "Les toca hoy, y todavía no está vencido." },
+  { id: "sin-fecha", label: "Sin próximo paso", ayuda: "Abiertos y sin fecha puesta: se pierden solos." },
+  { id: "frios", label: "Enfriándose", ayuda: `Abiertos y sin nada anotado en ${CRM_DIAS_PARA_ENFRIARSE} días.` },
+  { id: "sin-tocar", label: "Nunca contactados", ayuda: "Están en la lista y nadie les ha escrito jamás." },
+  { id: "abiertos", label: "Todo lo abierto", ayuda: "Sigue vivo: ni ganado ni perdido." },
+  { id: "cerrados", label: "Ya cerrados", ayuda: "Ganados y perdidos." },
+];
+
+const ESTADOS_POR_ID = new Map<string, CrmEstadoId>(CRM_ESTADOS.map((e) => [e.id, e.id]));
+
+export function crmEstado(id: string | null | undefined): { id: CrmEstadoId; label: string; ayuda: string } {
+  return CRM_ESTADOS.find((e) => e.id === String(id ?? "")) ?? CRM_ESTADOS[0];
+}
+
+/** Cuántas filas por página se pueden pedir. Fuera de esta lista se ignora. */
+export const CRM_POR_PAGINA_OPCIONES: readonly number[] = [25, 50, 100, 200];
+
+/** Lo que se pide si nadie eligió. 50 llena una pantalla sin hacerla pesada. */
+export const CRM_POR_PAGINA = 50;
+
+/**
+ * Tarjetas que carga el TABLERO de una vez. El tablero necesita repartir
+ * por columna y no se puede paginar como una lista, así que tiene su
+ * propio tope — y cuando lo pasa, lo DICE y manda a la lista, que sí
+ * llega a todo. Ver `CrmListado.tableroTruncado`.
+ */
+export const CRM_TABLERO_MAX = 300;
+
+/**
+ * Hasta aquí el tablero es la vista por defecto. Pasado este número el
+ * embudo deja de leerse de un vistazo —ocho columnas con cientos de
+ * tarjetas cada una— y la lista contesta mejor "¿a quién llamo hoy?".
+ * Es sólo el DEFECTO: el botón de tablero sigue ahí y lo que elija la
+ * persona manda, porque viaja en la URL.
+ */
+export const CRM_TABLERO_COMODO = 150;
+
+/** Lo que la pantalla le pide al servidor. Todo cabe en la querystring. */
+export interface CrmFiltros {
+  /** Texto libre: negocio, contacto, teléfono, correo, ciudad, notas. */
+  q: string;
+  /** Giro (CRM_VERTICALES). "" = todos. */
+  vertical: string;
+  /** De dónde salió (CRM_FUENTES). "" = todas. */
+  fuente: string;
+  /** Etapa del embudo (CRM_ETAPAS). "" = todas. */
+  etapa: string;
+  /** "" | CRM_ORIGEN_DALECONTROL | CRM_ORIGEN_AFILIADOS | un affiliateId. */
+  origen: string;
+  /** En qué situación está (ver CRM_ESTADOS). */
+  estado: CrmEstadoId;
+  orden: CrmOrden;
+  /** "" = que lo decida el tamaño de la libreta (ver crmVistaEfectiva). */
+  vista: CrmVista | "";
+  /** 1 en adelante. */
+  pagina: number;
+  porPagina: number;
+}
+
+export const CRM_FILTROS_VACIOS: CrmFiltros = {
+  q: "",
+  vertical: "",
+  fuente: "",
+  etapa: "",
+  origen: "",
+  estado: "",
+  orden: "prioridad",
+  vista: "",
+  pagina: 1,
+  porPagina: CRM_POR_PAGINA,
+};
+
+/** Las claves tal como se escriben en la URL. En español, como el resto. */
+export const CRM_CLAVES_QUERY = {
+  q: "q",
+  vertical: "giro",
+  fuente: "fuente",
+  etapa: "etapa",
+  origen: "origen",
+  estado: "estado",
+  orden: "orden",
+  vista: "vista",
+  pagina: "pag",
+  porPagina: "n",
+} as const satisfies Record<keyof CrmFiltros, string>;
+
+/** Lo que llega de `searchParams` de Next: un valor, varios, o nada. */
+export type CrmQueryEntrada = Record<string, string | string[] | undefined> | undefined | null;
+
+function unValor(sp: CrmQueryEntrada, clave: string): string {
+  const v = sp?.[clave];
+  if (Array.isArray(v)) return String(v[0] ?? "").trim();
+  return String(v ?? "").trim();
+}
+
+/**
+ * Lee la querystring y devuelve filtros SIEMPRE válidos. Nada de aquí
+ * puede lanzar ni dejar pasar un valor fuera de catálogo: la URL la
+ * escribe cualquiera, y un `?etapa=DROP` tiene que quedar en "todas las
+ * etapas", no en un error de servidor.
+ */
+export function crmFiltrosDesdeQuery(sp: CrmQueryEntrada): CrmFiltros {
+  const c = CRM_CLAVES_QUERY;
+
+  const vertical = unValor(sp, c.vertical);
+  const fuente = unValor(sp, c.fuente);
+  const etapa = unValor(sp, c.etapa);
+  const orden = unValor(sp, c.orden);
+  const estado = unValor(sp, c.estado);
+  const vista = unValor(sp, c.vista);
+
+  const pagina = Math.max(1, Math.floor(Number(unValor(sp, c.pagina))) || 1);
+  const porPaginaCrudo = Math.floor(Number(unValor(sp, c.porPagina))) || 0;
+
+  return {
+    q: unValor(sp, c.q).slice(0, 120),
+    vertical: crmEsVertical(vertical) ? vertical : "",
+    fuente: crmEsFuente(fuente) ? fuente : "",
+    // La etapa NO se valida contra el catálogo, a diferencia del giro y la
+    // fuente, y es a propósito: la columna es TEXT y el catálogo se retoca
+    // desde TypeScript (ver la cabecera de este archivo), así que una fila
+    // editada a mano en Supabase puede tener una etapa que hoy no está en
+    // la lista — y el tablero le pinta su columna. Si aquí se descartara,
+    // el botón "verlos en la lista" de esa columna llevaría a la lista SIN
+    // filtro y enseñaría la libreta entera. `crmEtapa` ya sabe pintar una
+    // etapa desconocida con su etiqueta cruda.
+    etapa: etapa.slice(0, 60),
+    // El origen es un id de socio y no hay catálogo que consultar sin
+    // tocar la base: se acepta cualquier texto corto y, si no existe, el
+    // filtro simplemente no encuentra nada (y la ficha lo dice).
+    origen: unValor(sp, c.origen).slice(0, 60),
+    estado: ESTADOS_POR_ID.get(estado) ?? "",
+    orden: ORDENES_POR_ID.get(orden) ?? "prioridad",
+    vista: vista === "tablero" || vista === "lista" ? vista : "",
+    pagina,
+    porPagina: CRM_POR_PAGINA_OPCIONES.includes(porPaginaCrudo) ? porPaginaCrudo : CRM_POR_PAGINA,
+  };
+}
+
+/**
+ * El camino de vuelta: los filtros a querystring, OMITIENDO lo que vale
+ * el defecto. Sin eso la URL de la pantalla recién abierta sería
+ * `?q=&giro=&fuente=&…` y nadie querría guardarla en marcadores.
+ *
+ * Devuelve "" (no "?") cuando todo está en su valor de fábrica, para que
+ * quien la use pueda pegarla detrás de la ruta sin comprobar nada.
+ */
+export function crmFiltrosAQuery(f: CrmFiltros): string {
+  const c = CRM_CLAVES_QUERY;
+  const partes: [string, string][] = [];
+
+  if (f.q.trim()) partes.push([c.q, f.q.trim()]);
+  if (f.vertical) partes.push([c.vertical, f.vertical]);
+  if (f.fuente) partes.push([c.fuente, f.fuente]);
+  if (f.etapa) partes.push([c.etapa, f.etapa]);
+  if (f.origen) partes.push([c.origen, f.origen]);
+  if (f.estado) partes.push([c.estado, f.estado]);
+  if (f.orden && f.orden !== CRM_FILTROS_VACIOS.orden) partes.push([c.orden, f.orden]);
+  if (f.vista) partes.push([c.vista, f.vista]);
+  if (f.porPagina && f.porPagina !== CRM_POR_PAGINA) partes.push([c.porPagina, String(f.porPagina)]);
+  // La página va la ÚLTIMA a propósito: es lo que más cambia y así la
+  // parte estable de la URL (los filtros) se lee de un golpe.
+  if (f.pagina > 1) partes.push([c.pagina, String(f.pagina)]);
+
+  if (partes.length === 0) return "";
+  const sp = new URLSearchParams();
+  for (const [k, v] of partes) sp.set(k, v);
+  return `?${sp.toString()}`;
+}
+
+/**
+ * Cambia unos cuantos filtros y devuelve el juego completo. Cualquier
+ * cambio que NO sea de página vuelve a la página 1: quedarse en la 7 al
+ * cambiar de filtro es la forma más rápida de ver una lista vacía y creer
+ * que se perdieron los prospectos.
+ */
+export function crmFiltrosCon(f: CrmFiltros, cambios: Partial<CrmFiltros>): CrmFiltros {
+  const siguiente = { ...f, ...cambios };
+  const soloPagina = Object.keys(cambios).every((k) => k === "pagina");
+  if (!soloPagina) siguiente.pagina = 1;
+  return siguiente;
+}
+
+/** ¿Hay algo puesto que esconda filas? El orden y la vista no cuentan. */
+export function crmHayFiltros(f: CrmFiltros): boolean {
+  return !!(f.q.trim() || f.vertical || f.fuente || f.etapa || f.origen || f.estado);
+}
+
+/** Quita TODOS los filtros y deja el orden, la vista y el tamaño de página. */
+export function crmFiltrosLimpios(f: CrmFiltros): CrmFiltros {
+  return {
+    ...CRM_FILTROS_VACIOS,
+    orden: f.orden,
+    vista: f.vista,
+    porPagina: f.porPagina,
+  };
+}
+
+/** Una ficha de filtro puesto: qué dice y qué clave hay que vaciar. */
+export interface CrmFiltroActivo {
+  /** La clave de `CrmFiltros` que se pone en "" para quitarlo. */
+  clave: keyof CrmFiltros;
+  /** De qué filtro es ("Giro", "Estado"…), para leerlo sin adivinar. */
+  etiqueta: string;
+  /** El valor, ya en castellano. */
+  texto: string;
+}
+
+/**
+ * Los filtros puestos, listos para pintarse como fichas que se quitan de
+ * una en una. Un filtro que no se ve es la forma más rápida de creer que
+ * se perdieron prospectos, así que esto se pinta SIEMPRE, no sólo con el
+ * panel de filtros abierto.
+ */
+export function crmFiltrosActivos(
+  f: CrmFiltros,
+  socios?: readonly { id: string; nombre: string }[],
+): CrmFiltroActivo[] {
+  const items: CrmFiltroActivo[] = [];
+
+  if (f.q.trim()) items.push({ clave: "q", etiqueta: "Buscando", texto: `«${f.q.trim()}»` });
+  if (f.vertical) {
+    items.push({ clave: "vertical", etiqueta: "Giro", texto: crmVertical(f.vertical).label });
+  }
+  if (f.fuente) items.push({ clave: "fuente", etiqueta: "Fuente", texto: crmFuenteLabel(f.fuente) });
+  if (f.etapa) items.push({ clave: "etapa", etiqueta: "Etapa", texto: crmEtapa(f.etapa).label });
+  if (f.estado) items.push({ clave: "estado", etiqueta: "Estado", texto: crmEstado(f.estado).label });
+  if (f.origen) {
+    const texto =
+      f.origen === CRM_ORIGEN_DALECONTROL
+        ? "Los que agregué yo"
+        : f.origen === CRM_ORIGEN_AFILIADOS
+          ? "Recomendados por socios"
+          : (socios ?? []).find((s) => s.id === f.origen)?.nombre ?? "Un socio dado de baja";
+    items.push({ clave: "origen", etiqueta: "Origen", texto });
+  }
+  return items;
+}
+
+/**
+ * Qué vista se pinta de verdad. Con la libreta chica manda el tablero,
+ * que es donde el embudo se lee de un vistazo; en cuanto hay muchos, la
+ * lista. Lo que la persona ELIJA gana siempre — por eso `f.vista` se
+ * mira primero, y por eso viaja en la URL.
+ */
+export function crmVistaEfectiva(f: CrmFiltros, totalGeneral: number): CrmVista {
+  if (f.vista === "tablero" || f.vista === "lista") return f.vista;
+  return totalGeneral > CRM_TABLERO_COMODO ? "lista" : "tablero";
+}
+
+/**
+ * El instante a partir del cual un contacto ya cuenta como "hace mucho".
+ * Existe para que la BASE pueda contar los que se están enfriando con un
+ * `lastContactAt < limite` en vez de traerse la tabla entera, y da
+ * EXACTAMENTE el mismo resultado que `crmEstaFrio` — hay una prueba que
+ * los compara día por día alrededor del umbral.
+ *
+ * La cuenta: frío es `dias >= CRM_DIAS_PARA_ENFRIARSE` contando días
+ * naturales mexicanos, así que el último contacto tiene que caer ANTES
+ * del arranque del día de hace (14 − 1) días.
+ */
+export function crmLimiteFrio(ahora: Date = new Date()): Date {
+  const base = crmInicioDelDiaMx(ahora).getTime();
+  return new Date(base - (CRM_DIAS_PARA_ENFRIARSE - 1) * 24 * 60 * 60 * 1000);
+}
+
+/** Lo que hace falta para ordenar una fila por cualquiera de los criterios. */
+export interface CrmOrdenable extends CrmProspectoResumible {
+  /** El desempate final. Ver `crmComparar`: sin él la paginación miente. */
+  id?: string | null;
+  name?: string | null;
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
+}
+
+function textoFecha(v: string | Date | null | undefined): string {
+  if (!v) return "";
+  return v instanceof Date ? v.toISOString() : String(v);
+}
+
+function cmpNombre(a: CrmOrdenable, b: CrmOrdenable): number {
+  return String(a?.name ?? "").localeCompare(String(b?.name ?? ""), "es") || cmpId(a, b);
+}
+
+/**
+ * EL DESEMPATE FINAL, y el único que de verdad desempata: el id.
+ *
+ * Ninguna de las demás columnas es única. El nombre TAMPOCO: la tabla no
+ * tiene índice único sobre él y dar de alta no deduplica (sólo la
+ * importación pegada evita repetidos), así que dos "Clínica Dental
+ * Sonrisa" —una de Puebla, otra de Mérida— empatan en todos los criterios.
+ *
+ * Con un orden que no es TOTAL, la base puede resolver el empate de una
+ * forma para `LIMIT 50 OFFSET 0` (top-N heapsort) y de otra para
+ * `LIMIT 50 OFFSET 50` (ordenación completa): la misma fila sale en la
+ * página 1 y en la 2, y su gemela no sale en ninguna. Y el contador
+ * seguiría diciendo "120 de 120", que es exactamente la clase de mentira
+ * silenciosa que esta pantalla existe para no contar.
+ */
+function cmpId(a: CrmOrdenable, b: CrmOrdenable): number {
+  return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
+}
+
+/**
+ * El comparador de cada orden. Se usa cuando el filtrado ocurre en
+ * memoria (búsqueda de texto); sin búsqueda ordena la base con el
+ * `orderBy` equivalente, y los dos caminos tienen que dar la misma lista.
+ * Cada criterio desempata por nombre para que la página 2 no repita ni
+ * se salte filas cuando dos valen lo mismo.
+ */
+export function crmComparar(
+  orden: CrmOrden,
+  ahora: Date = new Date(),
+): (a: CrmOrdenable, b: CrmOrdenable) => number {
+  return (a, b) => {
+    switch (orden) {
+      case "reciente":
+        return textoFecha(b?.updatedAt).localeCompare(textoFecha(a?.updatedAt)) || cmpNombre(a, b);
+      case "nuevos":
+        return textoFecha(b?.createdAt).localeCompare(textoFecha(a?.createdAt)) || cmpNombre(a, b);
+      case "sin-contacto": {
+        // Ascendente, y el que nunca se ha contactado ARRIBA: es el más
+        // abandonado de todos, no el que menos. Es el mismo criterio que
+        // `nulls: "first"` en el orderBy de la base.
+        const va = a?.lastContactAt ? new Date(a.lastContactAt as any).getTime() : -Infinity;
+        const vb = b?.lastContactAt ? new Date(b.lastContactAt as any).getTime() : -Infinity;
+        if (va !== vb) return va - vb;
+        return cmpNombre(a, b);
+      }
+      case "valor": {
+        // Sin valor puesto NO es lo mismo que valor cero: va al final,
+        // igual que `nulls: "last"` en la base.
+        const va = a?.monthlyValue === null || a?.monthlyValue === undefined ? -1 : Number(a.monthlyValue) || 0;
+        const vb = b?.monthlyValue === null || b?.monthlyValue === undefined ? -1 : Number(b.monthlyValue) || 0;
+        if (va !== vb) return vb - va;
+        return cmpNombre(a, b);
+      }
+      case "nombre":
+        return cmpNombre(a, b);
+      default:
+        return crmPrioridad(a, ahora) - crmPrioridad(b, ahora) || cmpNombre(a, b);
+    }
+  };
+}
+
+/** Cuántas páginas salen. Siempre al menos 1, para no pintar "página 1 de 0". */
+export function crmTotalPaginas(total: number, porPagina: number): number {
+  const n = Math.max(1, Math.floor(porPagina) || CRM_POR_PAGINA);
+  return Math.max(1, Math.ceil(Math.max(0, total) / n));
+}
+
+/**
+ * La página que de verdad se puede servir. Si alguien llega con `?pag=99`
+ * y sólo hay 3, se le da la 3 — mejor la última fila real que una página
+ * en blanco que parece que se borró todo.
+ */
+export function crmPaginaValida(pagina: number, total: number, porPagina: number): number {
+  return Math.min(Math.max(1, Math.floor(pagina) || 1), crmTotalPaginas(total, porPagina));
+}
+
+/** "1–50 de 1,240" / "Ninguno de 1,240". El número siempre a la vista. */
+export function crmRangoTexto(pagina: number, porPagina: number, total: number): string {
+  const fmt = (n: number) => n.toLocaleString("es-MX");
+  if (total <= 0) return `Ninguno de ${fmt(0)}`;
+  const desde = (Math.max(1, pagina) - 1) * porPagina + 1;
+  const hasta = Math.min(total, desde + porPagina - 1);
+  if (desde > total) return `Ninguno de ${fmt(total)}`;
+  return desde === hasta ? `${fmt(desde)} de ${fmt(total)}` : `${fmt(desde)}–${fmt(hasta)} de ${fmt(total)}`;
+}
+
+/**
+ * Los números de página que se pintan en el pie: siempre el 1 y el
+ * último, y una ventana alrededor del actual. `null` es el "…".
+ *
+ * Con la página actual pegada a un extremo la ventana se estira hacia el
+ * otro lado a propósito, para que la fila de botones no cambie de ancho
+ * al pasar de página — un paginador que se mueve bajo el dedo hace fallar
+ * el clic siguiente.
+ */
+export function crmNumerosDePagina(actual: number, total: number): (number | null)[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const vistos = new Set<number>([1, total, actual]);
+  for (const d of [-1, 1]) {
+    const n = actual + d;
+    if (n >= 1 && n <= total) vistos.add(n);
+  }
+  if (actual <= 3) for (const n of [2, 3, 4]) if (n <= total) vistos.add(n);
+  if (actual >= total - 2) for (const n of [total - 3, total - 2, total - 1]) if (n >= 1) vistos.add(n);
+
+  const orden = Array.from(vistos).sort((a, b) => a - b);
+  const salida: (number | null)[] = [];
+  let previo = 0;
+  for (const n of orden) {
+    if (previo && n - previo > 1) salida.push(null);
+    salida.push(n);
+    previo = n;
+  }
+  return salida;
+}

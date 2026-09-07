@@ -143,7 +143,10 @@ export async function POST(req: NextRequest) {
     if (discount > subtotal) {
       return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
     }
-    const { total } = computeInvoiceTotal(subtotal, discount, taxRate, taxIncluded);
+    // Los CONCEPTOS, no el subtotal: con IVA agregado el impuesto se redondea por
+    // concepto (criterio SAT) y pasar la suma daba hasta 2¢ de diferencia con lo
+    // que timbra Facturapi — el hallazgo 19. `subtotal` se sigue persistiendo.
+    const { total } = computeInvoiceTotal(data.items, discount, taxRate, taxIncluded);
 
     // "Vence el" (FIN-03). El editor manda "YYYY-MM-DD" y se ancla a las 00:00
     // de ESE día en la zona de la clínica: `new Date("2026-08-22")` en Vercel

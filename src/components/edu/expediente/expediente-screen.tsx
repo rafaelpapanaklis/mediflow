@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { FilePlus2, PenLine, Send, Signature, Undo2 } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
@@ -55,6 +55,14 @@ export interface EduExpedienteScreenProps {
   /** El techo, para poder decir el número en vez de "hay más". */
   maxRows: number;
   cases: EduCaseOption[];
+  /**
+   * H-20 · El caso por el que está filtrada la lista, o null = todas.
+   *
+   * Sale de `?caso=` y lo VALIDA el servidor contra los casos que le tocan
+   * a quien mira: aquí llega o un id suyo o null. La pantalla no decide
+   * qué se filtra, solo pinta el desplegable y navega.
+   */
+  casoFiltro: string | null;
   canWrite: boolean;
   /**
    * Cierre (P2-13): ¿puede FIRMAR (expediente.sign)? El alumno escribe y
@@ -105,17 +113,21 @@ export function EduExpedienteScreen({
   truncated,
   maxRows,
   cases,
+  casoFiltro,
   canWrite,
   canSign,
   meUserId,
   iaDictado,
 }: EduExpedienteScreenProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [navigating, startNav] = useTransition();
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nueva, setNueva] = useState<{ corrects: EduRecordRow | null } | null>(null);
   const [editar, setEditar] = useState<EduRecordRow | null>(null);
+  /** S-1: la nota que se está a punto de firmar, esperando el "sí". */
+  const [firmando, setFirmando] = useState<EduRecordRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const casosAbiertos = useMemo(() => cases.filter((c) => c.isOpen), [cases]);
@@ -138,6 +150,13 @@ export function EduExpedienteScreen({
     setFlash(mensaje);
     setError(null);
     startNav(() => router.refresh());
+  }
+
+  /** S-1: firmar no se dispara al primer clic; abre la confirmación. */
+  function confirmarFirma(nota: EduRecordRow) {
+    setFlash(null);
+    setError(null);
+    setFirmando(nota);
   }
 
   /** Mueve una nota de estado (entregar, firmar, devolver). */
@@ -180,6 +199,39 @@ export function EduExpedienteScreen({
                 truncated ? ` (se muestran las ${maxRows} más recientes)` : ""
               }`}
         </span>
+
+        {/* H-20 · EL FILTRO POR CASO QUE EL BANNER PROMETE.
+            Navega con `?caso=`, que la API y la página ya leían. Antes el
+            aviso de "filtra por caso para ver las notas viejas" mandaba a
+            usar algo que no existía en ninguna pantalla. */}
+        {cases.length > 1 && (
+          <label className="edu-integ-filtro" htmlFor="edu-exp-filtro">
+            <span className="edu-field__label">Caso</span>
+            <select
+              id="edu-exp-filtro"
+              className="edu-input edu-input--sm"
+              value={casoFiltro ?? ""}
+              disabled={navigating}
+              onChange={(e) => {
+                const v = e.target.value;
+                startNav(() =>
+                  router.push(v ? `${pathname}?caso=${encodeURIComponent(v)}` : pathname, {
+                    scroll: false,
+                  }),
+                );
+              }}
+            >
+              <option value="">Todos los casos</option>
+              {cases.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.programName} · {c.studentMatricula}
+                  {c.isOpen ? "" : " (cerrado)"}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         {canWrite && (
           <button
             type="button"
@@ -189,13 +241,28 @@ export function EduExpedienteScreen({
               setError(null);
               setNueva({ corrects: null });
             }}
-            disabled={cases.length === 0}
+            // 🔴 H-19 · Se cuentan los casos ABIERTOS, no los casos.
+            // Con `cases.length` el botón se pintaba activo para un
+            // paciente con un único caso ya cerrado: el modal abría, la
+            // única opción del desplegable salía deshabilitada y "Guardar
+            // borrador" quedaba muerto para siempre, sin un solo mensaje.
+            disabled={casosAbiertos.length === 0}
           >
             <FilePlus2 size={16} />
             Nota nueva
           </button>
         )}
       </div>
+
+      {/* El motivo se ESCRIBE, no se deja en un tooltip: en un teléfono no
+          hay `hover`. Mismo patrón que la pestaña de WhatsApp. */}
+      {canWrite && casosAbiertos.length === 0 && cases.length > 0 && (
+        <p className="edu-note">
+          No se puede escribir una nota nueva: este paciente no tiene ningún caso ABIERTO tuyo, y una
+          nota clínica cuelga de un caso vivo. Sus notas viejas se siguen leyendo, y una nota firmada
+          se corrige con otra desde su propia tarjeta. Si el paciente volvió, ábrele caso.
+        </p>
+      )}
 
       {truncated && (
         <div className="edu-banner edu-banner--warn" role="status">
@@ -349,12 +416,29 @@ export function EduExpedienteScreen({
 
                   {/* P2-13: firmar solo quien tiene expediente.sign. Al
                       alumno la pantalla le ofrece "Entregar" — su nota la
-                      cierra el docente que responde por él. */}
-                  {canSign && eduRecordCanTransition(n.status, "FIRMADA") && (
+                      cierra el docente que responde por él.
+
+                      🔴 S-1 · Y NO SOBRE UN BORRADOR AJENO. Firmar es
+                      irreversible: la nota queda cerrada para siempre y a
+                      partir de ahí solo se corrige con otra. Sobre un
+                      BORRADOR de otra persona sería firmar algo que su
+                      autor todavía está escribiendo y que ni siquiera ha
+                      entregado — el docente cerraría a media frase lo que
+                      su alumno pensaba terminar. Una ENVIADA sí: entregarla
+                      ES pedir la firma. Y la propia, en cualquiera de los
+                      dos estados: quien escribe y firma en un solo acto (la
+                      dirección) no se está adelantando a nadie.
+
+                      El servidor no lo rebota, y está bien: no es una fuga
+                      ni un permiso que falte, es un botón que no se ofrece
+                      donde no toca. */}
+                  {canSign &&
+                    eduRecordCanTransition(n.status, "FIRMADA") &&
+                    (n.status === "ENVIADA" || mia) && (
                     <button
                       type="button"
                       className="edu-btn edu-btn--primary edu-btn--sm"
-                      onClick={() => mover(n, "FIRMADA", "La nota quedó firmada. Ya no se edita.")}
+                      onClick={() => confirmarFirma(n)}
                       disabled={trabajando}
                     >
                       <Signature size={15} />
@@ -398,6 +482,62 @@ export function EduExpedienteScreen({
             recargar(msg);
           }}
         />
+      )}
+
+      {/* 🔴 S-1 · FIRMAR PIDE CONFIRMACIÓN. Era un clic suelto, sin vuelta
+          atrás, entre otros tres botones del mismo tamaño y a un pixel del
+          de "Devolver". Firmada, la nota ya no se edita ni se borra nunca:
+          lo único que queda es escribir otra que la corrija, y las dos se
+          leen para siempre. Un acto así no se hace sin decir que se hace. */}
+      {firmando && (
+        <EduModal
+          title="Firmar la nota"
+          subtitle={`${firmando.caseProgramName} · ${firmando.appointmentLabel ?? firmando.createdLabel}`}
+          busy={busyId === firmando.id}
+          onClose={() => setFirmando(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="edu-btn edu-btn--ghost"
+                onClick={() => setFirmando(null)}
+                disabled={busyId === firmando.id}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary"
+                onClick={() => {
+                  const n = firmando;
+                  setFirmando(null);
+                  void mover(n, "FIRMADA", "La nota quedó firmada. Ya no se edita.");
+                }}
+                disabled={busyId === firmando.id}
+              >
+                <Signature size={15} />
+                Sí, firmarla
+              </button>
+            </>
+          }
+        >
+          <div className="edu-banner edu-banner--warn">
+            <div>
+              <p className="edu-banner__title">Esto no se deshace</p>
+              <p className="edu-banner__detail">
+                Al firmar, esta nota queda cerrada: no se vuelve a editar ni se borra, ni por la
+                dirección. Si después hay algo que corregir, se escribe una nota NUEVA que apunte a
+                ésta y en el expediente se leen las dos. Es la NOM-004.
+              </p>
+            </div>
+          </div>
+          <p className="edu-note">
+            Firmas tú, y tu nombre queda en la nota:{" "}
+            {firmando.authorUserId === meUserId
+              ? "la escribiste tú."
+              : `la escribió ${firmando.authorName}. Firmarla es hacerte responsable de lo que dice.`}
+          </p>
+        </EduModal>
       )}
 
       {editar && (
@@ -733,11 +873,19 @@ function NotaEditar({
           <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
             Cancelar
           </button>
+          {/* 🔴 H-23 · EXIGE CONTENIDO, igual que el "Guardar borrador" del
+              alta y que "Guardar y firmar" de al lado. Con `disabled={busy}`
+              a secas se podía vaciar una nota entera y guardarla: quedaba
+              una tarjeta permanente, sin diagnóstico y sin SOAP, en el
+              expediente del paciente. Y no se podía quitar — no hay borrado
+              de notas y `createEduRecord` se niega a corregir lo que no
+              está FIRMADA, así que vaciarla era el único "remedio" y dejaba
+              exactamente eso. */}
           <button
             type="button"
             className={`edu-btn ${canSign ? "edu-btn--ghost" : "edu-btn--primary"}`}
             onClick={() => guardar(false)}
-            disabled={busy}
+            disabled={busy || !tieneAlgo(draft)}
           >
             {busy ? "Guardando…" : "Guardar"}
           </button>
@@ -768,6 +916,13 @@ function NotaEditar({
           ? "Al firmar, esta nota queda cerrada: no se vuelve a editar ni a borrar. Si después hay algo que corregir, se escribe una nota nueva que apunte a ésta."
           : "Cuando esté lista, entrégala desde la lista de notas: la firma tu docente, y firmada ya no se edita."}
       </p>
+      {!tieneAlgo(draft) && (
+        <p className="edu-note">
+          Escribe algo antes de guardar. Una nota clínica no se puede dejar en blanco: en este
+          expediente las notas no se borran, así que una vacía se queda para siempre en la historia
+          del paciente sin decir nada.
+        </p>
+      )}
       <CamposSoap
         draft={draft}
         setDraft={setDraft}

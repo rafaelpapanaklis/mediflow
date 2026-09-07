@@ -16,9 +16,6 @@ import {
   Users,
   Send,
   Mic,
-  Paperclip,
-  Share2,
-  MoreHorizontal,
   Download,
   AlertCircle,
   RotateCcw,
@@ -612,6 +609,45 @@ export function AiAssistantClient() {
     setError(null);
     setTimeout(() => textareaRef.current?.focus(), 50);
   }, []);
+
+  /**
+   * "Exportar" — hallazgo 43. Es el único de los cuatro botones muertos del
+   * asistente que tenía un significado evidente y cabía entero en el cliente:
+   * los turnos ya están en memoria, así que se vuelcan a un .md y se descargan.
+   * Mismo patrón de descarga que el resto del repo (Blob + createObjectURL);
+   * ver downloadVentasCsv en src/app/dashboard/caja/caja-client.tsx.
+   *
+   * El archivo lleva el aviso de que es apoyo de IA y NO una nota clínica: sale
+   * del panel a la máquina del doctor y no debe confundirse con expediente.
+   */
+  const exportConversation = useCallback(() => {
+    if (messages.length === 0) return;
+    const stamp = new Date();
+    const title = activeConv?.title ?? t("pages.aiAssistant.clinicalAssistant");
+    const lines = [
+      `# ${title}`,
+      "",
+      `${stamp.toLocaleString("es-MX")} · ${AI_CHAT_MODEL}`,
+      "",
+      "> Apoyo de IA. No es una nota clínica ni sustituye el criterio del profesional.",
+      "",
+      ...messages.flatMap((m) => [
+        // Mismas etiquetas que la pantalla (línea ~1546): el archivo se lee
+        // igual que el chat, y no hace falta ninguna clave nueva.
+        `## ${m.role === "user" ? t("pages.aiAssistant.doctor") : t("pages.aiAssistant.aiAssistant")}`,
+        "",
+        m.content,
+        "",
+      ]),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `asistente-ia-${stamp.toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [messages, activeConv, t]);
 
   // Cmd/Ctrl + K → nueva conversación
   useEffect(() => {
@@ -1357,10 +1393,18 @@ export function AiAssistantClient() {
             </div>
           </div>
           <div className={styles.chatHeaderActions}>
-            <button type="button" className={styles.iconBtn} title={t("pages.aiAssistant.share")} aria-label={t("pages.aiAssistant.shareConversation")}>
-              <Share2 size={14} aria-hidden />
-            </button>
-            <button type="button" className={styles.iconBtn} title={t("common.export")} aria-label={t("pages.aiAssistant.exportConversation")}>
+            {/* "Compartir" se quitó (hallazgo 43): prometía un enlace público a
+                una conversación clínica —permisos, caducidad, PHI fuera de la
+                clínica— y detrás no había nada. Un botón que promete y no
+                cumple es peor que no tenerlo. */}
+            <button
+              type="button"
+              className={styles.iconBtn}
+              title={t("common.export")}
+              aria-label={t("pages.aiAssistant.exportConversation")}
+              onClick={exportConversation}
+              disabled={messages.length === 0}
+            >
               <Download size={14} aria-hidden />
             </button>
             <button
@@ -1372,9 +1416,9 @@ export function AiAssistantClient() {
             >
               <RotateCcw size={14} aria-hidden />
             </button>
-            <button type="button" className={styles.iconBtn} title={t("pages.aiAssistant.more")} aria-label={t("pages.aiAssistant.moreOptions")}>
-              <MoreHorizontal size={14} aria-hidden />
-            </button>
+            {/* "Más" se quitó (hallazgo 43): era un menú de desbordamiento sin
+                menú. Lo único que habría contenido —nueva conversación— ya está
+                aquí al lado. */}
           </div>
         </header>
 
@@ -1579,9 +1623,10 @@ export function AiAssistantClient() {
                 rows={1}
               />
               <div className={styles.composerBar}>
-                <button type="button" className={styles.composerActionBtn} title={t("pages.aiAssistant.attach")} aria-label={t("pages.aiAssistant.attachFile")}>
-                  <Paperclip size={15} aria-hidden />
-                </button>
+                {/* "Adjuntar archivo" se quitó (hallazgo 43): promete un flujo
+                    entero que no existe —subida, almacenamiento y envío del
+                    archivo al modelo—. Cuando ese flujo se construya, el botón
+                    vuelve con su handler. */}
                 <button
                   type="button"
                   className={`${styles.composerActionBtn} ${recording ? styles.recording : ""}`}

@@ -16,7 +16,9 @@ import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import styles from "./appointments.module.css";
 import toast from "react-hot-toast";
-import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useConfirm, useConfirmWithReason } from "@/components/ui/confirm-dialog";
+import { possibleTransitions } from "@/lib/agenda/transitions";
+import type { AppointmentStatus } from "@/lib/agenda/types";
 import { DateField } from "@/components/ui/date-field";
 import { useT } from "@/i18n/i18n-provider";
 import { BookingRequestsPanel } from "./booking-requests-panel";
@@ -86,6 +88,44 @@ function addTime(base: string, mins: number) {
 }
 function serializeAppt(a: any): Appt {
   return { ...a, date: a.date instanceof Date ? a.date.toISOString() : String(a.date) };
+}
+
+/**
+ * Targets válidos desde un status, contra la MISMA matriz que valida el
+ * servidor. `PENDING` es un estado legacy que ya no existe en la matriz: se
+ * trata como SCHEDULED, que es a lo que migró.
+ */
+function statusTargets(current: string): AppointmentStatus[] {
+  const from = (current === "PENDING" ? "SCHEDULED" : current) as AppointmentStatus;
+  try {
+    return possibleTransitions(from);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Traduce la respuesta de error de la API de citas a algo que una recepcionista
+ * pueda leer. Antes se pintaba el código crudo (`appointment_overlap`,
+ * `internal_error`) o un genérico que no decía nada.
+ */
+function apiErrorMessage(status: number, body: any, fallback: string): string {
+  if (body?.error === "appointment_overlap") {
+    const c = body.conflictingAppointment;
+    if (c?.startsAt && c?.endsAt) {
+      const h = (iso: string) =>
+        new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+      return `Ese horario ya está ocupado: ${c.patientName ?? "otra cita"} de ${h(c.startsAt)} a ${h(c.endsAt)}. Elige otra hora.`;
+    }
+    return "Ese horario ya está ocupado por otra cita. Elige otra hora.";
+  }
+  if (typeof body?.reason === "string" && body.reason) return body.reason;
+  if (body?.error === "resource_unavailable") return "El sillón no está disponible a esa hora.";
+  if (body?.error === "patient_not_found") return "No se encontró el paciente.";
+  if (body?.error === "doctor_not_found") return "No se encontró al profesional.";
+  if (body?.error === "invalid_duration") return "La hora de fin tiene que ser posterior a la de inicio.";
+  if (status === 403) return "Tu rol no permite hacer este cambio.";
+  return fallback;
 }
 
 // ── Improvement 1: Patient search with autocomplete ───────────────────────────
@@ -270,6 +310,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
+  const askConfirmWithReason = useConfirmWithReason();
   const today = new Date();
   const [appts,       setAppts]       = useState<Appt[]>(initialAppts);
 
@@ -388,6 +429,30 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     setShowNew(true);
   }
 
+  /**
+   * Cuerpo que entiende /api/appointments. Esta pantalla mandaba `{...form}`
+   * entero —`type`, `mode`, `clinicId`, `date`, `startTime`…— y la API espera
+   * otros nombres, así que crear una cita devolvía 400 `missing_startsAt`
+   * SIEMPRE (hallazgo 24). La HORA va como la tiene el formulario (hora de
+   * pared de la clínica) y la resuelve el servidor con la tz de la sesión: el
+   * navegador no conoce la tz de la clínica y usar la del dispositivo agendaría
+   * a la hora equivocada.
+   */
+  function apptPayload() {
+    return {
+      patientId: form.patientId,
+      doctorId: form.doctorId,
+      resourceId: form.resourceId || null,
+      date: form.date,
+      startTime: form.startTime,
+      durationMins: form.durationMins,
+      endTime: addTime(form.startTime, form.durationMins),
+      reason: form.type,
+      notes: form.notes || null,
+      isTeleconsult: form.mode === "TELECONSULTATION",
+    };
+  }
+
   async function createAppt() {
     if (!form.patientId) { toast.error(t("appointments.toast.selectPatient")); return; }
     setLoading(true);
@@ -395,16 +460,40 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       const endTime = addTime(form.startTime, form.durationMins);
       const res = await fetch("/api/appointments", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, endTime, clinicId }),
+        body: JSON.stringify(apptPayload()),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? t("common.genericError"));
-      const created = await res.json();
-      // FIX: serialize date from API before adding to state
-      setAppts(prev => [...prev, serializeAppt(created)]);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("common.genericError")));
+      // La respuesta es { appointment, scheduleWarning }, no la cita legacy: se
+      // arma la fila con el id/estado que confirmó el servidor y con los datos
+      // que el servidor acaba de aceptar. Antes se metía el sobre entero.
+      const dto = body.appointment ?? {};
+      const p = patients.find(x => x.id === form.patientId);
+      const d = doctors.find(x => x.id === form.doctorId);
+      const nueva: Appt = {
+        id: dto.id,
+        patientId: form.patientId,
+        doctorId: form.doctorId,
+        type: form.type,
+        date: form.date,
+        startTime: form.startTime,
+        endTime,
+        durationMins: form.durationMins,
+        status: dto.status ?? "SCHEDULED",
+        notes: form.notes || null,
+        reminderSent: false,
+        mode: form.mode,
+        patient: { id: form.patientId, firstName: p?.firstName ?? "", lastName: p?.lastName ?? "", phone: p?.phone ?? null },
+        doctor:  { id: form.doctorId,  firstName: d?.firstName ?? "", lastName: d?.lastName ?? "" },
+      };
+      setAppts(prev => [...prev, nueva]);
       setSelectedDay(form.date);
       setShowNew(false);
       setForm(emptyForm);
       toast.success(t("appointments.toast.created"));
+      // La API guarda la cita fuera de horario pero avisa; si no lo mostramos,
+      // el aviso se pierde.
+      if (body.scheduleWarning) toast(String(body.scheduleWarning));
     } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
   }
 
@@ -416,29 +505,45 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       const endTime = addTime(form.startTime, form.durationMins);
       const res = await fetch(`/api/appointments/${showDetail.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, endTime }),
+        body: JSON.stringify(apptPayload()),
       });
-      if (!res.ok) throw new Error(t("appointments.toast.saveError"));
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("appointments.toast.saveError")));
       setAppts(prev => prev.map(a => a.id === showDetail.id
-        ? serializeAppt({ ...a, ...form, endTime, patient: a.patient, doctor: a.doctor })
+        ? serializeAppt({
+            ...a,
+            doctorId: form.doctorId, type: form.type, date: form.date,
+            startTime: form.startTime, endTime, durationMins: form.durationMins,
+            notes: form.notes || null, mode: form.mode,
+            doctor: doctors.find(x => x.id === form.doctorId) ?? a.doctor,
+          })
         : a));
       setShowEdit(false);
       setShowDetail(null);
       toast.success(t("appointments.toast.updated"));
+      if (body.scheduleWarning) toast(String(body.scheduleWarning));
     } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
   }
 
+  /**
+   * El cambio de estado va por /status, que es el que valida la matriz. Antes
+   * PATCHeaba `{status}` contra /api/appointments/[id] — una ruta que ni mira
+   * ese campo: respondía 200, la pantalla pintaba el cambio y cantaba éxito
+   * mientras en la base no había pasado nada (hallazgo 24).
+   */
   async function updateStatus(id: string, status: string) {
     try {
-      const res = await fetch(`/api/appointments/${id}`, {
+      const res = await fetch(`/api/appointments/${id}/status`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error(t("common.genericError"));
-      setAppts(prev => prev.map(a => a.id === id ? { ...a, status } : a));
-      setShowDetail(prev => prev?.id === id ? { ...prev, status } : prev);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("appointments.toast.updateError")));
+      const nuevo = body.appointment?.status ?? status;
+      setAppts(prev => prev.map(a => a.id === id ? { ...a, status: nuevo } : a));
+      setShowDetail(prev => prev?.id === id ? { ...prev, status: nuevo } : prev);
       toast.success(t("appointments.toast.statusUpdated"));
-    } catch { toast.error(t("appointments.toast.updateError")); }
+    } catch (err: any) { toast.error(err.message ?? t("appointments.toast.updateError")); }
   }
 
   async function sendWA(apptId: string) {
@@ -457,18 +562,34 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   // FIX: Verify API response before removing from state
   async function deleteAppt(id: string) {
-    if (!(await askConfirm({
+    // Se pide el motivo (opcional) y se manda: el schema tiene `cancelReason`,
+    // el panel de la agenda lo MUESTRA, y ninguna cancelación del staff lo
+    // guardaba, así que salía siempre vacío (hallazgo 42).
+    const answer = await askConfirmWithReason({
       title: t("appointments.cancelConfirm.title"),
       description: t("appointments.cancelConfirm.description"),
       variant: "warning",
       confirmText: t("appointments.cancelConfirm.confirm"),
       cancelText: t("appointments.cancelConfirm.cancel"),
-    }))) return;
+      withReason: true,
+      reasonLabel: "Motivo de la cancelación (opcional)",
+      reasonPlaceholder: "Ej.: el paciente pidió reagendar",
+    });
+    if (!answer.confirmed) return;
+    const reason = answer.reason?.trim();
     try {
-      const res = await fetch(`/api/appointments/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(t("appointments.toast.cancelError"));
-      setAppts(prev => prev.filter(a => a.id !== id));
-      setShowDetail(null);
+      const res = await fetch(`/api/appointments/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reason ? { reason } : {}),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("appointments.toast.cancelError")));
+      // La cita NO se borra: queda cancelada. Sacarla de la lista era una
+      // mentira que el primer refresco desmentía (el servidor la devuelve con
+      // estado "Cancelada").
+      setAppts(prev => prev.map(a => a.id === id ? { ...a, status: "CANCELLED" } : a));
+      setShowDetail(prev => prev?.id === id ? { ...prev, status: "CANCELLED" } : prev);
       toast.success(t("appointments.toast.cancelled"));
     } catch (err: any) { toast.error(err.message); }
   }
@@ -1094,14 +1215,27 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <div>
                   <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">{t("appointments.detail.changeStatus")}</div>
                   <div className="flex flex-wrap gap-2">
-                    {Object.entries(STATUS_CONFIG).map(([s,c]) => (
-                      <button key={s} onClick={() => updateStatus(appt.id,s)}
+                    {/* Solo los estados a los que la matriz deja pasar desde el
+                        actual, más el actual (marcado). Antes se pintaban los
+                        siete siempre — mismo bug que el panel de la Agenda
+                        (hallazgos 33 y 39). */}
+                    {Object.entries(STATUS_CONFIG)
+                      .filter(([s]) => s === appt.status || statusTargets(appt.status).includes(s as AppointmentStatus))
+                      .map(([s,c]) => (
+                      <button key={s}
+                        onClick={() => s === "CANCELLED" ? deleteAppt(appt.id) : updateStatus(appt.id,s)}
+                        disabled={appt.status===s}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-colors ${appt.status===s?"":"border-border hover:bg-muted"}`}
                         style={appt.status===s?{ background:c.bg, color:c.text, borderColor:c.border, fontStyle:c.italic?"italic":undefined }:undefined}>
                         <div className="w-2 h-2 rounded-full" style={{ background: c.dot }}/>{t(c.label)}
                       </button>
                     ))}
                   </div>
+                  {statusTargets(appt.status).length === 0 && (
+                    <div className="text-xs text-muted-foreground mt-2">
+                      Esta cita ya está cerrada: no hay más cambios de estado.
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="px-6 pb-5 flex gap-2">
