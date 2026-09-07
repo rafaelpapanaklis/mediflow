@@ -401,7 +401,25 @@ async function loadTargets(
   const [records, appts, recetas] = await Promise.all([
     recordIds.size > 0
       ? db.eduRecord.findMany({
-          where: { institutionId, id: { in: Array.from(recordIds) } },
+          // 🔴 N-1 · `deletedAt: null`, LA MISMA LÍNEA QUE YA LLEVAN LAS OTRAS
+          // DOS CONSULTAS DE ESTE ARCHIVO (`:890` el POST, `:1397` el
+          // desplegable). Sin ella, retirar un BORRADOR que ya se había
+          // mandado a autorizar dejaba la petición viva: la bandeja la
+          // pintaba con el resumen de una nota que nadie puede abrir, el
+          // docente la firmaba con su cédula y `loadTargetHashes` la
+          // encontraba, así que la puerta del caso la daba por cumplida
+          // sobre una página que no está en el expediente.
+          //
+          // Con el filtro, esa petición cae a TARGET_FALTA ("Ya no existe")
+          // y el hash sale null: firmarla contesta el 409 de `:1125-1133`,
+          // que hasta hoy no saltaba nunca. La otra mitad del arreglo está
+          // en `withdrawEduRecord` (expediente.ts), que cierra las PENDING
+          // al retirar; ésta es la red que cubre las que ya existían.
+          //
+          // Solo `eduRecord`: ni `EduAppointment` ni `EduPrescription`
+          // tienen baja lógica en el esquema, así que aquí no hay una
+          // tercera columna que filtrar.
+          where: { institutionId, id: { in: Array.from(recordIds) }, deletedAt: null },
           select: RECORD_TARGET_SELECT,
         })
       : Promise.resolve([] as RecordTarget[]),

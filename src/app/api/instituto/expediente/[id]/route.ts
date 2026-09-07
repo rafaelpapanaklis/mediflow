@@ -58,6 +58,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
  * que hace —la nota sale del expediente—, y el cuerpo va vacío: el id de la
  * URL es todo lo que hace falta.
  *
+ * 🔴 Y CIERRA SUS AUTORIZACIONES PENDIENTES (N-1). Retirar dejaba viva la
+ * petición de firma de esa nota: el docente la firmaba con su cédula y la
+ * puerta del caso avanzaba sobre una página que ya no está en el
+ * expediente. Las dos escrituras van juntas dentro de `withdrawEduRecord`
+ * —una transacción— porque el estado intermedio es exactamente el agujero.
+ *
  * 🔴 SOLO UN BORRADOR, y el candado vive en `withdrawEduRecord`, no aquí.
  * Es el mismo reparto que el resto del módulo: una ENVIADA está en la
  * bandeja de un docente (se devuelve primero) y una FIRMADA no se retira

@@ -349,7 +349,9 @@ export function eduOdontogramDefaultDentition(isChild: boolean): "permanent" | "
 // Los tres cuerpos están aquí, como dato puro, por dos razones:
 //   · los usan DOS caminos (el hallazgo y la nota del diente), y dos
 //     copias del payload de revivir es como se llega a que una de las dos
-//     se olvide de limpiar `deletedById`;
+//     se desincronice de la otra (hasta la Ola B, a que una limpiara
+//     `deletedById` y la otra no; hoy, a que una lo CONSERVE y la otra lo
+//     pise — ver N-3 en `eduOdontogramReviveData`);
 //   · una prueba puede aplicarlos sobre una tabla de mentira y comprobar
 //     el ciclo completo —marcar, quitar, volver a marcar— sin Postgres.
 // ═══════════════════════════════════════════════════════════════════════
@@ -378,17 +380,45 @@ export function eduOdontogramCreateData(a: EduOdontogramAuthor) {
  * REMARCAR una fila que ya existe — esté viva o dada de baja.
  *
  * Refresca quién y cuándo (un docente que reconfirma queda como autor) y
- * LIMPIA la baja: eso es "revivir". `firstRecordedAt` NO aparece en este
- * objeto, y su ausencia es la regla entera: si se escribiera, quitar y
- * volver a marcar borraría la única respuesta que queda a "¿desde cuándo
- * está marcado este diente?".
+ * levanta la baja poniendo `deletedAt` en NULL: eso es "revivir".
+ *
+ * ⛔ DOS COLUMNAS QUE **NO** APARECEN AQUÍ, Y LAS DOS AUSENCIAS SON LA REGLA:
+ *
+ *   · `firstRecordedAt` — si se escribiera, quitar y volver a marcar
+ *     borraría la única respuesta que queda a "¿desde cuándo está marcado
+ *     este diente?" (`recordedAt` se pisa a propósito en cada remarcado).
+ *
+ *   · 🔴 `deletedById` — N-3, Ola B. Hasta hoy este objeto lo ponía en NULL
+ *     "por simetría" con `deletedAt`, y eso BORRABA el rastro que H-17
+ *     existe para dejar. El escenario, entero: ortodoncia marca caries en
+ *     16-O; endodoncia la quita (queda `deletedAt` + `deletedById`);
+ *     ortodoncia la vuelve a marcar. Como el índice único de cinco
+ *     columnas NO es parcial, el upsert cae en `update` sobre LA MISMA
+ *     fila, y con `deletedById: null` en el payload no quedaba ni una
+ *     huella de que endodoncia la había quitado — que es LITERALMENTE la
+ *     pregunta que H-17 vino a contestar, y deja de contestarse en cuanto
+ *     alguien restaura el hallazgo, que es la reacción natural.
+ *
+ *     Dejando la columna fuera del `update`, una fila viva con
+ *     `deletedById` puesto significa "esto se quitó y se volvió a marcar",
+ *     y el historial de la pantalla lo dice con esas palabras. Ninguna
+ *     lectura del vertical usa `deletedById` para decidir si algo está
+ *     retirado o no: eso lo dice `deletedAt`, y solo `deletedAt` (el
+ *     `where` de las consultas, `eduEntriesToRecords`, `deletedLabel`).
+ *
+ * ⚠️ LO QUE ESTO **NO** ARREGLA, y por eso los rótulos lo dicen: se
+ * conserva QUIÉN lo quitó la última vez, no CUÁNDO (esa fecha es
+ * `deletedAt` y hay que soltarla para que la fila vuelva a estar viva) ni
+ * la cadena entera de quitados y remarcados. Una fila por llave solo
+ * puede contar un movimiento. El arreglo completo pide el índice único
+ * PARCIAL —está escrito con su SQL exacto en la cabecera de
+ * odontograma.ts— y eso es un DROP INDEX: Ola C.
  */
 export function eduOdontogramReviveData(a: EduOdontogramAuthor) {
   return {
     recordedById: a.userId,
     recordedAt: a.at,
     deletedAt: null as Date | null,
-    deletedById: null as string | null,
   };
 }
 

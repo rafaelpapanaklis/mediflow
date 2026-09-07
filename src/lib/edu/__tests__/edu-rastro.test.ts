@@ -51,9 +51,15 @@ import {
 } from "../odontograma-core";
 import {
   EDU_RECORD_WITHDRAW_DENIED,
+  EDU_RECORD_WITHDRAWN_APPROVAL_NOTE,
   eduRecordCanWithdraw,
+  eduRecordHasContent,
 } from "../expediente-core";
 import { EDU_RECORD_STATUSES } from "../types";
+import {
+  eduApprovalEffectiveStatus,
+  eduCaseGateVerdict,
+} from "../autorizaciones-core";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..");
 
@@ -202,7 +208,67 @@ test("🔴 marcar → quitar → marcar deja UNA sola fila, y sigue siendo la mi
   );
   assert.equal(tabla.vivas().length, 1, "revivir dejó la fila dada de baja");
   assert.equal(tabla.filas[0].deletedAt, null, "revivir no limpió deletedAt");
-  assert.equal(tabla.filas[0].deletedById, null, "revivir dejó puesto a quien la quitó");
+  // 🔴 N-3 · Y `deletedById` SOBREVIVE, a propósito. Ver la prueba de abajo.
+  assert.equal(
+    tabla.filas[0].deletedById,
+    DOCENTE,
+    "revivir borró a quien había pasado la goma: es la pregunta que H-17 existe para contestar",
+  );
+});
+
+test("🔴 N-3 · revivir CONSERVA a quien lo había quitado (y no la fecha, que no cabe)", () => {
+  // El escenario del hallazgo, entero: ortodoncia marca, endodoncia quita,
+  // ortodoncia vuelve a marcar. Antes de N-3 el `update` del upsert escribía
+  // `deletedById: null` "por simetría" con `deletedAt`, y en la base quedaba
+  // un hallazgo vivo firmado por ortodoncia y NINGUNA huella de que
+  // endodoncia lo había borrado — o sea, exactamente la pregunta que H-17
+  // vino a contestar, sin respuesta en cuanto alguien restaura el hallazgo,
+  // que es la reacción natural.
+  const tabla = new TablaFalsa();
+  tabla.upsert(
+    LLAVE,
+    eduOdontogramCreateData({ userId: ALUMNO, at: T0 }),
+    eduOdontogramReviveData({ userId: ALUMNO, at: T0 }),
+  );
+  tabla.bajaSiVive(LLAVE, eduOdontogramBajaData({ userId: DOCENTE, at: T1 }));
+  tabla.upsert(
+    LLAVE,
+    eduOdontogramCreateData({ userId: ALUMNO, at: T2 }),
+    eduOdontogramReviveData({ userId: ALUMNO, at: T2 }),
+  );
+
+  const fila = tabla.filas[0];
+  assert.equal(fila.deletedAt, null, "la fila tiene que quedar VIVA: es lo que se acaba de marcar");
+  assert.equal(fila.deletedById, DOCENTE, "se perdió quién pasó la goma");
+  assert.equal(fila.recordedById, ALUMNO, "remarcar tiene que refrescar el autor del hallazgo");
+
+  // Y LO QUE NO CABE, fijado también: la FECHA de esa baja se pierde, porque
+  // `deletedAt` es justo la columna que hay que soltar para que la fila
+  // vuelva a estar viva, y no queda dónde guardarla. Se comprueba por la
+  // FORMA del payload: si algún día crece o mengua, hay que volver a mirar
+  // los dos rótulos de la pantalla que dicen hasta dónde llega el rastro.
+  assert.deepEqual(
+    Object.keys(eduOdontogramReviveData({ userId: ALUMNO, at: T2 })).sort(),
+    ["deletedAt", "recordedAt", "recordedById"],
+    "el payload de revivir cambió de forma: revisa los rótulos de odontograma-screen.tsx",
+  );
+});
+
+test("N-3 · una fila NUEVA nace sin rastro de baja (nadie la ha quitado nunca)", () => {
+  // El otro lado de la moneda: conservar `deletedById` al revivir no puede
+  // significar que una fila recién creada lo herede de nada.
+  const crear = eduOdontogramCreateData({ userId: ALUMNO, at: T0 });
+  assert.equal(crear.deletedAt, null);
+  assert.equal(crear.deletedById, null, "una fila nueva no se ha quitado nunca");
+
+  // Y el payload de revivir NO menciona la columna: no la pisa ni con null.
+  const revivir = eduOdontogramReviveData({ userId: ALUMNO, at: T2 });
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(revivir, "deletedById"),
+    false,
+    "el update del upsert vuelve a tocar `deletedById`: eso borra el rastro (N-3)",
+  );
+  assert.equal(revivir.deletedAt, null, "revivir SÍ tiene que soltar `deletedAt`");
 });
 
 test("🔴 `firstRecordedAt` sobrevive al ciclo: es la única respuesta a «¿desde cuándo?»", () => {
@@ -554,4 +620,199 @@ test("una nota retirada no se puede mandar a autorizar", () => {
     /where: \{ institutionId, caseId: caso\.id, deletedAt: null \}/,
     "el desplegable ofrecería una opción que el POST después rechaza",
   );
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 7 · WS2-T4 (afinado) · LO QUE LA AUDITORÍA DE LA OLA A+B DEJÓ ABIERTO
+ *
+ * Cinco hallazgos, y el primero era el que bloqueaba el push: retirar un
+ * BORRADOR dejaba viva su autorización PENDING, así que el docente firmaba
+ * con su cédula una nota que ya no está en el expediente y la puerta del
+ * caso la daba por cumplida.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+const AUTORIZACIONES = "src/lib/edu/autorizaciones.ts";
+const PANEL_DIENTE = "src/components/edu/odontograma/DetailPanel.tsx";
+
+test("🔴 N-1 · la bandeja no puede resolver una nota RETIRADA", () => {
+  const src = fuente(AUTORIZACIONES);
+  assert.match(
+    src,
+    /where: \{ institutionId, id: \{ in: Array\.from\(recordIds\) \}, deletedAt: null \}/,
+    "`loadTargets` vuelve a traer notas retiradas: la bandeja las pinta con su resumen, " +
+      "`loadTargetHashes` les calcula hash y la puerta del caso las da por firmadas",
+  );
+});
+
+test("🔴 N-1 · retirar la nota CIERRA sus peticiones PENDING, en la misma transacción", () => {
+  const cuerpo = cuerpoDe(fuente(EXPEDIENTE), "withdrawEduRecord");
+
+  assert.match(cuerpo, /prisma\.\$transaction/, "las dos escrituras tienen que ir juntas");
+  assert.match(cuerpo, /eduCaseApproval\.updateMany/, "no se cierra ninguna autorización");
+  assert.match(cuerpo, /targetType: "EduRecord"/);
+  assert.match(cuerpo, /status: "PENDING"/, "el where tiene que acotar a las que esperan firma");
+  assert.match(
+    cuerpo,
+    /status: "CHANGES_REQUESTED"/,
+    "es el mismo estado con el que el reenvío cierra la anterior: nadie la decidió",
+  );
+  assert.match(cuerpo, /decisionNote: EDU_RECORD_WITHDRAWN_APPROVAL_NOTE/);
+
+  // 🔴 Y NO SE INVENTA UN DECISOR. Poner `decidedById` aquí le atribuiría a
+  // alguien —al alumno que retiró— una decisión de docente que no tomó.
+  assert.doesNotMatch(
+    cuerpo,
+    /decidedById/,
+    "se le atribuyó a alguien la decisión de una petición que cerró un hecho, no una persona",
+  );
+
+  // Y NO SE BORRA NADA: ni la nota ni la petición.
+  assert.doesNotMatch(cuerpo, /delete(Many)?\(/, "retirar volvió a borrar filas");
+});
+
+test("🔴 N-1 · EJECUTADA · una firma sobre una nota retirada NO abre la puerta del caso", () => {
+  // Con `deletedAt: null` en `loadTargets`, la nota retirada no se
+  // encuentra y su hash de hoy sale NULL. Esto comprueba lo que el resto
+  // del vertical hace con ese null, que es la mitad que de verdad importa:
+  // la firma deja de valer y el caso NO avanza de etapa.
+  const firmada = { status: "APPROVED" as const, contentHash: "a".repeat(64), isEmergency: false };
+
+  assert.equal(
+    eduApprovalEffectiveStatus(firmada, "a".repeat(64)),
+    "APPROVED",
+    "con la nota viva y sin tocar, la firma tiene que seguir valiendo",
+  );
+  assert.equal(
+    eduApprovalEffectiveStatus(firmada, null),
+    "EXPIRED",
+    "una firma sobre algo que ya no está en el expediente seguía contando como autorización",
+  );
+
+  // Y la puerta, con esa autorización ya vencida, no deja pasar.
+  const puerta = eduCaseGateVerdict("PLAN", [
+    { status: eduApprovalEffectiveStatus(firmada, null), isEmergency: false },
+  ]);
+  assert.equal(puerta.ok, false, "el caso avanzaba de etapa sobre una nota que nadie puede abrir");
+
+  // La otra mitad del arreglo: retirar CIERRA la petición, así que ni
+  // siquiera llega a firmarse. Una CHANGES_REQUESTED tampoco abre la puerta.
+  const cerrada = eduCaseGateVerdict("PLAN", [
+    { status: "CHANGES_REQUESTED", isEmergency: false },
+  ]);
+  assert.equal(cerrada.ok, false);
+});
+
+test("N-1 · el motivo que queda escrito en la petición lo lee una persona", () => {
+  assert.ok(EDU_RECORD_WITHDRAWN_APPROVAL_NOTE.length > 30);
+  assert.match(EDU_RECORD_WITHDRAWN_APPROVAL_NOTE, /retir/i, "no dice qué pasó con la nota");
+  assert.match(
+    EDU_RECORD_WITHDRAWN_APPROVAL_NOTE,
+    /nadie/i,
+    "tiene que decir que no la decidió nadie: la fila se cierra sin `decidedById`",
+  );
+});
+
+test("🔴 H-23 · el SERVIDOR exige contenido al crear la nota, no solo el botón", () => {
+  const cuerpo = cuerpoDe(fuente(EXPEDIENTE), "createEduRecord");
+  assert.match(
+    cuerpo,
+    /eduRecordHasContent/,
+    "un POST a mano seguía creando una nota sin una sola palabra, que después hay que RETIRAR",
+  );
+  assert.match(cuerpo, /EDU_RECORD_EMPTY_DENIED/);
+});
+
+test("🔴 H-23 · vaciar una nota ENVIADA rebota aunque el PATCH no traiga `status`", () => {
+  const cuerpo = cuerpoDe(fuente(EXPEDIENTE), "updateEduRecord");
+
+  // El chequeo se juzga por el estado en el que la nota VA A QUEDAR, no por
+  // el que trae el PATCH: vivía dentro del `if (input.status !== undefined)`
+  // y por eso un "Guardar" con los cinco campos en blanco pasaba limpio.
+  assert.match(
+    cuerpo,
+    /if \(siguiente !== "BORRADOR"\)/,
+    "el chequeo de nota vacía volvió a colgar del `status` que trae el PATCH",
+  );
+  assert.doesNotMatch(
+    cuerpo,
+    /if \(st !== "BORRADOR"\)/,
+    "el chequeo sigue dentro del bloque que solo corre cuando el PATCH manda `status`",
+  );
+  assert.match(cuerpo, /eduRecordHasContent\(final\)/);
+
+  // Un BORRADOR SÍ se puede quedar vacío: es un papel a medio escribir, y
+  // para el que nunca debió existir está "Retirar".
+  assert.equal(
+    eduRecordHasContent({ subjetivo: null, objetivo: null, analisis: null, plan: null, diagnostico: null }),
+    false,
+  );
+  assert.equal(eduRecordHasContent({ subjetivo: "   ", diagnostico: "caries" }), true);
+});
+
+test("🔴 N-4 · el dibujo se resincroniza con `entries`, y no mientras se guarda", () => {
+  const src = fuente(PANTALLA_ODO);
+  assert.match(
+    src,
+    /useEffect\(\(\) => \{[\s\S]*?setRecords\(eduEntriesToRecords\(entries\)\);[\s\S]*?\}, \[entries\]\)/,
+    "«Actualizar» volvía a refrescar solo la lista: el dibujo se quedaba con lo de hace una hora",
+  );
+  assert.match(
+    src,
+    /if \(guardandoRef\.current > 0\) return;/,
+    "sin el guardia, una foto del servidor tomada a media escritura borra del dibujo un " +
+      "hallazgo que sí se guardó",
+  );
+});
+
+test("🔴 H-22 · la goma por cara deshace SOLO lo que falló", () => {
+  const src = fuente(PANTALLA_ODO);
+  assert.match(
+    src,
+    /\(\) => restaurar\(fdi, cara, condition\)/,
+    "las N peticiones de la goma volvieron a compartir el mismo deshacer: si falla la " +
+      "tercera, se repintan las tres, incluidas las dos que sí se dieron de baja",
+  );
+  // `restaurar` reinyecta sobre el estado de ESE momento, no sobre una foto
+  // vieja: si volviera a `antes`, el arreglo sería el mismo fallo con otro nombre.
+  assert.match(src, /setRecords\(\(actual\) =>\s*\n?\s*clonar\(actual, fdi,/);
+});
+
+test("🔴 N-14 · en solo lectura, la rejilla de caras y la mini-paleta se apagan con motivo", () => {
+  const src = fuente(PANEL_DIENTE);
+
+  const rejilla = src.slice(src.indexOf("odo-surf-btn"), src.indexOf("DetailPalette"));
+  assert.match(rejilla, /disabled=\{!canEdit\}/, "los botones de cara se pulsaban y no pasaba nada");
+  assert.match(rejilla, /title=\{canEdit \? undefined : disabledReason/);
+
+  assert.match(
+    src,
+    /<DetailPalette[\s\S]*?canEdit=\{canEdit\}[\s\S]*?disabledReason=\{disabledReason\}/,
+    "la mini-paleta seguía ofreciendo pinceles que no se pueden usar",
+  );
+  const chips = src.slice(src.indexOf("odo-chip"));
+  assert.match(chips, /disabled=\{!canEdit\}/);
+});
+
+test("N-3 · los rótulos del odontograma ya no prometen más de lo que hay", () => {
+  // La promesa vieja era "quitar no borra, deja constancia de quién lo
+  // quitó", a secas. Hoy es verdad para lo retirado Y para lo que se
+  // remarcó — pero de esto último no queda la fecha, y el rótulo lo dice.
+  const pantalla = crudo(PANTALLA_ODO);
+  assert.ok(
+    !pantalla.includes("deja constancia de quién lo quitó"),
+    "el rótulo sigue prometiendo una constancia que se pierde al remarcar",
+  );
+  assert.match(
+    pantalla,
+    /se conserva quién pasó la goma, no la fecha en que lo hizo/,
+    "falta decir hasta dónde llega el rastro",
+  );
+
+  // Y el índice exacto de la Ola C queda anotado donde se va a buscar.
+  const servidor = crudo(ODONTOGRAMA);
+  assert.match(servidor, /DROP INDEX IF EXISTS "edu_odontogram_hallazgo_key"/);
+  assert.match(servidor, /WHERE "deletedAt" IS NULL/);
+  // H-17, la otra mitad que no cabe: acotar la escritura al CASO pide una
+  // columna que la tabla no tiene. Queda dicho, no a medias.
+  assert.match(servidor, /no tiene `caseId`/);
 });

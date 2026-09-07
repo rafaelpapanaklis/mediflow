@@ -10,6 +10,18 @@
  * "patients", caja vería el odontograma de la escuela entera: para caja,
  * "patients" es `all` y "cases" es `none`.
  *
+ * ⚠️ Y ES DEL PACIENTE TAMBIÉN AL ESCRIBIR — H-17, LA MITAD QUE NO CABE EN
+ * ESTA OLA. `requireClinicalPatient` deja entrar a cualquiera que pueda
+ * abrir el expediente de ese paciente, así que un alumno con un caso vivo
+ * puede dar de baja lo que marcó otro alumno con OTRO caso vivo del mismo
+ * paciente. Acotar la escritura al caso de quien escribe NO SE PUEDE HOY:
+ * `EduOdontogramEntry` no tiene `caseId` —ninguna de sus columnas dice de
+ * qué caso salió el hallazgo— y añadirla es una columna, un backfill y una
+ * decisión clínica que no es de esta casilla (un hallazgo es de la boca,
+ * no del caso: dos casos vivos miran la misma caries). Queda para la Ola
+ * C, junto con el índice parcial de N-3. Lo que SÍ hay hoy es el rastro:
+ * quien lo quitó queda escrito y sobrevive al remarcado.
+ *
  * 🔴 UN HALLAZGO SIN AUTOR NO SIRVE PARA NADA. Cada fila guarda quién lo
  * marcó (`recordedById`, de la SESIÓN) y cuándo. Es parte del expediente:
  * "el 16 tiene una corona" sin firma no contesta ninguna pregunta.
@@ -19,7 +31,7 @@
  * pasaba por encima de lo que marcó el de ortodoncia y no quedaba ni el
  * rastro de que existió. Ahora quitar es `deletedAt` + `deletedById`, las
  * lecturas del dibujo filtran `deletedAt IS NULL` y el historial enseña
- * las dos caras.
+ * también lo retirado.
  *
  * ⛔ EL DETALLE QUE ROMPE ESTO SI SE OLVIDA: el índice único
  * `edu_odontogram_hallazgo_key` es de CINCO columnas y NO es parcial
@@ -28,7 +40,47 @@
  * retirado tiene que REVIVIR esa misma fila —`deletedAt = NULL` y el
  * `recordedBy/At` de hoy— y no insertar una segunda, que chocaría contra
  * el índice. El upsert de las cinco columnas ya cae solo en esa rama; lo
- * único que hay que no hacer es tocar `firstRecordedAt` al revivir.
+ * único que hay que no hacer es tocar `firstRecordedAt` ni `deletedById`
+ * al revivir.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 N-3 · HASTA DÓNDE LLEGA EL RASTRO HOY, Y QUÉ FALTA (Ola C)
+ *
+ * UNA FILA POR LLAVE ES UNA FILA POR HALLAZGO, NO POR MOVIMIENTO. Esa es
+ * la frase entera. El historial se alimenta de estas mismas filas, así
+ * que de un hallazgo que se marca, se quita y se vuelve a marcar solo
+ * puede contar UN estado, no la secuencia.
+ *
+ * Lo que SÍ contesta hoy, sin una línea de SQL:
+ *   · un hallazgo retirado y no remarcado → quién lo quitó y cuándo;
+ *   · un hallazgo retirado y REMARCADO   → quién lo había quitado
+ *     (`deletedById` sobrevive al revivir; ver `eduOdontogramReviveData`).
+ *
+ * Lo que NO contesta, y por eso los rótulos de la pantalla no lo prometen:
+ *   · CUÁNDO se quitó, si después se remarcó — esa fecha es `deletedAt` y
+ *     hay que soltarla para que la fila vuelva a estar viva;
+ *   · la cadena completa (quitado por A, remarcado por B, quitado por C…):
+ *     solo queda el último que pasó la goma.
+ *
+ * EL ARREGLO DE VERDAD, para la Ola C, es que dos filas del mismo
+ * hallazgo puedan coexistir cuando una está retirada. Son dos sentencias,
+ * y llevan DROP INDEX, que es exactamente lo que la Ola B no hace:
+ *
+ *     DROP INDEX IF EXISTS "edu_odontogram_hallazgo_key";
+ *     CREATE UNIQUE INDEX IF NOT EXISTS "edu_odontogram_hallazgo_vivo_key"
+ *       ON "edu_odontogram_entries"
+ *          ("institutionId", "patientId", "tooth", "surface", "condition")
+ *       WHERE "deletedAt" IS NULL;
+ *
+ * Con ese índice, `setEduOdontogramFinding` deja de necesitar el upsert
+ * que revive y pasa a INSERTAR una fila nueva por cada marcaje, y el
+ * historial cuenta la secuencia entera. Es un cambio de escritura, no
+ * solo de índice: no se hace a medias.
+ *
+ * ⚠️ El índice PARCIAL de `edu_case_approvals` (una PENDING por fila
+ * apuntada) ya existe en la base y Prisma no sabe expresarlo: si algún
+ * día se corre `prisma migrate diff`, va a proponer borrar los dos. NO.
+ * ═══════════════════════════════════════════════════════════════════════
  */
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -130,6 +182,14 @@ function toRow(e: EntryPayload, timeZone: string): EduOdontogramEntryRow {
     recordedAt: e.recordedAt.toISOString(),
     recordedLabel: stampLabel(e.recordedAt, timeZone),
 
+    // 🔴 N-3 · `deletedAt` y `deletedById` YA NO VAN SIEMPRE JUNTOS, y la
+    // combinación de los dos es la que hay que leer:
+    //   · los dos puestos       → está retirado ahora mismo;
+    //   · `deletedById` a solas → se quitó y se volvió a marcar. Revivir
+    //     conserva a quien pasó la goma; la fecha se pierde, porque
+    //     `deletedAt` es justo la columna que hay que soltar para que la
+    //     fila vuelva a estar viva.
+    //   · ninguno              → nunca se ha quitado.
     deletedAt: e.deletedAt ? e.deletedAt.toISOString() : null,
     deletedById: e.deletedById,
     // Un hallazgo dado de baja por alguien cuya cuenta se desactivó después
@@ -300,11 +360,15 @@ export interface EduOdontogramWriteInput {
  * NULL y el autor de hoy. Un `create` ahí chocaría contra el índice y la
  * escritura fallaría con P2002 delante de quien está marcando una boca.
  *
- * ⛔ `firstRecordedAt` NO va en el `update`. Es la única respuesta que
+ * ⛔ NI `firstRecordedAt` NI `deletedById` VAN EN EL `update`, y las dos
+ * ausencias son deliberadas. `firstRecordedAt` es la única respuesta que
  * queda a "¿desde cuándo está marcado este diente?" —`recordedAt` se pisa
  * en cada remarcado, a propósito—, y escribirlo al revivir haría que
- * quitar y volver a marcar la borrara. Por eso el cuerpo del update es
- * `eduOdontogramReviveData`, que no la incluye.
+ * quitar y volver a marcar la borrara. `deletedById` es la respuesta a
+ * "¿quién pasó la goma sobre lo que yo marqué?" (N-3): ponerlo en NULL al
+ * revivir borraba justo lo que H-17 vino a dejar escrito. Por eso el
+ * cuerpo del update es `eduOdontogramReviveData`, que no incluye ninguna
+ * de las dos.
  */
 export async function setEduOdontogramFinding(
   ctx: EduClinicaContext,

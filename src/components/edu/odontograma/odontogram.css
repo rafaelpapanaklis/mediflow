@@ -222,23 +222,30 @@
 .odo-app .odo-btn { flex: 1; border: 1.5px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 13px; font-weight: 700; padding: 10px; border-radius: 10px; }
 @media (hover: hover) and (pointer: fine) { .odo-app .odo-btn.danger:hover { border-color: #f0b4b4; color: #d8504f; background: #fdf3f3; } }
 
-/* ── H-21 · SOLO LECTURA, dicho en voz alta ──────────────────────────────
-   Sin `odontograma.edit`, los tres controles de escritura del panel (la ×
-   de cada hallazgo, «Limpiar diente» y la nota) se DESHABILITAN en vez de
-   esconderse, y debajo se escribe el motivo. Antes se pintaban los tres
-   enteros y los tres eran no-ops silenciosos: se pulsaba y no pasaba nada.
+/* ── H-21 + N-14 · SOLO LECTURA, dicho en voz alta ───────────────────────
+   Sin `odontograma.edit`, los CINCO controles de escritura del panel se
+   DESHABILITAN en vez de esconderse, y debajo se escribe el motivo. Antes
+   se pintaban enteros y todos eran no-ops silenciosos: se pulsaba y no
+   pasaba nada.
 
-   El `:hover` de los dos botones se apaga aparte: sin esto, un botón
-   apagado sigue tiñéndose de rojo al pasar el ratón y parece que responde. */
+   Los tres de H-21: la × de cada hallazgo, «Limpiar diente» y la nota.
+   Los dos de N-14, que se habían quedado fuera: la rejilla de caras
+   (`.odo-surf-btn`) y los chips de la mini-paleta (`.odo-chip`).
+
+   El `:hover` se apaga aparte en los cuatro botones: sin esto, un botón
+   apagado sigue tiñéndose al pasar el ratón y parece que responde. */
 .odo-app .odo-find-rm:disabled,
 .odo-app .odo-btn:disabled,
-.odo-app .odo-note:disabled {
+.odo-app .odo-note:disabled,
+.odo-app .odo-surf-btn:disabled,
+.odo-app .odo-chip:disabled {
   opacity: .55;
   cursor: not-allowed;
 }
 @media (hover: hover) and (pointer: fine) {
   .odo-app .odo-find-rm:disabled:hover { background: transparent; color: var(--ink-3); }
   .odo-app .odo-btn.danger:disabled:hover { border-color: var(--line); color: var(--ink-2); background: var(--card); }
+  .odo-app .odo-chip:disabled:hover { border-color: var(--line); background: var(--card); transform: none; }
 }
 .odo-app .odo-note:disabled { background: var(--line-2); }
 

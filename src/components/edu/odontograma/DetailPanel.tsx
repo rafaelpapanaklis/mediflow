@@ -37,11 +37,16 @@ const TYPE_NAMES: Record<string, Record<"es" | "en", string>> = {
 };
 
 /**
- * DetailPanel — slide-over for the selected tooth. Ported 1:1 from design
+ * DetailPanel — slide-over for the selected tooth. Portado de design
  * jsx/detail.jsx: 3D/2D view toggle, surface grid, mini palette
  * (DetailPalette), recorded findings (with remove), clinical notes and
  * clear/close actions. Drives state through the contract callbacks
  * onApply / onRemove / onNote / onPick / onClose (DetailPanelProps).
+ *
+ * ⚠️ YA NO ES 1:1 CON EL DISEÑO, y decirlo aquí ahorra la comparación: el
+ * instituto le añadió `canEdit` + `disabledReason` (H-21 · N-14), que
+ * apagan los cinco controles de escritura cuando falta `odontograma.edit`
+ * y escriben el motivo debajo. Todo lo demás sigue siendo el original.
  */
 export function DetailPanel({
   fdi, lang, numbering, record, brush,
@@ -154,7 +159,13 @@ export function DetailPanel({
             </div>
           )}
 
-          {/* surfaces */}
+          {/* surfaces
+              🔴 N-14 · SE APAGAN CON EL MOTIVO, como los otros cuatro.
+              H-21 dejó fuera estos botones y la mini-paleta de abajo: en
+              solo lectura se pulsaban, el contenedor salía por su
+              `if (!canEdit) return`, y no pasaba nada — ni cambio, ni
+              error, ni una palabra que dijera por qué. El motivo escrito
+              vive al final del panel, que es donde ya estaba. */}
           <div className="odo-section-t">{t.surfaces}</div>
           <div className="odo-surf-grid">
             {surfaceLetters.map((letter) => {
@@ -165,6 +176,8 @@ export function DetailPanel({
                   className={"odo-surf-btn" + (col ? " has" : "")}
                   style={col ? { background: col } : {}}
                   onClick={() => applyFace(letter)}
+                  disabled={!canEdit}
+                  title={canEdit ? undefined : disabledReason ?? undefined}
                 >
                   {letter}
                   <small style={col ? { color: "rgba(255,255,255,.85)" } : {}}>
@@ -175,9 +188,19 @@ export function DetailPanel({
             })}
           </div>
 
-          {/* mini palette */}
+          {/* mini palette — N-14: los chips eligen pincel, y sin
+              `odontograma.edit` no hay pincel que elegir. Las pestañas de
+              especialidad SÍ se quedan vivas a propósito: solo cambian qué
+              hallazgos se listan, que en solo lectura sigue sirviendo para
+              leer el catálogo. */}
           <div className="odo-section-t">{t.brush}</div>
-          <DetailPalette lang={lang} brush={brush} onPick={onPick} />
+          <DetailPalette
+            lang={lang}
+            brush={brush}
+            onPick={onPick}
+            canEdit={canEdit}
+            disabledReason={disabledReason}
+          />
 
           {/* findings */}
           <div className="odo-section-t">{t.history}</div>
@@ -239,9 +262,22 @@ export function DetailPanel({
 
 /**
  * DetailPalette — compact specialty tabs + finding chips inside the panel.
- * Ported 1:1 from design jsx/detail.jsx; reuses the shared ConditionSwatch.
+ * Portado de design jsx/detail.jsx; reuses the shared ConditionSwatch.
+ * Tampoco es 1:1: los chips llevan `disabled` desde N-14.
  */
-function DetailPalette({ lang, brush, onPick }: { lang: Lang; brush: string | null; onPick: (id: string) => void }) {
+function DetailPalette({
+  lang,
+  brush,
+  onPick,
+  canEdit = true,
+  disabledReason = null,
+}: {
+  lang: Lang;
+  brush: string | null;
+  onPick: (id: string) => void;
+  canEdit?: boolean;
+  disabledReason?: string | null;
+}) {
   const [active, setActive] = useState<string>("diagnostic");
   const conds = CONDITIONS.filter((c) => c.group === active);
   const gc = GROUP_COLOR[active];
@@ -267,6 +303,8 @@ function DetailPalette({ lang, brush, onPick }: { lang: Lang; brush: string | nu
             className={"odo-chip" + (brush === c.id ? " on" : "")}
             style={brush === c.id ? { borderColor: gc, boxShadow: `0 0 0 2px ${gc}33` } : {}}
             onClick={() => onPick(c.id)}
+            disabled={!canEdit}
+            title={canEdit ? undefined : disabledReason ?? undefined}
           >
             <span className="odo-chip-ic"><ConditionSwatch cond={c} /></span>
             <span className="odo-chip-lb">{c[lang]}</span>
