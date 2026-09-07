@@ -103,7 +103,7 @@ export function CrmTextosElegir({
               style={{
                 alignSelf: "center",
                 fontSize: 10.5,
-                color: "var(--text-4)",
+                color: "var(--crm-text-sec)",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 marginLeft: sugeridos.length > 0 ? 4 : 0,
@@ -177,7 +177,7 @@ export function CrmTextosElegir({
                 Abrir WhatsApp
               </a>
             ) : (
-              <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>
+              <span style={{ fontSize: 11.5, color: "var(--crm-text-sec)" }}>
                 Sin un número de 10 dígitos no se puede abrir WhatsApp.
               </span>
             )}
@@ -198,7 +198,7 @@ export function CrmTextosElegir({
             </Link>
           </div>
 
-          <p style={{ margin: 0, fontSize: 11, color: "var(--text-4)", lineHeight: 1.45 }}>
+          <p style={{ margin: 0, fontSize: 11, color: "var(--crm-text-sec)", lineHeight: 1.45 }}>
             Abrir WhatsApp no manda nada: abre la app en este equipo con el texto puesto. A
             diferencia de los botones de contacto de la ficha, esto no anota nada en la bitácora
             — anótalo tú si acabas mandándolo.
@@ -238,7 +238,7 @@ function ChipTexto({
         whiteSpace: "nowrap",
         border: `1px solid ${activo ? "var(--brand)" : "var(--border-soft)"}`,
         background: activo ? "var(--brand-soft)" : "var(--bg-elev-2)",
-        color: activo ? "var(--text-1)" : atenuado ? "var(--text-4)" : "var(--text-2)",
+        color: activo ? "var(--text-1)" : atenuado ? "var(--crm-text-sec)" : "var(--text-2)",
       }}
     >
       {t.title}

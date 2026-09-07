@@ -43,6 +43,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   CalendarClock,
+  DatabaseZap,
   Flame,
   Handshake,
   Plus,
@@ -63,6 +64,7 @@ import {
   crmFiltrosLimpios,
   crmHayFiltros,
   crmSemaforo,
+  crmVistaARecordar,
   CRM_ORIGEN_AFILIADOS,
   type CrmFiltros,
   type CrmOrden,
@@ -86,6 +88,8 @@ import {
   CrmVerticalChip,
   crmFmtMxn,
 } from "./crm-ui";
+import { crmGuardarVista, crmLeerVistaGuardada } from "./crm-vista-guardada";
+import estilos from "./crm.module.css";
 
 const RUTA = "/admin/crm";
 
@@ -117,6 +121,7 @@ export function CrmClient({
     recomendacionesSinTocar,
     escaneoTruncado,
     tableroTruncado,
+    bitacoraNoDisponible,
   } = listado;
 
   // Espejo local de la página que mandó el servidor, sólo para el pintado
@@ -202,6 +207,48 @@ export function CrmClient({
     (cambios: Partial<CrmFiltros>) => navegar(crmFiltrosCon(filtros, cambios)),
     [filtros, navegar],
   );
+
+  // ── La vista elegida se recuerda ──────────────────────────────────────
+  //
+  // Al ABRIR: si la URL no dice vista y hay una guardada de la última vez,
+  // se escribe en la URL. Se escribe, y no se pinta y calla, para que la
+  // barra de direcciones siga diciendo la verdad y para que `f.vista`
+  // siga siendo la única fuente. `replace` y no `push`: recordar una
+  // preferencia no es un paso del historial que el botón de atrás tenga
+  // que deshacer.
+  //
+  // La página se conserva a mano en vez de pasar por `crmFiltrosCon`, que
+  // vuelve a la 1 ante cualquier cambio que no sea de página: abrir un
+  // enlace con `?pag=3` no puede llevarte a la 1 por haber recordado una
+  // vista.
+  //
+  // Depende de `filtros.vista` y NO se dispara una sola vez al montar.
+  // Este componente no se vuelve a montar entre navegaciones —es la misma
+  // ruta—, así que con un disparo único pasaba esto: abres, se recuerda el
+  // tablero; pulsas un KPI, que salta a la lista; vuelves a "CRM de
+  // ventas" desde el menú, que es `/admin/crm` pelado... y como el efecto
+  // ya había corrido, abría en lista. La preferencia sólo volvía
+  // recargando la página entera.
+  //
+  // No cicla: en cuanto el `replace` mete la vista en la URL,
+  // `crmVistaARecordar` devuelve `null` y no hay segundo viaje.
+  useEffect(() => {
+    const aplicar = crmVistaARecordar(filtros, crmLeerVistaGuardada());
+    if (!aplicar) return;
+    router.replace(`${RUTA}${crmFiltrosAQuery({ ...filtros, vista: aplicar })}`, { scroll: false });
+    // `filtros` entero se lee a propósito dentro del efecto: lo que decide
+    // si hay que hacer algo es su `vista`, y el resto sólo se usa para
+    // reconstruir la URL del render en el que eso cambió.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros.vista]);
+
+  // Al ELEGIR: se guarda lo que se pulsa en el CONMUTADOR de vista, y
+  // sólo eso. No vale mirar `filtros.vista`: ahí acaba también la vista
+  // que trae un enlace que alguien te manda (`?vista=lista`) y la que
+  // ponen los KPI al saltar a la lista, y ninguna de las dos es una
+  // elección tuya. Si se guardara cualquiera de ellas, abrir el enlace de
+  // un compañero te cambiaría la vista con la que abres cada mañana —
+  // que es justo la molestia que esto viene a quitar.
 
   // ── Mutaciones ────────────────────────────────────────────────────────
 
@@ -305,7 +352,10 @@ export function CrmClient({
   const hayFiltros = crmHayFiltros(filtros);
 
   return (
-    <div>
+    // `estilos.raiz` no pinta nada por sí solo: declara los tres tokens de
+    // color del CRM (ver crm.module.css) para todo lo que cuelga de aquí,
+    // modales incluidos.
+    <div className={estilos.raiz}>
       {/* ── Encabezado ─────────────────────────────────────────────── */}
       <div
         style={{
@@ -528,8 +578,30 @@ export function CrmClient({
               totalGeneral={totalGeneral}
               cargando={cargando}
               alCambiar={navegar}
+              alElegirVista={crmGuardarVista}
             />
           </div>
+
+          {/* Media migración aplicada: está `crm_prospects` pero no
+              `crm_activities`. Antes esto no se veía por ninguna parte —
+              todas las filas decían "sin bitácora" como si se hubiera
+              comprobado, y el FaltaElSql de page.tsx sólo salta cuando
+              falla la tabla principal. */}
+          {bitacoraNoDisponible && (
+            <Aviso>
+              <DatabaseZap
+                size={14}
+                aria-hidden
+                style={{ verticalAlign: "-2px", marginRight: 6, color: "var(--warning)" }}
+              />
+              No se pudo leer la bitácora, así que <strong>no se sabe</strong> cuántas anotaciones
+              tiene cada prospecto — donde antes salía un número ahora sale «—». Lo más probable es
+              que falte terminar de aplicar <code>sql/crm-dalecontrol.sql</code>: crea{" "}
+              <strong className="mono">dos</strong> tablas, <code>crm_prospects</code> y{" "}
+              <code>crm_activities</code>, y ésta es la segunda. Todo lo demás del CRM funciona
+              igual; el detalle del error está en los logs del servidor.
+            </Aviso>
+          )}
 
           {/* Nunca se esconden filas en silencio: si la búsqueda tuvo que
               cortar el barrido, se dice con los dos números y con qué
@@ -614,7 +686,7 @@ export function CrmClient({
             </CardNew>
           )}
 
-          <p style={{ fontSize: 11.5, color: "var(--text-4)", marginTop: 12, maxWidth: 760 }}>
+          <p style={{ fontSize: 11.5, color: "var(--crm-text-sec)", marginTop: 12, maxWidth: 760 }}>
             Los botones de WhatsApp y llamar abren la app en este equipo y dejan la constancia en
             la bitácora del prospecto: DaleControl no manda nada por su cuenta desde aquí.
           </p>
@@ -859,8 +931,12 @@ function FilaHoy({
         </Link>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 2 }}>
           <CrmVerticalChip vertical={p.vertical} />
-          {p.city && <span style={{ fontSize: 11, color: "var(--text-4)" }}>{p.city}</span>}
-          {frio && <span style={{ fontSize: 11, color: "var(--warning)" }}>enfriándose</span>}
+          {p.city && <span style={{ fontSize: 11, color: "var(--crm-text-sec)" }}>{p.city}</span>}
+          {frio && (
+            <span style={{ fontSize: 11, color: "var(--crm-warning-text)", fontWeight: 600 }}>
+              enfriándose
+            </span>
+          )}
         </div>
       </div>
 

@@ -1,0 +1,277 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   /admin/crm — lo que no se puede escribir con `style={{}}`.
+
+   Este archivo existe por tres cosas que un estilo en línea no sabe hacer,
+   y por ninguna más. El resto de la pantalla sigue con sus estilos en
+   línea, que es como está escrito todo /admin.
+
+   1) MODO OSCURO. Un `style={{}}` no puede tener dos valores. El patrón de
+      la casa para esto es `:global(.dark)` desde un módulo — el mismo que
+      usan live-public.module.css y el resto.
+   2) EL FOCO Y EL PASO DEL RATÓN de la cabecera de columna, que ahora es
+      un botón de verdad.
+   3) `[hidden]`. La regla del navegador es `display: none`, pero un
+      `display: flex` EN LÍNEA le gana, así que un contenedor oculto con
+      estilo en línea se sigue viendo. Aquí el display va en la clase y
+      `[hidden]` vuelve a mandar.
+
+   ── LOS TRES TOKENS DE COLOR, Y POR QUÉ SON DEL CRM Y NO GLOBALES ──────
+   La auditoría midió `--text-4` (#A8A4B8) en **2,42:1** sobre tarjeta
+   blanca y **2,11:1** sobre el fondo de columna, con el umbral en 4,5:1
+   para texto por debajo de 18 px. Y `--warning` (#d97706) en 3,19:1,
+   justo en el número de días sin contacto, que se tiñe PARA que se vea.
+
+   `--text-4` y `--warning` son tokens de TODO /admin: cambiarlos aquí
+   repintaría pantallas que no son de esta tarea. Así que no se tocan. Lo
+   que se hace es lo que sí es del CRM: dejar de mandar información que
+   hay que leer a un color que no se lee, con tres variables propias que
+   sólo existen dentro de `.raiz`.
+
+   Los ratios de abajo están calculados con WCAG 2.1 sobre los fondos
+   reales de esta pantalla: #FFFFFF (tarjeta) y #F0EEF7 (columna) en
+   claro; #121020 y #1A1630 en oscuro.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  /* Texto secundario legible: ciudad, tamaño, cargo, correo, la ayuda de
+     cada columna. Antes iba en --text-4.
+     #6E6885 → 5,27:1 sobre blanco · 4,59:1 sobre columna. */
+  --crm-text-sec: #6E6885;
+
+  /* El aviso que se tiñe a propósito: los días sin contacto y la marca de
+     "enfriándose". Antes iba en --warning (3,19:1).
+     #a4500b → 5,63:1 sobre blanco · 4,90:1 sobre columna. */
+  --crm-warning-text: #a4500b;
+
+  /* La línea de acento de una columna sin tono propio ("Sin contactar").
+     Antes era --border-strong, que sobre el fondo de columna da 1,56:1 y
+     es literalmente invisible. Es un elemento gráfico, así que el umbral
+     es 3:1 (WCAG 1.4.11).
+     #8B8699 → 3,06:1 sobre columna. */
+  --crm-acento-neutral: #8B8699;
+}
+
+:global(.dark) .raiz {
+  /* #8C8CA0 → 5,69:1 sobre tarjeta · 5,31:1 sobre columna. */
+  --crm-text-sec: #8C8CA0;
+  /* En oscuro --warning (#f59e0b) ya da 8,73:1: se deja el token de la casa. */
+  --crm-warning-text: var(--warning);
+  /* #6B6B78 → 3,33:1 sobre el fondo de columna oscuro. */
+  --crm-acento-neutral: #6B6B78;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL TABLERO
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.tablero {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* Horizontal: las columnas de siempre, pero elásticas. El overflow-x se
+   queda como RED DE SEGURIDAD, no como solución: con el plegado
+   automático no debería llegar a hacer falta nunca, y si un día un ancho
+   raro lo hiciera, mejor una barra que una columna cortada. */
+.tableroH {
+  flex-direction: row;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+/* Vertical (móvil): acordeón. Las ocho etapas caben en una pantalla como
+   ocho filas con su nombre y su número; se abre la que se va a trabajar. */
+.tableroV {
+  flex-direction: column;
+  overflow-x: visible;
+}
+
+.col {
+  /* Explícito y no heredado del preflight de Tailwind: la cuenta de
+     `crmCupoColumnas` reparte ANCHOS DE CAJA, así que con `content-box`
+     los 8 px de relleno y el borde de cada columna se suman por fuera y
+     el tablero desborda otra vez. Medido: a 1.280 px daba 1.126 px de
+     contenido en 1.027 de hueco. */
+  box-sizing: border-box;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 8px;
+  transition: background 0.12s, border-color 0.12s;
+  min-width: 0;
+}
+
+.tableroH .col {
+  flex: 1 1 0;
+  min-width: 196px;   /* CRM_COL_ANCHO_MIN */
+  max-width: 320px;   /* CRM_COL_ANCHO_MAX */
+}
+
+.tableroH .colPlegada {
+  flex: 0 0 40px;     /* CRM_COL_PLEGADA */
+  min-width: 40px;
+  max-width: 40px;
+  padding: 8px 4px;
+}
+
+.tableroV .col {
+  width: 100%;
+  align-self: stretch;
+}
+
+/* Encima al arrastrar: es el único momento en que una columna cambia de
+   color, para que se vea DÓNDE va a caer la tarjeta. */
+.colActiva {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+
+/* ── La cabecera, que ahora es el botón de plegar y desplegar ────────── */
+
+.cabecera {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 4px;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.cabecera:hover {
+  background: var(--brand-softer);
+}
+
+.tableroH .colPlegada .cabecera {
+  padding: 4px 0;
+  height: 100%;
+}
+
+/* La línea de acento del tono de la etapa: es lo que hace que las ocho
+   columnas se distingan sin leer el encabezado. */
+.acento {
+  height: 3px;
+  border-radius: 99px;
+  margin-bottom: 8px;
+}
+
+.tableroH .colPlegada .acento {
+  margin-bottom: 6px;
+}
+
+/* El nombre de la etapa cuando la columna está plegada: vertical, de
+   abajo arriba, que es como se leen las etiquetas verticales en un
+   idioma que se escribe de izquierda a derecha. */
+.tiraTexto {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 190px;
+  margin: 6px auto 0;
+}
+
+/* ── El cuerpo: las tarjetas ─────────────────────────────────────────── */
+
+.cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 60px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Ver la cabecera del archivo: sin esto, `hidden` no oculta nada porque
+   el `display` iba en línea. */
+.cuerpo[hidden] {
+  display: none;
+}
+
+.tableroV .cuerpo {
+  margin-top: 8px;
+}
+
+/* ── La tira del embudo (sólo en vertical) ───────────────────────────── */
+
+/* Apilando las columnas, el embudo deja de verse de un vistazo: las siete
+   etapas de abajo quedan detrás de las tarjetas de la que está abierta —
+   medido, 4.800 px de desplazamiento hasta la segunda fila. Esta tira
+   pone las OCHO cuentas arriba del todo, siempre, en unos 90 px, y de
+   paso es el atajo para saltar a una etapa. En horizontal no existe: ahí
+   las ocho columnas ya están a la vista y sería decir lo mismo dos veces. */
+.tira {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+/* El <li> es el elemento flexible, y no el <button> con `display:
+   contents` en el <li>: `display: contents` saca al elemento del árbol de
+   accesibilidad en varios navegadores, y con él la semántica de lista. */
+.tiraItem {
+  flex: 1 1 104px;
+  min-width: 0;
+}
+
+.tiraChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tiraChip:hover { background: var(--bg-elev-2); }
+
+.tiraChipAbierta {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.tiraPunto {
+  width: 3px;
+  height: 16px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.tiraNombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tiraCuenta {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--text-1);
+}

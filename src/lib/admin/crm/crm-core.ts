@@ -1342,6 +1342,199 @@ export function crmVistaEfectiva(f: CrmFiltros, totalGeneral: number): CrmVista 
 }
 
 /**
+ * La vista que se recuerda de la última vez. Es lo ÚNICO que la pantalla
+ * guarda en el navegador, y sólo actúa cuando la URL no dice nada: si
+ * alguien se pasó al tablero ayer, mañana abre en el tablero sin tener
+ * que elegirlo otra vez.
+ *
+ * Devuelve la vista que hay que ESCRIBIR en la URL, o `null` si no hay
+ * nada que hacer. Se escribe en la URL a propósito, en vez de pintar y
+ * callar: así la barra de direcciones sigue diciendo la verdad, la vista
+ * se puede compartir, y el resto del código sigue teniendo una sola
+ * fuente —`f.vista`— en vez de dos.
+ *
+ * El corte de CRM_TABLERO_COMODO se queda intacto para el arranque en
+ * frío: quien nunca ha elegido no tiene nada guardado y cae en
+ * `crmVistaEfectiva` como siempre.
+ */
+export function crmVistaARecordar(
+  f: CrmFiltros,
+  guardada: string | null | undefined,
+): CrmVista | null {
+  // La URL manda sobre lo guardado, SIEMPRE. Si no, un enlace que alguien
+  // manda por WhatsApp diciendo "míralo en lista" se abriría en tablero.
+  if (f.vista === "tablero" || f.vista === "lista") return null;
+  if (guardada === "tablero" || guardada === "lista") return guardada;
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EL TABLERO: CUÁNTAS COLUMNAS CABEN, Y CUÁLES SE PLIEGAN
+//
+// El problema medido: ocho etapas × 258 px fijos + huecos = más de 2.000
+// px dentro de un contenedor que en un portátil de 1440 mide 1.182. Se
+// veían 4 de 8, y "Ya es cliente" y "Perdido" no se veían nunca sin
+// arrastrar una barra horizontal que además no se anuncia. En el móvil
+// se veía una columna y media.
+//
+// La salida NO es encoger la letra ni desplazarse más rápido: es que una
+// columna tenga DOS tamaños. Desplegada enseña sus tarjetas; plegada se
+// queda en una tira estrecha que sigue diciendo su nombre y su número —
+// que es lo que hace falta para leer el embudo de un vistazo. Cuántas
+// caben desplegadas es aritmética, y está aquí para poder probarla sin
+// navegador.
+//
+// Por qué el número de la columna plegada NO es un detalle: el embudo se
+// lee por sus cuentas, no por sus tarjetas. Una columna que se pliega y
+// se lleva su número convierte "tengo 8 en negociación" en "no sé".
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Ancho mínimo de una columna DESPLEGADA. Por debajo de esto la tarjeta
+ * deja de leerse: el nombre del negocio se corta a media palabra y los
+ * botones de contacto se apilan de uno en uno.
+ */
+export const CRM_COL_ANCHO_MIN = 196;
+
+/**
+ * Ancho máximo de una columna desplegada. Sin tope, con dos columnas
+ * abiertas cada una se estiraría a 500 px y la tarjeta quedaría con
+ * medio metro de blanco a la derecha del nombre.
+ */
+export const CRM_COL_ANCHO_MAX = 320;
+
+/** Ancho de una columna PLEGADA: la tira con su nombre y su número. */
+export const CRM_COL_PLEGADA = 40;
+
+/** El hueco entre columnas. Es el mismo que ya había. */
+export const CRM_COL_HUECO = 10;
+
+/**
+ * Por debajo de este ancho el tablero deja de ser columnas y pasa a ser
+ * un acordeón vertical. No es un capricho responsive: en 390 px no caben
+ * ni dos columnas de 196, así que en horizontal el móvil SIEMPRE sería
+ * desplazamiento a ciegas. En vertical las ocho etapas caben en una
+ * pantalla como ocho filas, con su nombre y su número, y se abre la que
+ * se quiere trabajar.
+ */
+export const CRM_TABLERO_VERTICAL = 720;
+
+/**
+ * Lo que se supone que mide el contenedor ANTES de poder medirlo (la
+ * primera pintada, que ocurre en el servidor). 1.180 px es lo que da un
+ * portátil de 1440 descontando la barra lateral de /admin y su padding.
+ * En cuanto el navegador mide de verdad, manda la medida.
+ */
+export const CRM_TABLERO_ANCHO_SUPUESTO = 1180;
+
+export type CrmTableroOrientacion = "horizontal" | "vertical";
+
+export function crmTableroOrientacion(ancho: number): CrmTableroOrientacion {
+  return ancho > 0 && ancho < CRM_TABLERO_VERTICAL ? "vertical" : "horizontal";
+}
+
+/**
+ * Cuántas de las `cuantas` columnas caben DESPLEGADAS en `ancho` píxeles,
+ * estando el resto plegadas.
+ *
+ * La cuenta: todas ocupan al menos lo de una tira plegada, más los huecos;
+ * lo que sobra se reparte entre las que se desplieguen, y cada una
+ * necesita la diferencia entre su mínimo y una tira.
+ *
+ * Nunca devuelve 0: un tablero con las ocho columnas plegadas no es un
+ * tablero, es un índice. Si no cabe ni una, se enseña una y esa columna
+ * se desborda como pueda.
+ */
+export function crmCupoColumnas(ancho: number, cuantas: number): number {
+  if (cuantas <= 0) return 0;
+  const libre = ancho - cuantas * CRM_COL_PLEGADA - (cuantas - 1) * CRM_COL_HUECO;
+  const caben = Math.floor(libre / (CRM_COL_ANCHO_MIN - CRM_COL_PLEGADA));
+  return Math.min(cuantas, Math.max(1, caben));
+}
+
+/**
+ * En qué orden se van plegando las columnas cuando no caben todas. De
+ * menor a mayor: lo primero que se pliega es lo que menos se pierde.
+ *
+ *   0 · VACÍAS — no tienen ni una tarjeta que enseñar bajo los filtros
+ *       puestos. Plegarlas no esconde nada y le da su ancho a las que sí
+ *       tienen trabajo dentro.
+ *   1 · TERMINALES — "Ya es cliente" y "Perdido" son el archivo. Se
+ *       consultan; no se trabajan por la mañana.
+ *   2 · EL RESTO — el embudo abierto, y dentro de él de derecha a
+ *       izquierda: lo de más arriba del embudo es lo que más se toca.
+ */
+function crmPrioridadDePlegado(etapaId: string, total: number): number {
+  if (total <= 0) return 0;
+  if (crmEtapaEsTerminal(etapaId)) return 1;
+  return 2;
+}
+
+export interface CrmColumnasEntrada {
+  /** Los ids de las columnas, EN EL ORDEN en que se pintan. */
+  columnas: readonly string[];
+  /** Cuántos hay de verdad en cada una (los de la base, no los pintados). */
+  totales: Record<string, number>;
+  /** Ancho del contenedor, medido. */
+  ancho: number;
+  orientacion: CrmTableroOrientacion;
+  /**
+   * Lo que se abrió o cerró a mano. Vacío = automático. Lo elegido gana
+   * siempre sobre la cuenta: si alguien abre "Negociación" en un portátil
+   * estrecho, se abre, aunque tenga que apretar a las demás.
+   */
+  elegidas?: readonly string[] | null;
+}
+
+/**
+ * Qué columnas van DESPLEGADAS. Devuelve los ids en el orden de entrada.
+ *
+ * Garantiza siempre al menos una desplegada: un tablero entero plegado no
+ * enseña una sola tarjeta, y entonces no hay de dónde arrastrar.
+ */
+export function crmColumnasDesplegadas(entrada: CrmColumnasEntrada): string[] {
+  const columnas = entrada?.columnas ?? [];
+  if (columnas.length === 0) return [];
+
+  const totales = entrada?.totales ?? {};
+
+  // Lo elegido a mano manda. Se cruza con las columnas que existen de
+  // verdad: una elección guardada de cuando había una etapa fuera de
+  // catálogo no puede dejar el tablero sin ninguna abierta.
+  const elegidas = (entrada?.elegidas ?? []).filter((id) => columnas.indexOf(id) >= 0);
+  if (elegidas.length > 0) return columnas.filter((id) => elegidas.indexOf(id) >= 0);
+
+  const cupo =
+    entrada.orientacion === "vertical"
+      ? // En vertical no hay límite de ancho: el límite es la pantalla de
+        // alto. Se abre UNA y las demás quedan como filas legibles, que es
+        // lo que hace que el embudo entero quepa en un móvil.
+        1
+      : crmCupoColumnas(entrada.ancho, columnas.length);
+
+  // De derecha a izquierda dentro de cada grupo de prioridad: el final
+  // del embudo se pliega antes que el principio. `sort` es estable, así
+  // que este orden invertido se conserva dentro de cada grupo.
+  const candidatas = columnas
+    .slice()
+    .reverse()
+    .sort(
+      (a, b) =>
+        crmPrioridadDePlegado(a, totales[a] ?? 0) - crmPrioridadDePlegado(b, totales[b] ?? 0),
+    );
+
+  const plegadas = new Set<string>();
+  for (const id of candidatas) {
+    const quedan = columnas.length - plegadas.size;
+    if (quedan <= 1) break;
+    if (quedan <= cupo) break;
+    plegadas.add(id);
+  }
+
+  return columnas.filter((id) => !plegadas.has(id));
+}
+
+/**
  * El instante a partir del cual un contacto ya cuenta como "hace mucho".
  * Existe para que la BASE pueda contar los que se están enfriando con un
  * `lastContactAt < limite` en vez de traerse la tabla entera, y da

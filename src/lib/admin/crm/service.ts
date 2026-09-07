@@ -83,6 +83,71 @@ export const CRM_HOY_TOCA_MAX = 12;
 /** Tope del selector de socios del filtro de origen. */
 const CRM_SOCIOS_MAX = 200;
 
+/**
+ * Tope de filas que `crmImportar` lee para armar el juego de duplicados.
+ *
+ * Era la ÚNICA consulta del módulo sin ningún tope: un `findMany` pelado
+ * sobre la tabla entera. Hoy son 2.000 filas y no molesta; nada impedía
+ * que fueran 200.000. El `select` ya es estrecho (dos columnas cortas),
+ * así que 50.000 son unos pocos MB — el tope está para que exista un
+ * techo conocido, no porque el de hoy duela.
+ *
+ * Y cuando se corta, se DICE: `CrmImportResumen.comparadosContra` lleva
+ * cuántos se compararon de cuántos hay. Un deduplicador que en silencio
+ * deja de comparar contra media libreta es peor que no tenerlo.
+ */
+const CRM_DEDUPE_MAX = 50000;
+
+/**
+ * Cuántos prospectos se leen para avisar de un duplicado al dar de alta
+ * UNO a mano. Ver `crmCrear` y `buscarDuplicado`.
+ *
+ * Son 5.000 y no 50.000 como en el importador porque esto corre en CADA
+ * alta, no una vez por pegada. Con `select` de cuatro columnas cortas son
+ * unos 300 KB, y el `orderBy createdAt` tiene índice.
+ */
+const CRM_DUPLICADOS_MAX = 5000;
+
+/**
+ * Las columnas que el BARRIDO de texto necesita, y ni una más.
+ *
+ * Antes este `findMany` iba sin `select`: hasta CRM_ESCANEO_MAX + 1 filas
+ * ENTERAS en la memoria del servidor, con `website`, `lostReason`,
+ * `createdByEmail` y todo lo demás, para tirarlo casi todo un instante
+ * después. Y la memoria es del servidor, no del navegador de nadie: un
+ * techo alto aquí no revienta una pestaña, tumba la función para todos.
+ *
+ * Lo que se queda: lo que lee `crmCoincide` (el texto), lo que ordena
+ * `crmComparar`, el `stage` (las cuentas por columna del tablero) y el
+ * `id`. Después, de la página que de verdad se va a pintar —50 filas, no
+ * 20.000— se piden las filas completas.
+ *
+ * Honestidad sobre cuánto ahorra: `notes` (hasta CRM_TEXTO_MAX = 4.000
+ * caracteres) SE BUSCA, así que sigue viajando. Esto quita el resto, que
+ * es del orden de la cuarta parte del peso; lo que de verdad acotaría el
+ * pico sería barrer por lotes, y eso queda anotado como lo siguiente.
+ */
+const SELECT_ESCANEO = {
+  id: true,
+  name: true,
+  stage: true,
+  contactName: true,
+  contactRole: true,
+  phone: true,
+  email: true,
+  city: true,
+  state: true,
+  country: true,
+  notes: true,
+  nextActionNote: true,
+  tags: true,
+  monthlyValue: true,
+  nextActionAt: true,
+  lastContactAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 /** Las etapas que cierran el prospecto, para los `where` de la base. */
 const ETAPAS_TERMINALES: string[] = CRM_ETAPAS.filter((e) => e.terminal).map((e) => e.id);
 
@@ -193,6 +258,19 @@ export interface CrmListado {
    * pantalla lo dice y manda a la lista, que sí llega a todas.
    */
   tableroTruncado: { pintadas: number; de: number } | null;
+  /**
+   * No se pudo leer `crm_activities`. `false` = se leyó bien (aunque haya
+   * salido 0 en todos).
+   *
+   * Existe porque media migración pasaba desapercibida: si se aplica
+   * `sql/crm-dalecontrol.sql` a medias y queda `crm_prospects` pero no
+   * `crm_activities`, el `groupBy` de la bitácora fallaba, su `.catch`
+   * devolvía vacío, y la pantalla decía "sin bitácora" en TODAS las filas
+   * como si fuera verdad. El `FaltaElSql` de page.tsx sólo salta cuando
+   * falla la tabla principal. Cero anotaciones y no poder contarlas son
+   * cosas distintas y ahora se dicen distinto.
+   */
+  bitacoraNoDisponible: boolean;
 }
 
 function iso(d: Date | null | undefined): string | null {
@@ -499,6 +577,8 @@ export async function crmListar(
     .catch(() => [] as any[]);
 
   let crudas: any[];
+  /** Cuántas filas se pidieron para pintar. Ver `tableroTruncado`. */
+  let previstas = 0;
   let total: number;
   let porEtapa: Record<string, number> = {};
   let escaneoTruncado: { escaneados: number; de: number } | null = null;
@@ -522,12 +602,21 @@ export async function crmListar(
       hoyTocaPromesa,
       sinTocarPromesa,
     ]);
+    previstas = crudas.length;
     filtros = { ...filtros, pagina };
   } else {
     // Con texto: la base reduce con los filtros de catálogo y el barrido
     // se hace aquí, con las MISMAS reglas de `crmCoincide` de siempre.
+    // El `select` acota lo que se trae a lo que el barrido usa de verdad
+    // (ver SELECT_ESCANEO); las filas completas se piden después, y sólo
+    // las de la página.
     const [candidatas, hoy, sinTocar] = await Promise.all([
-      prisma.crmProspect.findMany({ where, orderBy, take: CRM_ESCANEO_MAX + 1 }),
+      prisma.crmProspect.findMany({
+        where,
+        orderBy,
+        take: CRM_ESCANEO_MAX + 1,
+        select: SELECT_ESCANEO,
+      }),
       hoyTocaPromesa,
       sinTocarPromesa,
     ]);
@@ -552,8 +641,34 @@ export async function crmListar(
 
     const pagina = crmPaginaValida(filtros.pagina, total, porPagina);
     const desde = vista === "tablero" ? 0 : (pagina - 1) * porPagina;
-    crudas = coincidentes.slice(desde, desde + porPagina);
+    const recortadas = coincidentes.slice(desde, desde + porPagina);
+    previstas = recortadas.length;
     filtros = { ...filtros, pagina };
+
+    // Las filas COMPLETAS, sólo de lo que se va a pintar. El barrido
+    // trabajó con columnas recortadas y `aDTO` necesita el resto (giro,
+    // fuente, sitio web, quién la dio de alta…). Son como mucho 200 ids
+    // —el tamaño de página más grande— o CRM_TABLERO_MAX en el tablero.
+    if (recortadas.length === 0) {
+      crudas = [];
+    } else {
+      const ids = recortadas.map((p: any) => String(p.id));
+      const completas = await prisma.crmProspect.findMany({ where: { id: { in: ids } } });
+      // El `in` no promete ningún orden, así que se vuelve a colocar en el
+      // que salió del barrido. Si alguna desapareció entre las dos
+      // consultas (alguien la borró justo ahora), se cae a lo que se leyó
+      // en el barrido en vez de dejar un hueco.
+      const porId = new Map(completas.map((f: any) => [String(f.id), f]));
+      // Si alguna desapareció entre las dos consultas (alguien la borró
+      // justo ahora), se CAE de la página en vez de pintarse con la fila
+      // recortada del barrido: a esa le faltan `vertical`, `source`,
+      // `affiliateId` y el resto, y `aDTO` los dejaría en `undefined` —
+      // la tarjeta saldría como giro "Otro" y sin su origen. Una fila de
+      // menos se nota; una fila que miente, no.
+      crudas = recortadas
+        .map((p: any) => porId.get(String(p.id)))
+        .filter((f: any) => f !== undefined);
+    }
 
     if (seCorto) {
       // Cuántos había en total que cumplían los filtros de catálogo. Es
@@ -564,8 +679,14 @@ export async function crmListar(
     }
   }
 
+  // Sobre `previstas` y no sobre `crudas.length`: son lo mismo salvo en
+  // una carrera —alguien borra una fila entre las dos consultas del
+  // buscador y `crudas` sale con una menos—, y ahí `crudas.length` haría
+  // saltar un "el tablero está pintando 5 de 6" que es MENTIRA: no se
+  // truncó nada. Este aviso existe para no esconder filas en silencio, no
+  // para inventarse recortes que no hubo.
   const tableroTruncado =
-    vista === "tablero" && total > crudas.length ? { pintadas: crudas.length, de: total } : null;
+    vista === "tablero" && total > previstas ? { pintadas: previstas, de: total } : null;
 
   // ── Ronda 3: lo accesorio, SÓLO de lo que se va a pintar ─────────────
   const paraEnriquecer = [...crudas, ...hoyTocaCrudas];
@@ -590,13 +711,19 @@ export async function crmListar(
     ]),
   );
 
-  const [conteos, nombresSocios] = await Promise.all([
+  const [bitacora, nombresSocios] = await Promise.all([
     contarActividades(paraEnriquecer.map((f) => f.id)),
     nombresDeAfiliados(idsSocios),
   ]);
 
+  // Sin bitácora legible no se manda 0: se manda `undefined`, que es lo
+  // que la pantalla pinta como "—" en vez de como "sin bitácora".
   const aFila = (f: any) =>
-    aDTO(f, conteos.get(f.id) ?? 0, f.affiliateId ? nombresSocios.get(f.affiliateId) ?? null : null);
+    aDTO(
+      f,
+      bitacora.disponible ? bitacora.conteos.get(f.id) ?? 0 : undefined,
+      f.affiliateId ? nombresSocios.get(f.affiliateId) ?? null : null,
+    );
 
   const socios: CrmSocioListado[] = sociosOrdenados
     .map((g) => ({
@@ -629,6 +756,7 @@ export async function crmListar(
     recomendacionesSinTocar,
     escaneoTruncado,
     tableroTruncado,
+    bitacoraNoDisponible: !bitacora.disponible,
   };
 }
 
@@ -636,20 +764,35 @@ export async function crmListar(
  * Cuántas cosas hay anotadas en la bitácora de cada uno, en UNA consulta.
  * Con su propio catch: el número de anotaciones es informativo y perderlo
  * jamás justifica dejar sin pantalla a DaleControl.
+ *
+ * Pero perderlo tampoco puede pasar CALLADO, y eso es lo que pasaba: sin
+ * la tabla `crm_activities` —media migración aplicada— el catch devolvía
+ * vacío y la pantalla decía "sin bitácora" en todas las filas como si lo
+ * hubiera comprobado. Por eso devuelve también si se pudo leer: cero
+ * anotaciones y no poder contarlas son cosas distintas.
  */
-async function contarActividades(ids: string[]): Promise<Map<string, number>> {
+async function contarActividades(
+  ids: string[],
+): Promise<{ conteos: Map<string, number>; disponible: boolean }> {
   const unicos = Array.from(new Set(ids.filter(Boolean)));
-  if (unicos.length === 0) return new Map();
+  // Sin ids no hay consulta que fallar: no se sabe nada malo de la tabla.
+  if (unicos.length === 0) return { conteos: new Map(), disponible: true };
+
+  let disponible = true;
   const grupos = await prisma.crmActivity
     .groupBy({
       by: ["prospectId"],
       _count: { _all: true },
       where: { prospectId: { in: unicos } },
     })
-    .catch(() => [] as any[]);
-  const mapa = new Map<string, number>();
-  for (const g of grupos as any[]) mapa.set(g.prospectId, g._count?._all ?? 0);
-  return mapa;
+    .catch((err) => {
+      console.error("[admin/crm] no se pudo contar la bitácora:", err);
+      disponible = false;
+      return [] as any[];
+    });
+  const conteos = new Map<string, number>();
+  for (const g of grupos as any[]) conteos.set(g.prospectId, g._count?._all ?? 0);
+  return { conteos, disponible };
 }
 
 /**
@@ -677,6 +820,12 @@ export interface CrmFicha {
   actividades: CrmActividadDTO[];
   /** Nombre de la clínica que nació de este prospecto, si ya cerró y se vinculó. */
   clinica: { id: string; name: string } | null;
+  /**
+   * No se pudo leer `crm_activities`. Lo mismo que en `CrmListado`, y por
+   * lo mismo: una bitácora vacía y una bitácora que no se puede leer se
+   * ven idénticas, y la segunda es media migración sin aplicar.
+   */
+  bitacoraNoDisponible: boolean;
 }
 
 export async function crmObtener(id: string): Promise<CrmFicha | null> {
@@ -684,13 +833,18 @@ export async function crmObtener(id: string): Promise<CrmFicha | null> {
   const p = await prisma.crmProspect.findUnique({ where: { id } });
   if (!p) return null;
 
+  let bitacoraNoDisponible = false;
   const actividades = await prisma.crmActivity
     .findMany({
       where: { prospectId: id },
       orderBy: [{ happenedAt: "desc" }, { createdAt: "desc" }],
       take: 300,
     })
-    .catch(() => [] as any[]);
+    .catch((err) => {
+      console.error("[admin/crm] no se pudo leer la bitácora de la ficha:", err);
+      bitacoraNoDisponible = true;
+      return [] as any[];
+    });
 
   // Consulta APARTE y con su propio catch: que el CRM no encuentre la
   // clínica vinculada (se borró, o el id quedó colgando) no puede tumbar
@@ -708,6 +862,7 @@ export async function crmObtener(id: string): Promise<CrmFicha | null> {
     prospecto: aDTO(p, undefined, p.affiliateId ? socios.get(p.affiliateId) ?? null : null),
     actividades: (actividades as any[]).map(actividadDTO),
     clinica,
+    bitacoraNoDisponible,
   };
 }
 
@@ -770,12 +925,105 @@ function aColumnas(entrada: CrmProspectoEntrada): Record<string, any> {
   return datos;
 }
 
+/** El prospecto que ya estaba y se parece al que se está dando de alta. */
+export interface CrmDuplicado {
+  id: string;
+  name: string;
+  phone: string | null;
+  stage: string;
+  /** Por qué se parece: sirve para decirlo con palabras, no con un "ya existe". */
+  motivo: "nombre" | "telefono";
+}
+
+/**
+ * ¿Ya hay uno igual? Devuelve el primero que se le parezca, o `null`.
+ *
+ * Las MISMAS reglas que el importador (`normalizarNombre` y los últimos
+ * dígitos del teléfono), porque si compararan distinto se colaría por el
+ * alta a mano justo lo que el importador rechaza — y era exactamente lo
+ * que pasaba: `crmImportar` deduplicaba y `crmCrear` no comprobaba nada.
+ * Rafael busca "Sonrisa del Valle", no la encuentra, la da de alta otra
+ * vez, y ahora hay dos con dos bitácoras.
+ *
+ * ── POR QUÉ NO SE LEE LA TABLA ENTERA ──────────────────────────────────
+ * Porque eso es justo el `findMany` sin tope que este mismo PR está
+ * quitando del importador. Aquí se pide un juego ACOTADO de candidatos
+ * con predicados que la base sí sabe resolver, y sobre ellos se aplica la
+ * comparación exacta en memoria.
+ *
+ * `contains` sin comodines es seguro aquí: `normalizarNombre` ya dejó
+ * sólo letras, dígitos y espacios, así que un "%" tecleado no llega nunca
+ * a la consulta como patrón. Es la misma razón por la que la BÚSQUEDA de
+ * la pantalla no baja a SQL, mirada del otro lado.
+ *
+ * ── QUÉ ES Y QUÉ NO ES ────────────────────────────────────────────────
+ * Es un AVISO, no una restricción de unicidad. Un candidato que no caiga
+ * en el juego acotado no se detecta, y quien quiera dar de alta el
+ * duplicado igualmente puede. La unicidad de verdad sería un índice en la
+ * base, y el esquema está fuera de esta tarea (queda dicho en el reporte).
+ */
+async function buscarDuplicado(
+  nombre: string,
+  telefono: string | null | undefined,
+): Promise<CrmDuplicado | null> {
+  const claveNombre = normalizarNombre(nombre);
+  const claveTel = soloDigitos(telefono);
+  if (!claveNombre && !claveTel) return null;
+
+  const candidatos = await prisma.crmProspect
+    .findMany({
+      select: { id: true, name: true, phone: true, stage: true },
+      // Los más nuevos primero, y por `createdAt`, que SÍ está indexado
+      // (sql/crm-dalecontrol.sql). Si hay que dejar a alguien fuera de la
+      // comparación, que sean los viejos.
+      orderBy: { createdAt: "desc" },
+      take: CRM_DUPLICADOS_MAX,
+    })
+    .catch(() => [] as any[]);
+
+  // El teléfono manda sobre el nombre: dos negocios pueden llamarse igual,
+  // pero dos que comparten número son el mismo.
+  for (const c of candidatos as any[]) {
+    if (claveTel && soloDigitos(c.phone) === claveTel) {
+      return { id: c.id, name: c.name, phone: c.phone ?? null, stage: c.stage, motivo: "telefono" };
+    }
+  }
+  for (const c of candidatos as any[]) {
+    if (claveNombre && normalizarNombre(c.name) === claveNombre) {
+      return { id: c.id, name: c.name, phone: c.phone ?? null, stage: c.stage, motivo: "nombre" };
+    }
+  }
+  return null;
+}
+
 export async function crmCrear(
   entrada: CrmProspectoEntrada & { tags?: string[] | string },
   autorEmail: string | null,
-): Promise<CrmResultado<CrmProspectoDTO>> {
+  opciones?: {
+    /**
+     * Dar de alta aunque ya haya uno igual. Es lo que pulsa quien ya vio
+     * el aviso y sabe que son dos negocios distintos con el mismo nombre
+     * —que en México pasa— o dos sucursales del mismo.
+     */
+    permitirDuplicado?: boolean;
+  },
+): Promise<CrmResultado<CrmProspectoDTO> & { duplicado?: CrmDuplicado }> {
   const invalido = crmValidarProspecto(entrada);
   if (invalido) return { ok: false, error: invalido };
+
+  if (!opciones?.permitirDuplicado) {
+    const duplicado = await buscarDuplicado(String(entrada.name ?? ""), entrada.phone);
+    if (duplicado) {
+      return {
+        ok: false,
+        error:
+          duplicado.motivo === "telefono"
+            ? `Ya hay un prospecto con ese teléfono: "${duplicado.name}".`
+            : `Ya hay un prospecto que se llama igual: "${duplicado.name}".`,
+        duplicado,
+      };
+    }
+  }
 
   const datos = aColumnas(entrada);
   datos.stage = crmEsEtapa(entrada.stage) ? entrada.stage : "NUEVO";
@@ -1009,6 +1257,13 @@ export interface CrmImportResumen {
   repetidos: number;
   /** Nombres que ya existían, para decirlos por su nombre y no en un número. */
   ejemplosRepetidos: string[];
+  /**
+   * Contra cuántos prospectos se comparó, de cuántos hay. `null` = contra
+   * todos, que es el caso normal. Con valor, el deduplicador se quedó
+   * corto y hay que decirlo: si no, una importación diría "0 repetidos"
+   * habiendo comparado contra media libreta.
+   */
+  comparadosContra: { comparados: number; de: number } | null;
 }
 
 /**
@@ -1032,7 +1287,26 @@ export async function crmImportar(
   const source = crmEsFuente(comunes?.source) ? comunes.source : null;
   const stage = crmEsEtapa(comunes?.stage) ? comunes.stage : "NUEVO";
 
-  const existentes = await prisma.crmProspect.findMany({ select: { name: true, phone: true } });
+  // El `take` no estaba, y ésta era la única consulta del módulo sin
+  // ningún tope. El `select` es estrecho —dos columnas cortas—, así que
+  // el tope no es por peso: es para que exista un techo conocido en vez
+  // de uno que depende de cuánto crezca la libreta.
+  const existentes = await prisma.crmProspect.findMany({
+    select: { name: true, phone: true },
+    // Los más nuevos primero: si hay que dejar a alguien fuera de la
+    // comparación, que sean los viejos. Lo que se acaba de pegar se
+    // repite contra lo que se pegó hace un rato, no contra 2019.
+    orderBy: { createdAt: "desc" },
+    take: CRM_DEDUPE_MAX,
+  });
+  // Sólo se avisa si de verdad quedó algo fuera. Con la libreta en
+  // exactamente CRM_DEDUPE_MAX filas se comparó contra TODAS, y decir
+  // "podría colarse un repetido" sería asustar sin motivo.
+  let comparadosContra: { comparados: number; de: number } | null = null;
+  if (existentes.length >= CRM_DEDUPE_MAX) {
+    const de = await prisma.crmProspect.count().catch(() => existentes.length);
+    if (de > existentes.length) comparadosContra = { comparados: existentes.length, de };
+  }
   const nombres = new Set(existentes.map((e) => normalizarNombre(e.name)));
   const telefonos = new Set(
     existentes.map((e) => soloDigitos(e.phone)).filter((d): d is string => !!d),
@@ -1075,12 +1349,23 @@ export async function crmImportar(
 
   return {
     ok: true,
-    datos: { creados: aCrear.length, repetidos, ejemplosRepetidos },
+    datos: { creados: aCrear.length, repetidos, ejemplosRepetidos, comparadosContra },
     mensaje:
-      aCrear.length === 0
+      (aCrear.length === 0
         ? "Ya estaban todos en la lista; no se dio de alta ninguno."
         : `Se dieron de alta ${aCrear.length} ${aCrear.length === 1 ? "prospecto" : "prospectos"}.` +
-          (repetidos > 0 ? ` ${repetidos} ya estaban y se dejaron como estaban.` : ""),
+          (repetidos > 0 ? ` ${repetidos} ya estaban y se dejaron como estaban.` : "")) +
+      // Se dice en el mismo mensaje y no en una pantalla nueva: quien
+      // acaba de pegar 300 filas tiene que saber AHÍ que la comprobación
+      // de repetidos no llegó a toda la libreta, no descubrirlo cuando
+      // encuentre el duplicado dentro de un mes.
+      (comparadosContra
+        ? ` Ojo: se comparó contra los ${comparadosContra.comparados.toLocaleString(
+            "es-MX",
+          )} más recientes de ${comparadosContra.de.toLocaleString(
+            "es-MX",
+          )}, así que podría colarse algún repetido más viejo.`
+        : ""),
   };
 }
 
