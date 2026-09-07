@@ -23,8 +23,12 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
       toast(t("home.heroNextPatient.alreadyActive"), { icon: "ℹ️" });
       return;
     }
-    await startConsult(appt.patient.id);
-    toast.success(t("home.heroNextPatient.consultStarted"));
+    // El toast de éxito SOLO si la consulta se abrió de verdad. Antes salía
+    // siempre, así que un 409 ("ya hay una consulta activa") pintaba el error
+    // y el "Consulta iniciada" a la vez, uno encima del otro (hallazgo 26).
+    if (await startConsult(appt.patient.id)) {
+      toast.success(t("home.heroNextPatient.consultStarted"));
+    }
   };
 
   const genderAge = [

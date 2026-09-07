@@ -17,7 +17,13 @@ import type { ActiveConsult } from "@/hooks/use-active-consult";
 export interface ActiveConsultContextValue {
   consult: ActiveConsult | null;
   loading: boolean;
-  startConsult: (patientId: string) => Promise<void>;
+  /**
+   * `true` solo si la consulta quedó abierta. Devuelve `false` cuando el
+   * servidor la rechaza (409 "ya hay una consulta activa", 404, red caída):
+   * sin este valor, quien llama no tiene forma de saber que falló y acaba
+   * felicitando al doctor encima del toast de error (hallazgo 26).
+   */
+  startConsult: (patientId: string) => Promise<boolean>;
   endConsult: () => Promise<void>;
 }
 
@@ -126,7 +132,9 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
       credentials: "include",
     })
       .then((r) => {
-        if (r.status === 401) return { consult: null } as ApiGetResponse;
+        // 401 sin sesión, 403 sin permiso "patients.view": no hay consulta que
+        // pintar y tampoco es un error que deba llegar a la consola.
+        if (r.status === 401 || r.status === 403) return { consult: null } as ApiGetResponse;
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<ApiGetResponse>;
       })
@@ -167,7 +175,7 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const startConsult = useCallback(async (patientId: string) => {
+  const startConsult = useCallback(async (patientId: string): Promise<boolean> => {
     try {
       const res = await fetch("/api/dashboard/consultations/active", {
         method: "POST",
@@ -182,7 +190,7 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
         toast.error("Ya hay una consulta activa. Termina la actual primero.");
         const data = (await res.json().catch(() => null)) as ApiGetResponse | null;
         if (data?.consult) setConsult(parseConsult(data.consult));
-        return;
+        return false;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as ApiGetResponse;
@@ -194,9 +202,11 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
       } satisfies ConsultBroadcast);
       // Refresca vistas derivadas server-rendered (context bar, contadores).
       router.refresh();
+      return true;
     } catch (err) {
       toast.error("No se pudo iniciar la consulta. Intenta de nuevo.");
       console.error("[ActiveConsult] startConsult failed", err);
+      return false;
     }
   }, [router]);
 

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
+import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,15 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   // Resuelve clinicId desde el slug (NO confía en query params).
   const display = await prisma.tVDisplay.findUnique({
     where: { publicSlug: params.slug },
-    select: { id: true, clinicId: true, active: true, config: true },
+    select: {
+      id: true,
+      clinicId: true,
+      active: true,
+      config: true,
+      // La zona sale de la CLÍNICA dueña del slug, en el mismo viaje que el
+      // display: es lo que define qué día es "hoy" en esta sala de espera.
+      clinic: { select: { timezone: true } },
+    },
   });
   if (!display || !display.active) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -45,10 +54,21 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
   const clinicId = display.clinicId;
   const showFull = (display.config as any)?.showPatientNames === true;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  /**
+   * 🔴 EL DÍA ES EL DE LA CLÍNICA, NO EL DEL SERVIDOR.
+   *
+   * Antes esto era `new Date(); today.setHours(0,0,0,0)`, o sea la medianoche
+   * del PROCESO (UTC en Vercel, que no fija TZ). Para una clínica mexicana la
+   * ventana "hoy" salía [ayer 18:00, hoy 18:00) local: a las 18:00 el tablero
+   * rodaba de día y el paciente que llevaba en el sillón desde las 17:00
+   * desaparecía de la sala de espera.
+   *
+   * Mismo criterio que ya llevan los dos hermanos vivos de este endpoint:
+   * src/app/api/clinic-layout/appointments/route.ts y
+   * src/app/api/live/[slug]/route.ts.
+   */
+  const tz = display.clinic?.timezone ?? "America/Mexico_City";
+  const { startUtc: today, endUtc: tomorrow } = calendarDayRangeUtc(todayInTz(tz), tz);
   const now = new Date();
 
   // Pulls citas de HOY de la clínica (clinicId scoped, derivado del display).

@@ -116,6 +116,13 @@ const SEV_COLOR: Record<AiFinding["severity"], string> = {
   baja: "#06b6d4",
   informativo: "#10b981",
 };
+/** Orden de gravedad para el interruptor "Por severidad" del panel de hallazgos. */
+const SEV_RANK: Record<AiFinding["severity"], number> = {
+  alta: 0,
+  media: 1,
+  baja: 2,
+  informativo: 3,
+};
 const SEV_LABEL_KEY: Record<AiFinding["severity"], string> = {
   alta: "pages.xrays.sevHigh",
   media: "pages.xrays.sevMedium",
@@ -254,6 +261,9 @@ export function XraysClient({
   // ── Transformaciones del visor ──
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
+  /** Espejo horizontal del visor. Vive junto a zoom/rotación porque viaja en
+   *  el mismo `transform` y se reinicia en los mismos sitios (hallazgo 43). */
+  const [flipped, setFlipped] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
@@ -315,6 +325,7 @@ export function XraysClient({
     setHighlightedFindingId(null);
     setZoom(1);
     setRotation(0);
+    setFlipped(false);
     setPan({ x: 0, y: 0 });
     setDrafting(null);
     setNaturalSize({ w: 0, h: 0 });
@@ -406,6 +417,24 @@ export function XraysClient({
     () => (aiAnalysis?.findings ? findingRegions(aiAnalysis.findings) : []),
     [aiAnalysis],
   );
+  /**
+   * "Por severidad" — hallazgo 43. Era un botón de ordenar sin ordenar. Es un
+   * interruptor: encendido agrupa los hallazgos de alta a informativo; apagado
+   * devuelve el orden en que los entregó el análisis. Solo reordena la LISTA;
+   * las regiones del visor van posicionadas en absoluto y no dependen del orden.
+   */
+  const [sortBySeverity, setSortBySeverity] = useState(false);
+  const listedFindings = useMemo(
+    () =>
+      sortBySeverity
+        // slice() antes de sort(): sort muta, y `findings` es el memo que
+        // también alimenta el visor. El sort de JS es estable, así que dentro
+        // de una misma severidad se conserva el orden del análisis.
+        ? findings.slice().sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity])
+        : findings,
+    [findings, sortBySeverity],
+  );
+
   const avgConfidence = useMemo(() => {
     if (findings.length === 0) return 0;
     const sum = findings.reduce((acc, f) => acc + (f.confidence ?? 0), 0);
@@ -569,11 +598,16 @@ export function XraysClient({
     if (!img) return null;
     const rect = img.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
-    const x = (e.clientX - rect.left) / rect.width;
+    const sx = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
+    // Con el visor volteado, `getBoundingClientRect` sigue dando la caja EN
+    // PANTALLA, así que la fracción horizontal viene espejada respecto a la
+    // imagen. Sin deshacerlo, medir o dibujar sobre una radiografía volteada
+    // pondría la marca en el diente contrario: peor que un botón muerto.
+    const x = flipped ? 1 - sx : sx;
     if (x < 0 || x > 1 || y < 0 || y > 1) return null;
     return { x, y };
-  }, []);
+  }, [flipped]);
 
   const finalizeAnnotation = useCallback((ann: Annotation) => {
     setAnnotations((prev) => [...prev, ann]);
@@ -712,6 +746,7 @@ export function XraysClient({
       setZoom(1);
       setPan({ x: 0, y: 0 });
       setRotation(0);
+      setFlipped(false);
       return;
     }
     setZoom((z) => Math.max(0.25, Math.min(6, z * (dir === "in" ? 1.2 : 1 / 1.2))));
@@ -990,6 +1025,9 @@ export function XraysClient({
           <button
             type="button"
             className={styles.toolBtn}
+            data-active={flipped}
+            aria-pressed={flipped}
+            onClick={() => setFlipped((v) => !v)}
             title={t("pages.xrays.flipHorizontal")}
             aria-label={t("pages.xrays.flipHorizontal")}
           >
@@ -1118,7 +1156,9 @@ export function XraysClient({
                 <div
                   className={styles.viewerImgWrap}
                   style={{
-                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`,
+                    // scaleX(-1) al final: espeja imagen Y anotaciones juntas,
+                    // así las marcas siguen pegadas al mismo diente.
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)${flipped ? " scaleX(-1)" : ""}`,
                   }}
                 >
                   <img
@@ -1350,11 +1390,19 @@ export function XraysClient({
                     <span className={styles.findingsHeaderLabel}>
                       {t("pages.xrays.findingsDetected", { count: findings.length })}
                     </span>
-                    <button type="button" className={styles.findingsHeaderSort}>{t("pages.xrays.bySeverity")}</button>
+                    <button
+                      type="button"
+                      className={styles.findingsHeaderSort}
+                      aria-pressed={sortBySeverity}
+                      onClick={() => setSortBySeverity((v) => !v)}
+                      style={sortBySeverity ? { color: "var(--brand)", borderColor: "var(--brand)" } : undefined}
+                    >
+                      {t("pages.xrays.bySeverity")}
+                    </button>
                   </div>
 
                   <div className={styles.findingsList}>
-                    {findings.map((f) => (
+                    {listedFindings.map((f) => (
                       // div + role="button" porque dentro hay sub-botones
                       // Aceptar/Rechazar y los buttons no se anidan en HTML
                       // válido. Mantenemos accesibilidad por teclado con
