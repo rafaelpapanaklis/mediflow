@@ -53,6 +53,13 @@ export interface EduUploadOptions {
   file: File;
   caseId?: string | null;
   notes?: string | null;
+  /**
+   * ws2-t2 · CUÁNDO SE TOMÓ (ISO, o "YYYY-MM-DD"). Se pregunta al subir
+   * porque después no lo pregunta nadie: la placa de hace un año se sube
+   * hoy y se queda ordenada como de hoy para siempre. Vacío = no se sabe,
+   * y la galería ordena por la fecha de subida.
+   */
+  takenAt?: string | null;
   /** 0-100. */
   onProgress?: (percent: number) => void;
   /** Para que la UI diga "Reintentando (2/3)…" en vez de quedarse muda. */
@@ -164,6 +171,7 @@ export async function eduUploadStudy({
   file,
   caseId,
   notes,
+  takenAt,
   onProgress,
   onPhase,
   signal,
@@ -270,6 +278,7 @@ export async function eduUploadStudy({
             name: file.name,
             caseId: caseId || undefined,
             notes,
+            takenAt: takenAt || undefined,
           }),
           signal,
         });

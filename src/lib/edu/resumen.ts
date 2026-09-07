@@ -47,6 +47,7 @@ import {
   type EduPatientResumenData,
   type EduResumenCita,
   type EduResumenEstudio,
+  type EduResumenFotos,
   type EduResumenSaldo,
   type EduResumenTimelineItem,
 } from "@/lib/edu/resumen-core";
@@ -350,7 +351,9 @@ export async function getEduPatientResumen(
   // · Los CONSENTIMIENTOS son del paciente entero, como en su pestaña
   //   (Ola 3B): la carta de atención general no cuelga de ningún caso.
   const openIds = casos.map((c) => c.id);
-  const [consents, approvals, notas, estudios, recetas] = veClinico
+  // Seis consultas y no siete: la regla del `Promise.all` corto sigue
+  // (el pooler de Supabase se satura por encima de siete).
+  const [consents, approvals, notas, estudios, recetas, fotosRaw] = veClinico
     ? await Promise.all([
         prisma.eduConsent.findMany({
           where: { institutionId, patientId: id },
@@ -397,6 +400,11 @@ export async function getEduPatientResumen(
           where: {
             institutionId,
             patientId: id,
+            // ws2-t2 · Los RETIRADOS no salen. Es el mismo recorte que la
+            // galería, y va en el `where` y no en un `.filter()` después:
+            // un estudio que alguien sacó del expediente no puede seguir
+            // apareciendo en la portada de la ficha.
+            deletedAt: null,
             patient: eduPatientScopeWhere({ institutionId, scope: scopes.clinico, now }),
           },
           orderBy: [{ createdAt: "desc" }],
@@ -423,8 +431,27 @@ export async function getEduPatientResumen(
             case: { select: { program: { select: { name: true } } } },
           },
         }),
+        // ws2-t2 · LAS FOTOS CLÍNICAS, y solo lo que hace falta para una
+        // línea: cuántas hay y de cuándo es la última. NO se traen filas
+        // ni se firma ninguna miniatura — el Resumen ya paga tres firmas
+        // por los estudios, y aquí se contesta "¿tiene fotos y de cuándo?"
+        // sin un solo viaje a Storage.
+        //
+        // 🔴 `deletedAt: null`: una foto retirada no cuenta. Y el alcance
+        // es el mismo del expediente (eduPatientScopeWhere con el scope
+        // clínico), igual que los estudios: caja ni llega aquí.
+        prisma.eduClinicalPhoto.aggregate({
+          where: {
+            institutionId,
+            patientId: id,
+            deletedAt: null,
+            patient: eduPatientScopeWhere({ institutionId, scope: scopes.clinico, now }),
+          },
+          _count: { _all: true },
+          _max: { capturedAt: true },
+        }),
       ])
-    : [[], [], [], [], []];
+    : [[], [], [], [], [], null];
 
   // ── Los avisos: consentimientos y autorizaciones de ESOS casos ────────
   let avisos: EduPatientResumenData["avisos"] = [];
@@ -456,7 +483,15 @@ export async function getEduPatientResumen(
   // ── La línea de tiempo: cuatro orígenes, un orden ─────────────────────
   let timeline: EduResumenTimelineItem[] | null = null;
   let estudiosResumen: EduResumenEstudio[] | null = null;
+  // ws2-t2 · Las fotos, en una línea. `null` para caja: no se consultó.
+  let fotosResumen: EduResumenFotos | null = null;
   if (veClinico) {
+    const totalFotos = fotosRaw && !Array.isArray(fotosRaw) ? fotosRaw._count._all ?? 0 : 0;
+    const ultima = fotosRaw && !Array.isArray(fotosRaw) ? fotosRaw._max.capturedAt : null;
+    fotosResumen = {
+      total: totalFotos,
+      ultimaLabel: ultima ? eduFormatDayShort(eduUtcToZoned(ultima, tz).dayISO) : "",
+    };
     const items: EduResumenTimelineItem[] = [];
     for (const n of notas) {
       items.push({
@@ -542,5 +577,6 @@ export async function getEduPatientResumen(
     avisos,
     timeline,
     estudios: estudiosResumen,
+    fotos: fotosResumen,
   };
 }

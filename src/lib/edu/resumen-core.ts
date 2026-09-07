@@ -305,4 +305,26 @@ export interface EduPatientResumenData {
   /** Ola de Casos. Los últimos estudios, con miniatura si son imagen.
    *  null = sin alcance clínico (caja). */
   estudios: EduResumenEstudio[] | null;
+  /** ws2-t2. Las FOTOS CLÍNICAS, en una línea. null = sin alcance
+   *  clínico (caja): no se consultó. */
+  fotos: EduResumenFotos | null;
+}
+
+/**
+ * ws2-t2 · LAS FOTOS CLÍNICAS DEL PACIENTE, en una línea.
+ *
+ * 🔴 POR QUÉ NO SON MINIATURAS COMO LOS ESTUDIOS. Porque el Resumen ya
+ * pinta "Últimos estudios" con tres miniaturas firmadas, y hasta hoy una
+ * foto de la sonrisa aparecía AHÍ rotulada «Radiografía» — el servidor
+ * asume RADIOGRAFIA para toda imagen subida como estudio. Meter aquí otras
+ * tres miniaturas sería tres firmas de Storage más en cada carga de la
+ * ficha para repetir lo que la pestaña Fotos enseña mejor. Una línea con
+ * el número y la fecha de la última contesta lo que se pregunta desde el
+ * Resumen ("¿tiene fotos? ¿de cuándo?") y el enlace lleva a verlas.
+ */
+export interface EduResumenFotos {
+  /** Cuántas fotos VIVAS tiene (las retiradas no cuentan). */
+  total: number;
+  /** "12 mar 2026" — la fecha de TOMA de la más reciente, o "" si no hay. */
+  ultimaLabel: string;
 }

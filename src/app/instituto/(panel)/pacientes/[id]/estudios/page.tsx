@@ -8,6 +8,7 @@ import { EDU_STUDY_MAX_ROWS } from "@/lib/edu/estudios-core";
 import { getEduClinicalPatient, listEduPatientCaseOptions } from "@/lib/edu/expediente";
 import { listEduPatientStudies } from "@/lib/edu/estudios";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
+import { eduTodayISO } from "@/lib/edu/agenda-core";
 import { eduIaEstadoActual } from "@/lib/edu/ia-cupo";
 import { getDict } from "@/i18n/dictionaries";
 import type { Dictionary } from "@/i18n/t";
@@ -95,6 +96,10 @@ export default async function PacienteEstudiosPage({
       iaAnalisis={iaAnalisis}
       canAnalyze={hasEduPermission(permUser, "estudios.analyze")}
       dict3d={dictModelos3d()}
+      // ws2-t2 · HOY en el calendario del INSTITUTO, no en el del
+      // navegador: el reloj del teléfono puede estar en otra zona (y en
+      // otro día) y la fecha de toma por defecto saldría corrida.
+      todayISO={eduTodayISO(ctx.institution.timezone)}
       // El botón "Subir estudio" de la ficha llega con ?subir=1 y el modal
       // se abre solo. El permiso manda igual: sin estudios.upload se ignora.
       abrirSubida={searchParams?.subir === "1"}

@@ -531,11 +531,19 @@ test("una foto dada de baja ya no se corrige ni se firma su URL", () => {
 // 6 · 🔴 LA CUOTA — las fotos suman, y las dadas de baja no
 // ─────────────────────────────────────────────────────────────────────
 
-test("el `where` de las fotos lleva UNA llave más: deletedAt null", () => {
+test("los dos `where` de la cuota esconden lo dado de baja, y solo por instituto", () => {
   assert.deepEqual(eduAlmacenamientoFotosWhere(INST), { institutionId: INST, deletedAt: null });
-  // Y el de los estudios sigue teniendo solo la del instituto: la cuota es
-  // por INSTITUTO y las sedes no la dividen.
-  assert.deepEqual(eduAlmacenamientoWhere(INST), { institutionId: INST });
+  // ws2-t2 · El de los estudios lleva AHORA la misma llave. Cuando la Ola
+  // B escribió esta prueba, los estudios todavía no se podían retirar y
+  // por eso su `where` tenía una sola llave; la casilla de fotos y
+  // estudios trajo la baja suave a `EduStudy`, y con ella el mismo trato:
+  // lo retirado no cuenta para la cuota. Dos tablas hermanas con la misma
+  // decisión de producto.
+  assert.deepEqual(eduAlmacenamientoWhere(INST), { institutionId: INST, deletedAt: null });
+  // Y lo que NO cambió: ni una llave de campus. La cuota es por INSTITUTO
+  // y las sedes no la dividen.
+  assert.equal("campusId" in eduAlmacenamientoWhere(INST), false);
+  assert.equal("campusId" in eduAlmacenamientoFotosWhere(INST), false);
 });
 
 test("🔴 un institutionId vacío revienta en vez de sumar el consumo del vecino", () => {

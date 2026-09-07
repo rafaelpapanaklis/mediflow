@@ -372,10 +372,22 @@ test("el modal mide contra la VENTANA con dvh, no con vh fijo", () => {
 test("la hoja del visor no usa consultas de contenedor", () => {
   // Es `position: fixed` y `container-type` CREA contención: un contenedor
   // de consulta encima la atraparía dentro de la columna del panel.
+  //
+  // ⚠️ ws2-t2 · EL CORTE TERMINA EN LA SIGUIENTE SECCIÓN, no en el final
+  // del archivo. edu-theme.css se escribe por AÑADIDO al final, así que
+  // "de `.edu-vsr {` hasta el EOF" iba creciendo con cada ola y acabó
+  // vigilando hojas que no son ésta: la casilla de fotos usó `@container`
+  // en el comparador —donde es lo correcto, porque ahí NO hay nada
+  // `position: fixed`— y esta prueba se puso roja por una regla de otro
+  // dueño. Lo que se vigila es el bloque del visor, y eso es lo que se
+  // corta ahora.
   const css = crudo(TEMA);
   const desde = css.indexOf(".edu-vsr {");
   assert.ok(desde > 0, "no se encontró el bloque del visor en edu-theme.css");
-  assert.equal(/@container/.test(css.slice(desde)), false, "el bloque del visor usa @container");
+  const siguiente = css.indexOf("/* ═", desde);
+  const bloque = css.slice(desde, siguiente > desde ? siguiente : undefined);
+  assert.ok(bloque.length > 500, "el corte del bloque del visor salió vacío");
+  assert.equal(/@container/.test(bloque), false, "el bloque del visor usa @container");
 });
 
 test("el reparto se apaga solo cuando no hay 2×2 que cuadrar", () => {
@@ -475,9 +487,22 @@ test("el cliente de la subida ya no manda el tipo", () => {
 test("el icono de la tarjeta sale del ARCHIVO, no del tipo guardado", () => {
   // Es el mismo criterio con el que se elige el visor al abrirla: así la
   // miniatura nunca promete algo distinto de lo que se va a abrir.
+  //
+  // ws2-t2 · La extensión ya no se recalcula en la pantalla con
+  // `eduExtOfName(name)`: llega RESUELTA del servidor en `row.ext`, sacada
+  // del PATH. El motivo es el renombrado, que esta casilla estrenó — un
+  // estudio corregido a «tomografía de Ana», sin extensión en el nombre,
+  // se quedaba con icono de documento y, peor, sin visor CBCT. Lo que la
+  // prueba sigue exigiendo es lo mismo: que el icono mire el ARCHIVO y no
+  // el `kind` guardado.
   const src = fuente(GALERIA);
   assert.ok(src.includes("function iconoDeArchivo("), "falta el icono deducido de la extensión");
-  assert.ok(src.includes("eduExtOfName("), "el icono tiene que mirar la extensión");
+  assert.ok(src.includes("iconoDeArchivo(e.ext)"), "el icono tiene que mirar la extensión real");
+  assert.equal(
+    /iconoDeArchivo\(e\.kind\)/.test(src),
+    false,
+    "el icono volvió a salir del tipo guardado",
+  );
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

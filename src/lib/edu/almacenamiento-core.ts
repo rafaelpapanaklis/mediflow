@@ -89,7 +89,7 @@ export const EDU_ALM_TB_MAX = 1000;
  */
 export const EDU_ALM_NOTA_ALCANCE =
   "Se cuentan los ESTUDIOS del expediente (radiografías, tomografías y PDFs) y las FOTOS " +
-  "CLÍNICAS del paciente, sin las que estén dadas de baja. " +
+  "CLÍNICAS del paciente, sin los que estén retirados ni las que estén dadas de baja. " +
   "Las firmas de consentimiento también viven en el almacenamiento, pero no se registra " +
   "su tamaño y no se estiman: este medidor no inventa bytes.";
 
@@ -155,11 +155,23 @@ function sano(n: unknown): number {
  * filtro y devuelve las de TODAS las escuelas. Aquí eso sería sumarle a un
  * instituto el consumo del vecino.
  */
-export function eduAlmacenamientoWhere(institutionId: string): { institutionId: string } {
+export function eduAlmacenamientoWhere(
+  institutionId: string,
+): { institutionId: string; deletedAt: null } {
   if (typeof institutionId !== "string" || !institutionId) {
     throw new Error("eduAlmacenamientoWhere: falta el institutionId");
   }
-  return { institutionId };
+  // 🔴 ws2-t2 · `deletedAt: null` — un estudio RETIRADO no cuenta para la
+  // cuota, exactamente igual que una foto dada de baja. Son dos tablas
+  // hermanas con la misma decisión de producto (baja suave, binario
+  // conservado); si una descontara y la otra no, la misma acción liberaría
+  // espacio o no según el archivo, y nadie sabría explicar por qué.
+  //
+  // ⚠️ Y la contrapartida, dicha en voz alta y sin adornos: el BINARIO
+  // sigue en el bucket. Esos bytes se pagan y no salen en el medidor —
+  // el mismo hueco que los huérfanos de subida (H-26), y se cierra con el
+  // mismo barrido periódico, que no es de esta casilla.
+  return { institutionId, deletedAt: null };
 }
 
 /**

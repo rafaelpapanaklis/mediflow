@@ -9991,3 +9991,810 @@ a.edu-ini-acceso:hover {
 .edu-integ-solo-lectura textarea[aria-label="Notas clínicas del estudio CBCT"] + div {
   display: none;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ===== fotos y estudios (ws2-t2) =====
+
+   TODO lo de aquí abajo es NUEVO y va con prefijo `.edu-fotos*` o
+   `.edu-estudios*`. No se tocó ni un bloque de arriba: esta hoja es de
+   ws2-t4 y dos olas escribiendo en el mismo sitio es exactamente cómo se
+   llega a que gane la última regla y la pantalla del otro salga torcida
+   (ver la cabecera de edu-theme.test.ts).
+
+   Los siete anchos de la regla 10 se midieron con la maqueta fuera del
+   repo (no hay .env para levantar la app): 390 · 768 · 1200 · 1366, más
+   360/1024/1536 por cálculo de la rejilla. A 390 px la galería sale de DOS
+   columnas —(390 − 28 de padding de .edu-main − 10 de hueco) / 2 = 176 px
+   por foto, y `minmax(150px, 1fr)` mete dos y no tres— y el comparador
+   apilado.
+
+   ⚠️ `@container` y no `@media` en el comparador (regla 2): a partir de
+   1024 px al contenido le quedan `ventana − 316`, así que un
+   `@media (min-width: 1180px)` se dispararía cuando la tarjeta mide 864.
+   Es seguro porque dentro de `.edu-fotos-comp` no hay nada `position:
+   fixed` — el visor a pantalla completa es HERMANO de la galería, no hijo
+   del comparador.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── El input de archivo, escondido sin desaparecer ──────────────────────
+   `display: none` en un <input type=file> lo saca del árbol y en algunos
+   navegadores el `.click()` programático deja de abrir el selector. Esto
+   lo deja de 1 px, fuera de la vista y fuera del foco, pero VIVO. */
+.edu-fotos-oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.edu-fotos-acciones {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* La palabra "obligatoria" al lado del rótulo de la etapa. Es la ÚNICA
+   pregunta de la subida que no tiene respuesta por defecto, y tiene que
+   verse que lo es. */
+.edu-fotos-obl {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--edu-amber-900);
+  background: var(--edu-amber-100);
+  border: 1px solid rgba(180, 83, 9, 0.28);
+}
+
+.dark .edu-fotos-obl {
+  color: var(--edu-amber-100);
+  background: rgba(180, 83, 9, 0.28);
+}
+
+.edu-fotos-vacio__icono {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  color: var(--edu-600);
+  background: var(--edu-100);
+}
+
+.dark .edu-fotos-vacio__icono {
+  color: var(--edu-200);
+  background: rgba(155, 176, 220, 0.14);
+}
+
+/* ── Los filtros: píldoras de etapa + desplegable de vista ───────────── */
+.edu-fotos-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.edu-fotos-filtros__vista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+
+/* La tira de píldoras se DESPLAZA en el teléfono en vez de partirse en
+   tres renglones, y lleva su desvanecido en el borde para que se note que
+   hay más (regla 5 de la cabecera). Con ratón vuelve la barra fina. */
+.edu-fotos-pills {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-radius: 999px;
+  background: var(--edu-surface-2);
+  border: 1px solid var(--edu-line);
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .edu-fotos-pills {
+    scrollbar-width: thin;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+.edu-fotos-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--edu-text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.edu-fotos-pill--on {
+  background: var(--edu-600);
+  color: #ffffff;
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* El contador de cada píldora. `tabular-nums` para que 1 y 11 no muevan
+   la píldora entera al cambiar de filtro. */
+.edu-fotos-pill__n {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+
+/* ── Un grupo de etapa ───────────────────────────────────────────────── */
+.edu-fotos-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edu-fotos-grupo__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edu-fotos-grupo__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--edu-text-1);
+}
+
+/* 🔴 EL GRUPO VACÍO SE PINTA, y este es su texto. Que falte el «Después»
+   es información clínica, no un hueco que haya que esconder. */
+.edu-fotos-grupo__vacio {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--edu-text-3);
+  background: var(--edu-surface-2);
+  border: 1px dashed var(--edu-line);
+  border-radius: 10px;
+}
+
+/* El punto de color de la etapa. NUNCA es lo único que la dice: el rótulo
+   va escrito al lado, porque un color no se lee con daltonismo ni impreso
+   en blanco y negro — la misma regla que la banda de las citas. */
+.edu-fotos-punto {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.edu-fotos-punto--pre {
+  background: var(--edu-amber-700);
+}
+
+.edu-fotos-punto--durante {
+  background: var(--edu-400);
+}
+
+.edu-fotos-punto--post {
+  background: var(--edu-ok);
+}
+
+.edu-fotos-punto--control {
+  background: var(--edu-text-3);
+}
+
+/* ── La rejilla de miniaturas ─────────────────────────────────────────
+   Se mide a SÍ MISMA con `auto-fill`, sin `@media` y sin envoltorio, por
+   lo mismo que `.edu-estudios`: con saltos de ventana, a 1023 px el cajón
+   todavía es cajón y a 1024 aparece la columna de 252 — las mismas tres
+   columnas encogían un 30 % al ENSANCHAR la ventana (regla 1).
+   A 390 px entran dos (176 px cada una); a 768, cuatro. */
+.edu-fotos-rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.edu-fotos-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+/* La miniatura tiene proporción FIJA (4:3) y fondo propio: reservar el
+   hueco evita que la rejilla salte cuando cargan las imágenes (CLS), y el
+   fondo oscuro impide que una foto clara se confunda con la tarjeta. */
+.edu-fotos-tarjeta__mini {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  color: var(--edu-100);
+  background: #10131c;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  cursor: zoom-in;
+}
+
+.edu-fotos-tarjeta__mini img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.edu-fotos-tarjeta__pie {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.edu-fotos-tarjeta__vista {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--edu-text-1);
+  overflow-wrap: anywhere;
+}
+
+.edu-fotos-tarjeta__meta {
+  font-size: 11.5px;
+  color: var(--edu-text-3);
+  overflow-wrap: anywhere;
+}
+
+.edu-fotos-tarjeta__nota {
+  font-size: 12px;
+  color: var(--edu-text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL COMPARADOR
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-fotos-comp {
+  container-type: inline-size;
+  container-name: edu-comparador;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--edu-surface);
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  box-shadow: var(--edu-shadow-1);
+}
+
+.edu-fotos-comp__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edu-fotos-comp__lead {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--edu-text-2);
+  max-width: 58ch;
+}
+
+/* Los dos desplegables + el intercambio. Se APILAN en el teléfono (flex
+   con wrap y `min-width` de 160 en el select) en vez de encogerse hasta
+   que el texto de la opción no se lee. */
+.edu-fotos-comp__picks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.edu-fotos-comp__sel {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.edu-fotos-comp__swap {
+  flex: 0 0 auto;
+}
+
+/* Los cuadraditos A y B. Ámbar el "antes", verde el "después": el mismo
+   reparto de significado que los puntos de etapa de la galería. */
+.edu-fotos-comp__ab {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.edu-fotos-comp__ab--a {
+  color: var(--edu-amber-900);
+  background: var(--edu-amber-100);
+}
+
+.edu-fotos-comp__ab--b {
+  color: #0f5132;
+  background: #d7f0e0;
+}
+
+.dark .edu-fotos-comp__ab--a {
+  color: var(--edu-amber-100);
+  background: rgba(180, 83, 9, 0.32);
+}
+
+.dark .edu-fotos-comp__ab--b {
+  color: #b7ecc9;
+  background: rgba(21, 128, 61, 0.32);
+}
+
+/* Con 0 o 1 foto la tarjeta NO se encoge: el aviso ocupa el sitio de la
+   imagen, donde se estaba mirando. */
+.edu-fotos-comp__vacio {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--edu-text-3);
+  background: var(--edu-surface-2);
+  border: 1px dashed var(--edu-line-strong);
+  border-radius: 12px;
+}
+
+/* `touch-action: none` es lo que hace que el arrastre funcione CON EL
+   DEDO: sin él, el navegador se queda el gesto para desplazar la página y
+   el tirador no se mueve. `user-select: none` evita que arrastrar
+   seleccione las etiquetas de encima. */
+.edu-fotos-comp__marco {
+  position: relative;
+  height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--edu-line);
+  border-radius: 12px;
+  background: #10131c;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@container edu-comparador (min-width: 560px) {
+  .edu-fotos-comp__marco {
+    height: 360px;
+  }
+}
+
+@container edu-comparador (min-width: 860px) {
+  .edu-fotos-comp__marco {
+    height: 430px;
+  }
+}
+
+.edu-fotos-comp__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  display: block;
+}
+
+.edu-fotos-comp__capa {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.edu-fotos-comp__linea {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.edu-fotos-comp__tirador {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--edu-600);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* Las etiquetas van DENTRO de la imagen, sobre una pastilla oscura: sobre
+   una foto clara, texto blanco a secas no se lee. */
+.edu-fotos-comp__tag {
+  position: absolute;
+  top: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.62);
+  pointer-events: none;
+  max-width: calc(50% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edu-fotos-comp__tag--a {
+  left: 10px;
+}
+
+.edu-fotos-comp__tag--b {
+  right: 10px;
+}
+
+.edu-fotos-comp__range {
+  width: 100%;
+  accent-color: var(--edu-600);
+}
+
+/* Lado a lado: APILADO por defecto y en dos columnas cuando la TARJETA
+   —no la ventana— pasa de 560 px. La forma que no se puede romper va en
+   la base (regla 8). */
+.edu-fotos-comp__lado {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@container edu-comparador (min-width: 560px) {
+  .edu-fotos-comp__lado {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.edu-fotos-comp__mitad {
+  position: relative;
+  aspect-ratio: 16 / 11;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  border: 1px solid var(--edu-line);
+  border-radius: 12px;
+  background: #10131c;
+  cursor: zoom-in;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EL VISOR A PANTALLA COMPLETA
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-fotos-visor {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.93);
+  color: #ffffff;
+}
+
+.edu-fotos-visor__barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.edu-fotos-visor__cuenta {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.edu-fotos-visor__acc {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.edu-fotos-visor__btn {
+  display: grid;
+  place-items: center;
+  /* 44 px: es un botón para un pulgar. */
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.edu-fotos-visor__cuerpo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 8px;
+}
+
+.edu-fotos-visor__nav {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.edu-fotos-visor__nav:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.edu-fotos-visor__marco {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+}
+
+.edu-fotos-visor__img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+  display: block;
+}
+
+/* Ampliado: la imagen deja de caber a propósito y el marco se desplaza.
+   Es lo que hace falta para mirar un margen gingival de cerca. */
+.edu-fotos-visor__marco--zoom {
+  place-items: start;
+}
+
+.edu-fotos-visor__marco--zoom .edu-fotos-visor__img {
+  max-width: none;
+  max-height: none;
+  width: 200%;
+  height: auto;
+}
+
+.edu-fotos-visor__pie {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 14px 16px;
+  font-size: 12.5px;
+  opacity: 0.86;
+  text-align: center;
+}
+
+.edu-fotos-visor__nota {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.edu-fotos-visor__ayuda {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ESTUDIOS · el rastro y las marcas sobre la imagen
+   ═══════════════════════════════════════════════════════════════════════ */
+.edu-estudios-rastro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edu-estudios-anot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 🔴 LA CAJA MIDE EXACTAMENTE LO QUE LA IMAGEN. Las marcas se colocan en
+   PORCENTAJE, así que si la caja fuera el marco —que puede tener franjas
+   vacías arriba y abajo por el `object-fit`— una marca en el 50 % caería
+   fuera del diente. Por eso `width: 100%` en la imagen y la caja pegada a
+   ella, y no al revés. */
+.edu-estudios-anot__caja {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.edu-estudios-anot__img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.edu-estudios-anot__caja--zoom {
+  width: 200%;
+  max-width: none;
+}
+
+.edu-estudios-anot__caja--zoom .edu-estudios-anot__img {
+  max-width: none;
+}
+
+/* 🔴 LA MARCA ES UN ANCLA DE TAMAÑO CERO en (x, y), y el PUNTO es lo que
+   se centra en ella. La primera versión centraba el conjunto punto +
+   etiqueta con un `translate(-50%,-50%)`, y el efecto era que el punto se
+   corría hacia la izquierda MEDIA ETIQUETA: una marca de «26 · caries
+   distal» señalaba un diente distinto que una de «36». Se vio en la
+   captura de 390 px. Ahora el punto cae donde se tocó y la etiqueta cuelga
+   a su derecha.
+
+   ⚠️ Una etiqueta puesta muy a la derecha se sale del marco y el marco la
+   desplaza (tiene `overflow: auto`); no se recorta en silencio. */
+.edu-estudios-anot__marca {
+  position: absolute;
+  width: 0;
+  height: 0;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.edu-estudios-anot__punto {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--edu-amber-700);
+  box-shadow: 0 0 0 2px #ffffff, 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.edu-estudios-anot__texto {
+  position: absolute;
+  left: 11px;
+  top: 0;
+  transform: translateY(-50%);
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.66);
+  white-space: nowrap;
+}
+
+.edu-estudios-anot__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edu-estudios-anot__fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edu-estudios-anot__num {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--edu-amber-900);
+  background: var(--edu-amber-100);
+}
+
+.dark .edu-estudios-anot__num {
+  color: var(--edu-amber-100);
+  background: rgba(180, 83, 9, 0.3);
+}
+
+/* ── El origen de la foto: cámara o galería ─────────────────────────── */
+.edu-fotos-subir__origen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* La fila de acciones de la tarjeta de foto: PEGADA ABAJO y apilada.
+   · `margin-top: auto` — sin él, la tarjeta que tiene nota empuja sus
+     botones más abajo que la de al lado y la rejilla se ve rota aunque
+     todas midan lo mismo.
+   · en COLUMNA y no en fila: a 390 px la tarjeta mide 176 px por dentro y
+     «Corregir» + «Retirar» no caben juntos ni con el rótulo más corto. Se
+     apilan a propósito, a ancho completo, en vez de partirse solos y
+     dejar dos filas desiguales. */
+.edu-fotos-tarjeta__acc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+
+/* Con la tarjeta angosta, las dos etiquetas del deslizador se tocaban en
+   el centro: las dos viven arriba y cada una puede ocupar la mitad. Por
+   debajo de 480 px de TARJETA, la B se va abajo a la derecha — en
+   diagonal no se pisan y las dos se leen enteras. */
+@container edu-comparador (max-width: 480px) {
+  .edu-fotos-comp__marco .edu-fotos-comp__tag--b {
+    top: auto;
+    bottom: 10px;
+  }
+}
+
+/* La fila de acciones de una tarjeta de ESTUDIO, pegada abajo. Se añade
+   AL LADO de `.edu-actions` (que sigue poniendo la fila) en vez de tocar
+   ese bloque, que es de otra ola. Hace falta desde que la tarjeta dice
+   cuál de las dos fechas está enseñando: «subida vie, 04 sep · sin fecha
+   de toma» ocupa dos renglones y dejaba su «Abrir» más bajo que el de la
+   tarjeta de al lado. */
+.edu-estudios-acc {
+  margin-top: auto;
+}
