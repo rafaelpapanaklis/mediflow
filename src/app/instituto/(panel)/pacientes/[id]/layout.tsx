@@ -6,12 +6,14 @@ import { notFound, redirect } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  Baby,
   CalendarClock,
   Check,
   ClipboardList,
   Droplet,
   HeartPulse,
   Mail,
+  PersonStanding,
   Phone,
   Pill,
   User,
@@ -23,8 +25,10 @@ import { hasEduPermission, type EduPermissionKey } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
 import {
   eduAntecedentesChips,
+  eduPatientFichaChips,
   eduPatientFullName,
   type EduAlertChipKind,
+  type EduFichaChipKind,
 } from "@/lib/edu/pacientes-core";
 import { listEduStudentOptions, listEduSupervisorOptions } from "@/lib/edu/agenda";
 import { listEduChairOptions } from "@/lib/edu/sillones";
@@ -68,6 +72,20 @@ const ALERT_ICONS: Record<EduAlertChipKind, LucideIcon> = {
   medicamento: Pill,
   sangre: Droplet,
   mas: HeartPulse,
+};
+
+/** Los dos chips que NO salen de los antecedentes: «menor · tutor» y
+ *  «embarazo/lactancia».
+ *
+ *  🔴 MAPA APARTE, sobre `EduFichaChipKind` y no sobre `EduAlertChipKind`.
+ *  Los dos Record de arriba son EXHAUSTIVOS: meter "menor" y "embarazo" en
+ *  la unión de las alertas obligaría a ALERT_ICONS a cubrirlos y tumbaría
+ *  la build de este archivo. Por eso `pacientes-core.ts` los declara con
+ *  tipo propio y aquí se les da su propio mapa. Está fijado por una prueba
+ *  en edu-ficha-completa.test.ts. */
+const FICHA_ICONS: Record<EduFichaChipKind, LucideIcon> = {
+  menor: PersonStanding,
+  embarazo: Baby,
 };
 
 /**
@@ -282,13 +300,13 @@ export default async function InstitutoPacienteLayout({
 
   // ── LOS KPI DE LA CABECERA ────────────────────────────────────────────
   // Próxima cita, última visita y —solo con permiso Y alcance— el saldo,
-  // visibles en LAS DIEZ pestañas y no solo en el Resumen.
+  // visibles en LAS DOCE pestañas y no solo en el Resumen.
   //
   // 🔴 UNA SOLA LLAMADA, y la comparte con el Resumen. `getEduPatientKpis`
   // va memoizada por petición con el `cache()` de React, así que en la
   // pestaña Resumen esto se ejecuta una vez y `getEduPatientResumen`
   // reutiliza el resultado en lugar de repetir las cinco consultas. En las
-  // otras nueve pestañas es esa única llamada y nada más: la ficha NO paga
+  // otras once pestañas es esa única llamada y nada más: la ficha NO paga
   // el resumen entero por cambiar de pestaña.
   const kpis = await getEduPatientKpis(
     ctx.institutionId,
@@ -393,7 +411,7 @@ export default async function InstitutoPacienteLayout({
           </div>
         </div>
 
-        {/* ── LOS KPI, EN LAS DIEZ PESTAÑAS ────────────────────────────
+        {/* ── LOS KPI, EN LAS DOCE PESTAÑAS ────────────────────────────
             Estaban solo en el Resumen: quien estaba en Estudios o en
             Recetas no sabía si el paciente tenía cita mañana sin volver a
             la portada. No cuestan una consulta por pestaña — ver
@@ -450,7 +468,7 @@ export default async function InstitutoPacienteLayout({
             y confundirlas es como se mata a alguien. CAJA también las ve
             (ella las captura): este bloque cuelga de pacientes.view, no
             del alcance clínico. */}
-        <div className="edu-fichahero__chips" role="group" aria-label="Alertas médicas del paciente">
+        <div className="edu-fichahero__chips" role="group" aria-label="Alertas y avisos del paciente">
           {eduAntecedentesChips(paciente.antecedentes).map((chip, i) => {
             const Icon = ALERT_ICONS[chip.kind] ?? AlertTriangle;
             return (
@@ -464,6 +482,42 @@ export default async function InstitutoPacienteLayout({
               </span>
             );
           })}
+
+          {/* ── LOS DOS DE LA FICHA: «menor · tutor» y «embarazo» ────────
+              Van DESPUÉS de los antecedentes y no antes: las alergias son
+              rojas y encabezan la fila por una razón, y colar delante un
+              chip azul de «Menor · tutor: X» las empuja a segunda lectura.
+              Pero van en la MISMA fila y no en otra: quien va a tomar una
+              radiografía mira una fila de chips, no dos.
+
+              🔴 Su propio mapa de iconos (FICHA_ICONS) y su propio tipo.
+              Ver la nota de ALERT_ICONS: ampliar EduAlertChipKind rompe
+              este archivo.
+
+              La regla de tres estados es de la función, no de aquí:
+              `pregnancy: null` NO pinta nada —nadie preguntó ≠ no está
+              embarazada— y «Menor sin tutor registrado» sale ámbar porque
+              es una tarea pendiente, no un dato. */}
+          {eduPatientFichaChips({
+            ageYears: paciente.ageYears,
+            guardianName: paciente.guardianName,
+            guardianRelation: paciente.guardianRelation,
+            pregnancy: paciente.pregnancy,
+            isChild: paciente.isChild,
+          }).map((chip, i) => {
+            const Icon = FICHA_ICONS[chip.kind] ?? AlertTriangle;
+            return (
+              <span
+                key={`ficha-${chip.kind}-${i}`}
+                className={`edu-tag edu-tag--${chip.tone}`}
+                title={chip.detail}
+              >
+                <Icon size={12} strokeWidth={1.75} aria-hidden />
+                {chip.text}
+              </span>
+            );
+          })}
+
           <Link href={`${base}/datos#antecedentes`} className="edu-fichaalertas__link">
             <ClipboardList size={12} strokeWidth={1.75} aria-hidden />
             Antecedentes

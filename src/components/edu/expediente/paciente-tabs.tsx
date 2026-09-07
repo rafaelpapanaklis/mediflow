@@ -25,7 +25,7 @@ import { EduPacienteTabsMas } from "@/components/edu/expediente/paciente-tabs-ma
  * vuelve a exigir el suyo. Esconder una pestaña no cierra ninguna puerta:
  * basta con teclear la URL.
  *
- * ── LAS DIEZ PESTAÑAS NO CABEN ──────────────────────────────────────────
+ * ── LAS DOCE PESTAÑAS NO CABEN ──────────────────────────────────────────
  * Medido: la tira de la ficha de un paciente pide 1118 px y `.edu-page` la
  * topa en 1100. Sobraban 18 px a 1440 de ventana, 68 a 1366 y 154 a 1280:
  * la última salía cortada como «R». La tira SÍ se desplazaba, pero
