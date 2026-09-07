@@ -84,8 +84,14 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
 
   async function handleMarkSession(redemptionId: string) {
     try {
-      const res = await fetch(`/api/packages/redemptions/${redemptionId}/use-session`, {
-        method: "POST",
+      // El endpoint es PATCH /api/packages/redeem con { redeemId }: descuenta
+      // una sesión y cierra el canje al llegar al total. La ruta que se llamaba
+      // antes (POST /api/packages/redemptions/[id]/use-session) nunca existió,
+      // así que el contador 3/10 no avanzaba jamás.
+      const res = await fetch("/api/packages/redeem", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ redeemId: redemptionId }),
       });
       if (!res.ok) throw new Error();
       const updated = await res.json();

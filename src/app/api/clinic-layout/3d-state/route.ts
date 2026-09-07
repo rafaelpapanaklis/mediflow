@@ -69,6 +69,7 @@ import { prisma } from "@/lib/prisma";
 import { activeClinicSecret } from "@/lib/active-clinic-core";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
+import { calendarDayRangeUtc, todayInTz } from "@/lib/agenda/time-utils";
 import { getChairStatus, getChairAppointment } from "@/lib/floor-plan/live-mode";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import { isChairType } from "@/components/clinic-3d/world-types";
@@ -100,19 +101,29 @@ export async function GET() {
 
     const clinicId = dbUser.clinicId;
 
-    // Rango de HOY (00:00:00 → 23:59:59.999 local). Mismo patrón que
-    // src/app/api/live/[slug]/route.ts.
-    const today = new Date();
-    const dayStart = new Date(today);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(today);
-    dayEnd.setHours(23, 59, 59, 999);
+    /**
+     * 🔴 EL DÍA ES EL DE LA CLÍNICA, NO EL DEL SERVIDOR.
+     *
+     * Antes: `new Date()` + `setHours(0,0,0,0)` / `setHours(23,59,59,999)`, o
+     * sea la medianoche del PROCESO (UTC en Vercel, que no fija TZ). Para una
+     * clínica mexicana la ventana "hoy" salía [ayer 18:00, hoy 18:00) local: a
+     * las 18:00 el visor rodaba de día y el sillón ocupado desde las 17:00 se
+     * vaciaba. Mismo criterio que ya llevan
+     * src/app/api/clinic-layout/appointments/route.ts y
+     * src/app/api/live/[slug]/route.ts.
+     *
+     * La consulta de `clinic` sale del Promise.all porque la zona hace falta
+     * ANTES de armar el where de las citas; no se añade una consulta nueva,
+     * solo se adelanta la que ya existía (y ahora trae también `timezone`).
+     */
+    const clinic = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { name: true, category: true, timezone: true },
+    });
+    const tz = clinic?.timezone ?? "America/Mexico_City";
+    const { startUtc: dayStart, endUtc: dayEnd } = calendarDayRangeUtc(todayInTz(tz), tz);
 
-    const [clinic, layout, chairs, appts] = await Promise.all([
-      prisma.clinic.findUnique({
-        where: { id: clinicId },
-        select: { name: true, category: true },
-      }),
+    const [layout, chairs, appts] = await Promise.all([
       prisma.clinicLayout.findUnique({
         where: { clinicId },
         select: { elements: true, metadata: true },
@@ -129,7 +140,9 @@ export async function GET() {
         // pacientes restringidos que este usuario no puede ver. Admins → [].
         where: {
           clinicId,
-          startsAt: { gte: dayStart, lte: dayEnd },
+          // Ventana semiabierta [00:00 de hoy, 00:00 de mañana) en la zona de
+          // la clínica — la misma forma que usan los dos routes hermanos.
+          startsAt: { gte: dayStart, lt: dayEnd },
           status: { notIn: ["CANCELLED", "NO_SHOW"] },
           AND: relatedPatientVisibilityAnd({ userId: dbUser.id, role: dbUser.role, clinicId }),
         },
