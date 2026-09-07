@@ -17,6 +17,15 @@
  *  4. LA IMPORTACIÓN PEGADA. Lee por CONTENIDO, no por posición; si eso se
  *     rompe, los teléfonos entran en la columna de la ciudad y nadie lo ve
  *     hasta que hay que marcar.
+ *  5. LOS FILTROS DE LA URL. Desde que la lista filtra y pagina en la
+ *     BASE, la querystring es lo que decide qué consulta se hace. Un
+ *     valor que se cuela sin validar llega hasta el `where`; una página
+ *     mal contada salta filas entre la 1 y la 2, y nadie lo nota hasta
+ *     que falta un prospecto.
+ *  6. QUE LA BASE Y LA MEMORIA DIGAN LO MISMO. El servicio filtra en SQL
+ *     cuando no hay búsqueda de texto y con estas funciones cuando sí la
+ *     hay. Si los dos caminos discreparan, buscar dentro de un filtro
+ *     daría otra lista que no buscar — y no habría forma de entenderlo.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -43,13 +52,32 @@ import {
   crmTelLink,
   crmTelefonoLegible,
   crmCoincide,
+  crmComparar,
+  crmFiltrosActivos,
+  crmFiltrosAQuery,
+  crmFiltrosCon,
+  crmFiltrosDesdeQuery,
+  crmFiltrosLimpios,
+  crmHayFiltros,
+  crmLimiteFrio,
+  crmNumerosDePagina,
+  crmPaginaValida,
+  crmRangoTexto,
   crmTextoPlano,
+  crmTotalPaginas,
+  crmVistaEfectiva,
   crmValidarProspecto,
   crmValorDeInput,
   crmWhatsappLink,
   crmWhatsappNumero,
+  CRM_DIAS_PARA_ENFRIARSE,
   CRM_ETAPAS,
+  CRM_FILTROS_VACIOS,
   CRM_IMPORT_MAX,
+  CRM_ORIGEN_AFILIADOS,
+  CRM_ORIGEN_DALECONTROL,
+  CRM_POR_PAGINA,
+  CRM_TABLERO_COMODO,
 } from "../crm-core";
 
 // ── 1. Fechas de calendario ─────────────────────────────────────────────
@@ -428,4 +456,341 @@ test("una etapa desconocida cae en seguimiento, no truena la pantalla del socio"
 test("ganado y perdido son los únicos estados que cierran para el socio", () => {
   assert.equal(crmEstadoParaAfiliado("GANADO").tono, "success");
   assert.equal(crmEstadoParaAfiliado("PERDIDO").tono, "danger");
+});
+
+// ── 10. Los filtros que viajan en la URL ────────────────────────────────
+//
+// La querystring la escribe cualquiera: se teclea, se pega, se manda por
+// WhatsApp y se retoca a mano. Nada de lo que salga de aquí puede llegar
+// crudo a un `where` de Prisma.
+
+test("un valor fuera de catálogo se ignora en vez de llegar a la consulta", () => {
+  const f = crmFiltrosDesdeQuery({
+    giro: "NO_EXISTE",
+    fuente: "'; --",
+    estado: "loquesea",
+    orden: "por_las_ganas",
+    vista: "carrusel",
+  });
+  assert.equal(f.vertical, "");
+  assert.equal(f.fuente, "");
+  assert.equal(f.estado, "");
+  assert.equal(f.orden, "prioridad");
+  assert.equal(f.vista, "");
+});
+
+test("la etapa SÍ acepta un valor fuera del catálogo, y es a propósito", () => {
+  // La columna es TEXT y el catálogo se retoca desde TypeScript: una fila
+  // editada a mano en Supabase puede tener una etapa que hoy no aparece en
+  // la lista, y el tablero le pinta su propia columna. Si aquí se
+  // descartara, el botón "y N más — verlos en la lista" de esa columna
+  // llevaría a la lista SIN filtro y enseñaría la libreta entera.
+  assert.equal(crmFiltrosDesdeQuery({ etapa: "NEGOCIACION_2" }).etapa, "NEGOCIACION_2");
+  assert.equal(crmFiltrosDesdeQuery({ etapa: "DEMO" }).etapa, "DEMO");
+  // Pero acotada: no se convierte en un campo de texto libre sin límite.
+  assert.equal(crmFiltrosDesdeQuery({ etapa: "x".repeat(500) }).etapa.length, 60);
+});
+
+test("lo que sí está en catálogo pasa tal cual", () => {
+  const f = crmFiltrosDesdeQuery({
+    q: "sonrisa",
+    giro: "DENTAL",
+    etapa: "PROPUESTA",
+    fuente: "GOOGLE_MAPS",
+    estado: "frios",
+    orden: "valor",
+    vista: "lista",
+    origen: CRM_ORIGEN_AFILIADOS,
+  });
+  assert.equal(f.q, "sonrisa");
+  assert.equal(f.vertical, "DENTAL");
+  assert.equal(f.etapa, "PROPUESTA");
+  assert.equal(f.fuente, "GOOGLE_MAPS");
+  assert.equal(f.estado, "frios");
+  assert.equal(f.orden, "valor");
+  assert.equal(f.vista, "lista");
+  assert.equal(f.origen, CRM_ORIGEN_AFILIADOS);
+});
+
+test("la página nunca es cero, negativa ni un texto", () => {
+  assert.equal(crmFiltrosDesdeQuery({ pag: "0" }).pagina, 1);
+  assert.equal(crmFiltrosDesdeQuery({ pag: "-7" }).pagina, 1);
+  assert.equal(crmFiltrosDesdeQuery({ pag: "hola" }).pagina, 1);
+  assert.equal(crmFiltrosDesdeQuery({ pag: "3.9" }).pagina, 3);
+  assert.equal(crmFiltrosDesdeQuery({ pag: "12" }).pagina, 12);
+});
+
+test("el tamaño de página sólo acepta los de la lista", () => {
+  assert.equal(crmFiltrosDesdeQuery({ n: "100" }).porPagina, 100);
+  // 5000 filas de golpe es justo lo que se está evitando.
+  assert.equal(crmFiltrosDesdeQuery({ n: "5000" }).porPagina, CRM_POR_PAGINA);
+  assert.equal(crmFiltrosDesdeQuery({ n: "37" }).porPagina, CRM_POR_PAGINA);
+});
+
+test("un parámetro repetido (?q=a&q=b) se queda con el primero, no revienta", () => {
+  assert.equal(crmFiltrosDesdeQuery({ q: ["primero", "segundo"] }).q, "primero");
+});
+
+test("sin querystring salen los filtros de fábrica", () => {
+  assert.deepEqual(crmFiltrosDesdeQuery(undefined), CRM_FILTROS_VACIOS);
+  assert.deepEqual(crmFiltrosDesdeQuery({}), CRM_FILTROS_VACIOS);
+});
+
+test("la URL de la pantalla recién abierta no lleva querystring", () => {
+  assert.equal(crmFiltrosAQuery(CRM_FILTROS_VACIOS), "");
+});
+
+test("la URL sólo lleva lo que NO es el valor de fábrica", () => {
+  const q = crmFiltrosAQuery({ ...CRM_FILTROS_VACIOS, estado: "frios", pagina: 3 });
+  assert.equal(q, "?estado=frios&pag=3");
+});
+
+test("filtros → URL → filtros devuelve exactamente lo mismo", () => {
+  const original = {
+    ...CRM_FILTROS_VACIOS,
+    q: "clínica puebla",
+    vertical: "BARBERIA",
+    fuente: "REFERIDO",
+    etapa: "DEMO",
+    origen: CRM_ORIGEN_DALECONTROL,
+    estado: "vencidos" as const,
+    orden: "sin-contacto" as const,
+    vista: "tablero" as const,
+    porPagina: 200,
+    pagina: 4,
+  };
+  const url = new URLSearchParams(crmFiltrosAQuery(original).slice(1));
+  const vuelta = crmFiltrosDesdeQuery(Object.fromEntries(url.entries()));
+  assert.deepEqual(vuelta, original);
+});
+
+test("cambiar un filtro vuelve a la página 1; cambiar de página, no", () => {
+  const base = { ...CRM_FILTROS_VACIOS, pagina: 7 };
+  assert.equal(crmFiltrosCon(base, { estado: "frios" }).pagina, 1);
+  assert.equal(crmFiltrosCon(base, { orden: "valor" }).pagina, 1);
+  assert.equal(crmFiltrosCon(base, { pagina: 8 }).pagina, 8);
+});
+
+test("quitar todos deja el orden, la vista y el tamaño de página", () => {
+  const puesto = {
+    ...CRM_FILTROS_VACIOS,
+    q: "algo",
+    vertical: "DENTAL",
+    estado: "frios" as const,
+    orden: "valor" as const,
+    vista: "lista" as const,
+    porPagina: 100,
+    pagina: 5,
+  };
+  const limpio = crmFiltrosLimpios(puesto);
+  assert.equal(crmHayFiltros(puesto), true);
+  assert.equal(crmHayFiltros(limpio), false);
+  assert.equal(limpio.orden, "valor");
+  assert.equal(limpio.vista, "lista");
+  assert.equal(limpio.porPagina, 100);
+  assert.equal(limpio.pagina, 1);
+});
+
+test("el orden y la vista NO cuentan como filtro: no esconden filas", () => {
+  assert.equal(crmHayFiltros({ ...CRM_FILTROS_VACIOS, orden: "nombre", vista: "lista" }), false);
+  assert.equal(crmHayFiltros({ ...CRM_FILTROS_VACIOS, q: "  " }), false);
+  assert.equal(crmHayFiltros({ ...CRM_FILTROS_VACIOS, q: "a" }), true);
+});
+
+test("cada filtro puesto trae su ficha, con su etiqueta y en castellano", () => {
+  const fichas = crmFiltrosActivos(
+    {
+      ...CRM_FILTROS_VACIOS,
+      q: "sonrisa",
+      vertical: "DENTAL",
+      fuente: "GOOGLE_MAPS",
+      etapa: "DEMO",
+      estado: "frios",
+      origen: "af_1",
+    },
+    [{ id: "af_1", nombre: "María López" }],
+  );
+  assert.deepEqual(
+    fichas.map((f) => `${f.etiqueta}: ${f.texto}`),
+    [
+      "Buscando: «sonrisa»",
+      "Giro: Clínica dental",
+      "Fuente: Google Maps",
+      "Etapa: Junta / demo",
+      "Estado: Enfriándose",
+      "Origen: María López",
+    ],
+  );
+  // Cada ficha sabe qué clave hay que vaciar para quitarse ella sola.
+  assert.deepEqual(
+    fichas.map((f) => f.clave),
+    ["q", "vertical", "fuente", "etapa", "estado", "origen"],
+  );
+});
+
+test("un socio dado de baja se dice, no se calla el origen", () => {
+  const fichas = crmFiltrosActivos({ ...CRM_FILTROS_VACIOS, origen: "af_borrado" }, []);
+  assert.equal(fichas[0].texto, "Un socio dado de baja");
+});
+
+// ── 11. Que la base y la memoria digan lo mismo ─────────────────────────
+
+test("el límite de frío que usa la base coincide con crmEstaFrio, día por día", () => {
+  const ahora = new Date("2026-09-15T18:00:00.000Z");
+  const limite = crmLimiteFrio(ahora);
+  const arranque = crmInicioDelDiaMx(ahora).getTime();
+
+  for (let d = 0; d <= 30; d++) {
+    // Un contacto a media mañana de hace `d` días mexicanos.
+    const contacto = new Date(arranque - d * 24 * 60 * 60 * 1000 + 5 * 60 * 60 * 1000);
+    const loQueDiriaLaBase = contacto.getTime() < limite.getTime();
+    const loQueDiceLaMemoria = crmEstaFrio({ stage: "CONTACTADO", lastContactAt: contacto }, ahora);
+    assert.equal(
+      loQueDiriaLaBase,
+      loQueDiceLaMemoria,
+      `a ${d} días sin contacto la base y la memoria no coinciden`,
+    );
+  }
+
+  // Y el umbral cae donde dice el catálogo, ni un día antes ni después.
+  const justoAntes = new Date(arranque - (CRM_DIAS_PARA_ENFRIARSE - 1) * 24 * 60 * 60 * 1000);
+  assert.equal(crmEstaFrio({ stage: "NUEVO", lastContactAt: justoAntes }, ahora), false);
+  assert.equal(justoAntes.getTime() < limite.getTime(), false);
+});
+
+// ── 12. El orden, y que la página 2 no repita ni se salte filas ─────────
+
+test("por atender: lo más vencido arriba y lo que no tiene fecha al final", () => {
+  const ahora = new Date("2026-09-15T18:00:00.000Z");
+  const filas = [
+    { name: "Sin fecha", nextActionAt: null },
+    { name: "Mañana", nextActionAt: "2026-09-16T12:00:00.000Z" },
+    { name: "Vencido hace mucho", nextActionAt: "2026-08-01T12:00:00.000Z" },
+    { name: "Hoy", nextActionAt: "2026-09-15T12:00:00.000Z" },
+    { name: "Vencido ayer", nextActionAt: "2026-09-14T12:00:00.000Z" },
+  ];
+  assert.deepEqual(
+    [...filas].sort(crmComparar("prioridad", ahora)).map((f) => f.name),
+    ["Vencido hace mucho", "Vencido ayer", "Hoy", "Mañana", "Sin fecha"],
+  );
+});
+
+test("más abandonados: el que NUNCA se ha contactado va primero", () => {
+  const filas = [
+    { name: "Hace poco", lastContactAt: "2026-09-14T12:00:00.000Z" },
+    { name: "Nunca", lastContactAt: null },
+    { name: "Hace un año", lastContactAt: "2025-09-14T12:00:00.000Z" },
+  ];
+  assert.deepEqual(
+    [...filas].sort(crmComparar("sin-contacto")).map((f) => f.name),
+    ["Nunca", "Hace un año", "Hace poco"],
+  );
+});
+
+test("mayor valor: sin valor puesto NO es valor cero, va al final", () => {
+  const filas = [
+    { name: "Sin poner", monthlyValue: null },
+    { name: "Cero", monthlyValue: 0 },
+    { name: "Mil", monthlyValue: 1000 },
+  ];
+  assert.deepEqual(
+    [...filas].sort(crmComparar("valor")).map((f) => f.name),
+    ["Mil", "Cero", "Sin poner"],
+  );
+});
+
+test("dos prospectos con el MISMO nombre siguen teniendo un orden fijo", () => {
+  // El caso que rompe la paginación: el nombre no es único (la tabla no
+  // tiene unique y dar de alta no deduplica), así que dos "Clínica Dental
+  // Sonrisa" empatan en todos los criterios. Sin un desempate total, la
+  // base puede resolverlos de una forma para la página 1 y de otra para la
+  // 2: una fila sale dos veces y su gemela no sale nunca, con el contador
+  // diciendo tan tranquilo "120 de 120".
+  const gemelas = [
+    { id: "ckz9", name: "Clínica Dental Sonrisa", nextActionAt: null, monthlyValue: null, lastContactAt: null },
+    { id: "cka1", name: "Clínica Dental Sonrisa", nextActionAt: null, monthlyValue: null, lastContactAt: null },
+  ];
+  for (const orden of ["prioridad", "sin-contacto", "valor", "nombre", "reciente", "nuevos"] as const) {
+    assert.deepEqual(
+      [...gemelas].sort(crmComparar(orden)).map((f) => f.id),
+      ["cka1", "ckz9"],
+      `el orden "${orden}" no es total: dos filas con el mismo nombre quedan al azar`,
+    );
+    // Y da igual en qué orden lleguen: el resultado es el mismo.
+    assert.deepEqual(
+      [...gemelas].reverse().sort(crmComparar(orden)).map((f) => f.id),
+      ["cka1", "ckz9"],
+      `el orden "${orden}" depende de cómo venían las filas`,
+    );
+  }
+});
+
+test("todos los órdenes desempatan por nombre, o la página 2 repetiría filas", () => {
+  const empate = [
+    { name: "Zeta", nextActionAt: null, monthlyValue: null, lastContactAt: null, updatedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z" },
+    { name: "Alfa", nextActionAt: null, monthlyValue: null, lastContactAt: null, updatedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z" },
+  ];
+  for (const orden of ["prioridad", "sin-contacto", "valor", "nombre", "reciente", "nuevos"] as const) {
+    assert.deepEqual(
+      [...empate].sort(crmComparar(orden)).map((f) => f.name),
+      ["Alfa", "Zeta"],
+      `el orden "${orden}" no desempata`,
+    );
+  }
+});
+
+test("el alfabético ordena como el español, no como la tabla ASCII", () => {
+  // Las dos cosas que un `sort()` pelado se equivoca: la Ñ va DESPUÉS de
+  // la N (es letra propia), y una vocal acentuada ordena junto a la suya
+  // en vez de irse al final del alfabeto.
+  const filas = [{ name: "Ozono" }, { name: "Óptica" }, { name: "Ñandú" }, { name: "Nueva" }];
+  assert.deepEqual(
+    [...filas].sort(crmComparar("nombre")).map((f) => f.name),
+    ["Nueva", "Ñandú", "Óptica", "Ozono"],
+  );
+});
+
+// ── 13. Paginación: no hay página en blanco ni página cero ──────────────
+
+test("siempre hay al menos una página, aunque no haya ni una fila", () => {
+  assert.equal(crmTotalPaginas(0, 50), 1);
+  assert.equal(crmTotalPaginas(50, 50), 1);
+  assert.equal(crmTotalPaginas(51, 50), 2);
+  assert.equal(crmTotalPaginas(1240, 50), 25);
+});
+
+test("pedir la página 99 de 3 lleva a la 3, no a una pantalla en blanco", () => {
+  assert.equal(crmPaginaValida(99, 120, 50), 3);
+  assert.equal(crmPaginaValida(1, 120, 50), 1);
+  assert.equal(crmPaginaValida(0, 120, 50), 1);
+  assert.equal(crmPaginaValida(2, 0, 50), 1);
+});
+
+test("el rango dice los dos números, siempre", () => {
+  assert.equal(crmRangoTexto(1, 50, 1240), "1–50 de 1,240");
+  assert.equal(crmRangoTexto(25, 50, 1240), "1,201–1,240 de 1,240");
+  assert.equal(crmRangoTexto(1, 50, 1), "1 de 1");
+  assert.equal(crmRangoTexto(1, 50, 0), "Ninguno de 0");
+});
+
+test("el paginador siempre enseña la primera y la última página", () => {
+  assert.deepEqual(crmNumerosDePagina(1, 5), [1, 2, 3, 4, 5]);
+  const largo = crmNumerosDePagina(12, 25);
+  assert.equal(largo[0], 1);
+  assert.equal(largo[largo.length - 1], 25);
+  assert.ok(largo.includes(12));
+  assert.ok(largo.includes(null), "faltan los puntos suspensivos");
+});
+
+// ── 14. Qué vista se abre sola ──────────────────────────────────────────
+
+test("con la libreta chica manda el tablero; en cuanto crece, la lista", () => {
+  assert.equal(crmVistaEfectiva(CRM_FILTROS_VACIOS, 10), "tablero");
+  assert.equal(crmVistaEfectiva(CRM_FILTROS_VACIOS, CRM_TABLERO_COMODO), "tablero");
+  assert.equal(crmVistaEfectiva(CRM_FILTROS_VACIOS, CRM_TABLERO_COMODO + 1), "lista");
+});
+
+test("lo que elige la persona gana siempre sobre el tamaño", () => {
+  assert.equal(crmVistaEfectiva({ ...CRM_FILTROS_VACIOS, vista: "tablero" }, 99999), "tablero");
+  assert.equal(crmVistaEfectiva({ ...CRM_FILTROS_VACIOS, vista: "lista" }, 1), "lista");
 });
