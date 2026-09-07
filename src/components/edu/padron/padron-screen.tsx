@@ -804,6 +804,38 @@ function FichaAlumno({
                 ))}
               </select>
               <span className="edu-field__hint">{EDU_STUDENT_STATUS_DESCRIPTIONS[status]}</span>
+
+              {/* 🔴 H-07 · MARCAR EL EGRESO NO APAGA LA CUENTA, Y ESO SE DICE.
+                  Poner GRADUATED (o WITHDRAWN) escribe el estado académico y
+                  `graduatedAt`, y nada más: `EduUser.isActive` no se toca, y
+                  la sesión solo exige eso. Desde esta ola el ALCANCE ya no le
+                  devuelve un solo paciente —el egresado entra a un panel
+                  vacío en vez de seguir abriendo expedientes y radiografías—
+                  pero la cuenta sigue viva, y apagarla es una decisión de
+                  dirección que se toma en otra pantalla.
+
+                  NO se hace automático a propósito: dar de baja una cuenta es
+                  quitarle a alguien el acceso a su propio historial
+                  académico, y eso no puede ser un efecto secundario de
+                  cambiar un desplegable. Se avisa y se ofrece el camino. */}
+              {(status === "GRADUATED" || status === "WITHDRAWN") &&
+                status !== student.status &&
+                student.userIsActive && (
+                  <div className="edu-banner edu-banner--warn" role="status">
+                    <div>
+                      <p className="edu-banner__title">Su cuenta seguirá activa</p>
+                      <p className="edu-banner__detail">
+                        Al guardar, {student.name} deja de ver pacientes, expedientes y
+                        radiografías: el alcance se cierra solo. Pero podrá seguir entrando al
+                        panel hasta que la dirección desactive su cuenta en{" "}
+                        <Link href="/instituto/equipo" className="edu-link">
+                          Equipo
+                        </Link>
+                        . No se hace automático: eso lo decide la dirección.
+                      </p>
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
         </section>

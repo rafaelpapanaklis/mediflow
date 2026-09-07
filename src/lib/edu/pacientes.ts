@@ -33,18 +33,26 @@ import {
 // Ola 1B: el índice sin acentos vive en su propio módulo puro. Se importa
 // de ahí y no de pacientes-core para que quede claro de dónde sale: es el
 // MISMO constructor que usa el .sql del backfill.
-import { eduPatientSearchIndex } from "@/lib/edu/search";
+import { eduNormalizeSearch, eduPatientSearchIndex } from "@/lib/edu/search";
+// El teléfono se compara con la MISMA función con la que se guarda y con la
+// que se manda: reconocer un "+52 55…" viejo y un "5544332211" nuevo como
+// el mismo número es la mitad del aviso de duplicado.
+import { eduWaPhone } from "@/lib/edu/whatsapp-core";
 import {
   eduAgeYears,
   eduPatientFullName,
   eduPatientSearchAnd,
   normalizeEduEmail,
   normalizeEduFolio,
-  normalizeEduPhone,
+  normalizeEduWaPhone,
   parseEduAntecedentes,
   parseEduPatientStatus,
   parseEduSex,
   eduPatientOptionsPageOf,
+  eduPatientFieldIsContact,
+  eduPatientStatusConflict,
+  EDU_PATIENT_FORM_FIELDS,
+  EDU_PHONE_HELP,
   type EduAntecedentesInput,
   type EduPatientFilters,
   type EduPatientOption,
@@ -351,10 +359,157 @@ async function resolveOriginStudent(
   return student.id;
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * EL AVISO DE DUPLICADO (H-05)
+ *
+ * 🔴 QUÉ ARREGLA. El alta solo comprobaba que el FOLIO no se repitiera.
+ * Nada miraba el nombre ni el teléfono, así que dos recepcionistas —o la
+ * misma dos días distintos— daban de alta a «María López, 5544332211» y
+ * salían dos folios, dos expedientes, dos odontogramas y dos historiales de
+ * la misma persona. Y a partir de ahí no hay vuelta: un paciente NO se
+ * borra (es NOM-004, y está razonado en el endpoint) y NO se fusiona (no
+ * existe ninguna función de fusión en el vertical).
+ *
+ * 🔴 AVISA, NO IMPIDE. Dos hermanos pueden llamarse igual y compartir el
+ * teléfono de su madre; una escuela grande tiene homónimos. Así que esto
+ * NO es un índice único: es un alto en el camino que dice a quién se
+ * parece y deja seguir A PROPÓSITO, con `allowDuplicate`. Un bloqueo duro
+ * dejaría a recepción sin poder registrar a un paciente real.
+ *
+ * 🔴 DÓNDE VIVE Y POR QUÉ. En el SERVIDOR, dentro del alta, y no como una
+ * consulta que la pantalla hace antes de enviar: entre "consulto" y "creo"
+ * caben los cinco segundos en los que la otra recepcionista lo registra.
+ * Aquí la comprobación y la escritura van pegadas.
+ *
+ * ⚠️ Esto NO fusiona nada. Fusionar son ocho tablas y una decisión de
+ * producto; es otra ola.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduPatientDuplicate {
+  id: string;
+  folio: string;
+  name: string;
+  phone: string | null;
+  /** Por qué se parece: "telefono" o "nombre" (nombre + apellidos + nacimiento). */
+  motivo: "telefono" | "nombre";
+}
+
+/**
+ * Pacientes del instituto que se parecen al que se está registrando.
+ *
+ * Dos criterios, los dos exactos (nada de parecidos borrosos: un "Juan
+ * Pérez" que avisa por cada "Juan Pérezz" se aprende a ignorar en dos días
+ * y deja de servir):
+ *   · MISMO TELÉFONO ya normalizado a diez dígitos, o
+ *   · MISMO nombre + apellidos + fecha de nacimiento.
+ *
+ * El nombre se compara SIN acentos y en minúsculas, con el mismo índice que
+ * usa el buscador (`searchIndex`), porque «María» y «Maria» son la misma
+ * persona escrita por dos recepcionistas distintas.
+ *
+ * 🔴 Alcance: el INSTITUTO entero, no el de quien pregunta. Quien registra
+ * es caja o dirección (`pacientes.manage`), cuyo alcance ya es completo, y
+ * un aviso recortado sería justo el que no avisa del duplicado que importa.
+ * El tenant, como siempre, sale de la sesión.
+ */
+async function buscarDuplicados(
+  institutionId: string,
+  datos: {
+    phone: string | null;
+    firstName: string;
+    lastName: string;
+    birthDate: Date | null;
+  },
+): Promise<EduPatientDuplicate[]> {
+  const or: Prisma.EduPatientWhereInput[] = [];
+
+  // 🔴 EL TELÉFONO SE BUSCA EN TODAS LAS FORMAS EN QUE PUDO GUARDARSE. Los
+  // pacientes de hoy llevan los diez dígitos (`normalizeEduWaPhone`), pero
+  // los de antes de esta ola se guardaron con la regla ancha y hay
+  // "+525544332211" y "525544332211" en la base. Comparar solo contra los
+  // diez dejaría el aviso ciego para justo los pacientes viejos, que son
+  // los que más duplicados tienen. No hay backfill: se busca por las cuatro.
+  if (datos.phone) {
+    or.push({
+      phone: { in: [datos.phone, `52${datos.phone}`, `+52${datos.phone}`, `+521${datos.phone}`] },
+    });
+  }
+
+  if (datos.birthDate) {
+    or.push({
+      birthDate: datos.birthDate,
+      // 🔴 Contra `searchIndex` y NO contra `lastName` con
+      // `mode: "insensitive"`: eso arregla las mayúsculas y NO los acentos,
+      // y el duplicado que importa es exactamente "Pérez" contra "Perez" —
+      // la misma persona tecleada por dos recepcionistas. `searchIndex` es
+      // la columna que ya está en minúsculas y sin acentos (Ola 1B), y es
+      // la que usa el buscador de la lista por esta misma razón.
+      searchIndex: { contains: eduNormalizeSearch(datos.lastName) },
+    });
+  }
+  if (or.length === 0) return [];
+
+  const filas = await prisma.eduPatient.findMany({
+    where: { institutionId, OR: or },
+    orderBy: [{ createdAt: "asc" }],
+    // Un tope pequeño a propósito: el aviso enseña a quién se parece, no
+    // hace un censo. Con más de cinco, lo que hace falta no es esta lista.
+    take: 5,
+    select: { id: true, folio: true, firstName: true, lastName: true, phone: true, birthDate: true },
+  });
+
+  const nombreBuscado = eduNormalizeSearch(`${datos.firstName} ${datos.lastName}`);
+  const out: EduPatientDuplicate[] = [];
+  for (const f of filas) {
+    // El afinado del teléfono se hace con `eduWaPhone` en los dos lados: es
+    // lo que hace que un "+52 55 4433 2211" guardado en 2025 y un
+    // "5544332211" de hoy se reconozcan como el mismo número.
+    const mismoTelefono =
+      Boolean(datos.phone) && Boolean(f.phone) && eduWaPhone(f.phone) === datos.phone;
+    const mismoNombre =
+      Boolean(datos.birthDate) &&
+      f.birthDate?.getTime() === datos.birthDate?.getTime() &&
+      eduNormalizeSearch(`${f.firstName} ${f.lastName}`) === nombreBuscado;
+    if (!mismoTelefono && !mismoNombre) continue;
+    out.push({
+      id: f.id,
+      folio: f.folio,
+      name: eduPatientFullName(f),
+      phone: f.phone,
+      motivo: mismoTelefono ? "telefono" : "nombre",
+    });
+  }
+  return out;
+}
+
+/** El aviso, escrito para recepción. Lo arma el servidor y la pantalla lo
+ *  pinta tal cual: el mensaje tiene que decir A QUIÉN se parece, con folio,
+ *  o no sirve para decidir. */
+export function eduDuplicateMessage(dups: EduPatientDuplicate[]): string {
+  const quienes = dups
+    .map((d) => `${d.folio} · ${d.name}${d.motivo === "telefono" ? " (mismo teléfono)" : ""}`)
+    .join("; ");
+  return dups.length === 1
+    ? `Ya existe ${quienes}. ¿Es la misma persona? Si no lo es, vuelve a pulsar Registrar para darla de alta igual.`
+    : `Ya existen ${dups.length} pacientes que se le parecen: ${quienes}. ¿Es alguno de ellos? Si no, vuelve a pulsar Registrar para darlo de alta igual.`;
+}
+
+/** El error del duplicado, con la lista pegada para que la pantalla pueda
+ *  pintarla sin volver a preguntar. */
+export class EduPatientDuplicateError extends EduPadronError {
+  readonly duplicates: EduPatientDuplicate[];
+  constructor(duplicates: EduPatientDuplicate[]) {
+    super(eduDuplicateMessage(duplicates), 409);
+    this.name = "EduPatientDuplicateError";
+    this.duplicates = duplicates;
+  }
+}
+
 export async function createEduPatient(
   ctx: EduClinicaContext,
   input: EduPatientInput,
-  options: { canSetOrigin: boolean } = { canSetOrigin: false },
+  options: { canSetOrigin: boolean; allowDuplicate?: boolean } = { canSetOrigin: false },
   now: Date = new Date(),
 ): Promise<{ id: string; folio: string }> {
   const institutionId = requireInstitution(ctx);
@@ -364,8 +519,8 @@ export async function createEduPatient(
   const lastName = eduRequiredText(input.lastName, 80);
   if (!lastName) throw new EduPadronError("El apellido del paciente es obligatorio (máximo 80 caracteres).");
 
-  const phone = input.phone === undefined || input.phone === null || input.phone === "" ? null : normalizeEduPhone(input.phone);
-  if (input.phone && !phone) throw new EduPadronError("Ese teléfono no tiene números suficientes.");
+  const phone = input.phone === undefined || input.phone === null || input.phone === "" ? null : normalizeEduWaPhone(input.phone);
+  if (input.phone && !phone) throw new EduPadronError(`Ese teléfono no sirve. ${EDU_PHONE_HELP}`);
 
   const email = input.email === undefined || input.email === null || input.email === "" ? null : normalizeEduEmail(input.email);
   if (input.email && !email) throw new EduPadronError("Ese correo no parece un correo.");
@@ -397,6 +552,14 @@ export async function createEduPatient(
   const folioTecleado = input.folio === undefined || input.folio === null || input.folio === "" ? null : normalizeEduFolio(input.folio);
   if (input.folio && !folioTecleado) {
     throw new EduPadronError("El folio es obligatorio si lo capturas (máximo 30 caracteres, sin espacios).");
+  }
+
+  // 🔴 EL AVISO DE DUPLICADO va DESPUÉS de sanear (para comparar teléfonos
+  // ya normalizados y no "55 4433 2211" contra "5544332211") y ANTES de
+  // escribir. Quien insiste manda `allowDuplicate` y se registra igual.
+  if (!options.allowDuplicate) {
+    const dups = await buscarDuplicados(institutionId, { phone, firstName, lastName, birthDate });
+    if (dups.length > 0) throw new EduPatientDuplicateError(dups);
   }
 
   const data = {
@@ -454,25 +617,90 @@ export async function createEduPatient(
 }
 
 /**
+ * Qué parte de la ficha puede tocar quien manda el PATCH (H-02).
+ *
+ *   · "all"      → los nueve campos. Es `pacientes.manage` (caja, dirección).
+ *   · "contacto" → SOLO teléfono y correo. Es `expediente.write` sin
+ *     `pacientes.manage`: el alumno y el docente que tienen al paciente en
+ *     el sillón.
+ *
+ * 🔴 El recorte se aplica AQUÍ y no solo en el endpoint. Que el body traiga
+ * `folio` no basta para que se escriba: un campo que quien manda no puede
+ * tocar es un ERROR con su motivo, no un campo que se ignora en silencio —
+ * ignorarlo dejaría a un alumno creyendo que corrigió el apellido.
+ */
+export type EduPatientEditFields = "all" | "contacto";
+
+/**
  * Edita la ficha. El ORIGEN no se toca aquí: tiene su propia función y su
  * propio permiso, porque no es un dato más de la ficha sino el que decide
  * el precio.
+ *
+ * 🔴 H-11 · EL PACIENTE SE BUSCA DENTRO DEL ALCANCE, como TODAS las demás
+ * escrituras del vertical (`updateEduPatientAntecedentes` ya lo hacía). Era
+ * la única que se saltaba el punto único: hoy no explota porque el endpoint
+ * exige `pacientes.manage` y solo lo llevan caja y dirección, cuyo alcance
+ * es completo — pero el catálogo es editable por `permissionsOverride`, y
+ * el día que una escuela le encendiera esa key a un coordinador, podría
+ * editar por API la ficha de CUALQUIER paciente del instituto, incluidos
+ * los que no puede ver. Y desde esta ola ya no es hipotético: el alumno y
+ * el docente entran aquí de verdad, con alcance recortado.
+ *
+ * 🔴 H-28 · EL ESTADO SE REVALIDA CONTRA LOS CASOS al guardar. La pantalla
+ * ya lo dice antes de pulsar, y aun así se comprueba aquí: entre que se
+ * pintó y se pulsó, alguien pudo abrir un caso — y el endpoint no puede
+ * confiar en que el body venga de esa pantalla.
  */
 export async function updateEduPatient(
   ctx: EduClinicaContext,
   patientId: string,
   input: EduPatientInput,
+  // 🔴 `options` es OBLIGATORIO y `fields` dentro de él también. Con un
+  // default ("all") esta firma fallaría ABIERTO: un llamador que pasara el
+  // `now` en la posición vieja —era el cuarto parámetro hasta esta ola—
+  // caería en `options`, `fields` saldría undefined y el alumno editaría los
+  // nueve campos. Que el compilador lo exija es lo que hace que ese error no
+  // se pueda escribir.
+  options: { fields: EduPatientEditFields },
   now: Date = new Date(),
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "patients");
+  if (eduScopeIsEmpty(scope)) {
+    throw new EduPadronError("Ese paciente no es de este instituto.", 404);
+  }
   const id = eduCleanId(patientId);
   if (!id) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
 
+  // 🔴 Los campos que quien manda NO puede tocar se rechazan ANTES de
+  // consultar nada: un alumno que manda `folio` se entera de que no puede,
+  // en vez de guardar a medias.
+  const fields = options.fields;
+  if (fields === "contacto") {
+    // Se miran los NUEVE campos de la ficha y no `Object.keys(input)`: lo
+    // que esta función no lee ya se ignoraba en silencio para todo el mundo
+    // antes de esta ola (`referredByStudentId`, por ejemplo, que tiene su
+    // propio endpoint), y rechazarlo solo para el alumno dejaría al
+    // formulario roto el día que alguien añada una clave suelta al body. Lo
+    // que se cierra es la escalada, que solo puede venir por estos nueve.
+    const prohibidos = EDU_PATIENT_FORM_FIELDS.filter(
+      (k) => input[k] !== undefined && !eduPatientFieldIsContact(k),
+    );
+    if (prohibidos.length > 0) {
+      throw new EduPadronError(
+        "Con tu permiso solo puedes corregir el teléfono y el correo del paciente. El resto de la ficha (folio, nombre, apellidos, sexo, nacimiento, estado y notas de recepción) lo captura recepción.",
+        403,
+      );
+    }
+  }
+
   // Se traen las cinco columnas que alimentan el índice de búsqueda, no
   // solo el id: al editar solo el apellido hay que reescribir el índice
-  // ENTERO, y para eso hacen falta las otras cuatro tal como están hoy.
+  // ENTERO, y para eso hacen falta las otras cuatro tal como están hoy. Y
+  // los casos, para poder revalidar el estado (H-28) sin una segunda vuelta
+  // a la base.
   const current = await prisma.eduPatient.findFirst({
-    where: { id, institutionId },
+    where: { ...eduPatientScopeWhere({ institutionId, scope, now }), id },
     select: {
       id: true,
       folio: true,
@@ -480,6 +708,7 @@ export async function updateEduPatient(
       lastName: true,
       phone: true,
       email: true,
+      cases: { select: { status: true } },
     },
   });
   if (!current) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
@@ -520,8 +749,8 @@ export async function updateEduPatient(
   if (input.phone !== undefined) {
     if (input.phone === null || input.phone === "") data.phone = null;
     else {
-      const v = normalizeEduPhone(input.phone);
-      if (!v) throw new EduPadronError("Ese teléfono no tiene números suficientes.");
+      const v = normalizeEduWaPhone(input.phone);
+      if (!v) throw new EduPadronError(`Ese teléfono no sirve. ${EDU_PHONE_HELP}`);
       data.phone = v;
     }
   }
@@ -555,6 +784,15 @@ export async function updateEduPatient(
   if (input.status !== undefined) {
     const v = parseEduPatientStatus(input.status);
     if (!v) throw new EduPadronError("Ese estado de paciente no existe.");
+    // 🔴 H-28 · un estado a mano no puede contradecir los casos. Se cuenta
+    // con la MISMA regla que la lista (`EDU_CASE_CLOSED_STATUSES`) y se
+    // rechaza con la MISMA frase que la pantalla ya enseñó, para que quien
+    // llegue aquí no lea dos explicaciones distintas del mismo no.
+    const abiertos = current.cases.filter(
+      (c) => !(EDU_CASE_CLOSED_STATUSES as string[]).includes(c.status),
+    ).length;
+    const choque = eduPatientStatusConflict(v, abiertos);
+    if (choque) throw new EduPadronError(choque, 409);
     data.status = v;
   }
 
@@ -582,8 +820,8 @@ export async function updateEduPatient(
     });
   }
 
-  await prisma.eduPatient.update({ where: { id }, data });
-  return { id };
+  await prisma.eduPatient.update({ where: { id: current.id }, data });
+  return { id: current.id };
 }
 
 /**

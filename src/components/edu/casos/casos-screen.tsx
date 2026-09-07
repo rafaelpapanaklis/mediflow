@@ -321,11 +321,38 @@ export function EduCasosScreen({
                 <div className="edu-cell edu-cell--wide">
                   <span className="edu-cell__label">Paciente</span>
                   <span className="edu-cell__value edu-cell__value--strong">
-                    {/* A la pestaña Casos de su ficha: ahí están el detalle
-                        del gate y las acciones. */}
-                    <Link href={`/instituto/pacientes/${c.patientId}/casos`} className="edu-link">
-                      {c.patientName}
-                    </Link>
+                    {/* 🔴 H-25 · UN ENLACE QUE LLEVA A UN 404 NO SE PINTA.
+                        El alumno que rota conserva sus casos en esta lista
+                        —son su historia académica y `eduCaseScopeWhere` los
+                        deja a propósito— pero PIERDE el paciente: el caso
+                        quedó TRANSFERRED y `eduPatientScopeWhere` lo
+                        descarta, también a propósito y documentado. Lo que
+                        no estaba decidido es que el nombre siguiera siendo
+                        un enlace: se pulsaba y salía un 404, sin decir por
+                        qué, sobre las notas que él mismo firmó.
+
+                        Se apaga solo con la vista RECORTADA (alumno y
+                        docente). Dirección y caja ven la clínica entera y
+                        el enlace les sirve igual.
+
+                        ⚠️ Falso negativo conocido: para un DOCENTE cuyo
+                        alumno traspasó el caso a OTRO alumno suyo, el
+                        paciente sí sigue en su alcance y aquí pierde el
+                        atajo — llega desde Pacientes. Falla del lado
+                        cerrado, que es la preferencia escrita del vertical
+                        (ver visibility.ts): mejor un atajo de menos que un
+                        enlace que miente. */}
+                    {recortado && c.status === "TRANSFERRED" ? (
+                      <span title="Traspasaste este caso: el paciente ya no está en tu alcance.">
+                        {c.patientName}
+                      </span>
+                    ) : (
+                      /* A la pestaña Casos de su ficha: ahí están el detalle
+                         del gate y las acciones. */
+                      <Link href={`/instituto/pacientes/${c.patientId}/casos`} className="edu-link">
+                        {c.patientName}
+                      </Link>
+                    )}
                   </span>
                   <span className="edu-cell__sub">Folio {c.patientFolio}</span>
                 </div>
