@@ -100,6 +100,103 @@ export function calendarDayRangeUtc(dateISO: string, timezone: string): DayRange
   };
 }
 
+/**
+ * La ventana que la agenda CONSULTA para "el día `dateISO`": el día natural
+ * completo en la tz de la clínica.
+ *
+ * Hermana de `dayRangeUtc`, y la distinción importa: `dayRangeUtc` es el
+ * HORARIO DE ATENCIÓN (`dayStart`–`dayEnd`, 08–20 por defecto) y sigue siendo
+ * lo correcto para pintar el eje y validar horarios. Pero leer las citas con
+ * esa ventana borra de la agenda todo lo que caiga fuera del horario.
+ *
+ * 🔴 Hallazgo 40, comprobado en la app real: una cita de 23:30 y otra de 07:30
+ * no salían en la rejilla de su propio día aunque el contador "CITAS HOY" sí
+ * las contaba. Y hallazgo 32: el SlotGridPicker se alimenta de esa misma
+ * lectura, así que una cita de 07:30–08:30 no le llegaba nunca, pintaba las
+ * 08:00 como libres y al guardar reventaba contra la constraint EXCLUDE.
+ *
+ * La SSR de la agenda (src/app/dashboard/agenda/page.tsx) ya usaba el día
+ * calendario vía `viewRangeUtc("day", …)`, con un comentario que explica que
+ * usar `[dayStart, dayEnd)` desincronizaba contadores y render ("Bug B").
+ * Esto es esa misma ventana, para la lectura por día.
+ */
+export function agendaDayFetchRange(
+  dateISO: string,
+  config: ClinicTimeConfig,
+): DayRange {
+  return calendarDayRangeUtc(dateISO, config.timezone);
+}
+
+export interface LegacyLocalTimes {
+  /** "YYYY-MM-DD" en la tz de la clínica. */
+  date?: string | null;
+  /** "HH:MM" en la tz de la clínica. */
+  startTime?: string | null;
+  /** "HH:MM" en la tz de la clínica. Puede pasar de 24 ("24:15"). */
+  endTime?: string | null;
+  durationMins?: number | null;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^(\d{1,2}):(\d{2})$/;
+
+function parseHHMM(v: unknown): { hour: number; minute: number } | null {
+  if (typeof v !== "string") return null;
+  const m = TIME_RE.exec(v.trim());
+  if (!m) return null;
+  const hour = parseInt(m[1]!, 10);
+  const minute = parseInt(m[2]!, 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  // La hora puede pasar de 24 a propósito: el cliente de /dashboard/appointments
+  // suma la duración sin envolver y manda "24:15" para una cita de 23:30+45min.
+  if (hour < 0 || hour > 47 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+/**
+ * Convierte la hora de pared de la clínica (`date` + `startTime` + duración o
+ * `endTime`) en el par de instantes `startsAt`/`endsAt`. Devuelve `null` si el
+ * trío no está completo o no es válido — quien llama decide el 400.
+ *
+ * 🔴 Hallazgo 24: `/dashboard/appointments` manda la hora en este formato
+ * mientras la API exige `startsAt`/`endsAt` ISO, así que crear una cita desde
+ * esa pantalla devolvía 400 `missing_startsAt` SIEMPRE. La pantalla se llega
+ * desde el inicio de recepción, el onboarding, las acciones rápidas y los
+ * estados vacíos.
+ *
+ * Esta conversión vive en el servidor a propósito: pasar de hora de pared a
+ * instante exige la tz IANA de la clínica, y el navegador no la recibe. Hacerlo
+ * con la tz del dispositivo crearía citas a la hora equivocada para cualquiera
+ * que no esté físicamente en la clínica. Es el INVERSO EXACTO de
+ * `dateISOInTz`/`timeHHMMInTz` (legacy-helpers.ts), que es lo que esa misma
+ * pantalla usa para pintar estos campos.
+ */
+export function legacyTimesToUtc(
+  input: LegacyLocalTimes,
+  timezone: string,
+): { startsAt: Date; endsAt: Date } | null {
+  const date = typeof input.date === "string" ? input.date.trim() : "";
+  if (!DATE_RE.test(date)) return null;
+
+  const start = parseHHMM(input.startTime);
+  if (!start) return null;
+  const startsAt = tzLocalToUtc(date, start.hour, start.minute, timezone);
+  if (Number.isNaN(startsAt.getTime())) return null;
+
+  // La duración manda sobre endTime: es lo que el formulario elige de verdad
+  // (un selector de minutos) y no se rompe cuando el fin cruza la medianoche.
+  const mins = input.durationMins;
+  if (typeof mins === "number" && Number.isFinite(mins) && mins > 0) {
+    return { startsAt, endsAt: new Date(startsAt.getTime() + mins * 60_000) };
+  }
+
+  const end = parseHHMM(input.endTime);
+  if (!end) return null;
+  const endsAt = tzLocalToUtc(date, end.hour, end.minute, timezone);
+  if (Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return null;
+  return { startsAt, endsAt };
+}
+
 export function slotsPerDay(config: ClinicTimeConfig): number {
   const hours = config.dayEnd - config.dayStart;
   return Math.max(0, (hours * 60) / config.slotMinutes) | 0;

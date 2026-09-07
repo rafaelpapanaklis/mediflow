@@ -5,7 +5,6 @@ import { logMutation } from "@/lib/audit";
 import {
   loadClinicSession,
   requireRole,
-  isOverlapError,
 } from "@/lib/agenda/api-helpers";
 import { appointmentToDTO } from "@/lib/agenda/server";
 import {
@@ -14,7 +13,12 @@ import {
   canSeePatient,
   type VisibilityViewer,
 } from "@/lib/patient-visibility";
-import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import {
+  canOverrideOverlap,
+  canTransition,
+  isAppointmentOverlapError,
+} from "@/lib/agenda/transitions";
+import { legacyTimesToUtc } from "@/lib/agenda/time-utils";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import {
   applyReminderReschedule,
@@ -40,6 +44,19 @@ const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true, visibleUserIds: true } },
   doctor:  { select: { id: true, firstName: true, lastName: true } },
 } as const;
+
+/**
+ * Cuerpo aceptado por PATCH: la forma canónica (`UpdateAppointmentInput`) más
+ * `notes` y el trío de hora local de /dashboard/appointments. Tipo LOCAL: el
+ * de @/lib/agenda/types no se toca desde esta tarea.
+ */
+type UpdateApptBody = UpdateAppointmentInput & {
+  notes?: string | null;
+  date?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  durationMins?: number | null;
+};
 
 // ═════════════════════════════════════════════════════════════════
 // PATCH /api/appointments/:id
@@ -87,11 +104,30 @@ export async function PATCH(
     return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
   }
 
-  let body: UpdateAppointmentInput;
+  let body: UpdateApptBody;
   try {
-    body = (await req.json()) as UpdateAppointmentInput;
+    body = (await req.json()) as UpdateApptBody;
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+
+  // Igual que en el POST: /dashboard/appointments manda la hora de pared de la
+  // clínica y esta ruta solo miraba `startsAt`/`endsAt`, así que respondía 200
+  // sin haber movido nada (hallazgo 24). La tz sale de la sesión.
+  if (!body.startsAt && !body.endsAt) {
+    const resolved = legacyTimesToUtc(
+      {
+        date: body.date,
+        startTime: body.startTime,
+        endTime: body.endTime,
+        durationMins: body.durationMins,
+      },
+      session.clinic.timezone,
+    );
+    if (resolved) {
+      body.startsAt = resolved.startsAt.toISOString();
+      body.endsAt = resolved.endsAt.toISOString();
+    }
   }
 
   if (body.overrideReason && !canOverrideOverlap(session.user.role)) {
@@ -193,6 +229,12 @@ export async function PATCH(
     data.type = body.reason ?? "Consulta general";
   }
 
+  // Las notas del formulario de /dashboard/appointments se perdían igual que en
+  // el alta: la ruta nunca las miró (hallazgo 24).
+  if (body.notes !== undefined) {
+    data.notes = body.notes ?? null;
+  }
+
   if (body.overrideReason !== undefined) {
     data.overrideReason = body.overrideReason;
     if (body.overrideReason) {
@@ -286,7 +328,7 @@ export async function PATCH(
       },
     );
   } catch (err) {
-    if (isOverlapError(err)) {
+    if (isAppointmentOverlapError(err)) {
       const conflict = await findConflictingAppointment(
         session.clinic.id,
         params.id,
@@ -364,6 +406,41 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   }
 
+  // 🔴 Una sola regla para cancelar. Este DELETE escribía CANCELLED directo, sin
+  // pasar por la matriz de estados, mientras PATCH /status sí validaba: la MISMA
+  // cita COMPLETADA se cancelaba con 200 por aquí y con 409 por allá (extra del
+  // triaje sobre el hallazgo 39). Ahora los dos caminos preguntan lo mismo y
+  // responden con los mismos códigos.
+  const now = new Date();
+  // `PENDING` es un estado legacy que ya no está en la matriz. Se evalúa como
+  // SCHEDULED, que es a lo que migró: si no, cancelar una cita vieja pasaría de
+  // funcionar a dar 409, que sería una regresión y no un arreglo.
+  const fromStatus = (
+    existing.status === "PENDING" ? "SCHEDULED" : existing.status
+  ) as Exclude<typeof existing.status, "PENDING">;
+  const check = canTransition(
+    fromStatus,
+    "CANCELLED",
+    session.user.role,
+    now,
+    existing.startsAt,
+  );
+  if (!check.ok) {
+    if (check.code === "forbidden_role") {
+      return NextResponse.json({ error: "forbidden", reason: check.error }, { status: 403 });
+    }
+    return NextResponse.json(
+      { error: "invalid_transition", reason: check.error },
+      { status: 409 },
+    );
+  }
+
+  // Motivo de la cancelación. El schema ya tiene `cancelReason`/`cancelledAt` y
+  // el panel de la agenda YA los muestra, pero ninguna cancelación del staff los
+  // escribía y el bloque salía siempre vacío (hallazgo 42). DELETE puede llegar
+  // sin cuerpo: eso no es un error, solo deja el motivo en null.
+  const cancelReason = await readCancelReason(req);
+
   // Cancelar la cita cancela sus recordatorios pendientes, en la MISMA
   // transacción. El worker ya se negaba a enviarlos (re-check al salir), pero la
   // fila seguía en "En cola" en el panel hasta que le tocaba turno: un
@@ -371,7 +448,7 @@ export async function DELETE(
   await prisma.$transaction(async (tx) => {
     await tx.appointment.update({
       where: { id: params.id },
-      data: { status: "CANCELLED" },
+      data: { status: "CANCELLED", cancelledAt: now, cancelReason },
     });
     await cancelPendingRemindersForAppointment(tx, {
       appointmentId: params.id,
@@ -406,6 +483,24 @@ export async function DELETE(
   revalidateAfter("appointments");
   revalidatePatientProfile(existing.patientId);
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Motivo opcional del DELETE. Un DELETE sin cuerpo es lo normal (y lo que
+ * mandan los callers viejos), así que cualquier fallo de parseo se traduce a
+ * "sin motivo", nunca a un 400. Se recorta a los 300 caracteres de la columna.
+ */
+async function readCancelReason(req: NextRequest): Promise<string | null> {
+  try {
+    const raw = await req.text();
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { reason?: unknown };
+    if (typeof parsed?.reason !== "string") return null;
+    const trimmed = parsed.reason.trim();
+    return trimmed ? trimmed.slice(0, 300) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function findConflictingAppointment(
