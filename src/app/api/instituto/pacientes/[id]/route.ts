@@ -101,7 +101,19 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   try {
     const body = await eduReadJson(request);
     const updated = await updateEduPatient(g.ctx, params.id, body, { groups: grupos });
-    return NextResponse.json({ ok: true, id: updated.id });
+    // 🔴 N-16 · LA FILA GUARDADA VUELVE EN LA RESPUESTA. El formulario se
+    // resembraba con la `row` que tenía ANTES de guardar, así que bajo el
+    // «Listo» verde seguían los valores viejos hasta que aterrizaba el
+    // `router.refresh()` —y el saneo del servidor no es cosmético: el
+    // teléfono se guarda en diez dígitos, el folio en mayúsculas y el CURP
+    // sin espacios—. Con la fila de vuelta, lo que se lee después de
+    // guardar es lo que hay en la base.
+    //
+    // Es una consulta más por guardado, dentro del alcance y por el mismo
+    // camino que el GET de al lado. La alternativa —adivinar en el
+    // navegador cómo saneó el servidor— es cómo se llega a dos reglas.
+    const row = await getEduPatient(g.ctx, updated.id);
+    return NextResponse.json({ ok: true, id: updated.id, row });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/pacientes/[id]");
   }

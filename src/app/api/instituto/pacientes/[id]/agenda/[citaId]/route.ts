@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduAppointment, setEduAppointmentStatus } from "@/lib/edu/agenda";
+import { eduReminderCancelLabel } from "@/lib/edu/recordatorios";
 import { EduPadronError } from "@/lib/edu/padron";
 
 export const dynamic = "force-dynamic";
@@ -76,7 +77,19 @@ export async function PATCH(
       canManage,
       reason: body.reason,
     });
-    return NextResponse.json({ ok: true, id: res.id, status: res.status });
+    // 🔴 N-15 · EL AVISO DEL RECORDATORIO VIAJA CON LA RESPUESTA. El modal
+    // afirmaba, sin condición, que «el recordatorio automático no sale», y
+    // lo que se cancela es solo lo que sigue en cola: con un recordatorio a
+    // 24 h y una cancelación la tarde anterior, el aviso salió hace horas.
+    // La frase la arma `eduReminderCancelLabel` (recordatorios.ts, pura y
+    // probada) para que todas las pantallas que cancelen digan lo mismo.
+    return NextResponse.json({
+      ok: true,
+      id: res.id,
+      status: res.status,
+      recordatorio: res.recordatorio,
+      recordatorioAviso: eduReminderCancelLabel(res.recordatorio),
+    });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/pacientes/[id]/agenda/[citaId]");
   }

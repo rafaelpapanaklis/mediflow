@@ -111,7 +111,16 @@ export async function POST(request: Request) {
       canSetOrigin,
       allowDuplicate: body.allowDuplicate === true,
     });
-    return NextResponse.json({ ok: true, id: created.id, folio: created.folio }, { status: 201 });
+    // 🔴 N-8 · el AVISO viaja con el 201, en su propio campo. Sin fecha de
+    // nacimiento no se puede afirmar que el paciente sea menor, así que el
+    // alta NO se bloquea — pero quien registra tiene que enterarse de que
+    // la ficha quedó sin la pareja de datos con la que se firma un
+    // consentimiento. Es el mismo patrón que el aviso de duplicado: campo
+    // propio, nunca una frase que la pantalla tenga que reconocer leyéndola.
+    return NextResponse.json(
+      { ok: true, id: created.id, folio: created.folio, aviso: created.aviso },
+      { status: 201 },
+    );
   } catch (err) {
     if (err instanceof EduPatientDuplicateError) {
       return NextResponse.json({

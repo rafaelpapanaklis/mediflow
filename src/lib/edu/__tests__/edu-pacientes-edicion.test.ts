@@ -187,8 +187,31 @@ test("🔴 H-01 · `updateEduPatient` acepta los NUEVE, uno por uno", () => {
   const cuerpo = fuente.slice(fuente.indexOf("export async function updateEduPatient("));
   assert.ok(cuerpo.length > 0, "no se encontró updateEduPatient");
 
+  // 🔴 N-16 · Los 22 campos de la Ola B ya NO tienen su rama escrita dentro
+  // de `updateEduPatient`: viven en `parseEduPatientOlaB`, y la corrección
+  // y el ALTA llaman a esa misma función. Antes el alta los declaraba en su
+  // input y los tiraba en silencio. Así que la rama se busca en la función
+  // que corresponda, y además se exige que las DOS escrituras pasen por el
+  // parser — que es lo que impide que vuelvan a separarse.
+  const parser = fuente.slice(
+    fuente.indexOf("export function parseEduPatientOlaB("),
+    fuente.indexOf("export async function createEduPatient("),
+  );
+  assert.ok(parser.length > 0, "no se encontró parseEduPatientOlaB");
+  assert.ok(
+    /Object\.assign\(data, parseEduPatientOlaB\(input, now\)\)/.test(cuerpo),
+    "updateEduPatient dejó de pasar por el parser compartido",
+  );
+  const alta = fuente.slice(fuente.indexOf("export async function createEduPatient("));
+  assert.ok(
+    /parseEduPatientOlaB\(input, now\)/.test(alta),
+    "createEduPatient volvió a tirar los campos de la Ola B en silencio",
+  );
+
   const sinRama = EDU_PATIENT_FORM_FIELDS.filter(
-    (campo) => !cuerpo.includes(`input.${campo} !== undefined`),
+    (campo) =>
+      !cuerpo.includes(`input.${campo} !== undefined`) &&
+      !parser.includes(`input.${campo} !== undefined`),
   );
   assert.deepEqual(
     sinRama,

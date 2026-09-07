@@ -68,7 +68,10 @@ import {
 // decisión de qué se cancela y qué no vive en whatsapp-core.ts (puro), y
 // esta función solo escribe. Es best-effort a propósito — mover una cita no
 // puede fallar porque el registro de WhatsApp esté caído.
-import { applyEduReminderCancel } from "@/lib/edu/recordatorios";
+import {
+  applyEduReminderCancel,
+  type EduReminderCancelResult,
+} from "@/lib/edu/recordatorios";
 import {
   EDU_CASE_CLOSED_STATUSES,
   type EduAppointmentStatus,
@@ -1044,7 +1047,16 @@ export async function setEduAppointmentStatus(
   rawStatus: unknown,
   options: { canManage: boolean; reason?: unknown },
   now: Date = new Date(),
-): Promise<{ id: string; status: EduAppointmentStatus }> {
+): Promise<{
+  id: string;
+  status: EduAppointmentStatus;
+  /**
+   * N-15 · QUÉ PASÓ CON EL RECORDATORIO de esta cita. Sube hasta el modal
+   * de cancelar, que prometía sin condición que «el recordatorio automático
+   * no sale» y a veces ya había salido.
+   */
+  recordatorio: EduReminderCancelResult;
+}> {
   const institutionId = requireInstitution(ctx);
   const scope = eduVisibility(ctx, "appointments");
   if (eduScopeIsEmpty(scope)) throw new EduPadronError("Esa cita no es de este instituto.", 404);
@@ -1149,15 +1161,21 @@ export async function setEduAppointmentStatus(
   // manda un "le recordamos su cita". El barrido tampoco las encontraría
   // (filtra por los estados vivos), pero la fila en cola se quedaría en
   // "en curso" para siempre y la pantalla diría algo que no va a pasar.
+  //
+  // 🔴 Y EL RESULTADO SUBE (N-15). Lo que no se pudo cancelar porque ya
+  // había salido no es un detalle interno: es la diferencia entre un
+  // paciente que sabe que su cita se cayó y uno que se presenta con el
+  // recordatorio en el teléfono.
+  let recordatorio: EduReminderCancelResult = { cancelados: 0, yaSalieron: 0 };
   if (status === "CANCELLED" || status === "NO_SHOW" || status === "COMPLETED") {
-    await applyEduReminderCancel({
+    recordatorio = await applyEduReminderCancel({
       institutionId,
       appointmentId: current.id,
       reason: "Se canceló porque la cita se cerró antes de que saliera el aviso.",
     });
   }
 
-  return { id: current.id, status };
+  return { id: current.id, status, recordatorio };
 }
 
 /**

@@ -929,6 +929,13 @@ export function EduCitaCancelar({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 🔴 N-15 · QUÉ PASÓ DE VERDAD CON EL RECORDATORIO. Lo arma el servidor
+   * (`eduReminderCancelLabel`) y se queda leyéndose junto al botón después
+   * de que el modal se cierre: si el aviso ya había salido, quien canceló
+   * tiene que enterarse EN ESE MOMENTO y llamar al paciente.
+   */
+  const [avisoRecordatorio, setAvisoRecordatorio] = useState<string | null>(null);
 
   if (!canManage) return null;
 
@@ -937,12 +944,13 @@ export function EduCitaCancelar({
     setError(null);
     setBusy(true);
     try {
-      await eduRequest(`/api/instituto/pacientes/${patientId}/agenda/${appointmentId}`, {
-        method: "PATCH",
-        body: { status: "CANCELLED", reason: reason.trim() },
-      });
+      const res = await eduRequest<{ recordatorioAviso?: string }>(
+        `/api/instituto/pacientes/${patientId}/agenda/${appointmentId}`,
+        { method: "PATCH", body: { status: "CANCELLED", reason: reason.trim() } },
+      );
       setAbierto(false);
       setReason("");
+      setAvisoRecordatorio(res?.recordatorioAviso ?? null);
       startNav(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cancelar la cita.");
@@ -961,6 +969,16 @@ export function EduCitaCancelar({
         <XCircle size={15} />
         Cancelar cita
       </button>
+
+      {/* 🔴 N-15 · el modal ya se cerró: el aviso se queda AQUÍ, pegado a la
+          cita, porque «ya le salió el recordatorio» es una tarea para la
+          persona que acaba de cancelar y no un mensaje que se pueda perder
+          con el modal. */}
+      {avisoRecordatorio && (
+        <p className="edu-note" role="status">
+          {avisoRecordatorio}
+        </p>
+      )}
 
       {abierto && (
         <EduModal
@@ -1015,9 +1033,20 @@ export function EduCitaCancelar({
             </span>
           </div>
 
+          {/* 🔴 N-15 · ANTES ESTO AFIRMABA, sin condición, que «el
+              recordatorio automático no sale». Lo que se cancela es lo que
+              sigue EN COLA: con un recordatorio a 24 h, una cita del jueves
+              a las 10:00 y una cancelación el miércoles a las 18:00, el
+              aviso salió hace ocho horas y el paciente lo tiene en el
+              teléfono. Lo entregado NO se borra a propósito —es la
+              constancia—, así que lo único que se podía arreglar era la
+              frase. Aquí se dice el condicional; al terminar, el servidor
+              dice cuál de los dos casos fue. */}
           <p className="edu-note">
-            El hueco queda libre para otro paciente y el recordatorio automático no sale. La cita no
-            se borra: se queda como constancia de que existió.
+            El hueco queda libre para otro paciente. Si el recordatorio automático todavía está en
+            cola, se cancela y al paciente no le llega nada; si ya le salió, te lo decimos al
+            terminar para que lo llames. La cita no se borra: se queda como constancia de que
+            existió.
           </p>
         </EduModal>
       )}
