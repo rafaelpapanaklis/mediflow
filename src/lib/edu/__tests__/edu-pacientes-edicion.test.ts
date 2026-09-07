@@ -99,6 +99,34 @@ function paciente(over: Partial<EduPatientRow> = {}): EduPatientRow {
     openCases: 0,
     totalCases: 0,
     createdAt: "2026-01-10T12:00:00.000Z",
+
+    // ── Ola B · los 22 campos de la ficha completa ────────────────────
+    // TODOS a null / false a propósito: es el estado de CUALQUIER paciente
+    // registrado antes de la Ola B, que es contra el que hay que probar.
+    curp: null,
+    phone2: null,
+    contactPreference: null,
+    addressStreet: null,
+    addressNeighborhood: null,
+    addressCity: null,
+    addressState: null,
+    addressZip: null,
+    guardianName: null,
+    guardianRelation: null,
+    guardianPhone: null,
+    insuranceProvider: null,
+    insurancePolicy: null,
+    familyHistory: null,
+    personalNonPathologicalHistory: null,
+    habitsTobacco: null,
+    habitsAlcohol: null,
+    habitsBruxism: null,
+    habitsNotes: null,
+    pregnancy: null,
+    isChild: false,
+    privacyNoticeAcceptedAt: null,
+    updatedAt: "2026-01-10T12:00:00.000Z",
+    updatedByName: null,
     ...over,
   };
 }
@@ -107,11 +135,46 @@ function paciente(over: Partial<EduPatientRow> = {}): EduPatientRow {
 // 1 · H-01 · QUÉ CAMPOS ACEPTA EL SERVIDOR, Y QUE LA UI LOS MANDE TODOS
 // ═══════════════════════════════════════════════════════════════════════
 
-test("los NUEVE campos de la ficha son los que son (si crece la lista, se entera esta prueba)", () => {
+test("los 31 campos de la ficha son los que son (si crece la lista, se entera esta prueba)", () => {
+  // Nueve de la ola de la edición + 22 de la Ola B. Si esta lista crece hay
+  // que revisar tres cosas: que el servidor los acepte, que las dos
+  // pantallas los manden, y que cada uno tenga su GRUPO de permiso.
   assert.deepEqual(
     [...EDU_PATIENT_FORM_FIELDS],
-    ["folio", "firstName", "lastName", "sex", "birthDate", "phone", "email", "status", "notes"],
-    "cambió la lista de campos de la ficha: revisa que el servidor los acepte y que las dos pantallas los manden",
+    [
+      "folio",
+      "firstName",
+      "lastName",
+      "sex",
+      "birthDate",
+      "curp",
+      "phone",
+      "phone2",
+      "email",
+      "contactPreference",
+      "addressStreet",
+      "addressNeighborhood",
+      "addressCity",
+      "addressState",
+      "addressZip",
+      "guardianName",
+      "guardianRelation",
+      "guardianPhone",
+      "insuranceProvider",
+      "insurancePolicy",
+      "familyHistory",
+      "personalNonPathologicalHistory",
+      "habitsTobacco",
+      "habitsAlcohol",
+      "habitsBruxism",
+      "habitsNotes",
+      "pregnancy",
+      "isChild",
+      "status",
+      "notes",
+      "privacyNoticeAcceptedAt",
+    ],
+    "cambió la lista de campos de la ficha: revisa que el servidor los acepte, que las dos pantallas los manden y que cada uno tenga grupo de permiso",
   );
 });
 
@@ -249,11 +312,30 @@ test("🔴 H-02 · quien no lleva ninguna de las dos llaves no corrige nada", ()
   assert.equal(a.contacto, false);
 });
 
-test("🔴 H-02 · el CONTACTO son teléfono y correo, y nada más", () => {
-  assert.deepEqual([...EDU_PATIENT_CONTACT_FIELDS], ["phone", "email"]);
+test("🔴 H-02 · el CONTACTO son los dos teléfonos, el correo y la preferencia", () => {
+  // La Ola B añadió `phone2` y `contactPreference` al MISMO grupo, y es la
+  // misma decisión: el alumno tiene al paciente en el sillón y le dictan un
+  // número de recado. Lo que NO entró es todo lo demás.
+  assert.deepEqual(
+    [...EDU_PATIENT_CONTACT_FIELDS],
+    ["phone", "phone2", "email", "contactPreference"],
+  );
   // El nacimiento NO es contacto y no es un olvido: decide la edad que sale
-  // impresa en una carta de consentimiento.
-  for (const campo of ["folio", "firstName", "lastName", "sex", "birthDate", "status", "notes"]) {
+  // impresa en una carta de consentimiento. El CURP y el TUTOR tampoco: son
+  // identidad y papeleo, y los captura recepción.
+  for (const campo of [
+    "folio",
+    "firstName",
+    "lastName",
+    "sex",
+    "birthDate",
+    "curp",
+    "guardianName",
+    "addressZip",
+    "pregnancy",
+    "status",
+    "notes",
+  ]) {
     assert.equal(eduPatientFieldIsContact(campo), false, `${campo} no puede ser "contacto"`);
   }
 });
@@ -263,22 +345,30 @@ test("🔴 H-02 · el servidor RECHAZA con su motivo un campo de más, no lo ign
   // apellido. La rama vive en `updateEduPatient`, no solo en el endpoint.
   const fuente = leer(SERVIDOR);
   assert.ok(
-    fuente.includes('fields === "contacto"'),
-    "updateEduPatient no distingue quién puede tocar qué",
+    /motivoGrupoCerrado/.test(fuente),
+    "updateEduPatient no rechaza con un motivo escrito el campo que no le toca a quien manda",
   );
   assert.ok(
-    /eduPatientFieldIsContact/.test(fuente),
+    /eduPatientFieldGroupOf/.test(fuente),
     "el recorte de campos no usa el punto único de pacientes-core",
   );
+  assert.ok(
+    /options\.groups/.test(fuente),
+    "updateEduPatient no lee los GRUPOS que puede tocar quien manda",
+  );
 
-  // Y el endpoint tiene que pasar el reparto: si llamara sin opciones, el
-  // default "all" abriría los nueve campos a quien solo lleva la segunda
+  // Y el endpoint tiene que pasar el reparto: si llamara sin opciones, o
+  // con una lista fija, abriría los 31 campos a quien solo lleva la segunda
   // llave. Es exactamente el bug que este check evita.
   const endpoint = leer(ENDPOINT);
   assert.ok(endpoint.includes("eduPatientEditAbilities"), "el endpoint no resuelve las dos llaves");
   assert.ok(
-    /fields: abilities\.manage \? "all" : "contacto"/.test(endpoint),
-    "el endpoint no le dice a updateEduPatient qué puede tocar quien manda",
+    /groups: grupos/.test(endpoint),
+    "el endpoint no le dice a updateEduPatient qué GRUPOS puede tocar quien manda",
+  );
+  assert.ok(
+    /eduPatientEditGroups/.test(endpoint),
+    "el endpoint traduce las llaves a grupos por su cuenta en vez de usar el punto único",
   );
 });
 
@@ -707,8 +797,16 @@ test("los campos del formulario no repiten id entre los dos montajes", () => {
   // Dos <label for> con el mismo id en la misma página hacen que el clic en
   // uno enfoque el otro. Por eso el componente recibe `idPrefix`.
   const form = leer(FORMULARIO);
-  const usados = [...form.matchAll(/id=\{`\$\{idPrefix\}-([a-z]+)`\}/g)].map((m) => m[1]);
-  assert.ok(usados.length >= 9, `se esperaban al menos 9 campos con prefijo, hay ${usados.length}`);
+  // Desde la Ola B el prefijo se aplica con el ayudante `id("…")` en vez de
+  // interpolarlo en cada campo: 31 campos con la plantilla escrita a mano
+  // son 31 sitios donde olvidarse del prefijo.
+  const usados = [
+    ...form.matchAll(/id=\{`\$\{idPrefix\}-([a-z0-9-]+)`\}/g),
+    // Solo el ATRIBUTO id, no el `htmlFor` que le apunta: los dos usan el
+    // mismo ayudante y contarlos juntos daría cada campo dos veces.
+    ...form.matchAll(/\bid=\{id\("([a-z0-9-]+)"\)\}/g),
+  ].map((m) => m[1]);
+  assert.ok(usados.length >= 25, `se esperaban al menos 25 campos con prefijo, hay ${usados.length}`);
   assert.equal(new Set(usados).size, usados.length, `hay ids repetidos: ${usados.join(", ")}`);
 
   const prefijos = [
@@ -719,12 +817,17 @@ test("los campos del formulario no repiten id entre los dos montajes", () => {
   assert.equal(new Set(prefijos).size, 2, `los dos montajes usan el mismo prefijo: ${prefijos}`);
 });
 
-test("los nueve campos tienen etiqueta en español (la UI nunca pinta el nombre de la columna)", () => {
+test("cada campo tiene etiqueta en español (la UI nunca pinta el nombre de la columna)", () => {
   const form = leer(FORMULARIO);
   // Se leen las etiquetas DE VERDAD del fuente, no se busca la palabra
   // suelta: "Estado" aparece en veinte comentarios y encontrarla ahí no
-  // prueba que exista el <label>.
-  const rotulos = [...form.matchAll(/<label[^>]*>\s*([^<]+?)\s*<\/label>/g)].map((m) => m[1]);
+  // prueba que exista el rótulo. Desde la Ola B hay dos formas: el <label>
+  // escrito a mano (los <select> que no caben en el ayudante) y la prop
+  // `label="…"` de los ayudantes Texto/Area/Enumo.
+  const rotulos = [
+    ...[...form.matchAll(/<label[^>]*>\s*([^<{]+?)\s*<\/label>/g)].map((m) => m[1]),
+    ...[...form.matchAll(/\blabel="([^"]+)"/g)].map((m) => m[1]),
+  ];
   for (const e of [
     "Nombre",
     "Apellidos",
@@ -735,8 +838,19 @@ test("los nueve campos tienen etiqueta en español (la UI nunca pinta el nombre 
     "Teléfono",
     "Correo",
     "Notas de recepción",
+    // Ola B: los que la ficha no tenía.
+    "CURP",
+    "Segundo teléfono",
+    "Nombre del tutor",
+    "Parentesco",
+    "Código postal",
+    "Heredofamiliares",
+    "Personales no patológicos",
+    "Tabaco",
+    "Embarazo o lactancia",
+    "Dentición",
   ]) {
-    assert.ok(rotulos.includes(e), `falta el <label> «${e}» — hay: ${rotulos.join(", ")}`);
+    assert.ok(rotulos.includes(e), `falta la etiqueta «${e}» — hay: ${rotulos.join(", ")}`);
   }
   // Y ninguna etiqueta es el nombre de la columna de Prisma.
   for (const campo of EDU_PATIENT_FORM_FIELDS as readonly EduPatientFormField[]) {

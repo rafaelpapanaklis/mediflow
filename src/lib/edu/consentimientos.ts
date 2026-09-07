@@ -79,6 +79,7 @@ import {
   eduSignRead,
   eduSignReadMany,
   eduStorageConfigured,
+  eduStorageDownload,
   eduStorageUpload,
 } from "@/lib/edu/storage";
 import {
@@ -1145,4 +1146,271 @@ export async function getEduCaseSupervisorNames(
   const out: Record<string, string | null> = {};
   for (const c of casos) out[c.id] = c.supervisor ? personName(c.supervisor) : null;
   return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// H-12 · EL PDF DE LA CARTA FIRMADA
+//
+// 🔴 QUÉ ARREGLA, y por qué era grave. El permiso de CAJA sobre los
+// consentimientos está justificado por escrito en que «la carta se imprime
+// y se entrega en el mostrador» (permissions.ts). No había nada que
+// imprimir: `EduConsent.content` se guardaba, se hasheaba y no volvía nunca
+// a una pantalla del instituto; firmada la carta, la liga pública se apaga
+// (`publicPath`) y no quedaba ninguna otra vía. El paciente pedía su copia
+// y se iba sin ella. La ola anterior devolvió el TEXTO a la pantalla; esto
+// devuelve el DOCUMENTO, con las firmas dentro.
+//
+// 🔴 EL MISMO MOTOR QUE LA RECETA (@react-pdf/renderer, renderToBuffer) y
+// la misma división de trabajo: esta función resuelve los datos y aplica el
+// alcance y el GATE; `consentimiento-pdf.tsx` solo dibuja y no consulta
+// nada. Una función que consultara y dibujara a la vez es como se acaba
+// sirviendo el PDF de una carta que no le toca a quien lo pidió.
+//
+// 🔴 LA HUELLA SE RECALCULA AQUÍ, no se lee de una columna. Es la misma
+// regla que ya aplican `toRow` y la página pública, y por la misma razón:
+// una bandera de integridad guardada la escribe quien pudo alterar el
+// documento. Si no cuadra, el PDF lo DICE en una franja arriba — un papel
+// que afirma su propia integridad por el hecho de imprimir una cifra es
+// exactamente el bug que la Ola 14 corrigió en las recetas.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Una firma manuscrita, ya lista para incrustarse en el PDF. */
+export interface EduConsentPdfFirma {
+  rol: string;
+  nombre: string;
+  cuando: string | null;
+  /** El PNG como `data:` URI, o null si no se pudo traer del bucket. */
+  dataUrl: string | null;
+}
+
+export interface EduConsentPdfData {
+  institutionName: string;
+  institutionCity: string | null;
+  institutionPhone: string | null;
+
+  patientName: string;
+  patientFolio: string;
+  patientAgeYears: number | null;
+
+  procedure: string;
+  programName: string | null;
+  content: string;
+
+  /** Quién firmó: el paciente, o su representante legal. */
+  signerName: string | null;
+  signerRelation: string | null;
+  signedLabel: string | null;
+  createdLabel: string;
+  createdByName: string;
+
+  firmas: EduConsentPdfFirma[];
+
+  integridad: EduConsentIntegridad;
+  hashCorto: string | null;
+
+  revoked: boolean;
+  revokedLabel: string | null;
+  revokedByName: string | null;
+  revokedReason: string | null;
+
+  consentId: string;
+  fileName: string;
+}
+
+/** El nombre del archivo: folio del paciente + procedimiento, saneado. */
+function nombreArchivoPdf(folio: string, procedure: string, consentId: string): string {
+  const trozo = procedure
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .toLowerCase();
+  return `consentimiento-${folio}-${trozo || "carta"}-${consentId.slice(0, 8)}.pdf`;
+}
+
+/**
+ * Los datos del PDF, SI la carta le toca a quien pregunta y SI hay algo que
+ * imprimir.
+ *
+ * 🔴 EL GATE: solo sale FIRMADA o REVOCADA. Una carta pendiente todavía es
+ * la LIGA —ahí se lee entera y ahí se firma—, y un PDF de algo sin firmar
+ * es un papel que parece un consentimiento y no lo es: alguien lo
+ * archivaría creyendo que el paciente autorizó. La revocada SÍ se imprime,
+ * marcada: el papel salió una vez, y poder imprimir la constancia de que se
+ * retiró (con su motivo y su fecha) es la mitad de revocar. Es la misma
+ * decisión, con las mismas palabras, que la receta anulada.
+ *
+ * 🔴 EL ALCANCE ES EL DEL PACIENTE, como toda esta pestaña, y por la razón
+ * escrita en la cabecera del archivo: recepción entrega la carta. Si el PDF
+ * usara el alcance clínico, caja no podría imprimir lo que su permiso
+ * existe para que imprima.
+ */
+export async function getEduConsentPdfData(
+  ctx: EduClinicaContext,
+  consentId: string,
+  timeZone: string,
+  now: Date = new Date(),
+): Promise<EduConsentPdfData> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduVisibility(ctx, "patients");
+  if (eduScopeIsEmpty(scope)) {
+    throw new EduPadronError("Esa carta no existe o no te toca.", 404);
+  }
+  const id = eduCleanId(consentId);
+  // El paciente se cruza DENTRO del where —y no después, comparando en
+  // memoria— para que una carta de otra escuela o de otro alumno se vea
+  // exactamente igual que una que no existe. Un 403 confirmaría que existe.
+  const c = id
+    ? await prisma.eduConsent.findFirst({
+        where: {
+          institutionId,
+          id,
+          patient: eduPatientScopeWhere({ institutionId, scope, now }),
+        },
+        select: {
+          ...CONSENT_SELECT,
+          patient: { select: { folio: true, firstName: true, lastName: true, birthDate: true } },
+          institution: { select: { name: true, city: true, phone: true } },
+        },
+      })
+    : null;
+  if (!c) throw new EduPadronError("Esa carta no existe o no te toca.", 404);
+
+  // ── EL GATE: SIN FIRMA DEL PACIENTE NO HAY PAPEL ──────────────────
+  //
+  // 🔴 Se mira `signedAt` Y NO «firmada o revocada». Parece lo mismo y no
+  // lo es: `revokeEduConsent` acepta a propósito revocar una carta que
+  // NUNCA se firmó —«el paciente dijo que no» es una constancia que hay que
+  // poder dejar, y es también como se anula una carta emitida por error—.
+  // Con el gate puesto en «tiene revokedAt», esa carta habría salido como
+  // un PDF titulado CONSENTIMIENTO INFORMADO, con el texto íntegro de algo
+  // que nadie autorizó. La franja roja de revocada no arregla eso: un papel
+  // así acaba archivado.
+  //
+  // La REVOCADA que sí se imprime es la que se firmó y luego se retiró: ahí
+  // el papel ya salió una vez y poder imprimir la constancia de que se
+  // retractó es la mitad de revocar. Ésa pasa este `if` por su `signedAt`.
+  const estado = eduConsentEstado(c, now);
+  if (!c.signedAt) {
+    throw new EduPadronError(
+      c.revokedAt
+        ? "Esta carta se revocó antes de que el paciente llegara a firmarla, así que no hay consentimiento que imprimir. La constancia de la revocación está en la ficha."
+        : estado === "PENDIENTE"
+          ? "Esta carta todavía no está firmada: el documento vivo es la liga que se le manda al paciente. Cuando firme, aquí sale el PDF."
+          : "Esta carta caducó sin que el paciente llegara a firmarla, así que no hay nada que imprimir. Emite una nueva.",
+      409,
+    );
+  }
+
+  // La huella, RECALCULADA. Ver el bloque de arriba.
+  let integridad: EduConsentIntegridad = "sin_hash";
+  if (c.contentHash) {
+    integridad = eduConsentHash(c.procedure, c.content) === c.contentHash ? "ok" : "alterado";
+  }
+
+  // ── Las cinco imágenes de firma ────────────────────────────────────
+  //
+  // 🔴 SE DESCARGAN Y SE INCRUSTAN COMO `data:` URI, no como URL firmada.
+  // El PDF se renderiza en el SERVIDOR: una URL firmada obligaría al
+  // renderer a hacer cinco peticiones HTTP de salida en el camino del
+  // documento —cinco sitios donde un timeout deja el PDF a medias— y esas
+  // URL caducan, así que el mismo buffer no se podría volver a generar. Son
+  // PNG de unos kilobytes; caben.
+  //
+  // ⚠️ Best-effort, igual que al guardarlas: si Storage no está o un PNG se
+  // perdió, la firma sale como una línea con el nombre y la fecha y el PDF
+  // lo dice. La constancia jurídica es la fecha y la evidencia de la fila;
+  // la imagen la acompaña. Perder el documento entero por una imagen sería
+  // peor.
+  const slots: { rol: string; nombre: string; cuando: Date | null; path: string | null }[] = [
+    {
+      rol: c.signerName ? "Representante legal" : "Paciente",
+      nombre: c.signerName ?? eduPatientFullName(c.patient),
+      cuando: c.signedAt,
+      path: c.signatureUrl,
+    },
+    {
+      rol: "Testigo 1",
+      nombre: c.witness1Name ?? "—",
+      cuando: c.witness1SignedAt,
+      path: c.witness1SignatureUrl,
+    },
+    {
+      rol: "Testigo 2",
+      nombre: c.witness2Name ?? "—",
+      cuando: c.witness2SignedAt,
+      path: c.witness2SignatureUrl,
+    },
+    {
+      rol: "Estudiante que atiende",
+      nombre: c.studentMatricula ? `${c.studentName} (${c.studentMatricula})` : c.studentName,
+      cuando: c.studentSignedAt,
+      path: c.studentSignatureUrl,
+    },
+    {
+      rol: "Docente responsable",
+      nombre: c.supervisorSignedByName ?? c.supervisorName ?? "—",
+      cuando: c.supervisorSignedAt,
+      path: c.supervisorSignatureUrl,
+    },
+  ];
+
+  const paths = slots
+    .map((s) => s.path)
+    .filter((p): p is string => typeof p === "string" && p.length > 0);
+  const bytes = new Map<string, string>();
+  if (paths.length > 0 && eduStorageConfigured()) {
+    // Menos de siete a la vez: son cinco como mucho, así que un solo
+    // Promise.all cabe de sobra en la regla del pooler.
+    const bajadas = await Promise.all(paths.map((p) => eduStorageDownload(p)));
+    paths.forEach((p, i) => {
+      const buf = bajadas[i];
+      if (buf) bytes.set(p, `data:image/png;base64,${buf.toString("base64")}`);
+    });
+  }
+
+  const firmas: EduConsentPdfFirma[] = slots
+    // Un testigo que no firmó no ocupa media hoja: se listan las firmas que
+    // EXISTEN. Que no haya testigos es normal y no es un hueco.
+    .filter((s) => s.cuando !== null || s.path)
+    .map((s) => ({
+      rol: s.rol,
+      nombre: s.nombre,
+      cuando: stampLabel(s.cuando, timeZone),
+      dataUrl: s.path ? bytes.get(s.path) ?? null : null,
+    }));
+
+  return {
+    institutionName: c.institution.name,
+    institutionCity: c.institution.city,
+    institutionPhone: c.institution.phone,
+
+    patientName: eduPatientFullName(c.patient),
+    patientFolio: c.patient.folio,
+    patientAgeYears: eduAgeYears(c.patient.birthDate, now),
+
+    procedure: c.procedure,
+    programName: c.case ? c.case.program.name : null,
+    content: c.content,
+
+    signerName: c.signerName,
+    signerRelation: c.signerRelation,
+    signedLabel: stampLabel(c.signedAt, timeZone),
+    createdLabel: stampLabel(c.createdAt, timeZone) ?? "",
+    createdByName: c.createdByName,
+
+    firmas,
+
+    integridad,
+    hashCorto: c.contentHash ? c.contentHash.slice(0, 12) : null,
+
+    revoked: c.revokedAt !== null,
+    revokedLabel: stampLabel(c.revokedAt, timeZone),
+    revokedByName: c.revokedByName,
+    revokedReason: c.revokedReason,
+
+    consentId: c.id,
+    fileName: nombreArchivoPdf(c.patient.folio, c.procedure, c.id),
+  };
 }

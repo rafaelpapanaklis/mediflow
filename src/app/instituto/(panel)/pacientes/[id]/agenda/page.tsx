@@ -14,6 +14,7 @@ import {
 } from "@/lib/edu/types";
 import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { EduDenied } from "@/components/edu/edu-denied";
+import { EduCitaCancelar } from "@/components/edu/expediente/paciente-acciones";
 
 /**
  * Pestaña AGENDA de la ficha (Ola 12): las citas de ESTE paciente, las que
@@ -27,6 +28,17 @@ import { EduDenied } from "@/components/edu/edu-denied";
  * Agendar NO vive aquí sino en la barra de acciones de la ficha (arriba,
  * en el layout): así el botón está en TODAS las pestañas y no solo en
  * ésta, que es lo que "agendar sin salir de la ficha" significa.
+ *
+ * 🔴 CANCELAR SÍ VIVE AQUÍ (Ola B), y es lo contrario por la misma razón:
+ * se cancela UNA cita concreta, así que el botón tiene que estar pegado a
+ * la cita y no en una barra que no sabe de cuál hablas. Hasta ahora esta
+ * pestaña enseñaba las citas y no dejaba hacer nada con ellas: para
+ * cancelar la del jueves había que salir a la agenda general, encontrar el
+ * día y encontrar el hueco.
+ *
+ * ⚠️ La regla de estado NO se duplica: el botón pega a
+ * `PATCH /api/instituto/pacientes/[id]/agenda/[citaId]`, que llama a
+ * `setEduAppointmentStatus` — la misma función que usa la agenda general.
  *
  * ⚠️ La ficha NO se filtra por sede a propósito (decisión de la Ola 11):
  * la historia del paciente es UNA. La sede de cada cita se PINTA cuando
@@ -42,7 +54,24 @@ const TAG_BY_STATUS: Record<EduAppointmentStatus, string> = {
   NO_SHOW: "edu-tag--danger",
 };
 
-function Cita({ a, conSede }: { a: EduAppointmentRow; conSede: boolean }) {
+/** Los estados desde los que todavía tiene sentido cancelar. Una cita ya
+ *  cancelada, ya terminada o a la que el paciente no llegó no se cancela —
+ *  y el servidor lo rebota igual con `eduAppointmentCanTransition`; esto
+ *  solo evita pintar un botón que solo puede dar error. */
+const CANCELABLES: EduAppointmentStatus[] = ["SCHEDULED", "CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"];
+
+function Cita({
+  a,
+  conSede,
+  patientId,
+  canManage,
+}: {
+  a: EduAppointmentRow;
+  conSede: boolean;
+  patientId: string;
+  /** `agenda.manage`: cancelar libera el hueco y toca el cobro. */
+  canManage: boolean;
+}) {
   return (
     <article className="edu-nota">
       <div className="edu-nota__head">
@@ -76,6 +105,16 @@ function Cita({ a, conSede }: { a: EduAppointmentRow; conSede: boolean }) {
         {a.caseProgramName ? ` · caso de ${a.caseProgramName}` : ""}
         {a.notes ? ` · ${a.notes}` : ""}
       </p>
+      {CANCELABLES.includes(a.status) && (
+        <div className="edu-actions">
+          <EduCitaCancelar
+            patientId={patientId}
+            appointmentId={a.id}
+            cuando={`${eduFormatDayShort(a.dayISO)} · ${a.startLabel}–${a.endLabel} · ${a.chairName}`}
+            canManage={canManage}
+          />
+        </div>
+      )}
     </article>
   );
 }
@@ -106,6 +145,13 @@ export default async function PacienteAgendaPage({ params }: { params: { id: str
       </div>
     );
   }
+
+  // 🔴 `agenda.manage` y no `agenda.view`: registrar lo que pasa en el
+  // sillón (llegó, se sentó, terminó) lo hace cualquiera con agenda.view —
+  // es lo que hace que /mi-dia funcione para un alumno—, pero CANCELAR es
+  // una decisión administrativa: libera el hueco y, desde la Ola 5, toca el
+  // cobro. Es la misma línea que traza el servidor con `eduStatusNeedsManage`.
+  const canCancelar = hasEduPermission(permUser, "agenda.manage");
 
   const now = new Date();
   const citas = await listEduPatientAppointments(ctx, p.id, ctx.institution.timezone, now);
@@ -143,7 +189,13 @@ export default async function PacienteAgendaPage({ params }: { params: { id: str
         ) : (
           <div className="edu-stack edu-stack--tight">
             {futuras.map((a) => (
-              <Cita key={a.id} a={a} conSede={conSede} />
+              <Cita
+                key={a.id}
+                a={a}
+                conSede={conSede}
+                patientId={p.id}
+                canManage={canCancelar}
+              />
             ))}
           </div>
         )}
@@ -159,7 +211,13 @@ export default async function PacienteAgendaPage({ params }: { params: { id: str
         ) : (
           <div className="edu-stack edu-stack--tight">
             {pasadas.map((a) => (
-              <Cita key={a.id} a={a} conSede={conSede} />
+              <Cita
+                key={a.id}
+                a={a}
+                conSede={conSede}
+                patientId={p.id}
+                canManage={canCancelar}
+              />
             ))}
           </div>
         )}

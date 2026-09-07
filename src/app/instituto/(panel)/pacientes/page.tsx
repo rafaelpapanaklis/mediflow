@@ -4,8 +4,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { eduPatientEditAbilities, hasEduPermission } from "@/lib/edu/permissions";
-import { EDU_CLINICA_MAX_ROWS } from "@/lib/edu/agenda-core";
-import { parseEduPatientFilters } from "@/lib/edu/pacientes-core";
+import { EDU_PATIENT_PAGE_SIZE, parseEduPatientFilters } from "@/lib/edu/pacientes-core";
 import { listEduPatients } from "@/lib/edu/pacientes";
 import { listEduStudentOptions } from "@/lib/edu/agenda";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
@@ -47,11 +46,18 @@ export default async function InstitutoPacientesPage({
     );
   }
 
-  // 🔴 DOS LLAVES para la ficha (H-02), resueltas en el punto único:
-  // `manage` abre los nueve campos (caja, dirección) y `contacto` abre el
-  // teléfono y el correo también al alumno y al docente, que son quienes
-  // tienen al paciente delante. El endpoint vuelve a exigir las dos.
-  const { manage: canManage, contacto: canContacto } = eduPatientEditAbilities(permUser);
+  // 🔴 DOS LLAVES Y TRES GRUPOS para la ficha (H-02 + Ola B), resueltos en
+  // el punto único: `manage` abre la identidad y el papeleo (caja,
+  // dirección), `contacto` abre los teléfonos, el correo y la preferencia
+  // también al alumno y al docente —que son quienes tienen al paciente
+  // delante—, y `clinico` abre los NOM-004, los hábitos, el embarazo y la
+  // dentición con la misma llave que los antecedentes. El endpoint las
+  // vuelve a exigir.
+  const {
+    manage: canManage,
+    contacto: canContacto,
+    clinico: canClinico,
+  } = eduPatientEditAbilities(permUser);
   const canOrigin = hasEduPermission(permUser, "pacientes.origen");
   const scope = eduVisibility(ctx, "patients");
 
@@ -105,12 +111,16 @@ export default async function InstitutoPacientesPage({
 
       <EduPacientesScreen
         rows={page.rows}
-        truncated={page.truncated}
-        maxRows={EDU_CLINICA_MAX_ROWS}
+        /* 🔴 H-06 · el cursor de la PÁGINA SIGUIENTE. La primera página la
+           pinta el servidor; «Ver más» pide la siguiente al endpoint y la
+           apila. El tope de 300 sin salida desapareció de aquí. */
+        nextCursor={page.nextCursor}
+        maxRows={EDU_PATIENT_PAGE_SIZE}
         filters={filters}
         students={alumnos}
         canManage={canManage}
         canContacto={canContacto}
+        canClinico={canClinico}
         canOrigin={canOrigin}
         /* 🔴 H-29 · el alcance de un docente es "supervised" y NUNCA
            "none", así que la rama de arriba no lo atrapa y la lista vacía
