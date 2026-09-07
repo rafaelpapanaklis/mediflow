@@ -46,6 +46,24 @@ export function DetailPanel({
   // externally (e.g. "clear tooth"). Local edits survive surface/finding edits.
   useEffect(() => { setNoteLocal(record.note || ""); }, [fdi, record.note]);
 
+  /**
+   * 🔴 MIRAR UNA NOTA NO ES ESCRIBIRLA.
+   *
+   * El `onBlur` disparaba `onNote` SIEMPRE, hubiera cambiado el texto o no.
+   * Y `onNote` acaba en un guardado que reescribe QUIÉN escribió la nota y
+   * CUÁNDO: basta con hacer clic dentro de la nota de un diente para leerla
+   * completa y hacer clic fuera para que pase a figurar como tuya, con la
+   * hora de hoy, en el expediente del paciente.
+   *
+   * Se compara contra `record.note` —lo que hay guardado— y no contra un
+   * valor de arranque: si la nota cambió por otro camino mientras el foco
+   * estaba dentro, lo guardado sigue siendo la referencia buena.
+   */
+  const saveNoteIfChanged = () => {
+    if (note === (record.note || "")) return;
+    onNote(note);
+  };
+
   const typeName =
     TYPE_NAMES[meta.type][lang] + (meta.primary ? (lang === "es" ? " (temporal)" : " (primary)") : "");
   const surfaceLetters = meta.posterior ? SURFACES.posterior : SURFACES.anterior;
@@ -161,7 +179,7 @@ export function DetailPanel({
             placeholder={t.notesPh}
             value={note}
             onChange={(e) => setNoteLocal(e.target.value)}
-            onBlur={() => onNote(note)}
+            onBlur={saveNoteIfChanged}
           />
 
           <div className="odo-dt-actions">

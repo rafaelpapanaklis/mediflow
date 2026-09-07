@@ -121,75 +121,83 @@ export function EduRubricasScreen({ rows, programs, procedures }: EduRubricasScr
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--rubricas">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Rúbrica</span>
-            <span>Para</span>
-            <span>Escala</span>
-            <span>Criterios</span>
-            <span>Usada en</span>
-            <span />
-          </div>
-
-          {rows.map((r) => (
-            <div key={r.id} className={`edu-row ${r.isActive ? "" : "edu-row--off"}`}>
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Rúbrica</span>
-                <span className="edu-cell__value edu-cell__value--strong">{r.name}</span>
-                {r.notes && <span className="edu-cell__sub">{r.notes}</span>}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Para</span>
-                <span className="edu-cell__value">{r.programName ?? "Todas las especialidades"}</span>
-                {r.procedureName && <span className="edu-cell__sub">{r.procedureName}</span>}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Escala</span>
-                <span className="edu-cell__value">
-                  {r.scaleMin} – {r.scaleMax}
-                </span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Criterios</span>
-                <span className="edu-cell__value">{r.criteria.length}</span>
-                <span className="edu-cell__sub">
-                  {r.criteria.map((c) => `${c.name} ${c.weightPercent}%`).join(" · ")}
-                </span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Usada en</span>
-                <span className="edu-cell__value">
-                  {r.usedIn} {r.usedIn === 1 ? "calificación" : "calificaciones"}
-                </span>
-                {!r.isActive && <span className="edu-tag edu-tag--muted">Desactivada</span>}
-              </div>
-
-              <div className="edu-cell__actions">
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                  onClick={() => {
-                    setFlash(null);
-                    setEditando(r);
-                  }}
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--quiet edu-btn--sm"
-                  onClick={() => alternar(r)}
-                  disabled={busyId === r.id}
-                >
-                  {r.isActive ? "Desactivar" : "Activar"}
-                </button>
-              </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--rubricas">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Rúbrica</span>
+              <span>Para</span>
+              <span>Escala</span>
+              <span>Criterios</span>
+              <span>Usada en</span>
+              <span />
             </div>
-          ))}
+
+            {rows.map((r) => (
+              <div key={r.id} className={`edu-row ${r.isActive ? "" : "edu-row--off"}`}>
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Rúbrica</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{r.name}</span>
+                  {r.notes && <span className="edu-cell__sub">{r.notes}</span>}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Para</span>
+                  <span className="edu-cell__value">{r.programName ?? "Todas las especialidades"}</span>
+                  {r.procedureName && <span className="edu-cell__sub">{r.procedureName}</span>}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Escala</span>
+                  <span className="edu-cell__value">
+                    {r.scaleMin} – {r.scaleMax}
+                  </span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Criterios</span>
+                  <span className="edu-cell__value">{r.criteria.length}</span>
+                  <span className="edu-cell__sub">
+                    {r.criteria.map((c) => `${c.name} ${c.weightPercent}%`).join(" · ")}
+                  </span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Usada en</span>
+                  <span className="edu-cell__value">
+                    {r.usedIn} {r.usedIn === 1 ? "calificación" : "calificaciones"}
+                  </span>
+                  {!r.isActive && <span className="edu-tag edu-tag--muted">Desactivada</span>}
+                </div>
+
+                <div className="edu-cell__actions">
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    onClick={() => {
+                      setFlash(null);
+                      setEditando(r);
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--quiet edu-btn--sm"
+                    onClick={() => alternar(r)}
+                    disabled={busyId === r.id}
+                  >
+                    {r.isActive ? "Desactivar" : "Activar"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

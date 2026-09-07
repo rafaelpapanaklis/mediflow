@@ -101,68 +101,76 @@ export function EduSillonesScreen({ rows, canManage, campuses }: EduSillonesScre
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--sillones">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Número</span>
-            <span>Sillón</span>
-            <span>Horario</span>
-            <span>Citas</span>
-            <span />
-          </div>
-
-          {rows.map((c) => (
-            <div key={c.id} className={`edu-row ${c.isActive ? "" : "edu-row--off"}`}>
-              <div className="edu-cell">
-                <span className="edu-cell__label">Número</span>
-                <span className="edu-cell__value edu-cell__value--strong">{c.number}</span>
-              </div>
-
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Sillón</span>
-                <span className="edu-cell__value edu-cell__value--strong">{c.name}</span>
-                {variasSedes && <span className="edu-tag edu-tag--info">{c.campusName}</span>}
-                {!c.isActive && <span className="edu-tag edu-tag--muted">Dado de baja</span>}
-              </div>
-
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Horario</span>
-                <span className="edu-cell__value">{eduDescribeSchedule(c.schedules)}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Citas próximas</span>
-                <span className="edu-cell__value">{c.upcoming}</span>
-              </div>
-
-              <div className="edu-cell__actions">
-                {canManage && (
-                  <>
-                    <button
-                      type="button"
-                      className="edu-btn edu-btn--ghost edu-btn--sm"
-                      onClick={() => {
-                        setFlash(null);
-                        setHorario(c);
-                      }}
-                    >
-                      <Clock size={15} />
-                      Horario
-                    </button>
-                    <button
-                      type="button"
-                      className="edu-btn edu-btn--ghost edu-btn--sm"
-                      onClick={() => {
-                        setFlash(null);
-                        setEditando(c);
-                      }}
-                    >
-                      Editar
-                    </button>
-                  </>
-                )}
-              </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--sillones">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Número</span>
+              <span>Sillón</span>
+              <span>Horario</span>
+              <span>Citas</span>
+              <span />
             </div>
-          ))}
+
+            {rows.map((c) => (
+              <div key={c.id} className={`edu-row ${c.isActive ? "" : "edu-row--off"}`}>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Número</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{c.number}</span>
+                </div>
+
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Sillón</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{c.name}</span>
+                  {variasSedes && <span className="edu-tag edu-tag--info">{c.campusName}</span>}
+                  {!c.isActive && <span className="edu-tag edu-tag--muted">Dado de baja</span>}
+                </div>
+
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Horario</span>
+                  <span className="edu-cell__value">{eduDescribeSchedule(c.schedules)}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Citas próximas</span>
+                  <span className="edu-cell__value">{c.upcoming}</span>
+                </div>
+
+                <div className="edu-cell__actions">
+                  {canManage && (
+                    <>
+                      <button
+                        type="button"
+                        className="edu-btn edu-btn--ghost edu-btn--sm"
+                        onClick={() => {
+                          setFlash(null);
+                          setHorario(c);
+                        }}
+                      >
+                        <Clock size={15} />
+                        Horario
+                      </button>
+                      <button
+                        type="button"
+                        className="edu-btn edu-btn--ghost edu-btn--sm"
+                        onClick={() => {
+                          setFlash(null);
+                          setEditando(c);
+                        }}
+                      >
+                        Editar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

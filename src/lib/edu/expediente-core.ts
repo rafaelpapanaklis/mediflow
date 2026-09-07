@@ -128,6 +128,59 @@ export function eduRecordIsEditable(status: EduRecordStatus): boolean {
 }
 
 /**
+ * 🔴 ¿SE PUEDE RETIRAR ESTA NOTA? (H-23, Ola B)
+ *
+ * SOLO un BORRADOR. Y la lista de lo que NO se puede retirar es la razón
+ * de que esta función exista en una línea y no como un `if` suelto en el
+ * endpoint:
+ *
+ *   · una FIRMADA no se toca — es la NOM-004 entera. Se corrige con una
+ *     nota nueva que la referencia (`correctsId`) y se leen las dos;
+ *   · una ENVIADA tampoco, y ésta es la que se cuela: el alumno ya la
+ *     entregó, su docente la tiene en la bandeja y puede haberla leído.
+ *     Retirarla sería sacarle de las manos algo que le pidieron revisar.
+ *     Para eso está "Devolver" (vuelve a BORRADOR, con su transición
+ *     registrada) y desde ahí sí se retira.
+ *
+ * Retirar es para el borrador que NUNCA DEBIÓ EXISTIR —el que se abrió en
+ * el paciente equivocado, o el que quedó vacío de un doble clic—, no para
+ * deshacer trabajo entregado.
+ */
+export function eduRecordCanWithdraw(status: EduRecordStatus): boolean {
+  return status === "BORRADOR";
+}
+
+/**
+ * 🔴 H-23 · EL MOTIVO DE REBOTAR UNA NOTA VACÍA, ESCRITO UNA SOLA VEZ.
+ *
+ * Lo usan los DOS caminos que pueden dejar una nota sin una palabra: el
+ * alta (`createEduRecord`) y la edición (`updateEduRecord`). Dos mensajes
+ * distintos para la misma regla es como se llega a que la pantalla enseñe
+ * uno y el endpoint conteste el otro.
+ */
+export const EDU_RECORD_EMPTY_DENIED =
+  "La nota está vacía: escribe algo antes de guardarla, entregarla o firmarla.";
+
+/**
+ * 🔴 N-1 · LO QUE QUEDA ESCRITO EN LA PETICIÓN DE AUTORIZACIÓN QUE SE CIERRA
+ * al retirar la nota.
+ *
+ * Vive aquí, en el módulo puro, por lo mismo que `EDU_RECORD_WITHDRAW_DENIED`:
+ * lo lee una persona en la pantalla del docente, así que tiene que poder
+ * comprobarse sin base de datos.
+ *
+ * Dice que no la decidió nadie porque la fila se cierra SIN `decidedById`:
+ * atribuirle a un docente una decisión que no tomó es exactamente lo que la
+ * cadena de custodia de este vertical existe para evitar.
+ */
+export const EDU_RECORD_WITHDRAWN_APPROVAL_NOTE =
+  "La nota se retiró del expediente, así que esta petición se cerró sola. No la decidió nadie.";
+
+/** El motivo del rechazo, escrito para una persona y no para un log. */
+export const EDU_RECORD_WITHDRAW_DENIED =
+  "Solo se retira un BORRADOR. Una nota ENVIADA ya está en la bandeja de tu docente: devuélvela a borrador y entonces se puede retirar. Una FIRMADA no se retira nunca — se corrige con una nota nueva que la referencia, y en el expediente se leen las dos. Es la NOM-004.";
+
+/**
  * Los sellos que se DERIVAN de un cambio de estado. No se capturan:
  * así no puede existir una nota "firmada" sin fecha de firma, ni una fecha
  * de firma en una nota que sigue en borrador. Es la misma regla que
@@ -182,6 +235,22 @@ export function eduRecordText(raw: unknown, maxLength: number): string | null | 
   if (v.length === 0) return null;
   return v.slice(0, maxLength);
 }
+
+/**
+ * Los CINCO campos de contenido de una nota: el SOAP más el diagnóstico.
+ *
+ * Escritos una vez y no cinco veces a mano en cada sitio que los recorre:
+ * el día que el SOAP crezca, un `if` olvidado en uno de esos sitios sería
+ * un campo que se puede reescribir sin que se note (S-3).
+ */
+export const EDU_RECORD_CONTENT_FIELDS = [
+  "subjetivo",
+  "objetivo",
+  "analisis",
+  "plan",
+  "diagnostico",
+] as const;
+export type EduRecordContentField = (typeof EDU_RECORD_CONTENT_FIELDS)[number];
 
 /** ¿La nota tiene ALGO escrito? Una nota vacía no se firma. */
 export function eduRecordHasContent(r: {

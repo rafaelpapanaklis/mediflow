@@ -156,106 +156,114 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
         </div>
       )}
 
-      <div className="edu-table edu-table--docentes">
-        <div className="edu-rowhead" aria-hidden="true">
-          <span>Docente</span>
-          <span>Correo</span>
-          <span>Estudiantes hoy</span>
-          <span>Estado</span>
-          <span />
-        </div>
+      <div className="edu-tablewrap">
+        {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+           mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+           hace que se DESPLACE en vez de recortar si algún día no cabe.
+           Sin él, la forma renglón de esta tabla no se estrena nunca:
+           desde la Ola B su umbral vive en un `@container`, no en un
+           `@media`. */}
+        <div className="edu-table edu-table--docentes">
+          <div className="edu-rowhead" aria-hidden="true">
+            <span>Docente</span>
+            <span>Correo</span>
+            <span>Estudiantes hoy</span>
+            <span>Estado</span>
+            <span />
+          </div>
 
-        {visibles.map((t) => {
-          const alumnos = porDocente.get(t.id) ?? [];
-          const expandido = abierto === t.id;
-          return (
-            <div key={t.id} className={`edu-row ${t.isActive ? "" : "edu-row--off"}`}>
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Docente</span>
-                <span className="edu-cell__value edu-cell__value--strong">
-                  <EduPersonaLink kind="docente" id={t.id}>
-                    {t.name}
-                  </EduPersonaLink>
-                </span>
-                {t.phone && <span className="edu-cell__sub">{t.phone}</span>}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Correo</span>
-                <span className="edu-cell__value">{t.email}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Estudiantes hoy</span>
-                <span className="edu-cell__value edu-cell__value--strong">{t.currentStudents}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Estado</span>
-                <span className={`edu-tag ${t.isActive ? "edu-tag--ok" : "edu-tag--muted"}`}>
-                  {t.isActive ? "Activo" : "Inactivo"}
-                </span>
-              </div>
-
-              <div className="edu-cell__actions">
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                  onClick={() => setAbierto(expandido ? null : t.id)}
-                  aria-expanded={expandido}
-                  disabled={t.currentStudents === 0}
-                >
-                  {expandido ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                  Estudiantes
-                </button>
-              </div>
-
-              {expandido && (
-                <div className="edu-detail">
-                  {alumnos.length === 0 ? (
-                    <p className="edu-note">
-                      Aquí no hay estudiantes que mostrarte. Si el número de arriba no dice cero,
-                      esa lista no te toca: los NOMBRES de los estudiantes de otro docente los ve
-                      la dirección. El conteo sí es el real.
-                    </p>
-                  ) : (
-                    <ul className="edu-chiplist">
-                      {alumnos.map((a) => (
-                        <li key={a.assignmentId} className="edu-assign">
-                          <span>
-                            <EduPersonaLink kind="estudiante" id={a.studentId}>
-                              {a.matricula} · {a.name}
-                            </EduPersonaLink>
-                            {a.isPrimary ? " · titular" : ""}
-                          </span>
-                          {canAssign && (
-                            <button
-                              type="button"
-                              className="edu-assign__x"
-                              onClick={() => cerrarAsignacion(a.assignmentId, a.name)}
-                              disabled={busyId === a.assignmentId}
-                              aria-label={`Cerrar la supervisión de ${a.name}`}
-                              title="Cerrar esta supervisión"
-                            >
-                              <X size={15} />
-                            </button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {canAssign && (
-                    <p className="edu-note">
-                      Para asignarle un estudiante nuevo, entra a Estudiantes, abre la ficha del estudiante y
-                      elige al docente ahí: la asignación se hace desde el estudiante, que es donde se
-                      ve con quién más la comparte.
-                    </p>
-                  )}
+          {visibles.map((t) => {
+            const alumnos = porDocente.get(t.id) ?? [];
+            const expandido = abierto === t.id;
+            return (
+              <div key={t.id} className={`edu-row ${t.isActive ? "" : "edu-row--off"}`}>
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Docente</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    <EduPersonaLink kind="docente" id={t.id}>
+                      {t.name}
+                    </EduPersonaLink>
+                  </span>
+                  {t.phone && <span className="edu-cell__sub">{t.phone}</span>}
                 </div>
-              )}
-            </div>
-          );
-        })}
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Correo</span>
+                  <span className="edu-cell__value">{t.email}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Estudiantes hoy</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{t.currentStudents}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Estado</span>
+                  <span className={`edu-tag ${t.isActive ? "edu-tag--ok" : "edu-tag--muted"}`}>
+                    {t.isActive ? "Activo" : "Inactivo"}
+                  </span>
+                </div>
+
+                <div className="edu-cell__actions">
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    onClick={() => setAbierto(expandido ? null : t.id)}
+                    aria-expanded={expandido}
+                    disabled={t.currentStudents === 0}
+                  >
+                    {expandido ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                    Estudiantes
+                  </button>
+                </div>
+
+                {expandido && (
+                  <div className="edu-detail">
+                    {alumnos.length === 0 ? (
+                      <p className="edu-note">
+                        Aquí no hay estudiantes que mostrarte. Si el número de arriba no dice cero,
+                        esa lista no te toca: los NOMBRES de los estudiantes de otro docente los ve
+                        la dirección. El conteo sí es el real.
+                      </p>
+                    ) : (
+                      <ul className="edu-chiplist">
+                        {alumnos.map((a) => (
+                          <li key={a.assignmentId} className="edu-assign">
+                            <span>
+                              <EduPersonaLink kind="estudiante" id={a.studentId}>
+                                {a.matricula} · {a.name}
+                              </EduPersonaLink>
+                              {a.isPrimary ? " · titular" : ""}
+                            </span>
+                            {canAssign && (
+                              <button
+                                type="button"
+                                className="edu-assign__x"
+                                onClick={() => cerrarAsignacion(a.assignmentId, a.name)}
+                                disabled={busyId === a.assignmentId}
+                                aria-label={`Cerrar la supervisión de ${a.name}`}
+                                title="Cerrar esta supervisión"
+                              >
+                                <X size={15} />
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {canAssign && (
+                      <p className="edu-note">
+                        Para asignarle un estudiante nuevo, entra a Estudiantes, abre la ficha del estudiante y
+                        elige al docente ahí: la asignación se hace desde el estudiante, que es donde se
+                        ve con quién más la comparte.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </>
   );

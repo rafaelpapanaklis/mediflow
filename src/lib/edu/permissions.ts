@@ -996,6 +996,114 @@ export function hasEduPermission(user: EduPermissionUser, key: EduPermissionKey)
   return getEduEffectivePermissions(user).includes(key);
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * QUÉ PUEDE CORREGIR CADA QUIEN EN LA FICHA DEL PACIENTE (H-02)
+ *
+ * Punto ÚNICO de las dos llaves. Lo leen el endpoint (PATCH
+ * /api/instituto/pacientes/[id]), la pestaña Datos y el modal de la lista;
+ * si cada uno lo resolviera a su manera, uno de los tres acabaría abriendo
+ * o cerrando de más.
+ *
+ * 🔴 DOS LLAVES, COMO EN LOS ANTECEDENTES. Es el mismo patrón que ya usa
+ * pacientes/[id]/antecedentes/route.ts, y por la misma razón escrita allí:
+ *
+ *   · `pacientes.manage`  → CAJA y DIRECCIÓN. La ficha entera: folio,
+ *     nombre, apellidos, sexo, nacimiento, estado y notas de recepción,
+ *     además del contacto.
+ *   · `expediente.write`  → ALUMNO, DOCENTE y DIRECCIÓN. SOLO el CONTACTO
+ *     (teléfono y correo). El alumno tiene al paciente en el sillón, el
+ *     paciente le dicta su teléfono nuevo, y hasta hoy no tenía dónde
+ *     escribirlo: tenía que ir a buscar a alguien de caja. Muerde de verdad
+ *     en WhatsApp, donde ES ÉL quien manda la carta de consentimiento y la
+ *     pantalla le decía "el teléfono no tiene 10 dígitos" sin dejarle
+ *     arreglarlo.
+ *
+ * 🔴 NO SE INVENTÓ UNA KEY NUEVA ("pacientes.contacto"), y es deliberado —
+ * la misma decisión, con las mismas palabras, que tomó la ola de los
+ * antecedentes: una key nueva NO le llega a nadie que ya tenga
+ * `permissionsOverride` guardado (el override REEMPLAZA al default), así
+ * que habría exigido un backfill en SQL contra la base de cada escuela para
+ * que sirviera de algo. Las dos keys existentes cubren EXACTAMENTE a los
+ * cuatro roles que la decisión pide —caja y dirección todo, docente y
+ * alumno el contacto— y a nadie más.
+ *
+ * ⚠️ El permiso abre la puerta; el ALCANCE decide de QUIÉN. Un alumno solo
+ * corrige el teléfono de SUS pacientes: `updateEduPatient` busca la fila con
+ * `eduPatientScopeWhere`, así que el paciente de otro alumno contesta 404,
+ * igual que uno que no existe.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduPatientEditAbilities {
+  /**
+   * IDENTIDAD Y PAPELEO (`pacientes.manage`): folio, nombre, apellidos,
+   * sexo, nacimiento, CURP, domicilio, TUTOR, seguro, estado, notas de
+   * recepción y la fecha del aviso de privacidad.
+   */
+  manage: boolean;
+  /**
+   * CONTACTO (`pacientes.manage` o `expediente.write`): los dos teléfonos,
+   * el correo y la preferencia de contacto.
+   *
+   * El segundo teléfono y la preferencia entran por la MISMA puerta que ya
+   * abría el teléfono y el correo (H-02) porque son la misma decisión: el
+   * alumno tiene al paciente en el sillón, le dictan un número de recado, y
+   * hasta hoy no tenía dónde escribirlo.
+   */
+  contacto: boolean;
+  /**
+   * CLÍNICO (`pacientes.manage` o `expediente.write`): los antecedentes
+   * NOM-004 (heredofamiliares y personales no patológicos), los hábitos,
+   * el embarazo/lactancia y la dentición temporal.
+   *
+   * 🔴 ES LA MISMA REGLA DE LOS ANTECEDENTES, letra por letra: el endpoint
+   * `pacientes/[id]/antecedentes` ya exige `pacientes.manage` O
+   * `expediente.write` — recepción los captura en el mostrador y el alumno
+   * los completa con el paciente sentado. Estos campos son la continuación
+   * de ese mismo bloque (la NOM-004 pide los heredofamiliares y los no
+   * patológicos POR SEPARADO de los patológicos, que ya viven en
+   * `chronicConditions`), así que abrirlos con otra llave habría partido en
+   * dos una historia clínica que se captura de una sentada.
+   *
+   * ⚠️ HOY VALE LO MISMO QUE `contacto`, y está separado a propósito: lo
+   * que distingue a los dos grupos no es quién los abre hoy, es QUÉ SON. El
+   * día que una escuela pida que su recepción no toque el embarazo, la
+   * línea ya está trazada y el cambio es una condición aquí, no una
+   * migración de 31 campos repartidos por tres archivos.
+   */
+  clinico: boolean;
+}
+
+export function eduPatientEditAbilities(user: EduPermissionUser): EduPatientEditAbilities {
+  const manage = hasEduPermission(user, "pacientes.manage");
+  const expediente = hasEduPermission(user, "expediente.write");
+  return { manage, contacto: manage || expediente, clinico: manage || expediente };
+}
+
+/**
+ * Los GRUPOS de campos que puede escribir quien manda, en la forma que
+ * espera `updateEduPatient`.
+ *
+ * Vive aquí, al lado de las abilities, y no en el endpoint: el endpoint, la
+ * pestaña Datos y el modal de la lista tienen que resolver esto igual, y
+ * tres traducciones del mismo reparto es cómo una de las tres acaba
+ * abriendo de más.
+ */
+export function eduPatientEditGroups(
+  abilities: EduPatientEditAbilities,
+): ("identidad" | "contacto" | "clinico")[] {
+  const grupos: ("identidad" | "contacto" | "clinico")[] = [];
+  if (abilities.manage) grupos.push("identidad");
+  if (abilities.contacto) grupos.push("contacto");
+  if (abilities.clinico) grupos.push("clinico");
+  return grupos;
+}
+
+/** El 403 con el motivo escrito, para que la pantalla lo pueda enseñar tal
+ *  cual en vez de un "sin permiso" pelado. */
+export const EDU_PATIENT_EDIT_FORBIDDEN =
+  "Corregir la ficha del paciente pide pacientes.manage (recepción) para los datos de identidad, el domicilio, el tutor y el seguro, o expediente.write para el contacto y los antecedentes clínicos, y tu cuenta no tiene ninguno.";
+
 /** Error tipado que lanzan los asserts; las APIs lo mapean a 403. */
 export class EduForbiddenError extends Error {
   readonly permission: EduPermissionKey;

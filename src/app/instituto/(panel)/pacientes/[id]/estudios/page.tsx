@@ -6,8 +6,9 @@ import { hasEduPermission } from "@/lib/edu/permissions";
 import { EDU_CLINICAL_NONE_DETAIL, eduClinicalScope } from "@/lib/edu/expediente-core";
 import { EDU_STUDY_MAX_ROWS } from "@/lib/edu/estudios-core";
 import { getEduClinicalPatient, listEduPatientCaseOptions } from "@/lib/edu/expediente";
-import { listEduPatientStudies } from "@/lib/edu/estudios";
+import { listEduPatientStudies, listEduPatientStudiesRetirados } from "@/lib/edu/estudios";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
+import { eduTodayISO } from "@/lib/edu/agenda-core";
 import { eduIaEstadoActual } from "@/lib/edu/ia-cupo";
 import { getDict } from "@/i18n/dictionaries";
 import type { Dictionary } from "@/i18n/t";
@@ -71,7 +72,13 @@ export default async function PacienteEstudiosPage({
   const paciente = await getEduClinicalPatient(ctx, params.id);
   if (!paciente) notFound();
 
-  const [page, cases, iaAnalisis] = await Promise.all([
+  const canUpload = hasEduPermission(permUser, "estudios.upload");
+
+  // Cuatro consultas, por debajo de las siete que satura el pooler. Los
+  // RETIRADOS solo se consultan con `estudios.upload`: sin ese permiso la
+  // sección no se pinta, y una consulta que nadie va a ver es un viaje
+  // pagado por nadie.
+  const [page, cases, iaAnalisis, retirados] = await Promise.all([
     listEduPatientStudies(ctx, paciente.id, ctx.institution.timezone),
     listEduPatientCaseOptions(ctx, paciente.id),
     // El estado de la IA lo resuelve el SERVIDOR (Ola 3B), y desde la Ola 8
@@ -79,6 +86,9 @@ export default async function PacienteEstudiosPage({
     // queda. El navegador no tiene por qué saber el presupuesto de la
     // escuela — recibe el estado ya decidido, con el motivo escrito.
     eduIaEstadoActual(ctx, "ANALISIS", ctx.institution.timezone),
+    canUpload
+      ? listEduPatientStudiesRetirados(ctx, paciente.id, ctx.institution.timezone)
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -88,10 +98,18 @@ export default async function PacienteEstudiosPage({
       truncated={page.truncated}
       maxRows={EDU_STUDY_MAX_ROWS}
       cases={cases}
-      canUpload={hasEduPermission(permUser, "estudios.upload")}
+      // S-9: cuándo se firmaron las URLs. La pantalla avisa antes de que
+      // caduquen en vez de dejar que cada miniatura dé un 403 mudo.
+      signedAt={page.signedAt}
+      canUpload={canUpload}
+      retirados={retirados}
       iaAnalisis={iaAnalisis}
       canAnalyze={hasEduPermission(permUser, "estudios.analyze")}
       dict3d={dictModelos3d()}
+      // ws2-t2 · HOY en el calendario del INSTITUTO, no en el del
+      // navegador: el reloj del teléfono puede estar en otra zona (y en
+      // otro día) y la fecha de toma por defecto saldría corrida.
+      todayISO={eduTodayISO(ctx.institution.timezone)}
       // El botón "Subir estudio" de la ficha llega con ?subir=1 y el modal
       // se abre solo. El permiso manda igual: sin estudios.upload se ignora.
       abrirSubida={searchParams?.subir === "1"}

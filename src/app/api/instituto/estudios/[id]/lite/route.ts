@@ -62,6 +62,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Ese estudio no existe o no te toca." }, { status: 404 });
     }
 
+    // 🔴 N-13 · UN ESTUDIO RETIRADO NO SE PREPARA. Es la invocación más
+    // cara del vertical (descomprime el .zip entero en memoria) y gastarla
+    // en una placa que ya no está en el expediente es tirar el freno por
+    // instituto de otro. Mismo 409 y mismas palabras que el resto de las
+    // puertas del expediente.
+    if (estudio.deletedAt) {
+      return NextResponse.json(
+        { error: "Ese estudio está retirado del expediente: ya no se prepara." },
+        { status: 409 },
+      );
+    }
+
     // Solo sets CBCT (.zip). Un DICOM suelto o una malla no tienen versión
     // reducida que generar.
     if (!/\.zip$/i.test(estudio.storagePath)) {

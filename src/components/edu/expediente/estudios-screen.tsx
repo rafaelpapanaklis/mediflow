@@ -1,20 +1,24 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Box, FileText, Image as ImageIcon, Layers, Upload, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import {
   EDU_MAX_STUDY_LABEL,
+  EDU_SIGNED_URL_TTL_SECONDS,
   EDU_STUDY_ACCEPT,
-  eduExtOfName,
+  EDU_STUDY_ORDEN_NOTA,
+  eduDiaISOaInstante,
   eduFormatBytes,
+  type EduRetiradoRow,
   type EduStudyRow,
 } from "@/lib/edu/estudios-core";
 import type { EduCaseOption } from "@/lib/edu/expediente-core";
 import type { EduIaEstado } from "@/lib/edu/ia-core";
 import type { Dictionary } from "@/i18n/t";
 import { EduEstudioViewer } from "@/components/edu/expediente/estudio-viewer";
+import { EduRetirados } from "@/components/edu/estudios/retirados";
 import {
   EduUploadCancelled,
   eduUploadStudy,
@@ -58,6 +62,13 @@ export interface EduEstudiosScreenProps {
   /** El techo, para poder decir el número en vez de "hay más". */
   maxRows: number;
   cases: EduCaseOption[];
+  /**
+   * S-9 · Cuándo se firmaron las URLs de los archivos (ISO). Caducan a la
+   * hora y esta pantalla se queda abierta toda la sesión clínica: sin este
+   * dato, pasado ese rato cada miniatura da un 403 mudo que se lee como
+   * "el archivo se perdió".
+   */
+  signedAt: string;
   canUpload: boolean;
   /** Estado del apoyo de IA, resuelto en el SERVIDOR. */
   iaAnalisis: EduIaEstado;
@@ -67,15 +78,30 @@ export interface EduEstudiosScreenProps {
   /** Abrir el modal de subida al llegar (viene de ?subir=1, el botón
    *  "Subir estudio" de la ficha). */
   abrirSubida?: boolean;
+  /**
+   * ws2-t2 · HOY en el calendario del INSTITUTO ("2026-09-07"), para que
+   * la fecha de toma venga puesta por defecto sin que el navegador la
+   * calcule con SU reloj — que puede estar en otra zona y en otro día.
+   */
+  todayISO: string;
+  /**
+   * N-16 · Los RETIRADOS, para que el motivo obligatorio se pueda LEER.
+   * Llegan vacíos sin `estudios.upload`: el servidor ni los consulta.
+   */
+  retirados: EduRetiradoRow[];
 }
 
 /**
  * El icono de la tarjeta sale de la EXTENSIÓN, no del `kind` de la fila: es
  * el mismo criterio con el que se elige el visor al abrirla, y así la
  * miniatura nunca promete algo distinto de lo que se va a abrir.
+ *
+ * ws2-t2 · Y la extensión llega YA RESUELTA desde el servidor (`row.ext`,
+ * sacada del path), no de `name`: el nombre ahora se puede corregir y uno
+ * renombrado sin extensión dejaba a un .zip con icono de documento.
  */
-function iconoDeArchivo(name: string): typeof ImageIcon {
-  switch (eduExtOfName(name)) {
+function iconoDeArchivo(ext: string): typeof ImageIcon {
+  switch (String(ext).toLowerCase()) {
     case "zip":
     case "dcm":
     case "dicom":
@@ -107,11 +133,14 @@ export function EduEstudiosScreen({
   truncated,
   maxRows,
   cases,
+  signedAt,
   canUpload,
   iaAnalisis,
   canAnalyze,
   dict3d,
   abrirSubida,
+  todayISO,
+  retirados,
 }: EduEstudiosScreenProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -126,6 +155,41 @@ export function EduEstudiosScreen({
     setFlash(mensaje);
     startNav(() => router.refresh());
   }
+
+  /**
+   * ═══════════════════════════════════════════════════════════════════════
+   * S-9 · LA URL FIRMADA CADUCA, Y AHORA SE DICE.
+   *
+   * Los archivos se sirven con una URL firmada de una hora. El TTL es largo
+   * a propósito —esta galería se queda abierta toda la sesión clínica y una
+   * URL de cinco minutos convertiría "enséñame la radiografía otra vez" en
+   * una recarga— pero una hora TAMBIÉN se acaba, y cuando se acababa cada
+   * miniatura y cada "Abrir" contestaban un 403 mudo. Lo que veía el alumno
+   * era una galería de imágenes rotas: no "caducó el enlace", sino "se
+   * perdieron las radiografías del paciente".
+   *
+   * Se avisa un minuto ANTES de que expire y se ofrece renovar, que es un
+   * `router.refresh()`: la página es `force-dynamic` y vuelve a firmarlo
+   * todo. Y si aun así una imagen falla al cargar, el `onError` de la
+   * miniatura levanta el mismo aviso — el reloj puede ir corrido, y la
+   * prueba de que caducó es que no carga.
+   * ═══════════════════════════════════════════════════════════════════════
+   */
+  const [caducadas, setCaducadas] = useState(false);
+
+  useEffect(() => {
+    setCaducadas(false);
+    const firmadas = Date.parse(signedAt);
+    if (!Number.isFinite(firmadas)) return;
+    // Un minuto de margen: mejor avisar de sobra que servir un 403.
+    const faltan = firmadas + (EDU_SIGNED_URL_TTL_SECONDS - 60) * 1000 - Date.now();
+    if (faltan <= 0) {
+      setCaducadas(true);
+      return;
+    }
+    const t = setTimeout(() => setCaducadas(true), faltan);
+    return () => clearTimeout(t);
+  }, [signedAt]);
 
   // Al cerrar el modal que llegó abierto se limpia el ?subir=1: si se
   // quedara en la URL, un refresh del teléfono lo volvería a abrir.
@@ -167,6 +231,29 @@ export function EduEstudiosScreen({
         )}
       </div>
 
+      {caducadas && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">Los enlaces de los archivos caducaron</p>
+            <p className="edu-banner__detail">
+              Por seguridad, los archivos se sirven con un enlace temporal que dura una hora, y esta
+              pestaña lleva más abierta. Las miniaturas y los estudios que abras ahora fallarían.
+              Actualiza para renovarlos: no se pierde nada, los archivos siguen ahí.
+            </p>
+            <p>
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary edu-btn--sm"
+                onClick={() => startNav(() => router.refresh())}
+                disabled={navigating}
+              >
+                {navigating ? "Renovando…" : "Renovar los enlaces"}
+              </button>
+            </p>
+          </div>
+        </div>
+      )}
+
       {truncated && (
         <div className="edu-banner edu-banner--warn" role="status">
           <div>
@@ -182,6 +269,11 @@ export function EduEstudiosScreen({
         </div>
       )}
 
+      {/* ws2-t2 · EL ORDEN SE DICE. La galería ordena por fecha de TOMA
+          cuando existe y por la de subida cuando no; un orden que no se
+          explica se lee como un orden roto. */}
+      {rows.length > 0 && <p className="edu-note">{EDU_STUDY_ORDEN_NOTA}</p>}
+
       {rows.length === 0 ? (
         <div className="edu-empty">
           <p className="edu-empty__title">Todavía no hay estudios</p>
@@ -194,7 +286,7 @@ export function EduEstudiosScreen({
       ) : (
         <div className="edu-estudios">
           {rows.map((e) => {
-            const Icono = iconoDeArchivo(e.name);
+            const Icono = iconoDeArchivo(e.ext);
             return (
               <article key={e.id} className="edu-estudio">
                 <button
@@ -206,15 +298,30 @@ export function EduEstudiosScreen({
                 >
                   {e.isImage && e.url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={e.url} alt={e.name} loading="lazy" />
+                    <img
+                      src={e.url}
+                      alt={e.name}
+                      loading="lazy"
+                      // S-9 · La prueba de que el enlace caducó es que no
+                      // carga. El reloj del navegador puede ir corrido, así
+                      // que el temporizador no es la única señal.
+                      onError={() => setCaducadas(true)}
+                    />
                   ) : (
                     <Icono size={34} />
                   )}
                 </button>
 
                 <span className="edu-estudio__name">{e.name}</span>
+                {/* ws2-t2 · Se dice CUÁL de las dos fechas se está viendo.
+                    Un "12 mar" a secas encima de una galería que ordena por
+                    fecha de toma no distingue "tomada el 12" de "subida el
+                    12", que es justo lo que hay que distinguir. */}
                 <span className="edu-estudio__meta">
-                  {e.sizeLabel} · {e.createdLabel}
+                  {e.sizeLabel} ·{" "}
+                  {e.ordenPorToma
+                    ? `tomada ${e.takenLabel}`
+                    : `subida ${e.createdLabel} · sin fecha de toma`}
                 </span>
                 <span className="edu-estudio__meta">
                   {e.uploadedByName}
@@ -222,7 +329,12 @@ export function EduEstudiosScreen({
                 </span>
                 {e.notes && <span className="edu-estudio__notes">{e.notes}</span>}
 
-                <div className="edu-actions">
+                {/* `edu-estudios-acc` pega la fila de acciones ABAJO de
+                    la tarjeta. Sin eso, la tarjeta cuyo renglón de meta
+                    ocupa dos líneas —«subida … · sin fecha de toma»— deja
+                    su «Abrir» más bajo que el de al lado y la rejilla se
+                    ve rota aunque todas midan lo mismo. */}
+                <div className="edu-actions edu-estudios-acc">
                   <button
                     type="button"
                     className="edu-btn edu-btn--ghost edu-btn--sm"
@@ -237,10 +349,23 @@ export function EduEstudiosScreen({
         </div>
       )}
 
+      {/* N-16 · El MOTIVO de retirar un estudio, por fin legible. Plegada y
+          solo con `estudios.upload`, que es el mismo permiso que hace falta
+          para retirar. */}
+      {canUpload && (
+        <EduRetirados
+          rows={retirados}
+          titulo="Retirados"
+          vacio="Ningún estudio de este paciente se ha retirado del expediente."
+          detalle="Un estudio retirado deja de salir en la galería y de contar para el almacenamiento contratado, pero ni la fila ni el archivo se borran. Aquí está por qué se retiró cada uno."
+        />
+      )}
+
       {subir && (
         <SubirEstudio
           patientId={patientId}
           cases={cases}
+          todayISO={todayISO}
           onClose={cerrarSubida}
           onDone={(nombre) => {
             cerrarSubida();
@@ -253,9 +378,26 @@ export function EduEstudiosScreen({
         <EduEstudioViewer
           estudio={ver}
           patientId={patientId}
+          cases={cases}
           onClose={() => setVer(null)}
+          onCorregido={(mensaje) => {
+            // Se CIERRA al corregir, y no es pereza: `ver` es una copia de
+            // la fila tal como llegó del servidor. Dejar el visor abierto
+            // después de renombrar o reclasificar enseñaría los datos
+            // viejos encima del archivo, que es peor que cerrarlo.
+            setVer(null);
+            recargar(mensaje);
+          }}
+          onRetirado={(nombre) => {
+            setVer(null);
+            recargar(`"${nombre}" se retiró del expediente. Queda la constancia de por qué.`);
+          }}
           iaAnalisis={iaAnalisis}
           canAnalyze={canAnalyze}
+          // S-7 · el permiso de ESCRITURA del expediente. Con solo
+          // `estudios.view` la nota se lee y no se ofrece editarla —
+          // tampoco la del CBCT, cuyo "Guardar" contestaba 403 siempre.
+          canUpload={canUpload}
           dict3d={dict3d}
         />
       )}
@@ -270,16 +412,23 @@ export function EduEstudiosScreen({
 function SubirEstudio({
   patientId,
   cases,
+  todayISO,
   onClose,
   onDone,
 }: {
   patientId: string;
   cases: EduCaseOption[];
+  todayISO: string;
   onClose: () => void;
   onDone: (nombre: string) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [caseId, setCaseId] = useState("");
+  // ws2-t2 · La fecha de TOMA, por defecto HOY en el calendario del
+  // instituto. Se pregunta AQUÍ porque después no la pregunta nadie: la
+  // placa de hace un año se sube hoy y se queda ordenada como de hoy para
+  // siempre. Se puede vaciar — "no se sabe" es una respuesta honesta.
+  const [dia, setDia] = useState(todayISO);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
@@ -304,6 +453,9 @@ function SubirEstudio({
         file,
         caseId: caseId || null,
         notes: notes.trim() || null,
+        // Mediodía UTC: con medianoche, leída en la zona del instituto, la
+        // fecha se corre un día hacia atrás (eduDiaISOaInstante lo explica).
+        takenAt: dia ? eduDiaISOaInstante(dia) : null,
         onProgress: setPct,
         onPhase: (f, i) => {
           setFase(f);
@@ -412,6 +564,25 @@ function SubirEstudio({
           </span>
         </div>
       )}
+
+      <div className="edu-field">
+        <label className="edu-field__label" htmlFor="edu-est-toma">
+          Fecha de toma
+        </label>
+        <input
+          id="edu-est-toma"
+          className="edu-input"
+          type="date"
+          value={dia}
+          max={todayISO}
+          disabled={busy}
+          onChange={(e) => setDia(e.target.value)}
+        />
+        <span className="edu-field__hint">
+          Cuándo se TOMÓ, que no es cuándo se sube. La galería ordena por ella. Si es una placa
+          vieja, cámbiala; si no se sabe, déjala vacía y se ordenará por la fecha de subida.
+        </span>
+      </div>
 
       <div className="edu-field">
         <label className="edu-field__label" htmlFor="edu-est-caso">

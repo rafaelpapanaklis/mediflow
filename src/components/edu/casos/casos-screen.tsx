@@ -303,86 +303,121 @@ export function EduCasosScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--casos">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Paciente</span>
-            <span>Estudiante</span>
-            <span>Docente</span>
-            <span>Especialidad</span>
-            <span>Abierto</span>
-            <span>Estado</span>
-            <span>Esperando</span>
-          </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--casos">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Paciente</span>
+              <span>Estudiante</span>
+              <span>Docente</span>
+              <span>Especialidad</span>
+              <span>Abierto</span>
+              <span>Estado</span>
+              <span>Esperando</span>
+            </div>
 
-          {rows.map((c) => {
-            const cerrado = c.espera.kind === "cerrado";
-            return (
-              <div key={c.id} className={`edu-row ${cerrado ? "edu-row--off" : ""}`}>
-                <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Paciente</span>
-                  <span className="edu-cell__value edu-cell__value--strong">
-                    {/* A la pestaña Casos de su ficha: ahí están el detalle
-                        del gate y las acciones. */}
-                    <Link href={`/instituto/pacientes/${c.patientId}/casos`} className="edu-link">
-                      {c.patientName}
-                    </Link>
-                  </span>
-                  <span className="edu-cell__sub">Folio {c.patientFolio}</span>
-                </div>
+            {rows.map((c) => {
+              const cerrado = c.espera.kind === "cerrado";
+              return (
+                <div key={c.id} className={`edu-row ${cerrado ? "edu-row--off" : ""}`}>
+                  <div className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Paciente</span>
+                    <span className="edu-cell__value edu-cell__value--strong">
+                      {/* 🔴 H-25 · UN ENLACE QUE LLEVA A UN 404 NO SE PINTA.
+                          El alumno que rota conserva sus casos en esta lista
+                          —son su historia académica y `eduCaseScopeWhere` los
+                          deja a propósito— pero PIERDE el paciente: el caso
+                          quedó TRANSFERRED y `eduPatientScopeWhere` lo
+                          descarta, también a propósito y documentado. Lo que
+                          no estaba decidido es que el nombre siguiera siendo
+                          un enlace: se pulsaba y salía un 404, sin decir por
+                          qué, sobre las notas que él mismo firmó.
 
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Estudiante</span>
-                  <span className="edu-cell__value">
-                    <EduPersonaLink kind="estudiante" id={c.studentId}>
-                      {c.studentName}
-                    </EduPersonaLink>
-                  </span>
-                  <span className="edu-cell__sub">{c.studentMatricula}</span>
-                </div>
+                          Se apaga solo con la vista RECORTADA (alumno y
+                          docente). Dirección y caja ven la clínica entera y
+                          el enlace les sirve igual.
 
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Docente</span>
-                  <span className="edu-cell__value">
-                    <EduPersonaLink kind="docente" id={c.supervisorUserId}>
-                      {c.supervisorName ?? "Sin responsable designado"}
-                    </EduPersonaLink>
-                  </span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Especialidad</span>
-                  <span className="edu-cell__value">{c.programName}</span>
-                  <span className="edu-cell__sub">
-                    {[c.cohortName, `${c.semester}º sem.`].filter(Boolean).join(" · ")}
-                  </span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Abierto</span>
-                  <span className="edu-cell__value">{c.openedLabel}</span>
-                  {c.closedLabel && <span className="edu-cell__sub">cerró {c.closedLabel}</span>}
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Estado</span>
-                  <span className={`edu-tag ${TAG_BY_CASE_STATUS[c.status]}`}>
-                    {c.statusLabel}
-                  </span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Esperando</span>
-                  {cerrado ? (
-                    <span className="edu-cell__value">—</span>
-                  ) : (
-                    <span className={`edu-tag ${EDU_CASO_ESPERA_TAG[c.espera.kind]}`}>
-                      {c.espera.label}
+                          ⚠️ Falso negativo conocido: para un DOCENTE cuyo
+                          alumno traspasó el caso a OTRO alumno suyo, el
+                          paciente sí sigue en su alcance y aquí pierde el
+                          atajo — llega desde Pacientes. Falla del lado
+                          cerrado, que es la preferencia escrita del vertical
+                          (ver visibility.ts): mejor un atajo de menos que un
+                          enlace que miente. */}
+                      {recortado && c.status === "TRANSFERRED" ? (
+                        <span title="Traspasaste este caso: el paciente ya no está en tu alcance.">
+                          {c.patientName}
+                        </span>
+                      ) : (
+                        /* A la pestaña Casos de su ficha: ahí están el detalle
+                           del gate y las acciones. */
+                        <Link href={`/instituto/pacientes/${c.patientId}/casos`} className="edu-link">
+                          {c.patientName}
+                        </Link>
+                      )}
                     </span>
-                  )}
+                    <span className="edu-cell__sub">Folio {c.patientFolio}</span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Estudiante</span>
+                    <span className="edu-cell__value">
+                      <EduPersonaLink kind="estudiante" id={c.studentId}>
+                        {c.studentName}
+                      </EduPersonaLink>
+                    </span>
+                    <span className="edu-cell__sub">{c.studentMatricula}</span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Docente</span>
+                    <span className="edu-cell__value">
+                      <EduPersonaLink kind="docente" id={c.supervisorUserId}>
+                        {c.supervisorName ?? "Sin responsable designado"}
+                      </EduPersonaLink>
+                    </span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Especialidad</span>
+                    <span className="edu-cell__value">{c.programName}</span>
+                    <span className="edu-cell__sub">
+                      {[c.cohortName, `${c.semester}º sem.`].filter(Boolean).join(" · ")}
+                    </span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Abierto</span>
+                    <span className="edu-cell__value">{c.openedLabel}</span>
+                    {c.closedLabel && <span className="edu-cell__sub">cerró {c.closedLabel}</span>}
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Estado</span>
+                    <span className={`edu-tag ${TAG_BY_CASE_STATUS[c.status]}`}>
+                      {c.statusLabel}
+                    </span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Esperando</span>
+                    {cerrado ? (
+                      <span className="edu-cell__value">—</span>
+                    ) : (
+                      <span className={`edu-tag ${EDU_CASO_ESPERA_TAG[c.espera.kind]}`}>
+                        {c.espera.label}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </>

@@ -89,6 +89,15 @@ export default async function PacienteConsentimientosPage({
       canCreate={hasEduPermission(permUser, "consentimientos.create")}
       canRevoke={hasEduPermission(permUser, "consentimientos.revoke")}
       supervisorPorCaso={supervisorPorCaso}
+      /* 🔴 H-08 · el TUTOR de la ficha, para precargar el representante
+         legal de la carta. Hasta la Ola B el representante vivía solo
+         dentro de cada carta: un niño con cuatro cartas obligaba a teclear
+         cuatro veces a su madre, y bastaba un dedazo en la tercera para que
+         las cuatro dijeran cosas distintas sobre quién responde por él.
+         Sigue siendo editable en la carta —quien firma HOY puede no ser el
+         tutor habitual— y el servidor sigue exigiéndolo cuando es menor. */
+      guardianName={paciente.guardianName}
+      guardianRelation={paciente.guardianRelation}
     />
   );
 }

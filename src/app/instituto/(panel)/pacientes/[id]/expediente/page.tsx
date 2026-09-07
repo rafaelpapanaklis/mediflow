@@ -31,7 +31,13 @@ import { EduExpedienteScreen } from "@/components/edu/expediente/expediente-scre
  * por error, aquí no vería ni el paciente. Son dos candados, y hacen falta
  * los dos — uno solo se abre por accidente.
  */
-export default async function PacienteExpedientePage({ params }: { params: { id: string } }) {
+export default async function PacienteExpedientePage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
   const ctx = await getEduContext();
   if (!ctx) redirect("/instituto/login");
 
@@ -57,8 +63,18 @@ export default async function PacienteExpedientePage({ params }: { params: { id:
   const paciente = await getEduClinicalPatient(ctx, params.id);
   if (!paciente) notFound();
 
+  // H-20 · EL FILTRO POR CASO QUE EL BANNER PROMETÍA.
+  //
+  // El aviso de "se muestran las 200 más recientes" decía —y sigue
+  // diciendo— "filtra por caso para ver las notas viejas". La API leía
+  // `?caso=` desde el primer día; esta página no le pasaba `searchParams`,
+  // así que era una instrucción imposible de seguir puesta delante de un
+  // dato clínico que falta. El id se valida contra los casos que le tocan a
+  // quien mira: uno inventado no recorta nada raro, simplemente no está.
+  const casoParam = typeof searchParams?.caso === "string" ? searchParams.caso : "";
+
   const [page, cases, iaDictado] = await Promise.all([
-    listEduPatientRecords(ctx, paciente.id, ctx.institution.timezone),
+    listEduPatientRecords(ctx, paciente.id, ctx.institution.timezone, { caseId: casoParam }),
     listEduPatientCaseOptions(ctx, paciente.id),
     // 🔴 Se resuelve AQUÍ, en el servidor, y desde la Ola 8 mira además el
     // CUPO del instituto (una fila de EduAiQuota + la suma del mes). El
@@ -76,6 +92,9 @@ export default async function PacienteExpedientePage({ params }: { params: { id:
       truncated={page.truncated}
       maxRows={EDU_RECORD_MAX_ROWS}
       cases={cases}
+      // Solo se le pasa si de verdad es uno de sus casos: así el
+      // desplegable nunca queda marcando algo que la lista no filtró.
+      casoFiltro={cases.some((c) => c.id === casoParam) ? casoParam : null}
       canWrite={hasEduPermission(permUser, "expediente.write")}
       // P2-13: firmar es otra key. El alumno (write sin sign) entrega; la
       // nota la cierra su docente. El endpoint lo vuelve a exigir.

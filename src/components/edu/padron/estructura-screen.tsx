@@ -105,67 +105,75 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
             </p>
           </div>
         ) : (
-          <div className="edu-table edu-table--programas">
-            <div className="edu-rowhead" aria-hidden="true">
-              <span>Especialidad</span>
-              <span>Clave</span>
-              <span>Duración</span>
-              <span>Generaciones</span>
-              <span>Estudiantes</span>
-              <span>Estado</span>
-              <span />
-            </div>
-
-            {programs.map((p) => (
-              <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
-                <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Especialidad</span>
-                  <span className="edu-cell__value edu-cell__value--strong">{p.name}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Clave</span>
-                  <span className="edu-cell__value">{p.code}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Duración</span>
-                  <span className="edu-cell__value">{p.durationSemesters} semestres</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Generaciones</span>
-                  <span className="edu-cell__value">{p.cohorts}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Estudiantes</span>
-                  <span className="edu-cell__value">{p.students}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Estado</span>
-                  <span className={`edu-tag ${p.isActive ? "edu-tag--ok" : "edu-tag--muted"}`}>
-                    {p.isActive ? "Activo" : "Inactivo"}
-                  </span>
-                </div>
-                <div className="edu-cell__actions">
-                  <button
-                    type="button"
-                    className="edu-btn edu-btn--ghost edu-btn--sm"
-                    onClick={() => {
-                      setFlash(null);
-                      setProgramaEnEdicion(p);
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="edu-btn edu-btn--quiet edu-btn--sm"
-                    onClick={() => alternar("programas", p.id, !p.isActive)}
-                    disabled={busyId === p.id}
-                  >
-                    {p.isActive ? "Desactivar" : "Activar"}
-                  </button>
-                </div>
+          <div className="edu-tablewrap">
+            {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+               mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+               hace que se DESPLACE en vez de recortar si algún día no cabe.
+               Sin él, la forma renglón de esta tabla no se estrena nunca:
+               desde la Ola B su umbral vive en un `@container`, no en un
+               `@media`. */}
+            <div className="edu-table edu-table--programas">
+              <div className="edu-rowhead" aria-hidden="true">
+                <span>Especialidad</span>
+                <span>Clave</span>
+                <span>Duración</span>
+                <span>Generaciones</span>
+                <span>Estudiantes</span>
+                <span>Estado</span>
+                <span />
               </div>
-            ))}
+
+              {programs.map((p) => (
+                <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
+                  <div className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Especialidad</span>
+                    <span className="edu-cell__value edu-cell__value--strong">{p.name}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Clave</span>
+                    <span className="edu-cell__value">{p.code}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Duración</span>
+                    <span className="edu-cell__value">{p.durationSemesters} semestres</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Generaciones</span>
+                    <span className="edu-cell__value">{p.cohorts}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Estudiantes</span>
+                    <span className="edu-cell__value">{p.students}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Estado</span>
+                    <span className={`edu-tag ${p.isActive ? "edu-tag--ok" : "edu-tag--muted"}`}>
+                      {p.isActive ? "Activo" : "Inactivo"}
+                    </span>
+                  </div>
+                  <div className="edu-cell__actions">
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      onClick={() => {
+                        setFlash(null);
+                        setProgramaEnEdicion(p);
+                      }}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--quiet edu-btn--sm"
+                      onClick={() => alternar("programas", p.id, !p.isActive)}
+                      disabled={busyId === p.id}
+                    >
+                      {p.isActive ? "Desactivar" : "Activar"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>
@@ -204,70 +212,78 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
             </p>
           </div>
         ) : (
-          <div className="edu-table edu-table--generaciones">
-            <div className="edu-rowhead" aria-hidden="true">
-              <span>Generación</span>
-              <span>Especialidad</span>
-              <span>Inicio</span>
-              <span>Fin</span>
-              <span>Estudiantes</span>
-              <span>Estado</span>
-              <span />
-            </div>
-
-            {cohorts.map((c) => (
-              <div key={c.id} className={`edu-row ${c.isActive ? "" : "edu-row--off"}`}>
-                <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Generación</span>
-                  <span className="edu-cell__value edu-cell__value--strong">{c.name}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Especialidad</span>
-                  <span className="edu-cell__value">{c.programName}</span>
-                  <span className="edu-cell__sub">{c.programCode}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Inicio</span>
-                  <span className="edu-cell__value">{formatEduDate(c.startDate)}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Fin</span>
-                  <span className="edu-cell__value">
-                    {c.endDate ? formatEduDate(c.endDate) : "Sin fecha"}
-                  </span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Estudiantes</span>
-                  <span className="edu-cell__value">{c.students}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Estado</span>
-                  <span className={`edu-tag ${c.isActive ? "edu-tag--ok" : "edu-tag--muted"}`}>
-                    {c.isActive ? "Abierta" : "Cerrada"}
-                  </span>
-                </div>
-                <div className="edu-cell__actions">
-                  <button
-                    type="button"
-                    className="edu-btn edu-btn--ghost edu-btn--sm"
-                    onClick={() => {
-                      setFlash(null);
-                      setGeneracionEnEdicion(c);
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="edu-btn edu-btn--quiet edu-btn--sm"
-                    onClick={() => alternar("generaciones", c.id, !c.isActive)}
-                    disabled={busyId === c.id}
-                  >
-                    {c.isActive ? "Cerrar" : "Reabrir"}
-                  </button>
-                </div>
+          <div className="edu-tablewrap">
+            {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+               mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+               hace que se DESPLACE en vez de recortar si algún día no cabe.
+               Sin él, la forma renglón de esta tabla no se estrena nunca:
+               desde la Ola B su umbral vive en un `@container`, no en un
+               `@media`. */}
+            <div className="edu-table edu-table--generaciones">
+              <div className="edu-rowhead" aria-hidden="true">
+                <span>Generación</span>
+                <span>Especialidad</span>
+                <span>Inicio</span>
+                <span>Fin</span>
+                <span>Estudiantes</span>
+                <span>Estado</span>
+                <span />
               </div>
-            ))}
+
+              {cohorts.map((c) => (
+                <div key={c.id} className={`edu-row ${c.isActive ? "" : "edu-row--off"}`}>
+                  <div className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Generación</span>
+                    <span className="edu-cell__value edu-cell__value--strong">{c.name}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Especialidad</span>
+                    <span className="edu-cell__value">{c.programName}</span>
+                    <span className="edu-cell__sub">{c.programCode}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Inicio</span>
+                    <span className="edu-cell__value">{formatEduDate(c.startDate)}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Fin</span>
+                    <span className="edu-cell__value">
+                      {c.endDate ? formatEduDate(c.endDate) : "Sin fecha"}
+                    </span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Estudiantes</span>
+                    <span className="edu-cell__value">{c.students}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Estado</span>
+                    <span className={`edu-tag ${c.isActive ? "edu-tag--ok" : "edu-tag--muted"}`}>
+                      {c.isActive ? "Abierta" : "Cerrada"}
+                    </span>
+                  </div>
+                  <div className="edu-cell__actions">
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      onClick={() => {
+                        setFlash(null);
+                        setGeneracionEnEdicion(c);
+                      }}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--quiet edu-btn--sm"
+                      onClick={() => alternar("generaciones", c.id, !c.isActive)}
+                      disabled={busyId === c.id}
+                    >
+                      {c.isActive ? "Cerrar" : "Reabrir"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>

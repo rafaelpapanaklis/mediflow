@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, BadgeCheck, ClipboardList, Mail, Phone, Users } from "lucide-react";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission, type EduPermissionKey } from "@/lib/edu/permissions";
 import { getEduDocenteFicha } from "@/lib/edu/docente";
@@ -60,6 +60,20 @@ export default async function InstitutoDocenteLayout({
 
   const base = `/instituto/docentes/${docente.id}`;
 
+  // Iniciales para el recuadro, mismo cálculo que las otras dos fichas.
+  const iniciales =
+    docente.name
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((parte) => parte.charAt(0).toUpperCase())
+      .join("")
+      .slice(0, 2) || docente.name.charAt(0).toUpperCase();
+
+  // 🔴 `casosAbiertos` es `number | null` y null NO es cero: null significa
+  // que a quien mira no le toca el recurso clínico (caja). Un 0 ahí mentiría
+  // sobre la carga de este docente.
+  const casos = docente.casosAbiertos;
+
   const definicion: {
     key: string;
     href: string;
@@ -90,21 +104,69 @@ export default async function InstitutoDocenteLayout({
         </Link>
       </p>
 
-      <header className="edu-fichahead">
-        <div>
-          <span className="edu-fichahead__folio">Docente</span>
-          <h1 className="edu-fichahead__name">{docente.name}</h1>
-          <p className="edu-fichahead__meta">
-            {[
-              docente.email,
-              docente.phone,
-              // La cédula se LEE, no se navega: es lo que firma una receta.
-              docente.cedulaProfesional ? `Cédula ${docente.cedulaProfesional}` : null,
-              !docente.isActive ? "Cuenta desactivada" : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+      {/* ── LA CABECERA DE LA FICHA ────────────────────────────────────
+          La misma que la del paciente y la del estudiante
+          (`.edu-fichahero`, Ola B). Antes era `.edu-fichahead`: correo,
+          teléfono y cédula unidos por `.join(" · ")` en una línea gris de
+          13 px, con el correo —que es a lo que se entra— pesando lo mismo
+          que el resto y sin poder tocarse para escribir.
+
+          Apilado por defecto y en fila con `@container`: la fila se
+          estrena cuando la CABECERA se ha medido a sí misma, no cuando la
+          ventana pasa un número. */}
+      <header className="edu-fichahero">
+        <div className="edu-fichahero__main">
+          <span className="edu-fichahero__avatar" aria-hidden="true">
+            {iniciales}
+          </span>
+
+          <div className="edu-fichahero__info">
+            <span className="edu-fichahero__folio">Docente</span>
+            <h1 className="edu-fichahero__name">{docente.name}</h1>
+            {!docente.isActive && (
+              <span className="edu-fichahero__estado">
+                <span className="edu-tag edu-tag--danger">Cuenta desactivada</span>
+              </span>
+            )}
+          </div>
+
+          <div className="edu-fichahero__datos">
+            {/* `mailto:` y `tel:`: son los dos datos a los que se entra, y
+                un toque escribe o marca en vez de obligar a copiar. */}
+            <a className="edu-fichadato" href={`mailto:${docente.email}`}>
+              <Mail size={13} strokeWidth={1.9} aria-hidden />
+              {docente.email}
+            </a>
+
+            {docente.phone && (
+              <a className="edu-fichadato" href={`tel:${docente.phone.replace(/[^+\d]/g, "")}`}>
+                <Phone size={13} strokeWidth={1.9} aria-hidden />
+                {docente.phone}
+              </a>
+            )}
+
+            {/* La cédula se LEE, no se navega: es lo que firma una receta. */}
+            {docente.cedulaProfesional && (
+              <span className="edu-fichadato">
+                <BadgeCheck size={13} strokeWidth={1.9} aria-hidden />
+                Cédula {docente.cedulaProfesional}
+              </span>
+            )}
+
+            <span className="edu-fichadato">
+              <Users size={13} strokeWidth={1.9} aria-hidden />
+              {`${docente.estudiantesVigentes} alumno${
+                docente.estudiantesVigentes === 1 ? "" : "s"
+              } a cargo`}
+            </span>
+
+            {casos !== null && (
+              <span className="edu-fichadato">
+                <ClipboardList size={13} strokeWidth={1.9} aria-hidden />
+                {`${casos} caso${casos === 1 ? "" : "s"} que supervisa`}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 

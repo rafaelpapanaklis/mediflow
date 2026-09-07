@@ -266,27 +266,35 @@ export function EduPlanesScreen({ page, filters, maxRows, canCharge, canRefund }
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--planes">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Cobro</span>
-            <span>Paciente</span>
-            <span>Mensualidad</span>
-            <span>Avance</span>
-            <span>Próxima</span>
-            <span>Estado</span>
-            <span />
-          </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--planes">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Cobro</span>
+              <span>Paciente</span>
+              <span>Mensualidad</span>
+              <span>Avance</span>
+              <span>Próxima</span>
+              <span>Estado</span>
+              <span />
+            </div>
 
-          {rows.map((p) => (
-            <PlanFila
-              key={p.id}
-              plan={p}
-              onVer={() => {
-                setFlash(null);
-                setDetalleId(p.id);
-              }}
-            />
-          ))}
+            {rows.map((p) => (
+              <PlanFila
+                key={p.id}
+                plan={p}
+                onVer={() => {
+                  setFlash(null);
+                  setDetalleId(p.id);
+                }}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -378,26 +386,34 @@ export function EduPacientePagos({ page, canCharge, canRefund }: EduPacientePago
         />
       )}
 
-      <div className="edu-table edu-table--planes">
-        <div className="edu-rowhead" aria-hidden="true">
-          <span>Cobro</span>
-          <span>Paciente</span>
-          <span>Mensualidad</span>
-          <span>Avance</span>
-          <span>Próxima</span>
-          <span>Estado</span>
-          <span />
+      <div className="edu-tablewrap">
+        {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+           mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+           hace que se DESPLACE en vez de recortar si algún día no cabe.
+           Sin él, la forma renglón de esta tabla no se estrena nunca:
+           desde la Ola B su umbral vive en un `@container`, no en un
+           `@media`. */}
+        <div className="edu-table edu-table--planes">
+          <div className="edu-rowhead" aria-hidden="true">
+            <span>Cobro</span>
+            <span>Paciente</span>
+            <span>Mensualidad</span>
+            <span>Avance</span>
+            <span>Próxima</span>
+            <span>Estado</span>
+            <span />
+          </div>
+          {rows.map((p) => (
+            <PlanFila
+              key={p.id}
+              plan={p}
+              onVer={() => {
+                setFlash(null);
+                setDetalleId(p.id);
+              }}
+            />
+          ))}
         </div>
-        {rows.map((p) => (
-          <PlanFila
-            key={p.id}
-            plan={p}
-            onVer={() => {
-              setFlash(null);
-              setDetalleId(p.id);
-            }}
-          />
-        ))}
       </div>
 
       {detalle && (

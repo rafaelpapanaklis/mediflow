@@ -68,7 +68,10 @@ import {
 // decisión de qué se cancela y qué no vive en whatsapp-core.ts (puro), y
 // esta función solo escribe. Es best-effort a propósito — mover una cita no
 // puede fallar porque el registro de WhatsApp esté caído.
-import { applyEduReminderCancel } from "@/lib/edu/recordatorios";
+import {
+  applyEduReminderCancel,
+  type EduReminderCancelResult,
+} from "@/lib/edu/recordatorios";
 import {
   EDU_CASE_CLOSED_STATUSES,
   type EduAppointmentStatus,
@@ -1042,9 +1045,18 @@ export async function setEduAppointmentStatus(
   ctx: EduClinicaContext,
   appointmentId: string,
   rawStatus: unknown,
-  options: { canManage: boolean },
+  options: { canManage: boolean; reason?: unknown },
   now: Date = new Date(),
-): Promise<{ id: string; status: EduAppointmentStatus }> {
+): Promise<{
+  id: string;
+  status: EduAppointmentStatus;
+  /**
+   * N-15 · QUÉ PASÓ CON EL RECORDATORIO de esta cita. Sube hasta el modal
+   * de cancelar, que prometía sin condición que «el recordatorio automático
+   * no sale» y a veces ya había salido.
+   */
+  recordatorio: EduReminderCancelResult;
+}> {
   const institutionId = requireInstitution(ctx);
   const scope = eduVisibility(ctx, "appointments");
   if (eduScopeIsEmpty(scope)) throw new EduPadronError("Esa cita no es de este instituto.", 404);
@@ -1071,6 +1083,9 @@ export async function setEduAppointmentStatus(
       checkedInAt: true,
       startedAt: true,
       completedAt: true,
+      // El MOTIVO de una cancelación se anota al final de las notas (ver
+      // abajo), así que hay que traer lo que ya había para no pisarlo.
+      notes: true,
     },
   });
   if (!current) throw new EduPadronError("Esa cita no es de este instituto.", 404);
@@ -1096,6 +1111,37 @@ export async function setEduAppointmentStatus(
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // EL MOTIVO DE LA CANCELACIÓN (Ola B · ws2-t3)
+  //
+  // 🔴 SE ANOTA AL FINAL DE `notes`, Y NO EN UNA COLUMNA PROPIA, por una
+  // razón concreta y no por gusto: `EduAppointment` no tiene `cancelReason`
+  // y este encargo no puede crear columnas (el SQL de la ola ya está
+  // aplicado y no se añade nada). Entre perder el motivo y guardarlo
+  // marcado dentro de las notas, se guarda: «se canceló y no se sabe por
+  // qué» es justo el hueco que esto viene a tapar.
+  //
+  // 🔴 NO PISA LO QUE HABÍA. Se AÑADE al final, con marca visible, y si el
+  // resultado no cabe en los 1 000 caracteres de la columna se recorta por
+  // el PRINCIPIO —conservando siempre el motivo recién escrito— con una
+  // elipsis que avisa de que hay texto viejo cortado. Recortar por el final
+  // habría tirado justo lo que se acaba de escribir.
+  //
+  // ⚠️ Es OPCIONAL en el servidor, a propósito: la agenda general y /mi-dia
+  // llaman a esta misma función sin motivo, y exigirlo aquí habría roto los
+  // dos sitios donde hoy se cancela una cita. Quien lo exige es la pantalla
+  // que lo pide (la pestaña Agenda de la ficha).
+  // ═══════════════════════════════════════════════════════════════════
+  let notes: string | undefined;
+  const motivo =
+    typeof options.reason === "string" ? options.reason.trim().replace(/\s+/g, " ") : "";
+  if (motivo && (status === "CANCELLED" || status === "NO_SHOW")) {
+    const etiqueta = status === "CANCELLED" ? "Cancelada" : "No llegó";
+    const marca = `[${etiqueta}: ${motivo.slice(0, 300)}]`;
+    const junto = current.notes ? `${current.notes} ${marca}` : marca;
+    notes = junto.length <= 1000 ? junto : `…${junto.slice(junto.length - 999)}`;
+  }
+
   await prisma.eduAppointment.update({
     where: { id: current.id },
     data: {
@@ -1104,6 +1150,7 @@ export async function setEduAppointmentStatus(
       // existe una cita terminada sin hora de fin, ni una hora de fin en
       // una que sigue agendada.
       ...eduAppointmentStamps(status, current, now),
+      ...(notes === undefined ? {} : { notes }),
     },
   });
 
@@ -1114,15 +1161,21 @@ export async function setEduAppointmentStatus(
   // manda un "le recordamos su cita". El barrido tampoco las encontraría
   // (filtra por los estados vivos), pero la fila en cola se quedaría en
   // "en curso" para siempre y la pantalla diría algo que no va a pasar.
+  //
+  // 🔴 Y EL RESULTADO SUBE (N-15). Lo que no se pudo cancelar porque ya
+  // había salido no es un detalle interno: es la diferencia entre un
+  // paciente que sabe que su cita se cayó y uno que se presenta con el
+  // recordatorio en el teléfono.
+  let recordatorio: EduReminderCancelResult = { cancelados: 0, yaSalieron: 0 };
   if (status === "CANCELLED" || status === "NO_SHOW" || status === "COMPLETED") {
-    await applyEduReminderCancel({
+    recordatorio = await applyEduReminderCancel({
       institutionId,
       appointmentId: current.id,
       reason: "Se canceló porque la cita se cerró antes de que saliera el aviso.",
     });
   }
 
-  return { id: current.id, status };
+  return { id: current.id, status, recordatorio };
 }
 
 /**

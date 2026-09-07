@@ -3,7 +3,15 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, BookOpen } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarRange,
+  ClipboardList,
+  GraduationCap,
+  Layers,
+  UserCheck,
+} from "lucide-react";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission, type EduPermissionKey } from "@/lib/edu/permissions";
 import { getEduEstudianteFicha } from "@/lib/edu/estudiante";
@@ -15,6 +23,15 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 export const metadata: Metadata = {
   title: "Estudiante · DaleControl Institucional",
   robots: { index: false, follow: false },
+};
+
+/** El tono de la píldora del estado ACADÉMICO. Los mismos `.edu-tag--*` de
+ *  siempre, cuyos contrastes ya están medidos; aquí solo se reparten. */
+const ESTADO_TONO: Record<string, string> = {
+  ACTIVE: "edu-tag--ok",
+  ON_LEAVE: "edu-tag--warn",
+  GRADUATED: "edu-tag--info",
+  WITHDRAWN: "edu-tag--muted",
 };
 
 /**
@@ -70,6 +87,22 @@ export default async function InstitutoEstudianteLayout({
   const base = `/instituto/estudiantes/${alumno.id}`;
   const titular = alumno.supervisors.find((s) => s.isPrimary) ?? alumno.supervisors[0] ?? null;
 
+  // Las iniciales del recuadro, con el mismo cálculo que la ficha del
+  // paciente y que el avatar de la sesión: dos letras como mucho, y si el
+  // nombre viene en una sola pieza, la primera de esa pieza.
+  const iniciales =
+    alumno.name
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((parte) => parte.charAt(0).toUpperCase())
+      .join("")
+      .slice(0, 2) || alumno.name.charAt(0).toUpperCase();
+
+  // `casosAbiertos` es `number | null`, y null NO es cero: null significa
+  // "a quien mira no le toca el recurso clínico" (caja). Pintar un 0 ahí
+  // sería mentir sobre la carga de este alumno.
+  const casosAbiertos = alumno.kpis.casosAbiertos;
+
   const definicion: {
     key: string;
     href: string;
@@ -108,33 +141,87 @@ export default async function InstitutoEstudianteLayout({
         )}
       </p>
 
-      <header className="edu-fichahead">
-        <div>
-          <span className="edu-fichahead__folio">{alumno.matricula}</span>
-          <h1 className="edu-fichahead__name">{alumno.name}</h1>
-          <p className="edu-fichahead__meta">
-            {[
-              alumno.programName,
-              alumno.cohortName,
-              `Semestre ${alumno.semester}`,
-              EDU_STUDENT_STATUS_LABELS[alumno.status],
-              !alumno.userIsActive ? "Cuenta desactivada" : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            {titular && (
-              <>
-                {" · "}
-                {/* El titular VIGENTE, clicable a su ficha. El id es el de
-                    EduUser: un docente no tiene fila en EduStudent. */}
+      {/* ── LA CABECERA DE LA FICHA ────────────────────────────────────
+          La misma que la del paciente (`.edu-fichahero`, Ola B). Antes era
+          `.edu-fichahead`: una tarjeta blanca lisa con el nombre a 19 px
+          —más chico que el título de la lista de la que vienes, que mide
+          27— y con programa, generación, semestre, estado y docente unidos
+          por `.join(" · ")` en UNA línea gris de 13 px. El docente
+          asignado, que es a lo que se entra, pesaba lo mismo que el
+          semestre.
+
+          Ahora: banda de marca, iniciales, nombre grande y los datos clave
+          como píldoras. Apilado por defecto y en fila con `@container`,
+          igual que el paciente: la fila se estrena cuando la CABECERA se ha
+          medido a sí misma, no cuando la ventana pasa un número.
+
+          🔴 EL RECUADRO NO ES UNA FOTO, son las INICIALES: este vertical no
+          guarda la cara de nadie. */}
+      <header className="edu-fichahero">
+        <div className="edu-fichahero__main">
+          <span className="edu-fichahero__avatar" aria-hidden="true">
+            {iniciales}
+          </span>
+
+          <div className="edu-fichahero__info">
+            <span className="edu-fichahero__folio">Matrícula {alumno.matricula}</span>
+            <h1 className="edu-fichahero__name">{alumno.name}</h1>
+            <span className="edu-fichahero__estado">
+              <span className={`edu-tag ${ESTADO_TONO[alumno.status] ?? "edu-tag--muted"}`}>
+                {EDU_STUDENT_STATUS_LABELS[alumno.status]}
+              </span>
+              {/* La CUENTA y el estado ACADÉMICO son dos cosas distintas:
+                  un alumno ACTIVO con la cuenta desactivada no puede entrar,
+                  y fundir las dos en una sola etiqueta esconde justo el
+                  caso que hay que atender. */}
+              {!alumno.userIsActive && (
+                <span className="edu-tag edu-tag--danger">Cuenta desactivada</span>
+              )}
+            </span>
+          </div>
+
+          <div className="edu-fichahero__datos">
+            <span className="edu-fichadato">
+              <GraduationCap size={13} strokeWidth={1.9} aria-hidden />
+              {alumno.programName}
+            </span>
+
+            <span className="edu-fichadato">
+              <CalendarRange size={13} strokeWidth={1.9} aria-hidden />
+              {alumno.cohortName}
+            </span>
+
+            <span className="edu-fichadato">
+              <Layers size={13} strokeWidth={1.9} aria-hidden />
+              {alumno.semester}º semestre
+            </span>
+
+            {/* El titular VIGENTE, clicable a su ficha. El id es el de
+                EduUser: un docente no tiene fila en EduStudent. */}
+            {titular ? (
+              <span className="edu-fichadato">
+                <UserCheck size={13} strokeWidth={1.9} aria-hidden />
                 <EduPersonaLink kind="docente" id={titular.supervisorUserId}>
                   {titular.name}
                 </EduPersonaLink>
                 {titular.isPrimary ? " (titular)" : ""}
-              </>
+              </span>
+            ) : (
+              <span className="edu-fichadato">
+                <UserCheck size={13} strokeWidth={1.9} aria-hidden />
+                Sin docente asignado
+              </span>
             )}
-            {!titular && " · Sin docente asignado"}
-          </p>
+
+            {casosAbiertos !== null && (
+              <span className="edu-fichadato">
+                <ClipboardList size={13} strokeWidth={1.9} aria-hidden />
+                {`${casosAbiertos} caso${casosAbiertos === 1 ? "" : "s"} abierto${
+                  casosAbiertos === 1 ? "" : "s"
+                }`}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 

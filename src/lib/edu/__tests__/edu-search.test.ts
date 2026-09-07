@@ -52,9 +52,15 @@ import { eduPatientSearchAnd } from "../pacientes-core";
 
 const MARIA = {
   folio: "P-0001",
+  // Ola B: el CURP y el SEGUNDO teléfono también entran al índice. En el
+  // mostrador el paciente dicta lo que trae a mano —el CURP de la
+  // constancia, el teléfono de su casa— y hasta esa ola el buscador
+  // contestaba cero con el paciente delante.
+  curp: "ROGM850101MDFDMR07",
   firstName: "María Elena",
   lastName: "Rodríguez Gómez",
   phone: "+525544332211",
+  phone2: "55 9988 7766",
   email: "maria@correo.mx",
 };
 
@@ -148,10 +154,42 @@ test("el correo también entra al índice del paciente", () => {
 // 3 · QUÉ LLEVA EL ÍNDICE DE CADA TABLA
 // ═══════════════════════════════════════════════════════════════════════
 
-test("el índice del paciente lleva folio, nombre, apellido, dígitos y correo", () => {
+test("el índice del paciente lleva folio, CURP, los dos teléfonos, nombre y correo", () => {
+  // 🔴 EL ORDEN IMPORTA, y no por estética: el índice se recorta a 400
+  // caracteres (el tamaño de la columna) y con todos los máximos —folio 30
+  // + CURP 18 + nombre 80 + apellido 80 + dos teléfonos 30+30 + correo 160—
+  // se puede pasar. El correo va el ÚLTIMO por ser el más largo y el que
+  // menos se busca; el CURP y los teléfonos van delante para que no puedan
+  // caer nunca en ese recorte. Para `contains` el orden da igual; para el
+  // recorte, no.
   assert.equal(
     eduPatientSearchIndex(MARIA),
-    "p-0001 maria elena rodriguez gomez 525544332211 maria@correo.mx",
+    "p-0001 rogm850101mdfdmr07 525544332211 5599887766 maria elena rodriguez gomez maria@correo.mx",
+  );
+});
+
+test("Ola B · se encuentra por CURP y por el segundo teléfono", () => {
+  // Los dos casos del mostrador: el paciente trae la constancia con el CURP
+  // y no se acuerda de su folio, o deja el teléfono de su casa.
+  assert.equal(encuentra("ROGM850101MDFDMR07"), true);
+  assert.equal(encuentra("rogm850101"), true);
+  assert.equal(encuentra("5599887766"), true);
+  assert.equal(encuentra("9988 7766"), true);
+});
+
+test("Ola B · un paciente sin CURP ni segundo teléfono indexa igual que antes", () => {
+  // Es el caso de TODOS los pacientes viejos: las dos columnas nacieron
+  // vacías en la Ola B. El índice no puede quedar con huecos ni espacios
+  // dobles por eso.
+  assert.equal(
+    eduPatientSearchIndex({
+      folio: "P-0002",
+      firstName: "Juan",
+      lastName: "Pérez",
+      phone: "5544332211",
+      email: null,
+    }),
+    "p-0002 5544332211 juan perez",
   );
 });
 

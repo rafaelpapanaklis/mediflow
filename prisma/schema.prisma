@@ -12479,6 +12479,9 @@ model EduInstitution {
   // El PLANO de cada sede. Bloque ADITIVO al final de las relaciones: el
   // modelo vive al FINAL del archivo, con su propio encabezado.
   campusLayouts      EduCampusLayout[]
+  // Ola B · las FOTOS CLÍNICAS. Bloque ADITIVO al final de las
+  // relaciones: el modelo vive al FINAL del archivo, con su encabezado.
+  clinicalPhotos     EduClinicalPhoto[]
 
   @@map("edu_institutions")
 }
@@ -12564,6 +12567,22 @@ model EduUser {
   /// Las dos son columnas de autoría; ninguna decide visibilidad.
   gradesGiven      EduCaseGrade[] @relation("EduGradeBy")
   transfersMade    EduCase[]      @relation("EduCaseTransferBy")
+
+  /// Ola B. Las fotos clínicas que subió y las que dio de BAJA, más las
+  /// tres bajas suaves que esta ola le pone al resto del expediente
+  /// (estudio, hallazgo del odontograma, nota) y quién tocó la ficha del
+  /// paciente por última vez.
+  ///
+  /// 🔴 Todas son columnas de AUDITORÍA y ninguna decide visibilidad. Las
+  /// de "quién dio de baja" son OPCIONALES (SetNull): perder el enlace es
+  /// aceptable, perder la constancia de que algo se retiró no — por eso el
+  /// motivo va como texto en la propia fila.
+  photosUploaded    EduClinicalPhoto[]   @relation("EduPhotoUploader")
+  photosDeleted     EduClinicalPhoto[]   @relation("EduPhotoDeletedBy")
+  studiesDeleted    EduStudy[]           @relation("EduStudyDeletedBy")
+  odontogramDeleted EduOdontogramEntry[] @relation("EduOdontogramDeletedBy")
+  recordsDeleted    EduRecord[]          @relation("EduRecordDeletedBy")
+  patientsUpdated   EduPatient[]         @relation("EduPatientUpdatedBy")
 
   /// Ola 11. A qué SEDES entra esta persona.
   ///
@@ -12973,6 +12992,98 @@ model EduPatient {
   historyRecordedAt   DateTime?
   historyRecordedById String?
 
+  /// ═══════════════════════════════════════════════════════════════════
+  /// OLA B · LO QUE LE FALTA A LA FICHA
+  ///
+  /// Las 23 columnas salen del informe ws2-t8 sección (e) —"lo que un
+  /// dentista necesita y NO existe en el modelo"— y del diff del ws2-t1
+  /// §6.1. TODAS son nullables o traen default: ninguna lectura ni
+  /// escritura que ya exista cambia de comportamiento, y el código
+  /// desplegado compila sin tocarlo.
+  ///
+  /// ⚠️ NINGUNA entra hoy a `searchIndex`. Que el CURP y el segundo
+  /// teléfono los encuentre el buscador es una decisión de la casilla de
+  /// pacientes (src/lib/edu/search.ts); escribirlas aquí y no allá dejaría
+  /// el índice a medias hasta que ese código llegara.
+  ///
+  /// ⚠️ Los datos FISCALES no están aquí y no es un olvido: viven en
+  /// `EduPatientTaxProfile` (uno a uno), porque esta fila la leen la
+  /// agenda, el buscador y la ficha, y un RFC de más viaja a pantallas
+  /// donde nadie lo pidió.
+  /// ═══════════════════════════════════════════════════════════════════
+
+  /// Domicilio en CINCO columnas y no en un `address` de texto libre como
+  /// el dental: la ciudad y el código postal son lo único que una escuela
+  /// agrupa después ("¿de dónde vienen nuestros pacientes?"), y de una
+  /// cadena no se sacan.
+  addressStreet       String? @db.VarChar(200)
+  addressNeighborhood String? @db.VarChar(120)
+  addressCity         String? @db.VarChar(120)
+  addressState        String? @db.VarChar(120)
+  addressZip          String? @db.VarChar(10)
+
+  /// TUTOR / representante legal del menor (H-08: hoy un menor no tiene
+  /// tutor en su ficha y nada comprueba la edad).
+  ///
+  /// Tres columnas planas y no una tabla como el dental (`Guardian`): en
+  /// una escuela el que firma es uno y se le llama por teléfono, y una
+  /// tabla aparte es una pantalla más que nadie va a llenar.
+  guardianName     String? @db.VarChar(160)
+  guardianRelation String? @db.VarChar(60)
+  guardianPhone    String? @db.VarChar(30)
+
+  /// Seguro o convenio. Mismos dos campos que el dental.
+  insuranceProvider String? @db.VarChar(120)
+  insurancePolicy   String? @db.VarChar(60)
+
+  /// El SEGUNDO teléfono (casa, trabajo, recado). `phone` es uno solo y
+  /// hoy el otro acaba dentro de `notes`, donde ningún recordatorio lo ve.
+  phone2 String? @db.VarChar(30)
+
+  /// CURP — NOM-024. Sin unicidad ni CHECK a propósito: un CURP mal
+  /// tecleado no puede impedir registrar a un paciente que está en el
+  /// sillón. La validación de formato va en la pantalla.
+  curp String? @db.VarChar(18)
+
+  /// NOM-004, los dos antecedentes que faltaban: los HEREDOFAMILIARES y
+  /// los PERSONALES NO PATOLÓGICOS (higiene, alimentación, vivienda). Son
+  /// distintos de los patológicos, que ya viven en `chronicConditions`, y
+  /// la norma los pide por separado.
+  familyHistory                  String? @db.VarChar(2000)
+  personalNonPathologicalHistory String? @db.VarChar(2000)
+
+  /// HÁBITOS. Enum y no texto libre: lo que se escribe a mano no se puede
+  /// filtrar ni alertar. El detalle en palabras va en `habitsNotes`, al
+  /// lado — el mismo par que el dental usa con `habits[]` +
+  /// `habitsDescription`.
+  habitsTobacco EduHabitLevel?
+  habitsAlcohol EduHabitLevel?
+  habitsBruxism EduHabitLevel?
+  habitsNotes   String?        @db.VarChar(500)
+
+  /// EMBARAZO / LACTANCIA. Es la columna que permite ALERTAR antes de una
+  /// radiografía; hoy eso cabe a mano en `notes` y nadie lo puede filtrar.
+  /// NULL = nadie preguntó · DESCONOCIDO = se preguntó y no se sabe.
+  pregnancy EduPregnancy?
+
+  /// MENOR DE EDAD: decide qué odontograma se pinta (dentición temporal
+  /// 51-85 vs permanente 11-48). Mismo campo y mismo default que el
+  /// `Patient` del dental, para poderlos comparar un día.
+  isChild Boolean @default(false)
+
+  /// AVISO DE PRIVACIDAD (LFPDPPP): CUÁNDO lo aceptó. Fecha y no booleano
+  /// porque lo que hay que poder contestar es "¿cuándo?", y un `true` sin
+  /// fecha no es constancia de nada. NULL = no consta.
+  privacyNoticeAcceptedAt DateTime? @db.Timestamptz(3)
+
+  /// Por dónde quiere que le hablen. NULL = nadie se lo preguntó;
+  /// `NINGUNO` = dijo que no quiere que le escriban, y eso se respeta.
+  contactPreference EduContactPreference?
+
+  /// QUIÉN tocó la ficha por última vez (H-12b). `updatedAt` ya dice
+  /// CUÁNDO; hoy nadie sabe quién corrigió un teléfono.
+  updatedById String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -12982,6 +13093,9 @@ model EduPatient {
   /// Ola de Casos: quién capturó los antecedentes. SetNull — perder el
   /// nombre es aceptable, perder los antecedentes no.
   historyRecordedBy EduUser?      @relation("EduPatientHistoryBy", fields: [historyRecordedById], references: [id], onDelete: SetNull)
+  /// Ola B: quién tocó la ficha por última vez. SetNull por lo mismo que
+  /// las de arriba — perder el nombre es aceptable, perder la ficha no.
+  updatedBy         EduUser?      @relation("EduPatientUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   cases        EduCase[]
   appointments EduAppointment[]
   /// Ola 3 · el expediente. El ODONTOGRAMA y los ESTUDIOS cuelgan del
@@ -13007,6 +13121,11 @@ model EduPatient {
   /// Pagos a meses: sus planes de pago. Se leen con el alcance del DINERO
   /// ("charges"), como los cobros de los que cuelgan.
   paymentPlans  EduPaymentPlan[]
+  /// Ola B: sus FOTOS CLÍNICAS. Cuelgan del PACIENTE y no del caso, como
+  /// el odontograma y los estudios: la cara y la boca son las mismas para
+  /// la ortodoncia y para la periodoncia. Se leen con el alcance CLÍNICO
+  /// ("cases"), así que caja no las ve.
+  clinicalPhotos EduClinicalPhoto[]
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -13206,6 +13325,9 @@ model EduCase {
   /// la firma es el docente que responde por ese caso; no hay columna
   /// "tiene receta" — se cuenta contando estas filas, como todo lo demás.
   prescriptions   EduPrescription[]
+  /// Ola B: las fotos clínicas que se engancharon a ESTE caso. Opcional
+  /// del lado de la foto — una foto de tamizaje existe antes que el caso.
+  clinicalPhotos  EduClinicalPhoto[]
 
   @@index([institutionId, status], map: "edu_cases_status_idx")
   @@index([institutionId, studentId, status], map: "edu_cases_student_idx")
@@ -13403,6 +13525,24 @@ model EduRecord {
   /// aceptable, perder la corrección no.
   correctsId String?
 
+  /// ── Ola B · RETIRAR UN BORRADOR VACÍO, CON RASTRO ──────────────────
+  ///
+  /// H-23: una nota de expediente se puede dejar completamente vacía y ya
+  /// no se quita. Con estas dos columnas se puede retirar dejando quién y
+  /// cuándo.
+  ///
+  /// 🔴 Y OJO CON EL LÍMITE, porque no es una columna sino la NOM: esto NO
+  /// abre la puerta a retirar una nota FIRMADA. Una firmada no se edita ni
+  /// se borra — se corrige con otra que la referencia (`correctsId`).
+  /// Estas columnas son para el BORRADOR que nunca debió existir, y el
+  /// candado del status lo pone la casilla del expediente.
+  ///
+  /// Sin `deleteReason` a propósito: retirar un borrador vacío no es un
+  /// acto clínico que haya que justificar por escrito, y un campo de
+  /// motivo obligatorio en el sitio equivocado solo produce "asdf".
+  deletedAt   DateTime? @db.Timestamptz(3)
+  deletedById String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -13415,6 +13555,8 @@ model EduRecord {
   appointment EduAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   corrects    EduRecord?      @relation("EduRecordCorrections", fields: [correctsId], references: [id], onDelete: SetNull)
   correctedBy EduRecord[]     @relation("EduRecordCorrections")
+  /// Ola B: quién retiró el borrador. SetNull, como el resto de las bajas.
+  deletedBy   EduUser?        @relation("EduRecordDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   // Los nombres van EXPLÍCITOS: el que Prisma generaría solo
   // (edu_records_institutionId_patientId_createdAt_idx) se acerca a los 63
@@ -13462,12 +13604,43 @@ model EduOdontogramEntry {
   recordedById String
   recordedAt   DateTime @default(now())
 
+  /// ── Ola B · LA BAJA LÓGICA (H-17) Y LA PRIMERA VEZ ─────────────────
+  ///
+  /// 🔴 H-17: el odontograma es la ÚNICA pantalla del vertical que BORRA
+  /// de verdad. `setEduOdontogramFinding` hace `deleteMany` del hallazgo y
+  /// `setEduOdontogramNote` hace lo mismo con la nota: la fila desaparece,
+  /// y el alumno de endodoncia puede pasar la goma sobre lo que marcó el
+  /// de ortodoncia sin que quede rastro de que existió. Estas dos columnas
+  /// son lo que permite cambiar ese DELETE por una baja con autor. La
+  /// LÓGICA la pone la casilla del odontograma; aquí solo van las columnas.
+  deletedAt   DateTime? @db.Timestamptz(3)
+  deletedById String?
+
+  /// CUÁNDO SE MARCÓ POR PRIMERA VEZ.
+  ///
+  /// 🔴 CONFIRMADO EN EL CÓDIGO, no supuesto: el upsert escribe
+  /// `update: { recordedById, recordedAt: now }`, así que REMARCAR un
+  /// hallazgo PISA `recordedAt`. Es deliberado (si un docente reconfirma
+  /// lo del alumno, el expediente tiene que decir que lo reconfirmó él) y
+  /// deja sin respuesta "¿desde cuándo está marcado este diente?", que es
+  /// la pregunta clínica.
+  ///
+  /// ⚠️ Hoy `createdAt` la contesta de rebote, porque el upsert no lo
+  /// toca. Deja de contestarla en cuanto exista la baja lógica: el índice
+  /// único de cinco columnas sigue intacto (aquí no se borra nada), así
+  /// que remarcar un hallazgo dado de baja REVIVE la misma fila en vez de
+  /// crear otra — y entonces `createdAt` es la fecha de la fila y esto la
+  /// del primer marcaje clínico. A partir de ahí divergen.
+  firstRecordedAt DateTime? @db.Timestamptz(3)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
   recordedBy  EduUser        @relation("EduOdontogramRecorder", fields: [recordedById], references: [id], onDelete: Cascade)
+  /// Ola B: quién lo dio de baja. SetNull, como el resto de las bajas.
+  deletedBy   EduUser?       @relation("EduOdontogramDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   // El índice único COMPLETO: es el que hace posible un upsert y el que
   // impide que el mismo hallazgo entre dos veces por un doble clic.
@@ -13505,6 +13678,35 @@ model EduStudy {
   notes       String? @db.VarChar(1000)
 
   uploadedById String
+
+  /// ── Ola B · LO QUE FALTABA PARA PODER RETIRAR Y ORDENAR ────────────
+  ///
+  /// 🔴 HOY NO HAY BORRADO DE ESTUDIOS. Una radiografía subida al paciente
+  /// equivocado se queda ahí para siempre: `abortEduStudyUpload` se niega
+  /// explícitamente a sacarla ("Ese archivo ya está registrado en el
+  /// expediente", 409) y no existe ni un `prisma.eduStudy.delete` en el
+  /// repo. Estas tres columnas son lo que permite RETIRARLA dejando
+  /// constancia — no destruirla. La LÓGICA la pone la casilla de estudios;
+  /// la Ola B solo deja las columnas.
+  ///
+  /// Las tres se escriben JUNTAS: un estudio retirado sin quién ni por qué
+  /// no es una baja, es una desaparición.
+  deletedAt    DateTime? @db.Timestamptz(3)
+  deletedById  String?
+  deleteReason String?   @db.VarChar(500)
+
+  /// CUÁNDO SE TOMÓ, que no es cuándo se subió. Hoy solo existe
+  /// `createdAt` y una placa de hace un año subida hoy se ordena como si
+  /// fuera de hoy. Nullable: quien lea ordena por
+  /// `COALESCE(takenAt, createdAt)`.
+  takenAt      DateTime? @db.Timestamptz(3)
+
+  /// Anotaciones libres sobre la imagen. Es el campo que el dental sí
+  /// tiene en `PatientFile` y aquí faltaba (fila 18 del informe ws2-t1);
+  /// `notes` sigue siendo el texto que se lee, esto es lo que dibuja
+  /// encima un visor.
+  annotations  Json?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -13512,6 +13714,9 @@ model EduStudy {
   patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
   case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
   uploadedBy  EduUser        @relation("EduStudyUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  /// Ola B: quién lo dio de baja. SetNull — perder el nombre es aceptable,
+  /// perder la constancia de que el estudio se retiró no.
+  deletedBy   EduUser?       @relation("EduStudyDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   /// Ola 3B: los análisis de IA que se le pidieron a esta imagen. Son N y
   /// no uno: en una escuela el alumno pide el suyo y el docente quiere ver
   /// exactamente lo que el alumno vio (ver EduStudyAnalysis).
@@ -16027,6 +16232,211 @@ model EduCampusLayout {
 
   @@index([institutionId], map: "edu_campus_layouts_institucion_idx")
   @@map("edu_campus_layouts")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — OLA B · LA FOTO CLÍNICA Y LOS CIMIENTOS DE LA FICHA.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-b.sql y hay que
+// aplicarlo A MANO en Supabase ANTES de integrar cualquier PR de la Ola B.
+//
+// 🔴 LA FOTO CLÍNICA ES TABLA PROPIA, NO UN EduStudy CON ETAPA.
+//
+// Un ESTUDIO sube DIRECTO al bucket porque una tomografía pesa cientos de
+// MB y no cabe en el cuerpo de una petición: por eso nadie lo comprime ni
+// le hace miniatura. Una FOTO pasa por el SERVIDOR — 25 MB de tope, MIME
+// por número mágico, 2 400 px JPEG q85 y miniatura 300 px WebP q80 — y
+// necesita VISTA y ETAPA, que a una tomografía no le significan nada. Son
+// dos tuberías con dos topes distintos; en la misma tabla la galería
+// tendría que adivinar cuál es cuál.
+//
+// 🔴 SE MIRÓ `ClinicalPhoto` DEL DENTAL PARA NO OLVIDAR NADA, Y NO SE
+// IMPORTA NI UNA LÍNEA. Aquella tiene FK a `Clinic` y a `Patient`, un
+// `module` de especialidades que aquí no existe y un `photoType` de 40
+// valores. Si el dental cambia, el instituto no cambia.
+//
+// 🔴 LA ETAPA ES TODO EL ANTES/DESPUÉS. El comparador no empareja por
+// ningún algoritmo: ordena por `capturedAt` y propone A = la primera PRE y
+// B = la última POST o CONTROL. Por eso `stage` y `capturedAt` son NOT
+// NULL con default — una foto sin etapa o sin fecha de toma es una foto
+// que el comparador no puede colocar.
+//
+// 🔴 institutionId ESTÁ EN LA FILA, como en todo el vertical: toda
+// consulta filtra por el de la SESIÓN, y un filtro que necesita un JOIN
+// para existir es un filtro que alguien va a olvidar.
+//
+// 🔴 QUIÉN VE ESTO: el recurso "cases" de src/lib/edu/visibility.ts, igual
+// que las notas, el odontograma y los estudios. Caja NO abre expediente
+// clínico y por lo tanto no ve fotos, aunque la tabla cuelgue del
+// paciente. Los permisos son los que ya existen: `estudios.view` para
+// mirar y `estudios.upload` para subir, editar y dar de baja.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// LA VISTA de la foto: desde dónde se tomó.
+///
+/// Enum PROPIO y no el `ClinicalPhotoType` del dental, que trae 40 valores
+/// de endodoncia, periodoncia e implantes. `OTRA` es el default a
+/// propósito: obligar a clasificar antes de subir produce datos
+/// inventados, y la vista se corrige después desde la galería.
+enum EduPhotoType {
+  FRONTAL
+  SONRISA
+  PERFIL_DER
+  PERFIL_IZQ
+  OCLUSAL_SUP
+  OCLUSAL_INF
+  INTRAORAL_FRONTAL
+  INTRAORAL_DER
+  INTRAORAL_IZQ
+  OTRA
+}
+
+/// LA ETAPA del tratamiento. Es LO ÚNICO que mira el comparador: A = la
+/// primera PRE, B = la última POST o CONTROL.
+///
+/// Valores en MAYÚSCULAS y en español como el resto del vertical
+/// (EduStudyKind, EduCaseStatus, EduRecordStatus). El dental los escribe
+/// en minúsculas y en inglés; son dos enums distintos en dos productos
+/// distintos y no tienen por qué parecerse.
+enum EduPhotoStage {
+  PRE
+  DURANTE
+  POST
+  CONTROL
+}
+
+/// UNA FOTO CLÍNICA del paciente.
+///
+/// 🔴 `storagePath` y `thumbnailPath` son PATHS INTERNOS del bucket
+/// privado `edu-files` ("<institutionId>/fotos/<patientId>/<uuid>-<n>"),
+/// jamás una URL: una URL firmada caduca y quedaría muerta en la columna.
+/// Se firma on-demand al leer, como los estudios.
+///
+/// 🔴 `sizeBytes` es BigInt como en EduStudy. El tope por foto son 25 MB y
+/// cabrían de sobra en un Int, pero la CUOTA del instituto suma las dos
+/// tablas y que las dos columnas tengan el mismo tipo evita un cast en
+/// cada consulta del medidor.
+///
+/// 🔴 LA BAJA ES SUAVE Y CON MOTIVO. `deletedAt`, `deletedById` y
+/// `deleteReason` se escriben JUNTOS: una foto retirada del expediente sin
+/// quién ni por qué no es una baja, es una desaparición.
+model EduClinicalPhoto {
+  id            String @id @default(cuid())
+  institutionId String
+  patientId     String
+  /// El caso al que se enganchó, si se enganchó a alguno. Opcional por lo
+  /// mismo que en EduStudy: una foto de tamizaje existe antes que
+  /// cualquier caso, y la boca es una sola.
+  caseId        String?
+  /// Quién la subió. Nunca opcional: una foto del expediente sin autor no
+  /// sirve para contestar nada.
+  uploadedById  String
+
+  photoType EduPhotoType  @default(OTRA)
+  stage     EduPhotoStage @default(PRE)
+
+  /// CUÁNDO SE TOMÓ, que no es cuándo se subió. Es la columna por la que
+  /// ordena el antes/después: si el alumno sube el "antes" una semana
+  /// tarde, `createdAt` pondría las fotos al revés.
+  capturedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  storagePath String @db.VarChar(400)
+  /// La miniatura de 300 px. Nullable porque la compresión es
+  /// best-effort: si sharp no puede con el formato (HEIC en algunas
+  /// plataformas) se sube el original SIN miniatura y la galería cae a la
+  /// foto completa. Rebotar la subida por la miniatura sería perder la
+  /// foto por la copia.
+  thumbnailPath String? @db.VarChar(400)
+  mime          String  @db.VarChar(120)
+  sizeBytes     BigInt
+  /// Alto y ancho del binario ALMACENADO (post-compresión). Opcionales:
+  /// si sharp falla no se conocen, y la galería sabe vivir sin ellos.
+  width         Int?
+  height        Int?
+
+  notes String? @db.VarChar(1000)
+  /// Anotaciones libres sobre la foto ("diente 36, fractura vestibular").
+  annotations Json?
+
+  deletedAt    DateTime? @db.Timestamptz(3)
+  deletedById  String?
+  deleteReason String?   @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  uploadedBy  EduUser        @relation("EduPhotoUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+  deletedBy   EduUser?       @relation("EduPhotoDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  // Los nombres van EXPLÍCITOS: el que Prisma generaría solo se acerca a
+  // los 63 caracteres que admite un identificador de Postgres, y
+  // sql/edu-ola-b.sql tiene que poder decir exactamente lo mismo.
+  //
+  // La galería del paciente, y el COMPARADOR (por etapa y en orden de
+  // toma, que es lo que decide cuál es la A y cuál la B).
+  @@index([institutionId, patientId], map: "edu_clinical_photos_patient_idx")
+  @@index([patientId, stage, capturedAt], map: "edu_clinical_photos_etapa_idx")
+  // Un path, una fila. La subida pasa por el servidor en un solo viaje
+  // (no hay /confirm que reintentar), así que esto no es idempotencia: es
+  // el candado de que dos filas no apunten al mismo objeto y que borrar
+  // el binario de una no deje a la otra ciega.
+  @@unique([institutionId, storagePath], map: "edu_clinical_photos_path_key")
+  @@map("edu_clinical_photos")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA B · LOS TRES ENUMS DE LA FICHA DEL PACIENTE.
+//
+// Los campos que los usan se AGREGAN a EduPatient (arriba, en su modelo).
+// Van aquí, con este encabezado, por la misma convención que el resto del
+// archivo: los bloques nuevos al final, y en el modelo solo las columnas.
+//
+// 🔴 LOS TRES SON NULLABLES Y NINGUNO TIENE DEFAULT, y eso ES el diseño:
+// NULL significa "nadie se lo preguntó". Es la misma distinción que ya
+// hace `historyRecordedAt` con los antecedentes — "sin antecedentes
+// registrados" y "se le preguntó y no refiere" son dos estados distintos,
+// y confundirlos es como se mata a alguien.
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Embarazo o lactancia del paciente.
+///
+/// 🔴 `DESCONOCIDO` está en el enum Y la columna es nullable, y no es
+/// redundante: NULL = nadie preguntó · DESCONOCIDO = se preguntó y no se
+/// sabe. Hoy esto cabe a mano dentro de `notes` y por eso nadie lo puede
+/// filtrar ni alertar antes de una radiografía (informe ws2-t8, sección e).
+enum EduPregnancy {
+  NO
+  EMBARAZO
+  LACTANCIA
+  DESCONOCIDO
+}
+
+/// Por dónde quiere que le hablen. `NINGUNO` es una respuesta legítima —
+/// no quiere recordatorios — y hay que respetarla; NULL sigue siendo
+/// "nadie se lo preguntó".
+enum EduContactPreference {
+  WHATSAPP
+  LLAMADA
+  CORREO
+  NINGUNO
+}
+
+/// CUÁNTO, para los tres hábitos que le importan a una escuela dental
+/// (tabaco, alcohol, bruxismo). UN enum para las tres columnas y no tres
+/// enums iguales.
+///
+/// 🔴 Enum y no texto libre, y ésa es toda la diferencia: lo que se
+/// escribe a mano no se puede filtrar ni alertar. El detalle en palabras
+/// ("10 cigarros al día") va en `habitsNotes`, al lado — el mismo par que
+/// el dental usa con `habits[]` + `habitsDescription`.
+enum EduHabitLevel {
+  NO
+  OCASIONAL
+  FRECUENTE
+  DESCONOCIDO
 }
 
 // ═══════════════════════════════════════════════════════════════════════

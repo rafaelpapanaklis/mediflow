@@ -84,8 +84,22 @@ export function EduAlmacenamientoCard({ medidor }: { medidor: EduAlmMedidor }) {
 
         <span className="edu-kv__k">Usado</span>
         <span className="edu-kv__v">
-          {eduFormatBytes(medidor.usadoBytes)} en {medidor.estudios.toLocaleString("es-MX")}{" "}
-          {medidor.estudios === 1 ? "estudio" : "estudios"} ({pct} %). {EDU_ALM_NOTA_ALCANCE}
+          {/* ws2-t2 · LOS DOS NÚMEROS. Hasta hoy esta línea decía "N
+              estudios" debajo de un total que YA incluía las fotos
+              clínicas: el número de arriba y el de abajo no hablaban de lo
+              mismo, y quien restaba no encontraba la diferencia por ningún
+              lado. `medidor.fotos` lo calcula el vertical desde la Ola B y
+              no lo pintaba nadie.
+
+              Es opcional en el tipo (`?? 0`) a propósito: hay medidores
+              construidos a mano —en pruebas y en el /admin— sin ese campo,
+              y hacerlo obligatorio los rompería sin ganar nada. */}
+          {eduFormatBytes(medidor.usadoBytes)} ({pct} %) en{" "}
+          {medidor.estudios.toLocaleString("es-MX")}{" "}
+          {medidor.estudios === 1 ? "estudio" : "estudios"} y{" "}
+          {(medidor.fotos ?? 0).toLocaleString("es-MX")}{" "}
+          {(medidor.fotos ?? 0) === 1 ? "foto clínica" : "fotos clínicas"}.{" "}
+          {EDU_ALM_NOTA_ALCANCE}
         </span>
 
         <span className="edu-kv__k">Queda</span>

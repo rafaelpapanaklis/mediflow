@@ -10,9 +10,77 @@
  * "patients", caja vería el odontograma de la escuela entera: para caja,
  * "patients" es `all` y "cases" es `none`.
  *
+ * ⚠️ Y ES DEL PACIENTE TAMBIÉN AL ESCRIBIR — H-17, LA MITAD QUE NO CABE EN
+ * ESTA OLA. `requireClinicalPatient` deja entrar a cualquiera que pueda
+ * abrir el expediente de ese paciente, así que un alumno con un caso vivo
+ * puede dar de baja lo que marcó otro alumno con OTRO caso vivo del mismo
+ * paciente. Acotar la escritura al caso de quien escribe NO SE PUEDE HOY:
+ * `EduOdontogramEntry` no tiene `caseId` —ninguna de sus columnas dice de
+ * qué caso salió el hallazgo— y añadirla es una columna, un backfill y una
+ * decisión clínica que no es de esta casilla (un hallazgo es de la boca,
+ * no del caso: dos casos vivos miran la misma caries). Queda para la Ola
+ * C, junto con el índice parcial de N-3. Lo que SÍ hay hoy es el rastro:
+ * quien lo quitó queda escrito y sobrevive al remarcado.
+ *
  * 🔴 UN HALLAZGO SIN AUTOR NO SIRVE PARA NADA. Cada fila guarda quién lo
  * marcó (`recordedById`, de la SESIÓN) y cuándo. Es parte del expediente:
  * "el 16 tiene una corona" sin firma no contesta ninguna pregunta.
+ *
+ * 🔴 Y DESDE LA OLA B, QUITAR TAMPOCO BORRA (H-17). Éste era el único
+ * módulo del vertical que hacía `DELETE`: la goma del alumno de endodoncia
+ * pasaba por encima de lo que marcó el de ortodoncia y no quedaba ni el
+ * rastro de que existió. Ahora quitar es `deletedAt` + `deletedById`, las
+ * lecturas del dibujo filtran `deletedAt IS NULL` y el historial enseña
+ * también lo retirado.
+ *
+ * ⛔ EL DETALLE QUE ROMPE ESTO SI SE OLVIDA: el índice único
+ * `edu_odontogram_hallazgo_key` es de CINCO columnas y NO es parcial
+ * (dejarlo parcial exigía un DROP INDEX, y aquí no se borra nada). Una
+ * fila dada de baja SIGUE OCUPANDO su clave. Por eso remarcar un hallazgo
+ * retirado tiene que REVIVIR esa misma fila —`deletedAt = NULL` y el
+ * `recordedBy/At` de hoy— y no insertar una segunda, que chocaría contra
+ * el índice. El upsert de las cinco columnas ya cae solo en esa rama; lo
+ * único que hay que no hacer es tocar `firstRecordedAt` ni `deletedById`
+ * al revivir.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 N-3 · HASTA DÓNDE LLEGA EL RASTRO HOY, Y QUÉ FALTA (Ola C)
+ *
+ * UNA FILA POR LLAVE ES UNA FILA POR HALLAZGO, NO POR MOVIMIENTO. Esa es
+ * la frase entera. El historial se alimenta de estas mismas filas, así
+ * que de un hallazgo que se marca, se quita y se vuelve a marcar solo
+ * puede contar UN estado, no la secuencia.
+ *
+ * Lo que SÍ contesta hoy, sin una línea de SQL:
+ *   · un hallazgo retirado y no remarcado → quién lo quitó y cuándo;
+ *   · un hallazgo retirado y REMARCADO   → quién lo había quitado
+ *     (`deletedById` sobrevive al revivir; ver `eduOdontogramReviveData`).
+ *
+ * Lo que NO contesta, y por eso los rótulos de la pantalla no lo prometen:
+ *   · CUÁNDO se quitó, si después se remarcó — esa fecha es `deletedAt` y
+ *     hay que soltarla para que la fila vuelva a estar viva;
+ *   · la cadena completa (quitado por A, remarcado por B, quitado por C…):
+ *     solo queda el último que pasó la goma.
+ *
+ * EL ARREGLO DE VERDAD, para la Ola C, es que dos filas del mismo
+ * hallazgo puedan coexistir cuando una está retirada. Son dos sentencias,
+ * y llevan DROP INDEX, que es exactamente lo que la Ola B no hace:
+ *
+ *     DROP INDEX IF EXISTS "edu_odontogram_hallazgo_key";
+ *     CREATE UNIQUE INDEX IF NOT EXISTS "edu_odontogram_hallazgo_vivo_key"
+ *       ON "edu_odontogram_entries"
+ *          ("institutionId", "patientId", "tooth", "surface", "condition")
+ *       WHERE "deletedAt" IS NULL;
+ *
+ * Con ese índice, `setEduOdontogramFinding` deja de necesitar el upsert
+ * que revive y pasa a INSERTAR una fila nueva por cada marcaje, y el
+ * historial cuenta la secuencia entera. Es un cambio de escritura, no
+ * solo de índice: no se hace a medias.
+ *
+ * ⚠️ El índice PARCIAL de `edu_case_approvals` (una PENDING por fila
+ * apuntada) ya existe en la base y Prisma no sabe expresarlo: si algún
+ * día se corre `prisma migrate diff`, va a proponer borrar los dos. NO.
+ * ═══════════════════════════════════════════════════════════════════════
  */
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -28,6 +96,9 @@ import { getEduClinicalPatient } from "@/lib/edu/expediente";
 import {
   EDU_ODONTOGRAM_NOTE_KEY,
   EDU_TOOTH_WHOLE,
+  eduOdontogramBajaData,
+  eduOdontogramCreateData,
+  eduOdontogramReviveData,
   parseEduFdi,
   parseEduOdontogramTarget,
   type EduOdontogramEntryRow,
@@ -71,11 +142,35 @@ const ENTRY_SELECT = {
   recordedById: true,
   recordedAt: true,
   recordedBy: { select: { firstName: true, lastName: true, email: true } },
+  deletedAt: true,
+  deletedById: true,
+  deletedBy: { select: { firstName: true, lastName: true, email: true } },
+  firstRecordedAt: true,
+  // `createdAt` no se pinta: es el respaldo de `firstRecordedAt` para las
+  // filas que se crearon entre el SQL de la Ola B y esta casilla, cuando
+  // el código todavía no sellaba la columna. Ver `desdeCuando`.
+  createdAt: true,
 } satisfies Prisma.EduOdontogramEntrySelect;
 
 type EntryPayload = Prisma.EduOdontogramEntryGetPayload<{ select: typeof ENTRY_SELECT }>;
 
+/**
+ * DESDE CUÁNDO está marcado ese diente.
+ *
+ * `firstRecordedAt` es la respuesta y el backfill de la Ola B la llenó
+ * para todo lo que existía. El `?? createdAt` cubre exactamente una
+ * rendija: las filas que el código VIEJO creó después de aplicar el SQL y
+ * antes de integrar esta casilla, que nacieron con la columna en NULL. En
+ * esas, `createdAt` sigue siendo la fecha del primer marcaje —el upsert
+ * viejo nunca lo tocaba—, así que la respuesta es correcta y no hace falta
+ * ni una escritura más ni un segundo backfill.
+ */
+function desdeCuando(e: EntryPayload): Date {
+  return e.firstRecordedAt ?? e.createdAt;
+}
+
 function toRow(e: EntryPayload, timeZone: string): EduOdontogramEntryRow {
+  const primera = desdeCuando(e);
   return {
     id: e.id,
     tooth: e.tooth,
@@ -86,6 +181,26 @@ function toRow(e: EntryPayload, timeZone: string): EduOdontogramEntryRow {
     recordedByName: personName(e.recordedBy),
     recordedAt: e.recordedAt.toISOString(),
     recordedLabel: stampLabel(e.recordedAt, timeZone),
+
+    // 🔴 N-3 · `deletedAt` y `deletedById` YA NO VAN SIEMPRE JUNTOS, y la
+    // combinación de los dos es la que hay que leer:
+    //   · los dos puestos       → está retirado ahora mismo;
+    //   · `deletedById` a solas → se quitó y se volvió a marcar. Revivir
+    //     conserva a quien pasó la goma; la fecha se pierde, porque
+    //     `deletedAt` es justo la columna que hay que soltar para que la
+    //     fila vuelva a estar viva.
+    //   · ninguno              → nunca se ha quitado.
+    deletedAt: e.deletedAt ? e.deletedAt.toISOString() : null,
+    deletedById: e.deletedById,
+    // Un hallazgo dado de baja por alguien cuya cuenta se desactivó después
+    // deja `deletedById` puesto y la relación en null (el FK es SetNull):
+    // el rastro dice "se quitó el 3 de marzo" aunque ya no pueda decir
+    // quién, que es mejor que no decir nada.
+    deletedByName: e.deletedBy ? personName(e.deletedBy) : null,
+    deletedLabel: e.deletedAt ? stampLabel(e.deletedAt, timeZone) : null,
+
+    firstRecordedAt: primera.toISOString(),
+    firstRecordedLabel: stampLabel(primera, timeZone),
   };
 }
 
@@ -114,12 +229,84 @@ export async function listEduOdontogram(
   if (!paciente) return [];
 
   const rows = await prisma.eduOdontogramEntry.findMany({
-    where: { institutionId, patientId: paciente.id },
+    // 🔴 `deletedAt: null` EN EL `where`, no con un `.filter()` después.
+    // Un recorte que vive fuera de la consulta es un recorte que el
+    // siguiente `findMany` se olvida de copiar, y aquí olvidarlo significa
+    // dibujar en la boca de alguien un hallazgo que se quitó.
+    where: { institutionId, patientId: paciente.id, deletedAt: null },
     orderBy: [{ tooth: "asc" }, { surface: "asc" }, { condition: "asc" }],
     take: EDU_ODONTOGRAM_MAX_ROWS,
     select: ENTRY_SELECT,
   });
   return rows.map((e) => toRow(e, timeZone));
+}
+
+/**
+ * Una página del odontograma: lo VIVO y lo RETIRADO, juntos.
+ *
+ * 🔴 POR QUÉ EN UNA SOLA CONSULTA Y NO EN DOS. El dibujo necesita las
+ * vivas y el historial necesita las dos; pedirlas por separado serían dos
+ * viajes al pooler para la misma tabla y, peor, dos fotos tomadas en
+ * instantes distintos — un hallazgo que alguien quita entre una y otra
+ * saldría dibujado y sin aparecer en el historial. Se traen juntas y las
+ * vivas se derivan con `eduOdontogramLiveEntries`.
+ */
+export interface EduOdontogramPage {
+  /** TODAS las filas, vivas y dadas de baja, la última acción primero. */
+  rows: EduOdontogramEntryRow[];
+  /** true = se topó con el techo y hay historia más vieja que no viajó. */
+  truncated: boolean;
+}
+
+/**
+ * El odontograma con su rastro.
+ *
+ * ── EL ORDEN: PRIMERO LAS VIVAS, Y ESO PROTEGE AL DIBUJO ───────────────
+ * `deletedAt` ascendente con los NULL DELANTE pone todas las filas vivas
+ * antes que cualquier retirada. No es estético: es lo que garantiza que,
+ * si algún día se topara con el techo, lo que se pierda sea historia
+ * vieja y NUNCA un hallazgo que hay que dibujar. Con un orden por fecha a
+ * secas, un hallazgo marcado hace dos años y nunca tocado sería justo lo
+ * primero en caerse, y el dibujo saldría incompleto sin que nadie lo vea.
+ *
+ * Dentro de cada grupo manda `updatedAt`, que con la baja lógica ES la
+ * "última acción": Prisma lo reescribe en cada escritura, así que vale
+ * `recordedAt` en una fila viva y `deletedAt` en una retirada. Postgres no
+ * ordena por el mayor de dos columnas sin un índice funcional; esto sí, y
+ * sin inventar nada.
+ *
+ * 🔴 SE PIDE UNA DE MÁS (`MAX + 1`) PARA PODER DECIRLO (S-12). El
+ * historial se cortaba a 40 filas EN LA PANTALLA y sin una palabra que lo
+ * dijera: un odontograma con 41 movimientos y uno con 400 se veían
+ * idénticos. Mismo criterio que las notas del expediente.
+ */
+export async function listEduOdontogramHistory(
+  ctx: EduClinicaContext,
+  patientId: string,
+  timeZone: string,
+  now: Date = new Date(),
+): Promise<EduOdontogramPage> {
+  const institutionId = requireInstitution(ctx);
+  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return { rows: [], truncated: false };
+
+  const paciente = await getEduClinicalPatient(ctx, patientId, now);
+  if (!paciente) return { rows: [], truncated: false };
+
+  const rows = await prisma.eduOdontogramEntry.findMany({
+    where: { institutionId, patientId: paciente.id },
+    orderBy: [
+      { deletedAt: { sort: "asc", nulls: "first" } },
+      { updatedAt: "desc" },
+      { id: "desc" },
+    ],
+    take: EDU_ODONTOGRAM_MAX_ROWS + 1,
+    select: ENTRY_SELECT,
+  });
+
+  return {
+    truncated: rows.length > EDU_ODONTOGRAM_MAX_ROWS,
+    rows: rows.slice(0, EDU_ODONTOGRAM_MAX_ROWS).map((e) => toRow(e, timeZone)),
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -164,6 +351,24 @@ export interface EduOdontogramWriteInput {
  * es NOT NULL con "" para el diente entero: Postgres considera distintos
  * dos NULL dentro de un índice único, así que con `surface` nullable el
  * mismo hallazgo entraría dos veces con un doble clic.
+ *
+ * 🔴 Y ES EL MISMO ÍNDICE EL QUE OBLIGA A REVIVIR (H-17). No es parcial
+ * —no lleva `WHERE "deletedAt" IS NULL`, porque hacerlo parcial exigía un
+ * DROP INDEX y aquí no se borra nada—, así que una fila dada de baja
+ * SIGUE OCUPANDO su clave. Remarcar ese hallazgo cae por eso en la rama
+ * `update` del upsert y lo que hace es revivir la fila: `deletedAt` a
+ * NULL y el autor de hoy. Un `create` ahí chocaría contra el índice y la
+ * escritura fallaría con P2002 delante de quien está marcando una boca.
+ *
+ * ⛔ NI `firstRecordedAt` NI `deletedById` VAN EN EL `update`, y las dos
+ * ausencias son deliberadas. `firstRecordedAt` es la única respuesta que
+ * queda a "¿desde cuándo está marcado este diente?" —`recordedAt` se pisa
+ * en cada remarcado, a propósito—, y escribirlo al revivir haría que
+ * quitar y volver a marcar la borrara. `deletedById` es la respuesta a
+ * "¿quién pasó la goma sobre lo que yo marqué?" (N-3): ponerlo en NULL al
+ * revivir borraba justo lo que H-17 vino a dejar escrito. Por eso el
+ * cuerpo del update es `eduOdontogramReviveData`, que no incluye ninguna
+ * de las dos.
  */
 export async function setEduOdontogramFinding(
   ctx: EduClinicaContext,
@@ -183,41 +388,91 @@ export async function setEduOdontogramFinding(
   // fallan por un campo que la pantalla olvidó.
   const present = input.present === undefined ? true : input.present === true;
 
+  const llave = { institutionId, patientId: pid, tooth, surface, condition };
+  const autor = { userId: ctx.eduUserId, at: now };
+
   if (present) {
     await prisma.eduOdontogramEntry.upsert({
-      where: {
-        institutionId_patientId_tooth_surface_condition: {
-          institutionId,
-          patientId: pid,
-          tooth,
-          surface,
-          condition,
-        },
-      },
-      // Marcar algo que ya estaba marcado REFRESCA quién y cuándo: si un
+      where: { institutionId_patientId_tooth_surface_condition: llave },
+      // Marcar algo que ya estaba marcado REFRESCA quién y cuándo (si un
       // docente reconfirma un hallazgo del alumno, el expediente tiene que
-      // decir que lo reconfirmó él.
-      update: { recordedById: ctx.eduUserId, recordedAt: now },
-      create: {
-        institutionId,
-        patientId: pid,
-        tooth,
-        surface,
-        condition,
-        recordedById: ctx.eduUserId,
-        recordedAt: now,
-      },
+      // decir que lo reconfirmó él) y, si estaba RETIRADO, lo revive.
+      update: eduOdontogramReviveData(autor),
+      create: { ...llave, ...eduOdontogramCreateData(autor) },
     });
   } else {
-    // deleteMany y no delete: quitar un hallazgo que ya no estaba no es un
-    // error que valga la pena enseñarle a nadie (pasa con un doble clic), y
-    // `delete` lanzaría P2025.
-    await prisma.eduOdontogramEntry.deleteMany({
-      where: { institutionId, patientId: pid, tooth, surface, condition },
+    // 🔴 BAJA LÓGICA, no DELETE (H-17). `updateMany` y no `update`: quitar
+    // un hallazgo que ya no estaba no es un error que valga la pena
+    // enseñarle a nadie (pasa con un doble clic) y `update` lanzaría
+    // P2025. El `deletedAt: null` del `where` es lo que hace que volver a
+    // quitar NO reescriba la firma de quien lo quitó de verdad.
+    await prisma.eduOdontogramEntry.updateMany({
+      where: { ...llave, deletedAt: null },
+      data: eduOdontogramBajaData(autor),
     });
   }
 
   return { tooth, surface, condition, present };
+}
+
+export interface EduOdontogramClearInput {
+  tooth?: unknown;
+}
+
+/**
+ * LIMPIAR UN DIENTE ENTERO — hallazgos, caras y nota — en UNA petición.
+ *
+ * 🔴 POR QUÉ EXISTE (H-22). Antes la pantalla mandaba UNA petición POR
+ * HALLAZGO y le daba a todas el mismo "deshacer": restaurar el diente
+ * entero. Un diente con cinco hallazgos mandaba cinco peticiones y, si
+ * fallaba la tercera, se repintaban los cinco — incluidos los dos que las
+ * peticiones 1 y 2 ya habían borrado en Postgres. La pantalla quedaba
+ * enseñando hallazgos que ya no existían, que es justo lo contrario de lo
+ * que promete el contenedor ("nunca se deja pintado algo que no se
+ * guardó"). Con una sola escritura el resultado solo tiene dos formas: se
+ * borró todo, o no se borró nada y se deshace entero con razón.
+ *
+ * UNA SOLA sentencia y no un `$transaction` con N escrituras: en Postgres
+ * un UPDATE con `WHERE ... AND tooth = $n` es una sola sentencia y por
+ * tanto ya es atómico. Una transacción alrededor no agregaría garantía
+ * ninguna y sí un viaje más al pooler.
+ *
+ * La NOTA se va con el diente a propósito: vive en esta misma tabla con la
+ * key reservada "__nota__", así que entra en el mismo `where`. Antes se
+ * quedaba huérfana — "Limpiar diente" dejaba un diente sin un solo
+ * hallazgo y con la nota de lo que ya no está.
+ *
+ * 🔴 OLA B · YA NO BORRA (H-17). Era la escritura más destructiva del
+ * vertical: un clic y el diente entero desaparecía de la tabla, con lo que
+ * hubiera marcado otra persona dentro. Ahora es una BAJA LÓGICA de todas
+ * las filas vivas de ese diente, con la firma de quien la hizo, y el
+ * historial sigue pudiendo contestar qué había ahí y quién lo quitó.
+ *
+ * `removed` cuenta lo que de verdad se dio de baja: el `deletedAt: null`
+ * del `where` deja fuera lo que ya estaba retirado, así que limpiar dos
+ * veces el mismo diente devuelve 0 la segunda y no reescribe la firma del
+ * primero.
+ */
+export async function clearEduOdontogramTooth(
+  ctx: EduClinicaContext,
+  patientId: string,
+  input: EduOdontogramClearInput,
+  now: Date = new Date(),
+): Promise<{ tooth: number; removed: number }> {
+  const institutionId = requireInstitution(ctx);
+  const pid = await requireClinicalPatient(ctx, patientId, now);
+
+  const tooth = parseEduFdi(input.tooth);
+  if (tooth === null) {
+    throw new EduPadronError("Ese número de diente no existe en la nomenclatura FDI.");
+  }
+
+  const { count } = await prisma.eduOdontogramEntry.updateMany({
+    where: { institutionId, patientId: pid, tooth, deletedAt: null },
+    data: eduOdontogramBajaData({ userId: ctx.eduUserId, at: now }),
+  });
+
+  return { tooth, removed: count };
 }
 
 /**
@@ -228,8 +483,13 @@ export async function setEduOdontogramFinding(
  * empiece con "__", así que esa fila no se puede crear ni borrar desde el
  * pincel: solo desde aquí.
  *
- * Vaciar el texto BORRA la fila en vez de dejar una con "": una nota vacía
- * en la lista de hallazgos es ruido que nadie escribió.
+ * Vaciar el texto RETIRA la fila en vez de dejar una con "": una nota
+ * vacía en la lista de hallazgos es ruido que nadie escribió.
+ *
+ * 🔴 OLA B · retirar es `deletedAt`, no `DELETE` (H-17), y volver a
+ * escribir la nota REVIVE la misma fila por el mismo índice de cinco
+ * columnas. Lo que se conserva es lo que a un expediente le importa: que
+ * ahí hubo una nota, qué decía y quién la quitó.
  */
 export async function setEduOdontogramNote(
   ctx: EduClinicaContext,
@@ -256,15 +516,23 @@ export async function setEduOdontogramNote(
     condition: EDU_ODONTOGRAM_NOTE_KEY,
   };
 
+  const autor = { userId: ctx.eduUserId, at: now };
+
   if (!texto) {
-    await prisma.eduOdontogramEntry.deleteMany({ where: llave });
+    // El `deletedAt: null` evita que vaciar dos veces reescriba la firma de
+    // quien la quitó de verdad. El TEXTO no se borra: la nota retirada
+    // queda legible en el historial, que es de lo que se trata.
+    await prisma.eduOdontogramEntry.updateMany({
+      where: { ...llave, deletedAt: null },
+      data: eduOdontogramBajaData(autor),
+    });
     return { tooth, notes: null };
   }
 
   await prisma.eduOdontogramEntry.upsert({
     where: { institutionId_patientId_tooth_surface_condition: llave },
-    update: { notes: texto, recordedById: ctx.eduUserId, recordedAt: now },
-    create: { ...llave, notes: texto, recordedById: ctx.eduUserId, recordedAt: now },
+    update: { notes: texto, ...eduOdontogramReviveData(autor) },
+    create: { ...llave, notes: texto, ...eduOdontogramCreateData(autor) },
   });
 
   return { tooth, notes: texto };

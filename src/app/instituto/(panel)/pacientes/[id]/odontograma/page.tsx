@@ -5,7 +5,11 @@ import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { EDU_CLINICAL_NONE_DETAIL, eduClinicalScope } from "@/lib/edu/expediente-core";
 import { getEduClinicalPatient } from "@/lib/edu/expediente";
-import { listEduOdontogram } from "@/lib/edu/odontograma";
+import { listEduOdontogramHistory } from "@/lib/edu/odontograma";
+import {
+  eduOdontogramDefaultDentition,
+  eduOdontogramLiveEntries,
+} from "@/lib/edu/odontograma-core";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduOdontogramaScreen } from "@/components/edu/expediente/odontograma-screen";
@@ -47,12 +51,28 @@ export default async function PacienteOdontogramaPage({ params }: { params: { id
   const paciente = await getEduClinicalPatient(ctx, params.id);
   if (!paciente) notFound();
 
-  const entries = await listEduOdontogram(ctx, paciente.id, ctx.institution.timezone);
+  // 🔴 UNA sola consulta para las dos cosas. El dibujo quiere lo VIVO y el
+  // historial quiere también lo RETIRADO; pedirlos por separado serían dos
+  // fotos tomadas en instantes distintos, y un hallazgo que alguien quita
+  // entre una y otra saldría dibujado sin aparecer en el historial.
+  const historial = await listEduOdontogramHistory(
+    ctx,
+    paciente.id,
+    ctx.institution.timezone,
+  );
 
   return (
     <EduOdontogramaScreen
       patientId={paciente.id}
-      entries={entries}
+      entries={eduOdontogramLiveEntries(historial.rows)}
+      historial={historial.rows}
+      historialTruncado={historial.truncated}
+      // Dentición inicial: un paciente con dentición temporal abre en los
+      // cuadrantes 5-8 en vez de obligar a quien atiende a cambiarlo cada
+      // vez. Se puede cambiar a mano — es el punto de partida, no un
+      // candado. `isChild` lo captura la ficha; aquí solo se lee.
+      denticionInicial={eduOdontogramDefaultDentition(paciente.isChild)}
+      esInfantil={paciente.isChild}
       canEdit={hasEduPermission(permUser, "odontograma.edit")}
     />
   );

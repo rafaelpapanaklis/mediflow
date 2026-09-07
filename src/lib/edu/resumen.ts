@@ -19,6 +19,7 @@
  * pantalla cruza muchas tablas y es la primera de la ficha — una consulta
  * lenta aquí retrasa TODAS las visitas a la ficha.
  */
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import { eduCurrentAssignmentWhere } from "@/lib/edu/padron-core";
@@ -46,6 +47,8 @@ import {
   type EduPatientResumenData,
   type EduResumenCita,
   type EduResumenEstudio,
+  type EduResumenFotos,
+  type EduResumenSaldo,
   type EduResumenTimelineItem,
 } from "@/lib/edu/resumen-core";
 // Ola de Casos: la derivación de "qué espera el caso" es la MISMA de la
@@ -56,6 +59,7 @@ import {
   EDU_CASE_CLOSED_STATUSES,
   EDU_PRESCRIPTION_STATUS_LABELS,
   EDU_STUDY_KIND_LABELS,
+  type EduRole,
 } from "@/lib/edu/types";
 
 export type { EduPatientResumenData } from "@/lib/edu/resumen-core";
@@ -131,36 +135,59 @@ function toCita(
 }
 
 /**
- * El resumen de UN paciente, con cada bloque recortado (o directamente NO
- * consultado) según quien pregunta. El paciente en sí ya lo validó la
- * página con getEduPatient — aquí cada consulta vuelve a cerrar tenant y
- * alcance por su cuenta, así que un patientId ajeno solo produce ceros.
+ * ═══════════════════════════════════════════════════════════════════════
+ * LOS KPI DE LA CABECERA — los cuatro datos que se ven en LAS DIEZ pestañas
+ * ═══════════════════════════════════════════════════════════════════════
+ * Cuántas veces ha venido, cuándo fue la última, cuándo es la próxima y —
+ * solo con permiso y alcance de dinero— su saldo. Antes vivían nada más en
+ * la pestaña Resumen: quien estaba en Estudios o en Recetas no sabía si el
+ * paciente tenía cita mañana sin volver a la portada.
  *
- * ⚠️ La ficha NO se filtra por sede a propósito (decisión de la Ola 11):
- * el expediente y la historia de un paciente son UNO, se atienda donde se
- * atienda. Por eso aquí no viaja `campusIds`.
+ * 🔴 UNA SOLA FUNCIÓN, LLAMADA UNA SOLA VEZ POR PETICIÓN. La cabecera vive
+ * en el LAYOUT, así que si esto se consultara sin memoizar, la pestaña
+ * Resumen pagaría las cinco consultas DOS veces (una el layout, otra la
+ * página) y las otras nueve pestañas las pagarían enteras. Va envuelta en
+ * el `cache()` de React —el mismo patrón de `getSession` en
+ * src/lib/auth.ts— que comparte UNA ejecución entre layout, página y
+ * cualquier otro punto del mismo render.
+ *
+ * 🔴 Y POR ESO LOS ARGUMENTOS SON PRIMITIVOS. `cache()` compara sus
+ * argumentos por IDENTIDAD: el layout y la página llaman cada uno a
+ * `getEduContext()` y reciben objetos distintos, así que pasar `ctx` daría
+ * SIEMPRE fallo de caché y la memoización no serviría de nada. Se pasan
+ * los tres campos que hacen falta y el contexto se rearma dentro.
  */
-export async function getEduPatientResumen(
+export interface EduPatientKpis {
+  /** Citas COMPLETADAS dentro del alcance de quien mira. */
+  visitas: number;
+  /** true = lo que se ve está recortado a "lo tuyo" (alumno/docente). */
+  recortado: boolean;
+  ultimaVisita: EduResumenCita | null;
+  proximaCita: EduResumenCita | null;
+  /** null = quien mira NO ve dinero (alumno/docente): NO SE CONSULTÓ. */
+  saldo: EduResumenSaldo | null;
+}
+
+/** El trabajo de verdad. Sin memoizar y con `now` inyectable: es lo que
+ *  llama el resumen cuando la prueba le fija una fecha. */
+async function consultarEduPatientKpis(
   ctx: EduClinicaContext,
   patientId: string,
   timeZone: string,
-  now: Date = new Date(),
-): Promise<EduPatientResumenData | null> {
+  now: Date,
+): Promise<EduPatientKpis> {
   const institutionId = requireInstitution(ctx);
   const id = eduCleanId(patientId);
-  if (!id) return null;
+  if (!id) return { visitas: 0, recortado: false, ultimaVisita: null, proximaCita: null, saldo: null };
 
   const scopes = eduResumenScopes(ctx);
   const veCitas = !eduScopeIsEmpty(scopes.citas);
-  const veClinico = eduResumenVeClinico(scopes);
   const veDinero = eduResumenVeDinero(scopes);
-
   const citasWhere = eduAppointmentScopeWhere({ institutionId, scope: scopes.citas, now });
-  const casosWhere = eduCaseScopeWhere({ institutionId, scope: scopes.clinico, now });
 
-  // ¿El instituto reparte por sedes? Decide si la sede se PINTA. Es una
-  // cuenta barata (count con take implícito) y va dentro del mismo batch.
-  const [visitas, ultima, proxima, casos, dinero, sedes] = await Promise.all([
+  // Cuatro consultas y la cuenta de sedes: cinco, lejos de las siete que
+  // saturan el pooler.
+  const [visitas, ultima, proxima, dinero, sedes] = await Promise.all([
     veCitas
       ? prisma.eduAppointment.count({
           where: { ...citasWhere, patientId: id, status: "COMPLETED" },
@@ -187,6 +214,96 @@ export async function getEduPatientResumen(
           select: CITA_RESUMEN_SELECT,
         })
       : Promise.resolve(null),
+    veDinero
+      ? prisma.eduCharge.aggregate({
+          where: { ...eduChargeScopeWhere({ institutionId, scope: scopes.dinero }), patientId: id },
+          _sum: { paidCents: true, balanceCents: true },
+          _count: true,
+        })
+      : Promise.resolve(null),
+    // ¿El instituto reparte por sedes? Decide si la sede se PINTA. Es una
+    // cuenta barata y va dentro del mismo batch.
+    prisma.eduCampus.count({ where: { institutionId } }).catch(() => 0),
+  ]);
+
+  const tz = eduSafeTimeZone(timeZone);
+  const multiSede = sedes > 1;
+
+  return {
+    visitas,
+    recortado: scopes.citas.kind !== "all",
+    ultimaVisita: toCita(ultima, tz, multiSede),
+    proximaCita: toCita(proxima, tz, multiSede),
+    saldo: dinero
+      ? {
+          cobradoCents: dinero._sum.paidCents ?? 0,
+          pendienteCents: dinero._sum.balanceCents ?? 0,
+          cobros: dinero._count,
+        }
+      : null,
+  };
+}
+
+/**
+ * Los KPI de un paciente, MEMOIZADOS POR PETICIÓN.
+ *
+ * La llama el layout de la ficha (para la cabecera) y la reutiliza la
+ * pestaña Resumen a través de `getEduPatientResumen`. En la petición del
+ * Resumen se ejecuta UNA vez y la segunda llamada sale de la caché; en las
+ * otras nueve pestañas se ejecuta esa única vez y ya.
+ */
+export const getEduPatientKpis = cache(
+  async (
+    institutionId: string,
+    role: EduRole,
+    eduUserId: string,
+    patientId: string,
+    timeZone: string,
+  ): Promise<EduPatientKpis> =>
+    consultarEduPatientKpis({ institutionId, role, eduUserId }, patientId, timeZone, new Date()),
+);
+
+/**
+ * El resumen de UN paciente, con cada bloque recortado (o directamente NO
+ * consultado) según quien pregunta. El paciente en sí ya lo validó la
+ * página con getEduPatient — aquí cada consulta vuelve a cerrar tenant y
+ * alcance por su cuenta, así que un patientId ajeno solo produce ceros.
+ *
+ * ⚠️ La ficha NO se filtra por sede a propósito (decisión de la Ola 11):
+ * el expediente y la historia de un paciente son UNO, se atienda donde se
+ * atienda. Por eso aquí no viaja `campusIds`.
+ */
+export async function getEduPatientResumen(
+  ctx: EduClinicaContext,
+  patientId: string,
+  timeZone: string,
+  nowExplicito?: Date,
+): Promise<EduPatientResumenData | null> {
+  const now = nowExplicito ?? new Date();
+  const institutionId = requireInstitution(ctx);
+  const id = eduCleanId(patientId);
+  if (!id) return null;
+
+  const scopes = eduResumenScopes(ctx);
+  const veClinico = eduResumenVeClinico(scopes);
+
+  const casosWhere = eduCaseScopeWhere({ institutionId, scope: scopes.clinico, now });
+
+  // ── Los KPI salen de la MISMA función que pinta la cabecera ───────────
+  // No se vuelven a consultar aquí: la cabecera vive en el layout y ya los
+  // pidió en esta misma petición, así que `cache()` devuelve lo suyo. Dos
+  // derivaciones del "saldo" o de la "próxima cita" divergirían en un mes,
+  // y encima se pagarían dos veces.
+  //
+  // El `now` explícito (el de una prueba, o el de una llamada que fija la
+  // fecha) NO puede pasar por la caché —sus argumentos son primitivos a
+  // propósito—, así que en ese caso se consulta directo y sin memoizar.
+  const kpis =
+    nowExplicito === undefined
+      ? await getEduPatientKpis(institutionId, ctx.role, ctx.eduUserId, id, timeZone)
+      : await consultarEduPatientKpis(ctx, id, timeZone, now);
+
+  const [casos] = await Promise.all([
     veClinico
       ? prisma.eduCase.findMany({
           where: { ...casosWhere, patientId: id, status: { notIn: EDU_CASE_CLOSED_STATUSES } },
@@ -217,17 +334,8 @@ export async function getEduPatientResumen(
           },
         })
       : Promise.resolve([]),
-    veDinero
-      ? prisma.eduCharge.aggregate({
-          where: { ...eduChargeScopeWhere({ institutionId, scope: scopes.dinero }), patientId: id },
-          _sum: { paidCents: true, balanceCents: true },
-          _count: true,
-        })
-      : Promise.resolve(null),
-    prisma.eduCampus.count({ where: { institutionId } }).catch(() => 0),
   ]);
 
-  const multiSede = sedes > 1;
   const tz = eduSafeTimeZone(timeZone);
 
   // ── Segundo lote (solo con alcance clínico): lo que alimenta los ──────
@@ -243,7 +351,9 @@ export async function getEduPatientResumen(
   // · Los CONSENTIMIENTOS son del paciente entero, como en su pestaña
   //   (Ola 3B): la carta de atención general no cuelga de ningún caso.
   const openIds = casos.map((c) => c.id);
-  const [consents, approvals, notas, estudios, recetas] = veClinico
+  // Seis consultas y no siete: la regla del `Promise.all` corto sigue
+  // (el pooler de Supabase se satura por encima de siete).
+  const [consents, approvals, notas, estudios, recetas, fotosRaw] = veClinico
     ? await Promise.all([
         prisma.eduConsent.findMany({
           where: { institutionId, patientId: id },
@@ -272,7 +382,11 @@ export async function getEduPatientResumen(
             })
           : Promise.resolve([]),
         prisma.eduRecord.findMany({
-          where: { institutionId, patientId: id, case: casosWhere },
+          // Ola B (H-23): una nota RETIRADA no cuenta como nota. Sin este
+          // filtro, el borrador que alguien sacó del expediente por haberlo
+          // abierto en el paciente equivocado seguiría apareciendo en la
+          // historia reciente de ese paciente, que es justo donde no va.
+          where: { institutionId, patientId: id, deletedAt: null, case: casosWhere },
           orderBy: [{ createdAt: "desc" }],
           take: 6,
           select: {
@@ -286,6 +400,11 @@ export async function getEduPatientResumen(
           where: {
             institutionId,
             patientId: id,
+            // ws2-t2 · Los RETIRADOS no salen. Es el mismo recorte que la
+            // galería, y va en el `where` y no en un `.filter()` después:
+            // un estudio que alguien sacó del expediente no puede seguir
+            // apareciendo en la portada de la ficha.
+            deletedAt: null,
             patient: eduPatientScopeWhere({ institutionId, scope: scopes.clinico, now }),
           },
           orderBy: [{ createdAt: "desc" }],
@@ -312,8 +431,27 @@ export async function getEduPatientResumen(
             case: { select: { program: { select: { name: true } } } },
           },
         }),
+        // ws2-t2 · LAS FOTOS CLÍNICAS, y solo lo que hace falta para una
+        // línea: cuántas hay y de cuándo es la última. NO se traen filas
+        // ni se firma ninguna miniatura — el Resumen ya paga tres firmas
+        // por los estudios, y aquí se contesta "¿tiene fotos y de cuándo?"
+        // sin un solo viaje a Storage.
+        //
+        // 🔴 `deletedAt: null`: una foto retirada no cuenta. Y el alcance
+        // es el mismo del expediente (eduPatientScopeWhere con el scope
+        // clínico), igual que los estudios: caja ni llega aquí.
+        prisma.eduClinicalPhoto.aggregate({
+          where: {
+            institutionId,
+            patientId: id,
+            deletedAt: null,
+            patient: eduPatientScopeWhere({ institutionId, scope: scopes.clinico, now }),
+          },
+          _count: { _all: true },
+          _max: { capturedAt: true },
+        }),
       ])
-    : [[], [], [], [], []];
+    : [[], [], [], [], [], null];
 
   // ── Los avisos: consentimientos y autorizaciones de ESOS casos ────────
   let avisos: EduPatientResumenData["avisos"] = [];
@@ -345,7 +483,15 @@ export async function getEduPatientResumen(
   // ── La línea de tiempo: cuatro orígenes, un orden ─────────────────────
   let timeline: EduResumenTimelineItem[] | null = null;
   let estudiosResumen: EduResumenEstudio[] | null = null;
+  // ws2-t2 · Las fotos, en una línea. `null` para caja: no se consultó.
+  let fotosResumen: EduResumenFotos | null = null;
   if (veClinico) {
+    const totalFotos = fotosRaw && !Array.isArray(fotosRaw) ? fotosRaw._count._all ?? 0 : 0;
+    const ultima = fotosRaw && !Array.isArray(fotosRaw) ? fotosRaw._max.capturedAt : null;
+    fotosResumen = {
+      total: totalFotos,
+      ultimaLabel: ultima ? eduFormatDayShort(eduUtcToZoned(ultima, tz).dayISO) : "",
+    };
     const items: EduResumenTimelineItem[] = [];
     for (const n of notas) {
       items.push({
@@ -408,10 +554,10 @@ export async function getEduPatientResumen(
   }
 
   return {
-    visitas,
-    recortado: scopes.citas.kind !== "all",
-    ultimaVisita: toCita(ultima, tz, multiSede),
-    proximaCita: toCita(proxima, tz, multiSede),
+    visitas: kpis.visitas,
+    recortado: kpis.recortado,
+    ultimaVisita: kpis.ultimaVisita,
+    proximaCita: kpis.proximaCita,
     casos: veClinico
       ? casos.map((c) => ({
           id: c.id,
@@ -427,15 +573,10 @@ export async function getEduPatientResumen(
           espera: eduCasoEsperando(c.status, approvalsPorCaso.get(c.id) ?? []),
         }))
       : null,
-    saldo: dinero
-      ? {
-          cobradoCents: dinero._sum.paidCents ?? 0,
-          pendienteCents: dinero._sum.balanceCents ?? 0,
-          cobros: dinero._count,
-        }
-      : null,
+    saldo: kpis.saldo,
     avisos,
     timeline,
     estudios: estudiosResumen,
+    fotos: fotosResumen,
   };
 }
