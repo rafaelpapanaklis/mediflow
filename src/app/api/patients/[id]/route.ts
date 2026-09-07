@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma, PatientStatus, Gender, type Role } from "@prisma/client";
+import { Prisma, PatientStatus, type Role } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { getPatientVisibility, sharedRecordScope, ownPrivateRecordsOnly } from "@/lib/branches";
 import { parsePatientUpdate } from "@/lib/patients/patient-update-core";
+import { parsePatientGender } from "@/lib/patients/patient-search-core";
 import { validateCurpRecord } from "@/lib/validators/curp";
 import {
   normalizeVisibleUserIds,
@@ -271,8 +272,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
     }
     if (has("gender")) {
-      if (!["MALE", "FEMALE", "OTHER"].includes(body.gender as string)) throw new Error("gender inválido");
-      data.gender = body.gender as Gender;
+      // El enum `Gender` es M | F | OTHER (prisma/schema.prisma). Esta lista
+      // decía ["MALE","FEMALE","OTHER"], que es el reverso exacto de lo que
+      // hace falta: rechazaba con 400 los únicos valores que la base guarda
+      // ("M"/"F" — editar un paciente mandándole su propio género fallaba) y
+      // dejaba pasar "MALE", que después reventaba el `patient.update` con
+      // PrismaClientValidationError FUERA de este try → 500 sin cuerpo.
+      // Mismo criterio que el filtro de la lista (parseGenderFilter, hallazgo
+      // 31): se aceptan los alias históricos y se NORMALIZA al valor del enum
+      // antes de escribir, en vez de guardarlos tal cual.
+      const g = parsePatientGender(body.gender);
+      if (!g) throw new Error("gender inválido");
+      data.gender = g;
     }
     if (has("status")) {
       if (!["ACTIVE", "INACTIVE", "ARCHIVED"].includes(body.status as string)) throw new Error("status inválido");

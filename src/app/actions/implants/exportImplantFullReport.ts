@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { implantPhotoTypeToImplantPhase } from "@/lib/clinical-shared/photo-gallery";
+import { parsePatientGender } from "@/lib/patients/patient-search-core";
 import type { ImplantFullReportPdfData } from "@/lib/implants/pdf-templates/full-report";
 import { IMPLANT_AUDIT_ACTIONS } from "./audit-actions";
 import {
@@ -33,10 +34,15 @@ function toAge(dob: Date | null): number | null {
 
 function genderLabel(g: string | null | undefined): string | null {
   if (!g) return null;
-  switch (g) {
-    case "MALE":
+  // El enum `Gender` es M | F | OTHER (prisma/schema.prisma); "MALE"/"FEMALE"
+  // no existen, así que el switch caía SIEMPRE en el default y el informe
+  // imprimía "Otro" para todo el mundo, hombres y mujeres incluidos. Se
+  // normaliza con el mismo criterio que el filtro de la lista de pacientes
+  // (parsePatientGender), que además absorbe los alias históricos.
+  switch (parsePatientGender(g)) {
+    case "M":
       return "M";
-    case "FEMALE":
+    case "F":
       return "F";
     default:
       return "Otro";
