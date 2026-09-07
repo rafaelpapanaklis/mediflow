@@ -3,6 +3,7 @@ import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import {
   EDU_PATIENT_EDIT_FORBIDDEN,
   eduPatientEditAbilities,
+  eduPatientEditGroups,
   hasEduPermission,
 } from "@/lib/edu/permissions";
 import { getEduPatient, updateEduPatient } from "@/lib/edu/pacientes";
@@ -52,19 +53,24 @@ export async function GET(_request: Request, { params }: { params: { id: string 
  * PATCH /api/instituto/pacientes/[id] — datos de la ficha.
  *
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 DOS LLAVES ABREN ESTA PUERTA, y abren cosas distintas (H-02). Es el
- * mismo patrón que /antecedentes, y el reparto lo decide el punto único
- * `eduPatientEditAbilities` (src/lib/edu/permissions.ts, que lo explica
- * largo):
+ * 🔴 DOS LLAVES ABREN ESTA PUERTA, y abren TRES GRUPOS distintos (H-02 +
+ * Ola B). Es el mismo patrón que /antecedentes, y el reparto lo decide el
+ * punto único `eduPatientEditAbilities` (src/lib/edu/permissions.ts, que lo
+ * explica largo):
  *
- *   · `pacientes.manage`  → CAJA y DIRECCIÓN. Los NUEVE campos.
- *   · `expediente.write`  → ALUMNO, DOCENTE y DIRECCIÓN. SOLO el teléfono y
- *     el correo. El alumno tiene al paciente en el sillón y le dictan un
- *     teléfono nuevo; hasta hoy tenía que ir a buscar a alguien de caja.
+ *   · `pacientes.manage`  → CAJA y DIRECCIÓN. La IDENTIDAD y el papeleo:
+ *     folio, nombre, apellidos, sexo, nacimiento, CURP, domicilio, tutor,
+ *     seguro, estado, notas de recepción y aviso de privacidad.
+ *   · `expediente.write`  → ALUMNO, DOCENTE y DIRECCIÓN. El CONTACTO (los
+ *     dos teléfonos, el correo y la preferencia) y lo CLÍNICO (NOM-004,
+ *     hábitos, embarazo y dentición), que es exactamente lo que ya abría
+ *     esa llave en /antecedentes. El alumno tiene al paciente en el sillón
+ *     y le dictan un teléfono nuevo o le cuentan que está embarazada; hasta
+ *     hoy tenía que ir a buscar a alguien de caja.
  *
  * El recorte no se queda en este archivo: `updateEduPatient` recibe qué
- * puede tocar quien manda y RECHAZA con su motivo un campo de más, en vez
- * de ignorarlo en silencio.
+ * GRUPOS puede tocar quien manda y RECHAZA con su motivo un campo de más,
+ * en vez de ignorarlo en silencio.
  *
  * 🔴 Y el paciente se busca DENTRO DEL ALCANCE (H-11): un alumno corrige el
  * teléfono de SUS pacientes, y el de otro alumno contesta 404 — igual que
@@ -87,15 +93,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     role: g.ctx.role,
     permissionsOverride: g.ctx.user.permissionsOverride,
   });
-  if (!abilities.contacto) {
+  const grupos = eduPatientEditGroups(abilities);
+  if (grupos.length === 0) {
     return NextResponse.json({ error: EDU_PATIENT_EDIT_FORBIDDEN }, { status: 403 });
   }
 
   try {
     const body = await eduReadJson(request);
-    const updated = await updateEduPatient(g.ctx, params.id, body, {
-      fields: abilities.manage ? "all" : "contacto",
-    });
+    const updated = await updateEduPatient(g.ctx, params.id, body, { groups: grupos });
     return NextResponse.json({ ok: true, id: updated.id });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/pacientes/[id]");

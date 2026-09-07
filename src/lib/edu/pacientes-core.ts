@@ -15,8 +15,22 @@
  * ver si su paciente cuenta como suyo.
  */
 import type { Prisma } from "@prisma/client";
-import type { EduPatientStatus, EduSex } from "@/lib/edu/types";
-import { EDU_PATIENT_STATUSES, EDU_PATIENT_STATUS_LABELS, EDU_SEXES } from "@/lib/edu/types";
+import type {
+  EduContactPreference,
+  EduHabitLevel,
+  EduPatientStatus,
+  EduPregnancy,
+  EduSex,
+} from "@/lib/edu/types";
+import {
+  EDU_CONTACT_PREFERENCES,
+  EDU_HABIT_LEVELS,
+  EDU_PATIENT_STATUSES,
+  EDU_PATIENT_STATUS_LABELS,
+  EDU_PREGNANCY_VALUES,
+  EDU_SEXES,
+  EDU_SEX_LABELS,
+} from "@/lib/edu/types";
 import { eduDateInputValue, eduSearchInput, eduSearchTokens } from "@/lib/edu/padron-core";
 import { eduNormalizeSearch } from "@/lib/edu/search";
 // 🔴 La regla del teléfono se IMPORTA, no se copia: `eduWaPhone` es la que
@@ -132,6 +146,107 @@ export function eduPhoneWaWarning(phone: string | null | undefined): string | nu
   return "Este teléfono no tiene 10 dígitos: WhatsApp no le puede entregar nada.";
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * CURP — Clave Única de Registro de Población (NOM-024).
+ *
+ * 🔴 LA REGLA SE ESCRIBE AQUÍ Y NO SE IMPORTA DEL DENTAL. Existe
+ * `src/lib/validators/curp.ts` con la misma expresión, y traerla habría
+ * atado la ficha del instituto a un archivo del producto dental: el día
+ * que allá añadan `curpStatus`/`passportNo` —que ya tienen— esta pantalla
+ * heredaría un contrato que nadie pidió. Son 18 caracteres y una
+ * expresión; el coste de tenerla dos veces es menor que el de compartirla.
+ *
+ * Formato oficial RENAPO, 18 posiciones:
+ *   1-4   cuatro letras (inicial y primera vocal del primer apellido,
+ *         inicial del segundo, inicial del nombre)
+ *   5-10  fecha de nacimiento AAMMDD
+ *   11    H | M
+ *   12-13 clave de entidad federativa (o NE, nacido en el extranjero)
+ *   14-16 tres consonantes internas
+ *   17    homoclave (letra para nacidos antes del 2000, dígito después)
+ *   18    dígito verificador
+ *
+ * ⚠️ NO se comprueba el dígito verificador contra RENAPO: eso pide una
+ * consulta en línea. Esto es formato, y el formato es lo que caza el
+ * dedazo.
+ *
+ * 🔴 DÓNDE SE APRIETA Y DÓNDE NO, a propósito. Las cuatro primeras letras
+ * se aceptan como `[A-Z]{4}` y no como "consonante + vocal + …": la
+ * segunda posición es la primera vocal INTERNA del primer apellido, y
+ * RENAPO la sustituye por X en los apellidos que no tienen ninguna. Apretar
+ * ahí rechaza CURP legítimos, y el coste no es simétrico — un CURP con un
+ * dedazo se corrige después; uno bueno rechazado deja a alguien sin poder
+ * guardar la ficha del paciente que tiene delante. Lo que SÍ se aprieta es
+ * lo que de verdad caza un dedazo y no rechaza a nadie: que las posiciones
+ * 5-10 sean una FECHA que existe (no un "990231") y que las 12-13 sean una
+ * clave de entidad REAL de las 33 (las 32 más NE, nacido en el extranjero).
+ *
+ * ⚠️ La columna NO tiene índice único ni CHECK, y es deliberado (está
+ * escrito en el esquema): un CURP mal tecleado no puede impedir registrar
+ * a un paciente que está en el sillón. Lo que hace esto es rebotar el
+ * valor MALO al guardarlo, no impedir que la ficha exista sin él.
+ */
+const EDU_CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
+
+/** Las 32 entidades federativas más NE (nacido en el extranjero), tal como
+ *  las escribe RENAPO en las posiciones 12-13. */
+const EDU_CURP_ENTIDADES = [
+  "AS", "BC", "BS", "CC", "CH", "CL", "CM", "CS", "DF", "DG", "GR", "GT",
+  "HG", "JC", "MC", "MN", "MS", "NE", "NL", "NT", "OC", "PL", "QR", "QT",
+  "SL", "SP", "SR", "TC", "TL", "TS", "VZ", "YN", "ZS",
+] as const;
+
+/** ¿Las posiciones 5-10 (AAMMDD) son un día que existe? "990231" no lo es,
+ *  y es exactamente la forma que toma un dedazo en la fecha. */
+function eduCurpFechaOk(aammdd: string): boolean {
+  const mes = Number(aammdd.slice(2, 4));
+  const dia = Number(aammdd.slice(4, 6));
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return false;
+  // El año son dos dígitos y no dice el siglo, así que se prueba con un
+  // año BISIESTO (2000): así el 29 de febrero pasa siempre y el 30 nunca.
+  // Afinarlo con el siglo real exigiría leer la homoclave, que no es de
+  // fiar en los CURP viejos.
+  const dias = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mes - 1];
+  return dia <= dias;
+}
+
+/** El motivo, escrito para una persona. Lo comparten el servidor (al
+ *  rechazar) y la pantalla (como pista bajo el campo). */
+export const EDU_CURP_HELP =
+  "18 caracteres, como viene en el acta: cuatro letras, la fecha de nacimiento, H o M, el estado y tres consonantes.";
+
+/** MAYÚSCULAS y sin espacios, que es como se compara y como se imprime. */
+export function normalizeEduCurp(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().replace(/\s+/g, "").toUpperCase();
+  if (v.length === 0) return null;
+  return v;
+}
+
+/** ¿Este CURP tiene la forma oficial? Se le pasa el valor YA normalizado. */
+export function eduCurpIsValid(raw: unknown): boolean {
+  const v = normalizeEduCurp(raw);
+  if (!v) return false;
+  if (v.length !== 18 || !EDU_CURP_RE.test(v)) return false;
+  if (!eduCurpFechaOk(v.slice(4, 10))) return false;
+  return (EDU_CURP_ENTIDADES as readonly string[]).includes(v.slice(11, 13));
+}
+
+/**
+ * El aviso para un CURP YA GUARDADO que no cuadra, o null si cuadra (o si
+ * no hay CURP, que no es lo mismo que uno malo).
+ *
+ * Existe por lo mismo que `eduPhoneWaWarning`: desde hoy la puerta está
+ * cerrada, pero en la base puede haber CURP escritos a mano antes de esta
+ * ola, y la ficha tiene que decirlo DONDE SE EDITA.
+ */
+export function eduCurpWarning(curp: string | null | undefined): string | null {
+  if (!curp || !String(curp).trim()) return null;
+  if (eduCurpIsValid(curp)) return null;
+  return "Este CURP no tiene la forma oficial de 18 caracteres. Revísalo contra el acta o la constancia.";
+}
+
 /** Correo, en minúsculas y con una forma mínimamente creíble. */
 export function normalizeEduEmail(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -151,6 +266,33 @@ export function parseEduSex(raw: unknown): EduSex | null {
 export function parseEduPatientStatus(raw: unknown): EduPatientStatus | null {
   if (typeof raw !== "string") return null;
   return (EDU_PATIENT_STATUSES as string[]).includes(raw) ? (raw as EduPatientStatus) : null;
+}
+
+// ── Los tres enums de la Ola B ──────────────────────────────────────────
+//
+// 🔴 DEVUELVEN `null` PARA LO QUE NO RECONOCEN, y quien llama distingue el
+// null de "no vino" mirando si la clave estaba en el body. No es una
+// sutileza: `null` en estas columnas SIGNIFICA "nadie preguntó", así que un
+// parser que convirtiera la basura en null estaría escribiendo "nadie
+// preguntó" encima de un dato bueno cada vez que alguien mandara un valor
+// mal escrito. Por eso el servidor comprueba las dos cosas por separado:
+// que la clave venga, y que el valor sea del enum.
+
+export function parseEduPregnancy(raw: unknown): EduPregnancy | null {
+  if (typeof raw !== "string") return null;
+  return (EDU_PREGNANCY_VALUES as string[]).includes(raw) ? (raw as EduPregnancy) : null;
+}
+
+export function parseEduContactPreference(raw: unknown): EduContactPreference | null {
+  if (typeof raw !== "string") return null;
+  return (EDU_CONTACT_PREFERENCES as string[]).includes(raw)
+    ? (raw as EduContactPreference)
+    : null;
+}
+
+export function parseEduHabitLevel(raw: unknown): EduHabitLevel | null {
+  if (typeof raw !== "string") return null;
+  return (EDU_HABIT_LEVELS as string[]).includes(raw) ? (raw as EduHabitLevel) : null;
 }
 
 /**
@@ -283,11 +425,91 @@ export interface EduPatientRow {
   /** Total de casos, abiertos y cerrados. */
   totalCases: number;
   createdAt: string;
+
+  // ═════════════════════════════════════════════════════════════════════
+  // OLA B · LO QUE LE FALTABA A LA FICHA (ws2-t3)
+  //
+  // 🔴 PLANAS Y NO ANIDADAS, como el resto de esta fila. `phone`, `notes` y
+  // `birthDate` ya viven aquí sueltas; meter el domicilio en un objeto
+  // `address` y el tutor en otro `guardian` habría hecho que el formulario
+  // necesitara dos formas de leer un campo según dónde estuviera, y ahí es
+  // donde se pierde uno de los dos al añadir el siguiente.
+  //
+  // 🔴 NULL NO ES UNA RESPUESTA. `pregnancy`, `contactPreference` y los tres
+  // hábitos son nullables Y tienen `DESCONOCIDO`/`NINGUNO` dentro del enum,
+  // y no es redundancia (lo dejó escrito la casilla que creó las columnas):
+  //   · null          = nadie preguntó        → la ficha dice «sin registrar»
+  //   · DESCONOCIDO   = se preguntó y no se sabe
+  //   · NO / NINGUNO  = se preguntó y la respuesta fue que no
+  // Aplastar los tres en uno pierde justo la distinción que evita el chip
+  // verde mentiroso, que es el mismo error que `historyRecordedAt` existe
+  // para no cometer con los antecedentes.
+  // ═════════════════════════════════════════════════════════════════════
+
+  /** Identidad · CURP (NOM-024). */
+  curp: string | null;
+
+  /** Contacto · el segundo teléfono y por dónde quiere que le hablen. */
+  phone2: string | null;
+  contactPreference: EduContactPreference | null;
+
+  /** Domicilio, en cinco columnas: la ciudad y el CP se agrupan después. */
+  addressStreet: string | null;
+  addressNeighborhood: string | null;
+  addressCity: string | null;
+  addressState: string | null;
+  addressZip: string | null;
+
+  /** Tutor o representante legal (H-08). Antes vivía en CADA carta. */
+  guardianName: string | null;
+  guardianRelation: string | null;
+  guardianPhone: string | null;
+
+  /** Seguro o convenio. */
+  insuranceProvider: string | null;
+  insurancePolicy: string | null;
+
+  /** NOM-004 · heredofamiliares y personales no patológicos. */
+  familyHistory: string | null;
+  personalNonPathologicalHistory: string | null;
+
+  /** Hábitos. Enum y no texto libre: lo escrito a mano no se filtra. */
+  habitsTobacco: EduHabitLevel | null;
+  habitsAlcohol: EduHabitLevel | null;
+  habitsBruxism: EduHabitLevel | null;
+  habitsNotes: string | null;
+
+  /** Embarazo / lactancia: la columna que permite ALERTAR antes de una placa. */
+  pregnancy: EduPregnancy | null;
+
+  /** Dentición temporal. La ESCRIBE esta pantalla; la LEE el odontograma. */
+  isChild: boolean;
+
+  /** Aviso de privacidad (LFPDPPP): CUÁNDO lo aceptó. null = no consta. */
+  privacyNoticeAcceptedAt: string | null;
+
+  /** H-12b · quién tocó la ficha por última vez y cuándo. `updatedAt` ya
+   *  existía en la tabla desde el primer día y no se pintaba en ninguna
+   *  pantalla; sin el nombre al lado tampoco servía de mucho. */
+  updatedAt: string;
+  updatedByName: string | null;
 }
 
 export interface EduPatientsPage {
   rows: EduPatientRow[];
+  /**
+   * ¿Quedan más filas DESPUÉS de esta página? (H-06)
+   *
+   * ⚠️ Cambió de significado y hay que saberlo: hasta la Ola B quería decir
+   * «la consulta se cortó en 300 y el resto no existe para ti». Ahora
+   * quiere decir «hay página siguiente», y la pantalla ofrece «Ver más» en
+   * vez de un aviso sin salida. El nombre se conserva porque lo leen el
+   * endpoint y la pantalla, y renombrarlo no habría cambiado nada de lo
+   * que hace.
+   */
   truncated: boolean;
+  /** El cursor de la SIGUIENTE página, o null si ya no hay más. */
+  nextCursor: string | null;
 }
 
 /** Lo MÍNIMO para un <select> de pacientes (agendar una cita). */
@@ -303,12 +525,18 @@ export interface EduPatientOptionsPage {
   truncated: boolean;
 }
 
-/** Recorta lo que llegó con `take: EDU_CLINICA_MAX_ROWS + 1` al tope real y
- *  dice si sobraba — mismo patrón que `listEduAgenda`. */
-export function eduPatientOptionsPageOf(rows: EduPatientOption[]): EduPatientOptionsPage {
+/** Recorta lo que llegó con `take: <tope> + 1` al tope real y dice si
+ *  sobraba — mismo patrón que `listEduAgenda`. El tope es un parámetro
+ *  desde la Ola B: el desplegable de agendar puede pedir menos cuando está
+ *  filtrando por texto, y una constante fija obligaría a repetir el
+ *  `slice` en el llamador (que es donde se olvida). */
+export function eduPatientOptionsPageOf(
+  rows: EduPatientOption[],
+  max: number = EDU_CLINICA_MAX_ROWS,
+): EduPatientOptionsPage {
   return {
-    truncated: rows.length > EDU_CLINICA_MAX_ROWS,
-    rows: rows.slice(0, EDU_CLINICA_MAX_ROWS),
+    truncated: rows.length > max,
+    rows: rows.slice(0, max),
   };
 }
 
@@ -383,43 +611,188 @@ export function eduPatientSearchAnd(
 // campos distintos no se pisan.
 // ═══════════════════════════════════════════════════════════════════════
 
-/** Los NUEVE campos de la ficha, en el orden en que se leen en pantalla. */
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * LOS 31 CAMPOS DE LA FICHA — nueve de la ola anterior, 22 de la Ola B.
+ *
+ * 🔴 EL ORDEN ES EL DE LA PANTALLA, y los grupos son los de abajo. Un campo
+ * nuevo se agrega AQUÍ, se le asigna su grupo en EDU_PATIENT_FIELD_GROUP
+ * (el compilador lo exige: el Record no admite huecos), y desde ese momento
+ * lo mandan las dos pantallas o ninguna.
+ *
+ * ⚠️ `updatedById` NO está en esta lista y no es un olvido: no lo teclea
+ * nadie, lo estampa el servidor en cada escritura. Un campo de auditoría
+ * que el cliente pueda mandar no es auditoría.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
 export const EDU_PATIENT_FORM_FIELDS = [
+  // Identidad
   "folio",
   "firstName",
   "lastName",
   "sex",
   "birthDate",
+  "curp",
+  // Contacto
   "phone",
+  "phone2",
   "email",
+  "contactPreference",
+  // Domicilio
+  "addressStreet",
+  "addressNeighborhood",
+  "addressCity",
+  "addressState",
+  "addressZip",
+  // Tutor / representante legal
+  "guardianName",
+  "guardianRelation",
+  "guardianPhone",
+  // Seguro
+  "insuranceProvider",
+  "insurancePolicy",
+  // Antecedentes NOM-004
+  "familyHistory",
+  "personalNonPathologicalHistory",
+  // Hábitos
+  "habitsTobacco",
+  "habitsAlcohol",
+  "habitsBruxism",
+  "habitsNotes",
+  // Embarazo / lactancia y dentición
+  "pregnancy",
+  "isChild",
+  // Administrativo
   "status",
   "notes",
+  "privacyNoticeAcceptedAt",
 ] as const;
 
 export type EduPatientFormField = (typeof EDU_PATIENT_FORM_FIELDS)[number];
 
 /**
- * Los campos de CONTACTO: los que un alumno o un docente pueden corregir
- * con el paciente en el sillón (H-02).
+ * ═══════════════════════════════════════════════════════════════════════
+ * QUÉ LLAVE ABRE CADA CAMPO — tres grupos, ninguna key nueva.
  *
- * 🔴 SON DOS Y NO MÁS. El teléfono y el correo son cómo se le avisa al
- * paciente; el resto —folio, nombre, apellidos, sexo, nacimiento, estado y
- * las notas de recepción— es identidad administrativa y sigue siendo de
- * `pacientes.manage`. El nacimiento entra en el segundo grupo a propósito:
- * decide la edad que sale impresa en una carta de consentimiento, no es un
- * dato de contacto.
+ *   · "identidad" → `pacientes.manage`. Caja y dirección. Quién es el
+ *     paciente y su papeleo: folio, nombre, apellidos, sexo, nacimiento,
+ *     CURP, domicilio, tutor, seguro, estado, notas de recepción y la
+ *     fecha del aviso de privacidad.
+ *   · "contacto"  → `pacientes.manage` O `expediente.write`. Por dónde se
+ *     le avisa: los dos teléfonos, el correo y la preferencia de contacto.
+ *     Es la regla que ya existía para teléfono y correo (H-02); el segundo
+ *     teléfono y la preferencia entran por la misma puerta porque son la
+ *     MISMA decisión — el alumno tiene al paciente en el sillón y le dictan
+ *     un número.
+ *   · "clinico"   → `pacientes.manage` O `expediente.write`, exactamente
+ *     como los ANTECEDENTES (el endpoint /antecedentes ya usa esas dos).
+ *     NOM-004, hábitos, embarazo/lactancia y dentición temporal.
+ *
+ * 🔴 "contacto" y "clinico" resuelven HOY al mismo booleano, y están
+ * separados a propósito. No es redundancia: lo que separa a los dos grupos
+ * no es quién puede escribirlos hoy, es QUÉ SON — el día que una escuela
+ * quiera que su recepción no toque el embarazo, o que el alumno no cambie
+ * la preferencia de contacto, la línea ya está trazada y el cambio es una
+ * condición, no una migración de 31 campos. Y mientras tanto la pantalla
+ * ya explica cada bloque con su motivo propio.
+ *
+ * 🔴 NINGUNA KEY NUEVA, y es la misma decisión escrita de las dos olas
+ * anteriores: una key nueva NO le llega a nadie que ya tenga
+ * `permissionsOverride` guardado (el override REEMPLAZA al default), así
+ * que habría exigido un backfill en SQL contra la base de cada escuela.
+ * ═══════════════════════════════════════════════════════════════════════
  */
-export const EDU_PATIENT_CONTACT_FIELDS: readonly EduPatientFormField[] = ["phone", "email"];
+export type EduPatientFieldGroup = "identidad" | "contacto" | "clinico";
+
+export const EDU_PATIENT_FIELD_GROUPS: readonly EduPatientFieldGroup[] = [
+  "identidad",
+  "contacto",
+  "clinico",
+];
+
+/** El grupo de CADA campo. `Record` completo a propósito: el compilador no
+ *  deja añadir un campo a EDU_PATIENT_FORM_FIELDS sin decidir su grupo, y
+ *  un campo sin grupo sería un campo que cualquiera puede escribir. */
+export const EDU_PATIENT_FIELD_GROUP: Record<EduPatientFormField, EduPatientFieldGroup> = {
+  folio: "identidad",
+  firstName: "identidad",
+  lastName: "identidad",
+  sex: "identidad",
+  birthDate: "identidad",
+  curp: "identidad",
+
+  phone: "contacto",
+  phone2: "contacto",
+  email: "contacto",
+  contactPreference: "contacto",
+
+  addressStreet: "identidad",
+  addressNeighborhood: "identidad",
+  addressCity: "identidad",
+  addressState: "identidad",
+  addressZip: "identidad",
+
+  guardianName: "identidad",
+  guardianRelation: "identidad",
+  guardianPhone: "identidad",
+
+  insuranceProvider: "identidad",
+  insurancePolicy: "identidad",
+
+  familyHistory: "clinico",
+  personalNonPathologicalHistory: "clinico",
+
+  habitsTobacco: "clinico",
+  habitsAlcohol: "clinico",
+  habitsBruxism: "clinico",
+  habitsNotes: "clinico",
+
+  pregnancy: "clinico",
+  isChild: "clinico",
+
+  status: "identidad",
+  notes: "identidad",
+  privacyNoticeAcceptedAt: "identidad",
+};
+
+/** Los campos de CONTACTO, derivados del mapa de arriba y no escritos otra
+ *  vez: dos listas que dicen lo mismo son dos listas que un día dejan de
+ *  decirlo. */
+export const EDU_PATIENT_CONTACT_FIELDS: readonly EduPatientFormField[] =
+  EDU_PATIENT_FORM_FIELDS.filter((f) => EDU_PATIENT_FIELD_GROUP[f] === "contacto");
+
+/** Los CLÍNICOS (NOM-004, hábitos, embarazo, dentición). */
+export const EDU_PATIENT_CLINICAL_FIELDS: readonly EduPatientFormField[] =
+  EDU_PATIENT_FORM_FIELDS.filter((f) => EDU_PATIENT_FIELD_GROUP[f] === "clinico");
+
+/** Los de IDENTIDAD y papeleo (`pacientes.manage`). */
+export const EDU_PATIENT_IDENTITY_FIELDS: readonly EduPatientFormField[] =
+  EDU_PATIENT_FORM_FIELDS.filter((f) => EDU_PATIENT_FIELD_GROUP[f] === "identidad");
 
 /** ¿Este campo lo puede tocar quien solo tiene la llave del contacto? */
 export function eduPatientFieldIsContact(field: string): field is EduPatientFormField {
   return (EDU_PATIENT_CONTACT_FIELDS as readonly string[]).includes(field);
 }
 
+/** ¿Qué grupo abre este campo? `null` si el nombre no es un campo de la
+ *  ficha (una clave suelta en el body). */
+export function eduPatientFieldGroupOf(field: string): EduPatientFieldGroup | null {
+  return (EDU_PATIENT_FORM_FIELDS as readonly string[]).includes(field)
+    ? EDU_PATIENT_FIELD_GROUP[field as EduPatientFormField]
+    : null;
+}
+
 /**
- * Los nueve campos tal como los teclea una persona: TODO cadena, incluidos
- * el `<select>` del sexo y el del estado. Es lo que un `<input>` devuelve, y
- * mantenerlo así evita el baile de null/""/undefined dentro del componente.
+ * Los 31 campos tal como los teclea una persona: TODO cadena, incluidos los
+ * `<select>` y la casilla de la dentición ("true"/"false"). Es lo que un
+ * `<input>` devuelve, y mantenerlo así evita el baile de null/""/undefined
+ * dentro del componente.
+ *
+ * 🔴 "" ES "SIN REGISTRAR" y no una respuesta. Los cinco campos de enum
+ * (pregnancy, contactPreference y los tres hábitos) usan la cadena vacía
+ * para el `null` de la columna, y sus `<option value="">` dicen «Sin
+ * registrar» en pantalla. Elegir «No lo sabe» escribe `DESCONOCIDO`, que es
+ * un dato distinto: alguien preguntó.
  */
 export type EduPatientFormValues = Record<EduPatientFormField, string>;
 
@@ -431,17 +804,59 @@ export function eduPatientFormValues(row: EduPatientRow): EduPatientFormValues {
     lastName: row.lastName,
     sex: row.sex,
     birthDate: eduDateInputValue(row.birthDate),
+    curp: row.curp ?? "",
+
     phone: row.phone ?? "",
+    phone2: row.phone2 ?? "",
     email: row.email ?? "",
+    contactPreference: row.contactPreference ?? "",
+
+    addressStreet: row.addressStreet ?? "",
+    addressNeighborhood: row.addressNeighborhood ?? "",
+    addressCity: row.addressCity ?? "",
+    addressState: row.addressState ?? "",
+    addressZip: row.addressZip ?? "",
+
+    guardianName: row.guardianName ?? "",
+    guardianRelation: row.guardianRelation ?? "",
+    guardianPhone: row.guardianPhone ?? "",
+
+    insuranceProvider: row.insuranceProvider ?? "",
+    insurancePolicy: row.insurancePolicy ?? "",
+
+    familyHistory: row.familyHistory ?? "",
+    personalNonPathologicalHistory: row.personalNonPathologicalHistory ?? "",
+
+    habitsTobacco: row.habitsTobacco ?? "",
+    habitsAlcohol: row.habitsAlcohol ?? "",
+    habitsBruxism: row.habitsBruxism ?? "",
+    habitsNotes: row.habitsNotes ?? "",
+
+    pregnancy: row.pregnancy ?? "",
+    isChild: row.isChild ? "true" : "false",
+
     status: row.status,
     notes: row.notes ?? "",
+    privacyNoticeAcceptedAt: eduDateInputValue(row.privacyNoticeAcceptedAt),
   };
 }
 
-/** Los campos que se VACÍAN a null en vez de guardarse como "". Folio,
- *  nombre, apellidos, sexo y estado no están: son obligatorios y el
- *  servidor rechaza vaciarlos. */
-const ANULABLES: readonly EduPatientFormField[] = ["birthDate", "phone", "email", "notes"];
+/**
+ * Los campos que NO se pueden vaciar: son obligatorios en la tabla y el
+ * servidor rechaza dejarlos en blanco. Todo lo demás se vacía a `null`, que
+ * es lo que devuelve la ficha a «sin registrar».
+ *
+ * `isChild` está aquí porque su columna es `NOT NULL DEFAULT false`: no
+ * tiene un "sin registrar", tiene un false.
+ */
+const NO_ANULABLES: readonly EduPatientFormField[] = [
+  "folio",
+  "firstName",
+  "lastName",
+  "sex",
+  "status",
+  "isChild",
+];
 
 /**
  * SOLO lo que cambió. Un campo que no aparece en el objeto que devuelve
@@ -462,7 +877,7 @@ export function eduPatientFormDiff(
     const antes = base[campo].trim();
     const ahora = (values[campo] ?? "").trim();
     if (antes === ahora) continue;
-    diff[campo] = ahora === "" && ANULABLES.includes(campo) ? null : ahora;
+    diff[campo] = ahora === "" && !NO_ANULABLES.includes(campo) ? null : ahora;
   }
   return diff;
 }
@@ -835,4 +1250,402 @@ export function parseEduAntecedentes(input: EduAntecedentesInput): EduAntecedent
       emergencyContactRelation,
     },
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 · LA FICHA COMPLETA (Ola B · ws2-t3)
+//
+// Lo que un dentista da por hecho al abrir un perfil y este vertical no
+// capturaba: el tutor del menor, el domicilio, el seguro, el segundo
+// teléfono, el CURP, los antecedentes que la NOM-004 pide por separado,
+// los hábitos, el embarazo, la dentición y el aviso de privacidad.
+//
+// Todo lo de aquí abajo es PURO: se prueba sin base de datos y lo usan las
+// dos puntas (el formulario en el navegador y el servidor al guardar).
+// ═══════════════════════════════════════════════════════════════════════
+
+/** La mayoría de edad, en años. El mismo número que usan los
+ *  consentimientos (`EDU_CONSENT_EDAD_MAYORIA`); se escribe aquí para no
+ *  arrastrar el módulo de consentimientos a la ficha, y hay una prueba que
+ *  fija que los dos valen lo mismo. */
+export const EDU_PATIENT_EDAD_MAYORIA = 18;
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * H-08 · UN MENOR TIENE QUE TENER TUTOR EN SU FICHA.
+ *
+ * El motivo escrito por el que este guardado no puede salir, o null si
+ * puede. Se comprueba en los DOS lados con esta misma función: la pantalla
+ * para decirlo antes de pulsar Guardar, y el servidor al guardar.
+ *
+ * 🔴 SOLO MUERDE CUANDO EL GUARDADO TOCA EL ASUNTO, y es la misma regla que
+ * `eduPatientStatusConflict` ya aplica al estado, por la misma razón. En la
+ * base hay menores registrados antes de que existiera la columna del tutor:
+ * si esto bloqueara cualquier guardado de un menor sin tutor, recepción no
+ * podría corregirle un dedazo en el apellido —ni el alumno el teléfono—
+ * hasta rellenar un dato que a lo mejor no tiene delante. Lo que se bloquea
+ * es lo que de verdad crea el problema:
+ *
+ *   · poner (o cambiar) la FECHA DE NACIMIENTO de forma que quede un menor
+ *     sin tutor en la ficha, y
+ *   · BORRAR el nombre del tutor de un menor que ya lo tenía.
+ *
+ * El aviso, en cambio, se pinta SIEMPRE que el paciente sea menor y no
+ * tenga tutor: la ficha lo dice aunque no bloquee nada.
+ *
+ * ⚠️ Sin fecha de nacimiento NO se bloquea nada. No se puede afirmar que
+ * alguien sea menor, y trancar la ficha de todo paciente sin nacimiento
+ * —un dato que sigue siendo opcional— pararía la clínica. Es la misma
+ * decisión que ya tomó el servidor de los consentimientos.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduPatientTutorConflict(
+  datos: { ageYears: number | null; guardianName: string | null },
+): string | null {
+  if (datos.ageYears === null) return null;
+  if (datos.ageYears >= EDU_PATIENT_EDAD_MAYORIA) return null;
+  if (datos.guardianName && datos.guardianName.trim()) return null;
+  return `Este paciente tiene ${datos.ageYears} ${
+    datos.ageYears === 1 ? "año" : "años"
+  }: es menor de edad y su ficha tiene que decir quién es su tutor o representante legal. Escribe su nombre y el parentesco — es quien firma los consentimientos y a quien se llama.`;
+}
+
+/** El aviso PERMANENTE de la ficha: menor sin tutor. Es el mismo texto que
+ *  bloquea, para que nadie lea dos explicaciones del mismo problema. */
+export function eduPatientTutorWarning(row: {
+  ageYears: number | null;
+  guardianName: string | null;
+}): string | null {
+  return eduPatientTutorConflict(row);
+}
+
+/**
+ * ¿ESTE guardado tiene que rebotar por falta de tutor? Recibe la fila
+ * guardada y el diff que se va a mandar, y aplica la regla de arriba.
+ *
+ * Se calcula la edad con la fecha RESULTANTE (la del diff si viene, la de
+ * la fila si no): cambiar el nacimiento a 2015 sobre un paciente que
+ * figuraba adulto tiene que rebotar en ese mismo acto, no en el siguiente.
+ */
+export function eduPatientTutorConflictOnSave(
+  row: EduPatientRow,
+  diff: Partial<Record<EduPatientFormField, string | null>>,
+  now: Date = new Date(),
+): string | null {
+  const tocaNacimiento = diff.birthDate !== undefined;
+  const borraTutor = diff.guardianName !== undefined && !String(diff.guardianName ?? "").trim();
+  if (!tocaNacimiento && !borraTutor) return null;
+
+  const nacimiento = tocaNacimiento ? diff.birthDate : row.birthDate;
+  const ageYears = eduAgeYears(nacimiento ?? null, now);
+  const guardianName =
+    diff.guardianName !== undefined ? (diff.guardianName ?? null) : row.guardianName;
+  return eduPatientTutorConflict({ ageYears, guardianName });
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * LOS CHIPS DE LA CABECERA QUE ESTA OLA DEJA LISTOS Y NO MONTA.
+ *
+ * El encabezado de la ficha (pacientes/[id]/layout.tsx) ya pinta los chips
+ * de los ANTECEDENTES con `eduAntecedentesChips`. Estos son los dos que la
+ * Ola B hace posibles —«menor · tutor: X» y «embarazo»— y salen de aquí, en
+ * la misma forma (`EduAlertChip`), para que montarlos sea añadir una línea
+ * al layout y no escribir la regla otra vez.
+ *
+ * 🔴 NO SE MONTAN EN ESTA OLA a propósito: ese layout es de otra casilla de
+ * la misma ola y tocarlo desde aquí es exactamente cómo dos ramas se pisan.
+ * Queda dicho en el reporte.
+ *
+ * 🔴 Y SIGUEN LA MISMA REGLA DE TRES ESTADOS que los antecedentes: `null`
+ * en `pregnancy` NO pinta nada (nadie preguntó ≠ no está embarazada), y
+ * `DESCONOCIDO` pinta un chip ámbar propio — porque «se preguntó y no se
+ * sabe» es justo lo que hay que resolver antes de una radiografía.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export type EduFichaChipKind = "menor" | "embarazo";
+
+/**
+ * Un chip de la cabecera que NO sale de los antecedentes.
+ *
+ * 🔴 TIPO PROPIO Y NO UN VALOR MÁS EN `EduAlertChipKind`, y la razón es
+ * mecánica: el layout de la ficha declara `Record<EduAlertChipKind,
+ * LucideIcon>`, así que ampliar aquella unión ROMPE LA BUILD de un archivo
+ * que esta casilla no puede tocar (es de otra casilla de la misma ola). La
+ * forma es la misma —tone, text, detail—, así que montarlos es concatenar
+ * las dos listas y añadir dos iconos.
+ */
+export interface EduFichaChip {
+  kind: EduFichaChipKind;
+  tone: "danger" | "warn" | "info" | "ok" | "muted";
+  text: string;
+  detail?: string;
+}
+
+export function eduPatientFichaChips(row: {
+  ageYears: number | null;
+  guardianName: string | null;
+  guardianRelation: string | null;
+  pregnancy: EduPregnancy | null;
+  isChild: boolean;
+}): EduFichaChip[] {
+  const chips: EduFichaChip[] = [];
+
+  const menor = row.ageYears !== null && row.ageYears < EDU_PATIENT_EDAD_MAYORIA;
+  if (menor || row.isChild) {
+    const quien = row.guardianName
+      ? `${row.guardianName}${row.guardianRelation ? ` (${row.guardianRelation})` : ""}`
+      : null;
+    chips.push(
+      quien
+        ? {
+            kind: "menor",
+            tone: "info",
+            text: `Menor · tutor: ${row.guardianName}`,
+            detail: `Firma su representante legal: ${quien}.`,
+          }
+        : {
+            kind: "menor",
+            tone: "warn",
+            text: "Menor sin tutor registrado",
+            detail:
+              "Un menor no firma su propio consentimiento y su ficha no dice quién es su representante legal. Se captura en la pestaña Datos.",
+          },
+    );
+  }
+
+  if (row.pregnancy === "EMBARAZO" || row.pregnancy === "LACTANCIA") {
+    chips.push({
+      kind: "embarazo",
+      tone: "warn",
+      text: row.pregnancy === "EMBARAZO" ? "Embarazo" : "Lactancia",
+      detail:
+        row.pregnancy === "EMBARAZO"
+          ? "Paciente embarazada: consúltalo antes de una radiografía o de recetar."
+          : "Paciente en lactancia: consúltalo antes de recetar.",
+    });
+  } else if (row.pregnancy === "DESCONOCIDO") {
+    chips.push({
+      kind: "embarazo",
+      tone: "warn",
+      text: "Embarazo: no lo sabe",
+      detail:
+        "Se le preguntó y no lo sabe. Resuélvelo antes de una radiografía — no es lo mismo que «no».",
+    });
+  }
+
+  return chips;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6 · LA PAGINACIÓN DE LA LISTA (H-06)
+//
+// 🔴 POR CURSOR Y NO POR `skip`. Una escuela con 2 000 pacientes veía los
+// 300 más recientes y leía «se muestran los primeros 300»: los otros 1 700
+// solo existían si sabías su nombre. Se pagina por cursor y no por número
+// de página porque la lista se ordena por `createdAt desc` y se le dan de
+// alta pacientes MIENTRAS alguien la recorre: con `skip`, un alta entre la
+// página 1 y la 2 empuja una fila hacia abajo y esa fila se ve DOS veces —
+// o, al revés, una se salta. El cursor apunta a una fila concreta, así que
+// lo que ya pasó no vuelve.
+//
+// 🔴 Y EL ORDEN LLEVA DESEMPATE POR `id`. `createdAt` no es único: dos
+// altas del mismo milisegundo (una importación, dos recepcionistas) se
+// ordenarían de forma arbitraria entre consultas y el cursor saltaría una.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Filas por página. 50 y no 300: es lo que cabe en una pantalla sin que
+ *  el navegador tenga que pintar un DOM de miles de nodos, y es el tamaño
+ *  que hace que "Ver más" se sienta instantáneo. */
+export const EDU_PATIENT_PAGE_SIZE = 50;
+
+/** El cursor, ya descompuesto. */
+export interface EduPatientCursor {
+  createdAt: Date;
+  id: string;
+}
+
+/**
+ * El cursor como cadena, para que viaje en la query string.
+ *
+ * `<ISO>|<id>`, en claro y a propósito: un cursor no es un secreto (no
+ * abre nada: el `where` del alcance se aplica igual) y uno legible se
+ * puede depurar mirando la URL. Lo que sí se hace es VALIDARLO al leerlo —
+ * un cursor inventado tiene que dar `null` y devolver la primera página,
+ * nunca reventar la consulta.
+ */
+export function eduPatientCursorEncode(row: { createdAt: string; id: string }): string {
+  return `${row.createdAt}|${row.id}`;
+}
+
+export function eduPatientCursorDecode(raw: unknown): EduPatientCursor | null {
+  if (typeof raw !== "string") return null;
+  const corte = raw.indexOf("|");
+  if (corte <= 0) return null;
+  const iso = raw.slice(0, corte);
+  const id = raw.slice(corte + 1);
+  if (!id || id.length > 40 || !/^[A-Za-z0-9_-]+$/.test(id)) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return { createdAt: d, id };
+}
+
+/** Una página de la lista. `nextCursor` null = ya no hay más. */
+export interface EduPatientsPageCursor {
+  rows: EduPatientRow[];
+  nextCursor: string | null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 7 · EXPORTAR LA LISTA A CSV
+//
+// 🔴 EL ESCAPE ES OBLIGATORIO Y NO ES ESTÉTICA. Un paciente que se llama
+// «Pérez, María» parte la fila en dos columnas si nadie lo entrecomilla, y
+// a partir de ahí TODO el archivo está corrido: el teléfono de uno queda en
+// la columna del correo de otro. Se entrecomilla siempre y se duplican las
+// comillas de dentro, que es la regla del RFC 4180.
+//
+// 🔴 Y LA CELDA QUE EMPIEZA POR = + - @ SE NEUTRALIZA. Excel y Sheets
+// tratan esa celda como una FÓRMULA: un campo de notas que empiece por
+// "=cmd|..." se ejecuta al abrir el archivo en el equipo de recepción. Se
+// le antepone un apóstrofo, que es lo que la hoja de cálculo entiende como
+// "esto es texto". No es teoría: es la clase de agujero que se abre al
+// exportar datos que teclea cualquiera.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Una celda, escapada y neutralizada. */
+export function eduCsvCell(value: unknown): string {
+  const raw =
+    value === null || value === undefined
+      ? ""
+      : typeof value === "string"
+        ? value
+        : String(value);
+  // Los saltos de línea dentro de una celda son legales entre comillas,
+  // pero una nota de recepción de tres párrafos hace ilegible la hoja: se
+  // colapsan a un espacio.
+  const limpio = raw.replace(/[\r\n]+/g, " ").trim();
+  const seguro = /^[=+\-@\t]/.test(limpio) ? `'${limpio}` : limpio;
+  return `"${seguro.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Hasta cuántas filas arma el CSV el NAVEGADOR.
+ *
+ * Por encima de esto (o si quedan páginas por bajar) el archivo lo hace el
+ * servidor. Mil es donde deja de ser gratis: mil filas por veintiséis
+ * columnas son unos 200 KB de cadena construidos en el hilo de la interfaz,
+ * y a partir de ahí la pestaña se nota trabada mientras se genera.
+ */
+export const EDU_PATIENT_CSV_CLIENTE_MAX = 1000;
+
+/** Las columnas del CSV de pacientes, en su orden. */
+export const EDU_PATIENT_CSV_HEADERS = [
+  "Folio",
+  "Nombre",
+  "Apellidos",
+  "Sexo",
+  "Nacimiento",
+  "Edad",
+  "CURP",
+  "Teléfono",
+  "Teléfono 2",
+  "Correo",
+  "Preferencia de contacto",
+  "Calle y número",
+  "Colonia",
+  "Ciudad",
+  "Estado",
+  "CP",
+  "Tutor",
+  "Parentesco del tutor",
+  "Teléfono del tutor",
+  "Seguro",
+  "Póliza",
+  "Estado del paciente",
+  "Casos abiertos",
+  "Casos totales",
+  "Lo trajo",
+  "Registrado",
+] as const;
+
+/**
+ * La fecha COMO LA QUIERE UNA HOJA DE CÁLCULO: `AAAA-MM-DD` o vacío.
+ *
+ * 🔴 Y no `formatEduDate`, que es la del panel («7 de septiembre de 2026»)
+ * y devuelve «—» cuando no hay fecha. En una columna de Excel eso no se
+ * ordena, no se filtra por rango y no se resta: un CSV es para calcular,
+ * no para leer. Se lee en UTC, como todas las fechas de calendario de este
+ * vertical, para que un nacimiento del 1 de enero no salga «31 de
+ * diciembre».
+ */
+export function eduCsvDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+/**
+ * El CSV completo de una lista de pacientes.
+ *
+ * ⚠️ NO lleva antecedentes, hábitos, embarazo ni los NOM-004: un CSV se
+ * manda por correo y se deja abierto en un escritorio. Lo que sale es el
+ * padrón administrativo —lo que una escuela necesita para llamar, cobrar y
+ * contar—, no la historia clínica. Sacar eso es otra decisión y necesita
+ * otra conversación.
+ *
+ * ⚠️ Con BOM UTF-8 al principio: sin él, Excel en Windows abre "Pérez"
+ * como "PÃ©rez" y el archivo llega roto a quien lo pidió.
+ */
+export function eduPatientsCsv(
+  rows: EduPatientRow[],
+  formatDate: (iso: string | null | undefined) => string = eduCsvDate,
+): string {
+  const lineas: string[] = [
+    (EDU_PATIENT_CSV_HEADERS as readonly string[]).map(eduCsvCell).join(","),
+  ];
+  for (const p of rows) {
+    lineas.push(
+      [
+        p.folio,
+        p.firstName,
+        p.lastName,
+        EDU_SEX_LABELS[p.sex],
+        formatDate(p.birthDate),
+        p.ageYears === null ? "" : p.ageYears,
+        p.curp,
+        p.phone,
+        p.phone2,
+        p.email,
+        p.contactPreference ?? "",
+        p.addressStreet,
+        p.addressNeighborhood,
+        p.addressCity,
+        p.addressState,
+        p.addressZip,
+        p.guardianName,
+        p.guardianRelation,
+        p.guardianPhone,
+        p.insuranceProvider,
+        p.insurancePolicy,
+        EDU_PATIENT_STATUS_LABELS[p.status],
+        p.openCases,
+        p.totalCases,
+        p.origin.studentMatricula
+          ? `${p.origin.studentMatricula} · ${p.origin.studentName ?? ""}`.trim()
+          : "",
+        formatDate(p.createdAt),
+      ]
+        .map(eduCsvCell)
+        .join(","),
+    );
+  }
+  // CRLF, que es lo que el RFC 4180 pide y lo que Excel espera.
+  return `﻿${lineas.join("\r\n")}\r\n`;
+}
+
+/** El nombre del archivo. Con la fecha dentro: dos exportaciones del mismo
+ *  día no se pisan en la carpeta de descargas y se sabe de cuándo es. */
+export function eduPatientsCsvFileName(now: Date = new Date()): string {
+  return `pacientes-${now.toISOString().slice(0, 10)}.csv`;
 }

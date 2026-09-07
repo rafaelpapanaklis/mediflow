@@ -9938,3 +9938,149 @@ a.edu-ini-acceso:hover {
 .edu-integ-solo-lectura textarea[aria-label="Notas clínicas del estudio CBCT"] + div {
   display: none;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FICHA COMPLETA (ws2-t3) — .edu-fichab*
+
+   Bloque NUEVO al FINAL del archivo y no un retoque de los de arriba: la
+   hoja se escribe por apéndices, hay olas en paralelo tocándola, y mover
+   una regla a mitad de archivo les cuesta un conflicto para no ganar nada.
+   Es el mismo criterio que ya usan el bloque de ~6134, el de .edu-persona y
+   el de .edu-fichaform.
+
+   Tres piezas: los grupos del formulario de 31 campos, el rastro de quién
+   corrigió la ficha, y la HOJA IMPRESA del resumen del paciente.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── LOS GRUPOS DEL FORMULARIO ──────────────────────────────────────────
+   Un formulario de 31 campos sin cabeceras es un muro: nadie encuentra el
+   tutor. Cada grupo se separa con una línea fina y su título, que es lo
+   mínimo para que la vista salte de bloque en bloque en vez de leerlo
+   entero. Sin tarjetas anidadas a propósito: la tarjeta ya es la sección
+   (.edu-section), y meter cajas dentro de cajas hunde el contraste. */
+.edu-fichab-grupo {
+  margin-top: 1.15rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid var(--edu-line);
+}
+
+/* El primero no lleva línea: iría pegada al encabezado de la sección. */
+.edu-fichab-grupo:first-of-type {
+  margin-top: 0.35rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+.edu-fichab-grupo__title {
+  margin: 0 0 0.15rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--edu-text-1);
+}
+
+.edu-fichab-grupo__lead {
+  margin: 0 0 0.7rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--edu-text-3);
+}
+
+/* ── EL RASTRO DE QUIÉN CORRIGIÓ (H-12b) ────────────────────────────────
+   Va encima del formulario y en gris: es contexto, no una acción. `updatedAt`
+   existía desde el primer día y no se pintaba en ninguna pantalla. */
+.edu-fichab-rastro {
+  margin: 0 0 0.9rem;
+  font-size: 0.8rem;
+  color: var(--edu-text-3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LA HOJA IMPRESA DEL PACIENTE (fila 45 del comparativo con el dental)
+
+   🔴 QUÉ TIENE QUE SALIR: los datos del paciente, sus alertas médicas, su
+   historia reciente y sus próximas citas. Es lo que un docente se lleva a
+   una sesión clínica y lo que se archiva en el expediente de papel.
+
+   🔴 QUÉ NO: el menú, la barra superior, las pestañas, los botones de
+   acción y los enlaces subrayados. Un papel con un botón «Cobrar» impreso
+   encima se lee como un error de la impresora.
+
+   ⚠️ Este bloque usa clases que NO llevan el prefijo .edu-fichab, y no hay
+   otra forma: para apagar el chrome hay que nombrarlo. Va TODO dentro de
+   `@media print`, así que no cambia ni un píxel de la pantalla — es
+   aditivo en el sentido que importa. El chrome general (.edu-sidebar,
+   .edu-topbar) ya lo apaga el bloque de ~6171; aquí solo están las piezas
+   de la FICHA.
+   ═══════════════════════════════════════════════════════════════════════ */
+@media print {
+  /* Las acciones de la ficha, las pestañas y el «volver» no son documento. */
+  .edu-acciones-ficha,
+  .edu-tabsbar,
+  .edu-fichahero__chips .edu-fichaalertas__link {
+    display: none !important;
+  }
+
+  /* El hero pierde su fondo y su sombra pero conserva el nombre, el folio,
+     la edad, el contacto y los KPIs: es la cabecera de la hoja. */
+  .edu-fichahero {
+    background: #ffffff !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    border: 1px solid #d7dbe0 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 🔴 LOS CHIPS MÉDICOS SE IMPRIMEN CON SU COLOR. En una hoja en blanco y
+     negro «Alergia: lidocaína» en gris claro es una alergia que nadie ve, y
+     ese chip existe justo para que se vea. Los navegadores respetan
+     print-color-adjust; y además cada chip lleva su TEXTO, así que el color
+     nunca es la única señal. */
+  .edu-fichahero__chips .edu-tag {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border: 1px solid #8a919c;
+  }
+
+  /* Cada bloque del resumen entero en una hoja: una lista de citas partida
+     por la mitad obliga a leer dos veces para saber cuántas hay. */
+  .edu-section,
+  .edu-kpi,
+  .edu-historia__item,
+  .edu-nota {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .edu-section {
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Los enlaces del resumen se imprimen como texto: sobre papel un enlace
+     azul subrayado no es nada, solo tinta rara encima del nombre de un
+     estudiante. Es lo mismo que el bloque de EL PAPEL hace más arriba con
+     las fichas de persona, aplicado a los enlaces normales de la ficha.
+
+     ⚠️ Y por eso este bloque NO nombra la clase de aquellas: hay una prueba
+     (edu-persona.test.ts) que exige que la regla de las fichas de persona
+     viva en UN solo @media print, y cuenta los bloques que MENCIONAN esa
+     clase — comentarios incluidos. */
+  .edu-page .edu-link,
+  .edu-page .edu-link:hover {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  /* Las miniaturas de estudios no se imprimen: son cuadros negros de tóner
+     que no se ven en papel y que empujan el texto a una segunda hoja. */
+  .edu-minis {
+    display: none !important;
+  }
+}

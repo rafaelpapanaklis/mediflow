@@ -5,6 +5,7 @@ import { parseEduPatientFilters } from "@/lib/edu/pacientes-core";
 import {
   createEduPatient,
   EduPatientDuplicateError,
+  listEduPatientOptions,
   listEduPatients,
 } from "@/lib/edu/pacientes";
 
@@ -14,13 +15,27 @@ export const dynamic = "force-dynamic";
  * GET /api/instituto/pacientes — los pacientes que le tocan a quien pregunta.
  *
  * 🔴 El institutionId sale de la sesión, NUNCA de la query. Lo único que se
- * lee de la URL son los filtros (?estado=&origen=&q=), y
- * `parseEduPatientFilters` descarta cualquier otra cosa que venga ahí.
+ * lee de la URL son los filtros (?estado=&origen=&q=), la página
+ * (?cursor=&take=) y el modo (?opciones=1), y `parseEduPatientFilters`
+ * descarta cualquier otra cosa que venga ahí.
  *
  * El recorte (alumno → los suyos; docente → los de sus alumnos VIGENTES;
  * caja y dirección → todos) lo aplica `listEduPatients` por dentro con el
  * helper de visibilidad: este endpoint no puede pedir "todos" ni aunque
  * quisiera, porque el alcance no es un parámetro.
+ *
+ * ── DOS COSAS QUE AÑADIÓ LA OLA B ──────────────────────────────────────
+ *
+ * 1. **`?cursor=`** — la página siguiente (H-06). La lista dejó de cortarse
+ *    en 300 sin salida: baja de 50 en 50 y `nextCursor` dice por dónde
+ *    seguir. Es lo que alimenta el «Ver más» de la pantalla, que APILA la
+ *    página nueva sobre las que ya tiene en vez de recargar la ruta.
+ *
+ * 2. **`?opciones=1&q=`** — el desplegable de agendar, buscando en el
+ *    SERVIDOR. Devuelve lo MÍNIMO (id, folio, nombre, estado) y no la ficha
+ *    entera: un `<select>` no necesita el domicilio ni los antecedentes de
+ *    nadie, y mandárselos sería volver a la lección del P1-4. Su tope y su
+ *    `truncated` son los del desplegable, no los de la lista.
  */
 export async function GET(request: Request) {
   const g = await eduApiGuard("pacientes.view");
@@ -32,8 +47,24 @@ export async function GET(request: Request) {
     url.searchParams.forEach((value, key) => {
       params[key] = value;
     });
-    const page = await listEduPatients(g.ctx, parseEduPatientFilters(params));
-    return NextResponse.json({ rows: page.rows, truncated: page.truncated });
+
+    if (params.opciones === "1") {
+      const opciones = await listEduPatientOptions(g.ctx, new Date(), {
+        q: params.q,
+        take: Number(params.take) || undefined,
+      });
+      return NextResponse.json(opciones);
+    }
+
+    const page = await listEduPatients(g.ctx, parseEduPatientFilters(params), new Date(), {
+      cursor: params.cursor,
+      take: Number(params.take) || undefined,
+    });
+    return NextResponse.json({
+      rows: page.rows,
+      truncated: page.truncated,
+      nextCursor: page.nextCursor,
+    });
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/pacientes");
   }

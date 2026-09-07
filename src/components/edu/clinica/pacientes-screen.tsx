@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, UserPlus, X } from "lucide-react";
+import { Download, Search, UserPlus, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EduPersonaLink } from "@/components/edu/persona/persona-link";
@@ -16,7 +16,15 @@ import {
   EDU_SEX_LABELS,
   type EduPatientStatus,
 } from "@/lib/edu/types";
-import { EDU_PHONE_HELP, formatEduDate, type EduPatientRow } from "@/lib/edu/pacientes-core";
+import {
+  EDU_PATIENT_CSV_CLIENTE_MAX,
+  EDU_PHONE_HELP,
+  eduPatientsCsv,
+  eduPatientsCsvFileName,
+  eduPhoneWaWarning,
+  formatEduDate,
+  type EduPatientRow,
+} from "@/lib/edu/pacientes-core";
 import {
   EduPacienteDatosFields,
   useEduPacienteDatosForm,
@@ -46,7 +54,18 @@ import {
  */
 export interface EduPacientesScreenProps {
   rows: EduPatientRow[];
-  truncated: boolean;
+  /**
+   * El cursor con el que pedir la página siguiente, o null si no hay más
+   * (H-06).
+   *
+   * ⚠️ Sustituye al `truncated` que esta pantalla recibía: aquel solo decía
+   * «la consulta se cortó y el resto no existe para ti», y lo único que se
+   * podía hacer con él era pintar un aviso sin salida. El cursor dice lo
+   * mismo Y por dónde seguir, así que la prop vieja se fue en vez de
+   * quedarse sin lector.
+   */
+  nextCursor: string | null;
+  /** Cuántas filas trae cada página. Solo se pinta, en el pie de «Ver más». */
   maxRows: number;
   filters: { status: EduPatientStatus | null; referredByStudentId: string | null; q: string | null };
   students: EduStudentOption[];
@@ -58,6 +77,12 @@ export interface EduPacientesScreenProps {
    * `eduPatientEditAbilities`, y el endpoint lo vuelve a exigir.
    */
   canContacto: boolean;
+  /**
+   * ¿Puede escribir los antecedentes NOM-004, los hábitos, el embarazo y la
+   * dentición? (Ola B). Es `pacientes.manage` o `expediente.write`, la
+   * misma llave que ya abre los antecedentes médicos.
+   */
+  canClinico: boolean;
   canOrigin: boolean;
   /**
    * ¿Es un DOCENTE al que la dirección todavía no le asignó ningún alumno?
@@ -87,12 +112,13 @@ const TAG_BY_STATUS: Record<EduPatientStatus, string> = {
 
 export function EduPacientesScreen({
   rows,
-  truncated,
+  nextCursor,
   maxRows,
   filters,
   students,
   canManage,
   canContacto,
+  canClinico,
   canOrigin,
   sinAlumnosAsignados = false,
   inscripcionInactiva = false,
@@ -104,7 +130,102 @@ export function EduPacientesScreen({
   const [ficha, setFicha] = useState<EduPatientRow | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
+  // ═══════════════════════════════════════════════════════════════════
+  // H-06 · LAS PÁGINAS SIGUIENTES SE APILAN, NO RECARGAN LA RUTA.
+  //
+  // La primera página la pinta el SERVIDOR (llega en `rows`); «Ver más»
+  // pide la siguiente al endpoint y la añade debajo. Se hace así y no con
+  // un `?cursor=` en la URL por una razón concreta: con la URL, cada «Ver
+  // más» sustituiría la lista entera por la página nueva y recepción
+  // perdería de vista las 50 que estaba mirando — que es justo lo que hace
+  // insoportable un paginador clásico cuando estás buscando a alguien.
+  //
+  // 🔴 Y el estado local se DESCARTA en cuanto cambian los filtros o la
+  // búsqueda: `rows` llega nuevo del servidor y las páginas extra que se
+  // habían apilado ya no son de esta consulta. Sin esto, filtrar por
+  // «Dado de alta» dejaría debajo los pacientes activos de la página 2.
+  const [extra, setExtra] = useState<EduPatientRow[]>([]);
+  const [cursor, setCursor] = useState<string | null>(nextCursor);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const [errorMas, setErrorMas] = useState<string | null>(null);
+
+  const huellaServidor = `${rows[0]?.id ?? ""}|${rows.length}|${filters.status ?? ""}|${
+    filters.referredByStudentId ?? ""
+  }|${filters.q ?? ""}`;
+  const [huellaBase, setHuellaBase] = useState(huellaServidor);
+  if (huellaServidor !== huellaBase) {
+    setHuellaBase(huellaServidor);
+    setExtra([]);
+    setCursor(nextCursor);
+    setErrorMas(null);
+  }
+
+  const visibles = useMemo(() => [...rows, ...extra], [rows, extra]);
+
+  async function verMas() {
+    if (!cursor || cargandoMas) return;
+    setCargandoMas(true);
+    setErrorMas(null);
+    try {
+      const params = new URLSearchParams();
+      if (filters.status) params.set("estado", filters.status);
+      if (filters.referredByStudentId) params.set("origen", filters.referredByStudentId);
+      if (filters.q) params.set("q", filters.q);
+      params.set("cursor", cursor);
+      const page = await eduRequest<{ rows: EduPatientRow[]; nextCursor: string | null }>(
+        `/api/instituto/pacientes?${params.toString()}`,
+      );
+      setExtra((v) => [...v, ...page.rows]);
+      setCursor(page.nextCursor);
+    } catch (err) {
+      setErrorMas(err instanceof Error ? err.message : "No se pudieron cargar más pacientes.");
+    } finally {
+      setCargandoMas(false);
+    }
+  }
+
   const hayFiltros = Boolean(filters.status || filters.referredByStudentId || filters.q);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // EXPORTAR A CSV — en el navegador cuando cabe, en el servidor cuando no.
+  //
+  // 🔴 CON LA LISTA COMPLETA Y PEQUEÑA (≤ 1 000 filas y sin páginas
+  // pendientes) el archivo se arma AQUÍ: cero viajes, descarga instantánea,
+  // y se lleva exactamente lo que se está viendo. En cuanto falta una
+  // página por bajar —o hay más de mil— eso deja de ser cierto: el archivo
+  // saldría incompleto sin decirlo, que es peor que no tenerlo. Ahí se
+  // manda al endpoint, que rehace la MISMA consulta con los MISMOS filtros
+  // y el mismo alcance.
+  //
+  // El enlace del servidor es un `<a href>` y no un `fetch`: el navegador
+  // descarga con sus cookies y sin meter el archivo en memoria.
+  const enClienteCabe = cursor === null && visibles.length <= EDU_PATIENT_CSV_CLIENTE_MAX;
+
+  function urlExportar(): string {
+    const params = new URLSearchParams();
+    if (filters.status) params.set("estado", filters.status);
+    if (filters.referredByStudentId) params.set("origen", filters.referredByStudentId);
+    if (filters.q) params.set("q", filters.q);
+    const qs = params.toString();
+    return qs
+      ? `/api/instituto/pacientes/exportar?${qs}`
+      : "/api/instituto/pacientes/exportar";
+  }
+
+  function exportarEnCliente() {
+    const blob = new Blob([eduPatientsCsv(visibles)], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = eduPatientsCsvFileName();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Sin esto el Blob se queda en memoria hasta que se cierre la pestaña.
+    URL.revokeObjectURL(url);
+  }
 
   function aplicar(next: Partial<Record<"estado" | "origen" | "q", string>>) {
     const actual: Record<string, string> = {};
@@ -221,10 +342,30 @@ export function EduPacientesScreen({
         <span className="edu-count">
           {navigating
             ? "Buscando…"
-            : `${rows.length} ${rows.length === 1 ? "paciente" : "pacientes"}${
-                truncated ? ` (se muestran los primeros ${maxRows})` : ""
+            : `${visibles.length} ${visibles.length === 1 ? "paciente" : "pacientes"}${
+                cursor ? " (hay más)" : ""
               }`}
         </span>
+        {/* 🔴 Exportar lo que está FILTRADO, no la tabla entera. El botón se
+            pinta siempre que haya algo que llevarse: un CSV de la lista es
+            lo que una escuela usa para llamar a sus pacientes y para contar
+            en una acreditación, y no depende de poder editar nada. */}
+        {visibles.length > 0 &&
+          (enClienteCabe ? (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              onClick={exportarEnCliente}
+            >
+              <Download size={16} />
+              Exportar a CSV
+            </button>
+          ) : (
+            <a className="edu-btn edu-btn--ghost edu-btn--sm" href={urlExportar()}>
+              <Download size={16} />
+              Exportar a CSV
+            </a>
+          ))}
         {canManage && (
           <button
             type="button"
@@ -240,7 +381,7 @@ export function EduPacientesScreen({
         )}
       </div>
 
-      {rows.length === 0 ? (
+      {visibles.length === 0 ? (
         /* 🔴 H-29 · UNA LISTA VACÍA TIENE QUE DECIR POR QUÉ ESTÁ VACÍA. Un
            docente sin alumnos asignados leía «Todavía no hay pacientes» —un
            texto que miente sobre el estado del sistema: la clínica SÍ tiene
@@ -286,7 +427,7 @@ export function EduPacientesScreen({
               <span />
             </div>
 
-            {rows.map((p) => (
+            {visibles.map((p) => (
               <div key={p.id} className={`edu-row ${p.status === "INACTIVE" ? "edu-row--off" : ""}`}>
                 <div className="edu-cell">
                   <span className="edu-cell__label">Folio</span>
@@ -316,7 +457,19 @@ export function EduPacientesScreen({
                 <div className="edu-cell">
                   <span className="edu-cell__label">Contacto</span>
                   <span className="edu-cell__value">{p.phone ?? "—"}</span>
+                  {p.phone2 && <span className="edu-cell__sub">y {p.phone2}</span>}
                   {p.email && <span className="edu-cell__sub">{p.email}</span>}
+                  {/* 🔴 H-09 · EL CHIP TAMBIÉN EN LA FILA. La función ya
+                      existía (`eduPhoneWaWarning`) y solo se pintaba dentro
+                      de la ficha: recepción tenía que abrir paciente por
+                      paciente para descubrir cuáles tienen el teléfono
+                      inservible. Aquí se ven todos de un vistazo, que es
+                      como se arregla una lista de teléfonos rotos. */}
+                  {eduPhoneWaWarning(p.phone) && (
+                    <span className="edu-tag edu-tag--warn" title={eduPhoneWaWarning(p.phone)!}>
+                      Sin WhatsApp
+                    </span>
+                  )}
                 </div>
 
                 <div className="edu-cell">
@@ -388,6 +541,32 @@ export function EduPacientesScreen({
         </div>
       )}
 
+      {/* ══ H-06 · VER MÁS ═══════════════════════════════════════════
+          Antes aquí decía «se muestran los primeros 300» y no había
+          siguiente: los otros 1 700 pacientes de una escuela grande solo
+          existían si sabías su nombre o su folio. */}
+      {errorMas && (
+        <div className="edu-alert" role="alert">
+          {errorMas}
+        </div>
+      )}
+      {cursor && (
+        <div className="edu-actions">
+          <button
+            type="button"
+            className="edu-btn edu-btn--ghost"
+            onClick={verMas}
+            disabled={cargandoMas}
+          >
+            {cargandoMas ? "Cargando…" : "Ver más pacientes"}
+          </button>
+          <span className="edu-fichaform__motivo">
+            Van {visibles.length}. Se cargan de {maxRows} en {maxRows}; el buscador y los filtros
+            de arriba miran a TODOS los pacientes que te tocan, no solo a los que están abajo.
+          </span>
+        </div>
+      )}
+
       {alta && (
         <AltaPaciente
           students={students}
@@ -406,6 +585,7 @@ export function EduPacientesScreen({
           students={students}
           canManage={canManage}
           canContacto={canContacto}
+          canClinico={canClinico}
           canOrigin={canOrigin}
           onClose={() => setFicha(null)}
           onDone={(mensaje) => {
@@ -764,6 +944,7 @@ function FichaPaciente({
   students,
   canManage,
   canContacto,
+  canClinico,
   canOrigin,
   onClose,
   onDone,
@@ -772,6 +953,7 @@ function FichaPaciente({
   students: EduStudentOption[];
   canManage: boolean;
   canContacto: boolean;
+  canClinico: boolean;
   canOrigin: boolean;
   onClose: () => void;
   onDone: (mensaje: string) => void;
@@ -809,6 +991,7 @@ function FichaPaciente({
       students={students}
       canManage={canManage}
       canContacto={canContacto}
+      canClinico={canClinico}
       canOrigin={canOrigin}
       onClose={onClose}
       onDone={onDone}
@@ -832,6 +1015,7 @@ function FichaModal({
   students,
   canManage,
   canContacto,
+  canClinico,
   canOrigin,
   onClose,
   onDone,
@@ -843,11 +1027,12 @@ function FichaModal({
   students: EduStudentOption[];
   canManage: boolean;
   canContacto: boolean;
+  canClinico: boolean;
   canOrigin: boolean;
   onClose: () => void;
   onDone: (mensaje: string) => void;
 }) {
-  const soloLectura = !canManage && !canContacto && !canOrigin;
+  const soloLectura = !canManage && !canContacto && !canClinico && !canOrigin;
   // El `busy` vive AQUÍ y no en el cuerpo: es lo que impide que Escape o un
   // clic en la cortina cierren el modal a media escritura.
   const [busy, setBusy] = useState(false);
@@ -889,6 +1074,7 @@ function FichaModal({
           students={students}
           canManage={canManage}
           canContacto={canContacto}
+          canClinico={canClinico}
           canOrigin={canOrigin}
           soloLectura={soloLectura}
           busy={busy}
@@ -906,6 +1092,7 @@ function FichaCuerpo({
   students,
   canManage,
   canContacto,
+  canClinico,
   canOrigin,
   soloLectura,
   busy,
@@ -917,6 +1104,7 @@ function FichaCuerpo({
   students: EduStudentOption[];
   canManage: boolean;
   canContacto: boolean;
+  canClinico: boolean;
   canOrigin: boolean;
   soloLectura: boolean;
   busy: boolean;
@@ -930,8 +1118,9 @@ function FichaCuerpo({
   const [error, setError] = useState<string | null>(null);
 
   const origenCambio = canOrigin && origen !== (row.origin.studentId ?? "");
-  const hayQueGuardar = origenCambio || (form.hayCambios && canContacto);
-  const puedeGuardar = hayQueGuardar && !form.conflictoEstado;
+  const puedeEditarCampos = canManage || canContacto || canClinico;
+  const hayQueGuardar = origenCambio || (form.hayCambios && puedeEditarCampos);
+  const puedeGuardar = hayQueGuardar && !form.conflictoEstado && !form.conflictoTutor;
 
   async function guardar() {
     setError(null);
@@ -1009,8 +1198,10 @@ function FichaCuerpo({
           campo nuevo se agrega ahí y aparece en los dos sitios. */}
       <EduPacienteDatosFields
         form={form}
+        row={row}
         canManage={canManage}
         canContacto={canContacto}
+        canClinico={canClinico}
         idPrefix="edu-f"
       />
 

@@ -49,10 +49,23 @@ import {
   parseEduPatientStatus,
   parseEduSex,
   eduPatientOptionsPageOf,
-  eduPatientFieldIsContact,
+  eduPatientFieldGroupOf,
   eduPatientStatusConflict,
+  eduPatientTutorConflict,
+  eduPatientCursorDecode,
+  eduPatientCursorEncode,
+  eduCurpIsValid,
+  normalizeEduCurp,
+  normalizeEduPhone,
+  parseEduContactPreference,
+  parseEduHabitLevel,
+  parseEduPregnancy,
+  EDU_CURP_HELP,
   EDU_PATIENT_FORM_FIELDS,
+  EDU_PATIENT_PAGE_SIZE,
   EDU_PHONE_HELP,
+  type EduPatientFieldGroup,
+  type EduPatientFormField,
   type EduAntecedentesInput,
   type EduPatientFilters,
   type EduPatientOption,
@@ -60,7 +73,7 @@ import {
   type EduPatientRow,
   type EduPatientsPage,
 } from "@/lib/edu/pacientes-core";
-import { eduRequiredText, parseEduCalendarDate } from "@/lib/edu/padron-core";
+import { eduRequiredText, eduSearchInput, parseEduCalendarDate } from "@/lib/edu/padron-core";
 import {
   eduPatientScopeWhere,
   eduVisibility,
@@ -141,6 +154,40 @@ const PATIENT_SELECT = {
   },
   originSetBy: { select: { firstName: true, lastName: true, email: true } },
   cases: { select: { status: true } },
+
+  // ── OLA B · los 22 campos que la ficha ya captura (ws2-t3) ───────────
+  //
+  // Viajan en la fila COMPLETA y no en una consulta aparte de la pestaña
+  // Datos, por lo mismo que los antecedentes: el modal de la lista y la
+  // pestaña montan el MISMO formulario, y una fila que a veces trae el
+  // tutor y a veces no es una fila que un día guarda un tutor vacío
+  // encima del que había.
+  curp: true,
+  phone2: true,
+  contactPreference: true,
+  addressStreet: true,
+  addressNeighborhood: true,
+  addressCity: true,
+  addressState: true,
+  addressZip: true,
+  guardianName: true,
+  guardianRelation: true,
+  guardianPhone: true,
+  insuranceProvider: true,
+  insurancePolicy: true,
+  familyHistory: true,
+  personalNonPathologicalHistory: true,
+  habitsTobacco: true,
+  habitsAlcohol: true,
+  habitsBruxism: true,
+  habitsNotes: true,
+  pregnancy: true,
+  isChild: true,
+  privacyNoticeAcceptedAt: true,
+  // H-12b · quién tocó la ficha por última vez. `updatedAt` existía desde
+  // el primer día y no se pintaba en ninguna pantalla.
+  updatedAt: true,
+  updatedBy: { select: { firstName: true, lastName: true, email: true } },
 } satisfies Prisma.EduPatientSelect;
 
 type PatientPayload = Prisma.EduPatientGetPayload<{ select: typeof PATIENT_SELECT }>;
@@ -183,6 +230,35 @@ function toRow(p: PatientPayload, now: Date): EduPatientRow {
     openCases: abiertos,
     totalCases: p.cases.length,
     createdAt: p.createdAt.toISOString(),
+
+    // ── Ola B ──────────────────────────────────────────────────────────
+    // Se copian TAL CUAL, sin "arreglar" un null a "" ni un enum a texto:
+    // `null` es un dato (nadie preguntó) y la pantalla lo pinta como «sin
+    // registrar». Convertirlo aquí perdería justo esa distinción.
+    curp: p.curp,
+    phone2: p.phone2,
+    contactPreference: p.contactPreference,
+    addressStreet: p.addressStreet,
+    addressNeighborhood: p.addressNeighborhood,
+    addressCity: p.addressCity,
+    addressState: p.addressState,
+    addressZip: p.addressZip,
+    guardianName: p.guardianName,
+    guardianRelation: p.guardianRelation,
+    guardianPhone: p.guardianPhone,
+    insuranceProvider: p.insuranceProvider,
+    insurancePolicy: p.insurancePolicy,
+    familyHistory: p.familyHistory,
+    personalNonPathologicalHistory: p.personalNonPathologicalHistory,
+    habitsTobacco: p.habitsTobacco,
+    habitsAlcohol: p.habitsAlcohol,
+    habitsBruxism: p.habitsBruxism,
+    habitsNotes: p.habitsNotes,
+    pregnancy: p.pregnancy,
+    isChild: p.isChild,
+    privacyNoticeAcceptedAt: iso(p.privacyNoticeAcceptedAt),
+    updatedAt: p.updatedAt.toISOString(),
+    updatedByName: p.updatedBy ? personName(p.updatedBy) : null,
   };
 }
 
@@ -230,25 +306,128 @@ function patientsWhere(
   return where;
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * H-06 · LA LISTA, PAGINADA POR CURSOR.
+ *
+ * 🔴 QUÉ ARREGLA. Una escuela con 2 000 pacientes veía los 300 más
+ * recientes y leía «se muestran los primeros 300». No había siguiente, ni
+ * cursor, ni orden por columna: los otros 1 700 solo existían si sabías su
+ * nombre o su folio. Y los filtros no ayudaban — filtrar por «Dado de alta»
+ * seguía devolviendo, como mucho, 300 de los más recientes.
+ *
+ * 🔴 POR CURSOR Y NO POR `skip`/`OFFSET`, y no es preferencia. La lista se
+ * ordena por `createdAt desc` y a la clínica le dan de alta pacientes
+ * MIENTRAS recepción la recorre: con `skip: 50`, un alta entre la página 1
+ * y la 2 empuja una fila hacia abajo y esa fila sale DOS veces (o, al
+ * revés, una se salta y nadie se entera). El cursor apunta a una fila
+ * concreta, así que lo que ya pasó no vuelve.
+ *
+ * 🔴 Y EL ORDEN LLEVA DESEMPATE POR `id`. `createdAt` no es único: dos
+ * altas del mismo milisegundo —una importación, dos recepcionistas— se
+ * ordenarían de forma arbitraria entre dos consultas y el cursor saltaría
+ * una fila. El `orderBy` y la condición del cursor son la MISMA pareja
+ * (createdAt, id), en el mismo orden: si se separaran, el paginador
+ * volvería a saltarse filas exactamente en el caso que esto viene a cerrar.
+ *
+ * ⚠️ El cursor NO es una credencial y no abre nada: el `where` del alcance
+ * se aplica igual, así que un cursor copiado de otra sesión sigue
+ * devolviendo solo lo que le toca a quien pregunta.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
 export async function listEduPatients(
   ctx: EduClinicaContext,
   filters: EduPatientFilters,
   now: Date = new Date(),
+  options: { cursor?: unknown; take?: number } = {},
 ): Promise<EduPatientsPage> {
   const scope = eduVisibility(ctx, "patients");
   // Sin alcance no se consulta nada. La pantalla explica por qué.
+  if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false, nextCursor: null };
+
+  // El tope de la petición se acota a los dos lados: nadie puede pedir la
+  // tabla entera por la query string, y un `take` de 0 o negativo (o
+  // basura) cae en el tamaño de página normal.
+  const pedido = Number(options.take);
+  const take = Number.isFinite(pedido) && pedido > 0
+    ? Math.min(Math.floor(pedido), EDU_CLINICA_MAX_ROWS)
+    : EDU_PATIENT_PAGE_SIZE;
+
+  const where = patientsWhere(ctx, filters, now);
+  const cursor = eduPatientCursorDecode(options.cursor);
+  if (cursor) {
+    // "Estrictamente después de esta fila", en el mismo orden del
+    // `orderBy`. Se añade al AND que `patientsWhere` ya armó para no pisar
+    // el OR con el que se expresa el alcance del alumno y del docente.
+    const despues: Prisma.EduPatientWhereInput = {
+      OR: [
+        { createdAt: { lt: cursor.createdAt } },
+        { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+      ],
+    };
+    where.AND = Array.isArray(where.AND)
+      ? [...where.AND, despues]
+      : where.AND
+        ? [where.AND, despues]
+        : [despues];
+  }
+
+  // Se pide UNA de más: es cómo se sabe que hay página siguiente sin
+  // gastar un `count()` sobre una tabla que puede tener decenas de miles
+  // de filas por instituto.
+  const rows = await prisma.eduPatient.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: take + 1,
+    select: PATIENT_SELECT,
+  });
+
+  const hayMas = rows.length > take;
+  const pagina = rows.slice(0, take).map((p) => toRow(p, now));
+  return {
+    truncated: hayMas,
+    rows: pagina,
+    nextCursor:
+      hayMas && pagina.length > 0
+        ? eduPatientCursorEncode(pagina[pagina.length - 1])
+        : null,
+  };
+}
+
+/**
+ * TODAS las filas que cumplen los filtros, para EXPORTAR a CSV.
+ *
+ * 🔴 Existe aparte y con su propio techo, y no es duplicación: la lista
+ * pagina de 50 en 50 porque una persona no lee más, y una exportación
+ * tiene que traer lo que hay. El `where` es EXACTAMENTE el mismo —el mismo
+ * alcance, los mismos filtros, el mismo buscador—, así que el CSV no puede
+ * enseñar una fila que la lista esconde.
+ *
+ * 🔴 EL TECHO SIGUE EXISTIENDO (5 000) y se dice cuándo muerde. Sin él,
+ * una escuela con 40 000 pacientes tumbaría la función serverless
+ * construyendo el archivo en memoria. `truncated` viaja para que el
+ * endpoint pueda decirlo en la respuesta en vez de entregar un archivo
+ * incompleto que parece completo.
+ */
+export const EDU_PATIENT_CSV_MAX_ROWS = 5000;
+
+export async function listEduPatientsForCsv(
+  ctx: EduClinicaContext,
+  filters: EduPatientFilters,
+  now: Date = new Date(),
+): Promise<{ rows: EduPatientRow[]; truncated: boolean }> {
+  const scope = eduVisibility(ctx, "patients");
   if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
 
   const rows = await prisma.eduPatient.findMany({
     where: patientsWhere(ctx, filters, now),
-    orderBy: [{ createdAt: "desc" }],
-    take: EDU_CLINICA_MAX_ROWS + 1,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: EDU_PATIENT_CSV_MAX_ROWS + 1,
     select: PATIENT_SELECT,
   });
-
   return {
-    truncated: rows.length > EDU_CLINICA_MAX_ROWS,
-    rows: rows.slice(0, EDU_CLINICA_MAX_ROWS).map((p) => toRow(p, now)),
+    truncated: rows.length > EDU_PATIENT_CSV_MAX_ROWS,
+    rows: rows.slice(0, EDU_PATIENT_CSV_MAX_ROWS).map((p) => toRow(p, now)),
   };
 }
 
@@ -278,19 +457,62 @@ export async function getEduPatient(
   return p ? toRow(p, now) : null;
 }
 
-/** Pacientes para un <select> (agendar una cita). Mismo recorte. */
+/**
+ * Pacientes para un <select> (agendar una cita). Mismo recorte.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 H-06 · AHORA BUSCA POR TEXTO EN EL SERVIDOR.
+ *
+ * Este desplegable traía los 300 primeros por folio y el resto no existía:
+ * en una escuela con 2 000 pacientes, agendarle una cita al que se llama
+ * "Zúñiga" era imposible desde la agenda — su folio caía fuera del corte y
+ * el `<select>` no tiene buscador. Y de paso viajaban 300 nombres de
+ * pacientes al navegador de cualquiera que abriera la agenda.
+ *
+ * Con `q`, el filtro se aplica en Postgres contra `searchIndex` (la misma
+ * columna, el mismo `where` y los mismos tokens que el buscador de la
+ * lista, `eduPatientSearchAnd`), y baja lo que se pidió y nada más. Sin
+ * `q` se comporta como siempre: es lo que hace que las dos pantallas que
+ * hoy la llaman sigan funcionando sin tocarlas.
+ *
+ * ⚠️ ESTO ES LA MITAD DEL ARREGLO, Y HAY QUE SABERLO. Lo que existe hoy es
+ * la CAPACIDAD: la función busca en el servidor y el endpoint la expone
+ * (`GET /api/instituto/pacientes?opciones=1&q=`). Las dos pantallas que
+ * montan el desplegable —`/instituto/agenda` y `/instituto/agenda/tamizaje`
+ * con `agenda-modales.tsx`— siguen llamando sin `q` y siguen bajando los
+ * 300 primeros por folio, porque esos archivos son de otra casilla de esta
+ * misma ola y tocarlos desde aquí es cómo dos ramas se pisan. Hasta que
+ * alguien monte el buscador ahí, a "Zúñiga" se le sigue sin poder agendar
+ * desde la agenda (desde su FICHA sí, que es donde esta casilla sí llega).
+ *
+ * ⚠️ El tope sigue existiendo y `truncated` sigue viajando: un desplegable
+ * que baja 2 000 opciones no es un desplegable. Lo que cambia es que ahora
+ * hay una forma de llegar a las que no cupieron.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
 export async function listEduPatientOptions(
   ctx: EduClinicaContext,
   now: Date = new Date(),
+  options: { q?: unknown; take?: number } = {},
 ): Promise<EduPatientOptionsPage> {
   const institutionId = requireInstitution(ctx);
   const scope = eduVisibility(ctx, "patients");
   if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
 
+  const q = eduSearchInput(typeof options.q === "string" ? options.q : null);
+  const where: Prisma.EduPatientWhereInput = eduPatientScopeWhere({ institutionId, scope, now });
+  const and = eduPatientSearchAnd(q);
+  if (and.length > 0) where.AND = and;
+
+  const pedido = Number(options.take);
+  const take = Number.isFinite(pedido) && pedido > 0
+    ? Math.min(Math.floor(pedido), EDU_CLINICA_MAX_ROWS)
+    : EDU_CLINICA_MAX_ROWS;
+
   const rows = await prisma.eduPatient.findMany({
-    where: eduPatientScopeWhere({ institutionId, scope, now }),
+    where,
     orderBy: [{ folio: "asc" }],
-    take: EDU_CLINICA_MAX_ROWS + 1,
+    take: take + 1,
     select: { id: true, folio: true, firstName: true, lastName: true, status: true },
   });
   return eduPatientOptionsPageOf(
@@ -300,6 +522,7 @@ export async function listEduPatientOptions(
       name: eduPatientFullName(p),
       status: p.status,
     })),
+    take,
   );
 }
 
@@ -340,6 +563,34 @@ export interface EduPatientInput {
   notes?: unknown;
   status?: unknown;
   referredByStudentId?: unknown;
+
+  // ── Ola B · lo que la ficha completa captura (ws2-t3) ────────────────
+  // TODAS opcionales: `undefined` = "no vino en el body y no se toca";
+  // `null` = "vacíalo". Es la regla de H-10 (campo ausente no se escribe)
+  // y aquí importa el doble, porque en estas columnas `null` SIGNIFICA
+  // "nadie preguntó" y escribirlo por accidente borra un dato bueno.
+  curp?: unknown;
+  phone2?: unknown;
+  contactPreference?: unknown;
+  addressStreet?: unknown;
+  addressNeighborhood?: unknown;
+  addressCity?: unknown;
+  addressState?: unknown;
+  addressZip?: unknown;
+  guardianName?: unknown;
+  guardianRelation?: unknown;
+  guardianPhone?: unknown;
+  insuranceProvider?: unknown;
+  insurancePolicy?: unknown;
+  familyHistory?: unknown;
+  personalNonPathologicalHistory?: unknown;
+  habitsTobacco?: unknown;
+  habitsAlcohol?: unknown;
+  habitsBruxism?: unknown;
+  habitsNotes?: unknown;
+  pregnancy?: unknown;
+  isChild?: unknown;
+  privacyNoticeAcceptedAt?: unknown;
 }
 
 /** Comprueba que el alumno del ORIGEN sea de este instituto. Devuelve el
@@ -582,7 +833,19 @@ export async function createEduPatient(
   const conIndice = (folio: string) => ({
     ...data,
     folio,
-    searchIndex: eduPatientSearchIndex({ folio, firstName, lastName, phone, email }),
+    // El alta mínima no captura CURP ni segundo teléfono (se completan en
+    // la ficha), así que entran como null y el índice los recoge en la
+    // primera edición. Se pasan EXPLÍCITAMENTE para que, el día que el
+    // alta los pida, no haya que acordarse de esta línea.
+    searchIndex: eduPatientSearchIndex({
+      folio,
+      curp: null,
+      firstName,
+      lastName,
+      phone,
+      phone2: null,
+      email,
+    }),
   });
 
   if (folioTecleado) {
@@ -617,19 +880,45 @@ export async function createEduPatient(
 }
 
 /**
- * Qué parte de la ficha puede tocar quien manda el PATCH (H-02).
+ * ═══════════════════════════════════════════════════════════════════════
+ * QUÉ PARTE DE LA FICHA PUEDE TOCAR QUIEN MANDA EL PATCH (H-02, Ola B).
  *
- *   · "all"      → los nueve campos. Es `pacientes.manage` (caja, dirección).
- *   · "contacto" → SOLO teléfono y correo. Es `expediente.write` sin
- *     `pacientes.manage`: el alumno y el docente que tienen al paciente en
- *     el sillón.
+ * Ya no son dos estados ("all" / "contacto") sino los GRUPOS que quien
+ * manda tiene abiertos, y el cambio es lo que hace posible la ficha de 31
+ * campos: con dos estados, "todo lo que no es contacto" era una sola cosa
+ * y no había forma de decir que un alumno escribe el embarazo pero no el
+ * domicilio.
+ *
+ *   · "identidad" → `pacientes.manage` (caja, dirección): quién es el
+ *     paciente y su papeleo — folio, nombre, apellidos, sexo, nacimiento,
+ *     CURP, domicilio, TUTOR, seguro, estado, notas y aviso de privacidad.
+ *   · "contacto"  → `pacientes.manage` o `expediente.write`: los dos
+ *     teléfonos, el correo y la preferencia de contacto.
+ *   · "clinico"   → `pacientes.manage` o `expediente.write`, igual que los
+ *     ANTECEDENTES: NOM-004, hábitos, embarazo/lactancia y dentición.
+ *
+ * El reparto vive en UN sitio (`EDU_PATIENT_FIELD_GROUP`, pacientes-core) y
+ * lo resuelven las abilities (`eduPatientEditGroups`, permissions.ts).
  *
  * 🔴 El recorte se aplica AQUÍ y no solo en el endpoint. Que el body traiga
  * `folio` no basta para que se escriba: un campo que quien manda no puede
  * tocar es un ERROR con su motivo, no un campo que se ignora en silencio —
  * ignorarlo dejaría a un alumno creyendo que corrigió el apellido.
+ * ═══════════════════════════════════════════════════════════════════════
  */
-export type EduPatientEditFields = "all" | "contacto";
+export type EduPatientEditFields = EduPatientFieldGroup;
+
+/** El motivo escrito de un campo que no le toca a quien manda. Lo arma el
+ *  servidor porque es él quien sabe cuál llegó de más. */
+function motivoGrupoCerrado(grupo: EduPatientFieldGroup): string {
+  if (grupo === "identidad") {
+    return "Con tu permiso solo puedes corregir el contacto y los antecedentes clínicos del paciente. La identidad (folio, nombre, apellidos, sexo, nacimiento, CURP), el domicilio, el tutor, el seguro, el estado, las notas de recepción y el aviso de privacidad los captura recepción.";
+  }
+  if (grupo === "contacto") {
+    return "Con tu permiso no puedes corregir el contacto del paciente (teléfonos, correo y preferencia). Lo hace recepción, o quien tenga al paciente en el sillón.";
+  }
+  return "Con tu permiso no puedes escribir los antecedentes clínicos del paciente (NOM-004, hábitos, embarazo y dentición). Eso lo captura quien hace la historia clínica.";
+}
 
 /**
  * Edita la ficha. El ORIGEN no se toca aquí: tiene su propia función y su
@@ -655,13 +944,13 @@ export async function updateEduPatient(
   ctx: EduClinicaContext,
   patientId: string,
   input: EduPatientInput,
-  // 🔴 `options` es OBLIGATORIO y `fields` dentro de él también. Con un
-  // default ("all") esta firma fallaría ABIERTO: un llamador que pasara el
-  // `now` en la posición vieja —era el cuarto parámetro hasta esta ola—
-  // caería en `options`, `fields` saldría undefined y el alumno editaría los
-  // nueve campos. Que el compilador lo exija es lo que hace que ese error no
-  // se pueda escribir.
-  options: { fields: EduPatientEditFields },
+  // 🔴 `options` es OBLIGATORIO y `groups` dentro de él también. Con un
+  // default esta firma fallaría ABIERTO: un llamador que pasara el `now` en
+  // la posición vieja —era el cuarto parámetro hasta la ola de la edición—
+  // caería en `options`, `groups` saldría undefined y el alumno editaría
+  // los 31 campos. Que el compilador lo exija es lo que hace que ese error
+  // no se pueda escribir.
+  options: { groups: readonly EduPatientEditFields[] },
   now: Date = new Date(),
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
@@ -675,39 +964,42 @@ export async function updateEduPatient(
   // 🔴 Los campos que quien manda NO puede tocar se rechazan ANTES de
   // consultar nada: un alumno que manda `folio` se entera de que no puede,
   // en vez de guardar a medias.
-  const fields = options.fields;
-  if (fields === "contacto") {
-    // Se miran los NUEVE campos de la ficha y no `Object.keys(input)`: lo
-    // que esta función no lee ya se ignoraba en silencio para todo el mundo
-    // antes de esta ola (`referredByStudentId`, por ejemplo, que tiene su
-    // propio endpoint), y rechazarlo solo para el alumno dejaría al
-    // formulario roto el día que alguien añada una clave suelta al body. Lo
-    // que se cierra es la escalada, que solo puede venir por estos nueve.
-    const prohibidos = EDU_PATIENT_FORM_FIELDS.filter(
-      (k) => input[k] !== undefined && !eduPatientFieldIsContact(k),
-    );
-    if (prohibidos.length > 0) {
-      throw new EduPadronError(
-        "Con tu permiso solo puedes corregir el teléfono y el correo del paciente. El resto de la ficha (folio, nombre, apellidos, sexo, nacimiento, estado y notas de recepción) lo captura recepción.",
-        403,
-      );
-    }
-  }
+  //
+  // Se miran los 31 campos de la ficha y no `Object.keys(input)`: lo que
+  // esta función no lee ya se ignoraba en silencio para todo el mundo antes
+  // de la Ola B (`referredByStudentId`, por ejemplo, que tiene su propio
+  // endpoint), y rechazarlo dejaría el formulario roto el día que alguien
+  // añada una clave suelta al body. Lo que se cierra es la escalada, que
+  // solo puede venir por estos 31.
+  //
+  // ⚠️ `options.groups` es OBLIGATORIO y sin default, por lo mismo que lo
+  // era `fields`: con un default esta firma fallaría ABIERTO — un llamador
+  // que olvidara pasarlo abriría los 31 campos a cualquiera. Que el
+  // compilador lo exija es lo que hace que ese error no se pueda escribir.
+  const grupos = options.groups;
+  const prohibido = EDU_PATIENT_FORM_FIELDS.filter((k) => input[k] !== undefined)
+    .map((k) => eduPatientFieldGroupOf(k))
+    .filter((g): g is EduPatientFieldGroup => g !== null && !grupos.includes(g))[0];
+  if (prohibido) throw new EduPadronError(motivoGrupoCerrado(prohibido), 403);
 
-  // Se traen las cinco columnas que alimentan el índice de búsqueda, no
+  // Se traen las SIETE columnas que alimentan el índice de búsqueda, no
   // solo el id: al editar solo el apellido hay que reescribir el índice
-  // ENTERO, y para eso hacen falta las otras cuatro tal como están hoy. Y
-  // los casos, para poder revalidar el estado (H-28) sin una segunda vuelta
-  // a la base.
+  // ENTERO, y para eso hacen falta las otras seis tal como están hoy. Y los
+  // casos, para poder revalidar el estado (H-28) sin una segunda vuelta a
+  // la base; y el nacimiento y el tutor, para la regla del menor (H-08).
   const current = await prisma.eduPatient.findFirst({
     where: { ...eduPatientScopeWhere({ institutionId, scope, now }), id },
     select: {
       id: true,
       folio: true,
+      curp: true,
       firstName: true,
       lastName: true,
       phone: true,
+      phone2: true,
       email: true,
+      birthDate: true,
+      guardianName: true,
       cases: { select: { status: true } },
     },
   });
@@ -724,7 +1016,77 @@ export async function updateEduPatient(
     notes?: string | null;
     status?: EduPatientStatus;
     searchIndex?: string;
+    updatedById?: string | null;
+
+    // ── Ola B ──────────────────────────────────────────────────────────
+    curp?: string | null;
+    phone2?: string | null;
+    contactPreference?: ReturnType<typeof parseEduContactPreference>;
+    addressStreet?: string | null;
+    addressNeighborhood?: string | null;
+    addressCity?: string | null;
+    addressState?: string | null;
+    addressZip?: string | null;
+    guardianName?: string | null;
+    guardianRelation?: string | null;
+    guardianPhone?: string | null;
+    insuranceProvider?: string | null;
+    insurancePolicy?: string | null;
+    familyHistory?: string | null;
+    personalNonPathologicalHistory?: string | null;
+    habitsTobacco?: ReturnType<typeof parseEduHabitLevel>;
+    habitsAlcohol?: ReturnType<typeof parseEduHabitLevel>;
+    habitsBruxism?: ReturnType<typeof parseEduHabitLevel>;
+    habitsNotes?: string | null;
+    pregnancy?: ReturnType<typeof parseEduPregnancy>;
+    isChild?: boolean;
+    privacyNoticeAcceptedAt?: Date | null;
   } = {};
+
+  /**
+   * ── LOS TRES AYUDANTES DE LA OLA B ─────────────────────────────────
+   *
+   * 🔴 `vacio` DISTINGUE "no vino" DE "vacíalo", y es la mitad de la
+   * distinción NULL / DESCONOCIDO / NINGUNO. `undefined` = la clave no
+   * estaba en el body → la columna no se toca. `null` o `""` = la persona
+   * borró el campo → se escribe null, que en estas columnas significa
+   * "nadie preguntó". Sin esta separación, cualquier PATCH que no
+   * mencionara el embarazo lo borraría.
+   */
+  //
+  // ⚠️ Un texto de SOLO ESPACIOS también es vaciar. Sin el `trim` caía en
+  // `eduOptionalText`, que devuelve null tras recortarlo, y el campo salía
+  // rebotado con «no es un texto válido» — un error donde la persona solo
+  // estaba borrando. No se alcanza desde la pantalla (el diff ya recorta),
+  // sí desde la API.
+  const vacio = (v: unknown) =>
+    v === null || v === "" || (typeof v === "string" && v.trim() === "");
+
+  /** Un texto opcional con su tope, o null si se vació. */
+  function texto(campo: EduPatientFormField, raw: unknown, max: number): string | null {
+    if (vacio(raw)) return null;
+    const v = eduOptionalText(raw, max);
+    if (v === undefined || v === null) {
+      throw new EduPadronError(`El campo «${campo}» no es un texto válido.`);
+    }
+    return v;
+  }
+
+  /**
+   * Un valor de enum, o null si se vació.
+   *
+   * 🔴 REBOTA lo que no reconoce en vez de guardarlo como null. Un parser
+   * que convirtiera la basura en null estaría escribiendo "nadie preguntó"
+   * encima de un dato bueno cada vez que llegara un valor mal escrito — y
+   * en `pregnancy` eso es borrar en silencio la única columna que permite
+   * alertar antes de una radiografía.
+   */
+  function enumo<T>(raw: unknown, parse: (v: unknown) => T | null, que: string): T | null {
+    if (vacio(raw)) return null;
+    const v = parse(raw);
+    if (v === null) throw new EduPadronError(`Ese valor de ${que} no existe.`);
+    return v;
+  }
 
   if (input.folio !== undefined) {
     const folio = normalizeEduFolio(input.folio);
@@ -796,29 +1158,249 @@ export async function updateEduPatient(
     data.status = v;
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // OLA B · LOS 22 CAMPOS DE LA FICHA COMPLETA
+  // ═══════════════════════════════════════════════════════════════════
+
+  // ── Identidad · CURP (NOM-024) ────────────────────────────────────
+  //
+  // 🔴 SE VALIDA EL FORMATO Y SE REBOTA, en vez de guardarlo como venga.
+  // La columna no tiene CHECK a propósito (un CURP malo no puede impedir
+  // registrar a alguien que está en el sillón), pero eso es una decisión
+  // sobre el ALTA, no sobre la corrección: aquí hay una persona
+  // capturándolo del acta y el dedazo se caza en el momento.
+  if (input.curp !== undefined) {
+    if (vacio(input.curp)) data.curp = null;
+    else {
+      const v = normalizeEduCurp(input.curp);
+      if (!v || !eduCurpIsValid(v)) {
+        throw new EduPadronError(`Ese CURP no tiene la forma oficial. ${EDU_CURP_HELP}`);
+      }
+      data.curp = v;
+    }
+  }
+
+  // ── Contacto · el SEGUNDO teléfono ────────────────────────────────
+  //
+  // 🔴 CON LA REGLA ESTRECHA, la misma que `phone` (H-09): son diez
+  // dígitos o nada. Es un teléfono DEL PACIENTE, y en cuanto exista un
+  // recordatorio que lo use tiene que poder entregarse — aceptar aquí lo
+  // que el envío rechaza es exactamente el agujero que H-09 cerró.
+  if (input.phone2 !== undefined) {
+    if (vacio(input.phone2)) data.phone2 = null;
+    else {
+      const v = normalizeEduWaPhone(input.phone2);
+      if (!v) throw new EduPadronError(`Ese segundo teléfono no sirve. ${EDU_PHONE_HELP}`);
+      data.phone2 = v;
+    }
+  }
+
+  if (input.contactPreference !== undefined) {
+    data.contactPreference = enumo(
+      input.contactPreference,
+      parseEduContactPreference,
+      "preferencia de contacto",
+    );
+  }
+
+  // ── Domicilio ──────────────────────────────────────────────────────
+  if (input.addressStreet !== undefined) {
+    data.addressStreet = texto("addressStreet", input.addressStreet, 200);
+  }
+  if (input.addressNeighborhood !== undefined) {
+    data.addressNeighborhood = texto("addressNeighborhood", input.addressNeighborhood, 120);
+  }
+  if (input.addressCity !== undefined) {
+    data.addressCity = texto("addressCity", input.addressCity, 120);
+  }
+  if (input.addressState !== undefined) {
+    data.addressState = texto("addressState", input.addressState, 120);
+  }
+  if (input.addressZip !== undefined) {
+    if (vacio(input.addressZip)) data.addressZip = null;
+    else {
+      // Cinco dígitos: el CP mexicano. Se aprieta porque es el único campo
+      // del domicilio con el que una escuela agrupa ("¿de dónde vienen
+      // nuestros pacientes?"), y una columna de agrupar con "col. centro"
+      // dentro no agrupa nada.
+      const v = String(input.addressZip).trim();
+      if (!/^\d{5}$/.test(v)) {
+        throw new EduPadronError("El código postal son cinco dígitos.");
+      }
+      data.addressZip = v;
+    }
+  }
+
+  // ── Tutor / representante legal (H-08) ─────────────────────────────
+  if (input.guardianName !== undefined) {
+    data.guardianName = texto("guardianName", input.guardianName, 160);
+  }
+  if (input.guardianRelation !== undefined) {
+    data.guardianRelation = texto("guardianRelation", input.guardianRelation, 60);
+  }
+  if (input.guardianPhone !== undefined) {
+    if (vacio(input.guardianPhone)) data.guardianPhone = null;
+    else {
+      // 🔴 REGLA ANCHA, y es deliberado. Al tutor se le LLAMA: un número de
+      // casa, uno con extensión o uno de otro país siguen sirviendo para
+      // eso. Es la misma decisión —y la misma razón escrita— que ya tomó
+      // este archivo con el contacto de emergencia de los antecedentes;
+      // apretarlo a diez dígitos habría bloqueado guardar al tutor, que es
+      // justo el dato sin el que un menor no puede firmar nada.
+      const v = normalizeEduPhone(input.guardianPhone);
+      if (!v) throw new EduPadronError("Ese teléfono del tutor no tiene números.");
+      data.guardianPhone = v;
+    }
+  }
+
+  // ── Seguro o convenio ──────────────────────────────────────────────
+  if (input.insuranceProvider !== undefined) {
+    data.insuranceProvider = texto("insuranceProvider", input.insuranceProvider, 120);
+  }
+  if (input.insurancePolicy !== undefined) {
+    data.insurancePolicy = texto("insurancePolicy", input.insurancePolicy, 60);
+  }
+
+  // ── NOM-004 · los dos antecedentes que faltaban ────────────────────
+  if (input.familyHistory !== undefined) {
+    data.familyHistory = texto("familyHistory", input.familyHistory, 2000);
+  }
+  if (input.personalNonPathologicalHistory !== undefined) {
+    data.personalNonPathologicalHistory = texto(
+      "personalNonPathologicalHistory",
+      input.personalNonPathologicalHistory,
+      2000,
+    );
+  }
+
+  // ── Hábitos ────────────────────────────────────────────────────────
+  if (input.habitsTobacco !== undefined) {
+    data.habitsTobacco = enumo(input.habitsTobacco, parseEduHabitLevel, "hábito de tabaco");
+  }
+  if (input.habitsAlcohol !== undefined) {
+    data.habitsAlcohol = enumo(input.habitsAlcohol, parseEduHabitLevel, "hábito de alcohol");
+  }
+  if (input.habitsBruxism !== undefined) {
+    data.habitsBruxism = enumo(input.habitsBruxism, parseEduHabitLevel, "bruxismo");
+  }
+  if (input.habitsNotes !== undefined) {
+    data.habitsNotes = texto("habitsNotes", input.habitsNotes, 500);
+  }
+
+  // ── Embarazo / lactancia ───────────────────────────────────────────
+  if (input.pregnancy !== undefined) {
+    data.pregnancy = enumo(input.pregnancy, parseEduPregnancy, "embarazo o lactancia");
+  }
+
+  // ── Dentición temporal ─────────────────────────────────────────────
+  //
+  // Columna NOT NULL con default false: no tiene "sin registrar", tiene un
+  // false. Se acepta el booleano y la cadena, porque el formulario manda
+  // "true"/"false" (todos sus valores son cadenas) y un cliente que use la
+  // API manda un booleano de verdad.
+  if (input.isChild !== undefined) {
+    const v = input.isChild;
+    if (v === true || v === "true") data.isChild = true;
+    else if (v === false || v === "false") data.isChild = false;
+    else throw new EduPadronError("La dentición temporal se marca o se desmarca, nada más.");
+  }
+
+  // ── Aviso de privacidad (LFPDPPP) ──────────────────────────────────
+  //
+  // Fecha y no booleano porque lo que hay que poder contestar es
+  // "¿cuándo?", y un `true` sin fecha no es constancia de nada.
+  if (input.privacyNoticeAcceptedAt !== undefined) {
+    if (vacio(input.privacyNoticeAcceptedAt)) data.privacyNoticeAcceptedAt = null;
+    else {
+      const v = parseEduCalendarDate(input.privacyNoticeAcceptedAt);
+      if (!v) {
+        throw new EduPadronError("La fecha del aviso de privacidad no es una fecha (AAAA-MM-DD).");
+      }
+      if (v.getTime() > now.getTime()) {
+        throw new EduPadronError("El aviso de privacidad no se puede aceptar en el futuro.");
+      }
+      data.privacyNoticeAcceptedAt = v;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 H-08 · UN MENOR TIENE QUE TENER TUTOR — comprobado al GUARDAR.
+  //
+  // Se comprueba con la fecha y el tutor RESULTANTES (los del body si
+  // vienen, los de la fila si no): poner un nacimiento de 2015 sobre una
+  // ficha que figuraba adulta tiene que rebotar en ese mismo acto, no en
+  // el siguiente.
+  //
+  // 🔴 Y SOLO CUANDO EL GUARDADO TOCA EL ASUNTO. En la base hay menores
+  // registrados antes de que existiera la columna del tutor; si esto
+  // bloqueara CUALQUIER guardado de un menor sin tutor, recepción no
+  // podría corregirle un dedazo en el apellido —ni el alumno el teléfono—
+  // hasta rellenar un dato que a lo mejor no tiene delante. Es la misma
+  // regla, y por la misma razón, que la del estado contra los casos
+  // (H-28): no se atrapa a nadie detrás de un dato que no está tocando.
+  //
+  // ⚠️ Sin fecha de nacimiento NO se bloquea nada: no se puede afirmar que
+  // alguien sea menor. La pantalla lo advierte, igual que hace el servidor
+  // de los consentimientos.
+  // ═══════════════════════════════════════════════════════════════════
+  const tocaNacimiento = data.birthDate !== undefined;
+  const borraTutor = data.guardianName !== undefined && !data.guardianName;
+  if (tocaNacimiento || borraTutor) {
+    const nacimiento = tocaNacimiento ? data.birthDate : current.birthDate;
+    const tutor = data.guardianName !== undefined ? data.guardianName : current.guardianName;
+    const choque = eduPatientTutorConflict({
+      ageYears: eduAgeYears(nacimiento ?? null, now),
+      guardianName: tutor ?? null,
+    });
+    if (choque) throw new EduPadronError(choque, 409);
+  }
+
   // 🔴 update con `data` vacío no falla: escribe nada y devuelve "ok". El
   // endpoint parecería funcionar y no cambiaría absolutamente nada, que es
   // la clase de bug que se busca durante una tarde entera.
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
 
-  // 🔴 El índice se REESCRIBE cuando cambia cualquiera de las cinco
-  // columnas que lo alimentan, y con los valores nuevos MEZCLADOS sobre los
+  // 🔴 El índice se REESCRIBE cuando cambia cualquiera de las SIETE
+  // columnas que lo alimentan —desde la Ola B, el CURP y el segundo
+  // teléfono también—, y con los valores nuevos MEZCLADOS sobre los
   // actuales. Si se reconstruyera solo con `data`, corregir el apellido
   // borraría del índice el folio y el teléfono, y el paciente dejaría de
   // encontrarse por ellos. Va DESPUÉS del check de "data vacío" para que un
   // PATCH sin cambios siga siendo un error y no una escritura fantasma.
-  const tocaIndice = ["folio", "firstName", "lastName", "phone", "email"].some(
+  //
+  // ⚠️ SIN BACKFILL, y es deliberado (el encargo prohíbe SQL nuevo): un
+  // paciente viejo empieza a encontrarse por su CURP y su segundo teléfono
+  // la primera vez que alguien guarda su ficha — que es exactamente cuando
+  // esos dos datos se capturan, porque hasta esta ola no había dónde
+  // escribirlos.
+  const tocaIndice = ["folio", "curp", "firstName", "lastName", "phone", "phone2", "email"].some(
     (k) => k in data,
   );
   if (tocaIndice) {
     data.searchIndex = eduPatientSearchIndex({
       folio: data.folio ?? current.folio,
+      curp: data.curp !== undefined ? data.curp : current.curp,
       firstName: data.firstName ?? current.firstName,
       lastName: data.lastName ?? current.lastName,
       phone: data.phone !== undefined ? data.phone : current.phone,
+      phone2: data.phone2 !== undefined ? data.phone2 : current.phone2,
       email: data.email !== undefined ? data.email : current.email,
     });
   }
+
+  // 🔴 H-12b · QUIÉN CORRIGIÓ LA FICHA. `updatedAt` existía desde el primer
+  // día (lo escribe Prisma con @updatedAt) y no se pintaba en ninguna
+  // pantalla; y sin el nombre al lado tampoco servía de mucho. Se estampa
+  // en la MISMA escritura, siempre, y no como un campo que el cliente
+  // pueda mandar: un rastro de auditoría que el navegador puede elegir no
+  // es un rastro.
+  //
+  // ⚠️ Se escribe también en `updateEduPatientAntecedentes` y en
+  // `setEduPatientOrigin`, que son las otras dos escrituras de esta fila.
+  // Si solo estuviera aquí, un guardado de antecedentes movería `updatedAt`
+  // y dejaría `updatedById` apuntando al de la corrección anterior — y la
+  // ficha diría "lo corrigió Fulano" con la fecha de lo que hizo Mengana.
+  data.updatedById = ctx.eduUserId ?? null;
 
   await prisma.eduPatient.update({ where: { id: current.id }, data });
   return { id: current.id };
@@ -861,6 +1443,10 @@ export async function setEduPatientOrigin(
       // sin dueño.
       originSetById: studentId ? ctx.eduUserId : null,
       originSetAt: studentId ? now : null,
+      // H-12b · esto TAMBIÉN es tocar la ficha. `updatedAt` se mueve solo
+      // (Prisma, @updatedAt); sin esta línea quedaría con el nombre de
+      // quien la corrigió la vez anterior, que es peor que no tener nombre.
+      updatedById: ctx.eduUserId ?? null,
     },
   });
   return { id };
@@ -920,6 +1506,9 @@ export async function updateEduPatientAntecedentes(
       ...parsed.data,
       historyRecordedAt: now,
       historyRecordedById: ctx.eduUserId,
+      // H-12b · lo mismo que arriba: `updatedAt` se mueve con esta
+      // escritura, así que el "quién" tiene que moverse con ella.
+      updatedById: ctx.eduUserId ?? null,
     },
   });
   return { id: current.id };

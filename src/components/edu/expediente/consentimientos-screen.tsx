@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, Copy, FilePlus2, FileText, PenLine } from "lucide-react";
+import { Ban, Check, Copy, FileDown, FilePlus2, FileText, PenLine } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import { SignaturePad } from "@/components/ui/signature-pad";
@@ -56,6 +56,27 @@ export interface EduConsentimientosScreenProps {
   canRevoke: boolean;
   /** El nombre del docente de cada caso, para la vista previa. */
   supervisorPorCaso: Record<string, string | null>;
+  /**
+   * ═══════════════════════════════════════════════════════════════════
+   * H-08 · EL TUTOR, TRAÍDO DE LA FICHA DEL PACIENTE.
+   *
+   * El representante legal vivía en CADA carta y en ningún sitio más: un
+   * niño de nueve años con cuatro cartas obligaba a teclear cuatro veces a
+   * su madre, y bastaba un dedazo en la tercera para que las cuatro dijeran
+   * cosas distintas sobre quién responde por él. Desde la Ola B el tutor
+   * vive en el paciente y aquí llega PRECARGADO.
+   *
+   * ⚠️ SIGUE SIENDO EDITABLE en la carta, a propósito: quien firma un
+   * consentimiento concreto puede no ser el tutor habitual (el padre está
+   * de viaje y viene la abuela con permiso). Lo que se guarda en la carta
+   * es quien firmó ESA vez; lo de la ficha es el valor por omisión.
+   *
+   * ⚠️ Y el servidor sigue EXIGIÉNDOLO cuando el paciente es menor. Esto
+   * es comodidad, no es el candado.
+   * ═══════════════════════════════════════════════════════════════════
+   */
+  guardianName: string | null;
+  guardianRelation: string | null;
 }
 
 export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
@@ -269,6 +290,27 @@ export function EduConsentimientosScreen(props: EduConsentimientosScreenProps) {
                 Ver la carta firmada
               </button>
             )}
+            {/* 🔴 H-12 · EL PDF, con las firmas dentro. El permiso de caja
+                sobre esta pestaña está justificado en que «la carta se
+                imprime y se entrega en el mostrador», y hasta ahora no
+                había nada que imprimir. Es un <a> y no un fetch: el
+                navegador lo abre en una pestaña con sus cookies, y de ahí
+                se imprime o se guarda — que es lo que hace recepción de pie
+                con el paciente delante.
+
+                Sale con la MISMA condición que el texto (`c.content`), que
+                es la del gate del servidor: firmada o revocada. */}
+            {c.content && (
+              <a
+                className="edu-btn edu-btn--ghost edu-btn--sm"
+                href={`/api/instituto/consentimientos/${c.id}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <FileDown size={15} />
+                PDF
+              </a>
+            )}
             {c.puedeContrafirmarComoAlumno && (
               <button
                 type="button"
@@ -361,6 +403,8 @@ function CartaNueva({
   timezone,
   casosAbiertos,
   supervisorPorCaso,
+  guardianName,
+  guardianRelation,
   onClose,
   onDone,
 }: EduConsentimientosScreenProps & {
@@ -371,8 +415,11 @@ function CartaNueva({
   const plantillas = useMemo(() => eduConsentTemplates(), []);
   const [caseId, setCaseId] = useState(casosAbiertos.length === 1 ? casosAbiertos[0].id : "");
   const [procedureKey, setProcedureKey] = useState(plantillas[0]?.key ?? "");
-  const [signerName, setSignerName] = useState("");
-  const [signerRelation, setSignerRelation] = useState("");
+  // 🔴 H-08 · precargados desde la ficha. `useState` con valor inicial y no
+  // un efecto: el efecto pisaría lo que la persona ya hubiera tecleado en
+  // cuanto el componente volviera a renderizarse por cualquier otra razón.
+  const [signerName, setSignerName] = useState(guardianName ?? "");
+  const [signerRelation, setSignerRelation] = useState(guardianRelation ?? "");
   const [editado, setEditado] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -622,6 +669,9 @@ function CartaNueva({
         <span className="edu-field__hint">
           Menor de edad o paciente sin capacidad de decidir (NOM-004 10.1.1.3). Al llenarlo, el texto
           de la carta cambia solo.
+          {guardianName
+            ? " Viene precargado del tutor de la ficha; puedes cambiarlo si hoy firma otra persona."
+            : " No hay tutor en la ficha del paciente: si lo capturas en la pestaña Datos, la próxima carta lo trae solo."}
         </span>
       </div>
 
@@ -723,9 +773,10 @@ function Firma({
  * está justificado en que "la carta se imprime y se entrega en el
  * mostrador", y no había nada que imprimir.
  *
- * ⚠️ Sin PDF todavía, a propósito: el documento imprimible con las firmas
- * incrustadas es otra ola. Lo que hay es la hoja, y se imprime con el
- * navegador — que es infinitamente más de lo que había.
+ * ⚠️ Y desde la Ola B hay PDF: el mismo texto, las firmas manuscritas
+ * incrustadas y el pie de integridad, por
+ * `GET /api/instituto/consentimientos/[id]/pdf`. Esta hoja sigue siendo
+ * para LEER en pantalla; el PDF es para entregar.
  * ═══════════════════════════════════════════════════════════════════════
  */
 function CartaFirmada({ row, onClose }: { row: EduConsentRow; onClose: () => void }) {
@@ -811,8 +862,17 @@ function CartaFirmada({ row, onClose }: { row: EduConsentRow; onClose: () => voi
 
         <p className="edu-note">
           Esto es el texto guardado, palabra por palabra: lo mismo que se digirió para calcular la
-          huella. Para dárselo al paciente, imprime esta hoja desde el navegador — el PDF con las
-          firmas incrustadas todavía no existe.
+          huella. Para dárselo al paciente,{" "}
+          <a
+            className="edu-link"
+            href={`/api/instituto/consentimientos/${row.id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            descarga el PDF
+          </a>
+          : trae este mismo texto, las firmas manuscritas de todos los que firmaron y el pie de
+          integridad.
         </p>
       </div>
     </EduModal>

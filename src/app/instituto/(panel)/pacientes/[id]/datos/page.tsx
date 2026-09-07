@@ -12,6 +12,16 @@ import { getEduPatientTaxProfile } from "@/lib/edu/facturacion";
 import { eduDescribeRegimen, eduDescribeUsoCfdi } from "@/lib/edu/facturacion-core";
 import { eduVisibility, eduScopeIsEmpty } from "@/lib/edu/visibility";
 import { formatEduDate } from "@/lib/edu/pacientes-core";
+// H-12b · `updatedAt` es un INSTANTE, no una fecha de calendario: se pinta
+// con hora y en la zona del INSTITUTO, con los mismos helpers que usa el
+// resto del vertical para los sellos de tiempo (la agenda, las cartas, las
+// recetas). `formatEduDate` es para fechas de calendario y formatea en UTC.
+import {
+  eduFormatDayShort,
+  eduFormatTime,
+  eduSafeTimeZone,
+  eduUtcToZoned,
+} from "@/lib/edu/agenda-core";
 import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { EduAntecedentesCard } from "@/components/edu/expediente/antecedentes-card";
 import { EduPacienteDatosCard } from "@/components/edu/clinica/paciente-datos-form";
@@ -72,15 +82,27 @@ export default async function PacienteDatosPage({ params }: { params: { id: stri
   const p = await getEduPatient(ctx, params.id);
   if (!p) notFound();
 
-  // 🔴 DOS LLAVES (H-02), resueltas en el punto único de permissions.ts:
-  // `manage` abre los nueve campos y `contacto` abre teléfono y correo
-  // también para el alumno y el docente. El endpoint las vuelve a exigir —
-  // esto solo decide qué se pinta deshabilitado.
-  const { manage: canManage, contacto: canContacto } = eduPatientEditAbilities(permUser);
+  // 🔴 DOS LLAVES Y TRES GRUPOS (H-02 + Ola B), resueltos en el punto único
+  // de permissions.ts: `manage` abre la identidad y el papeleo (incluidos
+  // el domicilio, el tutor, el seguro y el aviso de privacidad), `contacto`
+  // abre los dos teléfonos, el correo y la preferencia, y `clinico` abre
+  // los NOM-004, los hábitos, el embarazo y la dentición — la MISMA llave
+  // que ya abría los antecedentes de aquí abajo. El endpoint las vuelve a
+  // exigir: esto solo decide qué se pinta deshabilitado, y con qué motivo.
+  const {
+    manage: canManage,
+    contacto: canContacto,
+    clinico: canClinico,
+  } = eduPatientEditAbilities(permUser);
   // Ola de Casos: los antecedentes los captura recepción (pacientes.manage)
   // Y quien hace la historia clínica (expediente.write) — dos llaves, una
   // puerta (el endpoint /antecedentes comprueba las mismas dos).
-  const canAntecedentes = canManage || hasEduPermission(permUser, "expediente.write");
+  //
+  // ⚠️ Es EXACTAMENTE la misma condición que `canClinico`, y por eso sale
+  // del mismo sitio en vez de resolverse otra vez aquí: los campos NOM-004,
+  // los hábitos, el embarazo y la dentición del formulario de abajo son la
+  // continuación de este mismo bloque, partido por una norma.
+  const canAntecedentes = canClinico;
 
   // Los datos fiscales se leen SOLO para quien ve el dinero. La doble
   // cerradura del vertical: el permiso (facturacion.view) y el ALCANCE, que
@@ -91,6 +113,19 @@ export default async function PacienteDatosPage({ params }: { params: { id: stri
     hasEduPermission(permUser, "facturacion.view") &&
     !eduScopeIsEmpty(eduVisibility(ctx, "charges"));
   const fiscal = veDinero ? await getEduPatientTaxProfile(ctx, p.id) : null;
+
+  // 🔴 H-12b · el CUÁNDO se formatea AQUÍ, en el servidor, con la zona del
+  // instituto. En el navegador saldría en la zona de quien mira —dos
+  // cadenas distintas para el mismo dato entre el render del servidor y el
+  // del cliente, que es un aviso de hidratación— y en UTC saldría con la
+  // fecha del día siguiente para cualquier corrección de después de las
+  // seis de la tarde en México.
+  const zona = eduSafeTimeZone(ctx.institution.timezone);
+  const tocada = new Date(p.updatedAt);
+  const rastroLabel = `${eduFormatDayShort(eduUtcToZoned(tocada, zona).dayISO)} ${eduFormatTime(
+    tocada,
+    zona,
+  )}`;
 
   return (
     <div className="edu-stack">
@@ -103,12 +138,14 @@ export default async function PacienteDatosPage({ params }: { params: { id: stri
         canEdit={canAntecedentes}
       />
 
-      {/* Los NUEVE campos. El MISMO componente que monta el modal de la
-          lista de pacientes: una sola definición, dos montajes. */}
+      {/* Los 31 campos. El MISMO componente que monta el modal de la lista
+          de pacientes: una sola definición, dos montajes. */}
       <EduPacienteDatosCard
         row={p}
+        rastroLabel={rastroLabel}
         canManage={canManage}
         canContacto={canContacto}
+        canClinico={canClinico}
         idPrefix="edu-datos"
       />
 
