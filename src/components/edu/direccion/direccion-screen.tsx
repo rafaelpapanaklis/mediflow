@@ -800,81 +800,89 @@ function BloqueEspecialidades({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--especialidades">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Especialidad</span>
-            <span>Estudiantes</span>
-            <span>En clínica hoy</span>
-            <span>Pacientes</span>
-            <span>Cobrado</span>
-            <span>Avance del ciclo</span>
-            <span>Estado</span>
-          </div>
-          {panel.especialidades.map((e) => (
-            <button
-              key={e.programId}
-              type="button"
-              className="edu-dir-fila-click"
-              onClick={() => irA({ especialidad: e.programId })}
-              title={`Filtrar el tablero a ${e.programName}`}
-            >
-              <div className="edu-row">
-                <span className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Especialidad</span>
-                  <span className="edu-cell__value edu-cell__value--strong">{e.programName}</span>
-                </span>
-                <span className="edu-cell">
-                  <span className="edu-cell__label">Estudiantes</span>
-                  <span className="edu-cell__value">{e.alumnos}</span>
-                </span>
-                <span className="edu-cell">
-                  <span className="edu-cell__label">En clínica hoy</span>
-                  <span className="edu-cell__value">{e.enClinicaHoy}</span>
-                </span>
-                <span className="edu-cell">
-                  <span className="edu-cell__label">Pacientes</span>
-                  <span className="edu-cell__value">{e.pacientes}</span>
-                </span>
-                <span className="edu-cell">
-                  <span className="edu-cell__label">Cobrado</span>
-                  <span className="edu-cell__value">{eduMoney(e.cobradoCents)}</span>
-                </span>
-                <span className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Avance del ciclo</span>
-                  <span className="edu-dir-avance">
-                    <span className="edu-progreso">
-                      <span
-                        className="edu-progreso__bar"
-                        style={{ width: `${Math.round((e.avance ?? 0) * 100)}%` }}
-                      />
-                      {e.esperado !== null && (
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--especialidades">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Especialidad</span>
+              <span>Estudiantes</span>
+              <span>En clínica hoy</span>
+              <span>Pacientes</span>
+              <span>Cobrado</span>
+              <span>Avance del ciclo</span>
+              <span>Estado</span>
+            </div>
+            {panel.especialidades.map((e) => (
+              <button
+                key={e.programId}
+                type="button"
+                className="edu-dir-fila-click"
+                onClick={() => irA({ especialidad: e.programId })}
+                title={`Filtrar el tablero a ${e.programName}`}
+              >
+                <div className="edu-row">
+                  <span className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Especialidad</span>
+                    <span className="edu-cell__value edu-cell__value--strong">{e.programName}</span>
+                  </span>
+                  <span className="edu-cell">
+                    <span className="edu-cell__label">Estudiantes</span>
+                    <span className="edu-cell__value">{e.alumnos}</span>
+                  </span>
+                  <span className="edu-cell">
+                    <span className="edu-cell__label">En clínica hoy</span>
+                    <span className="edu-cell__value">{e.enClinicaHoy}</span>
+                  </span>
+                  <span className="edu-cell">
+                    <span className="edu-cell__label">Pacientes</span>
+                    <span className="edu-cell__value">{e.pacientes}</span>
+                  </span>
+                  <span className="edu-cell">
+                    <span className="edu-cell__label">Cobrado</span>
+                    <span className="edu-cell__value">{eduMoney(e.cobradoCents)}</span>
+                  </span>
+                  <span className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Avance del ciclo</span>
+                    <span className="edu-dir-avance">
+                      <span className="edu-progreso">
                         <span
-                          className="edu-progreso__meta"
-                          style={{ left: `${Math.round(e.esperado * 100)}%` }}
-                          aria-hidden="true"
+                          className="edu-progreso__bar"
+                          style={{ width: `${Math.round((e.avance ?? 0) * 100)}%` }}
                         />
-                      )}
-                    </span>
-                    <span className="edu-dir-avance__cifra">
-                      {eduDirPctLabel(e.avance)}
-                      {e.esperado !== null ? ` · se espera ${eduDirPctLabel(e.esperado)}` : ""}
+                        {e.esperado !== null && (
+                          <span
+                            className="edu-progreso__meta"
+                            style={{ left: `${Math.round(e.esperado * 100)}%` }}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </span>
+                      <span className="edu-dir-avance__cifra">
+                        {eduDirPctLabel(e.avance)}
+                        {e.esperado !== null ? ` · se espera ${eduDirPctLabel(e.esperado)}` : ""}
+                      </span>
                     </span>
                   </span>
-                </span>
-                <span className="edu-cell">
-                  <span className="edu-cell__label">Estado</span>
-                  <span
-                    className={`edu-tag ${EDU_DIR_SEMAFORO_TAG[eduDirSemaforoDeAtraso(e.estado)]}`}
-                  >
-                    {eduDirAtrasoLabel(e.estado)}
+                  <span className="edu-cell">
+                    <span className="edu-cell__label">Estado</span>
+                    <span
+                      className={`edu-tag ${EDU_DIR_SEMAFORO_TAG[eduDirSemaforoDeAtraso(e.estado)]}`}
+                    >
+                      {eduDirAtrasoLabel(e.estado)}
+                    </span>
                   </span>
-                </span>
-                <span className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__sub">{e.motivo}</span>
-                </span>
-              </div>
-            </button>
-          ))}
+                  <span className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__sub">{e.motivo}</span>
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

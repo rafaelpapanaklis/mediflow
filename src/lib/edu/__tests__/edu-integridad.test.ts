@@ -692,9 +692,20 @@ test("H-18 · mirar la nota de un diente no la reatribuye — los DOS cinturones
 
   // 3 · Y el servidor sigue refrescando el autor en cada guardado — que es
   //     justo lo que hace que los dos cinturones importen.
+  //
+  //     Desde la Ola B ese cuerpo no está escrito a mano en cada escritura:
+  //     lo arma `eduOdontogramReviveData`, que es el MISMO payload que usan
+  //     el hallazgo y la nota (y el que además limpia la baja). Se busca la
+  //     llamada, no el literal.
+  const servidorOdo = fuente(ODONTOGRAMA);
   assert.ok(
-    fuente(ODONTOGRAMA).includes("recordedById: ctx.eduUserId"),
+    servidorOdo.includes("eduOdontogramReviveData(autor)"),
     "si el servidor dejara de reatribuir, esta prueba estaría vigilando algo que ya no pasa",
+  );
+  assert.match(
+    fuente("src/lib/edu/odontograma-core.ts"),
+    /export function eduOdontogramReviveData[\s\S]*?recordedById: a\.userId,\s*\n\s*recordedAt: a\.at,/,
+    "el payload de remarcar dejó de refrescar quién y cuándo",
   );
 });
 
@@ -721,17 +732,36 @@ test("H-22 · «Limpiar diente» es UNA escritura, y se lleva la nota", () => {
   const src = fuente(ODONTOGRAMA);
   const cuerpo = cuerpoDe(src, "clearEduOdontogramTooth");
 
-  // Un solo deleteMany por diente: en Postgres es una sentencia y por tanto
+  // UNA sola escritura por diente: en Postgres es una sentencia y por tanto
   // atómica. Con N peticiones, un fallo a media tanda dejaba la pantalla
-  // repintando hallazgos que la base ya había borrado.
+  // repintando hallazgos que la base ya había quitado.
   assert.equal(
-    (cuerpo.match(/deleteMany\(/g) ?? []).length,
+    (cuerpo.match(/updateMany\(/g) ?? []).length,
     1,
     "limpiar un diente tiene que ser UNA escritura",
   );
+  // 🔴 Y desde la Ola B (H-17) esa escritura NO BORRA: es una baja lógica
+  // con autor. Era la escritura más destructiva del vertical — un clic y el
+  // diente entero desaparecía de la tabla, con lo que hubiera marcado otra
+  // persona dentro.
+  assert.equal(
+    (cuerpo.match(/deleteMany\(/g) ?? []).length,
+    0,
+    "«Limpiar diente» volvió a BORRAR filas: tiene que ser una baja lógica",
+  );
+  assert.ok(
+    cuerpo.includes("eduOdontogramBajaData({ userId: ctx.eduUserId, at: now })"),
+    "la baja del diente tiene que llevar la firma de quien la hizo",
+  );
   // El `where` NO lleva `condition` ni `surface`: por eso se lleva también
-  // la nota, que vive en la misma tabla con la key reservada.
-  assert.match(cuerpo, /where: \{ institutionId, patientId: pid, tooth \}/, "el where cambió");
+  // la nota, que vive en la misma tabla con la key reservada. Y sí lleva
+  // `deletedAt: null`, para que limpiar dos veces no reescriba la firma de
+  // quien lo limpió de verdad.
+  assert.match(
+    cuerpo,
+    /where: \{ institutionId, patientId: pid, tooth, deletedAt: null \}/,
+    "el where cambió",
+  );
   assert.ok(cuerpo.includes("requireClinicalPatient("), "falta la puerta de pertenencia");
 
   // La pantalla manda una sola petición y vacía la nota en local.

@@ -279,12 +279,135 @@ export interface EduOdontogramEntryRow {
   recordedByName: string;
   recordedAt: string;
   recordedLabel: string;
+
+  /**
+   * ── Ola B · EL RASTRO (H-17) ────────────────────────────────────────
+   *
+   * `deletedAt` en NULL = el hallazgo está VIVO y se pinta. Con fecha = lo
+   * quitaron, y entonces la fila sigue existiendo para contestar quién lo
+   * quitó y cuándo. El dibujo solo recibe las vivas; el historial recibe
+   * las dos.
+   */
+  deletedAt: string | null;
+  deletedById: string | null;
+  deletedByName: string | null;
+  deletedLabel: string | null;
+
+  /**
+   * DESDE CUÁNDO ESTÁ MARCADO ESTE DIENTE.
+   *
+   * 🔴 No es `recordedAt`, y la diferencia es justo la pregunta clínica:
+   * `recordedAt` se PISA cada vez que alguien remarca (si un docente
+   * reconfirma lo del alumno, el expediente tiene que decir que lo
+   * reconfirmó él). `firstRecordedAt` sobrevive a ese ciclo y también a
+   * quitar-y-volver-a-marcar, porque el índice único de cinco columnas
+   * hace que remarcar REVIVA la misma fila en vez de crear otra.
+   */
+  firstRecordedAt: string;
+  firstRecordedLabel: string;
+}
+
+/**
+ * Las filas VIVAS de un historial. El dibujo se pinta con éstas y solo con
+ * éstas.
+ *
+ * Existe como función y no como un `.filter()` suelto en cada pantalla por
+ * lo de siempre: un recorte repetido a mano es un recorte que la tercera
+ * pantalla se olvida de copiar, y aquí olvidarlo significa pintar en la
+ * boca de alguien un hallazgo que se quitó.
+ */
+export function eduOdontogramLiveEntries(
+  entries: EduOdontogramEntryRow[],
+): EduOdontogramEntryRow[] {
+  return (entries ?? []).filter((e) => e && e.deletedAt === null);
+}
+
+/**
+ * Con qué dentición ABRE el odontograma.
+ *
+ * `isChild` lo guarda la ficha del paciente (Ola B). Aquí solo se LEE: un
+ * paciente con dentición temporal abre en los cuadrantes 5-8 en vez de
+ * obligar a quien atiende a cambiarlo a mano cada vez que abre la pantalla.
+ * Se puede cambiar igual — es el punto de partida, no un candado.
+ */
+export function eduOdontogramDefaultDentition(isChild: boolean): "permanent" | "primary" {
+  return isChild ? "primary" : "permanent";
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 4b · LAS TRES ESCRITURAS, COMO DATO
+//
+// 🔴 POR QUÉ VIVEN AQUÍ Y NO PEGADAS AL `prisma.` QUE LAS USA.
+//
+// El índice único `edu_odontogram_hallazgo_key` es de CINCO columnas y NO
+// es parcial: dejarlo parcial (`WHERE "deletedAt" IS NULL`) habría exigido
+// un DROP INDEX, y en esta ola no se borra nada. La consecuencia manda
+// sobre todo lo demás: una fila dada de baja SIGUE OCUPANDO su clave, así
+// que remarcar ese hallazgo tiene que REVIVIR esa misma fila. Insertar una
+// segunda choca contra el índice y la escritura falla.
+//
+// Los tres cuerpos están aquí, como dato puro, por dos razones:
+//   · los usan DOS caminos (el hallazgo y la nota del diente), y dos
+//     copias del payload de revivir es como se llega a que una de las dos
+//     se olvide de limpiar `deletedById`;
+//   · una prueba puede aplicarlos sobre una tabla de mentira y comprobar
+//     el ciclo completo —marcar, quitar, volver a marcar— sin Postgres.
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduOdontogramAuthor {
+  /** Quien firma la escritura. Sale de la SESIÓN, nunca del cliente. */
+  userId: string;
+  at: Date;
+}
+
+/**
+ * La fila NUEVA. `firstRecordedAt` se sella aquí y ya no se vuelve a
+ * escribir nunca: es el primer marcaje clínico.
+ */
+export function eduOdontogramCreateData(a: EduOdontogramAuthor) {
+  return {
+    recordedById: a.userId,
+    recordedAt: a.at,
+    firstRecordedAt: a.at,
+    deletedAt: null as Date | null,
+    deletedById: null as string | null,
+  };
+}
+
+/**
+ * REMARCAR una fila que ya existe — esté viva o dada de baja.
+ *
+ * Refresca quién y cuándo (un docente que reconfirma queda como autor) y
+ * LIMPIA la baja: eso es "revivir". `firstRecordedAt` NO aparece en este
+ * objeto, y su ausencia es la regla entera: si se escribiera, quitar y
+ * volver a marcar borraría la única respuesta que queda a "¿desde cuándo
+ * está marcado este diente?".
+ */
+export function eduOdontogramReviveData(a: EduOdontogramAuthor) {
+  return {
+    recordedById: a.userId,
+    recordedAt: a.at,
+    deletedAt: null as Date | null,
+    deletedById: null as string | null,
+  };
+}
+
+/** LA BAJA LÓGICA: con autor, siempre. Un hallazgo que desaparece sin
+ *  firma no contesta "¿quién pasó la goma sobre lo que yo marqué?". */
+export function eduOdontogramBajaData(a: EduOdontogramAuthor) {
+  return { deletedAt: a.at, deletedById: a.userId };
 }
 
 export function eduEntriesToRecords(entries: EduOdontogramEntryRow[]): Records {
   const records: Records = {};
   for (const e of entries) {
     if (!eduIsValidFdi(e.tooth)) continue;
+    // 🔴 Un hallazgo DADO DE BAJA no se dibuja, y el recorte va AQUÍ
+    // además de en el `where` de la consulta. Son dos redes y hacen falta
+    // las dos: al historial le llegan las filas completas —para eso
+    // existe— y basta con que una pantalla le pase esa misma lista al
+    // dibujo para repintar en la boca de alguien lo que se quitó.
+    if (e.deletedAt) continue;
     if (!records[e.tooth]) records[e.tooth] = { surfaces: {}, tooth: [] };
     const rec: ToothRecord = records[e.tooth];
 
@@ -313,12 +436,17 @@ export interface EduOdontogramSummary {
  *
  *  ⚠️ Las notas por diente NO cuentan como hallazgo, que es lo que a
  *  cualquiera se le olvida al contar filas de la tabla: la nota vive en la
- *  misma tabla con una key reservada. */
+ *  misma tabla con una key reservada.
+ *
+ *  ⚠️ Y desde la Ola B tampoco cuentan las filas DADAS DE BAJA: siguen en
+ *  la tabla a propósito (son el rastro), pero no están en esa boca. */
 export function eduOdontogramSummary(entries: EduOdontogramEntryRow[]): EduOdontogramSummary {
   const teeth = new Set<number>();
   let findings = 0;
   let notes = 0;
   for (const e of entries) {
+    // Lo dado de baja no cuenta: el contador dice qué hay en esa boca HOY.
+    if (e.deletedAt) continue;
     teeth.add(e.tooth);
     if (e.condition === EDU_ODONTOGRAM_NOTE_KEY) notes += 1;
     else findings += 1;

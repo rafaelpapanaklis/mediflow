@@ -168,54 +168,62 @@ export function EduIaScreen({ panel, contratoHasta }: EduIaScreenProps) {
           {panel.porPersona.length === 0 ? (
             <p className="edu-note">Todavía nadie ha usado la IA este mes.</p>
           ) : (
-            <div className="edu-table edu-table--iapersonas">
-              <div className="edu-rowhead" aria-hidden="true">
-                <span>Persona</span>
-                <span>Rol</span>
-                <span>Usos</span>
-                <span>Gasto</span>
-                <span>Parte del mes</span>
-              </div>
-              {panel.porPersona.map((p) => (
-                <div key={`${p.userId ?? "baja"}-${p.userName}`} className="edu-row">
-                  <div className="edu-cell edu-cell--wide">
-                    <span className="edu-cell__label">Persona</span>
-                    <span className="edu-cell__value edu-cell__value--strong">
-                      {p.userRole === "DOCENTE" ? (
-                        <EduPersonaLink kind="docente" id={p.userId}>
-                          {p.userName}
-                        </EduPersonaLink>
-                      ) : (
-                        p.userName
-                      )}
-                    </span>
-                    {p.userId === null && (
-                      <span className="edu-cell__sub">La cuenta ya no existe</span>
-                    )}
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Rol</span>
-                    <span className="edu-cell__value">
-                      {EDU_ROLE_LABELS[p.userRole as EduRole] ?? p.userRole}
-                    </span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Usos</span>
-                    <span className="edu-cell__value">{p.usos}</span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Gasto</span>
-                    <span className="edu-cell__value edu-cell__value--strong">{p.costLabel}</span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Parte del mes</span>
-                    <div className="edu-progreso" aria-hidden>
-                      <span className="edu-progreso__bar" style={{ width: `${p.porcentaje}%` }} />
-                    </div>
-                    <span className="edu-cell__sub">{p.porcentaje} %</span>
-                  </div>
+            <div className="edu-tablewrap">
+              {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+                 mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+                 hace que se DESPLACE en vez de recortar si algún día no cabe.
+                 Sin él, la forma renglón de esta tabla no se estrena nunca:
+                 desde la Ola B su umbral vive en un `@container`, no en un
+                 `@media`. */}
+              <div className="edu-table edu-table--iapersonas">
+                <div className="edu-rowhead" aria-hidden="true">
+                  <span>Persona</span>
+                  <span>Rol</span>
+                  <span>Usos</span>
+                  <span>Gasto</span>
+                  <span>Parte del mes</span>
                 </div>
-              ))}
+                {panel.porPersona.map((p) => (
+                  <div key={`${p.userId ?? "baja"}-${p.userName}`} className="edu-row">
+                    <div className="edu-cell edu-cell--wide">
+                      <span className="edu-cell__label">Persona</span>
+                      <span className="edu-cell__value edu-cell__value--strong">
+                        {p.userRole === "DOCENTE" ? (
+                          <EduPersonaLink kind="docente" id={p.userId}>
+                            {p.userName}
+                          </EduPersonaLink>
+                        ) : (
+                          p.userName
+                        )}
+                      </span>
+                      {p.userId === null && (
+                        <span className="edu-cell__sub">La cuenta ya no existe</span>
+                      )}
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Rol</span>
+                      <span className="edu-cell__value">
+                        {EDU_ROLE_LABELS[p.userRole as EduRole] ?? p.userRole}
+                      </span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Usos</span>
+                      <span className="edu-cell__value">{p.usos}</span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Gasto</span>
+                      <span className="edu-cell__value edu-cell__value--strong">{p.costLabel}</span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Parte del mes</span>
+                      <div className="edu-progreso" aria-hidden>
+                        <span className="edu-progreso__bar" style={{ width: `${p.porcentaje}%` }} />
+                      </div>
+                      <span className="edu-cell__sub">{p.porcentaje} %</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </section>
@@ -245,44 +253,52 @@ export function EduIaScreen({ panel, contratoHasta }: EduIaScreenProps) {
             </div>
           </div>
         ) : (
-          <div className="edu-table edu-table--iaprecios">
-            <div className="edu-rowhead" aria-hidden="true">
-              <span>Función</span>
-              <span>Modelo</span>
-              <span>Entrada</span>
-              <span>Salida</span>
-            </div>
-            {panel.precios.map((p) => (
-              <div key={`${p.feature}-${p.model}`} className="edu-row">
-                <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Función</span>
-                  <span className="edu-cell__value edu-cell__value--strong">
-                    {p.feature === "DICTADO" ? "Dictado por voz" : "Análisis radiográfico"}
-                  </span>
-                  {p.source && <span className="edu-cell__sub">{p.source}</span>}
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Modelo</span>
-                  <span className="edu-cell__value">
-                    <code>{p.model}</code>
-                  </span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Entrada</span>
-                  <span className="edu-cell__value">
-                    {eduIaPrecioLabel(p.inUsdMicrosPerMillion, p.unit)}
-                  </span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Salida</span>
-                  <span className="edu-cell__value">
-                    {p.outUsdMicrosPerMillion > 0
-                      ? eduIaPrecioLabel(p.outUsdMicrosPerMillion, p.unit)
-                      : "—"}
-                  </span>
-                </div>
+          <div className="edu-tablewrap">
+            {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+               mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+               hace que se DESPLACE en vez de recortar si algún día no cabe.
+               Sin él, la forma renglón de esta tabla no se estrena nunca:
+               desde la Ola B su umbral vive en un `@container`, no en un
+               `@media`. */}
+            <div className="edu-table edu-table--iaprecios">
+              <div className="edu-rowhead" aria-hidden="true">
+                <span>Función</span>
+                <span>Modelo</span>
+                <span>Entrada</span>
+                <span>Salida</span>
               </div>
-            ))}
+              {panel.precios.map((p) => (
+                <div key={`${p.feature}-${p.model}`} className="edu-row">
+                  <div className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Función</span>
+                    <span className="edu-cell__value edu-cell__value--strong">
+                      {p.feature === "DICTADO" ? "Dictado por voz" : "Análisis radiográfico"}
+                    </span>
+                    {p.source && <span className="edu-cell__sub">{p.source}</span>}
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Modelo</span>
+                    <span className="edu-cell__value">
+                      <code>{p.model}</code>
+                    </span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Entrada</span>
+                    <span className="edu-cell__value">
+                      {eduIaPrecioLabel(p.inUsdMicrosPerMillion, p.unit)}
+                    </span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Salida</span>
+                    <span className="edu-cell__value">
+                      {p.outUsdMicrosPerMillion > 0
+                        ? eduIaPrecioLabel(p.outUsdMicrosPerMillion, p.unit)
+                        : "—"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>
@@ -300,58 +316,66 @@ export function EduIaScreen({ panel, contratoHasta }: EduIaScreenProps) {
             </div>
           </div>
 
-          <div className="edu-table edu-table--iausos">
-            <div className="edu-rowhead" aria-hidden="true">
-              <span>Cuándo</span>
-              <span>Quién</span>
-              <span>Función</span>
-              <span>Sobre qué</span>
-              <span>Consumo</span>
-              <span>Costo</span>
-            </div>
-            {panel.usos.map((u) => (
-              <div key={u.id} className="edu-row">
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Cuándo</span>
-                  <span className="edu-cell__value">{u.createdLabel}</span>
-                </div>
-                <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Quién</span>
-                  <span className="edu-cell__value edu-cell__value--strong">{u.userName}</span>
-                  <span className="edu-cell__sub">
-                    {EDU_ROLE_LABELS[u.userRole as EduRole] ?? u.userRole}
-                  </span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Función</span>
-                  <span className="edu-cell__value">{u.featureLabel}</span>
-                  <span className="edu-cell__sub">
-                    <code>{u.model}</code>
-                  </span>
-                </div>
-                <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Sobre qué</span>
-                  <span className="edu-cell__value">{u.targetLabel ?? "—"}</span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Consumo</span>
-                  <span className="edu-cell__value">
-                    {u.unit === "TOKEN"
-                      ? `${(u.inputUnits + u.outputUnits).toLocaleString("es-MX")} tokens`
-                      : `${u.inputUnits} s`}
-                  </span>
-                </div>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Costo</span>
-                  <span className="edu-cell__value">{u.costLabel}</span>
-                  {u.isEstimated && (
-                    <span className="edu-cell__sub">
-                      Estimado: el proveedor no dijo cuánto consumió
-                    </span>
-                  )}
-                </div>
+          <div className="edu-tablewrap">
+            {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+               mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+               hace que se DESPLACE en vez de recortar si algún día no cabe.
+               Sin él, la forma renglón de esta tabla no se estrena nunca:
+               desde la Ola B su umbral vive en un `@container`, no en un
+               `@media`. */}
+            <div className="edu-table edu-table--iausos">
+              <div className="edu-rowhead" aria-hidden="true">
+                <span>Cuándo</span>
+                <span>Quién</span>
+                <span>Función</span>
+                <span>Sobre qué</span>
+                <span>Consumo</span>
+                <span>Costo</span>
               </div>
-            ))}
+              {panel.usos.map((u) => (
+                <div key={u.id} className="edu-row">
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Cuándo</span>
+                    <span className="edu-cell__value">{u.createdLabel}</span>
+                  </div>
+                  <div className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Quién</span>
+                    <span className="edu-cell__value edu-cell__value--strong">{u.userName}</span>
+                    <span className="edu-cell__sub">
+                      {EDU_ROLE_LABELS[u.userRole as EduRole] ?? u.userRole}
+                    </span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Función</span>
+                    <span className="edu-cell__value">{u.featureLabel}</span>
+                    <span className="edu-cell__sub">
+                      <code>{u.model}</code>
+                    </span>
+                  </div>
+                  <div className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Sobre qué</span>
+                    <span className="edu-cell__value">{u.targetLabel ?? "—"}</span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Consumo</span>
+                    <span className="edu-cell__value">
+                      {u.unit === "TOKEN"
+                        ? `${(u.inputUnits + u.outputUnits).toLocaleString("es-MX")} tokens`
+                        : `${u.inputUnits} s`}
+                    </span>
+                  </div>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Costo</span>
+                    <span className="edu-cell__value">{u.costLabel}</span>
+                    {u.isEstimated && (
+                      <span className="edu-cell__sub">
+                        Estimado: el proveedor no dijo cuánto consumió
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}

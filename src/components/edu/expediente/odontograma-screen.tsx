@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { eduRequest } from "@/components/edu/edu-http";
@@ -71,7 +71,19 @@ const SIN_PERMISO =
 
 export interface EduOdontogramaScreenProps {
   patientId: string;
+  /** Solo las VIVAS: es lo que se dibuja. Las recorta el servidor. */
   entries: EduOdontogramEntryRow[];
+  /**
+   * TODAS: vivas y dadas de baja. Es lo que alimenta «Quién marcó qué», y
+   * es lo único que puede contestar "¿quién quitó esto y cuándo?".
+   */
+  historial: EduOdontogramEntryRow[];
+  /** true = la consulta se topó con el techo y hay historia más vieja. */
+  historialTruncado: boolean;
+  /** Con qué dentición abre (temporal si el paciente es `isChild`). */
+  denticionInicial: Dentition;
+  /** true = el paciente está marcado como de dentición temporal. */
+  esInfantil: boolean;
   canEdit: boolean;
 }
 
@@ -94,10 +106,18 @@ export interface EduOdontogramaScreenProps {
 export function EduOdontogramaScreen({
   patientId,
   entries,
+  historial,
+  historialTruncado,
+  denticionInicial,
+  esInfantil,
   canEdit,
 }: EduOdontogramaScreenProps) {
   const [records, setRecords] = useState<Records>(() => eduEntriesToRecords(entries));
-  const [dentition, setDentition] = useState<Dentition>("permanent");
+  // El arranque lo decide el SERVIDOR con `isChild`; a partir de ahí es de
+  // quien atiende. Un `useState` con valor inicial y no un `useEffect` que
+  // lo "corrija" después: lo segundo pintaría un odontograma de adulto
+  // durante un fotograma y pisaría el cambio manual en cada re-render.
+  const [dentition, setDentition] = useState<Dentition>(denticionInicial);
   const [brush, setBrush] = useState<string | null>(null);
   const [eraser, setEraser] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -366,6 +386,15 @@ export function EduOdontogramaScreen({
             <option value="mixed">Mixta</option>
             <option value="primary">Temporal</option>
           </select>
+          {/* Se DICE por qué abrió así, y no se deja adivinar: quien ve
+              cuadrantes 5-8 sin explicación piensa que la pantalla se
+              equivocó de paciente. */}
+          {esInfantil && (
+            <span className="edu-field__hint">
+              Este paciente está marcado como de dentición temporal, así que abre en los
+              cuadrantes 5-8. Puedes cambiarlo aquí.
+            </span>
+          )}
         </div>
         <div className="edu-field">
           <span className="edu-field__label">Marcado</span>
@@ -448,27 +477,58 @@ export function EduOdontogramaScreen({
         </div>
       )}
 
-      <HistorialDeHallazgos entries={entries} />
+      <HistorialDeHallazgos entries={historial} truncado={historialTruncado} />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Quién marcó qué, y cuándo. El dibujo enseña el ESTADO; esta lista enseña
-// la HISTORIA, que es lo que un expediente tiene que poder contestar.
+// QUIÉN MARCÓ QUÉ — Y QUIÉN LO QUITÓ.
+//
+// El dibujo enseña el ESTADO; esta lista enseña la HISTORIA, que es lo que
+// un expediente tiene que poder contestar. Desde la Ola B enseña las dos
+// caras: hasta ahora un hallazgo quitado desaparecía de la tabla y de aquí,
+// así que la pregunta "¿quién pasó la goma sobre lo que yo marqué?" no
+// tenía dónde contestarse.
+//
+// 🔴 Y YA NO CORTA EN SILENCIO (S-12). Cortaba a 40 filas sin decir una
+// palabra: un odontograma con 41 movimientos y uno con 400 se veían
+// idénticos, y el que buscaba el suyo concluía que nunca existió. Ahora se
+// pintan 40 y hay un botón que enseña el resto, con el número escrito.
 // ═══════════════════════════════════════════════════════════════════════
 
-function HistorialDeHallazgos({ entries }: { entries: EduOdontogramEntryRow[] }) {
+/** Cuántos movimientos se pintan antes de pedir «ver todo». */
+const HISTORIAL_PRIMERAS = 40;
+
+function HistorialDeHallazgos({
+  entries,
+  truncado,
+}: {
+  entries: EduOdontogramEntryRow[];
+  truncado: boolean;
+}) {
   const router = useRouter();
   const [actualizando, startNav] = useTransition();
+  const [verTodo, setVerTodo] = useState(false);
 
-  if (entries.length === 0) return null;
+  // La ÚLTIMA ACCIÓN de cada fila: la fecha en que se quitó si se quitó, y
+  // si no la del marcaje. Sin esto, un hallazgo marcado en enero y quitado
+  // hoy saldría al final de la lista, que es donde nadie lo busca.
+  const historial = useMemo(
+    () =>
+      // Una COPIA: `sort` muta, y mutar el array del render reordenaría
+      // también el que alimenta el dibujo.
+      [...entries].sort((a, b) =>
+        (b.deletedAt ?? b.recordedAt).localeCompare(a.deletedAt ?? a.recordedAt),
+      ),
+    [entries],
+  );
 
-  // Los más recientes primero. El servidor los manda ordenados por diente
-  // (que es lo que necesita el dibujo), así que aquí se reordena por fecha
-  // sobre una COPIA: `sort` muta, y mutar el array del render reordenaría
-  // también el que alimenta el dibujo.
-  const historial = [...entries].sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
+  if (historial.length === 0) return null;
+
+  const visibles = verTodo ? historial : historial.slice(0, HISTORIAL_PRIMERAS);
+  const ocultas = historial.length - visibles.length;
+  const bajas = historial.filter((e) => e.deletedAt !== null).length;
 
   return (
     <section className="edu-section">
@@ -483,7 +543,24 @@ function HistorialDeHallazgos({ entries }: { entries: EduOdontogramEntryRow[] })
       <p className="edu-note">
         Así estaba al abrir la pantalla. Lo que marques ahora se guarda al
         instante, pero aparece en esta lista al actualizar.
+        {bajas > 0
+          ? ` Incluye ${bajas} ${bajas === 1 ? "hallazgo retirado" : "hallazgos retirados"}: quitar no borra, deja constancia de quién lo quitó.`
+          : ""}
       </p>
+      {truncado && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">
+              Este odontograma tiene más historia de la que cabe en una consulta.
+            </p>
+            <p className="edu-banner__detail">
+              Se trajeron los movimientos más recientes y todos los hallazgos que siguen
+              marcados: el dibujo está completo, la lista de abajo no. Se avisa porque una
+              historia que se corta en silencio se lee como una historia que no existió.
+            </p>
+          </div>
+        </div>
+      )}
       <p>
         <button
           type="button"
@@ -495,8 +572,8 @@ function HistorialDeHallazgos({ entries }: { entries: EduOdontogramEntryRow[] })
         </button>
       </p>
       <ul className="edu-chiplist">
-        {historial.slice(0, 40).map((e) => (
-          <li key={e.id} className="edu-assign">
+        {visibles.map((e) => (
+          <li key={e.id} className={`edu-assign ${e.deletedAt ? "edu-assign--baja" : ""}`}>
             <span>
               <strong>Diente {e.tooth}</strong>
               {e.surface !== EDU_TOOTH_WHOLE ? ` · cara ${e.surface}` : ""} ·{" "}
@@ -504,10 +581,34 @@ function HistorialDeHallazgos({ entries }: { entries: EduOdontogramEntryRow[] })
                 ? `nota: ${e.notes ?? ""}`
                 : eduConditionLabel(e.condition)}{" "}
               · {e.recordedByName} · {e.recordedLabel}
+              {/* DESDE CUÁNDO, y solo cuando difiere de la marca de hoy:
+                  `recordedAt` se pisa en cada remarcado, así que en un
+                  hallazgo reconfirmado las dos fechas cuentan cosas
+                  distintas. Repetir la misma no aporta nada. */}
+              {e.firstRecordedLabel !== e.recordedLabel
+                ? ` · marcado por primera vez el ${e.firstRecordedLabel}`
+                : ""}
             </span>
+            {e.deletedAt && (
+              <span className="edu-tag edu-tag--muted">
+                Retirado {e.deletedLabel}
+                {e.deletedByName ? ` por ${e.deletedByName}` : ""}
+              </span>
+            )}
           </li>
         ))}
       </ul>
+      {ocultas > 0 && (
+        <p>
+          <button
+            type="button"
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+            onClick={() => setVerTodo(true)}
+          >
+            Ver los {ocultas} movimientos restantes
+          </button>
+        </p>
+      )}
     </section>
   );
 }

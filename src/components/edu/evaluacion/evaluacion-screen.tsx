@@ -346,98 +346,106 @@ export function EduEvaluacionScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--evaluacion">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Estudiante</span>
-            <span>Especialidad</span>
-            <span>Cómo va</span>
-            <span>Avance</span>
-            <span>Horas</span>
-            <span>Promedio</span>
-            <span />
-          </div>
-
-          {rows.map((r) => (
-            <div key={r.studentId} className="edu-row">
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Estudiante</span>
-                <span className="edu-cell__value edu-cell__value--strong">
-                  <EduPersonaLink kind="estudiante" id={r.studentId}>
-                    {r.studentName}
-                  </EduPersonaLink>
-                </span>
-                <span className="edu-cell__sub">
-                  {r.matricula} · {r.semester}º semestre ·{" "}
-                  {EDU_STUDENT_STATUS_LABELS[r.status as EduStudentStatus] ?? r.status}
-                </span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Especialidad</span>
-                <span className="edu-cell__value">{r.programName}</span>
-                <span className="edu-cell__sub">{r.cohortName}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Cómo va</span>
-                {r.estado ? (
-                  <span
-                    className={`edu-tag ${TAG_BY_ESTADO[r.estado]}`}
-                    title={EDU_ATRASO_DESCRIPTIONS[r.estado]}
-                  >
-                    {EDU_ATRASO_LABELS[r.estado]}
-                  </span>
-                ) : (
-                  <span className="edu-tag edu-tag--muted">Sin calcular</span>
-                )}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Avance</span>
-                <span className="edu-cell__value">
-                  {r.hechos} de {r.totales}
-                </span>
-                {r.fraccion !== null && (
-                  <span className="edu-cell__sub">
-                    se esperan {eduScoreLabel(Math.round(r.esperados * 100))} · {Math.round(r.fraccion * 100)} % del ciclo
-                  </span>
-                )}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Horas clínicas</span>
-                <span className="edu-cell__value">{r.hoursLabel}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Promedio</span>
-                <span className="edu-cell__value">
-                  {r.averageLabel ? `${r.averageLabel} / ${r.averageScaleMax}` : "—"}
-                </span>
-                <span className="edu-cell__sub">
-                  {r.gradesCount === 0
-                    ? "sin calificaciones"
-                    : `${r.gradesCount} ${r.gradesCount === 1 ? "caso calificado" : "casos calificados"}`}
-                </span>
-              </div>
-
-              {/* 🔴 EL PORQUÉ, en la misma tarjeta y siempre visible. Un
-                  tooltip o un "ver detalle" lo dejaría sin leer justo
-                  cuando hace falta: al hablar con el alumno. */}
-              <div className="edu-cell edu-cell--wide">
-                <p className="edu-motivo">{r.motivo}</p>
-              </div>
-
-              <div className="edu-cell__actions">
-                <Link
-                  href={`/instituto/evaluacion/${r.studentId}`}
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                >
-                  Ver bitácora
-                </Link>
-              </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--evaluacion">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Estudiante</span>
+              <span>Especialidad</span>
+              <span>Cómo va</span>
+              <span>Avance</span>
+              <span>Horas</span>
+              <span>Promedio</span>
+              <span />
             </div>
-          ))}
+
+            {rows.map((r) => (
+              <div key={r.studentId} className="edu-row">
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Estudiante</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    <EduPersonaLink kind="estudiante" id={r.studentId}>
+                      {r.studentName}
+                    </EduPersonaLink>
+                  </span>
+                  <span className="edu-cell__sub">
+                    {r.matricula} · {r.semester}º semestre ·{" "}
+                    {EDU_STUDENT_STATUS_LABELS[r.status as EduStudentStatus] ?? r.status}
+                  </span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Especialidad</span>
+                  <span className="edu-cell__value">{r.programName}</span>
+                  <span className="edu-cell__sub">{r.cohortName}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Cómo va</span>
+                  {r.estado ? (
+                    <span
+                      className={`edu-tag ${TAG_BY_ESTADO[r.estado]}`}
+                      title={EDU_ATRASO_DESCRIPTIONS[r.estado]}
+                    >
+                      {EDU_ATRASO_LABELS[r.estado]}
+                    </span>
+                  ) : (
+                    <span className="edu-tag edu-tag--muted">Sin calcular</span>
+                  )}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Avance</span>
+                  <span className="edu-cell__value">
+                    {r.hechos} de {r.totales}
+                  </span>
+                  {r.fraccion !== null && (
+                    <span className="edu-cell__sub">
+                      se esperan {eduScoreLabel(Math.round(r.esperados * 100))} · {Math.round(r.fraccion * 100)} % del ciclo
+                    </span>
+                  )}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Horas clínicas</span>
+                  <span className="edu-cell__value">{r.hoursLabel}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Promedio</span>
+                  <span className="edu-cell__value">
+                    {r.averageLabel ? `${r.averageLabel} / ${r.averageScaleMax}` : "—"}
+                  </span>
+                  <span className="edu-cell__sub">
+                    {r.gradesCount === 0
+                      ? "sin calificaciones"
+                      : `${r.gradesCount} ${r.gradesCount === 1 ? "caso calificado" : "casos calificados"}`}
+                  </span>
+                </div>
+
+                {/* 🔴 EL PORQUÉ, en la misma tarjeta y siempre visible. Un
+                    tooltip o un "ver detalle" lo dejaría sin leer justo
+                    cuando hace falta: al hablar con el alumno. */}
+                <div className="edu-cell edu-cell--wide">
+                  <p className="edu-motivo">{r.motivo}</p>
+                </div>
+
+                <div className="edu-cell__actions">
+                  <Link
+                    href={`/instituto/evaluacion/${r.studentId}`}
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                  >
+                    Ver bitácora
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </>
