@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { BUCKETS, extractStoragePath, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -41,6 +42,20 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: subir una foto de antes/después es SUBIR UN ARCHIVO del
+  // paciente, que es literalmente lo que cubre "xrays.upload" — el catálogo lo
+  // dice en su propia nota ("POST /api/xrays es también la subida genérica de
+  // archivos del paciente: fotos, PDFs, adjuntos de la nota"), y es la key que
+  // recepción tiene por default porque es quien toma la foto en la ficha.
+  //
+  // La asimetría con su hermana DELETE —que exige "medicalRecord.edit"— es
+  // deliberada y ya existe igual en radiografías: POST /api/xrays pide
+  // "xrays.upload" y DELETE/PATCH de /api/xrays/[id] piden "medicalRecord.edit".
+  // Añadir evidencia clínica no es destruirla. Lo que esta línea cierra es la
+  // escritura de un READONLY, que es el hallazgo.
+  const deniedPerm = denyIfMissingPermission(ctx, "xrays.upload");
+  if (deniedPerm) return deniedPerm;
 
   const body = await req.json();
   const { patientId, category, angle, url, sessionId, notes } = body;

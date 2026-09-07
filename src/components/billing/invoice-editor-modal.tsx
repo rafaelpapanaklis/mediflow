@@ -16,9 +16,20 @@ import { useState, useEffect, useMemo } from "react";
 import { Plus, Loader2, Trash2, Check, Search, User } from "lucide-react";
 import toast from "react-hot-toast";
 import { computeTotals, round2 } from "@/lib/quotes/compute";
-import { clinicInvoiceTaxDefaults, IVA_RATE_PCT, type CfdiTaxMode } from "@/lib/invoice-totals";
+import { clinicInvoiceTaxDefaults, cfdiTotalBreakdown, IVA_RATE_PCT, type CfdiTaxMode } from "@/lib/invoice-totals";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useT } from "@/i18n/i18n-provider";
+
+/**
+ * Descuento de línea tal y como VIAJA en el payload: clampeado al importe de la
+ * línea. Lo usan el preview de totales y `save()`, y tiene que ser el mismo en
+ * los dos o la pantalla vuelve a decir un número distinto del que se guarda: un
+ * descuento de línea MAYOR que su línea daba base negativa en el preview y 0 en
+ * el servidor (que recibe ya el valor clampeado).
+ */
+function lineDiscount(it: { unitPrice: number; quantity: number; discount: number }): number {
+  return Math.min(it.discount, round2(it.unitPrice * it.quantity));
+}
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
@@ -169,20 +180,52 @@ function InvoiceEditorBody({
     });
   }, [items, discountMode, discountValue]);
 
-  // IVA en vivo sobre la base (subtotal − descuento):
-  //   incluido → IVA = base − base/(1+r); total = base.
-  //   agregado → IVA = base·r;            total = base + IVA.
-  //   exento (r=0) → IVA = 0;             total = base.
+  // IVA en vivo — CRITERIO DEL SAT, el mismo que el servidor y el timbrado.
+  //
+  // Aquí había `round2(base × tasa)` sobre la base AGREGADA. El impuesto se
+  // redondea **por concepto y se suma**: el CFDI manda `taxes` DENTRO de cada
+  // línea y Facturapi redondea línea por línea. Los dos criterios dan números
+  // distintos en cuanto hay varios conceptos —hasta 2¢—, así que la pantalla
+  // enseñaba $3,093.30 y se guardaba $3,093.28 (medido: el 37,3 % de las
+  // facturas con IVA agregado). Lo guardado es lo correcto; el que se había
+  // quedado atrás era el modal.
+  //
+  // `cfdiTotalBreakdown` es la MISMA función que predice lo que va a timbrar
+  // Facturapi, y arma la base de cada línea con `spreadInvoiceDiscount` — o sea
+  // el mismo descuento por concepto que viaja en el payload. Se le pasan los
+  // items YA NORMALIZADOS y el descuento ya resuelto a monto, que es exactamente
+  // lo que `save()` manda a POST /api/invoices: la vista previa y lo que se
+  // guarda parten del mismo dato.
+  //
+  // El 16 % fijo de ese helper es exacto aquí: el select solo produce
+  // `IVA_RATE_PCT` o 0 (una tasa intermedia rebotaría al timbrar), y el 0 se
+  // resuelve por `taxMode === "exento"` antes de mirar el impuesto.
   const { tax, grandTotal } = useMemo(() => {
-    const base = totals.total;
-    const r = Math.min(100, Math.max(0, taxRate)) / 100;
+    // Las MISMAS líneas que va a mandar `save()` (descuento de línea clampeado):
+    // si el preview calculara sobre otras, volvería a divergir del servidor.
+    const lineas = totals.items.map((it) => ({
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      discount: lineDiscount(it),
+    }));
+    const bd = cfdiTotalBreakdown(lineas, totals.discountAmount, taxMode, taxIncluded);
+    // Piso en 0, igual que el total interno del servidor: `cfdiTotalBreakdown`
+    // va sin piso a propósito (para que la guarda de integridad pueda VER un
+    // descuento que se pasa de largo), pero lo que se enseña como total no.
+    const base = round2(Math.max(0, bd.base));
+    if (taxMode !== "iva16") return { tax: 0, grandTotal: base };
     if (taxIncluded) {
-      const t = r > 0 ? round2(base - base / (1 + r)) : 0;
-      return { tax: t, grandTotal: round2(base) };
+      // IVA ya contenido en el precio: el total ES la base, no se le suma nada,
+      // y por eso este modo NO puede divergir del servidor (allí el impuesto
+      // agregado es 0 y el total es la misma base por concepto que la de aquí).
+      // El renglón informativo usa `base·r/(1+r)`, la fórmula agregada de
+      // `invoiceTaxPortion` — la que ya reparten el corte de Caja y Finanzas
+      // sobre lo cobrado—, para que los tres sitios digan el mismo IVA contenido.
+      const r = IVA_RATE_PCT / 100;
+      return { tax: round2(base - base / (1 + r)), grandTotal: base };
     }
-    const t = round2(base * r);
-    return { tax: t, grandTotal: round2(base + t) };
-  }, [totals.total, taxRate, taxIncluded]);
+    return { tax: bd.tax, grandTotal: round2(base + bd.tax) };
+  }, [totals.items, totals.discountAmount, taxMode, taxIncluded]);
 
   function addProcedure(p: CatalogProcedure) {
     setItems((prev) => [...prev, {
@@ -231,7 +274,7 @@ function InvoiceEditorBody({
         // El descuento POR LÍNEA viaja con el concepto (clamp a importe): el
         // server y la guarda del CFDI calculan qty × unitPrice − discount; sin
         // él, el total interno (neto) no cuadraría con los conceptos (bruto).
-        ...(it.discount > 0 ? { discount: Math.min(it.discount, round2(it.unitPrice * it.quantity)) } : {}),
+        ...(lineDiscount(it) > 0 ? { discount: lineDiscount(it) } : {}),
         total: round2(it.lineTotal),
       })),
       discount: round2(normalized.discountAmount),

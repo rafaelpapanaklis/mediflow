@@ -83,6 +83,20 @@ const GATES: Array<{
     firstEffect: "prisma.", porque: "inicia un cobro real con MercadoPago" },
   { rel: "app/api/ordenes-laboratorio/[orderId]/route.ts", method: "PATCH", key: "suppliers.order",
     firstEffect: "prisma.", porque: "cancela la orden de forma irreversible" },
+  // Los tres CABOS que quedaron de los lotes anteriores: las últimas puertas de
+  // presupuestos que escribían con solo comprobar sesión.
+  { rel: "app/api/quotes/[id]/duplicate/route.ts", method: "POST", key: "billing.create",
+    firstEffect: "prisma.", porque: "clona el presupuesto y quema un folio nuevo, igual que POST /api/quotes" },
+  { rel: "app/api/quotes/[id]/treatment-plan/route.ts", method: "POST", key: "treatments.edit",
+    firstEffect: "prisma.", porque: "crea el plan de tratamiento ACTIVE del paciente" },
+  { rel: "app/api/quotes/[id]/send-whatsapp/route.ts", method: "POST", key: "billing.edit",
+    firstEffect: "prisma.", porque: "presenta el DRAFT (presentQuote) antes de mandar la liga: la cuarta puerta a presentar" },
+  // Las dos ALTAS que quedaron fuera del lote anterior: allí se cerró el DELETE
+  // de before-after y el PATCH de orthotics, pero no el POST de cada una.
+  { rel: "app/api/before-after/route.ts", method: "POST", key: "xrays.upload",
+    firstEffect: "prisma.", porque: "sube una foto clínica del paciente, igual que POST /api/xrays" },
+  { rel: "app/api/orthotics/route.ts", method: "POST", key: "treatments.edit",
+    firstEffect: "prisma.", porque: "da de alta la ortesis y arranca el tratamiento, igual que su PATCH" },
   // Hallazgo 23 — caja
   { rel: "app/api/caja/current/route.ts", method: "GET", key: "billing.view",
     firstEffect: "getCajaState(", porque: "el turno completo, fila por fila" },
@@ -164,16 +178,31 @@ for (const [rel, method, efecto] of [
 const ESPERADO: Record<string, Record<Role, boolean>> = {
   // Hallazgo 8 — nadie pierde el padrón: los cinco roles traen patients.view.
   "patients.view":   { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: true  },
-  // Hallazgo 22 — facturar. READONLY deja de emitir; DOCTOR también (no tiene
-  // billing.* por default, y hoy creaba facturas que ni siquiera podía ver).
-  "billing.create":  { SUPER_ADMIN: true, ADMIN: true, DOCTOR: false, RECEPTIONIST: true,  READONLY: false },
-  "billing.edit":    { SUPER_ADMIN: true, ADMIN: true, DOCTOR: false, RECEPTIONIST: true,  READONLY: false },
+  // Hallazgo 22 — facturar. READONLY deja de emitir.
+  //
+  // DOCTOR: true desde que se le devolvieron las billing.* de cotizar. Cuando
+  // se pusieron estos gates, el doctor se quedó con los botones a la vista y un
+  // 403 al pulsarlos ("Crear presupuesto" al cerrar la consulta, y presentar /
+  // aceptar / generar factura en la pestaña Presupuestos): el agujero se tapó
+  // bien y la que estaba mal era la fila del rol. Cobrar y reembolsar siguen
+  // siendo NO — presupuestar no es tocar el dinero.
+  "billing.create":  { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: false },
+  "billing.edit":    { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: false },
   // Hallazgo 22 — laboratorio. Misma key que YA exige el alta de la orden en
   // /api/dental-labs/[labId]/ordenes: quien no puede pedir tampoco paga ni
   // cancela, así que nadie que hoy pueda crear una orden pierde nada.
   "suppliers.order": { SUPER_ADMIN: true, ADMIN: true, DOCTOR: false, RECEPTIONIST: false, READONLY: false },
-  // Hallazgo 23 — billing.view sigue igual; lo que cierra la Caja es canUseCaja.
-  "billing.view":    { SUPER_ADMIN: true, ADMIN: true, DOCTOR: false, RECEPTIONIST: true,  READONLY: true  },
+  // Hallazgo 23 — lo que cierra la Caja NO es esta key, es canUseCaja (bandera
+  // por usuario): que el doctor pase billing.view no le abre el turno.
+  "billing.view":    { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: true  },
+  // Los cabos: el plan de tratamiento lo abren doctor y recepción, que son
+  // quienes lo ejecutan; READONLY no escribe.
+  "treatments.edit": { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: false },
+  // Subir archivos del paciente (placas, fotos de antes/después): recepción es
+  // quien los sube desde la ficha y NO puede perderlo. Borrarlos es otra cosa y
+  // lleva otra key (medicalRecord.edit), que recepción no tiene: añadir
+  // evidencia clínica no es destruirla.
+  "xrays.upload":    { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: false },
 };
 
 for (const [key, esperado] of Object.entries(ESPERADO)) {

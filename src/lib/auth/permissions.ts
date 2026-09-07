@@ -174,6 +174,11 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
  *     rol; el default lo excluía por una etiqueta ("solo SUPER_ADMIN") que no
  *     describía el gate real. Lo que sí es solo del dueño (modal de Permisos y
  *     reset de contraseña) se gatea por ROL en su endpoint.
+ *   · DOCTOR + billing.view/create/edit — al cerrar los agujeros de
+ *     presupuestos (PR #190 y siguientes) el doctor se quedó con los botones a
+ *     la vista y un 403 al pulsarlos: presupuestar exige billing.* y él no
+ *     tenía ninguna. Se le devuelve cotizar y facturar, NO cobrar ni
+ *     reembolsar. El porqué completo está junto a las keys, más abajo.
  */
 export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
   SUPER_ADMIN: [...ALL_PERMISSION_KEYS], // todo
@@ -189,6 +194,30 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "consents.view", "consents.create", "consents.revoke",
     "xrays.view", "xrays.upload", "xrays.analyze",
     "treatments.view", "treatments.edit",
+    // El doctor PRESUPUESTA y FACTURA, pero no toca el dinero.
+    //
+    // El plan de tratamiento y su presupuesto son la misma pieza vista por sus
+    // dos caras: el doctor explora, marca el odontograma y dice qué hay que
+    // hacer y cuánto cuesta. Ya tenía "treatments.edit" (la cara clínica) y no
+    // la cara del importe, así que sus dos botones —"Crear presupuesto" al
+    // cerrar la consulta, y presentar / aceptar / generar factura en la pestaña
+    // Presupuestos— se veían en pantalla y devolvían 403 al pulsarlos: los
+    // endpoints piden billing.* desde que se taparon los agujeros del PR #190
+    // (y sus continuaciones), y este rol no tenía NINGUNA billing.*.
+    //
+    //   · billing.view   — ver la factura BORRADOR que su propio presupuesto
+    //                      acaba de crear. Sin ella creaba facturas que no
+    //                      podía abrir. NO le abre la Caja: eso lo cierra
+    //                      aparte canUseCaja (bandera por usuario, no por rol).
+    //   · billing.create — "Crear presupuesto" y "Generar factura".
+    //   · billing.edit   — presentar / aceptar / rechazar y corregir el
+    //                      presupuesto antes de que el paciente lo firme.
+    //
+    // Lo que se le NIEGA a propósito, y es la línea entera de esta decisión:
+    // "billing.charge" (registrar cobros) y "billing.refund" (reembolsar y
+    // cancelar). Cotizar no es cobrar — el dinero lo mueve recepción o el
+    // administrador, y el arqueo tiene que seguir cuadrando con quien lo hizo.
+    "billing.view", "billing.create", "billing.edit",
     "resources.view", "suppliers.view",
     "inbox.view", "inbox.send",
     "marketplace.view",

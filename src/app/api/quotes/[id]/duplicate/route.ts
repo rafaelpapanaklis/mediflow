@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
@@ -15,6 +16,14 @@ interface Params { params: { id: string } }
 export async function POST(_req: NextRequest, { params }: Params) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Duplicar NO es leer: nace un presupuesto nuevo con FOLIO nuevo, por el
+  // mismo createQuoteWithFolio que usa POST /api/quotes — que exige
+  // "billing.create" desde el PR #190. Era la puerta que quedaba abierta al
+  // mismo efecto: con solo sesión se clonaba un presupuesto y se quemaba folio
+  // de la serie de la clínica.
+  const deniedPerm = denyIfMissingPermission(ctx, "billing.create");
+  if (deniedPerm) return deniedPerm;
 
   const src = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },

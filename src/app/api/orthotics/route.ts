@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 // Orthotics pipeline stored as FormulaRecord with type="orthotics_pipeline"
 // The formula JSON holds: { orthoticType, status, notes, startDate }
@@ -33,6 +34,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Permiso granular: dar de alta la ortesis ARRANCA el tratamiento (nace en
+  // etapa "evaluation"). Es la misma superficie que mover esa ortesis de etapa,
+  // así que lleva la MISMA key que su hermana PATCH /api/orthotics/[id]:
+  // "treatments.edit". Se elige esa y no medicalRecord.edit por el mismo motivo
+  // que allí — no dejar fuera a recepción, que es quien registra la vuelta del
+  // laboratorio y la entrega. Lo que cierra es la escritura de un READONLY.
+  const deniedPerm = denyIfMissingPermission(ctx, "treatments.edit");
+  if (deniedPerm) return deniedPerm;
 
   const body = await req.json();
   const { patientId, orthoticType, notes } = body;

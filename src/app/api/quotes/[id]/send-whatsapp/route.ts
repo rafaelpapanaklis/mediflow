@@ -39,6 +39,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const denied = denyIfMissingPermission(ctx, "whatsapp.send");
   if (denied) return denied;
+  // Y ADEMÁS "billing.edit": más abajo esta ruta llama a presentQuote() para
+  // PRESENTAR un DRAFT antes de mandar la liga —genera acceptToken y reescribe
+  // la vigencia—, que es la misma escritura que POST /api/quotes/[id]/status.
+  // Era la cuarta puerta a "presentar" y la única sin la llave de facturación:
+  // con solo whatsapp.send se presentaba un presupuesto sin poder editarlo.
+  // Las dos keys se exigen juntas: enviar por WhatsApp y presentar.
+  const deniedBilling = denyIfMissingPermission(ctx, "billing.edit");
+  if (deniedBilling) return deniedBilling;
 
   const quote = await prisma.quote.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId }, // scope multi-tenant
