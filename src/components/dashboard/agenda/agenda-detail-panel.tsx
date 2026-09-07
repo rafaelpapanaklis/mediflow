@@ -36,6 +36,7 @@ import {
   pipelinePosition,
 } from "@/lib/agenda/status-pipeline";
 import { possibleTransitions } from "@/lib/agenda/transitions";
+import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { AgendaEditAppointmentModal } from "./agenda-edit-appointment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
@@ -78,6 +79,34 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   NO_SHOW:      "var(--danger)",
 };
 
+/**
+ * Gemelo de `patchAppointmentStatus` (@/lib/agenda/mutations) con el motivo de
+ * cancelación, que aquella no acepta. Vive aquí y no allá porque mutations.ts
+ * no es de esta tarea; lanza el MISMO objeto `{status, error, reason}` que el
+ * catch de `changeStatus` ya sabe leer.
+ */
+async function patchStatusWithReason(
+  id: string,
+  status: AppointmentStatus,
+  reason: string,
+): Promise<AgendaAppointmentDTO> {
+  const res = await fetch(`/api/appointments/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, reason }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw {
+      status: res.status,
+      error: body.error ?? "request_failed",
+      reason: body.reason,
+    };
+  }
+  const body = (await res.json()) as { appointment: AgendaAppointmentDTO };
+  return body.appointment;
+}
+
 function patientInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -98,6 +127,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   const { state, permissions, selectAppointment, dispatch, invalidateRangeCache } = useAgenda();
   const router = useRouter();
   const { open: openNewAppointment } = useNewAppointmentDialog();
+  const confirmWithReason = useConfirmWithReason();
   const [pendingStatus, setPendingStatus] = useState<AppointmentStatus | null>(null);
   const [waSending, setWaSending] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -186,12 +216,40 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
       return false;
     }
 
+    // Cancelar pide confirmación y MOTIVO. El panel ya tenía el bloque para
+    // mostrarlo, pero ninguna cancelación del staff lo guardaba y salía siempre
+    // vacío (hallazgo 42). El motivo es opcional: si se deja en blanco, se
+    // cancela igual. Todos los caminos de cancelar del panel (botón rojo y menú
+    // "Más" del pipeline) pasan por aquí, así que basta con pedirlo una vez.
+    let cancelReason: string | undefined;
+    if (target === "CANCELLED") {
+      // Textos literales: las claves nuevas no están en los diccionarios y
+      // src/i18n/ no entra en esta tarea — t() de una clave desconocida
+      // devuelve la clave cruda en pantalla. Mismo criterio que el
+      // "Permiso requerido:" de más arriba y que STATUS_LABELS.
+      const answer = await confirmWithReason({
+        title: "¿Cancelar esta cita?",
+        description:
+          "La cita queda cancelada y se anulan sus recordatorios pendientes. Puedes anotar el motivo para que quede en el expediente.",
+        variant: "danger",
+        withReason: true,
+        reasonLabel: "Motivo de la cancelación (opcional)",
+        reasonPlaceholder: "Ej.: el paciente pidió reagendar",
+        confirmText: t("agenda.detailPanel.actionCancel"),
+      });
+      if (!answer.confirmed) return false;
+      cancelReason = answer.reason?.trim() || undefined;
+    }
+
     const original: AgendaAppointmentDTO = appt;
     setPendingStatus(target);
     dispatch({ type: "OPTIMISTIC_STATUS", id: appt.id, status: target });
 
     try {
-      const updated = await patchAppointmentStatus(appt.id, target);
+      const updated =
+        cancelReason === undefined
+          ? await patchAppointmentStatus(appt.id, target)
+          : await patchStatusWithReason(appt.id, target, cancelReason);
       startTransition(() => {
         dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       });
@@ -232,12 +290,19 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
     }
   }
 
-  // Targets válidos desde el status actual (estructural, ignora rol — el
-  // server enforcea rol con 409 si no aplica). Renderizamos un botón por
-  // cada target válido. Esto reemplaza el "Iniciar consulta" hard-coded
-  // que solo aceptaba CHECKED_IN como origen y bloqueaba el flow
-  // CONFIRMED → IN_PROGRESS reportado por el usuario.
-  const validTargets = possibleTransitions(appt.status);
+  // Targets válidos desde el status actual SEGÚN LA MATRIZ (transitions.ts),
+  // más los predicates que dependen del reloj — hoy, la gracia de 15 min del
+  // no-show. Antes esto devolvía "todos los estados menos el actual" y el panel
+  // pintaba ocho botones en cualquier estado, de los que el servidor rechazaba
+  // con 409 los que no existían (hallazgos 33 y 39).
+  //
+  // El filtro por ROL se queda del lado del servidor: el rol no baja por este
+  // árbol de props (el panel solo recibe `permissions`), así que aquí se filtra
+  // por estado + permisos y la API vuelve a validar rol con 403.
+  const validTargets = possibleTransitions(appt.status, {
+    now: new Date(),
+    appointmentStart: new Date(appt.startsAt),
+  });
   // Para citas terminales (CANCELLED/NO_SHOW), "SCHEDULED" técnicamente es
   // una transición válida (revertir el status). Pero la UX clínica dental
   // espera que "Reagendar" abra una nueva cita — la cita vieja queda
@@ -438,6 +503,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
         appt={appt}
         pendingStatus={pendingStatus}
         onChange={changeStatus}
+        validTargets={validTargets}
       />
 
       {appt.requiresValidation && appt.overrideReason && (
@@ -446,6 +512,15 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
             <AlertTriangle size={12} aria-hidden /> {t("agenda.detailPanel.validationPending")}
           </div>
           <div className={styles.detailAlertsContent}>{appt.overrideReason}</div>
+        </div>
+      )}
+
+      {validTargets.length === 0 && (
+        // CHECKED_OUT es terminal: la matriz no tiene ninguna salida para
+        // ningún rol. Antes se pintaban cuatro botones y los cuatro daban 409
+        // (hallazgo 33). Ahora no hay botones, y se dice por qué.
+        <div className={styles.pipelineNote}>
+          {`Una cita en "${STATUS_LABELS[appt.status]}" ya no cambia de estado: es el final del recorrido.`}
         </div>
       )}
 
@@ -585,14 +660,19 @@ interface StatusPipelineProps {
   appt: AgendaAppointmentDTO;
   pendingStatus: AppointmentStatus | null;
   onChange: (status: AppointmentStatus) => Promise<boolean> | void;
+  /** Targets que la matriz permite desde el estado actual. */
+  validTargets: AppointmentStatus[];
 }
 
-function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) {
+function StatusPipeline({ appt, pendingStatus, onChange, validTargets }: StatusPipelineProps) {
   const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
   const currentIdx = pipelinePosition(appt.status);
   const next = nextLogicalStatus(appt.status);
-  const offRails = offRailsStatuses(appt.status);
+  // El menú "Más" proponía CANCELLED/NO_SHOW mirando solo el estado actual, sin
+  // consultar la matriz: en una cita COMPLETADA seguía ofreciendo "Cancelar"
+  // (hallazgo 39). Se intersecta con lo que de verdad se puede hacer.
+  const offRails = offRailsStatuses(appt.status).filter((s) => validTargets.includes(s));
   const isOffRails = currentIdx === -1;
 
   return (
@@ -603,6 +683,10 @@ function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) 
           const isDone = !isOffRails && idx < currentIdx;
           const isNext = next?.status === status;
           const isPending = pendingStatus === status;
+          // El riel del pipeline se sigue viendo entero (es el recorrido de la
+          // cita), pero solo se puede pulsar lo que la matriz permite: antes
+          // cualquier chip disparaba una transición que el server rechazaba.
+          const reachable = validTargets.includes(status);
           const stateClass = isCurrent
             ? styles.current
             : isDone
@@ -621,9 +705,13 @@ function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) 
                 e.stopPropagation();
                 void onChange(status);
               }}
-              disabled={pendingStatus !== null && !isPending}
+              disabled={!reachable || (pendingStatus !== null && !isPending)}
               aria-current={isCurrent}
-              title={STATUS_LABELS[status]}
+              title={
+                reachable || isCurrent
+                  ? STATUS_LABELS[status]
+                  : `No se puede pasar de "${STATUS_LABELS[appt.status]}" a "${STATUS_LABELS[status]}"`
+              }
             >
               {isDone && <Check size={10} aria-hidden />}
               <span>{STATUS_LABELS[status]}</span>

@@ -11,7 +11,7 @@ import type {
   ResourceKind,
 } from "./types";
 import {
-  dayRangeUtc,
+  agendaDayFetchRange,
   periodRangeUtc,
   type ClinicTimeConfig,
   type AdminPeriod,
@@ -128,7 +128,10 @@ export async function fetchAppointmentsForDay(
   config: ClinicTimeConfig,
   filter: AgendaQueryFilter,
 ): Promise<AgendaAppointmentDTO[]> {
-  const range = dayRangeUtc(dateISO, config);
+  // Día NATURAL de la clínica, no la ventana de horario: con `dayRangeUtc` las
+  // citas fuera de 08–20 desaparecían de la agenda y del picker de huecos
+  // (hallazgos 40 y 32). Misma ventana que ya usa la SSR de /dashboard/agenda.
+  const range = agendaDayFetchRange(dateISO, config);
 
   const where: Prisma.AppointmentWhereInput = {
     clinicId: filter.clinicId,
@@ -194,7 +197,9 @@ export async function fetchPendingValidation(
   category: ClinicCategory,
   viewer?: VisibilityViewer | null,
 ): Promise<AgendaAppointmentDTO[]> {
-  const range = dayRangeUtc(dateISO, config);
+  // Mismo día natural que fetchAppointmentsForDay: si no, una solicitud a las
+  // 07:00 salía en la rejilla pero no en el panel de pendientes de validar.
+  const range = agendaDayFetchRange(dateISO, config);
 
   const rows = await prisma.appointment.findMany({
     where: {

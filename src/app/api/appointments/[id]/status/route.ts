@@ -108,12 +108,29 @@ export async function PATCH(
   // misma transacción que el cambio de estado.
   const closesAppointment = body.status === "CANCELLED" || body.status === "NO_SHOW";
 
+  // Motivo de la cancelación. `StatusChangeInput.reason` ya existía en el tipo
+  // pero nadie lo escribía: el schema tiene `cancelReason`/`cancelledAt` y el
+  // panel de la agenda YA los muestra, así que el bloque salía siempre vacío en
+  // toda cancelación hecha por el staff (hallazgo 42). El portal del paciente,
+  // WhatsApp y el enlace público sí los guardaban; esto los iguala.
+  const cancelFields =
+    body.status === "CANCELLED"
+      ? {
+          cancelledAt: now,
+          cancelReason:
+            typeof body.reason === "string" && body.reason.trim()
+              ? body.reason.trim().slice(0, 300)
+              : null,
+        }
+      : {};
+
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.appointment.update({
       where: { id: params.id },
       data: {
         status: body.status,
         ...sideEffects,
+        ...cancelFields,
       },
       include: APPT_INCLUDE,
     });
