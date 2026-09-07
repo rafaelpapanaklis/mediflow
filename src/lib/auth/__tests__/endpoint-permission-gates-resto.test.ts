@@ -224,12 +224,23 @@ test("PATCH /api/waitlist/[id] sigue admitiendo BORRAR el doctor preferido (null
 
 const ESPERADO: Record<string, Record<Role, boolean>> = {
   // Presupuestos y planes de pago van con las keys de Facturación, igual que el
-  // PR #190: RECEPTIONIST las tiene todas y no pierde nada. DOCTOR no tiene
-  // ninguna billing.* por default — ES la pérdida de este lote, y está en el
-  // punto 4 del reporte.
-  "billing.view":       { SUPER_ADMIN: true, ADMIN: true, DOCTOR: false, RECEPTIONIST: true,  READONLY: true  },
-  "billing.create":     { SUPER_ADMIN: true, ADMIN: true, DOCTOR: false, RECEPTIONIST: true,  READONLY: false },
-  "billing.edit":       { SUPER_ADMIN: true, ADMIN: true, DOCTOR: false, RECEPTIONIST: true,  READONLY: false },
+  // PR #190: RECEPTIONIST las tiene todas y no pierde nada.
+  //
+  // DOCTOR: las tres de cotizar en `true`. Cuando se escribió este archivo el
+  // rol no traía NINGUNA billing.* por default y aquí se anotó como la pérdida
+  // del lote; el PR #216 corrigió la fila del rol y le devolvió
+  // billing.view/create/edit (el presupuesto es la cara del importe del plan
+  // que el propio doctor arma). Las dos ramas no comparten archivo, así que
+  // git las fusiona sin conflicto y esta tabla es la que se queda vieja:
+  // alineada a mano contra ROLE_DEFAULT_PERMISSIONS, misma decisión que
+  // permissions-matrix y endpoint-permission-gates.
+  //
+  // "billing.charge" se queda en `false` a propósito, y es la línea entera de
+  // la decisión: cotizar no es cobrar. El dinero lo mueve recepción o el
+  // administrador, y el arqueo tiene que cuadrar con quien lo movió.
+  "billing.view":       { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: true  },
+  "billing.create":     { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: false },
+  "billing.edit":       { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: false },
   "billing.charge":     { SUPER_ADMIN: true, ADMIN: true, DOCTOR: false, RECEPTIONIST: true,  READONLY: false },
   // Borrar imagen clínica: la doctrina del catálogo (nota de medicalRecord.edit)
   // dice que este borrado NO se le regala a recepción.
