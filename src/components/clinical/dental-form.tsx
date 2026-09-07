@@ -67,6 +67,28 @@ interface Props {
   };
 }
 
+/** Una adenda tal y como la guarda POST /api/clinical-notes/[id]/addendum. */
+interface Addendum {
+  id: string;
+  text: string;
+  authorName: string;
+  createdAt: string;
+}
+
+/** Lo que haya en specialtyData.addenda, saneado. Nunca lanza. */
+function readAddenda(spec: any): Addendum[] {
+  const raw = spec?.addenda;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((a: any) => a && typeof a.text === "string" && typeof a.createdAt === "string")
+    .map((a: any) => ({
+      id: String(a.id ?? a.createdAt),
+      text: a.text,
+      authorName: String(a.authorName ?? ""),
+      createdAt: a.createdAt,
+    }));
+}
+
 export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
@@ -74,6 +96,26 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   // expediente existente; consulta nueva: local y se vuelca tras crear el record.
   const { dxs, onAdd: onAddDx, onRemove: onRemoveDx, flush: flushDx } = useCodedDiagnoses(initialRecord?.id ?? null);
   const initialSpec = (initialRecord?.specialtyData ?? {}) as any;
+  /**
+   * NOTA FIRMADA = SOLO LECTURA — hallazgo 25.
+   *
+   * "Guardar consulta" nace con `status: "SIGNED"`, y el PATCH de
+   * /api/clinical-notes/[id] rechaza toda edición de una nota firmada con
+   * «Las notas firmadas no se pueden editar (NOM-024 inalterable)». Hasta hoy
+   * la pantalla no se enteraba: al abrir una consulta del historial pintaba
+   * este formulario entero, editable, con su botón "Guardar cambios". El
+   * doctor corregía la pieza equivocada, pulsaba, y se llevaba un toast rojo.
+   * El 100 % de las veces.
+   *
+   * No se arregla dejando editar —la inalterabilidad es la ley y está bien
+   * puesta—: se arregla dejando de prometerlo. Con la nota firmada el
+   * formulario se bloquea entero y en su lugar aparece el camino que la norma
+   * sí contempla: una ADENDA, que se añade al lado sin tocar lo firmado.
+   */
+  const isLocked = isEditing && initialSpec.status === "SIGNED";
+  const [addenda, setAddenda] = useState<Addendum[]>(() => readAddenda(initialSpec));
+  const [addendumText, setAddendumText] = useState("");
+  const [addendumSaving, setAddendumSaving] = useState(false);
   const [saving,     setSaving]     = useState(false);
   // Asistente IA de consulta — procedencia separada del texto clínico firmado.
   const [aiAssist, setAiAssist] = useState<AiAssistValue | null>(initialRecord?.aiAssist ?? null);
@@ -242,6 +284,105 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   if (vitals.temp && (nv(vitals.temp) < 34 || nv(vitals.temp) > 42))  vitalWarnings.push("Temp fuera de rango (34–42)");
   if (vitals.spo2 && (nv(vitals.spo2) < 80 || nv(vitals.spo2) > 100)) vitalWarnings.push("SpO₂ fuera de rango (80–100)");
 
+  // ── BORRADOR LOCAL DE LA CONSULTA EN CURSO — hallazgo 29 ──────────────────
+  //
+  // Sin esto, recargar a media consulta borraba lo tecleado del SOAP: el doctor
+  // volvía a un formulario vacío y el cierre se le bloqueaba (guardar exige
+  // motivo, diagnóstico o CIE-10).
+  //
+  // POR QUÉ sessionStorage Y NO localStorage. Esto es texto clínico de un
+  // paciente con nombre y apellidos, y el ordenador de un consultorio lo usan
+  // varias personas al día. sessionStorage aguanta justo lo que hay que
+  // aguantar —un F5, un cierre de pestaña accidental con recuperación, una
+  // navegación de ida y vuelta— y muere con la pestaña: no deja la exploración
+  // de un paciente esperando en el disco a que la abra el siguiente turno.
+  // Tampoco viaja a la base ni a ningún servidor: el borrador no es expediente.
+  //
+  // Qué se guarda: lo que se TECLEA (SOAP, periodontal, oclusal, ATM, higiene,
+  // radiografías, próxima visita), los signos vitales y los procedimientos
+  // elegidos. El odontograma queda fuera a propósito: en una consulta nueva se
+  // precarga del estado vivo del paciente y al guardar se sincroniza
+  // REEMPLAZANDO su historial dental — restaurar ahí una foto a medias es la
+  // forma de borrarle el odontograma a alguien, y no vale la pena.
+  const draftKey = isEditing ? null : `dc:dental-draft:${patientId}`;
+  const [draftRestored, setDraftRestored] = useState(false);
+  // Hasta que no se intentó leer el borrador no se puede escribir: si no, el
+  // primer render (con los campos vacíos) pisaría el borrador que iba a
+  // recuperarse.
+  const draftReadRef = useRef(false);
+
+  /**
+   * ¿Hay algo escrito ahí dentro? Recursiva a propósito: `form` no es plano —
+   * periodontal, oclusal y ATM son objetos anidados, e `hygieneInstructions` un
+   * arreglo. Una comprobación de un solo nivel daría "vacío" a una consulta en
+   * la que el doctor solo hubiera llenado el periodontograma, y le borraría el
+   * borrador en vez de guardárselo.
+   */
+  function tieneContenido(v: any): boolean {
+    if (v == null || v === false || v === "") return false;
+    if (typeof v === "string") return v.trim() !== "";
+    if (Array.isArray(v)) return v.some(tieneContenido);
+    if (typeof v === "object") return Object.values(v).some(tieneContenido);
+    return true;   // números y `true`
+  }
+
+  const clearDraft = useCallback(() => {
+    if (!draftKey) return;
+    try { window.sessionStorage.removeItem(draftKey); } catch { /* sin almacenamiento */ }
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey) { draftReadRef.current = true; return; }
+    try {
+      const raw = window.sessionStorage.getItem(draftKey);
+      const d = raw ? JSON.parse(raw) : null;
+      if (d && d.v === 1) {
+        if (d.form)   setForm(f => ({ ...f, ...d.form }));
+        if (d.vitals) setVitals(v => ({ ...v, ...d.vitals }));
+        if (Array.isArray(d.procs)) setSelectedProcs(d.procs);
+        setDraftRestored(true);
+      }
+    } catch {
+      // Navegación privada, almacenamiento bloqueado o borrador corrupto: se
+      // sigue exactamente como antes, sin borrador. Nunca rompe la consulta.
+    }
+    draftReadRef.current = true;
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || !draftReadRef.current) return;
+    const id = window.setTimeout(() => {
+      try {
+        const hayAlgoQueGuardar =
+          tieneContenido(form) || tieneContenido(vitals) || selectedProcs.length > 0;
+        if (!hayAlgoQueGuardar) {
+          window.sessionStorage.removeItem(draftKey);
+        } else {
+          window.sessionStorage.setItem(draftKey, JSON.stringify({
+            v: 1, savedAt: Date.now(), form, vitals, procs: selectedProcs,
+          }));
+        }
+      } catch { /* sin almacenamiento: se sigue sin borrador */ }
+    }, 700);
+    return () => window.clearTimeout(id);
+  }, [draftKey, form, vitals, selectedProcs]);
+
+  /** Tira el borrador y deja el formulario como recién abierto. */
+  function discardDraft() {
+    clearDraft();
+    setForm({
+      subjective: "", objective: "", assessment: "", plan: "",
+      periodontal: { plaque: "", calculus: "", gingival: "", pocketDepth: "", bleeding: false },
+      occlusal: { molarClass: "", bite: [] as string[], overbite: "", overjet: "" },
+      tmj: { opening: "", clicking: "", pain: "", guard: "" },
+      hygieneInstructions: [],
+      xrays: "", nextVisit: "",
+    });
+    setVitals({ bpSys: "", bpDia: "", hr: "", rr: "", temp: "", spo2: "", weight: "", height: "" });
+    setSelectedProcs([]);
+    setDraftRestored(false);
+  }
+
   function toggleProc(cat: CatalogProcedure) {
     setSelectedProcs(prev => {
       const exists = prev.find(p => p.id === cat.id);
@@ -316,6 +457,9 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   }
 
   async function handleSave() {
+    // Cinturón, además del formulario bloqueado: un Enter en cualquier campo
+    // dispara el submit del <form>, y una nota firmada no se guarda nunca.
+    if (isLocked) return;
     if (!form.subjective && !form.assessment && dxs.length === 0) {
       toast.error(t("clinical.dentalForm.reasonOrDiagnosisRequired"));
       return;
@@ -427,11 +571,41 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           } catch { toast.error(t("clinical.aiConsult.genericError")); }
         }
       }
+      // Guardada de verdad: el borrador local ya no tiene a quién servir.
+      clearDraft();
       onSaved(record);
     } catch (err: any) {
       toast.error(err.message ?? (isEditing ? t("clinical.dentalForm.updateError") : t("clinical.dentalForm.saveError")));
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Añade una ADENDA a la nota firmada. Va contra una ruta propia
+   * (/api/clinical-notes/[id]/addendum) porque el PATCH normal —con razón—
+   * rechaza cualquier cambio sobre una nota SIGNED: esa ruta solo sabe empujar
+   * al final de la lista y no puede tocar nada de lo firmado.
+   */
+  async function handleAddAddendum() {
+    const text = addendumText.trim();
+    if (!text || !initialRecord?.id) return;
+    setAddendumSaving(true);
+    try {
+      const res = await fetch(`/api/clinical-notes/${initialRecord.id}/addendum`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "No se pudo guardar la adenda.");
+      const body = await res.json();
+      setAddenda(readAddenda({ addenda: body.addenda }));
+      setAddendumText("");
+      toast.success("Adenda agregada a la nota.");
+    } catch (err: any) {
+      toast.error(err.message ?? "No se pudo guardar la adenda.");
+    } finally {
+      setAddendumSaving(false);
     }
   }
 
@@ -446,6 +620,42 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
 
   return (
     <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {isLocked && (
+        <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
+          <div className="font-semibold mb-0.5">
+            🔒 Consulta firmada{initialSpec.signedAt ? ` el ${new Date(initialSpec.signedAt).toLocaleString("es-MX")}` : ""}
+          </div>
+          <div>
+            Una nota firmada es inalterable (NOM-024), así que este formulario es solo de
+            lectura. Si hay algo que corregir o añadir, escríbelo abajo como <strong>adenda</strong>:
+            queda fechada y a tu nombre, junto a la nota original y sin modificarla.
+          </div>
+        </div>
+      )}
+
+      {/* Un <fieldset disabled> apaga de una vez TODOS los controles nativos que
+          cuelgan de él (inputs, textareas, selects y botones), incluido el submit.
+          Los estilos lo neutralizan como contenedor: sin borde, sin margen y con
+          el mismo flex-column que tenía el <form>, para que nada se mueva de sitio. */}
+      <fieldset
+        disabled={isLocked}
+        style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0, display: "flex", flexDirection: "column", gap: 20 }}
+      >
+      {draftRestored && (
+        <div className="flex flex-wrap items-center gap-2 p-2 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300">
+          <span>
+            Se recuperó lo que llevabas escrito de esta consulta. Aún no está guardada en el
+            expediente: para eso, pulsa «{t("clinical.dentalForm.saveConsultation")}».
+          </span>
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="px-2 py-0.5 rounded border border-blue-300 dark:border-blue-700 font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/30"
+          >
+            Descartar y empezar de cero
+          </button>
+        </div>
+      )}
       {orthoMilestones && orthoMilestones.months.length > 0 && (
         <CardNew title={`${t("clinical.dentalForm.timelineTitle")} — ${orthoMilestones.plan.name}`} sub={t("clinical.dentalForm.orthoPlanMonthly")}>
           <TreatmentTimeline milestones={orthoMilestones.months} />
@@ -575,7 +785,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           </button>
         </div>
       )}
-      <div style={{ width: "100%", overflowX: "auto" }}>
+      {/* El odontograma no se pinta con controles de formulario, así que el
+          `disabled` del fieldset no le llega: con la nota firmada se le quitan
+          los clics a mano para que no acepte marcas que nunca se guardarían. */}
+      <div style={{ width: "100%", overflowX: "auto", pointerEvents: isLocked ? "none" : undefined }} aria-disabled={isLocked}>
         <OdontogramV2 patientId={patientId} value={odontogram} onChange={handleOdontogramChange} />
       </div>
 
@@ -912,13 +1125,60 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <ButtonNew variant="primary" type="submit" disabled={saving}>
-          {saving
-            ? (isEditing ? t("clinical.dentalForm.savingChanges") : t("common.saving"))
-            : (isEditing ? t("common.saveChanges") : t("clinical.dentalForm.saveConsultation"))}
-        </ButtonNew>
-      </div>
+      {/* Con la nota firmada NO hay botón de guardar: era la promesa que la ley
+          no permite cumplir. En su lugar va el bloque de adendas, aquí abajo. */}
+      {!isLocked && (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <ButtonNew variant="primary" type="submit" disabled={saving}>
+            {saving
+              ? (isEditing ? t("clinical.dentalForm.savingChanges") : t("common.saving"))
+              : (isEditing ? t("common.saveChanges") : t("clinical.dentalForm.saveConsultation"))}
+          </ButtonNew>
+        </div>
+      )}
+      </fieldset>
+
+      {isLocked && (
+        <CardNew title="Adendas de la consulta" sub="Correcciones y añadidos posteriores a la firma. No modifican la nota original.">
+          {addenda.length > 0 && (
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {addenda.map(a => (
+                <li key={a.id} className="p-3 rounded-lg border border-border bg-muted/20">
+                  <div className="text-[11px] text-muted-foreground mb-1">
+                    {new Date(a.createdAt).toLocaleString("es-MX")}
+                    {a.authorName ? ` · ${a.authorName}` : ""}
+                  </div>
+                  <div className="text-sm" style={{ whiteSpace: "pre-wrap" }}>{a.text}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="field-new">
+            <label className="field-new__label">Nueva adenda</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Ej.: donde dice pieza 26 debe decir pieza 27; se corrige por error de captura."
+              value={addendumText}
+              onChange={e => setAddendumText(e.target.value)}
+              disabled={addendumSaving}
+            />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+            <ButtonNew
+              variant="primary"
+              type="button"
+              disabled={addendumSaving || !addendumText.trim()}
+              onClick={handleAddAddendum}
+            >
+              {addendumSaving ? t("common.saving") : "Agregar adenda"}
+            </ButtonNew>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Una adenda no se puede editar ni borrar después de guardarla.
+          </p>
+        </CardNew>
+      )}
 
       <PrescriptionModal
         open={rxOpen}
