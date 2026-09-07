@@ -220,6 +220,59 @@ export async function setEduOdontogramFinding(
   return { tooth, surface, condition, present };
 }
 
+export interface EduOdontogramClearInput {
+  tooth?: unknown;
+}
+
+/**
+ * LIMPIAR UN DIENTE ENTERO — hallazgos, caras y nota — en UNA petición.
+ *
+ * 🔴 POR QUÉ EXISTE (H-22). Antes la pantalla mandaba UNA petición POR
+ * HALLAZGO y le daba a todas el mismo "deshacer": restaurar el diente
+ * entero. Un diente con cinco hallazgos mandaba cinco peticiones y, si
+ * fallaba la tercera, se repintaban los cinco — incluidos los dos que las
+ * peticiones 1 y 2 ya habían borrado en Postgres. La pantalla quedaba
+ * enseñando hallazgos que ya no existían, que es justo lo contrario de lo
+ * que promete el contenedor ("nunca se deja pintado algo que no se
+ * guardó"). Con una sola escritura el resultado solo tiene dos formas: se
+ * borró todo, o no se borró nada y se deshace entero con razón.
+ *
+ * UN SOLO `deleteMany` y no un `$transaction` con N borrados: en Postgres
+ * un DELETE con `WHERE ... AND tooth = $n` es una sola sentencia y por
+ * tanto ya es atómico. Una transacción alrededor no agregaría garantía
+ * ninguna y sí un viaje más al pooler.
+ *
+ * La NOTA se va con el diente a propósito: vive en esta misma tabla con la
+ * key reservada "__nota__", así que entra en el mismo `where`. Antes se
+ * quedaba huérfana — "Limpiar diente" dejaba un diente sin un solo
+ * hallazgo y con la nota de lo que ya no está.
+ *
+ * ⚠️ Esto sigue siendo un borrado FÍSICO, como todo el odontograma de hoy
+ * (H-17). No lo empeora —antes eran N borrados físicos y ahora es uno—
+ * pero tampoco lo arregla: la baja lógica necesita una columna y va en
+ * otra ola.
+ */
+export async function clearEduOdontogramTooth(
+  ctx: EduClinicaContext,
+  patientId: string,
+  input: EduOdontogramClearInput,
+  now: Date = new Date(),
+): Promise<{ tooth: number; removed: number }> {
+  const institutionId = requireInstitution(ctx);
+  const pid = await requireClinicalPatient(ctx, patientId, now);
+
+  const tooth = parseEduFdi(input.tooth);
+  if (tooth === null) {
+    throw new EduPadronError("Ese número de diente no existe en la nomenclatura FDI.");
+  }
+
+  const { count } = await prisma.eduOdontogramEntry.deleteMany({
+    where: { institutionId, patientId: pid, tooth },
+  });
+
+  return { tooth, removed: count };
+}
+
 /**
  * La NOTA de un diente.
  *

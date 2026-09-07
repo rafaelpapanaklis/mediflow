@@ -7,31 +7,33 @@
  * odontograma en un campo de texto libre con forma de dibujo.
  *
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 EL CATÁLOGO DE HALLAZGOS SE **IMPORTA**, NO SE COPIA.
+ * 🔴 EL CATÁLOGO DE HALLAZGOS ES DEL INSTITUTO: `@/components/edu/odontograma`.
  *
- * `src/components/dashboard/odontogram-v2/data.ts` es un módulo PURO del
- * dental: no importa prisma, no importa nada de "@/", no toca `window` ni
- * `fetch`, no lleva "use client". Trae los 45 hallazgos agrupados por
- * especialidad (diagnóstico, restauradora, endodoncia, cirugía,
- * ortodoncia, preventivo, periodoncia, odontopediatría) y la clasificación
- * anatómica FDI.
+ * `data.ts` de esa carpeta es un módulo PURO: no importa prisma, no importa
+ * nada más de "@/", no toca `window` ni `fetch`, no lleva "use client".
+ * Trae los 45 hallazgos agrupados por especialidad (diagnóstico,
+ * restauradora, endodoncia, cirugía, ortodoncia, preventivo, periodoncia,
+ * odontopediatría) y la clasificación anatómica FDI.
  *
- * El vertical lo IMPORTA tal cual y NO lo edita ni lo copia a medias.
- * Copiarlo habría dado dos catálogos que empiezan iguales y terminan
- * distintos: el día que alguien agregue "caries radicular" al del dental,
- * el del instituto seguiría sin tenerla y nadie lo notaría hasta que un
- * alumno intentara marcarla.
+ * Hasta WS2-T3 esto se importaba del vertical DENTAL, con el argumento de
+ * que copiarlo daría "dos catálogos que empiezan iguales y terminan
+ * distintos". Era cierto, y el otro lado de la moneda resultó peor: el
+ * catálogo con el que un alumno marca la boca de un paciente lo movía otro
+ * equipo, por otra razón, sin que nadie del instituto se enterara. Un
+ * expediente clínico no se cambia desde fuera del vertical que responde
+ * por él. La carpeta se bifurcó y su cabecera explica el precio: un
+ * hallazgo nuevo del dental ya no llega solo.
  *
- * Lo que el vertical NO usa del dental es su ADAPTADOR
- * (odontogram-v2/adapter.ts), que habla con /api/odontogram y escribe en
- * la tabla `odontogram_entries` del producto dental. Las escrituras de esta
- * ola van a `edu_odontogram_entries` por /api/instituto/**.
+ * Lo que este módulo NO usa de la copia es su ADAPTADOR (`adapter.ts`),
+ * que sigue hablando con la API del dental y no debe usarse desde aquí:
+ * las escrituras del vertical van a `edu_odontogram_entries` por
+ * /api/instituto/**.
  * ═══════════════════════════════════════════════════════════════════════
  */
-import { COND_BY_ID, classify } from "@/components/dashboard/odontogram-v2/data";
-import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
+import { COND_BY_ID, classify } from "@/components/edu/odontograma/data";
+import type { Records, ToothRecord } from "@/components/edu/odontograma/types";
 
-export type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
+export type { Records, ToothRecord } from "@/components/edu/odontograma/types";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · EL DIENTE

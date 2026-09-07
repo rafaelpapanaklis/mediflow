@@ -19,6 +19,7 @@
  */
 import { createElement } from "react";
 import { Document, Page, renderToBuffer, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { EDU_RECETA_INTEGRIDAD_PDF_ALERTA } from "@/lib/edu/recetas-core";
 import type { EduRecetaPdfData } from "@/lib/edu/recetas";
 
 const s = StyleSheet.create({
@@ -52,6 +53,21 @@ const s = StyleSheet.create({
   },
   voidTitle: { color: "#b3261e", fontFamily: "Helvetica-Bold", fontSize: 11 },
   voidText: { color: "#7a1c16", fontSize: 8.5, marginTop: 2 },
+
+  // La franja de INTEGRIDAD ALTERADA. Misma forma que la de anulada y en
+  // el mismo sitio —arriba, antes de los medicamentos— porque el papel
+  // tiene que desmentirse a sí mismo antes de que alguien lo surta. Ámbar
+  // y no rojo: se distingue de un vistazo de la de "anulada", que dice
+  // otra cosa, y las dos pueden salir juntas.
+  tamperBand: {
+    borderWidth: 1.4,
+    borderColor: "#b45309",
+    backgroundColor: "#fff7e6",
+    padding: 8,
+    marginBottom: 12,
+  },
+  tamperTitle: { color: "#7c3d0a", fontFamily: "Helvetica-Bold", fontSize: 11 },
+  tamperText: { color: "#7c3d0a", fontSize: 8.5, marginTop: 2 },
 
   rule: { borderBottomWidth: 1, borderBottomColor: "#d7dbe0", marginVertical: 10 },
 
@@ -134,6 +150,16 @@ export function EduRecetaDocument({ data }: { data: EduRecetaPdfData }) {
           </View>
         </View>
 
+        {/* 🔴 La integridad va ANTES que la de anulada: si el contenido no
+            es el que se firmó, todo lo que sigue —incluido el motivo de la
+            anulación— se lee con eso puesto delante. */}
+        {data.integridad === "alterada" && (
+          <View style={s.tamperBand}>
+            <Text style={s.tamperTitle}>INTEGRIDAD ALTERADA — no surtir</Text>
+            <Text style={s.tamperText}>{EDU_RECETA_INTEGRIDAD_PDF_ALERTA}</Text>
+          </View>
+        )}
+
         {data.voided && (
           <View style={s.voidBand}>
             <Text style={s.voidTitle}>RECETA ANULADA — no surtir</Text>
@@ -209,10 +235,20 @@ export function EduRecetaDocument({ data }: { data: EduRecetaPdfData }) {
           </View>
         </View>
 
+        {/* El pie ya no AFIRMA integridad por el hecho de imprimir una
+            cifra: dice si la comprobación cuadró. Antes ponía "integridad
+            sha256 a1b2…" en cualquier papel, incluido uno manipulado. */}
         <Text style={s.foot} fixed>
           Expedida electrónicamente en DaleControl Institucional
-          {data.issuedHashShort ? ` · integridad sha256 ${data.issuedHashShort}…` : ""} · documento{" "}
-          {data.recetaId}
+          {data.issuedHashShort
+            ? ` · sha256 ${data.issuedHashShort}… (${
+                data.integridad === "ok"
+                  ? "integridad verificada"
+                  : data.integridad === "alterada"
+                    ? "INTEGRIDAD ALTERADA"
+                    : "sin verificar"
+              })`
+            : ""} · documento {data.recetaId}
         </Text>
       </Page>
     </Document>

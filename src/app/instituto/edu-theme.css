@@ -9828,3 +9828,113 @@ a.edu-ini-acceso:hover {
   background: rgba(180, 83, 9, 0.16);
   color: var(--edu-amber-300);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   WS2-T3 · INTEGRIDAD CLÍNICA — bloque APENDICE.
+
+   Todo con el prefijo `.edu-integ*`, y al final del archivo, por lo mismo
+   que los dos bloques de arriba: esta hoja tiene otro dueño (ws2-t1), se
+   escribe por apéndices y hay olas en paralelo tocándola. Un cambio a
+   mitad de archivo cuesta un conflicto y no gana nada.
+
+   `edu-theme.test.ts` exige que ninguna clase se declare dos veces en
+   primer nivel: `edu-integ` es un prefijo que no existía.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* El filtro por caso del expediente (H-20) y el de cualquier barra que
+   necesite un <select> corto EN LÍNEA. `.edu-field` apila etiqueta y
+   control en columna, que dentro de `.edu-toolbar__foot` deja la barra
+   con dos alturas distintas. */
+.edu-integ-filtro {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* La ficha de una carta de consentimiento ya firmada (H-12): el texto que
+   el paciente firmó, su huella verificada y las imágenes de las firmas.
+   Antes no volvía nunca a una pantalla del instituto. */
+.edu-integ-carta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* El texto firmado. Se pinta con la tipografía del panel y NO monoespaciada:
+   es un documento que una persona lee, no un volcado. `pre-wrap` porque los
+   saltos de línea del texto canónico son parte de lo que se firmó. */
+.edu-integ-carta__texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--edu-line);
+  border-radius: var(--edu-radius);
+  background: var(--edu-surface-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--edu-text-1);
+}
+
+.edu-integ-firmas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.edu-integ-firma {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--edu-line);
+  border-radius: 10px;
+  /* Fondo BLANCO fijo y no `--edu-surface`: los PNG de firma son trazo
+     negro sobre transparente. En modo oscuro, sobre la superficie del
+     panel, la firma desaparece. Es el mismo criterio que la isla clara del
+     odontograma. */
+  background: #ffffff;
+}
+
+.edu-integ-firma__img {
+  width: 100%;
+  height: 72px;
+  object-fit: contain;
+}
+
+.edu-integ-firma__quien {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: #4a5468;
+}
+
+.edu-integ-firma__cuando {
+  font-size: 11px;
+  color: #67707f;
+}
+
+/* S-7 · EL PANEL DE NOTAS DEL VISOR CBCT, tapado cuando no se puede escribir.
+   Las notas piden `estudios.upload`; con solo `estudios.view` ese "Guardar"
+   contestaba 403 SIEMPRE, con el estudio abierto y el paciente delante. El
+   visor es del dental y no acepta una prop para esconderlo, así que se tapa
+   desde aquí — el mismo remedio que ya lleva el panel muerto de DicomViewer2D
+   (.edu-vsr__lienzo--dicom .lg\:w-72), y con la misma trampa: si el dental
+   cambia lo que aquí se busca, el botón vuelve a aparecer sin que nada falle.
+   Por eso hay una prueba en edu-visor.test.ts que fija el `aria-label`.
+
+   Se engancha al `aria-label` del textarea y no a sus clases de Tailwind: un
+   rediseño del dental cambia clases mucho antes que una etiqueta de
+   accesibilidad. La nota se sigue LEYENDO abajo, en la ficha del estudio. */
+.edu-integ-solo-lectura div:has(> textarea[aria-label="Notas clínicas del estudio CBCT"]) {
+  display: none;
+}
+
+/* Reserva para navegadores sin `:has()`: se van el campo y la fila del
+   botón, y queda solo el encabezado suelto. Feo, pero nunca un "Guardar"
+   que no guarda. */
+.edu-integ-solo-lectura textarea[aria-label="Notas clínicas del estudio CBCT"],
+.edu-integ-solo-lectura textarea[aria-label="Notas clínicas del estudio CBCT"] + div {
+  display: none;
+}

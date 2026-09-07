@@ -62,7 +62,9 @@ import {
   eduRecetaSendable,
   eduRecetaSnapshot,
   eduRecetaVoidable,
+  eduRecetaWriteWhere,
   type EduRecetaCaseOption,
+  type EduRecetaIntegridad,
   type EduRecetaItemDraft,
   type EduRecetaRow,
 } from "@/lib/edu/recetas-core";
@@ -73,7 +75,7 @@ import {
 } from "@/lib/edu/types";
 
 export { EduPadronError as EduRecetaError };
-export type { EduRecetaCaseOption, EduRecetaRow } from "@/lib/edu/recetas-core";
+export type { EduRecetaCaseOption, EduRecetaIntegridad, EduRecetaRow } from "@/lib/edu/recetas-core";
 
 function requireInstitution(ctx: EduClinicaContext): string {
   const id = ctx?.institutionId;
@@ -127,6 +129,10 @@ const RECETA_SELECT = {
   issuedByName: true,
   issuedByCedula: true,
   issuedAt: true,
+  // 🔴 La huella viaja en TODAS las lecturas, no solo en la del PDF: se
+  // recalcula y se compara en `toRow` (H-16). Una columna que solo se lee
+  // para imprimirla al pie es una columna decorativa.
+  issuedHash: true,
   voidedByName: true,
   voidedAt: true,
   voidReason: true,
@@ -152,6 +158,52 @@ const RECETA_SELECT = {
 } satisfies Prisma.EduPrescriptionSelect;
 
 type RecetaPayload = Prisma.EduPrescriptionGetPayload<{ select: typeof RECETA_SELECT }>;
+
+/**
+ * 🔴 LA HUELLA SE RECALCULA AL LEER. Aquí y en el PDF, en los dos.
+ *
+ * `issuedHash` se congela en la transacción que EXPIDE la receta: es el
+ * sha256 del texto canónico que el docente tenía delante al firmar (mismo
+ * snapshot, misma función de hash y misma receta canónica que el gate de la
+ * Ola 4 — no hay una segunda forma de calcularlo). Comparar contra él es lo
+ * único que convierte esa columna en una comprobación de verdad.
+ *
+ * Antes NADIE la comparaba: el PDF la imprimía al pie y punto. Así que
+ * reescribir los renglones de una receta ya expedida —la carrera del H-16,
+ * un UPDATE a mano, una migración torcida— salía un papel con la cédula de
+ * un docente, medicamentos que ese docente nunca leyó, y una cifra abajo
+ * afirmando que el documento estaba íntegro.
+ *
+ * Devuelve `null` si la receta todavía no es un documento (no está
+ * EXPEDIDA ni ANULADA): no hay nada firmado contra lo que comparar.
+ *
+ * El desajuste se GRITA también en el log del servidor, igual que en los
+ * consentimientos: es un dato clínico alterado, no un aviso de pantalla.
+ */
+function verificarIntegridad(r: {
+  id: string;
+  status: string;
+  issuedHash: string | null;
+  diagnosis: string | null;
+  indications: string | null;
+  items: { drug: string; presentation: string | null; dose: string; route: string | null; frequency: string | null; duration: string | null; quantity: string | null; notes: string | null }[];
+}): EduRecetaIntegridad | null {
+  if (!eduRecetaPrintable(r.status as EduPrescriptionStatus)) return null;
+  if (!r.issuedHash) return "sin_hash";
+
+  const recalculado = eduApprovalHash(eduRecetaSnapshot(r));
+  if (recalculado === r.issuedHash) return "ok";
+
+  console.error(
+    "[instituto/recetas] HUELLA QUE NO CUADRA en la receta",
+    r.id,
+    "— el contenido cambió DESPUÉS de expedirse. Esperado",
+    r.issuedHash,
+    "recalculado",
+    recalculado,
+  );
+  return "alterada";
+}
 
 function toRow(
   r: RecetaPayload,
@@ -192,6 +244,8 @@ function toRow(
     voidedByName: r.voidedByName,
     voidedAtLabel: r.voidedAt ? stampLabel(r.voidedAt, timeZone) : null,
     voidReason: r.voidReason,
+
+    integridad: verificarIntegridad(r),
 
     lastDecisionNote,
 
@@ -470,11 +524,16 @@ async function resolveReceta(
         select: {
           id: true,
           caseId: true,
+          patientId: true,
           status: true,
           proposedByUserId: true,
           proposedByName: true,
           diagnosis: true,
           indications: true,
+          // S-16: el estado del CASO, para no mandar a firmar la receta de
+          // un caso que ya se cerró. Se bloqueaba al crear y no al enviar,
+          // así que un borrador viejo pasaba igual.
+          case: { select: { status: true } },
           items: {
             orderBy: [{ orden: "asc" as const }, { id: "asc" as const }],
             select: {
@@ -499,6 +558,62 @@ export interface EduRecetaUpdateInput {
   diagnosis?: unknown;
   indications?: unknown;
   items?: unknown;
+  /**
+   * H-24 · MOVER LA RECETA DE CASO. Solo en BORRADOR (ver abajo).
+   *
+   * La pantalla ya lo mandaba en el cuerpo del PATCH desde el primer día y
+   * el servidor lo TIRABA EN SILENCIO: el usuario elegía otro caso, pulsaba
+   * Guardar, salía "Receta guardada" y la receta seguía colgando del caso
+   * equivocado — o sea, la firmaría el docente equivocado.
+   */
+  caseId?: unknown;
+}
+
+/**
+ * El caso al que se MUEVE un borrador, comprobado entero.
+ *
+ * Se busca DENTRO del alcance clínico (uno de otra escuela o de otro alumno
+ * contesta 404 igual que uno inventado), tiene que ser del MISMO paciente
+ * —mover una receta a un caso de otra persona no es moverla, es escribir en
+ * el expediente de alguien más— y tiene que estar ABIERTO, la misma regla
+ * con la que nace.
+ */
+async function resolverCasoDestino(
+  ctx: EduClinicaContext,
+  institutionId: string,
+  patientId: string,
+  raw: unknown,
+  now: Date,
+) {
+  const caseId = eduCleanId(raw);
+  const scope = eduClinicalScope(ctx);
+  const caso = caseId
+    ? await prisma.eduCase.findFirst({
+        where: {
+          ...eduCaseScopeWhere({ institutionId, scope, now }),
+          id: caseId,
+          patientId,
+        },
+        select: {
+          id: true,
+          status: true,
+          student: { select: { userId: true, matricula: true } },
+        },
+      })
+    : null;
+  if (!caso) {
+    throw new EduPadronError(
+      "Ese caso no es de este paciente o no te toca. La receta la firma el docente que responde por el caso: no se puede colgar de uno cualquiera.",
+      caseId ? 404 : 400,
+    );
+  }
+  if ((EDU_CASE_CLOSED_STATUSES as string[]).includes(caso.status)) {
+    throw new EduPadronError(
+      "Ese caso ya está cerrado. Una receta va en un caso vivo: si el paciente volvió, se le abre caso.",
+      409,
+    );
+  }
+  return caso;
 }
 
 /**
@@ -535,10 +650,44 @@ export async function updateEduReceta(
     );
   }
 
-  const data: Prisma.EduPrescriptionUncheckedUpdateInput = {};
+  const data: Prisma.EduPrescriptionUncheckedUpdateInput = { updatedAt: now };
   if ("diagnosis" in input) data.diagnosis = texto(input.diagnosis, EDU_RECETA_DIAGNOSIS_MAX);
   if ("indications" in input) {
     data.indications = texto(input.indications, EDU_RECETA_INDICATIONS_MAX);
+  }
+
+  // ── H-24 · MOVER DE CASO, solo en BORRADOR ────────────────────────────
+  //
+  // No en PENDIENTE, y la razón no es de comodidad: una PENDIENTE ya tiene
+  // una EduCaseApproval abierta CONTRA SU CASO, en la bandeja de ese
+  // docente. Moverla dejaría la petición colgando del caso viejo y al
+  // docente nuevo sin nada que firmar. Quien quiera mover una pendiente la
+  // devuelve a borrador (el docente pide cambios) y entonces la mueve.
+  //
+  // Solo se toca si el cliente MANDA el campo y trae un caso distinto: la
+  // pantalla manda `caseId` siempre, también cuando nadie lo eligió.
+  const nuevoCaseId = "caseId" in input ? eduCleanId(input.caseId) : null;
+  if (nuevoCaseId && nuevoCaseId !== receta.caseId) {
+    if (receta.status !== "BORRADOR") {
+      throw new EduPadronError(
+        "Una receta que ya está esperando firma no cambia de caso: el docente la tiene en su bandeja. Pídele que te la devuelva a borrador y muévela entonces.",
+        409,
+      );
+    }
+    const destino = await resolverCasoDestino(
+      ctx,
+      institutionId,
+      receta.patientId,
+      nuevoCaseId,
+      now,
+    );
+    data.caseId = destino.id;
+    // La MATRÍCULA congelada se recalcula con la MISMA regla que al crear:
+    // solo si quien propone es el alumno de ESE caso. Si se quedara la
+    // vieja, el papel diría que lo propuso un alumno con la matrícula de
+    // otro — que es exactamente lo que esa regla existe para impedir.
+    data.proposedByMatricula =
+      destino.student.userId === ctx.eduUserId ? destino.student.matricula : null;
   }
 
   let items: EduRecetaItemDraft[] | null = null;
@@ -549,7 +698,41 @@ export async function updateEduReceta(
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.eduPrescription.update({ where: { id: receta.id }, data });
+    // ══════════════════════════════════════════════════════════════════
+    // 🔴 H-16 · EL ESTADO VA EN EL `where`. ES TODA LA CORRECCIÓN.
+    //
+    // Esta función leía el estado arriba (`resolveReceta`) y escribía aquí
+    // con `where: { id }` a secas. Entre las dos cosas hay una consulta y
+    // el arranque de una transacción, y en esa ventana cabe una firma:
+    //
+    //   1. la receta está PENDIENTE y el alumno pulsa «Guardar cambios»;
+    //   2. su docente la EXPIDE desde la bandeja (esa sí lleva su guardia);
+    //   3. la transacción del alumno entra DESPUÉS y reescribe los
+    //      renglones de una fila que ya está EXPEDIDA, con `issuedByCedula`
+    //      e `issuedHash` congelados de antes.
+    //
+    // Resultado: un PDF con la cédula de un docente y medicamentos que ese
+    // docente nunca leyó. Con el estado en el `where`, el paso 3 no toca
+    // ninguna fila y contesta 409 en vez de falsificar un documento.
+    //
+    // Es el MISMO patrón que ya usaban `voidEduReceta` y la firma de
+    // `decideEduApproval`; esta era la única escritura de recetas que se
+    // había quedado fuera.
+    //
+    // Y el `throw` deshace TAMBIÉN el borrado de los renglones de abajo:
+    // no queda una receta expedida con la prescripción vaciada.
+    // ══════════════════════════════════════════════════════════════════
+    const moved = await tx.eduPrescription.updateMany({
+      where: eduRecetaWriteWhere(institutionId, receta.id, receta.status as EduPrescriptionStatus),
+      data,
+    });
+    if (moved.count === 0) {
+      throw new EduPadronError(
+        "Esa receta cambió mientras la editabas: tu docente la firmó, la rechazó o la movió. Refresca la pantalla y mira cómo quedó antes de volver a escribir.",
+        409,
+      );
+    }
+
     if (items) {
       // Se reemplazan completos: los renglones no tienen identidad
       // propia hacia fuera (no los referencia nadie) y un diff renglón a
@@ -607,6 +790,20 @@ export async function sendEduRecetaToApproval(
     throw new EduPadronError("Agrega al menos un medicamento antes de mandarla a autorización.");
   }
 
+  // 🔴 S-16 · UN CASO CERRADO NO RECIBE RECETAS NUEVAS, tampoco por aquí.
+  //
+  // `createEduReceta` ya lo bloquea al crear, pero un BORRADOR puede
+  // quedarse semanas en la pestaña y el caso cerrarse mientras tanto:
+  // entonces se mandaba a firmar igual y aparecía en la bandeja de un
+  // docente que ya entregó ese caso. El candado tiene que estar donde el
+  // documento SALE, no solo donde nace.
+  if ((EDU_CASE_CLOSED_STATUSES as string[]).includes(receta.case.status)) {
+    throw new EduPadronError(
+      "El caso de esta receta ya está cerrado: no hay a quién mandársela a firmar. Si el paciente volvió, se le abre caso y la receta se cuelga de ése.",
+      409,
+    );
+  }
+
   const contentHash = eduApprovalHash(eduRecetaSnapshot(receta));
 
   try {
@@ -644,10 +841,22 @@ export async function sendEduRecetaToApproval(
         select: { id: true },
       });
 
-      await tx.eduPrescription.update({
-        where: { id: receta.id },
-        data: { status: "PENDIENTE" },
+      // 🔴 H-16 (el hueco gemelo, más estrecho): el estado en el `where`.
+      // Sin él, mandar a autorización una receta que el docente acaba de
+      // expedir en la misma ventana la devolvía a PENDIENTE — una EXPEDIDA
+      // que vuelve a estar esperando firma, con su cédula ya congelada
+      // dentro. El `throw` deshace también la EduCaseApproval de arriba:
+      // no queda una petición pendiente sobre una receta que no se movió.
+      const moved = await tx.eduPrescription.updateMany({
+        where: eduRecetaWriteWhere(institutionId, receta.id, receta.status as EduPrescriptionStatus),
+        data: { status: "PENDIENTE", updatedAt: now },
       });
+      if (moved.count === 0) {
+        throw new EduPadronError(
+          "Esa receta cambió mientras la mandabas: tu docente la firmó o la rechazó. Refresca la pantalla y mira cómo quedó.",
+          409,
+        );
+      }
 
       return approval;
     });
@@ -661,6 +870,102 @@ export async function sendEduRecetaToApproval(
     }
     throw err;
   }
+}
+
+/**
+ * RETIRAR DE AUTORIZACIÓN: PENDIENTE → BORRADOR, por quien la propuso.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 POR QUÉ ESTO EXISTE, Y POR QUÉ NO ES "ANULAR" (H-24).
+ *
+ * La auditoría encontró que el alumno no puede deshacerse de nada de lo que
+ * propone: `recetas.void` es de DOCENTE y DIRECCIÓN, y aun teniéndolo solo
+ * abre lo EXPEDIDO. Un alumno que se equivoca de paciente, o que ya no
+ * quiere esa receta, la manda a la bandeja de su docente y a partir de ahí
+ * mira. La decisión contraria a la que se tomó a propósito con
+ * `consentimientos.revoke`, que sí se le dio al alumno y con su razón
+ * escrita.
+ *
+ * Lo que NO se hizo, y hay que saberlo: darle un camino a ANULADA para lo
+ * que no está expedido. Dos decisiones escritas lo impiden y las dos siguen
+ * teniendo razón:
+ *
+ *   · `EDU_PRESCRIPTION_TRANSITIONS` (types.ts) dice `RECHAZADA: []` y
+ *     `BORRADOR: ["PENDIENTE"]`. Es la máquina de estados escrita como
+ *     dato, precisamente para que un `if` suelto no la contradiga.
+ *   · `eduRecetaPrintable` abre el PDF para ANULADA. Una anulada SÍ se
+ *     imprime, marcada, porque el papel existió una vez con una cédula
+ *     encima. Una receta que nunca se expidió y pasara a ANULADA ofrecería
+ *     el botón del PDF y luego rebotaría con "no tiene firmante": un botón
+ *     roto donde antes había una regla clara.
+ *
+ * Así que el alumno recupera lo que de verdad le faltaba —poder retirar lo
+ * que él mandó, mientras nadie lo haya firmado— por la puerta que la
+ * máquina de estados ya tenía abierta (PENDIENTE → BORRADOR, la misma que
+ * usa el docente al pedir cambios). Y no toca ningún permiso nuevo: es
+ * `recetas.propose`, la key de quien la armó.
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * La petición de autorización se cierra como CHANGES_REQUESTED SIN decisor,
+ * exactamente igual que un reenvío: la fila queda como historial y la
+ * bandeja no le atribuye a ningún docente una decisión que no tomó.
+ */
+export async function withdrawEduReceta(
+  ctx: EduClinicaContext,
+  recetaId: string,
+  now: Date = new Date(),
+): Promise<{ id: string }> {
+  const institutionId = requireInstitution(ctx);
+  const receta = await resolveReceta(ctx, institutionId, recetaId, now);
+
+  if (receta.status !== "PENDIENTE") {
+    throw new EduPadronError(
+      receta.status === "EXPEDIDA"
+        ? "Esa receta ya está expedida: no se retira, se anula con motivo (y la anula quien tiene la cédula)."
+        : "Esa receta no está esperando firma: no hay nada que retirar.",
+      409,
+    );
+  }
+  if (receta.proposedByUserId !== ctx.eduUserId) {
+    throw new EduPadronError(
+      `Esta receta la propuso ${receta.proposedByName} y solo quien la propuso la retira. Si hay que pararla por otra razón, el docente la rechaza desde su bandeja y deja escrito por qué.`,
+      403,
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // El estado en el `where`, como en las otras dos escrituras (H-16): si
+    // el docente la firmó en esta misma ventana, esto no la devuelve a
+    // borrador — y el throw deshace también el cierre de la petición.
+    const moved = await tx.eduPrescription.updateMany({
+      where: eduRecetaWriteWhere(institutionId, receta.id, "PENDIENTE"),
+      data: { status: "BORRADOR", updatedAt: now },
+    });
+    if (moved.count === 0) {
+      throw new EduPadronError(
+        "Esa receta ya no está esperando firma: tu docente acaba de decidirla. Refresca la pantalla.",
+        409,
+      );
+    }
+
+    await tx.eduCaseApproval.updateMany({
+      where: {
+        institutionId,
+        targetType: "EduPrescription",
+        targetId: receta.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "CHANGES_REQUESTED",
+        decidedAt: now,
+        // Sin `decidedById` a propósito: no la decidió ningún docente. La
+        // bandeja filtra por eso para no atribuirle a nadie una decisión.
+        decisionNote: "La retiró quien la propuso, antes de que nadie la firmara.",
+      },
+    });
+  });
+
+  return { id: receta.id };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -751,6 +1056,13 @@ export interface EduRecetaPdfData {
   issuedByCedula: string;
   issuedAtLabel: string;
   issuedHashShort: string | null;
+  /**
+   * 🔴 RECALCULADA al servir el PDF, nunca leída de una columna. Si sale
+   * "alterada", el documento lo DICE arriba, en una franja, junto a la de
+   * anulada: antes imprimía la huella al pie y jamás la comparaba, así que
+   * un papel manipulado salía afirmando que estaba íntegro.
+   */
+  integridad: EduRecetaIntegridad | null;
 
   voided: boolean;
   voidReason: string | null;
@@ -794,8 +1106,9 @@ export async function getEduRecetaPdfData(
           case: eduCaseScopeWhere({ institutionId, scope, now }),
         },
         select: {
+          // `issuedHash` ya viene en RECETA_SELECT: se verifica en TODA
+          // lectura, no solo aquí.
           ...RECETA_SELECT,
-          issuedHash: true,
           institution: { select: { name: true, city: true, phone: true, email: true } },
           patient: {
             select: { folio: true, firstName: true, lastName: true, birthDate: true },
@@ -859,6 +1172,7 @@ export async function getEduRecetaPdfData(
     issuedByCedula: receta.issuedByCedula,
     issuedAtLabel,
     issuedHashShort: receta.issuedHash ? receta.issuedHash.slice(0, 16) : null,
+    integridad: verificarIntegridad(receta),
 
     voided: status === "ANULADA",
     voidReason: receta.voidReason,
