@@ -170,28 +170,76 @@ export function availableTransitions(
   now: Date,
   appointmentStart: Date,
 ): AppointmentStatus[] {
-  return TRANSITIONS.filter((t) => {
-    if (t.from !== from) return false;
-    if (!t.allowedRoles.includes(role)) return false;
-    if (t.predicate && t.predicate(now, appointmentStart)) return false;
-    return true;
-  }).map((t) => t.to);
+  return possibleTransitions(from, { role, now, appointmentStart });
+}
+
+export interface PossibleTransitionsOptions {
+  /**
+   * Rol de quien mira. Si viene, se filtra además por su allowlist. El panel
+   * de la agenda todavía NO lo recibe (el rol no baja al cliente por ese
+   * árbol de props), así que llama sin él y obtiene el filtro estructural.
+   */
+  role?: UserRole;
+  /** Para evaluar los predicates (hoy solo la gracia de 15 min del no-show). */
+  now?: Date;
+  appointmentStart?: Date;
 }
 
 /**
- * Lista de targets válidos desde un status, ignorando rol y predicates.
- * Usado por la UI del panel detail para filtrar visualmente botones.
- * El server (PATCH /api/appointments/[id]/status) valida con canTransition:
- * transición fuera de la matriz o predicate fallido → 409; rol sin permiso
- * → 403. La UI muestra el `reason` en el toast de error.
+ * Targets a los que una cita en `from` PUEDE pasar según la matriz. Es lo que
+ * la UI usa para pintar botones, y por eso tiene que decir la verdad.
+ *
+ * 🔴 Antes devolvía "todos los estados menos el actual", ignorando la matriz
+ * entera (hallazgos 33 y 39, comprobados en la app real): el panel de detalle
+ * pintaba ocho botones en cualquier estado y el servidor rechazaba los
+ * inválidos con 409. En CHECKED_OUT ofrecía cuatro transiciones y las cuatro
+ * fallaban; en una cita COMPLETADA ofrecía "Cancelar", que también fallaba.
+ *
+ * Sin `role` el filtro es solo ESTRUCTURAL (qué permite la matriz desde ese
+ * estado, para cualquier rol) — que es el contrato que ya estaba documentado
+ * aquí y el que usa el panel. Con `role` filtra también por su allowlist, y
+ * con `now`/`appointmentStart` aplica los predicates. El server sigue siendo
+ * la última palabra: `canTransition` en PATCH /api/appointments/[id]/status.
  */
-export function possibleTransitions(from: AppointmentStatus): AppointmentStatus[] {
-  // Todos los estados (menos el actual): la UI ofrece pasar a cualquiera.
-  const ALL: AppointmentStatus[] = [
-    "SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_CHAIR",
-    "IN_PROGRESS", "COMPLETED", "CHECKED_OUT", "CANCELLED", "NO_SHOW",
-  ];
-  return ALL.filter((s) => s !== from);
+export function possibleTransitions(
+  from: AppointmentStatus,
+  opts: PossibleTransitionsOptions = {},
+): AppointmentStatus[] {
+  const { role, now, appointmentStart } = opts;
+  const out: AppointmentStatus[] = [];
+  for (const t of TRANSITIONS) {
+    if (t.from !== from) continue;
+    if (role && !t.allowedRoles.includes(role)) continue;
+    if (t.predicate && now && appointmentStart && t.predicate(now, appointmentStart)) continue;
+    if (!out.includes(t.to)) out.push(t.to);
+  }
+  return out;
+}
+
+/**
+ * Detecta el rechazo de la constraint EXCLUDE de Postgres sobre `appointments`
+ * (`appt_doctor_no_overlap`, SQLSTATE 23P01): dos citas solapadas del mismo
+ * doctor o del mismo recurso. Es la ÚLTIMA palabra sobre dobles reservas —
+ * dos peticiones simultáneas pueden pasar las dos el pre-chequeo en memoria,
+ * pero solo una entra.
+ *
+ * 🔴 Hallazgo 32: mirar solo `.code` NO alcanza y por eso el usuario veía un
+ * 500 crudo en vez del 409 con el nombre de la cita en conflicto. Postgres no
+ * tiene mapeo Prisma para 23P01, así que en un `create()` por ORM el error
+ * llega como PrismaClientUnknownRequestError SIN `.code`, con el SQLSTATE y el
+ * texto de la constraint metidos dentro de `.message`. Gemelo dental de
+ * `isBarberOverlapError` (src/lib/barber/agenda.ts), que ya reconocía las tres
+ * formas.
+ */
+export function isAppointmentOverlapError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string; meta?: { code?: string }; message?: unknown };
+  if (e.code === "P2010") return e.meta?.code === "23P01";
+  if (e.code === "23P01") return true;
+  if (typeof e.message !== "string") return false;
+  // Sin nombre de constraint cableado: sobre `appointments` la única familia de
+  // EXCLUDE es la de no-solape (doctor y recurso).
+  return e.message.includes("23P01") || e.message.includes("exclusion constraint");
 }
 
 export function sideEffectsOf(
