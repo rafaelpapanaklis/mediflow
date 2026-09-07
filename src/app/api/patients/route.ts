@@ -16,6 +16,14 @@ import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { stripPatientSecrets } from "@/lib/patient-secrets";
 import { linkOrphanThreadsToPatient } from "@/lib/whatsapp/inbox-log";
+import {
+  parseGenderFilter,
+  patientSearchTokens,
+  matchesDebtFilter,
+  isDebtFilterActive,
+  isProbablePatientDuplicate,
+} from "@/lib/patients/patient-search-core";
+import { findPatientIdsBySearch } from "@/lib/patients/patient-search";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +42,7 @@ export const dynamic = "force-dynamic";
  *   status       active | inactive | archived
  *   quickFilter  debt | vip | nextAppt | birthdayWeek | noContact6m
  *   ageMin/Max   rango edad en años
- *   gender       MALE,FEMALE,OTHER (multi-comma)
+ *   gender       M,F,OTHER (multi-comma; acepta los alias MALE/FEMALE)
  *   doctorId     primaryDoctor.id
  *   tags         comma-separated, hasSome
  *   hasDebt      true | false
@@ -78,8 +86,13 @@ async function v2Handler(
   const quickFilter = sp.get("quickFilter");
   const ageMin = parseIntOrNull(sp.get("ageMin"));
   const ageMax = parseIntOrNull(sp.get("ageMax"));
-  const gendersParam = sp.get("gender") ?? "";
-  const genders = gendersParam ? gendersParam.split(",").filter(Boolean) : [];
+  // 31 — el enum de la base es M | F | OTHER. El cajón de filtros mandaba
+  // MALE/FEMALE: Prisma lanzaba PrismaClientValidationError y la lista ENTERA
+  // devolvía 500 ("elijo Masculino y la pantalla se rompe"). parseGenderFilter
+  // traduce los alias históricos —siguen llegando de URLs guardadas y de
+  // pestañas con el bundle viejo— y TIRA lo que no reconoce, que es lo que
+  // impide que un `?gender=cualquierCosa` vuelva a tumbar el padrón.
+  const genders = parseGenderFilter(sp.get("gender"));
   const doctorId = sp.get("doctorId");
   const source = sp.get("source") ?? "";
   const tagsParam = sp.get("tags") ?? "";
@@ -115,20 +128,48 @@ async function v2Handler(
   // buildPatientWhere fija en where.AND (doctores + visibleUserIds); el spread de
   // `prev` de abajo lo conserva. Prisma combina clinicId + (AND scope) +
   // (AND tokens) todos con AND.
-  const tokens = search.split(/\s+/).filter(Boolean);
-  if (tokens.length) {
+  //
+  // 38 — Y ADEMÁS SIN ACENTOS Y CON EL TELÉFONO NORMALIZADO. `mode:
+  // "insensitive"` es ILIKE: arregla las mayúsculas y NO los acentos, así que
+  // "Perez" devolvía cero con "Pérez" en la ficha; y el teléfono se guarda como
+  // lo teclea recepción ("+52 55 1234 5678"), así que pegar "5512345678" —el
+  // número copiado de WhatsApp— tampoco encontraba nada. Las dos
+  // normalizaciones van DENTRO de la consulta (ver patient-search.ts, mismo
+  // movimiento que el emparejamiento por teléfono del Inbox).
+  //
+  // El resultado entra como un `id IN (...)` más dentro de where.AND, así que
+  // el scope de tenant y visibilidad que fija buildPatientWhere NO se mueve de
+  // sitio: esto solo ESTRECHA lo que ya se podía ver.
+  const rawTokens = search.split(/\s+/).filter(Boolean);
+  const searchTokens = patientSearchTokens(search);
+  // La condición mira los términos CRUDOS: si alguien teclea solo comodines de
+  // LIKE ("%"), la normalización los deja fuera y sin este detalle el buscador
+  // se saltaría el filtro entero y devolvería el padrón completo — el mismo
+  // fallo que el del hallazgo 41, por otra puerta. Con términos crudos pero sin
+  // términos normalizados, matchIds sale null y manda el criterio de siempre.
+  if (rawTokens.length) {
     const prev = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+    const matchIds = await findPatientIdsBySearch({
+      clinicIds: visibility.clinicIds,
+      tokens: searchTokens,
+    });
     where.AND = [
       ...prev,
-      ...tokens.map((tok): Prisma.PatientWhereInput => ({
-        OR: [
-          { firstName: { contains: tok, mode: "insensitive" } },
-          { lastName: { contains: tok, mode: "insensitive" } },
-          { email: { contains: tok, mode: "insensitive" } },
-          { phone: { contains: tok, mode: "insensitive" } },
-          { patientNumber: { contains: tok, mode: "insensitive" } },
-        ],
-      })),
+      // `null` = la consulta normalizada no se pudo hacer (motor distinto,
+      // permisos). Se cae al criterio de SIEMPRE —el término crudo, sin
+      // normalizar— en vez de devolver una lista vacía: peor que no encontrar
+      // a "Pérez" sin acento es no encontrar a nadie.
+      ...(matchIds !== null
+        ? [{ id: { in: matchIds } } as Prisma.PatientWhereInput]
+        : rawTokens.map((tok): Prisma.PatientWhereInput => ({
+            OR: [
+              { firstName: { contains: tok, mode: "insensitive" } },
+              { lastName: { contains: tok, mode: "insensitive" } },
+              { email: { contains: tok, mode: "insensitive" } },
+              { phone: { contains: tok, mode: "insensitive" } },
+              { patientNumber: { contains: tok, mode: "insensitive" } },
+            ],
+          }))),
     ];
   }
   if (genders.length > 0) {
@@ -192,7 +233,10 @@ async function v2Handler(
     !!visitFromDate ||
     !!visitToDate ||
     ["balance", "lastVisit", "nextAppointment"].includes(sortCol) ||
-    hasDebt === "false";
+    // 41 — antes esto solo contemplaba la rama "En cero": con "Con deuda: Sí"
+    // no se pedía el post-fetch, no se filtraba nada y la chip se marcaba como
+    // filtro activo mientras devolvía el padrón entero.
+    isDebtFilterActive(hasDebt);
   const dbFetchTake = needsPostFetch ? 5000 : limit;
   const dbFetchSkip = needsPostFetch ? 0 : (page - 1) * limit;
 
@@ -419,7 +463,10 @@ async function v2Handler(
   if (quickPostFetch === "birthdayWeek") {
     filtered = filtered.filter((p) => isBirthdayThisWeek(p.dob));
   }
-  if (hasDebt === "false") filtered = filtered.filter((p) => p.balance === 0);
+  // 41 — las DOS ramas: "Sí" (saldo > 0) y "En cero". Solo existía la segunda.
+  if (isDebtFilterActive(hasDebt)) {
+    filtered = filtered.filter((p) => matchesDebtFilter(hasDebt, p.balance));
+  }
   if (visitFromDate || visitToDate) {
     filtered = filtered.filter((p) => {
       if (!p.lastVisit) return false;
@@ -595,6 +642,58 @@ export async function POST(req: NextRequest) {
   const curpCheck = validateCurpRecord({ curp: body.curp, curpStatus, passportNo: body.passportNo });
   if (curpCheck.ok === false) {
     return NextResponse.json({ error: curpCheck.error }, { status: 400 });
+  }
+
+  // ── 37 · GUARDA DE DUPLICADOS, EN EL SERVIDOR ──────────────────────────
+  // El aviso "ya existe este paciente" no había saltado NUNCA: el modal
+  // preguntaba a `/api/patients?search=Ana García` sin `v=2` y caía en el
+  // handler legacy, que hace `contains` de la frase ENTERA contra cada columna
+  // por separado — firstName "Ana" no contiene "Ana García" → cero resultados →
+  // cero avisos → gemelo creado en silencio.
+  //
+  // Se arregla AQUÍ y no solo en el modal a propósito: una comprobación que
+  // vive en el cliente se la salta cualquier otro llamador, y entre el GET y el
+  // POST cabe otra alta. El servidor es el único sitio donde la guarda no se
+  // puede esquivar. `allowDuplicate: true` es el "sí, créalo igual" que manda
+  // el modal después de que el usuario confirme — el aviso avisa, no prohíbe:
+  // dos personas pueden llamarse igual y recepción tiene que poder seguir.
+  //
+  // Los candidatos pasan por buildPatientWhere: la guarda NO puede convertirse
+  // en una forma de averiguar que existe un paciente restringido por
+  // visibleUserIds preguntando por su nombre.
+  const alta = {
+    firstName: String(body.firstName ?? "").trim(),
+    lastName: String(body.lastName ?? "").trim(),
+    phone: typeof body.phone === "string" ? body.phone : null,
+  };
+  if (body.allowDuplicate !== true && alta.firstName && alta.lastName) {
+    const dupIds = await findPatientIdsBySearch({
+      clinicIds: [ctx.clinicId],
+      tokens: patientSearchTokens(`${alta.firstName} ${alta.lastName}`),
+      limit: 50,
+    });
+    if (dupIds && dupIds.length > 0) {
+      const candidatos = await prisma.patient.findMany({
+        where: buildPatientWhere(ctx, { id: { in: dupIds } }),
+        select: { id: true, patientNumber: true, firstName: true, lastName: true, phone: true },
+      });
+      const duplicados = candidatos.filter((c) => isProbablePatientDuplicate(c, alta));
+      if (duplicados.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Ya existe un paciente con nombre "${alta.firstName} ${alta.lastName}".`,
+            code: "DUPLICATE_PATIENT",
+            duplicates: duplicados.map((d) => ({
+              id: d.id,
+              patientNumber: d.patientNumber,
+              fullName: `${d.firstName} ${d.lastName}`.trim(),
+              phone: d.phone,
+            })),
+          },
+          { status: 409 },
+        );
+      }
+    }
   }
 
   // Visibilidad por paciente: el creador elige quién del equipo lo ve.

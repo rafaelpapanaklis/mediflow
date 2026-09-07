@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { genderShortLabel, type PatientGender } from "@/lib/patients/patient-search-core";
 import type { TFunction } from "@/i18n/t";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
@@ -62,7 +63,8 @@ interface PatientRow {
   phone: string | null;
   dob: string | null;
   age: number | null;
-  gender: "MALE" | "FEMALE" | "OTHER";
+  /** Enum `Gender` de la base: M | F | OTHER. NUNCA "MALE"/"FEMALE". */
+  gender: PatientGender;
   tags: string[];
   isVip: boolean;
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
@@ -1303,7 +1305,7 @@ function PatientRowComp({
               <span className={styles.patientMeta}>
                 {p.patientNumber}
                 {p.age != null && ` · ${t("patients.row.yearsOld", { age: p.age })}`}
-                {p.gender !== "OTHER" && ` · ${p.gender === "MALE" ? "M" : "F"}`}
+                {genderShortLabel(p.gender) && ` · ${genderShortLabel(p.gender)}`}
               </span>
               {/* FASE 2 — el paciente vive en otra sede vinculada. Va en su
                   propia línea (patientInfo apila) para no romper el ellipsis
@@ -1485,7 +1487,7 @@ function PatientsGrid({
                 <span className={styles.gridMeta}>
                   {p.patientNumber}
                   {p.age != null && ` · ${t("patients.row.yearsOld", { age: p.age })}`}
-                  {p.gender !== "OTHER" && ` · ${p.gender === "MALE" ? "M" : "F"}`}
+                  {genderShortLabel(p.gender) && ` · ${genderShortLabel(p.gender)}`}
                   {p.source && ` · ${p.source}`}
                 </span>
                 {/* FASE 2 — sede de origen del paciente prestado. */}
@@ -1647,8 +1649,12 @@ function FilterDrawer({
             <span className={styles.drawerLabel}>{t("patients.drawer.gender")}</span>
             <div className={styles.checkRow}>
               {[
-                { v: "MALE", l: t("patients.drawer.genderMale") },
-                { v: "FEMALE", l: t("patients.drawer.genderFemale") },
+                // Los valores REALES del enum `Gender` (prisma/schema.prisma:1500).
+                // Mandaban "MALE"/"FEMALE": Prisma los rechazaba con
+                // PrismaClientValidationError y la lista entera respondía 500 en
+                // cuanto alguien aplicaba el filtro.
+                { v: "M", l: t("patients.drawer.genderMale") },
+                { v: "F", l: t("patients.drawer.genderFemale") },
                 { v: "OTHER", l: t("patients.drawer.genderOther") },
               ].map((g) => (
                 <button

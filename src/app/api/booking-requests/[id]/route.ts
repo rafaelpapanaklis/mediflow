@@ -11,6 +11,8 @@ import {
   freeSlotsForDay,
   isMissingTable,
 } from "@/lib/booking-requests/server";
+import { findPatientsByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
+import { pickExistingPatientForBooking } from "@/lib/patients/patient-search-core";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +21,10 @@ export const dynamic = "force-dynamic";
  *   { action: "accept", startTime?: "HH:MM", doctorId?: string }
  *   { action: "reject", reason?: string }
  *
- * ACEPTAR es lo que convierte una solicitud en algo real: crea el Patient de
- * ESTA clínica y la Appointment en el horario pedido. Hasta aquí el paciente no
- * existía en la base — la vía sin cuenta no crea expedientes fantasma.
+ * ACEPTAR es lo que convierte una solicitud en algo real: engancha la
+ * Appointment del horario pedido al expediente de ESTA clínica — al que ya
+ * existía si el teléfono lo identifica, y a uno nuevo si de verdad es la
+ * primera vez. Hasta aquí la vía sin cuenta no crea expedientes fantasma.
  *
  * El hueco NO estaba apartado mientras la solicitud esperaba, así que puede
  * habérselo ganado otra persona. En ese caso se responde 409 CON los horarios
@@ -134,6 +137,49 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     : todos;
 
   const { firstName, lastName } = partirNombre(solicitud.patientName);
+
+  // ── 36 · NO DUPLICAR EL EXPEDIENTE ──────────────────────────────────
+  // Aceptar hacía SIEMPRE un patient.create. Las otras tres vías por las que
+  // entra un paciente sí deduplican (el bot de WhatsApp por los últimos 10
+  // dígitos, el portal por correo verificado, el importador por teléfono y
+  // correo); ésta no, así que el paciente que ya venía a la clínica nacía otra
+  // vez —vacío— y el día de la consulta el doctor abría la ficha sin historial
+  // ni alergias.
+  //
+  // Se reusa el criterio que YA existe, no uno nuevo:
+  // findPatientsByWhatsAppPhone es el mismo helper del Inbox y del webhook, y
+  // compara los últimos 10 dígitos NORMALIZADOS en los dos lados (el teléfono
+  // se guarda como lo teclea recepción: "+52 55 1234 5678"). Ver
+  // src/lib/whatsapp/inbox-log.ts.
+  //
+  // La búsqueda va FUERA de la transacción a propósito: el helper usa el
+  // cliente global de Prisma y llamarlo dentro pediría una segunda conexión
+  // mientras la transacción retiene la suya. La ventana de carrera que queda
+  // (dos recepcionistas aceptando a la vez dos solicitudes del MISMO teléfono)
+  // es la que ya existe hoy, así que esto no empeora nada y sí arregla el caso
+  // real, que es el de todos los días.
+  const mismoTelefono = await findPatientsByWhatsAppPhone(clinicId, solicitud.patientWhatsapp)
+    .catch((err) => {
+      // Quedarse sin deduplicar es peor que un 500, pero mucho mejor que no
+      // poder aceptar la cita: si la búsqueda falla, se sigue como antes.
+      console.error("[booking-requests] búsqueda de paciente existente falló:", err);
+      return [] as Array<{ id: string; phone: string | null }>;
+    });
+  // El helper devuelve id+teléfono; para desempatar dos hermanos que comparten
+  // el celular hace falta el NOMBRE. Y hace falta releerlos por Prisma de todas
+  // formas: la consulta del helper no filtra `deletedAt`, y un expediente
+  // cancelado por ARCO (PII ya anonimizado) no es un paciente al que colgarle
+  // una cita.
+  const candidatosExpediente = mismoTelefono.length > 0
+    ? await prisma.patient.findMany({
+        where: { id: { in: mismoTelefono.map((p) => p.id) }, clinicId, deletedAt: null },
+        select: { id: true, firstName: true, lastName: true, phone: true },
+      })
+    : [];
+  const pacienteExistenteId = pickExistingPatientForBooking(
+    candidatosExpediente,
+    solicitud.patientName,
+  );
   // El procedimiento y lo que escribió el paciente se arrastran a la cita: si
   // se quedan en la solicitud, quien atiende nunca los ve.
   const notasCita = [
@@ -161,22 +207,35 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       const doctor = candidatos.find(c => !tomados.has(c.id));
       if (!doctor) throw new Error("SLOT_TAKEN");
 
-      // 1) El expediente. El folio SIEMPRE con el helper: `count + 1` deja
-      //    huecos y choca contra @@unique([clinicId, patientNumber]).
-      await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinicId} FOR UPDATE`;
-      const patientNumber = await nextPatientNumber(clinicId, tx);
-      const paciente = await tx.patient.create({
-        data: {
-          clinicId,
-          patientNumber,
-          firstName,
-          lastName,
-          phone: solicitud.patientWhatsapp,
-          dob: solicitud.patientDob,
-          primaryDoctorId: doctor.id,
-        },
-        select: { id: true, firstName: true, lastName: true },
-      });
+      // 1) El expediente: el que YA existe con ese teléfono, o uno nuevo.
+      //    Cuando se reusa NO se toca ni un campo de la ficha — los datos de un
+      //    formulario público no pisan lo que capturó la clínica.
+      //    El folio SIEMPRE con el helper: `count + 1` deja huecos y choca
+      //    contra @@unique([clinicId, patientNumber]).
+      let paciente: { id: string; firstName: string; lastName: string } | null = null;
+      if (pacienteExistenteId) {
+        paciente = await tx.patient.findFirst({
+          where: { id: pacienteExistenteId, clinicId, deletedAt: null },
+          select: { id: true, firstName: true, lastName: true },
+        });
+      }
+      const reusado = paciente !== null;
+      if (!paciente) {
+        await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinicId} FOR UPDATE`;
+        const patientNumber = await nextPatientNumber(clinicId, tx);
+        paciente = await tx.patient.create({
+          data: {
+            clinicId,
+            patientNumber,
+            firstName,
+            lastName,
+            phone: solicitud.patientWhatsapp,
+            dob: solicitud.patientDob,
+            primaryDoctorId: doctor.id,
+          },
+          select: { id: true, firstName: true, lastName: true },
+        });
+      }
 
       // 2) La cita.
       const cita = await tx.appointment.create({
@@ -208,7 +267,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         },
       });
 
-      return { paciente, cita, doctor };
+      return { paciente, cita, doctor, reusado };
     }));
 
     await logMutation({
@@ -222,6 +281,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         origen: "booking_request",
         bookingRequestId: solicitud.id,
         patientId: creado.paciente.id,
+        // Para poder distinguir en la auditoría un expediente NUEVO de uno
+        // reusado sin tener que cruzar tablas.
+        pacienteReusado: creado.reusado,
         doctorId: creado.doctor.id,
         startsAt,
       },
@@ -233,6 +295,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ok: true,
       status: "ACEPTADA",
       patientId: creado.paciente.id,
+      patientReused: creado.reusado,
       appointmentId: creado.cita.id,
       doctorName: `${creado.doctor.firstName} ${creado.doctor.lastName}`,
     });
