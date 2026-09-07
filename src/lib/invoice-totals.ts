@@ -55,18 +55,67 @@ export function sumInvoiceItems(items: any[]): number {
 }
 
 /**
+ * Base imponible de CADA concepto: importe de la línea menos su descuento propio
+ * y menos la parte que le toca del descuento de factura. Es EXACTAMENTE la línea
+ * que viaja en el payload del CFDI — `spreadInvoiceDiscount` reparte el descuento
+ * global igual que el timbrado—, así que la línea de aquí y la de allá son la
+ * misma. Única fuente de las bases por concepto: la usan el total interno
+ * (`computeInvoiceTotal`) y la predicción del CFDI (`cfdiTotalBreakdown`), para
+ * que los dos criterios no puedan volver a separarse.
+ */
+export function invoiceLineBases(items: any[], discount: number): number[] {
+  const list = Array.isArray(items) ? items : [];
+  const extra = spreadInvoiceDiscount(list, discount);
+  return list.map((it, i) =>
+    round2(round2(itemQuantity(it) * itemUnitPrice(it)) - round2(itemDiscount(it) + (extra[i] ?? 0))),
+  );
+}
+
+/**
  * Total interno canónico: base = Σconceptos − descuento; si el IVA va AGREGADO
  * (taxIncluded=false) se suma sobre la base; si va incluido, el total es la base.
+ *
+ * CRITERIO DEL SAT (hallazgo 19). El impuesto se redondea **por concepto y se
+ * suma**, nunca `round2(base × tasa)` sobre la base agregada. Los dos criterios
+ * dan números DISTINTOS —hasta 2¢ con 8 conceptos, en ~34% de las facturas con
+ * IVA agregado— y solo el de por concepto cuadra con lo que se timbra: el CFDI
+ * manda `taxes` DENTRO de cada línea y Facturapi redondea línea por línea.
+ *
+ * El primer argumento acepta los CONCEPTOS o su suma:
+ *  - `items[]` → criterio del SAT (por concepto). Es el que hay que usar.
+ *  - `number`  → criterio agregado LEGADO. Sin las líneas no hay forma de
+ *    redondear por concepto, así que se conserva: cambiarlo en silencio movería
+ *    el total de las facturas ya guardadas con él, y la alerta de
+ *    `cfdi-timbrado-alerta` tiene que seguir viéndolas divergir.
+ *
+ * En los otros dos modos —IVA incluido en el precio, y exento (tasa 0)— no hay
+ * impuesto que sumar y el total es la base: ahí ambos criterios coinciden por
+ * definición, y por eso el presupuesto (que no lleva IVA) no se mueve.
+ *
+ * La tasa sale de la factura, no de `IVA_RATE_PCT`: el input libre 0-100 que
+ * existió antes pudo dejar tasas intermedias en facturas viejas. Con la única
+ * tasa que el CFDI sabe emitir (16) esto es idéntico a `cfdiTotalBreakdown`.
  */
 export function computeInvoiceTotal(
-  itemsSum: number,
+  itemsOrSum: any[] | number,
   discount: number,
   taxRate: number | null | undefined,
   taxIncluded: boolean,
 ): { base: number; tax: number; total: number } {
   const disc = round2(Math.max(0, Number(discount) || 0));
-  const base = round2(Math.max(0, itemsSum - disc));
   const rate = isFinite(Number(taxRate)) && Number(taxRate) > 0 ? Number(taxRate) : 0;
+  if (Array.isArray(itemsOrSum)) {
+    const bases = invoiceLineBases(itemsOrSum, disc);
+    // Mismo piso en 0 que el camino agregado, y por lo mismo: el total interno
+    // nunca es negativo. `cfdiTotalBreakdown` sí va sin piso, a propósito, para
+    // que la guarda de integridad pueda VER un descuento que se pasa de largo.
+    const base = round2(Math.max(0, bases.reduce((a, b) => a + b, 0)));
+    const tax = taxIncluded || rate === 0
+      ? 0
+      : round2(bases.reduce((s, b) => s + round2(b * (rate / 100)), 0));
+    return { base, tax, total: round2(base + tax) };
+  }
+  const base = round2(Math.max(0, Number(itemsOrSum) - disc));
   const tax = taxIncluded ? 0 : round2(base * (rate / 100));
   return { base, tax, total: round2(base + tax) };
 }
@@ -201,11 +250,13 @@ export function invoiceTaxPortion(
  * verdad se timbra en cuanto hay varios conceptos (hasta 2¢ con 8 líneas), y la
  * guarda de integridad no podía verlo porque comparaba agregado contra agregado.
  *
- * La base por línea se arma con `spreadInvoiceDiscount`, que es EXACTAMENTE el
- * descuento por concepto que viaja en el payload: así la línea de aquí y la de
- * allá son la misma línea. Sin piso en 0 a nivel factura, a propósito: si el
- * descuento global excede la capacidad de las líneas, Facturapi timbraría el
- * remanente y la guarda debe verlo, no taparlo con un 0.
+ * La base por línea se arma con `invoiceLineBases` — la MISMA que usa el total
+ * interno desde el hallazgo 19, con el descuento por concepto que viaja en el
+ * payload: así la línea de aquí y la de allá son la misma línea, y el total
+ * guardado y el timbrado no pueden volver a divergir. Sin piso en 0 a nivel
+ * factura, a propósito: si el descuento global excede la capacidad de las
+ * líneas, Facturapi timbraría el remanente y la guarda debe verlo, no taparlo
+ * con un 0.
  */
 export function cfdiTotalBreakdown(
   items: any[],
@@ -213,11 +264,7 @@ export function cfdiTotalBreakdown(
   taxMode: CfdiTaxMode,
   taxIncluded: boolean,
 ): { bases: number[]; base: number; tax: number; total: number } {
-  const list = Array.isArray(items) ? items : [];
-  const extra = spreadInvoiceDiscount(list, discount);
-  const bases = list.map((it, i) =>
-    round2(round2(itemQuantity(it) * itemUnitPrice(it)) - round2(itemDiscount(it) + (extra[i] ?? 0))),
-  );
+  const bases = invoiceLineBases(items, discount);
   const base = round2(bases.reduce((a, b) => a + b, 0));
   if (taxMode !== "iva16" || taxIncluded) return { bases, base, tax: 0, total: base };
   const tax = round2(bases.reduce((s, b) => s + round2(b * (IVA_RATE_PCT / 100)), 0));
