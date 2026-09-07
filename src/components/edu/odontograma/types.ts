@@ -225,13 +225,24 @@ export interface DetailPanelProps {
   onRemove: OnRemove;
   onPick: (id: string) => void;
   /**
-   * ¿Esta sesión puede ESCRIBIR en el odontograma? (H-21)
+   * ¿Esta sesión puede ESCRIBIR en el odontograma? (H-21 · N-14)
    *
    * `undefined` = sí, para que el panel siga siendo el mismo componente de
-   * antes allí donde nadie pregunta. En false, la × de cada hallazgo,
-   * «Limpiar diente» y la nota se DESHABILITAN — no se esconden — y debajo
-   * se escribe `disabledReason`. Antes se pintaban los tres y los tres eran
-   * no-ops silenciosos: se pulsaba y no pasaba nada, sin error y sin motivo.
+   * antes allí donde nadie pregunta. En false se DESHABILITAN —no se
+   * esconden— los CINCO controles de escritura del panel, y debajo se
+   * escribe `disabledReason`:
+   *
+   *   · la × de cada hallazgo, «Limpiar diente» y la nota (H-21);
+   *   · la rejilla de caras y los chips de la mini-paleta (N-14), que se
+   *     quedaron fuera del primer arreglo.
+   *
+   * Antes se pintaban los cinco enteros y los cinco eran no-ops
+   * silenciosos: se pulsaba y no pasaba nada, sin error y sin motivo.
+   *
+   * ⚠️ Lo que NO se apaga, y es a propósito: las pestañas de especialidad
+   * de la mini-paleta (solo cambian qué hallazgos se listan, que en solo
+   * lectura sigue sirviendo) y el diente en 3D/2D, que no es un botón —
+   * tocarlo con `canEdit` en false solo reabre el mismo diente.
    */
   canEdit?: boolean;
   /** Por qué no se puede escribir. Se pinta bajo los controles apagados:

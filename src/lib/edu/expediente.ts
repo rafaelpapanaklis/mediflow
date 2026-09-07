@@ -52,7 +52,9 @@ import {
   eduClinicalScope,
   eduRecordCanTransition,
   EDU_RECORD_CONTENT_FIELDS,
+  EDU_RECORD_EMPTY_DENIED,
   EDU_RECORD_WITHDRAW_DENIED,
+  EDU_RECORD_WITHDRAWN_APPROVAL_NOTE,
   eduRecordCanWithdraw,
   eduRecordHasContent,
   eduRecordIsEditable,
@@ -429,6 +431,31 @@ export async function createEduRecord(
     correctsId = previa.id;
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 H-23 · UNA NOTA NACE CON ALGO ESCRITO. LO EXIGE EL SERVIDOR.
+  //
+  // El botón de la pantalla ya lo pedía (`!tieneAlgo(draft)` apaga
+  // "Guardar" en expediente-screen.tsx), pero eso es una cortesía de la
+  // pantalla y no una regla del expediente: un POST a mano, un doble clic
+  // que manda el formulario vacío o el siguiente cliente que se escriba
+  // creaban una nota sin una sola palabra, que después hay que RETIRAR
+  // —con su fila de baja y su firma— para sacarla de en medio.
+  //
+  // Se comprueba sobre el texto YA SANEADO (`eduRecordText` recorta y
+  // devuelve undefined si solo había espacios), que es lo que se va a
+  // guardar, y no sobre el body crudo.
+  // ══════════════════════════════════════════════════════════════════
+  const contenido = {
+    subjetivo: eduRecordText(input.subjetivo, EDU_RECORD_TEXT_MAX) ?? null,
+    objetivo: eduRecordText(input.objetivo, EDU_RECORD_TEXT_MAX) ?? null,
+    analisis: eduRecordText(input.analisis, EDU_RECORD_TEXT_MAX) ?? null,
+    plan: eduRecordText(input.plan, EDU_RECORD_TEXT_MAX) ?? null,
+    diagnostico: eduRecordText(input.diagnostico, EDU_RECORD_DIAGNOSIS_MAX) ?? null,
+  };
+  if (!eduRecordHasContent(contenido)) {
+    throw new EduPadronError(EDU_RECORD_EMPTY_DENIED);
+  }
+
   const created = await prisma.eduRecord.create({
     data: {
       institutionId,
@@ -442,11 +469,7 @@ export async function createEduRecord(
       appointmentId,
       correctsId,
       status: "BORRADOR",
-      subjetivo: eduRecordText(input.subjetivo, EDU_RECORD_TEXT_MAX) ?? null,
-      objetivo: eduRecordText(input.objetivo, EDU_RECORD_TEXT_MAX) ?? null,
-      analisis: eduRecordText(input.analisis, EDU_RECORD_TEXT_MAX) ?? null,
-      plan: eduRecordText(input.plan, EDU_RECORD_TEXT_MAX) ?? null,
-      diagnostico: eduRecordText(input.diagnostico, EDU_RECORD_DIAGNOSIS_MAX) ?? null,
+      ...contenido,
     },
     select: { id: true },
   });
@@ -605,23 +628,6 @@ export async function updateEduRecord(
         );
       }
 
-      // Una nota VACÍA no se entrega ni se firma. Se comprueba con lo que
-      // va a quedar guardado (lo que ya estaba MÁS lo que llega en este
-      // mismo PATCH), no solo con lo de la base: si no, escribir y firmar
-      // en una sola petición rebotaría siempre.
-      if (st !== "BORRADOR") {
-        const final = {
-          subjetivo: (data.subjetivo as string | null | undefined) ?? actual.subjetivo,
-          objetivo: (data.objetivo as string | null | undefined) ?? actual.objetivo,
-          analisis: (data.analisis as string | null | undefined) ?? actual.analisis,
-          plan: (data.plan as string | null | undefined) ?? actual.plan,
-          diagnostico: (data.diagnostico as string | null | undefined) ?? actual.diagnostico,
-        };
-        if (!eduRecordHasContent(final)) {
-          throw new EduPadronError("La nota está vacía: escribe algo antes de entregarla o firmarla.");
-        }
-      }
-
       const sellos = eduRecordStamps(st, now, ctx.eduUserId, { submittedAt: actual.submittedAt });
       data.status = st;
       data.submittedAt = sellos.submittedAt;
@@ -632,6 +638,37 @@ export async function updateEduRecord(
         ? { connect: { id: sellos.signedByUserId } }
         : { disconnect: true };
       siguiente = st;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 H-23 · LA NOTA VACÍA SE COMPRUEBA SIEMPRE, NO SOLO AL CAMBIAR DE ESTADO.
+  //
+  // Este chequeo vivía DENTRO del `if (input.status !== undefined)`, así
+  // que un PATCH que solo mandaba texto —el "Guardar" del modal de
+  // edición— podía dejar en blanco los cinco campos de una nota ENVIADA y
+  // el servidor lo aceptaba: el docente abría la bandeja y encontraba una
+  // página en blanco esperando su firma, con la hora de entrega intacta.
+  //
+  // Ahora se juzga por el ESTADO EN EL QUE VA A QUEDAR (`siguiente`) y con
+  // lo que va a quedar guardado (lo de la base MÁS lo que llega en este
+  // mismo PATCH): escribir y firmar en una sola petición sigue pasando, y
+  // vaciar una ENVIADA sin tocar su estado ya no.
+  //
+  // Un BORRADOR SÍ se puede quedar vacío, y es deliberado: es un papel a
+  // medio escribir, y para el que nunca debió existir está "Retirar"
+  // (H-23), que deja su fila con quién y cuándo.
+  // ══════════════════════════════════════════════════════════════════
+  if (siguiente !== "BORRADOR") {
+    const final = {
+      subjetivo: (data.subjetivo as string | null | undefined) ?? actual.subjetivo,
+      objetivo: (data.objetivo as string | null | undefined) ?? actual.objetivo,
+      analisis: (data.analisis as string | null | undefined) ?? actual.analisis,
+      plan: (data.plan as string | null | undefined) ?? actual.plan,
+      diagnostico: (data.diagnostico as string | null | undefined) ?? actual.diagnostico,
+    };
+    if (!eduRecordHasContent(final)) {
+      throw new EduPadronError(EDU_RECORD_EMPTY_DENIED);
     }
   }
 
@@ -700,9 +737,52 @@ export async function withdrawEduRecord(
     throw new EduPadronError(EDU_RECORD_WITHDRAW_DENIED, 409);
   }
 
-  await prisma.eduRecord.updateMany({
-    where: { id: actual.id, institutionId, deletedAt: null },
-    data: { deletedAt: now, deletedById: ctx.eduUserId },
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 N-1 · RETIRAR LA NOTA CIERRA SUS PETICIONES DE AUTORIZACIÓN.
+  //
+  // Un BORRADOR se puede mandar a autorizar, y retirarlo después dejaba la
+  // petición PENDING viva: la bandeja la pintaba con el resumen de una nota
+  // que ninguna lectura del expediente devuelve ya, el docente la firmaba
+  // con su cédula, y la puerta del caso avanzaba de etapa sobre una página
+  // que no está en el expediente. El modal de la pantalla promete justo lo
+  // contrario ("deja de poder mandarse a autorizar").
+  //
+  // Se cierran como CHANGES_REQUESTED, con `decidedAt` y SIN `decidedById`:
+  // es EXACTAMENTE el patrón que ya usa el reenvío en
+  // `requestEduApproval` (autorizaciones.ts), y por la misma razón — nadie
+  // la decidió, la cerró un hecho. No se usa EXPIRED, que en este vertical
+  // significa "se firmó y luego el contenido cambió" y haría que las
+  // pantallas dijeran que hubo una firma que nunca existió
+  // (autorizaciones-core.ts:752-754). Y no se BORRA ninguna fila: las
+  // filas son el historial de qué se pidió y cuándo.
+  //
+  // Las dos escrituras van en UNA transacción: una nota retirada con su
+  // petición todavía esperando firma es el agujero entero, y un corte de
+  // red entre dos escrituras sueltas lo reabre.
+  //
+  // El `deletedAt: null` de `loadTargets` (autorizaciones.ts) es la otra
+  // mitad, y hace falta igual: cubre las peticiones de notas retiradas
+  // ANTES de este arreglo, que ya están en la base.
+  // ══════════════════════════════════════════════════════════════════
+  await prisma.$transaction(async (tx) => {
+    await tx.eduRecord.updateMany({
+      where: { id: actual.id, institutionId, deletedAt: null },
+      data: { deletedAt: now, deletedById: ctx.eduUserId },
+    });
+
+    await tx.eduCaseApproval.updateMany({
+      where: {
+        institutionId,
+        targetType: "EduRecord",
+        targetId: actual.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "CHANGES_REQUESTED",
+        decidedAt: now,
+        decisionNote: EDU_RECORD_WITHDRAWN_APPROVAL_NOTE,
+      },
+    });
   });
 
   return { id: actual.id };

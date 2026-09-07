@@ -150,6 +150,32 @@ export function eduRecordCanWithdraw(status: EduRecordStatus): boolean {
   return status === "BORRADOR";
 }
 
+/**
+ * 🔴 H-23 · EL MOTIVO DE REBOTAR UNA NOTA VACÍA, ESCRITO UNA SOLA VEZ.
+ *
+ * Lo usan los DOS caminos que pueden dejar una nota sin una palabra: el
+ * alta (`createEduRecord`) y la edición (`updateEduRecord`). Dos mensajes
+ * distintos para la misma regla es como se llega a que la pantalla enseñe
+ * uno y el endpoint conteste el otro.
+ */
+export const EDU_RECORD_EMPTY_DENIED =
+  "La nota está vacía: escribe algo antes de guardarla, entregarla o firmarla.";
+
+/**
+ * 🔴 N-1 · LO QUE QUEDA ESCRITO EN LA PETICIÓN DE AUTORIZACIÓN QUE SE CIERRA
+ * al retirar la nota.
+ *
+ * Vive aquí, en el módulo puro, por lo mismo que `EDU_RECORD_WITHDRAW_DENIED`:
+ * lo lee una persona en la pantalla del docente, así que tiene que poder
+ * comprobarse sin base de datos.
+ *
+ * Dice que no la decidió nadie porque la fila se cierra SIN `decidedById`:
+ * atribuirle a un docente una decisión que no tomó es exactamente lo que la
+ * cadena de custodia de este vertical existe para evitar.
+ */
+export const EDU_RECORD_WITHDRAWN_APPROVAL_NOTE =
+  "La nota se retiró del expediente, así que esta petición se cerró sola. No la decidió nadie.";
+
 /** El motivo del rechazo, escrito para una persona y no para un log. */
 export const EDU_RECORD_WITHDRAW_DENIED =
   "Solo se retira un BORRADOR. Una nota ENVIADA ya está en la bandeja de tu docente: devuélvela a borrador y entonces se puede retirar. Una FIRMADA no se retira nunca — se corrige con una nota nueva que la referencia, y en el expediente se leen las dos. Es la NOM-004.";

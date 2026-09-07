@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { eduRequest } from "@/components/edu/edu-http";
@@ -117,6 +117,10 @@ export function EduOdontogramaScreen({
   // quien atiende. Un `useState` con valor inicial y no un `useEffect` que
   // lo "corrija" después: lo segundo pintaría un odontograma de adulto
   // durante un fotograma y pisaría el cambio manual en cada re-render.
+  //
+  // (La dentición NO se resincroniza y el dibujo SÍ — ver el `useEffect` de
+  // más abajo. No es una incoherencia: la dentición es una preferencia de
+  // quien mira, y el dibujo es el expediente.)
   const [dentition, setDentition] = useState<Dentition>(denticionInicial);
   const [brush, setBrush] = useState<string | null>(null);
   const [eraser, setEraser] = useState(false);
@@ -136,6 +140,42 @@ export function EduOdontogramaScreen({
   // las 32 celdas del dibujo no se invalidan en cada pintado.
   const recordsRef = useRef(records);
   recordsRef.current = records;
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 N-4 · EL DIBUJO SE RESINCRONIZA CON `entries`.
+  //
+  // `records` nacía de un `useState` con valor inicial y nadie lo volvía a
+  // tocar desde el servidor. `router.refresh()` —el botón "Actualizar" de
+  // abajo— baja props nuevas pero NO remonta el cliente, así que la lista
+  // de movimientos se recalculaba y el dibujo se quedaba como estaba. Dos
+  // personas con el mismo paciente abierto: B retira la caries del 16, A
+  // pulsa "Actualizar", y la lista decía "Retirado … por B" mientras el
+  // dibujo de arriba seguía pintando la caries y el contador sumándola.
+  // Es exactamente el odontograma que miente que prohíbe la cabecera de
+  // este archivo.
+  //
+  // 🔴 SOLO CUANDO NO HAY ESCRITURAS EN VUELO, y el guardia se lee de un
+  // ref y no de la dependencia del efecto. El marcado es OPTIMISTA: si
+  // llegara un `entries` tomado ANTES de que el servidor recibiera el
+  // último clic, resincronizar borraría del dibujo un hallazgo que sí se
+  // guardó. Esa foto se DESCARTA (se marca consumida y no se aplica) en
+  // vez de guardarse para aplicarla al terminar de guardar, que es la
+  // versión sutilmente rota del mismo arreglo: la foto no mejora con el
+  // tiempo, y aplicarla tarde repintaría lo viejo encima de lo nuevo. El
+  // siguiente "Actualizar" trae una foto que ya incluye todo.
+  //
+  // Se compara por IDENTIDAD del array: `entries` es una prop nueva en
+  // cada render del servidor y la misma referencia mientras no lo haya.
+  // ══════════════════════════════════════════════════════════════════
+  const guardandoRef = useRef(0);
+  guardandoRef.current = guardando;
+  const entriesRef = useRef(entries);
+  useEffect(() => {
+    if (entriesRef.current === entries) return;
+    entriesRef.current = entries;
+    if (guardandoRef.current > 0) return;
+    setRecords(eduEntriesToRecords(entries));
+  }, [entries]);
 
   /**
    * Una escritura del odontograma, con su deshacer.
@@ -173,6 +213,29 @@ export function EduOdontogramaScreen({
     [patientId],
   );
 
+  /**
+   * 🔴 H-22 · EL DESHACER DE **UN** HALLAZGO.
+   *
+   * Vuelve a pintar exactamente el hallazgo que el servidor rechazó, sobre
+   * el estado que haya EN ESE MOMENTO (`setRecords` con función, no con la
+   * foto de antes del gesto). Es lo que permite mandar N peticiones por un
+   * gesto sin que el fallo de una repinte lo que las otras sí borraron.
+   *
+   * `cara === null` = el hallazgo es del diente entero.
+   */
+  const restaurar = useCallback((fdi: number, cara: string | null, condition: string) => {
+    setRecords((actual) =>
+      clonar(actual, fdi, (r) => {
+        if (cara) {
+          if (!r.surfaces[cara]) r.surfaces[cara] = [];
+          if (!r.surfaces[cara].includes(condition)) r.surfaces[cara].push(condition);
+        } else if (!r.tooth.includes(condition)) {
+          r.tooth.push(condition);
+        }
+      }),
+    );
+  }, []);
+
   const apply = useCallback(
     (fdi: number, kind: ApplyKind, letter?: SurfaceLetter | string) => {
       if (!canEdit) {
@@ -183,22 +246,42 @@ export function EduOdontogramaScreen({
       const rec = antes[fdi] ?? EMPTY_RECORD;
 
       // ── Goma: quita lo que haya en esa cara (o en el diente) ──────────
+      //
+      // 🔴 H-22 · CADA PETICIÓN DESHACE **LO SUYO**, no el diente entero.
+      //
+      // Aquí seguía vivo el patrón que H-22 arregló en "Limpiar diente":
+      // una cara con tres hallazgos mandaba tres peticiones y le daba a
+      // las tres el MISMO deshacer, `() => setRecords(antes)`. Si fallaba
+      // la tercera, volvían a pintarse las tres — incluidas las dos que
+      // las peticiones 1 y 2 sí habían dado de baja en Postgres. La
+      // pantalla quedaba enseñando hallazgos que ya no existen, que es lo
+      // contrario de lo que promete la cabecera de este archivo, y solo se
+      // arreglaba recargando.
+      //
+      // No se une en una sola escritura porque no hay una: el POST de
+      // "Limpiar diente" borra el diente ENTERO (caras, corona y nota), y
+      // la goma por cara tiene que dejar en pie lo de las otras caras.
+      // Así que se hace lo otro que pedía H-22: deshacer solo lo que
+      // falló, con `restaurar`, que reinyecta ESE hallazgo sobre el estado
+      // que haya en ese momento en vez de volver a una foto vieja.
       if (eraser || kind === "glyphErase") {
         const enCara = kind === "surface" && letter;
-        const ids = enCara ? (rec.surfaces?.[String(letter)] ?? []) : (rec.tooth ?? []);
+        const cara = enCara ? String(letter) : null;
+        const ids = enCara ? (rec.surfaces?.[cara as string] ?? []) : (rec.tooth ?? []);
         if (ids.length === 0) return;
 
+        // Copia: `ids` apunta al array de `antes`, y `clonar` lo reemplaza.
+        const borrados = [...ids];
         const siguiente = clonar(antes, fdi, (r) => {
-          if (enCara) delete r.surfaces[String(letter)];
+          if (cara) delete r.surfaces[cara];
           else r.tooth = [];
         });
         setRecords(siguiente);
-        // Una petición por hallazgo: son pocos (lo que quepa en una cara) y
-        // así un fallo suelto no se lleva los demás.
-        for (const condition of ids) {
+        // Una petición por hallazgo: son pocos (lo que quepa en una cara).
+        for (const condition of borrados) {
           void escribir(
-            { tooth: fdi, surface: enCara ? letter : null, condition, present: false },
-            () => setRecords(antes),
+            { tooth: fdi, surface: cara, condition, present: false },
+            () => restaurar(fdi, cara, condition),
           );
         }
         return;
@@ -233,7 +316,7 @@ export function EduOdontogramaScreen({
         setRecords(antes),
       );
     },
-    [brush, canEdit, eraser, escribir],
+    [brush, canEdit, eraser, escribir, restaurar],
   );
 
   const quitar = useCallback(
@@ -468,9 +551,13 @@ export function EduOdontogramaScreen({
             onNote={(txt: string) => void anotar(selected, txt)}
             onRemove={quitar}
             onPick={pickBrush}
-            // H-21: los tres controles de escritura del panel (la × de cada
-            // hallazgo, «Limpiar diente» y la nota) se apagan CON el motivo
-            // escrito debajo, en vez de quedarse pintados sin hacer nada.
+            // H-21 + N-14: los CINCO controles de escritura del panel se
+            // apagan CON el motivo escrito debajo, en vez de quedarse
+            // pintados sin hacer nada. Los tres del hallazgo original (la ×
+            // de cada hallazgo, «Limpiar diente» y la nota) y los dos que
+            // se quedaron fuera y encontró N-14: la rejilla de caras y la
+            // mini-paleta. El número va escrito porque el panel dice «los
+            // tres controles» en su propio comentario y ya no eran tres.
             canEdit={canEdit}
             disabledReason={SIN_PERMISO}
           />
@@ -490,6 +577,14 @@ export function EduOdontogramaScreen({
 // caras: hasta ahora un hallazgo quitado desaparecía de la tabla y de aquí,
 // así que la pregunta "¿quién pasó la goma sobre lo que yo marqué?" no
 // tenía dónde contestarse.
+//
+// ⚠️ HASTA DÓNDE LLEGA, DICHO AQUÍ PARA QUE NADIE LO DESCUBRA SOLO (N-3):
+// esta lista sale de las MISMAS filas que el dibujo, y hay UNA fila por
+// hallazgo, no una por movimiento. De un hallazgo que se quitó y se volvió
+// a marcar queda quién lo quitó (`deletedById` sobrevive al revivir) pero
+// no cuándo, ni la cadena si pasó más de una vez. La secuencia completa
+// pide el índice único parcial de la Ola C — el SQL exacto está en la
+// cabecera de lib/edu/odontograma.ts.
 //
 // 🔴 Y YA NO CORTA EN SILENCIO (S-12). Cortaba a 40 filas sin decir una
 // palabra: un odontograma con 41 movimientos y uno con 400 se veían
@@ -529,6 +624,10 @@ function HistorialDeHallazgos({
   const visibles = verTodo ? historial : historial.slice(0, HISTORIAL_PRIMERAS);
   const ocultas = historial.length - visibles.length;
   const bajas = historial.filter((e) => e.deletedAt !== null).length;
+  // 🔴 N-3 · vivo pero con `deletedById`: se quitó y se volvió a marcar.
+  // Las dos columnas ya no van siempre juntas (ver toRow en
+  // lib/edu/odontograma.ts) y ESA es la combinación que lo dice.
+  const revividos = historial.filter((e) => e.deletedAt === null && e.deletedById !== null).length;
 
   return (
     <section className="edu-section">
@@ -540,11 +639,23 @@ function HistorialDeHallazgos({
           recargar (marcar y esperar medio segundo por diente es
           insoportable), así que esta lista es la foto de cuando se abrió la
           pantalla. El CONTADOR de arriba sí va en vivo. */}
+      {/* 🔴 N-3 · EL RÓTULO DICE EXACTAMENTE LO QUE HAY, NI UNA PALABRA MÁS.
+          Prometía "constancia de quién lo quitó" a secas. Es verdad para un
+          hallazgo retirado y también, desde N-3, para uno que se quitó y se
+          volvió a marcar (revivir conserva `deletedById`) — pero de ése ya
+          no queda la FECHA, ni la cadena entera si pasó más de una vez:
+          una fila por hallazgo solo puede contar un movimiento. El arreglo
+          completo pide el índice único parcial, y eso es un DROP INDEX:
+          está escrito con su SQL exacto en la cabecera de lib/edu/odontograma.ts,
+          para la Ola C. */}
       <p className="edu-note">
         Así estaba al abrir la pantalla. Lo que marques ahora se guarda al
         instante, pero aparece en esta lista al actualizar.
         {bajas > 0
-          ? ` Incluye ${bajas} ${bajas === 1 ? "hallazgo retirado" : "hallazgos retirados"}: quitar no borra, deja constancia de quién lo quitó.`
+          ? ` Incluye ${bajas} ${bajas === 1 ? "hallazgo retirado" : "hallazgos retirados"}: quitar no borra, deja escrito quién lo quitó y cuándo.`
+          : ""}
+        {revividos > 0
+          ? ` De los que siguen marcados, ${revividos === 1 ? "uno se había retirado antes" : `${revividos} se habían retirado antes`}: se conserva quién pasó la goma, no la fecha en que lo hizo.`
           : ""}
       </p>
       {truncado && (
@@ -589,12 +700,21 @@ function HistorialDeHallazgos({
                 ? ` · marcado por primera vez el ${e.firstRecordedLabel}`
                 : ""}
             </span>
-            {e.deletedAt && (
+            {e.deletedAt ? (
               <span className="edu-tag edu-tag--muted">
                 Retirado {e.deletedLabel}
                 {e.deletedByName ? ` por ${e.deletedByName}` : ""}
               </span>
-            )}
+            ) : e.deletedById ? (
+              /* 🔴 N-3 · Sigue marcado, pero alguien lo había quitado y se
+                 volvió a marcar. Sin esta línea, revivir dejaba el rastro
+                 en la base y en ninguna pantalla — que es lo mismo que no
+                 dejarlo. No se dice CUÁNDO a propósito: esa fecha era
+                 `deletedAt` y hay que soltarla para revivir la fila. */
+              <span className="edu-tag edu-tag--muted">
+                Se había retirado{e.deletedByName ? ` (${e.deletedByName})` : ""} y volvió a ponerse
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>
