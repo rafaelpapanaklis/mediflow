@@ -91,6 +91,12 @@ const GATES: Array<{
     firstEffect: "prisma.", porque: "crea el plan de tratamiento ACTIVE del paciente" },
   { rel: "app/api/quotes/[id]/send-whatsapp/route.ts", method: "POST", key: "billing.edit",
     firstEffect: "prisma.", porque: "presenta el DRAFT (presentQuote) antes de mandar la liga: la cuarta puerta a presentar" },
+  // Las dos ALTAS que quedaron fuera del lote anterior: allí se cerró el DELETE
+  // de before-after y el PATCH de orthotics, pero no el POST de cada una.
+  { rel: "app/api/before-after/route.ts", method: "POST", key: "xrays.upload",
+    firstEffect: "prisma.", porque: "sube una foto clínica del paciente, igual que POST /api/xrays" },
+  { rel: "app/api/orthotics/route.ts", method: "POST", key: "treatments.edit",
+    firstEffect: "prisma.", porque: "da de alta la ortesis y arranca el tratamiento, igual que su PATCH" },
   // Hallazgo 23 — caja
   { rel: "app/api/caja/current/route.ts", method: "GET", key: "billing.view",
     firstEffect: "getCajaState(", porque: "el turno completo, fila por fila" },
@@ -192,6 +198,11 @@ const ESPERADO: Record<string, Record<Role, boolean>> = {
   // Los cabos: el plan de tratamiento lo abren doctor y recepción, que son
   // quienes lo ejecutan; READONLY no escribe.
   "treatments.edit": { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: false },
+  // Subir archivos del paciente (placas, fotos de antes/después): recepción es
+  // quien los sube desde la ficha y NO puede perderlo. Borrarlos es otra cosa y
+  // lleva otra key (medicalRecord.edit), que recepción no tiene: añadir
+  // evidencia clínica no es destruirla.
+  "xrays.upload":    { SUPER_ADMIN: true, ADMIN: true, DOCTOR: true,  RECEPTIONIST: true,  READONLY: false },
 };
 
 for (const [key, esperado] of Object.entries(ESPERADO)) {
