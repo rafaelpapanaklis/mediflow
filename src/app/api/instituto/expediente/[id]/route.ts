@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { hasEduPermission } from "@/lib/edu/permissions";
-import { updateEduRecord } from "@/lib/edu/expediente";
+import { updateEduRecord, withdrawEduRecord } from "@/lib/edu/expediente";
 
 export const dynamic = "force-dynamic";
 
@@ -46,5 +46,38 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ ok: true, id: updated.id, status: updated.status });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/expediente/[id]");
+  }
+}
+
+/**
+ * DELETE /api/instituto/expediente/[id] — RETIRA un BORRADOR (H-23).
+ *
+ * 🔴 NO BORRA NADA. Es una baja lógica: la fila se queda con `deletedAt` y
+ * `deletedById`, y lo que cambia es que todas las lecturas del expediente
+ * la dejan de traer. El verbo es DELETE porque para quien lo usa eso es lo
+ * que hace —la nota sale del expediente—, y el cuerpo va vacío: el id de la
+ * URL es todo lo que hace falta.
+ *
+ * 🔴 SOLO UN BORRADOR, y el candado vive en `withdrawEduRecord`, no aquí.
+ * Es el mismo reparto que el resto del módulo: una ENVIADA está en la
+ * bandeja de un docente (se devuelve primero) y una FIRMADA no se retira
+ * nunca — es la NOM-004. Un segundo endpoint que retirara notas nacería con
+ * el candado puesto por ir a la misma función.
+ *
+ * Mismo permiso que editar (`expediente.write`) y no uno nuevo: retirar el
+ * borrador que acabas de abrir por error es parte de escribir, no un acto
+ * administrativo aparte. La PERTENENCIA la comprueba la función dentro, con
+ * el alcance clínico: una nota que no te toca contesta 404, igual que una
+ * que no existe.
+ */
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  const g = await eduApiGuard("expediente.write");
+  if ("response" in g) return g.response;
+
+  try {
+    const retirada = await withdrawEduRecord(g.ctx, params.id);
+    return NextResponse.json({ ok: true, id: retirada.id });
+  } catch (err) {
+    return eduApiError(err, "DELETE /api/instituto/expediente/[id]");
   }
 }

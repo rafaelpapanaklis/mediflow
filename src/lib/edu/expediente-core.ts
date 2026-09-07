@@ -128,6 +128,33 @@ export function eduRecordIsEditable(status: EduRecordStatus): boolean {
 }
 
 /**
+ * 🔴 ¿SE PUEDE RETIRAR ESTA NOTA? (H-23, Ola B)
+ *
+ * SOLO un BORRADOR. Y la lista de lo que NO se puede retirar es la razón
+ * de que esta función exista en una línea y no como un `if` suelto en el
+ * endpoint:
+ *
+ *   · una FIRMADA no se toca — es la NOM-004 entera. Se corrige con una
+ *     nota nueva que la referencia (`correctsId`) y se leen las dos;
+ *   · una ENVIADA tampoco, y ésta es la que se cuela: el alumno ya la
+ *     entregó, su docente la tiene en la bandeja y puede haberla leído.
+ *     Retirarla sería sacarle de las manos algo que le pidieron revisar.
+ *     Para eso está "Devolver" (vuelve a BORRADOR, con su transición
+ *     registrada) y desde ahí sí se retira.
+ *
+ * Retirar es para el borrador que NUNCA DEBIÓ EXISTIR —el que se abrió en
+ * el paciente equivocado, o el que quedó vacío de un doble clic—, no para
+ * deshacer trabajo entregado.
+ */
+export function eduRecordCanWithdraw(status: EduRecordStatus): boolean {
+  return status === "BORRADOR";
+}
+
+/** El motivo del rechazo, escrito para una persona y no para un log. */
+export const EDU_RECORD_WITHDRAW_DENIED =
+  "Solo se retira un BORRADOR. Una nota ENVIADA ya está en la bandeja de tu docente: devuélvela a borrador y entonces se puede retirar. Una FIRMADA no se retira nunca — se corrige con una nota nueva que la referencia, y en el expediente se leen las dos. Es la NOM-004.";
+
+/**
  * Los sellos que se DERIVAN de un cambio de estado. No se capturan:
  * así no puede existir una nota "firmada" sin fecha de firma, ni una fecha
  * de firma en una nota que sigue en borrador. Es la misma regla que

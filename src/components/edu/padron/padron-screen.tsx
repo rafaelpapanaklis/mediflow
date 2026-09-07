@@ -272,89 +272,97 @@ export function EduPadronScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--padron">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Matrícula</span>
-            <span>Estudiante</span>
-            <span>Especialidad · Generación</span>
-            <span>Sem.</span>
-            <span>Estado</span>
-            <span>Docente vigente</span>
-            <span />
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--padron">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Matrícula</span>
+              <span>Estudiante</span>
+              <span>Especialidad · Generación</span>
+              <span>Sem.</span>
+              <span>Estado</span>
+              <span>Docente vigente</span>
+              <span />
+            </div>
+
+            {rows.map((r) => {
+              const titular = r.supervisors.find((s) => s.isPrimary) ?? r.supervisors[0] ?? null;
+              const extra = r.supervisors.length - (titular ? 1 : 0);
+              return (
+                <div key={r.id} className={`edu-row ${r.status === "ACTIVE" ? "" : "edu-row--off"}`}>
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Matrícula</span>
+                    <span className="edu-cell__value edu-cell__value--strong">{r.matricula}</span>
+                  </div>
+
+                  <div className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Estudiante</span>
+                    <span className="edu-cell__value edu-cell__value--strong">
+                      <EduPersonaLink kind="estudiante" id={r.id}>
+                        {r.name}
+                      </EduPersonaLink>
+                    </span>
+                    <span className="edu-cell__sub">
+                      {r.email}
+                      {r.userIsActive ? "" : " · cuenta desactivada"}
+                    </span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Especialidad · Generación</span>
+                    <span className="edu-cell__value">{r.programName}</span>
+                    <span className="edu-cell__sub">{r.cohortName}</span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Semestre</span>
+                    <span className="edu-cell__value">{r.semester}º</span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Estado</span>
+                    <span className={`edu-tag ${TAG_BY_STATUS[r.status]}`}>
+                      {EDU_STUDENT_STATUS_LABELS[r.status]}
+                    </span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Docente vigente</span>
+                    {titular ? (
+                      <>
+                        <span className="edu-cell__value">
+                          <EduPersonaLink kind="docente" id={titular.supervisorUserId}>
+                            {titular.name}
+                          </EduPersonaLink>
+                        </span>
+                        {extra > 0 && <span className="edu-cell__sub">y {extra} más</span>}
+                      </>
+                    ) : (
+                      <span className="edu-tag edu-tag--warn">Sin docente</span>
+                    )}
+                  </div>
+
+                  <div className="edu-cell__actions">
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      onClick={() => {
+                        setFlash(null);
+                        setFicha(r);
+                      }}
+                    >
+                      {canManage || canAssign ? "Editar" : "Ver"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
-          {rows.map((r) => {
-            const titular = r.supervisors.find((s) => s.isPrimary) ?? r.supervisors[0] ?? null;
-            const extra = r.supervisors.length - (titular ? 1 : 0);
-            return (
-              <div key={r.id} className={`edu-row ${r.status === "ACTIVE" ? "" : "edu-row--off"}`}>
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Matrícula</span>
-                  <span className="edu-cell__value edu-cell__value--strong">{r.matricula}</span>
-                </div>
-
-                <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Estudiante</span>
-                  <span className="edu-cell__value edu-cell__value--strong">
-                    <EduPersonaLink kind="estudiante" id={r.id}>
-                      {r.name}
-                    </EduPersonaLink>
-                  </span>
-                  <span className="edu-cell__sub">
-                    {r.email}
-                    {r.userIsActive ? "" : " · cuenta desactivada"}
-                  </span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Especialidad · Generación</span>
-                  <span className="edu-cell__value">{r.programName}</span>
-                  <span className="edu-cell__sub">{r.cohortName}</span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Semestre</span>
-                  <span className="edu-cell__value">{r.semester}º</span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Estado</span>
-                  <span className={`edu-tag ${TAG_BY_STATUS[r.status]}`}>
-                    {EDU_STUDENT_STATUS_LABELS[r.status]}
-                  </span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Docente vigente</span>
-                  {titular ? (
-                    <>
-                      <span className="edu-cell__value">
-                        <EduPersonaLink kind="docente" id={titular.supervisorUserId}>
-                          {titular.name}
-                        </EduPersonaLink>
-                      </span>
-                      {extra > 0 && <span className="edu-cell__sub">y {extra} más</span>}
-                    </>
-                  ) : (
-                    <span className="edu-tag edu-tag--warn">Sin docente</span>
-                  )}
-                </div>
-
-                <div className="edu-cell__actions">
-                  <button
-                    type="button"
-                    className="edu-btn edu-btn--ghost edu-btn--sm"
-                    onClick={() => {
-                      setFlash(null);
-                      setFicha(r);
-                    }}
-                  >
-                    {canManage || canAssign ? "Editar" : "Ver"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
         </div>
       )}
 

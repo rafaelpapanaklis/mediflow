@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { FilePlus2, PenLine, Send, Signature, Undo2 } from "lucide-react";
+import { FilePlus2, PenLine, Send, Signature, Trash2, Undo2 } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
@@ -12,6 +12,7 @@ import {
   EDU_SOAP_HINTS,
   EDU_SOAP_LABELS,
   eduRecordCanTransition,
+  eduRecordCanWithdraw,
   type EduCaseOption,
   type EduRecordRow,
   type EduSoapField,
@@ -128,6 +129,8 @@ export function EduExpedienteScreen({
   const [editar, setEditar] = useState<EduRecordRow | null>(null);
   /** S-1: la nota que se está a punto de firmar, esperando el "sí". */
   const [firmando, setFirmando] = useState<EduRecordRow | null>(null);
+  /** H-23: el BORRADOR que se está a punto de retirar, esperando el "sí". */
+  const [retirando, setRetirando] = useState<EduRecordRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const casosAbiertos = useMemo(() => cases.filter((c) => c.isOpen), [cases]);
@@ -157,6 +160,24 @@ export function EduExpedienteScreen({
     setFlash(null);
     setError(null);
     setFirmando(nota);
+  }
+
+  /**
+   * H-23 · RETIRA un BORRADOR. Baja lógica: la nota sale del expediente y
+   * queda constancia de quién la sacó. El servidor rebota una ENVIADA o
+   * una FIRMADA con 409 aunque se fabrique la petición a mano.
+   */
+  async function retirar(nota: EduRecordRow) {
+    setError(null);
+    setBusyId(nota.id);
+    try {
+      await eduRequest(`/api/instituto/expediente/${nota.id}`, { method: "DELETE" });
+      recargar("El borrador quedó retirado del expediente.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo retirar la nota.");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   /** Mueve una nota de estado (entregar, firmar, devolver). */
@@ -461,6 +482,29 @@ export function EduExpedienteScreen({
                       Corregir
                     </button>
                   )}
+
+                  {/* 🔴 H-23 · RETIRAR, y SOLO sobre un BORRADOR.
+                      `eduRecordCanWithdraw` es la MISMA función que usa el
+                      servidor: dos copias de esa regla es como se llega a
+                      un botón que la pantalla ofrece y el endpoint rechaza.
+                      Sobre una ENVIADA no se pinta a propósito —está en la
+                      bandeja de un docente que puede haberla leído; se
+                      devuelve primero— y sobre una FIRMADA no existe. */}
+                  {eduRecordCanWithdraw(n.status) && (
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--ghost edu-btn--sm edu-btn--danger"
+                      onClick={() => {
+                        setFlash(null);
+                        setError(null);
+                        setRetirando(n);
+                      }}
+                      disabled={trabajando}
+                    >
+                      <Trash2 size={15} />
+                      Retirar
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -536,6 +580,63 @@ export function EduExpedienteScreen({
             {firmando.authorUserId === meUserId
               ? "la escribiste tú."
               : `la escribió ${firmando.authorName}. Firmarla es hacerte responsable de lo que dice.`}
+          </p>
+        </EduModal>
+      )}
+
+      {/* 🔴 H-23 · RETIRAR PIDE CONFIRMACIÓN, y el modal dice las dos cosas
+          que importan: que la nota sale del expediente, y que NO se borra.
+          Lo segundo no es un detalle legal: es lo que evita que alguien
+          use "Retirar" creyendo que hace desaparecer un error, y lo que
+          responde después a "¿aquí había una nota?". */}
+      {retirando && (
+        <EduModal
+          title="Retirar el borrador"
+          subtitle={`${retirando.caseProgramName} · ${retirando.appointmentLabel ?? retirando.createdLabel}`}
+          busy={busyId === retirando.id}
+          onClose={() => setRetirando(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="edu-btn edu-btn--ghost"
+                onClick={() => setRetirando(null)}
+                disabled={busyId === retirando.id}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="edu-btn edu-btn--danger"
+                onClick={() => {
+                  const n = retirando;
+                  setRetirando(null);
+                  void retirar(n);
+                }}
+                disabled={busyId === retirando.id}
+              >
+                <Trash2 size={15} />
+                Sí, retirarla
+              </button>
+            </>
+          }
+        >
+          <div className="edu-banner edu-banner--warn">
+            <div>
+              <p className="edu-banner__title">Sale del expediente, pero no se borra</p>
+              <p className="edu-banner__detail">
+                El borrador deja de verse aquí, deja de contar como nota en el Resumen y deja de
+                poder mandarse a autorizar. La fila se queda en la base con tu nombre y la fecha:
+                un expediente del que se puede hacer desaparecer una página deja de ser el
+                registro de lo que pasó. Esto es para el borrador que nunca debió existir —el que
+                se abrió en el paciente equivocado, o el que quedó vacío—, no para deshacer
+                trabajo hecho.
+              </p>
+            </div>
+          </div>
+          <p className="edu-note">
+            Solo se retiran BORRADORES. Una nota entregada se devuelve primero a borrador; una
+            firmada no se retira nunca: se corrige con una nota nueva y se leen las dos.
           </p>
         </EduModal>
       )}

@@ -156,44 +156,52 @@ function PanelCredenciales({
         </div>
       </div>
 
-      <div className="edu-table edu-table--creds">
-        <div className="edu-rowhead" aria-hidden="true">
-          <span>Persona</span>
-          <span>Correo</span>
-          <span>Rol</span>
-          <span>Contraseña temporal</span>
-        </div>
-        {resultados.map((r, i) => (
-          <div key={`${r.email}-${i}`} className={`edu-row ${r.ok ? "" : "edu-row--off"}`}>
-            <div className="edu-cell edu-cell--wide">
-              <span className="edu-cell__label">Persona</span>
-              <span className="edu-cell__value edu-cell__value--strong">{r.name || "—"}</span>
-            </div>
-            <div className="edu-cell">
-              <span className="edu-cell__label">Correo</span>
-              <span className="edu-cell__value">{r.email}</span>
-            </div>
-            <div className="edu-cell">
-              <span className="edu-cell__label">Rol</span>
-              <span className="edu-cell__value">{r.role ? EDU_ROLE_LABELS[r.role] : "—"}</span>
-            </div>
-            <div className="edu-cell edu-cell--wide">
-              <span className="edu-cell__label">Contraseña temporal</span>
-              {r.ok && r.tempPassword ? (
-                <span className="edu-creds__pass">
-                  <code>{r.tempPassword}</code>
-                  <BotonCopiar texto={r.tempPassword} etiqueta="Copiar" />
-                </span>
-              ) : r.ok && r.reused ? (
-                <span className="edu-cell__sub">
-                  Ya tenía cuenta en DaleControl: entra con su contraseña de siempre.
-                </span>
-              ) : (
-                <span className="edu-cell__sub edu-creds__error">{r.error}</span>
-              )}
-            </div>
+      <div className="edu-tablewrap">
+        {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+           mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+           hace que se DESPLACE en vez de recortar si algún día no cabe.
+           Sin él, la forma renglón de esta tabla no se estrena nunca:
+           desde la Ola B su umbral vive en un `@container`, no en un
+           `@media`. */}
+        <div className="edu-table edu-table--creds">
+          <div className="edu-rowhead" aria-hidden="true">
+            <span>Persona</span>
+            <span>Correo</span>
+            <span>Rol</span>
+            <span>Contraseña temporal</span>
           </div>
-        ))}
+          {resultados.map((r, i) => (
+            <div key={`${r.email}-${i}`} className={`edu-row ${r.ok ? "" : "edu-row--off"}`}>
+              <div className="edu-cell edu-cell--wide">
+                <span className="edu-cell__label">Persona</span>
+                <span className="edu-cell__value edu-cell__value--strong">{r.name || "—"}</span>
+              </div>
+              <div className="edu-cell">
+                <span className="edu-cell__label">Correo</span>
+                <span className="edu-cell__value">{r.email}</span>
+              </div>
+              <div className="edu-cell">
+                <span className="edu-cell__label">Rol</span>
+                <span className="edu-cell__value">{r.role ? EDU_ROLE_LABELS[r.role] : "—"}</span>
+              </div>
+              <div className="edu-cell edu-cell--wide">
+                <span className="edu-cell__label">Contraseña temporal</span>
+                {r.ok && r.tempPassword ? (
+                  <span className="edu-creds__pass">
+                    <code>{r.tempPassword}</code>
+                    <BotonCopiar texto={r.tempPassword} etiqueta="Copiar" />
+                  </span>
+                ) : r.ok && r.reused ? (
+                  <span className="edu-cell__sub">
+                    Ya tenía cuenta en DaleControl: entra con su contraseña de siempre.
+                  </span>
+                ) : (
+                  <span className="edu-cell__sub edu-creds__error">{r.error}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -406,114 +414,122 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--equipo">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Persona</span>
-            <span>Correo</span>
-            <span>Rol</span>
-            <span>Matrícula</span>
-            <span>Estado</span>
-            <span />
-          </div>
-
-          {rows.map((p) => (
-            <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Persona</span>
-                <span className="edu-cell__value edu-cell__value--strong">
-                  {p.role === "ALUMNO" ? (
-                    <EduPersonaLink kind="estudiante" id={p.studentId}>
-                      {p.name}
-                    </EduPersonaLink>
-                  ) : p.role === "DOCENTE" ? (
-                    <EduPersonaLink kind="docente" id={p.id}>
-                      {p.name}
-                    </EduPersonaLink>
-                  ) : (
-                    p.name
-                  )}
-                </span>
-                {p.phone && <span className="edu-cell__sub">{p.phone}</span>}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Correo</span>
-                <span className="edu-cell__value">{p.email}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Rol</span>
-                <span className={`edu-tag ${TAG_BY_ROLE[p.role]}`}>{EDU_ROLE_LABELS[p.role]}</span>
-                {/* P2-8: la fila DICE cuando alguien no usa el default del
-                    rol — un override invisible es cómo la dirección olvida
-                    quién tiene qué. */}
-                {p.permissionsOverride.length > 0 && (
-                  <span className="edu-cell__sub">Permisos personalizados</span>
-                )}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Matrícula</span>
-                {p.role !== "ALUMNO" ? (
-                  <span className="edu-cell__sub">No aplica</span>
-                ) : p.hasStudentProfile ? (
-                  <span className="edu-cell__value">{p.matricula}</span>
-                ) : (
-                  <span className="edu-cell__sub">Falta inscribirlo</span>
-                )}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Estado</span>
-                <span className={`edu-tag ${p.isActive ? "edu-tag--ok" : "edu-tag--muted"}`}>
-                  {p.isActive ? "Con acceso" : "Dada de baja"}
-                </span>
-              </div>
-
-              <div className="edu-cell__actions">
-                {/* P2-8: los permisos se editan por persona. Deshabilitado
-                    para uno mismo — el servidor lo rebota igual; así, quien
-                    edita conserva siempre su equipo.manage y el instituto
-                    no se queda sin administrador por una casilla. */}
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                  onClick={() => {
-                    setFlash(null);
-                    setError(null);
-                    setPermisosDe(p);
-                  }}
-                  disabled={busyId === p.id || p.isSelf}
-                  title={
-                    p.isSelf
-                      ? "No puedes editar tus propios permisos."
-                      : "Qué puede ver y hacer esta cuenta, casilla por casilla."
-                  }
-                >
-                  <SlidersHorizontal size={15} />
-                  Permisos
-                </button>
-                <button
-                  type="button"
-                  className={`edu-btn edu-btn--sm ${p.isActive ? "edu-btn--ghost" : "edu-btn--primary"}`}
-                  onClick={() => cambiarEstado(p)}
-                  disabled={busyId === p.id || p.isSelf}
-                  // Nadie se da de baja a sí mismo: con una sola dirección
-                  // en la escuela sería cerrar la puerta desde dentro. El
-                  // servidor lo vuelve a rechazar, esto solo lo explica.
-                  title={
-                    p.isSelf
-                      ? "No puedes darte de baja a ti mismo."
-                      : p.isActive
-                        ? "Le quita el acceso al panel. No borra nada de lo que hizo."
-                        : "Le devuelve el acceso al panel."
-                  }
-                >
-                  {busyId === p.id ? "…" : p.isActive ? "Dar de baja" : "Reactivar"}
-                </button>
-              </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--equipo">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Persona</span>
+              <span>Correo</span>
+              <span>Rol</span>
+              <span>Matrícula</span>
+              <span>Estado</span>
+              <span />
             </div>
-          ))}
+
+            {rows.map((p) => (
+              <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Persona</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    {p.role === "ALUMNO" ? (
+                      <EduPersonaLink kind="estudiante" id={p.studentId}>
+                        {p.name}
+                      </EduPersonaLink>
+                    ) : p.role === "DOCENTE" ? (
+                      <EduPersonaLink kind="docente" id={p.id}>
+                        {p.name}
+                      </EduPersonaLink>
+                    ) : (
+                      p.name
+                    )}
+                  </span>
+                  {p.phone && <span className="edu-cell__sub">{p.phone}</span>}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Correo</span>
+                  <span className="edu-cell__value">{p.email}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Rol</span>
+                  <span className={`edu-tag ${TAG_BY_ROLE[p.role]}`}>{EDU_ROLE_LABELS[p.role]}</span>
+                  {/* P2-8: la fila DICE cuando alguien no usa el default del
+                      rol — un override invisible es cómo la dirección olvida
+                      quién tiene qué. */}
+                  {p.permissionsOverride.length > 0 && (
+                    <span className="edu-cell__sub">Permisos personalizados</span>
+                  )}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Matrícula</span>
+                  {p.role !== "ALUMNO" ? (
+                    <span className="edu-cell__sub">No aplica</span>
+                  ) : p.hasStudentProfile ? (
+                    <span className="edu-cell__value">{p.matricula}</span>
+                  ) : (
+                    <span className="edu-cell__sub">Falta inscribirlo</span>
+                  )}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Estado</span>
+                  <span className={`edu-tag ${p.isActive ? "edu-tag--ok" : "edu-tag--muted"}`}>
+                    {p.isActive ? "Con acceso" : "Dada de baja"}
+                  </span>
+                </div>
+
+                <div className="edu-cell__actions">
+                  {/* P2-8: los permisos se editan por persona. Deshabilitado
+                      para uno mismo — el servidor lo rebota igual; así, quien
+                      edita conserva siempre su equipo.manage y el instituto
+                      no se queda sin administrador por una casilla. */}
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    onClick={() => {
+                      setFlash(null);
+                      setError(null);
+                      setPermisosDe(p);
+                    }}
+                    disabled={busyId === p.id || p.isSelf}
+                    title={
+                      p.isSelf
+                        ? "No puedes editar tus propios permisos."
+                        : "Qué puede ver y hacer esta cuenta, casilla por casilla."
+                    }
+                  >
+                    <SlidersHorizontal size={15} />
+                    Permisos
+                  </button>
+                  <button
+                    type="button"
+                    className={`edu-btn edu-btn--sm ${p.isActive ? "edu-btn--ghost" : "edu-btn--primary"}`}
+                    onClick={() => cambiarEstado(p)}
+                    disabled={busyId === p.id || p.isSelf}
+                    // Nadie se da de baja a sí mismo: con una sola dirección
+                    // en la escuela sería cerrar la puerta desde dentro. El
+                    // servidor lo vuelve a rechazar, esto solo lo explica.
+                    title={
+                      p.isSelf
+                        ? "No puedes darte de baja a ti mismo."
+                        : p.isActive
+                          ? "Le quita el acceso al panel. No borra nada de lo que hizo."
+                          : "Le devuelve el acceso al panel."
+                    }
+                  >
+                    {busyId === p.id ? "…" : p.isActive ? "Dar de baja" : "Reactivar"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

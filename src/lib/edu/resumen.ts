@@ -379,7 +379,11 @@ export async function getEduPatientResumen(
             })
           : Promise.resolve([]),
         prisma.eduRecord.findMany({
-          where: { institutionId, patientId: id, case: casosWhere },
+          // Ola B (H-23): una nota RETIRADA no cuenta como nota. Sin este
+          // filtro, el borrador que alguien sacó del expediente por haberlo
+          // abierto en el paciente equivocado seguiría apareciendo en la
+          // historia reciente de ese paciente, que es justo donde no va.
+          where: { institutionId, patientId: id, deletedAt: null, case: casosWhere },
           orderBy: [{ createdAt: "desc" }],
           take: 6,
           select: {

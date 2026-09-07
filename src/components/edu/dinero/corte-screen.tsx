@@ -154,43 +154,51 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
               </div>
             </div>
 
-            <div className="edu-table edu-table--corte">
-              <div className="edu-rowhead" aria-hidden="true">
-                <span>Método</span>
-                <span>Movimientos</span>
-                <span>Cobrado</span>
-                <span>Devuelto</span>
-                <span>Neto</span>
-              </div>
-
-              {visibles.map((m) => (
-                <div className="edu-row" key={m.method}>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Método</span>
-                    <span className="edu-cell__value edu-cell__value--strong">
-                      {EDU_PAYMENT_METHOD_LABELS[m.method]}
-                    </span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Movimientos</span>
-                    <span className="edu-cell__value">{m.count}</span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Cobrado</span>
-                    <span className="edu-cell__value edu-precio">{eduMoney(m.chargedCents)}</span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Devuelto</span>
-                    <span className="edu-cell__value edu-precio">
-                      {m.refundedCents > 0 ? `−${eduMoney(m.refundedCents)}` : "—"}
-                    </span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Neto</span>
-                    <span className="edu-cell__value edu-precio">{eduMoney(m.netCents)}</span>
-                  </div>
+            <div className="edu-tablewrap">
+              {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+                 mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+                 hace que se DESPLACE en vez de recortar si algún día no cabe.
+                 Sin él, la forma renglón de esta tabla no se estrena nunca:
+                 desde la Ola B su umbral vive en un `@container`, no en un
+                 `@media`. */}
+              <div className="edu-table edu-table--corte">
+                <div className="edu-rowhead" aria-hidden="true">
+                  <span>Método</span>
+                  <span>Movimientos</span>
+                  <span>Cobrado</span>
+                  <span>Devuelto</span>
+                  <span>Neto</span>
                 </div>
-              ))}
+
+                {visibles.map((m) => (
+                  <div className="edu-row" key={m.method}>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Método</span>
+                      <span className="edu-cell__value edu-cell__value--strong">
+                        {EDU_PAYMENT_METHOD_LABELS[m.method]}
+                      </span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Movimientos</span>
+                      <span className="edu-cell__value">{m.count}</span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Cobrado</span>
+                      <span className="edu-cell__value edu-precio">{eduMoney(m.chargedCents)}</span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Devuelto</span>
+                      <span className="edu-cell__value edu-precio">
+                        {m.refundedCents > 0 ? `−${eduMoney(m.refundedCents)}` : "—"}
+                      </span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Neto</span>
+                      <span className="edu-cell__value edu-precio">{eduMoney(m.netCents)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="edu-totales">
@@ -219,49 +227,57 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
             </div>
           </div>
 
-          <div className="edu-table edu-table--turnos">
-            <div className="edu-rowhead" aria-hidden="true">
-              <span>Abierto</span>
-              <span>Cerrado</span>
-              <span>Esperado</span>
-              <span>Contado</span>
-              <span>Diferencia</span>
-            </div>
+          <div className="edu-tablewrap">
+            {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+               mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+               hace que se DESPLACE en vez de recortar si algún día no cabe.
+               Sin él, la forma renglón de esta tabla no se estrena nunca:
+               desde la Ola B su umbral vive en un `@container`, no en un
+               `@media`. */}
+            <div className="edu-table edu-table--turnos">
+              <div className="edu-rowhead" aria-hidden="true">
+                <span>Abierto</span>
+                <span>Cerrado</span>
+                <span>Esperado</span>
+                <span>Contado</span>
+                <span>Diferencia</span>
+              </div>
 
-            {corte.previous.map((s) => {
-              const l = labels.previous[s.id];
-              const dif = s.differenceCents ?? 0;
-              return (
-                <div className="edu-row" key={s.id}>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Abierto</span>
-                    <span className="edu-cell__value">{l?.openedAt ?? "—"}</span>
-                    <span className="edu-cell__sub">{s.openedByName}</span>
+              {corte.previous.map((s) => {
+                const l = labels.previous[s.id];
+                const dif = s.differenceCents ?? 0;
+                return (
+                  <div className="edu-row" key={s.id}>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Abierto</span>
+                      <span className="edu-cell__value">{l?.openedAt ?? "—"}</span>
+                      <span className="edu-cell__sub">{s.openedByName}</span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Cerrado</span>
+                      <span className="edu-cell__value">{l?.closedAt ?? "—"}</span>
+                      <span className="edu-cell__sub">{s.closedByName ?? "—"}</span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Esperado</span>
+                      <span className="edu-cell__value edu-precio">{eduMoney(s.expectedCents)}</span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Contado</span>
+                      <span className="edu-cell__value edu-precio">{eduMoney(s.countedCents)}</span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Diferencia</span>
+                      <span
+                        className={`edu-tag ${dif === 0 ? "edu-tag--ok" : dif > 0 ? "edu-tag--info" : "edu-tag--danger"}`}
+                      >
+                        {dif === 0 ? "Cuadró" : dif > 0 ? `Sobró ${eduMoney(dif)}` : `Faltó ${eduMoney(-dif)}`}
+                      </span>
+                    </div>
                   </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Cerrado</span>
-                    <span className="edu-cell__value">{l?.closedAt ?? "—"}</span>
-                    <span className="edu-cell__sub">{s.closedByName ?? "—"}</span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Esperado</span>
-                    <span className="edu-cell__value edu-precio">{eduMoney(s.expectedCents)}</span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Contado</span>
-                    <span className="edu-cell__value edu-precio">{eduMoney(s.countedCents)}</span>
-                  </div>
-                  <div className="edu-cell">
-                    <span className="edu-cell__label">Diferencia</span>
-                    <span
-                      className={`edu-tag ${dif === 0 ? "edu-tag--ok" : dif > 0 ? "edu-tag--info" : "edu-tag--danger"}`}
-                    >
-                      {dif === 0 ? "Cuadró" : dif > 0 ? `Sobró ${eduMoney(dif)}` : `Faltó ${eduMoney(-dif)}`}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </section>
       )}

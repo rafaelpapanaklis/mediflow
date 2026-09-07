@@ -22,6 +22,15 @@
  *      · una nota FIRMADA no se edita. Se corrige con una nota NUEVA que
  *        la referencia.
  *
+ * 4. OLA B · UN BORRADOR SE RETIRA, Y RETIRAR NO ES BORRAR (H-23). Una
+ *    nota que se abrió en el paciente equivocado —o que quedó vacía de un
+ *    doble clic— se puede sacar del expediente con `deletedAt` +
+ *    `deletedById`. La fila se queda; lo que cambia es que TODAS las
+ *    lecturas de aquí filtran `deletedAt: null`, así que deja de pintarse,
+ *    deja de contar como nota en el Resumen y deja de poder mandarse a
+ *    autorizar. Solo un BORRADOR: una ENVIADA se devuelve primero y una
+ *    FIRMADA no se retira nunca.
+ *
  * Las escrituras NO comprueban permisos: eso lo hace el endpoint con
  * assertEduPermission antes de llamar. Aquí se comprueba la PERTENENCIA,
  * que es lo que un permiso no puede saber.
@@ -43,6 +52,8 @@ import {
   eduClinicalScope,
   eduRecordCanTransition,
   EDU_RECORD_CONTENT_FIELDS,
+  EDU_RECORD_WITHDRAW_DENIED,
+  eduRecordCanWithdraw,
   eduRecordHasContent,
   eduRecordIsEditable,
   eduRecordStamps,
@@ -178,7 +189,20 @@ export async function getEduClinicalPatient(
   ctx: EduClinicaContext,
   patientId: string,
   now: Date = new Date(),
-): Promise<{ id: string; folio: string; firstName: string; lastName: string } | null> {
+): Promise<{
+  id: string;
+  folio: string;
+  firstName: string;
+  lastName: string;
+  /**
+   * Dentición TEMPORAL (Ola B). Lo captura la ficha del paciente; aquí solo
+   * se LEE, y viaja en esta puerta —y no en una consulta aparte— porque
+   * quien lo necesita es el odontograma, que ya pasa por aquí
+   * obligatoriamente. Una segunda consulta para un booleano sería un viaje
+   * más al pooler en la pantalla que más se abre desde un teléfono.
+   */
+  isChild: boolean;
+} | null> {
   const institutionId = requireInstitution(ctx);
   const scope = eduClinicalScope(ctx);
   if (eduScopeIsEmpty(scope)) return null;
@@ -190,7 +214,7 @@ export async function getEduClinicalPatient(
     // "patients". Para caja, "patients" es `all` y "cases" es `none`: con
     // el alcance equivocado, caja abriría el expediente de toda la escuela.
     where: { ...eduPatientScopeWhere({ institutionId, scope, now }), id },
-    select: { id: true, folio: true, firstName: true, lastName: true },
+    select: { id: true, folio: true, firstName: true, lastName: true, isChild: true },
   });
 }
 
@@ -227,6 +251,11 @@ export async function listEduPatientRecords(
   const where: Prisma.EduRecordWhereInput = {
     institutionId,
     patientId: id,
+    // 🔴 Ola B · las RETIRADAS no viajan, y el recorte va en el `where` y
+    // no en un `.filter()` después: un recorte fuera de la consulta es un
+    // recorte que el siguiente `findMany` se olvida de copiar. Además
+    // arruinaría el `truncated` de abajo, que cuenta filas traídas.
+    deletedAt: null,
     case: eduCaseScopeWhere({ institutionId, scope, now }),
   };
   const caseId = eduCleanId(options.caseId);
@@ -386,7 +415,8 @@ export async function createEduRecord(
     const id = eduCleanId(input.correctsId);
     const previa = id
       ? await prisma.eduRecord.findFirst({
-          where: { id, institutionId, caseId: caso.id },
+          // Una nota retirada no se corrige: no está en el expediente.
+          where: { id, institutionId, caseId: caso.id, deletedAt: null },
           select: { id: true, status: true },
         })
       : null;
@@ -465,6 +495,10 @@ export async function updateEduRecord(
     where: {
       institutionId,
       id,
+      // Una nota RETIRADA no se edita ni se mueve de estado: para el
+      // expediente ya no está, y contestar 404 es lo mismo que contesta
+      // una que no le toca a quien pregunta.
+      deletedAt: null,
       case: eduCaseScopeWhere({ institutionId, scope, now }),
     },
     select: {
@@ -605,4 +639,71 @@ export async function updateEduRecord(
 
   await prisma.eduRecord.update({ where: { id: actual.id }, data });
   return { id: actual.id, status: siguiente };
+}
+
+/**
+ * RETIRAR UN BORRADOR — baja lógica, con autor (H-23, Ola B).
+ *
+ * 🔴 QUÉ PROBLEMA RESUELVE, PORQUE NO ES "UN BOTÓN DE BORRAR". Una nota se
+ * podía abrir en el paciente equivocado, o quedar completamente vacía de un
+ * doble clic, y ya no había forma de sacarla: el expediente se quedaba con
+ * ella para siempre, contándose como nota en el Resumen y ofreciéndose en
+ * el desplegable de "¿qué mando a autorizar?". La única salida era pedirle
+ * a alguien que la editara para que dijera "esto no va".
+ *
+ * 🔴 Y QUÉ **NO** RESUELVE, que es la mitad importante:
+ *   · SOLO un BORRADOR (`eduRecordCanWithdraw`). Una ENVIADA está en la
+ *     bandeja de un docente que puede haberla leído: se devuelve primero.
+ *     Una FIRMADA no se retira NUNCA — es la NOM-004, y se corrige con una
+ *     nota nueva que la referencia.
+ *   · la fila NO se borra. `deletedAt` + `deletedById` dejan quién la
+ *     retiró y cuándo. Un expediente del que se puede hacer desaparecer una
+ *     página deja de ser el registro de lo que pasó.
+ *
+ * 🔴 SIN MOTIVO ESCRITO, Y ES DELIBERADO — lo dice el propio schema. No hay
+ * columna `deleteReason` y esta ola no añade SQL: retirar un borrador vacío
+ * no es un acto clínico que haya que justificar por escrito, y un campo de
+ * motivo obligatorio en el sitio equivocado solo produce "asdf". Lo que sí
+ * queda escrito es quién y cuándo, que es la pregunta que se hace después.
+ *
+ * `updateMany` con `deletedAt: null` en el `where` y no `update`: retirar
+ * dos veces (un doble clic, una pestaña vieja) no reescribe la firma de
+ * quien la retiró de verdad, ni lanza P2025 en la cara de nadie.
+ */
+export async function withdrawEduRecord(
+  ctx: EduClinicaContext,
+  recordId: string,
+  now: Date = new Date(),
+): Promise<{ id: string }> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduClinicalScope(ctx);
+  if (eduScopeIsEmpty(scope)) throw new EduPadronError("Esa nota no existe o no te toca.", 404);
+
+  const id = eduCleanId(recordId);
+  if (!id) throw new EduPadronError("Esa nota no existe o no te toca.", 404);
+
+  // Se busca DENTRO del alcance, igual que en updateEduRecord: una nota que
+  // no le toca a quien pregunta se ve exactamente igual que una que no
+  // existe. Y una ya retirada también da 404, que es lo que es.
+  const actual = await prisma.eduRecord.findFirst({
+    where: {
+      institutionId,
+      id,
+      deletedAt: null,
+      case: eduCaseScopeWhere({ institutionId, scope, now }),
+    },
+    select: { id: true, status: true },
+  });
+  if (!actual) throw new EduPadronError("Esa nota no existe o no te toca.", 404);
+
+  if (!eduRecordCanWithdraw(actual.status)) {
+    throw new EduPadronError(EDU_RECORD_WITHDRAW_DENIED, 409);
+  }
+
+  await prisma.eduRecord.updateMany({
+    where: { id: actual.id, institutionId, deletedAt: null },
+    data: { deletedAt: now, deletedById: ctx.eduUserId },
+  });
+
+  return { id: actual.id };
 }

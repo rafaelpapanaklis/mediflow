@@ -123,80 +123,88 @@ export function EduRequisitosScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--requisitos">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Requisito</span>
-            <span>Especialidad</span>
-            <span>Qué cuenta</span>
-            <span>Cuántos</span>
-            <span>Se exige</span>
-            <span />
-          </div>
-
-          {rows.map((r) => (
-            <div key={r.id} className={`edu-row ${r.isActive ? "" : "edu-row--off"}`}>
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Requisito</span>
-                <span className="edu-cell__value edu-cell__value--strong">{r.name}</span>
-                {r.notes && <span className="edu-cell__sub">{r.notes}</span>}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Especialidad</span>
-                <span className="edu-cell__value">{r.programName}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Qué cuenta</span>
-                <span className="edu-cell__value">
-                  {r.procedureName ?? r.category ?? "Cualquier caso de la especialidad"}
-                </span>
-                <span className="edu-cell__sub">
-                  {r.onlyCompleted ? "solo casos terminados" : "abiertos o terminados"}
-                </span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Cuántos</span>
-                <span className="edu-cell__value edu-cell__value--strong">{r.requiredCount}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Se exige</span>
-                {/* P2-5: "Se exige de 3º a 5º" y no "3º – 5º" a secas — el
-                    rango decide desde cuándo lo espera el semáforo, no qué
-                    casos cuentan, y la etiqueta tiene que leerse como lo
-                    que hace. */}
-                <span className="edu-cell__value">
-                  {r.semesterFrom || r.semesterTo
-                    ? `De ${r.semesterFrom ?? 1}º a ${r.semesterTo ? `${r.semesterTo}º` : "fin del plan"}`
-                    : "Todo el plan"}
-                </span>
-                {!r.isActive && <span className="edu-tag edu-tag--muted">Desactivado</span>}
-              </div>
-
-              <div className="edu-cell__actions">
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                  onClick={() => {
-                    setFlash(null);
-                    setEditando(r);
-                  }}
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--quiet edu-btn--sm"
-                  onClick={() => alternar(r)}
-                  disabled={busyId === r.id}
-                >
-                  {r.isActive ? "Desactivar" : "Activar"}
-                </button>
-              </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--requisitos">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Requisito</span>
+              <span>Especialidad</span>
+              <span>Qué cuenta</span>
+              <span>Cuántos</span>
+              <span>Se exige</span>
+              <span />
             </div>
-          ))}
+
+            {rows.map((r) => (
+              <div key={r.id} className={`edu-row ${r.isActive ? "" : "edu-row--off"}`}>
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Requisito</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{r.name}</span>
+                  {r.notes && <span className="edu-cell__sub">{r.notes}</span>}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Especialidad</span>
+                  <span className="edu-cell__value">{r.programName}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Qué cuenta</span>
+                  <span className="edu-cell__value">
+                    {r.procedureName ?? r.category ?? "Cualquier caso de la especialidad"}
+                  </span>
+                  <span className="edu-cell__sub">
+                    {r.onlyCompleted ? "solo casos terminados" : "abiertos o terminados"}
+                  </span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Cuántos</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{r.requiredCount}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Se exige</span>
+                  {/* P2-5: "Se exige de 3º a 5º" y no "3º – 5º" a secas — el
+                      rango decide desde cuándo lo espera el semáforo, no qué
+                      casos cuentan, y la etiqueta tiene que leerse como lo
+                      que hace. */}
+                  <span className="edu-cell__value">
+                    {r.semesterFrom || r.semesterTo
+                      ? `De ${r.semesterFrom ?? 1}º a ${r.semesterTo ? `${r.semesterTo}º` : "fin del plan"}`
+                      : "Todo el plan"}
+                  </span>
+                  {!r.isActive && <span className="edu-tag edu-tag--muted">Desactivado</span>}
+                </div>
+
+                <div className="edu-cell__actions">
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    onClick={() => {
+                      setFlash(null);
+                      setEditando(r);
+                    }}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--quiet edu-btn--sm"
+                    onClick={() => alternar(r)}
+                    disabled={busyId === r.id}
+                  >
+                    {r.isActive ? "Desactivar" : "Activar"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

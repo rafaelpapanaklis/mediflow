@@ -884,7 +884,10 @@ export async function requestEduApproval(
   let snapshot: EduApprovalSnapshot;
   if (esperado === "EduRecord") {
     const nota = await prisma.eduRecord.findFirst({
-      where: { id: targetId, institutionId, caseId: caso.id },
+      // Ola B (H-23): una nota RETIRADA no se manda a autorizar. Ya no está
+      // en el expediente, así que pedir la firma de un docente sobre ella
+      // sería pedirla sobre algo que nadie puede abrir.
+      where: { id: targetId, institutionId, caseId: caso.id, deletedAt: null },
       select: RECORD_TARGET_SELECT,
     });
     if (!nota) throw new EduPadronError("Esa nota no es de este caso.", 404);
@@ -1389,7 +1392,9 @@ export async function listEduApprovalTargets(
 
   const [notas, citas] = await Promise.all([
     prisma.eduRecord.findMany({
-      where: { institutionId, caseId: caso.id },
+      // Mismo recorte que el POST de arriba: no puede existir una opción en
+      // el desplegable que la escritura después rechace.
+      where: { institutionId, caseId: caso.id, deletedAt: null },
       orderBy: [{ createdAt: "desc" }],
       take: 30,
       select: RECORD_TARGET_SELECT,

@@ -1382,50 +1382,76 @@ select.edu-input {
   }
 }
 
-/* ── Las demás listas: forma renglón por VENTANA, con SU umbral ─────────
-   Estas 25 tablas todavía no tienen envoltorio en su pantalla, así que no
-   hay contenedor contra el que medir y siguen leyendo la ventana. Lo que
-   sí se corrige es el NÚMERO: hasta ahora las 26 se estrenaban a 1180 px
-   —el mismo para una tabla de 5 columnas que para una de 8— y quince de
-   ellas necesitaban más de los 864 px de contenido que hay a esa ventana.
-   `Casos` (1042 px) se estrenaba 178 px antes de caber y se recortaba
-   hasta los 1358.
+/* ── Las demás listas: TODAS con envoltorio, TODAS con `@container` ─────
+   Hasta la Ola B, veinticinco de las veintiséis tablas del vertical
+   medían la VENTANA y no su contenedor: `@container` necesita un
+   envoltorio en el marcado, y el marcado de esas veinticinco vivía en
+   veinticinco pantallas que no eran de aquella casilla. Lo único que se
+   pudo hacer entonces fue arreglar el NÚMERO —cada tabla con su umbral
+   sumado pista a pista, en vez del 1180 único que compartían las 26 y que
+   quince de ellas no cumplían—, y quedó escrito aquí que graduarlas era
+   "una línea de marcado por pantalla".
 
-   Cada umbral es `Σ(pistas) + Σ(huecos) + padding + bordes` (regla 3)
-   redondeado hacia ARRIBA al cubo, más los 316 px que el panel le quita a
-   la ventana en escritorio (regla 1: 252 del cajón + 64 del padding).
+   Esta ola puso esa línea (`<div className="edu-tablewrap">`) en cada una
+   de ellas, así que estos bloques ya no leen la ventana: leen el ancho
+   REAL del hueco donde vive la tabla. Deja de importar cuánto mide el
+   cajón, el padding de `.edu-main` o el escalado de Windows — que es de
+   donde salían los 316 px que antes había que sumarle a cada umbral y
+   volver a restar mentalmente cada vez que alguien tocaba una pista.
 
-   👉 PARA GRADUAR UNA DE ESTAS A `@container`: envuelve su `.edu-table` en
-   un `<div className="edu-tablewrap">` en su pantalla y muévela al bloque
-   de arriba con su propio umbral SIN los 316. Es una línea de marcado por
-   pantalla, y entonces esa lista también se desplaza en vez de recortar. */
+   Los umbrales son ahora el CUBO de contenido (regla 3): la suma de
+   `Σ(pistas) + Σ(huecos) + padding + bordes` de la tabla más ancha del
+   grupo, redondeada hacia arriba. El número que se compara con él es el
+   ancho del envoltorio, no el de la pantalla.
 
-/* Cubo 700 px de contenido → 1016 px de ventana. iapersonas 670 · iaprecios 670 · creds 680 · usosillones 682 · docentes 700 */
-@media (min-width: 1016px) {
+   🔴 Y NINGUNO LLEVA YA `overflow: hidden`. Ese overflow estaba solo para
+   redondear esquinas y es exactamente lo que dejó el botón «Expediente»
+   INALCANZABLE en la lista de pacientes: recortaba sin dejar barra ni
+   gesto (regla 4). El radio vive ahora en `.edu-rowhead` y en la última
+   fila, y quien se desplaza es el envoltorio. `min-width: fit-content` es
+   la otra mitad: sin él la tabla se encoge al ancho del envoltorio y la
+   rejilla se sale por debajo en vez de hacerlo desplazarse.
+
+   ⚠️ TRES CLASES DE ESTA LISTA NO TIENEN PANTALLA: `--notas`,
+   `--usosillones` y `--diralumnos` están declaradas aquí y no las usa
+   ningún JSX del repo (comprobado con grep sobre todo `src/`). Se dejan
+   —aquí no se borra nada— y se avisa: el día que alguien estrene una de
+   esas listas, tiene que envolverla en `.edu-tablewrap` o su forma
+   renglón no se estrenará nunca, porque ya no hay ventana que medir. */
+
+/* Cubo 700 px de CONTENIDO (lo mide el envoltorio, no la ventana). iapersonas 670 · iaprecios 670 · creds 680 · usosillones 682 · docentes 700 */
+@container edu-tabla (min-width: 700px) {
   :is(.edu-table--iapersonas,
-     .edu-table--iaprecios,
-     .edu-table--creds,
-     .edu-table--usosillones,
-     .edu-table--docentes) {
+       .edu-table--iaprecios,
+       .edu-table--creds,
+       .edu-table--usosillones,
+       .edu-table--docentes) {
     gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace. */
+    min-width: fit-content;
     background: var(--edu-surface);
     border: 1px solid var(--edu-line);
     border-radius: var(--edu-radius);
     box-shadow: var(--edu-shadow-1);
-    overflow: hidden;
   }
 
   :is(.edu-table--iapersonas,
-     .edu-table--iaprecios,
-     .edu-table--creds,
-     .edu-table--usosillones,
-     .edu-table--docentes) .edu-rowhead {
+       .edu-table--iaprecios,
+       .edu-table--creds,
+       .edu-table--usosillones,
+       .edu-table--docentes) .edu-rowhead {
     display: grid;
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
     padding: 10px 16px;
     background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow es el que recorta un botón sin dejar scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
     border-bottom: 1px solid var(--edu-line);
     font-size: 11px;
     font-weight: 700;
@@ -1435,10 +1461,10 @@ select.edu-input {
   }
 
   :is(.edu-table--iapersonas,
-     .edu-table--iaprecios,
-     .edu-table--creds,
-     .edu-table--usosillones,
-     .edu-table--docentes) .edu-row {
+       .edu-table--iaprecios,
+       .edu-table--creds,
+       .edu-table--usosillones,
+       .edu-table--docentes) .edu-row {
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
@@ -1450,69 +1476,80 @@ select.edu-input {
   }
 
   :is(.edu-table--iapersonas,
-     .edu-table--iaprecios,
-     .edu-table--creds,
-     .edu-table--usosillones,
-     .edu-table--docentes) .edu-row:last-child {
+       .edu-table--iaprecios,
+       .edu-table--creds,
+       .edu-table--usosillones,
+       .edu-table--docentes) .edu-row:last-child {
     border-bottom: 0;
+    /* La última fila puede tener fondo propio (`.edu-row--off` y sus
+       primas): sin este radio sus esquinas cuadradas asoman por el
+       redondeo de la tabla. */
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
   }
 
   :is(.edu-table--iapersonas,
-     .edu-table--iaprecios,
-     .edu-table--creds,
-     .edu-table--usosillones,
-     .edu-table--docentes) .edu-cell--wide,
+       .edu-table--iaprecios,
+       .edu-table--creds,
+       .edu-table--usosillones,
+       .edu-table--docentes) .edu-cell--wide,
   :is(.edu-table--iapersonas,
-     .edu-table--iaprecios,
-     .edu-table--creds,
-     .edu-table--usosillones,
-     .edu-table--docentes) .edu-cell__actions {
+       .edu-table--iaprecios,
+       .edu-table--creds,
+       .edu-table--usosillones,
+       .edu-table--docentes) .edu-cell__actions {
     grid-column: auto;
   }
 
   :is(.edu-table--iapersonas,
-     .edu-table--iaprecios,
-     .edu-table--creds,
-     .edu-table--usosillones,
-     .edu-table--docentes) .edu-cell__label {
+       .edu-table--iaprecios,
+       .edu-table--creds,
+       .edu-table--usosillones,
+       .edu-table--docentes) .edu-cell__label {
     display: none;
   }
 
   :is(.edu-table--iapersonas,
-     .edu-table--iaprecios,
-     .edu-table--creds,
-     .edu-table--usosillones,
-     .edu-table--docentes) .edu-cell__actions {
+       .edu-table--iaprecios,
+       .edu-table--creds,
+       .edu-table--usosillones,
+       .edu-table--docentes) .edu-cell__actions {
     justify-content: flex-end;
   }
 }
 
-/* Cubo 780 px de contenido → 1096 px de ventana. corte 702 · notas 736 · sillones 742 · turnos 766 · procedimientos 776 */
-@media (min-width: 1096px) {
+/* Cubo 780 px de CONTENIDO (lo mide el envoltorio, no la ventana). corte 702 · notas 736 · sillones 742 · turnos 766 · procedimientos 776 */
+@container edu-tabla (min-width: 780px) {
   :is(.edu-table--corte,
-     .edu-table--notas,
-     .edu-table--sillones,
-     .edu-table--turnos,
-     .edu-table--procedimientos) {
+       .edu-table--notas,
+       .edu-table--sillones,
+       .edu-table--turnos,
+       .edu-table--procedimientos) {
     gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace. */
+    min-width: fit-content;
     background: var(--edu-surface);
     border: 1px solid var(--edu-line);
     border-radius: var(--edu-radius);
     box-shadow: var(--edu-shadow-1);
-    overflow: hidden;
   }
 
   :is(.edu-table--corte,
-     .edu-table--notas,
-     .edu-table--sillones,
-     .edu-table--turnos,
-     .edu-table--procedimientos) .edu-rowhead {
+       .edu-table--notas,
+       .edu-table--sillones,
+       .edu-table--turnos,
+       .edu-table--procedimientos) .edu-rowhead {
     display: grid;
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
     padding: 10px 16px;
     background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow es el que recorta un botón sin dejar scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
     border-bottom: 1px solid var(--edu-line);
     font-size: 11px;
     font-weight: 700;
@@ -1522,10 +1559,10 @@ select.edu-input {
   }
 
   :is(.edu-table--corte,
-     .edu-table--notas,
-     .edu-table--sillones,
-     .edu-table--turnos,
-     .edu-table--procedimientos) .edu-row {
+       .edu-table--notas,
+       .edu-table--sillones,
+       .edu-table--turnos,
+       .edu-table--procedimientos) .edu-row {
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
@@ -1537,71 +1574,82 @@ select.edu-input {
   }
 
   :is(.edu-table--corte,
-     .edu-table--notas,
-     .edu-table--sillones,
-     .edu-table--turnos,
-     .edu-table--procedimientos) .edu-row:last-child {
+       .edu-table--notas,
+       .edu-table--sillones,
+       .edu-table--turnos,
+       .edu-table--procedimientos) .edu-row:last-child {
     border-bottom: 0;
+    /* La última fila puede tener fondo propio (`.edu-row--off` y sus
+       primas): sin este radio sus esquinas cuadradas asoman por el
+       redondeo de la tabla. */
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
   }
 
   :is(.edu-table--corte,
-     .edu-table--notas,
-     .edu-table--sillones,
-     .edu-table--turnos,
-     .edu-table--procedimientos) .edu-cell--wide,
+       .edu-table--notas,
+       .edu-table--sillones,
+       .edu-table--turnos,
+       .edu-table--procedimientos) .edu-cell--wide,
   :is(.edu-table--corte,
-     .edu-table--notas,
-     .edu-table--sillones,
-     .edu-table--turnos,
-     .edu-table--procedimientos) .edu-cell__actions {
+       .edu-table--notas,
+       .edu-table--sillones,
+       .edu-table--turnos,
+       .edu-table--procedimientos) .edu-cell__actions {
     grid-column: auto;
   }
 
   :is(.edu-table--corte,
-     .edu-table--notas,
-     .edu-table--sillones,
-     .edu-table--turnos,
-     .edu-table--procedimientos) .edu-cell__label {
+       .edu-table--notas,
+       .edu-table--sillones,
+       .edu-table--turnos,
+       .edu-table--procedimientos) .edu-cell__label {
     display: none;
   }
 
   :is(.edu-table--corte,
-     .edu-table--notas,
-     .edu-table--sillones,
-     .edu-table--turnos,
-     .edu-table--procedimientos) .edu-cell__actions {
+       .edu-table--notas,
+       .edu-table--sillones,
+       .edu-table--turnos,
+       .edu-table--procedimientos) .edu-cell__actions {
     justify-content: flex-end;
   }
 }
 
-/* Cubo 880 px de contenido → 1196 px de ventana. facturas 820 · diralumnos 860 · programas 872 · requisitos 872 · bitacora 874 · iausos 876 */
-@media (min-width: 1196px) {
+/* Cubo 880 px de CONTENIDO (lo mide el envoltorio, no la ventana). facturas 820 · diralumnos 860 · programas 872 · requisitos 872 · bitacora 874 · iausos 876 */
+@container edu-tabla (min-width: 880px) {
   :is(.edu-table--facturas,
-     .edu-table--diralumnos,
-     .edu-table--programas,
-     .edu-table--requisitos,
-     .edu-table--bitacora,
-     .edu-table--iausos) {
+       .edu-table--diralumnos,
+       .edu-table--programas,
+       .edu-table--requisitos,
+       .edu-table--bitacora,
+       .edu-table--iausos) {
     gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace. */
+    min-width: fit-content;
     background: var(--edu-surface);
     border: 1px solid var(--edu-line);
     border-radius: var(--edu-radius);
     box-shadow: var(--edu-shadow-1);
-    overflow: hidden;
   }
 
   :is(.edu-table--facturas,
-     .edu-table--diralumnos,
-     .edu-table--programas,
-     .edu-table--requisitos,
-     .edu-table--bitacora,
-     .edu-table--iausos) .edu-rowhead {
+       .edu-table--diralumnos,
+       .edu-table--programas,
+       .edu-table--requisitos,
+       .edu-table--bitacora,
+       .edu-table--iausos) .edu-rowhead {
     display: grid;
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
     padding: 10px 16px;
     background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow es el que recorta un botón sin dejar scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
     border-bottom: 1px solid var(--edu-line);
     font-size: 11px;
     font-weight: 700;
@@ -1611,11 +1659,11 @@ select.edu-input {
   }
 
   :is(.edu-table--facturas,
-     .edu-table--diralumnos,
-     .edu-table--programas,
-     .edu-table--requisitos,
-     .edu-table--bitacora,
-     .edu-table--iausos) .edu-row {
+       .edu-table--diralumnos,
+       .edu-table--programas,
+       .edu-table--requisitos,
+       .edu-table--bitacora,
+       .edu-table--iausos) .edu-row {
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
@@ -1627,70 +1675,81 @@ select.edu-input {
   }
 
   :is(.edu-table--facturas,
-     .edu-table--diralumnos,
-     .edu-table--programas,
-     .edu-table--requisitos,
-     .edu-table--bitacora,
-     .edu-table--iausos) .edu-row:last-child {
+       .edu-table--diralumnos,
+       .edu-table--programas,
+       .edu-table--requisitos,
+       .edu-table--bitacora,
+       .edu-table--iausos) .edu-row:last-child {
     border-bottom: 0;
+    /* La última fila puede tener fondo propio (`.edu-row--off` y sus
+       primas): sin este radio sus esquinas cuadradas asoman por el
+       redondeo de la tabla. */
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
   }
 
   :is(.edu-table--facturas,
-     .edu-table--diralumnos,
-     .edu-table--programas,
-     .edu-table--requisitos,
-     .edu-table--bitacora,
-     .edu-table--iausos) .edu-cell--wide,
+       .edu-table--diralumnos,
+       .edu-table--programas,
+       .edu-table--requisitos,
+       .edu-table--bitacora,
+       .edu-table--iausos) .edu-cell--wide,
   :is(.edu-table--facturas,
-     .edu-table--diralumnos,
-     .edu-table--programas,
-     .edu-table--requisitos,
-     .edu-table--bitacora,
-     .edu-table--iausos) .edu-cell__actions {
+       .edu-table--diralumnos,
+       .edu-table--programas,
+       .edu-table--requisitos,
+       .edu-table--bitacora,
+       .edu-table--iausos) .edu-cell__actions {
     grid-column: auto;
   }
 
   :is(.edu-table--facturas,
-     .edu-table--diralumnos,
-     .edu-table--programas,
-     .edu-table--requisitos,
-     .edu-table--bitacora,
-     .edu-table--iausos) .edu-cell__label {
+       .edu-table--diralumnos,
+       .edu-table--programas,
+       .edu-table--requisitos,
+       .edu-table--bitacora,
+       .edu-table--iausos) .edu-cell__label {
     display: none;
   }
 
   :is(.edu-table--facturas,
-     .edu-table--diralumnos,
-     .edu-table--programas,
-     .edu-table--requisitos,
-     .edu-table--bitacora,
-     .edu-table--iausos) .edu-cell__actions {
+       .edu-table--diralumnos,
+       .edu-table--programas,
+       .edu-table--requisitos,
+       .edu-table--bitacora,
+       .edu-table--iausos) .edu-cell__actions {
     justify-content: flex-end;
   }
 }
 
-/* Cubo 900 px de contenido → 1216 px de ventana. generaciones 894 · equipo 894 · padron 896 */
-@media (min-width: 1216px) {
+/* Cubo 900 px de CONTENIDO (lo mide el envoltorio, no la ventana). generaciones 894 · equipo 894 · padron 896 */
+@container edu-tabla (min-width: 900px) {
   :is(.edu-table--generaciones,
-     .edu-table--equipo,
-     .edu-table--padron) {
+       .edu-table--equipo,
+       .edu-table--padron) {
     gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace. */
+    min-width: fit-content;
     background: var(--edu-surface);
     border: 1px solid var(--edu-line);
     border-radius: var(--edu-radius);
     box-shadow: var(--edu-shadow-1);
-    overflow: hidden;
   }
 
   :is(.edu-table--generaciones,
-     .edu-table--equipo,
-     .edu-table--padron) .edu-rowhead {
+       .edu-table--equipo,
+       .edu-table--padron) .edu-rowhead {
     display: grid;
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
     padding: 10px 16px;
     background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow es el que recorta un botón sin dejar scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
     border-bottom: 1px solid var(--edu-line);
     font-size: 11px;
     font-weight: 700;
@@ -1700,8 +1759,8 @@ select.edu-input {
   }
 
   :is(.edu-table--generaciones,
-     .edu-table--equipo,
-     .edu-table--padron) .edu-row {
+       .edu-table--equipo,
+       .edu-table--padron) .edu-row {
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
@@ -1713,57 +1772,68 @@ select.edu-input {
   }
 
   :is(.edu-table--generaciones,
-     .edu-table--equipo,
-     .edu-table--padron) .edu-row:last-child {
+       .edu-table--equipo,
+       .edu-table--padron) .edu-row:last-child {
     border-bottom: 0;
+    /* La última fila puede tener fondo propio (`.edu-row--off` y sus
+       primas): sin este radio sus esquinas cuadradas asoman por el
+       redondeo de la tabla. */
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
   }
 
   :is(.edu-table--generaciones,
-     .edu-table--equipo,
-     .edu-table--padron) .edu-cell--wide,
+       .edu-table--equipo,
+       .edu-table--padron) .edu-cell--wide,
   :is(.edu-table--generaciones,
-     .edu-table--equipo,
-     .edu-table--padron) .edu-cell__actions {
+       .edu-table--equipo,
+       .edu-table--padron) .edu-cell__actions {
     grid-column: auto;
   }
 
   :is(.edu-table--generaciones,
-     .edu-table--equipo,
-     .edu-table--padron) .edu-cell__label {
+       .edu-table--equipo,
+       .edu-table--padron) .edu-cell__label {
     display: none;
   }
 
   :is(.edu-table--generaciones,
-     .edu-table--equipo,
-     .edu-table--padron) .edu-cell__actions {
+       .edu-table--equipo,
+       .edu-table--padron) .edu-cell__actions {
     justify-content: flex-end;
   }
 }
 
-/* Cubo 980 px de contenido → 1296 px de ventana. rubricas 906 · especialidades 928 · evaluacion 966 · planes 976 */
-@media (min-width: 1296px) {
+/* Cubo 980 px de CONTENIDO (lo mide el envoltorio, no la ventana). rubricas 906 · especialidades 928 · evaluacion 966 · planes 976 */
+@container edu-tabla (min-width: 980px) {
   :is(.edu-table--rubricas,
-     .edu-table--especialidades,
-     .edu-table--evaluacion,
-     .edu-table--planes) {
+       .edu-table--especialidades,
+       .edu-table--evaluacion,
+       .edu-table--planes) {
     gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace. */
+    min-width: fit-content;
     background: var(--edu-surface);
     border: 1px solid var(--edu-line);
     border-radius: var(--edu-radius);
     box-shadow: var(--edu-shadow-1);
-    overflow: hidden;
   }
 
   :is(.edu-table--rubricas,
-     .edu-table--especialidades,
-     .edu-table--evaluacion,
-     .edu-table--planes) .edu-rowhead {
+       .edu-table--especialidades,
+       .edu-table--evaluacion,
+       .edu-table--planes) .edu-rowhead {
     display: grid;
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
     padding: 10px 16px;
     background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow es el que recorta un botón sin dejar scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
     border-bottom: 1px solid var(--edu-line);
     font-size: 11px;
     font-weight: 700;
@@ -1773,9 +1843,9 @@ select.edu-input {
   }
 
   :is(.edu-table--rubricas,
-     .edu-table--especialidades,
-     .edu-table--evaluacion,
-     .edu-table--planes) .edu-row {
+       .edu-table--especialidades,
+       .edu-table--evaluacion,
+       .edu-table--planes) .edu-row {
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
@@ -1787,58 +1857,69 @@ select.edu-input {
   }
 
   :is(.edu-table--rubricas,
-     .edu-table--especialidades,
-     .edu-table--evaluacion,
-     .edu-table--planes) .edu-row:last-child {
+       .edu-table--especialidades,
+       .edu-table--evaluacion,
+       .edu-table--planes) .edu-row:last-child {
     border-bottom: 0;
+    /* La última fila puede tener fondo propio (`.edu-row--off` y sus
+       primas): sin este radio sus esquinas cuadradas asoman por el
+       redondeo de la tabla. */
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
   }
 
   :is(.edu-table--rubricas,
-     .edu-table--especialidades,
-     .edu-table--evaluacion,
-     .edu-table--planes) .edu-cell--wide,
+       .edu-table--especialidades,
+       .edu-table--evaluacion,
+       .edu-table--planes) .edu-cell--wide,
   :is(.edu-table--rubricas,
-     .edu-table--especialidades,
-     .edu-table--evaluacion,
-     .edu-table--planes) .edu-cell__actions {
+       .edu-table--especialidades,
+       .edu-table--evaluacion,
+       .edu-table--planes) .edu-cell__actions {
     grid-column: auto;
   }
 
   :is(.edu-table--rubricas,
-     .edu-table--especialidades,
-     .edu-table--evaluacion,
-     .edu-table--planes) .edu-cell__label {
+       .edu-table--especialidades,
+       .edu-table--evaluacion,
+       .edu-table--planes) .edu-cell__label {
     display: none;
   }
 
   :is(.edu-table--rubricas,
-     .edu-table--especialidades,
-     .edu-table--evaluacion,
-     .edu-table--planes) .edu-cell__actions {
+       .edu-table--especialidades,
+       .edu-table--evaluacion,
+       .edu-table--planes) .edu-cell__actions {
     justify-content: flex-end;
   }
 }
 
-/* Cubo 1060 px de contenido → 1376 px de ventana. cobros 1004 · casos 1042 */
-@media (min-width: 1376px) {
+/* Cubo 1060 px de CONTENIDO (lo mide el envoltorio, no la ventana). cobros 1004 · casos 1042 */
+@container edu-tabla (min-width: 1060px) {
   :is(.edu-table--cobros,
-     .edu-table--casos) {
+       .edu-table--casos) {
     gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace. */
+    min-width: fit-content;
     background: var(--edu-surface);
     border: 1px solid var(--edu-line);
     border-radius: var(--edu-radius);
     box-shadow: var(--edu-shadow-1);
-    overflow: hidden;
   }
 
   :is(.edu-table--cobros,
-     .edu-table--casos) .edu-rowhead {
+       .edu-table--casos) .edu-rowhead {
     display: grid;
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
     padding: 10px 16px;
     background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow es el que recorta un botón sin dejar scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
     border-bottom: 1px solid var(--edu-line);
     font-size: 11px;
     font-weight: 700;
@@ -1848,7 +1929,7 @@ select.edu-input {
   }
 
   :is(.edu-table--cobros,
-     .edu-table--casos) .edu-row {
+       .edu-table--casos) .edu-row {
     grid-template-columns: var(--edu-cols);
     gap: 12px;
     align-items: center;
@@ -1860,24 +1941,28 @@ select.edu-input {
   }
 
   :is(.edu-table--cobros,
-     .edu-table--casos) .edu-row:last-child {
+       .edu-table--casos) .edu-row:last-child {
     border-bottom: 0;
+    /* La última fila puede tener fondo propio (`.edu-row--off` y sus
+       primas): sin este radio sus esquinas cuadradas asoman por el
+       redondeo de la tabla. */
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
   }
 
   :is(.edu-table--cobros,
-     .edu-table--casos) .edu-cell--wide,
+       .edu-table--casos) .edu-cell--wide,
   :is(.edu-table--cobros,
-     .edu-table--casos) .edu-cell__actions {
+       .edu-table--casos) .edu-cell__actions {
     grid-column: auto;
   }
 
   :is(.edu-table--cobros,
-     .edu-table--casos) .edu-cell__label {
+       .edu-table--casos) .edu-cell__label {
     display: none;
   }
 
   :is(.edu-table--cobros,
-     .edu-table--casos) .edu-cell__actions {
+       .edu-table--casos) .edu-cell__actions {
     justify-content: flex-end;
   }
 }
@@ -2213,6 +2298,21 @@ select.edu-input {
   font-size: 13px;
 }
 
+/* Ola B · un movimiento RETIRADO del historial del odontograma. Se lee
+   distinto sin dejar de leerse: el texto tachado dice "esto ya no está" y
+   el resto de la fila —quién lo marcó, cuándo, quién lo quitó— sigue con
+   su contraste, porque es justo lo que se viene a consultar. */
+.edu-assign--baja {
+  border-style: dashed;
+  background: transparent;
+}
+
+.edu-assign--baja > span:first-child {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: var(--edu-text-2);
+}
+
 .edu-assign__x {
   display: grid;
   place-items: center;
@@ -2511,64 +2611,24 @@ select.edu-input {
    odontograma y estudios. MÓVIL PRIMERO, como todo el vertical.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── Encabezado de la ficha del paciente ── */
-.edu-fichahead {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  background: var(--edu-surface);
-  border: 1px solid var(--edu-line);
-  border-radius: var(--edu-radius);
-  box-shadow: var(--edu-shadow-1);
-}
-
-@media (min-width: 720px) {
-  .edu-fichahead {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-  }
-}
-
-.edu-fichahead__folio {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--edu-text-3);
-}
-
-.edu-fichahead__name {
-  margin: 2px 0 0;
-  font-size: 19px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--edu-text-1);
-}
-
-.edu-fichahead__meta {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--edu-text-2);
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
-   LA CABECERA DE LA FICHA DEL PACIENTE — `.edu-fichahero`
+   LA CABECERA DE LAS FICHAS — `.edu-fichahero`
    ═══════════════════════════════════════════════════════════════════════
-   Sustituye a `.edu-fichahead` SOLO en /instituto/pacientes/[id]. El
-   `.edu-fichahead` de arriba SE QUEDA: lo usan otras tres pantallas (la
-   ficha del estudiante, la del docente y la bitácora) y borrarlo las
-   dejaría sin encabezado.
+   La usan las CUATRO pantallas que tienen ficha de una persona: paciente,
+   estudiante, docente y la bitácora académica.
+
+   Sustituyó a `.edu-fichahead`, que ya no existe: la Ola B lo dejó sin una
+   sola pantalla y se retiró aquí (era CSS sin dueño, y CSS sin dueño es lo
+   que se copia por error a la quinta pantalla). Si vuelve a hacer falta un
+   encabezado plano, es este bloque con menos cosas — no un nombre nuevo.
 
    Qué tenía de malo el plano: era `--edu-surface` liso —la misma
    superficie que una tarjeta cualquiera de la lista de la que vienes—, el
-   nombre medía 19 px contra los 27 del título de esa lista, y edad, sexo,
-   teléfono, correo, estado y casos se unían con `.join(" · ")` en UNA
-   línea gris de 13 px: el teléfono, que es a lo que se va, pesaba lo mismo
-   que el sexo.
+   nombre medía 19 px contra los 27 del título de esa lista, y los datos
+   clave se unían con `.join(" · ")` en UNA línea gris de 13 px: el
+   teléfono del paciente, el docente asignado del alumno y el correo del
+   docente —que son a lo que se entra— pesaban lo mismo que el sexo o el
+   semestre.
 
    Cuatro efectos, todos con tokens que ya existían en esta hoja:
      1. banda de 3 px con el degradado de la marca (`::before`);
@@ -6863,20 +6923,13 @@ button.edu-dir-money__fila:hover {
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── Los chips de alerta del encabezado ─────────────────────────────────
-   Debajo del nombre y ARRIBA de las pestañas: se ven en TODAS. Los tonos
-   son los .edu-tag--* de siempre (contrastes ya medidos ahí); aquí solo
-   se acomodan. */
-.edu-fichaalertas {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin: 10px 0 2px;
-}
+   El contenedor `.edu-fichaalertas` (y su `.edu-tag`) se RETIRÓ en la Ola
+   B: los chips se mudaron DENTRO de la cabecera y ahora los acomoda
+   `.edu-fichahero__chips`, que hace lo mismo y además les da el contraste
+   del fondo del hero. Quedaba sin una sola pantalla que lo usara.
 
-.edu-fichaalertas .edu-tag {
-  white-space: normal; /* una alergia larga se parte, no se desborda */
-}
+   Lo que SÍ sigue vivo es el enlace de abajo: la ficha del paciente lo
+   pinta al final de los chips, ya dentro del hero. */
 
 /* El enlace a capturar/editar antecedentes, al final de los chips. */
 .edu-fichaalertas__link {

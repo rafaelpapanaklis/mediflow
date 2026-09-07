@@ -81,69 +81,77 @@ export function EduProcedimientosScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--procedimientos">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Clave</span>
-            <span>Procedimiento</span>
-            <span>Categoría</span>
-            <span>Duración</span>
-            <span>Precios</span>
-            <span />
-          </div>
-
-          {rows.map((p) => (
-            <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
-              <div className="edu-cell">
-                <span className="edu-cell__label">Clave</span>
-                <span className="edu-cell__value edu-cell__value--strong">{p.code}</span>
-              </div>
-
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Procedimiento</span>
-                <span className="edu-cell__value edu-cell__value--strong">{p.name}</span>
-                {!p.isActive && <span className="edu-cell__sub">Dado de baja del catálogo</span>}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Categoría</span>
-                <span className="edu-cell__value">{p.category ?? "—"}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Duración</span>
-                <span className="edu-cell__value">{p.durationMinutes} min</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Precios</span>
-                {p.pricedIn === 0 ? (
-                  // Un procedimiento sin precio en NINGUNA lista no se
-                  // puede cobrar. Se dice aquí, en el catálogo, y no
-                  // cuando el paciente ya está en el mostrador.
-                  <span className="edu-tag edu-tag--warn">Sin precio</span>
-                ) : (
-                  <span className="edu-cell__value">
-                    {p.pricedIn} de {schedulesCount || p.pricedIn}
-                  </span>
-                )}
-              </div>
-
-              <div className="edu-cell__actions">
-                {canManage && (
-                  <button
-                    type="button"
-                    className="edu-btn edu-btn--ghost edu-btn--sm"
-                    onClick={() => {
-                      setFlash(null);
-                      setEditar(p);
-                    }}
-                  >
-                    Editar
-                  </button>
-                )}
-              </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--procedimientos">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Clave</span>
+              <span>Procedimiento</span>
+              <span>Categoría</span>
+              <span>Duración</span>
+              <span>Precios</span>
+              <span />
             </div>
-          ))}
+
+            {rows.map((p) => (
+              <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Clave</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{p.code}</span>
+                </div>
+
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Procedimiento</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{p.name}</span>
+                  {!p.isActive && <span className="edu-cell__sub">Dado de baja del catálogo</span>}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Categoría</span>
+                  <span className="edu-cell__value">{p.category ?? "—"}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Duración</span>
+                  <span className="edu-cell__value">{p.durationMinutes} min</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Precios</span>
+                  {p.pricedIn === 0 ? (
+                    // Un procedimiento sin precio en NINGUNA lista no se
+                    // puede cobrar. Se dice aquí, en el catálogo, y no
+                    // cuando el paciente ya está en el mostrador.
+                    <span className="edu-tag edu-tag--warn">Sin precio</span>
+                  ) : (
+                    <span className="edu-cell__value">
+                      {p.pricedIn} de {schedulesCount || p.pricedIn}
+                    </span>
+                  )}
+                </div>
+
+                <div className="edu-cell__actions">
+                  {canManage && (
+                    <button
+                      type="button"
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      onClick={() => {
+                        setFlash(null);
+                        setEditar(p);
+                      }}
+                    >
+                      Editar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

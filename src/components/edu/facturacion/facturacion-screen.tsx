@@ -227,78 +227,86 @@ export function EduFacturacionScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--facturas">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Folio</span>
-            <span>Receptor</span>
-            <span>Cobro</span>
-            <span>Total</span>
-            <span>Estado</span>
-            <span />
-          </div>
-
-          {page.rows.map((f) => (
-            <div
-              key={f.id}
-              className={`edu-row ${f.status === "CANCELLED" || f.status === "FAILED" ? "edu-row--off" : ""}`}
-            >
-              <div className="edu-cell">
-                <span className="edu-cell__label">Folio</span>
-                <span className="edu-cell__value edu-cell__value--strong">{f.folio}</span>
-                {/* 🔴 El ambiente, factura por factura: el instituto puede
-                    haber pasado a EN VIVO y ésta seguir siendo de pruebas. */}
-                <span
-                  className={`edu-tag ${f.environment === "LIVE" ? "edu-tag--ok" : "edu-tag--warn"}`}
-                >
-                  {EDU_FISCAL_ENV_LABELS[f.environment]}
-                </span>
-              </div>
-
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Receptor</span>
-                <span className="edu-cell__value edu-cell__value--strong">
-                  {f.receptorLegalName}
-                </span>
-                <span className="edu-cell__sub">
-                  {f.receptorRfc} ·{" "}
-                  <EduPersonaLink kind="paciente" id={f.patientId}>
-                    {f.patientName}
-                  </EduPersonaLink>
-                </span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Cobro</span>
-                <span className="edu-cell__value">{f.chargeFolio}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Total</span>
-                <span className="edu-cell__value edu-precio">{eduMoney(f.totalCents)}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Estado</span>
-                <span className={`edu-tag ${TAG_BY_STATUS[f.status]}`}>
-                  {EDU_INVOICE_STATUS_LABELS[f.status]}
-                </span>
-              </div>
-
-              <div className="edu-cell__actions">
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                  onClick={() => {
-                    setFlash(null);
-                    setDetalle(f);
-                  }}
-                >
-                  <FileText size={15} />
-                  Ver
-                </button>
-              </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--facturas">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Folio</span>
+              <span>Receptor</span>
+              <span>Cobro</span>
+              <span>Total</span>
+              <span>Estado</span>
+              <span />
             </div>
-          ))}
+
+            {page.rows.map((f) => (
+              <div
+                key={f.id}
+                className={`edu-row ${f.status === "CANCELLED" || f.status === "FAILED" ? "edu-row--off" : ""}`}
+              >
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Folio</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{f.folio}</span>
+                  {/* 🔴 El ambiente, factura por factura: el instituto puede
+                      haber pasado a EN VIVO y ésta seguir siendo de pruebas. */}
+                  <span
+                    className={`edu-tag ${f.environment === "LIVE" ? "edu-tag--ok" : "edu-tag--warn"}`}
+                  >
+                    {EDU_FISCAL_ENV_LABELS[f.environment]}
+                  </span>
+                </div>
+
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Receptor</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    {f.receptorLegalName}
+                  </span>
+                  <span className="edu-cell__sub">
+                    {f.receptorRfc} ·{" "}
+                    <EduPersonaLink kind="paciente" id={f.patientId}>
+                      {f.patientName}
+                    </EduPersonaLink>
+                  </span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Cobro</span>
+                  <span className="edu-cell__value">{f.chargeFolio}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Total</span>
+                  <span className="edu-cell__value edu-precio">{eduMoney(f.totalCents)}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Estado</span>
+                  <span className={`edu-tag ${TAG_BY_STATUS[f.status]}`}>
+                    {EDU_INVOICE_STATUS_LABELS[f.status]}
+                  </span>
+                </div>
+
+                <div className="edu-cell__actions">
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    onClick={() => {
+                      setFlash(null);
+                      setDetalle(f);
+                    }}
+                  >
+                    <FileText size={15} />
+                    Ver
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
