@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Pencil, Trash2, Upload } from "lucide-react";
 import {
@@ -8,7 +8,7 @@ import {
   eduContarFotosPorEtapa,
   type EduPhotoRow,
 } from "@/lib/edu/fotos-core";
-import { EDU_SIGNED_URL_TTL_SECONDS } from "@/lib/edu/estudios-core";
+import { EDU_SIGNED_URL_TTL_SECONDS, type EduRetiradoRow } from "@/lib/edu/estudios-core";
 import type { EduCaseOption } from "@/lib/edu/expediente-core";
 import {
   EDU_PHOTO_STAGE_DESCRIPTIONS,
@@ -22,6 +22,8 @@ import { EduFotosComparador } from "@/components/edu/fotos/comparador";
 import { EduFotoVisor } from "@/components/edu/fotos/visor";
 import { EduSubirFoto } from "@/components/edu/fotos/subir-foto";
 import { EduCorregirFoto, EduRetirarFoto } from "@/components/edu/fotos/editar-foto";
+import { EduFotoImagen, type EduFotoEstado } from "@/components/edu/fotos/foto-img";
+import { EduRetirados } from "@/components/edu/estudios/retirados";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -63,6 +65,11 @@ export interface EduFotosScreenProps {
   canUpload: boolean;
   /** HOY en el calendario del INSTITUTO, no en el del navegador. */
   todayISO: string;
+  /**
+   * N-16 · Las RETIRADAS, para que el motivo obligatorio se pueda LEER.
+   * Llegan vacías sin `estudios.upload`: el servidor ni las consulta.
+   */
+  retiradas: EduRetiradoRow[];
 }
 
 const SIN_PERMISO =
@@ -78,6 +85,7 @@ export function EduFotosScreen({
   signedAt,
   canUpload,
   todayISO,
+  retiradas,
 }: EduFotosScreenProps) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
@@ -86,10 +94,21 @@ export function EduFotosScreen({
   const [etapa, setEtapa] = useState<EduPhotoStage | "todas">("todas");
   const [vista, setVista] = useState<EduPhotoType | "todas">("todas");
   const [subir, setSubir] = useState(false);
-  const [verIdx, setVerIdx] = useState<number | null>(null);
+  /**
+   * N-16 · EL VISOR SE ABRE CON LA LISTA POR LA QUE VA A NAVEGAR, no con un
+   * índice sobre una lista global.
+   *
+   * Antes el clic en A/B del comparador buscaba la foto en `planas`
+   * —derivada de lo FILTRADO— mientras el comparador se alimentaba de
+   * `rows` cuando el filtro dejaba menos de dos: con un filtro puesto, el
+   * `findIndex` devolvía −1 y el clic no hacía absolutamente nada.
+   */
+  const [visor, setVisor] = useState<{ lista: EduPhotoRow[]; indice: number } | null>(null);
   const [corregir, setCorregir] = useState<EduPhotoRow | null>(null);
   const [retirar, setRetirar] = useState<EduPhotoRow | null>(null);
   const [caducadas, setCaducadas] = useState(false);
+  /** N-5 · Las que NO se pueden pintar ni con un enlace recién firmado. */
+  const [rotas, setRotas] = useState<string[]>([]);
 
   function recargar(mensaje: string) {
     setFlash(mensaje);
@@ -98,11 +117,17 @@ export function EduFotosScreen({
 
   /* Las URLs firmadas caducan a la hora. Se avisa un minuto antes y se
      ofrece renovar (un `router.refresh()`: la página es force-dynamic y
-     vuelve a firmarlo todo). Y si una miniatura falla al cargar, su
-     `onError` levanta el mismo aviso — el reloj del navegador puede ir
-     corrido, y la prueba de que caducó es que no carga. */
+     vuelve a firmarlo todo).
+
+     🔴 N-5 · Y ESTE AVISO YA NO LO ENCIENDE NINGÚN `onError`. Lo encendía,
+     y por eso una foto ilegible (HEIC sin convertir, objeto que ya no está)
+     decía «caducaron» para siempre: se pulsaba «Renovar», se refrescaba, y
+     volvía a fallar. Ahora cada imagen se renueva sola contra
+     `/fotos/[fotoId]/url` y, si con la URL nueva sigue sin pintarse, dice
+     lo que de verdad pasa en su sitio. */
   useEffect(() => {
     setCaducadas(false);
+    setRotas([]);
     const firmadas = Date.parse(signedAt);
     if (!Number.isFinite(firmadas)) return;
     const faltan = firmadas + (EDU_SIGNED_URL_TTL_SECONDS - 60) * 1000 - Date.now();
@@ -114,6 +139,14 @@ export function EduFotosScreen({
     return () => clearTimeout(t);
   }, [signedAt]);
 
+  const alEstado = useCallback((id: string, estado: EduFotoEstado) => {
+    setRotas((prev) => {
+      const dentro = prev.includes(id);
+      if (estado === "rota") return dentro ? prev : [...prev, id];
+      return dentro ? prev.filter((x) => x !== id) : prev;
+    });
+  }, []);
+
   // Los contadores de las píldoras de ETAPA se calculan sobre lo filtrado
   // por VISTA (y no sobre el total): si se está mirando "Sonrisa", la
   // píldora "Después" tiene que decir cuántas sonrisas hay en "Después",
@@ -124,6 +157,18 @@ export function EduFotosScreen({
     [rows, vista],
   );
   const cuentaEtapa = useMemo(() => eduContarFotosPorEtapa(porVista), [porVista]);
+
+  /**
+   * N-16 · Y LA SIMÉTRICA, que faltaba: los contadores del desplegable
+   * «Vista» se calculaban sobre `rows` —el total— ignorando el filtro de
+   * etapa. Con «Después» puesto, el desplegable decía «Sonrisa (12)» encima
+   * de una galería con dos. Es exactamente lo que el comentario de arriba
+   * declara peor que no tener contador, en el otro filtro.
+   */
+  const porEtapa = useMemo(
+    () => (etapa === "todas" ? rows : rows.filter((f) => f.stage === etapa)),
+    [rows, etapa],
+  );
 
   const filtradas = useMemo(
     () => (etapa === "todas" ? porVista : porVista.filter((f) => f.stage === etapa)),
@@ -138,6 +183,17 @@ export function EduFotosScreen({
   // derecha saltaría a una foto que no es la de al lado.
   const planas = useMemo(() => grupos.flatMap((g) => g.rows), [grupos]);
 
+  /* El comparador se alimenta de lo FILTRADO cuando hay al menos dos, y de
+     todo cuando el filtro dejó menos: comparar es lo que se vino a hacer, y
+     un filtro estrecho no puede vaciar la tarjeta principal de la pantalla.
+     Su lista viaja también al visor, para que un clic en A o en B abra
+     SIEMPRE la foto que se estaba mirando. */
+  const paraComparar = filtradas.length >= 2 ? filtradas : rows;
+  const planasComp = useMemo(
+    () => eduAgruparFotosPorEtapa(paraComparar).flatMap((g) => g.rows),
+    [paraComparar],
+  );
+
   // Las vistas que este paciente tiene DE VERDAD. Un desplegable con las
   // diez, ocho de ellas vacías, es una lista de cosas que no existen.
   const vistasPresentes = useMemo(() => {
@@ -146,9 +202,9 @@ export function EduFotosScreen({
     return [...set];
   }, [rows]);
 
-  function abrir(foto: EduPhotoRow) {
-    const i = planas.findIndex((f) => f.id === foto.id);
-    if (i >= 0) setVerIdx(i);
+  function abrirEn(lista: EduPhotoRow[], foto: EduPhotoRow) {
+    const i = lista.findIndex((f) => f.id === foto.id);
+    if (i >= 0) setVisor({ lista, indice: i });
   }
 
   return (
@@ -195,8 +251,8 @@ export function EduFotosScreen({
             <p className="edu-banner__title">Los enlaces de las fotos caducaron</p>
             <p className="edu-banner__detail">
               Por seguridad las fotos se sirven con un enlace temporal que dura una hora, y esta
-              pestaña lleva más abierta. Actualiza para renovarlos: no se pierde nada, las fotos
-              siguen ahí.
+              pestaña lleva más abierta. Cada foto pide uno nuevo cuando hace falta, pero si ves
+              varias tardando, actualiza: no se pierde nada, las fotos siguen ahí.
             </p>
             <p>
               <button
@@ -207,6 +263,28 @@ export function EduFotosScreen({
               >
                 {navigating ? "Renovando…" : "Renovar los enlaces"}
               </button>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 🔴 N-5 · EL AVISO HONESTO. Ya no dice «caducaron» de una foto que
+          no se puede pintar: dice que ese archivo no se puede mostrar, y
+          que renovar no lo va a arreglar. */}
+      {rotas.length > 0 && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">
+              {rotas.length === 1
+                ? "Una foto no se puede mostrar en este navegador"
+                : `${rotas.length} fotos no se pueden mostrar en este navegador`}
+            </p>
+            <p className="edu-banner__detail">
+              No es que el enlace haya caducado: se pidió uno nuevo y tampoco se pintan. El
+              archivo quedó en un formato que este navegador no abre (un HEIC sin convertir, lo
+              que produce un iPhone) o ya no está en el almacenamiento. Ábrelas desde un teléfono,
+              o vuelve a subirlas desde el dispositivo que las tomó — las de ahora se convierten a
+              JPG antes de subirse.
             </p>
           </div>
         </div>
@@ -285,10 +363,14 @@ export function EduFotosScreen({
                   value={vista}
                   onChange={(e) => setVista(e.target.value as EduPhotoType | "todas")}
                 >
-                  <option value="todas">Todas las vistas ({rows.length})</option>
+                  {/* N-16 · Los contadores cuentan DENTRO del filtro de
+                      etapa que ya está puesto. Un «(12)» encima de dos
+                      fotos es peor que no tener contador. */}
+                  <option value="todas">Todas las vistas ({porEtapa.length})</option>
                   {vistasPresentes.map((t) => (
                     <option key={t} value={t}>
-                      {EDU_PHOTO_TYPE_LABELS[t]} ({rows.filter((f) => f.photoType === t).length})
+                      {EDU_PHOTO_TYPE_LABELS[t]} ({porEtapa.filter((f) => f.photoType === t).length}
+                      )
                     </option>
                   ))}
                 </select>
@@ -296,11 +378,12 @@ export function EduFotosScreen({
             )}
           </div>
 
-          {/* ── El comparador. Se alimenta de lo FILTRADO cuando hay al
-              menos dos, y de todo cuando el filtro dejó menos: comparar es
-              lo que se vino a hacer, y un filtro estrecho no puede vaciar
-              la tarjeta principal de la pantalla. ────────────────────── */}
-          <EduFotosComparador fotos={filtradas.length >= 2 ? filtradas : rows} onAbrir={abrir} />
+          <EduFotosComparador
+            patientId={patientId}
+            fotos={paraComparar}
+            onAbrir={(foto) => abrirEn(planasComp, foto)}
+            onEstado={alEstado}
+          />
 
           {filtradas.length === 0 ? (
             <div className="edu-empty">
@@ -349,22 +432,17 @@ export function EduFotosScreen({
                           <button
                             type="button"
                             className="edu-fotos-tarjeta__mini"
-                            onClick={() => abrir(f)}
+                            onClick={() => abrirEn(planas, f)}
                             aria-label={`Abrir la foto ${EDU_PHOTO_TYPE_LABELS[f.photoType]} del ${f.capturedLabel}`}
                           >
-                            {f.thumbUrl || f.url ? (
-                              /* eslint-disable-next-line @next/next/no-img-element -- URL
-                                 firmada que caduca: next/image la cachearía
-                                 y después daría 403. */
-                              <img
-                                src={f.thumbUrl || f.url}
-                                alt={f.notes ?? EDU_PHOTO_TYPE_LABELS[f.photoType]}
-                                loading="lazy"
-                                onError={() => setCaducadas(true)}
-                              />
-                            ) : (
-                              <Camera size={28} aria-hidden />
-                            )}
+                            <EduFotoImagen
+                              patientId={patientId}
+                              foto={f}
+                              mini
+                              alt={f.notes ?? EDU_PHOTO_TYPE_LABELS[f.photoType]}
+                              loading="lazy"
+                              onEstado={alEstado}
+                            />
                           </button>
 
                           <figcaption className="edu-fotos-tarjeta__pie">
@@ -417,12 +495,26 @@ export function EduFotosScreen({
         </>
       )}
 
-      {verIdx !== null && planas[verIdx] && (
+      {/* N-16 · El MOTIVO de retirar una foto, por fin legible. Plegada y
+          solo con `estudios.upload`, que es el mismo permiso que hace falta
+          para retirar. */}
+      {canUpload && (
+        <EduRetirados
+          rows={retiradas}
+          titulo="Retiradas"
+          vacio="Ninguna foto de este paciente se ha retirado del expediente."
+          detalle="Una foto retirada deja de salir en la galería y de contar para el almacenamiento contratado, pero ni la fila ni el archivo se borran. Aquí está por qué se retiró cada una."
+        />
+      )}
+
+      {visor && visor.lista[visor.indice] && (
         <EduFotoVisor
-          fotos={planas}
-          indice={verIdx}
-          onCerrar={() => setVerIdx(null)}
-          onIr={setVerIdx}
+          patientId={patientId}
+          fotos={visor.lista}
+          indice={visor.indice}
+          onCerrar={() => setVisor(null)}
+          onIr={(i) => setVisor((v) => (v ? { ...v, indice: i } : v))}
+          onEstado={alEstado}
         />
       )}
 

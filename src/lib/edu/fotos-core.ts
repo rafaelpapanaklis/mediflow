@@ -8,27 +8,42 @@
  * el servidor.
  *
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 POR QUÉ ESTA FOTO SÍ PASA POR EL SERVIDOR (y el estudio no)
+ * 🔴 LA FOTO SUBE DIRECTO AL BUCKET, IGUAL QUE UN ESTUDIO (N-2)
  *
- * Un ESTUDIO sube DIRECTO al bucket porque una tomografía CBCT pesa
- * cientos de MB y el cuerpo de una petición en Vercel se corta muy por
- * debajo de eso (~4.5 MB). El precio de esa decisión está escrito en el
- * informe ws2-t1 §4.3: no hay compresión, no hay miniatura, y una foto de
- * celular de 8 MB se guarda entera y la galería la descarga entera.
+ * Hasta esta corrección la foto viajaba por un ROUTE HANDLER con
+ * `formData()`, y ahí estaba el fallo: el `bodySizeLimit: "30mb"` de
+ * `next.config.mjs` solo vale para SERVER ACTIONS. El cuerpo de un route
+ * handler lo corta la plataforma muy por debajo (~4.5 MB), así que el
+ * rótulo prometía 25 MB por una tubería que en producción no los aguanta —
+ * y la compresión del navegador era best-effort: cuatro caminos mandaban el
+ * ORIGINAL (HEIC que el navegador no decodifica, sin `createImageBitmap`,
+ * sin contexto 2D, comprimido más pesado que el original).
  *
- * Una FOTO CLÍNICA es otra cosa: 25 MB de tope, y a cambio de que los
- * bytes pasen por aquí el servidor puede hacer las tres cosas que el
- * estudio no puede:
- *   1. comprobar el MIME por NÚMERO MÁGICO (los primeros bytes), no por
- *      la extensión ni por lo que declare el navegador;
- *   2. reducirla a 2 400 px JPEG q85, que es lo que evita que el
- *      expediente de un paciente pese 300 MB en fotos de celular;
- *   3. generar la MINIATURA de 300 px, sin la cual una galería de 40
- *      fotos se descarga entera para pintar cuarenta cuadraditos.
+ * Ahora son los MISMOS TRES PASOS que los estudios de 2 GB:
+ *   1. POST .../fotos/sign     → el SERVIDOR valida permiso, alcance,
+ *                                tamaño y CUOTA, y compone el path
+ *   2. PUT  <signedUrl>        → el binario va del navegador AL BUCKET
+ *   3. POST .../fotos/confirm  → el servidor MIDE el objeto real, comprueba
+ *                                su NÚMERO MÁGICO y crea la fila
  *
- * Los 25 MB no son un capricho: son el mismo tope que el dental
- * (MAX_PHOTO_BYTES), holgado para una cámara y muy por debajo del techo
- * del cuerpo de una petición sin streaming.
+ * 🔴 Y COMO EL BINARIO YA NO PASA POR EL SERVIDOR, LA COMPRESIÓN ES DEL
+ * NAVEGADOR Y ES OBLIGATORIA. Sharp ya no ve la foto: los 2 400 px JPEG
+ * q85 y la miniatura de 300 px WebP se hacen con el canvas ANTES del PUT.
+ * Si el navegador no sabe decodificar el archivo (HEIC en Chrome de
+ * escritorio, sin `createImageBitmap`), NO se manda el original: se rechaza
+ * con el motivo escrito. Subir un HEIC que nadie sabe pintar es guardar en
+ * el expediente una foto que después sale rota — es exactamente el bucle
+ * que describe N-5.
+ *
+ * Lo único que se perdió respecto a sharp es la reorientación EXIF del
+ * servidor, y no hace falta: el canvas ya rota con `imageOrientation:
+ * "from-image"` y al pasar por él los metadatos EXIF desaparecen, así que
+ * el `.rotate()` de sharp no tenía nada que aplicar.
+ *
+ * Lo que NO se perdió: el NÚMERO MÁGICO. /confirm descarga el objeto —que
+ * está acotado por `EDU_MAX_PHOTO_BYTES` y medido en Storage ANTES de
+ * descargarlo— y comprueba sus primeros bytes. Un `.exe` renombrado sigue
+ * rebotando, y el objeto se borra del bucket.
  *
  * 🔴 EL PATH LO DECIDE EL SERVIDOR, SIEMPRE, y lleva el institutionId
  * ADENTRO — igual que los estudios. El cliente nunca propone un path: si
@@ -51,9 +66,16 @@ import {
 /**
  * Tope por foto: 25 MB.
  *
- * El mismo número que el dental. Es holgado para una foto de cámara o de
- * celular (una de 48 Mpx ronda los 12 MB) y se queda muy por debajo del
- * techo de un cuerpo de petición leído de golpe.
+ * El mismo número que el dental, y ahora es el tope del ARCHIVO ORIGINAL
+ * que se elige: lo que acaba en el bucket es el JPEG de 2 400 px que
+ * produce el navegador, que pesa una fracción de eso. Sigue existiendo
+ * porque decodificar un archivo de 200 MB en el canvas de un teléfono es
+ * la forma más cara de colgar la pestaña.
+ *
+ * ⚠️ Ya NO es "lo que promete la pantalla": el subtítulo del modal dejó de
+ * prometer un número y dice lo que de verdad pasa (se encoge aquí y sube
+ * directo al almacenamiento). Un rótulo con un tope que la tubería no
+ * aguantaba es lo que abrió N-2.
  */
 export const EDU_MAX_PHOTO_BYTES = 25 * 1024 * 1024;
 export const EDU_MAX_PHOTO_LABEL = "25 MB";
@@ -94,6 +116,31 @@ export const EDU_PHOTO_MAX_EDGE = 2400;
 export const EDU_PHOTO_JPEG_QUALITY = 85;
 export const EDU_PHOTO_THUMB_EDGE = 300;
 export const EDU_PHOTO_THUMB_QUALITY = 80;
+
+/**
+ * Lo que el navegador SUBE, y por lo tanto lo único que el bucket acepta de
+ * una foto clínica.
+ *
+ * 🔴 SIEMPRE UN JPEG, porque la compresión del navegador es OBLIGATORIA. Es
+ * lo que cierra el bucle de N-5: mientras el original podía colarse tal
+ * cual, un HEIC acababa en el bucket, ningún navegador de escritorio sabía
+ * pintarlo y la galería decía «los enlaces caducaron» para siempre.
+ *
+ * La MINIATURA es WebP por lo mismo que antes: pesa la mitad que un JPEG
+ * equivalente y la soportan todos los navegadores que soportan
+ * `canvas.toBlob`, que es el que la genera.
+ */
+export const EDU_PHOTO_UPLOAD_MIME = "image/jpeg";
+export const EDU_PHOTO_UPLOAD_EXT = "jpg";
+export const EDU_PHOTO_THUMB_MIME = "image/webp";
+
+/**
+ * El sufijo del path de la miniatura, en UN sitio: lo escribe
+ * `eduPhotoThumbPath` y lo comprueba /confirm. Dos literales para lo mismo
+ * es cómo se llega a que /confirm acepte como miniatura cualquier objeto
+ * que caiga en la carpeta del paciente.
+ */
+export const EDU_PHOTO_THUMB_SUFIJO = "-thumb.webp";
 
 /**
  * Techo de fotos por consulta.
@@ -230,7 +277,7 @@ export function eduPhotoThumbPath(
   patientId: string,
   uuid: string,
 ): string {
-  return `${eduPhotoPathPrefix(institutionId, patientId)}${uuid}-thumb.webp`;
+  return `${eduPhotoPathPrefix(institutionId, patientId)}${uuid}${EDU_PHOTO_THUMB_SUFIJO}`;
 }
 
 /**
@@ -298,6 +345,83 @@ export function eduPhotoPathBelongsTo(
   return path.startsWith(eduPhotoPathPrefix(institutionId, patientId));
 }
 
+/** El UUID que genera `randomUUID()`. Ni más largo ni con otras letras. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * El UUID que el SERVIDOR metió en un path de foto, o `null`.
+ *
+ * Existe para una sola cosa: que /confirm pueda exigir que la miniatura sea
+ * LA de esa foto y no cualquier otro objeto de la carpeta del paciente.
+ * Sin esto, `thumbPath` solo tendría que caer dentro del prefijo, y se
+ * podría registrar la foto de ayer como miniatura de la de hoy.
+ */
+export function eduPhotoUuidDePath(
+  path: unknown,
+  institutionId: string,
+  patientId: string,
+): string | null {
+  if (typeof path !== "string") return null;
+  if (!eduPhotoPathBelongsTo(path, institutionId, patientId)) return null;
+  const resto = path.slice(eduPhotoPathPrefix(institutionId, patientId).length);
+  const uuid = resto.slice(0, 36);
+  return UUID.test(uuid) ? uuid : null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LOS TRES PASOS — lo que se valida en /sign y en /confirm
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ¿Se puede FIRMAR esta subida? Devuelve el error escrito para una persona,
+ * o `null` si pasa.
+ *
+ * 🔴 Es más estricto que `eduValidarFotoSubida`, y a propósito: aquí ya no
+ * se está mirando el archivo que la persona ELIGIÓ, sino el binario que el
+ * navegador va a subir, y ése siempre es el JPEG que salió del canvas. Un
+ * cliente que declare otra cosa está saltándose la compresión obligatoria —
+ * que es justo por donde entraba el HEIC que después nadie sabe pintar.
+ *
+ * El tamaño es el DECLARADO, o sea una PISTA: /confirm vuelve a medir el
+ * objeto real en Storage antes de crear la fila.
+ */
+export function eduValidarFirmaFoto(input: {
+  mime?: unknown;
+  size?: unknown;
+}): string | null {
+  if (input?.mime !== EDU_PHOTO_UPLOAD_MIME) {
+    return (
+      "La foto tiene que subirse ya comprimida como JPEG. Si tu navegador no pudo " +
+      "prepararla, vuelve a elegirla o súbela desde el teléfono."
+    );
+  }
+  const size = Number(input?.size);
+  if (!Number.isFinite(size) || size <= 0) {
+    return "El archivo llegó vacío. Vuelve a elegirlo e inténtalo de nuevo.";
+  }
+  if (size > EDU_MAX_PHOTO_BYTES) {
+    return (
+      `Esa foto pesa ${eduFormatBytes(size)} y el máximo por foto es ${EDU_MAX_PHOTO_LABEL}. ` +
+      "Si viene de una cámara, exporta una versión más chica y vuelve a subirla."
+    );
+  }
+  return null;
+}
+
+/**
+ * El alto o el ancho que manda el cliente, o `null`.
+ *
+ * No es un dato de seguridad —sirve para que la galería sepa la forma de la
+ * foto— pero se sanea igual: un `width: "8e99"` guardado en una columna Int
+ * revienta la escritura entera y con ella la subida.
+ */
+export function eduParsePhotoDimension(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0 || n > 30000) return null;
+  return n;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // LA FORMA QUE VIAJA A LA PANTALLA
 // ═══════════════════════════════════════════════════════════════════════
@@ -308,6 +432,23 @@ export interface EduPhotoRow {
   stage: EduPhotoStage;
   /** ISO. Es la columna por la que ORDENA el comparador. */
   capturedAt: string;
+  /**
+   * N-7 · EL DÍA CIVIL de la toma en la ZONA DEL INSTITUTO ("2026-03-12"),
+   * resuelto por el servidor.
+   *
+   * 🔴 No es un lujo: el modal de corregir sembraba su `<input type="date">`
+   * con `eduInstanteADiaInput`, que recorta el instante EN UTC, mientras la
+   * tarjeta pintaba el día en la zona del instituto. Coincidían mientras
+   * `capturedAt` fuera mediodía UTC —lo que escribe la subida normal—, pero
+   * quien sube puede dejar la fecha vacía y entonces se guarda el instante
+   * real: una foto subida a las 20:00 de Ciudad de México queda en 02:00Z
+   * del día siguiente, la tarjeta decía «12 mar», el modal abría en «13» y
+   * guardar —aunque solo se viniera a corregir la etapa— movía la foto un
+   * día EN LA COLUMNA POR LA QUE ORDENA EL COMPARADOR.
+   *
+   * Con el día ya resuelto aquí, la pantalla y la base hablan del mismo día.
+   */
+  capturedDayISO: string;
   /** "12 mar 2026" — la fecha ya escrita, en la zona del instituto. */
   capturedLabel: string;
 

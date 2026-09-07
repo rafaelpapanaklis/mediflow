@@ -31,7 +31,11 @@ export async function PATCH(
 
   try {
     const body = await eduReadJson(request);
-    const out = await updateEduPatientPhoto(g.ctx, params.fotoId, {
+    // 🔴 N-16 · El `[id]` del paciente VIAJA A LA CAPA DE DATOS. Hasta hoy
+    // se ignoraba: `PATCH /pacientes/A/fotos/<foto-de-B>` contestaba 200.
+    // No había fuga de tenant —el alcance cierra la puerta— pero la URL
+    // mentía sobre a quién se le tocó el expediente.
+    const out = await updateEduPatientPhoto(g.ctx, params.fotoId, params.id, {
       stage: body.etapa,
       photoType: body.vista,
       capturedAt: body.capturedAt,
@@ -68,7 +72,7 @@ export async function DELETE(
 
   try {
     const body = await eduReadJson(request);
-    const out = await softDeleteEduPatientPhoto(g.ctx, params.fotoId, body.motivo);
+    const out = await softDeleteEduPatientPhoto(g.ctx, params.fotoId, params.id, body.motivo);
     return NextResponse.json(out);
   } catch (err) {
     return eduApiError(err, "DELETE /api/instituto/pacientes/[id]/fotos/[fotoId]");

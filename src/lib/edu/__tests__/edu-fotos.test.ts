@@ -49,6 +49,7 @@ import {
   eduIsPhotoMime,
   eduParFotosComparador,
   eduParseCapturedAt,
+  eduParsePhotoDimension,
   eduParsePhotoStage,
   eduParsePhotoType,
   eduPhotoExtForMime,
@@ -57,8 +58,10 @@ import {
   eduPhotoPathPrefix,
   eduPhotoStoragePath,
   eduPhotoThumbPath,
+  eduPhotoUuidDePath,
   eduPuedeCompararFotos,
   eduSafePhotoFileName,
+  eduValidarFirmaFoto,
   eduValidarFotoSubida,
   type EduPhotoRow,
 } from "../fotos-core";
@@ -259,6 +262,53 @@ test("la miniatura vive en la MISMA carpeta que su foto", () => {
   assert.equal(eduPhotoPathBelongsTo(thumb, INST, PAC), true);
 });
 
+test("🔴 N-2 · el uuid del path, y la miniatura que TIENE que ser su pareja", () => {
+  const uuid = "0f1e2d3c-4b5a-4968-8776-a5b4c3d2e1f0";
+  const path = eduPhotoStoragePath(INST, PAC, uuid, "sonrisa.jpg");
+  assert.equal(eduPhotoUuidDePath(path, INST, PAC), uuid);
+  // La miniatura sale del MISMO uuid: es lo que le deja a /confirm exigir
+  // que sean pareja. Sin esto bastaría con que cayera en la carpeta, y se
+  // podría enganchar la miniatura de otra foto.
+  assert.equal(eduPhotoThumbPath(INST, PAC, uuid), `${INST}/fotos/${PAC}/${uuid}-thumb.webp`);
+
+  // Un path de otra escuela, de otro paciente, o con un uuid que no lo es.
+  assert.equal(eduPhotoUuidDePath(path, "otra", PAC), null);
+  assert.equal(eduPhotoUuidDePath(path, INST, "otro"), null);
+  assert.equal(eduPhotoUuidDePath(`${INST}/fotos/${PAC}/no-un-uuid.jpg`, INST, PAC), null);
+  assert.equal(eduPhotoUuidDePath("", INST, PAC), null);
+  assert.equal(eduPhotoUuidDePath(undefined, INST, PAC), null);
+});
+
+test("🔴 N-2 · /sign solo firma el JPEG comprimido, y con tamaño", () => {
+  // La compresión del navegador dejó de ser best-effort: si llega otra
+  // cosa, alguien se la está saltando — que es por donde entraba el HEIC
+  // que después nadie sabe pintar.
+  assert.equal(eduValidarFirmaFoto({ mime: "image/jpeg", size: 900_000 }), null);
+  assert.match(String(eduValidarFirmaFoto({ mime: "image/heic", size: 900_000 })), /JPEG/);
+  assert.match(String(eduValidarFirmaFoto({ mime: "image/png", size: 900_000 })), /JPEG/);
+  assert.match(String(eduValidarFirmaFoto({ mime: "image/jpeg", size: 0 })), /vac/i);
+  assert.match(
+    String(eduValidarFirmaFoto({ mime: "image/jpeg", size: EDU_MAX_PHOTO_BYTES + 1 })),
+    /25 MB/,
+  );
+  // Justo en el tope pasa.
+  assert.equal(eduValidarFirmaFoto({ mime: "image/jpeg", size: EDU_MAX_PHOTO_BYTES }), null);
+});
+
+test("el alto y el ancho que manda el cliente se sanean", () => {
+  // No son un dato de seguridad, pero un número raro en una columna Int
+  // tumba la escritura entera y con ella la subida.
+  assert.equal(eduParsePhotoDimension(2400), 2400);
+  assert.equal(eduParsePhotoDimension("1600"), 1600);
+  assert.equal(eduParsePhotoDimension(0), null);
+  assert.equal(eduParsePhotoDimension(-5), null);
+  assert.equal(eduParsePhotoDimension(1.5), null);
+  assert.equal(eduParsePhotoDimension("8e99"), null);
+  assert.equal(eduParsePhotoDimension(999_999), null);
+  assert.equal(eduParsePhotoDimension(undefined), null);
+  assert.equal(eduParsePhotoDimension(null), null);
+});
+
 test("un path de otra escuela o de otro paciente NO pertenece", () => {
   const path = eduPhotoStoragePath(INST, PAC, "u1", "a.jpg");
   assert.equal(eduPhotoPathBelongsTo(path, INST, PAC), true);
@@ -317,6 +367,7 @@ function foto(id: string, stage: EduPhotoStage, capturedAt: string): EduPhotoRow
     photoType: "FRONTAL",
     stage,
     capturedAt,
+    capturedDayISO: capturedAt.slice(0, 10),
     capturedLabel: "",
     mime: "image/jpeg",
     sizeBytes: 1000,
@@ -441,45 +492,119 @@ test("el techo de la galería se lee MAX + 1 para poder DECIR que se cortó", ()
 
 const SERVER = sinComentarios(crudo("src", "lib", "edu", "fotos.ts"));
 
-test("🔴 el MIME se comprueba por NÚMERO MÁGICO y no por lo que declare el navegador", () => {
-  // `file.type` lo elige el cliente: un .exe renombrado a .jpg lo declara
-  // como quiera.
-  assert.match(SERVER, /validateMagicNumber\(bytes, \[\.\.\.EDU_PHOTO_MIME\]\)/);
+test("🔴 N-2 · la foto ya NO sube por un route handler: son TRES PASOS", () => {
+  // El `bodySizeLimit` de next.config.mjs solo vale para SERVER ACTIONS.
+  // Con `request.formData()` en un route handler, el cuerpo lo cortaba la
+  // plataforma (~4.5 MB) muy por debajo de lo que la pantalla prometía.
+  // Sin comentarios: el encabezado del archivo EXPLICA por escrito por qué
+  // ya no hay POST y nombra `request.formData()` para contarlo.
+  const lista = sinComentarios(
+    crudo("src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "route.ts"),
+  );
+  assert.equal(/export async function POST/.test(lista), false, "quedó un POST en el listado");
+  assert.equal(/request\.formData\(\)/.test(lista), false, "quedó el multipart del route handler");
+
+  // Y las tres puertas nuevas existen, con la MISMA forma que las de los
+  // estudios de 2 GB.
+  assert.match(SERVER, /export async function signEduPhotoUpload/);
+  assert.match(SERVER, /export async function confirmEduPhotoUpload/);
+  assert.match(SERVER, /export async function abortEduPhotoUpload/);
+});
+
+test("🔴 el MIME se comprueba por NÚMERO MÁGICO, ahora sobre el objeto YA subido", () => {
+  // Lo único que la tubería directa podía haber perdido, y no se perdió:
+  // /confirm descarga el objeto (ya medido, así que acotado) y le mira los
+  // primeros bytes. Un .exe renombrado sigue rebotando.
+  assert.match(SERVER, /validateMagicNumber\(bytes, \[EDU_PHOTO_UPLOAD_MIME\]\)/);
   // Y se reusa el helper compartido del repo, no una copia.
   assert.match(SERVER, /from "@\/lib\/validate-upload"/);
+  // 🔴 Solo JPEG: lo que el navegador sube es SIEMPRE el comprimido. Aceptar
+  // la lista de cinco volvería a meter HEIC en el bucket, que es el binario
+  // que después ningún escritorio sabe pintar (N-5).
+  assert.equal(/validateMagicNumber\(bytes, \[\.\.\.EDU_PHOTO_MIME\]\)/.test(SERVER), false);
 });
 
-test("🔴 la CUOTA se comprueba ANTES de escribir un byte en el bucket", () => {
-  const iCuota = SERVER.indexOf("eduAlmCabe(medidor, bytes.length)");
-  const iSubida = SERVER.indexOf("await eduStorageUpload(path, comprimida.body");
-  assert.ok(iCuota > 0, "no está el corte de cuota en fotos.ts");
-  assert.ok(iSubida > 0, "no está la subida al bucket");
-  assert.ok(iCuota < iSubida, "la cuota se comprueba DESPUÉS de subir: eso ya gastó el espacio");
+test("🔴 la CUOTA se comprueba en /sign, ANTES de firmar nada", () => {
+  const iSign = SERVER.indexOf("export async function signEduPhotoUpload");
+  const iConfirm = SERVER.indexOf("export interface EduPhotoConfirmInput");
+  assert.ok(iSign > 0 && iConfirm > iSign);
+  const sign = SERVER.slice(iSign, iConfirm);
+
+  const iCuota = sign.indexOf("eduAlmCabe(medidor, declarado)");
+  const iFirma = sign.indexOf("await eduSignUpload(path)");
+  assert.ok(iCuota > 0, "no está el corte de cuota en /sign");
+  assert.ok(iFirma > 0, "no se firma la subida");
+  assert.ok(iCuota < iFirma, "se firma antes de mirar la cuota: la foto ya subió para nada");
   // 507 y no 413: la foto no es grande, la escuela no tiene sitio.
-  assert.match(SERVER, /eduAlmRechazo\(medidor, bytes\.length\),\s*507/);
+  assert.match(sign, /eduAlmRechazo\(medidor, declarado\),\s*507/);
 });
 
-test("🔴 el número mágico va ANTES que la cuota y que la compresión", () => {
+test("🔴 el TAMAÑO se le pregunta a STORAGE, y el número mágico va DESPUÉS de medir", () => {
+  const iConfirm = SERVER.indexOf("export async function confirmEduPhotoUpload");
+  const iAbort = SERVER.indexOf("export async function abortEduPhotoUpload");
+  assert.ok(iConfirm > 0 && iAbort > iConfirm);
+  const confirm = SERVER.slice(iConfirm, iAbort);
+
+  const iMedir = confirm.indexOf("eduStorageObjectSizeWithRetry(path)");
+  const iDescargar = confirm.indexOf("eduStorageDownload(path)");
+  const iMagico = confirm.indexOf("validateMagicNumber");
+  assert.ok(iMedir > 0, "no se mide el objeto real");
+  assert.ok(iDescargar > iMedir, "se descarga antes de saber si cabe: eso es cargar 500 MB para nada");
+  assert.ok(iMagico > iDescargar);
+  // El tamaño del cliente NO se usa para nada que importe.
+  assert.equal(/input\??\.size/.test(confirm), false, "/confirm se cree el tamaño del cliente");
+});
+
+test("🔴 la FILA se crea AL FINAL, después de medir y de comprobar el contenido", () => {
   const iMagico = SERVER.indexOf("validateMagicNumber");
-  const iCuota = SERVER.indexOf("getEduAlmacenamientoMedidor(institutionId)");
-  const iSharp = SERVER.indexOf("comprimirFoto(bytes");
-  assert.ok(iMagico > 0 && iCuota > iMagico, "la cuota se consulta antes de saber si es una imagen");
-  assert.ok(iSharp > iMagico, "se comprime antes de saber si es una imagen");
+  const iFila = SERVER.indexOf("prisma.eduClinicalPhoto.create");
+  assert.ok(iMagico > 0 && iFila > iMagico, "la fila se crea antes de mirar los bytes");
 });
 
-test("🔴 la FILA se crea DESPUÉS de subir el binario", () => {
-  const iSubida = SERVER.indexOf("await eduStorageUpload(path, comprimida.body");
+test("🔴 /confirm es IDEMPOTENTE: un reintento devuelve la fila que ya existe", () => {
+  const iConfirm = SERVER.indexOf("export async function confirmEduPhotoUpload");
   const iFila = SERVER.indexOf("prisma.eduClinicalPhoto.create");
-  assert.ok(iFila > iSubida, "la fila se crea antes de subir: un fallo dejaría una foto fantasma");
+  const iBusca = SERVER.indexOf("prisma.eduClinicalPhoto.findFirst", iConfirm);
+  assert.ok(iBusca > iConfirm && iBusca < iFila, "no se busca la fila existente antes de crear");
+  assert.match(SERVER.slice(iBusca, iFila), /alreadyRegistered: true/);
+  // El candado real: el índice único (institutionId, storagePath), que YA
+  // existía en el esquema y en el .sql — esta casilla no añade SQL.
+  assert.match(SCHEMA, /@@unique\(\[institutionId, storagePath\], map: "edu_clinical_photos_path_key"\)/);
+  assert.match(SQL, /CREATE UNIQUE INDEX IF NOT EXISTS "edu_clinical_photos_path_key"/);
 });
 
 test("🔴 el PATH lo compone el servidor con el institutionId de la SESIÓN", () => {
   assert.match(SERVER, /requireInstitution\(ctx\)/);
   assert.match(SERVER, /randomUUID\(\)/);
   assert.match(SERVER, /eduPhotoStoragePath\(\s*institutionId,\s*pid,\s*uuid,/);
-  // El cliente NUNCA propone un path: si lo hiciera, bastaría con teclear
-  // el de otra escuela para escribir en su carpeta.
-  assert.equal(/input\??\.path/.test(SERVER), false);
+
+  // El cliente devuelve el path que le dio /sign, y /confirm lo VUELVE A
+  // COMPROBAR contra la carpeta de este instituto y este paciente: si no lo
+  // hiciera, bastaría con teclear el de otra escuela para registrar su
+  // archivo dentro del expediente propio.
+  const iConfirm = SERVER.indexOf("export async function confirmEduPhotoUpload");
+  const iAbort = SERVER.indexOf("export async function abortEduPhotoUpload");
+  const confirm = SERVER.slice(iConfirm, iAbort);
+  assert.match(confirm, /eduPhotoUuidDePath\(path, institutionId, pid\)/);
+  // Y la MINIATURA tiene que ser la de ESA foto: mismo uuid, no cualquier
+  // objeto que caiga en la carpeta.
+  assert.match(confirm, /eduPhotoThumbPath\(institutionId, pid, uuid\)/);
+});
+
+test("🔴 /abort solo borra HUÉRFANOS, y no filtra los retirados", () => {
+  const iAbort = SERVER.indexOf("export async function abortEduPhotoUpload");
+  assert.ok(iAbort > 0);
+  const abort = SERVER.slice(iAbort);
+  // Si existe la fila, esta puerta no es un atajo para sacar la foto del
+  // expediente: 409 y a «Retirar», que deja constancia.
+  assert.match(abort, /prisma\.eduClinicalPhoto\.findFirst/);
+  assert.match(abort, /409/);
+  // 🔴 SIN `deletedAt: null`: una foto RETIRADA sigue apuntando a su
+  // objeto. Filtrarlas convertiría «cancelar una subida» en la forma de
+  // destruir la evidencia que «Retirar» existe para conservar.
+  const iBusca = abort.indexOf("prisma.eduClinicalPhoto.findFirst");
+  const trozo = abort.slice(iBusca, iBusca + 220);
+  assert.equal(/deletedAt: null/.test(trozo), false, "/abort filtra las retiradas");
 });
 
 test("🔴 el alcance es el CLÍNICO en las cuatro puertas, y caja no ve fotos", () => {
@@ -522,9 +647,9 @@ test("una foto dada de baja ya no se corrige ni se firma su URL", () => {
   assert.ok(iPatch > 0);
   assert.match(SERVER.slice(iPatch), /foto\.deletedAt/);
   const iUrl = SERVER.indexOf("export async function getEduPhotoSignedUrl");
-  const iUpload = SERVER.indexOf("export interface EduPhotoUploadInput");
-  assert.ok(iUrl > 0 && iUpload > iUrl);
-  assert.match(SERVER.slice(iUrl, iUpload), /410/);
+  const iSign = SERVER.indexOf("export interface EduPhotoSignedUpload");
+  assert.ok(iUrl > 0 && iSign > iUrl);
+  assert.match(SERVER.slice(iUrl, iSign), /410/);
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -588,6 +713,10 @@ const PROPIOS = [
   ["src", "lib", "edu", "fotos-core.ts"],
   ["src", "lib", "edu", "fotos.ts"],
   ["src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "route.ts"],
+  // N-2 · las tres puertas de la subida directa
+  ["src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "sign", "route.ts"],
+  ["src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "confirm", "route.ts"],
+  ["src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "abort", "route.ts"],
   ["src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "[fotoId]", "route.ts"],
   ["src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "[fotoId]", "url", "route.ts"],
 ];
@@ -618,45 +747,79 @@ test("🔴 el bucket es `edu-files` y se llega a él por el helper del vertical"
 // 8 · LOS ENDPOINTS — permiso, y ninguna key nueva
 // ─────────────────────────────────────────────────────────────────────
 
-test("las tres rutas pasan por el guard, con los permisos que YA existen", () => {
-  const lista = crudo("src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "route.ts");
+test("las SEIS rutas pasan por el guard, con los permisos que YA existen", () => {
+  const ruta = (...t: string[]) =>
+    crudo("src", "app", "api", "instituto", "pacientes", "[id]", "fotos", ...t);
+  const lista = ruta("route.ts");
+  const sign = ruta("sign", "route.ts");
+  const confirm = ruta("confirm", "route.ts");
+  const abort = ruta("abort", "route.ts");
+  const detalle = ruta("[fotoId]", "route.ts");
+  const url = ruta("[fotoId]", "url", "route.ts");
+
+  // Mirar es `estudios.view`; escribir —subir, corregir, retirar, limpiar—
+  // es `estudios.upload`. Ninguna key nueva.
+  assert.match(lista, /eduApiGuard\("estudios\.view"\)/);
+  for (const src of [sign, confirm, abort, detalle]) {
+    assert.match(src, /eduApiGuard\("estudios\.upload"\)/);
+  }
+  assert.match(url, /eduApiGuard\("estudios\.view"\)/);
+
+  // 🔴 NINGUNA key nueva: `permissions.ts` no se toca en esta casilla.
+  for (const src of [lista, sign, confirm, abort, detalle, url]) {
+    assert.equal(/["']fotos\./.test(src), false, "se coló una key de permiso fotos.*");
+  }
+});
+
+test("🔴 N-16 · las rutas de [fotoId] mandan el [id] del paciente a la capa de datos", () => {
   const detalle = crudo(
     "src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "[fotoId]", "route.ts",
   );
   const url = crudo(
     "src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "[fotoId]", "url", "route.ts",
   );
+  // Sin esto, `DELETE /pacientes/A/fotos/<foto-de-B>` contestaba 200: no hay
+  // fuga de tenant (el alcance cierra la puerta) pero la URL miente sobre a
+  // quién se le tocó el expediente.
+  assert.match(detalle, /updateEduPatientPhoto\(g\.ctx, params\.fotoId, params\.id,/);
+  assert.match(detalle, /softDeleteEduPatientPhoto\(g\.ctx, params\.fotoId, params\.id,/);
+  assert.match(url, /getEduPhotoSignedUrl\(g\.ctx, params\.fotoId, params\.id\)/);
+  // Y la capa de datos lo EXIGE (no es opcional) y lo mete en el `where`,
+  // JUNTO al alcance: los dos, no uno.
+  assert.match(SERVER, /photoId: string,\s*patientId: string,/);
+  const iViewer = SERVER.indexOf("export async function getEduPhotoForViewer");
+  const iUrl = SERVER.indexOf("export async function getEduPhotoSignedUrl");
+  assert.ok(iViewer > 0 && iUrl > iViewer);
+  const viewer = SERVER.slice(iViewer, iUrl);
+  assert.match(viewer, /const pid = eduCleanId\(patientId\);/);
+  assert.match(viewer, /patientId: pid,/);
+  assert.match(viewer, /patient: eduPatientScopeWhere\(\{ institutionId, scope, now \}\)/);
+});
 
-  assert.match(lista, /eduApiGuard\("estudios\.view"\)/);
-  assert.match(lista, /eduApiGuard\("estudios\.upload"\)/);
-  // Corregir la etapa cambia lo que enseña el comparador: es escritura.
-  assert.match(detalle, /eduApiGuard\("estudios\.upload"\)/);
-  assert.match(url, /eduApiGuard\("estudios\.view"\)/);
-
-  // 🔴 NINGUNA key nueva: `permissions.ts` no se toca en esta casilla.
-  for (const src of [lista, detalle, url]) {
-    assert.equal(/["']fotos\./.test(src), false, "se coló una key de permiso fotos.*");
+test("🔴 N-16 · las escrituras miran el `count` del updateMany", () => {
+  // Dos alumnos con el mismo paciente abierto: el primero retira la foto y
+  // el segundo recibía 200 y «La foto se retiró» sin haber escrito nada.
+  const trozos = SERVER.split("prisma.eduClinicalPhoto.updateMany");
+  assert.equal(trozos.length, 3, "cambió el número de updateMany de fotos.ts");
+  for (const t of trozos.slice(1)) {
+    assert.match(t.slice(0, 400), /res\.count === 0/);
+  }
+  // Y lo mismo en los estudios, que tienen las mismas tres escrituras.
+  const est = sinComentarios(crudo("src", "lib", "edu", "estudios.ts"));
+  const te = est.split("prisma.eduStudy.updateMany");
+  assert.equal(te.length, 4, "cambió el número de updateMany de estudios.ts");
+  for (const t of te.slice(1)) {
+    assert.match(t.slice(0, 400), /res\.count === 0/);
   }
 });
 
-test("las tres rutas son force-dynamic: sirven URL que caducan", () => {
+test("las seis rutas son force-dynamic: sirven URL que caducan", () => {
   for (const tramos of PROPIOS.slice(2)) {
     const src = crudo(...tramos);
     assert.match(src, /export const dynamic = "force-dynamic"/, tramos.join("/"));
-    // Y nodejs, no edge: sharp es un módulo nativo.
+    // Y nodejs, no edge: se firma con la llave de service role.
     assert.match(src, /export const runtime = "nodejs"/, tramos.join("/"));
   }
-});
-
-test("la subida corta por tamaño ANTES de leer el arrayBuffer", () => {
-  // Cargar 500 MB en memoria para después decir que no caben es la forma
-  // más cara de rechazar algo.
-  const lista = sinComentarios(
-    crudo("src", "app", "api", "instituto", "pacientes", "[id]", "fotos", "route.ts"),
-  );
-  const iTope = lista.indexOf("file.size > EDU_MAX_PHOTO_BYTES");
-  const iLeer = lista.indexOf("await file.arrayBuffer()");
-  assert.ok(iTope > 0 && iLeer > iTope, "se lee el binario antes de comprobar el tope");
 });
 
 // ─────────────────────────────────────────────────────────────────────

@@ -261,6 +261,14 @@ export interface EduAlmTexto {
  * que a partir del 80 % diga cuánto queda, y que al 100 % diga que la
  * subida está bloqueada Y qué hacer al respecto. Un semáforo que solo
  * cambia de color deja a quien lo mira adivinando qué se espera de él.
+ *
+ * 🔴 N-16 · Y HABLA DE «ARCHIVOS», NO SOLO DE ESTUDIOS. Desde la Ola B la
+ * bolsa suma DOS tablas —`EduStudy` y `EduClinicalPhoto`— y las dos se
+ * bloquean a la vez, porque las dos consultan la misma cuota antes de
+ * firmar. El texto se quedó hablando solo de estudios: decía «la subida de
+ * estudios está BLOQUEADA» y «ni una radiografía más» a alguien que lo que
+ * no podía subir era una foto, y que por lo tanto no entendía qué le
+ * estaban explicando.
  */
 export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
   const restante = eduAlmRestanteBytes(m);
@@ -268,12 +276,13 @@ export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
 
   if (nivel === "lleno") {
     return {
-      titulo: "Almacenamiento lleno: la subida de estudios está BLOQUEADA",
+      titulo: "Almacenamiento lleno: la subida de archivos está BLOQUEADA",
       detalle:
         `Se llegó a la cuota de ${eduFormatBytes(sano(m?.cuotaBytes))} y no se puede subir ` +
-        "ni una radiografía más. Hay dos salidas: contratar más TB con DaleControl " +
-        `(${eduAlmPrecioLabel()}) o liberar espacio borrando estudios que ya no hagan falta. ` +
-        "Lo demás del panel sigue funcionando igual.",
+        "ni un archivo más: ni estudios (radiografías, tomografías, PDFs) ni fotos clínicas, " +
+        "porque las dos cosas comparten la misma bolsa. Hay dos salidas: contratar más TB con " +
+        `DaleControl (${eduAlmPrecioLabel()}) o liberar espacio retirando archivos que ya no ` +
+        "hagan falta. Lo demás del panel sigue funcionando igual.",
     };
   }
 
@@ -282,8 +291,8 @@ export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
       titulo: `Queda ${eduFormatBytes(restante)} de almacenamiento`,
       detalle:
         "Es menos del 5 % de la cuota: con una tomografía se acaba. Cuando llegue a cero " +
-        "no se podrá subir ningún estudio, así que conviene contratar más TB ahora " +
-        `(${eduAlmPrecioLabel()}) y no cuando ya esté detenido.`,
+        "no se podrá subir ningún archivo —ni estudios ni fotos clínicas—, así que conviene " +
+        `contratar más TB ahora (${eduAlmPrecioLabel()}) y no cuando ya esté detenido.`,
     };
   }
 
@@ -292,7 +301,8 @@ export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
       titulo: `Queda ${eduFormatBytes(restante)} de almacenamiento`,
       detalle:
         `Ya se usó el ${eduAlmPorcentaje(m)} % de la cuota. Todavía no bloquea nada, pero es ` +
-        "el momento de decidir: más TB con DaleControl o una limpieza de estudios viejos.",
+        "el momento de decidir: más TB con DaleControl o una limpieza de archivos viejos " +
+        "(estudios y fotos).",
     };
   }
 
@@ -300,8 +310,8 @@ export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
     titulo: `Queda ${eduFormatBytes(restante)} de almacenamiento`,
     detalle:
       `Va el ${eduAlmPorcentaje(m)} % de la cuota del contrato. Cuando llegue al ` +
-      `${EDU_ALM_UMBRAL_AVISO} % esta tarjeta lo avisa, y al 100 % la subida de estudios se ` +
-      "detiene.",
+      `${EDU_ALM_UMBRAL_AVISO} % esta tarjeta lo avisa, y al 100 % se detiene la subida de ` +
+      "archivos: estudios y fotos clínicas, que comparten la misma bolsa.",
   };
 }
 
@@ -331,8 +341,9 @@ export function eduAlmRechazo(m: EduAlmMedidor, bytes: number): string {
   if (restante <= 0) {
     return (
       `El almacenamiento del instituto está lleno (${eduFormatBytes(sano(m?.cuotaBytes))} de ` +
-      "cuota) y no se pueden subir más archivos. Avísale a la dirección: hay que contratar " +
-      "más espacio o liberar el que hay. Lo que ya está subido no se pierde."
+      "cuota) y no se pueden subir más archivos: ni estudios ni fotos clínicas, porque " +
+      "comparten la misma bolsa. Avísale a la dirección: hay que contratar más espacio o " +
+      "liberar el que hay. Lo que ya está subido no se pierde."
     );
   }
   return (

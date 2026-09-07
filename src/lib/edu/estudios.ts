@@ -54,6 +54,7 @@ import {
   EDU_MAX_STUDY_LABEL,
   EDU_STUDY_ABORT_YA_REGISTRADO,
   EDU_STUDY_EXT,
+  EDU_RETIRADOS_MAX_ROWS,
   EDU_STUDY_MAX_ROWS,
   EDU_STUDY_MOTIVO_MAX,
   eduExtOfName,
@@ -72,6 +73,7 @@ import {
   eduStudyPathBelongsTo,
   eduStudyStoragePath,
   eduValidarReclasificacion,
+  type EduRetiradoRow,
   type EduStudyPage,
   type EduStudyRow,
 } from "@/lib/edu/estudios-core";
@@ -729,10 +731,20 @@ export async function updateEduStudyNotes(
   // findFirst de arriba ya lo comprobó, la escritura no se apoya en que
   // nadie meta mano entre las dos consultas. Y `deletedAt: null` por lo
   // mismo: entre la lectura y la escritura, otro pudo retirarlo.
-  await prisma.eduStudy.updateMany({
+  //
+  // 🔴 N-16 · Y SE MIRA EL `count`. Sin esto, escribir cero filas devolvía
+  // 200 y la nota que la persona acaba de teclear desaparecía en el
+  // siguiente refresco, sin una palabra.
+  const res = await prisma.eduStudy.updateMany({
     where: { id: estudio.id, institutionId, deletedAt: null },
     data: { notes },
   });
+  if (res.count === 0) {
+    throw new EduPadronError(
+      "Ese estudio se retiró del expediente mientras escribías: la nota no se guardó. Actualiza la pestaña.",
+      409,
+    );
+  }
   return { notes };
 }
 
@@ -948,10 +960,21 @@ export async function updateEduStudy(
   // updateMany con el institutionId REPETIDO y `deletedAt: null`: aunque
   // el findFirst de arriba ya lo comprobó, la escritura no se apoya en que
   // nadie meta mano entre las dos consultas.
-  await prisma.eduStudy.updateMany({
+  //
+  // 🔴 N-16 · Y SE MIRA EL `count`: dos alumnos con el mismo paciente
+  // abierto, el primero retira el estudio y el segundo recibe un 200 con
+  // «quedó corregido» sin haber escrito nada. Un 200 que no escribió es la
+  // peor respuesta posible, porque la persona se va convencida.
+  const res = await prisma.eduStudy.updateMany({
     where: { id: estudio.id, institutionId, deletedAt: null },
     data,
   });
+  if (res.count === 0) {
+    throw new EduPadronError(
+      "Ese estudio se retiró del expediente mientras lo corregías: no se guardó nada. Actualiza la pestaña.",
+      409,
+    );
+  }
   return { id: estudio.id };
 }
 
@@ -993,9 +1016,74 @@ export async function softDeleteEduStudy(
 
   // Los tres campos se escriben JUNTOS, en una sola escritura: una baja
   // con fecha y sin autor, o con autor y sin motivo, no es una baja.
-  await prisma.eduStudy.updateMany({
+  //
+  // 🔴 N-16 · Y SE MIRA EL `count`: si otro lo retiró entre la lectura y
+  // esta escritura, aquí se escribieron CERO filas. Contestar 200 le
+  // atribuiría a esta persona una baja que hizo otra, y el motivo que
+  // quedó guardado no es el suyo.
+  const res = await prisma.eduStudy.updateMany({
     where: { id: estudio.id, institutionId, deletedAt: null },
     data: { deletedAt: now, deletedById: ctx.eduUserId, deleteReason: reason },
   });
+  if (res.count === 0) {
+    throw new EduPadronError("Ese estudio ya estaba retirado del expediente.", 409);
+  }
   return { id: estudio.id };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// N-16 · LO RETIRADO, PARA QUE EL MOTIVO SE PUEDA LEER
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * Los estudios RETIRADOS de un paciente: qué, quién, cuándo y por qué.
+ *
+ * 🔴 EXISTE PORQUE EL MOTIVO ERA OBLIGATORIO Y NO LO LEÍA NADIE.
+ * `estudio-editar.tsx` promete con todas sus letras que la constancia «es
+ * lo que contesta la pregunta dentro de un año», y hasta hoy esa pregunta
+ * solo se contestaba en Postgres: no había una sola consulta con
+ * `deletedAt: { not: null }` fuera del historial del odontograma.
+ *
+ * ⚠️ NO SE FIRMA NINGUNA URL. Esto es el registro de por qué algo dejó de
+ * estar, no una segunda galería: la sección va plegada y casi nadie la
+ * abre, y pedirle a Storage cincuenta enlaces para eso es un viaje pagado
+ * por nadie. El binario sigue en el bucket, así que si alguna vez hace
+ * falta recuperarlo, la fila dice exactamente cuál es.
+ *
+ * El permiso lo pone quien llama: la sección solo se pinta con
+ * `estudios.upload`, que es el mismo que hace falta para retirar.
+ */
+export async function listEduPatientStudiesRetirados(
+  ctx: EduClinicaContext,
+  patientId: string,
+  timeZone: string,
+  now: Date = new Date(),
+): Promise<EduRetiradoRow[]> {
+  const institutionId = requireInstitution(ctx);
+  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return [];
+
+  const paciente = await getEduClinicalPatient(ctx, patientId, now);
+  if (!paciente) return [];
+
+  const rows = await prisma.eduStudy.findMany({
+    where: { institutionId, patientId: paciente.id, deletedAt: { not: null } },
+    orderBy: [{ deletedAt: "desc" }],
+    take: EDU_RETIRADOS_MAX_ROWS,
+    select: {
+      id: true,
+      name: true,
+      deletedAt: true,
+      deleteReason: true,
+      deletedBy: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+
+  const tz = eduSafeTimeZone(timeZone);
+  return rows.map((r) => ({
+    id: r.id,
+    que: r.name,
+    quien: r.deletedBy ? personName(r.deletedBy) : "",
+    cuando: r.deletedAt ? stampLabel(r.deletedAt, tz) : "",
+    porQue: r.deleteReason ?? "",
+  }));
 }

@@ -20,8 +20,9 @@ export const dynamic = "force-dynamic";
  * refrescar cuarenta enlaces es otra cosa.
  *
  * El path NUNCA sale de aquí: lo que viaja es la URL firmada. Y la foto se
- * busca dentro del ALCANCE clínico, así que un id de otra escuela no
- * existe — devuelve 404, igual que uno inventado.
+ * busca dentro del ALCANCE clínico Y bajo el `[id]` de la URL (N-16), así
+ * que ni un id de otra escuela ni la foto de otro paciente existen aquí:
+ * los dos devuelven 404, igual que uno inventado.
  */
 export async function GET(
   _request: Request,
@@ -31,7 +32,7 @@ export async function GET(
   if ("response" in g) return g.response;
 
   try {
-    const out = await getEduPhotoSignedUrl(g.ctx, params.fotoId);
+    const out = await getEduPhotoSignedUrl(g.ctx, params.fotoId, params.id);
     return NextResponse.json(out);
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/pacientes/[id]/fotos/[fotoId]/url");

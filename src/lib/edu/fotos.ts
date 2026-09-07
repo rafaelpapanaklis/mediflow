@@ -7,29 +7,36 @@
  * fotos-core.ts; aquí solo hay consultas, compresión y Storage.
  *
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 AQUÍ EL BINARIO SÍ PASA POR EL SERVIDOR, Y ES LA DIFERENCIA ENTERA
- * CON LOS ESTUDIOS.
+ * 🔴 N-2 · EL BINARIO YA NO PASA POR EL SERVIDOR: SUBE DIRECTO AL BUCKET,
+ * EN LOS MISMOS TRES PASOS QUE UN ESTUDIO.
  *
- * Los estudios suben directo al bucket porque una tomografía pesa cientos
- * de MB. El precio: nadie puede mirar esos bytes, así que no hay
- * compresión, no hay miniatura y no hay comprobación del contenido real.
+ * Pasaba por aquí, con `request.formData()` en un ROUTE HANDLER, y ahí
+ * estaba el fallo: el `bodySizeLimit: "30mb"` de `next.config.mjs` solo
+ * vale para SERVER ACTIONS. El cuerpo de un route handler lo corta la
+ * plataforma (~4.5 MB) y la pantalla prometía 25 MB, con la compresión del
+ * navegador en best-effort y cuatro caminos que mandaban el original.
  *
- * Una foto clínica cabe en 25 MB, así que se hace lo contrario y en este
- * orden, que importa:
- *   1. permiso + alcance clínico + paciente de ESTE instituto
- *   2. MIME y tamaño DECLARADOS (rechazo barato, antes de leer nada más)
- *   3. NÚMERO MÁGICO del contenido — el `file.type` lo elige el navegador
- *   4. CUOTA del instituto, ANTES de escribir un byte en el bucket
- *   5. compresión con sharp (2 400 px JPEG q85) y miniatura (300 px WebP
- *      q80), las dos BEST-EFFORT
- *   6. subida del binario, subida de la miniatura, y la fila al final
+ * El orden de ahora, que importa igual que el de antes:
+ *   /sign     1. permiso + alcance clínico + paciente de ESTE instituto
+ *             2. MIME y tamaño DECLARADOS (rechazo barato)
+ *             3. CUOTA del instituto, ANTES de firmar nada
+ *             4. el PATH lo compone el servidor (institutionId de la SESIÓN)
+ *   PUT       5. el navegador sube el JPEG y su miniatura, sin tocar aquí
+ *   /confirm  6. TAMAÑO REAL preguntado a Storage (nunca al cliente)
+ *             7. NÚMERO MÁGICO del contenido descargado
+ *             8. y AL FINAL la fila
  *
- * 🔴 EL PASO 6 VA AL FINAL A PROPÓSITO. Si la fila se creara antes de
- * subir, un fallo de Storage dejaría un expediente con una foto que no
- * existe. Al revés —objeto sin fila— el peor caso es un huérfano en el
- * bucket, que es el mismo modo de fallo que ya tienen los estudios y que
- * se limpia con un barrido; una foto fantasma en el expediente no se
- * limpia con nada porque nadie sabe que está mal.
+ * 🔴 EL PASO 8 VA AL FINAL A PROPÓSITO, igual que antes. Un objeto sin fila
+ * es un huérfano que se limpia (para eso está `abortEduPhotoUpload`); una
+ * foto fantasma en el expediente no se limpia con nada porque nadie sabe
+ * que está mal.
+ *
+ * 🔴 LA COMPRESIÓN SE FUE AL NAVEGADOR Y ES OBLIGATORIA. Sharp ya no ve la
+ * foto: los 2 400 px JPEG q85 y la miniatura de 300 px WebP los hace el
+ * canvas antes del PUT, y si el navegador no sabe decodificar el archivo se
+ * RECHAZA con el motivo escrito en vez de subir el original. Lo que no se
+ * perdió es el número mágico: /confirm descarga el objeto —medido antes, y
+ * acotado a 25 MB— y comprueba sus primeros bytes.
  *
  * 🔴 EL ALCANCE ES EL DEL EXPEDIENTE (recurso "cases"), igual que las
  * notas, el odontograma y los estudios: las fotos cuelgan del PACIENTE
@@ -50,29 +57,36 @@ import { EduPadronError } from "@/lib/edu/padron";
 import {
   eduCleanId,
   eduFormatDayShort,
+  eduFormatTime,
   eduOptionalText,
   eduSafeTimeZone,
   eduUtcToZoned,
 } from "@/lib/edu/agenda-core";
 import { eduClinicalScope } from "@/lib/edu/expediente-core";
 import { getEduClinicalPatient } from "@/lib/edu/expediente";
-import { eduFormatBytes } from "@/lib/edu/estudios-core";
+import {
+  EDU_RETIRADOS_MAX_ROWS,
+  eduFormatBytes,
+  type EduRetiradoRow,
+} from "@/lib/edu/estudios-core";
 import {
   EDU_MAX_PHOTO_BYTES,
-  EDU_PHOTO_JPEG_QUALITY,
-  EDU_PHOTO_MAX_EDGE,
+  EDU_MAX_PHOTO_LABEL,
   EDU_PHOTO_MAX_ROWS,
-  EDU_PHOTO_MIME,
-  EDU_PHOTO_THUMB_EDGE,
-  EDU_PHOTO_THUMB_QUALITY,
+  EDU_PHOTO_THUMB_MIME,
+  EDU_PHOTO_THUMB_SUFIJO,
+  EDU_PHOTO_UPLOAD_EXT,
+  EDU_PHOTO_UPLOAD_MIME,
   eduParseCapturedAt,
+  eduParsePhotoDimension,
   eduParsePhotoStage,
   eduParsePhotoType,
-  eduPhotoExtForMime,
+  eduPhotoPathBelongsTo,
   eduPhotoStoragePath,
   eduPhotoThumbPath,
+  eduPhotoUuidDePath,
   eduSafePhotoFileName,
-  eduValidarFotoSubida,
+  eduValidarFirmaFoto,
   type EduPhotoPage,
   type EduPhotoRow,
 } from "@/lib/edu/fotos-core";
@@ -81,8 +95,11 @@ import { getEduAlmacenamientoMedidor } from "@/lib/edu/almacenamiento";
 import {
   eduSignRead,
   eduSignReadMany,
+  eduSignUpload,
   eduStorageConfigured,
-  eduStorageUpload,
+  eduStorageDownload,
+  eduStorageObjectSizeWithRetry,
+  eduStorageRemove,
 } from "@/lib/edu/storage";
 import {
   eduCaseScopeWhere,
@@ -90,7 +107,12 @@ import {
   eduScopeIsEmpty,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
-import type { EduPhotoStage, EduPhotoType } from "@/lib/edu/types";
+import {
+  EDU_PHOTO_STAGE_LABELS,
+  EDU_PHOTO_TYPE_LABELS,
+  type EduPhotoStage,
+  type EduPhotoType,
+} from "@/lib/edu/types";
 
 export { EduPadronError as EduFotosError };
 export type { EduPhotoRow, EduPhotoPage } from "@/lib/edu/fotos-core";
@@ -174,6 +196,11 @@ function toRow(
     photoType: p.photoType,
     stage: p.stage,
     capturedAt: p.capturedAt.toISOString(),
+    // N-7 · El día CIVIL, en la zona del instituto. Es el mismo cálculo que
+    // `dayLabel` de la línea de abajo, y va crudo para que el modal de
+    // corregir siembre su `<input type="date">` con EL MISMO día que la
+    // tarjeta pinta — no con el recorte en UTC, que se corre uno.
+    capturedDayISO: eduUtcToZoned(p.capturedAt, eduSafeTimeZone(timeZone)).dayISO,
     capturedLabel: dayLabel(p.capturedAt, timeZone),
 
     mime: p.mime,
@@ -310,10 +337,18 @@ export interface EduPhotoForViewer {
  * decide. Dar de baja dos veces tiene que poder contestar "ya estaba dada
  * de baja" y no "no existe", que le haría creer a alguien que perdió una
  * foto.
+ *
+ * 🔴 N-16 · `patientId` NO ES OPCIONAL Y SE COMPRUEBA. Las tres rutas del
+ * detalle viven bajo `/pacientes/[id]/fotos/[fotoId]` y hasta ahora
+ * ignoraban el `[id]`: no había fuga de tenant —el alcance cierra la
+ * puerta— pero `DELETE /pacientes/A/fotos/<foto-de-B>` contestaba 200 y la
+ * URL mentía sobre a quién se le tocó el expediente. Un rastro que miente
+ * sobre el paciente es peor que no tenerlo.
  */
 export async function getEduPhotoForViewer(
   ctx: EduClinicaContext,
   photoId: string,
+  patientId: string,
   now: Date = new Date(),
 ): Promise<EduPhotoForViewer | null> {
   const institutionId = requireInstitution(ctx);
@@ -321,11 +356,15 @@ export async function getEduPhotoForViewer(
   if (eduScopeIsEmpty(scope)) return null;
   const id = eduCleanId(photoId);
   if (!id) return null;
+  const pid = eduCleanId(patientId);
+  if (!pid) return null;
 
   const row = await prisma.eduClinicalPhoto.findFirst({
     where: {
       id,
       institutionId,
+      // El paciente de la URL, y además el alcance: los dos, no uno.
+      patientId: pid,
       patient: eduPatientScopeWhere({ institutionId, scope, now }),
     },
     select: {
@@ -352,10 +391,11 @@ export async function getEduPhotoForViewer(
 export async function getEduPhotoSignedUrl(
   ctx: EduClinicaContext,
   photoId: string,
+  patientId: string,
   now: Date = new Date(),
 ): Promise<{ url: string; thumbUrl: string }> {
   requireStorage();
-  const foto = await getEduPhotoForViewer(ctx, photoId, now);
+  const foto = await getEduPhotoForViewer(ctx, photoId, patientId, now);
   if (!foto) throw new EduPadronError("Esa foto no existe o no te toca.", 404);
   if (foto.deletedAt) {
     throw new EduPadronError("Esa foto está dada de baja del expediente.", 410);
@@ -370,152 +410,243 @@ export async function getEduPhotoSignedUrl(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// LA SUBIDA — por el SERVIDOR, en un solo viaje
+// LA SUBIDA, EN TRES PASOS (N-2)
 // ═══════════════════════════════════════════════════════════════════════
 
-export interface EduPhotoUploadInput {
-  /** Los bytes del archivo, ya leídos del multipart. */
-  bytes: Uint8Array | Buffer;
-  /** El MIME que DECLARA el navegador. Se comprueba contra el contenido. */
-  mime?: unknown;
-  /** El nombre original. Solo se usa para componer un path legible. */
+export interface EduPhotoSignedUpload {
+  /** El path del JPEG. Lo compone el servidor; el cliente lo devuelve tal cual. */
+  path: string;
+  /** El path de la miniatura, derivado del MISMO uuid. */
+  thumbPath: string;
+  signedUrl: string;
+  thumbSignedUrl: string;
+  contentType: string;
+  thumbContentType: string;
+  maxBytes: number;
+}
+
+/**
+ * PASO 1 — valida y firma las DOS subidas (la foto y su miniatura).
+ *
+ * Lo que se valida aquí, todo en el servidor y sin creerle nada al cliente:
+ *   · sesión + permiso + ALCANCE clínico del paciente
+ *   · que lo que va a subir sea el JPEG comprimido (la compresión del
+ *     navegador es obligatoria: `eduValidarFirmaFoto`)
+ *   · tamaño DECLARADO <= 25 MB
+ *   · que quepa en la CUOTA DEL INSTITUTO — 507 con el mensaje escrito,
+ *     nunca un 413 mudo: quien sube tiene al paciente en el sillón
+ *   · el PATH lo compone el servidor con el institutionId de la SESIÓN
+ *
+ * Lo que NO se puede validar aquí: el contenido real, porque los bytes no
+ * pasan por el servidor. El tamaño declarado es una PISTA —un cliente puede
+ * mentir— y por eso /confirm vuelve a medir el objeto Y a mirar sus
+ * primeros bytes.
+ *
+ * 🔴 SE FIRMAN LAS DOS DE UNA VEZ, y no la miniatura en un segundo viaje:
+ * dos redondeos a Storage desde un teléfono en 4G, con el paciente
+ * delante, se notan. Que la miniatura tenga path propio DERIVADO del uuid
+ * de la foto es lo que le deja a /confirm exigir que sean pareja.
+ */
+export async function signEduPhotoUpload(
+  ctx: EduClinicaContext,
+  patientId: string,
+  input: { name?: unknown; size?: unknown; contentType?: unknown },
+  now: Date = new Date(),
+): Promise<EduPhotoSignedUpload> {
+  const institutionId = requireInstitution(ctx);
+  requireStorage();
+  const pid = await requireClinicalPatient(ctx, patientId, now);
+
+  const declarado = Number(input?.size);
+  const invalido = eduValidarFirmaFoto({
+    mime: typeof input?.contentType === "string" ? input.contentType.toLowerCase() : "",
+    size: declarado,
+  });
+  if (invalido) {
+    throw new EduPadronError(invalido, declarado > EDU_MAX_PHOTO_BYTES ? 413 : 400);
+  }
+
+  // ── LA CUOTA DEL INSTITUTO, ANTES DE FIRMAR ──────────────────────────
+  //
+  // 🔴 El corte va AQUÍ y no en /confirm, por lo mismo que en los estudios:
+  // después de firmar, el navegador ya subió una foto que iba a rebotar
+  // igual, y el rebote llegaría del bucket, sin palabras.
+  //
+  // Son DOS TOPES DISTINTOS y los dos valen: arriba, lo que pesa ESA foto;
+  // aquí, lo que le queda a la ESCUELA.
+  const medidor = await getEduAlmacenamientoMedidor(institutionId);
+  if (!eduAlmCabe(medidor, declarado)) {
+    // 507 Insufficient Storage, no 413: la foto no es demasiado grande, es
+    // la escuela la que no tiene sitio. Se distinguen en los logs y el
+    // mensaje dice cuánto queda, cuánto pesa esto y a quién avisarle.
+    throw new EduPadronError(eduAlmRechazo(medidor, declarado), 507);
+  }
+
+  // 🔴 El PATH lo compone el SERVIDOR, con el institutionId de la SESIÓN y
+  // un UUID recién generado. El cliente nunca propone un path: si lo
+  // hiciera, bastaría con teclear el de otra escuela para escribir en su
+  // carpeta.
+  const uuid = randomUUID();
+  const path = eduPhotoStoragePath(
+    institutionId,
+    pid,
+    uuid,
+    eduSafePhotoFileName(input?.name, EDU_PHOTO_UPLOAD_EXT),
+  );
+  const thumbPath = eduPhotoThumbPath(institutionId, pid, uuid);
+
+  const firmada = await eduSignUpload(path);
+  const firmadaThumb = await eduSignUpload(thumbPath);
+  if (!firmada || !firmadaThumb) {
+    throw new EduPadronError("No se pudo preparar la subida. Intenta de nuevo.", 500);
+  }
+
+  return {
+    path,
+    thumbPath,
+    signedUrl: firmada.signedUrl,
+    thumbSignedUrl: firmadaThumb.signedUrl,
+    contentType: EDU_PHOTO_UPLOAD_MIME,
+    thumbContentType: EDU_PHOTO_THUMB_MIME,
+    maxBytes: EDU_MAX_PHOTO_BYTES,
+  };
+}
+
+export interface EduPhotoConfirmInput {
+  path?: unknown;
+  thumbPath?: unknown;
   fileName?: unknown;
   stage?: unknown;
   photoType?: unknown;
   capturedAt?: unknown;
   caseId?: unknown;
   notes?: unknown;
+  width?: unknown;
+  height?: unknown;
 }
 
-interface Comprimida {
-  body: Buffer;
-  mime: string;
-  ext: string;
-  width: number | null;
-  height: number | null;
-  thumb: Buffer | null;
-}
-
-/**
- * Comprime y saca la miniatura. BEST-EFFORT, y eso es una decisión:
- *
- * si sharp no puede con el formato —HEIC/HEIF dependen de que la
- * compilación de libvips de este entorno traiga libheif— se sube el
- * ORIGINAL sin miniatura y la galería cae a la foto completa. Rebotar la
- * subida entera por la copia pequeña sería perder la foto por la
- * miniatura, con el paciente todavía en el sillón.
- *
- * El import es DINÁMICO porque sharp pesa y no tiene por qué entrar en el
- * bundle de las pantallas que solo listan.
- */
-async function comprimirFoto(bytes: Buffer, mimeDeclarado: string): Promise<Comprimida> {
+/** Borra un objeto sin poder romperle nada a quien llama. */
+async function limpiarObjeto(path: string | null): Promise<void> {
+  if (!path) return;
   try {
-    const sharp = (await import("sharp")).default;
-    const principal = await sharp(bytes)
-      // `rotate()` sin argumentos aplica la orientación EXIF: sin esto,
-      // media galería de un iPhone sale de lado.
-      .rotate()
-      .resize(EDU_PHOTO_MAX_EDGE, EDU_PHOTO_MAX_EDGE, {
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .jpeg({ quality: EDU_PHOTO_JPEG_QUALITY, mozjpeg: true })
-      .toBuffer({ resolveWithObject: true });
-
-    let thumb: Buffer | null = null;
-    try {
-      thumb = await sharp(bytes)
-        .rotate()
-        .resize(EDU_PHOTO_THUMB_EDGE, EDU_PHOTO_THUMB_EDGE, { fit: "cover" })
-        .webp({ quality: EDU_PHOTO_THUMB_QUALITY })
-        .toBuffer();
-    } catch (e) {
-      console.warn("[instituto/fotos] miniatura falló:", (e as Error).message);
-    }
-
-    return {
-      body: principal.data,
-      mime: "image/jpeg",
-      ext: "jpg",
-      width: principal.info?.width ?? null,
-      height: principal.info?.height ?? null,
-      thumb,
-    };
+    await eduStorageRemove(path);
   } catch (e) {
-    console.warn(
-      "[instituto/fotos] compresión sharp falló; se sube el original:",
-      (e as Error).message,
-    );
-    return {
-      body: bytes,
-      mime: mimeDeclarado,
-      ext: eduPhotoExtForMime(mimeDeclarado),
-      width: null,
-      height: null,
-      thumb: null,
-    };
+    console.error("[instituto/fotos] no se pudo borrar el objeto rechazado:", path, e);
   }
 }
 
 /**
- * SUBE una foto clínica al expediente del paciente.
+ * PASO 3 — mide el objeto real, comprueba su contenido y lo registra.
  *
- * Devuelve el id de la fila creada. Lanza `EduPadronError` con el status y
- * el mensaje ya escritos para una persona: quien sube es un alumno con el
- * paciente en el sillón, y un 400 mudo lo deja mirando la pantalla.
+ * El objeto YA está en el bucket (lo subió el navegador). Aquí el servidor
+ * decide si esa subida se convierte en una fila del expediente, y NO se
+ * cree NADA de lo que diga el cliente:
+ *   · el `path` debe caer EXACTAMENTE en la carpeta de este instituto y
+ *     este paciente — sin esto, conociendo un path ajeno se podría
+ *     registrar el archivo de otra escuela dentro del expediente propio;
+ *   · la MINIATURA tiene que ser LA de esta foto: mismo uuid y el sufijo
+ *     que escribe `eduPhotoThumbPath`. Que caiga en la carpeta no basta —
+ *     si bastara, se podría enganchar la miniatura de otra foto;
+ *   · el TAMAÑO se le pregunta a STORAGE, jamás al cliente;
+ *   · el CONTENIDO se comprueba por NÚMERO MÁGICO. Es lo único que la
+ *     tubería directa podía haber perdido y no se perdió: se descarga el
+ *     objeto —después de medirlo, así que está acotado a 25 MB— y se miran
+ *     sus primeros bytes. Un `.exe` renombrado rebota y el objeto se borra.
+ *
+ * 🔴 ES IDEMPOTENTE: un reintento del cliente o un doble toque devuelven la
+ * fila que ya existe en vez de duplicar la foto. Lo garantiza el índice
+ * único (institutionId, storagePath), que ya existía en el esquema y en
+ * `sql/edu-ola-b.sql` — esta casilla no añade SQL.
  */
-export async function uploadEduPatientPhoto(
+export async function confirmEduPhotoUpload(
   ctx: EduClinicaContext,
   patientId: string,
-  input: EduPhotoUploadInput,
+  input: EduPhotoConfirmInput,
   now: Date = new Date(),
-): Promise<{ id: string }> {
+): Promise<{ id: string; alreadyRegistered: boolean }> {
   const institutionId = requireInstitution(ctx);
   requireStorage();
   const pid = await requireClinicalPatient(ctx, patientId, now);
 
-  const bytes = Buffer.isBuffer(input?.bytes) ? input.bytes : Buffer.from(input?.bytes ?? []);
-  const mimeDeclarado = typeof input?.mime === "string" ? input.mime.toLowerCase() : "";
+  const path = typeof input?.path === "string" ? input.path : "";
+  const uuid = eduPhotoUuidDePath(path, institutionId, pid);
+  if (!uuid) throw new EduPadronError("Esa ruta no es de este paciente.", 400);
 
-  // ── 1. Lo barato primero: MIME declarado y tamaño ────────────────────
-  const invalido = eduValidarFotoSubida({ mime: mimeDeclarado, size: bytes.length });
-  if (invalido) {
-    throw new EduPadronError(invalido, bytes.length > EDU_MAX_PHOTO_BYTES ? 413 : 400);
+  // La miniatura es opcional en el ESQUEMA (`thumbnailPath String?`), pero
+  // si viene tiene que ser la de ESTA foto.
+  let thumbPath: string | null = null;
+  if (input?.thumbPath !== undefined && input?.thumbPath !== null && input?.thumbPath !== "") {
+    const t = typeof input.thumbPath === "string" ? input.thumbPath : "";
+    if (
+      !eduPhotoPathBelongsTo(t, institutionId, pid) ||
+      !t.endsWith(EDU_PHOTO_THUMB_SUFIJO) ||
+      t !== eduPhotoThumbPath(institutionId, pid, uuid)
+    ) {
+      throw new EduPadronError("Esa miniatura no es de esta foto.", 400);
+    }
+    thumbPath = t;
   }
 
-  // ── 2. El NÚMERO MÁGICO ──────────────────────────────────────────────
-  // 🔴 `file.type` lo elige el navegador y se puede falsear: un .exe
-  // renombrado a .jpg lo declara como quiera. Esto mira los primeros bytes
-  // del contenido. Es el mismo helper que ya usan las firmas de
-  // consentimiento del vertical (@/lib/consent/signature) e inmuebles —
-  // se importa, no se copia.
-  const magico = await validateMagicNumber(bytes, [...EDU_PHOTO_MIME]);
-  if (magico) {
+  // ── IDEMPOTENCIA, lo primero: un reintento no vuelve a medir ni a
+  //    descargar nada, y sobre todo no crea una segunda fila.
+  const existente = await prisma.eduClinicalPhoto.findFirst({
+    where: { institutionId, storagePath: path },
+    select: { id: true },
+  });
+  if (existente) return { id: existente.id, alreadyRegistered: true };
+
+  // ── EL TAMAÑO REAL, PREGUNTADO A STORAGE ─────────────────────────────
+  const size = await eduStorageObjectSizeWithRetry(path);
+  if (size == null) {
+    // 409 y no 500: el objeto puede existir y todavía no listarse. El
+    // cliente reintenta el REGISTRO (no la subida) y suele entrar.
     throw new EduPadronError(
-      "Ese archivo no es una imagen: su contenido no coincide con lo que dice ser.",
+      "La foto todavía no aparece en el almacenamiento. Espera un momento y vuelve a intentar.",
+      409,
+    );
+  }
+  if (size <= 0) {
+    await limpiarObjeto(path);
+    await limpiarObjeto(thumbPath);
+    throw new EduPadronError("El archivo llegó vacío. Vuelve a elegirlo e inténtalo de nuevo.", 400);
+  }
+  if (size > EDU_MAX_PHOTO_BYTES) {
+    // Se borra: si se quedara, ocuparía espacio sin fila que lo
+    // contabilice, y nadie podría verlo ni para borrarlo.
+    await limpiarObjeto(path);
+    await limpiarObjeto(thumbPath);
+    throw new EduPadronError(
+      `Esa foto pesa ${eduFormatBytes(size)} y el máximo por foto es ${EDU_MAX_PHOTO_LABEL}.`,
+      413,
+    );
+  }
+
+  // ── EL NÚMERO MÁGICO ─────────────────────────────────────────────────
+  //
+  // 🔴 Va DESPUÉS de medir y no antes: descargar primero y preguntar
+  // después sería cargar en memoria de la función lo que todavía no se
+  // sabe si cabe. Y va con `EDU_PHOTO_UPLOAD_MIME` a secas y no con la
+  // lista de cinco: lo que el navegador sube SIEMPRE es el JPEG que salió
+  // del canvas, así que aceptar un HEIC aquí sería volver a meter en el
+  // bucket el binario que después ningún escritorio sabe pintar (N-5).
+  const bytes = await eduStorageDownload(path);
+  if (!bytes) {
+    throw new EduPadronError(
+      "No se pudo leer la foto recién subida. Espera un momento y vuelve a intentar.",
+      409,
+    );
+  }
+  const magico = await validateMagicNumber(bytes, [EDU_PHOTO_UPLOAD_MIME]);
+  if (magico) {
+    await limpiarObjeto(path);
+    await limpiarObjeto(thumbPath);
+    throw new EduPadronError(
+      "Ese archivo no es una foto JPEG: su contenido no coincide con lo que dice ser.",
       400,
     );
   }
 
-  // ── 3. LA CUOTA DEL INSTITUTO, ANTES DE ESCRIBIR UN BYTE ─────────────
-  //
-  // 🔴 Se decide con el tamaño de ENTRADA y no con el comprimido, aunque
-  // lo que acabe ocupando sea menos. Comprimir primero para decidir sería
-  // gastar CPU en una foto que va a rebotar igual, y equivocarse hacia el
-  // lado conservador solo puede rechazar un poco antes de tiempo — nunca
-  // dejar pasar de más.
-  //
-  // Son DOS TOPES DISTINTOS y los dos valen: arriba, lo que pesa ESA foto
-  // (25 MB); aquí, lo que le queda a la ESCUELA.
-  const medidor = await getEduAlmacenamientoMedidor(institutionId);
-  if (!eduAlmCabe(medidor, bytes.length)) {
-    // 507 Insufficient Storage, no 413: la foto no es demasiado grande, es
-    // la escuela la que no tiene sitio. Se distinguen en los logs y el
-    // mensaje dice cuánto queda, cuánto pesa esto y a quién avisarle.
-    throw new EduPadronError(eduAlmRechazo(medidor, bytes.length), 507);
-  }
-
-  // ── 4. El caso, DENTRO DEL ALCANCE ───────────────────────────────────
+  // ── El caso, DENTRO DEL ALCANCE ──────────────────────────────────────
   // No se puede colgar una foto de un caso que quien sube no puede ver, ni
   // de un caso de otro paciente.
   let caseId: string | null = null;
@@ -532,37 +663,7 @@ export async function uploadEduPatientPhoto(
     caseId = caso.id;
   }
 
-  // ── 5. Comprimir (best-effort) ───────────────────────────────────────
-  const comprimida = await comprimirFoto(bytes, mimeDeclarado);
-
-  // ── 6. Subir. El PATH lo compone el SERVIDOR ─────────────────────────
-  // 🔴 con el institutionId de la SESIÓN y un UUID recién generado. El
-  // cliente nunca propone un path: si lo hiciera, bastaría con teclear el
-  // de otra escuela para escribir en su carpeta.
-  const uuid = randomUUID();
-  const path = eduPhotoStoragePath(
-    institutionId,
-    pid,
-    uuid,
-    eduSafePhotoFileName(input?.fileName, comprimida.ext),
-  );
-
-  const guardado = await eduStorageUpload(path, comprimida.body, comprimida.mime);
-  if (!guardado) {
-    throw new EduPadronError("No se pudo guardar la foto. Intenta de nuevo.", 502);
-  }
-
-  // La miniatura es best-effort del principio al fin: si su subida falla,
-  // la foto queda sin miniatura y la galería usa la completa, en vez de
-  // tumbar una subida que ya está guardada.
-  let thumbPath: string | null = null;
-  if (comprimida.thumb) {
-    const tp = eduPhotoThumbPath(institutionId, pid, uuid);
-    const okThumb = await eduStorageUpload(tp, comprimida.thumb, "image/webp");
-    if (okThumb) thumbPath = tp;
-  }
-
-  // ── 7. Y AL FINAL la fila ────────────────────────────────────────────
+  // ── Y AL FINAL la fila ───────────────────────────────────────────────
   const stage: EduPhotoStage = eduParsePhotoStage(input?.stage) ?? "PRE";
   const photoType: EduPhotoType = eduParsePhotoType(input?.photoType) ?? "OTRA";
   const capturedAt = eduParseCapturedAt(input?.capturedAt, now) ?? now;
@@ -578,18 +679,89 @@ export async function uploadEduPatientPhoto(
       capturedAt,
       storagePath: path,
       thumbnailPath: thumbPath,
-      mime: comprimida.mime,
-      // Lo que de verdad ocupa en el bucket, que es lo que suma a la
-      // cuota: el tamaño DESPUÉS de comprimir, no el que llegó.
-      sizeBytes: BigInt(comprimida.body.length),
-      width: comprimida.width,
-      height: comprimida.height,
+      mime: EDU_PHOTO_UPLOAD_MIME,
+      // Lo que de verdad ocupa en el bucket, medido por Storage, que es lo
+      // que suma a la cuota. La miniatura no cuenta, igual que antes.
+      sizeBytes: BigInt(Math.trunc(size)),
+      // Alto y ancho los mide el canvas del navegador. No son un dato de
+      // seguridad —dicen la forma de la foto— pero se sanean igual: un
+      // número raro en una columna Int tumba la escritura entera.
+      width: eduParsePhotoDimension(input?.width),
+      height: eduParsePhotoDimension(input?.height),
       notes: eduOptionalText(input?.notes, 1000) ?? null,
     },
     select: { id: true },
   });
 
-  return { id: created.id };
+  return { id: created.id, alreadyRegistered: false };
+}
+
+/**
+ * LIMPIEZA — borra el objeto que se subió y NUNCA se confirmó.
+ *
+ * Es la misma puerta que `abortEduStudyUpload` y se defiende igual, porque
+ * borra bytes:
+ *   1. sesión + alcance clínico + paciente de este instituto;
+ *   2. el path tiene que caer en la carpeta de este instituto y paciente;
+ *   3. NO debe existir ninguna fila `EduClinicalPhoto` apuntando a ese
+ *      path. Solo se borran HUÉRFANOS: si la foto ya es parte del
+ *      expediente, esta puerta no es un atajo para sacarla de ahí — para
+ *      eso está «Retirar», que deja constancia.
+ *
+ * 🔴 SIN `deletedAt: null` en el punto 3, y a propósito: una foto RETIRADA
+ * sigue apuntando a su objeto (el binario se conserva), así que esta puerta
+ * tampoco puede borrarlo. Si filtrara las retiradas, «cancelar una subida»
+ * se convertiría en la forma de destruir la evidencia que «Retirar» existe
+ * para conservar.
+ *
+ * Es best-effort por diseño: si el navegador se cierra a media subida nadie
+ * la llama, y ese caso queda para el mismo barrido de huérfanos que ya
+ * tienen los estudios (H-26, anotado y no resuelto).
+ */
+export async function abortEduPhotoUpload(
+  ctx: EduClinicaContext,
+  patientId: string,
+  input: { path?: unknown; thumbPath?: unknown },
+  now: Date = new Date(),
+): Promise<{ deleted: boolean }> {
+  const institutionId = requireInstitution(ctx);
+  requireStorage();
+  const pid = await requireClinicalPatient(ctx, patientId, now);
+
+  const path = typeof input?.path === "string" ? input.path : "";
+  if (!eduPhotoPathBelongsTo(path, institutionId, pid)) {
+    throw new EduPadronError("Esa ruta no es de este paciente.", 400);
+  }
+
+  const registrada = await prisma.eduClinicalPhoto.findFirst({
+    where: { institutionId, storagePath: path },
+    select: { id: true },
+  });
+  if (registrada) {
+    throw new EduPadronError(
+      "Esa foto ya está registrada en el expediente, así que esta puerta no la saca: " +
+        "aquí solo se limpia lo que se subió a medias. Si se subió por error, usa «Retirar» — " +
+        "deja constancia de quién la retiró y por qué, y el archivo no se destruye.",
+      409,
+    );
+  }
+
+  const thumb =
+    typeof input?.thumbPath === "string" &&
+    eduPhotoPathBelongsTo(input.thumbPath, institutionId, pid) &&
+    input.thumbPath.endsWith(EDU_PHOTO_THUMB_SUFIJO)
+      ? input.thumbPath
+      : null;
+
+  try {
+    await eduStorageRemove(path);
+  } catch (e) {
+    console.error("[instituto/fotos] no se pudo borrar el huérfano:", path, e);
+    await limpiarObjeto(thumb);
+    return { deleted: false };
+  }
+  await limpiarObjeto(thumb);
+  return { deleted: true };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -619,11 +791,12 @@ export interface EduPhotoPatch {
 export async function updateEduPatientPhoto(
   ctx: EduClinicaContext,
   photoId: string,
+  patientId: string,
   patch: EduPhotoPatch,
   now: Date = new Date(),
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
-  const foto = await getEduPhotoForViewer(ctx, photoId, now);
+  const foto = await getEduPhotoForViewer(ctx, photoId, patientId, now);
   if (!foto) throw new EduPadronError("Esa foto no existe o no te toca.", 404);
   if (foto.deletedAt) {
     throw new EduPadronError("Esa foto está dada de baja: ya no se corrige.", 409);
@@ -662,10 +835,22 @@ export async function updateEduPatientPhoto(
   // updateMany con el institutionId REPETIDO en el where: aunque el
   // findFirst de arriba ya lo comprobó, la escritura no se apoya en que
   // nadie meta mano entre las dos consultas.
-  await prisma.eduClinicalPhoto.updateMany({
+  //
+  // 🔴 N-16 · Y SE MIRA EL `count`. Sin esto, dos alumnos con el mismo
+  // paciente abierto: el primero retira la foto, el segundo guarda su
+  // corrección, escribe cero filas y recibe un 200 con «La foto quedó
+  // en…». Un 200 que no escribió nada es la peor respuesta posible, porque
+  // la persona se va convencida.
+  const res = await prisma.eduClinicalPhoto.updateMany({
     where: { id: foto.id, institutionId, deletedAt: null },
     data,
   });
+  if (res.count === 0) {
+    throw new EduPadronError(
+      "Esa foto se retiró del expediente mientras la corregías: no se guardó nada. Actualiza la pestaña.",
+      409,
+    );
+  }
   return { id: foto.id };
 }
 
@@ -690,11 +875,12 @@ export async function updateEduPatientPhoto(
 export async function softDeleteEduPatientPhoto(
   ctx: EduClinicaContext,
   photoId: string,
+  patientId: string,
   rawReason: unknown,
   now: Date = new Date(),
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
-  const foto = await getEduPhotoForViewer(ctx, photoId, now);
+  const foto = await getEduPhotoForViewer(ctx, photoId, patientId, now);
   if (!foto) throw new EduPadronError("Esa foto no existe o no te toca.", 404);
   if (foto.deletedAt) {
     throw new EduPadronError("Esa foto ya estaba dada de baja.", 409);
@@ -710,9 +896,82 @@ export async function softDeleteEduPatientPhoto(
 
   // Los tres campos se escriben JUNTOS, en una sola escritura: una baja
   // con fecha y sin autor, o con autor y sin motivo, no es una baja.
-  await prisma.eduClinicalPhoto.updateMany({
+  //
+  // 🔴 N-16 · Y SE MIRA EL `count`: si otro la retiró entre la lectura y
+  // esta escritura, aquí se escribieron CERO filas. Contestar 200 y «La
+  // foto se retiró» le atribuiría a esta persona una baja que hizo otra, y
+  // el motivo que se guardó no es el suyo.
+  const res = await prisma.eduClinicalPhoto.updateMany({
     where: { id: foto.id, institutionId, deletedAt: null },
     data: { deletedAt: now, deletedById: ctx.eduUserId, deleteReason: reason },
   });
+  if (res.count === 0) {
+    throw new EduPadronError("Esa foto ya estaba dada de baja.", 409);
+  }
   return { id: foto.id };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// N-16 · LO RETIRADO, PARA QUE EL MOTIVO SE PUEDA LEER
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Las fotos RETIRADAS de un paciente: qué, quién, cuándo y por qué.
+ *
+ * 🔴 EXISTE PORQUE EL MOTIVO ERA OBLIGATORIO Y NO LO LEÍA NADIE. El modal
+ * de retirar promete con todas sus letras que la constancia «es lo que
+ * contesta la pregunta dentro de un año», y hasta hoy esa pregunta solo se
+ * contestaba en Postgres: no había una sola consulta con
+ * `deletedAt: { not: null }` fuera del historial del odontograma.
+ *
+ * ⚠️ NO SE FIRMA NINGUNA URL. Esto es un registro de por qué algo dejó de
+ * estar, no una segunda galería: pedirle a Storage cuarenta enlaces para
+ * una sección plegada que casi nadie abre es un viaje pagado por nadie. Y
+ * el binario sigue en el bucket, así que si alguna vez hace falta
+ * recuperarlo, la fila dice exactamente cuál es.
+ *
+ * El permiso lo pone quien llama: la sección solo se pinta con
+ * `estudios.upload`, que es el mismo que hace falta para retirar.
+ */
+export async function listEduPatientPhotosRetiradas(
+  ctx: EduClinicaContext,
+  patientId: string,
+  timeZone: string,
+  now: Date = new Date(),
+): Promise<EduRetiradoRow[]> {
+  const institutionId = requireInstitution(ctx);
+  if (eduScopeIsEmpty(eduClinicalScope(ctx))) return [];
+
+  const paciente = await getEduClinicalPatient(ctx, patientId, now);
+  if (!paciente) return [];
+
+  const rows = await prisma.eduClinicalPhoto.findMany({
+    where: { institutionId, patientId: paciente.id, deletedAt: { not: null } },
+    orderBy: [{ deletedAt: "desc" }],
+    take: EDU_RETIRADOS_MAX_ROWS,
+    select: {
+      id: true,
+      photoType: true,
+      stage: true,
+      capturedAt: true,
+      deletedAt: true,
+      deleteReason: true,
+      deletedBy: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+
+  const tz = eduSafeTimeZone(timeZone);
+  return rows.map((r) => ({
+    id: r.id,
+    // La foto no tiene nombre de archivo (a propósito: se identifica por su
+    // vista y su etapa), así que el "qué" se compone con lo que sí la
+    // identifica para una persona.
+    que: `${EDU_PHOTO_TYPE_LABELS[r.photoType]} · ${EDU_PHOTO_STAGE_LABELS[r.stage]} · ${dayLabel(
+      r.capturedAt,
+      tz,
+    )}`,
+    quien: r.deletedBy ? personName(r.deletedBy) : "",
+    cuando: r.deletedAt ? `${dayLabel(r.deletedAt, tz)} ${eduFormatTime(r.deletedAt, tz)}` : "",
+    porQue: r.deleteReason ?? "",
+  }));
 }
