@@ -71,7 +71,9 @@ export default async function InstitutoFacturacionPage({
 
   const filters = parseEduInvoiceFilters(searchParams);
   const [page, config] = await Promise.all([
-    listEduInvoices(ctx, filters),
+    // H-78 · la zona del INSTITUTO: el rango de fechas se cuenta en días
+    // de la escuela, no en UTC.
+    listEduInvoices(ctx, filters, { timeZone: ctx.institution.timezone }),
     getEduFiscalConfig(ctx),
   ]);
 
@@ -96,6 +98,8 @@ export default async function InstitutoFacturacionPage({
         config={config}
         filtroQ={filters.q}
         filtroEstado={filters.status}
+        filtroDesde={filters.desde}
+        filtroHasta={filters.hasta}
         maxRows={EDU_INVOICE_MAX_ROWS}
         canEmit={canEmit}
         canCancel={canCancel}

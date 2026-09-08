@@ -44,7 +44,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
       );
     }
     const res = await addEduPayment(g.ctx, params.id, body, { canRefund });
-    return NextResponse.json({ ok: true, ...res }, { status: 201 });
+    // 🔴 H-06 · `duplicado` = este POST traía una clave de idempotencia ya
+    // usada y NO se registró un segundo abono: se devuelve el estado del
+    // cobro tal como quedó. 200 y no 201, porque no se creó nada. Mismo
+    // contrato que el POST de cobros desde P2-10.
+    return NextResponse.json({ ok: true, ...res }, { status: res.duplicado ? 200 : 201 });
   } catch (err) {
     return eduApiError(err, "POST /api/instituto/caja/cobros/[id]/pagos");
   }

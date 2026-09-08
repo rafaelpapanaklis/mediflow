@@ -35,11 +35,27 @@ export function EduProcedimientosScreen({
   const [alta, setAlta] = useState(false);
   const [editar, setEditar] = useState<EduProcedureRow | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  // 🔴 H-79 · EL BUSCADOR. Para subir el precio de "ENDO-3" había que
+  // hacer scroll y contar renglones en una tabla de 250 — y es la pantalla
+  // donde más caro sale equivocarse de renglón. Filtra en el cliente
+  // porque las filas ya están todas aquí (el techo es 400): un viaje al
+  // servidor por cada letra sería peor y no traería nada nuevo.
+  const [filtro, setFiltro] = useState("");
 
   function recargar(mensaje: string) {
     setFlash(mensaje);
     startNav(() => router.refresh());
   }
+
+  const termino = filtro.trim().toLowerCase();
+  const visibles = termino
+    ? rows.filter(
+        (p) =>
+          p.code.toLowerCase().includes(termino) ||
+          p.name.toLowerCase().includes(termino) ||
+          (p.category ?? "").toLowerCase().includes(termino),
+      )
+    : rows;
 
   return (
     <>
@@ -51,11 +67,31 @@ export function EduProcedimientosScreen({
         </div>
       )}
 
+      <div className="edu-toolbar">
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-proc-filtro">
+            Buscar en el catálogo
+          </label>
+          <input
+            id="edu-proc-filtro"
+            className="edu-input edu-input--sm"
+            type="search"
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            placeholder="Clave, nombre o categoría"
+            autoComplete="off"
+          />
+          <span className="edu-field__hint">Filtra mientras escribes, sin recargar.</span>
+        </div>
+      </div>
+
       <div className="edu-toolbar__foot">
         <span className="edu-count">
           {navigating
             ? "Actualizando…"
-            : `${rows.length} ${rows.length === 1 ? "procedimiento" : "procedimientos"}`}
+            : termino
+              ? `${visibles.length} de ${rows.length} ${rows.length === 1 ? "procedimiento" : "procedimientos"}`
+              : `${rows.length} ${rows.length === 1 ? "procedimiento" : "procedimientos"}`}
         </span>
         {canManage && (
           <button
@@ -72,9 +108,11 @@ export function EduProcedimientosScreen({
         )}
       </div>
 
-      {rows.length === 0 ? (
+      {visibles.length === 0 ? (
         <div className="edu-empty">
-          <p className="edu-empty__title">Todavía no hay procedimientos</p>
+          <p className="edu-empty__title">
+            {termino ? "Ningún procedimiento coincide" : "Todavía no hay procedimientos"}
+          </p>
           <p className="edu-empty__detail">
             Da de alta lo que la clínica hace: una resina, una endodoncia, una radiografía. El
             precio no se captura aquí — se captura en Tarifarios, uno por cada lista de precios.
@@ -98,7 +136,7 @@ export function EduProcedimientosScreen({
               <span />
             </div>
 
-            {rows.map((p) => (
+            {visibles.map((p) => (
               <div key={p.id} className={`edu-row ${p.isActive ? "" : "edu-row--off"}`}>
                 <div className="edu-cell">
                   <span className="edu-cell__label">Clave</span>
@@ -129,6 +167,9 @@ export function EduProcedimientosScreen({
                     // cuando el paciente ya está en el mostrador.
                     <span className="edu-tag edu-tag--warn">Sin precio</span>
                   ) : (
+                    // H-73 · `pricedIn` cuenta SOLO las listas activas, que
+                    // son las mismas que cuenta `schedulesCount`: antes
+                    // contaba todas y la columna llegaba a decir "3 de 2".
                     <span className="edu-cell__value">
                       {p.pricedIn} de {schedulesCount || p.pricedIn}
                     </span>
@@ -169,9 +210,11 @@ export function EduProcedimientosScreen({
         <FormProcedimiento
           actual={editar}
           onClose={() => setEditar(null)}
-          onDone={() => {
+          onDone={(aviso) => {
             setEditar(null);
-            recargar("Procedimiento actualizado.");
+            // H-75 · el aviso de la baja va DELANTE del "actualizado": es
+            // lo que hay que leer.
+            recargar(aviso ? `Procedimiento actualizado. ${aviso}` : "Procedimiento actualizado.");
           }}
         />
       )}
@@ -186,7 +229,8 @@ function FormProcedimiento({
 }: {
   actual?: EduProcedureRow;
   onClose: () => void;
-  onDone: () => void;
+  /** H-75 · `aviso` = a quién deja colgando la baja (casos, requisitos, rúbricas). */
+  onDone: (aviso?: string | null) => void;
 }) {
   const [code, setCode] = useState(actual?.code ?? "");
   const [name, setName] = useState(actual?.name ?? "");
@@ -208,11 +252,21 @@ function FormProcedimiento({
         ...(actual ? { isActive } : {}),
       };
       if (actual) {
-        await eduRequest(`/api/instituto/procedimientos/${actual.id}`, { method: "PATCH", body });
-      } else {
-        await eduRequest("/api/instituto/procedimientos", { method: "POST", body });
+        // 🔴 H-75 · al dar de BAJA, el servidor cuenta a quién deja
+        // colgando. El catálogo es también el vocabulario ACADÉMICO: la
+        // rúbrica, el requisito para graduarse y el caso vivo hablan del
+        // mismo procedimiento, y desactivarlo a mitad de ciclo dejaba 14
+        // casos y un requisito sin que nadie se enterara hasta que caja
+        // intentaba cobrar, con el paciente ya atendido.
+        const res = await eduRequest<{ aviso: string | null }>(
+          `/api/instituto/procedimientos/${actual.id}`,
+          { method: "PATCH", body },
+        );
+        onDone(res?.aviso ?? null);
+        return;
       }
-      onDone();
+      await eduRequest("/api/instituto/procedimientos", { method: "POST", body });
+      onDone(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar.");
     } finally {

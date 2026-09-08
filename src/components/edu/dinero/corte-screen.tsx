@@ -9,6 +9,7 @@ import {
   eduCorteTerminalCents,
   eduMoney,
   type EduCorte,
+  type EduCorteGrupo,
 } from "@/lib/edu/dinero-core";
 import { EDU_PAYMENT_METHOD_LABELS } from "@/lib/edu/types";
 
@@ -95,6 +96,9 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
               <p className="edu-banner__title">Turno abierto el {labels.openedAt}</p>
               <p className="edu-banner__detail">
                 Lo abrió {session.openedByName} con {eduMoney(session.openingCents)} de fondo.
+                {/* H-54 · la nota de la apertura, a la vista mientras el
+                    turno está vivo: es donde se explica el fondo raro. */}
+                {session.notes ? ` Nota: ${session.notes}` : ""}
                 {corte.spanDays > 1 && (
                   <>
                     {" "}
@@ -212,6 +216,127 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
               </p>
             </div>
           </section>
+
+          {/* ══ 🔴 H-09 · DOS SEDES, UN TURNO. DICHO CON LETRAS ══════════
+              El turno de caja es del INSTITUTO y no de la sede
+              (EduCashSession no tiene columna de sede), así que cuando dos
+              mostradores cobran a la vez los dos sellan sus pagos con el
+              MISMO turno y el "efectivo esperado" de arriba es el de LOS
+              DOS CAJONES. La cajera que cuenta solo el suyo cerraba con
+              "Faltaron $8,400" todos los días y no había nada en pantalla
+              que lo explicara: la limitación estaba escrita en el código,
+              no donde se cuadra el cajón.
+              Mientras no exista esa columna, esto es lo que sí se puede
+              decir: de quién es cada peso, derivándolo de la SEDE DEL COBRO
+              (EduCharge.campusId, que sí está sellada). */}
+          {corte.porSede.length > 0 && (
+            <section className="edu-section">
+              <div className="edu-section__head">
+                <div>
+                  <h2 className="edu-section__title">De qué sede es el dinero de este turno</h2>
+                  <p className="edu-section__lead">
+                    Este turno es del <strong>instituto</strong>, no de una sede: mientras esté
+                    abierto, todo lo que cobre cualquier mostrador entra aquí. El{" "}
+                    <strong>efectivo esperado de arriba es el de todos los cajones juntos</strong>,
+                    así que no cierres el turno contando solo el tuyo — o cuentan los dos, o se
+                    cierra cuando la otra sede haya terminado. Abajo, cuánto puso cada una
+                    (derivado de la sede en la que se emitió cada cobro).
+                  </p>
+                </div>
+              </div>
+
+              <div className="edu-tablewrap">
+                <div className="edu-table edu-table--corte">
+                  <div className="edu-rowhead" aria-hidden="true">
+                    <span>Sede</span>
+                    <span>Movimientos</span>
+                    <span>Efectivo neto</span>
+                    <span>Todos los métodos</span>
+                  </div>
+                  {corte.porSede.map((s) => (
+                    <div className="edu-row" key={s.key || "sin-sede"}>
+                      <div className="edu-cell">
+                        <span className="edu-cell__label">Sede</span>
+                        <span className="edu-cell__value edu-cell__value--strong">{s.label}</span>
+                      </div>
+                      <div className="edu-cell">
+                        <span className="edu-cell__label">Movimientos</span>
+                        <span className="edu-cell__value">{s.count}</span>
+                      </div>
+                      <div className="edu-cell">
+                        <span className="edu-cell__label">Efectivo neto</span>
+                        <span className="edu-cell__value edu-precio">
+                          {eduMoney(s.cashNetCents)}
+                        </span>
+                      </div>
+                      <div className="edu-cell">
+                        <span className="edu-cell__label">Todos los métodos</span>
+                        <span className="edu-cell__value edu-precio">{eduMoney(s.netCents)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <p className="edu-note">
+                El <strong>fondo de apertura no se reparte</strong>: es uno solo y es del turno, así
+                que estas columnas son solo el movimiento, sin fondo. La solución de verdad —un
+                turno por sede— pide una columna nueva en la base y no se hace en esta ola.
+              </p>
+            </section>
+          )}
+
+          {/* ══ 🔴 H-60 · QUIÉN COBRÓ QUÉ ═══════════════════════════════
+              Con dos cajeras en el mismo turno —que es lo único que el
+              sistema permite, ver arriba— el corte enseñaba "Efectivo: 14
+              movimientos, $8,300" y los nombres de quien abrió y quien
+              cerró, y faltaban $600 de nadie. `EduPayment.receivedByUserId`
+              estaba guardado desde la Ola 5 y no llegaba a la pantalla. */}
+          {corte.porCajero.length > 0 && (
+            <section className="edu-section">
+              <div className="edu-section__head">
+                <div>
+                  <h2 className="edu-section__title">Quién cobró qué</h2>
+                  <p className="edu-section__lead">
+                    Un descuadre con nombre se resuelve preguntando; uno sin nombre, no se resuelve.
+                  </p>
+                </div>
+              </div>
+
+              <div className="edu-tablewrap">
+                <div className="edu-table edu-table--corte">
+                  <div className="edu-rowhead" aria-hidden="true">
+                    <span>Cajero</span>
+                    <span>Movimientos</span>
+                    <span>Efectivo neto</span>
+                    <span>Todos los métodos</span>
+                  </div>
+                  {corte.porCajero.map((c) => (
+                    <div className="edu-row" key={c.key}>
+                      <div className="edu-cell">
+                        <span className="edu-cell__label">Cajero</span>
+                        <span className="edu-cell__value edu-cell__value--strong">{c.label}</span>
+                      </div>
+                      <div className="edu-cell">
+                        <span className="edu-cell__label">Movimientos</span>
+                        <span className="edu-cell__value">{c.count}</span>
+                      </div>
+                      <div className="edu-cell">
+                        <span className="edu-cell__label">Efectivo neto</span>
+                        <span className="edu-cell__value edu-precio">
+                          {eduMoney(c.cashNetCents)}
+                        </span>
+                      </div>
+                      <div className="edu-cell">
+                        <span className="edu-cell__label">Todos los métodos</span>
+                        <span className="edu-cell__value edu-precio">{eduMoney(c.netCents)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
         </>
       )}
 
@@ -222,7 +347,8 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
               <h2 className="edu-section__title">Turnos cerrados</h2>
               <p className="edu-section__lead">
                 Lo esperado y la diferencia quedaron congelados al cerrar: un pago registrado
-                después no cambia un corte ya firmado.
+                después no cambia un corte ya firmado. Debajo de cada diferencia va la nota que
+                se escribió al abrir y al cerrar.
               </p>
             </div>
           </div>
@@ -273,6 +399,14 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
                       >
                         {dif === 0 ? "Cuadró" : dif > 0 ? `Sobró ${eduMoney(dif)}` : `Faltó ${eduMoney(-dif)}`}
                       </span>
+                      {/* 🔴 H-54 · LA NOTA, LEÍDA. El cierre la pide con
+                          insistencia ("un descuadre con explicación es un
+                          dato; sin explicación, es una pregunta abierta"),
+                          el servidor la concatena con cuidado con la de la
+                          apertura… y no la pintaba NADIE. La cajera escribía
+                          "faltaron $50: se pagó un taxi de la escuela",
+                          cerraba, y esa frase no se podía volver a leer. */}
+                      {s.notes && <span className="edu-cell__sub">{s.notes}</span>}
                     </div>
                   </div>
                 );
@@ -295,6 +429,9 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
       {cerrar && session && (
         <CerrarTurno
           esperado={expectedCashCents}
+          // 🔴 H-09 · el desglose por sede viaja al arqueo: quien cuenta el
+          // cajón tiene que saber que el esperado incluye el de la otra.
+          porSede={corte.porSede}
           onClose={() => setCerrar(false)}
           onDone={(mensaje) => {
             setCerrar(false);
@@ -390,10 +527,13 @@ function AbrirTurno({ onClose, onDone }: { onClose: () => void; onDone: () => vo
 
 function CerrarTurno({
   esperado,
+  porSede,
   onClose,
   onDone,
 }: {
   esperado: number;
+  /** H-09 · más de un renglón = el esperado es el de varios cajones. */
+  porSede: EduCorteGrupo[];
   onClose: () => void;
   onDone: (mensaje: string) => void;
 }) {
@@ -457,6 +597,29 @@ function CerrarTurno({
       {error && (
         <div className="edu-alert" role="alert">
           {error}
+        </div>
+      )}
+
+      {/* 🔴 H-09 · EL ARQUEO NO LE PUEDE PEDIR A UNA SEDE EL EFECTIVO DE
+          LAS DOS SIN DECIRLO. El turno es del instituto y el esperado suma
+          los dos mostradores: sin este aviso, quien contaba su cajón
+          cerraba con "Faltaron $8,400" todos los días. */}
+      {porSede.length > 1 && (
+        <div className="edu-banner edu-banner--warn" role="alert">
+          <div>
+            <p className="edu-banner__title">
+              En este turno cobraron {porSede.length} sedes: el esperado es el de TODOS los cajones
+            </p>
+            <p className="edu-banner__detail">
+              {porSede
+                .map((s) => `${s.label}: ${eduMoney(s.cashNetCents)} de efectivo`)
+                .join(" · ")}
+              . El fondo de apertura ({eduMoney(esperado - porSede.reduce((a, s) => a + s.cashNetCents, 0))}
+              ) es uno solo y es del turno. Cuenta los dos cajones antes de escribir el total, o
+              cierra el turno cuando la otra sede haya terminado: si escribes solo el tuyo, el corte
+              dirá que falta dinero que sí está.
+            </p>
+          </div>
         </div>
       )}
 

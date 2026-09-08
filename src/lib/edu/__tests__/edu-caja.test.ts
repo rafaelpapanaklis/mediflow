@@ -957,7 +957,13 @@ test("🔴 el modal de devolución ofrece motivo para “Otro” y pide el chequ
   // Y el cheque deja de anunciarse como "opcional".
   assert.match(pantalla, /metodo === "CHECK" \? "Número de cheque y banco"/);
   // El botón se bloquea antes de mandar algo que el servidor rebotaría.
-  assert.match(pantalla, /metodo === "OTHER" && devNotas\.trim\(\)\.length < 3/);
+  //
+  // ⚠️ Ola C·1 (H-55): el motivo pasó de ser SOLO para "Otro" a ser
+  // OBLIGATORIO SIEMPRE. Devolver dinero es el único movimiento del
+  // mostrador que SACA dinero del cajón y era el único que salía sin
+  // explicación; ahora el servidor también lo exige (addEduPayment). Por
+  // eso la guarda ya no menciona el método.
+  assert.match(pantalla, /devNotas\.trim\(\)\.length < 3/);
   assert.match(pantalla, /metodo === "CHECK" && referencia\.trim\(\) === ""/);
 });
 

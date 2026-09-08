@@ -229,6 +229,7 @@ function match(
   lista: EduFeeScheduleData,
   reason: string,
   isDefault: boolean,
+  manual = false,
 ): EduTarifaMatch {
   return {
     feeScheduleId: lista.id,
@@ -236,7 +237,53 @@ function match(
     feeScheduleKey: lista.key,
     reason,
     isDefault,
+    manual,
   };
+}
+
+/**
+ * 🔴 H-10 · LA LISTA QUE CAJA ELIGIÓ A MANO, validada.
+ *
+ * Hasta esta ola, una lista de regla MANUAL —un convenio, una campaña, el
+ * personal del instituto— no se aplicaba NUNCA: `elegirLista` solo miraba
+ * la regla automática y la predeterminada, y en caja no había selector.
+ * La dirección capturaba cuarenta precios de "Convenio sindicato" y al día
+ * siguiente se le cobraba al afiliado la tarifa de público general, con el
+ * recibo diciendo "Público general". Tres textos del producto prometían lo
+ * contrario, empezando por el que define la regla (`types.ts`: «nace MANUAL
+ * y se elige a mano al cobrar»).
+ *
+ * Las tres cerraduras de la elección:
+ *   · la lista tiene que ser DE ESTE INSTITUTO (llega ya filtrada por
+ *     `fuente.listas(institutionId)`);
+ *   · tiene que estar ACTIVA — una lista desactivada es historia, no una
+ *     tarifa vigente;
+ *   · su regla tiene que ser MANUAL. Las automáticas se aplican solas y
+ *     elegirlas a mano sería saltarse el dato que las dispara (quién trajo
+ *     al paciente), que es justo lo que el navegador no controla.
+ *
+ * El PRECIO sigue saliendo del servidor: elegir la lista no es teclear un
+ * número, es decir con cuál de las tarifas de la escuela se cobra.
+ */
+function elegirManual(
+  listas: EduFeeScheduleData[],
+  feeScheduleId: string,
+): EduFeeScheduleData {
+  const lista = listas.find((l) => l.id === feeScheduleId);
+  if (!lista) throw new EduPadronError("Esa lista de precios no es de este instituto.", 404);
+  if (!lista.isActive) {
+    throw new EduPadronError(
+      `La lista "${lista.name}" está desactivada: no se puede cobrar con ella.`,
+      409,
+    );
+  }
+  if (lista.rule !== "MANUAL") {
+    throw new EduPadronError(
+      `La lista "${lista.name}" se aplica sola por su regla, no se elige a mano.`,
+      409,
+    );
+  }
+  return lista;
 }
 
 function nombreDelAlumno(p: EduPacienteTarifaData): string {
@@ -256,8 +303,25 @@ function nombreDelAlumno(p: EduPacienteTarifaData): string {
 function elegirLista(
   listas: EduFeeScheduleData[],
   paciente: EduPacienteTarifaData,
+  elegida: EduFeeScheduleData | null = null,
 ): EduTarifaMatch | null {
   const activas = listas.filter((l) => l.isActive).sort(porOrden);
+
+  // 0 · 🔴 H-10 · LA ELECCIÓN A MANO GANA. Es lo que significa un convenio:
+  //     alguien del mostrador sabe algo que el sistema no puede deducir
+  //     (que este paciente es del sindicato, que viene por la campaña de
+  //     mayo). La regla automática es un default, no una orden — y la
+  //     elección queda escrita en el recibo con el nombre de la lista.
+  if (elegida) {
+    return match(
+      elegida,
+      paciente.referredByStudentId
+        ? `Elegida a mano en caja (lo trajo ${nombreDelAlumno(paciente)}, pero se cobra con esta lista)`
+        : "Elegida a mano en caja",
+      false,
+      true,
+    );
+  }
 
   // 1 · ¿Alguna regla automática dispara? Hoy hay una: la del paciente que
   //     trajo un alumno. Si mañana hay tres, se evalúan aquí en orden.
@@ -301,8 +365,19 @@ export async function resolveFeeSchedule(
   institutionId: string,
   patientId: string,
   fuente: EduTarifaFuente = fuenteTarifaPrisma,
+  opciones: EduTarifaOpciones = {},
 ): Promise<EduTarifaMatch | null> {
-  return (await resolverListaYCatalogo(institutionId, patientId, fuente)).applied;
+  return (await resolverListaYCatalogo(institutionId, patientId, fuente, opciones)).applied;
+}
+
+/**
+ * 🔴 H-10 · Lo que caja puede DECIDIR al cobrar. Hoy una sola cosa: con
+ * qué lista MANUAL se cobra. No es un precio —los precios no viajan— es
+ * cuál de las tarifas que la dirección creó se aplica a este ticket.
+ */
+export interface EduTarifaOpciones {
+  /** Id de una lista MANUAL activa, o null/undefined = la regla de siempre. */
+  feeScheduleId?: unknown;
 }
 
 /**
@@ -317,6 +392,7 @@ async function resolverListaYCatalogo(
   institutionId: string,
   patientId: string,
   fuente: EduTarifaFuente,
+  opciones: EduTarifaOpciones = {},
 ): Promise<{ applied: EduTarifaMatch | null; listas: EduFeeScheduleData[] }> {
   requireInstitutionId(institutionId, "resolveFeeSchedule");
   const id = eduCleanId(patientId);
@@ -328,7 +404,12 @@ async function resolverListaYCatalogo(
   ]);
   if (!paciente) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
 
-  return { applied: elegirLista(listas, paciente), listas };
+  // H-10 · la lista elegida a mano, si la mandaron. Se valida contra las
+  // listas YA filtradas por instituto: un id de otra escuela no existe aquí.
+  const elegidaId = eduCleanId(opciones.feeScheduleId);
+  const elegida = elegidaId ? elegirManual(listas, elegidaId) : null;
+
+  return { applied: elegirLista(listas, paciente, elegida), listas };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -377,12 +458,18 @@ export async function resolveUnitPrice(
   patientId: string,
   procedureId: string,
   fuente: EduTarifaFuente = fuenteTarifaPrisma,
+  opciones: EduTarifaOpciones = {},
 ): Promise<EduPrecioUnitario | null> {
   requireInstitutionId(institutionId, "resolveUnitPrice");
   const procId = eduCleanId(procedureId);
   if (!procId) throw new EduPadronError("Ese procedimiento no es válido.", 400);
 
-  const { applied, listas } = await resolverListaYCatalogo(institutionId, patientId, fuente);
+  const { applied, listas } = await resolverListaYCatalogo(
+    institutionId,
+    patientId,
+    fuente,
+    opciones,
+  );
   if (!applied) return null;
 
   const [procs, items] = await Promise.all([
@@ -491,13 +578,19 @@ export async function resolveEduChargeLines(
   patientId: string,
   lineas: EduLineaCliente[],
   fuente: EduTarifaFuente = fuenteTarifaPrisma,
+  opciones: EduTarifaOpciones = {},
 ): Promise<EduLineasResueltas> {
   requireInstitutionId(institutionId, "resolveEduChargeLines");
   if (!Array.isArray(lineas) || lineas.length === 0) {
     throw new EduPadronError("El cobro no tiene ni un concepto.");
   }
 
-  const { applied, listas } = await resolverListaYCatalogo(institutionId, patientId, fuente);
+  const { applied, listas } = await resolverListaYCatalogo(
+    institutionId,
+    patientId,
+    fuente,
+    opciones,
+  );
 
   const ids: string[] = [];
   for (const l of lineas) {
@@ -636,6 +729,13 @@ export interface EduTarifaDePaciente {
   prices: EduPrecioResuelto[];
   /** Procedimientos activos que no tienen precio en ninguna lista. */
   sinPrecio: { id: string; code: string; name: string }[];
+  /**
+   * 🔴 H-10 · LAS LISTAS QUE CAJA PUEDE ELEGIR A MANO: las ACTIVAS con
+   * regla MANUAL (convenios, campañas, personal). Vacío = no hay ninguna,
+   * y entonces la pantalla no pinta el selector: ofrecer un desplegable
+   * vacío hace creer que falta algo.
+   */
+  manuales: { id: string; name: string; key: string }[];
 }
 
 /**
@@ -649,6 +749,7 @@ export interface EduTarifaDePaciente {
 export async function getEduTarifaDePaciente(
   ctx: EduClinicaContext,
   patientId: string,
+  opciones: EduTarifaOpciones = {},
 ): Promise<EduTarifaDePaciente> {
   const institutionId = requireInstitution(ctx);
   // El dinero es de caja y dirección. El alcance se comprueba aquí ADEMÁS
@@ -666,7 +767,7 @@ export async function getEduTarifaDePaciente(
   if (!paciente) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
 
   const [applied, procedimientos, items, listas] = await Promise.all([
-    resolveFeeSchedule(institutionId, id),
+    resolveFeeSchedule(institutionId, id, fuenteTarifaPrisma, opciones),
     prisma.eduProcedure.findMany({
       where: { institutionId, isActive: true },
       orderBy: [{ orderIndex: "asc" }, { code: "asc" }],
@@ -740,6 +841,11 @@ export async function getEduTarifaDePaciente(
     applied,
     prices,
     sinPrecio,
+    // H-10 · lo que caja puede elegir. El orden es el del tarifario.
+    manuales: listas
+      .filter((l) => l.isActive && l.rule === "MANUAL")
+      .sort(porOrden)
+      .map((l) => ({ id: l.id, name: l.name, key: l.key })),
   };
 }
 
@@ -780,7 +886,12 @@ export async function listEduProcedures(
       durationMinutes: true,
       isActive: true,
       orderIndex: true,
-      _count: { select: { feeItems: true } },
+      // 🔴 H-73 · SOLO LAS LISTAS ACTIVAS. Contando todas, un
+      // procedimiento con precio únicamente en una lista desactivada se
+      // anunciaba "con precio" y luego caja no lo podía cobrar; la columna
+      // llegaba a decir "3 de 2". El catálogo existe para avisar ANTES del
+      // mostrador: si cuenta filas que nunca se van a aplicar, avisa mal.
+      _count: { select: { feeItems: { where: { feeSchedule: { isActive: true } } } } },
     },
   });
   return rows.map((p) => ({
@@ -857,7 +968,7 @@ export async function updateEduProcedure(
   ctx: EduClinicaContext,
   procedureId: string,
   input: EduProcedureInput,
-): Promise<{ id: string }> {
+): Promise<{ id: string; aviso: string | null }> {
   const institutionId = requireInstitution(ctx);
   const id = eduCleanId(procedureId);
   if (!id) throw new EduPadronError("Ese procedimiento no es válido.", 400);
@@ -910,7 +1021,37 @@ export async function updateEduProcedure(
   }
 
   await prisma.eduProcedure.update({ where: { id }, data });
-  return { id };
+
+  // ── 🔴 H-75 · QUIÉN SE QUEDA COLGANDO ────────────────────────────────
+  // El catálogo es también el vocabulario ACADÉMICO (lo dice el propio
+  // schema): la rúbrica, el requisito para graduarse y el caso vivo hablan
+  // del mismo procedimiento. Dar de baja "Endodoncia unirradicular" a
+  // mitad de ciclo dejaba 14 casos y un requisito sin que nadie se
+  // enterara hasta que caja intentaba cobrar, con el paciente ya atendido.
+  //
+  // NO se bloquea la baja —es una decisión de la dirección y nada se
+  // borra: reactivarlo es un clic— pero se DICE en el mismo momento.
+  let aviso: string | null = null;
+  if (data.isActive === false) {
+    const [casos, requisitos, rubricas] = await Promise.all([
+      prisma.eduCase.count({ where: { institutionId, procedureId: id } }),
+      prisma.eduRequirement.count({ where: { institutionId, procedureId: id } }),
+      prisma.eduRubric.count({ where: { institutionId, procedureId: id } }),
+    ]);
+    const partes: string[] = [];
+    if (casos > 0) partes.push(`${casos} ${casos === 1 ? "caso" : "casos"}`);
+    if (requisitos > 0) {
+      partes.push(`${requisitos} ${requisitos === 1 ? "requisito" : "requisitos"} del plan`);
+    }
+    if (rubricas > 0) partes.push(`${rubricas} ${rubricas === 1 ? "rúbrica" : "rúbricas"}`);
+    if (partes.length > 0) {
+      aviso =
+        `Ojo: ${partes.join(", ")} ${partes.length === 1 ? "usa" : "usan"} este procedimiento. ` +
+        "Caja ya no lo puede cobrar; lo académico sigue como estaba. Vuelve a activarlo si fue un error.";
+    }
+  }
+
+  return { id, aviso };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1082,22 +1223,31 @@ export async function updateEduFeeSchedule(
     data.orderIndex = n;
   }
 
-  if (input.isActive !== undefined) {
-    const activa = Boolean(input.isActive);
-    // 🔴 Desactivar la lista predeterminada dejaría a la clínica sin
-    // ninguna: el siguiente cobro no sabría qué precio poner. Se rechaza
-    // con la instrucción de qué hacer antes.
-    const seraDefault = input.isDefault === undefined ? actual.isDefault : Boolean(input.isDefault);
-    if (!activa && seraDefault) {
-      throw new EduPadronError(
-        "No puedes desactivar la lista predeterminada. Marca otra como predeterminada primero.",
-        409,
-      );
-    }
-    data.isActive = activa;
-  }
+  if (input.isActive !== undefined) data.isActive = Boolean(input.isActive);
 
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
+
+  // ── 🔴 H-65 · LA PREDETERMINADA TIENE QUE ESTAR ACTIVA ───────────────
+  // El guardia vivía DENTRO de `if (input.isActive !== undefined)`, así que
+  // solo miraba cuando alguien tocaba el interruptor. Un PATCH con solo
+  // `{isDefault:true}` sobre una lista INACTIVA apagaba la marca de la
+  // buena y dejaba como única predeterminada una que `elegirLista` no
+  // devuelve nunca: `applied` salía null y TODO cobro de catálogo rebotaba
+  // con "no hay ninguna lista predeterminada". Caja se quedaba parada con
+  // el paciente enfrente y sin saber qué había pasado.
+  //
+  // Ahora se comprueba el ESTADO FINAL de las dos banderas, venga el
+  // cambio del lado que venga.
+  const seraActivaFinal = data.isActive === undefined ? actual.isActive : Boolean(data.isActive);
+  const seraDefaultFinal = data.isDefault === undefined ? actual.isDefault : Boolean(data.isDefault);
+  if (seraDefaultFinal && !seraActivaFinal) {
+    throw new EduPadronError(
+      actual.isDefault && data.isActive === false
+        ? "No puedes desactivar la lista predeterminada. Marca otra como predeterminada primero."
+        : "Una lista desactivada no puede ser la predeterminada: caja se quedaría sin poder cobrar. Actívala primero.",
+      409,
+    );
+  }
 
   const seraDefault = data.isDefault === undefined ? actual.isDefault : Boolean(data.isDefault);
   const seraRule = (data.rule === undefined ? actual.rule : data.rule) as EduFeeRule;
@@ -1145,7 +1295,8 @@ export async function getEduTarifario(ctx: EduClinicaContext): Promise<EduTarifa
         durationMinutes: true,
         isActive: true,
         orderIndex: true,
-        _count: { select: { feeItems: true } },
+        // 🔴 H-73 · solo las listas ACTIVAS, igual que en el catálogo.
+        _count: { select: { feeItems: { where: { feeSchedule: { isActive: true } } } } },
       },
     }),
     prisma.eduFeeScheduleItem.findMany({

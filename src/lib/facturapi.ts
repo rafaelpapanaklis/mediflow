@@ -112,6 +112,22 @@ export interface CreateInvoiceParams {
   usoCfdi: string;
   items: InvoiceItem[];
   paymentForm?: string; // 01=efectivo, 03=transferencia, 04=tarjeta crédito, 28=tarjeta débito
+  /**
+   * MÉTODO de pago del CFDI (c_MetodoPago), que NO es la forma de pago:
+   *   PUE = Pago en una sola exhibición (lo cobrado ya está pagado)
+   *   PPD = Pago en parcialidades o diferido (queda saldo)
+   *
+   * Por DEFECTO "PUE", que es lo que este archivo mandaba fijo desde
+   * siempre: sin este parámetro, el dental se comporta exactamente igual
+   * línea por línea. Lo pasa el instituto, que sí sabe si el cobro que
+   * está timbrando tiene saldo abierto — un PUE sobre un tratamiento a
+   * meses sin pagar es un comprobante mal emitido que hay que cancelar y
+   * rehacer.
+   *
+   * ⚠️ Con PPD, el SAT exige que la forma de pago sea "99 · Por definir":
+   * quien pase PPD tiene que pasar también ese payment_form.
+   */
+  paymentMethod?: "PUE" | "PPD";
 }
 
 export interface InvoiceResult {
@@ -136,7 +152,10 @@ export async function createInvoice(params: CreateInvoiceParams): Promise<Invoic
       customer: params.customerId,
       use: params.usoCfdi,
       payment_form: params.paymentForm ?? "03", // Transferencia por defecto
-      payment_method: "PUE", // Pago en una sola exhibición
+      // PUE (pago en una sola exhibición) por defecto: es lo que este
+      // archivo mandaba fijo. Quien sepa que el cobro tiene saldo abierto
+      // manda "PPD" — ver CreateInvoiceParams.paymentMethod.
+      payment_method: params.paymentMethod ?? "PUE",
       items: params.items,
     }),
   });

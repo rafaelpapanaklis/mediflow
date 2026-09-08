@@ -124,8 +124,21 @@ function matchesOwnPattern(p) {
 // UN argumento/prop OPCIONAL con el default de siempre: sin él, el dental
 // pinta exactamente lo que pintaba. Se declaran los tres juntos:
 //   EDU_GUARD_SHARED="src/components/clinic-3d/Clinic3DClient.tsx,src/components/clinic-3d/live-layer.ts,src/components/clinic-3d/Clinic3DHud.tsx" node scripts/edu-guard.cjs
+//
+// `src/lib/facturapi.ts` entra aquí en la Ola C·1 por el H-12 (todo CFDI
+// del instituto salía con `payment_method: "PUE"`, también un tratamiento a
+// meses sin un peso pagado, que fiscalmente es PPD). Es el CLIENTE de
+// Facturapi que comparten el dental y los cuatro verticales, y la
+// constante estaba escrita a pelo dentro del `body` del POST: no se puede
+// cambiar desde fuera. Recibió UN parámetro OPCIONAL (`paymentMethod`) con
+// el valor de siempre por defecto — `params.paymentMethod ?? "PUE"` —, así
+// que /api/cfdi y el resto del dental se comportan exactamente igual línea
+// por línea. Es un archivo del producto dental VIVO, así que se declara y
+// se ve:
+//   EDU_GUARD_SHARED="src/lib/facturapi.ts" node scripts/edu-guard.cjs
 const SHARED_FILES = [
   "prisma/schema.prisma",
+  "src/lib/facturapi.ts",
   "src/middleware.ts",
   "ORQUESTA.md",
   "package.json",

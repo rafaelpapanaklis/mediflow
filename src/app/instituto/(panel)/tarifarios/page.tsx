@@ -66,8 +66,15 @@ export default async function InstitutoTarifariosPage() {
         <div>
           <h1 className="edu-page__title">Tarifarios</h1>
           <p className="edu-page__lead">
+            {/* 🔴 H-10 · ESTE TEXTO DECÍA LO CONTRARIO DE LO QUE PROMETE EL
+                RESTO DEL MÓDULO. Las listas de regla automática las decide
+                el servidor con un dato que el navegador no controla (quién
+                trajo al paciente); las de regla MANUAL —convenios,
+                campañas, personal— se eligen a mano al cobrar, que es lo
+                que significan desde que se escribió el enum y lo que hasta
+                esta ola no pasaba nunca. */}
             {canManage
-              ? "Las listas de precios del instituto. Caja no elige la lista: la decide el servidor a partir de quién trajo al paciente."
+              ? "Las listas de precios del instituto. Las de regla automática las aplica el servidor a partir de quién trajo al paciente; las de regla «Se elige a mano» (convenios, campañas, personal) las elige caja al cobrar, y la elección gana a la automática."
               : "Las listas de precios del instituto. Puedes consultarlas delante del paciente; cambiarlas es de la dirección."}
           </p>
         </div>

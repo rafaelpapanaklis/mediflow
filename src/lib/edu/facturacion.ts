@@ -50,7 +50,12 @@ import {
   validateRfc,
 } from "@/lib/facturapi";
 import { EduPadronError } from "@/lib/edu/padron";
-import { eduCleanId } from "@/lib/edu/agenda-core";
+import {
+  eduCleanId,
+  eduSafeTimeZone,
+  eduShiftDayISO,
+  eduZonedToUtc,
+} from "@/lib/edu/agenda-core";
 import { eduPatientFullName } from "@/lib/edu/pacientes-core";
 import { eduSearchTokens } from "@/lib/edu/padron-core";
 import { eduUserDisplayName } from "@/lib/edu-auth";
@@ -61,12 +66,16 @@ import {
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
+import { eduMoney } from "@/lib/edu/dinero-core";
 import {
+  EDU_FORMA_PAGO_POR_DEFINIR,
   EDU_INVOICE_MAX_ROWS,
   eduConceptosDeCobro,
   eduCuadreDelCobro,
   eduItemsFacturapi,
+  eduMetodoPagoDeCobro,
   eduNextInvoiceFolio,
+  eduSugerirFormaPago,
   esEduCancelMotive,
   esEduFiscalEnv,
   esEduFormaPago,
@@ -248,13 +257,67 @@ export async function saveEduFiscalConfig(
   if (!zipCode) {
     throw new EduPadronError("El código postal del domicilio fiscal son cinco dígitos.", 400);
   }
-  const environment: EduFiscalEnv = esEduFiscalEnv(input.environment) ? input.environment : "TEST";
-  const isEnabled = input.isEnabled === true;
-  const taxMode: EduTaxMode = esEduTaxMode(input.taxMode) ? input.taxMode : "EXENTO";
-  const defaultUsoCfdi = esEduUsoCfdi(input.defaultUsoCfdi) ? input.defaultUsoCfdi : "D01";
-  const defaultProductKey = esEduProductKey(input.defaultProductKey)
-    ? input.defaultProductKey
-    : "85121600";
+  const previo = await fiscalConfigRaw(institutionId);
+
+  // ── 🔴 H-80 · NI UN DEFAULT SILENCIOSO SOBRE UNA CONFIGURACIÓN QUE YA
+  // EXISTE ─────────────────────────────────────────────────────────────
+  // Esto era un reemplazo total: un cuerpo al que le faltara `isEnabled`
+  // APAGABA la facturación, y uno al que le faltara `environment` devolvía
+  // el instituto a PRUEBAS. Sin decir nada, y sin que nadie lo hubiera
+  // pedido. Hoy no mordía porque la pantalla manda los diez campos — o
+  // sea: la única cerradura era que nadie más llamara al endpoint.
+  //
+  // La regla ahora es la de siempre en el vertical: AUSENTE = no lo tocas
+  // (se conserva lo guardado), PRESENTE Y MALO = 400. El default solo
+  // aplica en la PRIMERA captura, cuando no hay nada que conservar.
+  function conservar<T>(raw: unknown, ok: (v: unknown) => boolean, guardado: T | null, inicial: T): T {
+    if (raw === undefined || raw === null || raw === "") {
+      return guardado === null || guardado === undefined ? inicial : guardado;
+    }
+    if (!ok(raw)) throw new EduPadronError("Ese valor no es válido para la facturación.", 400);
+    return raw as T;
+  }
+
+  if (input.environment !== undefined && !esEduFiscalEnv(input.environment)) {
+    throw new EduPadronError("El ambiente de timbrado solo puede ser PRUEBAS o EN VIVO.", 400);
+  }
+  const environment: EduFiscalEnv = conservar<EduFiscalEnv>(
+    input.environment,
+    esEduFiscalEnv,
+    (previo?.environment as EduFiscalEnv) ?? null,
+    "TEST",
+  );
+  const isEnabled =
+    input.isEnabled === undefined || input.isEnabled === null
+      ? (previo?.isEnabled ?? false)
+      : input.isEnabled === true;
+  if (input.taxMode !== undefined && !esEduTaxMode(input.taxMode)) {
+    throw new EduPadronError("Ese modo de IVA no existe.", 400);
+  }
+  const taxMode: EduTaxMode = conservar<EduTaxMode>(
+    input.taxMode,
+    esEduTaxMode,
+    (previo?.taxMode as EduTaxMode) ?? null,
+    "EXENTO",
+  );
+  if (input.defaultUsoCfdi !== undefined && !esEduUsoCfdi(input.defaultUsoCfdi)) {
+    throw new EduPadronError("Ese uso del CFDI no está en el catálogo del SAT.", 400);
+  }
+  const defaultUsoCfdi = conservar<string>(
+    input.defaultUsoCfdi,
+    esEduUsoCfdi,
+    previo?.defaultUsoCfdi ?? null,
+    "D01",
+  );
+  if (input.defaultProductKey !== undefined && !esEduProductKey(input.defaultProductKey)) {
+    throw new EduPadronError("La clave de producto del SAT son ocho dígitos.", 400);
+  }
+  const defaultProductKey = conservar<string>(
+    input.defaultProductKey,
+    esEduProductKey,
+    previo?.defaultProductKey ?? null,
+    "85121600",
+  );
   const folioPrefixRaw =
     typeof input.folioPrefix === "string" ? input.folioPrefix.trim().toUpperCase() : "";
   if (folioPrefixRaw && !/^[A-Z]{1,6}$/.test(folioPrefixRaw)) {
@@ -263,9 +326,7 @@ export async function saveEduFiscalConfig(
       400,
     );
   }
-  const folioPrefix = folioPrefixRaw || "F";
-
-  const previo = await fiscalConfigRaw(institutionId);
+  const folioPrefix = folioPrefixRaw || previo?.folioPrefix || "F";
 
   // ── La organización en Facturapi ────────────────────────────────────
   let orgId = previo?.facturapiOrgId ?? null;
@@ -349,6 +410,16 @@ export async function saveEduFiscalConfig(
     update: data,
     select: CONFIG_SELECT,
   });
+
+  // 🔴 H-80 · BAJAR de EN VIVO a PRUEBAS no se puede impedir (una escuela
+  // puede querer volver a practicar), pero no puede ser MUDO: subir tiene
+  // tres comprobaciones y bajar no tenía ninguna, y lo que se apaga es la
+  // validez fiscal de todo lo que se emita a partir de ese momento.
+  if (previo?.environment === "LIVE" && environment === "TEST") {
+    const nota =
+      "Ojo: el instituto pasó de EN VIVO a PRUEBAS. Lo que se timbre a partir de ahora NO tendrá validez fiscal y no le sirve al paciente para deducir.";
+    aviso = aviso ? `${aviso} ${nota}` : nota;
+  }
 
   return { config: toConfigView(saved), aviso };
 }
@@ -682,6 +753,12 @@ const INVOICE_SELECT = {
   patientId: true,
   receptorRfc: true,
   receptorLegalName: true,
+  // H-81 · el receptor CONGELADO, entero. Régimen, CP y correo se
+  // guardaban y no salían a ninguna pantalla, así que no se podía
+  // comprobar contra la Constancia del paciente qué se timbró de verdad.
+  receptorTaxRegime: true,
+  receptorZip: true,
+  receptorEmail: true,
   usoCfdi: true,
   paymentForm: true,
   taxMode: true,
@@ -706,7 +783,28 @@ const INVOICE_SELECT = {
 
 type InvoiceRow = Prisma.EduInvoiceGetPayload<{ select: typeof INVOICE_SELECT }>;
 
-function toInvoiceRow(i: InvoiceRow): EduInvoiceRow {
+/**
+ * H-81 · El formateador de instantes, UNA vez por lectura y en la zona del
+ * INSTITUTO. Construirlo por fila serían doscientos objetos Intl para
+ * pintar una lista de doscientas facturas.
+ *
+ * La zona por defecto es la misma con la que nacen los institutos, para el
+ * llamador que todavía no la pasa: sin ella, `eduSafeTimeZone(undefined)`
+ * cae a UTC y una factura de las 19:00 se leería como del día siguiente.
+ */
+function invoiceFmt(timeZone?: string): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone: eduSafeTimeZone(timeZone ?? "America/Mexico_City"),
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function toInvoiceRow(i: InvoiceRow, fmt: Intl.DateTimeFormat = invoiceFmt()): EduInvoiceRow {
   return {
     id: i.id,
     folio: i.folio,
@@ -719,6 +817,9 @@ function toInvoiceRow(i: InvoiceRow): EduInvoiceRow {
     patientFolio: i.patient?.folio ?? "—",
     receptorRfc: i.receptorRfc,
     receptorLegalName: i.receptorLegalName,
+    receptorTaxRegime: i.receptorTaxRegime,
+    receptorZip: i.receptorZip,
+    receptorEmail: i.receptorEmail,
     usoCfdi: i.usoCfdi,
     paymentForm: i.paymentForm,
     taxMode: i.taxMode as EduTaxMode,
@@ -729,6 +830,7 @@ function toInvoiceRow(i: InvoiceRow): EduInvoiceRow {
     uuid: i.uuid,
     stampedAt: iso(i.stampedAt),
     issuedAt: i.issuedAt.toISOString(),
+    issuedAtLabel: fmt.format(i.issuedAt),
     issuedByName: persona(i.issuedBy),
     cancelledAt: iso(i.cancelledAt),
     cancelledByName: i.cancelledBy ? persona(i.cancelledBy) : null,
@@ -745,9 +847,26 @@ function toInvoiceRow(i: InvoiceRow): EduInvoiceRow {
 function invoicesWhere(
   institutionId: string,
   filters: EduInvoiceFilters,
+  timeZone: string,
 ): Prisma.EduInvoiceWhereInput {
   const where: Prisma.EduInvoiceWhereInput = { institutionId };
   if (filters.status) where.status = filters.status;
+
+  // 🔴 H-78 · El rango de fechas se traduce a INSTANTES en la zona del
+  // INSTITUTO, igual que la agenda y el corte: en UTC, una factura emitida
+  // a las 19:00 de un 31 de marzo en México caería en abril y el mes no
+  // cuadraría contra el corte de caja. El `hasta` es inclusivo para quien
+  // lo teclea y exclusivo en el `where` (medianoche del día siguiente).
+  const rango: Prisma.DateTimeFilter = {};
+  if (filters.desde) {
+    const desde = eduZonedToUtc(filters.desde, 0, timeZone);
+    if (desde) rango.gte = desde;
+  }
+  if (filters.hasta) {
+    const hasta = eduZonedToUtc(eduShiftDayISO(filters.hasta, 1), 0, timeZone);
+    if (hasta) rango.lt = hasta;
+  }
+  if (rango.gte || rango.lt) where.issuedAt = rango;
 
   const q = filters.q.trim();
   if (q) {
@@ -774,16 +893,19 @@ function invoicesWhere(
 export async function listEduInvoices(
   ctx: EduClinicaContext,
   filters: EduInvoiceFilters,
+  /** La zona del INSTITUTO, para que "del 1 al 31 de marzo" sea de marzo. */
+  options: { timeZone?: string } = {},
 ): Promise<EduInvoicesPage> {
   const institutionId = requireDinero(ctx);
   const rows = await prisma.eduInvoice.findMany({
-    where: invoicesWhere(institutionId, filters),
+    where: invoicesWhere(institutionId, filters, eduSafeTimeZone(options.timeZone)),
     orderBy: [{ issuedAt: "desc" }],
     take: EDU_INVOICE_MAX_ROWS + 1,
     select: INVOICE_SELECT,
   });
 
-  const visibles = rows.slice(0, EDU_INVOICE_MAX_ROWS).map(toInvoiceRow);
+  const fmt = invoiceFmt(options.timeZone);
+  const visibles = rows.slice(0, EDU_INVOICE_MAX_ROWS).map((r) => toInvoiceRow(r, fmt));
 
   // 🔴 Las canceladas y las fallidas NO suman. Una factura cancelada no es
   // ingreso facturado, igual que un cobro cancelado no es dinero.
@@ -792,12 +914,23 @@ export async function listEduInvoices(
       if (r.status === "VALID") {
         acc.vivas += 1;
         acc.totalCents += r.totalCents;
+        // H-70 · y en el cubo de SU ambiente. Lo timbrado en pruebas no es
+        // ingreso facturado: no llega al SAT y no se puede deducir.
+        const cubo = r.environment === "LIVE" ? acc.live : acc.test;
+        cubo.vivas += 1;
+        cubo.totalCents += r.totalCents;
       } else if (r.status === "CANCELLED") {
         acc.canceladas += 1;
       }
       return acc;
     },
-    { vivas: 0, totalCents: 0, canceladas: 0 },
+    {
+      vivas: 0,
+      totalCents: 0,
+      canceladas: 0,
+      live: { vivas: 0, totalCents: 0 },
+      test: { vivas: 0, totalCents: 0 },
+    },
   );
 
   return { rows: visibles, truncated: rows.length > EDU_INVOICE_MAX_ROWS, totals };
@@ -832,7 +965,13 @@ export async function listEduCobrosFacturables(
   const termino = (q ?? "").trim();
 
   const where: Prisma.EduChargeWhereInput = {
-    ...eduChargeScopeWhere({ institutionId, scope }),
+    // 🔴 H-69 · LA SEDE, igual que en la lista de Caja. Este buscador
+    // ignoraba el selector de la barra superior: una cajera del Norte con
+    // su sede puesta veía —y podía timbrar— cobros del Sur, con nombre de
+    // paciente y monto. Es exactamente el mismo `campusIds` del contexto
+    // que ya aplica `chargesWhere` en caja.ts; sin él, el recorte que la
+    // pantalla anuncia no existía en esta lista.
+    ...eduChargeScopeWhere({ institutionId, scope, campusIds: ctx.campusIds }),
     status: { not: "CANCELLED" },
   };
   if (termino) {
@@ -858,6 +997,11 @@ export async function listEduCobrosFacturables(
       balanceCents: true,
       chargedAt: true,
       patient: { select: { folio: true, firstName: true, lastName: true } },
+      // 🔴 H-71 · CON QUÉ SE PAGÓ. `eduSugerirFormaPago` estaba escrita y
+      // probada desde la Ola 10 y no tenía un solo llamador fuera de los
+      // tests: caja elegía a mano entre las ~20 formas del SAT en cada
+      // factura, con el paciente delante y el voucher en la otra mano.
+      payments: { select: { method: true, isRefund: true, paidAt: true, amountCents: true } },
       // La factura VIVA, si la hay. `activeChargeId` no nulo es exactamente
       // la definición de "viva" (ver el índice único de EduInvoice).
       invoices: {
@@ -878,6 +1022,9 @@ export async function listEduCobrosFacturables(
     paidCents: c.paidCents,
     balanceCents: c.balanceCents,
     chargedAt: c.chargedAt.toISOString(),
+    // H-71 · la forma del SAT que corresponde al método con MAYOR monto
+    // neto. Es una PROPUESTA: el modal la deja cambiar.
+    formaPagoSugerida: eduSugerirFormaPago(c.payments),
     facturaFolio: c.invoices[0]?.folio ?? null,
     facturaStatus: (c.invoices[0]?.status as EduInvoiceRow["status"]) ?? null,
   }));
@@ -897,12 +1044,18 @@ export interface EduEmitInput {
 }
 
 async function siguienteFolio(institutionId: string, prefix: string): Promise<string> {
-  const ultimo = await prisma.eduInvoice.findFirst({
-    where: { institutionId, folio: { startsWith: `${prefix}-` } },
-    orderBy: { folio: "desc" },
-    select: { folio: true },
-  });
-  return eduNextInvoiceFolio(prefix, ultimo?.folio ?? null);
+  // 🔴 H-68 · LAS DOS PREGUNTAS, porque ninguna sola basta.
+  // El orden de Postgres es ALFABÉTICO: con el relleno a cuatro dígitos
+  // coincide con el numérico hasta F-9999 y después deja de coincidir
+  // ("F-10000" < "F-9999" como texto), así que el "último" se congelaba en
+  // F-9999 y toda emisión posterior moría en 409 contra el índice único.
+  // El CONTEO no tiene ese techo. Se usa el mayor de los dos.
+  const where = { institutionId, folio: { startsWith: `${prefix}-` } };
+  const [ultimo, emitidas] = await Promise.all([
+    prisma.eduInvoice.findFirst({ where, orderBy: { folio: "desc" }, select: { folio: true } }),
+    prisma.eduInvoice.count({ where }),
+  ]);
+  return eduNextInvoiceFolio(prefix, ultimo?.folio ?? null, emitidas);
 }
 
 function esConflictoDeUnico(err: unknown): boolean {
@@ -976,6 +1129,11 @@ export async function emitEduInvoice(
       subtotalCents: true,
       discountCents: true,
       totalCents: true,
+      // 🔴 H-12 · EL SALDO. Es lo que decide PUE o PPD, y hasta esta ola no
+      // se leía siquiera: todo salía PUE, incluidos los tratamientos a
+      // meses sin un peso pagado.
+      paidCents: true,
+      balanceCents: true,
       items: {
         select: {
           description: true,
@@ -1026,36 +1184,34 @@ export async function emitEduInvoice(
   const receptor = parsed.receptor!;
 
   // ── 1e · forma de pago e impuestos ──────────────────────────────────
-  if (!esEduFormaPago(input.paymentForm)) {
+  // 🔴 H-12 · La forma de pago solo se EXIGE cuando el cobro está
+  // liquidado. Con saldo abierto el comprobante es PPD y el SAT obliga a
+  // "99 · Por definir": pedirle a la cajera que elija una forma que no va
+  // a viajar sería pedirle un dato falso.
+  if (charge.balanceCents <= 0 && !esEduFormaPago(input.paymentForm)) {
     throw new EduPadronError(
       "Elige la forma de pago del SAT. No se adivina: es el dato con el que el SAT cruza el comprobante contra el depósito.",
       400,
     );
   }
-  const paymentForm = input.paymentForm;
   const taxMode: EduTaxMode = esEduTaxMode(input.taxMode)
     ? input.taxMode
     : (config.taxMode as EduTaxMode);
   const conceptos = eduConceptosDeCobro(charge.items, config.defaultProductKey);
 
-  // ── 1f · guardar el receptor del paciente (si se pidió) ─────────────
-  if (input.guardarReceptor !== false) {
-    const data = {
-      institutionId,
-      rfc: receptor.rfc,
-      legalName: receptor.legalName,
-      taxRegime: receptor.taxRegime,
-      zipCode: receptor.zipCode,
-      email: receptor.email,
-      usoCfdi: receptor.usoCfdi,
-      updatedByUserId: ctx.eduUserId,
-    };
-    await prisma.eduPatientTaxProfile.upsert({
-      where: { patientId: charge.patientId },
-      create: { patientId: charge.patientId, ...data },
-      update: data,
-    });
-  }
+  // ── 1f · 🔴 H-12 · PUE o PPD, SEGÚN EL SALDO DEL COBRO ──────────────
+  // La decisión no es del que timbra: sale del cobro congelado. Con saldo
+  // abierto el comprobante es PPD y —lo exige el SAT en CFDI 4.0— su forma
+  // de pago pasa a ser "99 · Por definir", porque todavía no se sabe con
+  // qué se va a liquidar. Las dos cosas salen juntas de la misma función
+  // pura, que es también la que la pantalla usa para avisar ANTES.
+  const metodoPago = eduMetodoPagoDeCobro({
+    balanceCents: charge.balanceCents,
+    paymentForm: esEduFormaPago(input.paymentForm)
+      ? input.paymentForm
+      : EDU_FORMA_PAGO_POR_DEFINIR,
+  });
+  const paymentForm = metodoPago.paymentForm;
 
   // ── 2 · 🔴 LA RESERVA. Aquí muere el segundo clic ───────────────────
   const folio = await siguienteFolio(institutionId, config.folioPrefix);
@@ -1141,8 +1297,23 @@ export async function emitEduInvoice(
       customerId,
       usoCfdi: receptor.usoCfdi,
       paymentForm,
+      // 🔴 H-12 · PUE / PPD. El default del helper compartido sigue siendo
+      // "PUE", así que el dental no cambia una línea.
+      paymentMethod: metodoPago.metodo,
       items: eduItemsFacturapi(conceptos, taxMode),
     });
+
+    // ── 🔴 H-74 · ¿LO TIMBRADO ES LO COBRADO? ─────────────────────────
+    // El cuadre de antes compara las LÍNEAS contra el cobro; nadie
+    // comparaba lo que Facturapi dice que timbró contra el total del
+    // cobro. Si difieren, el comprobante ya existe y no se puede deshacer
+    // desde aquí: se DEJA ESCRITO en la factura para que la escuela lo
+    // vea y decida, en vez de descubrirlo el día de la conciliación.
+    const timbradoCents = Math.round(Number(result.total) * 100);
+    const descuadre =
+      Number.isFinite(timbradoCents) && timbradoCents !== charge.totalCents
+        ? `El CFDI se timbró por ${eduMoney(timbradoCents)} y el cobro ${charge.folio} dice ${eduMoney(charge.totalCents)}. Revísalo con tu contador: el comprobante ya está emitido.`
+        : null;
 
     // El XML se baja y se guarda AQUÍ mismo: es el documento fiscal, pesa
     // unos kilobytes y no puede depender de que Facturapi siga en pie
@@ -1169,8 +1340,41 @@ export async function emitEduInvoice(
         xml,
         xmlUrl: result.xml_url ?? null,
         pdfUrl: result.pdf_url ?? null,
+        errorMessage: descuadre,
       },
     });
+
+    // ── 🔴 H-67 · EL RECEPTOR SE GUARDA CUANDO YA SE SABE QUE SIRVIÓ ───
+    // Este upsert corría ANTES de la reserva y antes de Facturapi, así que
+    // un RFC con forma válida pero rechazado (la lista negra EFOS del SAT,
+    // o un cobro que ya estaba facturado) dejaba el RFC malo GUARDADO en
+    // el paciente: la siguiente factura salía a nombre de quien no era.
+    // Ahora se escribe aquí, con el timbre en la mano — y si el guardado
+    // fallara, la factura no se toca: ya está emitida.
+    if (input.guardarReceptor !== false) {
+      const perfil = {
+        institutionId,
+        rfc: receptor.rfc,
+        legalName: receptor.legalName,
+        taxRegime: receptor.taxRegime,
+        zipCode: receptor.zipCode,
+        email: receptor.email,
+        usoCfdi: receptor.usoCfdi,
+        updatedByUserId: ctx.eduUserId,
+      };
+      await prisma.eduPatientTaxProfile
+        .upsert({
+          where: { patientId: charge.patientId },
+          create: { patientId: charge.patientId, ...perfil },
+          update: perfil,
+        })
+        .catch((err) => {
+          console.warn(
+            `[instituto/facturacion] timbrado OK pero no se pudo guardar el perfil fiscal de ${charge.patientId}:`,
+            mensajeDe(err),
+          );
+        });
+    }
 
     return { id: reserva.id, folio: reserva.folio, uuid: result.uuid, environment };
   } catch (err) {
@@ -1286,9 +1490,58 @@ export async function cancelEduInvoice(
     factura.environment as EduFiscalEnv,
   );
 
+  // ── 🔴 H-66 · LA RESERVA, ANTES DE HABLAR CON EL SAT ────────────────
+  // Esto era un check-then-act de manual: se leía la factura VALID, se
+  // llamaba a Facturapi y se escribía con `update({where:{id}})` a secas.
+  // Dos peticiones a la vez mandaban DOS cancelaciones al SAT y el segundo
+  // motivo pisaba al primero — y el motivo escrito ES el historial, no hay
+  // otro. Emitir sí heredó la lección (el índice único de `activeChargeId`)
+  // y cancelar no, aunque `caja.ts` la aplica y la explica quince líneas
+  // más abajo de donde faltaba.
+  //
+  // El candado es el ESTADO en el `where`: la primera petición se lleva la
+  // fila marcando `cancelledAt`, la segunda cuenta 0 y se entera. El
+  // `status` NO se toca todavía: hasta que el SAT conteste, esa factura
+  // sigue siendo VÁLIDA y así se lee en toda pantalla.
+  const reserva = await prisma.eduInvoice.updateMany({
+    where: { id: factura.id, institutionId, status: "VALID", cancelledAt: null },
+    data: {
+      cancelledAt: new Date(),
+      cancelledByUserId: ctx.eduUserId,
+      cancelMotive: motive,
+      cancelReason: reason,
+    },
+  });
+  if (reserva.count === 0) {
+    throw new EduPadronError(
+      "Esa factura ya se está cancelando (o alguien la canceló mientras escribías el motivo). Recarga la pantalla antes de volver a intentarlo: una segunda cancelación ante el SAT no se puede deshacer.",
+      409,
+    );
+  }
+
   try {
     await cancelInvoice(orgApiKey, factura.facturapiId, motive);
   } catch (err) {
+    // El SAT dijo que no: se SUELTA la reserva para que se pueda volver a
+    // intentar. Si esta escritura fallara también, la factura se quedaría
+    // marcada y el siguiente intento chocaría con el 409 de arriba: por eso
+    // se grita en el log en vez de tragárselo.
+    await prisma.eduInvoice
+      .update({
+        where: { id: factura.id },
+        data: {
+          cancelledAt: null,
+          cancelledByUserId: null,
+          cancelMotive: null,
+          cancelReason: null,
+        },
+      })
+      .catch((err2) => {
+        console.error(
+          `[instituto/facturacion] la cancelación de ${factura.folio} falló y NO se pudo soltar la reserva:`,
+          mensajeDe(err2),
+        );
+      });
     throw new EduPadronError(`El SAT o Facturapi rechazaron la cancelación: ${mensajeDe(err)}`, 422);
   }
 
@@ -1298,10 +1551,6 @@ export async function cancelEduInvoice(
       status: "CANCELLED",
       // 🔴 Esto —y solo esto— es lo que libera el cobro.
       activeChargeId: null,
-      cancelledAt: new Date(),
-      cancelledByUserId: ctx.eduUserId,
-      cancelMotive: motive,
-      cancelReason: reason,
     },
     select: INVOICE_SELECT,
   });
