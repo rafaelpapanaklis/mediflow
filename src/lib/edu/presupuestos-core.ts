@@ -383,3 +383,71 @@ export function eduQuoteTextoCanonico(quote: {
   const vig = quote.validUntil ? quote.validUntil.toISOString() : "sin-vencimiento";
   return `v1|${quote.folio}|${quote.title}|${lineas}|total=${quote.totalCents}|vigencia=${vig}`;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6 · LAS FORMAS QUE VIAJAN A LA PANTALLA
+//
+// 🔴 VIVEN AQUÍ Y NO EN presupuestos.ts, y es la misma decisión —con las
+// mismas palabras— que campus-core.ts: los componentes "use client" las
+// necesitan y presupuestos.ts importa prisma. Un `import type` se borra al
+// compilar, pero basta con que alguien le quite el `type` para arrastrar
+// el runtime de Prisma al navegador. Si el tipo no vive ahí, no hay de
+// dónde.
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduQuoteRow {
+  id: string;
+  folio: string;
+  title: string;
+  status: EduQuoteStatus;
+  estadoVisible: EduQuoteEstadoVisible;
+  patientId: string;
+  /**
+   * El paciente, escrito. La pantalla de Caja lista presupuestos de TODO
+   * el instituto y sin nombre no se puede leer un renglón; en la ficha
+   * sobra, pero mandar dos formas del mismo renglón es cómo se llega a
+   * dos pantallas que discrepan.
+   */
+  patientName: string;
+  patientFolio: string;
+  caseId: string | null;
+  validUntil: string | null;
+  subtotalCents: number;
+  discountPct: number | null;
+  discountCents: number;
+  totalCents: number;
+  notes: string | null;
+  presentedAt: string | null;
+  acceptedAt: string | null;
+  acceptedByName: string | null;
+  chargeId: string | null;
+  treatmentPlanId: string | null;
+  createdByName: string;
+  createdAt: string;
+  items: {
+    id: string;
+    name: string;
+    toothFdi: string | null;
+    quantity: number;
+    unitPriceCents: number;
+    discountCents: number;
+    lineTotalCents: number;
+    phase: number | null;
+    notes: string | null;
+  }[];
+}
+
+export interface EduQuoteFilters {
+  q: string;
+  /** El estado GUARDADO. "VENCIDO" no se filtra aquí: se deriva. */
+  status: EduQuoteStatus | null;
+  patientId: string | null;
+}
+
+export const EDU_QUOTE_EMPTY_FILTERS: EduQuoteFilters = { q: "", status: null, patientId: null };
+
+export interface EduQuotesPage {
+  rows: EduQuoteRow[];
+  truncated: boolean;
+  filters: EduQuoteFilters;
+}

@@ -8,6 +8,7 @@ import {
   eduCorteMethodsVisibles,
   eduCorteTerminalCents,
   eduMoney,
+  type EduCashSessionRow,
   type EduCorte,
   type EduCorteGrupo,
 } from "@/lib/edu/dinero-core";
@@ -34,6 +35,8 @@ export interface EduCorteScreenProps {
   labels: {
     openedAt: string | null;
     previous: Record<string, { openedAt: string; closedAt: string }>;
+    /** Los turnos abiertos en otras sedes, con su hora ya escrita. */
+    otros: Record<string, string>;
   };
   canCorte: boolean;
 }
@@ -43,6 +46,9 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
   const [, startNav] = useTransition();
   const [abrir, setAbrir] = useState(false);
   const [cerrar, setCerrar] = useState(false);
+  const [fondo, setFondo] = useState(false);
+  /** El corte cerrado que se está reimprimiendo, si hay. */
+  const [reimprimir, setReimprimir] = useState<EduCashSessionRow | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
   function recargar(mensaje: string) {
@@ -71,34 +77,99 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
         </div>
       )}
 
+      {/* ══ 🔴 Ola C · H-09 · LOS TURNOS ABIERTOS EN OTRAS SEDES ═══════
+          Desde que el turno es POR SEDE, «no hay turno abierto» dejó de
+          ser una sola cosa: puede no haberlo aquí y llevar seis horas
+          abierto en el campus de al lado. Sin este aviso, quien abre caja
+          en Sur se entera al cuadrar — que es tarde. */}
+      {corte.otrosTurnos.length > 0 && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">
+              {corte.otrosTurnos.length === 1
+                ? "Hay otro turno de caja abierto"
+                : `Hay ${corte.otrosTurnos.length} turnos de caja abiertos en otras sedes`}
+            </p>
+            <p className="edu-banner__detail">
+              {corte.otrosTurnos
+                .map((t) => `${t.campusLabel}: lo abrió ${t.openedByName} el ${labels.otros[t.id] ?? "—"}`)
+                .join(" · ")}
+              . Cada sede cuadra el suyo: lo que ves aquí es solo tu cajón.
+            </p>
+          </div>
+        </div>
+      )}
+
       {!session ? (
         <div className="edu-empty">
-          <p className="edu-empty__title">No hay ningún turno de caja abierto</p>
+          <p className="edu-empty__title">
+            {corte.campusLabel
+              ? `No hay ningún turno de caja abierto en ${corte.campusLabel}`
+              : "No hay ningún turno de caja abierto"}
+          </p>
           <p className="edu-empty__detail">
             Abre uno al empezar el día o el turno, con el fondo que haya en el cajón. Se puede
             cobrar sin turno abierto —el corte no es un peaje— pero esos cobros no entran en ningún
             corte.
           </p>
-          {canCorte && (
-            <button
-              type="button"
-              className="edu-btn edu-btn--primary edu-btn--sm"
-              onClick={() => setAbrir(true)}
-            >
-              Abrir turno
-            </button>
-          )}
+          {/* 🔴 DESHABILITADO **CON MOTIVO**, nunca un botón que no hace
+              nada: con varias sedes y ninguna elegida, el servidor rebota
+              porque un fondo de caja es el de UN cajón. Se dice aquí, con
+              la frase entera, en vez de dejar que el clic falle. */}
+          {canCorte &&
+            (corte.abrirBloqueado ? (
+              <>
+                <button
+                  type="button"
+                  className="edu-btn edu-btn--primary edu-btn--sm"
+                  disabled
+                  aria-describedby="edu-turno-bloqueo"
+                >
+                  Abrir turno
+                </button>
+                <p className="edu-note" id="edu-turno-bloqueo">
+                  {corte.abrirBloqueado}
+                </p>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary edu-btn--sm"
+                onClick={() => setAbrir(true)}
+              >
+                Abrir turno
+              </button>
+            ))}
         </div>
       ) : (
         <>
           <div className="edu-banner">
             <div>
-              <p className="edu-banner__title">Turno abierto el {labels.openedAt}</p>
+              <p className="edu-banner__title">
+                {/* 🔴 H-09 · DE QUÉ SEDE ES ESTE TURNO, en el título. Un
+                    turno SIN sede no es un hueco: es «el turno del
+                    instituto», el que recoge lo que cobran todas las sedes
+                    y el que son todos los anteriores a esta ola. Quien
+                    cuadra tiene que poder distinguirlos de un vistazo,
+                    porque el arqueo de uno y el del otro no significan lo
+                    mismo. */}
+                Turno {session.campusLabel ? `de ${session.campusLabel}` : "del instituto"} abierto
+                el {labels.openedAt}
+              </p>
               <p className="edu-banner__detail">
                 Lo abrió {session.openedByName} con {eduMoney(session.openingCents)} de fondo.
                 {/* H-54 · la nota de la apertura, a la vista mientras el
                     turno está vivo: es donde se explica el fondo raro. */}
                 {session.notes ? ` Nota: ${session.notes}` : ""}
+                {!session.campusLabel && corte.otrosTurnos.length === 0 && corte.porSede.length > 1 && (
+                  <>
+                    {" "}
+                    <strong>
+                      Este turno no es de una sede: está recogiendo lo que cobran todas. Ciérralo y
+                      a partir del siguiente cada sede tendrá el suyo.
+                    </strong>
+                  </>
+                )}
                 {corte.spanDays > 1 && (
                   <>
                     {" "}
@@ -111,13 +182,27 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
               </p>
             </div>
             {canCorte && (
-              <button
-                type="button"
-                className="edu-btn edu-btn--primary edu-btn--sm"
-                onClick={() => setCerrar(true)}
-              >
-                Cerrar turno
-              </button>
+              <span className="edu-actions">
+                {/* 🔴 H-51 · CORREGIR EL FONDO. «Fondo con "1000" en vez de
+                    "100": todo el turno espera $900 de más», y no había
+                    dónde arreglarlo salvo cerrar con un descuadre falso.
+                    Solo mientras el turno está ABIERTO: un corte firmado
+                    no se reescribe. */}
+                <button
+                  type="button"
+                  className="edu-btn edu-btn--ghost edu-btn--sm"
+                  onClick={() => setFondo(true)}
+                >
+                  Corregir fondo
+                </button>
+                <button
+                  type="button"
+                  className="edu-btn edu-btn--primary edu-btn--sm"
+                  onClick={() => setCerrar(true)}
+                >
+                  Cerrar turno
+                </button>
+              </span>
             )}
           </div>
 
@@ -348,7 +433,16 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
               <p className="edu-section__lead">
                 Lo esperado y la diferencia quedaron congelados al cerrar: un pago registrado
                 después no cambia un corte ya firmado. Debajo de cada diferencia va la nota que
-                se escribió al abrir y al cerrar.
+                se escribió al abrir y al cerrar.{" "}
+                {/* 🔴 H-53 · LA REIMPRESIÓN, QUE EL CÓDIGO YA PROMETÍA.
+                    «De los turnos cerrados solo quedan los últimos 10, sin
+                    detalle y sin reimpresión — y el código promete la
+                    reimpresión»: la fila no tenía ni un botón. Ahora el
+                    desglose por método se CONGELA al cerrar y «Reimprimir»
+                    lo LEE; no lo recalcula, que es lo que haría que el
+                    papel cambiara con el tiempo. */}
+                <strong>Reimprimir</strong> saca el corte tal como salió, leyendo el desglose que
+                se congeló al cerrar.
               </p>
             </div>
           </div>
@@ -367,6 +461,7 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
                 <span>Esperado</span>
                 <span>Contado</span>
                 <span>Diferencia</span>
+                <span>Corte</span>
               </div>
 
               {corte.previous.map((s) => {
@@ -377,7 +472,11 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
                     <div className="edu-cell">
                       <span className="edu-cell__label">Abierto</span>
                       <span className="edu-cell__value">{l?.openedAt ?? "—"}</span>
-                      <span className="edu-cell__sub">{s.openedByName}</span>
+                      <span className="edu-cell__sub">
+                        {s.openedByName}
+                        {" · "}
+                        {s.campusLabel ?? "Sin sede (turno del instituto)"}
+                      </span>
                     </div>
                     <div className="edu-cell">
                       <span className="edu-cell__label">Cerrado</span>
@@ -408,6 +507,32 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
                           cerraba, y esa frase no se podía volver a leer. */}
                       {s.notes && <span className="edu-cell__sub">{s.notes}</span>}
                     </div>
+                    <div className="edu-cell edu-cell__actions">
+                      <span className="edu-cell__label">Corte</span>
+                      {/* Deshabilitado CON MOTIVO: un turno cerrado antes
+                          de esta ola no tiene desglose congelado que
+                          reimprimir, y decirlo es más honesto que sacar
+                          una hoja con ceros que parecen datos. */}
+                      {s.desglose ? (
+                        <button
+                          type="button"
+                          className="edu-btn edu-btn--ghost edu-btn--sm"
+                          onClick={() => setReimprimir(s)}
+                        >
+                          Reimprimir
+                        </button>
+                      ) : (
+                        // El texto corto va en la celda (la pista mide
+                        // 116 px, regla 7) y la frase entera en el
+                        // `title`: se puede leer, y no empuja la rejilla.
+                        <span
+                          className="edu-cell__sub"
+                          title="Este turno se cerró antes de que el corte guardara su desglose por método, así que no hay nada que reimprimir."
+                        >
+                          Sin desglose guardado
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -423,6 +548,26 @@ export function EduCorteScreen({ corte, labels, canCorte }: EduCorteScreenProps)
             setAbrir(false);
             recargar("Turno abierto. Lo que se cobre desde ahora entra en este corte.");
           }}
+        />
+      )}
+
+      {fondo && session && (
+        <CorregirFondo
+          sessionId={session.id}
+          actualCents={session.openingCents}
+          onClose={() => setFondo(false)}
+          onDone={(mensaje) => {
+            setFondo(false);
+            recargar(mensaje);
+          }}
+        />
+      )}
+
+      {reimprimir && (
+        <ReimprimirCorte
+          sesion={reimprimir}
+          labels={labels.previous[reimprimir.id]}
+          onClose={() => setReimprimir(null)}
         />
       )}
 
@@ -687,4 +832,284 @@ function centavos(texto: string): number {
   const [ent, dec = ""] = limpio.split(".");
   const n = Number(ent || "0") * 100 + Number((dec + "00").slice(0, 2));
   return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+
+/**
+ * 🔴 H-51 · CORREGIR EL FONDO DE UN TURNO ABIERTO.
+ *
+ * El fondo se teclea al abrir la caja y hasta esta ola no se podía tocar:
+ * un «1000» donde iban «100» dejaba todo el turno esperando $900 de más y
+ * el único camino era cerrar con un descuadre falso, que queda escrito
+ * para siempre en un corte firmado.
+ *
+ * 🔴 EL MOTIVO ES OBLIGATORIO y se guarda en las notas del turno con el
+ * importe anterior: un fondo que cambia sin rastro es un fondo que se
+ * puede acomodar al final del día para que el arqueo cuadre. El servidor
+ * lo exige igual — esto solo evita el viaje.
+ */
+function CorregirFondo({
+  sessionId,
+  actualCents,
+  onClose,
+  onDone,
+}: {
+  sessionId: string;
+  actualCents: number;
+  onClose: () => void;
+  onDone: (mensaje: string) => void;
+}) {
+  const [monto, setMonto] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const listo = monto.trim() !== "" && motivo.trim().length >= 3;
+
+  async function guardar() {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await eduRequest<{ openingCents: number; anteriorCents: number }>(
+        "/api/instituto/caja/corte/fondo",
+        {
+          method: "PATCH",
+          body: { sessionId, openingCents: monto, reason: motivo.trim() },
+        },
+      );
+      onDone(
+        `Fondo corregido: ${eduMoney(res.anteriorCents)} → ${eduMoney(res.openingCents)}. El esperado del arqueo ya lo tiene en cuenta.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo corregir el fondo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <EduModal
+      title="Corregir el fondo del turno"
+      subtitle="Solo mientras el turno está abierto. Un corte cerrado no se reescribe."
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="edu-btn edu-btn--primary"
+            onClick={guardar}
+            disabled={busy || !listo}
+          >
+            {busy ? "Guardando…" : "Corregir fondo"}
+          </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="edu-alert" role="alert">
+          {error}
+        </div>
+      )}
+
+      <div className="edu-totales">
+        <div className="edu-totales__fila">
+          <span>Fondo que está guardado</span>
+          <span className="edu-precio">{eduMoney(actualCents)}</span>
+        </div>
+      </div>
+
+      <div className="edu-field">
+        <label className="edu-field__label" htmlFor="edu-fondo-monto">
+          Fondo correcto
+        </label>
+        <input
+          id="edu-fondo-monto"
+          className="edu-input"
+          inputMode="decimal"
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+          placeholder="0.00"
+          autoComplete="off"
+        />
+        <span className="edu-field__hint">
+          Es lo que había en el cajón ANTES de cobrarle a nadie. Cambiarlo mueve el efectivo
+          esperado del arqueo, nada más: ni un cobro ni un pago se tocan.
+        </span>
+      </div>
+
+      <div className="edu-field">
+        <label className="edu-field__label" htmlFor="edu-fondo-motivo">
+          Por qué se corrige
+        </label>
+        <input
+          id="edu-fondo-motivo"
+          className="edu-input"
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Se tecleó 1000 en vez de 100 al abrir."
+          autoComplete="off"
+        />
+        <span className="edu-field__hint">
+          Se guarda en las notas del turno con el importe anterior y con tu nombre. Sin explicación,
+          un fondo que cambia no se puede distinguir de uno que se acomodó para cuadrar.
+        </span>
+      </div>
+    </EduModal>
+  );
+}
+
+/**
+ * 🔴 H-53 · REIMPRIMIR UN CORTE CERRADO, DESDE EL DESGLOSE CONGELADO.
+ *
+ * «El código promete la reimpresión (`dinero-core.ts:615-616` dice
+ * literalmente "para poder reimprimir un corte"); la fila no tiene ni un
+ * botón. El desglose por método no se guarda: se pierde al cerrar.»
+ *
+ * 🔴 ESTO NO RECALCULA NADA. Todo lo que se pinta salió de la fila del
+ * turno: el esperado, lo contado, la diferencia y los renglones por
+ * método que se congelaron en `methodBreakdown` al cerrar. Recalcularlo
+ * haría que el papel cambiara si mañana alguien registra un pago con
+ * fecha vieja — que es justo lo que el congelado existe para impedir.
+ */
+function ReimprimirCorte({
+  sesion,
+  labels,
+  onClose,
+}: {
+  sesion: EduCashSessionRow;
+  labels: { openedAt: string; closedAt: string } | undefined;
+  onClose: () => void;
+}) {
+  const d = sesion.desglose;
+  const dif = sesion.differenceCents ?? 0;
+
+  return (
+    <EduModal
+      title={`Corte del turno · ${labels?.closedAt ?? "cerrado"}`}
+      subtitle="Tal como se congeló al cerrar. No se recalcula: se lee."
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose}>
+            Cerrar
+          </button>
+          <button
+            type="button"
+            className="edu-btn edu-btn--primary"
+            onClick={() => {
+              if (typeof window !== "undefined") window.print();
+            }}
+          >
+            Imprimir
+          </button>
+        </>
+      }
+    >
+      <div className="edu-totales">
+        <div className="edu-totales__fila">
+          <span>Sede</span>
+          <span>{sesion.campusLabel ?? "Sin sede (turno del instituto)"}</span>
+        </div>
+        <div className="edu-totales__fila">
+          <span>Abierto</span>
+          <span>
+            {labels?.openedAt ?? "—"} · {sesion.openedByName}
+          </span>
+        </div>
+        <div className="edu-totales__fila">
+          <span>Cerrado</span>
+          <span>
+            {labels?.closedAt ?? "—"} · {sesion.closedByName ?? "—"}
+          </span>
+        </div>
+        <div className="edu-totales__fila">
+          <span>Fondo de apertura</span>
+          <span className="edu-precio">{eduMoney(sesion.openingCents)}</span>
+        </div>
+        <div className="edu-totales__fila">
+          <span>Efectivo esperado</span>
+          <span className="edu-precio">{eduMoney(sesion.expectedCents)}</span>
+        </div>
+        <div className="edu-totales__fila">
+          <span>Efectivo contado</span>
+          <span className="edu-precio">{eduMoney(sesion.countedCents)}</span>
+        </div>
+        <div className="edu-totales__fila edu-totales__fila--fuerte">
+          <span>Diferencia</span>
+          <span className="edu-precio">
+            {dif === 0 ? "Cuadró" : dif > 0 ? `Sobró ${eduMoney(dif)}` : `Faltó ${eduMoney(-dif)}`}
+          </span>
+        </div>
+      </div>
+
+      {d ? (
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap`: esta lista se mide a SÍ MISMA (`@container`)
+             y se DESPLAZA si no cabe, en vez de recortar. */}
+          <div className="edu-table edu-table--corte">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Método</span>
+              <span>Movimientos</span>
+              <span>Cobrado</span>
+              <span>Devuelto</span>
+              <span>Neto</span>
+            </div>
+            {d.renglones.map((r) => (
+              <div className="edu-row" key={r.method}>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Método</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    {EDU_PAYMENT_METHOD_LABELS[r.method] ?? r.method}
+                  </span>
+                </div>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Movimientos</span>
+                  <span className="edu-cell__value">{r.count}</span>
+                </div>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Cobrado</span>
+                  <span className="edu-cell__value edu-precio">{eduMoney(r.chargedCents)}</span>
+                </div>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Devuelto</span>
+                  <span className="edu-cell__value edu-precio">
+                    {r.refundedCents > 0 ? `−${eduMoney(r.refundedCents)}` : "—"}
+                  </span>
+                </div>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Neto</span>
+                  <span className="edu-cell__value edu-precio">{eduMoney(r.netCents)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="edu-note">
+          Este turno se cerró antes de que el corte guardara su desglose por método, así que no hay
+          nada que reimprimir salvo las cifras de arriba. Los turnos cerrados a partir de ahora sí
+          lo guardan.
+        </p>
+      )}
+
+      {d && (
+        <div className="edu-totales">
+          <div className="edu-totales__fila edu-totales__fila--fuerte">
+            <span>Neto de todos los métodos</span>
+            <span className="edu-precio">{eduMoney(d.netoTotalCents)}</span>
+          </div>
+        </div>
+      )}
+
+      {sesion.notes && (
+        <p className="edu-note">
+          <strong>Notas del turno:</strong> {sesion.notes}
+        </p>
+      )}
+    </EduModal>
+  );
 }

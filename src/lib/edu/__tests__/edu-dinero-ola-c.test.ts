@@ -666,10 +666,20 @@ test("🔴 H-65 · una lista INACTIVA no puede quedar como predeterminada", () =
 
 test("🔴 H-73 · «con precio» solo cuenta las listas ACTIVAS", () => {
   const src = TARIFAS();
-  const veces = src.split(
-    'feeItems: { where: { feeSchedule: { isActive: true } } }',
-  ).length - 1;
+  // ⚠️ El literal creció en la Ola C·2: al filtro de listas ACTIVAS
+  // (H-73) se le sumó el de precios VIVOS (H-76 · `deletedAt: null`),
+  // porque quitar un precio pasó a ser una baja lógica y un precio
+  // retirado no puede seguir contando como "con precio". Lo que esta
+  // prueba fija NO ha cambiado: son DOS sitios —el catálogo y la tabla
+  // comparativa— y los dos cuentan IGUAL.
+  const veces =
+    src.split("feeSchedule: { isActive: true }, deletedAt: null").length - 1;
   assert.equal(veces, 2, "el catálogo y la tabla comparativa cuentan igual");
+  assert.equal(
+    src.split("feeSchedule: { isActive: true } } }").length - 1,
+    0,
+    "un _count sin `deletedAt: null` volvería a contar precios retirados",
+  );
 });
 
 test("🔴 H-75 · dar de baja un procedimiento dice a quién deja colgando", () => {

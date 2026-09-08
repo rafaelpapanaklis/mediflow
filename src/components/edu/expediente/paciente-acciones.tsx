@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Banknote, CalendarPlus, FolderPlus, Printer, Upload, XCircle } from "lucide-react";
+import {
+  Banknote,
+  CalendarPlus,
+  ClipboardList,
+  FolderPlus,
+  Printer,
+  Upload,
+  XCircle,
+} from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
@@ -196,6 +204,31 @@ export function EduPacienteAcciones(props: EduPacienteAccionesProps) {
             <Banknote size={15} />
             Cobrar
           </button>
+        )}
+        {/* ── 🔴 Ola C·2 · PRESUPUESTO (fila 26 del comparativo) ────────
+            Un enlace y no un modal, al revés que «Cobrar», y es una
+            decisión, no una prisa: armar un presupuesto es elegir varias
+            partidas del tarifario, ponerles fase y descuento y decidir una
+            vigencia — eso no cabe en un diálogo encima de la ficha, y
+            duplicarlo aquí sería la segunda copia que se desincroniza (es
+            el mismo argumento con el que «Subir estudio» es un enlace).
+            Va a la pantalla de Presupuestos con el paciente YA filtrado.
+
+            🔴 Y CUELGA DE `canCobrar`, que es exactamente `caja.charge`:
+            la MISMA llave que exige crear un presupuesto en el servidor
+            (`POST /api/instituto/presupuestos`). Cero keys nuevas — un
+            presupuesto es la antesala de un cobro y quien cobra es quien
+            lo arma. El alumno y el docente no lo ven ni de lejos: no
+            llevan la key y, aunque la llevaran, el alcance del dinero les
+            devuelve "none". */}
+        {props.canCobrar && (
+          <Link
+            href={`/instituto/caja/presupuestos?paciente=${props.patientId}`}
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+          >
+            <ClipboardList size={15} />
+            Presupuesto
+          </Link>
         )}
         <button
           type="button"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
@@ -9,6 +9,7 @@ import {
   eduMoney,
   eduMoneyInputValue,
   type EduFeeScheduleRow,
+  type EduPrecioRastroRow,
   type EduTarifario,
 } from "@/lib/edu/dinero-core";
 import {
@@ -538,6 +539,36 @@ function FormPrecios({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── 🔴 H-76 · QUIÉN PUSO CADA PRECIO Y CUÁNDO ──────────────────────
+  // «Nadie sabe quién cambió un precio ni cuándo, y borrar un precio es un
+  // DELETE físico.» Ahora la fila guarda autor y fecha DEL PRECIO
+  // (`priceSetAt`, aparte de `updatedAt`), y quitar un precio es una baja
+  // lógica: el rastro sobrevive. Se pide al abrir el modal, no en la
+  // tabla: son 40 procedimientos × N listas y nadie mira eso de un
+  // vistazo — se pregunta por el procedimiento que se está tocando.
+  const [rastro, setRastro] = useState<EduPrecioRastroRow[] | null>(null);
+  const procedureId = fila?.procedure.id ?? null;
+  useEffect(() => {
+    if (!procedureId) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await eduRequest<{ rows: EduPrecioRastroRow[] }>(
+          `/api/instituto/tarifarios/precios?procedimiento=${encodeURIComponent(procedureId)}`,
+        );
+        if (vivo) setRastro(res.rows);
+      } catch {
+        // El rastro es información de apoyo: si no llega, la captura de
+        // precios sigue funcionando igual. No se pinta un error rojo por
+        // no poder decir quién puso un precio.
+        if (vivo) setRastro([]);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [procedureId]);
+
   if (!fila) return null;
 
   async function guardar() {
@@ -594,7 +625,9 @@ function FormPrecios({
 
       <p className="edu-note">
         Cambiar un precio aquí NO reescribe ningún cobro ya emitido: el precio de un cobro vive
-        congelado en su renglón. Esto decide lo que costará el próximo.
+        congelado en su renglón. Esto decide lo que costará el próximo. Y{" "}
+        <strong>vaciar un campo ya no borra la fila</strong>: la lista deja de cubrir el
+        procedimiento y queda escrito quién lo quitó.
       </p>
 
       <div className="edu-formgrid">
@@ -614,9 +647,65 @@ function FormPrecios({
               placeholder="0.00"
               autoComplete="off"
             />
+            {/* 🔴 H-76 · el AUTOR y la FECHA DEL PRECIO, debajo del campo
+                que se está tocando. `priceSetAt` no es `updatedAt`: lo que
+                hay que poder contestar es cuándo cambió EL PRECIO, no
+                cuándo se tocó la fila. */}
+            <span className="edu-field__hint">{rastroDe(rastro, s.id)}</span>
           </div>
         ))}
       </div>
+
+      {/* ── El historial CORTO, y dice lo que NO es ──────────────────── */}
+      {rastro && rastro.some((r) => r.retirado) && (
+        <>
+          <p className="edu-note">
+            <strong>Precios retirados de este procedimiento</strong> — la fila sigue ahí, sin
+            cotizar: volver a escribir un importe la revive.
+          </p>
+          <ul className="edu-picklist">
+            {rastro
+              .filter((r) => r.retirado)
+              .map((r) => (
+                <li key={r.feeScheduleId} className="edu-note">
+                  {r.feeScheduleName}: valía {eduMoney(r.priceCents)} · lo quitó{" "}
+                  {r.deletedByName ?? "—"}
+                  {r.deletedAt ? ` el ${r.deletedAt.slice(0, 10)}` : ""}
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
+
+      {rastro !== null && (
+        <p className="edu-note">
+          Esto es el rastro del precio que está puesto hoy, no un historial completo: para poder
+          contestar «¿cuánto costaba en febrero?» haría falta una tabla de movimientos de precio,
+          que todavía no existe.
+        </p>
+      )}
     </EduModal>
   );
+}
+
+/**
+ * La línea de rastro de UNA lista, escrita para una persona.
+ *
+ * `null` = todavía no llegó del servidor; `[]` = llegó y no hay nada que
+ * decir. Los dos casos tienen que verse distintos de "nadie lo puso": un
+ * hueco silencioso donde debería ir un nombre se lee como si el dato no
+ * existiera.
+ */
+function rastroDe(rastro: EduPrecioRastroRow[] | null, feeScheduleId: string): string {
+  if (rastro === null) return "Leyendo quién lo puso…";
+  const r = rastro.find((x) => x.feeScheduleId === feeScheduleId);
+  if (!r) return "Esta lista nunca ha cubierto este procedimiento.";
+  if (r.retirado) {
+    return `Retirado por ${r.deletedByName ?? "—"}${r.deletedAt ? ` el ${r.deletedAt.slice(0, 10)}` : ""}. Valía ${eduMoney(r.priceCents)}.`;
+  }
+  const quien = r.updatedByName ?? r.createdByName;
+  if (!quien && !r.priceSetAt) {
+    return "Sin rastro: este precio se capturó antes de que se guardara el autor.";
+  }
+  return `Lo puso ${quien ?? "—"}${r.priceSetAt ? ` el ${r.priceSetAt.slice(0, 10)}` : ""}.`;
 }

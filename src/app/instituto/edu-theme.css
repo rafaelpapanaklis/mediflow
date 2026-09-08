@@ -1419,6 +1419,81 @@ select.edu-input {
    esas listas, tiene que envolverla en `.edu-tablewrap` o su forma
    renglón no se estrenará nunca, porque ya no hay ventana que medir. */
 
+/* ── Cubo 500 px · LA TABLA MÁS ESTRECHA DEL VERTICAL ──────────────────
+   Sumada pista a pista (regla 3), igual que las demás:
+        minmax(150px,2fr) concepto + 64 cant. + 100 precio + 106 importe
+      = 420 px de pistas
+      + 3 huecos × 12 px                                    =  36 px
+      + padding 12px 16px de .edu-row                       =  32 px
+      + borde de .edu-table                                 =   2 px
+      ──────────────────────────────────────────────────────────────
+                                                              490 px
+   El umbral es 500 y no 880 porque esta tabla vive DENTRO de un modal
+   (`.edu-modal`, ~640 px de ancho útil en escritorio): con el umbral de
+   las listas de página se quedaría apilada para siempre y las partidas de
+   un presupuesto de doce renglones ocuparían tres pantallas de alto.
+
+   ⚠️ El `container-type` del envoltorio sigue siendo seguro aquí: dentro
+   de `.edu-table` solo hay div, span y button, y el modal es el ANCESTRO
+   —no un descendiente—, así que no hay ningún `position: fixed` atrapado
+   por la contención. */
+@container edu-tabla (min-width: 500px) {
+  .edu-table--partidas {
+    gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace. */
+    min-width: fit-content;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+  }
+
+  .edu-table--partidas .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow es exactamente el que recorta sin dejar scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  .edu-table--partidas .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .edu-table--partidas .edu-row:last-child {
+    border-bottom: 0;
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
+  }
+
+  .edu-table--partidas .edu-cell--wide {
+    grid-column: auto;
+  }
+
+  .edu-table--partidas .edu-cell__label {
+    display: none;
+  }
+}
+
 /* Cubo 700 px de CONTENIDO (lo mide el envoltorio, no la ventana). iapersonas 670 · iaprecios 670 · creds 680 · usosillones 682 · docentes 700 */
 @container edu-tabla (min-width: 700px) {
   :is(.edu-table--iapersonas,
@@ -1517,7 +1592,7 @@ select.edu-input {
   }
 }
 
-/* Cubo 780 px de CONTENIDO (lo mide el envoltorio, no la ventana). corte 702 · notas 736 · sillones 742 · turnos 766 · procedimientos 776 */
+/* Cubo 780 px de CONTENIDO (lo mide el envoltorio, no la ventana). corte 702 · notas 736 · sillones 742 · procedimientos 776 · turnos 778 */
 @container edu-tabla (min-width: 780px) {
   :is(.edu-table--corte,
        .edu-table--notas,
@@ -1615,9 +1690,10 @@ select.edu-input {
   }
 }
 
-/* Cubo 880 px de CONTENIDO (lo mide el envoltorio, no la ventana). facturas 820 · diralumnos 860 · programas 872 · requisitos 872 · bitacora 874 · iausos 876 */
+/* Cubo 880 px de CONTENIDO (lo mide el envoltorio, no la ventana). facturas 820 · presupuestos 842 · diralumnos 860 · programas 872 · requisitos 872 · bitacora 874 · iausos 876 */
 @container edu-tabla (min-width: 880px) {
   :is(.edu-table--facturas,
+       .edu-table--presupuestos,
        .edu-table--diralumnos,
        .edu-table--programas,
        .edu-table--requisitos,
@@ -1636,6 +1712,7 @@ select.edu-input {
   }
 
   :is(.edu-table--facturas,
+       .edu-table--presupuestos,
        .edu-table--diralumnos,
        .edu-table--programas,
        .edu-table--requisitos,
@@ -1659,6 +1736,7 @@ select.edu-input {
   }
 
   :is(.edu-table--facturas,
+       .edu-table--presupuestos,
        .edu-table--diralumnos,
        .edu-table--programas,
        .edu-table--requisitos,
@@ -1675,6 +1753,7 @@ select.edu-input {
   }
 
   :is(.edu-table--facturas,
+       .edu-table--presupuestos,
        .edu-table--diralumnos,
        .edu-table--programas,
        .edu-table--requisitos,
@@ -1688,12 +1767,14 @@ select.edu-input {
   }
 
   :is(.edu-table--facturas,
+       .edu-table--presupuestos,
        .edu-table--diralumnos,
        .edu-table--programas,
        .edu-table--requisitos,
        .edu-table--bitacora,
        .edu-table--iausos) .edu-cell--wide,
   :is(.edu-table--facturas,
+       .edu-table--presupuestos,
        .edu-table--diralumnos,
        .edu-table--programas,
        .edu-table--requisitos,
@@ -1703,6 +1784,7 @@ select.edu-input {
   }
 
   :is(.edu-table--facturas,
+       .edu-table--presupuestos,
        .edu-table--diralumnos,
        .edu-table--programas,
        .edu-table--requisitos,
@@ -1712,6 +1794,7 @@ select.edu-input {
   }
 
   :is(.edu-table--facturas,
+       .edu-table--presupuestos,
        .edu-table--diralumnos,
        .edu-table--programas,
        .edu-table--requisitos,
@@ -1983,6 +2066,24 @@ select.edu-input {
 
 .edu-table--docentes {
   --edu-cols: minmax(150px, 1.5fr) minmax(150px, 1.4fr) 110px 104px 104px;
+}
+
+/* ── Ola C·2 · PRESUPUESTOS ────────────────────────────────────────────
+   Sumada pista a pista (regla 3): 104 folio + 150 paciente + 160 concepto
+   + 116 total + 118 estado + 100 acciones = 748 px de pistas, + 5 huecos
+   × 12 = 60, + 32 de padding, + 2 de borde  →  842 px, que es el cubo de
+   880 en el que entra (ver su bloque @container arriba).
+
+   El rótulo del botón es «Ver» y no «Presupuesto» a propósito (regla 7):
+   un rótulo largo empujaría la pista de acciones y con ella la suma. */
+.edu-table--presupuestos {
+  --edu-cols: 104px minmax(150px, 1.4fr) minmax(160px, 1.6fr) 116px 118px 100px;
+}
+
+/* Las partidas de un presupuesto, DENTRO del modal de detalle. Su umbral
+   es 500 px (ver el bloque de arriba), no el de las listas de página. */
+.edu-table--partidas {
+  --edu-cols: minmax(150px, 2fr) 64px 100px 106px;
 }
 
 /* ── Píldoras de estado ── */
@@ -3876,8 +3977,28 @@ a.edu-fichadato:hover {
   --edu-cols: minmax(120px, 1.2fr) 116px 128px 128px 128px;
 }
 
+/* ── Ola C·2 · H-53 · LOS TURNOS CERRADOS, con su columna de CORTE ─────
+   Le entró una SEXTA pista: «Corte», el botón de REIMPRIMIR que H-53
+   pedía («el código promete la reimpresión; la fila no tiene ni un
+   botón»). Aplicando la regla 6 —al cambiar una columna se recalcula la
+   SUMA de todas— las cinco viejas se estrecharon para que la tabla se
+   quede en SU cubo de siempre y no haya ni un píxel de regresión:
+
+        128 abierto + 128 cerrado + 96 esperado + 96 contado
+      + 128 diferencia + 108 corte                = 684 px de pistas
+      + 5 huecos × 12 px                          =  60 px
+      + padding 12px 16px de .edu-row             =  32 px
+      + borde de .edu-table                       =   2 px
+      ────────────────────────────────────────────────────────────
+                                                    778 px  → cubo 780
+
+   Dejarlas como estaban daba 906 y habría empujado la tabla al cubo de
+   980, dejándola apilada en toda la banda 780-980 —incluida la 1180-1235
+   que la cabecera de este archivo señala como la que no mira nadie—. Y
+   el rótulo del botón es «Reimprimir» y no «Reimprimir el corte» por la
+   regla 7: el rótulo manda sobre el ancho de su pista, y son 108 px. */
 .edu-table--turnos {
-  --edu-cols: minmax(140px, 1.3fr) minmax(140px, 1.3fr) 128px 128px 148px;
+  --edu-cols: minmax(128px, 1.2fr) minmax(128px, 1.2fr) 96px 96px 128px 108px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

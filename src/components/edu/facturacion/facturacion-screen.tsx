@@ -98,6 +98,22 @@ export function EduFacturacionScreen({
   const aviso = useMemo(() => eduFiscalNotice(config), [config]);
   const puedeEmitirYa = Boolean(config?.isEnabled && config.hasOrg);
 
+  // 🔴 H-78 · LA QUERY DEL CSV se arma de los filtros APLICADOS (los que
+  // el servidor usó para pintar esta lista), NO de `window.location`:
+  // leer la URL en el render pintaría "" en el servidor y "?desde=…" en el
+  // navegador, que es una discrepancia de hidratación — el mismo error que
+  // este vertical ya documentó con las fechas del recibo. Así, además, el
+  // archivo trae EXACTAMENTE lo que hay en la tabla.
+  const csvHref = useMemo(() => {
+    const p = new URLSearchParams();
+    if (filtroQ) p.set("q", filtroQ);
+    if (filtroEstado) p.set("estado", filtroEstado);
+    if (filtroDesde) p.set("desde", filtroDesde);
+    if (filtroHasta) p.set("hasta", filtroHasta);
+    const qs = p.toString();
+    return `/api/instituto/facturacion/csv${qs ? `?${qs}` : ""}`;
+  }, [filtroQ, filtroEstado, filtroDesde, filtroHasta]);
+
   function recargar(mensaje: string) {
     setFlash(mensaje);
     startNav(() => router.refresh());
@@ -268,6 +284,30 @@ export function EduFacturacionScreen({
                 page.truncated ? ` (se muestran las ${maxRows} más recientes)` : ""
               }`}
         </span>
+        {/* ── 🔴 H-78 (la otra mitad) · EXPORTAR A CSV ────────────────
+            «Facturación no tiene filtro por fecha ni exportación, y se
+            corta en 200. Cerrar el mes y conciliar con el corte de caja
+            es imposible desde el panel.» El filtro de fechas lo puso la
+            C·1; esto es la exportación.
+
+            🔴 SALE LO QUE SE ESTÁ VIENDO: la descarga lleva los MISMOS
+            parámetros de la URL que la lista, así que el archivo y la
+            pantalla no pueden discrepar — incluido el tope de 200, que es
+            justo por lo que el filtro de fechas hace falta.
+
+            Un enlace `<a download>` y no un fetch + blob: el servidor ya
+            manda `Content-Disposition`, y un blob en el navegador se
+            saltaría el renglón de bitácora que la ruta escribe (la
+            NOM-024 pregunta cuándo SALIÓ un dato de la escuela). */}
+        <a
+          className="edu-btn edu-btn--ghost edu-btn--sm"
+          href={csvHref}
+          download
+        >
+          <Download size={15} />
+          Exportar CSV
+        </a>
+
         {/* 🔴 H-77 · CAPTURAR O CORREGIR EL RFC DE UN PACIENTE SIN
             FACTURARLE. El PUT existía, estaba probado y no lo llamaba
             nadie: la única forma de escribir un perfil fiscal era EMITIR

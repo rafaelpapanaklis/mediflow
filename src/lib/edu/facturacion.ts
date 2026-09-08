@@ -98,6 +98,14 @@ import {
   type EduTaxMode,
 } from "@/lib/edu/facturacion-core";
 import { esEduTaxRegime } from "@/lib/edu/facturacion-core";
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
+
+/**
+ * El contexto de las escrituras de facturación: el alcance de siempre MÁS
+ * lo que la bitácora necesita para firmar el renglón (nombre y rol
+ * congelados). Las lecturas siguen tomando `EduClinicaContext` a secas.
+ */
+export interface EduFacturacionContext extends EduClinicaContext, EduAuditActor {}
 
 export { EduPadronError as EduFacturacionError };
 
@@ -1487,7 +1495,7 @@ export async function emitEduInvoice(
  * que pasa a NULL — y eso es lo que deja volver a facturar el cobro.
  */
 export async function cancelEduInvoice(
-  ctx: EduClinicaContext,
+  ctx: EduFacturacionContext,
   invoiceId: string,
   input: { motive?: unknown; reason?: unknown },
   /** La zona del INSTITUTO, para que la fila que vuelve diga el mismo día
@@ -1652,6 +1660,27 @@ export async function cancelEduInvoice(
     },
     select: INVOICE_SELECT,
   });
+
+  // 🔴 BITÁCORA (NOM-024). Cancelar un CFDI es el acto más irreversible de
+  // toda la facturación —una segunda cancelación ante el SAT no se puede
+  // deshacer— y hasta ahora solo quedaba en las columnas de la propia
+  // factura. `eduAudit` nunca lanza, así que esto no puede tumbar una
+  // cancelación que el SAT ya aceptó.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "invoice",
+    entityId: factura.id,
+    patientId: actualizada.patientId,
+    before: { status: "VALID" },
+    after: {
+      status: "CANCELLED",
+      folio: factura.folio,
+      uuid: actualizada.uuid,
+      motivoSat: motive,
+      motivo: reason,
+    },
+  });
+
   return toInvoiceRow(actualizada, invoiceFmt(options.timeZone));
 }
 

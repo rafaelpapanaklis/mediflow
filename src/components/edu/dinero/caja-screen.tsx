@@ -323,6 +323,16 @@ export function EduCajaScreen({
           <Link href="/instituto/caja/planes" className="edu-btn edu-btn--ghost edu-btn--sm">
             Pagos a meses
           </Link>
+          {/* 🔴 Ola C·2 · PRESUPUESTOS (fila 26 del comparativo con el
+              dental). Cuelga de Caja y no del menú principal a propósito:
+              un presupuesto es la antesala de un cobro, lo llevan las
+              mismas personas y se convierte en uno con un clic. El enlace
+              NO cuelga de `canCharge` — quien puede VER la caja puede ver
+              lo que se le propuso a un paciente; crear sí pide
+              `caja.charge`, y eso lo decide la pantalla de allá. */}
+          <Link href="/instituto/caja/presupuestos" className="edu-btn edu-btn--ghost edu-btn--sm">
+            Presupuestos
+          </Link>
           {canCharge && (
             <button
               type="button"

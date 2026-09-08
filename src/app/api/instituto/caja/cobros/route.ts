@@ -20,11 +20,15 @@ export async function GET(request: Request) {
     url.searchParams.forEach((value, key) => {
       params[key] = value;
     });
-    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const sede = await getEduCampusScope(g.ctx);
+    const cctx = eduWithCampus(g.ctx, sede);
     const page = await listEduCharges(cctx, parseEduChargeFilters(params), {
       // La zona del INSTITUTO, de la sesión: con ella se deriva si una
       // mensualidad está vencida y se escribe la hora de cada pago.
       timeZone: g.ctx.institution.timezone,
+      // 🔴 Ola C · H-09 · y la SEDE, para que "solo el turno abierto" sea
+      // el turno de ESTE mostrador y no el de la sede de al lado.
+      campusId: eduCampusForCharge(sede).campusId,
     });
     return NextResponse.json(page);
   } catch (err) {
