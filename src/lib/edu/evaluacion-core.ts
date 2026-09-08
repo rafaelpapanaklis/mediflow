@@ -1237,6 +1237,10 @@ export interface EduBitacoraCaseRow {
   patientId: string;
   patientName: string;
   patientFolio: string;
+  /** H-91: la especialidad DEL CASO. La rúbrica se elige contra ésta, no
+   *  contra la del alumno: un caso traspasado o de otra especialidad se
+   *  calificaba con la rúbrica equivocada y la escala quedaba congelada. */
+  programId: string;
   programName: string;
   procedureId: string | null;
   procedureName: string | null;
@@ -1356,6 +1360,16 @@ export interface EduBitacoraPage {
   hours: EduClinicalHours;
   hoursLabel: string;
   cases: EduBitacoraCaseRow[];
+  /**
+   * 🔴 OLA C · H-85 — cuántos casos hay DE VERDAD, y si la tabla los pinta
+   * todos. El avance y el semáforo se cuentan sobre TODOS (como hace la
+   * lista de Evaluación, que no pone tope); lo que se corta es la tabla, y
+   * cuando se corta se dice. Antes el tope se aplicaba a la CUENTA: la
+   * lista decía «Cumplido 12 de 12 · Al día» y la bitácora del mismo alumno
+   * «Te faltan 4 de 12 · Atrasado», sin un solo aviso.
+   */
+  casesTotal: number;
+  casesTruncated: boolean;
   /** Casos sin procedimiento: no cuentan para requisitos que pidan uno. */
   casesWithoutProcedure: number;
   grades: EduGradeRow[];
@@ -1363,6 +1377,15 @@ export interface EduBitacoraPage {
   averageX100: number | null;
   averageLabel: string | null;
   averageScaleMax: number | null;
+  /**
+   * 🔴 OLA C · H-86 — CUÁNTAS CALIFICACIONES SE QUEDARON FUERA DEL
+   * PROMEDIO por estar en otra escala. `eduAverageScore` lo calcula y lo
+   * devuelve desde el primer día; se descartaba antes de llegar a la
+   * pantalla, y la prueba que «garantizaba» que se decía comprobaba el
+   * valor de retorno, no la pantalla. Un promedio que tira notas sin
+   * decirlo es un promedio que no se puede defender en una acreditación.
+   */
+  averageIgnored: number;
   generatedLabel: string;
 }
 

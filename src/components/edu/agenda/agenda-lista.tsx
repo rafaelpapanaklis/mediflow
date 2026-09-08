@@ -30,11 +30,15 @@ export function EduAgendaLista({
   rows,
   variasSedes,
   todayISO,
+  hayFiltros,
   onOpen,
 }: {
   rows: EduAppointmentRow[];
   variasSedes: boolean;
   todayISO: string;
+  /** H-27: si de verdad hay filtros puestos. Sin esto el vacío culpaba
+   *  siempre a unos filtros que podían no existir. */
+  hayFiltros: boolean;
   onOpen: (row: EduAppointmentRow) => void;
 }) {
   const grupos = useMemo(() => {
@@ -55,11 +59,19 @@ export function EduAgendaLista({
   }, [rows]);
 
   if (grupos.length === 0) {
+    // 🔴 OLA C · H-27 — EL VACÍO NO CULPA A UNOS FILTROS QUE PUEDEN NO
+    // EXISTIR. Esta lista no recibía la consulta, así que su vacío decía
+    // SIEMPRE «con los filtros que están puestos no queda ninguna. Quítalos
+    // o cambia de día» — un domingo sin citas y sin un solo filtro puesto.
+    // `hayFiltros` lo calcula `eduHasAgendaFilters`, que existe justo para
+    // esto y ya se usa dos archivos más arriba.
     return (
       <div className="edu-empty">
         <p className="edu-empty__title">No hay citas que enseñar</p>
         <p className="edu-empty__detail">
-          Con los filtros que están puestos no queda ninguna. Quítalos o cambia de día.
+          {hayFiltros
+            ? "Con los filtros que están puestos no queda ninguna. Quítalos o cambia de día."
+            : "Este día no tiene ninguna cita agendada. Cambia de día, o agenda una con «Agendar»."}
         </p>
       </div>
     );

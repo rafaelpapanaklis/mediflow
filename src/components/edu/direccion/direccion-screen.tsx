@@ -87,6 +87,17 @@ interface VistaDetalle {
   truncated: boolean;
   cargando: boolean;
   error: string | null;
+  /**
+   * 🔴 OLA C · H-126 — ESTE DETALLE ES UNA EXPLICACIÓN, NO UNA BÚSQUEDA.
+   *
+   * Varias cifras abren un modal SIN filas a propósito: lo que tienen que
+   * decir es el porqué, no una lista. El vacío genérico —«Aquí no hay
+   * nada. La cifra es cero para este periodo»— es exactamente lo contrario
+   * de lo que se acaba de leer cuando la tarjeta dice
+   * «Cobrado que no se puede atribuir (sin caso): $34,800», y dejaba a la
+   * dirección sin ninguna otra forma de entender esos 34.800 pesos.
+   */
+  explicativo: boolean;
 }
 
 const CLASE_POR_SEMAFORO: Record<EduDirSemaforo, string> = {
@@ -210,6 +221,7 @@ export function EduDireccionScreen({ ahora: ahoraSSR, panel }: EduDireccionScree
         truncated: false,
         cargando: true,
         error: null,
+        explicativo: false,
       });
       try {
         const page = await eduRequest<EduDirDetallePage>(
@@ -223,6 +235,7 @@ export function EduDireccionScreen({ ahora: ahoraSSR, panel }: EduDireccionScree
           truncated: page.truncated,
           cargando: false,
           error: null,
+          explicativo: false,
         });
       } catch (err) {
         if (peticion.current !== n) return;
@@ -237,7 +250,17 @@ export function EduDireccionScreen({ ahora: ahoraSSR, panel }: EduDireccionScree
   const abrirLocal = useCallback(
     (titulo: string, texto: string, filas: EduDirDetalleFila[]) => {
       peticion.current += 1;
-      setDetalle({ titulo, detalle: texto, filas, truncated: false, cargando: false, error: null });
+      setDetalle({
+        titulo,
+        detalle: texto,
+        filas,
+        truncated: false,
+        cargando: false,
+        error: null,
+        // H-126: sin filas y abierto a mano = explicación. Con filas, es
+        // una lista local de verdad y su vacío nunca se pinta.
+        explicativo: filas.length === 0,
+      });
     },
     [],
   );
@@ -328,13 +351,22 @@ export function EduDireccionScreen({ ahora: ahoraSSR, panel }: EduDireccionScree
               {detalle.error}
             </div>
           ) : detalle.filas.length === 0 ? (
-            <div className="edu-empty">
-              <p className="edu-empty__title">Aquí no hay nada</p>
-              <p className="edu-empty__detail">
-                La cifra es cero para este periodo y esta especialidad. Cambia el periodo arriba
-                para mirar otra franja.
+            detalle.explicativo ? (
+              // H-126: el subtítulo del modal YA lleva el porqué. Aquí solo
+              // se dice qué hacer con él, sin afirmar que la cifra es cero.
+              <p className="edu-note">
+                Esta cifra no se abre en una lista: lo que hay que saber es lo de arriba. Para verla
+                renglón por renglón, expórtala en CSV desde el botón de la cabecera.
               </p>
-            </div>
+            ) : (
+              <div className="edu-empty">
+                <p className="edu-empty__title">Aquí no hay nada</p>
+                <p className="edu-empty__detail">
+                  La cifra es cero para este periodo y esta especialidad. Cambia el periodo arriba
+                  para mirar otra franja.
+                </p>
+              </div>
+            )
           ) : (
             <div className="edu-dir-detalle">
               {detalle.truncated && (
@@ -645,8 +677,19 @@ function BloqueAhora({
         />
         <CifraViva
           label="Sillones en uso"
-          value={`${ahora.sillonesEnUso} / ${ahora.sillonesTotal}`}
-          note="Ocupar es estar sentado: quien espera en recepción no cuenta."
+          // H-124: con especialidad elegida el cociente miente — el de
+          // arriba está filtrado y el de abajo no. Se enseña solo el
+          // numerador y se dice de qué es.
+          value={
+            ahora.especialidadFiltrada
+              ? String(ahora.sillonesEnUso)
+              : `${ahora.sillonesEnUso} / ${ahora.sillonesTotal}`
+          }
+          note={
+            ahora.especialidadFiltrada
+              ? `Sillones ocupados por la especialidad elegida. El total de la clínica son ${ahora.sillonesTotal}, pero los demás pueden estar ocupados por otras especialidades: no son sillones libres.`
+              : "Ocupar es estar sentado: quien espera en recepción no cuenta."
+          }
           onAbrir={null}
         />
         <CifraViva
@@ -1011,6 +1054,14 @@ function BloqueDinero({
           k="Cobrado en el periodo"
           v={eduMoney(d.cobradoCents)}
           fuerte
+          // 🔴 OLA C · H-127 — «Cobrado» son PAGOS NETOS y la lista que se
+          // abre es la de COBROS EMITIDOS: dos cifras distintas del mismo
+          // bloque llevaban al mismo detalle sin decirlo, y quien sumaba
+          // los totales de la lista obtenía el de «Emitido» y dejaba de
+          // creerle a las dos. El bloque ya explica arriba que no son lo
+          // mismo «y por eso van los dos»; lo que faltaba era decirlo aquí,
+          // en el clic.
+          nota="Pagos menos devoluciones, por la fecha del pago. Al abrirlo se enseña la lista de COBROS EMITIDOS, que es la otra cifra: sus totales no suman este número."
           onAbrir={() => abrir("cobros")}
         />
         <FilaMoney

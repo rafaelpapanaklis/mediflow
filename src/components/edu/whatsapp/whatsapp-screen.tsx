@@ -21,6 +21,7 @@ import {
   type EduWaConnectionDTO,
   type EduWaMessageRow,
 } from "@/lib/edu/whatsapp-core";
+import type { EduReminderAutomationStatus } from "@/lib/edu/recordatorios";
 
 /**
  * /instituto/whatsapp — la conexión, las plantillas y qué avisos salen.
@@ -43,6 +44,15 @@ import {
  */
 export interface EduWhatsappScreenProps {
   connection: EduWaConnectionDTO;
+  /**
+   * 🔴 OLA C · H-01 — SI EL BARRIDO AUTOMÁTICO HA SALIDO ALGUNA VEZ.
+   *
+   * Sin esto la tarjeta decía «Encendido · Sale 24 h antes de la cita» y el
+   * bloque de arriba «lo manda solo el sistema… nadie lo dispara a mano»
+   * mientras el cron NO estaba dado de alta en `vercel.json`. No salía ni
+   * uno, y el panel afirmaba que el sistema funcionaba.
+   */
+  automatizacion: EduReminderAutomationStatus;
   messages: EduWaMessageRow[];
   canManage: boolean;
   institutionName: string;
@@ -50,6 +60,7 @@ export interface EduWhatsappScreenProps {
 
 export function EduWhatsappScreen({
   connection,
+  automatizacion,
   messages,
   canManage,
   institutionName,
@@ -225,10 +236,37 @@ export function EduWhatsappScreen({
 
                 {r.problem && <p className="edu-wa-aviso__problema">{r.problem}</p>}
 
+                {/* ── 🔴 OLA C · H-01 · LA TARJETA DICE LA VERDAD ──────────
+                    Con el aviso encendido había DOS frases posibles y solo
+                    se pintaba la optimista. La que manda es la constancia:
+                    si nunca ha salido un recordatorio SIN firma de persona,
+                    el barrido automático no ha entregado nada y decir «sale
+                    24 h antes» es una promesa que el producto no cumple. */}
                 {r.kind === "RECORDATORIO" && r.enabled && (
-                  <p className="edu-wa-aviso__meta">
-                    Sale <strong>{connection.reminderHoursBefore} h</strong> antes de la cita.
-                  </p>
+                  automatizacion.lastAutomaticAt ? (
+                    <p className="edu-wa-aviso__meta">
+                      Sale <strong>{connection.reminderHoursBefore} h</strong> antes de la cita. El
+                      último automático salió el {automatizacion.lastAutomaticLabel}.
+                    </p>
+                  ) : (
+                    <div className="edu-wa-aviso__problema">
+                      <p>
+                        <strong>Encendido, pero todavía no ha salido ninguno solo.</strong> No hay
+                        constancia de ni un recordatorio entregado por el barrido automático, así
+                        que no se puede prometer que salga {connection.reminderHoursBefore} h antes.
+                      </p>
+                      <p>
+                        Falta dar de alta el cron{" "}
+                        <code>/api/instituto/cron/recordatorios</code> en el{" "}
+                        <code>vercel.json</code> del proyecto — es un archivo del despliegue, no del
+                        panel, y no se toca desde aquí. Mientras tanto, «Correr el barrido ahora»
+                        hace lo mismo para este instituto, a mano.
+                        {automatizacion.lastManualAt
+                          ? ` El último a mano lo corrió ${automatizacion.lastManualBy ?? "alguien"} el ${automatizacion.lastManualLabel}.`
+                          : ""}
+                      </p>
+                    </div>
+                  )
                 )}
 
                 {canManage && (
@@ -354,6 +392,16 @@ export function EduWhatsappScreen({
                   )}
                 </p>
                 {cfg?.reason && <p className="edu-wa-tpl__reason">{cfg.reason}</p>}
+                {/* H-130: el estado de arriba puede ser de hace tres meses.
+                    Se guardaba y no se pintaba: «APPROVED» sin fecha se lee
+                    como «aprobada ahora», y Meta pausa plantillas. */}
+                {cfg && (
+                  <p className="edu-wa-tpl__vars">
+                    {connection.templatesCheckedLabel[spec.kind]
+                      ? `Se le preguntó a Meta el ${connection.templatesCheckedLabel[spec.kind]}.`
+                      : "Nunca se le ha preguntado a Meta: el estado es el que se capturó al registrarla. Pulsa «Revisar en Meta»."}
+                  </p>
+                )}
                 <p className="edu-wa-tpl__body">{spec.body}</p>
                 <p className="edu-wa-tpl__vars">
                   Variables, en este orden: {spec.variableKeys.map((v, i) => `{{${i + 1}}} ${v}`).join(" · ")}
@@ -461,9 +509,16 @@ export function EduWaEnvios({
             </p>
           )}
           <p className="edu-wa-envio__meta">
-            {EDU_WA_STATUS_DETAILS[m.status]}
-            {m.sentByName ? ` · Lo mandó ${m.sentByName}.` : " · Lo mandó el sistema."}
+            {/* H-119: la hora primero. El texto de arriba promete «con su
+                resultado, SU HORA y el texto exacto» y la hora no estaba en
+                ninguna de las cincuenta tarjetas. */}
+            {m.whenLabel} · {EDU_WA_STATUS_DETAILS[m.status]}
+            {m.sentByName ? ` · Lo mandó ${m.sentByName}.` : " · Lo mandó el sistema (barrido automático)."}
+            {m.attempts > 1 ? ` · ${m.attempts} intentos.` : ""}
           </p>
+          {/* H-119: el acuse de Meta. Es lo único con lo que se le reclama un
+              mensaje concreto, y ni siquiera se seleccionaba. */}
+          {m.wamid && <p className="edu-wa-envio__meta">Acuse de Meta: <code>{m.wamid}</code></p>}
         </div>
       ))}
     </div>
@@ -538,6 +593,13 @@ function FormConexion({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 🔴 OLA C · H-128 — el token solo hace falta si no hay ninguno guardado
+  // o si CAMBIA el número. Corregir una errata en el WABA ID no puede
+  // obligar a pedirle a Meta un token nuevo.
+  const yaConectado = Boolean(actual.phoneNumberId);
+  const mismoNumero = yaConectado && phoneNumberId.trim() === actual.phoneNumberId;
+  const tokenObligatorio = !mismoNumero;
+
   async function guardar() {
     setError(null);
     setBusy(true);
@@ -574,7 +636,7 @@ function FormConexion({
             type="button"
             className="edu-btn edu-btn--primary"
             onClick={guardar}
-            disabled={busy || !phoneNumberId.trim() || !token.trim()}
+            disabled={busy || !phoneNumberId.trim() || (tokenObligatorio && !token.trim())}
           >
             {busy ? "Conectando…" : "Conectar"}
           </button>
@@ -652,6 +714,11 @@ function FormConexion({
         <span className="edu-field__hint">
           Se guarda cifrado y no vuelve a salir de aquí: ni esta pantalla lo puede volver a leer.
           Usa uno permanente, de sistema — uno temporal caduca en 24 h y los avisos dejan de salir.
+          {tokenObligatorio
+            ? yaConectado
+              ? " Estás cambiando el número: hace falta el token del número nuevo."
+              : ""
+            : " Déjalo vacío para conservar el que ya está guardado y corregir solo el resto."}
         </span>
       </div>
 

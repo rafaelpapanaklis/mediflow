@@ -746,6 +746,21 @@ export interface EduDirAhora {
   alumnosAtendiendo: number;
   sillonesEnUso: number;
   sillonesTotal: number;
+  /**
+   * 🔴 OLA C · H-124 — SI HAY UNA ESPECIALIDAD ELEGIDA.
+   *
+   * «Sillones en uso 3 / 20» con una especialidad puesta tiene el NUMERADOR
+   * filtrado y el DENOMINADOR no: la rejilla pintaba 17 sillones "libres"
+   * que estaban ocupados por otra especialidad. Es el mismo error que este
+   * archivo se prohíbe a sí mismo 350 líneas más abajo para la ocupación
+   * del periodo: «la ocupación es un cociente, y sus dos mitades tienen que
+   * ser del mismo edificio».
+   *
+   * El denominador NO se puede filtrar —un sillón no es de una
+   * especialidad—, así que lo que se arregla es la lectura: con el filtro
+   * puesto, la cifra deja de presentarse como un cociente.
+   */
+  especialidadFiltrada: boolean;
   docentesResponsables: number;
   /** Sillones ocupados cuyo alumno no tiene NINGÚN docente responsable. */
   sillonesSinDocente: number;
@@ -1059,7 +1074,14 @@ export function buildEduDireccionCsv(panel: EduDirPanel, ahora: EduDirAhora | nu
     filas.push(eduCsvRow(["Pacientes en la clínica", ahora.pacientesEnClinica]));
     filas.push(eduCsvRow(["Estudiantes atendiendo", ahora.alumnosAtendiendo]));
     filas.push(
-      eduCsvRow(["Sillones en uso", `${ahora.sillonesEnUso} de ${ahora.sillonesTotal}`]),
+      eduCsvRow([
+        "Sillones en uso",
+        // H-124: mismo cuidado que en la pantalla — con especialidad
+        // elegida el "de N" es de otra población.
+        ahora.especialidadFiltrada
+          ? `${ahora.sillonesEnUso} (solo la especialidad elegida; la clínica tiene ${ahora.sillonesTotal})`
+          : `${ahora.sillonesEnUso} de ${ahora.sillonesTotal}`,
+      ]),
     );
     filas.push(eduCsvRow(["Docentes responsables", ahora.docentesResponsables]));
     filas.push(eduCsvRow(["Esperando firma", ahora.esperandoFirma]));

@@ -296,6 +296,14 @@ export interface EduCasosPanelRow {
   closedLabel: string | null;
 
   espera: EduCasoEspera;
+  /**
+   * 🔴 OLA C · H-41 — CUÁNTAS FIRMAS DE ESTE CASO SE PIDIERON COMO
+   * URGENCIA (el alumno marcó «es urgencia y ya procedí» y siguió sin
+   * esperar la firma previa). El dato se guardaba desde la Ola 4 y no
+   * había NINGUNA pantalla donde contarlo: ni la lista lo pedía ni el CSV
+   * lo llevaba, así que la ruta de urgencia no dejaba rastro auditable.
+   */
+  urgencias: number;
 }
 
 export interface EduCasosPanelPage {
@@ -373,6 +381,8 @@ export function buildEduCasosCsv(rows: EduCasosPanelRow[]): string {
       "Abierto",
       "Estado",
       "Esperando",
+      // H-41: la columna que faltaba para poder auditar la ruta de urgencia.
+      "Firmas por urgencia",
     ]),
   );
   for (const r of rows) {
@@ -389,6 +399,7 @@ export function buildEduCasosCsv(rows: EduCasosPanelRow[]): string {
         r.openedISO,
         EDU_CASE_STATUS_LABELS[r.status] ?? r.status,
         r.espera.label,
+        r.urgencias,
       ]),
     );
   }

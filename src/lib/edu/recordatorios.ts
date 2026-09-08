@@ -104,6 +104,19 @@ function resumenVacio(): EduReminderSweepSummary {
 export async function runEduReminderSweep(opts: {
   now?: Date;
   institutionId?: string;
+  /**
+   * 🔴 OLA C · H-01 — QUIÉN CORRIÓ ESTE BARRIDO.
+   *
+   * `EduWhatsappMessage.sentByUserId` dice en el schema «Null = el cron», y
+   * hasta ahora era mentira: el botón «Correr el barrido ahora» pasaba por
+   * esta misma función y tampoco firmaba, así que las filas del cron y las
+   * del botón eran indistinguibles. Con el botón firmando, un envío SIN
+   * firma vuelve a significar exactamente lo que el schema promete: salió
+   * solo. Es lo que le permite a la pantalla decir la verdad sobre si el
+   * automático ha corrido alguna vez.
+   */
+  sentByUserId?: string | null;
+  sentByName?: string | null;
 } = {}): Promise<EduReminderSweepSummary> {
   const now = opts.now ?? new Date();
   const summary = resumenVacio();
@@ -235,6 +248,37 @@ export async function runEduReminderSweep(opts: {
           continue;
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // 🔴 OLA C · H-117 — LA CITA SE VUELVE A MIRAR JUSTO ANTES DE
+        // MANDAR.
+        //
+        // El barrido lee hasta 200 citas de golpe y tarda en recorrerlas,
+        // porque cada una es una llamada a Meta. Recepción cancela por
+        // teléfono a las 09:00:12 y a las 09:00:35 le sale al paciente "le
+        // recordamos su cita de mañana": `applyEduReminderCancel` solo
+        // puede cancelar filas que YA EXISTEN, y ésta todavía no existía
+        // cuando se canceló la cita. Los dos cinturones que documenta el
+        // encabezado —el reagendado y el aviso ya encolado— no cubren esta
+        // ventana.
+        //
+        // Una lectura por cita que de verdad va a salir, y solo del estado.
+        // Es barata comparada con la llamada a Meta que viene después, y es
+        // la diferencia entre un paciente que se presenta a una cita que no
+        // existe y uno que no.
+        // ═══════════════════════════════════════════════════════════════
+        const sigueViva = await prisma.eduAppointment.findFirst({
+          where: {
+            id: cita.id,
+            institutionId: cfg.institutionId,
+            status: { in: [...EDU_REMINDER_LIVE_APPOINTMENT_STATUSES] },
+          },
+          select: { id: true },
+        });
+        if (!sigueViva) {
+          summary.saltados++;
+          continue;
+        }
+
         const z = eduUtcToZoned(cita.startsAt, tz);
         const res = await sendEduWhatsapp({
           institutionId: cfg.institutionId,
@@ -253,6 +297,15 @@ export async function runEduReminderSweep(opts: {
           dedupeKey: llave,
           scheduledFor: eduReminderMoment(cita.startsAt, horas),
           reuseId: previa?.id ?? null,
+          // H-115: el estado con el que se LEYÓ la fila. Es lo que convierte
+          // el reuso en una reclamación atómica: dos barridos que lean lo
+          // mismo, solo uno lo reclama.
+          reuseStatus: previa?.status ?? null,
+          reuseAttempts: previa?.attempts ?? null,
+          // H-01: si lo disparó una persona, queda su nombre. Sin firma =
+          // el cron, como dice el schema.
+          sentByUserId: opts.sentByUserId ?? null,
+          sentByName: opts.sentByName ?? null,
           now,
         });
 
@@ -415,4 +468,98 @@ export function eduReminderCancelLabel(res: EduReminderCancelResult): string {
     return "El recordatorio automático estaba en cola y se canceló: al paciente no le llega nada.";
   }
   return "No había ningún recordatorio automático en cola para esta cita.";
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 OLA C · H-01 — ¿EL BARRIDO AUTOMÁTICO HA CORRIDO ALGUNA VEZ?
+//
+// La pantalla de WhatsApp decía «Encendido · Sale 24 h antes de la cita» y
+// «Lo manda solo el sistema… Nadie lo dispara a mano» mientras el cron
+// (/api/instituto/cron/recordatorios) NO estaba dado de alta en
+// `vercel.json` — un archivo que está FUERA del guardia de este vertical y
+// que esta rama no puede tocar. La dirección conectaba su WABA, registraba
+// la plantilla, la veía aprobada, encendía el interruptor y leía que los
+// avisos salen solos. No salía ni uno, durante meses.
+//
+// Esto no arregla el cron: lo hace VISIBLE. La única constancia que existe
+// sin columnas nuevas son las propias filas de envío, y desde este mismo
+// arreglo vuelven a distinguirse (el botón manual firma con su usuario, el
+// cron no firma). Así que «el último run real» es el último recordatorio
+// que salió SIN firma.
+//
+// ⚠️ Lo que esto NO puede saber: un cron que corrió y no encontró ninguna
+// cita que avisar no deja fila. Por eso la pantalla dice «no hay constancia
+// de que haya salido ninguno», que es exactamente lo que se sabe, y no «el
+// cron no está dado de alta», que sería inventar. Un instituto recién
+// conectado y sin citas mañana lee lo mismo, y en su caso también es cierto.
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduReminderAutomationStatus {
+  /** El último recordatorio que salió SIN firma de persona (= el cron). */
+  lastAutomaticAt: string | null;
+  /** Ese mismo instante, ya escrito en la zona del instituto. Se formatea
+   *  en el servidor: un `Intl` en el cliente pintaría la hora de quien
+   *  mira, y encima no cuadraría con el render del servidor. */
+  lastAutomaticLabel: string | null;
+  /** El último que salió porque alguien pulsó «Correr el barrido ahora». */
+  lastManualAt: string | null;
+  lastManualLabel: string | null;
+  /** Quién pulsó ese último manual, para que la frase tenga nombre. */
+  lastManualBy: string | null;
+}
+
+export async function getEduReminderAutomationStatus(
+  institutionId: string,
+  timeZone?: string,
+): Promise<EduReminderAutomationStatus> {
+  const vacio: EduReminderAutomationStatus = {
+    lastAutomaticAt: null,
+    lastAutomaticLabel: null,
+    lastManualAt: null,
+    lastManualLabel: null,
+    lastManualBy: null,
+  };
+  if (!institutionId) return vacio;
+  const zona = eduSafeTimeZone(timeZone);
+  const escrito = (at: Date): string =>
+    new Intl.DateTimeFormat("es-MX", {
+      timeZone: zona,
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(at);
+
+  const [automatico, manual] = await Promise.all([
+    prisma.eduWhatsappMessage.findFirst({
+      where: {
+        institutionId,
+        kind: "RECORDATORIO",
+        status: "SENT",
+        sentByUserId: null,
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: { createdAt: true },
+    }),
+    prisma.eduWhatsappMessage.findFirst({
+      where: {
+        institutionId,
+        kind: "RECORDATORIO",
+        status: "SENT",
+        sentByUserId: { not: null },
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: { createdAt: true, sentByName: true },
+    }),
+  ]);
+
+  return {
+    lastAutomaticAt: automatico ? automatico.createdAt.toISOString() : null,
+    lastAutomaticLabel: automatico ? escrito(automatico.createdAt) : null,
+    lastManualAt: manual ? manual.createdAt.toISOString() : null,
+    lastManualLabel: manual ? escrito(manual.createdAt) : null,
+    lastManualBy: manual?.sentByName ?? null,
+  };
 }

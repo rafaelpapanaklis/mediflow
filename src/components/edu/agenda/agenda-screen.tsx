@@ -900,6 +900,7 @@ export function EduAgendaScreen({
             rows={rows}
             variasSedes={layout.variasSedes}
             todayISO={todayISO}
+            hayFiltros={hayFiltros}
             onOpen={abrirDetalle}
           />
         ) : (

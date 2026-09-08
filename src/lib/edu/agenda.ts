@@ -107,6 +107,13 @@ export const EDU_APPOINTMENT_SELECT = {
   type: true,
   status: true,
   notes: true,
+  // 🔴 OLA C · H-26 — LOS TRES SELLOS DE TIEMPO. Se escriben solos al
+  // mover el estado y SON de donde salen las horas clínicas de la
+  // acreditación; no estaban ni en el `select`, así que ninguna pantalla
+  // de la agenda podía decir si la sesión duró 40 minutos o tres horas.
+  checkedInAt: true,
+  startedAt: true,
+  completedAt: true,
   supervisorUserId: true,
   caseId: true,
   patient: { select: { id: true, folio: true, firstName: true, lastName: true } },
@@ -147,6 +154,15 @@ export function eduAppointmentToRow(a: AppointmentPayload, timeZone: string): Ed
     type: a.type,
     status: a.status,
     notes: a.notes,
+    // H-26: ya escritos en la zona que pide quien lee. Null cuando el
+    // estado todavía no pasó por ahí, que también es información.
+    checkedInLabel: a.checkedInAt ? eduFormatTime(a.checkedInAt, timeZone) : null,
+    startedLabel: a.startedAt ? eduFormatTime(a.startedAt, timeZone) : null,
+    completedLabel: a.completedAt ? eduFormatTime(a.completedAt, timeZone) : null,
+    sessionMinutes:
+      a.startedAt && a.completedAt
+        ? Math.max(0, Math.round((a.completedAt.getTime() - a.startedAt.getTime()) / 60_000))
+        : null,
 
     patientId: a.patient.id,
     patientName: [a.patient.firstName, a.patient.lastName].filter(Boolean).join(" ").trim() || "Sin nombre",
@@ -606,6 +622,23 @@ async function resolveParties(
     supervisorUserId?: unknown;
   },
   campusIds?: string[] | null,
+  /**
+   * 🔴 OLA C · H-18 — QUÉ PARTES SE ESTÁN CAMBIANDO DE VERDAD.
+   *
+   * Esta función revalida SIEMPRE a las tres partes, también a las que no
+   * se tocan, porque el PATCH le pasa las de la cita para resolver la zona
+   * del sillón. Con un alumno dado de baja eso CONGELA sus citas futuras:
+   * el arrastre manda siempre `chairId`, así que mover cualquiera de ellas
+   * moría con «Ese estudiante no está activo en el padrón» —un mensaje que
+   * habla de agendar, no de mover— y no había forma de reagendarle el
+   * paciente a otro ni de moverle la hora a nadie.
+   *
+   * Con `studentUnchanged` la baja del alumno deja de ser un candado sobre
+   * lo YA agendado: sigue cerrando el alta (`createEduAppointment` no lo
+   * pasa) y sigue cerrando el cambio A→B-de-baja, que es donde de verdad
+   * importa. Es la misma asimetría que ya usa el sillón dado de baja.
+   */
+  opciones: { studentUnchanged?: boolean } = {},
 ): Promise<{
   patientId: string;
   studentId: string;
@@ -629,7 +662,7 @@ async function resolveParties(
       })
     : null;
   if (!student) throw new EduPadronError("Elige un estudiante de este instituto.", 400);
-  if (student.status !== "ACTIVE") {
+  if (student.status !== "ACTIVE" && !opciones.studentUnchanged) {
     throw new EduPadronError("Ese estudiante no está activo en el padrón. No se le pueden agendar pacientes.");
   }
 
@@ -902,6 +935,7 @@ export async function updateEduAppointment(
           input.supervisorUserId !== undefined ? input.supervisorUserId : current.supervisorUserId,
       },
       ctx.campusIds,
+      { studentUnchanged: !cambiaAlumno || input.studentId === current.studentId },
     );
     studentId = partes.studentId;
     chairId = partes.chairId;
@@ -1003,7 +1037,29 @@ export async function updateEduAppointment(
     });
   }
 
-  await prisma.eduAppointment.update({ where: { id: current.id }, data });
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C · H-25 — REAGENDAR NO PISA UN ESTADO NUEVO.
+  //
+  // `current.status` se lee arriba y se comprueba que la cita no esté
+  // cerrada; entre esa lectura y este UPDATE cabe justo lo que pasa a
+  // diario: el alumno pulsa "Terminó" en Mi día en el mismo segundo en que
+  // caja arrastra la cita a otra hora. Ganaba el último y quedaba una cita
+  // COMPLETED movida al futuro, o una CANCELLED con `completedAt`.
+  //
+  // El estado leído entra en el `where` (`updateMany`, que es el único que
+  // lo admite) y 409 si no movió nada — el mismo patrón que recordatorios.ts
+  // documenta tres archivos más allá.
+  // ═══════════════════════════════════════════════════════════════════
+  const movida = await prisma.eduAppointment.updateMany({
+    where: { id: current.id, institutionId, status: current.status },
+    data,
+  });
+  if (movida.count === 0) {
+    throw new EduPadronError(
+      "Esa cita cambió de estado mientras la movías: alguien la cerró, la canceló o marcó que el paciente no llegó. Refresca la agenda y mira cómo quedó.",
+      409,
+    );
+  }
 
   // 🔴 REAGENDAR CANCELA EL RECORDATORIO VIEJO.
   //
@@ -1075,7 +1131,11 @@ export async function setEduAppointmentStatus(
   }
 
   const current = await prisma.eduAppointment.findFirst({
-    where: { ...eduAppointmentScopeWhere({ institutionId, scope, now }), id },
+    // 🔴 OLA C · H-23 — el cambio de estado se recorta por SEDE, como la
+    // lectura que lo pinta. Sin `campusIds` una dirección restringida al
+    // Norte podía cerrar, cancelar o dar por no presentada una cita del
+    // Sur: la pantalla no se la enseña, pero el id viaja en la URL.
+    where: { ...eduAppointmentScopeWhere({ institutionId, scope, now, campusIds: ctx.campusIds }), id },
     select: {
       id: true,
       status: true,
@@ -1142,8 +1202,16 @@ export async function setEduAppointmentStatus(
     notes = junto.length <= 1000 ? junto : `…${junto.slice(junto.length - 999)}`;
   }
 
-  await prisma.eduAppointment.update({
-    where: { id: current.id },
+  // 🔴 OLA C · H-25 — EL ESTADO LEÍDO ENTRA EN EL `where`.
+  //
+  // `eduAppointmentCanTransition` valida contra `current.status`, leído
+  // fuera de cualquier transacción. Caja cancela en el mismo segundo en que
+  // el alumno pulsa "Terminó": las dos transiciones son legales por
+  // separado, las dos escribían con `where: { id }` a secas y ganaba la
+  // última — quedaba una CANCELLED con `completedAt` puesto, que es una
+  // hora clínica de una sesión que no ocurrió.
+  const movida = await prisma.eduAppointment.updateMany({
+    where: { id: current.id, institutionId, status: current.status },
     data: {
       status,
       // Las marcas de tiempo se DERIVAN del estado y no se capturan: así no
@@ -1153,6 +1221,12 @@ export async function setEduAppointmentStatus(
       ...(notes === undefined ? {} : { notes }),
     },
   });
+  if (movida.count === 0) {
+    throw new EduPadronError(
+      "Alguien movió el estado de esa cita mientras la mirabas. Refresca la agenda: puede que ya esté cancelada o cerrada.",
+      409,
+    );
+  }
 
   // 🔴 CANCELAR (O CERRAR) TAMBIÉN CANCELA EL RECORDATORIO.
   //
@@ -1206,7 +1280,12 @@ export async function listEduPendingScreenings(
 
   const rows = await prisma.eduAppointment.findMany({
     where: {
-      ...eduAppointmentScopeWhere({ institutionId, scope, now }),
+      // 🔴 OLA C · H-23 — LA COLA DE VALORACIONES TAMBIÉN SE RECORTA POR
+      // SEDE. No es fuga de tenant; es fuga del ALCANCE DE SEDE: una
+      // dirección restringida al campus Norte leía —con nombre y folio— las
+      // valoraciones pendientes del Sur. El recorte va por el sillón, igual
+      // que en la agenda.
+      ...eduAppointmentScopeWhere({ institutionId, scope, now, campusIds: ctx.campusIds }),
       type: "TAMIZAJE",
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
       startsAt: { gte: desde, lt: hasta },

@@ -437,6 +437,14 @@ function EditorRubrica({
             value={scaleMax}
             onChange={(e) => setScaleMax(e.target.value)}
           />
+          {/* H-92: dejarlo vacío al CREAR daba 0–100 en silencio, y la
+              escala se congela en cada calificación. Ahora el servidor lo
+              pregunta; esto lo dice antes de mandar. */}
+          <span className="edu-field__hint">
+            {rubrica
+              ? "Vacío conserva la escala que ya tenía."
+              : "Obligatorio: la escala queda congelada en cada calificación que se ponga con esta rúbrica."}
+          </span>
         </div>
       </div>
 

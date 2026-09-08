@@ -140,6 +140,12 @@ function etapaLabel(stage: string): string {
 interface EduDirAlcance {
   institutionId: string;
   timeZone: string;
+  /**
+   * H-123: la sede elegida, tal cual, para que el tablero pueda DECIR que
+   * está mezclando cifras de un edificio con cifras del instituto entero.
+   * `null` = sin recorte de sede.
+   */
+  campusIds: string[] | null;
   citas: (extra?: Prisma.EduStudentWhereInput) => Prisma.EduAppointmentWhereInput;
   casos: Prisma.EduCaseWhereInput;
   pacientes: Prisma.EduPatientWhereInput;
@@ -214,6 +220,7 @@ function eduDirAlcance(ctx: EduClinicaContext & { timeZone: string }, now: Date)
   return {
     institutionId,
     timeZone: ctx.timeZone,
+    campusIds,
     citas: (extra) =>
       eduAppointmentScopeWhere({
         institutionId,
@@ -571,6 +578,9 @@ export async function getEduDireccionAhora(
     alumnosAtendiendo: new Set(enSillon.map((c) => c.studentId)).size,
     sillonesEnUso: ocupacionPorSillon.size,
     sillonesTotal: rejilla.size,
+    // H-124: el numerador sale de `citas`, que SÍ está filtrado por
+    // especialidad; el denominador es la rejilla entera y no puede estarlo.
+    especialidadFiltrada: Boolean(programId),
     docentesResponsables: docentes.size,
     sillonesSinDocente,
     esperandoFirma: esperas.length,
@@ -785,6 +795,16 @@ export async function getEduDireccionPanel(
   const citasCortadas = citas.length > EDU_DIR_MAX_CITAS;
   const casosCortados = casos.length > EDU_DIR_MAX_FILAS;
   const cobrosCortados = cobros.length > EDU_DIR_MAX_FILAS;
+  // 🔴 OLA C · H-125 — EL PERIODO ANTERIOR TAMBIÉN SE TRUNCA, Y ANTES NO SE
+  // DECÍA.
+  //
+  // Los avisos solo miraban el periodo ACTUAL. El anterior se lee con el
+  // MISMO `take` y se recorta igual, pero su corte solo afecta a una cosa:
+  // la VARIACIÓN. Un mes con 19.000 citas comparado contra uno anterior de
+  // 24.000 amputado a 20.000 anuncia una subida del 20 % que no existe — y
+  // la regla que abre este archivo es «NINGÚN NÚMERO INVENTADO».
+  const previoCortado =
+    citasPrev.length > EDU_DIR_MAX_CITAS || casosPrev.length > EDU_DIR_MAX_FILAS;
   const citasV = citasCortadas ? citas.slice(0, EDU_DIR_MAX_CITAS) : citas;
   const citasPrevV = citasPrev.slice(0, EDU_DIR_MAX_CITAS);
   const casosV = casosCortados ? casos.slice(0, EDU_DIR_MAX_FILAS) : casos;
@@ -799,6 +819,26 @@ export async function getEduDireccionPanel(
   if (casosCortados || cobrosCortados) {
     avisos.push(
       `El periodo tiene más de ${EDU_DIR_MAX_FILAS.toLocaleString("es-MX")} casos o cobros y las cuentas se hicieron con los primeros. Acorta el periodo para que los totales sean exactos.`,
+    );
+  }
+  // 🔴 OLA C · H-123 — CON UNA SEDE ELEGIDA, EL TABLERO LO CONFIESA.
+  //
+  // Bajo el encabezado «Cómo va Campus Norte» conviven cifras del campus
+  // (sillones, cobrado, ocupación —todo lo que cuelga de un edificio—) y
+  // cifras del INSTITUTO ENTERO (los cinco «Pendientes» y la columna
+  // «Estudiantes»), porque un alumno ROTA entre sedes y su padrón es uno
+  // solo. Esa decisión es correcta y está escrita arriba; lo que faltaba es
+  // decirla. Se leía «Endodoncia · Estudiantes 40 · Pacientes 12» y se
+  // concluía que en el Norte 40 residentes atendieron a 12 personas. El
+  // Inicio de dirección ya lo confiesa con una nota; el tablero no.
+  if (alcance.campusIds && alcance.campusIds.length > 0) {
+    avisos.push(
+      "Con una sede elegida, lo que cuelga de un edificio (sillones, citas, ocupación y el dinero de esas citas) es de ESA sede; los estudiantes y los pendientes son del instituto entero, porque un alumno rota entre sedes y su padrón es uno solo.",
+    );
+  }
+  if (previoCortado) {
+    avisos.push(
+      "El periodo ANTERIOR también se salió del tope, así que las flechas de comparación pueden estar contando de menos: una subida puede ser el corte, no el trabajo. Acorta el periodo o filtra por especialidad para que la comparación sea real.",
     );
   }
   if (evaluacion.truncated) {
@@ -1695,11 +1735,29 @@ export async function getEduDireccionDetalle(
           ? { patient: { referredByStudentId: { not: null } } }
           : {}),
         ...(key === "pendiente-cobro" ? { balanceCents: { gt: 0 } } : {}),
-        ...(key === "control-tarifa" && listasDeAlumno.size > 0
+        // 🔴 OLA C · H-120 — SIN LISTA DE ALUMNO NO HAY CONTROL, Y NO HAY
+        // LISTA DE COBROS.
+        //
+        // El filtro por lista solo se aplicaba `&& listasDeAlumno.size > 0`.
+        // Sin ninguna lista con regla de alumno —el estado POR DEFECTO de
+        // una escuela recién montada— el filtro desaparecía y el detalle
+        // devolvía TODOS los cobros del periodo, pintados en rojo «ACTUAR»:
+        // la dirección se pasaba la mañana auditando 180 cobros correctos
+        // por una cifra que en la tarjeta decía 0.
+        //
+        // `{ in: [] }` es cero filas, que es la respuesta correcta: si
+        // ninguna lista es "de alumno", ningún cobro puede llevar una.
+        ...(key === "control-tarifa"
           ? { feeScheduleId: { in: Array.from(listasDeAlumno) } }
           : {}),
         ...(key === "control-inverso" && listasDeAlumno.size > 0
           ? { feeScheduleId: { notIn: Array.from(listasDeAlumno) } }
+          : {}),
+        // El inverso sin listas de alumno tampoco tiene nada que enseñar:
+        // "se le cobró tarifa de público a alguien que trajo un alumno"
+        // exige saber cuál es la de alumno.
+        ...(key === "control-inverso" && listasDeAlumno.size === 0
+          ? { feeScheduleId: { in: [] } }
           : {}),
       };
 

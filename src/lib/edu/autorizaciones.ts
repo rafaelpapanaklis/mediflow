@@ -88,6 +88,7 @@ import { EDU_SOAP_LABELS } from "@/lib/edu/expediente-core";
 import {
   EDU_APPOINTMENT_TYPE_LABELS,
   EDU_APPROVAL_STAGE_LABELS,
+  EDU_CASE_CLOSED_STATUSES,
   EDU_CASE_STATUS_LABELS,
   type EduApprovalStage,
   type EduCaseStatus,
@@ -650,7 +651,20 @@ export async function listEduApprovalInbox(
     where: {
       institutionId,
       status: "PENDING",
-      case: eduCaseScopeWhere({ institutionId, scope, now }),
+      case: {
+        ...eduCaseScopeWhere({ institutionId, scope, now }),
+        // 🔴 OLA C · H-32 — LA BANDEJA NO ARRASTRA CASOS CERRADOS.
+        //
+        // El `where` filtraba por PENDING y por alcance, nunca por el
+        // estado del CASO: la petición de un caso terminado, abandonado o
+        // TRASPASADO se quedaba arriba para siempre, poniéndose cada día
+        // más roja, y no había nada que firmar —el traspaso no toca las
+        // autorizaciones y el caso nuevo nace con las suyas—. La fila NO se
+        // borra ni se cambia de estado: sigue en la base como lo que fue,
+        // una petición que se quedó sin caso. Lo que deja de hacer es
+        // pedirle una firma a alguien.
+        status: { notIn: EDU_CASE_CLOSED_STATUSES },
+      },
     },
     orderBy: [{ isEmergency: "desc" }, { requestedAt: "asc" }],
     take: EDU_APPROVAL_MAX_ROWS + 1,
@@ -827,10 +841,25 @@ async function resolveCase(
   const caso = id
     ? await prisma.eduCase.findFirst({
         where: { ...eduCaseScopeWhere({ institutionId, scope, now }), id },
-        select: { id: true, studentId: true, patientId: true },
+        select: { id: true, studentId: true, patientId: true, status: true },
       })
     : null;
   if (!caso) throw new EduPadronError("Ese caso no existe o no te toca.", 404);
+
+  // 🔴 OLA C · H-42 — UN CASO CERRADO NO PIDE FIRMAS.
+  //
+  // Esta función comprobaba el tenant y el alcance, nunca el ESTADO: una
+  // pestaña vieja —o un POST a mano— metía en la bandeja la petición de un
+  // caso terminado, abandonado o ya traspasado, donde va a quedarse para
+  // siempre porque no hay nada que autorizar. Las dos puertas del gate
+  // (PLAN para "en tratamiento", ALTA para "terminado") se piden con el
+  // caso VIVO, así que aquí no se cierra ningún camino legítimo.
+  if ((EDU_CASE_CLOSED_STATUSES as string[]).includes(caso.status)) {
+    throw new EduPadronError(
+      `Ese caso está en "${EDU_CASE_STATUS_LABELS[caso.status as EduCaseStatus]}": un caso cerrado no manda nada a autorización. Si el paciente volvió, reábrelo primero.`,
+      409,
+    );
+  }
   return caso;
 }
 
@@ -1220,8 +1249,23 @@ export async function decideEduApproval(
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.eduCaseApproval.update({
-      where: { id: actual.id },
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔴 OLA C · H-07 — LA DECISIÓN NO PISA OTRA DECISIÓN.
+    //
+    // El `status !== "PENDING"` de arriba se lee FUERA de la transacción, y
+    // entre esa lectura y este UPDATE caben 300 ms: el titular rechaza con
+    // su motivo escrito, el de guardia pulsa "Autorizar" sobre la tarjeta
+    // vieja y el REJECTED se convertía en APPROVED con el motivo borrado.
+    // Estas filas SON el historial: no hay otro sitio donde mirar qué se
+    // decidió.
+    //
+    // `updateMany` acotado a PENDING —el mismo patrón que la receta quince
+    // líneas más abajo, y el que ya usaban `persistExpired` y los cierres
+    // de la Ola 4— y 409 si no movió nada. El throw deshace la transacción
+    // entera, así que tampoco queda la receta expedida.
+    // ═══════════════════════════════════════════════════════════════════
+    const decidida = await tx.eduCaseApproval.updateMany({
+      where: { institutionId, id: actual.id, status: "PENDING" },
       data: datosDeDecision(decision, ctx, now, {
         note,
         hash,
@@ -1230,6 +1274,12 @@ export async function decideEduApproval(
         signatureUrl,
       }),
     });
+    if (decidida.count === 0) {
+      throw new EduPadronError(
+        "Esa autorización ya la decidió alguien mientras la mirabas. Refresca la bandeja para ver en qué quedó: si la rechazaron, el motivo está ahí.",
+        409,
+      );
+    }
 
     if (esReceta && recetaData) {
       // `updateMany` acotado a PENDIENTE: si la receta ya no está
@@ -1364,16 +1414,26 @@ export async function decideEduApprovalBatch(
     aprobables.push({ id: f.id, hash: h ?? "" });
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C · H-31 — EL LOTE TAMPOCO RESUCITA UN RECHAZO.
+  //
+  // Antes esto eran `update({ where: { id } })` sobre filas leídas al
+  // principio de la función, con un comentario que decía que la ventana era
+  // de milisegundos y que "lo peor que pasa es que se re-firme algo ya
+  // firmado". No era lo peor: entre la lectura y la transacción cabe un
+  // RECHAZO de otro docente, y el lote lo convertía en APPROVED borrando el
+  // motivo. Con `updateMany` el `status: "PENDING"` SÍ entra en el `where`
+  // (es lo que `update` no admite y por lo que el comentario se rindió), y
+  // la que no se movió se reporta con el motivo que ya existía en el
+  // catálogo de exclusiones: "no-pendiente", el mismo que ve quien marca
+  // una que otro acaba de firmar.
+  // ═══════════════════════════════════════════════════════════════════
+  let approved = 0;
   if (aprobables.length > 0) {
-    await prisma.$transaction(
+    const movidas = await prisma.$transaction(
       aprobables.map((a) =>
-        prisma.eduCaseApproval.update({
-          // El `status: "PENDING"` del where no se puede poner en un
-          // `update` de Prisma, así que la carrera se cierra con la
-          // comprobación de arriba; la ventana es de milisegundos y lo peor
-          // que pasa es que se re-firme algo ya firmado con el mismo
-          // contenido.
-          where: { id: a.id },
+        prisma.eduCaseApproval.updateMany({
+          where: { institutionId, id: a.id, status: "PENDING" },
           data: datosDeDecision("APPROVED", ctx, now, {
             note: null,
             hash: a.hash,
@@ -1383,9 +1443,13 @@ export async function decideEduApprovalBatch(
         }),
       ),
     );
+    aprobables.forEach((a, i) => {
+      if ((movidas[i]?.count ?? 0) > 0) approved += 1;
+      else skipped.push({ id: a.id, reason: "no-pendiente" });
+    });
   }
 
-  return { approved: aprobables.length, skipped };
+  return { approved, skipped };
 }
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -727,10 +727,13 @@ export async function getEduBitacora(
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
       select: REQUIREMENT_SELECT,
     }),
+    // 🔴 OLA C · H-85 — SIN TOPE, como la lista de Evaluación (que no lo
+    // pone). El tope estaba sobre la consulta que alimenta el AVANCE, así
+    // que no acotaba: falsificaba. Son los casos de UN alumno, no los de
+    // trescientos; la tabla sí se corta más abajo, y lo dice.
     prisma.eduCase.findMany({
       where: { institutionId, studentId: alumno.id },
       orderBy: [{ openedAt: "desc" }],
-      take: EDU_EVALUACION_MAX_ROWS,
       select: CASE_FOR_COUNT_SELECT,
     }),
     prisma.eduAppointment.findMany({
@@ -755,7 +758,7 @@ export async function getEduBitacora(
 
   // La calificación vigente de cada caso, para la columna de la tabla.
   const notasPorCaso = agrupar(grades, (g) => g.caseId);
-  const casesRows: EduBitacoraCaseRow[] = casos.map((c) => {
+  const casesRows: EduBitacoraCaseRow[] = casos.slice(0, EDU_EVALUACION_MAX_ROWS).map((c) => {
     const vigente = eduCurrentGrade(notasPorCaso.get(c.id) ?? []);
     return {
       id: c.id,
@@ -763,6 +766,7 @@ export async function getEduBitacora(
       patientId: c.patientId,
       patientName: patientName(c.patient),
       patientFolio: c.patient.folio,
+      programId: c.programId,
       programName: c.program.name,
       procedureId: c.procedureId,
       procedureName: c.procedure?.name ?? null,
@@ -800,12 +804,15 @@ export async function getEduBitacora(
     hours: horas,
     hoursLabel: eduHoursLabel(horas.totalMinutes),
     cases: casesRows,
+    casesTotal: casos.length,
+    casesTruncated: casos.length > EDU_EVALUACION_MAX_ROWS,
     casesWithoutProcedure: casos.filter((c) => !c.procedureId).length,
     grades,
     transfers,
     averageX100: promedio.averageX100,
     averageLabel: promedio.averageX100 === null ? null : eduScoreLabel(promedio.averageX100),
     averageScaleMax: promedio.scaleMax,
+    averageIgnored: promedio.ignored,
     generatedLabel: fechaHora(now, zona),
   };
 }

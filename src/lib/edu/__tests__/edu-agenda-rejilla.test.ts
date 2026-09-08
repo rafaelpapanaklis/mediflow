@@ -112,6 +112,12 @@ function cita(over: {
     startLabel: over.startLabel,
     endLabel: etiqueta(minutoDe(over.startLabel) + over.minutes),
     minutes: over.minutes,
+    // H-26: los tres sellos de tiempo viajan con la cita. En la rejilla no
+    // se pintan, pero el tipo los exige.
+    checkedInLabel: null,
+    startedLabel: null,
+    completedLabel: null,
+    sessionMinutes: null,
     type: "TRATAMIENTO",
     status: over.status ?? "SCHEDULED",
     notes: null,
