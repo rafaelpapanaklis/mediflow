@@ -3,6 +3,8 @@ import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { addEduPayment } from "@/lib/edu/caja";
 import { eduPagosPideDevolucion } from "@/lib/edu/dinero-core";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduCampusForCharge, eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,9 @@ export const dynamic = "force-dynamic";
  *
  * 🔴 El turno que se estampa es el del PAGO, no el del cobro: un cobro de
  * ayer que se liquida hoy entra en el corte de HOY, porque el dinero está
- * en la caja de hoy.
+ * en la caja de hoy. Y desde la C·fin también en el corte de AQUÍ: el
+ * efectivo de un cobro de Norte pagado en el mostrador de Sur entra en el
+ * cajón de Sur, que es donde está el billete.
  */
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const g = await eduApiGuard("caja.charge");
@@ -43,7 +47,21 @@ export async function POST(request: Request, { params }: { params: { id: string 
         { status: 403 },
       );
     }
-    const res = await addEduPayment(g.ctx, params.id, body, { canRefund });
+    // 🔴 H-63 · EL ALCANCE POR SEDE al leer el cobro, y 🔴 EL MOSTRADOR
+    // en el que entra el dinero para sellar el turno. Las dos salen del
+    // selector de la barra superior (`getEduCampusScope`), nunca del body.
+    //
+    // Con la vista consolidada puesta, `eduCampusForCharge` no puede decir
+    // dónde estás y aquí NO se rebota: se manda `null` y el pago cae en el
+    // turno de la sede del cobro, que es exactamente lo que se hacía
+    // antes. Cobrar exige elegir sede porque emite un documento; abonar a
+    // uno que ya existe, no.
+    const sede = await getEduCampusScope(g.ctx);
+    const donde = eduCampusForCharge(sede);
+    const res = await addEduPayment(eduWithCampus(g.ctx, sede), params.id, body, {
+      canRefund,
+      campusId: donde.ok ? donde.campusId : null,
+    });
     // 🔴 H-06 · `duplicado` = este POST traía una clave de idempotencia ya
     // usada y NO se registró un segundo abono: se devuelve el estado del
     // cobro tal como quedó. 200 y no 201, porque no se creó nada. Mismo

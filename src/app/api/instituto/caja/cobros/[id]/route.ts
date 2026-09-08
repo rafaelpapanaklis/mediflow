@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { cancelEduCharge, getEduCharge } from "@/lib/edu/caja";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +18,11 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   if ("response" in g) return g.response;
 
   try {
-    const cobro = await getEduCharge(g.ctx, params.id, {
+    // 🔴 H-63 · EL ALCANCE POR SEDE. La lista ya lo respetaba y esta
+    // lectura por id no: con el id en la mano se abría el recibo de otra
+    // sede entero. Mismo patrón que facturación (H-69).
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const cobro = await getEduCharge(cctx, params.id, {
       timeZone: g.ctx.institution.timezone,
     });
     if (!cobro) {
@@ -41,7 +47,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   try {
     const body = await eduReadJson(request);
-    const res = await cancelEduCharge(g.ctx, params.id, { reason: body.reason });
+    // 🔴 H-63 · y anular tampoco se hace sobre la sede de al lado.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const res = await cancelEduCharge(cctx, params.id, { reason: body.reason });
     return NextResponse.json({ ok: true, id: res.id });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/caja/cobros/[id]");

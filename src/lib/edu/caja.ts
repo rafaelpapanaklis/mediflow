@@ -68,6 +68,9 @@ import {
 } from "@/lib/edu/dinero-core";
 import { eduCampusLabel } from "@/lib/edu/campus-core";
 import { eduCorteDesglose, eduCorteDesgloseLeer } from "@/lib/edu/caja-cierre-core";
+// La aritmética del folio, compartida con la factura: es la MISMA regla y
+// vive en un módulo puro (client-safe, sin prisma) que ya tiene su prueba.
+import { eduNextInvoiceFolio } from "@/lib/edu/facturacion-core";
 import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 import { eduInstallmentStatus, eduPlanResumen } from "@/lib/edu/pagos-core";
 import {
@@ -648,6 +651,13 @@ async function sumaNetaDelTurno(ctx: EduClinicaContext, sessionId: string): Prom
  * El id de la URL no basta: la fila se busca con el `where` del alcance,
  * así que un cobro de otra escuela se ve exactamente igual que uno que no
  * existe.
+ *
+ * 🔴 OLA C·fin · H-63 — Y ESO INCLUYE LA SEDE. `listEduCharges` recortaba
+ * por sede desde la Ola 11 y esta lectura por ID no: la cajera de Norte no
+ * veía el cobro de Sur en su tabla, pero con el id en la mano lo abría
+ * entero. Recortar la lista y no la puerta es tapar, no cerrar — y
+ * facturación ya lo hacía bien (H-69), así que la incoherencia era del
+ * propio módulo consigo mismo.
  */
 export async function getEduCharge(
   ctx: EduClinicaContext,
@@ -660,7 +670,11 @@ export async function getEduCharge(
 
   const c = await prisma.eduCharge.findFirst({
     where: {
-      ...eduChargeScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") }),
+      ...eduChargeScopeWhere({
+        institutionId,
+        scope: eduVisibility(ctx, "charges"),
+        campusIds: ctx.campusIds,
+      }),
       id,
     },
     select: CHARGE_SELECT,
@@ -702,16 +716,31 @@ export async function listEduPatientCharges(
  * alfabético y sin el relleno "C-9" saldría después de "C-10", que es
  * justo lo que rompería este cálculo. Mismo patrón que el folio del
  * paciente de la Ola 2.
+ *
+ * 🔴 OLA C·fin · LAS DOS PREGUNTAS, porque ninguna sola basta.
+ *
+ * El relleno hace que el orden alfabético coincida con el numérico… HASTA
+ * C-9999. A partir de ahí los folios tienen cinco dígitos y, como texto,
+ * "C-10000" va ANTES que "C-9999": el "último" se quedaba en C-9999 para
+ * siempre, se proponía C-10000, chocaba con el índice único, y el bucle de
+ * tres intentos de `createEduCharge` proponía TRES VECES el mismo folio.
+ * La caja dejaba de cobrar para toda la escuela, con un mensaje que
+ * invitaba a reintentar algo que no se iba a arreglar. Una clínica escolar
+ * llega a 10 000 cobros mucho antes que a 10 000 CFDI.
+ *
+ * El CONTEO no tiene ese techo. Se reusa `eduNextInvoiceFolio` —la función
+ * pura que H-68 escribió al lado para la factura, con su prueba— en vez de
+ * copiar aquí la aritmética: dos copias de la misma regla son dos sitios
+ * donde discrepar. Manda el mayor de los dos, así que el alfabético sigue
+ * mandando si alguna vez hubiera huecos.
  */
 async function nextEduChargeFolio(institutionId: string): Promise<string> {
-  const last = await prisma.eduCharge.findFirst({
-    where: { institutionId, folio: { startsWith: "C-" } },
-    orderBy: { folio: "desc" },
-    select: { folio: true },
-  });
-  const m = last?.folio.match(/^C-(\d{1,6})$/);
-  const n = m ? Number(m[1]) + 1 : 1;
-  return `C-${String(n).padStart(4, "0")}`;
+  const where = { institutionId, folio: { startsWith: "C-" } };
+  const [last, emitidos] = await Promise.all([
+    prisma.eduCharge.findFirst({ where, orderBy: { folio: "desc" }, select: { folio: true } }),
+    prisma.eduCharge.count({ where }),
+  ]);
+  return eduNextInvoiceFolio("C", last?.folio ?? null, emitidos);
 }
 
 export interface EduPaymentInput {
@@ -1381,7 +1410,19 @@ export async function addEduPayment(
     /** H-06 · la clave de idempotencia del cliente. Opcional. */
     idempotencyKey?: unknown;
   },
-  options: { canRefund?: boolean } = {},
+  options: {
+    canRefund?: boolean;
+    /**
+     * 🔴 OLA C·fin · EN QUÉ MOSTRADOR SE ESTÁ RECIBIENDO EL DINERO.
+     *
+     * La resuelve el endpoint con `eduCampusForCharge` sobre el selector
+     * de la barra, igual que `createEduCharge`, y JAMÁS sale del body.
+     * `null`/ausente = el llamador no sabe dónde está (vista consolidada,
+     * instituto sin sedes): entonces se cae a la sede del cobro, que es lo
+     * que se hacía siempre.
+     */
+    campusId?: string | null;
+  } = {},
   now: Date = new Date(),
 ): Promise<{
   id: string;
@@ -1397,7 +1438,14 @@ export async function addEduPayment(
 
   const cobro = await prisma.eduCharge.findFirst({
     where: {
-      ...eduChargeScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") }),
+      // 🔴 OLA C·fin · H-63 — LA SEDE TAMBIÉN AQUÍ. Sin esto, la cajera de
+      // Norte no veía el cobro de Sur en su tabla pero, con el id en la
+      // mano, podía abonarle, devolverle y dejarlo liquidado.
+      ...eduChargeScopeWhere({
+        institutionId,
+        scope: eduVisibility(ctx, "charges"),
+        campusIds: ctx.campusIds,
+      }),
       id,
     },
     select: {
@@ -1491,7 +1539,29 @@ export async function addEduPayment(
     );
   }
 
-  const sesion = await getEduOpenCashSession(ctx, cobro.campusId);
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·fin · EL PAGO CAE EN EL CAJÓN DONDE ENTRA EL BILLETE.
+  //
+  // Esto resolvía el turno con `cobro.campusId` —la sede donde NACIÓ el
+  // cobro— y lo justificaba con «el dinero de un cobro y el de sus pagos
+  // tienen que caer en el MISMO corte». El argumento no se sostiene: el
+  // paciente paga $5,000 EN EFECTIVO en Sur un cobro emitido en Norte, y
+  // el cajón de Sur cierra con $5,000 de sobra mientras el esperado de
+  // Norte pide $5,000 que nadie tiene. El corte compara billetes contados
+  // contra billetes esperados, y los billetes están donde se entregaron.
+  //
+  // Y es lo que este módulo ya prometía por escrito dos veces —«el turno
+  // que se estampa es el del PAGO, no el del cobro»—: hasta hoy eso solo
+  // era verdad para el CUÁNDO (un cobro de ayer liquidado hoy entra en el
+  // corte de hoy) y no para el DÓNDE. Ahora lo es para los dos.
+  //
+  // Se cae a la sede del cobro cuando el llamador no sabe en qué mostrador
+  // está: con la vista consolidada puesta, o con un instituto sin sedes,
+  // el comportamiento es exactamente el de antes.
+  // ═══════════════════════════════════════════════════════════════════
+  const mostrador =
+    typeof options.campusId === "string" && options.campusId ? options.campusId : cobro.campusId;
+  const sesion = await getEduOpenCashSession(ctx, mostrador);
 
   // 🔴 H-06 · Y LA CARRERA DE VERDAD, la de dos POST simultáneos. El
   // pre-chequeo de arriba solo atrapa el reintento SECUENCIAL; dos
@@ -1712,7 +1782,13 @@ export async function cancelEduCharge(
 
   const cobro = await prisma.eduCharge.findFirst({
     where: {
-      ...eduChargeScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") }),
+      // 🔴 OLA C·fin · H-63 — ANULAR UN COBRO DE OTRA SEDE TAMPOCO. Es la
+      // tercera puerta del mismo hallazgo: leer, abonar y cancelar por id.
+      ...eduChargeScopeWhere({
+        institutionId,
+        scope: eduVisibility(ctx, "charges"),
+        campusIds: ctx.campusIds,
+      }),
       id,
     },
     select: { id: true, patientId: true, paidCents: true, status: true },

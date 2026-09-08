@@ -194,10 +194,28 @@ test("🔴 H-09 · el cobro, el abono y la mensualidad sellan el turno de SU sed
     /getEduOpenCashSession\(ctx,\s*options\.campusId/,
     "el cobro tiene que caer en el turno de la sede en la que se emite",
   );
+  // ⚠️ ESTA REGLA CAMBIÓ EN LA C·fin, y el cambio es el hallazgo.
+  //
+  // Aquí se exigía `getEduOpenCashSession(ctx, cobro.campusId)` — «un abono
+  // cae en el turno de la sede del COBRO que paga»— con el argumento de que
+  // el dinero de un cobro y el de sus pagos tienen que caer en el mismo
+  // corte. La auditoría final lo refutó y tiene razón: el paciente paga
+  // $5,000 EN EFECTIVO en Sur un cobro emitido en Norte, y el cajón de Sur
+  // cierra con $5,000 de sobra mientras el esperado de Norte pide $5,000
+  // que nadie tiene. El corte compara billetes contra billetes, y los
+  // billetes están donde se entregaron.
+  //
+  // Lo que NO cambió, y sigue probado abajo: el turno nunca se resuelve a
+  // ciegas, y la sede del mostrador jamás sale del body.
   assert.match(
     cuerpoDe(caja, "addEduPayment"),
-    /getEduOpenCashSession\(ctx,\s*cobro\.campusId\)/,
-    "un abono cae en el turno de la sede del cobro que paga",
+    /getEduOpenCashSession\(ctx,\s*mostrador\)/,
+    "un abono cae en el turno del MOSTRADOR donde entra el dinero",
+  );
+  assert.match(
+    cuerpoDe(caja, "addEduPayment"),
+    /options\.campusId[\s\S]{0,80}:\s*cobro\.campusId;/,
+    "sin mostrador conocido (consolidada, instituto sin sedes) se cae a la sede del cobro",
   );
   const pagos = PAGOS();
   assert.match(pagos, /getEduOpenCashSession\(ctx,\s*cobro\.campusId\)/);

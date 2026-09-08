@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { setEduAppointmentStatus } from "@/lib/edu/agenda";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +37,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       { role: g.ctx.role, permissionsOverride: g.ctx.user.permissionsOverride },
       "agenda.manage",
     );
-    const res = await setEduAppointmentStatus(g.ctx, params.id, body.status, { canManage });
+    // 🔴 S-5 · EL ALCANCE DE SEDE, DE VERDAD. `setEduAppointmentStatus`
+    // mete `campusIds: ctx.campusIds` en el `where` desde la Ola C (H-23),
+    // pero aquí llegaba `g.ctx` sin envolver: el campo es opcional, llegaba
+    // `undefined`, Prisma descartaba la clave y el filtro era código muerto
+    // que compilaba sin ruido. Una dirección restringida al Norte podía
+    // cerrar, cancelar o dar por no presentada una cita del Sur con solo
+    // tener el id en la URL.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const res = await setEduAppointmentStatus(cctx, params.id, body.status, { canManage });
     return NextResponse.json({ ok: true, id: res.id, status: res.status });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/agenda/[id]/estado");

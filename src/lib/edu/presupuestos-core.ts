@@ -143,6 +143,48 @@ export function eduQuoteMotivoParaNoAceptar(
   return null;
 }
 
+/**
+ * 🔴 S-6 · ¿LA LIGA PÚBLICA TODAVÍA SIRVE?
+ *
+ * Es la puerta de `getEduQuotePorToken` y de `aceptarEduQuotePorToken`, y
+ * existe porque el token **no caducaba nunca**: el GET público seguía
+ * devolviendo folio, título, partidas e importes de un presupuesto
+ * CANCELADO, RECHAZADO, vencido o ya convertido en cobro — solo cambiaba
+ * que aparecía un texto y desaparecía el botón. Y `presentarEduQuote`
+ * REUSA el token a propósito (para no matar el enlace que el paciente ya
+ * tiene en su WhatsApp), así que sin esta función la liga es la misma para
+ * siempre, y el WhatsApp que la lleva también está en el teléfono de quien
+ * se la reenvió.
+ *
+ * La liga sirve mientras el presupuesto está VIVO PARA EL PACIENTE:
+ *
+ *   · PRESENTADO y dentro de su vigencia → sí, es lo que tiene que firmar;
+ *   · ACEPTADO y todavía sin cobro       → sí, es su propio acuse: quien
+ *     acaba de aceptar recarga la página y tiene que ver qué aceptó;
+ *   · cualquier otra cosa                → NO. Y "no" es 404, el MISMO que
+ *     un token inexistente: decir "venció" o "lo canceló la clínica"
+ *     confirmaría que ese token es real ante quien tiene la liga reenviada.
+ *
+ * BORRADOR también queda fuera, y por eso mismo: un presupuesto devuelto a
+ * edición conserva su token (volverá a servir cuando se vuelva a
+ * presentar), pero mientras tanto sus partidas se están cambiando y no son
+ * las que el paciente vio.
+ */
+export function eduQuoteLigaVigente(
+  quote: {
+    status: EduQuoteStatus;
+    validUntil: Date | null;
+    /** Lleno = ya se convirtió en cobro; el papel dejó de ser una oferta. */
+    chargeId?: string | null;
+  },
+  now: Date,
+): boolean {
+  if (quote.chargeId) return false;
+  if (quote.status === "ACEPTADO") return true;
+  if (quote.status !== "PRESENTADO") return false;
+  return !eduQuoteVencido(quote, now);
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 3 · LA ARITMÉTICA
 // ═══════════════════════════════════════════════════════════════════════

@@ -833,6 +833,41 @@ async function enviarYRegistrar(args: EduWaSendArgs): Promise<EduWaSendResult> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·fin · «DIJO QUE NO QUIERE QUE LE ESCRIBAN», Y ESO SE RESPETA.
+  //
+  // `EduPatient.contactPreference` promete exactamente eso en el schema
+  // («NINGUNO = dijo que no quiere que le escriban, y eso se respeta») y no
+  // lo miraba nadie: cero apariciones de esa columna en todo el vertical.
+  // La escuela contestaba a una petición de no contacto escribiéndole al
+  // paciente igual.
+  //
+  // 🔴 SE PREGUNTA AQUÍ, EN LA ÚNICA PUERTA, y no en el `where` del barrido
+  // de recordatorios: así también lo respetan el recibo y el
+  // consentimiento que se mandan a mano desde la ficha, y ninguna pantalla
+  // futura puede olvidárselo. Es una lectura por aviso que de verdad va a
+  // salir, barata al lado de la llamada a Meta que viene después.
+  //
+  // ⚠️ Solo NINGUNO bloquea. LLAMADA y CORREO son una PREFERENCIA de canal,
+  // no una negativa, y apagarles el recordatorio de la cita sería una
+  // decisión de producto que nadie ha tomado. NULL = nadie se lo preguntó.
+  //
+  // Va antes del teléfono a propósito: si pidió que no le escriban, el
+  // motivo que queda escrito tiene que ser ése y no «el teléfono no tiene
+  // 10 dígitos».
+  // ═══════════════════════════════════════════════════════════════════
+  if (args.patientId) {
+    const ficha = await prisma.eduPatient.findFirst({
+      where: { id: args.patientId, institutionId: args.institutionId },
+      select: { contactPreference: true },
+    });
+    if (ficha?.contactPreference === "NINGUNO") {
+      return bloquear(
+        "Este paciente pidió que no se le contacte (preferencia de contacto: ninguno), así que este aviso no se mandó.",
+      );
+    }
+  }
+
   const phone = eduWaPhone(args.rawPhone);
   if (!phone) {
     return bloquear(
