@@ -67,8 +67,14 @@ import {
   type EduPagoValidado,
 } from "@/lib/edu/dinero-core";
 import { eduCampusLabel } from "@/lib/edu/campus-core";
+import { eduCorteDesglose, eduCorteDesgloseLeer } from "@/lib/edu/caja-cierre-core";
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 import { eduInstallmentStatus, eduPlanResumen } from "@/lib/edu/pagos-core";
-import { resolveEduChargeLines, type EduLineaCliente } from "@/lib/edu/tarifas";
+import {
+  resolveEduChargeLines,
+  type EduLineaCliente,
+  type EduLineaResuelta,
+} from "@/lib/edu/tarifas";
 import {
   eduCaseScopeWhere,
   eduChargeScopeWhere,
@@ -86,6 +92,23 @@ import {
 } from "@/lib/edu/types";
 
 export { EduPadronError as EduCajaError };
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * EL CONTEXTO DE LAS ESCRITURAS DE CAJA.
+ *
+ * Es el `EduClinicaContext` de siempre —el que decide tenant y alcance—
+ * MÁS lo que la bitácora necesita para firmar el renglón: el nombre y el
+ * rol de quien escribe, CONGELADOS. Se pide en la firma y no se saca de
+ * una variable global por la misma razón que el alcance: un actor
+ * implícito es el que la siguiente función olvida pasar.
+ *
+ * Las LECTURAS siguen tomando `EduClinicaContext` a secas: leer no
+ * escribe renglón, y estrechar la puerta de una lectura sin necesidad
+ * obliga a fabricar un usuario completo para llamarla desde una prueba.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduCajaContext extends EduClinicaContext, EduAuditActor {}
 
 function requireInstitution(ctx: EduClinicaContext): string {
   const id = ctx?.institutionId;
@@ -118,6 +141,18 @@ function persona(u: { firstName: string; lastName: string; email: string } | nul
   return u ? eduUserDisplayName(u) : "—";
 }
 
+/**
+ * El nombre de quien está escribiendo, tal como se CONGELA en la bitácora
+ * y en el rastro de las notas.
+ *
+ * No usa `eduUserDisplayName` porque el contexto de la sesión solo trae
+ * nombre y apellido (`EduAuditActor`), no el correo: pedirle el correo
+ * aquí obligaría a arrastrar el `EduUser` entero hasta cada escritura.
+ */
+function nombreDelActor(ctx: EduCajaContext): string {
+  return `${ctx.user.firstName} ${ctx.user.lastName}`.trim().slice(0, 160) || "—";
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · LA FORMA DE UN COBRO
 // ═══════════════════════════════════════════════════════════════════════
@@ -146,6 +181,13 @@ const CHARGE_SELECT = {
   patient: { select: { firstName: true, lastName: true, folio: true } },
   chargedBy: { select: { firstName: true, lastName: true, email: true } },
   cancelledBy: { select: { firstName: true, lastName: true, email: true } },
+  // 🔴 Ola C · DE QUÉ PRESUPUESTO VIENE ESTE COBRO. La columna llena en el
+  // presupuesto (`EduQuote.chargeId`) ES la llave de idempotencia de la
+  // conversión, así que esta lista tiene 0 o 1 fila; el `take: 1` lo dice
+  // en el código y no solo en el esquema. Sin esto, un cobro convertido
+  // era indistinguible de uno tecleado a mano, y quien lo mira no podía
+  // saber por qué el precio no es el del tarifario de hoy.
+  quotes: { select: { id: true, folio: true }, orderBy: { createdAt: "asc" }, take: 1 },
   items: {
     orderBy: { createdAt: "asc" },
     select: {
@@ -277,6 +319,8 @@ function toChargeRow(c: ChargePayload, ctx: ChargeCtx): EduChargeRow {
     cancelledAt: iso(c.cancelledAt),
     cancelledByName: c.cancelledBy ? persona(c.cancelledBy) : null,
     cancelReason: c.cancelReason,
+    quoteId: c.quotes[0]?.id ?? null,
+    quoteFolio: c.quotes[0]?.folio ?? null,
     items: c.items.map((i) => ({
       id: i.id,
       procedureId: i.procedureId,
@@ -346,17 +390,105 @@ function toChargeRow(c: ChargePayload, ctx: ChargeCtx): EduChargeRow {
 // 2 · LECTURAS
 // ═══════════════════════════════════════════════════════════════════════
 
-/** El turno abierto del instituto, si hay. */
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 Ola C · H-09 · EL TURNO ABIERTO **DE ESTA SEDE**.
+ *
+ * Hasta esta ola el turno era del INSTITUTO: `findFirst({institutionId,
+ * closedAt: null})`. Campus Norte abría a las 8:00, a las 8:05 la cajera
+ * de Sur recibía «Ya hay un turno de caja abierto», cobraba igual, y cada
+ * pago suyo se sellaba con el turno de Norte. Al cerrar, Norte contaba SU
+ * cajón y el sistema le exigía el efectivo de las DOS sedes: el corte
+ * decía «Faltaron $8,400» todos los días.
+ *
+ * Ahora hay UN turno abierto POR SEDE, y la resolución es esta —escrita
+ * una sola vez porque la usan el cobro, el abono, la devolución, la
+ * mensualidad y la pantalla:
+ *
+ *   1. Con sede: el turno abierto DE ESA SEDE.
+ *   2. Si esa sede no tiene turno propio, el turno abierto **SIN SEDE**.
+ *      🔴 Y esto NO es un parche: un turno sin sede es «el turno del
+ *      instituto», que es lo que son TODOS los que ya existen en la base
+ *      y lo que sigue siendo el turno de una escuela de una sola sede.
+ *      Mientras uno de ésos siga abierto está recogiendo el dinero de
+ *      todo el mundo, y mandar los cobros de Sur a un turno nuevo dejaría
+ *      el suyo a medias. Aplicar esta ola no cambia el comportamiento de
+ *      ningún turno vivo: ésa es la propiedad que se busca.
+ *   3. Sin sede (nadie eligió mostrador, o el instituto no tiene sedes):
+ *      el turno sin sede; y si no lo hay y solo queda UNO abierto, ése —
+ *      con uno solo no hay ambigüedad que resolver. Con varios, `null`:
+ *      inventar cuál es sería sellar el dinero en la caja equivocada.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduOpenCashSession {
+  id: string;
+  openedAt: Date;
+  openingCents: number;
+  campusId: string | null;
+}
+
 export async function getEduOpenCashSession(
   ctx: EduClinicaContext,
-): Promise<{ id: string; openedAt: Date; openingCents: number } | null> {
+  /**
+   * En qué sede está el mostrador. Lo resuelve el endpoint con
+   * `eduCampusForCharge` a partir del selector de la barra superior, o lo
+   * hereda del cobro que se está pagando. 🔴 NUNCA sale del body: un
+   * campusId del navegador metería el dinero en el corte de la otra sede.
+   */
+  campusId?: string | null,
+): Promise<EduOpenCashSession | null> {
   const institutionId = requireDinero(ctx);
-  return prisma.eduCashSession.findFirst({
+  const abiertas = await prisma.eduCashSession.findMany({
     where: { institutionId, closedAt: null },
     orderBy: { openedAt: "desc" },
-    select: { id: true, openedAt: true, openingCents: true },
+    select: { id: true, openedAt: true, openingCents: true, campusId: true },
   });
+  if (abiertas.length === 0) return null;
+
+  const sinSede = abiertas.find((s) => s.campusId === null) ?? null;
+  const sede = typeof campusId === "string" && campusId ? campusId : null;
+  if (sede) return abiertas.find((s) => s.campusId === sede) ?? sinSede;
+  if (sinSede) return sinSede;
+  return abiertas.length === 1 ? abiertas[0] : null;
 }
+
+/**
+ * Los turnos abiertos EN OTRAS SEDES, para que la pantalla pueda decirlo.
+ *
+ * «No hay turno abierto» dejó de ser una sola cosa: puede no haberlo aquí
+ * y llevar seis horas abierto en el campus de al lado. Sin esta lista,
+ * quien abre caja en Sur se entera al cuadrar.
+ */
+async function otrosTurnosAbiertos(
+  institutionId: string,
+  exceptoId: string | null,
+): Promise<{ id: string; campusLabel: string; openedByName: string; openedAt: string }[]> {
+  const filas = await prisma.eduCashSession.findMany({
+    where: { institutionId, closedAt: null, ...(exceptoId ? { id: { not: exceptoId } } : {}) },
+    orderBy: { openedAt: "desc" },
+    take: EDU_MAX_TURNOS_ABIERTOS,
+    select: {
+      id: true,
+      openedAt: true,
+      campus: { select: { name: true, code: true } },
+      openedBy: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+  return filas.map((f) => ({
+    id: f.id,
+    campusLabel: f.campus ? eduCampusLabel(f.campus) : "Sin sede (turno del instituto)",
+    openedByName: persona(f.openedBy),
+    openedAt: f.openedAt.toISOString(),
+  }));
+}
+
+/**
+ * Tope de turnos abiertos que se listan. Uno por sede y el tope de sedes
+ * es 40 (`EDU_MAX_CAMPUSES`), así que 40 es el techo real; se pide de
+ * todos modos para que una base con basura no traiga mil filas a pintar
+ * un aviso.
+ */
+const EDU_MAX_TURNOS_ABIERTOS = 40;
 
 function chargesWhere(
   ctx: EduClinicaContext,
@@ -418,6 +550,15 @@ function chargesWhere(
  */
 export interface EduChargeReadOptions {
   timeZone?: string;
+  /**
+   * 🔴 Ola C · H-09 · LA SEDE DEL MOSTRADOR, para que «solo el turno
+   * abierto» sea el turno DE ESTA SEDE. Sin esto, con Norte y Sur
+   * abiertos a la vez, el filtro enseñaría los cobros del turno de la
+   * otra — la misma confusión que el hallazgo describe en el arqueo, con
+   * otro disfraz. La resuelve el llamador con `eduCampusForCharge`; no
+   * sale del body.
+   */
+  campusId?: string | null;
 }
 
 export async function listEduCharges(
@@ -426,7 +567,9 @@ export async function listEduCharges(
   options: EduChargeReadOptions = {},
 ): Promise<EduChargesPage> {
   requireDinero(ctx);
-  const sesion = filters.soloTurno ? await getEduOpenCashSession(ctx) : null;
+  const sesion = filters.soloTurno
+    ? await getEduOpenCashSession(ctx, options.campusId ?? null)
+    : null;
 
   // 🔴 SIN TURNO ABIERTO, EL DEFAULT ENSEÑA EL HISTÓRICO. El fallo que
   // arregla —un cobro recién emitido que desaparecía de la lista— y por
@@ -710,7 +853,7 @@ async function resolverCaso(
  * conceptos o un pago sin cobro, que es dinero perdido en la base.
  */
 export async function createEduCharge(
-  ctx: EduClinicaContext,
+  ctx: EduCajaContext,
   input: EduChargeInput,
   options: {
     canRefund?: boolean;
@@ -725,6 +868,36 @@ export async function createEduCharge(
      * dinero no se detiene por una columna de infraestructura.
      */
     campusId?: string | null;
+    /**
+     * ═════════════════════════════════════════════════════════════════
+     * 🔴 Ola C · LAS LÍNEAS **YA CONGELADAS** DE UN PRESUPUESTO ACEPTADO.
+     *
+     * SOLO EL SERVIDOR, y solo desde `convertirEduQuote` (presupuestos.ts).
+     * ⛔ NUNCA sale del body: ninguna ruta la lee de la petición, y por eso
+     * no es un agujero en el antifraude del precio.
+     *
+     * Existe porque re-cotizar aquí sería TRAICIONAR lo que el paciente
+     * aceptó: si en marzo firmó una resina a $800 y hoy el tarifario dice
+     * $1,200, `resolveEduChargeLines` cobraría $1,200 —ése es su trabajo—
+     * y el cobro no cuadraría con el papel que hay firmado. El precio de
+     * un presupuesto aceptado ya lo puso el servidor una vez, cuando se
+     * armó, y ahí se quedó congelado con su hash de aceptación.
+     *
+     * La alternativa era mandar las partidas como "líneas libres" (sin
+     * `procedureId`), y se descartó: el cobro perdería el enlace con el
+     * catálogo y ningún reporte por procedimiento volvería a ver ese
+     * dinero.
+     * ═════════════════════════════════════════════════════════════════
+     */
+    lineasCongeladas?: EduLineaResuelta[];
+    /** El presupuesto del que viene, para el renglón de bitácora. */
+    quoteId?: string | null;
+    /**
+     * Qué se escribe en `feeScheduleLabel`. Solo lo usa la conversión de
+     * un presupuesto ("Presupuesto P-0007"): el recibo tiene que poder
+     * decir de dónde salió ese precio, y no salió de una lista.
+     */
+    feeScheduleLabel?: string | null;
   } = {},
   now: Date = new Date(),
 ): Promise<{ id: string; folio: string; descartados: number; duplicado: boolean }> {
@@ -766,23 +939,34 @@ export async function createEduCharge(
   if (!paciente) throw new EduPadronError("Ese paciente no es de este instituto.", 404);
 
   const lineasCliente = Array.isArray(input.items) ? (input.items as EduLineaCliente[]) : [];
-  if (lineasCliente.length === 0) throw new EduPadronError("El cobro no tiene ni un concepto.");
-  if (lineasCliente.length > EDU_MAX_CHARGE_ITEMS) {
+  // Un cobro que nace de un presupuesto aceptado trae sus partidas por
+  // `options.lineasCongeladas` y no por el body: el "ni un concepto" se
+  // pregunta contra las que de verdad van a escribirse.
+  const cuantasLineas = options.lineasCongeladas?.length ?? lineasCliente.length;
+  if (cuantasLineas === 0) throw new EduPadronError("El cobro no tiene ni un concepto.");
+  if (cuantasLineas > EDU_MAX_CHARGE_ITEMS) {
     throw new EduPadronError(
       `Un cobro admite hasta ${EDU_MAX_CHARGE_ITEMS} conceptos. Divídelo en dos.`,
     );
   }
 
   // ── 🔴 AQUÍ SE COTIZA EN EL SERVIDOR ────────────────────────────────
-  const { applied, lines, descartados } = await resolveEduChargeLines(
-    institutionId,
-    patientId,
-    lineasCliente,
-    undefined,
-    // H-10 · la lista elegida a mano. La valida tarifas.ts (activa, MANUAL
-    // y de este instituto) y lanza si no cumple.
-    { feeScheduleId: input.feeScheduleId },
-  );
+  // …salvo cuando las líneas vienen CONGELADAS de un presupuesto aceptado
+  // (ver `options.lineasCongeladas`, arriba): ahí el precio ya lo puso el
+  // servidor cuando se armó el presupuesto, y volver a cotizarlo cobraría
+  // algo distinto de lo que el paciente firmó.
+  const congeladas = options.lineasCongeladas;
+  const { applied, lines, descartados } = congeladas
+    ? { applied: null, lines: congeladas, descartados: 0 }
+    : await resolveEduChargeLines(
+        institutionId,
+        patientId,
+        lineasCliente,
+        undefined,
+        // H-10 · la lista elegida a mano. La valida tarifas.ts (activa,
+        // MANUAL y de este instituto) y lanza si no cumple.
+        { feeScheduleId: input.feeScheduleId },
+      );
 
   const totals = eduChargeTotals(lines);
   if (totals.totalCents > EDU_MAX_CHARGE_CENTS) {
@@ -792,7 +976,12 @@ export async function createEduCharge(
   }
 
   const caseId = await resolverCaso(ctx, institutionId, patientId, input.caseId, now);
-  const sesion = await getEduOpenCashSession(ctx);
+  // 🔴 H-09 · EL TURNO ES EL DE **ESTA SEDE**. Antes se pedía "el turno
+  // abierto del instituto" y por eso el cobro de Sur se sellaba con el
+  // turno de Norte y descuadraba su arqueo. La sede es la misma que se
+  // sella en la fila del cobro, tres líneas más abajo: si estas dos
+  // llegaran a discrepar, el corte diría de una sede dinero de la otra.
+  const sesion = await getEduOpenCashSession(ctx, options.campusId ?? null);
 
   // El pago inmediato, si viene. Una o hasta tres formas; se validan
   // TODAS o ninguna, y `exacto: false` porque un cobro puede quedar
@@ -857,8 +1046,10 @@ export async function createEduCharge(
     caseId,
     feeScheduleId: applied?.feeScheduleId ?? null,
     // 🔴 El NOMBRE congelado. Si mañana la dirección renombra la lista o la
-    // desactiva, el recibo sigue diciendo qué tarifa se aplicó.
-    feeScheduleLabel: applied?.feeScheduleName ?? null,
+    // desactiva, el recibo sigue diciendo qué tarifa se aplicó. Un cobro
+    // que viene de un presupuesto no aplicó una LISTA sino un papel
+    // firmado, y eso es lo que dice aquí (lo pone `convertirEduQuote`).
+    feeScheduleLabel: options.feeScheduleLabel ?? applied?.feeScheduleName ?? null,
     subtotalCents: totals.subtotalCents,
     discountCents: totals.discountCents,
     totalCents: totals.totalCents,
@@ -931,6 +1122,25 @@ export async function createEduCharge(
         }
 
         return cobro;
+      });
+
+      // 🔴 BITÁCORA (NOM-024). El acto por el que entra dinero. Va DESPUÉS
+      // de la transacción y no dentro: `eduAudit` nunca lanza, pero meterla
+      // en la transacción del cobro le daría la oportunidad de alargarla —
+      // y un renglón de auditoría no puede hacer esperar a un pago.
+      await eduAudit(ctx, {
+        action: "create",
+        entity: "charge",
+        entityId: creado.id,
+        patientId,
+        after: {
+          folio: creado.folio,
+          totalCents: totals.totalCents,
+          paidCents,
+          campusId: options.campusId ?? null,
+          cashSessionId: sesion?.id ?? null,
+          quoteId: options.quoteId ?? undefined,
+        },
       });
 
       return { ...creado, descartados, duplicado: false };
@@ -1163,7 +1373,7 @@ export async function eduApplyEduPaymentInTx(
  * y el cobro vuelve a moverse normal.
  */
 export async function addEduPayment(
-  ctx: EduClinicaContext,
+  ctx: EduCajaContext,
   chargeId: string,
   input: EduPaymentInput & {
     payment?: EduPaymentInput;
@@ -1192,10 +1402,18 @@ export async function addEduPayment(
     },
     select: {
       id: true,
+      patientId: true,
       totalCents: true,
       paidCents: true,
       balanceCents: true,
       status: true,
+      // 🔴 H-09 · LA SEDE DEL COBRO. Es la que decide en qué turno cae el
+      // abono o la devolución: el dinero de un cobro y el de sus pagos
+      // tienen que caer en el MISMO corte, o el arqueo de una sede
+      // enseñaría el abono de la otra. Se hereda del cobro y no del
+      // selector porque un abono se aplica a un cobro concreto, que ya
+      // tiene sellado dónde nació.
+      campusId: true,
     },
   });
   if (!cobro) throw new EduPadronError("Ese cobro no es de este instituto.", 404);
@@ -1273,7 +1491,7 @@ export async function addEduPayment(
     );
   }
 
-  const sesion = await getEduOpenCashSession(ctx);
+  const sesion = await getEduOpenCashSession(ctx, cobro.campusId);
 
   // 🔴 H-06 · Y LA CARRERA DE VERDAD, la de dos POST simultáneos. El
   // pre-chequeo de arriba solo atrapa el reintento SECUENCIAL; dos
@@ -1413,6 +1631,27 @@ export async function addEduPayment(
     return { id: ids[0], ids, status, balanceCents, duplicado: false };
   });
 
+  // 🔴 BITÁCORA (NOM-024). Un abono y —sobre todo— una devolución son los
+  // dos movimientos por los que sale y entra dinero del cajón: son
+  // exactamente lo que una auditoría viene a preguntar. `eduAudit` nunca
+  // lanza, así que esto no puede tumbar un pago ya escrito.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "payment",
+    entityId: resultado.id,
+    patientId: cobro.patientId,
+    before: { balanceCents: cobro.balanceCents, status: cobro.status },
+    after: {
+      chargeId: id,
+      esDevolucion,
+      formas: pagos.length,
+      montoCents: pagos.reduce((a, x) => a + x.amountCents, 0),
+      balanceCents: resultado.balanceCents,
+      status: resultado.status,
+      motivo: esDevolucion ? pagos[0].notes : undefined,
+    },
+  });
+
   return resultado;
   }
 }
@@ -1462,7 +1701,7 @@ function eduNetoPorMetodo(
  * cinco pantallas seguían ofreciendo cobrarla.
  */
 export async function cancelEduCharge(
-  ctx: EduClinicaContext,
+  ctx: EduCajaContext,
   chargeId: string,
   input: { reason?: unknown } = {},
   now: Date = new Date(),
@@ -1476,7 +1715,7 @@ export async function cancelEduCharge(
       ...eduChargeScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") }),
       id,
     },
-    select: { id: true, paidCents: true, status: true },
+    select: { id: true, patientId: true, paidCents: true, status: true },
   });
   if (!cobro) throw new EduPadronError("Ese cobro no es de este instituto.", 404);
   if (cobro.status === "CANCELLED") throw new EduPadronError("Ese cobro ya está cancelado.", 409);
@@ -1556,6 +1795,22 @@ export async function cancelEduCharge(
       409,
     );
   }
+
+  // 🔴 BITÁCORA (NOM-024). Anular un cobro es el acto que borra dinero de
+  // todas las sumas del instituto: si algo tiene que dejar renglón, es
+  // esto.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "charge",
+    entityId: id,
+    patientId: cobro.patientId,
+    before: { status: cobro.status },
+    after: {
+      status: "CANCELLED",
+      motivo: eduOptionalText(input.reason, 300) ?? null,
+    },
+  });
+
   return { id };
 }
 
@@ -1577,6 +1832,13 @@ const SESSION_SELECT = {
   expectedCents: true,
   differenceCents: true,
   notes: true,
+  // 🔴 Ola C · H-09 · la SEDE del turno, sellada al abrirlo. `null` = «el
+  // turno del instituto» (todos los anteriores a esta ola lo son).
+  campusId: true,
+  campus: { select: { name: true, code: true } },
+  // 🔴 H-53 · el desglose CONGELADO al cerrar. Es lo que hace que un corte
+  // se pueda reimprimir dentro de un año exactamente como salió.
+  methodBreakdown: true,
   openedBy: { select: { firstName: true, lastName: true, email: true } },
   closedBy: { select: { firstName: true, lastName: true, email: true } },
 } satisfies Prisma.EduCashSessionSelect;
@@ -1595,6 +1857,12 @@ function toSessionRow(s: SessionPayload): EduCashSessionRow {
     notes: s.notes,
     openedByName: persona(s.openedBy),
     closedByName: s.closedBy ? persona(s.closedBy) : null,
+    campusId: s.campusId,
+    campusLabel: s.campus ? eduCampusLabel(s.campus) : null,
+    // `eduCorteDesgloseLeer` devuelve null para un turno abierto y para uno
+    // cerrado ANTES de esta ola. Los dos casos son legítimos y la pantalla
+    // los distingue por `closedAt`, no por este null.
+    desglose: eduCorteDesgloseLeer(s.methodBreakdown),
   };
 }
 
@@ -1684,8 +1952,26 @@ async function calcularTurno(
     chargeCount: cobros.length,
     chargedCents: cobros.reduce((a, c) => a + c.totalCents, 0),
     pendingCents: cobros.reduce((a, c) => a + c.balanceCents, 0),
+    // 🔴 H-53 · la FOTO que se congela al cerrar. Se arma aquí, con los
+    // mismos pagos con los que se calculó el esperado, para que el
+    // desglose guardado y la diferencia guardada no puedan discrepar: dos
+    // consultas distintas para dos cifras del mismo papel es exactamente
+    // cómo se llega a un corte que no cuadra consigo mismo.
+    desglose: eduCorteDesglose(pagos),
   };
 }
+
+/**
+ * Cuántos turnos cerrados se listan.
+ *
+ * 🔴 H-53 · ERAN 10 Y AHORA SON 40. «Con dos turnos al día eso cubre
+ * cinco días: el corte del 14 de febrero es inalcanzable desde el panel».
+ * Con el turno por sede, dos sedes × dos turnos son cuatro al día y los
+ * diez cubrían dos días y medio. Cuarenta no es la solución definitiva
+ * —eso es paginar— pero es un mes de una sede o dos semanas de dos, y
+ * cabe en una consulta sin filtro nuevo.
+ */
+const EDU_CORTE_CERRADOS = 40;
 
 export async function getEduCorte(
   ctx: EduClinicaContext,
@@ -1697,26 +1983,54 @@ export async function getEduCorte(
    */
   timeZoneCrudo: string,
   now: Date = new Date(),
+  /**
+   * 🔴 Ola C · H-09 · LA SEDE QUE SE ESTÁ MIRANDO, ya resuelta por el
+   * endpoint (`eduCampusForCharge` sobre el selector de la barra). Decide
+   * de qué turno se pinta el arqueo. `null` = vista consolidada o
+   * instituto sin sedes, y entonces vale la regla 3 de
+   * `getEduOpenCashSession`.
+   */
+  donde: { campusId: string | null; campusLabel: string | null; bloqueo: string | null } = {
+    campusId: null,
+    campusLabel: null,
+    bloqueo: null,
+  },
 ): Promise<EduCorte> {
   const institutionId = requireDinero(ctx);
   const scope = eduVisibility(ctx, "charges");
   const timeZone = eduSafeTimeZone(timeZoneCrudo);
 
+  // 🔴 EL TURNO QUE SE PINTA ES EL DE ESTA SEDE, con la MISMA función que
+  // usan el cobro y el abono para decidir dónde sellan. Si esta pantalla
+  // eligiera el turno por su cuenta, enseñaría el arqueo de un turno
+  // distinto de aquel en el que está entrando el dinero — que es
+  // exactamente el descuadre que H-09 describe, con otro disfraz.
+  const abiertaMin = await getEduOpenCashSession(ctx, donde.campusId);
+
   const [abierta, cerradas] = await Promise.all([
-    prisma.eduCashSession.findFirst({
-      where: { institutionId, closedAt: null },
-      orderBy: { openedAt: "desc" },
-      select: SESSION_SELECT,
-    }),
+    abiertaMin
+      ? prisma.eduCashSession.findFirst({
+          where: { id: abiertaMin.id, institutionId },
+          select: SESSION_SELECT,
+        })
+      : Promise.resolve(null),
     prisma.eduCashSession.findMany({
-      where: { institutionId, closedAt: { not: null } },
+      where: {
+        institutionId,
+        closedAt: { not: null },
+        // Con una sede elegida se listan los cortes DE ESA SEDE más los
+        // del instituto (sin sede), que son los históricos: esconderlos
+        // dejaría a Norte sin poder reimprimir nada anterior a esta ola.
+        ...(donde.campusId ? { OR: [{ campusId: donde.campusId }, { campusId: null }] } : {}),
+      },
       orderBy: { closedAt: "desc" },
-      take: 10,
+      take: EDU_CORTE_CERRADOS,
       select: SESSION_SELECT,
     }),
   ]);
 
   const previous = cerradas.map(toSessionRow);
+  const otrosTurnos = await otrosTurnosAbiertos(institutionId, abierta?.id ?? null);
 
   if (!abierta) {
     return {
@@ -1732,35 +2046,66 @@ export async function getEduCorte(
       porSede: [],
       porCajero: [],
       previous,
+      otrosTurnos,
+      campusId: donde.campusId,
+      campusLabel: donde.campusLabel,
+      abrirBloqueado: donde.bloqueo,
     };
   }
 
   const cuentas = await calcularTurno(institutionId, scope, abierta.id, abierta.openingCents);
+  // El desglose vivo NO viaja como "congelado": lo que se congela se
+  // escribe al cerrar. La pantalla lo recalcula de `methods`.
+  const { desglose: _vivo, ...visibles } = cuentas;
 
   return {
     session: toSessionRow(abierta),
-    ...cuentas,
+    ...visibles,
     spanDays: eduCorteSpanDays(abierta.openedAt, now, timeZone),
     previous,
+    otrosTurnos,
+    campusId: donde.campusId,
+    campusLabel: donde.campusLabel,
+    abrirBloqueado: donde.bloqueo,
   };
 }
 
 /**
- * Abre el turno.
+ * Abre el turno **DE UNA SEDE** (H-09).
  *
- * ⚠️ El "solo un turno abierto" lo garantiza la aplicación, no la base: un
- * índice único parcial (WHERE "closedAt" IS NULL) no lo puede expresar sin
- * romper cualquier upsert futuro. La comprobación va DENTRO de la
- * transacción, así que la ventana de carrera es de milisegundos y hace
- * falta que dos personas abran caja en el mismo instante. Está anotado a
- * propósito en vez de fingir que no existe: si algún día pasa, se ve como
- * dos turnos abiertos y se cierra uno.
+ * ⚠️ El "un solo turno abierto por sede" lo garantiza la aplicación, no la
+ * base: un índice único parcial (WHERE "closedAt" IS NULL) no lo puede
+ * expresar sin romper cualquier upsert futuro. La comprobación va DENTRO
+ * de la transacción, así que la ventana de carrera es de milisegundos y
+ * hace falta que dos personas abran caja en el mismo instante. Está
+ * anotado a propósito en vez de fingir que no existe: si algún día pasa,
+ * se ve como dos turnos abiertos de la misma sede y se cierra uno.
+ *
+ * 🔴 DOS CANDADOS Y NO UNO, y el segundo es el que evita el descuadre:
+ *
+ *   · YA HAY TURNO EN ESTA SEDE → 409, como siempre.
+ *   · YA HAY UN TURNO **SIN SEDE** (el del instituto) → 409 TAMBIÉN, con
+ *     otro mensaje. Ese turno está recogiendo el dinero de todo el mundo
+ *     —así se comportaba el producto hasta esta ola— y abrir uno por sede
+ *     encima partiría el mismo cajón en dos cortes que ninguno cuadra.
+ *     Primero se cierra el del instituto; a partir de ahí, cada sede el
+ *     suyo.
  */
 export async function openEduCashSession(
-  ctx: EduClinicaContext,
+  ctx: EduCajaContext,
   input: { openingCents?: unknown; notes?: unknown } = {},
   now: Date = new Date(),
-): Promise<{ id: string }> {
+  options: {
+    /**
+     * 🔴 EN QUÉ SEDE se abre. Lo resuelve el endpoint con
+     * `eduCampusForCharge` (campus-core.ts) a partir del selector de la
+     * barra superior, y NUNCA sale del body: un campusId del navegador
+     * abriría el turno de la otra sede. `null` = el instituto no tiene
+     * sedes, y entonces esto se comporta EXACTAMENTE como antes de la ola.
+     */
+    campusId?: string | null;
+  } = {},
+): Promise<{ id: string; campusId: string | null }> {
   const institutionId = requireDinero(ctx);
 
   const openingCents =
@@ -1773,27 +2118,148 @@ export async function openEduCashSession(
     );
   }
 
-  const creado = await prisma.$transaction(async (tx) => {
-    const abierta = await tx.eduCashSession.findFirst({
-      where: { institutionId, closedAt: null },
+  const campusId = typeof options.campusId === "string" && options.campusId ? options.campusId : null;
+  if (campusId) {
+    // La sede tiene que ser de ESTE instituto. El endpoint ya la resuelve
+    // desde el alcance, pero el candado de pertenencia se comprueba aquí
+    // igual: es la regla 2 del encabezado de este archivo.
+    const sede = await prisma.eduCampus.findFirst({
+      where: { id: campusId, institutionId },
       select: { id: true },
     });
-    if (abierta) {
-      throw new EduPadronError("Ya hay un turno de caja abierto. Ciérralo antes de abrir otro.", 409);
+    if (!sede) throw new EduPadronError("Esa sede no es de tu instituto.", 404);
+  }
+
+  const creado = await prisma.$transaction(async (tx) => {
+    const abiertas = await tx.eduCashSession.findMany({
+      where: { institutionId, closedAt: null },
+      select: { id: true, campusId: true },
+    });
+    const delInstituto = abiertas.find((a) => a.campusId === null);
+    if (delInstituto) {
+      throw new EduPadronError(
+        campusId
+          ? "Hay un turno abierto SIN sede: es el turno del instituto entero y está recogiendo lo que cobran todas las sedes. Ciérralo antes de abrir turnos por sede, o los dos cortes saldrán a medias."
+          : "Ya hay un turno de caja abierto. Ciérralo antes de abrir otro.",
+        409,
+      );
+    }
+    if (campusId && abiertas.some((a) => a.campusId === campusId)) {
+      throw new EduPadronError(
+        "Esta sede ya tiene un turno de caja abierto. Ciérralo antes de abrir otro.",
+        409,
+      );
     }
     return tx.eduCashSession.create({
       data: {
         institutionId,
+        campusId,
         openedAt: now,
         openingCents,
         notes: eduOptionalText(input.notes, 500) ?? null,
         openedByUserId: ctx.eduUserId,
       },
-      select: { id: true },
+      select: { id: true, campusId: true },
     });
   });
 
+  await eduAudit(ctx, {
+    action: "create",
+    entity: "cashSession",
+    entityId: creado.id,
+    after: { openingCents, campusId },
+  });
+
   return creado;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 H-51 (la parte sana) · CORREGIR EL FONDO DE UN TURNO **ABIERTO**.
+ *
+ * «Fondo de apertura con "1000" en vez de "100": todo el turno espera $900
+ * de más». Hasta hoy no había dónde arreglarlo: el fondo se tecleaba al
+ * abrir y el único camino era cerrar el turno con un descuadre falso.
+ *
+ * Lo que esto NO hace, y es deliberado:
+ *   · NO toca un turno CERRADO. `closedAt: null` va en el `where` del
+ *     `updateMany`, así que un corte ya firmado —con su esperado y su
+ *     diferencia congelados— no se puede reescribir desde ninguna
+ *     pantalla. Eso sería falsificar un papel que alguien firmó.
+ *   · NO borra el fondo anterior: lo ESCRIBE en las notas del turno, con
+ *     quién lo cambió. Un fondo que cambia sin rastro es un fondo que se
+ *     puede acomodar al final del día para que el arqueo cuadre.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function setEduCashSessionOpening(
+  ctx: EduCajaContext,
+  input: { sessionId?: unknown; openingCents?: unknown; reason?: unknown } = {},
+  now: Date = new Date(),
+): Promise<{ id: string; openingCents: number; anteriorCents: number }> {
+  const institutionId = requireDinero(ctx);
+
+  const openingCents = parseEduMoneyCentsMax(input.openingCents, EDU_MAX_CASH_CENTS);
+  if (openingCents === null) {
+    throw new EduPadronError(
+      `El fondo de caja no es una cantidad válida (máximo ${eduMoney(EDU_MAX_CASH_CENTS)}). Si el cajón empezó vacío, escribe 0.`,
+    );
+  }
+
+  const motivo = eduOptionalText(input.reason, 200);
+  if (!motivo || motivo.trim().length < 3) {
+    throw new EduPadronError(
+      "Escribe por qué se corrige el fondo (al menos 3 letras). Un fondo que cambia sin explicación es un arqueo que no se puede leer.",
+      400,
+    );
+  }
+
+  const id = eduCleanId(input.sessionId);
+  const abierta = id
+    ? await prisma.eduCashSession.findFirst({
+        where: { id, institutionId, closedAt: null },
+        select: { id: true, openingCents: true, notes: true },
+      })
+    : await prisma.eduCashSession.findFirst({
+        where: { institutionId, closedAt: null },
+        orderBy: { openedAt: "desc" },
+        select: { id: true, openingCents: true, notes: true },
+      });
+  if (!abierta) {
+    throw new EduPadronError(
+      "No hay ningún turno de caja abierto con ese id. Un turno cerrado no se corrige: su corte ya está congelado.",
+      409,
+    );
+  }
+  if (abierta.openingCents === openingCents) {
+    throw new EduPadronError("Ese ya es el fondo del turno: no hay nada que corregir.", 409);
+  }
+
+  const rastro = `Fondo corregido: ${eduMoney(abierta.openingCents)} → ${eduMoney(openingCents)} por ${nombreDelActor(ctx)}. Motivo: ${motivo}`;
+  const notes = [abierta.notes, rastro].filter(Boolean).join("\n").slice(0, 500);
+
+  // El estado en el `where`, como manda la casa: si alguien cierra el
+  // turno mientras se teclea la corrección, esto escribe CERO filas y se
+  // entera, en vez de mover el fondo de un corte ya congelado.
+  const res = await prisma.eduCashSession.updateMany({
+    where: { id: abierta.id, institutionId, closedAt: null, openingCents: abierta.openingCents },
+    data: { openingCents, notes },
+  });
+  if (res.count === 0) {
+    throw new EduPadronError(
+      "Ese turno se cerró (o alguien corrigió el fondo antes) mientras lo editabas. Recarga la pantalla.",
+      409,
+    );
+  }
+
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "cashSession",
+    entityId: abierta.id,
+    before: { openingCents: abierta.openingCents },
+    after: { openingCents, motivo },
+  });
+
+  return { id: abierta.id, openingCents, anteriorCents: abierta.openingCents };
 }
 
 /**
@@ -1805,18 +2271,34 @@ export async function openEduCashSession(
  * diciendo lo mismo.
  */
 export async function closeEduCashSession(
-  ctx: EduClinicaContext,
+  ctx: EduCajaContext,
   input: { countedCents?: unknown; notes?: unknown } = {},
   now: Date = new Date(),
-): Promise<{ id: string; expectedCents: number; countedCents: number; differenceCents: number }> {
+  options: {
+    /**
+     * 🔴 H-09 · QUÉ TURNO se cierra: el de ESTA sede. Se resuelve con la
+     * misma función que usan el cobro y el abono para decidir dónde
+     * sellan, así que quien cierra cierra el turno en el que está
+     * entrando su dinero y no el de la sede de al lado.
+     */
+    campusId?: string | null;
+  } = {},
+): Promise<{
+  id: string;
+  expectedCents: number;
+  countedCents: number;
+  differenceCents: number;
+}> {
   const institutionId = requireDinero(ctx);
   const scope = eduVisibility(ctx, "charges");
 
-  const abierta = await prisma.eduCashSession.findFirst({
-    where: { institutionId, closedAt: null },
-    orderBy: { openedAt: "desc" },
-    select: { id: true, openingCents: true, notes: true },
-  });
+  const abiertaMin = await getEduOpenCashSession(ctx, options.campusId);
+  const abierta = abiertaMin
+    ? await prisma.eduCashSession.findFirst({
+        where: { id: abiertaMin.id, institutionId, closedAt: null },
+        select: { id: true, openingCents: true, notes: true, campusId: true },
+      })
+    : null;
   if (!abierta) throw new EduPadronError("No hay ningún turno de caja abierto.", 409);
 
   const countedCents = parseEduMoneyCentsMax(input.countedCents, EDU_MAX_CASH_CENTS);
@@ -1848,6 +2330,16 @@ export async function closeEduCashSession(
       countedCents,
       expectedCents,
       differenceCents,
+      // ── 🔴 H-53 · EL DESGLOSE POR MÉTODO, CONGELADO ─────────────────
+      // «El desglose por método NO SE GUARDA: se pierde al cerrar», y el
+      // propio código prometía la reimpresión (dinero-core.ts:615). Se
+      // escribe UNA vez, aquí, con los MISMOS pagos con los que se acaba
+      // de calcular `expectedCents`: el papel que alguien firma y la fila
+      // que queda en la base dicen lo mismo por construcción. A partir de
+      // ahora el corte del 14 de febrero se reimprime LEYENDO esto, no
+      // recalculándolo — recalcularlo sería deshacer el congelado que ya
+      // protege al esperado y a la diferencia.
+      methodBreakdown: cuentas.desglose as unknown as Prisma.InputJsonValue,
       // Las notas del cierre se SUMAN a las de la apertura en vez de
       // pisarlas: las dos son del mismo turno y las dos importan.
       notes: extra
@@ -1862,5 +2354,46 @@ export async function closeEduCashSession(
     );
   }
 
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "cashSession",
+    entityId: abierta.id,
+    before: { closedAt: null },
+    after: {
+      closedAt: now,
+      campusId: abierta.campusId,
+      expectedCents,
+      countedCents,
+      differenceCents,
+    },
+  });
+
   return { id: abierta.id, expectedCents, countedCents, differenceCents };
+}
+
+/**
+ * EL CORTE CONGELADO de un turno ya cerrado, para reimprimirlo.
+ *
+ * 🔴 SE LEE, NO SE RECALCULA. Lo que devuelve es exactamente lo que se
+ * guardó al cerrar: el esperado, lo contado, la diferencia y el desglose
+ * por método. Un pago registrado después con fecha vieja no puede cambiar
+ * un papel que ya se firmó — es la misma decisión que ya protegía a
+ * `expectedCents`, extendida al desglose.
+ *
+ * ⚠️ `desglose: null` en un turno cerrado significa «cerrado ANTES de esta
+ * ola»: no hay foto que enseñar y la pantalla lo dice con esas palabras,
+ * en vez de pintar ceros que parecen datos.
+ */
+export async function getEduCorteCerrado(
+  ctx: EduClinicaContext,
+  sessionId: string,
+): Promise<EduCashSessionRow | null> {
+  const institutionId = requireDinero(ctx);
+  const id = eduCleanId(sessionId);
+  if (!id) return null;
+  const fila = await prisma.eduCashSession.findFirst({
+    where: { id, institutionId, closedAt: { not: null } },
+    select: SESSION_SELECT,
+  });
+  return fila ? toSessionRow(fila) : null;
 }

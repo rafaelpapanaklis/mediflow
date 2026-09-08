@@ -32,13 +32,16 @@ import { createHash, randomBytes } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
-import { eduCleanId, eduOptionalText } from "@/lib/edu/agenda-core";
+import { eduCleanId, eduOptionalText, eduSafeTimeZone } from "@/lib/edu/agenda-core";
+import { eduPatientFullName } from "@/lib/edu/pacientes-core";
+import { eduSearchTokens } from "@/lib/edu/padron-core";
 import {
   eduScopeIsEmpty,
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
 import {
+  EDU_QUOTE_EMPTY_FILTERS,
   EDU_QUOTE_MAX_ROWS,
   EDU_QUOTE_NOTES_MAX,
   eduQuoteEstadoVisible,
@@ -52,9 +55,15 @@ import {
   eduQuoteTotales,
   eduQuoteVigenciaPorDefecto,
   type EduQuoteEstadoVisible,
+  type EduQuoteFilters,
+  type EduQuoteRow,
+  type EduQuotesPage,
   type EduQuoteStatus,
 } from "@/lib/edu/presupuestos-core";
 import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
+import { EDU_MAX_CHARGE_ITEMS } from "@/lib/edu/dinero-core";
+import { createEduCharge } from "@/lib/edu/caja";
+import { createEduPaymentPlan } from "@/lib/edu/pagos";
 
 export interface EduQuoteContext extends EduClinicaContext, EduAuditActor {}
 
@@ -108,41 +117,12 @@ async function nextEduQuoteFolio(institutionId: string): Promise<string> {
   return `P-${String(n).padStart(4, "0")}`;
 }
 
-export interface EduQuoteRow {
-  id: string;
-  folio: string;
-  title: string;
-  status: EduQuoteStatus;
-  estadoVisible: EduQuoteEstadoVisible;
-  patientId: string;
-  caseId: string | null;
-  validUntil: string | null;
-  subtotalCents: number;
-  discountPct: number | null;
-  discountCents: number;
-  totalCents: number;
-  notes: string | null;
-  presentedAt: string | null;
-  acceptedAt: string | null;
-  acceptedByName: string | null;
-  chargeId: string | null;
-  treatmentPlanId: string | null;
-  createdByName: string;
-  createdAt: string;
-  items: {
-    id: string;
-    name: string;
-    toothFdi: string | null;
-    quantity: number;
-    unitPriceCents: number;
-    discountCents: number;
-    lineTotalCents: number;
-    phase: number | null;
-    notes: string | null;
-  }[];
-}
+const QUOTE_INCLUDE = {
+  items: true,
+  patient: { select: { firstName: true, lastName: true, folio: true } },
+} satisfies Prisma.EduQuoteInclude;
 
-type QuoteConItems = Prisma.EduQuoteGetPayload<{ include: { items: true } }>;
+type QuoteConItems = Prisma.EduQuoteGetPayload<{ include: typeof QUOTE_INCLUDE }>;
 
 function aRow(q: QuoteConItems, now: Date): EduQuoteRow {
   return {
@@ -155,6 +135,8 @@ function aRow(q: QuoteConItems, now: Date): EduQuoteRow {
       now,
     ),
     patientId: q.patientId,
+    patientName: q.patient ? eduPatientFullName(q.patient) : "—",
+    patientFolio: q.patient?.folio ?? "—",
     caseId: q.caseId,
     validUntil: q.validUntil?.toISOString() ?? null,
     subtotalCents: q.subtotalCents,
@@ -200,9 +182,227 @@ export async function listEduQuotes(
     where: { institutionId, patientId: id },
     orderBy: { createdAt: "desc" },
     take: EDU_QUOTE_MAX_ROWS,
-    include: { items: true },
+    include: QUOTE_INCLUDE,
   });
   return filas.map((q) => aRow(q, now));
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LA PANTALLA DE CAJA · listar, leer y editar
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Re-exports para el llamador: la pantalla lee el tope y las FORMAS de la
+ * misma fuente que la consulta.
+ *
+ * 🔴 Y las formas viven en presupuestos-core.ts, no aquí: los componentes
+ * "use client" las necesitan y este archivo importa prisma. Un
+ * `import type` se borra al compilar, pero basta con que alguien le quite
+ * el `type` para arrastrar el runtime de Prisma al navegador. Si el tipo
+ * no vive ahí, no hay de dónde. (Misma decisión, con las mismas palabras,
+ * que campus-core.ts.)
+ */
+export {
+  EDU_QUOTE_MAX_ROWS,
+  EDU_QUOTE_EMPTY_FILTERS,
+  type EduQuoteFilters,
+  type EduQuoteRow,
+  type EduQuotesPage,
+} from "@/lib/edu/presupuestos-core";
+
+/**
+ * Lee los filtros de la URL. Vive aquí y no en la pantalla para que el
+ * servidor y el cliente lean EXACTAMENTE los mismos parámetros: dos
+ * lectores del mismo query string es cómo un selector acaba diciendo una
+ * cosa mientras la tabla enseña otra.
+ */
+export function parseEduQuoteFilters(
+  sp: { [k: string]: string | string[] | undefined } | undefined,
+): EduQuoteFilters {
+  const uno = (k: string): string => {
+    const v = sp?.[k];
+    const s = Array.isArray(v) ? v[0] : v;
+    return typeof s === "string" ? s.trim() : "";
+  };
+  return {
+    q: uno("q").slice(0, 80),
+    status: eduQuoteParseStatus(uno("estado")),
+    patientId: eduCleanId(uno("paciente")),
+  };
+}
+
+/**
+ * LOS PRESUPUESTOS DEL INSTITUTO, para la pantalla de Caja.
+ *
+ * 🔴 El alcance sigue siendo el del DINERO, entero: caja y dirección ven
+ * todo, docente y alumno no ven nada (403 con el porqué, no una lista
+ * vacía que les haría creer que su paciente no tiene ninguno).
+ */
+export async function listEduQuotesPanel(
+  ctx: EduQuoteContext,
+  filters: EduQuoteFilters = EDU_QUOTE_EMPTY_FILTERS,
+  now: Date = new Date(),
+): Promise<EduQuotesPage> {
+  const institutionId = requireInstitution(ctx);
+  asegurarAlcanceDinero(ctx);
+
+  const and: Prisma.EduQuoteWhereInput[] = [];
+  if (filters.status) and.push({ status: filters.status });
+  if (filters.patientId) and.push({ patientId: filters.patientId });
+  // El MISMO troceador que el padrón, los pacientes y la caja: si este
+  // buscador partiera el término a su manera, "Rodriguez" encontraría
+  // cosas distintas aquí que en la lista de pacientes.
+  for (const token of eduSearchTokens(filters.q)) {
+    and.push({
+      OR: [
+        { folio: { contains: token, mode: "insensitive" } },
+        { title: { contains: token, mode: "insensitive" } },
+        { patient: { searchIndex: { contains: token } } },
+      ],
+    });
+  }
+
+  const filas = await prisma.eduQuote.findMany({
+    where: { institutionId, ...(and.length > 0 ? { AND: and } : {}) },
+    orderBy: { createdAt: "desc" },
+    take: EDU_QUOTE_MAX_ROWS + 1,
+    include: QUOTE_INCLUDE,
+  });
+
+  return {
+    rows: filas.slice(0, EDU_QUOTE_MAX_ROWS).map((q) => aRow(q, now)),
+    truncated: filas.length > EDU_QUOTE_MAX_ROWS,
+    filters,
+  };
+}
+
+/** UN presupuesto, entero. */
+export async function getEduQuote(
+  ctx: EduQuoteContext,
+  quoteId: string,
+  now: Date = new Date(),
+): Promise<EduQuoteRow | null> {
+  const institutionId = requireInstitution(ctx);
+  asegurarAlcanceDinero(ctx);
+  const id = eduCleanId(quoteId);
+  if (!id) return null;
+  const q = await prisma.eduQuote.findFirst({
+    where: { id, institutionId },
+    include: QUOTE_INCLUDE,
+  });
+  return q ? aRow(q, now) : null;
+}
+
+/**
+ * EDITA un presupuesto — 🔴 SOLO MIENTRAS ES BORRADOR.
+ *
+ * Un PRESENTADO ya tiene su liga en el WhatsApp del paciente y su texto
+ * canónico es lo que se va a hashear al aceptar: cambiarle una partida
+ * por detrás haría que el paciente aceptara un total distinto del que vio.
+ * Para corregir uno presentado se le devuelve a borrador (que le quita la
+ * presentación y deja el token quieto) y se edita ahí.
+ */
+export async function updateEduQuote(
+  ctx: EduQuoteContext,
+  quoteId: string,
+  body: {
+    title?: unknown;
+    notes?: unknown;
+    validUntil?: unknown;
+    discountPct?: unknown;
+    discountCents?: unknown;
+    items?: unknown;
+  },
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+): Promise<{ id: string; totalCents: number }> {
+  const institutionId = requireInstitution(ctx);
+  asegurarAlcanceDinero(ctx);
+
+  const id = eduCleanId(quoteId);
+  if (!id) throw new EduPadronError("Falta el presupuesto.", 400);
+
+  const q = await prisma.eduQuote.findFirst({
+    where: { id, institutionId },
+    select: {
+      id: true,
+      patientId: true,
+      status: true,
+      title: true,
+      totalCents: true,
+      discountCents: true,
+    },
+  });
+  if (!q) throw new EduPadronError("Ese presupuesto no existe o no es de tu instituto.", 404);
+  if (q.status !== "BORRADOR") {
+    throw new EduPadronError(
+      `Un presupuesto ${q.status} no se edita: sus partidas están congeladas. Devuélvelo a borrador si tienes que corregirlo.`,
+      409,
+    );
+  }
+
+  const title = eduQuoteParseTitulo(body?.title);
+  const notes = eduOptionalText(body?.notes, EDU_QUOTE_NOTES_MAX) ?? null;
+  const items = eduQuoteParseItems(body?.items);
+  const discountPct = eduQuoteParsePct(body?.discountPct);
+  const discountCentsRaw =
+    body?.discountCents === undefined || body?.discountCents === null
+      ? 0
+      : Number.parseInt(String(body.discountCents), 10) || 0;
+  const totales = eduQuoteTotales(items, discountPct, discountCentsRaw);
+
+  let validUntil: Date | null = null;
+  if (body?.validUntil) {
+    const d = new Date(String(body.validUntil));
+    if (Number.isNaN(d.getTime())) throw new EduPadronError("La vigencia no se entiende.", 400);
+    validUntil = d;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // 🔴 El estado en el `where`, como manda la casa: si alguien lo
+    // presenta mientras esto se teclea, aquí no se escribe nada y el 409
+    // de abajo lo cuenta — en vez de reescribir las partidas de un
+    // presupuesto que el paciente ya está mirando.
+    const res = await tx.eduQuote.updateMany({
+      where: { id: q.id, institutionId, status: "BORRADOR" },
+      data: {
+        title,
+        notes,
+        validUntil,
+        discountPct,
+        subtotalCents: totales.subtotalCents,
+        discountCents: totales.discountCents,
+        totalCents: totales.totalCents,
+      },
+    });
+    if (res.count === 0) {
+      throw new EduPadronError(
+        "Alguien presentó o cambió ese presupuesto mientras lo editabas. Actualiza la pantalla.",
+        409,
+      );
+    }
+    // Las partidas se REEMPLAZAN enteras y no se van casando una a una:
+    // un presupuesto en borrador no tiene nada colgando de sus filas (ni
+    // cobro, ni evidencia, ni liga usada), así que la forma sencilla es
+    // también la correcta. Va dentro de la MISMA transacción que los
+    // totales: si se escribieran por separado, un fallo a la mitad dejaría
+    // un total que no es la suma de sus partidas.
+    await tx.eduQuoteItem.deleteMany({ where: { institutionId, quoteId: q.id } });
+    await tx.eduQuoteItem.createMany({
+      data: items.map((i) => ({ ...i, institutionId, quoteId: q.id })),
+    });
+  });
+
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "quote",
+    entityId: q.id,
+    patientId: q.patientId,
+    before: { title: q.title, totalCents: q.totalCents },
+    after: { title, totalCents: totales.totalCents, partidas: items.length },
+    ...meta,
+  });
+
+  return { id: q.id, totalCents: totales.totalCents };
 }
 
 /**
@@ -218,6 +418,21 @@ export async function createEduQuote(
   body: {
     patientId?: unknown;
     caseId?: unknown;
+    /**
+     * 🔴 DESDE UN PLAN DE TRATAMIENTO. Cuando viene, el presupuesto queda
+     * COLGADO de ese plan (`EduQuote.treatmentPlanId`, la columna que la
+     * C·base dejó puesta y que hasta ahora no escribía nadie) y, si no
+     * mandan partidas, se siembra UNA con el nombre del plan y su
+     * `totalCents`.
+     *
+     * ⚠️ Y UNA sola, no `totalSessions`: `EduTreatmentPlan` **no** guarda
+     * una lista de procedimientos —tiene nombre, descripción, cuántas
+     * sesiones se esperan y un importe total—, así que partirlo en N
+     * renglones sería inventarse un desglose que no existe. Quien quiera
+     * el detalle manda sus propias partidas y este parámetro solo hace el
+     * enlace.
+     */
+    treatmentPlanId?: unknown;
     title?: unknown;
     notes?: unknown;
     validUntil?: unknown;
@@ -240,9 +455,34 @@ export async function createEduQuote(
   });
   if (!paciente) throw new EduPadronError("Ese paciente no existe o no es de tu instituto.", 404);
 
-  const title = eduQuoteParseTitulo(body?.title);
+  // ── EL PLAN DE TRATAMIENTO del que sale, si sale de uno ─────────────
+  // Se resuelve ANTES del título y de las partidas porque los dos pueden
+  // salir de él: un presupuesto hecho desde un plan hereda su nombre y su
+  // importe si no le mandan otros.
+  let treatmentPlanId: string | null = null;
+  let plan: { id: string; name: string; totalCents: number; caseId: string | null } | null = null;
+  const rawPlan = eduCleanId(body?.treatmentPlanId);
+  if (rawPlan) {
+    plan = await prisma.eduTreatmentPlan.findFirst({
+      where: { id: rawPlan, institutionId, patientId: paciente.id },
+      select: { id: true, name: true, totalCents: true, caseId: true },
+    });
+    if (!plan) {
+      throw new EduPadronError("Ese plan de tratamiento no existe o no es de este paciente.", 404);
+    }
+    treatmentPlanId = plan.id;
+  }
+
+  const title = eduQuoteParseTitulo(body?.title ?? plan?.name);
   const notes = eduOptionalText(body?.notes, EDU_QUOTE_NOTES_MAX) ?? null;
-  const items = eduQuoteParseItems(body?.items);
+  // Sin partidas y con plan, se siembra UNA con el nombre del plan y su
+  // importe. Sin plan, `eduQuoteParseItems` sigue exigiendo al menos una:
+  // un presupuesto vacío no es un presupuesto.
+  const itemsCrudos =
+    plan && (!Array.isArray(body?.items) || body.items.length === 0)
+      ? [{ name: plan.name, quantity: 1, unitPriceCents: plan.totalCents }]
+      : body?.items;
+  const items = eduQuoteParseItems(itemsCrudos);
   const discountPct = eduQuoteParsePct(body?.discountPct);
   const discountCentsRaw =
     body?.discountCents === undefined || body?.discountCents === null
@@ -257,7 +497,9 @@ export async function createEduQuote(
     validUntil = d;
   }
 
-  let caseId: string | null = null;
+  // El caso: el que manden, y si no el del plan (perder el enlace al
+  // abrirlo desde un plan sería tirar un dato que ya se sabía).
+  let caseId: string | null = plan?.caseId ?? null;
   const rawCase = eduCleanId(body?.caseId);
   if (rawCase) {
     const caso = await prisma.eduCase.findFirst({
@@ -282,6 +524,7 @@ export async function createEduQuote(
             institutionId,
             patientId: paciente.id,
             caseId,
+            treatmentPlanId,
             folio,
             title,
             notes,
@@ -306,7 +549,13 @@ export async function createEduQuote(
         entity: "quote",
         entityId: creado.id,
         patientId: paciente.id,
-        after: { folio: creado.folio, title, totalCents: totales.totalCents },
+        after: {
+          folio: creado.folio,
+          title,
+          totalCents: totales.totalCents,
+          caseId,
+          treatmentPlanId,
+        },
         ...meta,
       });
 
@@ -458,6 +707,455 @@ export async function cambiarEstadoEduQuote(
   });
 
   return { id: q.id, status: destino };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EL PDF
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduQuotePdfData {
+  institutionName: string;
+  institutionCity: string | null;
+  institutionPhone: string | null;
+  institutionEmail: string | null;
+
+  quoteId: string;
+  folio: string;
+  title: string;
+  notes: string | null;
+
+  patientName: string;
+  patientFolio: string;
+
+  createdByName: string;
+  createdAtLabel: string;
+  validUntilLabel: string | null;
+
+  subtotalCents: number;
+  discountCents: number;
+  discountPctLabel: string | null;
+  totalCents: number;
+
+  items: {
+    name: string;
+    toothFdi: string | null;
+    quantity: number;
+    unitPriceCents: number;
+    discountCents: number;
+    lineTotalCents: number;
+    phase: number | null;
+    notes: string | null;
+  }[];
+
+  /** La franja ROJA de arriba: vencido, rechazado o cancelado. */
+  avisoMalo: { titulo: string; detalle: string } | null;
+  /** La franja VERDE: quién lo aceptó y cuándo. */
+  aceptado: string | null;
+
+  fileName: string;
+}
+
+/**
+ * Los datos del PDF, con el permiso y el alcance ya aplicados.
+ *
+ * 🔴 UN BORRADOR NO SE IMPRIME. Es la misma puerta que la receta pone
+ * sobre una PENDIENTE: un papel con importes que todavía se están
+ * editando sale del control de la escuela y vuelve dentro de un mes con
+ * un precio que ya no es. Se presenta primero (que es un clic) y de ahí
+ * se imprime.
+ */
+export async function getEduQuotePdfData(
+  ctx: EduQuoteContext,
+  quoteId: string,
+  timeZoneCrudo: string,
+  now: Date = new Date(),
+): Promise<EduQuotePdfData> {
+  const institutionId = requireInstitution(ctx);
+  asegurarAlcanceDinero(ctx);
+
+  const id = eduCleanId(quoteId);
+  const q = id
+    ? await prisma.eduQuote.findFirst({
+        where: { id, institutionId },
+        include: {
+          items: { orderBy: { sortOrder: "asc" } },
+          patient: { select: { firstName: true, lastName: true, folio: true } },
+          institution: { select: { name: true, city: true, phone: true, email: true } },
+        },
+      })
+    : null;
+  if (!q) throw new EduPadronError("Ese presupuesto no existe o no es de tu instituto.", 404);
+
+  if (q.status === "BORRADOR") {
+    throw new EduPadronError(
+      "Un presupuesto en borrador no se imprime: todavía se está editando y el papel saldría con un total que puede cambiar. Preséntalo y vuelve a intentarlo.",
+      409,
+    );
+  }
+
+  const timeZone = eduSafeTimeZone(timeZoneCrudo);
+  const fmt = new Intl.DateTimeFormat("es-MX", {
+    timeZone,
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const estado = eduQuoteEstadoVisible(
+    { status: q.status as EduQuoteStatus, validUntil: q.validUntil },
+    now,
+  );
+
+  let avisoMalo: { titulo: string; detalle: string } | null = null;
+  if (estado === "VENCIDO") {
+    avisoMalo = {
+      titulo: "PRESUPUESTO VENCIDO — los precios ya no están garantizados",
+      detalle: `Su vigencia terminó el ${q.validUntil ? fmt.format(q.validUntil) : "—"}. Pide uno actualizado antes de agendar el tratamiento.`,
+    };
+  } else if (estado === "RECHAZADO") {
+    avisoMalo = {
+      titulo: "PRESUPUESTO RECHAZADO",
+      detalle: "Este presupuesto no se aceptó. Se conserva porque la propuesta existió; no se cobra por él.",
+    };
+  } else if (estado === "CANCELADO") {
+    avisoMalo = {
+      titulo: "PRESUPUESTO CANCELADO POR LA CLÍNICA",
+      detalle: q.cancelReason
+        ? `Motivo: ${q.cancelReason}`
+        : "La clínica lo retiró. No se cobra por él.",
+    };
+  }
+
+  return {
+    institutionName: q.institution.name,
+    institutionCity: q.institution.city,
+    institutionPhone: q.institution.phone,
+    institutionEmail: q.institution.email,
+
+    quoteId: q.id,
+    folio: q.folio,
+    title: q.title,
+    notes: q.notes,
+
+    patientName: q.patient ? eduPatientFullName(q.patient) : "—",
+    patientFolio: q.patient?.folio ?? "—",
+
+    createdByName: q.createdByName,
+    createdAtLabel: fmt.format(q.createdAt),
+    validUntilLabel: q.validUntil ? fmt.format(q.validUntil) : null,
+
+    subtotalCents: q.subtotalCents,
+    discountCents: q.discountCents,
+    discountPctLabel: q.discountPct === null ? null : `${Number(q.discountPct)} %`,
+    totalCents: q.totalCents,
+
+    items: [...q.items]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((i) => ({
+        name: i.name,
+        toothFdi: i.toothFdi,
+        quantity: i.quantity,
+        unitPriceCents: i.unitPriceCents,
+        discountCents: i.discountCents,
+        lineTotalCents: i.lineTotalCents,
+        phase: i.phase,
+        notes: i.notes,
+      })),
+
+    avisoMalo,
+    aceptado:
+      q.status === "ACEPTADO" && q.acceptedAt
+        ? `Lo aceptó ${q.acceptedByName ?? "el paciente"} el ${fmt.format(q.acceptedAt)}.${q.acceptedHash ? ` Evidencia sha256 ${q.acceptedHash.slice(0, 12)}…` : ""}`
+        : null,
+
+    fileName: `presupuesto-${q.folio}.pdf`,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 CONVERTIR UN PRESUPUESTO ACEPTADO EN COBRO (y, si se pide, EN PLAN)
+//
+// Lo que hace que esto sea difícil no es crear el cobro: es que se pueda
+// pulsar dos veces. Por eso la llave de idempotencia NO es una clave que
+// mande el cliente sino la COLUMNA `EduQuote.chargeId`: si está llena, ya
+// se convirtió, y la segunda llamada devuelve el cobro que ya existe en
+// vez de emitir otro. Un presupuesto de $18,000 convertido dos veces son
+// dos cobros que hay que cancelar delante del paciente.
+//
+// 🔴 Y LOS PRECIOS VAN CONGELADOS, no se vuelven a cotizar. Si el
+// paciente aceptó una resina a $800 en marzo y hoy el tarifario dice
+// $1,200, el cobro tiene que decir $800: es lo que hay firmado, con su
+// hash y su IP. Se pasa por `options.lineasCongeladas` de
+// `createEduCharge` — un camino que solo existe para esto y que NUNCA
+// sale del body de ninguna ruta (ver su comentario en caja.ts).
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduQuoteConversion {
+  chargeId: string;
+  chargeFolio: string;
+  /** El plan de pagos, si se pidió convertir a meses. */
+  planId: string | null;
+  /** true = ya estaba convertido y NO se emitió un segundo cobro. */
+  duplicado: boolean;
+}
+
+export async function convertirEduQuote(
+  ctx: EduQuoteContext,
+  quoteId: string,
+  body: {
+    /** "cobro" (por defecto) o "plan" — a meses, sobre el mismo cobro. */
+    modo?: unknown;
+    /** Solo con modo "plan". Los valida `createEduPaymentPlan`. */
+    months?: unknown;
+    dueDay?: unknown;
+    enganche?: unknown;
+  } = {},
+  options: { campusId?: string | null; timeZone?: string } = {},
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+  now: Date = new Date(),
+): Promise<EduQuoteConversion> {
+  const institutionId = requireInstitution(ctx);
+  asegurarAlcanceDinero(ctx);
+
+  const id = eduCleanId(quoteId);
+  if (!id) throw new EduPadronError("Falta el presupuesto.", 400);
+
+  const q = await prisma.eduQuote.findFirst({
+    where: { id, institutionId },
+    include: { items: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!q) throw new EduPadronError("Ese presupuesto no existe o no es de tu instituto.", 404);
+
+  // 🔴 SOLO UN ACEPTADO SE CONVIERTE. Cobrar un presupuesto que el
+  // paciente no aceptó es cobrarle algo que no dijo que sí — y un
+  // borrador se sigue editando, así que su total no significa nada
+  // todavía.
+  if (q.status !== "ACEPTADO") {
+    throw new EduPadronError(
+      `Un presupuesto ${q.status} no se cobra: solo se convierte uno ACEPTADO. Preséntaselo al paciente y espera su aceptación (o acéptalo a mano desde aquí si te lo dijo en el mostrador).`,
+      409,
+    );
+  }
+  if (q.totalCents <= 0) {
+    throw new EduPadronError("Ese presupuesto suma cero: no hay nada que cobrar.", 409);
+  }
+  // ⚠️ LOS DOS TOPES NO SON EL MISMO, y el aviso va ANTES de emitir nada.
+  // Un presupuesto admite 60 partidas y un cobro 50 conceptos
+  // (`EDU_MAX_CHARGE_ITEMS`): sin esta comprobación, un presupuesto de 55
+  // renglones se dejaría armar, presentar y aceptar, y reventaría al
+  // convertirlo —con el paciente delante y el papel ya firmado— con un
+  // mensaje que habla de conceptos y no de partidas. Los topes se dejan
+  // como están (son de dos olas distintas y cambiarlos es decisión de
+  // producto); lo que se arregla aquí es enterarse a tiempo.
+  if (q.items.length > EDU_MAX_CHARGE_ITEMS) {
+    throw new EduPadronError(
+      `Ese presupuesto tiene ${q.items.length} partidas y un cobro admite ${EDU_MAX_CHARGE_ITEMS} conceptos. Pártelo en dos presupuestos y convierte cada uno.`,
+      409,
+    );
+  }
+
+  const modo = String(body?.modo ?? "cobro").toLowerCase() === "plan" ? "plan" : "cobro";
+
+  // ── LA IDEMPOTENCIA, ANTES DE TOCAR NADA ────────────────────────────
+  let chargeId = q.chargeId;
+  let chargeFolio = "";
+  let duplicado = false;
+  if (chargeId) {
+    const previo = await prisma.eduCharge.findFirst({
+      where: { id: chargeId, institutionId },
+      select: { id: true, folio: true },
+    });
+    if (previo) {
+      chargeFolio = previo.folio;
+      duplicado = true;
+    } else {
+      // La columna apunta a un cobro que ya no está (se borró la fila a
+      // mano, o el SetNull de una cascada). No se finge que sigue: se
+      // vuelve a convertir, que es lo que la escuela necesita.
+      chargeId = null;
+    }
+  }
+
+  if (!chargeId) {
+    // 🔴 EL DESCUENTO GLOBAL SE REPARTE ENTRE LAS PARTIDAS. `EduCharge` no
+    // tiene un descuento de cabecera: el suyo es la SUMA de los descuentos
+    // de sus líneas (el invariante `subtotal − descuento == total` lo fija
+    // una prueba). Se reparte proporcionalmente y el ÚLTIMO renglón se
+    // lleva el resto de la división, para que el total del cobro sea el
+    // total del presupuesto AL CENTAVO y no "casi".
+    const lineas = eduQuoteRepartirDescuento(
+      q.items.map((i) => ({
+        procedureId: i.procedureId,
+        // El nombre va con sus dientes: es lo que el paciente leyó.
+        description: (i.toothFdi ? `${i.name} (dientes ${i.toothFdi})` : i.name).slice(0, 160),
+        quantity: i.quantity,
+        unitPriceCents: i.unitPriceCents,
+        discountCents: i.discountCents,
+        clientPriceCents: null,
+      })),
+      q.discountCents,
+    );
+
+    const cobro = await createEduCharge(
+      ctx,
+      {
+        patientId: q.patientId,
+        caseId: q.caseId ?? undefined,
+        notes: `Presupuesto ${q.folio} · ${q.title}`.slice(0, 500),
+        // Sin `items`: las líneas van por `lineasCongeladas`.
+        items: [],
+      },
+      {
+        campusId: options.campusId ?? null,
+        lineasCongeladas: lineas,
+        quoteId: q.id,
+        feeScheduleLabel: `Presupuesto ${q.folio}`.slice(0, 80),
+      },
+      now,
+    );
+    chargeId = cobro.id;
+    chargeFolio = cobro.folio;
+
+    // 🔴 Y SE SELLA LA COLUMNA, con `chargeId: null` en el `where`: si dos
+    // clics llegaron a la vez, el segundo escribe CERO filas y su cobro
+    // queda huérfano — que es visible y arreglable— en vez de pisar la
+    // llave de idempotencia del primero y dejar los DOS cobros vivos sin
+    // que nadie lo note.
+    const sellado = await prisma.eduQuote.updateMany({
+      where: { id: q.id, institutionId, chargeId: null },
+      data: { chargeId },
+    });
+    if (sellado.count === 0) {
+      const ganador = await prisma.eduQuote.findFirst({
+        where: { id: q.id, institutionId },
+        select: { chargeId: true, charge: { select: { folio: true } } },
+      });
+      throw new EduPadronError(
+        `Ese presupuesto se convirtió en el cobro ${ganador?.charge?.folio ?? "—"} mientras lo hacías, así que este segundo cobro (${cobro.folio}) sobra: cancélalo en Caja.`,
+        409,
+      );
+    }
+
+    await eduAudit(ctx, {
+      action: "update",
+      entity: "quote",
+      entityId: q.id,
+      patientId: q.patientId,
+      before: { chargeId: null },
+      after: { chargeId, chargeFolio, totalCents: q.totalCents },
+      ...meta,
+    });
+  }
+
+  let planId: string | null = null;
+  if (modo === "plan") {
+    // El plan cuelga del COBRO, no del presupuesto: es el mismo camino
+    // que "Pagos a meses" de Caja, con su enganche, sus fechas en la zona
+    // del instituto y su candado de "un solo plan activo". Aquí no se
+    // duplica ni una línea de esa lógica.
+    const activo = await prisma.eduPaymentPlan.findFirst({
+      where: { institutionId, chargeId, status: "ACTIVO" },
+      select: { id: true },
+    });
+    if (activo) {
+      planId = activo.id;
+    } else {
+      const plan = await createEduPaymentPlan(
+        ctx,
+        chargeId,
+        { months: body?.months, dueDay: body?.dueDay, enganche: body?.enganche },
+        // La zona del INSTITUTO: sin ella las fechas del calendario se
+        // calcularían en UTC y "cada día 28" podría salir el 27.
+        { timeZone: options.timeZone ?? "America/Mexico_City" },
+        now,
+      );
+      planId = plan.id;
+    }
+  }
+
+  return { chargeId, chargeFolio, planId, duplicado };
+}
+
+/**
+ * Reparte el descuento GLOBAL del presupuesto entre sus partidas.
+ *
+ * 🔴 POR QUÉ HAY QUE REPARTIRLO. `EduQuote` tiene UN descuento de
+ * cabecera; `EduCharge` no: el suyo es la SUMA de los descuentos de sus
+ * líneas, y hay una prueba que fija el invariante
+ * `subtotal − descuento == total`. Así que al convertir hay que bajar el
+ * descuento a las partidas, y la suma tiene que dar EXACTAMENTE el mismo
+ * total que el papel que el paciente firmó. Un centavo de diferencia en
+ * un presupuesto aceptado es una discusión en el mostrador.
+ *
+ * 🔴 CÓMO SE REPARTE, y por qué no es una regla de tres a secas:
+ *
+ *   1. A cada partida le toca la parte ENTERA de su proporción
+ *      (`floor`), calculada con enteros — nada de flotantes en dinero.
+ *   2. Lo que sobra por los redondeos (siempre menos de un centavo por
+ *      partida) se reparte de a UN centavo, empezando por la partida
+ *      cuyo resto quedó más grande. Con empate manda el orden de la
+ *      lista, para que dos ejecuciones den lo mismo.
+ *   3. ⚠️ Y SALTANDO LAS PARTIDAS QUE YA NO TIENEN SITIO. Una partida no
+ *      puede acabar con más descuento que su importe: sin este salto,
+ *      tres partidas de $0.07, $0.01 y $0.01 con $0.05 de descuento
+ *      global dejaban un centavo sin repartir y el cobro salía un centavo
+ *      por encima del presupuesto. Es un caso ridículo y es exactamente
+ *      la clase de caso que un día aparece en una conciliación.
+ *
+ * El reparto en aggregate SIEMPRE cabe: `reparto = min(global, Σbrutos)`,
+ * así que el bucle termina con cero centavos sueltos.
+ */
+export function eduQuoteRepartirDescuento(
+  lineas: {
+    procedureId: string | null;
+    description: string;
+    quantity: number;
+    unitPriceCents: number;
+    discountCents: number;
+    clientPriceCents: number | null;
+  }[],
+  descuentoGlobalCents: number,
+): typeof lineas {
+  const global = Math.max(0, Math.trunc(descuentoGlobalCents));
+  if (global === 0 || lineas.length === 0) return lineas;
+
+  // Lo que a cada partida le queda por descontar: su importe menos el
+  // descuento de línea que ya trae.
+  const bruto = lineas.map((l) =>
+    Math.max(0, l.quantity * l.unitPriceCents - l.discountCents),
+  );
+  const total = bruto.reduce((a, b) => a + b, 0);
+  if (total <= 0) return lineas;
+
+  const reparto = Math.min(global, total);
+
+  // 1 · la parte entera, y el resto de cada división (en enteros).
+  const parte = bruto.map((b) => Math.floor((reparto * b) / total));
+  const resto = bruto.map((b) => (reparto * b) % total);
+  let sobrante = reparto - parte.reduce((a, b) => a + b, 0);
+
+  // 2 · el sobrante, de a un centavo, por resto descendente.
+  const orden = bruto
+    .map((_, i) => i)
+    .sort((a, b) => resto[b] - resto[a] || a - b);
+  // 3 · con vueltas: una partida puede llenarse y hay que seguir con la
+  //     siguiente. Como el reparto cabe en la suma, esto termina.
+  while (sobrante > 0) {
+    let repartidoEnLaVuelta = 0;
+    for (const i of orden) {
+      if (sobrante === 0) break;
+      if (parte[i] >= bruto[i]) continue;
+      parte[i] += 1;
+      sobrante -= 1;
+      repartidoEnLaVuelta += 1;
+    }
+    // Red de seguridad: si una vuelta no reparte nada, no hay sitio en
+    // ninguna partida y seguir sería un bucle infinito. No puede pasar
+    // (ver arriba), y por eso mismo se corta en vez de confiar.
+    if (repartidoEnLaVuelta === 0) break;
+  }
+
+  return lineas.map((l, i) => ({ ...l, discountCents: l.discountCents + parte[i] }));
 }
 
 // ═══════════════════════════════════════════════════════════════════════

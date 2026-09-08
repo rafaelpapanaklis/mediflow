@@ -95,9 +95,14 @@ export default async function InstitutoCajaPage({
   const pacienteACobrar =
     canCharge && cobrarId ? await getEduPatient(ctx, cobrarId) : null;
 
+  // 🔴 Ola C · H-09 · EL TURNO ES EL DE ESTA SEDE. Con Norte y Sur
+  // abiertos a la vez, el banner y el filtro «solo el turno abierto»
+  // tienen que hablar del turno del mostrador en el que estás; leer «el
+  // turno del instituto» enseñaría el de la otra sede.
+  const donde = eduCampusForCharge(sede).campusId;
   const [page, turno] = await Promise.all([
-    listEduCharges(cctx, filters, { timeZone: ctx.institution.timezone }),
-    getEduOpenCashSession(ctx),
+    listEduCharges(cctx, filters, { timeZone: ctx.institution.timezone, campusId: donde }),
+    getEduOpenCashSession(ctx, donde),
   ]);
 
   // La hora se formatea EN EL SERVIDOR y en la zona del INSTITUTO. Hacerlo

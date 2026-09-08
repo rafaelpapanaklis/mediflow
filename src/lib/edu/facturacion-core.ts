@@ -783,6 +783,148 @@ export function eduHasInvoiceFilters(f: EduInvoiceFilters): boolean {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// 🔴 H-78 (la otra mitad) · LA EXPORTACIÓN A CSV
+//
+// «Facturación no tiene filtro por fecha ni exportación, y se corta en
+// 200. Cerrar el mes y conciliar con el corte de caja es imposible desde
+// el panel.» El filtro por fecha lo puso la C·1; esto es la exportación,
+// que era la entrega aparte que aquel reporte dejó escrita.
+//
+// 🔴 SE EXPORTA LO QUE SE ESTÁ VIENDO. El CSV usa los MISMOS filtros que
+// la lista, leídos por la MISMA función (`parseEduInvoiceFilters`): un
+// export que trae algo distinto de lo que la pantalla enseña es un export
+// en el que no se puede confiar, y nadie lo descubre hasta que el total
+// no cuadra con el del contador.
+//
+// 🔴 Y ES **PURO**: recibe filas y devuelve texto. Sin prisma, sin fechas
+// inventadas, sin `Intl` propio — la fecha ya viene escrita en la zona del
+// instituto desde `toInvoiceRow`. Así se puede probar con una tabla a
+// mano, que es lo único que atrapa un separador mal escapado.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Las columnas del CSV, en el orden en que salen. Se declaran como DATO
+ * para que el encabezado y la fila no puedan desalinearse: si alguien
+ * añade una columna en un sitio y no en el otro, todo el archivo queda
+ * corrido y el error se ve una semana después, en una conciliación.
+ */
+export const EDU_INVOICE_CSV_COLUMNAS = [
+  "Folio",
+  "Estado",
+  "Ambiente",
+  "Emitida",
+  "UUID",
+  "RFC receptor",
+  "Razón social",
+  "Régimen",
+  "CP",
+  "Correo",
+  "Uso CFDI",
+  "Forma de pago",
+  "IVA",
+  "Subtotal",
+  "Descuento",
+  "Total",
+  "Cobro",
+  "Paciente",
+  "Folio del paciente",
+  "Emitió",
+  "Cancelada",
+  "Motivo SAT",
+  "Motivo escrito",
+] as const;
+
+/**
+ * Escapa UNA celda.
+ *
+ * 🔴 EL `'` DE DELANTE NO ES DECORACIÓN. Una celda que empieza por `=`,
+ * `+`, `-` o `@` la ejecuta Excel como fórmula al abrir el archivo: es la
+ * inyección CSV de manual, y aquí hay campos que escribe una persona (la
+ * razón social del receptor, el motivo de una cancelación). Se antepone
+ * un apóstrofo, que Excel entiende como "esto es texto" y no se ve al
+ * imprimir.
+ *
+ * ⚠️ Un `-` inicial también dispara la fórmula, y por eso los importes se
+ * escriben SIN signo menos: el descuento va en su propia columna, en
+ * positivo, como en el resto del vertical.
+ */
+export function eduCsvCelda(valor: unknown): string {
+  const texto = valor === null || valor === undefined ? "" : String(valor);
+  const seguro = /^[=+\-@\t\r]/.test(texto) ? `'${texto}` : texto;
+  return `"${seguro.replace(/"/g, '""')}"`;
+}
+
+/** Centavos → "1234.56", en punto decimal y sin símbolo: es para una hoja. */
+export function eduCsvImporte(cents: number): string {
+  const abs = Math.abs(Math.round(cents));
+  return `${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+/**
+ * El CSV completo de una página de facturas.
+ *
+ * 🔴 LLEVA BOM (`\uFEFF`) Y SALTOS `\r\n`. Sin el BOM, Excel en español
+ * abre el archivo en la codificación del sistema y "Rodríguez" sale
+ * "RodrÃ­guez" en todas las filas; sin `\r\n`, Excel antiguo mete todo
+ * en una sola línea. Los dos son detalles feos y los dos son la
+ * diferencia entre un archivo que sirve y uno que hay que rehacer a mano.
+ */
+export function eduInvoicesCsv(rows: EduInvoiceRow[]): string {
+  const lineas: string[] = [EDU_INVOICE_CSV_COLUMNAS.map(eduCsvCelda).join(",")];
+  for (const r of rows ?? []) {
+    lineas.push(
+      [
+        r.folio,
+        EDU_INVOICE_STATUS_LABELS[r.status] ?? r.status,
+        EDU_FISCAL_ENV_LABELS[r.environment] ?? r.environment,
+        r.issuedAtLabel,
+        r.uuid ?? "",
+        r.receptorRfc,
+        r.receptorLegalName,
+        r.receptorTaxRegime,
+        r.receptorZip,
+        r.receptorEmail ?? "",
+        r.usoCfdi,
+        r.paymentForm,
+        r.taxMode === "EXENTO" ? "Exento" : "16 %",
+        eduCsvImporte(r.subtotalCents),
+        eduCsvImporte(r.discountCents),
+        eduCsvImporte(r.totalCents),
+        r.chargeFolio,
+        r.patientName,
+        r.patientFolio,
+        r.issuedByName,
+        r.cancelledAt ? r.cancelledByName ?? "sí" : "",
+        r.cancelMotive ?? "",
+        r.cancelReason ?? "",
+      ]
+        .map(eduCsvCelda)
+        .join(","),
+    );
+  }
+  return `\uFEFF${lineas.join("\r\n")}\r\n`;
+}
+
+/**
+ * El nombre del archivo, con el rango que se exportó DENTRO.
+ *
+ * Un `facturas.csv` en la carpeta de descargas junto a otros cuatro
+ * `facturas (1).csv` no dice de qué mes es ninguno. Si hay filtro de
+ * fechas, va en el nombre.
+ */
+export function eduInvoicesCsvNombre(f: EduInvoiceFilters): string {
+  const tramo =
+    f.desde && f.hasta
+      ? `-${f.desde}_a_${f.hasta}`
+      : f.desde
+        ? `-desde-${f.desde}`
+        : f.hasta
+          ? `-hasta-${f.hasta}`
+          : "";
+  return `facturas${tramo}.csv`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // 9 · LO QUE VIAJA A LA PANTALLA
 //
 // Ni una de estas formas lleva la Live Secret Key, el `facturapiOrgId` ni

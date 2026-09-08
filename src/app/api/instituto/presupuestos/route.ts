@@ -36,7 +36,21 @@ export async function GET(request: Request) {
   }
 }
 
-/** POST — crea un presupuesto con sus partidas. */
+/**
+ * POST — crea un presupuesto con sus partidas.
+ *
+ * 🔴 Y ACEPTA `caseId` **y** `treatmentPlanId`: un presupuesto puede nacer
+ * de un caso o de un plan de tratamiento, que es como lo pide el
+ * comparativo con el dental. El servidor comprueba que los dos sean de ESE
+ * paciente y, con un plan y sin partidas, siembra una con el nombre del
+ * plan y su importe.
+ *
+ * ⚠️ El BOTÓN para eso no vive en esta ola: **caja no ve casos** (la línea
+ * del contrato de la Ola 2, en visibility.ts), así que la pantalla de
+ * Presupuestos no puede ofrecer un selector de casos. Tiene que salir de
+ * la pantalla del caso y de la del plan, y las dos son de otra casilla.
+ * Lo que aquí queda es la puerta, abierta y probada.
+ */
 export async function POST(request: Request) {
   const g = await eduApiGuard("caja.charge");
   if ("response" in g) return g.response;

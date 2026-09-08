@@ -64,10 +64,20 @@ import {
   type EduTarifario,
 } from "@/lib/edu/dinero-core";
 import { eduVisibility, eduScopeIsEmpty, type EduClinicaContext } from "@/lib/edu/visibility";
+import type { EduPrecioRastroRow } from "@/lib/edu/dinero-core";
+import { eduUserDisplayName } from "@/lib/edu-auth";
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 import type { EduFeeRule } from "@/lib/edu/types";
 
 /** Mismo error con status del resto del vertical: `eduApiError` lo mapea. */
 export { EduPadronError as EduTarifaError };
+
+/**
+ * El contexto de las escrituras del tarifario: el alcance de siempre MÁS
+ * lo que la bitácora necesita para firmar el renglón (nombre y rol
+ * congelados). Las lecturas siguen tomando `EduClinicaContext` a secas.
+ */
+export interface EduTarifaContext extends EduClinicaContext, EduAuditActor {}
 
 /** Duración de un procedimiento, en minutos. */
 const EDU_MIN_DURACION = 5;
@@ -209,7 +219,12 @@ export const fuenteTarifaPrisma: EduTarifaFuente = {
   async precios(institutionId, procedureIds) {
     if (procedureIds.length === 0) return [];
     return prisma.eduFeeScheduleItem.findMany({
-      where: { institutionId, procedureId: { in: procedureIds } },
+      // 🔴 Ola C · H-76 · `deletedAt: null`. Desde que quitar un precio es
+      // una BAJA LÓGICA y no un DELETE físico, la fila sigue ahí con su
+      // último importe: sin este filtro, un precio retirado seguiría
+      // cotizando y el mostrador cobraría algo que la dirección quitó del
+      // tarifario. El mismo filtro va en las CUATRO lecturas de esta tabla.
+      where: { institutionId, procedureId: { in: procedureIds }, deletedAt: null },
       select: { feeScheduleId: true, procedureId: true, priceCents: true },
     });
   },
@@ -782,7 +797,9 @@ export async function getEduTarifaDePaciente(
       },
     }),
     prisma.eduFeeScheduleItem.findMany({
-      where: { institutionId },
+      // 🔴 H-76 · los precios RETIRADOS no cotizan. Ver la nota de
+      // `fuenteTarifaPrisma.precios`.
+      where: { institutionId, deletedAt: null },
       select: { feeScheduleId: true, procedureId: true, priceCents: true },
     }),
     fuenteTarifaPrisma.listas(institutionId),
@@ -891,7 +908,12 @@ export async function listEduProcedures(
       // anunciaba "con precio" y luego caja no lo podía cobrar; la columna
       // llegaba a decir "3 de 2". El catálogo existe para avisar ANTES del
       // mostrador: si cuenta filas que nunca se van a aplicar, avisa mal.
-      _count: { select: { feeItems: { where: { feeSchedule: { isActive: true } } } } },
+      // 🔴 H-73 + H-76 · solo las listas ACTIVAS y solo los precios VIVOS:
+      // «en cuántas listas tiene precio» no puede contar los retirados por
+      // baja lógica, o la columna volvería a decir "3 de 2".
+      _count: {
+        select: { feeItems: { where: { feeSchedule: { isActive: true }, deletedAt: null } } },
+      },
     },
   });
   return rows.map((p) => ({
@@ -1295,12 +1317,19 @@ export async function getEduTarifario(ctx: EduClinicaContext): Promise<EduTarifa
         durationMinutes: true,
         isActive: true,
         orderIndex: true,
-        // 🔴 H-73 · solo las listas ACTIVAS, igual que en el catálogo.
-        _count: { select: { feeItems: { where: { feeSchedule: { isActive: true } } } } },
+        // 🔴 H-73 + H-76 · solo las listas ACTIVAS y solo los precios VIVOS:
+        // «en cuántas listas tiene precio» no puede contar los retirados por
+        // baja lógica, o la columna volvería a decir "3 de 2".
+        _count: {
+          select: { feeItems: { where: { feeSchedule: { isActive: true }, deletedAt: null } } },
+        },
       },
     }),
     prisma.eduFeeScheduleItem.findMany({
-      where: { institutionId },
+      // 🔴 H-76 · un precio retirado no se pinta en la rejilla: la celda
+      // vuelve a estar vacía, que es lo que significa. Su rastro —quién lo
+      // quitó y cuándo— vive en el historial del procedimiento.
+      where: { institutionId, deletedAt: null },
       select: { feeScheduleId: true, procedureId: true, priceCents: true },
     }),
   ]);
@@ -1359,9 +1388,10 @@ export interface EduPrecioInput {
  * decide lo que costará el PRÓXIMO.
  */
 export async function setEduProcedurePrices(
-  ctx: EduClinicaContext,
+  ctx: EduTarifaContext,
   procedureId: string,
   precios: EduPrecioInput[],
+  now: Date = new Date(),
 ): Promise<{ id: string; escritos: number; borrados: number }> {
   const institutionId = requireInstitution(ctx);
   const id = eduCleanId(procedureId);
@@ -1418,15 +1448,52 @@ export async function setEduProcedurePrices(
     aEscribir.push({ feeScheduleId, priceCents: cents });
   }
 
+  // ── El estado ANTERIOR, para la bitácora y para no escribir de más ──
+  // Se lee incluyendo las filas ya retiradas: volver a poner un precio
+  // REVIVE su fila (ver abajo) y eso también es un cambio que contar.
+  const previas = await prisma.eduFeeScheduleItem.findMany({
+    where: { institutionId, procedureId: id },
+    select: { feeScheduleId: true, priceCents: true, deletedAt: true },
+  });
+  const antes = new Map(previas.map((p) => [p.feeScheduleId, p]));
+
+  // El nombre CONGELADO de quien tocó el precio. Se arma del contexto de
+  // sesión (nombre y apellido) y no con `eduUserDisplayName`, que pide
+  // además el correo: la sesión no lo lleva, y arrastrar el `EduUser`
+  // entero hasta aquí para un rótulo sería peor.
+  const autor = `${ctx.user.firstName} ${ctx.user.lastName}`.trim().slice(0, 160) || "—";
+
   await prisma.$transaction(async (tx) => {
+    // ── 🔴 Ola C · H-76 · QUITAR UN PRECIO ES UNA **BAJA LÓGICA** ──────
+    // Era un `deleteMany` FÍSICO: vaciar la celda borraba la fila y con
+    // ella el único rastro de que ese precio existió, quién lo puso y
+    // cuánto valía. «En febrero la resina costaba $800 y hoy $1,200: no se
+    // puede contestar quién lo subió» — y menos aún si la fila ya no está.
+    //
+    // El `where` lleva `deletedAt: null` para que volver a vaciar una
+    // celda ya vacía no reescriba la fecha de baja: la primera es la que
+    // vale, y sin esto un doble clic movería el rastro.
     if (aBorrar.length > 0) {
-      await tx.eduFeeScheduleItem.deleteMany({
-        where: { institutionId, procedureId: id, feeScheduleId: { in: aBorrar } },
+      await tx.eduFeeScheduleItem.updateMany({
+        where: {
+          institutionId,
+          procedureId: id,
+          feeScheduleId: { in: aBorrar },
+          deletedAt: null,
+        },
+        data: { deletedAt: now, deletedById: ctx.eduUserId },
       });
     }
     for (const it of aEscribir) {
       // upsert por el índice único COMPLETO (feeScheduleId, procedureId).
       // Uno parcial no lo infiere el ON CONFLICT que emite Prisma.
+      //
+      // 🔴 Y ES UN **UPSERT** Y NO UN INSERT, precisamente por la baja
+      // lógica: el `@@unique([feeScheduleId, procedureId])` NO es parcial,
+      // así que una fila retirada SIGUE OCUPANDO su clave. Volver a poner
+      // ese precio tiene que REVIVIR esa misma fila —`deletedAt: null` en
+      // el `update`— porque insertar otra chocaría contra el índice. Está
+      // avisado en el propio esquema y es la trampa de esta ola.
       await tx.eduFeeScheduleItem.upsert({
         where: {
           feeScheduleId_procedureId: { feeScheduleId: it.feeScheduleId, procedureId: id },
@@ -1436,13 +1503,116 @@ export async function setEduProcedurePrices(
           feeScheduleId: it.feeScheduleId,
           procedureId: id,
           priceCents: it.priceCents,
+          createdByUserId: ctx.eduUserId,
+          updatedByUserId: ctx.eduUserId,
+          updatedByName: autor,
+          priceSetAt: now,
         },
-        update: { priceCents: it.priceCents },
+        update: {
+          priceCents: it.priceCents,
+          updatedByUserId: ctx.eduUserId,
+          updatedByName: autor,
+          // 🔴 `priceSetAt` va APARTE de `updatedAt` y solo se mueve
+          // cuando el IMPORTE cambia (o cuando el precio revive): lo que
+          // hay que poder contestar es cuándo cambió EL PRECIO, no cuándo
+          // se tocó la fila. Si se moviera con cualquier escritura, la
+          // pregunta de H-76 volvería a quedar sin respuesta.
+          ...(antes.get(it.feeScheduleId)?.priceCents === it.priceCents &&
+          antes.get(it.feeScheduleId)?.deletedAt === null
+            ? {}
+            : { priceSetAt: now }),
+          deletedAt: null,
+          deletedById: null,
+        },
       });
     }
   });
 
+  // 🔴 BITÁCORA. Un cambio de precio es la escritura que más tarda en
+  // notarse y la que más cuesta reconstruir: se registra siempre, con el
+  // antes y el después de cada lista tocada.
+  const diffAntes: Record<string, unknown> = {};
+  const diffDespues: Record<string, unknown> = {};
+  for (const it of aEscribir) {
+    const p = antes.get(it.feeScheduleId);
+    diffAntes[it.feeScheduleId] = p && !p.deletedAt ? p.priceCents : null;
+    diffDespues[it.feeScheduleId] = it.priceCents;
+  }
+  for (const fs of aBorrar) {
+    const p = antes.get(fs);
+    diffAntes[fs] = p && !p.deletedAt ? p.priceCents : null;
+    diffDespues[fs] = null;
+  }
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "feeSchedule",
+    entityId: id,
+    before: diffAntes,
+    after: diffDespues,
+  });
+
   return { id, escritos: aEscribir.length, borrados: aBorrar.length };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 Ola C · H-76 · QUIÉN CAMBIÓ UN PRECIO Y CUÁNDO
+//
+// «Los tres modelos del tarifario no guardan autor, mientras el cobro sí
+// guarda quién cobró y la factura quién la emitió.»
+//
+// ⚠️ ESTO NO ES UN HISTORIAL COMPLETO Y NO FINGE SERLO. No hay tabla de
+// movimientos de precio: lo que existe es UNA fila por (lista,
+// procedimiento) con el ÚLTIMO autor, la fecha del último cambio de
+// importe y —desde la baja lógica— quién lo retiró. Con eso se contesta
+// «¿quién puso el precio que está hoy?» y «¿quién quitó éste?», que es lo
+// que pregunta la dirección. «¿Cuánto costaba en febrero?» necesita una
+// tabla de movimientos, y eso queda escrito en el reporte, no simulado
+// aquí con datos que no existen.
+// ═══════════════════════════════════════════════════════════════════════
+
+export type { EduPrecioRastroRow } from "@/lib/edu/dinero-core";
+
+export async function getEduProcedurePrecioRastro(
+  ctx: EduClinicaContext,
+  procedureId: string,
+): Promise<EduPrecioRastroRow[]> {
+  const institutionId = requireInstitution(ctx);
+  // El mismo segundo candado que `getEduTarifario`: esto son precios.
+  if (eduScopeIsEmpty(eduVisibility(ctx, "charges"))) {
+    throw new EduPadronError("Tu rol no ve precios ni cobros.", 403);
+  }
+  const id = eduCleanId(procedureId);
+  if (!id) throw new EduPadronError("Ese procedimiento no es válido.", 400);
+
+  const filas = await prisma.eduFeeScheduleItem.findMany({
+    // 🔴 AQUÍ SÍ ENTRAN LAS RETIRADAS: son la mitad de la respuesta.
+    where: { institutionId, procedureId: id },
+    orderBy: [{ feeSchedule: { orderIndex: "asc" } }, { feeSchedule: { key: "asc" } }],
+    take: EDU_MAX_FEE_SCHEDULES,
+    select: {
+      feeScheduleId: true,
+      priceCents: true,
+      priceSetAt: true,
+      updatedByName: true,
+      deletedAt: true,
+      feeSchedule: { select: { name: true, key: true } },
+      createdBy: { select: { firstName: true, lastName: true, email: true } },
+      deletedBy: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+
+  return filas.map((f) => ({
+    feeScheduleId: f.feeScheduleId,
+    feeScheduleName: f.feeSchedule.name,
+    feeScheduleKey: f.feeSchedule.key,
+    priceCents: f.priceCents,
+    retirado: f.deletedAt !== null,
+    updatedByName: f.updatedByName,
+    priceSetAt: f.priceSetAt ? f.priceSetAt.toISOString() : null,
+    createdByName: f.createdBy ? eduUserDisplayName(f.createdBy) : null,
+    deletedByName: f.deletedBy ? eduUserDisplayName(f.deletedBy) : null,
+    deletedAt: f.deletedAt ? f.deletedAt.toISOString() : null,
+  }));
 }
 
 // ⚠️ Aquí vivía `listEduProcedureOptions` ("procedimientos activos para un
