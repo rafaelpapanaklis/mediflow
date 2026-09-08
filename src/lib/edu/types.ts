@@ -1039,7 +1039,19 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     // El href es MÁS LARGO que el de "Dirección" y el sidebar marca activo
     // el que coincide más, así que abrir la bitácora no enciende también
     // el item del panel.
-    key: "bitacora",
+    //
+    // 🔴 LA KEY ES "bitacora-instituto" Y NO "bitacora" A PROPÓSITO. En
+    // este vertical hay DOS bitácoras y son cosas distintas:
+    //   · la de EVALUACIÓN — el historial de un alumno, que se exporta en
+    //     CSV desde /api/instituto/evaluacion/[id]/export y NO tiene item
+    //     de menú porque se llega desde Evaluación, que es donde uno está
+    //     cuando pregunta por un alumno concreto (Ola 6);
+    //   · ÉSTA — el libro NOM-024 del instituto entero.
+    // La Ola 6 dejó clavado `enMenu.has("bitacora") === false` para que la
+    // suya no se colara al menú por descuido, y esa cerradura sigue siendo
+    // correcta: es la de evaluación la que no va en el menú. Usar aquí esa
+    // misma key la habría roto midiendo un texto en vez de una intención.
+    key: "bitacora-instituto",
     href: "/instituto/direccion/bitacora",
     icon: "scroll-text",
     section: "administracion",
@@ -1177,8 +1189,10 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   whatsapp: "WhatsApp",
   // Ola C·2. "Bitácora" y no "Auditoría": es como la NOM-024 y como la
   // propia escuela le dicen al libro de quién hizo qué. "Auditoría" se lee
-  // como algo que le hacen a uno desde fuera.
-  bitacora: "Bitácora",
+  // como algo que le hacen a uno desde fuera. La key lleva el sufijo
+  // porque hay otra bitácora en el vertical (la de evaluación); lo que se
+  // LEE en el menú es solo "Bitácora", que es como la llama la escuela.
+  "bitacora-instituto": "Bitácora",
   facturacion: "Facturación",
 };
 
