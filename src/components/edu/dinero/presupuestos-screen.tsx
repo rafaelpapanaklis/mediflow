@@ -1012,6 +1012,11 @@ function DetallePresupuesto({
   const [liga, setLiga] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [motivo, setMotivo] = useState("");
+  // 🔴 QUIÉN ACEPTA EN EL MOSTRADOR. La liga pública exige el nombre
+  // completo antes de aceptar y aquí no se pedía nada: el presupuesto
+  // quedaba ACEPTADO sin decir quién dijo que sí. Va al servidor y acaba
+  // dentro de `acceptedByName`, junto a ante quién se aceptó.
+  const [aceptante, setAceptante] = useState("");
   const [meses, setMeses] = useState("3");
 
   // 🔴 LAS TRANSICIONES SON UN DATO, no una cadena de `if`: la misma tabla
@@ -1201,24 +1206,6 @@ function DetallePresupuesto({
           </button>
         )}
 
-        {canCharge && puede("ACEPTADO") && (
-          <button
-            type="button"
-            className="edu-btn edu-btn--ghost edu-btn--sm"
-            onClick={() =>
-              llamar(
-                `/api/instituto/presupuestos/${quote.id}`,
-                "PATCH",
-                { status: "ACEPTADO" },
-                "Presupuesto aceptado. Ya se puede convertir en cobro.",
-              )
-            }
-            disabled={busy}
-          >
-            Aceptar en el mostrador
-          </button>
-        )}
-
         {canCharge && puede("RECHAZADO") && (
           <button
             type="button"
@@ -1316,6 +1303,48 @@ function DetallePresupuesto({
               </button>
             </div>
           )}
+        </section>
+      )}
+
+      {/* ── ACEPTAR EN EL MOSTRADOR ──────────────────────────────────── */}
+      {canCharge && puede("ACEPTADO") && (
+        <section className="edu-section">
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-presu-aceptante">
+              Aceptar en el mostrador (pide quién lo acepta)
+            </label>
+            <input
+              id="edu-presu-aceptante"
+              className="edu-input"
+              value={aceptante}
+              onChange={(e) => setAceptante(e.target.value)}
+              placeholder="Nombre completo de quien dice que sí"
+              autoComplete="off"
+            />
+            <span className="edu-field__hint">
+              {/* La liga pública pide el nombre antes de aceptar; el
+                  mostrador tiene que dejar la misma evidencia, o el PDF
+                  sale sin franja y dentro de un año nadie puede contestar
+                  quién aceptó ese total. */}
+              Queda con fecha, con tu nombre y con la huella del total aceptado — lo mismo que
+              cuando el paciente acepta desde su liga. Un presupuesto vencido no se puede aceptar.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+            onClick={() =>
+              llamar(
+                `/api/instituto/presupuestos/${quote.id}`,
+                "PATCH",
+                { status: "ACEPTADO", acceptedByName: aceptante.trim() },
+                "Presupuesto aceptado, con su evidencia. Ya se puede convertir en cobro.",
+              )
+            }
+            disabled={busy || aceptante.trim().length < 3}
+          >
+            Aceptar en el mostrador
+          </button>
         </section>
       )}
 

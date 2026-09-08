@@ -1700,6 +1700,27 @@ export async function cancelEduInvoice(
 // ahí es peor que pedirle a una persona que lo verifique.
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * El 409 de las dos ramas de `resolveEduStuckInvoice`. Uno solo, porque es
+ * el mismo suceso: alguien más la resolvió entre la lectura y la escritura.
+ */
+function conflictoAlResolver(folio: string): EduPadronError {
+  return new EduPadronError(
+    `Alguien resolvió la factura ${folio} mientras la mirabas. Recarga Facturación y comprueba cómo quedó ANTES de volver a facturar ese cobro: si ya está VÁLIDA, el comprobante existe y volver a facturarlo timbraría un segundo CFDI.`,
+    409,
+  );
+}
+
+/** La fila ya resuelta, para poder contestar con ella. */
+async function releerFactura(institutionId: string, id: string) {
+  const fila = await prisma.eduInvoice.findFirst({
+    where: { institutionId, id },
+    select: INVOICE_SELECT,
+  });
+  if (!fila) throw new EduPadronError("No se encontró esa factura.", 404);
+  return fila;
+}
+
 export async function resolveEduStuckInvoice(
   ctx: EduClinicaContext,
   invoiceId: string,
@@ -1721,8 +1742,22 @@ export async function resolveEduStuckInvoice(
   }
 
   if (input.sinTimbre === true) {
-    const actualizada = await prisma.eduInvoice.update({
-      where: { id: factura.id },
+    // 🔴 OLA C·fin · H-66 — EL ESTADO LEÍDO ENTRA EN EL `where`.
+    //
+    // Esto era el mismo check-then-act que H-66 vino a matar: `factura` se
+    // lee arriba, fuera de toda transacción, y `update({ where: { id } })`
+    // escribía pasara lo que pasara en medio. Dos personas miran Facturapi
+    // a la vez —una encuentra el timbre y pega el UUID, la otra pulsa «no
+    // hay comprobante»—: la segunda pisaba a la primera, la fila quedaba
+    // FAILED con `activeChargeId: null`, el cobro se liberaba, y el
+    // siguiente «Facturar» emitía un SEGUNDO CFDI de algo que el SAT ya
+    // timbró — y el primero ni se puede cancelar desde el panel, porque
+    // esa rama nunca guardó su `facturapiId`.
+    //
+    // Con `status: "STAMPING"` en el `where`, la que llega tarde escribe
+    // cero filas y recibe un 409 que dice qué pasó.
+    const soltada = await prisma.eduInvoice.updateMany({
+      where: { id: factura.id, institutionId, status: "STAMPING" },
       data: {
         status: "FAILED",
         activeChargeId: null,
@@ -1732,9 +1767,10 @@ export async function resolveEduStuckInvoice(
             500,
           ),
       },
-      select: INVOICE_SELECT,
     });
-    return toInvoiceRow(actualizada, invoiceFmt(options.timeZone));
+    if (soltada.count === 0) throw conflictoAlResolver(factura.folio);
+    const soltadaFila = await releerFactura(institutionId, factura.id);
+    return toInvoiceRow(soltadaFila, invoiceFmt(options.timeZone));
   }
 
   const uuid = typeof input.uuid === "string" ? input.uuid.trim().toUpperCase() : "";
@@ -1746,8 +1782,10 @@ export async function resolveEduStuckInvoice(
   }
 
   try {
-    const actualizada = await prisma.eduInvoice.update({
-      where: { id: factura.id },
+    // 🔴 El MISMO candado que la rama de arriba: si otro ya la resolvió
+    // —soltando el cobro o pegando otro UUID— aquí no se pisa nada.
+    const recuperada = await prisma.eduInvoice.updateMany({
+      where: { id: factura.id, institutionId, status: "STAMPING" },
       data: {
         status: "VALID",
         uuid,
@@ -1755,9 +1793,10 @@ export async function resolveEduStuckInvoice(
         errorMessage:
           "Recuperada a mano: el comprobante SÍ se había timbrado y el folio fiscal se capturó desde Facturapi.",
       },
-      select: INVOICE_SELECT,
     });
-    return toInvoiceRow(actualizada, invoiceFmt(options.timeZone));
+    if (recuperada.count === 0) throw conflictoAlResolver(factura.folio);
+    const recuperadaFila = await releerFactura(institutionId, factura.id);
+    return toInvoiceRow(recuperadaFila, invoiceFmt(options.timeZone));
   } catch (err) {
     if (esConflictoDeUnico(err)) {
       throw new EduPadronError(

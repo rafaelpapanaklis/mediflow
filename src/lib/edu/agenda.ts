@@ -1184,14 +1184,29 @@ export async function updateEduAppointment(
   // El estado leído entra en el `where` (`updateMany`, que es el único que
   // lo admite) y 409 si no movió nada — el mismo patrón que recordatorios.ts
   // documenta tres archivos más allá.
+  //
+  // 🔴 OLA C·fin — Y EL ALUMNO Y EL CASO TAMBIÉN, porque el estado solo no
+  // bastaba. Un TRASPASO (`traspasos.ts`) cambia `studentId` y `caseId` sin
+  // tocar el estado: entre la lectura de `current` y este UPDATE cabe el
+  // traspaso entero, el `where` con solo `status` lo deja pasar, y `data`
+  // —que arrastra el `studentId` leído de la pantalla vieja— DEVUELVE el
+  // paciente al alumno saliente. Reagendar una hora no puede deshacer un
+  // traspaso: si el par (alumno, caso) ya no es el que se leyó, esto no
+  // escribe nada y contesta 409.
   // ═══════════════════════════════════════════════════════════════════
   const movida = await prisma.eduAppointment.updateMany({
-    where: { id: current.id, institutionId, status: current.status },
+    where: {
+      id: current.id,
+      institutionId,
+      status: current.status,
+      studentId: current.studentId,
+      caseId: current.caseId,
+    },
     data,
   });
   if (movida.count === 0) {
     throw new EduPadronError(
-      "Esa cita cambió de estado mientras la movías: alguien la cerró, la canceló o marcó que el paciente no llegó. Refresca la agenda y mira cómo quedó.",
+      "Esa cita cambió mientras la movías: alguien la cerró, la canceló, marcó que el paciente no llegó, o la traspasó a otro alumno. Refresca la agenda y mira cómo quedó.",
       409,
     );
   }

@@ -46,6 +46,7 @@ import {
   EDU_QUOTE_MAX_ROWS,
   EDU_QUOTE_NOTES_MAX,
   eduQuoteEstadoVisible,
+  eduQuoteLigaVigente,
   eduQuoteMotivoParaNoAceptar,
   eduQuoteParseItems,
   eduQuoteParsePct,
@@ -54,6 +55,7 @@ import {
   eduQuotePuedeTransicionar,
   eduQuoteTextoCanonico,
   eduQuoteTotales,
+  eduQuoteVencido,
   eduQuoteVigenciaPorDefecto,
   type EduQuoteEstadoVisible,
   type EduQuoteFilters,
@@ -694,7 +696,16 @@ export async function presentarEduQuote(
 export async function cambiarEstadoEduQuote(
   ctx: EduQuoteContext,
   quoteId: string,
-  body: { status?: unknown; reason?: unknown },
+  body: {
+    status?: unknown;
+    reason?: unknown;
+    /**
+     * Quién aceptó, cuando `status` es ACEPTADO. Lo teclea el mostrador —
+     * es el nombre de la persona que dijo que sí, delante de la caja. Se
+     * guarda dentro de `acceptedByName` junto a ante quién se aceptó.
+     */
+    acceptedByName?: unknown;
+  },
   meta: { ip?: string | null; userAgent?: string | null } = {},
   now: Date = new Date(),
 ): Promise<{ id: string; status: EduQuoteStatus }> {
@@ -708,7 +719,7 @@ export async function cambiarEstadoEduQuote(
 
   const q = await prisma.eduQuote.findFirst({
     where: { id, institutionId },
-    select: { id: true, patientId: true, status: true },
+    select: { id: true, patientId: true, status: true, validUntil: true },
   });
   if (!q) throw new EduPadronError("Ese presupuesto no existe o no es de tu instituto.", 404);
 
@@ -716,6 +727,31 @@ export async function cambiarEstadoEduQuote(
   if (!eduQuotePuedeTransicionar(desde, destino)) {
     throw new EduPadronError(
       `Un presupuesto ${desde} no puede pasar a ${destino}. Un aceptado no se des-acepta: se cancela el cobro que generó.`,
+      409,
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·fin · UN VENCIDO NO SE ACEPTA EN EL MOSTRADOR, Y POR ESO
+  // TAMPOCO SE COBRA.
+  //
+  // La liga pública sí lo frenaba (`eduQuoteMotivoParaNoAceptar`) y este
+  // camino no: las dos puertas del MISMO documento aplicaban reglas
+  // distintas, y la que no validaba es la que emite el cobro.
+  //
+  // 🔴 Y SE COMPRUEBA **AQUÍ**, NO AL CONVERTIR. `eduQuoteVencido`
+  // devuelve `false` en cuanto el estado deja de ser PRESENTADO
+  // (presupuestos-core.ts): aceptarlo BORRA la condición de vencido, así
+  // que `convertirEduQuote` no puede preguntarlo aunque quiera. Cerrar la
+  // aceptación cierra la conversión, que es lo que se quería. Y no se
+  // mira la vigencia de un ACEPTADO a propósito: la aceptación ocurrió
+  // dentro del plazo y el reloj deja de importar (un aceptado en marzo se
+  // puede cobrar en abril; lo que no se puede es aceptar en abril el
+  // papel que venció en marzo).
+  // ═══════════════════════════════════════════════════════════════════
+  if (destino === "ACEPTADO" && eduQuoteVencido({ status: desde, validUntil: q.validUntil }, now)) {
+    throw new EduPadronError(
+      "Ese presupuesto ya venció: no se puede aceptar ni convertir en cobro con precios caducados. Devuélvelo a borrador, actualiza la vigencia y vuelve a presentárselo al paciente.",
       409,
     );
   }
@@ -730,6 +766,57 @@ export async function cambiarEstadoEduQuote(
   if (destino === "CANCELADO") {
     data.cancelledAt = now;
     data.cancelReason = reason;
+  }
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·fin · «ACEPTAR EN EL MOSTRADOR» DEJA LA MISMA EVIDENCIA QUE
+  // LA LIGA PÚBLICA.
+  //
+  // Hasta aquí esta rama no existía: `acceptedAt`, `acceptedByName`,
+  // `acceptedHash`, `acceptedIp` y `acceptedUserAgent` quedaban NULL y
+  // solo los escribía el camino público (`aceptarEduQuotePorToken`). El
+  // resultado: el detalle no decía quién ni cuándo, el PDF salía SIN la
+  // franja de aceptación —`getEduQuotePdfData` exige
+  // `status === "ACEPTADO" && acceptedAt`, así que se veía idéntico a uno
+  // que nadie ha contestado— y se convertía en cobro igual. El agujero
+  // que este archivo dice cerrar se cerraba por la liga y se dejaba
+  // abierto por el mostrador, que es por donde entra la mitad de los
+  // casos.
+  //
+  // 🔴 EL HASH ES EL MISMO TEXTO CANÓNICO, con los importes dentro. Sin
+  // él, dentro de un año no se puede contestar «¿aceptó ESTE total?» —y
+  // media evidencia, para las dos puertas del mismo documento, es dos
+  // reglas distintas sobre el mismo papel.
+  //
+  // ⚠️ LA IP Y EL NAVEGADOR SON LOS DE LA ESCUELA, no los del paciente, y
+  // eso es lo correcto: aquí quien pulsa es el mostrador. Por eso el
+  // nombre dice SIEMPRE ante quién se aceptó, y no se puede confundir con
+  // una aceptación hecha por el paciente desde su teléfono.
+  // ═══════════════════════════════════════════════════════════════════
+  if (destino === "ACEPTADO") {
+    const papel = await prisma.eduQuote.findFirst({
+      where: { id: q.id, institutionId },
+      select: {
+        folio: true,
+        title: true,
+        totalCents: true,
+        validUntil: true,
+        items: {
+          orderBy: { sortOrder: "asc" },
+          select: { name: true, quantity: true, lineTotalCents: true },
+        },
+      },
+    });
+    if (!papel) throw new EduPadronError("Ese presupuesto ya no está.", 404);
+
+    const ante = `${ctx.user.firstName} ${ctx.user.lastName}`.trim() || "el mostrador";
+    const quien = eduOptionalText(body?.acceptedByName, 80);
+    data.acceptedAt = now;
+    data.acceptedByName = `${quien ?? "el paciente"}, en el mostrador ante ${ante}`.slice(0, 160);
+    data.acceptedHash = createHash("sha256")
+      .update(eduQuoteTextoCanonico({ ...papel, items: papel.items }))
+      .digest("hex");
+    data.acceptedIp = meta.ip ?? null;
+    data.acceptedUserAgent = meta.userAgent?.slice(0, 300) ?? null;
   }
   if (destino === "BORRADOR") {
     // Vuelve a edición: se le quita la presentación, pero NO el token —
@@ -755,7 +842,14 @@ export async function cambiarEstadoEduQuote(
     entityId: q.id,
     patientId: q.patientId,
     before: { status: desde },
-    after: { status: destino, motivo: reason },
+    after: {
+      status: destino,
+      motivo: reason,
+      // Quién aceptó y con qué evidencia, para que la bitácora conteste lo
+      // mismo que el PDF sin tener que abrir el presupuesto.
+      aceptadoPor: destino === "ACEPTADO" ? data.acceptedByName : undefined,
+      evidencia: destino === "ACEPTADO" ? data.acceptedHash : undefined,
+    },
     ...meta,
   });
 
@@ -1057,6 +1151,21 @@ export async function convertirEduQuote(
         notes: `Presupuesto ${q.folio} · ${q.title}`.slice(0, 500),
         // Sin `items`: las líneas van por `lineasCongeladas`.
         items: [],
+        // 🔴 OLA C·fin · LA CLAVE DE IDEMPOTENCIA, que faltaba.
+        //
+        // El sello de `chargeId` va DESPUÉS de emitir (veinte líneas más
+        // abajo), así que dos clics simultáneos emitían los dos su cobro
+        // con su folio y el segundo recibía un 409 que decía "cancélalo en
+        // Caja" — con el paciente delante. `createEduCharge` ya sabe
+        // hacerlo bien: el índice único (institutionId, idempotencyKey) de
+        // sql/edu-cierre.sql convierte esa carrera en un P2002 que se
+        // traduce en "toma el cobro que ganó", y el segundo cobro nunca
+        // llega a existir.
+        //
+        // La clave se DERIVA del presupuesto y no la manda el cliente
+        // porque la regla es "un presupuesto, un cobro": es la misma llave
+        // que la columna `chargeId`, aplicada un instante antes.
+        idempotencyKey: `presupuesto-${q.id}`,
       },
       {
         campusId: options.campusId ?? null,
@@ -1246,6 +1355,15 @@ export async function getEduQuotePorToken(
   });
   if (!q) return null;
 
+  // 🔴 S-6 · LA LIGA CADUCA Y SE INVALIDA. Un presupuesto cancelado,
+  // rechazado, vencido o ya convertido en cobro devuelve exactamente lo
+  // mismo que un token inventado: `null`, que arriba es 404. Antes seguía
+  // entregando folio, título, partidas e importes y solo cambiaba el texto
+  // de la pantalla. La regla vive en el core, la usan las dos puertas
+  // públicas, y el 404 no distingue "no existe" de "ya no vale" — decirlo
+  // confirmaría que el token es real ante quien recibió la liga reenviada.
+  if (!eduQuoteLigaVigente({ ...q, status: q.status as EduQuoteStatus }, now)) return null;
+
   return {
     folio: q.folio,
     title: q.title,
@@ -1298,6 +1416,17 @@ export async function aceptarEduQuotePorToken(
   });
   if (!q) throw new EduPadronError("Ese enlace no es válido.", 404);
 
+  // 🔴 S-6 · LA MISMA PUERTA QUE EL GET, y con el MISMO mensaje que un
+  // token inexistente: si la liga ya no vale, aquí no se explica por qué.
+  if (!eduQuoteLigaVigente({ ...q, status: q.status as EduQuoteStatus }, now)) {
+    throw new EduPadronError("Ese enlace no es válido.", 404);
+  }
+
+  // Lo que sigue vivo del bloqueo escrito: el ÚNICO caso que la liga deja
+  // pasar y no admite aceptación es un ACEPTADO todavía sin cobro, y ahí
+  // la frase entera ("ya lo aceptaste, no hace falta otra vez") es la
+  // respuesta correcta — el paciente tiene la liga en la mano y acaba de
+  // usarla.
   const bloqueo = eduQuoteMotivoParaNoAceptar(
     { status: q.status as EduQuoteStatus, validUntil: q.validUntil },
     now,

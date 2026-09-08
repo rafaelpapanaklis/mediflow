@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { eduAuditRequestMeta } from "@/lib/edu/auditoria";
 import { createEduBloqueo, listEduBloqueos } from "@/lib/edu/agenda-bloqueos";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +51,14 @@ export async function POST(request: Request) {
   if ("response" in g) return g.response;
   try {
     const body = await eduReadJson(request);
-    const r = await createEduBloqueo(g.ctx, body, eduAuditRequestMeta(request));
+    // 🔴 S-5 · EL ALCANCE DE SEDE, DE VERDAD. `createEduBloqueo` comprueba
+    // `eduCampusCovers(ctx.campusIds, campusId)` desde el primer día, pero
+    // aquí se le pasaba `g.ctx` CRUDO: `campusIds` es opcional en
+    // `EduCampusAware`, llegaba `undefined`, y `eduCampusCovers(undefined,
+    // x)` devuelve `true` siempre. El `if` no rechazaba nunca y compilaba
+    // sin ruido. Es el mismo patrón que ya usan facturación y agenda.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const r = await createEduBloqueo(cctx, body, eduAuditRequestMeta(request));
     return NextResponse.json({ ok: true, ...r });
   } catch (err) {
     return eduApiError(err, "POST /api/instituto/bloqueos");
