@@ -3930,8 +3930,22 @@ a.edu-fichadato:hover {
   color: var(--edu-text-3);
 }
 
-/* ── El descuadre del arqueo ────────────────────────────────────────── */
+/* ── El descuadre del arqueo, y la píldora del diff de la bitácora ────
+   🔴 OLA C·2 · `display: inline-block` Y NO EL `block` IMPLÍCITO.
+   Nació como el PÁRRAFO del descuadre del corte de caja y trae 10 px de
+   relleno vertical. La bitácora la reusa EN LÍNEA («antes → después»,
+   dentro de un `.edu-kv__v`), y ahí el relleno de una caja en línea de
+   verdad NO cuenta para la altura de la línea: la píldora se subía por
+   encima del rótulo de arriba. Como caja en LÍNEA-BLOQUE sí cuenta.
+
+   ⚠️ Y NO le cambia nada al corte de caja, que es de donde salió: ese `<p>`
+   es hijo directo de `.edu-modal__body`, que es `display: flex`, y un hijo
+   de flex se BLOQUEA (`inline-block` computa a `block`). Sigue ocupando la
+   fila entera, como hasta ahora. La bitácora, en cambio, cuelga de un
+   `.edu-kv__v` que es `display: block`, así que ahí sí manda esta regla.
+   ──────────────────────────────────────────────────────────────────── */
 .edu-dif {
+  display: inline-block;
   margin: 0;
   padding: 10px 12px;
   border-radius: 10px;

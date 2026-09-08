@@ -369,30 +369,18 @@ export default async function DireccionBitacoraPage({
                       {r.campos.map((c) => (
                         <div key={c.campo}>
                           <span className="edu-kv__k">{c.campo}</span>
-                          {/* ⚠️ `display: inline-block` EN LÍNEA, y no es
-                              pereza de no tocar la hoja de estilo:
-                              `.edu-dif` nació como un PÁRRAFO del diff de
-                              otra pantalla y trae 10 px de relleno
-                              vertical. Como caja en línea, ese relleno no
-                              cuenta para la altura de la línea y la píldora
-                              se sube por encima del rótulo de arriba —se
-                              ve, y es feo, en la primera captura. Con
-                              `inline-block` sí cuenta. La regla general
-                              vive en edu-theme.css, que es un archivo
-                              compartido fuera del área de esta casilla; el
-                              cambio queda propuesto en el punto 6. */}
+                          {/* El `display: inline-block` que estaba aquí en
+                              línea ya vive en `.edu-dif` (edu-theme.css):
+                              esa hoja era un archivo compartido fuera del
+                              área de esta casilla y el arreglo quedó
+                              propuesto en su punto 6. Se cerró al juntar la
+                              ola, así que aquí ya no hace falta nada. */}
                           <span className="edu-kv__v">
-                            <span
-                              className="edu-dif edu-dif--mal"
-                              style={{ display: "inline-block" }}
-                            >
+                            <span className="edu-dif edu-dif--mal">
                               {c.antes === null || c.antes === "" ? "—" : String(c.antes)}
                             </span>{" "}
                             →{" "}
-                            <span
-                              className="edu-dif edu-dif--ok"
-                              style={{ display: "inline-block" }}
-                            >
+                            <span className="edu-dif edu-dif--ok">
                               {c.despues === null || c.despues === "" ? "—" : String(c.despues)}
                             </span>
                           </span>
