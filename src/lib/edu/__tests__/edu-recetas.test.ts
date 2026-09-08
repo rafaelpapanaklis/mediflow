@@ -300,10 +300,17 @@ test("las transiciones son un dato y cuadran con los helpers", () => {
   assert.deepEqual(EDU_PRESCRIPTION_TRANSITIONS.BORRADOR, ["PENDIENTE"]);
   assert.deepEqual(EDU_PRESCRIPTION_TRANSITIONS.PENDIENTE, ["EXPEDIDA", "RECHAZADA", "BORRADOR"]);
   assert.deepEqual(EDU_PRESCRIPTION_TRANSITIONS.EXPEDIDA, ["ANULADA"]);
-  // RECHAZADA y ANULADA no llevan a ningún lado: una rechazada se
-  // propone de nuevo, una anulada se sustituye por OTRA receta.
-  assert.deepEqual(EDU_PRESCRIPTION_TRANSITIONS.RECHAZADA, []);
+  // Ola C · la ÚNICA salida de RECHAZADA es ARCHIVADA: guardarla fuera de
+  // la vista de trabajo, sin borrarla. NO lleva a ANULADA — una anulada se
+  // IMPRIME, y algo que nunca llevó cédula no puede producir papel.
+  assert.deepEqual(EDU_PRESCRIPTION_TRANSITIONS.RECHAZADA, ["ARCHIVADA"]);
+  // ANULADA y ARCHIVADA no llevan a ningún lado: una anulada se sustituye
+  // por OTRA receta, y una archivada se propone de nuevo desde cero.
   assert.deepEqual(EDU_PRESCRIPTION_TRANSITIONS.ANULADA, []);
+  assert.deepEqual(EDU_PRESCRIPTION_TRANSITIONS.ARCHIVADA, []);
+  // 🔴 Y el candado que hace que lo de arriba sea seguro: archivar NO
+  // abre la puerta del PDF.
+  assert.equal(eduRecetaPrintable("ARCHIVADA"), false);
 
   for (const s of EDU_PRESCRIPTION_STATUSES) {
     assert.ok(EDU_PRESCRIPTION_STATUS_LABELS[s], `falta la etiqueta de ${s}`);

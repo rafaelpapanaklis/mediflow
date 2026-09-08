@@ -12482,6 +12482,19 @@ model EduInstitution {
   // Ola B · las FOTOS CLÍNICAS. Bloque ADITIVO al final de las
   // relaciones: el modelo vive al FINAL del archivo, con su encabezado.
   clinicalPhotos     EduClinicalPhoto[]
+  // Ola C · la BASE. Bloque ADITIVO al final de las relaciones: los
+  // modelos viven al FINAL del archivo, con su propio encabezado.
+  auditLogs           EduAuditLog[]
+  questionnaires      EduHealthQuestionnaire[]
+  treatmentPlans      EduTreatmentPlan[]
+  treatmentSessions   EduTreatmentSession[]
+  quotes              EduQuote[]
+  quoteItems          EduQuoteItem[]
+  agendaBlocks        EduAgendaBlock[]
+  odontogramEvents    EduOdontogramEvent[]
+  procedureCategories EduProcedureCategory[]
+  requirementVersions EduRequirementVersion[]
+  aiQuotaChanges      EduAiQuotaChange[]
 
   @@map("edu_institutions")
 }
@@ -12514,6 +12527,47 @@ model EduUser {
   /// semántica que User.permissionsOverride del dental — ver
   /// src/lib/edu/permissions.ts.
   permissionsOverride String[] @default([])
+
+  /// ═══════════════════════════════════════════════════════════════════
+  /// OLA C · LO QUE ws2-t1 (Ola C·1) PIDIÓ POR ESCRITO EN SU PUNTO 6.1
+  ///
+  /// Las cinco columnas salen de su reporte, tal cual, con una sola
+  /// traducción: él las escribió en snake_case (`updated_by_id`) y aquí
+  /// van en camelCase ENTRECOMILLADO, que es como las escribe Prisma. Una
+  /// columna `updated_by_id` en esta base sería una columna que el cliente
+  /// no encuentra — la misma nota que lleva el encabezado de cada .sql del
+  /// vertical.
+  ///
+  /// TODAS nullables o con default: aplicar la ola no cambia el
+  /// comportamiento de ni una fila que ya exista.
+  /// ═══════════════════════════════════════════════════════════════════
+
+  /// H-04 · QUIÉN tocó esta cuenta por última vez, y cuándo. `updatedAt`
+  /// ya contesta el «cuándo» del último cambio, pero no hay «quién»: hoy
+  /// no se puede contestar quién le cambió el correo a una persona.
+  ///
+  /// `updatedByAt` va APARTE de `updatedAt` a propósito, y no es
+  /// redundante: `updatedAt` lo mueve CUALQUIER escritura sobre la fila
+  /// (un `lastLogin`, por ejemplo), y lo que hay que poder contestar es
+  /// cuándo la tocó una PERSONA.
+  updatedById String?
+  updatedByAt DateTime? @db.Timestamptz(3)
+
+  /// H-04 · EL OVERRIDE QUE SE DESCARTÓ al cambiar de rol.
+  ///
+  /// Cambiar de rol BORRA el override, y tiene que borrarlo: el override
+  /// REEMPLAZA al default del rol, así que conservarlo dejaría a la
+  /// persona con los permisos del rol viejo. Lo que no puede pasar es que
+  /// desaparezca sin rastro — hoy la única forma de recuperarlo es que
+  /// quien hizo el cambio lo leyera en el mensaje verde y lo apuntara.
+  permissionsOverridePrevious String[] @default([])
+
+  /// H-114 · EL ROL ANTERIOR y cuándo cambió. Un alumno que se gradúa y
+  /// entra de docente es la misma persona con dos historias, y hoy la
+  /// primera desaparece en el momento del cambio.
+  rolePrevious  EduRole?
+  roleChangedAt DateTime? @db.Timestamptz(3)
+
   lastLogin     DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -12633,6 +12687,39 @@ model EduUser {
   /// la escuela, lo edita la dirección y lo mira todo el piso.
   campusLayoutsUpdated  EduCampusLayout[] @relation("EduCampusLayoutUpdatedBy")
 
+  /// Ola C · H-04 · quién tocó esta cuenta, apuntando a OTRA cuenta del
+  /// mismo instituto. SetNull: dar de baja a quien hizo el cambio no
+  /// puede borrar la constancia de que el cambio ocurrió.
+  updatedBy    EduUser?  @relation("EduUserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  usersUpdated EduUser[] @relation("EduUserUpdatedBy")
+
+  /// ── Ola C · TODAS son columnas de AUTORÍA, y ninguna decide
+  /// visibilidad. Van con SetNull sin excepción: dar de baja a alguien no
+  /// puede borrar el rastro de lo que hizo, y por eso el NOMBRE va
+  /// congelado en cada fila.
+  auditLogs               EduAuditLog[]            @relation("EduAuditActor")
+  patientsDeleted         EduPatient[]             @relation("EduPatientDeletedBy")
+  patientsAnonymized      EduPatient[]             @relation("EduPatientAnonymizedBy")
+  patientsMerged          EduPatient[]             @relation("EduPatientMergedBy")
+  questionnairesRecorded  EduHealthQuestionnaire[] @relation("EduQuestionnaireBy")
+  treatmentPlansCreated   EduTreatmentPlan[]       @relation("EduPlanTratamientoBy")
+  treatmentPlansClosed    EduTreatmentPlan[]       @relation("EduPlanTratamientoClosedBy")
+  treatmentSessionsDone   EduTreatmentSession[]    @relation("EduPlanSessionBy")
+  quotesCreated           EduQuote[]               @relation("EduQuoteBy")
+  agendaBlocksCreated     EduAgendaBlock[]         @relation("EduAgendaBlockBy")
+  agendaBlocksDeleted     EduAgendaBlock[]         @relation("EduAgendaBlockDeletedBy")
+  odontogramEvents        EduOdontogramEvent[]     @relation("EduOdontogramEventBy")
+  prescriptionsArchived   EduPrescription[]        @relation("EduRecetaArchivedBy")
+  proceduresUpdated       EduProcedure[]           @relation("EduProcedureUpdatedBy")
+  feeSchedulesUpdated     EduFeeSchedule[]         @relation("EduFeeScheduleUpdatedBy")
+  feeItemsCreated         EduFeeScheduleItem[]     @relation("EduFeeItemCreatedBy")
+  feeItemsUpdated         EduFeeScheduleItem[]     @relation("EduFeeItemUpdatedBy")
+  feeItemsDeleted         EduFeeScheduleItem[]     @relation("EduFeeItemDeletedBy")
+  procedureCategoriesSet  EduProcedureCategory[]   @relation("EduProcCategoryBy")
+  requirementVersionsSet  EduRequirementVersion[]  @relation("EduRequirementVersionBy")
+  requirementsUpdated     EduRequirement[]         @relation("EduRequirementUpdatedBy")
+  aiQuotaChanges          EduAiQuotaChange[]       @relation("EduAiQuotaChangeBy")
+
   @@unique([supabaseId, institutionId])
   @@index([supabaseId])
   @@index([institutionId, role, isActive])
@@ -12725,6 +12812,9 @@ model EduCohort {
   institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
   students    EduStudent[]
+  /// Ola C · H-89: las versiones de requisito que aplican SOLO a esta
+  /// generación. Sin filas = le aplica la regla general.
+  requirementVersions EduRequirementVersion[]
 
   @@unique([institutionId, programId, name])
   @@index([institutionId, isActive])
@@ -13084,6 +13174,43 @@ model EduPatient {
   /// CUÁNDO; hoy nadie sabe quién corrigió un teléfono.
   updatedById String?
 
+  /// ═══════════════════════════════════════════════════════════════════
+  /// OLA C · ARCO (LFPDPPP) Y LA FUSIÓN DE DUPLICADOS
+  ///
+  /// 🔴 UN PACIENTE NO SE BORRA NUNCA, Y ESO NO CAMBIA. La NOM-004 obliga
+  /// a conservar el expediente CINCO AÑOS desde el último acto médico, y
+  /// una solicitud de cancelación de datos no derrota a esa obligación.
+  /// Lo que sí se puede hacer —y hasta hoy no se podía— es ANONIMIZAR:
+  /// sustituir el PII (nombre, teléfono, correo, domicilio, CURP, tutor,
+  /// seguro) por marcadores y CONSERVAR lo clínico. Qué campos se
+  /// sustituyen está escrito en UN sitio: EDU_ARCO_PII_FIELDS
+  /// (src/lib/edu/arco-core.ts).
+  ///
+  /// 🔴 Y NADA DE ESTO ES UN DELETE. `deletedAt` es una baja LÓGICA: la
+  /// fila sigue, sus citas siguen, sus cobros siguen. Las consultas la
+  /// esconden; la base la conserva.
+  /// ═══════════════════════════════════════════════════════════════════
+
+  /// La BAJA de la ficha, con autor y motivo. Baja lógica: nada se borra.
+  deletedAt    DateTime? @db.Timestamptz(3)
+  deletedById  String?
+  deleteReason String?   @db.VarChar(500)
+
+  /// La ANONIMIZACIÓN. Con fecha = el PII ya se sustituyó y esta ficha no
+  /// vuelve a tener nombre. Es IRREVERSIBLE, y por eso es un acto con su
+  /// propia fecha y su propio autor y no una consecuencia de la baja.
+  anonymizedAt   DateTime? @db.Timestamptz(3)
+  anonymizedById String?
+
+  /// FUSIÓN DE DUPLICADOS (H-05). El PERDEDOR apunta al GANADOR; el
+  /// ganador tiene esto en null. El perdedor queda además en INACTIVE y
+  /// NO se borra: sus citas, sus casos y sus cobros ocurrieron, y la
+  /// fusión los MUEVE al ganador dejando la fila como constancia de que
+  /// ese folio existió.
+  mergedIntoId String?
+  mergedAt     DateTime? @db.Timestamptz(3)
+  mergedById   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -13096,6 +13223,19 @@ model EduPatient {
   /// Ola B: quién tocó la ficha por última vez. SetNull por lo mismo que
   /// las de arriba — perder el nombre es aceptable, perder la ficha no.
   updatedBy         EduUser?      @relation("EduPatientUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  /// Ola C · ARCO. Quién dio de baja y quién anonimizó. SetNull, como
+  /// todas las de autoría: perder el nombre es aceptable, perder la
+  /// constancia de que se ejerció un derecho ARCO no — por eso el motivo
+  /// va como texto en la propia fila.
+  deletedBy         EduUser?      @relation("EduPatientDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  anonymizedBy      EduUser?      @relation("EduPatientAnonymizedBy", fields: [anonymizedById], references: [id], onDelete: SetNull)
+  mergedBy          EduUser?      @relation("EduPatientMergedBy", fields: [mergedById], references: [id], onDelete: SetNull)
+  /// Ola C · la FUSIÓN, apuntando a sí misma. El perdedor apunta al
+  /// ganador (`mergedInto`) y el ganador lista a los que absorbió
+  /// (`mergedFrom`). SetNull: si algún día el ganador desapareciera, el
+  /// perdedor se queda sin puntero pero no se borra.
+  mergedInto        EduPatient?   @relation("EduPatientMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom        EduPatient[]  @relation("EduPatientMerge")
   cases        EduCase[]
   appointments EduAppointment[]
   /// Ola 3 · el expediente. El ODONTOGRAMA y los ESTUDIOS cuelgan del
@@ -13126,6 +13266,17 @@ model EduPatient {
   /// la ortodoncia y para la periodoncia. Se leen con el alcance CLÍNICO
   /// ("cases"), así que caja no las ve.
   clinicalPhotos EduClinicalPhoto[]
+
+  /// ── Ola C ──────────────────────────────────────────────────────────
+  /// El cuestionario VERSIONADO y su historial, los planes de tratamiento
+  /// y los movimientos de su odontograma se leen con el alcance CLÍNICO
+  /// ("cases"). Los PRESUPUESTOS se leen con el del DINERO ("charges"):
+  /// son dinero y el alumno no los ve. La BITÁCORA es de dirección.
+  questionnaires  EduHealthQuestionnaire[]
+  treatmentPlans  EduTreatmentPlan[]
+  quotes          EduQuote[]
+  odontogramEvents EduOdontogramEvent[]
+  auditLogs       EduAuditLog[]  @relation("EduAuditPatient")
 
   @@unique([institutionId, folio])
   @@index([institutionId, status])
@@ -13166,6 +13317,8 @@ model EduChair {
   campus       EduCampus          @relation(fields: [campusId], references: [id], onDelete: Restrict)
   schedules    EduChairSchedule[]
   appointments EduAppointment[]
+  /// Ola C · H-19: los bloqueos que cierran ESTE sillón (mantenimiento).
+  agendaBlocks EduAgendaBlock[]
 
   /// 🔴 Ola 11: el número es único dentro de la SEDE, no del instituto. El
   /// .sql crea este índice ANTES de soltar el viejo.
@@ -13334,6 +13487,12 @@ model EduCase {
   @@index([institutionId, patientId], map: "edu_cases_patient_idx")
   @@index([institutionId, programId, status], map: "edu_cases_program_idx")
   // Ola 6: contar requisitos por procedimiento, y seguir la cadena de
+  /// Ola C: el plan de tratamiento y el presupuesto de este caso. Los dos
+  /// OPCIONALES por el otro lado (un plan puede no tener caso), y por eso
+  /// aquí son listas: un caso largo puede tener más de un presupuesto.
+  treatmentPlans EduTreatmentPlan[]
+  quotes         EduQuote[]
+
   // traspasos hacia atrás sin recorrer la tabla.
   @@index([institutionId, procedureId, status], map: "edu_cases_procedure_idx")
   @@index([transferredFromCaseId], map: "edu_cases_transfer_idx")
@@ -13401,6 +13560,9 @@ model EduAppointment {
   @@index([institutionId, chairId, startsAt], map: "edu_appointments_chair_idx")
   @@index([institutionId, studentId, startsAt], map: "edu_appointments_student_idx")
   @@index([institutionId, patientId, startsAt], map: "edu_appointments_patient_idx")
+  /// Ola C: las sesiones de plan de tratamiento que documentan esta cita.
+  treatmentSessions EduTreatmentSession[] @relation("EduPlanSessionAppointment")
+
   @@index([institutionId, caseId], map: "edu_appointments_case_idx")
   // Ola 7: el bloque EN VIVO del panel de dirección pregunta cada 25
   // segundos por las citas de HOY en CHECKED_IN / IN_CHAIR / IN_PROGRESS.
@@ -13537,11 +13699,20 @@ model EduRecord {
   /// Estas columnas son para el BORRADOR que nunca debió existir, y el
   /// candado del status lo pone la casilla del expediente.
   ///
-  /// Sin `deleteReason` a propósito: retirar un borrador vacío no es un
-  /// acto clínico que haya que justificar por escrito, y un campo de
-  /// motivo obligatorio en el sitio equivocado solo produce "asdf".
-  deletedAt   DateTime? @db.Timestamptz(3)
-  deletedById String?
+  /// ── Ola C · Y AHORA SÍ, EL MOTIVO ──────────────────────────────────
+  ///
+  /// La Ola B lo dejó fuera por escrito («retirar un borrador vacío no es
+  /// un acto clínico que haya que justificar»), y la auditoría de la ficha
+  /// pidió lo contrario: la columna existe para el caso que NO es el
+  /// borrador vacío —la nota escrita en el paciente equivocado—, donde lo
+  /// único que contesta la pregunta de dentro de un año es el texto.
+  ///
+  /// 🔴 SIGUE SIENDO OPCIONAL, y eso no es indecisión: obligarlo en el
+  /// borrador vacío es como se producen quinientos "asdf". Quién lo exige
+  /// y cuándo lo decide el endpoint, no la base.
+  deletedAt    DateTime? @db.Timestamptz(3)
+  deletedById  String?
+  deleteReason String?   @db.VarChar(500)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -13641,6 +13812,10 @@ model EduOdontogramEntry {
   recordedBy  EduUser        @relation("EduOdontogramRecorder", fields: [recordedById], references: [id], onDelete: Cascade)
   /// Ola B: quién lo dio de baja. SetNull, como el resto de las bajas.
   deletedBy   EduUser?       @relation("EduOdontogramDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  /// Ola C · N-3: el libro de MOVIMIENTOS de este hallazgo. Es lo que
+  /// sobrevive a que la fila se reviva: el `update` del upsert pisa
+  /// `deletedById`, pero no puede tocar lo que ya se escribió aquí.
+  events      EduOdontogramEvent[]
 
   // El índice único COMPLETO: es el que hace posible un upsert y el que
   // impide que el mismo hallazgo entre dos veces por un doble clic.
@@ -13858,14 +14033,30 @@ model EduProcedure {
   /// Cuánto dura en el sillón. Sirve para proponer la duración de la
   /// cita; no bloquea nada.
   durationMinutes Int   @default(60)
+  /// ── Ola C · H-90 · LA CATEGORÍA CON LLAVE ──────────────────────────
+  /// La columna `category` de arriba se queda EXACTAMENTE como está —no
+  /// se renombra, no se borra, no se migra—, y ésta se le pone al lado:
+  /// hoy renombrar una categoría pone el avance de un requisito a cero EN
+  /// SILENCIO, porque el requisito la compara por texto. SetNull:
+  /// desactivar una categoría no puede vaciar el tarifario.
+  categoryId    String?
   isActive      Boolean @default(true)
   /// Orden en que se pinta el tarifario. Empata con el alta por defecto.
   orderIndex    Int     @default(0)
 
+  /// ── Ola C · H-76 · QUIÉN LO TOCÓ ───────────────────────────────────
+  /// El cobro guarda quién cobró y la factura quién la emitió; los tres
+  /// modelos del tarifario no guardaban nada. `updatedAt` ya dice CUÁNDO.
+  updatedByUserId String?
+  updatedByName   String? @db.VarChar(160)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution       @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  institution EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  categoryRef EduProcedureCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  updatedBy   EduUser?              @relation("EduProcedureUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  quoteItems  EduQuoteItem[]
   feeItems    EduFeeScheduleItem[]
   chargeItems EduChargeItem[]
   /// Ola 6: el catálogo de la Ola 5 es también el vocabulario ACADÉMICO —
@@ -13880,6 +14071,8 @@ model EduProcedure {
   @@unique([institutionId, code])
   @@index([institutionId, isActive, orderIndex], map: "edu_procedures_orden_idx")
   @@index([institutionId, category], map: "edu_procedures_categoria_idx")
+  /// Ola C · H-90: el tarifario agrupado por la categoría CON LLAVE.
+  @@index([institutionId, categoryId], map: "edu_procedures_categoria_ref_idx")
   @@map("edu_procedures")
 }
 
@@ -13912,10 +14105,15 @@ model EduFeeSchedule {
   /// Para qué es esta lista, en una frase. Se pinta en caja.
   notes         String?    @db.VarChar(300)
 
+  /// Ola C · H-76 · quién la tocó por última vez. Ver EduProcedure.
+  updatedByUserId String?
+  updatedByName   String? @db.VarChar(160)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   institution EduInstitution       @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  updatedBy   EduUser?             @relation("EduFeeScheduleUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
   items       EduFeeScheduleItem[]
   charges     EduCharge[]
 
@@ -13940,12 +14138,42 @@ model EduFeeScheduleItem {
   /// gratis), y por eso "sin fila" y "cero" tienen que poder distinguirse.
   priceCents     Int
 
+  /// ── Ola C · H-76 · EL AUTOR Y LA FECHA DEL PRECIO ──────────────────
+  /// «En febrero la resina costaba $800 y hoy $1,200: no se puede
+  /// contestar quién lo subió.» Con estas tres columnas sí.
+  ///
+  /// `priceSetAt` va APARTE de `updatedAt` a propósito: `updatedAt` lo
+  /// mueve cualquier escritura sobre la fila, y lo que hay que poder
+  /// contestar es cuándo cambió EL PRECIO.
+  createdByUserId String?
+  updatedByUserId String?
+  updatedByName   String?   @db.VarChar(160)
+  priceSetAt      DateTime? @db.Timestamptz(3)
+
+  /// ── Ola C · LA BAJA LÓGICA DEL PRECIO (lo pidió ws2-t2 en su punto 6)
+  ///
+  /// La otra mitad de H-76: vaciar el campo del precio hace hoy un
+  /// `deleteMany` FÍSICO (`setEduProcedurePrices`, en tarifas.ts). Con
+  /// estas dos columnas, quitar un precio deja de borrar la fila.
+  ///
+  /// ⚠️ Y HAY QUE DECIR LA CONSECUENCIA, porque es la misma trampa del
+  /// odontograma: el `@@unique([feeScheduleId, procedureId])` de abajo NO
+  /// es parcial, así que una fila dada de baja SIGUE OCUPANDO su clave.
+  /// Volver a poner ese precio tiene que REVIVIR esa misma fila (un
+  /// upsert), no insertar otra — insertar chocaría contra el índice. La
+  /// lógica la pone la casilla del tarifario; aquí van las columnas.
+  deletedAt   DateTime? @db.Timestamptz(3)
+  deletedById String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   feeSchedule EduFeeSchedule @relation(fields: [feeScheduleId], references: [id], onDelete: Cascade)
   procedure   EduProcedure   @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  createdBy   EduUser?       @relation("EduFeeItemCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy   EduUser?       @relation("EduFeeItemUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  deletedBy   EduUser?       @relation("EduFeeItemDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@unique([feeScheduleId, procedureId])
   @@index([institutionId, procedureId], map: "edu_fee_items_procedure_idx")
@@ -14051,6 +14279,11 @@ model EduCharge {
   /// aplicación dentro de la transacción que crea el plan (mismo criterio
   /// que el único turno de caja abierto).
   paymentPlans EduPaymentPlan[]
+
+  /// Ola C: los presupuestos que se convirtieron en ESTE cobro. La
+  /// columna llena en el presupuesto ES la llave de idempotencia de la
+  /// conversión, así que en la práctica esta lista tiene 0 o 1 fila.
+  quotes EduQuote[] @relation("EduQuoteCharge")
 
   @@unique([institutionId, folio])
   @@unique([institutionId, idempotencyKey], map: "edu_charges_idem_key")
@@ -14194,6 +14427,38 @@ model EduCashSession {
   differenceCents Int?
   notes         String?   @db.VarChar(500)
 
+  /// ── Ola C · H-09 · LA SEDE DEL TURNO ───────────────────────────────
+  ///
+  /// Hoy el turno es del INSTITUTO: `getEduOpenCashSession` busca UNO
+  /// abierto por `institutionId`, así que el campus Sur no puede abrir el
+  /// suyo mientras Norte tenga el suyo, cobra con el `cashSessionId` de
+  /// Norte, y al cerrar el sistema le exige a Norte el efectivo de las
+  /// DOS sedes. El corte dice «faltaron $8,400» todos los días.
+  ///
+  /// 🔴 NULLABLE, y eso ES el backfill. Un turno sin sede es "el turno
+  /// del instituto", que es exactamente lo que son todos los que ya
+  /// existen: aplicar esta ola no cambia el comportamiento de ninguno.
+  /// La LÓGICA que abre un turno POR SEDE la pone la casilla de caja
+  /// (src/lib/edu/caja.ts); aquí solo va la columna.
+  campusId      String?
+
+  /// ── Ola C · H-53 · EL DESGLOSE POR MÉTODO, GUARDADO ────────────────
+  ///
+  /// Hoy se CALCULA para el turno abierto y se pierde al cerrar: la fila
+  /// del corte guarda tres cifras de efectivo y ni un renglón de tarjeta,
+  /// transferencia o cheque. Con dos turnos al día, el corte del 14 de
+  /// febrero es inalcanzable desde el panel, y el propio código promete
+  /// la reimpresión (`dinero-core.ts:615-616`).
+  ///
+  /// Json y no ocho columnas: los métodos de pago son un enum que crece
+  /// (EduPaymentMethod), y una columna por método convertiría cada método
+  /// nuevo en una migración. La FORMA de este Json —y su validación— vive
+  /// en src/lib/edu/caja-cierre-core.ts, no en la base.
+  ///
+  /// Se escribe UNA vez, en la transacción que cierra el turno, y no se
+  /// vuelve a tocar: es la foto congelada del corte impreso.
+  methodBreakdown Json?
+
   openedByUserId String
   closedByUserId String?
 
@@ -14201,6 +14466,10 @@ model EduCashSession {
   updatedAt DateTime @updatedAt
 
   institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  /// Ola C: la SEDE del turno. Restrict y no Cascade — una sede con
+  /// turnos de caja no se va ni por accidente, igual que una con
+  /// sillones (ver el encabezado de EduCampus).
+  campus      EduCampus?     @relation(fields: [campusId], references: [id], onDelete: Restrict)
   openedBy    EduUser        @relation("EduCashOpenedBy", fields: [openedByUserId], references: [id], onDelete: Cascade)
   closedBy    EduUser?       @relation("EduCashClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
   charges     EduCharge[]
@@ -14208,6 +14477,9 @@ model EduCashSession {
 
   @@index([institutionId, openedAt], map: "edu_cash_sessions_abierto_idx")
   @@index([institutionId, closedAt], map: "edu_cash_sessions_cerrado_idx")
+  /// Ola C · H-09: "el turno abierto de ESTA sede", que es la consulta
+  /// que hoy no se puede hacer.
+  @@index([institutionId, campusId, closedAt], map: "edu_cash_sessions_sede_idx")
   @@map("edu_cash_sessions")
 }
 
@@ -14691,6 +14963,17 @@ model EduRubricCriterion {
   weightPercent Int
   orderIndex    Int     @default(0)
 
+  /// ── Ola C · H-93 (lo pidió ws2-t3 en su punto 6a) ──────────────────
+  /// Los criterios se BORRAN de verdad, y renombrar uno deja el
+  /// `criterionId` de todo el historial de calificaciones en NULL. En el
+  /// resto del vertical nada se borra: se desactiva. Con esta columna, la
+  /// rúbrica puede dejar de ofrecer un criterio SIN romper las
+  /// calificaciones que ya se pusieron con él.
+  ///
+  /// NOT NULL con DEFAULT true: es su propio backfill — todo criterio que
+  /// ya exista está activo.
+  isActive      Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -14845,6 +15128,10 @@ model EduRequirement {
   /// especialidad.
   procedureId   String?
   category      String? @db.VarChar(60)
+  /// Ola C · H-90 · la MISMA categoría, pero con llave. `category` se
+  /// queda intacta al lado: renombrar la categoría deja de poner el
+  /// avance a cero en silencio en cuanto el requisito la compare por id.
+  categoryId    String?
   /// CUÁNTOS necesita.
   requiredCount Int
   /// Si solo cuentan los casos COMPLETADOS. En true (lo normal) un caso a
@@ -14855,12 +15142,27 @@ model EduRequirement {
   orderIndex    Int     @default(0)
   notes         String? @db.VarChar(300)
 
+  /// ── Ola C · H-89, la mitad que cabe sin tocar el índice único ──────
+  /// «EduRequirement no tiene cohorte, ni versión, ni AUTOR». La cohorte y
+  /// la versión viven en EduRequirementVersion (el índice único
+  /// `edu_requirements_nombre_key` no deja dos filas con el mismo nombre,
+  /// y cambiarlo sería un DROP). El autor sí cabe aquí, y es la pregunta
+  /// que se hace quien ve su avance caer una tarde: quién lo tocó.
+  updatedByUserId String?
+  updatedByName   String? @db.VarChar(160)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  program     EduProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
-  procedure   EduProcedure?  @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  institution EduInstitution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  program     EduProgram            @relation(fields: [programId], references: [id], onDelete: Cascade)
+  updatedBy   EduUser?              @relation("EduRequirementUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  procedure   EduProcedure?         @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+  categoryRef EduProcedureCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  /// Ola C · H-89 · sus VERSIONES. Esta fila es LA VIGENTE (que es lo que
+  /// todo el código de evaluación ya lee); cada cambio escribe una
+  /// versión con su cohorte y su autor. Ver EduRequirementVersion.
+  versions    EduRequirementVersion[]
 
   @@unique([institutionId, programId, name], map: "edu_requirements_nombre_key")
   @@index([institutionId, programId, isActive, orderIndex], map: "edu_requirements_plan_idx")
@@ -14949,6 +15251,10 @@ model EduCampus {
   chairs      EduChair[]
   access      EduUserCampusAccess[]
   charges     EduCharge[]
+  /// Ola C · H-09 · los TURNOS DE CAJA de esta sede, y H-19 · los
+  /// bloqueos que cierran esta sede entera.
+  cashSessions EduCashSession[]
+  agendaBlocks EduAgendaBlock[]
   /// El PLANO de esta sede. OPCIONAL, y esa opcionalidad ES la regla: una
   /// sede sin fila se pinta con el plano automático de sus sillones.
   layout      EduCampusLayout?
@@ -15283,6 +15589,21 @@ model EduAiPrice {
   /// millón de segundos, y la salida va en cero.
   inUsdMicrosPerMillion  Int @default(0)
   outUsdMicrosPerMillion Int @default(0)
+
+  /// ── Ola C · H-132 (lo pidió ws2-t3 en su punto 6a) ─────────────────
+  /// Los tokens LEÍDOS DE CACHÉ se cobran hoy a precio de token nuevo, y
+  /// no cuestan lo mismo: el proveedor los factura a una fracción.
+  ///
+  /// 🔴 LA UNIDAD ES LA DE SUS HERMANAS (micros de dólar por millón de
+  /// tokens) y NO «centavos por millón», que es como venían pedidas. Dos
+  /// unidades distintas en la misma tabla es como una factura sale
+  /// multiplicada por diez mil.
+  ///
+  /// NULLABLE, y ese NULL significa «este modelo no cobra la caché
+  /// aparte»: quien calcule el costo cae a `inUsdMicrosPerMillion`, que
+  /// es exactamente lo que hace hoy.
+  cacheReadUsdMicrosPerMillion  Int?
+  cacheWriteUsdMicrosPerMillion Int?
 
   /// De dónde salió el número, para que quien lo revise dentro de un año
   /// sepa contra qué compararlo ("Tarifa pública de Anthropic, ago-2026").
@@ -15906,6 +16227,13 @@ enum EduPrescriptionStatus {
   /// Se anuló DESPUÉS de expedida, con motivo. La fila no se borra: el
   /// documento existió y el PDF sale marcado "ANULADA".
   ANULADA
+  /// Ola C · LA SALIDA DE RECHAZADA (H-24). Una receta que el docente
+  /// rechazó se quedaba en la lista del alumno PARA SIEMPRE:
+  /// `EDU_PRESCRIPTION_TRANSITIONS.RECHAZADA` era `[]` y no había forma
+  /// de quitarla de en medio. ARCHIVADA la saca de la vista de trabajo
+  /// SIN borrarla: la propuesta existió, el docente dijo que no y por qué,
+  /// y las dos cosas se siguen pudiendo leer.
+  ARCHIVADA
 }
 
 /// LA RECETA de un caso: propuesta por el alumno, expedida por el docente.
@@ -15965,6 +16293,18 @@ model EduPrescription {
   voidedByName   String?   @db.VarChar(160)
   voidReason     String?   @db.VarChar(500)
 
+  /// Ola C · EL ARCHIVADO de una RECHAZADA. Tampoco borra nada, y por eso
+  /// son las mismas cuatro columnas que la anulación: fecha, quién, su
+  /// nombre congelado y el motivo. Lo que cambia es de dónde se viene —
+  /// se ANULA lo expedido, se ARCHIVA lo rechazado— y por eso no se
+  /// reutilizan las de arriba: un documento no puede estar anulado y
+  /// archivado a la vez, y dos actos distintos con la misma columna es
+  /// cómo se pierde cuál de los dos ocurrió.
+  archivedAt       DateTime? @db.Timestamptz(3)
+  archivedByUserId String?
+  archivedByName   String?   @db.VarChar(160)
+  archiveReason    String?   @db.VarChar(500)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -15974,6 +16314,8 @@ model EduPrescription {
   proposedBy  EduUser?       @relation("EduRecetaProposedBy", fields: [proposedByUserId], references: [id], onDelete: SetNull)
   issuedBy    EduUser?       @relation("EduRecetaIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
   voidedBy    EduUser?       @relation("EduRecetaVoidedBy", fields: [voidedByUserId], references: [id], onDelete: SetNull)
+  /// Ola C: quién archivó la rechazada. SetNull, como las demás.
+  archivedBy  EduUser?       @relation("EduRecetaArchivedBy", fields: [archivedByUserId], references: [id], onDelete: SetNull)
   items       EduPrescriptionItem[]
 
   // · paciente → la pestaña Recetas de su ficha, más recientes primero.
@@ -16715,4 +17057,696 @@ model AiConversationMessage {
   @@index([conversationId, createdAt])
   @@index([clinicId, createdAt])
   @@map("ai_conversation_messages")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// INSTITUCIONAL — OLA C · LA BASE.
+//
+// Once tablas y cuatro enums nuevos, más las columnas que la ola le añade
+// a seis tablas que ya existen. TODO es ADITIVO: nada se borra, nada se
+// renombra, ninguna columna que ya existiera cambia de tipo o de
+// nulabilidad, y todo lo nuevo es NULLABLE o trae DEFAULT — así que el
+// código que ya está desplegado compila y corre sin tocarlo.
+//
+// El .sql idempotente equivalente vive en sql/edu-ola-c.sql y hay que
+// aplicarlo a mano en Supabase ANTES del deploy de la ola. Si Prisma lee
+// una columna que no existe, TODA lectura de esa tabla revienta.
+//
+// 🔴 institutionId está en las ONCE, igual que en todas las olas
+// anteriores y por lo mismo: toda consulta del vertical filtra por el
+// institutionId de la SESIÓN, y un filtro que necesita un JOIN para
+// existir es un filtro que alguien va a olvidar. Ojo Prisma: un
+// institutionId `undefined` BORRA el filtro y una escuela lee lo de otra.
+//
+// 🔴 EL DINERO EN CENTAVOS ENTEROS, como toda la Ola 5 (EduCharge,
+// EduFeeScheduleItem, EduCashSession). El dental usa Decimal(10,2) en
+// `Quote`; aquí NO se copia eso: mezclar dos representaciones de dinero
+// en el mismo vertical es cómo se llega a un presupuesto que no cuadra
+// con el cobro que generó.
+//
+// 🔴 LOS NOMBRES DE PERSONA VAN CONGELADOS al lado de un id opcional con
+// SetNull, igual que en EduConsent, EduPrescription y EduAiUsage: un
+// documento que existió tiene que seguir diciendo quién lo hizo aunque
+// esa persona se dé de baja o cambie de apellido.
+// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── C·1 · LA BITÁCORA (NOM-024) ────────────────────────────────────────
+
+/// LA BITÁCORA del instituto: quién hizo qué, sobre qué, cuándo y desde
+/// dónde. Espejo funcional del `AuditLog` del dental, en su propia tabla:
+/// los dos productos no comparten ni una fila.
+///
+/// 🔴 SE REGISTRAN TAMBIÉN LAS LECTURAS del expediente, y no es celo: la
+/// NOM-024 §6.3.5 pide poder contestar quién ABRIÓ un expediente, no solo
+/// quién lo escribió. El dental ya lo hace (`action: "view"`); esto es lo
+/// que le permite al instituto hacerlo igual.
+///
+/// 🔴 UN SOLO ESCRITOR: `eduAudit(...)` en src/lib/edu/auditoria.ts. Doce
+/// sitios escribiendo la bitácora a mano es cómo se llega a que el
+/// decimotercero no la escriba, y una bitácora con huecos no prueba nada.
+///
+/// ⚠️ `actorUserId` es OPCIONAL con SetNull y el NOMBRE va congelado al
+/// lado: dar de baja a alguien no puede borrar el rastro de lo que hizo.
+/// Y `before`/`after` son Json y no texto: lo que se lee después es un
+/// diff campo a campo, no un párrafo.
+model EduAuditLog {
+  id            String @id @default(cuid())
+  institutionId String
+
+  /// Quién. Null solo si esa cuenta desapareció (SetNull); el nombre
+  /// congelado sigue contestando la pregunta.
+  actorUserId String?
+  actorName   String  @db.VarChar(160)
+  /// El rol QUE TENÍA en ese momento. Congelado a propósito: ascender a
+  /// alguien mañana no puede reescribir con qué sombrero hizo algo ayer.
+  actorRole   String  @db.VarChar(20)
+
+  /// Qué hizo: "create" | "update" | "delete" | "view" | "sign" | … El
+  /// catálogo vivo es EDU_AUDIT_ACTIONS (src/lib/edu/auditoria-core.ts).
+  action   String  @db.VarChar(40)
+  /// Sobre qué: "patient" | "record" | "prescription" | "quote" | …
+  entity   String  @db.VarChar(40)
+  /// El id de esa fila. Opcional: una lectura de LISTA no tiene una.
+  entityId String?
+
+  /// El PACIENTE al que toca, si toca alguno. Denormalizado a propósito y
+  /// con su propio índice: "el historial de este expediente" es la
+  /// consulta que la NOM obliga a poder contestar, y sacarla de `entityId`
+  /// exigiría saber de qué tabla es cada fila.
+  patientId String?
+
+  /// El diff. `before` null en un alta, `after` null en una baja, los dos
+  /// null en una lectura.
+  before Json?
+  after  Json?
+
+  ip        String? @db.VarChar(60)
+  userAgent String? @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  actor       EduUser?       @relation("EduAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  patient     EduPatient?    @relation("EduAuditPatient", fields: [patientId], references: [id], onDelete: SetNull)
+
+  // Los tres accesos que existen, y ninguno más: la bitácora del
+  // instituto, la de un expediente y la de una persona.
+  @@index([institutionId, createdAt], map: "edu_audit_logs_institucion_idx")
+  @@index([institutionId, patientId, createdAt], map: "edu_audit_logs_paciente_idx")
+  @@index([institutionId, actorUserId, createdAt], map: "edu_audit_logs_actor_idx")
+  @@index([institutionId, entity, entityId], map: "edu_audit_logs_entidad_idx")
+  @@map("edu_audit_logs")
+}
+
+// ── C·2 · EL CUESTIONARIO DE SALUD VERSIONADO ──────────────────────────
+
+/// EL CUESTIONARIO DE SALUD, una fila POR VERSIÓN.
+///
+/// 🔴 CADA GUARDADO ES UNA FILA NUEVA, nunca un UPDATE. Ésa es toda la
+/// diferencia con lo que hay hoy (`antecedentes-card.tsx` escribe encima
+/// de la propia fila del paciente): la pregunta clínica no es "¿qué
+/// contestó?", es "¿qué contestó ANTES de la extracción?". Un UPDATE la
+/// deja sin respuesta para siempre.
+///
+/// 🔴 EL MERGE A LA FICHA ES ADITIVO Y VA EN LA MISMA TRANSACCIÓN. Al
+/// guardar una versión, los campos clínicos que el cuestionario toca
+/// (alergias, crónicos, medicación, tipo de sangre, embarazo, hábitos) se
+/// MEZCLAN sobre EduPatient — se añade lo que llegó, no se borra lo que
+/// no llegó. Un cuestionario que llega a medias no puede vaciarle las
+/// alergias a nadie.
+///
+/// `version` es un entero por PACIENTE que empieza en 1. Único junto al
+/// paciente: dos versiones 3 del mismo paciente serían dos respuestas a
+/// "¿qué decía la 3?".
+model EduHealthQuestionnaire {
+  id            String @id @default(cuid())
+  institutionId String
+  patientId     String
+
+  /// 1, 2, 3… por paciente. Lo calcula el servidor dentro de la misma
+  /// transacción que inserta; el cliente no lo manda.
+  version Int
+
+  /// Las respuestas TAL CUAL las capturó la pantalla. Json y no columnas:
+  /// el cuestionario de una escuela de ortodoncia no es el de una de
+  /// prótesis, y una columna por pregunta convertiría cada cambio de
+  /// formulario en una migración.
+  answers Json
+
+  /// Las BANDERAS que el SERVIDOR calculó sobre esas respuestas
+  /// ("ANTICOAGULANTE", "EMBARAZO", "ALERGIA_ANESTESIA"…). Se recalculan
+  /// en cada versión y no se capturan a mano: una bandera que el cliente
+  /// manda es una bandera que el cliente puede no mandar.
+  riskFlags Json
+
+  notes String? @db.VarChar(2000)
+
+  /// Quién lo capturó y cuándo. El nombre CONGELADO al lado del id.
+  recordedById   String?
+  recordedByName String    @db.VarChar(160)
+  recordedAt     DateTime  @default(now()) @db.Timestamptz(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  recordedBy  EduUser?       @relation("EduQuestionnaireBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@unique([patientId, version], map: "edu_health_questionnaires_version_key")
+  @@index([institutionId, patientId, recordedAt], map: "edu_health_questionnaires_paciente_idx")
+  @@map("edu_health_questionnaires")
+}
+
+// ── C·3 · EL PLAN DE TRATAMIENTO ───────────────────────────────────────
+
+/// En qué va un plan de tratamiento.
+///
+/// No se deriva del avance: un plan con todas sus sesiones hechas sigue
+/// ACTIVO hasta que alguien lo cierra, porque cerrar es un acto con autor
+/// y fecha. ABANDONADO es lo que le pasa al paciente que dejó de venir, y
+/// distinguirlo de COMPLETADO es media estadística de una escuela.
+enum EduTreatmentPlanStatus {
+  ACTIVO
+  PAUSADO
+  COMPLETADO
+  ABANDONADO
+}
+
+/// EL PLAN DE TRATAMIENTO del paciente: qué se le va a hacer, en cuántas
+/// sesiones y por cuánto.
+///
+/// 🔴 CUELGA DEL PACIENTE Y, OPCIONALMENTE, DEL CASO. El caso es "esta
+/// especialidad con este alumno"; el plan es el recorrido clínico. Un
+/// plan sin caso existe (la valoración inicial propone un plan antes de
+/// que haya alumno asignado); un caso sin plan también.
+///
+/// ⚠️ NO se borra: se cierra con estado. `EduCase` ya cubre "de quién es";
+/// esto cubre "cuántas sesiones lleva y cuánto falta", que es lo que hoy
+/// no se puede contestar en ninguna pantalla del vertical.
+model EduTreatmentPlan {
+  id            String @id @default(cuid())
+  institutionId String
+  patientId     String
+  /// El caso al que pertenece. SetNull: perder el enlace es aceptable,
+  /// perder el plan no.
+  caseId        String?
+
+  name        String  @db.VarChar(160)
+  description String? @db.VarChar(2000)
+
+  /// Cuántas sesiones se esperan y cada cuántos días. Son la ESTIMACIÓN
+  /// con la que se abre; el avance real se cuenta con las filas de
+  /// EduTreatmentSession.
+  totalSessions       Int @default(1)
+  sessionIntervalDays Int @default(30)
+
+  /// Centavos enteros, como todo el dinero del vertical.
+  totalCents Int @default(0)
+
+  status EduTreatmentPlanStatus @default(ACTIVO)
+
+  startsAt         DateTime  @default(now()) @db.Timestamptz(3)
+  /// La fecha ESPERADA de cierre y la del cierre REAL. Dos columnas
+  /// porque son dos preguntas distintas.
+  expectedEndAt    DateTime? @db.Timestamptz(3)
+  closedAt         DateTime? @db.Timestamptz(3)
+  nextExpectedAt   DateTime? @db.Timestamptz(3)
+
+  /// Quién lo armó y quién lo cerró, con el nombre congelado.
+  createdById   String?
+  createdByName String  @db.VarChar(160)
+  closedById    String?
+  closeReason   String? @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case        EduCase?       @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  createdBy   EduUser?       @relation("EduPlanTratamientoBy", fields: [createdById], references: [id], onDelete: SetNull)
+  closedBy    EduUser?       @relation("EduPlanTratamientoClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  sessions    EduTreatmentSession[]
+  quotes      EduQuote[]
+
+  @@index([institutionId, patientId, status], map: "edu_treatment_plans_paciente_idx")
+  @@index([institutionId, caseId], map: "edu_treatment_plans_caso_idx")
+  @@index([institutionId, status, nextExpectedAt], map: "edu_treatment_plans_seguimiento_idx")
+  @@map("edu_treatment_plans")
+}
+
+/// UNA SESIÓN del plan. `completedAt` null = todavía no se hizo.
+///
+/// El número de sesión es único DENTRO del plan: dos "sesión 3" serían dos
+/// respuestas a "¿qué se hizo en la tercera?".
+model EduTreatmentSession {
+  id            String @id @default(cuid())
+  institutionId String
+  planId        String
+
+  sessionNumber Int
+  notes         String? @db.VarChar(2000)
+
+  /// La CITA en la que se hizo, si hubo. SetNull: cancelar una cita no
+  /// puede borrar la sesión que documenta.
+  appointmentId String?
+
+  completedAt   DateTime? @db.Timestamptz(3)
+  completedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  plan        EduTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  appointment EduAppointment? @relation("EduPlanSessionAppointment", fields: [appointmentId], references: [id], onDelete: SetNull)
+  completedBy EduUser?        @relation("EduPlanSessionBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@unique([planId, sessionNumber], map: "edu_treatment_sessions_numero_key")
+  @@index([institutionId, planId], map: "edu_treatment_sessions_plan_idx")
+  @@map("edu_treatment_sessions")
+}
+
+// ── C·4 · LOS PRESUPUESTOS ─────────────────────────────────────────────
+
+/// En qué va un presupuesto.
+///
+/// VENCIDO no se guarda nunca: se DERIVA de `validUntil` contra el reloj
+/// (src/lib/edu/presupuestos-core.ts). Un estado que hay que ir a escribir
+/// con un cron es un estado que se queda mal el día que el cron no corre.
+enum EduQuoteStatus {
+  BORRADOR
+  PRESENTADO
+  ACEPTADO
+  RECHAZADO
+  CANCELADO
+}
+
+/// EL PRESUPUESTO del paciente: folio, partidas, vigencia, descuento y
+/// aceptación con token.
+///
+/// 🔴 ES DINERO, y por eso lo lee el alcance del DINERO (recurso
+/// "charges" de visibility.ts): caja y dirección. El alumno que propone el
+/// tratamiento NO ve el presupuesto, igual que no ve el cobro ni el saldo.
+///
+/// 🔴 EL FOLIO ES DEL INSTITUTO y único dentro de él, como el del
+/// paciente y como el de la factura. Lo compone el servidor.
+///
+/// 🔴 LOS IMPORTES SE CONGELAN AL PRESENTAR. Un presupuesto presentado que
+/// cambia de total cuando la dirección sube un precio no es un
+/// presupuesto: por eso cada partida guarda su `name` y su
+/// `unitPriceCents` COPIADOS del tarifario, y no un JOIN.
+model EduQuote {
+  id            String @id @default(cuid())
+  institutionId String
+  patientId     String
+  /// El caso, si el presupuesto sale de uno. SetNull.
+  caseId        String?
+
+  folio String @db.VarChar(30)
+  title String @db.VarChar(160)
+
+  status EduQuoteStatus @default(BORRADOR)
+
+  /// Hasta cuándo vale. Null = sin vencimiento (una escuela puede no
+  /// querer ponerle fecha a un plan largo).
+  validUntil DateTime? @db.Timestamptz(3)
+
+  /// Centavos enteros. `discountPct` es el porcentaje que la dirección
+  /// tecleó (0-100) y `discountCents` es lo que ese porcentaje valió: se
+  /// guardan los DOS porque el porcentaje es lo que se explica y los
+  /// centavos son lo que se cobra.
+  subtotalCents Int      @default(0)
+  discountPct   Decimal? @db.Decimal(5, 2)
+  discountCents Int      @default(0)
+  totalCents    Int      @default(0)
+
+  notes String? @db.VarChar(2000)
+
+  /// El TOKEN público de aceptación. Solo existe desde que se presenta, y
+  /// es único en toda la base: es una URL que sale del instituto.
+  acceptToken String? @db.VarChar(64)
+
+  presentedAt DateTime? @db.Timestamptz(3)
+  acceptedAt  DateTime? @db.Timestamptz(3)
+  rejectedAt  DateTime? @db.Timestamptz(3)
+  /// Quién aceptó, escrito por quien aceptó, y la evidencia — mismo trío
+  /// que EduConsent y EduPrescription: hash del texto canónico que tenía
+  /// delante, IP y navegador.
+  acceptedByName String? @db.VarChar(160)
+  acceptedHash   String? @db.VarChar(64)
+  acceptedIp     String? @db.VarChar(60)
+  acceptedUserAgent String? @db.VarChar(300)
+
+  /// AGUAS ABAJO, e idempotente: cuando el presupuesto se acepta se puede
+  /// convertir UNA vez en cobro y UNA vez en plan. Que la columna esté
+  /// llena ES la llave de idempotencia; sin ella, dos clics son dos
+  /// cobros.
+  chargeId        String?
+  treatmentPlanId String?
+
+  cancelledAt   DateTime? @db.Timestamptz(3)
+  cancelReason  String?   @db.VarChar(500)
+
+  createdById   String?
+  createdByName String  @db.VarChar(160)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution   EduInstitution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient       EduPatient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  case          EduCase?          @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  createdBy     EduUser?          @relation("EduQuoteBy", fields: [createdById], references: [id], onDelete: SetNull)
+  charge        EduCharge?        @relation("EduQuoteCharge", fields: [chargeId], references: [id], onDelete: SetNull)
+  treatmentPlan EduTreatmentPlan? @relation(fields: [treatmentPlanId], references: [id], onDelete: SetNull)
+  items         EduQuoteItem[]
+
+  @@unique([institutionId, folio], map: "edu_quotes_folio_key")
+  @@unique([acceptToken], map: "edu_quotes_token_key")
+  @@index([institutionId, patientId, status], map: "edu_quotes_paciente_idx")
+  @@index([institutionId, status, validUntil], map: "edu_quotes_vigencia_idx")
+  @@map("edu_quotes")
+}
+
+/// UNA PARTIDA del presupuesto. El nombre y el precio van COPIADOS del
+/// tarifario a propósito (ver el encabezado de EduQuote).
+model EduQuoteItem {
+  id            String @id @default(cuid())
+  institutionId String
+  quoteId       String
+  /// El procedimiento del catálogo, si salió de ahí. SetNull: desactivar
+  /// un procedimiento no puede vaciar un presupuesto ya presentado.
+  procedureId   String?
+
+  name     String  @db.VarChar(160)
+  /// Dientes FDI en CSV ("11,12,21"), como en el dental. Opcional.
+  toothFdi String? @db.VarChar(60)
+
+  quantity       Int @default(1)
+  unitPriceCents Int
+  discountCents  Int @default(0)
+  lineTotalCents Int
+
+  /// Fase 1..n para agrupar en el PDF y para partir el plan en etapas.
+  phase     Int?
+  notes     String? @db.VarChar(500)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  quote       EduQuote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  procedure   EduProcedure?  @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, quoteId, sortOrder], map: "edu_quote_items_presupuesto_idx")
+  @@map("edu_quote_items")
+}
+
+// ── C·5 · LOS BLOQUEOS DE AGENDA (H-19) ────────────────────────────────
+
+/// Por qué está cerrado. Es lo que se PINTA en la rejilla y lo que se le
+/// dice a quien intenta agendar ahí.
+enum EduAgendaBlockKind {
+  /// Día festivo oficial.
+  FESTIVO
+  /// Puente, periodo vacacional, semana de exámenes.
+  PUENTE
+  /// El sillón está descompuesto o en servicio.
+  MANTENIMIENTO
+  /// Cualquier otra cosa; el motivo escrito manda.
+  OTRO
+}
+
+/// UN CIERRE de la agenda: un rango de tiempo en el que NO se agenda.
+///
+/// 🔴 EL ALCANCE LO DA LO QUE ESTÉ EN NULL, y es toda la tabla en una
+/// línea:
+///   · sin sede y sin sillón → el INSTITUTO entero (un festivo nacional);
+///   · con sede y sin sillón → esa SEDE (el puente del campus norte);
+///   · con sillón            → ese SILLÓN (el 7 en mantenimiento).
+/// Sin esta tabla, cerrar un martes obligaba a cambiar el horario semanal
+/// del sillón —que afecta TODOS los martes— o a darlo de baja, que no
+/// cancela nada (H-19).
+///
+/// ⚠️ NO CANCELA LAS CITAS QUE YA ESTÁN. Bloquear es cerrar el hueco para
+/// lo que venga; lo que ya estaba agendado se reagenda a mano, con su
+/// aviso al paciente. Un bloqueo que cancela citas en cascada es una
+/// pantalla que borra la tarde de alguien sin que nadie lo decida.
+///
+/// ⚠️ Y NO SE BORRA: se retira con `deletedAt`, como todo lo de la Ola B.
+/// Un bloqueo que existió explica por qué esa tarde no hubo nadie.
+model EduAgendaBlock {
+  id            String @id @default(cuid())
+  institutionId String
+  /// La SEDE. Null = todas.
+  campusId      String?
+  /// EL SILLÓN. Null = todos los de esa sede (o del instituto).
+  chairId       String?
+
+  kind   EduAgendaBlockKind @default(OTRO)
+  /// Lo que se lee en la rejilla. Obligatorio: un hueco cerrado sin motivo
+  /// es una llamada de teléfono.
+  reason String @db.VarChar(200)
+
+  /// INSTANTES, no horas de pared: un bloqueo se compara contra las citas,
+  /// que son instantes. La conversión desde lo que teclea la pantalla usa
+  /// la zona de la SEDE (src/lib/edu/campus.ts).
+  startsAt DateTime @db.Timestamptz(3)
+  endsAt   DateTime @db.Timestamptz(3)
+
+  createdById   String?
+  createdByName String  @db.VarChar(160)
+
+  deletedAt   DateTime? @db.Timestamptz(3)
+  deletedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  campus      EduCampus?     @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  chair       EduChair?      @relation(fields: [chairId], references: [id], onDelete: Cascade)
+  createdBy   EduUser?       @relation("EduAgendaBlockBy", fields: [createdById], references: [id], onDelete: SetNull)
+  deletedBy   EduUser?       @relation("EduAgendaBlockDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, startsAt, endsAt], map: "edu_agenda_blocks_rango_idx")
+  @@index([institutionId, campusId, startsAt], map: "edu_agenda_blocks_sede_idx")
+  @@index([institutionId, chairId, startsAt], map: "edu_agenda_blocks_sillon_idx")
+  @@map("edu_agenda_blocks")
+}
+
+// ── C·6 · EL MOVIMIENTO DEL ODONTOGRAMA (N-3) ──────────────────────────
+
+/// Qué se hizo con el hallazgo.
+enum EduOdontogramEventAction {
+  /// Se marcó por primera vez.
+  MARCA
+  /// Se quitó (baja lógica de la Ola B).
+  QUITA
+  /// Se volvió a marcar sobre una fila que estaba dada de baja.
+  REVIVE
+  /// Se cambió la nota o el texto del hallazgo, sin quitarlo.
+  EDITA
+}
+
+/// EL LIBRO DE MOVIMIENTOS del odontograma. Una fila POR ACTO, no por
+/// hallazgo.
+///
+/// ═══════════════════════════════════════════════════════════════════════
+/// 🔴 POR QUÉ EXISTE, Y POR QUÉ NO ES UNA COLUMNA MÁS (N-3)
+///
+/// La Ola B cambió el DELETE del odontograma por una baja lógica, y el
+/// índice único `edu_odontogram_hallazgo_key` es de CINCO columnas y NO es
+/// parcial: una fila dada de baja SIGUE OCUPANDO su clave, así que
+/// remarcar ese hallazgo REVIVE la misma fila y el `update` escribe
+/// `deletedById: null` encima. Resultado: en base queda un hallazgo vivo y
+/// NINGUNA huella de quién lo había quitado — justo la pregunta que la
+/// baja lógica existía para contestar.
+///
+/// Había dos salidas. La primera es hacer PARCIAL ese índice
+/// (`WHERE "deletedAt" IS NULL`) para poder insertar una segunda fila, y
+/// eso es DROP INDEX + CREATE INDEX: se borra un objeto de una base viva,
+/// y en esta ola no se borra nada sin que Rafael lo decida (el bloque va
+/// COMENTADO al final de sql/edu-ola-c.sql). La segunda es ésta: una tabla
+/// de MOVIMIENTOS, puramente aditiva, que sobrevive a que la fila del
+/// hallazgo se reviva mil veces.
+///
+/// Se eligió ésta, y la otra queda escrita para que Rafael decida.
+/// ═══════════════════════════════════════════════════════════════════════
+///
+/// ⚠️ `entryId` es OPCIONAL con SetNull, y las cinco columnas del hallazgo
+/// van COPIADAS: el movimiento tiene que poder leerse aunque la fila del
+/// hallazgo desaparezca algún día. Un libro de movimientos que depende de
+/// que exista lo que registra no es un libro de movimientos.
+model EduOdontogramEvent {
+  id            String @id @default(cuid())
+  institutionId String
+  patientId     String
+  /// La fila del hallazgo. SetNull.
+  entryId       String?
+
+  /// Copia del hallazgo, para que el renglón sea autosuficiente.
+  tooth     Int
+  surface   String @default("") @db.VarChar(4)
+  condition String @db.VarChar(40)
+
+  action EduOdontogramEventAction
+
+  /// El texto que tenía la nota, si el movimiento la tocó.
+  notes String? @db.VarChar(1000)
+  /// El motivo, cuando quitar exige uno.
+  reason String? @db.VarChar(500)
+
+  actorUserId String?
+  actorName   String  @db.VarChar(160)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  institution EduInstitution      @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  patient     EduPatient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  entry       EduOdontogramEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+  actor       EduUser?            @relation("EduOdontogramEventBy", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, patientId, createdAt], map: "edu_odontogram_events_paciente_idx")
+  @@index([institutionId, patientId, tooth, surface, condition], map: "edu_odontogram_events_hallazgo_idx")
+  @@map("edu_odontogram_events")
+}
+
+// ── C·7 · LA CATEGORÍA DE PROCEDIMIENTO COMO ENTIDAD (H-90) ────────────
+
+/// LA CATEGORÍA del catálogo ("Endodoncia", "Prótesis"), con llave.
+///
+/// 🔴 NO SUSTITUYE al texto libre `EduProcedure.category` ni a
+/// `EduRequirement.category`: las dos columnas siguen ahí, intactas y sin
+/// renombrar. Lo que esta tabla añade es la LLAVE que H-90 pide — hoy
+/// renombrar una categoría en el catálogo pone el avance a cero EN
+/// SILENCIO para toda la especialidad, porque el requisito la compara por
+/// texto. Con `categoryId`, renombrar es renombrar y nada se cae.
+///
+/// ⚠️ NO SE BORRA: se desactiva, como los sillones, las especialidades y
+/// las sedes. Y los dos `categoryId` que apuntan aquí van con SetNull, no
+/// con Cascade: desactivar una categoría no puede llevarse por delante un
+/// procedimiento del tarifario.
+model EduProcedureCategory {
+  id            String @id @default(cuid())
+  institutionId String
+
+  name String @db.VarChar(60)
+  /// La clave corta y estable ("endodoncia"). Es lo que no cambia cuando
+  /// la dirección renombra la categoría. Única dentro del instituto.
+  key  String @db.VarChar(40)
+
+  isActive   Boolean @default(true)
+  orderIndex Int     @default(0)
+
+  updatedByUserId String?
+  updatedByName   String? @db.VarChar(160)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution  EduInstitution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  updatedBy    EduUser?         @relation("EduProcCategoryBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  procedures   EduProcedure[]
+  requirements EduRequirement[]
+
+  @@unique([institutionId, key], map: "edu_procedure_categories_key")
+  @@index([institutionId, isActive, orderIndex], map: "edu_procedure_categories_orden_idx")
+  @@map("edu_procedure_categories")
+}
+
+// ── C·8 · EL REQUISITO VERSIONADO POR COHORTE (H-89) ───────────────────
+
+/// UNA VERSIÓN de un requisito del plan de estudios.
+///
+/// ═══════════════════════════════════════════════════════════════════════
+/// 🔴 POR QUÉ UNA TABLA APARTE Y NO COLUMNAS EN EduRequirement
+///
+/// H-89: subir el mínimo de 8 a 12 en marzo reescribe el pasado de TODA la
+/// escuela —incluida la generación que se gradúa en junio—, sin versión y
+/// sin rastro. El arreglo natural sería `version` + `cohortId` DENTRO de
+/// EduRequirement… pero esa tabla tiene `@@unique([institutionId,
+/// programId, name])`, y dos versiones del mismo requisito chocan contra
+/// él. Cambiarlo es DROP INDEX, y en esta ola no se borra nada.
+///
+/// Así que la fila de EduRequirement se queda como LA VIGENTE (que es lo
+/// que todo el código que ya existe lee, sin cambiar una línea) y cada
+/// cambio escribe aquí una versión con su cohorte, su fecha de vigencia y
+/// su autor. El avance de un alumno se mide contra la versión que aplicaba
+/// a SU generación.
+/// ═══════════════════════════════════════════════════════════════════════
+model EduRequirementVersion {
+  id            String @id @default(cuid())
+  institutionId String
+  requirementId String
+
+  /// 1, 2, 3… por requisito.
+  version Int
+
+  /// La GENERACIÓN a la que aplica esta versión. Null = a todas las que no
+  /// tengan una propia (la regla general).
+  cohortId String?
+
+  /// La foto de lo que decía el requisito en esta versión. Se copia
+  /// entera a propósito: leer la versión no puede depender de que la fila
+  /// viva no haya cambiado desde entonces.
+  requiredCount Int
+  semesterFrom  Int?
+  semesterTo    Int?
+  onlyCompleted Boolean @default(true)
+  notes         String? @db.VarChar(300)
+
+  /// Desde cuándo rige. El avance de un alumno se mide con la versión
+  /// vigente para su generación a la fecha del caso.
+  effectiveFrom DateTime @default(now()) @db.Timestamptz(3)
+
+  createdById   String?
+  createdByName String  @db.VarChar(160)
+
+  createdAt DateTime @default(now())
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  requirement EduRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  cohort      EduCohort?     @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  createdBy   EduUser?       @relation("EduRequirementVersionBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([requirementId, version], map: "edu_requirement_versions_version_key")
+  @@index([institutionId, requirementId, effectiveFrom], map: "edu_requirement_versions_vigencia_idx")
+  @@index([institutionId, cohortId], map: "edu_requirement_versions_cohorte_idx")
+  @@map("edu_requirement_versions")
+}
+
+// ── C·9 · EL HISTORIAL DEL CUPO DE IA ──────────────────────────────────
+
+/// UN CAMBIO del cupo de IA del instituto.
+///
+/// El propio EduAiQuota lo dejó escrito: «guarda el ÚLTIMO cambio, no la
+/// historia: si algún día hace falta la historia del cupo, es una tabla
+/// aparte y no una columna más». Ésta es esa tabla. Encender el excedente
+/// y subir el tope duro son decisiones que cuestan dinero, y "quién lo
+/// subió y cuándo" no se contesta con dos columnas que se pisan.
+model EduAiQuotaChange {
+  id            String @id @default(cuid())
+  institutionId String
+
+  /// La foto ANTES y DESPUÉS del cambio, campo a campo. Json y no
+  /// columnas: el día que el cupo gane un campo, esta tabla no cambia.
+  before Json?
+  after  Json
+
+  changedById   String?
+  changedByName String  @db.VarChar(160)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  institution EduInstitution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  changedBy   EduUser?       @relation("EduAiQuotaChangeBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, createdAt], map: "edu_ai_quota_changes_institucion_idx")
+  @@map("edu_ai_quota_changes")
 }

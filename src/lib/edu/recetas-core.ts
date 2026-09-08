@@ -354,6 +354,25 @@ export function eduRecetaVoidable(status: EduPrescriptionStatus): boolean {
   return status === "EXPEDIDA";
 }
 
+/**
+ * 🔴 OLA C · ¿Se puede ARCHIVAR? Solo lo RECHAZADO (H-24).
+ *
+ * Archivar NO es anular, y por eso son dos funciones y no un parámetro:
+ *   · ANULAR   → lo EXPEDIDO. El documento existió, llevaba cédula, y el
+ *     PDF sigue saliendo marcado «ANULADA».
+ *   · ARCHIVAR → lo RECHAZADO. Nunca fue documento y nunca produce papel
+ *     (`eduRecetaPrintable` sigue diciendo que no). Solo sale de la vista
+ *     de trabajo del alumno, donde hasta hoy se quedaba PARA SIEMPRE
+ *     porque `EDU_PRESCRIPTION_TRANSITIONS.RECHAZADA` era `[]`.
+ *
+ * El motivo del rechazo lo escribió el docente en su autorización y no se
+ * toca; el de archivar es de quien archiva («ya se le hizo otra»,
+ * «el paciente no volvió»).
+ */
+export function eduRecetaArchivable(status: EduPrescriptionStatus): boolean {
+  return status === "RECHAZADA";
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 5 · LAS FORMAS QUE VIAJAN A LA PANTALLA
 //
