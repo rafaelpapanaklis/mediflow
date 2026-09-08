@@ -12,6 +12,8 @@ import {
 } from "@/lib/edu/agenda";
 import { listEduPatientOptions } from "@/lib/edu/pacientes";
 import { listEduPrograms } from "@/lib/edu/padron";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduTamizajeScreen } from "@/components/edu/clinica/tamizaje-screen";
 
@@ -47,14 +49,24 @@ export default async function InstitutoTamizajePage() {
   }
 
   const now = new Date();
-  const tz = ctx.institution.timezone;
+
+  // 🔴 OLA C · H-23 — ESTA PÁGINA RESUELVE SU ALCANCE DE SEDE.
+  //
+  // Antes llamaba con el `ctx` crudo, que no trae `campusIds`, así que la
+  // cola de valoraciones se leía SIN recorte de sede: una dirección
+  // restringida al campus Norte veía —con nombre y folio— las valoraciones
+  // pendientes del Sur. La agenda, que es de donde se llega aquí, lo
+  // resuelve así desde la Ola 11; esta pantalla se había quedado fuera.
+  const sede = await getEduCampusScope(ctx);
+  const cctx = eduWithCampus(ctx, sede);
+  const tz = sede.timezone;
 
   const [pendientes, pacientes, alumnos, docentes, programas] = await Promise.all([
-    listEduPendingScreenings(ctx, tz, now),
-    listEduPatientOptions(ctx, now),
-    listEduStudentOptions(ctx, now),
-    listEduSupervisorOptions(ctx),
-    listEduPrograms(ctx),
+    listEduPendingScreenings(cctx, tz, now),
+    listEduPatientOptions(cctx, now),
+    listEduStudentOptions(cctx, now),
+    listEduSupervisorOptions(cctx),
+    listEduPrograms(cctx),
   ]);
 
   return (

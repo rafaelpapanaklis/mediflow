@@ -39,6 +39,14 @@ export interface EduCasosScreenProps {
   programas: { id: string; name: string; isActive: boolean }[];
   alumnos: { id: string; matricula: string; name: string }[];
   docentes: { id: string; name: string; isActive: boolean }[];
+  /**
+   * 🔴 OLA C · H-44 — si los desplegables de filtro se quedaron cortos.
+   * Los dos se cortan en {EDU_CLINICA_MAX_ROWS} y no lo decían, mientras la
+   * LISTA sí avisa cuando se corta: quien no encontraba a su alumno concluía
+   * que no tenía casos.
+   */
+  alumnosTruncados: boolean;
+  docentesTruncados: boolean;
 }
 
 const TAG_BY_CASE_STATUS: Record<EduCaseStatus, string> = {
@@ -60,6 +68,8 @@ export function EduCasosScreen({
   programas,
   alumnos,
   docentes,
+  alumnosTruncados,
+  docentesTruncados,
 }: EduCasosScreenProps) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
@@ -67,6 +77,56 @@ export function EduCasosScreen({
   // como en la lista de pacientes); los demás filtros escriben la URL al
   // cambiar.
   const [q, setQ] = useState(filters.q ?? "");
+  /**
+   * 🔴 OLA C · H-43 — UN 413 DEL EXPORT NO PUEDE DEJARTE MIRANDO JSON.
+   *
+   * El botón era un `<a href>` a la API. Cuando el rango no cabe, el
+   * endpoint responde JSON con 413 y el navegador NAVEGA a esa ruta: la
+   * pantalla desaparece con sus filtros y lo que queda es un blob de texto
+   * en la barra de direcciones. El banner promete que «lo dice con el
+   * número», y lo decía en un blob.
+   *
+   * Ahora se pide con fetch: si sale bien, el archivo se descarga igual; si
+   * no, el mensaje se lee AQUÍ, con la lista y los filtros intactos.
+   */
+  const [exportando, setExportando] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function exportar(url: string) {
+    if (exportando) return;
+    setExportando(true);
+    setExportError(null);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        let detalle = `El servidor contestó ${res.status}.`;
+        try {
+          const j = (await res.json()) as { error?: string };
+          if (j?.error) detalle = j.error;
+        } catch {
+          // Un cuerpo que no es JSON no aporta nada legible: se queda el
+          // código, que al menos se puede reportar.
+        }
+        setExportError(detalle);
+        return;
+      }
+      const blob = await res.blob();
+      const nombre =
+        res.headers.get("content-disposition")?.match(/filename="?([^"]+)"?/)?.[1] ?? "casos.csv";
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = nombre;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "No se pudo exportar.");
+    } finally {
+      setExportando(false);
+    }
+  }
 
   const hayFiltros = eduHasCasosPanelFilters(filters);
 
@@ -121,7 +181,15 @@ export function EduCasosScreen({
             }
           >
             <option value="">{filters.incluirCerrados ? "Todos" : "Todos los abiertos"}</option>
-            {EDU_CASE_STATUSES.map((s) => (
+            {/* 🔴 OLA C · H-40 — "En valoración" (SCREENING) NO se ofrece.
+                Es un estado que el producto no puede producir: las dos
+                creaciones de caso escriben ASSIGNED y solo la semilla de
+                demo pone SCREENING. El filtro devolvía cero SIEMPRE, y quien
+                lo probaba concluía que el filtro estaba roto. El estado
+                sigue existiendo en el modelo y esas filas se siguen viendo
+                en "Todos"; lo que se quita es la opción que no lleva a
+                ningún sitio. */}
+            {EDU_CASE_STATUSES.filter((s) => s !== "SCREENING").map((s) => (
               <option key={s} value={s}>
                 {EDU_CASE_STATUS_LABELS[s]}
               </option>
@@ -167,6 +235,12 @@ export function EduCasosScreen({
                 </option>
               ))}
             </select>
+            {alumnosTruncados && (
+              <span className="edu-field__hint">
+                Se listan los primeros {alumnos.length} por matrícula, no todos. Si no encuentras a
+                alguien, acota antes por especialidad.
+              </span>
+            )}
           </div>
         )}
 
@@ -189,6 +263,11 @@ export function EduCasosScreen({
                 </option>
               ))}
             </select>
+            {docentesTruncados && (
+              <span className="edu-field__hint">
+                Se listan los primeros {docentes.length}, no todos.
+              </span>
+            )}
           </div>
         )}
 
@@ -248,6 +327,12 @@ export function EduCasosScreen({
         )}
       </form>
 
+      {exportError && (
+        <div className="edu-alert" role="alert">
+          {exportError}
+        </div>
+      )}
+
       <div className="edu-toolbar__foot">
         <span className="edu-count">
           {navigating
@@ -267,13 +352,17 @@ export function EduCasosScreen({
           // cerrados" está armando el reporte de una acreditación, no
           // leyendo la lista. Esconderlo dejaba a la escuela sin export en
           // cuanto pasaba de 300 casos.
-          <a
+          <button
+            type="button"
             className="edu-btn edu-btn--ghost edu-btn--sm"
-            href={`/api/instituto/casos/export${exportQs ? `?${exportQs}` : ""}`}
+            disabled={exportando}
+            onClick={() =>
+              exportar(`/api/instituto/casos/export${exportQs ? `?${exportQs}` : ""}`)
+            }
           >
             <Download size={15} />
-            Exportar CSV
-          </a>
+            {exportando ? "Preparando…" : "Exportar CSV"}
+          </button>
         )}
       </div>
 
@@ -411,6 +500,16 @@ export function EduCasosScreen({
                     ) : (
                       <span className={`edu-tag ${EDU_CASO_ESPERA_TAG[c.espera.kind]}`}>
                         {c.espera.label}
+                      </span>
+                    )}
+                    {/* 🔴 OLA C · H-41 — la ruta de urgencia deja rastro.
+                        Marcar «es urgencia y ya procedí» salta la firma
+                        previa, y no había una sola pantalla donde contar
+                        cuántas veces pasó. Va también en el CSV. */}
+                    {c.urgencias > 0 && (
+                      <span className="edu-cell__sub">
+                        {c.urgencias} {c.urgencias === 1 ? "firma pedida" : "firmas pedidas"} por
+                        urgencia
                       </span>
                     )}
                   </div>

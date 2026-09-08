@@ -731,6 +731,18 @@ export interface EduWaConnectionDTO {
   receiptEnabled: boolean;
   /** Plantilla registrada por tipo (nombre, idioma, estado). */
   templates: EduWaTemplateMap;
+  /**
+   * 🔴 OLA C · H-130 — CUÁNDO SE LE PREGUNTÓ A META, por tipo, ya escrito.
+   *
+   * `checkedAt` se guardaba desde el primer día y la pantalla no lo pintaba
+   * nunca: el panel enseñaba «APPROVED» sobre una comprobación de hace tres
+   * meses. Meta pausó la plantilla la semana pasada, el interruptor sigue
+   * encendido y el barrido falla en silencio. El propio código dice «la
+   * pantalla dice CUÁNDO se preguntó»; ahora lo dice.
+   *
+   * Ya formateado en la zona del instituto, por lo mismo que `whenLabel`.
+   */
+  templatesCheckedLabel: Partial<Record<EduWhatsappKind, string>>;
   /** Qué puede salir y qué no, con el porqué. */
   readiness: EduWaKindReadiness[];
 }
@@ -756,4 +768,23 @@ export interface EduWaMessageRow {
   attempts: number;
   sentByName: string | null;
   createdAt: string;
+  /**
+   * 🔴 OLA C · H-119 — EL ACUSE DE META. Es lo ÚNICO con lo que se le
+   * reclama a Meta un mensaje concreto, se guardaba desde el primer día y
+   * no se seleccionaba: la pantalla no podía enseñarlo ni aunque quisiera.
+   */
+  wamid: string | null;
+  /**
+   * 🔴 OLA C · H-119 — CUÁNDO. «Últimos envíos» no enseñaba ni la fecha ni
+   * la hora, y el texto de arriba prometía que sí: «quedará aquí con su
+   * resultado, SU HORA y el texto exacto». Un paciente llama enfadado
+   * porque le llegó el recordatorio a las once de la noche y la directora
+   * veía cincuenta tarjetas idénticas sin una sola hora.
+   *
+   * Se formatea en el SERVIDOR, en la zona del instituto: un `Intl` en el
+   * cliente pintaría la hora del navegador —la de quien mira, no la de la
+   * escuela— y además no cuadraría entre el render del servidor y el del
+   * navegador.
+   */
+  whenLabel: string;
 }

@@ -246,6 +246,10 @@ export function EduBandejaScreen({
             {row.studentMatricula} {row.studentName}
           </EduPersonaLink>
           {row.requestedByName !== row.studentName ? ` · lo mandó ${row.requestedByName}` : ""}
+          {/* OLA C · H-32: el estado del CASO se calculaba, viajaba hasta
+              aquí y la tarjeta no lo pintaba. Firmar sin saber si el caso
+              está en tratamiento o en pausa es firmar a ciegas. */}
+          {row.caseStatusLabel ? ` · caso ${row.caseStatusLabel.toLowerCase()}` : ""}
         </p>
 
         {row.contentChanged && (

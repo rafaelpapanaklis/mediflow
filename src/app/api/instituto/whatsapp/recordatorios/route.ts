@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard } from "@/lib/edu/api-guard";
 import { runEduReminderSweep } from "@/lib/edu/recordatorios";
+import { eduWaActorName } from "@/lib/edu/whatsapp";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -27,7 +28,15 @@ export async function POST() {
   if ("response" in g) return g.response;
 
   try {
-    const summary = await runEduReminderSweep({ institutionId: g.ctx.institutionId });
+    // 🔴 OLA C · H-01 — EL BARRIDO MANUAL FIRMA. Sin esto sus filas eran
+    // indistinguibles de las del cron, y la pantalla no podía decir si el
+    // automático había salido alguna vez (no está dado de alta en
+    // vercel.json). Un envío sin firma vuelve a significar "salió solo".
+    const summary = await runEduReminderSweep({
+      institutionId: g.ctx.institutionId,
+      sentByUserId: g.ctx.eduUserId,
+      sentByName: eduWaActorName(g.ctx),
+    });
     return NextResponse.json({ summary });
   } catch (err) {
     return eduApiError(err, "POST /api/instituto/whatsapp/recordatorios");

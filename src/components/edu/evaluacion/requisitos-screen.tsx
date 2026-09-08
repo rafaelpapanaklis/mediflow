@@ -280,7 +280,19 @@ function EditorRequisito({
       };
 
       if (requisito) {
-        await eduRequest(`/api/instituto/requisitos/${requisito.id}`, { method: "PATCH", body });
+        // 🔴 OLA C · H-98 — EL PATCH NO MANDA `programId`.
+        //
+        // `updateEduRequirement` no lo lee NUNCA. Hoy es inocuo porque el
+        // `<select>` está deshabilitado al editar; el día que alguien lo
+        // habilite para "arreglar" un requisito de la especialidad
+        // equivocada, la pantalla diría «Requisito guardado» y no habría
+        // cambiado nada. Mandar un campo que el servidor ignora es
+        // exactamente cómo nace ese fallo mudo: se deja de mandar.
+        const { programId: _noSeCambia, ...cambios } = body;
+        await eduRequest(`/api/instituto/requisitos/${requisito.id}`, {
+          method: "PATCH",
+          body: cambios,
+        });
         onDone(`Requisito "${body.name}" guardado. El avance de cada estudiante se recalcula solo.`);
       } else {
         await eduRequest("/api/instituto/requisitos", { method: "POST", body });

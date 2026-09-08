@@ -79,7 +79,9 @@ export function EduCasoAcciones({
   // Confirmación en dos pasos para lo que no tiene vuelta fácil
   // (abandonar). Sin window.confirm: un diálogo del navegador no explica
   // nada y no se puede leer con calma en un teléfono.
-  const [confirmando, setConfirmando] = useState<EduCaseStatus | null>(null);
+  // "REOPEN" no es un estado del caso: es la confirmación de reabrirlo
+  // (H-36), que aterriza en ASSIGNED.
+  const [confirmando, setConfirmando] = useState<EduCaseStatus | "REOPEN" | null>(null);
 
   const [modalSesion, setModalSesion] = useState(false);
   const [subjetivo, setSubjetivo] = useState("");
@@ -330,8 +332,16 @@ export function EduCasoAcciones({
                 </button>
               ) : (
                 <span className="edu-note">
-                  Para iniciar el tratamiento falta el plan autorizado — el estudiante lo manda con
-                  «Enviar a autorización», aquí arriba.
+                  {/* 🔴 OLA C · H-45 — el estudiante puede no existir ya. Si
+                      se dio de baja, el docente lee "el estudiante lo
+                      manda" y NO puede hacerlo él: no lleva
+                      "autorizaciones.request" por diseño. Quien sí puede es
+                      la dirección, y eso no estaba escrito en ninguna
+                      parte. El repo tomó esta misma decisión para el
+                      mensaje del gate (autorizaciones-core.ts). */}
+                  Para iniciar el tratamiento falta el plan autorizado — lo manda el estudiante con
+                  «Enviar a autorización», aquí arriba. Si ya no está activo, quien puede mandarlo
+                  es la dirección.
                 </span>
               )}
             </>
@@ -352,8 +362,9 @@ export function EduCasoAcciones({
                 </button>
               ) : (
                 <span className="edu-note">
-                  Para dar de alta falta la autorización del alta — el estudiante la manda con
-                  «Enviar a autorización», aquí arriba.
+                  Para dar de alta falta la autorización del alta — la manda el estudiante con
+                  «Enviar a autorización», aquí arriba. Si ya no está activo, quien puede mandarla
+                  es la dirección.
                 </span>
               )}
               <button
@@ -439,6 +450,59 @@ export function EduCasoAcciones({
               }}
             >
               Traspasar
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── 🔴 OLA C · H-36 · REABRIR UN CASO CERRADO ──────────────────────
+          `{!cerrado && …}` borraba TODOS los botones de estado, mientras la
+          confirmación de ABANDONADO promete literalmente «Reabrirlo es
+          posible si el paciente vuelve». No lo era por ninguna pantalla: un
+          docente que marcaba el caso equivocado no tenía vuelta atrás.
+
+          Vuelve a ASIGNADO y no a EN TRATAMIENTO a propósito: "en
+          tratamiento" tiene puerta (el plan firmado) y saltársela por
+          reabrir sería abrir el gate por la puerta de atrás. Desde
+          ASIGNADO, el caso vuelve a pasar por donde tiene que pasar.
+
+          TRANSFERIDO no se reabre y no es una omisión: ese caso se entregó
+          a otro alumno, sigue vivo en la ficha del que lo recibió, y
+          reabrirlo le devolvería el paciente a quien ya lo entregó (H-37,
+          que el servidor también rebota). */}
+      {cerrado && canMoverEstado && status !== "TRANSFERRED" && (
+        <div className="edu-caso-acciones__fila">
+          {confirmando === "REOPEN" ? (
+            <span className="edu-caso-acciones__confirm">
+              ¿Reabrir el caso? Vuelve a ASIGNADO y se le quita la fecha de cierre. Para volver a
+              «en tratamiento» hace falta el plan autorizado, como la primera vez.
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary edu-btn--sm"
+                disabled={busy}
+                onClick={() =>
+                  moverEstado("ASSIGNED", "El caso se reabrió: está ASIGNADO otra vez.")
+                }
+              >
+                Sí, reabrirlo
+              </button>
+              <button
+                type="button"
+                className="edu-btn edu-btn--quiet edu-btn--sm"
+                disabled={busy}
+                onClick={() => setConfirmando(null)}
+              >
+                No
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              disabled={busy}
+              onClick={() => setConfirmando("REOPEN")}
+            >
+              Reabrir el caso
             </button>
           )}
         </div>

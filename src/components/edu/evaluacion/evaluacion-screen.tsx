@@ -89,13 +89,25 @@ export function EduEvaluacionScreen({
   const router = useRouter();
   const [navigating, startNav] = useTransition();
 
+  // 🔴 OLA C · H-83 — EL DEFAULT DE GENERACIÓN TAMBIÉN ES UN FILTRO.
+  //
+  // Con la lista vacía y `hayFiltros` en false se pintaba «Todavía no hay
+  // estudiantes que medir» —el vacío de una escuela recién montada— y se
+  // volvía ANTES de pintar el aviso de generación y el enlace «mira todas
+  // las generaciones». Con 120 alumnos activos y una generación recién
+  // capturada todavía vacía, la dirección leía un mensaje falso y no tenía
+  // NINGÚN control en pantalla para salir: la única salida era teclear
+  // `?generacion=todas` a mano.
+  //
+  // El servidor filtra por la generación vigente aunque nadie la haya
+  // elegido, así que eso ES un filtro puesto y aquí se cuenta como tal.
   const hayFiltros = Boolean(
     filters.programId ||
       filters.cohortId ||
       filters.todasLasGeneraciones ||
       filters.status ||
       filters.semaforo,
-  );
+  ) || generacion.modo === "vigente" || generacion.modo === "elegida";
 
   type EduEvalParam = "especialidad" | "generacion" | "estado" | "semaforo";
 
@@ -138,11 +150,21 @@ export function EduEvaluacionScreen({
     ? cohorts.filter((c) => c.programId === filters.programId)
     : cohorts;
 
+  // 🔴 OLA C · H-88 — LOS KPI CUENTAN A LOS ACTIVOS.
+  //
+  // Una baja definitiva y un egresado siguen en su generación, así que se
+  // les mide igual y salen en rojo: «Atrasados: 7» cuando los atrasados que
+  // se pueden llamar por teléfono son 4. Un KPI existe para decidir a quién
+  // llamar. Las filas NO se esconden —el semáforo de un egresado es su
+  // historia y la lista lo sigue enseñando con su estado—, lo que cambia es
+  // el número de arriba, que ahora dice sobre quiénes está contando.
+  const medibles = rows.filter((r) => r.status === "ACTIVE");
+  const noMedibles = rows.length - medibles.length;
   const cuenta = {
-    atrasados: rows.filter((r) => r.estado === "ATRASADO").length,
-    vigilar: rows.filter((r) => r.estado === "VIGILAR").length,
-    alDia: rows.filter((r) => r.estado === "AL_DIA").length,
-    sinCalcular: rows.filter((r) => r.estado === null).length,
+    atrasados: medibles.filter((r) => r.estado === "ATRASADO").length,
+    vigilar: medibles.filter((r) => r.estado === "VIGILAR").length,
+    alDia: medibles.filter((r) => r.estado === "AL_DIA").length,
+    sinCalcular: medibles.filter((r) => r.estado === null).length,
   };
 
   if (rows.length === 0 && !hayFiltros) {
@@ -186,6 +208,16 @@ export function EduEvaluacionScreen({
               <span className="edu-kpi__value">{cuenta.sinCalcular}</span>
               <span className="edu-kpi__note">
                 A su generación le faltan fechas. Captúralas en Especialidades y generaciones.
+              </span>
+            </div>
+          )}
+          {noMedibles > 0 && (
+            <div className="edu-kpi">
+              <span className="edu-kpi__label">Fuera de la cuenta</span>
+              <span className="edu-kpi__value">{noMedibles}</span>
+              <span className="edu-kpi__note">
+                Bajas y egresados. Siguen en la lista con su estado, pero no se cuentan arriba: a
+                quien ya no está no se le puede llamar.
               </span>
             </div>
           )}
@@ -335,6 +367,21 @@ export function EduEvaluacionScreen({
               }${generacion.name ? ` · generación ${generacion.name}` : ""}`}
         </span>
       </div>
+      {/* 🔴 OLA C · H-87 — EL FILTRO «CÓMO VA» SE APLICA DESPUÉS DEL TOPE.
+          El corte de {maxRows} se hace por matrícula y semestre, que no
+          tienen nada que ver con el semáforo: filtrar "Atrasado" descarta
+          alumnos ANTES de mirar cómo van, y los atrasados de las últimas
+          matrículas no salen. No se puede arreglar en la consulta —el
+          semáforo se calcula con los casos, las citas y los requisitos de
+          cada uno—, así que se DICE, que es lo que el contador de arriba no
+          conseguía decir. */}
+      {truncated && filters.semaforo && !navigating && (
+        <p className="edu-note">
+          Ojo: el semáforo se calcula DESPUÉS de cortar en {maxRows} estudiantes, así que estos son
+          los que están así <strong>entre los primeros {maxRows}</strong>, no todos. Acota por
+          especialidad o por generación para que quepan todos y el número sea el de verdad.
+        </p>
+      )}
 
       {rows.length === 0 ? (
         <div className="edu-empty">

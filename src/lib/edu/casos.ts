@@ -27,6 +27,7 @@ import { EduPadronError } from "@/lib/edu/padron";
 import { eduCurrentAssignmentWhere, eduSearchTokens } from "@/lib/edu/padron-core";
 import {
   EDU_CLINICA_MAX_ROWS,
+  eduCaseFitsAppointment,
   eduCleanId,
   eduDayRange,
   eduFormatDayShort,
@@ -59,6 +60,7 @@ import { eduCaseGateCheck } from "@/lib/edu/autorizaciones";
 import {
   EDU_CASE_CLOSED_STATUSES,
   EDU_CASE_STATUS_LABELS,
+  type EduAppointmentStatus,
   type EduCaseStatus,
 } from "@/lib/edu/types";
 
@@ -440,6 +442,16 @@ export async function createEduCase(
   }
 
   let screeningAppointmentId: string | null = null;
+  /** H-15: si la cita de valoración y el caso son del MISMO alumno. Solo
+   *  entonces se le escribe el `caseId` de vuelta a la cita. */
+  let citaEncaja = false;
+  /** H-30: la cita de valoración que hay que dar por terminada al abrir el
+   *  caso, si procede. Null = no se toca. */
+  let citaACerrar: {
+    id: string;
+    status: EduAppointmentStatus;
+    startedAt: Date | null;
+  } | null = null;
   if (
     input.screeningAppointmentId !== undefined &&
     input.screeningAppointmentId !== null &&
@@ -449,7 +461,16 @@ export async function createEduCase(
     const cita = id
       ? await prisma.eduAppointment.findFirst({
           where: { id, institutionId },
-          select: { id: true, patientId: true, type: true },
+          select: {
+            id: true,
+            patientId: true,
+            studentId: true,
+            type: true,
+            // H-30: para poder cerrarla sin fabricar horas clínicas.
+            status: true,
+            startsAt: true,
+            startedAt: true,
+          },
         })
       : null;
     if (!cita) throw new EduPadronError("Esa cita no es de este instituto.", 404);
@@ -457,6 +478,54 @@ export async function createEduCase(
       throw new EduPadronError("Esa cita de valoración es de otro paciente.");
     }
     screeningAppointmentId = cita.id;
+    // 🔴 OLA C · H-15 — LA CITA NO CUELGA DEL CASO DE OTRO ALUMNO.
+    //
+    // La cita se comprobaba SOLO contra el paciente, nunca contra el
+    // alumno, y luego se le escribía el `caseId` unas líneas más abajo. En
+    // la Valoración eso pasa el día normal: el renglón dice "valora A"
+    // (quien está en el sillón) y el desplegable pregunta por el
+    // "estudiante que lo va a tratar", que puede ser B. Quedaba una fila
+    // con `studentId = A` y `caseId = caso de B` — exactamente la
+    // invariante que el POST de la agenda defiende por escrito ("Ese caso
+    // es de otro estudiante") con esta misma función.
+    //
+    // No se rebota y no se le cambia el alumno a la cita: las dos cosas
+    // mentirían. Rebotar prohibiría asignarle el caso a quien lo va a
+    // tratar, que es para lo que existe ese desplegable; reescribir el
+    // `studentId` borraría quién hizo de verdad la valoración y le movería
+    // las horas clínicas de A a B. Lo que se hace es NO poner el enlace de
+    // vuelta: el caso sigue sabiendo de qué cita nació
+    // (`screeningAppointmentId`), y la cita se queda con su alumno y sin un
+    // caso que no es suyo.
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔴 OLA C · H-30 — ABRIR EL CASO CIERRA LA CITA DE VALORACIÓN.
+    //
+    // La cita se quedaba en AGENDADA para siempre: la valoración ocurrió
+    // —hay un caso abierto que lo demuestra— y en la agenda seguía pintada
+    // como algo que va a pasar.
+    //
+    // ⚠️ SOLO SI YA OCURRIÓ. Una cita de valoración del jueves que viene no
+    // se marca terminada hoy: los sellos de tiempo son de donde salen las
+    // HORAS CLÍNICAS de la acreditación, y fabricarlas es exactamente lo
+    // que la regla P2-11 prohíbe. Si la cita todavía no llega, se queda
+    // como está y alguien la cerrará desde la agenda.
+    //
+    // ⚠️ Y NO SE SACA DE LA COLA DE VALORACIONES: esa lista filtra las
+    // canceladas y las que el paciente no llegó, no las terminadas, y ver
+    // «ya tiene caso abierto» es cómo alguien se entera de que un compañero
+    // ya lo hizo. Esa decisión está escrita en `listEduPendingScreenings` y
+    // se respeta.
+    if (cita.startsAt <= now && !["CANCELLED", "NO_SHOW", "COMPLETED"].includes(cita.status)) {
+      citaACerrar = {
+        id: cita.id,
+        status: cita.status as EduAppointmentStatus,
+        startedAt: cita.startedAt,
+      };
+    }
+    citaEncaja = eduCaseFitsAppointment(
+      { patientId: partes.patientId, studentId: partes.studentId },
+      { patientId: cita.patientId, studentId: cita.studentId },
+    );
   }
 
   const procedureId = (await resolveProcedureId(institutionId, input.procedureId)) ?? null;
@@ -494,10 +563,23 @@ export async function createEduCase(
     //
     // `updateMany` con el caseId todavía nulo: si la cita ya colgaba de
     // otro caso, no se le toca — un enlace existente vale más que éste.
-    if (screeningAppointmentId) {
+    if (screeningAppointmentId && citaEncaja) {
       await tx.eduAppointment.updateMany({
         where: { id: screeningAppointmentId, institutionId, caseId: null },
         data: { caseId: caso.id },
+      });
+    }
+
+    // H-30 · la valoración queda TERMINADA, con el estado leído en el
+    // `where` para no pisar una cancelación que llegó mientras tanto.
+    if (citaACerrar) {
+      await tx.eduAppointment.updateMany({
+        where: { id: citaACerrar.id, institutionId, status: citaACerrar.status },
+        data: {
+          status: "COMPLETED",
+          startedAt: citaACerrar.startedAt ?? now,
+          completedAt: now,
+        },
       });
     }
 
@@ -618,6 +700,25 @@ export async function updateEduCase(
     const st = parseEduCaseStatus(input.status);
     if (!st) throw new EduPadronError("Ese estado de caso no existe.");
     if (st === current.status) throw new EduPadronError("El caso ya estaba en ese estado.");
+    // 🔴 OLA C · H-37 — DE "TRANSFERIDO" NO SE VUELVE.
+    //
+    // No hay tabla de transiciones y el único control era "no puede ser el
+    // mismo estado", así que por API un caso TRANSFERRED volvía a
+    // IN_TREATMENT — y el candado del traspaso es literalmente
+    // `status: TRANSFERRED` en el alcance de visibilidad: reabrirlo le
+    // devolvía al alumno que ya entregó la ficha, el expediente, el
+    // odontograma y las radiografías del paciente. Ninguna pantalla lo
+    // ofrece; se conseguía armando la petición a mano.
+    //
+    // Los otros dos cierres (TERMINADO y ABANDONADO) SÍ se reabren: eso es
+    // lo que promete el texto de la confirmación —«reabrirlo es posible si
+    // el paciente vuelve»— y no le quita el paciente a nadie.
+    if (current.status === "TRANSFERRED") {
+      throw new EduPadronError(
+        "Ese caso se traspasó: su historia se cerró aquí y sigue en el caso nuevo del alumno que lo recibió. Reabrirlo le devolvería el paciente a quien ya lo entregó. Si hay que corregir el traspaso, ábrelo desde el caso que lo recibió.",
+        409,
+      );
+    }
     data.status = st;
     data.closedAt = (EDU_CASE_CLOSED_STATUSES as string[]).includes(st)
       ? (current.closedAt ?? now)
@@ -680,7 +781,32 @@ export async function updateEduCase(
       if (!verdict.ok) throw new EduPadronError(verdict.detail, 409);
     }
 
-    await tx.eduCase.update({ where: { id: current.id }, data });
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔴 OLA C · H-08 — EL PATCH NO PISA UN TRASPASO EN CURSO.
+    //
+    // `current.status` se lee ARRIBA, fuera de la transacción. Fin de
+    // semestre: dirección traspasa en lote los doce casos de un egresado
+    // mientras el docente pulsa "Dar de alta" en uno de ellos. El traspaso
+    // cierra el caso como TRANSFERRED y abre el del alumno que entra; el
+    // PATCH, que había leído IN_TREATMENT, lo dejaba COMPLETED con su
+    // `closedAt` — y el paciente se quedaba con dos casos vivos en la misma
+    // especialidad, con el nuevo apuntando a uno que dice "Terminado".
+    //
+    // El hermano lo hacía bien y lo explicaba (traspasos.ts): `updateMany`
+    // con el estado leído dentro del `where` y 409 si no movió nada. Es el
+    // mismo patrón de la casa que usan recetas, consentimientos y la
+    // decisión de una autorización.
+    // ═══════════════════════════════════════════════════════════════════
+    const movido = await tx.eduCase.updateMany({
+      where: { id: current.id, institutionId, status: current.status },
+      data,
+    });
+    if (movido.count === 0) {
+      throw new EduPadronError(
+        "Ese caso cambió de estado mientras lo mirabas: alguien lo traspasó, lo cerró o lo movió. Refresca la ficha y decide sobre lo que hay ahora.",
+        409,
+      );
+    }
 
     // Si al paciente no le queda ningún caso abierto, deja de estar "en
     // tratamiento". Se recalcula DENTRO de la transacción y contando de
@@ -995,7 +1121,14 @@ const CASOS_PANEL_SELECT = {
   // engordarían el payload de cada fila.
   approvals: {
     where: { status: { in: ["PENDING", "APPROVED"] } },
-    select: { stage: true, status: true },
+    // 🔴 OLA C · H-41 — `isEmergency` entra en el select.
+    //
+    // Un alumno puede marcar «es urgencia y ya procedí» en casi todas sus
+    // peticiones (bastan 12 caracteres de motivo) y, una vez firmadas, NO
+    // había una sola pantalla donde contar cuántas veces se saltó la firma
+    // previa: ni la lista pedía el campo ni el CSV lo llevaba. El dato ya
+    // se guardaba; lo que faltaba era mirarlo.
+    select: { stage: true, status: true, isEmergency: true },
   },
 } satisfies Prisma.EduCaseSelect;
 
@@ -1024,5 +1157,8 @@ function toCasoPanelRow(c: CasoPanelPayload, tz: string): EduCasosPanelRow {
     openedLabel: eduFormatDayShort(abierto),
     closedLabel: c.closedAt ? eduFormatDayShort(eduUtcToZoned(c.closedAt, tz).dayISO) : null,
     espera: eduCasoEsperando(c.status, c.approvals),
+    // H-41: cuántas de las firmas de este caso se pidieron por la ruta de
+    // urgencia. Es el número que la dirección no tenía forma de sacar.
+    urgencias: c.approvals.filter((a) => a.isEmergency).length,
   };
 }

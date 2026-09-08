@@ -12,6 +12,15 @@ import {
 import { getEduCampusScope } from "@/lib/edu/campus";
 
 export const dynamic = "force-dynamic";
+// 🔴 OLA C · H-133 — ESTE ENDPOINT NECESITA SU `maxDuration`.
+//
+// Es el más caro del vertical: dos bloques en secuencia (4 + 14 consultas)
+// más la evaluación de cada alumno. Sin declararlo se queda con el
+// `maxDuration` por defecto de la función, y un rango de 366 días —el caso
+// de la acreditación, que es exactamente para lo que existe este botón—
+// devolvía un 504 sin un solo mensaje. Los otros dos endpoints pesados del
+// vertical (el cron de recordatorios y el barrido manual) sí lo declaran.
+export const maxDuration = 300;
 
 /**
  * GET /api/instituto/direccion/export — EL TABLERO EN CSV.

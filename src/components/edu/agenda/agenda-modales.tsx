@@ -251,7 +251,17 @@ export function EduAgendaAlta({
             value={hora}
             onChange={(e) => setHora(e.target.value)}
           />
-          <span className="edu-field__hint">En la hora del instituto.</span>
+          {/* 🔴 OLA C · H-28 — LA HORA ES LA DE LA SEDE DEL SILLÓN, no la
+              del instituto. El servidor interpreta con la zona del campus
+              donde está el sillón (Ola 11); el rótulo decía "del instituto"
+              y con dos husos se clicaba el hueco de las 10:00 de Tijuana y
+              la cita reaparecía a las 12:00. Con una sola sede el rótulo
+              viejo era correcto, y por eso solo cambia cuando hay varias. */}
+          <span className="edu-field__hint">
+            {variasSedes
+              ? "En la hora de la SEDE del sillón que elijas, no en la del instituto."
+              : "En la hora del instituto."}
+          </span>
         </div>
 
         <div className="edu-field">
@@ -379,6 +389,16 @@ export function EduAgendaDetalle({
   const variasSedes = new Set(chairs.map((c) => c.campusId)).size > 1;
   const [studentId, setStudentId] = useState(row.studentId);
   const [supervisorUserId, setSupervisorUserId] = useState(row.supervisorUserId ?? "");
+  // 🔴 OLA C · H-24 — EL TIPO Y LAS NOTAS TAMBIÉN SE CORRIGEN.
+  //
+  // El servidor acepta `type` y `notes` en el PATCH desde el primer día; el
+  // formulario mandaba seis campos y ninguno de esos dos, así que se
+  // capturaban al agendar y no se cambiaban NUNCA. El tipo no es un
+  // adorno: decide si la cita sale en Valoración y si nace suelta o
+  // enganchada a un caso, y una valoración agendada como tratamiento por
+  // error no se podía arreglar sin cancelarla y volver a agendar.
+  const [tipo, setTipo] = useState<EduAppointmentType>(row.type);
+  const [notas, setNotas] = useState(row.notes ?? "");
 
   const siguientes = EDU_APPOINTMENT_TRANSITIONS[row.status] ?? [];
   const clinicos = siguientes.filter((s) => s !== "CANCELLED" && s !== "NO_SHOW");
@@ -414,6 +434,9 @@ export function EduAgendaDetalle({
           chairId,
           studentId,
           supervisorUserId: supervisorUserId || null,
+          // H-24: los dos que faltaban.
+          type: tipo,
+          notes: notas.trim() || null,
         },
       });
       onDone("La cita quedó reagendada.");
@@ -490,6 +513,26 @@ export function EduAgendaDetalle({
           <span className="edu-kv__k">Tipo</span>
           <span className="edu-kv__v">{EDU_APPOINTMENT_TYPE_LABELS[row.type]}</span>
         </div>
+        {/* 🔴 OLA C · H-26 — LO QUE DE VERDAD PASÓ EN EL SILLÓN. Los tres
+            sellos se escriben solos al mover el estado, son la base de las
+            horas clínicas de la acreditación, y no se enseñaban en ninguna
+            pantalla de la agenda. Solo se pinta el bloque si hay algo que
+            enseñar: una cita que todavía no llega no tiene nada. */}
+        {(row.checkedInLabel || row.startedLabel || row.completedLabel) && (
+          <div>
+            <span className="edu-kv__k">Lo que pasó</span>
+            <span className="edu-kv__v">
+              {[
+                row.checkedInLabel ? `llegó ${row.checkedInLabel}` : null,
+                row.startedLabel ? `empezó ${row.startedLabel}` : null,
+                row.completedLabel ? `terminó ${row.completedLabel}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              {row.sessionMinutes !== null ? ` · ${row.sessionMinutes} min en el sillón` : ""}
+            </span>
+          </div>
+        )}
         <div>
           <span className="edu-kv__k">Caso</span>
           <span className="edu-kv__v">
@@ -642,6 +685,18 @@ export function EduAgendaDetalle({
                   value={studentId}
                   onChange={(e) => setStudentId(e.target.value)}
                 >
+                  {/* 🔴 OLA C · H-18 — EL ALUMNO DE LA CITA SIEMPRE ESTÁ EN
+                      LA LISTA, aunque esté dado de baja. `listEduStudentOptions`
+                      solo trae ACTIVE, así que al reagendar una cita de un
+                      alumno de baja el desplegable se abría EN BLANCO y
+                      mandaba el primero de la lista —o nada—. Se añade el
+                      suyo, marcado, para que reagendar no le cambie de
+                      alumno a la cita sin querer. */}
+                  {!students.some((s) => s.id === row.studentId) && (
+                    <option value={row.studentId}>
+                      {row.studentMatricula} · {row.studentName} (baja)
+                    </option>
+                  )}
                   {students.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.matricula} · {s.name}
@@ -667,6 +722,43 @@ export function EduAgendaDetalle({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* H-24 · el tipo y las notas, que hasta ahora se capturaban
+                  al agendar y no se corregían nunca. */}
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-rg-tipo">
+                  Tipo de cita
+                </label>
+                <select
+                  id="edu-rg-tipo"
+                  className="edu-input"
+                  value={tipo}
+                  onChange={(e) => setTipo(e.target.value as EduAppointmentType)}
+                >
+                  {EDU_APPOINTMENT_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {EDU_APPOINTMENT_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+                <span className="edu-field__hint">
+                  El tipo decide si la cita sale en Valoración y si se engancha a un caso.
+                </span>
+              </div>
+
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-rg-notas">
+                  Notas de la cita
+                </label>
+                <input
+                  id="edu-rg-notas"
+                  className="edu-input"
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  placeholder="Lo que recepción necesita saber al recibirlo"
+                  autoComplete="off"
+                />
               </div>
             </div>
           )}

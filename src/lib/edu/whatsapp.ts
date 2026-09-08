@@ -35,7 +35,7 @@ import { decryptField, encryptField } from "@/lib/crypto/envelope";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { parseWaError, waErrorCode, isTokenRevoked, WhatsAppApiError } from "@/lib/whatsapp/errors";
 import { EduPadronError } from "@/lib/edu/padron";
-import { eduCleanId } from "@/lib/edu/agenda-core";
+import { eduCleanId, eduSafeTimeZone } from "@/lib/edu/agenda-core";
 import { eduMoney } from "@/lib/edu/dinero-core";
 import {
   eduVisibility,
@@ -241,8 +241,23 @@ export function eduWaCredentials(cfg: EduWaConfigRow): EduWaCredentials | null {
 
 // ── Lo que ve la pantalla ───────────────────────────────────────────────
 
-export function eduWaConnectionDTO(cfg: EduWaConfigRow): EduWaConnectionDTO {
+export function eduWaConnectionDTO(
+  cfg: EduWaConfigRow,
+  /** H-130: la zona en la que se escribe «se preguntó el …». Opcional para
+   *  no obligar a los llamadores que no pintan plantillas. */
+  timeZone?: string,
+): EduWaConnectionDTO {
   const templates = eduParseWaTemplates(cfg.templates);
+  const zona = eduSafeTimeZone(timeZone);
+  const templatesCheckedLabel: Partial<Record<EduWhatsappKind, string>> = {};
+  for (const [kind, tpl] of Object.entries(templates)) {
+    if (tpl?.checkedAt) {
+      const d = new Date(tpl.checkedAt);
+      if (!Number.isNaN(d.getTime())) {
+        templatesCheckedLabel[kind as EduWhatsappKind] = whenLabel(d, zona);
+      }
+    }
+  }
   const state = eduWaConnState({
     connected: cfg.connected,
     phoneNumberId: cfg.phoneNumberId,
@@ -268,6 +283,7 @@ export function eduWaConnectionDTO(cfg: EduWaConfigRow): EduWaConnectionDTO {
     consentEnabled: cfg.consentEnabled,
     receiptEnabled: cfg.receiptEnabled,
     templates,
+    templatesCheckedLabel,
     readiness: eduWaReadiness({
       conn: state,
       templates,
@@ -326,7 +342,30 @@ export async function saveEduWaConnection(
       "El identificador del número (phone number ID) de Meta son solo dígitos. Se copia del Administrador de WhatsApp, no es el teléfono.",
     );
   }
-  if (token.length < 20) {
+  // ═════════════════════════════════════════════════════════════════════
+  // 🔴 OLA C · H-128 — CORREGIR UNA ERRATA NO EXIGE EL TOKEN OTRA VEZ.
+  //
+  // El campo del token llegaba vacío (el hint de la pantalla dice que «no
+  // vuelve a salir de aquí») y era obligatorio, así que para arreglar un
+  // dedazo en el WABA ID había que pedirle a Meta un token nuevo. En la
+  // práctica: o se quedaba con el dato mal, o se pedía un token que no
+  // hacía falta.
+  //
+  // El token sigue siendo obligatorio cuando de verdad hace falta: si no
+  // hay ninguno guardado, o si el NÚMERO cambia —un token es de un número, y
+  // reusar el viejo dejaría credenciales que no corresponden—.
+  // ═════════════════════════════════════════════════════════════════════
+  const mismoNumero = Boolean(cfg.phoneNumberId) && cfg.phoneNumberId === phoneNumberId;
+  const tokenGuardado = Boolean(cfg.accessToken);
+  if (!token) {
+    if (!tokenGuardado || !mismoNumero) {
+      throw new EduPadronError(
+        tokenGuardado
+          ? "Estás cambiando el número: pega el token de Meta del número nuevo. El guardado es del anterior y no serviría."
+          : "Pega el token de Meta. Es lo único que este panel no puede recuperar solo.",
+      );
+    }
+  } else if (token.length < 20) {
     throw new EduPadronError("Ese token es demasiado corto para ser el de Meta. Cópialo completo.");
   }
   if (businessAccountId && !/^\d{5,32}$/.test(businessAccountId)) {
@@ -354,7 +393,9 @@ export async function saveEduWaConnection(
     data: {
       phoneNumberId,
       businessAccountId: businessAccountId || null,
-      accessToken: encryptField(token),
+      // H-128: sin token nuevo se conserva el que hay. Solo se puede llegar
+      // aquí con el token vacío si el número no cambió (arriba).
+      ...(token ? { accessToken: encryptField(token) } : {}),
       displayPhone: displayPhone ? displayPhone.slice(0, 40) : null,
       connMethod: "manual",
       connected: true,
@@ -364,6 +405,19 @@ export async function saveEduWaConnection(
       lastErrorCode: null,
       lastErrorMsg: null,
       lastErrorAt: null,
+      // 🔴 OLA C · H-129 — Y SE APAGA EL «MÉTODO DE PAGO COMPROBADO».
+      //
+      // Desconectar SÍ lo apagaba; volver a conectar no lo tocaba, así que
+      // el panel afirmaba «Método de pago: Comprobado» sobre una cuenta de
+      // Meta distinta que nunca ha mandado nada. `billingOk` se gana
+      // mandando: se vuelve a ganar con el primer envío que salga por el
+      // número nuevo, igual que la primera vez.
+      //
+      // Solo cuando de verdad cambia la cuenta con la que se manda (número
+      // nuevo o token nuevo): corregir una errata del WABA ID —el H-128, que
+      // ya no exige repegar el token— no es motivo para borrar una
+      // comprobación que sigue siendo cierta.
+      ...(mismoNumero && !token ? {} : { billingOk: false, billingCheckedAt: null }),
     },
   });
 
@@ -684,6 +738,23 @@ export interface EduWaSendArgs {
   sentByName?: string | null;
   /** Fila ya reclamada que se reintenta (el cron la trae de un tick anterior). */
   reuseId?: string | null;
+  /**
+   * 🔴 OLA C · H-115 — EL ESTADO CON EL QUE SE LEYÓ LA FILA QUE SE REUSA.
+   *
+   * Es la llave de idempotencia del camino de REUSO, que era el único de
+   * los dos que no tenía ninguna: el de creación está blindado por el
+   * índice único `(institutionId, dedupeKey)`, y éste hacía
+   * `update({ where: { id } })` a secas. Dos barridos simultáneos —el guard
+   * de "ocupado" del botón es solo del cliente— reclamaban la MISMA fila y
+   * llamaban a Meta las dos veces: el paciente recibía dos recordatorios,
+   * Meta cobraba dos plantillas, y la constancia quedaba como UNA fila con
+   * `attempts: 2`, que se lee como "un reintento".
+   *
+   * Con el par (status, attempts) leído dentro del `where`, el segundo
+   * barrido no encuentra nada que actualizar y se va sin mandar nada.
+   */
+  reuseStatus?: EduWhatsappStatus | null;
+  reuseAttempts?: number | null;
   now?: Date;
 }
 
@@ -771,8 +842,20 @@ async function enviarYRegistrar(args: EduWaSendArgs): Promise<EduWaSendResult> {
   // ── Se reclama la fila ANTES de llamar a Meta ─────────────────────────
   let rowId: string;
   if (args.reuseId) {
-    const previa = await prisma.eduWhatsappMessage.update({
-      where: { id: args.reuseId },
+    // 🔴 OLA C · H-115 — SE RECLAMA LA FILA CON EL ESTADO EN EL `where`.
+    //
+    // `updateMany` y no `update` porque es el único que admite más
+    // condiciones que el id. Si otro barrido ya la reclamó, el par
+    // (status, attempts) que este leyó ya no está y `count` sale 0: se
+    // devuelve CANCELLED —"ese aviso ya lo está mandando otro"— igual que
+    // hace el camino de creación cuando choca contra el índice único.
+    const reclamada = await prisma.eduWhatsappMessage.updateMany({
+      where: {
+        id: args.reuseId,
+        institutionId: args.institutionId,
+        ...(args.reuseStatus ? { status: args.reuseStatus } : {}),
+        ...(typeof args.reuseAttempts === "number" ? { attempts: args.reuseAttempts } : {}),
+      },
       data: {
         status: "PENDING",
         body: decision.body,
@@ -782,9 +865,16 @@ async function enviarYRegistrar(args: EduWaSendArgs): Promise<EduWaSendResult> {
         errorCode: null,
         errorMsg: null,
       },
-      select: { id: true },
     });
-    rowId = previa.id;
+    if (reclamada.count === 0) {
+      return {
+        ok: false,
+        messageId: args.reuseId,
+        status: "CANCELLED",
+        error: "Ese aviso lo está mandando otro barrido en este momento.",
+      };
+    }
+    rowId = args.reuseId;
   } else {
     try {
       const creada = await prisma.eduWhatsappMessage.create({
@@ -980,10 +1070,28 @@ const MESSAGE_SELECT = {
   attempts: true,
   sentByName: true,
   createdAt: true,
+  // H-119: el acuse de Meta. Sin él, una directora que reclama un envío no
+  // tiene con qué; y ya estaba guardado.
+  wamid: true,
 } satisfies Prisma.EduWhatsappMessageSelect;
+
+/** H-119: «14 de marzo, 20:05». La fecha larga y la hora de 24, en la zona
+ *  del instituto. Sin año cuando es de este año: la lista es de lo
+ *  reciente y el año la haría ilegible. */
+function whenLabel(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone,
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(at);
+}
 
 function toMessageRow(
   m: Prisma.EduWhatsappMessageGetPayload<{ select: typeof MESSAGE_SELECT }>,
+  timeZone: string,
 ): EduWaMessageRow {
   return {
     id: m.id,
@@ -1006,6 +1114,10 @@ function toMessageRow(
     attempts: m.attempts,
     sentByName: m.sentByName,
     createdAt: m.createdAt.toISOString(),
+    wamid: m.wamid,
+    // La hora que importa es la de SALIDA cuando salió; para lo que no
+    // salió, la de cuando se intentó.
+    whenLabel: whenLabel(m.sentAt ?? m.createdAt, timeZone),
   };
 }
 
@@ -1087,7 +1199,7 @@ export async function listEduWaMessages(
     take: Math.min(opts.take ?? 50, EDU_WA_MAX_ROWS),
     select: MESSAGE_SELECT,
   });
-  return rows.map(toMessageRow);
+  return rows.map((r) => toMessageRow(r, ctxTimeZone(ctx)));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1158,10 +1270,13 @@ export interface EduWaDocumentResult {
   message: EduWaMessageRow | null;
 }
 
-async function leerFila(id: string | null): Promise<EduWaMessageRow | null> {
+async function leerFila(
+  id: string | null,
+  timeZone: string,
+): Promise<EduWaMessageRow | null> {
   if (!id) return null;
   const row = await prisma.eduWhatsappMessage.findUnique({ where: { id }, select: MESSAGE_SELECT });
-  return row ? toMessageRow(row) : null;
+  return row ? toMessageRow(row, timeZone) : null;
 }
 
 /**
@@ -1251,7 +1366,7 @@ export async function sendEduConsentWhatsapp(
     now,
   });
 
-  return { ok: res.ok, error: res.error, message: await leerFila(res.messageId) };
+  return { ok: res.ok, error: res.error, message: await leerFila(res.messageId, ctxTimeZone(ctx)) };
 }
 
 /**
@@ -1345,7 +1460,7 @@ export async function sendEduReceiptWhatsapp(
     now,
   });
 
-  return { ok: res.ok, error: res.error, message: await leerFila(res.messageId) };
+  return { ok: res.ok, error: res.error, message: await leerFila(res.messageId, ctxTimeZone(ctx)) };
 }
 
 // ── Nombre del instituto y de quien manda ───────────────────────────────
@@ -1356,13 +1471,24 @@ export async function sendEduReceiptWhatsapp(
 // completo de sesión, y caen a un texto genérico si no — nunca revientan.
 
 interface PosibleContextoCompleto {
-  institution?: { name?: string } | null;
+  institution?: { name?: string; timezone?: string | null } | null;
   user?: { firstName?: string; lastName?: string; email?: string } | null;
+}
+
+/** H-119: la zona del instituto, si la sesión la trae. Mismo rodeo que
+ *  `ctxInstitutionName`, y con el mismo motivo: `EduClinicaContext` es un
+ *  subconjunto a propósito, para poder llamar a esto desde una prueba. */
+function ctxTimeZone(ctx: EduClinicaContext): string {
+  return eduSafeTimeZone((ctx as unknown as PosibleContextoCompleto).institution?.timezone);
 }
 
 function ctxInstitutionName(ctx: EduClinicaContext): string {
   const nombre = (ctx as unknown as PosibleContextoCompleto).institution?.name;
   return typeof nombre === "string" && nombre.trim() !== "" ? nombre.trim() : "tu instituto";
+}
+
+export function eduWaActorName(ctx: EduClinicaContext): string | null {
+  return eduActorName(ctx);
 }
 
 function eduActorName(ctx: EduClinicaContext): string | null {

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { eduWaConnectionDTO, getEduWaConfig, listEduWaMessages } from "@/lib/edu/whatsapp";
+import { getEduReminderAutomationStatus } from "@/lib/edu/recordatorios";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduWhatsappScreen } from "@/components/edu/whatsapp/whatsapp-screen";
 
@@ -42,8 +43,15 @@ export default async function InstitutoWhatsappPage() {
   }
 
   const cfg = await getEduWaConfig(ctx.institutionId);
-  const connection = eduWaConnectionDTO(cfg);
+  const connection = eduWaConnectionDTO(cfg, ctx.institution.timezone);
   const messages = await listEduWaMessages(ctx, { take: 50 });
+  // 🔴 H-01: si el recordatorio automático ha salido alguna vez de verdad.
+  // La tarjeta lo necesita para no prometer un envío que nadie dispara: el
+  // cron todavía no está dado de alta en vercel.json.
+  const automatizacion = await getEduReminderAutomationStatus(
+    ctx.institutionId,
+    ctx.institution.timezone,
+  );
 
   return (
     <div className="edu-page">
@@ -61,6 +69,7 @@ export default async function InstitutoWhatsappPage() {
 
       <EduWhatsappScreen
         connection={connection}
+        automatizacion={automatizacion}
         messages={messages}
         canManage={hasEduPermission(permUser, "whatsapp.manage")}
         institutionName={ctx.institution.name}

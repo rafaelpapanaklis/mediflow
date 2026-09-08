@@ -134,11 +134,19 @@ export default async function InstitutoInicioPage({
       // la mitad de su consumo. Es la misma decisión (y la misma función)
       // que ya usa /instituto/direccion.
       almacenamiento = await getEduAlmacenamientoPanel(ctx);
-    } catch {
+    } catch (e) {
       // El 403 del alcance no es un fallo: es la respuesta correcta para
       // una cuenta que ve una parte de la clínica, y aquí se traduce en
       // "esta persona ve el Inicio de siempre". Cualquier otro error
       // (una consulta caída) hace lo mismo: la portada abre igual.
+      //
+      // 🔴 OLA C · H-135 — PERO SE DEJA RASTRO. El `catch {}` mudo se comía
+      // igual el 403 esperado que una consulta rota o un timeout del
+      // pooler: la dirección veía el saludo de un alumno y en el servidor
+      // no quedaba NI UNA línea con la que empezar a mirar. La degradación
+      // no cambia —la portada abre igual—; lo que cambia es que ahora se
+      // puede saber que pasó.
+      console.error("[instituto/inicio] tablero de dirección degradado:", e);
       tablero = null;
       almacenamiento = null;
     }

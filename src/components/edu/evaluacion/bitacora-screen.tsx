@@ -99,6 +99,11 @@ export function EduBitacoraScreen({
     caseId: string;
     patientName: string;
     corrige: EduGradeRow | null;
+    /** 🔴 OLA C · H-05 — el id de la calificación VIGENTE cuando se
+     *  califica desde la tabla de casos, donde no viaja la fila entera
+     *  (solo `gradeId`). Sin esto el POST salía con `correctsId` vacío y
+     *  nacía una SEGUNDA raíz: el caso contaba dos veces en el promedio. */
+    corrigeId?: string | null;
   } | null>(null);
   const [traspasando, setTraspasando] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -110,6 +115,15 @@ export function EduBitacoraScreen({
     setFlash(mensaje);
     startNav(() => router.refresh());
   }
+
+  // H-91: el caso que está abierto en el modal de calificar. La rúbrica se
+  // ofrece contra la especialidad y el procedimiento DEL CASO — antes se
+  // ofrecían todas las activas y el único filtro que existía miraba la
+  // especialidad del ALUMNO, así que una endodoncia se podía calificar con
+  // la rúbrica de Ortodoncia y la escala quedaba congelada en la fila.
+  const casoDeLaModal = calificando
+    ? (page.cases.find((c) => c.id === calificando.caseId) ?? null)
+    : null;
 
   const verdict = page.verdict;
   // Iniciales del recuadro, mismo cálculo que las otras tres cabeceras.
@@ -252,6 +266,13 @@ export function EduBitacoraScreen({
           </span>
           <span className="edu-kpi__note">
             {page.grades.filter((g) => g.current).length} casos calificados
+            {/* H-86: el promedio solo puede promediar una escala. Las que
+                quedaron fuera se contaban y se tiraban sin decirlo: un 8/10
+                y un 80/100 no se suman, y quien lee «Promedio 8» merece
+                saber que hay dos notas que no están dentro. */}
+            {page.averageIgnored > 0
+              ? ` · ${page.averageIgnored} ${page.averageIgnored === 1 ? "quedó fuera por estar en otra escala" : "quedaron fuera por estar en otra escala"}`
+              : ""}
           </span>
         </div>
       </div>
@@ -338,9 +359,16 @@ export function EduBitacoraScreen({
       {/* ── Los casos ───────────────────────────────────────────────── */}
       <section className="edu-section">
         <div className="edu-section__head">
-          <h3 className="edu-section__title">Casos ({page.cases.length})</h3>
+          <h3 className="edu-section__title">Casos ({page.casesTotal})</h3>
           <p className="edu-section__lead">
             {abiertos.length} {abiertos.length === 1 ? "abierto" : "abiertos"}
+            {/* H-85: el avance y el semáforo se cuentan sobre TODOS los
+                casos; lo que se corta es esta tabla, y ahora se dice. Antes
+                el corte estaba sobre la cuenta y la lista de Evaluación y
+                esta pantalla decían cosas distintas del mismo alumno. */}
+            {page.casesTruncated
+              ? ` · se enseñan los ${page.cases.length} más recientes; el avance de arriba está calculado con los ${page.casesTotal}`
+              : ""}
           </p>
         </div>
 
@@ -431,11 +459,12 @@ export function EduBitacoraScreen({
                             caseId: c.id,
                             patientName: c.patientName,
                             corrige: null,
+                            corrigeId: c.gradeId,
                           });
                         }}
                       >
                         <GraduationCap size={15} />
-                        {c.gradeLabel ? "Calificar otra vez" : "Calificar"}
+                        {c.gradeLabel ? "Corregir la calificación" : "Calificar"}
                       </button>
                     )}
                   </div>
@@ -566,6 +595,9 @@ export function EduBitacoraScreen({
           caseId={calificando.caseId}
           patientName={calificando.patientName}
           corrige={calificando.corrige}
+          corrigeId={calificando.corrigeId ?? null}
+          casoProgramId={casoDeLaModal?.programId ?? null}
+          casoProcedureId={casoDeLaModal?.procedureId ?? null}
           rubrics={rubrics}
           onClose={() => setCalificando(null)}
           onDone={(msg) => {
@@ -600,6 +632,9 @@ function Calificar({
   caseId,
   patientName,
   corrige,
+  corrigeId,
+  casoProgramId,
+  casoProcedureId,
   rubrics,
   onClose,
   onDone,
@@ -607,11 +642,34 @@ function Calificar({
   caseId: string;
   patientName: string;
   corrige: EduGradeRow | null;
+  /** H-91: la especialidad y el procedimiento del CASO, para no ofrecer
+   *  una rúbrica que el servidor va a rebotar. `null` = no se supo (el caso
+   *  no está en la página): entonces se ofrecen todas y decide el servidor. */
+  casoProgramId?: string | null;
+  casoProcedureId?: string | null;
+  /** H-05: la vigente a la que ESTA corrige cuando no se abrió desde su
+   *  tarjeta y por tanto no hay fila que precargar. */
+  corrigeId: string | null;
   rubrics: EduRubricRow[];
   onClose: () => void;
   onDone: (mensaje: string) => void;
 }) {
-  const activas = useMemo(() => rubrics.filter((r) => r.isActive), [rubrics]);
+  // Corrige si se abrió desde la tarjeta de una calificación (con precarga)
+  // o desde la tabla de casos sobre un caso que ya tiene una vigente.
+  const esCorreccion = Boolean(corrige) || Boolean(corrigeId);
+  const activas = useMemo(
+    () =>
+      rubrics.filter(
+        (r) =>
+          r.isActive &&
+          // `null` en la rúbrica = "para todas" / "para cualquiera", tal
+          // como lo dice el schema. El procedimiento solo acota si el caso
+          // tiene uno capturado.
+          (!r.programId || !casoProgramId || r.programId === casoProgramId) &&
+          (!r.procedureId || !casoProcedureId || r.procedureId === casoProcedureId),
+      ),
+    [rubrics, casoProgramId, casoProcedureId],
+  );
   const [rubricId, setRubricId] = useState(
     corrige?.rubricId && activas.some((r) => r.id === corrige.rubricId)
       ? corrige.rubricId
@@ -677,7 +735,7 @@ function Calificar({
             caseId,
             rubricId: rubrica.id,
             comment: comment.trim() || null,
-            correctsId: corrige?.id ?? undefined,
+            correctsId: corrige?.id ?? corrigeId ?? undefined,
             items: rubrica.criteria.map((c) => ({
               criterionId: c.id,
               score: scores[c.id] ?? "",
@@ -687,7 +745,7 @@ function Calificar({
         },
       );
       onDone(
-        corrige
+        esCorreccion
           ? `Calificación corregida: ${eduScoreLabel(res.finalScoreX100)} / ${rubrica.scaleMax}. La anterior queda en el historial con tu nombre.`
           : `Calificado: ${eduScoreLabel(res.finalScoreX100)} / ${rubrica.scaleMax}.`,
       );
@@ -700,7 +758,7 @@ function Calificar({
 
   return (
     <EduModal
-      title={corrige ? "Corregir la calificación" : "Calificar"}
+      title={esCorreccion ? "Corregir la calificación" : "Calificar"}
       subtitle={`${patientName} · la calificación final la calcula el sistema con los pesos de la rúbrica`}
       onClose={onClose}
       busy={busy}
@@ -715,7 +773,7 @@ function Calificar({
             onClick={guardar}
             disabled={busy || !rubrica}
           >
-            {busy ? "Guardando…" : corrige ? "Guardar la corrección" : "Guardar la calificación"}
+            {busy ? "Guardando…" : esCorreccion ? "Guardar la corrección" : "Guardar la calificación"}
           </button>
         </>
       }
@@ -726,13 +784,14 @@ function Calificar({
         </div>
       )}
 
-      {corrige && (
+      {esCorreccion && (
         <div className="edu-banner edu-banner--warn">
           <div>
             <p className="edu-banner__title">Esto NO reescribe la calificación anterior</p>
             <p className="edu-banner__detail">
-              Se guarda una nueva que apunta a la de {corrige.gradedLabel}. Las dos quedan
-              visibles, con quién las puso y cuándo.
+              {corrige
+                ? `Se guarda una nueva que apunta a la de ${corrige.gradedLabel}. Las dos quedan visibles, con quién las puso y cuándo.`
+                : "Se guarda una nueva que apunta a la que está vigente. Las dos quedan visibles, con quién las puso y cuándo, y el caso sigue contando UNA vez en el promedio. Abajo empiezas con los criterios en blanco: para verlos precargados, abre «Corregir» en la tarjeta de la calificación."}
             </p>
           </div>
         </div>
@@ -871,6 +930,19 @@ function Traspasar({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fallidos, setFallidos] = useState<{ caseId: string; error: string }[]>([]);
+  /**
+   * 🔴 OLA C · H-38 — EL LOTE NO SE TRAGA LOS FALLOS.
+   *
+   * El servidor devuelve cada fallido con su motivo y la pantalla los
+   * guardaba en el estado… y a continuación llamaba a `onDone`, que
+   * DESMONTA este modal — justo donde se pintaban. Quedaba «Se traspasaron
+   * 9 casos» y tres pacientes con un caso vivo de alguien que ya egresó.
+   *
+   * Con un traspaso parcial el modal se QUEDA abierto, enseña los tres
+   * motivos, y el cierre es un acto de quien lo leyó (el botón de abajo,
+   * que sí refresca la pantalla).
+   */
+  const [parcial, setParcial] = useState<string | null>(null);
 
   async function traspasar() {
     setError(null);
@@ -895,6 +967,11 @@ function Traspasar({
           setError("No se pudo traspasar ninguno. Mira el detalle de abajo.");
           return;
         }
+        // H-38: parcial. NO se cierra: los motivos se leen aquí.
+        setParcial(
+          `Se traspasaron ${res.traspasados.length} de ${res.traspasados.length + res.fallidos.length}. ${res.fallidos.length} ${res.fallidos.length === 1 ? "se quedó" : "se quedaron"} sin traspasar, con el motivo al lado.`,
+        );
+        return;
       }
       onDone(
         `Se traspasaron ${res.traspasados.length} ${res.traspasados.length === 1 ? "caso" : "casos"}. ${desde} deja de ver a esos pacientes; el estudiante que los recibe empieza a verlos.`,
@@ -926,26 +1003,49 @@ function Traspasar({
       onClose={onClose}
       busy={busy}
       footer={
-        <>
-          <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
-            Cancelar
-          </button>
+        parcial ? (
+          // H-38: con un traspaso parcial la única salida es leer y cerrar.
           <button
             type="button"
             className="edu-btn edu-btn--primary"
-            onClick={traspasar}
-            disabled={busy || elegidos.length === 0 || !toStudentId}
+            onClick={() => onDone(parcial)}
           >
-            {busy
-              ? "Traspasando…"
-              : `Traspasar ${elegidos.length} ${elegidos.length === 1 ? "caso" : "casos"}`}
+            Entendido, cerrar
           </button>
-        </>
+        ) : (
+          <>
+            <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="edu-btn edu-btn--primary"
+              onClick={traspasar}
+              disabled={busy || elegidos.length === 0 || !toStudentId}
+            >
+              {busy
+                ? "Traspasando…"
+                : `Traspasar ${elegidos.length} ${elegidos.length === 1 ? "caso" : "casos"}`}
+            </button>
+          </>
+        )
       }
     >
       {error && (
         <div className="edu-alert" role="alert">
           {error}
+        </div>
+      )}
+
+      {parcial && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">{parcial}</p>
+            <p className="edu-banner__detail">
+              Los que no se movieron siguen siendo de {desde}. El motivo de cada uno está abajo, en
+              su renglón.
+            </p>
+          </div>
         </div>
       )}
 
@@ -981,6 +1081,15 @@ function Traspasar({
           {programaIds.length > 1
             ? `Elegiste casos de ${programaIds.length} especialidades (${programaNombres.join(", ")}). Un caso se traspasa dentro de su especialidad: hazlo en dos tandas.`
             : `Tiene que ser de la misma especialidad${programaNombres[0] ? ` (${programaNombres[0]})` : ""} y seguir ACTIVO como estudiante.`}
+          {/* 🔴 OLA C · H-97 — de dónde sale esta lista, dicho con todas sus
+              letras. Un docente solo ve a SUS alumnos vigentes, y en la
+              rotación de fin de semestre los suyos también se van: la lista
+              salía vacía y el texto le hacía creer que era un problema de
+              especialidad. Quien puede repartir entre grupos es la
+              dirección, y eso no estaba escrito en ninguna parte. */}
+          {programaIds.length <= 1 && destinosVisibles.length === 0
+            ? " Aquí solo salen los estudiantes que TÚ llevas. Si los tuyos también se van en esta rotación, el traspaso a otro grupo lo hace la dirección."
+            : ""}
         </p>
       </div>
 
