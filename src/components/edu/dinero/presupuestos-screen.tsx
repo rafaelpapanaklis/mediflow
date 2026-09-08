@@ -1144,10 +1144,14 @@ function DetallePresupuesto({
         </div>
       </div>
 
-      {quote.acceptedAt && (
+      {/* 🔴 OLA C·fin 3 · EL DÍA LO MANDA EL SERVIDOR, como la vigencia.
+          `acceptedAt.slice(0, 10)` pinta el día en UTC: una aceptación de
+          las 19:30 hora de México se rotulaba aquí un día después y en el
+          PDF el correcto —el PDF ya usaba `Intl` con la zona del instituto. */}
+      {quote.acceptedAtDia && (
         <p className="edu-note">
           Lo aceptó <strong>{quote.acceptedByName ?? "el paciente"}</strong> el{" "}
-          {quote.acceptedAt.slice(0, 10)}.
+          {quote.acceptedAtDia}.
         </p>
       )}
 

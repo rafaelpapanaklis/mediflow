@@ -165,6 +165,7 @@ function aRow(q: QuoteConItems, now: Date, timeZone: string): EduQuoteRow {
     notes: q.notes,
     presentedAt: q.presentedAt?.toISOString() ?? null,
     acceptedAt: q.acceptedAt?.toISOString() ?? null,
+    acceptedAtDia: eduQuoteVigenciaDiaISO(q.acceptedAt, timeZone),
     acceptedByName: q.acceptedByName,
     chargeId: q.chargeId,
     treatmentPlanId: q.treatmentPlanId,

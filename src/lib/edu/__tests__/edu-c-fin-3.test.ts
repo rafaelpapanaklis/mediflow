@@ -269,3 +269,28 @@ test("🟠 #3 · dirección sigue viendo y cerrando el plan del caso entregado",
   const cerrar = sinComentarios(crudo("src/lib/edu/plan-tratamiento-core.ts"));
   assert.match(cerrar, /role === "DIRECCION" \|\| role === "DOCENTE"/);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// 4 · LAS DOS DE UNA LÍNEA DEL MISMO VIAJE
+// ═══════════════════════════════════════════════════════════════════════
+
+test("#4 · el DÍA de la aceptación lo manda el servidor, en la zona del instituto", () => {
+  // Es el mismo bug de recorte que ya se arregló para `validUntil`, en otro
+  // campo: `acceptedAt.slice(0, 10)` pinta el día en UTC, así que una
+  // aceptación de las 19:30 hora de México se rotulaba un día después en el
+  // modal y el día correcto en el PDF (que ya usaba `Intl` con la zona).
+  const servidor = sinComentarios(crudo(PRESU));
+  assert.match(servidor, /acceptedAtDia:\s*eduQuoteVigenciaDiaISO\(q\.acceptedAt, timeZone\)/);
+
+  const pantalla = sinComentarios(crudo(PANTALLA_PRESU));
+  assert.ok(
+    !/acceptedAt\??\.slice\(0,\s*10\)/.test(pantalla),
+    "recortar el instante a diez caracteres es pintar el día en UTC",
+  );
+  assert.match(pantalla, /quote\.acceptedAtDia/);
+});
+
+test("#4 · y el día de la aceptación viaja en la forma, no se recalcula en el navegador", () => {
+  const core = sinComentarios(crudo("src/lib/edu/presupuestos-core.ts"));
+  assert.match(core, /acceptedAtDia:\s*string \| null;/);
+});
