@@ -294,3 +294,33 @@ test("#4 · y el día de la aceptación viaja en la forma, no se recalcula en el
   const core = sinComentarios(crudo("src/lib/edu/presupuestos-core.ts"));
   assert.match(core, /acceptedAtDia:\s*string \| null;/);
 });
+
+test("#5 · una vigencia YA PASADA no se presenta: la liga nacería en 404", () => {
+  // Antes solo pintaba un rótulo feo. Con el 409 del mostrador y el 404 de
+  // la liga que estrenó la Ola C, es un enlace muerto entregado en mano.
+  const src = crudo(PRESU) + "\n/* FIN DEL ARCHIVO */";
+  const presentar = sinComentarios(
+    tramo(src, "export async function presentarEduQuote", "export async function cambiarEstadoEduQuote"),
+  );
+  assert.match(presentar, /validUntil\.getTime\(\) < now\.getTime\(\)/);
+  assert.match(presentar, /VIGENCIA_PASADA, 400/);
+  // Y el `updateMany` que escribe el token va DESPUÉS del rebote, no antes:
+  // presentar es lo que genera la liga.
+  assert.ok(
+    presentar.indexOf("VIGENCIA_PASADA") < presentar.indexOf("prisma.eduQuote.updateMany"),
+    "si el token se escribe antes del rebote, la liga ya existe",
+  );
+
+  // Y al crear, para que no nazca guardada una fecha que ya pasó.
+  const crear = sinComentarios(
+    tramo(src, "export async function createEduQuote", "export async function presentarEduQuote"),
+  );
+  assert.match(crear, /validUntil\.getTime\(\) < now\.getTime\(\)/);
+
+  // El mismo texto en las dos puertas, como el mínimo de «quién acepta».
+  assert.equal(
+    (sinComentarios(crudo(PRESU)).match(/const VIGENCIA_PASADA/g) ?? []).length,
+    1,
+    "dos mensajes distintos para la misma regla es cómo dos puertas acaban discrepando",
+  );
+});

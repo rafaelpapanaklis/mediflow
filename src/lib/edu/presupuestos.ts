@@ -135,6 +135,16 @@ async function nextEduQuoteFolio(institutionId: string): Promise<string> {
   return `P-${String(n).padStart(4, "0")}`;
 }
 
+/**
+ * El «no» de una vigencia que ya pasó.
+ *
+ * Es UNO y no dos: el mostrador y la liga tienen que decir lo mismo, por lo
+ * mismo que el mínimo de «quién acepta» se comprueba con la misma regla en
+ * las dos puertas.
+ */
+const VIGENCIA_PASADA =
+  "Esa vigencia ya pasó: el presupuesto nacería vencido y la liga del paciente daría 404. Pon una fecha de hoy en adelante.";
+
 const QUOTE_INCLUDE = {
   items: true,
   patient: { select: { firstName: true, lastName: true, folio: true } },
@@ -590,6 +600,7 @@ export async function createEduQuote(
     if (!validUntil) {
       throw new EduPadronError("La vigencia no se entiende: mándala como 2026-09-30.", 400);
     }
+    if (validUntil.getTime() < now.getTime()) throw new EduPadronError(VIGENCIA_PASADA, 400);
   }
 
   const createdByName = `${ctx.user.firstName} ${ctx.user.lastName}`.trim().slice(0, 160) || "—";
@@ -697,6 +708,15 @@ export async function presentarEduQuote(
     }
   } else if (!validUntil) {
     validUntil = eduQuoteVigenciaPorDefecto(now, tz);
+  }
+  // 🔴 OLA C·fin 3 · UNA VIGENCIA YA PASADA NO SE PRESENTA. Presentar es lo
+  // que genera el token y la liga que se le manda al paciente, y desde el
+  // 404 de la Ola C esa liga nace muerta: `eduQuoteLigaVigente` la rechaza
+  // en el mismo instante. Antes solo pintaba un rótulo feo; ahora es un
+  // enlace roto entregado en mano. Se rebota aquí, que es la única puerta
+  // por la que se entrega.
+  if (validUntil && validUntil.getTime() < now.getTime()) {
+    throw new EduPadronError(VIGENCIA_PASADA, 400);
   }
 
   const res = await prisma.eduQuote.updateMany({
