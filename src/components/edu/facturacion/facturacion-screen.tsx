@@ -1124,7 +1124,11 @@ function DetalleFactura({
               cobro (H-74). Esconderlo en las válidas era esconder
               exactamente los dos casos que hay que mirar. */}
           {factura.errorMessage && (
-            <div className="edu-alert" role="note">
+            // En una factura VÁLIDA este texto no es un fallo: es la nota
+            // que dejó el resolver ("recuperada a mano") o el aviso de
+            // descuadre. Pintarlo con el estilo de error haría que se
+            // leyera como un problema en una factura sana.
+            <div className={factura.status === "VALID" ? "edu-note" : "edu-alert"} role="note">
               {factura.errorMessage}
             </div>
           )}
@@ -1399,8 +1403,12 @@ function DatosFiscalesPaciente({
     setBuscando(true);
     const t = window.setTimeout(async () => {
       try {
+        // `opciones=1` devuelve LO MÍNIMO (id, folio, nombre, estado) y no
+        // la ficha entera: un desplegable no necesita el domicilio ni los
+        // antecedentes de nadie. Es la lección P1-4, y el endpoint tiene
+        // ese modo escrito justamente para esto.
         const res = await eduRequest<{ rows: { id: string; folio: string; name: string }[] }>(
-          `/api/instituto/pacientes?q=${encodeURIComponent(termino)}`,
+          `/api/instituto/pacientes?opciones=1&q=${encodeURIComponent(termino)}`,
         );
         setResultados(res.rows.slice(0, 20));
       } catch (err) {

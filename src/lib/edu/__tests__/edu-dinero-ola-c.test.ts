@@ -237,7 +237,6 @@ test("🔴 H-06 · addEduPayment acepta la clave y devuelve `duplicado`", () => 
   // El candado es el índice único de la LLAVE PRIMARIA: la clave se usa
   // como `id` de la fila, así que un segundo POST idéntico choca con un
   // P2002 que revienta la transacción entera.
-  assert.match(cuerpo, /findUnique\(\{\s*where:\s*\{\s*id:\s*idemKey\s*\}/);
   assert.match(
     cuerpo,
     /ids\.length === 0 \? \{ id: idemKey \}/,
@@ -245,11 +244,30 @@ test("🔴 H-06 · addEduPayment acepta la clave y devuelve `duplicado`", () => 
   );
 });
 
-test("🔴 H-06 · la clave de otro instituto NO devuelve su fila", () => {
-  // `id` es único en toda la tabla, no por instituto: sin esta relectura,
-  // una colisión con otra escuela enseñaría un movimiento ajeno.
+test("🔴 H-06 · el POST simultáneo NO sale con un 500", () => {
+  // El pre-chequeo solo atrapa el reintento SECUENCIAL. Dos peticiones a la
+  // vez pasan las dos y la segunda choca contra la llave primaria: sin
+  // capturar ese P2002, salía como "500 · Intenta de nuevo", que es
+  // exactamente la frase que este hallazgo viene a matar.
   const cuerpo = cuerpoDe(CAJA(), "addEduPayment");
-  assert.match(cuerpo, /previo\.institutionId !== institutionId \|\| previo\.chargeId !== id/);
+  assert.match(cuerpo, /code\?:\s*string\s*\}\)\?\.code === "P2002"/);
+  assert.match(cuerpo, /const ganador = await eduPagoDeLaClave/);
+});
+
+test("🔴 H-06 · la clave NUNCA se consulta sin tenant", () => {
+  // `id` es único en toda la tabla, no por instituto: preguntar por el id
+  // pelado convertiría el endpoint en un oráculo de existencia entre
+  // escuelas (regla (c) de CLAUDE.md).
+  const src = CAJA();
+  assert.match(
+    src,
+    /where:\s*\{\s*id:\s*key,\s*institutionId,\s*chargeId\s*\}/,
+    "eduPagoDeLaClave lleva institutionId y chargeId",
+  );
+  assert.ok(
+    !/eduPayment\.findUnique/.test(src),
+    "no queda ninguna lectura de EduPayment por id pelado",
+  );
 });
 
 test("H-06 · eduApplyEduPaymentInTx sabe escribir el id determinista", () => {
@@ -277,15 +295,40 @@ test("🔴 H-11 · cancelEduCharge mira la factura viva y dice qué hacer", () =
 
 test("🔴 H-47 · la devolución se topa contra el NETO DE SU MÉTODO", () => {
   const cuerpo = cuerpoDe(CAJA(), "addEduPayment");
-  assert.match(cuerpo, /eduNetoPorMetodo\(cobro\.payments\)/);
+  assert.match(cuerpo, /eduNetoPorMetodo\(reales\)/);
   assert.match(cuerpo, /dev\.amountCents > disponible/);
   // La salida de emergencia es "Otro", que ya exige motivo escrito.
   assert.match(cuerpo, /dev\.method !== "OTHER"/);
 });
 
+test("🔴 H-47 · el tope por método se comprueba DENTRO de la transacción", () => {
+  // Comprobarlo fuera es un check-then-act: dos devoluciones simultáneas de
+  // $1,000 por débito sobre un cobro pagado mitad débito y mitad efectivo
+  // pasaban las dos y dejaban el débito en −$1,000. El candado de la fila
+  // se toma ANTES de leer los pagos.
+  const cuerpo = cuerpoDe(CAJA(), "addEduPayment");
+  const tx = cuerpo.indexOf("prisma.$transaction");
+  const chequeo = cuerpo.indexOf("eduNetoPorMetodo(reales)");
+  assert.ok(tx > 0 && chequeo > tx, "el chequeo vive dentro de la transacción");
+  assert.match(cuerpo, /balanceCents:\s*\{\s*increment:\s*0\s*\}/, "toma el candado de la fila");
+  assert.match(cuerpo, /tx\.eduPayment\.findMany/, "y relee los pagos con el candado puesto");
+});
+
+test("🔴 H-47 · no se manda a nadie a devolver por un método que no existe", () => {
+  // El legado "CARD" puede tener el dinero y ya no se puede elegir: decir
+  // "devuelve por ahí" sería un callejón sin salida.
+  const cuerpo = cuerpoDe(CAJA(), "addEduPayment");
+  assert.match(cuerpo, /EDU_PAYMENT_METHODS_COBRABLES as string\[\]\)\.includes\(m\)/);
+  // Y la pantalla tampoco arranca en un método que su desplegable no pinta.
+  assert.match(
+    CAJA_UI(),
+    /EDU_PAYMENT_METHODS_COBRABLES as readonly string\[\]\)\.includes\(p\.method\)/,
+  );
+});
+
 test("🔴 H-55 · la devolución EXIGE motivo", () => {
   const cuerpo = cuerpoDe(CAJA(), "addEduPayment");
-  assert.match(cuerpo, /dev\.notes.*trim\(\)\.length < 3/s);
+  assert.match(cuerpo, /pagos\[0\]\.notes\.trim\(\)\.length < 3/);
 });
 
 // ═════════════════════════════════════════════════════════════════════
@@ -311,11 +354,33 @@ test("🔴 H-66 · cancelar un CFDI reserva ANTES de hablar con el SAT", () => {
   assert.ok(reserva > 0, "hay una reserva con updateMany");
   assert.ok(sat > 0, "sigue llamando al SAT");
   assert.ok(reserva < sat, "la reserva va PRIMERO: si no, dos peticiones cancelan dos veces");
-  assert.match(cuerpo, /status:\s*"VALID",\s*cancelledAt:\s*null/, "el estado va en el where");
+  assert.match(cuerpo, /status:\s*"VALID"/, "el estado va en el where");
   assert.match(cuerpo, /reserva\.count === 0/);
   // Y si el SAT dice que no, la reserva se SUELTA: si no, la factura se
   // quedaría marcada y el siguiente intento chocaría con el 409 para siempre.
   assert.match(cuerpo, /cancelledAt:\s*null,\s*cancelledByUserId:\s*null/);
+});
+
+test("🔴 H-66 · la reserva CADUCA: no hay estado sin salida", () => {
+  // Si el proceso muere entre la reserva y la respuesta del SAT, una
+  // reserva eterna dejaría esa factura en 409 para siempre —y
+  // `resolveEduStuckInvoice` solo toca las STAMPING, así que no habría
+  // ninguna vía de recuperación.
+  const cuerpo = cuerpoDe(FACT(), "cancelEduInvoice");
+  assert.match(cuerpo, /OR:\s*\[\{ cancelledAt: null \}, \{ cancelledAt: \{ lt: caducada \} \}\]/);
+  assert.match(FACT(), /const EDU_CANCEL_RESERVA_MIN = \d+/);
+});
+
+test("🔴 H-66 · «rechazó» y «no contestó» no son lo mismo", () => {
+  // Soltar la reserva ante un timeout dejaría la factura viva con el cobro
+  // ocupado y un mensaje que afirma que el SAT la rechazó — cuando la
+  // cancelación pudo llegar. Emitir ya hacía esta distinción.
+  const cuerpo = cuerpoDe(FACT(), "cancelEduInvoice");
+  const dudoso = cuerpo.indexOf("pudoHaberTimbrado(err)");
+  const suelta = cuerpo.indexOf("cancelledAt: null,");
+  assert.ok(dudoso > 0, "se pregunta si pudo haber llegado");
+  assert.ok(dudoso < suelta, "y solo se suelta la reserva cuando NO llegó");
+  assert.match(cuerpo, /502/);
 });
 
 // ═════════════════════════════════════════════════════════════════════
@@ -451,12 +516,16 @@ test("🔴 H-67 · el receptor se guarda DESPUÉS de saber que el timbre salió"
   );
 });
 
-test("🔴 H-69 · el buscador de cobros a facturar respeta la sede", () => {
-  const cuerpo = cuerpoDe(FACT(), "listEduCobrosFacturables");
-  assert.match(cuerpo, /campusIds:\s*ctx\.campusIds/);
-  const ruta = fuenteDe("src", "app", "api", "instituto", "facturacion", "cobros", "route.ts");
-  assert.match(ruta, /getEduCampusScope/, "el endpoint resuelve el alcance y lo pasa");
-  assert.match(ruta, /eduWithCampus/);
+test("🔴 H-69 · buscar Y TIMBRAR respetan la sede", () => {
+  assert.match(cuerpoDe(FACT(), "listEduCobrosFacturables"), /campusIds:\s*ctx\.campusIds/);
+  // Recortar solo el buscador tapaba la lista pero no la puerta: un POST
+  // con el id de un cobro de otra sede se timbraba igual.
+  assert.match(cuerpoDe(FACT(), "emitEduInvoice"), /campusIds:\s*ctx\.campusIds/);
+  const cobros = fuenteDe("src", "app", "api", "instituto", "facturacion", "cobros", "route.ts");
+  assert.match(cobros, /getEduCampusScope/, "el endpoint resuelve el alcance y lo pasa");
+  assert.match(cobros, /eduWithCampus/);
+  const emitir = fuenteDe("src", "app", "api", "instituto", "facturacion", "route.ts");
+  assert.match(emitir, /eduWithCampus\(g\.ctx, await getEduCampusScope\(g\.ctx\)\)/);
 });
 
 test("🔴 H-70 · el KPI separa lo fiscal de lo de PRUEBAS", () => {
@@ -491,8 +560,14 @@ test("🔴 H-74 · el IVA se desglosa, y lo timbrado se compara con el cobro", (
   assert.equal(d?.ivaCents, 16000);
   assert.equal(d?.totalCents, 116000, "el total no cambia: es lo que pagó el paciente");
   // Y el descuadre entre lo que Facturapi dice haber timbrado y el cobro
-  // queda ESCRITO en la factura en vez de descubrirse en la conciliación.
-  assert.match(cuerpoDe(FACT(), "emitEduInvoice"), /timbradoCents !== charge\.totalCents/);
+  // queda ESCRITO en la factura en vez de descubrirse en la conciliación —
+  // con TOLERANCIA (con IVA incluido, Facturapi redondea concepto a
+  // concepto) y descartando el total cero, que es un dato que falta y no un
+  // descuadre. Marcar como sospechosa una factura sana es peor que nada.
+  const emit = cuerpoDe(FACT(), "emitEduInvoice");
+  assert.match(emit, /const toleranciaCents = 1 \+ conceptos\.length/);
+  assert.match(emit, /timbradoCents > 0/);
+  assert.match(emit, /Math\.abs\(timbradoCents - charge\.totalCents\) > toleranciaCents/);
 });
 
 test("🔴 H-78 · la facturación se puede acotar por fechas", () => {
@@ -518,6 +593,55 @@ test("🔴 H-80 · un cuerpo incompleto ya no apaga la facturación", () => {
   );
   // Y bajar de EN VIVO a PRUEBAS deja de ser mudo.
   assert.match(cuerpo, /previo\?\.environment === "LIVE" && environment === "TEST"/);
+});
+
+test("🔴 H-80 · y los CUATRO obligatorios siguen la misma regla", () => {
+  // Un `PUT {"isEnabled": false}` contestaba 400 "El RFC del instituto…":
+  // el cuerpo no estaba pidiendo borrar el RFC, estaba apagando la
+  // facturación.
+  const cuerpo = cuerpoDe(FACT(), "saveEduFiscalConfig");
+  assert.match(cuerpo, /ausente\(input\.rfc\) \? \(previo\?\.rfc \?\? null\)/);
+  assert.match(cuerpo, /ausente\(input\.legalName\)/);
+  assert.match(cuerpo, /ausente\(input\.taxRegime\)/);
+  assert.match(cuerpo, /ausente\(input\.zipCode\)/);
+  // Y lo que se manda a Facturapi es el régimen RESUELTO, no el del body.
+  assert.match(cuerpo, /tax_system: taxRegime/);
+});
+
+test("H-81 · cancelar y resolver contestan en la zona del INSTITUTO", () => {
+  // `toInvoiceRow` sin formateador cae a México: en Tijuana, una factura de
+  // las 23:30 cambiaba de día entre la lista y la respuesta.
+  const src = FACT();
+  assert.ok(
+    !/return toInvoiceRow\(actualizada\);/.test(src),
+    "ninguna respuesta se queda sin la zona del instituto",
+  );
+  for (const ruta of ["cancelar", "resolver"]) {
+    const r = fuenteDe("src", "app", "api", "instituto", "facturacion", "[id]", ruta, "route.ts");
+    assert.match(r, /timeZone: g\.ctx\.institution\.timezone/, ruta);
+  }
+});
+
+test("H-77 · el buscador de pacientes pide LO MÍNIMO", () => {
+  // Un desplegable no necesita el domicilio ni los antecedentes de nadie
+  // (la lección P1-4): el endpoint tiene `opciones=1` justo para esto.
+  assert.match(
+    fuenteDe("src", "components", "edu", "facturacion", "facturacion-screen.tsx"),
+    /\/api\/instituto\/pacientes\?opciones=1&q=/,
+  );
+});
+
+test("H-10 · la lista solo se fija cuando la cotización LLEGÓ", () => {
+  // Fijarla antes del `await` dejaba, si el GET fallaba, los precios de la
+  // lista anterior en pantalla y el id de la nueva en el cuerpo del cobro.
+  const src = CAJA_UI();
+  const cuerpo = src.slice(src.indexOf("async function cambiarLista"));
+  const fin = cuerpo.indexOf("\n  }");
+  const bloque = cuerpo.slice(0, fin === -1 ? undefined : fin);
+  assert.ok(
+    bloque.indexOf("await eduRequest") < bloque.indexOf("setListaElegida(lista)"),
+    "setListaElegida va DESPUÉS de que la tarifa llegue",
+  );
 });
 
 test("H-82 · el POST de timbrado tiene su maxDuration", () => {
@@ -579,6 +703,16 @@ test("🔴 H-49 · el KPI del turno sale de los PAGOS del turno", () => {
   assert.match(CAJA_UI(), /page\.turnoNetCents !== null/);
 });
 
+test("🔴 H-49 · y se recorta por SEDE, como las filas de esa misma pantalla", () => {
+  // `EduPayment` no guarda sede y `eduPaymentScopeWhere` no la sabe
+  // aplicar: sin esto, la cajera de Norte veía una tabla de Norte con un
+  // "Entró en el turno" que incluía el dinero de Sur.
+  assert.match(
+    CAJA(),
+    /Array\.isArray\(ctx\.campusIds\) \? \{ charge: \{ campusId: \{ in: ctx\.campusIds \} \} \}/,
+  );
+});
+
 test("H-52 / H-61 · el recibo se imprime y dice cuándo fue", () => {
   const src = CAJA_UI();
   assert.match(src, /window\.print\(\)/, "H-52: se puede entregar el recibo");
@@ -610,8 +744,17 @@ test("H-59 · el modal de cobro avisa de la sede ANTES de armar el ticket", () =
 
 test("H-64 · si el tarifario cambió en medio, el error lo DICE", () => {
   const cuerpo = cuerpoDe(CAJA(), "createEduCharge");
-  assert.match(cuerpo, /descartados > 0 && err instanceof EduPadronError/);
+  assert.match(cuerpo, /soloElTope && descartados > 0 && err instanceof EduPadronError/);
   assert.match(cuerpo, /el total es ahora/);
+});
+
+test("🔴 H-64 · y NO reescribe los errores que no son del tope", () => {
+  // Un cheque sin referencia, un "Otro" sin motivo o el 403 de caja.refund
+  // se contestaban como "el precio cambió": un mensaje que ayuda cambiado
+  // por uno que miente.
+  const cuerpo = cuerpoDe(CAJA(), "createEduCharge");
+  assert.match(cuerpo, /const conTopeAmplio = parseEduPagosDivididos\(/);
+  assert.match(cuerpo, /conTopeAmplio\.sumaCents > totals\.totalCents/);
 });
 
 test("H-72 / H-77 / H-81 · la factura dice lo que se puede hacer con ella", () => {

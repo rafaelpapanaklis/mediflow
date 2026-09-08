@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { parseEduInvoiceFilters } from "@/lib/edu/facturacion-core";
 import { emitEduInvoice, listEduInvoices } from "@/lib/edu/facturacion";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +68,12 @@ export async function POST(request: Request) {
 
   try {
     const body = await eduReadJson(request);
-    const emitida = await emitEduInvoice(g.ctx, {
+    // 🔴 H-69 · EL ALCANCE POR SEDE. Recortar el buscador tapaba la lista
+    // pero no la puerta: un POST con el id de un cobro de otra sede se
+    // timbraba igual. Timbrar EMITE un documento fiscal, así que el
+    // alcance se aplica también aquí.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const emitida = await emitEduInvoice(cctx, {
       chargeId: body.chargeId,
       receptor:
         body.receptor && typeof body.receptor === "object"

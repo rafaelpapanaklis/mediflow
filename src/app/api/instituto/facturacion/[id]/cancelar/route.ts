@@ -25,10 +25,14 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   try {
     const body = await eduReadJson(request);
-    const invoice = await cancelEduInvoice(g.ctx, params.id, {
-      motive: body.motive,
-      reason: body.reason,
-    });
+    const invoice = await cancelEduInvoice(
+      g.ctx,
+      params.id,
+      { motive: body.motive, reason: body.reason },
+      // H-81 · la zona del INSTITUTO: la fila que vuelve tiene que decir el
+      // mismo día que la lista, no el de México por defecto.
+      { timeZone: g.ctx.institution.timezone },
+    );
     return NextResponse.json({ ok: true, invoice });
   } catch (err) {
     return eduApiError(err, "POST /api/instituto/facturacion/[id]/cancelar");

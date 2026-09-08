@@ -103,6 +103,16 @@ export { EduPadronError as EduFacturacionError };
 
 const FACTURAPI_BASE = "https://www.facturapi.io/v2";
 
+/**
+ * Cuántos minutos vale la RESERVA de una cancelación (H-66).
+ *
+ * Es el tiempo que una factura queda marcada mientras se le pregunta al
+ * SAT. Ni tan corto que dos peticiones simultáneas se crucen —cancelar
+ * tarda segundos—, ni tan largo que una petición muerta deje la factura sin
+ * salida: pasado el plazo, se puede volver a intentar.
+ */
+const EDU_CANCEL_RESERVA_MIN = 5;
+
 // ═══════════════════════════════════════════════════════════════════════
 // 0 · LAS PUERTAS
 // ═══════════════════════════════════════════════════════════════════════
@@ -236,28 +246,55 @@ export async function saveEduFiscalConfig(
 ): Promise<{ config: EduFiscalConfigView; aviso: string | null }> {
   const institutionId = requireDinero(ctx);
 
-  const rfc = normalizeEduRfc(input.rfc);
+  const previo = await fiscalConfigRaw(institutionId);
+
+  // 🔴 H-80 · Y LOS CUATRO OBLIGATORIOS SIGUEN LA MISMA REGLA. Si un
+  // cuerpo trae solo `{isEnabled:false}` no está diciendo "bórrame el
+  // RFC": está diciendo "apaga la facturación". Ausente = se conserva lo
+  // guardado; presente y malo = 400; y en la PRIMERA captura, donde no hay
+  // nada que conservar, siguen siendo obligatorios.
+  const ausente = (v: unknown) => v === undefined || v === null || v === "";
+
+  const rfc = ausente(input.rfc) ? (previo?.rfc ?? null) : normalizeEduRfc(input.rfc);
   if (!rfc) {
     throw new EduPadronError(
-      "El RFC del instituto no tiene forma de RFC. Son 12 caracteres (persona moral) o 13 (persona física), sin guiones ni espacios.",
+      ausente(input.rfc)
+        ? "Falta el RFC del instituto: todavía no hay ninguno guardado."
+        : "El RFC del instituto no tiene forma de RFC. Son 12 caracteres (persona moral) o 13 (persona física), sin guiones ni espacios.",
       400,
     );
   }
-  const legalName = normalizeEduLegalName(input.legalName);
+  const legalName = ausente(input.legalName)
+    ? (previo?.legalName ?? null)
+    : normalizeEduLegalName(input.legalName);
   if (!legalName) {
     throw new EduPadronError(
-      "Falta la razón social del instituto. Cópiala EXACTAMENTE como aparece en su Constancia de Situación Fiscal.",
+      ausente(input.legalName)
+        ? "Falta la razón social del instituto: todavía no hay ninguna guardada."
+        : "Falta la razón social del instituto. Cópiala EXACTAMENTE como aparece en su Constancia de Situación Fiscal.",
       400,
     );
   }
-  if (!esEduTaxRegime(input.taxRegime)) {
+  if (!ausente(input.taxRegime) && !esEduTaxRegime(input.taxRegime)) {
+    throw new EduPadronError("Ese régimen fiscal no está en el catálogo del SAT.", 400);
+  }
+  const taxRegime = ausente(input.taxRegime)
+    ? (previo?.taxRegime ?? null)
+    : (input.taxRegime as string);
+  if (!taxRegime) {
     throw new EduPadronError("Elige el régimen fiscal del instituto.", 400);
   }
-  const zipCode = normalizeEduZip(input.zipCode);
+  const zipCode = ausente(input.zipCode)
+    ? (previo?.zipCode ?? null)
+    : normalizeEduZip(input.zipCode);
   if (!zipCode) {
-    throw new EduPadronError("El código postal del domicilio fiscal son cinco dígitos.", 400);
+    throw new EduPadronError(
+      ausente(input.zipCode)
+        ? "Falta el código postal del domicilio fiscal: todavía no hay ninguno guardado."
+        : "El código postal del domicilio fiscal son cinco dígitos.",
+      400,
+    );
   }
-  const previo = await fiscalConfigRaw(institutionId);
 
   // ── 🔴 H-80 · NI UN DEFAULT SILENCIOSO SOBRE UNA CONFIGURACIÓN QUE YA
   // EXISTE ─────────────────────────────────────────────────────────────
@@ -270,10 +307,10 @@ export async function saveEduFiscalConfig(
   // La regla ahora es la de siempre en el vertical: AUSENTE = no lo tocas
   // (se conserva lo guardado), PRESENTE Y MALO = 400. El default solo
   // aplica en la PRIMERA captura, cuando no hay nada que conservar.
+  // El validador se pide igual que en las cuatro de arriba: el llamador ya
+  // rechazó lo malo con su mensaje, y esto es el segundo cerrojo.
   function conservar<T>(raw: unknown, ok: (v: unknown) => boolean, guardado: T | null, inicial: T): T {
-    if (raw === undefined || raw === null || raw === "") {
-      return guardado === null || guardado === undefined ? inicial : guardado;
-    }
+    if (ausente(raw)) return guardado === null || guardado === undefined ? inicial : guardado;
     if (!ok(raw)) throw new EduPadronError("Ese valor no es válido para la facturación.", 400);
     return raw as T;
   }
@@ -337,7 +374,7 @@ export async function saveEduFiscalConfig(
     }
     await updateOrgLegal(orgId, {
       legal_name: legalName,
-      tax_system: input.taxRegime,
+      tax_system: taxRegime,
       address: { zip: zipCode },
     });
   } catch (err) {
@@ -392,7 +429,7 @@ export async function saveEduFiscalConfig(
   const data = {
     rfc,
     legalName,
-    taxRegime: input.taxRegime,
+    taxRegime,
     zipCode,
     environment,
     isEnabled,
@@ -939,6 +976,8 @@ export async function listEduInvoices(
 export async function getEduInvoice(
   ctx: EduClinicaContext,
   invoiceId: string,
+  /** La zona del INSTITUTO: sin ella, la fecha de emisión sale en la de México. */
+  options: { timeZone?: string } = {},
 ): Promise<EduInvoiceRow | null> {
   const institutionId = requireDinero(ctx);
   const id = eduCleanId(invoiceId);
@@ -947,7 +986,7 @@ export async function getEduInvoice(
     where: { institutionId, id },
     select: INVOICE_SELECT,
   });
-  return i ? toInvoiceRow(i) : null;
+  return i ? toInvoiceRow(i, invoiceFmt(options.timeZone)) : null;
 }
 
 /**
@@ -1118,7 +1157,15 @@ export async function emitEduInvoice(
 
   const charge = await prisma.eduCharge.findFirst({
     where: {
-      ...eduChargeScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") }),
+      // 🔴 H-69 · Y LA SEDE TAMBIÉN AQUÍ. Recortar solo el buscador tapaba
+      // la lista pero no la puerta: un POST con el id de un cobro del Sur
+      // se timbraba igual desde el Norte. Timbrar no es leer — emite un
+      // documento fiscal— así que el alcance se aplica en la ESCRITURA.
+      ...eduChargeScopeWhere({
+        institutionId,
+        scope: eduVisibility(ctx, "charges"),
+        campusIds: ctx.campusIds,
+      }),
       id: chargeId,
     },
     select: {
@@ -1309,9 +1356,19 @@ export async function emitEduInvoice(
     // cobro. Si difieren, el comprobante ya existe y no se puede deshacer
     // desde aquí: se DEJA ESCRITO en la factura para que la escuela lo
     // vea y decida, en vez de descubrirlo el día de la conciliación.
+    // ⚠️ CON TOLERANCIA, y descartando el total fantasma. Es la misma
+    // lección que el dental ya aprendió en `src/lib/invoice-totals.ts`: con
+    // IVA incluido, Facturapi redondea CONCEPTO A CONCEPTO, así que una
+    // factura correcta puede diferir un centavo por línea; y un `total`
+    // ausente o cero en la respuesta es un dato que falta, no un
+    // descuadre. Marcar como sospechosa una factura sana es peor que no
+    // marcar nada: el aviso deja de leerse.
     const timbradoCents = Math.round(Number(result.total) * 100);
+    const toleranciaCents = 1 + conceptos.length;
     const descuadre =
-      Number.isFinite(timbradoCents) && timbradoCents !== charge.totalCents
+      Number.isFinite(timbradoCents) &&
+      timbradoCents > 0 &&
+      Math.abs(timbradoCents - charge.totalCents) > toleranciaCents
         ? `El CFDI se timbró por ${eduMoney(timbradoCents)} y el cobro ${charge.folio} dice ${eduMoney(charge.totalCents)}. Revísalo con tu contador: el comprobante ya está emitido.`
         : null;
 
@@ -1433,6 +1490,9 @@ export async function cancelEduInvoice(
   ctx: EduClinicaContext,
   invoiceId: string,
   input: { motive?: unknown; reason?: unknown },
+  /** La zona del INSTITUTO, para que la fila que vuelve diga el mismo día
+   *  que la lista. En Tijuana, una factura de las 23:30 cambiaba de día. */
+  options: { timeZone?: string } = {},
 ): Promise<EduInvoiceRow> {
   const institutionId = requireDinero(ctx);
   const id = eduCleanId(invoiceId);
@@ -1503,10 +1563,24 @@ export async function cancelEduInvoice(
   // fila marcando `cancelledAt`, la segunda cuenta 0 y se entera. El
   // `status` NO se toca todavía: hasta que el SAT conteste, esa factura
   // sigue siendo VÁLIDA y así se lee en toda pantalla.
+  // ⚠️ Y LA RESERVA CADUCA. Si el proceso muere entre la reserva y la
+  // respuesta del SAT —o si el rollback de abajo tampoco puede escribir—,
+  // una reserva eterna dejaría esa factura en 409 PARA SIEMPRE, sin ninguna
+  // vía de recuperación (`resolveEduStuckInvoice` solo toca las STAMPING).
+  // Con la ventana, dos peticiones simultáneas siguen serializadas —una
+  // cancelación tarda segundos— y una abandonada se puede reintentar
+  // pasados los EDU_CANCEL_RESERVA_MIN minutos.
+  const ahora = new Date();
+  const caducada = new Date(ahora.getTime() - EDU_CANCEL_RESERVA_MIN * 60_000);
   const reserva = await prisma.eduInvoice.updateMany({
-    where: { id: factura.id, institutionId, status: "VALID", cancelledAt: null },
+    where: {
+      id: factura.id,
+      institutionId,
+      status: "VALID",
+      OR: [{ cancelledAt: null }, { cancelledAt: { lt: caducada } }],
+    },
     data: {
-      cancelledAt: new Date(),
+      cancelledAt: ahora,
       cancelledByUserId: ctx.eduUserId,
       cancelMotive: motive,
       cancelReason: reason,
@@ -1514,7 +1588,7 @@ export async function cancelEduInvoice(
   });
   if (reserva.count === 0) {
     throw new EduPadronError(
-      "Esa factura ya se está cancelando (o alguien la canceló mientras escribías el motivo). Recarga la pantalla antes de volver a intentarlo: una segunda cancelación ante el SAT no se puede deshacer.",
+      `Esa factura ya se está cancelando (o alguien la canceló mientras escribías el motivo). Espera ${EDU_CANCEL_RESERVA_MIN} minutos y recarga la pantalla antes de volver a intentarlo: una segunda cancelación ante el SAT no se puede deshacer.`,
       409,
     );
   }
@@ -1522,10 +1596,34 @@ export async function cancelEduInvoice(
   try {
     await cancelInvoice(orgApiKey, factura.facturapiId, motive);
   } catch (err) {
-    // El SAT dijo que no: se SUELTA la reserva para que se pueda volver a
-    // intentar. Si esta escritura fallara también, la factura se quedaría
-    // marcada y el siguiente intento chocaría con el 409 de arriba: por eso
-    // se grita en el log en vez de tragárselo.
+    // 🔴 "RECHAZÓ" Y "NO CONTESTÓ" NO SON LO MISMO — la misma distinción
+    // que ya hace el timbrado con `pudoHaberTimbrado`. Si la llamada se
+    // cortó a media red, la cancelación PUDO llegar al SAT: soltar la
+    // reserva y decir "la rechazaron" sería mentir, y dejaría a alguien
+    // mandando una segunda cancelación a ciegas.
+    if (pudoHaberTimbrado(err)) {
+      await prisma.eduInvoice
+        .update({
+          where: { id: factura.id },
+          data: {
+            errorMessage:
+              `La cancelación se mandó y la conexión se cortó: NO se sabe si el SAT la aceptó. Revísala en el panel de Facturapi antes de volver a cancelarla. (${mensajeDe(err)})`.slice(
+                0,
+                500,
+              ),
+          },
+        })
+        .catch(() => undefined);
+      throw new EduPadronError(
+        `La conexión con Facturapi se cortó y no se sabe si la cancelación llegó al SAT. La factura ${factura.folio} quedó marcada: revísala en el panel de Facturapi antes de volver a intentarlo.`,
+        502,
+      );
+    }
+
+    // El SAT (o Facturapi) dijo que no: se SUELTA la reserva para que se
+    // pueda volver a intentar. Si esta escritura fallara también, la
+    // reserva caduca sola por la ventana de arriba; se grita en el log
+    // igual, porque es un síntoma.
     await prisma.eduInvoice
       .update({
         where: { id: factura.id },
@@ -1554,7 +1652,7 @@ export async function cancelEduInvoice(
     },
     select: INVOICE_SELECT,
   });
-  return toInvoiceRow(actualizada);
+  return toInvoiceRow(actualizada, invoiceFmt(options.timeZone));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1577,6 +1675,8 @@ export async function resolveEduStuckInvoice(
   ctx: EduClinicaContext,
   invoiceId: string,
   input: { uuid?: unknown; sinTimbre?: unknown },
+  /** La zona del INSTITUTO. Ver `cancelEduInvoice`. */
+  options: { timeZone?: string } = {},
 ): Promise<EduInvoiceRow> {
   const institutionId = requireDinero(ctx);
   const id = eduCleanId(invoiceId);
@@ -1605,7 +1705,7 @@ export async function resolveEduStuckInvoice(
       },
       select: INVOICE_SELECT,
     });
-    return toInvoiceRow(actualizada);
+    return toInvoiceRow(actualizada, invoiceFmt(options.timeZone));
   }
 
   const uuid = typeof input.uuid === "string" ? input.uuid.trim().toUpperCase() : "";
@@ -1628,7 +1728,7 @@ export async function resolveEduStuckInvoice(
       },
       select: INVOICE_SELECT,
     });
-    return toInvoiceRow(actualizada);
+    return toInvoiceRow(actualizada, invoiceFmt(options.timeZone));
   } catch (err) {
     if (esConflictoDeUnico(err)) {
       throw new EduPadronError(

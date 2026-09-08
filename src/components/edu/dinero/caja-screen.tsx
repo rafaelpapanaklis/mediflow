@@ -812,12 +812,34 @@ function Cobrar({
    */
   async function cambiarLista(lista: string) {
     if (!tarifa) return;
-    setListaElegida(lista);
-    setLineas([]);
-    await elegirPaciente(
-      { id: tarifa.patientId, folio: tarifa.patientFolio, name: tarifa.patientName },
-      lista,
-    );
+    // ⚠️ Nada se toca hasta que la cotización LLEGA. Fijar la lista antes
+    // del `await` dejaba, si el GET fallaba (red, o un 409 porque acaban de
+    // desactivarla), los precios de la lista ANTERIOR en pantalla y el id
+    // de la NUEVA en el cuerpo del cobro: se cobraría con una tarifa
+    // distinta de la que se está enseñando.
+    const paciente = {
+      id: tarifa.patientId,
+      folio: tarifa.patientFolio,
+      name: tarifa.patientName,
+    };
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await eduRequest<TarifaRespuesta>(
+        `/api/instituto/caja/tarifa?paciente=${encodeURIComponent(paciente.id)}${
+          lista ? `&lista=${encodeURIComponent(lista)}` : ""
+        }`,
+      );
+      setTarifa(res);
+      setLineas([]);
+      setListaElegida(lista);
+    } catch (err) {
+      // El `<select>` vuelve solo a la lista de antes: su valor ES
+      // `listaElegida`, que no se movió.
+      setError(err instanceof Error ? err.message : "No se pudo leer la tarifa.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   // Ola 12 · el paciente preseleccionado (el "Cobrar" de la ficha) se
@@ -1520,11 +1542,17 @@ function Recibo({
   //
   // H-47 · y arranca por el método con MÁS dinero dentro, no por
   // "Efectivo" siempre.
+  //
+  // ⚠️ Solo entre los COBRABLES. El método legado "CARD" puede ser el que
+  // más dinero tiene y NO está en el desplegable: arrancar ahí pintaba
+  // "Efectivo" con el estado en "CARD" y el servidor rebotaba con un 400
+  // que no venía a cuento.
   const [metodo, setMetodo] = useState<EduPaymentMethod>(() => {
     let mejor: EduPaymentMethod = "CASH";
     let max = 0;
     for (const p of charge.payments) {
       if (p.isRefund) continue;
+      if (!(EDU_PAYMENT_METHODS_COBRABLES as readonly string[]).includes(p.method)) continue;
       if (p.amountCents > max) {
         max = p.amountCents;
         mejor = p.method;
