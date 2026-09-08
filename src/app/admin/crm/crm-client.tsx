@@ -6,18 +6,28 @@
 // El orden no es decorativo. Un CRM no se abre para admirar el embudo: se
 // abre para saber a quién hay que buscar hoy. Por eso lo primero de la
 // página es la lista de seguimientos vencidos y de hoy, con los botones
-// para escribirle, marcarle o posponer sin salir de ahí; el tablero viene
-// después, para ver cómo va todo.
+// para escribirle, marcarle o posponer sin salir de ahí; el tablero (o la
+// lista, según el tamaño de la libreta) viene después, para ver cómo va
+// todo.
 //
 // ── QUIÉN MANDA SOBRE LAS FILAS ────────────────────────────────────────
-// La lista llega del servidor y se guarda en estado local para poder
-// pintar el cambio ANTES de que conteste la acción (arrastrar una tarjeta
-// tiene que sentirse instantáneo). Cada acción termina en router.refresh()
-// y el useEffect vuelve a tomar lo que diga el servidor: el estado local
-// es un adelanto, nunca la verdad.
+// El SERVIDOR. Filtra, ordena y pagina en la base y manda UNA página; ver
+// el comentario largo de `crmListar`. Antes llegaban hasta 2.000 filas
+// enteras y la pantalla las cribaba en el navegador: eso ponía un techo
+// silencioso a los 2.000 prospectos y metía la libreta completa dentro
+// del HTML de cada carga.
 //
-// Buscar y filtrar se hacen aquí, en el navegador, sobre la lista ya
-// cargada — ver el comentario de `crmCoincide` para los dos motivos.
+// Aquí sólo queda un espejo local de esa página, y sirve para UNA cosa:
+// pintar el cambio ANTES de que conteste la acción, porque arrastrar una
+// tarjeta tiene que sentirse instantáneo. Cada acción termina en
+// router.refresh() y el useEffect vuelve a tomar lo que diga el servidor:
+// el estado local es un adelanto, nunca la verdad.
+//
+// ── LOS FILTROS VIVEN EN LA URL ────────────────────────────────────────
+// Ni uno en useState. Se leen en page.tsx (servidor) y se escriben con
+// router.push, así que la vista se guarda en marcadores, se manda por
+// WhatsApp, aguanta una recarga y el botón de atrás deshace el último
+// filtro. La mecánica fina está en crm-filtros.tsx.
 //
 // ── EDITAR SE HACE EN SITIO, NO EN OTRA PANTALLA ───────────────────────
 // El botón "Editar" de la tarjeta y el de la fila abren el MISMO
@@ -27,7 +37,7 @@
 // de trabajo. La ficha sigue siendo el sitio de la bitácora y de lo que se
 // mira con calma, y desde aquí se llega con "Ficha".
 // ═══════════════════════════════════════════════════════════════════════
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -35,34 +45,32 @@ import {
   CalendarClock,
   Flame,
   Handshake,
-  LayoutGrid,
-  List,
   Plus,
-  Search,
-  SlidersHorizontal,
+  SearchX,
   Target,
   Trophy,
   Upload,
-  X,
 } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import {
-  crmCoincide,
   crmDiaRelativo,
   crmEstaFrio,
   crmEtapa,
-  crmPrioridad,
-  crmResumen,
+  crmFiltrosAQuery,
+  crmFiltrosCon,
+  crmFiltrosLimpios,
+  crmHayFiltros,
   crmSemaforo,
-  CRM_ETAPAS,
-  CRM_FUENTES,
-  CRM_VERTICALES,
+  CRM_ORIGEN_AFILIADOS,
+  type CrmFiltros,
+  type CrmOrden,
 } from "@/lib/admin/crm/crm-core";
 import type { CrmListado, CrmProspectoDTO } from "@/lib/admin/crm/service";
 import type { CrmTextoDTO } from "@/lib/admin/crm/textos-core";
 import { moverEtapaAccion, programarSeguimientoAccion } from "./actions";
+import { CrmBarraFiltros, CrmPaginacion } from "./crm-filtros";
 import { CrmFormulario, type CrmClinicaLite } from "./crm-form";
 import { CrmImportar } from "./crm-importar";
 import { CrmLista } from "./crm-lista";
@@ -79,19 +87,10 @@ import {
   crmFmtMxn,
 } from "./crm-ui";
 
-type Vista = "tablero" | "lista";
-type Orden = "prioridad" | "reciente" | "valor" | "nombre";
+const RUTA = "/admin/crm";
 
-/** Valores especiales del filtro de origen; el resto es un affiliateId. */
-const ORIGEN_DALECONTROL = "__dalecontrol";
-const ORIGEN_AFILIADOS = "__afiliados";
-
-const ORDENES: { id: Orden; label: string }[] = [
-  { id: "prioridad", label: "Por atender" },
-  { id: "reciente", label: "Más recientes" },
-  { id: "valor", label: "Mayor valor" },
-  { id: "nombre", label: "Nombre" },
-];
+/** Ancla del bloque de resultados, para volver a él al cambiar de página. */
+const ANCLA_RESULTADOS = "crm-resultados";
 
 export function CrmClient({
   listado,
@@ -105,29 +104,54 @@ export function CrmClient({
   textos: CrmTextoDTO[];
 }) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [cargando, startTransition] = useTransition();
 
-  // La verdad la manda el servidor; esto es el adelanto para que arrastrar
-  // se sienta instantáneo. Se vuelve a tomar en cada refresco.
+  const {
+    filtros,
+    vista,
+    total,
+    totalGeneral,
+    totalPaginas,
+    resumen,
+    socios,
+    recomendacionesSinTocar,
+    escaneoTruncado,
+    tableroTruncado,
+  } = listado;
+
+  // Espejo local de la página que mandó el servidor, sólo para el pintado
+  // optimista. Se vuelve a tomar en cada respuesta.
   const [filas, setFilas] = useState<CrmProspectoDTO[]>(listado.filas);
   useEffect(() => {
     setFilas(listado.filas);
   }, [listado.filas]);
 
+  const [hoyToca, setHoyToca] = useState<CrmProspectoDTO[]>(listado.hoyToca);
+  useEffect(() => {
+    setHoyToca(listado.hoyToca);
+  }, [listado.hoyToca]);
+
+  // Las cuentas por etapa también se pintan por adelantado. Son las que
+  // salen en la cabecera de cada columna del tablero y las que deciden el
+  // "y N más": si se quedaran con el número del servidor mientras la
+  // tarjeta ya se movió, la columna diría 8 sobre 7 tarjetas y ofrecería
+  // ver "1 más" que no existe.
+  const [porEtapa, setPorEtapa] = useState<Record<string, number>>(listado.porEtapa);
+  useEffect(() => {
+    setPorEtapa(listado.porEtapa);
+  }, [listado.porEtapa]);
+
+  // Y el total de "hay que atenderlos", por lo mismo: es la cifra de la
+  // cabecera de "Hoy toca" y la del botón de ver el resto.
+  const [pendientes, setPendientes] = useState(listado.resumen.vencidos + listado.resumen.paraHoy);
+  useEffect(() => {
+    setPendientes(listado.resumen.vencidos + listado.resumen.paraHoy);
+  }, [listado.resumen.vencidos, listado.resumen.paraHoy]);
+
   // "Ahora" se congela por render de datos: si se recalculara en cada
   // pintado, un prospecto podría cambiar de "hoy" a "vencido" a media
   // interacción. Se refresca cuando llegan datos nuevos.
   const ahora = useMemo(() => new Date(), [listado.filas]);
-
-  const [vista, setVista] = useState<Vista>("tablero");
-  const [q, setQ] = useState("");
-  const [vertical, setVertical] = useState("");
-  const [fuente, setFuente] = useState("");
-  const [etapaFiltro, setEtapaFiltro] = useState("");
-  const [origen, setOrigen] = useState("");
-  const [soloPendientes, setSoloPendientes] = useState(false);
-  const [orden, setOrden] = useState<Orden>("prioridad");
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
 
   const [creando, setCreando] = useState(false);
   const [importando, setImportando] = useState(false);
@@ -135,134 +159,71 @@ export function CrmClient({
   const [editando, setEditando] = useState<CrmProspectoDTO | null>(null);
   const [viendoTextos, setViendoTextos] = useState<CrmProspectoDTO | null>(null);
 
-  const resumen = useMemo(() => crmResumen(filas, ahora), [filas, ahora]);
+  // ── Navegación ────────────────────────────────────────────────────────
 
-  // Los socios que aparecen en la lista, para poder filtrar por uno. Se
-  // sacan de las filas y no de la tabla de afiliados: aquí sólo importan
-  // los que efectivamente recomendaron algo.
-  const socios = useMemo(() => {
-    const mapa = new Map<string, string>();
-    for (const p of filas) {
-      if (p.affiliateId) mapa.set(p.affiliateId, p.affiliateName ?? "Socio dado de baja");
-    }
-    return Array.from(mapa.entries()).sort((a, b) => a[1].localeCompare(b[1], "es"));
-  }, [filas]);
-
-  const deAfiliados = useMemo(() => filas.filter((p) => !!p.affiliateId).length, [filas]);
+  /** Al cambiar de página se vuelve al principio de los resultados. */
+  const volverAResultados = useRef(false);
+  useEffect(() => {
+    if (!volverAResultados.current) return;
+    volverAResultados.current = false;
+    document.getElementById(ANCLA_RESULTADOS)?.scrollIntoView({ block: "start" });
+  }, [listado.filas]);
 
   /**
-   * Recomendaciones de socios que nadie ha tocado todavía. Merecen aviso
-   * propio y no un badge más: un socio que recomienda y ve que nunca lo
-   * contactamos deja de recomendar, y estas no entran en "hoy toca" porque
-   * nacen sin fecha de seguimiento.
+   * El ÚNICO camino para cambiar lo que se está viendo. `push` deja
+   * entrada en el historial (el botón de atrás deshace ese filtro);
+   * `reemplazar` es para el tecleo de la búsqueda, que si no dejaría una
+   * entrada por letra.
+   *
+   * `scroll: false` en los dos: saltar al principio de la página cada vez
+   * que se toca un selector marea. Quien sí quiere volver arriba —cambiar
+   * de página— lo pide con la bandera de aquí al lado.
    */
-  const deSociosSinTocar = useMemo(
-    () => filas.filter((p) => !!p.affiliateId && crmEtapa(p.stage).id === "NUEVO"),
-    [filas],
-  );
-
-  const filtradas = useMemo(() => {
-    const lista = filas.filter((p) => {
-      if (vertical && p.vertical !== vertical) return false;
-      if (fuente && p.source !== fuente) return false;
-      if (origen === ORIGEN_DALECONTROL && p.affiliateId) return false;
-      if (origen === ORIGEN_AFILIADOS && !p.affiliateId) return false;
-      if (origen && origen !== ORIGEN_DALECONTROL && origen !== ORIGEN_AFILIADOS) {
-        if (p.affiliateId !== origen) return false;
-      }
-      if (etapaFiltro && crmEtapa(p.stage).id !== etapaFiltro) return false;
-      if (soloPendientes) {
-        const s = crmSemaforo(p.nextActionAt, ahora);
-        if (s !== "vencido" && s !== "hoy") return false;
-      }
-      return crmCoincide(p, q);
-    });
-    const copia = [...lista];
-    if (orden === "prioridad") {
-      copia.sort((a, b) => crmPrioridad(a, ahora) - crmPrioridad(b, ahora) || a.name.localeCompare(b.name, "es"));
-    } else if (orden === "reciente") {
-      copia.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    } else if (orden === "valor") {
-      copia.sort((a, b) => (Number(b.monthlyValue) || 0) - (Number(a.monthlyValue) || 0));
-    } else {
-      copia.sort((a, b) => a.name.localeCompare(b.name, "es"));
-    }
-    return copia;
-  }, [filas, vertical, fuente, origen, etapaFiltro, soloPendientes, q, orden, ahora]);
-
-  /** Los que hay que buscar hoy: vencidos primero, luego los de hoy. */
-  const hoyToca = useMemo(
-    () =>
-      filas
-        .filter((p) => {
-          if (crmEtapa(p.stage).terminal) return false;
-          const s = crmSemaforo(p.nextActionAt, ahora);
-          return s === "vencido" || s === "hoy";
-        })
-        .sort((a, b) => crmPrioridad(a, ahora) - crmPrioridad(b, ahora)),
-    [filas, ahora],
-  );
-
-  // ── Filtros ───────────────────────────────────────────────────────────
-
-  /**
-   * Los filtros que se despliegan son cuatro selectores; con todos siempre
-   * a la vista, la barra era un muro de ocho controles encima de lo que de
-   * verdad se viene a leer. Ahora se guardan detrás de un botón que DICE
-   * cuántos hay puestos, y los puestos se siguen viendo como fichas: un
-   * filtro escondido es la forma más rápida de creer que se perdieron
-   * prospectos.
-   */
-  const activos = useMemo(() => {
-    const items: { clave: string; texto: string; limpiar: () => void }[] = [];
-    if (vertical) {
-      const v = CRM_VERTICALES.find((x) => x.id === vertical);
-      items.push({ clave: "vertical", texto: v?.label ?? vertical, limpiar: () => setVertical("") });
-    }
-    if (fuente) {
-      const f = CRM_FUENTES.find((x) => x.id === fuente);
-      items.push({ clave: "fuente", texto: f?.label ?? fuente, limpiar: () => setFuente("") });
-    }
-    if (etapaFiltro) {
-      items.push({
-        clave: "etapa",
-        texto: crmEtapa(etapaFiltro).label,
-        limpiar: () => setEtapaFiltro(""),
+  const navegar = useCallback(
+    (siguiente: CrmFiltros, opciones?: { reemplazar?: boolean }) => {
+      const url = `${RUTA}${crmFiltrosAQuery(siguiente)}`;
+      startTransition(() => {
+        if (opciones?.reemplazar) router.replace(url, { scroll: false });
+        else router.push(url, { scroll: false });
       });
-    }
-    if (origen) {
-      const texto =
-        origen === ORIGEN_DALECONTROL
-          ? "Sólo los míos"
-          : origen === ORIGEN_AFILIADOS
-            ? "De afiliados"
-            : socios.find(([id]) => id === origen)?.[1] ?? "Un socio";
-      items.push({ clave: "origen", texto, limpiar: () => setOrigen("") });
-    }
-    return items;
-  }, [vertical, fuente, etapaFiltro, origen, socios]);
+    },
+    [router],
+  );
 
-  function limpiarFiltros() {
-    setVertical("");
-    setFuente("");
-    setEtapaFiltro("");
-    setOrigen("");
-    setSoloPendientes(false);
-    setQ("");
-  }
+  const irAPagina = useCallback(
+    (siguiente: CrmFiltros) => {
+      volverAResultados.current = true;
+      navegar(siguiente);
+    },
+    [navegar],
+  );
+
+  const conFiltros = useCallback(
+    (cambios: Partial<CrmFiltros>) => navegar(crmFiltrosCon(filtros, cambios)),
+    [filtros, navegar],
+  );
 
   // ── Mutaciones ────────────────────────────────────────────────────────
 
-  /** Pinta el cambio de etapa YA y devuelve la anterior para poder revertir. */
+  /** Pinta el cambio de etapa YA (en la página y en "hoy toca") y devuelve
+   *  la etapa anterior para poder revertir. */
   function pintarEtapa(id: string, etapa: string): string | null {
     let anterior: string | null = null;
-    setFilas((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        anterior = p.stage;
-        return { ...p, stage: etapa };
-      }),
-    );
+    const cambiar = (p: CrmProspectoDTO) => {
+      if (p.id !== id) return p;
+      anterior = p.stage;
+      return { ...p, stage: etapa };
+    };
+    setFilas((prev) => prev.map(cambiar));
+    setHoyToca((prev) => prev.map(cambiar));
+    if (anterior && anterior !== etapa) {
+      const desde: string = anterior;
+      setPorEtapa((prev) => ({
+        ...prev,
+        [desde]: Math.max(0, (prev[desde] ?? 0) - 1),
+        [etapa]: (prev[etapa] ?? 0) + 1,
+      }));
+    }
     return anterior;
   }
 
@@ -272,7 +233,7 @@ export function CrmClient({
    */
   function mover(id: string, etapa: string, motivoPerdida?: string | null) {
     if (etapa === "PERDIDO" && motivoPerdida === undefined) {
-      const p = filas.find((f) => f.id === id);
+      const p = filas.find((f) => f.id === id) ?? hoyToca.find((f) => f.id === id);
       if (p) {
         setPerdiendo(p);
         return;
@@ -292,9 +253,25 @@ export function CrmClient({
   }
 
   function reprogramar(p: CrmProspectoDTO, fecha: string | null) {
-    setFilas((prev) =>
-      prev.map((f) => (f.id === p.id ? { ...f, nextActionAt: fecha ? `${fecha}T12:00:00.000Z` : null } : f)),
-    );
+    const nuevaFecha = fecha ? `${fecha}T12:00:00.000Z` : null;
+    const pintar = (f: CrmProspectoDTO) =>
+      f.id === p.id ? { ...f, nextActionAt: nuevaFecha } : f;
+    setFilas((prev) => prev.map(pintar));
+
+    // Posponer o dar por hecho saca la fila de "Hoy toca" AL INSTANTE. Si
+    // sólo se repintara, se quedaría ahí diciendo "En 7 días" debajo de un
+    // encabezado que sigue contándola, hasta que volviera el servidor —
+    // que es justo el momento en que uno duda de si el botón funcionó.
+    const sigueTocando =
+      nuevaFecha !== null && ["vencido", "hoy"].includes(crmSemaforo(nuevaFecha, ahora));
+    setHoyToca((prev) => {
+      const estaba = prev.some((f) => f.id === p.id);
+      if (estaba && !sigueTocando) {
+        setPendientes((n) => Math.max(0, n - 1));
+        return prev.filter((f) => f.id !== p.id);
+      }
+      return prev.map(pintar);
+    });
     startTransition(async () => {
       const r = await programarSeguimientoAccion(p.id, fecha, p.nextActionNote);
       if (!r.ok) {
@@ -314,13 +291,18 @@ export function CrmClient({
    * se guardó.
    */
   function guardado(p: CrmProspectoDTO) {
-    setFilas((prev) => prev.map((f) => (f.id === p.id ? { ...f, ...p } : f)));
+    const pintar = (f: CrmProspectoDTO) => (f.id === p.id ? { ...f, ...p } : f);
+    setFilas((prev) => prev.map(pintar));
+    setHoyToca((prev) => prev.map(pintar));
     router.refresh();
   }
 
   const abrirTextos = textos.length > 0 ? (p: CrmProspectoDTO) => setViendoTextos(p) : undefined;
 
-  const vacio = filas.length === 0;
+  // Libreta vacía de verdad = ni un prospecto en la base. No es lo mismo
+  // que "el filtro no encontró nada", y se dicen cosas distintas.
+  const libretaVacia = totalGeneral === 0;
+  const hayFiltros = crmHayFiltros(filtros);
 
   return (
     <div>
@@ -359,7 +341,7 @@ export function CrmClient({
 
       <CrmTabs activo="prospectos" />
 
-      {vacio ? (
+      {libretaVacia ? (
         <VacioInicial alCrear={() => setCreando(true)} alImportar={() => setImportando(true)} />
       ) : (
         <>
@@ -373,12 +355,15 @@ export function CrmClient({
             }}
           >
             <KpiBoton
-              activo={soloPendientes}
+              activo={filtros.estado === "pendientes"}
               titulo="Ver sólo los que hay que atender"
-              onClick={() => {
-                setSoloPendientes((v) => !v);
-                setVista("lista");
-              }}
+              onClick={() =>
+                conFiltros(
+                  filtros.estado === "pendientes"
+                    ? { estado: "" }
+                    : { estado: "pendientes", etapa: "", orden: "prioridad", vista: "lista" },
+                )
+              }
             >
               <KpiCard
                 label="Por atender"
@@ -393,27 +378,53 @@ export function CrmClient({
                 }
               />
             </KpiBoton>
-            <KpiCard
-              label="En el embudo"
-              value={String(resumen.abiertos)}
-              icon={Target}
-              hint={`${crmFmtMxn(resumen.valorAbierto)} al mes si cerraran todos`}
-            />
-            <KpiCard
-              label="Enfriándose"
-              value={String(resumen.frios)}
-              icon={Flame}
-              tone={resumen.frios > 0 ? "warning" : undefined}
-              hint="Abiertos y sin nada anotado en 14 días"
-            />
             <KpiBoton
-              activo={etapaFiltro === "GANADO"}
+              activo={filtros.estado === "abiertos"}
+              titulo="Ver todo lo que sigue vivo"
+              onClick={() =>
+                conFiltros(
+                  filtros.estado === "abiertos"
+                    ? { estado: "" }
+                    : { estado: "abiertos", etapa: "" },
+                )
+              }
+            >
+              <KpiCard
+                label="En el embudo"
+                value={String(resumen.abiertos)}
+                icon={Target}
+                hint={`${crmFmtMxn(resumen.valorAbierto)} al mes si cerraran todos`}
+              />
+            </KpiBoton>
+            <KpiBoton
+              activo={filtros.estado === "frios"}
+              titulo="Ver los que se están enfriando"
+              onClick={() =>
+                conFiltros(
+                  filtros.estado === "frios"
+                    ? { estado: "" }
+                    : { estado: "frios", etapa: "", orden: "sin-contacto", vista: "lista" },
+                )
+              }
+            >
+              <KpiCard
+                label="Enfriándose"
+                value={String(resumen.frios)}
+                icon={Flame}
+                tone={resumen.frios > 0 ? "warning" : undefined}
+                hint="Abiertos y sin nada anotado en 14 días"
+              />
+            </KpiBoton>
+            <KpiBoton
+              activo={filtros.etapa === "GANADO"}
               titulo="Ver los que ya cerraron"
-              onClick={() => {
-                setEtapaFiltro((e) => (e === "GANADO" ? "" : "GANADO"));
-                setVista("lista");
-                setFiltrosAbiertos(true);
-              }}
+              onClick={() =>
+                conFiltros(
+                  filtros.etapa === "GANADO"
+                    ? { etapa: "" }
+                    : { etapa: "GANADO", estado: "", orden: "reciente", vista: "lista" },
+                )
+              }
             >
               <KpiCard
                 label="Ya son clientes"
@@ -425,7 +436,7 @@ export function CrmClient({
           </div>
 
           {/* ── Lo que mandaron los socios y nadie ha tocado ─────────── */}
-          {deSociosSinTocar.length > 0 && (
+          {recomendacionesSinTocar.total > 0 && (
             <div
               style={{
                 display: "flex",
@@ -442,26 +453,21 @@ export function CrmClient({
               <Handshake size={16} style={{ color: "var(--brand)", flexShrink: 0 }} />
               <div style={{ flex: "1 1 320px", minWidth: 0, fontSize: 12.5, color: "var(--text-2)" }}>
                 <strong style={{ color: "var(--text-1)" }}>
-                  {deSociosSinTocar.length}{" "}
-                  {deSociosSinTocar.length === 1 ? "recomendación" : "recomendaciones"} de socios
+                  {recomendacionesSinTocar.total}{" "}
+                  {recomendacionesSinTocar.total === 1 ? "recomendación" : "recomendaciones"} de socios
                 </strong>{" "}
-                sin contactar todavía —{" "}
-                {Array.from(
-                  new Set(deSociosSinTocar.map((p) => p.affiliateName ?? "un socio dado de baja")),
-                )
-                  .slice(0, 3)
-                  .join(", ")}
+                sin contactar todavía
+                {recomendacionesSinTocar.socios.length > 0 && (
+                  <> — {recomendacionesSinTocar.socios.join(", ")}</>
+                )}
                 . Un socio que recomienda y ve que nunca los buscamos deja de recomendar.
               </div>
               <ButtonNew
                 size="sm"
                 variant="secondary"
-                onClick={() => {
-                  setOrigen(ORIGEN_AFILIADOS);
-                  setEtapaFiltro("NUEVO");
-                  setVista("lista");
-                  setFiltrosAbiertos(true);
-                }}
+                onClick={() =>
+                  conFiltros({ origen: CRM_ORIGEN_AFILIADOS, etapa: "NUEVO", vista: "lista" })
+                }
               >
                 Verlas
               </ButtonNew>
@@ -473,11 +479,11 @@ export function CrmClient({
             <div style={{ marginBottom: 18 }}>
               <CardNew
                 noPad
-                title={`Hoy toca (${hoyToca.length})`}
+                title={`Hoy toca (${pendientes})`}
                 sub="Lo vencido primero. Escribe, marca, edita o posponlo sin salir de aquí."
               >
                 <div style={{ display: "flex", flexDirection: "column" }}>
-                  {hoyToca.slice(0, 12).map((p) => (
+                  {hoyToca.map((p) => (
                     <FilaHoy
                       key={p.id}
                       p={p}
@@ -487,13 +493,12 @@ export function CrmClient({
                       alTextos={abrirTextos}
                     />
                   ))}
-                  {hoyToca.length > 12 && (
+                  {pendientes > hoyToca.length && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setSoloPendientes(true);
-                        setVista("lista");
-                      }}
+                      onClick={() =>
+                        conFiltros({ estado: "pendientes", vista: "lista", orden: "prioridad" })
+                      }
                       style={{
                         border: "none",
                         borderTop: "1px solid var(--border-soft)",
@@ -505,7 +510,7 @@ export function CrmClient({
                         textAlign: "left",
                       }}
                     >
-                      Ver los {hoyToca.length - 12} restantes en la lista →
+                      Ver los {pendientes - hoyToca.length} restantes en la lista →
                     </button>
                   )}
                 </div>
@@ -514,265 +519,102 @@ export function CrmClient({
           )}
 
           {/* ── Barra de trabajo ───────────────────────────────────── */}
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              alignItems: "center",
-              marginBottom: 10,
-            }}
-          >
-            <div style={{ position: "relative", flex: "1 1 240px", minWidth: 200, maxWidth: 420 }}>
-              <Search
-                size={13}
-                style={{
-                  position: "absolute",
-                  left: 10,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "var(--text-4)",
-                  pointerEvents: "none",
-                }}
-              />
-              <input
-                className="input-new"
-                style={{ paddingLeft: 30 }}
-                placeholder="Buscar por negocio, persona, ciudad, teléfono o nota…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                aria-label="Buscar prospectos"
-              />
-            </div>
-
-            <select
-              className="input-new"
-              style={{ width: 150 }}
-              value={orden}
-              onChange={(e) => setOrden(e.target.value as Orden)}
-              aria-label="Ordenar"
-            >
-              {ORDENES.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={() => setSoloPendientes((v) => !v)}
-              style={{
-                height: 34,
-                padding: "0 12px",
-                borderRadius: 8,
-                fontSize: 12,
-                cursor: "pointer",
-                border: `1px solid ${soloPendientes ? "var(--brand)" : "var(--border-soft)"}`,
-                background: soloPendientes ? "var(--brand-soft)" : "var(--bg-elev)",
-                color: soloPendientes ? "var(--text-1)" : "var(--text-2)",
-              }}
-              aria-pressed={soloPendientes}
-            >
-              Sólo pendientes
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFiltrosAbiertos((v) => !v)}
-              aria-expanded={filtrosAbiertos}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                height: 34,
-                padding: "0 12px",
-                borderRadius: 8,
-                fontSize: 12,
-                cursor: "pointer",
-                border: `1px solid ${activos.length > 0 ? "var(--brand)" : "var(--border-soft)"}`,
-                background: activos.length > 0 ? "var(--brand-soft)" : "var(--bg-elev)",
-                color: activos.length > 0 ? "var(--text-1)" : "var(--text-2)",
-              }}
-            >
-              <SlidersHorizontal size={13} />
-              Filtros
-              {activos.length > 0 && ` (${activos.length})`}
-            </button>
-
-            <div className="segment-new" style={{ marginLeft: "auto" }}>
-              <BotonVista actual={vista} valor="tablero" icono={<LayoutGrid size={13} />} label="Tablero" alElegir={setVista} />
-              <BotonVista actual={vista} valor="lista" icono={<List size={13} />} label="Lista" alElegir={setVista} />
-            </div>
+          <div id={ANCLA_RESULTADOS} style={{ scrollMarginTop: 16 }}>
+            <CrmBarraFiltros
+              filtros={filtros}
+              vista={vista}
+              socios={socios}
+              total={total}
+              totalGeneral={totalGeneral}
+              cargando={cargando}
+              alCambiar={navegar}
+            />
           </div>
 
-          {/* Los filtros puestos, SIEMPRE a la vista — con el panel abierto
-              o cerrado. Uno escondido se lee como prospectos perdidos, y
-              además el selector de etapa sólo existe en la vista de lista:
-              sin estas fichas, un filtro de etapa puesto desde el tablero
-              se quedaría sin forma de quitarse. */}
-          {activos.length > 0 && (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-              {activos.map((a) => (
-                <button
-                  key={a.clave}
-                  type="button"
-                  onClick={a.limpiar}
-                  title={`Quitar el filtro «${a.texto}»`}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    height: 26,
-                    padding: "0 6px 0 10px",
-                    borderRadius: 99,
-                    fontSize: 11.5,
-                    cursor: "pointer",
-                    border: "1px solid var(--border-soft)",
-                    background: "var(--bg-elev-2)",
-                    color: "var(--text-2)",
-                  }}
-                >
-                  {a.texto}
-                  <X size={12} />
-                </button>
-              ))}
-            </div>
+          {/* Nunca se esconden filas en silencio: si la búsqueda tuvo que
+              cortar el barrido, se dice con los dos números y con qué
+              hacer para verlo todo. */}
+          {escaneoTruncado && (
+            <Aviso>
+              La búsqueda revisó los primeros{" "}
+              <strong className="mono">{escaneoTruncado.escaneados.toLocaleString("es-MX")}</strong>{" "}
+              prospectos —según el orden que tienes puesto— de los{" "}
+              <strong className="mono">{escaneoTruncado.de.toLocaleString("es-MX")}</strong> que
+              cumplen los demás filtros, así que podría faltar alguno más abajo. Añade un giro, una
+              fuente, una etapa o una situación antes de buscar: esos filtros sí los resuelve la
+              base entera, sin tope.
+            </Aviso>
           )}
 
-          {filtrosAbiertos && (
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-                alignItems: "center",
-                marginBottom: 10,
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid var(--border-soft)",
-                background: "var(--bg-elev-2)",
-              }}
-            >
-              <select
-                className="input-new"
-                style={{ width: 168 }}
-                value={vertical}
-                onChange={(e) => setVertical(e.target.value)}
-                aria-label="Filtrar por giro"
-              >
-                <option value="">Todos los giros</option>
-                {CRM_VERTICALES.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="input-new"
-                style={{ width: 168 }}
-                value={fuente}
-                onChange={(e) => setFuente(e.target.value)}
-                aria-label="Filtrar por fuente"
-              >
-                <option value="">Todas las fuentes</option>
-                {CRM_FUENTES.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-
-              {/* La etapa sólo filtra en la LISTA: en el tablero cada etapa
-                  ya es una columna, y filtrar por una dejaría siete vacías. */}
-              {vista === "lista" && (
-                <select
-                  className="input-new"
-                  style={{ width: 160 }}
-                  value={etapaFiltro}
-                  onChange={(e) => setEtapaFiltro(e.target.value)}
-                  aria-label="Filtrar por etapa"
-                >
-                  <option value="">Todas las etapas</option>
-                  {CRM_ETAPAS.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {socios.length > 0 && (
-                <select
-                  className="input-new"
-                  style={{ width: 190 }}
-                  value={origen}
-                  onChange={(e) => setOrigen(e.target.value)}
-                  aria-label="Filtrar por quién lo agregó"
-                >
-                  <option value="">Lo agregó cualquiera</option>
-                  <option value={ORIGEN_DALECONTROL}>Sólo los míos</option>
-                  <option value={ORIGEN_AFILIADOS}>De afiliados ({deAfiliados})</option>
-                  {socios.map(([id, nombre]) => (
-                    <option key={id} value={id}>
-                      {nombre}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {(activos.length > 0 || soloPendientes || q) && (
-                <button
-                  type="button"
-                  onClick={limpiarFiltros}
-                  style={{
-                    height: 34,
-                    padding: "0 12px",
-                    borderRadius: 8,
-                    fontSize: 12,
-                    cursor: "pointer",
-                    border: "1px solid var(--border-soft)",
-                    background: "transparent",
-                    color: "var(--text-3)",
-                    marginLeft: "auto",
-                  }}
-                >
-                  Quitar todos
-                </button>
-              )}
-            </div>
+          {tableroTruncado && (
+            <Aviso>
+              El tablero está pintando{" "}
+              <strong className="mono">{tableroTruncado.pintadas.toLocaleString("es-MX")}</strong> de{" "}
+              <strong className="mono">{tableroTruncado.de.toLocaleString("es-MX")}</strong>{" "}
+              prospectos: repartir por columna no se puede paginar. Los números de cada columna sí
+              son los de verdad.{" "}
+              <button type="button" onClick={() => conFiltros({ vista: "lista" })} style={ESTILO_ENLACE}>
+                Cámbiate a la lista
+              </button>{" "}
+              para llegar a todos.
+            </Aviso>
           )}
 
           {/* ── Embudo ─────────────────────────────────────────────── */}
           {vista === "tablero" ? (
-            <CrmTablero
-              filas={filtradas}
-              ahora={ahora}
-              mover={(id, etapa) => mover(id, etapa)}
-              alVerLista={(etapa) => {
-                setEtapaFiltro(etapa);
-                setVista("lista");
-              }}
-              alEditar={setEditando}
-              alTextos={abrirTextos}
-            />
-          ) : (
-            <CardNew noPad title={`Prospectos (${filtradas.length})`}>
-              <CrmLista
-                filas={filtradas}
+            total === 0 ? (
+              <CardNew noPad>
+                <SinResultados
+                  hayFiltros={hayFiltros}
+                  q={filtros.q}
+                  alLimpiar={() => navegar(crmFiltrosLimpios(filtros))}
+                  alCrear={() => setCreando(true)}
+                />
+              </CardNew>
+            ) : (
+              <CrmTablero
+                filas={filas}
                 ahora={ahora}
+                totales={porEtapa}
                 mover={(id, etapa) => mover(id, etapa)}
+                alVerLista={(etapa) => conFiltros({ etapa, vista: "lista" })}
                 alEditar={setEditando}
                 alTextos={abrirTextos}
               />
+            )
+          ) : (
+            <CardNew noPad title={tituloLista(total, totalGeneral, hayFiltros)}>
+              <CrmLista
+                filas={filas}
+                ahora={ahora}
+                orden={filtros.orden}
+                mover={(id, etapa) => mover(id, etapa)}
+                alOrdenar={(orden: CrmOrden) => conFiltros({ orden })}
+                alProgramar={reprogramar}
+                alEditar={setEditando}
+                alTextos={abrirTextos}
+                vacio={
+                  <SinResultados
+                    hayFiltros={hayFiltros}
+                    q={filtros.q}
+                    alLimpiar={() => navegar(crmFiltrosLimpios(filtros))}
+                    alCrear={() => setCreando(true)}
+                  />
+                }
+              />
+              {total > 0 && (
+                <CrmPaginacion
+                  filtros={filtros}
+                  total={total}
+                  totalPaginas={totalPaginas}
+                  porPagina={filtros.porPagina}
+                  alCambiar={irAPagina}
+                />
+              )}
             </CardNew>
           )}
 
           <p style={{ fontSize: 11.5, color: "var(--text-4)", marginTop: 12, maxWidth: 760 }}>
-            {listado.truncado
-              ? `Se muestran los ${filas.length} prospectos más recientes de ${listado.total}. `
-              : ""}
             Los botones de WhatsApp y llamar abren la app en este equipo y dejan la constancia en
             la bitácora del prospecto: DaleControl no manda nada por su cuenta desde aquí.
           </p>
@@ -819,10 +661,112 @@ export function CrmClient({
 
 // ═══════════════════════════════════════════════════════════════════════
 
+const ESTILO_ENLACE: React.CSSProperties = {
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  font: "inherit",
+  color: "var(--brand)",
+  textDecoration: "underline",
+  cursor: "pointer",
+};
+
+/** El título de la tarjeta de la lista dice SIEMPRE los dos números. */
+function tituloLista(total: number, totalGeneral: number, hayFiltros: boolean): string {
+  const fmt = (n: number) => n.toLocaleString("es-MX");
+  if (!hayFiltros) return `Prospectos (${fmt(total)})`;
+  return `Prospectos — ${fmt(total)} de ${fmt(totalGeneral)}`;
+}
+
+/** Un aviso de que algo no se está enseñando entero. Nunca en silencio. */
+function Aviso({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      role="status"
+      style={{
+        marginBottom: 12,
+        padding: "10px 12px",
+        borderRadius: 10,
+        border: "1px solid var(--warning-border-strong)",
+        background: "var(--warning-soft)",
+        color: "var(--text-2)",
+        fontSize: 12,
+        lineHeight: 1.5,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Lo que se ve cuando el filtro no encuentra nada. NO dice "no hay nada":
+ * dice qué se buscó y qué hacer ahora, porque el 99 % de las veces es un
+ * filtro que se quedó puesto y no un prospecto que se perdió.
+ */
+function SinResultados({
+  hayFiltros,
+  q,
+  alLimpiar,
+  alCrear,
+}: {
+  hayFiltros: boolean;
+  q: string;
+  alLimpiar: () => void;
+  alCrear: () => void;
+}) {
+  return (
+    <div style={{ padding: "44px 20px", textAlign: "center", maxWidth: 460, margin: "0 auto" }}>
+      <div
+        style={{
+          width: 46,
+          height: 46,
+          borderRadius: 14,
+          margin: "0 auto 14px",
+          display: "grid",
+          placeItems: "center",
+          background: "var(--brand-softer)",
+          border: "1px solid var(--border-brand)",
+          color: "var(--brand)",
+        }}
+      >
+        <SearchX size={20} />
+      </div>
+      <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: "var(--text-1)" }}>
+        {q.trim() ? `Nada coincide con «${q.trim()}»` : "Ningún prospecto cumple estos filtros"}
+      </h2>
+      <p style={{ fontSize: 13, color: "var(--text-3)", margin: "8px 0 18px", lineHeight: 1.55 }}>
+        {hayFiltros
+          ? "Los prospectos siguen ahí: lo que no encuentra nada es la combinación de filtros que hay puesta. Quítalos y vuelve a empezar, o cambia sólo uno."
+          : "La libreta tiene prospectos, pero ninguno cabe en esta página. Vuelve a la primera."}
+      </p>
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+        <ButtonNew variant="primary" onClick={alLimpiar}>
+          Quitar todos los filtros
+        </ButtonNew>
+        <ButtonNew variant="secondary" icon={<Plus size={13} />} onClick={alCrear}>
+          Dar de alta uno nuevo
+        </ButtonNew>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Un número que además filtra. Un KPI que sólo se puede mirar obliga a
  * bajar a los selectores a reproducirlo a mano: "hay 7 por atender" y
  * ahora hay que ir a buscarlos. Aquí el número ES el filtro.
+ *
+ * ENCENDERLO deja la pantalla como conviene para eso: la vista de lista,
+ * el orden que tiene sentido para ese número, y el OTRO eje de filtro
+ * limpio. Eso último no es un detalle — "En el embudo" filtra por
+ * situación (abiertos) y "Ya son clientes" por etapa (ganados), y
+ * encender los dos daba una lista vacía POR CONSTRUCCIÓN, con las dos
+ * tarjetas encendidas enseñando números que no se podían ver.
+ *
+ * APAGARLO sólo quita su filtro y no toca nada más: un botón que al
+ * apagarse te reordena la lista se siente estropeado aunque haga lo que
+ * dice.
  *
  * Va como <div role="button"> y no como <button>: dentro vive la tarjeta
  * entera del KPI, con sus divs, y un <div> dentro de un <button> es HTML
@@ -870,34 +814,6 @@ function KpiBoton({
     >
       {children}
     </div>
-  );
-}
-
-function BotonVista({
-  actual,
-  valor,
-  icono,
-  label,
-  alElegir,
-}: {
-  actual: Vista;
-  valor: Vista;
-  icono: React.ReactNode;
-  label: string;
-  alElegir: (v: Vista) => void;
-}) {
-  const activo = actual === valor;
-  return (
-    <button
-      type="button"
-      onClick={() => alElegir(valor)}
-      aria-pressed={activo}
-      className={`segment-new__btn${activo ? " segment-new__btn--active" : ""}`}
-      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-    >
-      {icono}
-      {label}
-    </button>
   );
 }
 
@@ -998,11 +914,12 @@ function VacioInicial({ alCrear, alImportar }: { alCrear: () => void; alImportar
           style={{
             width: 46,
             height: 46,
-            borderRadius: 12,
+            borderRadius: 14,
             margin: "0 auto 14px",
             display: "grid",
             placeItems: "center",
-            background: "var(--brand-soft)",
+            background: "var(--brand-softer)",
+            border: "1px solid var(--border-brand)",
             color: "var(--brand)",
           }}
         >
