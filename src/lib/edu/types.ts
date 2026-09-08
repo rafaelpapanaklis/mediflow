@@ -1266,7 +1266,8 @@ export type EduPrescriptionStatus =
   | "PENDIENTE"
   | "EXPEDIDA"
   | "RECHAZADA"
-  | "ANULADA";
+  | "ANULADA"
+  | "ARCHIVADA";
 
 export const EDU_PRESCRIPTION_STATUSES: EduPrescriptionStatus[] = [
   "BORRADOR",
@@ -1274,6 +1275,7 @@ export const EDU_PRESCRIPTION_STATUSES: EduPrescriptionStatus[] = [
   "EXPEDIDA",
   "RECHAZADA",
   "ANULADA",
+  "ARCHIVADA",
 ];
 
 export const EDU_PRESCRIPTION_STATUS_LABELS: Record<EduPrescriptionStatus, string> = {
@@ -1282,6 +1284,7 @@ export const EDU_PRESCRIPTION_STATUS_LABELS: Record<EduPrescriptionStatus, strin
   EXPEDIDA: "Expedida",
   RECHAZADA: "Rechazada",
   ANULADA: "Anulada",
+  ARCHIVADA: "Archivada",
 };
 
 export const EDU_PRESCRIPTION_STATUS_DESCRIPTIONS: Record<EduPrescriptionStatus, string> = {
@@ -1292,17 +1295,43 @@ export const EDU_PRESCRIPTION_STATUS_DESCRIPTIONS: Record<EduPrescriptionStatus,
   RECHAZADA: "El docente dijo que no, y dejó escrito por qué. No se imprime.",
   ANULADA:
     "Se anuló después de expedida, con motivo. No se borra: el documento existió y sale marcado.",
+  ARCHIVADA:
+    "Rechazada y guardada: sale de la lista de trabajo sin borrarse. La propuesta y el motivo del docente se siguen leyendo.",
 };
 
 /**
  * A qué estados puede pasar una receta desde donde está.
  *
- * EXPEDIDA solo lleva a ANULADA, y ANULADA y RECHAZADA no llevan a ningún
- * lado: la regla "una expedida se anula y se hace otra" escrita como dato
- * en vez de como un `if` que alguien puede olvidar en el segundo endpoint.
- * PENDIENTE → BORRADOR es la vuelta que da el docente al pedir cambios;
- * PENDIENTE → EXPEDIDA / RECHAZADA son su firma y su no, y las tres las
- * escribe la MISMA transacción que decide la autorización de la Ola 4.
+ * EXPEDIDA solo lleva a ANULADA: la regla "una expedida se anula y se hace
+ * otra", escrita como dato en vez de como un `if` que alguien puede olvidar
+ * en el segundo endpoint. PENDIENTE → BORRADOR es la vuelta que da el
+ * docente al pedir cambios; PENDIENTE → EXPEDIDA / RECHAZADA son su firma y
+ * su no, y las tres las escribe la MISMA transacción que decide la
+ * autorización de la Ola 4.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA C · RECHAZADA → ARCHIVADA, Y POR QUÉ ESTO **NO** CONTRADICE LA
+ * DECISIÓN QUE LA CASILLA ANTERIOR DEJÓ ESCRITA.
+ *
+ * H-24 quedó a medias: mover de caso en BORRADOR y retirar lo propuesto se
+ * arreglaron, pero RECHAZADA seguía sin salida (`[]`) y la receta se
+ * quedaba en la lista del alumno PARA SIEMPRE. La casilla de entonces se
+ * negó —con razón— a abrir RECHAZADA → ANULADA, y lo dejó por escrito: una
+ * ANULADA **se imprime** (marcada, con su motivo), así que darle ese camino
+ * a algo que nunca llevó la cédula de un docente sacaría papel sin firma de
+ * la escuela. Ésa era la regla, y sigue teniendo razón.
+ *
+ * ARCHIVADA no la toca. NO es imprimible —`eduRecetaPrintable` sigue
+ * diciendo que sí solo a EXPEDIDA y a ANULADA— y no es una anulación: es
+ * "guardada, fuera de la vista de trabajo". La propuesta existió, el
+ * docente dijo que no y por qué, y las dos cosas se siguen leyendo. Con
+ * motivo, con autor y con fecha, en cuatro columnas propias
+ * (`archivedAt`, `archivedByUserId`, `archivedByName`, `archiveReason`)
+ * que NO reutilizan las de la anulación: dos actos distintos compartiendo
+ * columna es cómo se pierde cuál de los dos ocurrió.
+ *
+ * ARCHIVADA es terminal. Una receta archivada no vuelve: se propone otra.
+ * ═══════════════════════════════════════════════════════════════════════
  */
 export const EDU_PRESCRIPTION_TRANSITIONS: Record<
   EduPrescriptionStatus,
@@ -1311,8 +1340,9 @@ export const EDU_PRESCRIPTION_TRANSITIONS: Record<
   BORRADOR: ["PENDIENTE"],
   PENDIENTE: ["EXPEDIDA", "RECHAZADA", "BORRADOR"],
   EXPEDIDA: ["ANULADA"],
-  RECHAZADA: [],
+  RECHAZADA: ["ARCHIVADA"],
   ANULADA: [],
+  ARCHIVADA: [],
 };
 
 // ═══════════════════════════════════════════════════════════════════════
