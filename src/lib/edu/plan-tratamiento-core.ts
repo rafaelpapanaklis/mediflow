@@ -84,6 +84,66 @@ export const EDU_PLAN_TRANSITIONS: Record<EduTreatmentPlanStatus, EduTreatmentPl
 /** Los dos estados que CIERRAN el plan y exigen `closedAt` + motivo. */
 export const EDU_PLAN_STATUSES_CERRADOS: EduTreatmentPlanStatus[] = ["COMPLETADO", "ABANDONADO"];
 
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 OLA C·fin 2 · DE QUIÉN ES UN PLAN, Y QUIÉN PUEDE CERRARLO
+//
+// Las dos reglas viven aquí, puras, porque las usan DOS sitios que no
+// pueden discrepar: el servidor (`cambiarEstadoEduPlan`, que contesta 403)
+// y la pantalla (que decide qué botón pinta). Cuando la regla vivía en los
+// dos, la pantalla ofrecía «Marcar abandonado» a un alumno y el 403 llegaba
+// después del clic.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ¿De quién es este plan?
+ *
+ * Del alumno del CASO cuando cuelga de uno; de quien lo ARMÓ cuando no.
+ * Ésa es toda la regla, y es la misma que aplica el `where` del alcance en
+ * plan-tratamiento.ts: un plan «sin caso» no es de todo el que comparta
+ * paciente, es de quien lo abrió.
+ *
+ * ⚠️ Un plan cuyo autor se dio de baja tiene `createdById` null (el FK es
+ * SetNull) y entonces no es de NADIE: lo cierra la dirección, que es quien
+ * puede reasignarlo. Falla del lado cerrado.
+ */
+export function eduPlanEsMio(
+  plan: {
+    caseId: string | null;
+    createdById: string | null;
+    case?: { student: { userId: string } } | null;
+  },
+  eduUserId: string | null | undefined,
+): boolean {
+  if (!eduUserId) return false;
+  const dueno = plan.caseId ? (plan.case?.student.userId ?? null) : plan.createdById;
+  return !!dueno && dueno === eduUserId;
+}
+
+/**
+ * ¿Puede esta persona llevar el plan a ese estado?
+ *
+ * Solo los TERMINALES piden algo: pausar y reanudar no cierran nada y los
+ * hace cualquiera con `expediente.write`.
+ *
+ *   · COMPLETADO — la dirección, el docente, o EL ALUMNO DEL PLAN. Cerrar
+ *     por terminado es la conclusión normal de su trabajo; lo que no puede
+ *     es cerrar el de otro, y hasta esta ola podía (bastaba compartir
+ *     paciente).
+ *   · ABANDONADO — solo docente y dirección. No se reabre nunca y no es un
+ *     clic que el alumno dé sin que lo sepa quien lo supervisa. Esto no
+ *     cambia en esta ola: se escribe aquí para que la pantalla lo sepa sin
+ *     tener que adivinarlo.
+ */
+export function eduPlanPuedeCerrar(
+  role: string,
+  esMio: boolean,
+  destino: EduTreatmentPlanStatus,
+): boolean {
+  if (!EDU_PLAN_STATUSES_CERRADOS.includes(destino)) return true;
+  if (role === "DIRECCION" || role === "DOCENTE") return true;
+  return destino === "COMPLETADO" && esMio;
+}
+
 export function eduPlanPuedeTransicionar(
   desde: EduTreatmentPlanStatus,
   hasta: EduTreatmentPlanStatus,

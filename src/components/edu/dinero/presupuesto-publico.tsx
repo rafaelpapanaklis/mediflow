@@ -30,6 +30,8 @@ export interface EduQuotePublicView {
   title: string;
   estadoVisible: string;
   validUntil: string | null;
+  /** El DÍA de la vigencia, ya escrito por el servidor en la zona del instituto. */
+  validUntilDia: string | null;
   totalCents: number;
   subtotalCents: number;
   discountCents: number;
@@ -78,11 +80,15 @@ export function EduPresupuestoPublico({
     }
   }
 
-  // La fecha llega en ISO del servidor y aquí solo se pinta el día: para
-  // una vigencia («vale hasta el 12 de abril») la hora no dice nada, y
-  // formatear el instante en el navegador pintaría la zona del teléfono,
-  // que puede no ser la de la escuela.
-  const vigencia = vista.validUntil ? vista.validUntil.slice(0, 10) : null;
+  // El DÍA de la vigencia lo manda el servidor ya resuelto en la zona del
+  // instituto: para una vigencia («vale hasta el 12 de abril») la hora no
+  // dice nada, y formatear el instante en el navegador pintaría la zona del
+  // teléfono, que puede no ser la de la escuela.
+  //
+  // 🔴 OLA C·fin 2 · y por eso ya no se recorta el ISO aquí: `validUntil`
+  // guarda el FINAL del día del instituto, así que sus diez primeros
+  // caracteres son el día SIGUIENTE en UTC. El paciente leía un día de más.
+  const vigencia = vista.validUntilDia;
   const puedeAceptar = vista.bloqueo === null;
 
   return (

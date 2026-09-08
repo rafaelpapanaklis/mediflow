@@ -457,11 +457,22 @@ test("#7 · la celda se convierte a texto antes de normalizar matrícula y telé
     /return typeof v === "string" \? v : String\(v\)/,
     "una matrícula 20260001 llega como number y los tres normalizadores cortan por tipo",
   );
-  // Las fechas siguen saliendo como Date: no hay columna de fecha hoy, y
-  // convertirlas aquí decidiría a escondidas un formato.
-  assert.match(limpio, /v instanceof Date/, "las fechas no se convierten a texto a la ligera");
-  // Y el resultado de una fórmula, también.
-  assert.match(limpio, /v\.result instanceof Date \? v\.result : String\(v\.result\)/);
+  // 🔴 OLA C·fin 2 · LA CELDA-FECHA YA NO SALE COMO `Date` CRUDO.
+  //
+  // La decisión de esta prueba era «no convertir a la ligera: no hay
+  // columna de fecha y elegir formato sería inventárselo». Solo que Excel
+  // AUTOFORMATEA a fecha cualquier celda ambigua —una matrícula tecleada
+  // `3/22`—, así que el `Date` no llegaba a ninguna columna de fecha:
+  // llegaba a la de la matrícula, donde `normalizeEduMatricula` corta por
+  // tipo y la fila volvía a salir en rojo con «Falta la matrícula», que es
+  // el mensaje que este mismo arreglo vino a dejar de decir.
+  //
+  // Se devuelve lo que Excel ENSEÑA en la celda, que no es inventarse un
+  // formato: es usar el que el propio archivo trae.
+  assert.match(limpio, /v instanceof Date/, "la rama de las fechas sigue siendo explícita");
+  assert.match(limpio, /if \(v instanceof Date\) return cell\.text \|\| v;/);
+  // Y el resultado de una fórmula, igual.
+  assert.match(limpio, /v\.result instanceof Date \? cell\.text \|\| v\.result/);
 });
 
 // ═══════════════════════════════════════════════════════════════════════

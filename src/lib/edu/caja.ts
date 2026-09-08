@@ -944,7 +944,19 @@ export async function createEduCharge(
   // Si la clave ya está guardada, se devuelve el cobro EXISTENTE con
   // `duplicado: true` y no se toca nada — ni el folio, ni el pago, ni una
   // línea. `descartados: 0` porque en ESTA petición no se cotizó nada.
-  const idempotencyKey = parseIdempotencyKey(input.idempotencyKey);
+  //
+  // 🔴 OLA C·fin 2 · LA CLAVE DE UNA CONVERSIÓN LA PONE EL SERVIDOR, Y NO
+  // SE PUEDE TECLEAR. Un cobro que nace de un presupuesto trae su
+  // `options.quoteId` —que solo lo escribe `convertirEduQuote`, nunca un
+  // body— y de ahí sale su clave. El separador es ":" a propósito: es
+  // exactamente el carácter que `parseIdempotencyKey` NO acepta, así que
+  // ningún cliente puede adelantarse a crear un cobro manual con la clave
+  // de un presupuesto (el id está en la URL) para que la conversión se lo
+  // devuelva como "duplicado" y le selle el `chargeId` contra un cobro que
+  // no son sus partidas.
+  const idempotencyKey = options.quoteId
+    ? `presupuesto:${options.quoteId}`
+    : parseIdempotencyKey(input.idempotencyKey);
   if (idempotencyKey) {
     const previo = await prisma.eduCharge.findFirst({
       where: { institutionId, idempotencyKey },

@@ -282,24 +282,46 @@ test("la sede del mostrador sale del selector, JAMÁS del body", () => {
 // EL idempotencyKey DE LA CONVERSIÓN DE PRESUPUESTO
 // ═════════════════════════════════════════════════════════════════════
 
-test("🔴 convertir un presupuesto pasa la clave de idempotencia", () => {
+test("🔴 convertir un presupuesto sigue siendo idempotente, y el sello va después", () => {
   const cuerpo = cuerpoDe(PRESU(), "convertirEduQuote");
   // El sello de `chargeId` va DESPUÉS de emitir: dos clics simultáneos
   // emitían dos cobros con dos folios y el segundo recibía un 409 que decía
   // "cancélalo en Caja", con el paciente delante.
-  assert.match(cuerpo, /idempotencyKey: `presupuesto-\$\{q\.id\}`/);
   const sello = cuerpo.indexOf("chargeId: null }");
   const emite = cuerpo.indexOf("await createEduCharge(");
   assert.ok(emite > 0 && sello > emite, "el sello sigue yendo después de emitir");
+  // 🔴 OLA C·fin 2 · Y LA CLAVE YA NO VIAJA POR EL BODY. Ver la prueba de
+  // abajo: se deriva dentro de createEduCharge, no aquí.
+  assert.ok(
+    !/idempotencyKey: `presupuesto-\$\{q\.id\}`/.test(cuerpo),
+    "esa clave la podía teclear cualquiera con caja.charge: el id está en la URL",
+  );
 });
 
-test("la clave derivada cumple lo que exige parseIdempotencyKey", () => {
-  // 16-80 caracteres de [A-Za-z0-9_-]. Un cuid son 25.
-  const clave = `presupuesto-${"c".repeat(25)}`;
+test("🔴 la clave derivada de un presupuesto NO la puede teclear un cliente", () => {
+  // ═══════════════════════════════════════════════════════════════════
+  // Esta prueba decía lo CONTRARIO, y por eso el veredicto la señaló:
+  // comprobaba que `presupuesto-<id>` cabía en lo que `parseIdempotencyKey`
+  // acepta del cliente. Cabía, y ahí estaba el agujero — quien tuviera
+  // `caja.charge` podía crear ANTES un cobro manual con esa clave (el id
+  // del presupuesto va en la URL), y la conversión le devolvía ESE cobro
+  // como "duplicado" y le sellaba el `chargeId` contra él: el presupuesto
+  // quedaba convertido en algo que no son sus partidas ni su importe.
+  //
+  // Ahora la clave la pone el servidor desde `options.quoteId` —que solo
+  // escribe la conversión— y lleva un ":" que el parser del cliente
+  // rechaza. Cabe en la columna (VarChar(80)) y sigue siendo determinista,
+  // que es lo único que la idempotencia necesita.
+  // ═══════════════════════════════════════════════════════════════════
+  const clave = `presupuesto:${"c".repeat(25)}`;
   assert.ok(clave.length >= 16 && clave.length <= 80);
-  assert.match(clave, /^[A-Za-z0-9_-]+$/);
-  const cuerpo = cuerpoDe(CAJA(), "parseIdempotencyKey");
-  assert.match(cuerpo, /v\.length < 16 \|\| v\.length > 80/);
+  assert.ok(!/^[A-Za-z0-9_-]+$/.test(clave), "si el cliente pudiera teclearla, el agujero seguiría");
+
+  const caja = CAJA();
+  assert.match(caja, /options\.quoteId\s*\n?\s*\?\s*`presupuesto:\$\{options\.quoteId\}`/);
+  const parser = cuerpoDe(caja, "parseIdempotencyKey");
+  assert.match(parser, /v\.length < 16 \|\| v\.length > 80/);
+  assert.match(parser, /\/\^\[A-Za-z0-9_-\]\+\$\//);
 });
 
 // ═════════════════════════════════════════════════════════════════════

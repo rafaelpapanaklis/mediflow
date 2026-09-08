@@ -124,21 +124,37 @@ function auditor(ctx: EduImportContext): EduAuditActor {
  * Así que la conversión va donde tenía que ir desde el principio: en el
  * único sitio por el que pasan TODAS las celdas de la rama xlsx.
  *
- * ⚠️ Las fechas se devuelven como `Date` y no como texto: no hay ninguna
- * columna de fecha en el padrón hoy, y convertirlas aquí decidiría a
- * escondidas un formato (¿`dd/mm` o `mm/dd`?) para el día que la haya.
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA C·fin 2 · Y UNA CELDA-FECHA EN UNA COLUMNA QUE NO ES DE FECHA.
+ *
+ * Aquí las fechas se devolvían como `Date`, con el motivo escrito: no hay
+ * ninguna columna de fecha en el padrón, y convertirlas decidiría a
+ * escondidas un formato (¿`dd/mm` o `mm/dd`?) para el día que la haya. Solo
+ * que Excel AUTOFORMATEA a fecha cualquier celda ambigua —una matrícula
+ * tecleada `3/22` se guarda como el 22 de marzo—, así que el `Date` no
+ * llegaba a ninguna columna de fecha: llegaba a la de la MATRÍCULA, donde
+ * `normalizeEduMatricula` corta por tipo y la fila volvía a salir en rojo
+ * con «Falta la matrícula» — el mismo mensaje que mentía antes del arreglo
+ * de las celdas numéricas.
+ *
+ * Se devuelve **lo que Excel enseña en la celda** (`cell.text`), que es lo
+ * que la persona escribió y lo que tiene delante cuando lee el error. No es
+ * inventarse un formato: es no inventarse ninguno y usar el que el propio
+ * archivo trae. El día que exista una columna de fecha de verdad, quien la
+ * añada la parsea en su normalizador, que es donde se sabe qué se espera.
  * ═══════════════════════════════════════════════════════════════════════
  */
 function celdaATexto(cell: ExcelJS.Cell): unknown {
   const v = cell.value as any;
   if (v === null || v === undefined) return "";
-  if (v instanceof Date) return v;
+  if (v instanceof Date) return cell.text || v;
   if (typeof v === "object") {
     // Fórmula, hipervínculo o texto enriquecido → el texto ya renderizado.
     // Un `{ formula: "…" }` guardado como matrícula sería una matrícula que
     // nadie puede leer.
     if (v.result !== undefined && v.result !== null && typeof v.result !== "object") {
-      return v.result instanceof Date ? v.result : String(v.result);
+      // Ídem para el resultado de una fórmula: lo que se ve en la celda.
+      return v.result instanceof Date ? cell.text || v.result : String(v.result);
     }
     return cell.text ?? "";
   }

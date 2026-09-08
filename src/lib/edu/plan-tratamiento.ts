@@ -45,6 +45,7 @@ import {
   EDU_PLAN_STATUSES_CERRADOS,
   eduPlanAtrasado,
   eduPlanDescripcionCon,
+  eduPlanEsMio,
   eduPlanDescripcionHumana,
   eduPlanKpis,
   eduPlanParseEntero,
@@ -55,12 +56,19 @@ import {
   eduPlanPartidasParse,
   eduPlanPartidasTotal,
   eduPlanProximaFecha,
+  eduPlanPuedeCerrar,
   eduPlanPuedeTransicionar,
   type EduPlanKpis,
   type EduPlanPartida,
   type EduTreatmentPlanStatus,
 } from "@/lib/edu/plan-tratamiento-core";
-import { eduCaseScopeWhere, eduVisibility, eduScopeIsEmpty } from "@/lib/edu/visibility";
+import {
+  eduCaseScopeWhere,
+  eduPatientScopeWhere,
+  eduStudentScopeWhere,
+  eduVisibility,
+  eduScopeIsEmpty,
+} from "@/lib/edu/visibility";
 import { getEduTarifaDePaciente } from "@/lib/edu/tarifas";
 import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 
@@ -98,13 +106,47 @@ function requireInstitution(ctx: { institutionId?: string }): string {
  * señora NO lee las notas de su ortodoncia»). Esto es la misma regla, en el
  * módulo de al lado.
  *
- * ⚠️ UN PLAN «SIN CASO» SIGUE COLGANDO DEL PACIENTE, y es deliberado: el
- * formulario ofrece «Sin caso» como primera opción y explica que colgarlo
- * de un caso es lo que lo mete en el seguimiento de ese estudiante. Un plan
- * sin caso no es de ningún alumno, así que no hay caso ajeno que proteger;
- * y filtrarlo también dejaría invisibles —para todos, dirección incluida—
- * los planes que ya existen sin caso, que es perder datos por la puerta de
- * atrás. Queda con el alcance del paciente, que es el que ya se comprobó.
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA C·fin 2 · Y EL PLAN «SIN CASO» TAMBIÉN TIENE DUEÑO.
+ *
+ * El recorte de arriba dejaba la rama `{ caseId: null }` abierta de par en
+ * par, con el argumento de que «un plan sin caso no es de ningún alumno,
+ * así que no hay caso ajeno que proteger». Ese argumento es el que falla, y
+ * falla justo en el caso que la pantalla provoca sola: el selector de caso
+ * del formulario se quedaba en «Sin caso» cuando el paciente tiene DOS
+ * casos, así que el plan desprotegido es el que se crea por defecto.
+ *
+ * La cadena, entera: el paciente P tiene la ortodoncia de Ana y la
+ * endodoncia de Beto. Beto abre un plan y el formulario lo deja sin caso.
+ * Ana entra a `/instituto/pacientes/P/plan`, LEE el plan de Beto con el
+ * texto de cada sesión, y con un PATCH lo pasa a COMPLETADO —que es
+ * TERMINAL igual que ABANDONADO (`EDU_PLAN_TRANSITIONS.COMPLETADO = []`) y
+ * lo alcanza `expediente.write`, que ALUMNO trae por defecto—: el
+ * tratamiento de otro, cerrado para siempre, sin un renglón que lo explique.
+ *
+ * SÍ tiene dueño, y el campo ya existe: `createdById`, que se escribe al
+ * crear. Así que la rama sin caso pide TRES cosas a la vez, y no una:
+ *
+ *   · el PACIENTE en el alcance de quien mira (`eduPatientScopeWhere`), que
+ *     es el mismo recorte que abre la ficha y el expediente. Va DENTRO del
+ *     `where` y no fuera: este helper también alimenta el `updateMany` de
+ *     la escritura, donde no hay ningún `getEduClinicalPatient` antes;
+ *   · el instituto, que ya viajaba;
+ *   · y el DUEÑO — quien lo armó si soy alumno; quien lo armó o cualquiera
+ *     de mis alumnos vigentes si soy docente. Dirección sigue con
+ *     `scope.kind === "all"` y no toca nada.
+ *
+ * ⚠️ Se aplica también a la LECTURA, y no solo a la escritura. Un plan que
+ * se puede leer entero —con la nota de cada sesión— es la mitad del
+ * hallazgo, y esconderlo no pierde datos de nadie: dirección los ve todos,
+ * el docente ve los de sus alumnos, y `edu_treatment_plans` la crea
+ * `sql/edu-ola-c.sql`, que todavía no está aplicado. No hay filas viejas
+ * que desaparezcan porque todavía no hay filas.
+ *
+ * ⚠️ Un plan cuyo autor se dio de baja tiene `createdById` null (el FK es
+ * SetNull) y deja de estar al alcance de un alumno o un docente: lo ve la
+ * dirección, que es quien puede reasignarlo. Falla del lado cerrado, que es
+ * el lado por el que tiene que fallar.
  * ═══════════════════════════════════════════════════════════════════════
  */
 function eduPlanScopeWhere(
@@ -116,12 +158,30 @@ function eduPlanScopeWhere(
   // Sin alcance clínico no hay plan que valga. No debería llegarse aquí
   // —getEduClinicalPatient ya contestó 404— pero un `where` que no filtra
   // nada es exactamente lo que este helper viene a impedir.
-  if (eduScopeIsEmpty(scope)) return { id: { in: [] } };
+  if (eduScopeIsEmpty(scope) || scope.kind === "none") return { id: { in: [] } };
   // Alcance completo (dirección): el paciente ya se comprobó y no hay nada
   // más que recortar.
   if (scope.kind === "all") return {};
+
+  // Quién es «el dueño» de un plan sin caso. Para el DOCENTE son dos
+  // opciones y no una: los planes que armó él y los que armaron los alumnos
+  // que supervisa HOY (la vigencia la pone el mismo helper que el resto del
+  // vertical, no una copia local del predicado).
+  const dueno: Prisma.EduTreatmentPlanWhereInput =
+    scope.kind === "own"
+      ? { createdById: scope.studentUserId }
+      : {
+          OR: [
+            { createdById: scope.supervisorUserId },
+            { createdBy: { studentProfile: eduStudentScopeWhere({ institutionId, scope, now }) } },
+          ],
+        };
+
   return {
-    OR: [{ caseId: null }, { case: eduCaseScopeWhere({ institutionId, scope, now }) }],
+    OR: [
+      { caseId: null, patient: eduPatientScopeWhere({ institutionId, scope, now }), ...dueno },
+      { case: eduCaseScopeWhere({ institutionId, scope, now }) },
+    ],
   };
 }
 
@@ -147,6 +207,15 @@ export interface EduPlanRow {
   nextExpectedAt: string | null;
   closeReason: string | null;
   createdByName: string;
+  /**
+   * 🔴 OLA C·fin 2 · ¿es MÍO? El alumno del caso, o —cuando no hay caso—
+   * quien lo armó. Viaja como booleano y no como id: la pantalla solo
+   * necesita saber si puede ofrecer el botón que CIERRA el plan, y mandar
+   * el id de otra persona sería mandar un dato que nadie va a pintar.
+   * Para dirección y para el docente que supervisa es `false` y da igual:
+   * los dos pueden cerrar por rol.
+   */
+  esMio: boolean;
   kpis: EduPlanKpis & { atrasado: boolean };
   sesiones: {
     id: string;
@@ -184,6 +253,9 @@ export async function listEduPlanes(
     orderBy: [{ status: "asc" }, { startsAt: "desc" }],
     take: EDU_PLAN_MAX_ROWS,
     include: {
+      // El alumno del caso, para poder contestar «¿es mío?» sin una
+      // segunda consulta por plan.
+      case: { select: { student: { select: { userId: true } } } },
       sessions: {
         orderBy: { sessionNumber: "asc" },
         select: {
@@ -227,6 +299,7 @@ export async function listEduPlanes(
       nextExpectedAt: p.nextExpectedAt?.toISOString() ?? null,
       closeReason: p.closeReason,
       createdByName: p.createdByName,
+      esMio: eduPlanEsMio(p, ctx.eduUserId),
       kpis: {
         ...kpis,
         atrasado: eduPlanAtrasado(p.status as EduTreatmentPlanStatus, p.nextExpectedAt, now),
@@ -582,7 +655,15 @@ export async function cambiarEstadoEduPlan(
     // #3 · ídem: cerrar el plan de otro alumno era el daño más grande de
     // los tres, porque COMPLETADO y ABANDONADO no se reabren.
     where: { id: pid, institutionId, ...eduPlanScopeWhere(ctx, institutionId, now) },
-    select: { id: true, patientId: true, status: true },
+    select: {
+      id: true,
+      patientId: true,
+      status: true,
+      // Para el candado de los estados TERMINALES de más abajo.
+      caseId: true,
+      createdById: true,
+      case: { select: { student: { select: { userId: true } } } },
+    },
   });
   if (!plan) throw new EduPadronError("Ese plan no existe o no es de tu instituto.", 404);
 
@@ -619,13 +700,43 @@ export async function cambiarEstadoEduPlan(
   // clic sin que lo sepa quien lo supervisa.
   //
   // Es la puerta MÍNIMA: el motivo ya se exigía, y sigue exigiéndose. Lo que
-  // se añade es quién puede darlo. `COMPLETADO` se deja como está —cerrar
-  // por terminado es la conclusión normal del trabajo del alumno, y su
-  // consecuencia es la que el plan promete— y `PAUSADO` no cierra nada.
+  // se añade es quién puede darlo. `PAUSADO` no cierra nada, y `COMPLETADO`
+  // tiene su propio candado — el de aquí abajo, que lo deja en manos del
+  // alumno que lleva el plan pero no de cualquiera que comparta paciente.
   // ═══════════════════════════════════════════════════════════════════
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·fin 2 · Y **COMPLETADO** TAMPOCO ES UN TERMINAL SILENCIOSO.
+  //
+  // El candado de abajo cubría un solo estado, y COMPLETADO cierra igual:
+  // `EDU_PLAN_TRANSITIONS.COMPLETADO = []`, está en
+  // `EDU_PLAN_STATUSES_CERRADOS` y se alcanza con `expediente.write`, que
+  // ALUMNO trae por defecto. Cerrar por terminado sigue siendo la
+  // conclusión normal del trabajo del alumno —por eso él SÍ puede, y por
+  // eso esto no es una copia del candado de ABANDONADO—, pero solo sobre
+  // SU plan: el del caso que lleva, o el que armó cuando no hay caso.
+  //
+  // El `where` de arriba ya no deja llegar aquí con el plan de otro. Esto
+  // es el segundo cerrojo, escrito aparte y sobre el dato leído: un
+  // recorte que vive solo dentro de un `where` es un recorte que el
+  // siguiente `findFirst` se olvida de copiar, y lo que está en juego es
+  // irreversible.
+  //
+  // La confirmación (la pantalla la pide para los dos) y el rastro (el
+  // renglón de bitácora, `closedById`, `closedAt` y el motivo) ya estaban.
+  // ═══════════════════════════════════════════════════════════════════
+  // Primero el de ABANDONADO, porque su mensaje es el que de verdad ayuda:
+  // «eso lo marca tu docente». El general de abajo lo taparía.
   if (destino === "ABANDONADO" && ctx.role !== "DIRECCION" && ctx.role !== "DOCENTE") {
     throw new EduPadronError(
       "Abandonar un plan lo cierra para siempre: no se reabre, se abre otro. Eso lo marca tu docente o la dirección. Escribe en la nota de la sesión lo que pasó y díselo.",
+      403,
+    );
+  }
+
+  if (cierra && !eduPlanPuedeCerrar(ctx.role, eduPlanEsMio(plan, ctx.eduUserId), destino)) {
+    throw new EduPadronError(
+      "Ese plan no es tuyo, y cerrarlo no se deshace. Lo cierra el alumno que lo lleva, su docente o la dirección.",
       403,
     );
   }

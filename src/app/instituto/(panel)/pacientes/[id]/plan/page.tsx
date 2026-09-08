@@ -106,6 +106,10 @@ export default async function PacientePlanPage({ params }: { params: { id: strin
         nextExpectedLabel: p.nextExpectedAt ? dia(p.nextExpectedAt) : null,
         closeReason: p.closeReason,
         createdByName: p.createdByName,
+        // 🔴 OLA C·fin 2 · lo calcula el servidor (el alumno del caso, o
+        // quien lo armó si no hay caso) y viaja como booleano: la pantalla
+        // solo necesita saber si ofrece el botón que cierra el plan.
+        esMio: p.esMio,
         kpis: {
           hechas: p.kpis.hechas,
           total: p.kpis.total,
@@ -142,6 +146,10 @@ export default async function PacientePlanPage({ params }: { params: { id: strin
       canEdit={hasEduPermission(permUser, "expediente.write")}
       veDinero={veDinero}
       canPresupuestar={canPresupuestar}
+      // Con el rol, la pantalla aplica la MISMA regla que el servidor
+      // (`eduPlanPuedeCerrar`) para decidir qué botón de cierre pinta. El
+      // 403 sigue estando; lo que se quita es el clic que siempre falla.
+      role={ctx.role}
       motivoSinPermiso="Puedes leer los planes, no armarlos ni marcar sesiones: hace falta el permiso expediente.write, el mismo que escribe una nota clínica."
     />
   );
