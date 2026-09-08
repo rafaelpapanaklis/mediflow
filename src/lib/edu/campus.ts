@@ -16,6 +16,7 @@
  * (src/lib/barber/branches.ts).
  */
 import { cookies } from "next/headers";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import { eduRequiredText, parseEduBoolean } from "@/lib/edu/padron-core";
@@ -517,6 +518,142 @@ export async function setEduCampusAccess(
   });
 
   return { allowed: quiere, campusCount, abrioTodas: !quiere && campusCount === 0 };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3B · LAS SEDES DE UNA PERSONA, DE UNA VEZ (H-112)
+//
+// 🔴 QUÉ ARREGLA. El alta de una cuenta no preguntaba la sede, y por la
+// regla de esta ola —«sin filas = TODAS las sedes»— cada persona nueva
+// nacía con acceso al instituto entero. Una universidad daba de alta a 40
+// residentes del campus norte y los 40 veían también el sur, hasta que
+// alguien los marcara UNO POR UNO en /instituto/sedes. El default abierto
+// es deliberado y está bien explicado (es lo que hace que aplicar la ola no
+// deje a nadie fuera), pero el alta ni lo mencionaba: nadie sabía que
+// estaba eligiendo.
+//
+// 🔴 POR QUÉ ESTÁ AQUÍ Y NO EN equipo.ts. `edu_user_campus_access` tiene UN
+// solo escritor y es este archivo — igual que la bitácora tiene un solo
+// `eduAudit` y la visibilidad un solo `visibility.ts`. Escribirla también
+// desde el alta serían dos sitios decidiendo qué significa "sin filas", y
+// es exactamente el detalle que no se puede desincronizar: en esa tabla, la
+// AUSENCIA de filas concede MÁS acceso, no menos. Por eso `equipo.ts` llama
+// a esta función y no toca la tabla.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Cliente Prisma o transacción: el alta escribe la persona y sus sedes juntas. */
+type EduDb = Pick<typeof prisma, "eduUserCampusAccess"> | Prisma.TransactionClient;
+
+/**
+ * Las sedes que se pueden ELEGIR al dar de alta o al editar a una persona.
+ *
+ * Solo las ACTIVAS: una sede cerrada sigue existiendo (sus turnos y sus
+ * citas históricas cuelgan de ella) pero no se le asigna gente nueva, igual
+ * que no se inscribe a nadie en una especialidad desactivada.
+ */
+export async function listEduCampusesAsignables(
+  ctx: EduClinicaContext,
+): Promise<EduCampusOption[]> {
+  const institutionId = requireInstitution(ctx);
+  const rows = await prisma.eduCampus.findMany({
+    where: { institutionId, isActive: true },
+    orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+    take: EDU_MAX_CAMPUSES,
+    select: { id: true, name: true, code: true, timezone: true, isActive: true },
+  });
+  return rows;
+}
+
+/**
+ * Valida una lista de ids de sede contra ESTE instituto.
+ *
+ * Devuelve los ids limpios, sin repetidos y en el orden en que se pintan.
+ * Lanza con un mensaje legible si alguno no es de aquí o está cerrado —
+ * callarlo y guardar el resto dejaría a una persona con menos sedes de las
+ * que quien la dio de alta creyó marcarle, y nadie se enteraría.
+ *
+ * ⚠️ Una lista VACÍA es válida y significa «todas las sedes» (la regla de
+ * la ola). Quien llama tiene que decirlo en pantalla, no suponerlo.
+ */
+export async function eduParseCampusIds(
+  ctx: EduClinicaContext,
+  raw: unknown,
+): Promise<string[]> {
+  const institutionId = requireInstitution(ctx);
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new EduPadronError("Manda la lista de sedes, o una lista vacía para dejarle todas.");
+  }
+  const pedidos: string[] = [];
+  for (const v of raw) {
+    const id = eduCleanId(v);
+    if (!id) throw new EduPadronError("Una de las sedes que mandaste no es válida.");
+    if (!pedidos.includes(id)) pedidos.push(id);
+  }
+  if (pedidos.length === 0) return [];
+  if (pedidos.length > EDU_MAX_CAMPUSES) {
+    throw new EduPadronError(`No se pueden marcar más de ${EDU_MAX_CAMPUSES} sedes.`);
+  }
+
+  const validas = await prisma.eduCampus.findMany({
+    where: { institutionId, id: { in: pedidos } },
+    select: { id: true, name: true, isActive: true },
+  });
+  const porId = new Map(validas.map((c) => [c.id, c]));
+  for (const id of pedidos) {
+    const c = porId.get(id);
+    if (!c) throw new EduPadronError("Una de las sedes que elegiste no es de este instituto.", 404);
+    if (!c.isActive) {
+      throw new EduPadronError(
+        `La sede ${c.name} está cerrada: no se le puede asignar a nadie. Ábrela primero en Sedes.`,
+      );
+    }
+  }
+  return pedidos;
+}
+
+/**
+ * Deja a UNA persona con EXACTAMENTE estas sedes. Reemplaza lo que tuviera.
+ *
+ * 🔴 LISTA VACÍA = TODAS LAS SEDES, y por eso lo devuelve dicho
+ * (`abrioTodas`): es la misma sorpresa que ya avisaba `setEduCampusAccess`
+ * al quitar la última, y leída al derecho sigue sorprendiendo. Quien llama
+ * lo pinta; callarlo sería dejar que alguien creyera que "no marqué
+ * ninguna" es "no entra a ninguna", cuando es justo lo contrario.
+ *
+ * `campusIds` tiene que venir YA validado por `eduParseCampusIds`: esta
+ * función no vuelve a preguntarle a la base si esas sedes son de aquí,
+ * porque el alta masiva la llama una vez por persona y serían N consultas
+ * para comprobar N veces lo mismo. La firma lo dice y quien llama lo
+ * cumple — los dos llamadores están en equipo.ts, a la vista.
+ *
+ * Acepta una transacción para que el alta escriba la persona y sus sedes
+ * juntas: media alta —cuenta creada, sedes no— es una persona que ve el
+ * instituto entero sin que nadie lo haya decidido.
+ */
+export async function setEduUserCampuses(
+  ctx: EduClinicaContext,
+  userId: string,
+  campusIds: string[],
+  db: EduDb = prisma,
+): Promise<{ campusIds: string[]; abrioTodas: boolean }> {
+  const institutionId = requireInstitution(ctx);
+  const uid = eduCleanId(userId);
+  if (!uid) throw new EduPadronError("Esa persona no es de este instituto.", 404);
+
+  // Se borra lo que había y se escribe lo pedido. Es un REEMPLAZO y no un
+  // diff a propósito: el diff exige leer antes, y entre la lectura y la
+  // escritura cabe otra pestaña marcando otra cosa. El `deleteMany` lleva
+  // el institutionId además del userId — un id de otra escuela no borra
+  // nada aquí.
+  await db.eduUserCampusAccess.deleteMany({ where: { institutionId, userId: uid } });
+  if (campusIds.length > 0) {
+    await db.eduUserCampusAccess.createMany({
+      data: campusIds.map((campusId) => ({ institutionId, userId: uid, campusId })),
+      skipDuplicates: true,
+    });
+  }
+  return { campusIds, abrioTodas: campusIds.length === 0 };
 }
 
 // ═══════════════════════════════════════════════════════════════════════

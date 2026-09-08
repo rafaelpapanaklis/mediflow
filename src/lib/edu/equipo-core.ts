@@ -118,6 +118,13 @@ export interface EduTeamRow {
   matricula: string | null;
   lastLogin: string | null;
   createdAt: string;
+  /**
+   * 🔴 H-112 · Las sedes a las que entra. **VACÍO = TODAS**, que es la regla
+   * de la ola de sedes y la lectura que sorprende: la ausencia de filas
+   * concede MÁS acceso, no menos. Por eso viaja a la pantalla — para que la
+   * fila lo pueda DECIR en vez de dejar un hueco que se lee como "ninguna".
+   */
+  campusIds: string[];
 }
 
 export interface EduTeamFilters {

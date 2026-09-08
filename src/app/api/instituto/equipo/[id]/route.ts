@@ -3,6 +3,7 @@ import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { parseEduBoolean } from "@/lib/edu/padron-core";
 import {
   setEduTeamMemberActive,
+  setEduTeamMemberCampuses,
   setEduTeamMemberPermissions,
   updateEduTeamMember,
   type EduTeamUpdateResult,
@@ -37,10 +38,17 @@ const CAMPOS_PERSONA = ["firstName", "lastName", "email", "phone", "role"] as co
  * Nadie edita los suyos, y una lista que quede vacía tras sanear rebota —
  * las reglas viven en setEduTeamMemberPermissions y ahí están explicadas.
  *
+ * 🔴 H-112 · `campusIds` en el body: la lista de sedes a las que entra,
+ * EXACTA (reemplaza lo que tuviera). `[]` significa TODAS —la regla de la
+ * ola de sedes— y la respuesta lo devuelve dicho (`abrioTodas`) para que la
+ * pantalla lo pueda avisar: en esa tabla, quitar todas las filas concede
+ * MÁS acceso, no menos. Ausente = no se tocan. La escritura vive en
+ * campus.ts, que es el único escritor de esa tabla.
+ *
  * 🔴 El ORDEN importa: primero los datos (que pueden cambiar el ROL), después
- * los permisos, y el estado al final. Al revés, un override guardado antes
- * del cambio de rol lo borraría el propio cambio de rol y quien lo mandó
- * creería que quedó puesto.
+ * los permisos, después las sedes, y el estado al final. Al revés, un
+ * override guardado antes del cambio de rol lo borraría el propio cambio de
+ * rol y quien lo mandó creería que quedó puesto.
  */
 export async function PATCH(
   request: Request,
@@ -54,8 +62,9 @@ export async function PATCH(
 
     const tocaEstado = body.isActive !== undefined;
     const tocaPermisos = "permissionsOverride" in body;
+    const tocaSedes = "campusIds" in body;
     const tocaPersona = CAMPOS_PERSONA.some((k) => body[k] !== undefined);
-    if (!tocaEstado && !tocaPermisos && !tocaPersona) {
+    if (!tocaEstado && !tocaPermisos && !tocaSedes && !tocaPersona) {
       return NextResponse.json({ error: "No mandaste ningún cambio." }, { status: 400 });
     }
 
@@ -75,6 +84,11 @@ export async function PATCH(
       permisos = await setEduTeamMemberPermissions(g.ctx, params.id, body.permissionsOverride);
     }
 
+    let sedes: { campusIds: string[]; abrioTodas: boolean } | null = null;
+    if (tocaSedes) {
+      sedes = await setEduTeamMemberCampuses(g.ctx, params.id, body.campusIds);
+    }
+
     let estado: { isActive: boolean; supervisionesCerradas: number } | null = null;
     if (tocaEstado) {
       const isActive = parseEduBoolean(body.isActive);
@@ -92,6 +106,7 @@ export async function PATCH(
       id: params.id,
       ...(estado ?? {}),
       ...(permisos ?? {}),
+      ...(sedes ?? {}),
       ...(persona
         ? {
             emailChanged: persona.emailChanged,

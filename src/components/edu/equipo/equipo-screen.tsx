@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, KeyRound, Pencil, Search, SlidersHorizontal, UserPlus, Users, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
@@ -21,6 +21,9 @@ import {
   getEduEffectivePermissions,
   type EduPermissionKey,
 } from "@/lib/edu/permissions";
+// H-112 · el catálogo de sedes que se puede marcar en el alta. `campus-core`
+// es un módulo PURO (sin prisma): de aquí solo sale la FORMA de una sede.
+import { eduCampusLabel, type EduCampusOption } from "@/lib/edu/campus-core";
 import {
   EDU_TEAM_BULK_CHUNK,
   eduCambioDeRolAviso,
@@ -233,6 +236,106 @@ function PanelCredenciales({
 // LA PANTALLA
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+// LAS SEDES DE UNA PERSONA (H-112)
+//
+// 🔴 EL HALLAZGO, EN UNA FRASE: el alta no preguntaba la sede, y en esta
+// tabla NO tener filas concede acceso a TODAS. Una universidad daba de alta
+// a 40 residentes del campus norte y los 40 veían también el sur, hasta que
+// alguien los marcara uno por uno en /instituto/sedes. El default abierto es
+// deliberado —es lo que hace que aplicar la ola de sedes no deje a nadie
+// fuera— pero nadie sabía que lo estaba eligiendo.
+//
+// 🔴 POR ESO EL TEXTO DE ABAJO NO ES DECORACIÓN. Un selector de casillas
+// vacío se lee como "no entra a ninguna", y aquí significa lo contrario. La
+// frase cambia según lo que hay marcado, para que no haya que deducirla.
+//
+// 🔴 Y NO SE PINTA NADA CON UNA SOLA SEDE. Casi todas las escuelas tienen
+// una, y para ellas esta ola no existe: `sedes.length < 2` esconde el bloque
+// entero, igual que el shell esconde el cambiador de sede.
+// ═══════════════════════════════════════════════════════════════════════
+
+function SelectorSedes({
+  sedes,
+  marcadas,
+  onChange,
+  disabled,
+  titulo = "Sedes a las que entra",
+}: {
+  sedes: EduCampusOption[];
+  marcadas: string[];
+  onChange: (ids: string[]) => void;
+  disabled?: boolean;
+  titulo?: string;
+}) {
+  if (sedes.length < 2) return null;
+
+  function alternar(id: string) {
+    onChange(marcadas.includes(id) ? marcadas.filter((x) => x !== id) : [...marcadas, id]);
+  }
+
+  const todas = marcadas.length === 0;
+
+  return (
+    <div className="edu-field">
+      <span className="edu-field__label">{titulo}</span>
+      <div
+        style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }}
+        role="group"
+        aria-label={titulo}
+      >
+        {sedes.map((c) => (
+          <label
+            key={c.id}
+            style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}
+          >
+            <input
+              type="checkbox"
+              checked={marcadas.includes(c.id)}
+              onChange={() => alternar(c.id)}
+              disabled={disabled}
+            />
+            <span style={{ overflowWrap: "anywhere" }}>{eduCampusLabel(c)}</span>
+          </label>
+        ))}
+      </div>
+      <span className={todas ? "edu-field__hint" : "edu-field__hint"}>
+        {todas
+          ? "Sin marcar ninguna entra a TODAS las sedes del instituto. Marca las suyas si solo trabaja en una."
+          : `Entra solo a ${marcadas.length === 1 ? "esa sede" : `esas ${marcadas.length} sedes`}. Se puede cambiar después desde su ficha.`}
+      </span>
+      {!todas && (
+        <button
+          type="button"
+          className="edu-btn edu-btn--ghost edu-btn--sm"
+          onClick={() => onChange([])}
+          disabled={disabled}
+          style={{ alignSelf: "flex-start", marginTop: 4 }}
+        >
+          Dejarle todas las sedes
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Cómo se lee en la fila a qué sedes entra alguien. Vacío = todas. */
+function sedesDeFila(campusIds: string[], sedes: EduCampusOption[]): string {
+  if (campusIds.length === 0) return "Entra a todas las sedes";
+  const nombres = campusIds
+    .map((id) => sedes.find((c) => c.id === id)?.name)
+    .filter(Boolean) as string[];
+  // Un id sin nombre = una sede cerrada (el catálogo solo trae las activas).
+  // Se cuenta, no se esconde: "entra a 2 sedes" con una cerrada sigue siendo
+  // verdad, y decir solo la abierta sería mentir por omisión.
+  const faltan = campusIds.length - nombres.length;
+  const lista = nombres.join(", ");
+  if (faltan > 0) {
+    return `Entra a ${lista || "—"}${lista ? " y" : ""} ${faltan} ${faltan === 1 ? "sede cerrada" : "sedes cerradas"}`;
+  }
+  return `Entra a ${lista}`;
+}
+
 export function EduEquipoScreen({
   rows,
   truncated,
@@ -253,6 +356,30 @@ export function EduEquipoScreen({
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // H-112 · el catálogo de sedes que se puede marcar. Se pide UNA vez al
+  // montar y no en cada diálogo: el alta es la acción principal de esta
+  // pantalla, así que tenerlo listo antes de abrir el modal evita un
+  // selector que aparece medio segundo tarde y ya con casillas marcadas.
+  //
+  // Si falla (o la escuela no tiene sedes) queda en lista vacía y el
+  // selector NO se pinta: el alta sigue funcionando exactamente como antes
+  // —sin filas = todas las sedes— en vez de quedarse bloqueada por una
+  // pantalla que no es la suya.
+  const [sedes, setSedes] = useState<EduCampusOption[]>([]);
+
+  useEffect(() => {
+    let vivo = true;
+    eduRequest<{ rows: EduCampusOption[] }>("/api/instituto/equipo/sedes")
+      .then((r) => {
+        if (vivo) setSedes(r?.rows ?? []);
+      })
+      .catch(() => {
+        /* sin sedes: el selector no se pinta y el alta sigue igual */
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   const hayFiltros = Boolean(filters.role || filters.estado || filters.q);
 
@@ -509,6 +636,14 @@ export function EduEquipoScreen({
                     )}
                   </span>
                   {p.phone && <span className="edu-cell__sub">{p.phone}</span>}
+                  {/* H-112 · con una sola sede no se dice nada (casi todas
+                      las escuelas). Con dos o más, la fila CONTESTA la
+                      pregunta que nadie podía contestar sin abrir otra
+                      pantalla — incluido el caso que sorprende: sin filas
+                      marcadas, entra a todas. */}
+                  {sedes.length > 1 && (
+                    <span className="edu-cell__sub">{sedesDeFila(p.campusIds, sedes)}</span>
+                  )}
                 </div>
 
                 <div className="edu-cell">
@@ -622,13 +757,16 @@ export function EduEquipoScreen({
       )}
 
       {alta === "individual" && (
-        <ModalAlta onClose={() => setAlta(null)} onDone={alCrear} />
+        <ModalAlta sedes={sedes} onClose={() => setAlta(null)} onDone={alCrear} />
       )}
-      {alta === "masiva" && <ModalMasiva onClose={() => setAlta(null)} onDone={alCrear} />}
+      {alta === "masiva" && (
+        <ModalMasiva sedes={sedes} onClose={() => setAlta(null)} onDone={alCrear} />
+      )}
       {datosDe && (
         <ModalPersona
           persona={datosDe}
           viewerRole={viewerRole}
+          sedes={sedes}
           onClose={() => setDatosDe(null)}
           onDone={(mensaje) => {
             setDatosDe(null);
@@ -683,12 +821,14 @@ export function EduEquipoScreen({
 function ModalPersona({
   persona,
   viewerRole,
+  sedes,
   onClose,
   onDone,
   onPasswordReset,
 }: {
   persona: EduTeamRow;
   viewerRole: EduRole;
+  sedes: EduCampusOption[];
   onClose: () => void;
   onDone: (mensaje: string) => void;
   onPasswordReset: (resultado: EduTeamAltaResult) => void;
@@ -698,6 +838,9 @@ function ModalPersona({
   const [email, setEmail] = useState(persona.email);
   const [phone, setPhone] = useState(persona.phone ?? "");
   const [role, setRole] = useState<EduRole>(persona.role);
+  // H-112 · «editable después desde la persona»: la otra mitad del hallazgo.
+  // Arranca de lo que hay guardado, que es lo que la fila ya está diciendo.
+  const [campusIds, setCampusIds] = useState<string[]>(persona.campusIds ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // El cambio de ROL pide confirmación aparte: no es editar una columna, es
@@ -716,12 +859,20 @@ function ModalPersona({
     (r) => r === persona.role || !eduTeamGuardDireccion(viewerRole, r, "crear"),
   );
 
+  // Las sedes se comparan como CONJUNTO: marcar y desmarcar la misma
+  // casilla deja otro orden en el array y no es un cambio.
+  const sedesOriginales = persona.campusIds ?? [];
+  const sedesCambian =
+    campusIds.length !== sedesOriginales.length ||
+    campusIds.some((id) => !sedesOriginales.includes(id));
+
   const hayCambios =
     firstName.trim() !== persona.firstName ||
     lastName.trim() !== persona.lastName ||
     correoCambia ||
     phone.trim() !== (persona.phone ?? "") ||
-    rolCambia;
+    rolCambia ||
+    sedesCambian;
 
   async function guardar() {
     // El aviso del cambio de rol se enseña UNA vez y hay que confirmarlo.
@@ -732,24 +883,39 @@ function ModalPersona({
     setError(null);
     setBusy(true);
     try {
-      const res = await eduRequest<{ overrideDescartado?: string[]; emailChanged?: boolean }>(
-        `/api/instituto/equipo/${persona.id}`,
-        {
-          method: "PATCH",
-          body: {
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            email: email.trim(),
-            // "" borra el teléfono a propósito: se capturó mal y no hay otro.
-            phone: phone.trim(),
-            ...(rolCambia ? { role } : {}),
-          },
+      const res = await eduRequest<{
+        overrideDescartado?: string[];
+        emailChanged?: boolean;
+        abrioTodas?: boolean;
+      }>(`/api/instituto/equipo/${persona.id}`, {
+        method: "PATCH",
+        body: {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
+          // "" borra el teléfono a propósito: se capturó mal y no hay otro.
+          phone: phone.trim(),
+          ...(rolCambia ? { role } : {}),
+          // Solo si cambian: mandarlas siempre reescribiría sus filas de
+          // acceso en cada guardado de un teléfono, y dejaría un renglón de
+          // bitácora por algo que nadie tocó.
+          ...(sedesCambian ? { campusIds } : {}),
         },
-      );
+      });
       const nombre = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
       const partes = [`Se guardaron los datos de ${nombre}.`];
       if (res?.emailChanged) {
         partes.push(`Desde ahora entra con ${email.trim().toLowerCase()}: avísale.`);
+      }
+      if (sedesCambian) {
+        // 🔴 «Se le quitaron todas» se lee como «ya no entra a ninguna» y
+        // significa lo contrario. El servidor lo devuelve dicho y aquí se
+        // repite con todas las letras.
+        partes.push(
+          res?.abrioTodas || campusIds.length === 0
+            ? "Ya no tiene sedes marcadas, así que entra a TODAS las del instituto."
+            : `Entra a ${campusIds.length} ${campusIds.length === 1 ? "sede" : "sedes"}.`,
+        );
       }
       if (rolCambia) {
         partes.push(`Ahora es ${EDU_ROLE_LABELS[role]}.`);
@@ -960,6 +1126,13 @@ function ModalPersona({
           )}
         </div>
       )}
+
+      <SelectorSedes
+        sedes={sedes}
+        marcadas={campusIds}
+        onChange={setCampusIds}
+        disabled={busy}
+      />
 
       {/* ── RESTABLECER LA CONTRASEÑA ────────────────────────────────────
           Vive aquí y no en una fila de la tabla porque es lo que se busca
@@ -1190,9 +1363,11 @@ function ModalPermisos({
 // ═══════════════════════════════════════════════════════════════════════
 
 function ModalAlta({
+  sedes,
   onClose,
   onDone,
 }: {
+  sedes: EduCampusOption[];
   onClose: () => void;
   onDone: (resultados: EduTeamAltaResult[], aviso?: string | null) => void;
 }) {
@@ -1201,6 +1376,9 @@ function ModalAlta({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<EduRole | "">("");
+  // H-112 · vacío = todas las sedes, que es lo que hacía antes. El selector
+  // lo DICE con esas palabras; ver SelectorSedes.
+  const [campusIds, setCampusIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1210,7 +1388,7 @@ function ModalAlta({
     try {
       const res = await eduRequest<EduTeamAltaResult>("/api/instituto/equipo", {
         method: "POST",
-        body: { firstName, lastName, email, role, phone: phone || null },
+        body: { firstName, lastName, email, role, phone: phone || null, campusIds },
       });
       onDone([res]);
     } catch (err) {
@@ -1333,10 +1511,13 @@ function ModalAlta({
         </div>
       </div>
 
+      <SelectorSedes sedes={sedes} marcadas={campusIds} onChange={setCampusIds} disabled={busy} />
+
       {role === "ALUMNO" && (
         <p className="edu-note">
           Crear la cuenta no lo inscribe: después hay que darle matrícula, especialidad y generación
-          desde Estudiantes.
+          desde Estudiantes. Si vas a dar de alta a una generación entera, usa «Importar padrón»
+          desde Estudiantes: crea la cuenta y la inscribe de una vez.
         </p>
       )}
     </EduModal>
@@ -1353,14 +1534,20 @@ function ModalAlta({
 // ═══════════════════════════════════════════════════════════════════════
 
 function ModalMasiva({
+  sedes,
   onClose,
   onDone,
 }: {
+  sedes: EduCampusOption[];
   onClose: () => void;
   onDone: (resultados: EduTeamAltaResult[], aviso?: string | null) => void;
 }) {
   const [texto, setTexto] = useState("");
   const [rolPorDefecto, setRolPorDefecto] = useState<EduRole>("ALUMNO");
+  // H-112 · la MISMA sede para toda la lista. Es justo el caso del hallazgo:
+  // «una universidad da de alta a 40 residentes del norte», y hasta esta ola
+  // los 40 quedaban con las dos sedes.
+  const [campusIds, setCampusIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [progreso, setProgreso] = useState<{ hechas: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1403,6 +1590,8 @@ function ModalMasiva({
                 // de validarlo sin quedarse con el dato.
                 phone: f.phone,
               })),
+              // H-112 · las mismas sedes para las 25 del trozo.
+              campusIds,
             },
           },
         );
@@ -1503,6 +1692,14 @@ function ModalMasiva({
           ))}
         </select>
       </div>
+
+      <SelectorSedes
+        sedes={sedes}
+        marcadas={campusIds}
+        onChange={setCampusIds}
+        disabled={busy}
+        titulo="Sedes para toda la lista"
+      />
 
       {filas.length > 0 && <VistaPrevia filas={filas} listas={listas.length} errores={conError.length} />}
     </EduModal>

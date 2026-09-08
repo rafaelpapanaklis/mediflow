@@ -59,6 +59,14 @@ import {
 // pantalla de permisos. TODO lo que venga del cliente pasa por él antes de
 // guardarse en permissionsOverride — una key inventada no se guarda.
 import { sanitizeEduPermissionKeys } from "@/lib/edu/permissions";
+// H-112 · las sedes de una persona. `campus.ts` es el ÚNICO escritor de
+// edu_user_campus_access (ver su §3B): aquí se le pide, nunca se toca la
+// tabla. En esa tabla la AUSENCIA de filas concede MÁS acceso, así que dos
+// sitios decidiendo qué significa "vacío" no es una duplicación estética.
+import { eduParseCampusIds, setEduUserCampuses } from "@/lib/edu/campus";
+// Ola C · la bitácora. Un solo escritor, y NUNCA lanza: si el renglón de
+// auditoría no entra, el alta sigue.
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 
 /** El error con status HTTP del vertical, otra vez el MISMO: `eduApiError`
  *  lo mapea tal cual y un error propio saldría como 500 genérico. */
@@ -71,6 +79,42 @@ export interface EduTeamContext {
   institutionId: string;
   eduUserId: string;
   role: EduRole;
+  /**
+   * Ola C · solo para la BITÁCORA: el nombre del actor va CONGELADO en el
+   * renglón (dar de baja a alguien o ascenderlo no puede reescribir con qué
+   * sombrero hizo algo ayer). Opcional a propósito, para poder seguir
+   * llamando a estas funciones desde una prueba sin fabricar un EduUser
+   * entero — el `EduContext` real siempre lo trae.
+   */
+  user?: { firstName: string; lastName: string } | null;
+}
+
+/** El actor de la bitácora a partir del contexto. Ver el comentario de arriba. */
+function auditor(ctx: EduTeamContext): EduAuditActor {
+  return {
+    institutionId: ctx.institutionId,
+    eduUserId: ctx.eduUserId,
+    role: ctx.role,
+    user: { firstName: ctx.user?.firstName ?? "", lastName: ctx.user?.lastName ?? "" },
+  };
+}
+
+/**
+ * H-04 · el rastro de «QUIÉN tocó esta cuenta y cuándo», para meterlo en el
+ * `data` de cada escritura sobre `edu_users`.
+ *
+ * Va en TODAS las escrituras de este archivo y no en algunas: la pregunta
+ * que la dirección hace un martes es «¿quién le cambió esto?», y una
+ * columna que solo se llena a veces contesta «no se sabe» exactamente igual
+ * que una vacía.
+ *
+ * `updatedByAt` es APARTE de `updatedAt` a propósito: `updatedAt` lo mueve
+ * cualquier escritura (un `lastLogin`, por ejemplo) y lo que hay que poder
+ * contestar es cuándo la tocó una PERSONA. Y de paso es lo que ancla la
+ * caducidad de la contraseña temporal (H-153, ver puerta-core.ts).
+ */
+function rastro(ctx: EduTeamContext, now: Date) {
+  return { updatedById: ctx.eduUserId, updatedByAt: now };
 }
 
 function requireInstitution(ctx: EduTeamContext): string {
@@ -235,6 +279,11 @@ export async function listEduTeam(
       lastLogin: true,
       createdAt: true,
       studentProfile: { select: { id: true, matricula: true } },
+      // H-112 · a qué sedes entra. Viaja para que el editor de la persona
+      // arranque de lo que de verdad hay marcado, y para que la fila pueda
+      // decir «entra a todas» cuando NO hay ninguna — que es la lectura que
+      // sorprende y la que nadie hacía.
+      campusAccess: { select: { campusId: true } },
     },
   });
 
@@ -259,6 +308,9 @@ export async function listEduTeam(
       matricula: u.studentProfile?.matricula ?? null,
       lastLogin: iso(u.lastLogin),
       createdAt: u.createdAt.toISOString(),
+      // Vacío = TODAS las sedes (la regla de la ola de sedes). La pantalla
+      // lo dice con esas palabras; aquí solo se transporta.
+      campusIds: u.campusAccess.map((a) => a.campusId),
     })),
   };
 }
@@ -286,6 +338,20 @@ export async function createEduTeamMember(
     phone?: unknown;
   },
   institutionName: string,
+  /**
+   * 🔴 H-112 · LAS SEDES A LAS QUE ENTRA, elegidas en el mismo paso del
+   * alta. Tienen que venir YA validadas contra este instituto
+   * (`eduParseCampusIds`, campus.ts): el endpoint las valida UNA vez y el
+   * alta masiva las reusa para las 25 filas, en vez de preguntarle a la
+   * base lo mismo veinticinco veces.
+   *
+   * ⚠️ Lista VACÍA = TODAS las sedes. Es la regla de la ola de sedes y NO
+   * se cambia aquí (cambiarla dejaría fuera a todo el mundo el día que se
+   * aplicó): lo que cambia es que ahora el alta lo PREGUNTA y la pantalla
+   * dice qué significa no marcar ninguna.
+   */
+  campusIds: string[] = [],
+  now: Date = new Date(),
 ): Promise<EduTeamAltaResult> {
   const institutionId = requireInstitution(ctx);
 
@@ -378,32 +444,65 @@ export async function createEduTeamMember(
   }
 
   try {
-    const fila = await prisma.eduUser.create({
-      data: {
-        institutionId,
-        supabaseId,
+    // 🔴 LA PERSONA Y SUS SEDES, EN LA MISMA TRANSACCIÓN. Media alta
+    // —cuenta creada, sedes no— es una persona con acceso al instituto
+    // ENTERO sin que nadie lo haya decidido, que es exactamente el H-112
+    // visto desde el otro lado.
+    const fila = await prisma.$transaction(async (tx) => {
+      const creada = await tx.eduUser.create({
+        data: {
+          institutionId,
+          supabaseId,
+          email,
+          firstName,
+          lastName,
+          role,
+          phone,
+          isActive: true,
+          // El índice sin acentos se escribe AQUÍ, en el mismo create: una
+          // persona que existe y no se puede buscar es una persona que, para
+          // quien la busca, no existe.
+          searchIndex: eduUserSearchIndex({ firstName, lastName, email, phone }),
+          // La contraseña la generó el sistema y la conoce quien dio de alta:
+          // esa persona no puede quedarse con ella. Cuando se REUSA una
+          // cuenta no se marca, porque esa persona ya eligió su contraseña y
+          // obligarla a cambiarla la sacaría de su otro producto.
+          //
+          // Desde la ola de cierre (P2-9) esta bandera POR FIN tiene lector:
+          // el layout del panel manda a /instituto/cambiar-contrasena a quien
+          // la traiga encendida, y no deja pasar hasta que la persona define
+          // la suya (POST /api/instituto/auth/cambiar-contrasena la levanta).
+          mustChangePassword: !reused,
+          // H-04 · quién dio de alta a esta persona y cuándo. Y H-153: es el
+          // ancla de la caducidad de la temporal (ver puerta-core.ts) — sin
+          // esta fecha, "cuándo se emitió" solo se podría adivinar.
+          ...rastro(ctx, now),
+        },
+        select: { id: true },
+      });
+      // El único escritor de edu_user_campus_access, con la MISMA `tx`.
+      await setEduUserCampuses(ctx, creada.id, campusIds, tx);
+      return creada;
+    });
+
+    // Bitácora (H-162). Va DESPUÉS de la transacción y nunca lanza: un
+    // renglón de auditoría que no entra no puede tumbar un alta que sí pasó.
+    // No se registra la contraseña temporal en ninguna parte.
+    await eduAudit(auditor(ctx), {
+      action: "create",
+      entity: "user",
+      entityId: fila.id,
+      after: {
         email,
         firstName,
         lastName,
         role,
         phone,
         isActive: true,
-        // El índice sin acentos se escribe AQUÍ, en el mismo create: una
-        // persona que existe y no se puede buscar es una persona que, para
-        // quien la busca, no existe.
-        searchIndex: eduUserSearchIndex({ firstName, lastName, email, phone }),
-        // La contraseña la generó el sistema y la conoce quien dio de alta:
-        // esa persona no puede quedarse con ella. Cuando se REUSA una
-        // cuenta no se marca, porque esa persona ya eligió su contraseña y
-        // obligarla a cambiarla la sacaría de su otro producto.
-        //
-        // Desde la ola de cierre (P2-9) esta bandera POR FIN tiene lector:
-        // el layout del panel manda a /instituto/cambiar-contrasena a quien
-        // la traiga encendida, y no deja pasar hasta que la persona define
-        // la suya (POST /api/instituto/auth/cambiar-contrasena la levanta).
         mustChangePassword: !reused,
+        reusoCuentaExistente: reused,
+        sedes: campusIds.length === 0 ? "todas" : campusIds.join(","),
       },
-      select: { id: true },
     });
 
     return {
@@ -450,6 +549,8 @@ export async function createEduTeamMembers(
   ctx: EduTeamContext,
   filas: unknown,
   institutionName: string,
+  /** H-112 · las MISMAS sedes para todo el trozo. Ya validadas. */
+  campusIds: string[] = [],
 ): Promise<EduTeamAltaResult[]> {
   requireInstitution(ctx);
   if (!Array.isArray(filas)) {
@@ -468,9 +569,13 @@ export async function createEduTeamMembers(
   }
 
   const salida: EduTeamAltaResult[] = [];
+  // Una sola hora para todo el trozo: veinticinco filas de la misma tanda
+  // con veinticinco marcas de tiempo distintas se leen como veinticinco
+  // altas separadas cuando alguien mire la bitácora dentro de un año.
+  const now = new Date();
   for (const fila of filas) {
     const input = (fila ?? {}) as Record<string, unknown>;
-    salida.push(await createEduTeamMember(ctx, input, institutionName));
+    salida.push(await createEduTeamMember(ctx, input, institutionName, campusIds, now));
   }
   return salida;
 }
@@ -570,7 +675,8 @@ export async function setEduTeamMemberActive(
   const { supervisionesCerradas } = await prisma.$transaction(async (tx) => {
     const cambio = await tx.eduUser.updateMany({
       where: { id: persona.id, institutionId, isActive: !isActive },
-      data: { isActive },
+      // H-04 · con el rastro de quién la dio de baja (o la reactivó).
+      data: { isActive, ...rastro(ctx, now) },
     });
     if (cambio.count === 0) {
       throw new EduPadronError(
@@ -593,6 +699,14 @@ export async function setEduTeamMemberActive(
       return { supervisionesCerradas: cerradas.count };
     }
     return { supervisionesCerradas: 0 };
+  });
+
+  await eduAudit(auditor(ctx), {
+    action: isActive ? "update" : "delete",
+    entity: "user",
+    entityId: persona.id,
+    before: { isActive: !isActive },
+    after: { isActive, supervisionesCerradas },
   });
 
   return { id: persona.id, isActive, supervisionesCerradas };
@@ -702,9 +816,18 @@ export async function setEduTeamMemberPermissions(
   // entre la lectura y esta escritura, el guardia de arriba se resolvió
   // contra un rol que ya no es el suyo — y los permisos que se guardarían
   // serían los que se marcaron para el rol viejo.
+  const anterior = persona.permissionsOverride ?? [];
   const escrito = await prisma.eduUser.updateMany({
     where: { id: persona.id, institutionId, role: persona.role },
-    data: { permissionsOverride: override },
+    data: {
+      permissionsOverride: override,
+      // 🔴 H-04 · EL OVERRIDE QUE SE VA NO DESAPARECE. Hasta esta ola, la
+      // única forma de recuperar lo que alguien tenía marcado era que quien
+      // lo cambió lo hubiera apuntado del mensaje verde. Ahora queda en la
+      // fila (y el diff completo, en la bitácora).
+      permissionsOverridePrevious: anterior,
+      ...rastro(ctx, new Date()),
+    },
   });
   if (escrito.count === 0) {
     throw new EduPadronError(
@@ -712,6 +835,15 @@ export async function setEduTeamMemberPermissions(
       409,
     );
   }
+
+  await eduAudit(auditor(ctx), {
+    action: "update",
+    entity: "user",
+    entityId: persona.id,
+    before: { permissionsOverride: anterior.join(",") || "(el default del rol)" },
+    after: { permissionsOverride: override.join(",") || "(el default del rol)" },
+  });
+
   return { id: persona.id, permissionsOverride: override };
 }
 
@@ -891,12 +1023,30 @@ export async function updateEduTeamMember(
   const finalEmail = cambios.email ?? persona.email;
   const finalPhone = cambios.phone !== undefined ? cambios.phone : persona.phone;
 
+  const now = new Date();
+  const overrideAnterior = persona.permissionsOverride ?? [];
   const data: Prisma.EduUserUpdateManyMutationInput = {
     ...(cambios.firstName !== undefined && { firstName: cambios.firstName }),
     ...(cambios.lastName !== undefined && { lastName: cambios.lastName }),
     ...(cambios.phone !== undefined && { phone: cambios.phone }),
     ...(emailChanged && { email: cambios.email }),
-    ...(roleChanged && { role: cambios.role, permissionsOverride: [] }),
+    ...(roleChanged && {
+      role: cambios.role,
+      permissionsOverride: [],
+      // 🔴 H-04 · el override que BORRA el cambio de rol queda guardado, y
+      // H-114 · el rol anterior también, con su fecha. Un alumno que se
+      // gradúa y vuelve de docente es la misma persona con dos historias, y
+      // hasta esta ola la primera desaparecía en el instante del cambio: la
+      // única constancia era el mensaje verde que quien lo hizo tenía que
+      // apuntar a mano.
+      permissionsOverridePrevious: overrideAnterior,
+      rolePrevious: persona.role as EduRole,
+      roleChangedAt: now,
+    }),
+    // H-04 · quién tocó la ficha, en TODOS los casos (no solo al cambiar el
+    // rol): la pregunta «¿quién le cambió el correo?» es la que no se podía
+    // contestar.
+    ...rastro(ctx, now),
     searchIndex: eduUserSearchIndex({
       firstName: finalFirst,
       lastName: finalLast,
@@ -1002,11 +1152,33 @@ export async function updateEduTeamMember(
     throw err;
   }
 
+  await eduAudit(auditor(ctx), {
+    action: "update",
+    entity: "user",
+    entityId: persona.id,
+    before: {
+      firstName: persona.firstName,
+      lastName: persona.lastName,
+      email: persona.email,
+      phone: persona.phone,
+      role: persona.role,
+      ...(roleChanged && { permissionsOverride: overrideAnterior.join(",") }),
+    },
+    after: {
+      firstName: finalFirst,
+      lastName: finalLast,
+      email: finalEmail,
+      phone: finalPhone,
+      role: roleChanged ? cambios.role : persona.role,
+      ...(roleChanged && { permissionsOverride: "(borrado por el cambio de rol)" }),
+    },
+  });
+
   return {
     id: persona.id,
     emailChanged,
     roleChanged,
-    overrideDescartado: roleChanged ? (persona.permissionsOverride ?? []) : [],
+    overrideDescartado: roleChanged ? overrideAnterior : [],
   };
 }
 
@@ -1092,7 +1264,11 @@ export async function resetEduTeamMemberPassword(
   // mientras tanto, la marca no se escribe y se dice.
   const marcado = await prisma.eduUser.updateMany({
     where: { id: persona.id, institutionId, isActive: true },
-    data: { mustChangePassword: true },
+    // 🔴 `rastro` NO es decoración aquí: `updatedByAt` es lo que ANCLA la
+    // caducidad de esta temporal (H-153, puerta-core.ts). Sin esta fecha, la
+    // temporal recién emitida heredaría la antigüedad de la cuenta y podría
+    // nacer caducada.
+    data: { mustChangePassword: true, ...rastro(ctx, new Date()) },
   });
   if (marcado.count === 0) {
     // La contraseña de Auth YA cambió. No se revierte —no la tenemos— pero
@@ -1103,10 +1279,73 @@ export async function resetEduTeamMemberPassword(
     );
   }
 
+  // La contraseña NO entra a la bitácora, ni la vieja ni la nueva. Lo que
+  // se registra es el ACTO: quién le restableció el acceso a quién.
+  await eduAudit(auditor(ctx), {
+    action: "update",
+    entity: "user",
+    entityId: persona.id,
+    before: { mustChangePassword: persona.mustChangePassword },
+    after: { mustChangePassword: true, contrasenaRestablecida: true },
+  });
+
   return {
     id: persona.id,
     name: eduTeamFullName(persona),
     email: persona.email,
     tempPassword,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 8 · LAS SEDES DE UNA PERSONA (H-112) — editables después del alta
+//
+// El alta ya las pregunta; esto es la otra mitad, «editable después desde
+// la persona»: la misma casilla, en el mismo diálogo desde el que se
+// corrige su correo o su rol, para que no haya que ir a otra pantalla y
+// buscarla en una lista de doscientos nombres.
+//
+// ⚠️ La pantalla /instituto/sedes SIGUE existiendo y sigue siendo la buena
+// para la otra pregunta —«¿quién entra al campus norte?»—, que se contesta
+// mirando una sede y no una persona. Son las dos caras de la misma tabla y
+// las dos escriben por el mismo sitio (campus.ts).
+// ═══════════════════════════════════════════════════════════════════════
+
+export async function setEduTeamMemberCampuses(
+  ctx: EduTeamContext,
+  memberId: string,
+  rawCampusIds: unknown,
+): Promise<{ id: string; campusIds: string[]; abrioTodas: boolean }> {
+  const institutionId = requireInstitution(ctx);
+
+  const persona = await prisma.eduUser.findFirst({
+    where: { id: memberId, institutionId },
+    select: {
+      id: true,
+      role: true,
+      campusAccess: { select: { campusId: true } },
+    },
+  });
+  if (!persona) throw new EduPadronError("Esa persona no es de este instituto.", 404);
+
+  // 🔴 H-16 · a una cuenta de DIRECCION solo la toca otra de DIRECCION.
+  // Decidir a qué sedes entra la dirección de la escuela es decidir qué
+  // parte de su propia escuela ve, así que va por el mismo guardia que sus
+  // datos y sus permisos.
+  const guard = eduTeamGuardDireccion(ctx.role, persona.role as EduRole, "datos");
+  if (guard) throw new EduPadronError(guard, 403);
+
+  const antes = persona.campusAccess.map((a) => a.campusId);
+  const campusIds = await eduParseCampusIds(ctx, rawCampusIds);
+  const res = await setEduUserCampuses(ctx, persona.id, campusIds);
+
+  await eduAudit(auditor(ctx), {
+    action: "update",
+    entity: "user",
+    entityId: persona.id,
+    before: { sedes: antes.length === 0 ? "todas" : antes.join(",") },
+    after: { sedes: campusIds.length === 0 ? "todas" : campusIds.join(",") },
+  });
+
+  return { id: persona.id, campusIds: res.campusIds, abrioTodas: res.abrioTodas };
 }
