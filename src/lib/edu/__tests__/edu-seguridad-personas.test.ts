@@ -151,12 +151,30 @@ test("🔴 H-03: la allowlist MÍNIMA es cambiar contraseña, cerrar sesión y e
     .sort();
   assert.deepEqual(deAuth, ["auth/cambiar-contrasena", "auth/logout", "auth/session"]);
 
-  // Y las otras dos exentas no son del panel: una es pública (el paciente
-  // firma su carta) y la otra la llama el cron.
+  // Y las otras exentas no son del panel: dos son públicas de PACIENTE, con
+  // el token de la liga como única credencial, y la otra la llama el cron.
+  //
+  // 🔴 ESTA LISTA ES UN CANDADO, NO UN INVENTARIO: está clavada a mano para
+  // que una cuarta ruta sin guardia no entre en silencio. Si esta prueba te
+  // falla, NO añadas la ruta aquí sin más — mira primero si de verdad tiene
+  // que ser pública, y sólo entonces decláralas en las dos partes.
+  //
+  // `presupuestos/publico/[token]` entró al INTEGRAR la Ola C, y por eso no
+  // la traía ninguna rama: la ruta viene de #225 y el guardia de #222, así
+  // que el choque sólo existe con las dos juntas. Se admitió tras revisarla:
+  // token de 32 bytes de randomBytes, forma validada antes de tocar la base,
+  // token inválido e inexistente devuelven los dos 404 (sin oráculo), rate
+  // limit por IP, y el payload no lleva paciente, caso, institución ni autor.
+  // Es el mismo diseño que la carta de consentimiento, y pasarla por
+  // eduApiGuard —que exige sesión— dejaría al paciente sin poder abrirla.
   const resto = Object.keys(EDU_API_RUTAS_SIN_GUARD)
     .filter((r) => !r.startsWith("auth/"))
     .sort();
-  assert.deepEqual(resto, ["consentimientos/publico/[token]", "cron/recordatorios"]);
+  assert.deepEqual(resto, [
+    "consentimientos/publico/[token]",
+    "cron/recordatorios",
+    "presupuestos/publico/[token]",
+  ]);
 });
 
 test("🔴 H-03 (fuente): eduApiGuard corta con 403 por mustChangePassword ANTES de mirar el permiso", () => {

@@ -42,6 +42,8 @@ export const EDU_API_RUTAS_SIN_GUARD: Record<string, string> = {
     "La carta que firma el PACIENTE desde su WhatsApp. No hay sesión de instituto: el candado es el token de la liga y su caducidad (src/lib/edu/consentimientos.ts).",
   "cron/recordatorios":
     "Lo llama el cron de Vercel, no una persona. Se autentica con CRON_SECRET, que es otro candado distinto del de la sesión.",
+  "presupuestos/publico/[token]":
+    "El presupuesto que el PACIENTE abre y acepta desde la liga que le mandaron, sin sesión de instituto: el candado es el token de 32 bytes de randomBytes (src/lib/edu/presupuestos.ts), igual que la carta de consentimiento de arriba. Añadida al INTEGRAR la Ola C: la ruta llega en #225 y el guardia en #222, así que ninguna de las dos ramas por separado podía declararla.",
 };
 
 /** ¿Esta ruta está exenta del guardia, y por qué? `null` = no lo está. */
