@@ -171,6 +171,21 @@ export interface EduPadronFilters {
   cohortId: string | null;
   status: EduStudentStatus | null;
   q: string | null;
+  /**
+   * 🔴 H-106 · LA PÁGINA, 1-based. Sin ella, los alumnos a partir del 301
+   * eran INALCANZABLES: la lista decía «380 estudiantes (se muestran los
+   * primeros 300)» —honesto y sin salida—, y como el orden es por matrícula
+   * ascendente, los 80 que se quedaban fuera eran justo los de la
+   * generación más nueva. La única forma de llegar a ellos era adivinar un
+   * filtro que los recortara por debajo de 300.
+   *
+   * Es OPCIONAL a propósito, y AUSENTE cuando es la primera: este objeto
+   * es el espejo de la query string, y `?pagina=1` no se escribe en la URL.
+   * Así ningún constructor de filtros que ya existía tiene que cambiar, y
+   * "sin página" significa la primera. Quien lo lee lo pasa por
+   * `eduPadronPagina`, que resuelve el ausente.
+   */
+  page?: number;
 }
 
 export const EDU_PADRON_EMPTY_FILTERS: EduPadronFilters = {
@@ -179,6 +194,19 @@ export const EDU_PADRON_EMPTY_FILTERS: EduPadronFilters = {
   status: null,
   q: null,
 };
+
+/**
+ * La página pedida, saneada. Cualquier cosa rara (0, -3, "abc", 1e9) cae en
+ * la primera: una página inventada tiene que enseñar el principio de la
+ * lista, no una pantalla vacía que se lee como "no hay estudiantes".
+ */
+export function eduPadronPagina(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : parseInt(String(raw ?? ""), 10);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  // Techo defensivo: sin él, `?pagina=999999999` se traduce en un OFFSET
+  // gigantesco que Postgres recorre entero antes de devolver cero filas.
+  return Math.min(Math.floor(n), 1000);
+}
 
 /** ¿Hay algún filtro puesto? (para pintar el botón de "limpiar"). */
 export function eduHasFilters(f: EduPadronFilters): boolean {
@@ -214,11 +242,15 @@ export function parseEduPadronFilters(
 ): EduPadronFilters {
   const sp = searchParams ?? {};
   const status = firstParam(sp.estado);
+  const pagina = eduPadronPagina(firstParam(sp.pagina));
   return {
     programId: cleanId(sp.programa),
     cohortId: cleanId(sp.generacion),
     status: parseEduStudentStatus(status),
     q: eduSearchInput(firstParam(sp.q)),
+    // La primera página NO se escribe: el objeto es el espejo de la URL, y
+    // ahí `?pagina=1` no aparece.
+    ...(pagina > 1 ? { page: pagina } : {}),
   };
 }
 
@@ -485,6 +517,14 @@ export interface EduStudentRow {
   programCode: string;
   cohortId: string;
   cohortName: string;
+  /**
+   * H-101 · Lo que queda colgando si se le da de baja: casos sin cerrar y
+   * citas futuras todavía en pie. La pantalla lo avisa en el modal de baja
+   * y enlaza al traspaso, que existía desde la Ola de Casos y el padrón ni
+   * mencionaba.
+   */
+  casosAbiertos: number;
+  citasFuturas: number;
   /** Solo las VIGENTES, con el titular primero. */
   supervisors: EduSupervisorRow[];
 }
@@ -492,8 +532,14 @@ export interface EduStudentRow {
 export interface EduPadronPage {
   rows: EduStudentRow[];
   scope: EduPadronScope;
-  /** true si se llegó al techo: la UI lo dice en vez de mentir con un total. */
+  /**
+   * true si HAY MÁS después de esta página. Desde H-106 ya no significa
+   * "aquí se acabó lo alcanzable" sino "hay una página siguiente": la UI
+   * pinta el botón en vez de disculparse.
+   */
   truncated: boolean;
+  /** La página que se está enseñando, 1-based. */
+  page: number;
 }
 
 export interface EduProgramRow {

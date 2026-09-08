@@ -43,8 +43,24 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
     startNav(() => router.refresh());
   }
 
+  /**
+   * 🔴 H-108 · DESACTIVAR CON GENTE DENTRO SE CONFIRMA.
+   *
+   * La fila enseña «40 estudiantes» dos columnas a la izquierda del botón, y
+   * el botón desactivaba con un clic y sin preguntar — mientras el modal de
+   * edición SÍ sabía contar y advertir con ese mismo dato. Se guarda el id de
+   * lo que está esperando confirmación, no un booleano: con dos filas en la
+   * tabla, un booleano confirmaría la que no era.
+   *
+   * No bloquea: una especialidad se cierra con alumnos dentro y eso es
+   * normal al final de una generación. Lo que no puede pasar es que ocurra
+   * sin que nadie lo vea venir.
+   */
+  const [confirmar, setConfirmar] = useState<string | null>(null);
+
   async function alternar(tipo: "programas" | "generaciones", id: string, isActive: boolean) {
     setError(null);
+    setConfirmar(null);
     setBusyId(id);
     try {
       await eduRequest(`/api/instituto/${tipo}/${id}`, { method: "PATCH", body: { isActive } });
@@ -162,14 +178,44 @@ export function EduEstructuraScreen({ programs, cohorts }: EduEstructuraScreenPr
                     >
                       Editar
                     </button>
-                    <button
-                      type="button"
-                      className="edu-btn edu-btn--quiet edu-btn--sm"
-                      onClick={() => alternar("programas", p.id, !p.isActive)}
-                      disabled={busyId === p.id}
-                    >
-                      {p.isActive ? "Desactivar" : "Activar"}
-                    </button>
+                    {/* H-108: con alumnos dentro, el primer clic pregunta. */}
+                    {confirmar === p.id ? (
+                      <>
+                        <button
+                          type="button"
+                          className="edu-btn edu-btn--ghost edu-btn--sm"
+                          onClick={() => setConfirmar(null)}
+                          disabled={busyId === p.id}
+                        >
+                          Mejor no
+                        </button>
+                        <button
+                          type="button"
+                          className="edu-btn edu-btn--primary edu-btn--sm"
+                          onClick={() => alternar("programas", p.id, false)}
+                          disabled={busyId === p.id}
+                          title={`${p.students} ${p.students === 1 ? "estudiante sigue inscrito" : "estudiantes siguen inscritos"}: no se les borra nada, pero nadie más se podrá inscribir aquí.`}
+                        >
+                          Sí, desactivar ({p.students})
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="edu-btn edu-btn--quiet edu-btn--sm"
+                        onClick={() => {
+                          if (p.isActive && p.students > 0) {
+                            setFlash(null);
+                            setConfirmar(p.id);
+                            return;
+                          }
+                          alternar("programas", p.id, !p.isActive);
+                        }}
+                        disabled={busyId === p.id}
+                      >
+                        {p.isActive ? "Desactivar" : "Activar"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

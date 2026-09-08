@@ -31,6 +31,9 @@ export async function GET(request: Request) {
     return NextResponse.json({
       rows: page.rows,
       truncated: page.truncated,
+      // H-106: quien consuma este endpoint necesita saber en qué página
+      // está para poder pedir la siguiente (?pagina=2).
+      page: page.page,
       scope: page.scope.kind,
     });
   } catch (err) {

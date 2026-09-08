@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Search, SlidersHorizontal, UserPlus, Users, X } from "lucide-react";
+import { Check, Copy, KeyRound, Pencil, Search, SlidersHorizontal, UserPlus, Users, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { eduRequest } from "@/components/edu/edu-http";
@@ -23,7 +23,9 @@ import {
 } from "@/lib/edu/permissions";
 import {
   EDU_TEAM_BULK_CHUNK,
+  eduCambioDeRolAviso,
   eduTeamCredentialsText,
+  eduTeamGuardDireccion,
   eduTeamRowsListas,
   parseEduTeamPaste,
   type EduTeamAltaResult,
@@ -53,6 +55,17 @@ export interface EduEquipoScreenProps {
   truncated: boolean;
   maxRows: number;
   filters: EduTeamFilters;
+  /**
+   * 🔴 H-16 · El rol de QUIEN MIRA. Con `equipo.manage` prestado por
+   * override —un coordinador académico, que es el caso que el producto
+   * invita a montar— se podía crear una cuenta DIRECCION y vaciarle los
+   * permisos a la que había. Desde esta ola solo una DIRECCION toca a otra
+   * DIRECCION, y la pantalla lo EXPLICA en vez de dejar que el servidor
+   * conteste 403 sobre un botón que se veía habilitado.
+   *
+   * El candado real está en el servidor: esto solo evita el callejón.
+   */
+  viewerRole: EduRole;
 }
 
 const TAG_BY_ROLE: Record<EduRole, string> = {
@@ -121,9 +134,14 @@ function BotonCopiar({ texto, etiqueta }: { texto: string; etiqueta: string }) {
  */
 function PanelCredenciales({
   resultados,
+  modo = "alta",
   onListo,
 }: {
   resultados: EduTeamAltaResult[];
+  /** "restablecida" (H-04) usa el MISMO panel: la contraseña se enseña una
+   *  vez y se copia igual; lo único que cambia es el encabezado, porque
+   *  "Cuenta creada" sobre un restablecimiento sería mentira. */
+  modo?: "alta" | "restablecida";
   onListo: () => void;
 }) {
   const creados = resultados.filter((r) => r.ok);
@@ -135,15 +153,19 @@ function PanelCredenciales({
       <div className="edu-creds__head">
         <div>
           <p className="edu-banner__title">
-            {creados.length === 1
-              ? "Cuenta creada"
-              : `${creados.length} cuentas creadas`}
-            {fallidos.length > 0 ? ` · ${fallidos.length} sin crear` : ""}
+            {modo === "restablecida"
+              ? "Contraseña restablecida"
+              : creados.length === 1
+                ? "Cuenta creada"
+                : `${creados.length} cuentas creadas`}
+            {modo === "alta" && fallidos.length > 0 ? ` · ${fallidos.length} sin crear` : ""}
           </p>
           <p className="edu-banner__detail">
-            {conPassword.length > 0
-              ? "Éstas son las contraseñas temporales, y es la ÚNICA vez que se pueden ver. Cópialas antes de cerrar: no se guardan en ninguna parte."
-              : "Nadie estrenó contraseña: todos estos correos ya tenían cuenta en DaleControl y entran con la suya de siempre."}
+            {conPassword.length === 0
+              ? "Nadie estrenó contraseña: todos estos correos ya tenían cuenta en DaleControl y entran con la suya de siempre."
+              : modo === "restablecida"
+                ? "Ésta es la contraseña temporal, y es la ÚNICA vez que se puede ver. Cópiala antes de cerrar: no se guarda en ninguna parte, y al entrar se le va a pedir que defina la suya."
+                : "Éstas son las contraseñas temporales, y es la ÚNICA vez que se pueden ver. Cópialas antes de cerrar: no se guardan en ninguna parte."}
           </p>
         </div>
         <div className="edu-creds__acciones">
@@ -211,14 +233,23 @@ function PanelCredenciales({
 // LA PANTALLA
 // ═══════════════════════════════════════════════════════════════════════
 
-export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipoScreenProps) {
+export function EduEquipoScreen({
+  rows,
+  truncated,
+  maxRows,
+  filters,
+  viewerRole,
+}: EduEquipoScreenProps) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
   const [q, setQ] = useState(filters.q ?? "");
   const [alta, setAlta] = useState<"individual" | "masiva" | null>(null);
   // P2-8: la persona cuyos permisos se están editando.
   const [permisosDe, setPermisosDe] = useState<EduTeamRow | null>(null);
+  // H-04: la persona cuyos DATOS se están corrigiendo.
+  const [datosDe, setDatosDe] = useState<EduTeamRow | null>(null);
   const [credenciales, setCredenciales] = useState<EduTeamAltaResult[] | null>(null);
+  const [credencialesModo, setCredencialesModo] = useState<"alta" | "restablecida">("alta");
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -254,8 +285,22 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
     setAlta(null);
     setError(aviso ?? null);
     setFlash(null);
+    setCredencialesModo("alta");
     setCredenciales(resultados);
     startNav(() => router.refresh());
+  }
+
+  /**
+   * 🔴 H-16 en la pantalla: ¿puede quien mira hacerle ESTO a esta persona?
+   * Devuelve el motivo del "no" (que se pinta en el `title`) o null. Es la
+   * MISMA función que corre en el servidor — si fueran dos, la pantalla
+   * acabaría ofreciendo un botón que el servidor rebota.
+   */
+  function guardDe(
+    persona: EduTeamRow,
+    accion: "baja" | "reactivar" | "permisos" | "datos",
+  ): string | null {
+    return eduTeamGuardDireccion(viewerRole, persona.role, accion);
   }
 
   async function cambiarEstado(persona: EduTeamRow) {
@@ -263,14 +308,25 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
     setFlash(null);
     setBusyId(persona.id);
     try {
-      await eduRequest(`/api/instituto/equipo/${persona.id}`, {
-        method: "PATCH",
-        body: { isActive: !persona.isActive },
-      });
+      const res = await eduRequest<{ supervisionesCerradas?: number }>(
+        `/api/instituto/equipo/${persona.id}`,
+        { method: "PATCH", body: { isActive: !persona.isActive } },
+      );
+      const cerradas = res?.supervisionesCerradas ?? 0;
       setFlash(
         persona.isActive
-          ? `${persona.name} queda dado de baja. Su historial no se toca: sigue siendo el autor de lo que escribió.`
-          : `${persona.name} vuelve a tener acceso.`,
+          ? `${persona.name} queda dado de baja. Su historial no se toca: sigue siendo el autor de lo que escribió.` +
+              // H-99: sus asignaciones seguían VIGENTES y sus alumnos se
+              // quedaban sin quien firmara, con la lista pintando
+              // "Inactivo · 12 estudiantes hoy". Ahora se cierran con la
+              // baja, y se DICE — son alumnos que necesitan otro titular.
+              (cerradas > 0
+                ? ` Se cerraron sus ${cerradas} ${cerradas === 1 ? "supervisión" : "supervisiones"} vigentes: esos estudiantes quedaron sin docente titular y hay que asignarles otro en Estudiantes.`
+                : "")
+          : `${persona.name} vuelve a tener acceso.` +
+              (persona.role === "DOCENTE"
+                ? " Sus supervisiones NO se reabren: si vuelve a llevar alumnos, asígnaselos en Estudiantes."
+                : ""),
       );
       startNav(() => router.refresh());
     } catch (err) {
@@ -283,7 +339,11 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
   return (
     <>
       {credenciales && (
-        <PanelCredenciales resultados={credenciales} onListo={() => setCredenciales(null)} />
+        <PanelCredenciales
+          resultados={credenciales}
+          modo={credencialesModo}
+          onListo={() => setCredenciales(null)}
+        />
       )}
 
       {flash && (
@@ -486,6 +546,28 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
                 </div>
 
                 <div className="edu-cell__actions">
+                  {/* H-04: corregir nombre, correo, teléfono y ROL. Hasta esta
+                      ola no había ninguna forma: un correo mal tecleado dejaba
+                      a esa persona fuera para siempre y su fila huérfana en
+                      esta misma lista. Desde aquí también se restablece la
+                      contraseña. */}
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    onClick={() => {
+                      setFlash(null);
+                      setError(null);
+                      setDatosDe(p);
+                    }}
+                    disabled={busyId === p.id || Boolean(guardDe(p, "datos"))}
+                    title={
+                      guardDe(p, "datos") ??
+                      "Corrige su nombre, correo, teléfono o rol, y restablece su contraseña."
+                    }
+                  >
+                    <Pencil size={15} />
+                    Editar
+                  </button>
                   {/* P2-8: los permisos se editan por persona. Deshabilitado
                       para uno mismo — el servidor lo rebota igual; así, quien
                       edita conserva siempre su equipo.manage y el instituto
@@ -498,11 +580,12 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
                       setError(null);
                       setPermisosDe(p);
                     }}
-                    disabled={busyId === p.id || p.isSelf}
+                    disabled={busyId === p.id || p.isSelf || Boolean(guardDe(p, "permisos"))}
                     title={
                       p.isSelf
                         ? "No puedes editar tus propios permisos."
-                        : "Qué puede ver y hacer esta cuenta, casilla por casilla."
+                        : (guardDe(p, "permisos") ??
+                          "Qué puede ver y hacer esta cuenta, casilla por casilla.")
                     }
                   >
                     <SlidersHorizontal size={15} />
@@ -512,16 +595,21 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
                     type="button"
                     className={`edu-btn edu-btn--sm ${p.isActive ? "edu-btn--ghost" : "edu-btn--primary"}`}
                     onClick={() => cambiarEstado(p)}
-                    disabled={busyId === p.id || p.isSelf}
+                    disabled={
+                      busyId === p.id ||
+                      p.isSelf ||
+                      Boolean(guardDe(p, p.isActive ? "baja" : "reactivar"))
+                    }
                     // Nadie se da de baja a sí mismo: con una sola dirección
                     // en la escuela sería cerrar la puerta desde dentro. El
                     // servidor lo vuelve a rechazar, esto solo lo explica.
                     title={
                       p.isSelf
                         ? "No puedes darte de baja a ti mismo."
-                        : p.isActive
-                          ? "Le quita el acceso al panel. No borra nada de lo que hizo."
-                          : "Le devuelve el acceso al panel."
+                        : (guardDe(p, p.isActive ? "baja" : "reactivar") ??
+                          (p.isActive
+                            ? "Le quita el acceso al panel. No borra nada de lo que hizo."
+                            : "Le devuelve el acceso al panel."))
                     }
                   >
                     {busyId === p.id ? "…" : p.isActive ? "Dar de baja" : "Reactivar"}
@@ -537,6 +625,27 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
         <ModalAlta onClose={() => setAlta(null)} onDone={alCrear} />
       )}
       {alta === "masiva" && <ModalMasiva onClose={() => setAlta(null)} onDone={alCrear} />}
+      {datosDe && (
+        <ModalPersona
+          persona={datosDe}
+          viewerRole={viewerRole}
+          onClose={() => setDatosDe(null)}
+          onDone={(mensaje) => {
+            setDatosDe(null);
+            setError(null);
+            setFlash(mensaje);
+            startNav(() => router.refresh());
+          }}
+          onPasswordReset={(resultado) => {
+            setDatosDe(null);
+            setError(null);
+            setFlash(null);
+            setCredencialesModo("restablecida");
+            setCredenciales([resultado]);
+            startNav(() => router.refresh());
+          }}
+        />
+      )}
       {permisosDe && (
         <ModalPermisos
           persona={permisosDe}
@@ -550,6 +659,363 @@ export function EduEquipoScreen({ rows, truncated, maxRows, filters }: EduEquipo
         />
       )}
     </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CORREGIR A UNA PERSONA (H-04)
+//
+// Las tres escenas que esto cierra, y las tres son de una escuela real:
+//   · se teclea `maria.rodrigez@…` en vez de `maria.rodriguez@…` — ese
+//     correo no se podía editar, y la salida era darla de alta otra vez y
+//     dejar la fila vieja huérfana para siempre en esta misma lista;
+//   · un docente asciende a coordinación de dirección — no se podía cambiar
+//     el rol, así que hacía falta OTRA cuenta y todo su historial clínico
+//     se quedaba colgando del id viejo;
+//   · una alumna se casa y cambia de apellido — se quedaba con el apellido
+//     viejo impreso en cada nota clínica que firmara el resto de su carrera.
+//
+// Y la cuarta: no había forma de restablecer una contraseña desde el panel,
+// mientras el login prometía que sí («La dirección de tu instituto da de
+// alta las cuentas y restablece las contraseñas»).
+// ═══════════════════════════════════════════════════════════════════════
+
+function ModalPersona({
+  persona,
+  viewerRole,
+  onClose,
+  onDone,
+  onPasswordReset,
+}: {
+  persona: EduTeamRow;
+  viewerRole: EduRole;
+  onClose: () => void;
+  onDone: (mensaje: string) => void;
+  onPasswordReset: (resultado: EduTeamAltaResult) => void;
+}) {
+  const [firstName, setFirstName] = useState(persona.firstName);
+  const [lastName, setLastName] = useState(persona.lastName);
+  const [email, setEmail] = useState(persona.email);
+  const [phone, setPhone] = useState(persona.phone ?? "");
+  const [role, setRole] = useState<EduRole>(persona.role);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // El cambio de ROL pide confirmación aparte: no es editar una columna, es
+  // reescribir qué ve y qué puede hacer esa persona en todo el panel.
+  const [confirmarRol, setConfirmarRol] = useState(false);
+  const [confirmarReset, setConfirmarReset] = useState(false);
+
+  const correoCambia = email.trim().toLowerCase() !== persona.email.trim().toLowerCase();
+  const rolCambia = role !== persona.role;
+  // 🔴 H-16 · el rol solo lo cambia una DIRECCION, y a una DIRECCION solo la
+  // toca otra DIRECCION (el destino pasa por el mismo guardia). El servidor
+  // lo vuelve a exigir; esto explica el candado en vez de dejar un <select>
+  // que contesta 403.
+  const puedeCambiarRol = viewerRole === "DIRECCION" && !persona.isSelf;
+  const rolesOfrecidos = EDU_ROLES.filter(
+    (r) => r === persona.role || !eduTeamGuardDireccion(viewerRole, r, "crear"),
+  );
+
+  const hayCambios =
+    firstName.trim() !== persona.firstName ||
+    lastName.trim() !== persona.lastName ||
+    correoCambia ||
+    phone.trim() !== (persona.phone ?? "") ||
+    rolCambia;
+
+  async function guardar() {
+    // El aviso del cambio de rol se enseña UNA vez y hay que confirmarlo.
+    if (rolCambia && !confirmarRol) {
+      setConfirmarRol(true);
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await eduRequest<{ overrideDescartado?: string[]; emailChanged?: boolean }>(
+        `/api/instituto/equipo/${persona.id}`,
+        {
+          method: "PATCH",
+          body: {
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            email: email.trim(),
+            // "" borra el teléfono a propósito: se capturó mal y no hay otro.
+            phone: phone.trim(),
+            ...(rolCambia ? { role } : {}),
+          },
+        },
+      );
+      const nombre = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+      const partes = [`Se guardaron los datos de ${nombre}.`];
+      if (res?.emailChanged) {
+        partes.push(`Desde ahora entra con ${email.trim().toLowerCase()}: avísale.`);
+      }
+      if (rolCambia) {
+        partes.push(`Ahora es ${EDU_ROLE_LABELS[role]}.`);
+        // 🔴 El override borrado NO se guarda en ninguna parte (el vertical
+        // no tiene columna de histórico ni bitácora): la única forma de que
+        // no desaparezca sin dejar rastro es enseñarlo AQUÍ, ahora, para que
+        // quien lo hizo lo apunte.
+        const descartado = res?.overrideDescartado ?? [];
+        if (descartado.length > 0) {
+          partes.push(
+            `Tenía permisos personalizados y se borraron; eran: ${descartado.join(", ")}. Apúntalos si los vas a volver a poner: no se guardan en ninguna parte.`,
+          );
+        }
+      }
+      onDone(partes.join(" "));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron guardar los datos.");
+      setBusy(false);
+      setConfirmarRol(false);
+    }
+  }
+
+  async function restablecer() {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await eduRequest<{ name: string; email: string; tempPassword: string }>(
+        `/api/instituto/equipo/${persona.id}/restablecer`,
+        { method: "POST" },
+      );
+      onPasswordReset({
+        ok: true,
+        email: res.email,
+        name: res.name,
+        role: persona.role,
+        tempPassword: res.tempPassword,
+        reused: false,
+        id: persona.id,
+        error: null,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo restablecer la contraseña.");
+      setBusy(false);
+      setConfirmarReset(false);
+    }
+  }
+
+  return (
+    <EduModal
+      title={`Editar a ${persona.name}`}
+      subtitle={`${EDU_ROLE_LABELS[persona.role]} · ${persona.isActive ? "Con acceso" : "Dada de baja"}`}
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="edu-btn edu-btn--primary"
+            onClick={guardar}
+            disabled={busy || !hayCambios || !firstName.trim() || !lastName.trim() || !email.trim()}
+          >
+            {busy ? "Guardando…" : confirmarRol ? "Sí, cambiar el rol" : "Guardar"}
+          </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="edu-alert" role="alert">
+          {error}
+        </div>
+      )}
+
+      <div className="edu-formgrid edu-formgrid--2">
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-ep-nombre">
+            Nombre
+          </label>
+          <input
+            id="edu-ep-nombre"
+            className="edu-input"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            disabled={busy}
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-ep-apellidos">
+            Apellidos
+          </label>
+          <input
+            id="edu-ep-apellidos"
+            className="edu-input"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            disabled={busy}
+            autoComplete="off"
+          />
+        </div>
+      </div>
+
+      <div className="edu-field">
+        <label className="edu-field__label" htmlFor="edu-ep-correo">
+          Correo
+        </label>
+        <input
+          id="edu-ep-correo"
+          className="edu-input"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={busy}
+          autoComplete="off"
+        />
+        <span className="edu-field__hint">
+          Es con lo que entra al panel: cambiarlo le cambia el login. Si ese acceso lo usa también
+          en el panel dental de DaleControl, el cambio hay que hacerlo desde allá — este panel no
+          escribe los datos del dental.
+        </span>
+        {correoCambia && (
+          <div className="edu-banner edu-banner--warn" role="status">
+            <div>
+              <p className="edu-banner__title">Va a entrar con otro correo</p>
+              <p className="edu-banner__detail">
+                Su contraseña no cambia, pero su usuario sí: avísale antes de que se encuentre con
+                que el suyo ya no entra.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="edu-formgrid edu-formgrid--2">
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-ep-tel">
+            Teléfono (opcional)
+          </label>
+          <input
+            id="edu-ep-tel"
+            className="edu-input"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            disabled={busy}
+            autoComplete="off"
+          />
+          <span className="edu-field__hint">Vacío lo borra.</span>
+        </div>
+
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-ep-rol">
+            Rol
+          </label>
+          <select
+            id="edu-ep-rol"
+            className="edu-input"
+            value={role}
+            onChange={(e) => {
+              setConfirmarRol(false);
+              setRole(e.target.value as EduRole);
+            }}
+            disabled={busy || !puedeCambiarRol}
+          >
+            {rolesOfrecidos.map((r) => (
+              <option key={r} value={r}>
+                {EDU_ROLE_LABELS[r]}
+              </option>
+            ))}
+          </select>
+          <span className="edu-field__hint">
+            {puedeCambiarRol
+              ? EDU_ROLE_DESCRIPTIONS[role]
+              : persona.isSelf
+                ? "No puedes cambiarte el rol a ti mismo. Pídeselo a otra persona de dirección."
+                : "Solo una cuenta de Dirección puede cambiar el rol de una persona."}
+          </span>
+        </div>
+      </div>
+
+      {rolCambia && (
+        <div className={confirmarRol ? "edu-alert" : "edu-banner edu-banner--warn"} role="alert">
+          {confirmarRol ? (
+            <>
+              <strong>Confirma el cambio de rol.</strong>{" "}
+              {eduCambioDeRolAviso(
+                persona.name,
+                persona.role,
+                role,
+                persona.permissionsOverride.length > 0,
+              )}{" "}
+              Pulsa «Sí, cambiar el rol» para guardarlo.
+            </>
+          ) : (
+            <div>
+              <p className="edu-banner__title">Vas a cambiarle el rol</p>
+              <p className="edu-banner__detail">
+                {eduCambioDeRolAviso(
+                  persona.name,
+                  persona.role,
+                  role,
+                  persona.permissionsOverride.length > 0,
+                )}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── RESTABLECER LA CONTRASEÑA ────────────────────────────────────
+          Vive aquí y no en una fila de la tabla porque es lo que se busca
+          cuando ya se abrió la ficha de la persona ("no puede entrar"), y
+          porque un botón que reparte contraseñas no debe estar a un clic de
+          distancia en una lista de 200 renglones. */}
+      <section className="edu-section">
+        <h3 className="edu-section__title">Contraseña</h3>
+        {!persona.isActive ? (
+          <p className="edu-section__lead">
+            Esta cuenta está dada de baja: reactívala antes de restablecerle la contraseña.
+          </p>
+        ) : confirmarReset ? (
+          <>
+            <div className="edu-alert" role="alert">
+              <strong>Se le pone una contraseña temporal NUEVA.</strong> La de ahora deja de
+              funcionar en el momento. Se enseña una sola vez —cópiala— y al entrar se le pide que
+              defina la suya; hasta entonces no puede usar el instituto.
+            </div>
+            <div className="edu-actions">
+              <button
+                type="button"
+                className="edu-btn edu-btn--ghost edu-btn--sm"
+                onClick={() => setConfirmarReset(false)}
+                disabled={busy}
+              >
+                Mejor no
+              </button>
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary edu-btn--sm"
+                onClick={restablecer}
+                disabled={busy}
+              >
+                {busy ? "Restableciendo…" : "Sí, restablecer"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="edu-section__lead">
+              Si perdió su contraseña temporal o no puede entrar, aquí se le pone una nueva.
+            </p>
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              onClick={() => setConfirmarReset(true)}
+              disabled={busy}
+            >
+              <KeyRound size={15} />
+              Restablecer contraseña
+            </button>
+          </>
+        )}
+      </section>
+    </EduModal>
   );
 }
 
@@ -931,6 +1397,11 @@ function ModalMasiva({
                 lastName: f.lastName,
                 email: f.email,
                 role: f.role,
+                // H-104: la quinta columna se interpretaba y se VALIDABA
+                // —un teléfono malo marcaba el renglón en rojo e impedía
+                // crear esa cuenta— y aquí se tiraba. Se cobraba el precio
+                // de validarlo sin quedarse con el dato.
+                phone: f.phone,
               })),
             },
           },

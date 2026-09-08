@@ -74,6 +74,16 @@ export interface EduDocenteFicha {
    * repartido un dato nuevo sobre los compañeros sin que nadie lo pidiera.
    */
   lastLoginLabel: string | null;
+  /**
+   * 🔴 H-159 · ¿Quien mira PUEDE ver la última entrada? Es distinto de "no
+   * hay ninguna", y hasta esta ola la ficha no los distinguía: `null`
+   * significaba las dos cosas y el texto elegía siempre la de permisos —
+   * «La última entrada solo la ve quien administra el equipo»—, que se lo
+   * estaba leyendo justamente la persona que SÍ administra el equipo. Con
+   * `lastLogin` sin escribir en todo el repo, ese caso era el único que
+   * ocurría: la dirección concluía que le faltaba un permiso que ya tenía.
+   */
+  veUltimaEntrada: boolean;
   createdAt: string;
 
   /** Estudiantes con asignación VIGENTE ahora mismo. */
@@ -189,6 +199,7 @@ export async function getEduDocenteFicha(
     lastLogin: opciones.verCuenta && docente.lastLogin ? docente.lastLogin.toISOString() : null,
     lastLoginLabel:
       opciones.verCuenta && docente.lastLogin ? eduFechaHora(docente.lastLogin, zona) : null,
+    veUltimaEntrada: Boolean(opciones.verCuenta),
     createdAt: docente.createdAt.toISOString(),
     estudiantesVigentes: docente._count.supervisees,
     casosAbiertos,

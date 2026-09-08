@@ -293,3 +293,36 @@ export function eduEstudiantePacientesOrden(
   if (!av && bv) return 1;
   return a.folio.localeCompare(b.folio);
 }
+
+/**
+ * La fecha de una ficha, en largo: "2026-09-07T…" → "7 de septiembre de 2026".
+ *
+ * 🔴 H-103 · La ficha del estudiante traía correo, teléfono, fecha de
+ * inscripción y de egreso desde la Ola de Personas y NO pintaba ninguno: un
+ * docente que quiere llamar a su alumno porque no llegó a la clínica no
+ * tenía su teléfono, y las fechas que la escuela imprime en una constancia
+ * no se veían en ningún sitio del producto.
+ *
+ * Se formatea EN UTC sobre el mediodía, por la misma razón que el resto del
+ * vertical: una fecha de calendario no tiene zona, y formatearla en la del
+ * navegador la correría un día en media República (medianoche UTC son las
+ * 18:00 de AYER en México).
+ */
+const EDU_FICHA_FECHA = new Intl.DateTimeFormat("es-MX", {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+export function eduFichaFecha(iso: string | null | undefined): string {
+  if (typeof iso !== "string" || iso.length < 10) return "—";
+  const dia = iso.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return "—";
+  // La forma no basta: "2026-13-99" la pasa y no es una fecha. Sin esta
+  // comprobación, un dato sucio revienta la ficha ENTERA con un RangeError
+  // de Intl, en vez de pintar un guion en una píldora.
+  const fecha = new Date(`${dia}T12:00:00.000Z`);
+  if (Number.isNaN(fecha.getTime())) return "—";
+  return EDU_FICHA_FECHA.format(fecha);
+}
