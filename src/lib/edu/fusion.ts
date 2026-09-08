@@ -223,6 +223,41 @@ export async function mergeEduPatients(
           409,
         );
       }
+
+      // ── 5 · Y EL GANADOR, COMPROBADO DENTRO DE LA TRANSACCIÓN ───────
+      // ═════════════════════════════════════════════════════════════
+      // 🔴 LA CARRERA QUE FALTABA. El perdedor lleva su candado
+      // (`mergedIntoId: null` en el where, arriba); el GANADOR se leyó
+      // fuera de la transacción y esa condición no volvía a aparecer en
+      // ninguna escritura. A→B y B→C a la vez commitean las dos, y el
+      // expediente de A acaba colgado de una ficha que en ese mismo
+      // instante quedó fusionada: un expediente escondido detrás de dos
+      // saltos que la pantalla no sigue.
+      //
+      // Se cierra con un compare-and-swap: se cuenta al ganador con las
+      // MISMAS condiciones con las que se le eligió. Si otra fusión lo
+      // convirtió en perdedor mientras tanto, `count` sale 0 y toda la
+      // transacción —las once escrituras y el marcado de arriba— se
+      // deshace.
+      //
+      // Es un `count` y no un `update` a propósito: al ganador no hay
+      // nada que escribirle, y una escritura postiza para bloquear la
+      // fila sería un `updatedAt` movido por una fusión que no lo tocó.
+      // ═════════════════════════════════════════════════════════════
+      const ganadorSigue = await tx.eduPatient.count({
+        where: {
+          id: ganador.id,
+          institutionId,
+          mergedIntoId: null,
+          anonymizedAt: null,
+        },
+      });
+      if (ganadorSigue === 0) {
+        throw new EduPadronError(
+          "La ficha que iba a quedarse con el expediente se fusionó (o se anonimizó) mientras ésta corría: no se movió nada. Actualiza la pantalla y elige la ficha que quedó viva.",
+          409,
+        );
+      }
     },
     { timeout: EDU_FUSION_TIMEOUT_MS },
   );

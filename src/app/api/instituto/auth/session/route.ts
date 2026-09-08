@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getEduContext } from "@/lib/edu-auth";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { eduAudit, eduAuditRequestMeta } from "@/lib/edu/auditoria";
 import {
   eduLoginMensaje,
   eduTempPasswordEstado,
@@ -66,7 +67,7 @@ export const dynamic = "force-dynamic";
  * igual. Una columna de auditoría informativa no puede ser el motivo de que
  * alguien se quede en la puerta.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const ctx = await getEduContext();
 
   if (!ctx) {
@@ -97,6 +98,30 @@ export async function GET() {
   } catch (err) {
     console.warn("[instituto/auth] no se pudo anotar la última entrada:", err);
   }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 EL RENGLÓN DE ENTRADA. La bitácora registraba veinte módulos y no
+  // registraba quién ENTRA, que es la primera pregunta de cualquiera que
+  // investigue algo — y el panel se usa de pie en el piso clínico y en
+  // equipo compartido, así que «¿quién estaba dentro esa tarde?» es una
+  // pregunta real y no un trámite.
+  //
+  // Va AQUÍ y no en `getEduContext` por el mismo motivo que `lastLogin`:
+  // ese helper corre en cada render del panel y dejaría un renglón por
+  // pantalla pintada. Este endpoint lo llama el login UNA vez, justo
+  // después de autenticar.
+  //
+  // Guarda la IP y el navegador (los pone `eduAudit`) y NADA de la
+  // contraseña. `eduAudit` nunca lanza: una entrada que no se registra no
+  // puede dejar a nadie fuera.
+  // ═══════════════════════════════════════════════════════════════════
+  await eduAudit(ctx, {
+    action: "login",
+    entity: "session",
+    entityId: ctx.eduUserId,
+    after: { entro: new Date(), conTemporal: temporal.aplica },
+    ...eduAuditRequestMeta(request),
+  });
 
   // `debeCambiar` viaja para que el login mande DIRECTO a la pantalla de
   // cambio en vez de rebotar contra el layout del panel. Es un booleano

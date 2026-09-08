@@ -40,9 +40,47 @@ import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import { eduInstitucionParsePatch, type EduInstitucionPatch } from "@/lib/edu/institucion-core";
 import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
+import { hasEduPermission } from "@/lib/edu/permissions";
+import type { EduRole } from "@/lib/edu/types";
 
 export interface EduInstitucionContext extends EduAuditActor {
   user: { firstName: string; lastName: string; permissionsOverride?: string[] | null };
+}
+
+/** Lo mínimo para LEER: el tenant y con qué llaves entra quien lee. */
+export interface EduInstitucionLector {
+  institutionId: string;
+  role: EduRole;
+  user?: { permissionsOverride?: string[] | null };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 S-4 · EL RFC, LA RAZÓN SOCIAL Y EL CONTRATO SON DE DIRECCIÓN.
+ *
+ * El GET se abre con `inicio.view` —lo llevan los cuatro roles, y tiene que
+ * ser así: el nombre y la zona horaria de la escuela los pinta el panel
+ * entero—, pero el `select` devolvía TODO. Un alumno con `curl` leía el RFC
+ * de su escuela y las fechas de su contrato con DaleControl.
+ *
+ * Y contradecía al propio vertical: `permissions.ts` argumenta por escrito,
+ * al lado de `sedes.manage`, que el cupo y el contrato son de dirección. El
+ * recorte usa esa MISMA llave, no una nueva.
+ *
+ * ⚠️ Los campos recortados viajan en `null`, no ausentes, y hay un booleano
+ * (`verDatosFiscales`) que dice cuál de las dos cosas es. Quitarlos del
+ * objeto obligaría a cambiar la forma del DTO en la pantalla que lo pinta —
+ * y una pantalla que no distingue «no hay RFC» de «no te toca verlo» es la
+ * que acaba enseñando un formulario vacío que borra el dato al guardar.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+function veDatosFiscales(ctx: EduInstitucionLector): boolean {
+  // Sin rol no se enseña: ante la duda, la opción que no filtra.
+  if (!ctx?.role) return false;
+  return hasEduPermission(
+    { role: ctx.role, permissionsOverride: ctx.user?.permissionsOverride ?? [] },
+    "sedes.manage",
+  );
 }
 
 function requireInstitution(ctx: { institutionId?: string }): string {
@@ -69,11 +107,18 @@ export interface EduInstitucionDatos {
   contractStartsAt: string | null;
   contractEndsAt: string | null;
   storageQuotaBytes: string;
+  /**
+   * S-4 · ¿quien pidió estos datos puede ver los FISCALES (`legalName`,
+   * `rfc`) y el CONTRATO? Cuando es `false`, esos cuatro campos llegan en
+   * `null` porque no le tocan, no porque estén vacíos.
+   */
+  verDatosFiscales: boolean;
 }
 
-/** LOS DATOS del instituto de la sesión. */
+/** LOS DATOS del instituto de la sesión, recortados a lo que le toca ver a
+ *  quien pregunta (S-4). */
 export async function getEduInstitucion(
-  ctx: { institutionId: string },
+  ctx: EduInstitucionLector,
 ): Promise<EduInstitucionDatos> {
   const institutionId = requireInstitution(ctx);
   const i = await prisma.eduInstitution.findFirst({
@@ -97,10 +142,16 @@ export async function getEduInstitucion(
   });
   if (!i) throw new EduPadronError("Tu instituto no existe. Vuelve a entrar.", 404);
 
+  // S-4 · el recorte. Ver `veDatosFiscales`.
+  const fiscales = veDatosFiscales(ctx);
+
   return {
     ...i,
-    contractStartsAt: i.contractStartsAt?.toISOString() ?? null,
-    contractEndsAt: i.contractEndsAt?.toISOString() ?? null,
+    legalName: fiscales ? i.legalName : null,
+    rfc: fiscales ? i.rfc : null,
+    verDatosFiscales: fiscales,
+    contractStartsAt: fiscales ? (i.contractStartsAt?.toISOString() ?? null) : null,
+    contractEndsAt: fiscales ? (i.contractEndsAt?.toISOString() ?? null) : null,
     // 🔴 BigInt A STRING. `JSON.stringify` de un BigInt LANZA
     // ("Do not know how to serialize a BigInt") y la respuesta se
     // convertiría en un 500 sin mensaje. Es la misma conversión que ya

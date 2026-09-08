@@ -65,7 +65,10 @@ export async function POST(request: Request) {
 
     const result = await createEduTeamMember(g.ctx, body, nombreInstituto, campusIds);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      // 400 salvo que el renglón traiga el suyo: S-1 contesta 409 porque el
+      // correo ya es de otro instituto, que es un conflicto con la base y no
+      // un dato mal escrito.
+      return NextResponse.json({ error: result.error }, { status: result.status ?? 400 });
     }
     return NextResponse.json(result, { status: 201 });
   } catch (err) {

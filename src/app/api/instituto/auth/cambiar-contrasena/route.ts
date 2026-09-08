@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { getEduContext } from "@/lib/edu-auth";
+import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimitKey } from "@/lib/rate-limit";
+import { eduAudit, eduAuditRequestMeta } from "@/lib/edu/auditoria";
 import {
   EDU_TEMP_PASSWORD_CADUCADA,
   eduPasswordCheck,
@@ -173,6 +175,57 @@ export async function POST(req: NextRequest) {
   await prisma.eduUser.updateMany({
     where: { supabaseId: ctx.user.supabaseId },
     data: { mustChangePassword: false },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 S-3 / H-160 · Y SE CIERRAN LAS OTRAS SESIONES.
+  //
+  // El escenario es el que este panel tiene todos los días: se usa de pie
+  // en el piso clínico y en equipo compartido. Quien pasaba por una sesión
+  // abierta le cambiaba la contraseña a la cuenta —de TODO DaleControl con
+  // ese correo, porque la cuenta de Auth es una sola—, el dueño se quedaba
+  // fuera… y la sesión del que pasó por ahí seguía viva. Cambiar la
+  // contraseña tiene que echar a todos MENOS a quien la cambió.
+  //
+  // `scope: "others"` es exactamente eso: revoca los refresh tokens de las
+  // demás sesiones y deja viva la de esta petición. Con `"global"` se
+  // echaría también a quien acaba de estrenarla —que además es el caso
+  // normal: alguien canjeando su temporal— y volvería a la puerta sin saber
+  // por qué. Best-effort: si GoTrue no contesta, la contraseña YA cambió y
+  // negar un 200 aquí solo conseguiría que lo intentara otra vez.
+  // ═══════════════════════════════════════════════════════════════════
+  let otrasCerradas = true;
+  try {
+    const sesion = createClient();
+    const { error: outError } = await sesion.auth.signOut({ scope: "others" });
+    if (outError) {
+      otrasCerradas = false;
+      console.warn("[instituto/auth] no se pudieron cerrar las otras sesiones:", outError.message);
+    }
+  } catch (err) {
+    otrasCerradas = false;
+    console.warn("[instituto/auth] no se pudieron cerrar las otras sesiones:", err);
+  }
+
+  // 🔴 Y DEJA RENGLÓN. 179 líneas y cero llamadas a la bitácora, teniéndola
+  // ya en esta ola y haciéndolo el dental. Sin él, la pregunta «¿quién le
+  // cambió la contraseña a esta cuenta?» no tenía dónde contestarse.
+  //
+  // NO se guarda la contraseña, ni su longitud, ni una pista de ella: solo
+  // el HECHO, con la IP y el navegador que pone `eduAuditRequestMeta`.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "session",
+    entityId: ctx.eduUserId,
+    before: { contrasena: "la anterior" },
+    after: {
+      contrasena: "cambiada por la persona",
+      // `aplica` de eduTempPasswordEstado es exactamente esta bandera; se
+      // lee del contexto para no volver a calcular el estado entero.
+      eraTemporal: Boolean(ctx.user.mustChangePassword),
+      otrasSesionesCerradas: otrasCerradas,
+    },
+    ...eduAuditRequestMeta(req),
   });
 
   return NextResponse.json({ ok: true });

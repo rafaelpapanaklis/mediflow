@@ -86,6 +86,14 @@ export interface EduTeamAltaResult {
   reused: boolean;
   id: string | null;
   error: string | null;
+  /**
+   * El código HTTP que le toca a ESTE renglón cuando el alta es individual
+   * (ausente = 400, que es lo que era todo antes). Existe por S-1: "ese
+   * correo ya es de otro instituto" es un CONFLICTO con algo que ya está en
+   * la base, no un dato mal escrito, y el alta masiva lo sigue tratando como
+   * un renglón en rojo sin tumbar los otros 24.
+   */
+  status?: number;
 }
 
 /** Una persona del equipo, tal como viaja a la pantalla. */

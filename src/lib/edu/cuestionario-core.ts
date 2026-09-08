@@ -375,6 +375,64 @@ export function eduCuestionarioMergeData(
   return data;
 }
 
+/**
+ * Las tres listas clínicas TAL COMO SE LEYERON, para el `where` de la
+ * escritura. Es un filtro de Prisma escrito a mano (`{ equals }` sobre una
+ * columna de lista) para no arrastrar `@prisma/client` a un módulo puro.
+ */
+export interface EduCuestionarioMergeCas {
+  allergies?: { equals: string[] };
+  chronicConditions?: { equals: string[] };
+  currentMedications?: { equals: string[] };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EL COMPARE-AND-SWAP DEL MERGE. Lo que impide que guardar un
+ * cuestionario BORRE una alergia que acaba de escribir otra persona.
+ *
+ * El merge es aditivo, sí, pero se calcula contra una FOTO: se lee la ficha,
+ * se une lo viejo con lo nuevo y se escribe el resultado. Entre la lectura y
+ * la escritura hay dos escritores más en este vertical —el otro alumno
+ * guardando su propio cuestionario del mismo paciente, y la pestaña de
+ * ANTECEDENTES, que reemplaza el bloque entero— y la unión contra la foto
+ * vieja los pisa sin decir nada:
+ *
+ *   1. Ana abre el cuestionario. Se lee `allergies: []`.
+ *   2. La docente guarda antecedentes: `allergies: ["Penicilina"]`.
+ *   3. Ana guarda. Se escribe `["Látex"]` — la penicilina desapareció.
+ *
+ * No hay error, no hay aviso, y lo que se pierde es el dato por el que
+ * existe la ficha. Con estas claves en el `where`, el paso 3 no escribe
+ * NADA: `updateMany` devuelve `count: 0`, el llamador vuelve a leer la ficha
+ * de AHORA y une contra ella, y quedan las dos. Es el mismo patrón que el
+ * resto del vertical («el estado leído va en el where»), aplicado a las
+ * columnas que se unen.
+ *
+ * Solo se ponen en el `where` las listas que esta escritura VA A TOCAR: un
+ * cuestionario que no pregunta por medicamentos no puede fallar porque
+ * alguien tocara los medicamentos.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduCuestionarioMergeCas(
+  data: EduCuestionarioMergeData,
+  actual: {
+    allergies?: string[] | null;
+    chronicConditions?: string[] | null;
+    currentMedications?: string[] | null;
+  },
+): EduCuestionarioMergeCas {
+  const cas: EduCuestionarioMergeCas = {};
+  if (data.allergies !== undefined) cas.allergies = { equals: actual.allergies ?? [] };
+  if (data.chronicConditions !== undefined) {
+    cas.chronicConditions = { equals: actual.chronicConditions ?? [] };
+  }
+  if (data.currentMedications !== undefined) {
+    cas.currentMedications = { equals: actual.currentMedications ?? [] };
+  }
+  return cas;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 5 · EL FORMULARIO, COMO DATO (Ola C·2)
 // ═══════════════════════════════════════════════════════════════════════

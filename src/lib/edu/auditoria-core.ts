@@ -54,6 +54,15 @@ export const EDU_AUDIT_ACTIONS = [
   "export",
   /** Baja ARCO, anonimización y fusión. Actos de datos personales. */
   "arco",
+  /**
+   * ENTRADA y SALIDA. Las dos preguntas que la bitácora no podía contestar
+   * y que son las primeras que hace cualquiera que investiga algo: «¿quién
+   * entró esa tarde?» y «¿había cerrado sesión?». El panel se usa de pie en
+   * el piso clínico y en equipo compartido — lo dice la propia hoja del
+   * vertical—, así que no son un adorno de cumplimiento.
+   */
+  "login",
+  "logout",
 ] as const;
 
 export type EduAuditAction = (typeof EDU_AUDIT_ACTIONS)[number];
@@ -66,6 +75,8 @@ export const EDU_AUDIT_ACTION_LABELS: Record<EduAuditAction, string> = {
   sign: "Firmó",
   export: "Exportó",
   arco: "Datos personales",
+  login: "Entró",
+  logout: "Salió",
 };
 
 /**
@@ -96,6 +107,17 @@ export const EDU_AUDIT_ENTITIES = [
   "institution",
   "agendaBlock",
   "aiQuota",
+  /** La sesión de la persona: entrar, salir y estrenar contraseña. */
+  "session",
+  // ⚠️ NO se añade `campus` todavía, y es a propósito. H-140 (dar y quitar
+  // el acceso de alguien a una sede desde /instituto/sedes) sigue sin dejar
+  // renglón, pero su escritor —`setEduCampusAccess`, en campus.ts— no
+  // recibe hoy el nombre del actor que `eduAudit` necesita. Poner la
+  // entidad sin nadie que la escriba dejaría un filtro que SIEMPRE sale
+  // vacío en la pantalla de dirección, que es justo el defecto que la
+  // auditoría le señala a «Odontograma». Se añade el día que se añada el
+  // renglón. (Dar y quitar sedes desde la FICHA de la persona sí deja
+  // renglón: `setEduTeamMemberCampuses`, con entidad `user`.)
 ] as const;
 
 export type EduAuditEntity = (typeof EDU_AUDIT_ENTITIES)[number];
@@ -123,6 +145,7 @@ export const EDU_AUDIT_ENTITY_LABELS: Record<EduAuditEntity, string> = {
   institution: "Instituto",
   agendaBlock: "Bloqueo de agenda",
   aiQuota: "Cupo de IA",
+  session: "Sesión",
 };
 
 export function eduAuditIsAction(raw: unknown): raw is EduAuditAction {
@@ -360,4 +383,60 @@ export function eduAuditParseDia(raw: unknown, fin = false): Date | null {
   if (Number.isNaN(d.getTime())) return null;
   if (fin) d.setUTCDate(d.getUTCDate() + 1);
   return d;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LA ANONIMIZACIÓN DE LOS RENGLONES YA ESCRITOS (ARCO)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 SUSTITUYE, EN UN `before`/`after` YA GUARDADO, LAS CLAVES QUE SON PII.
+ *
+ * `anonymizeEduPatient` promete por escrito que «la bitácora no guarda el
+ * PII que se borró», y no era verdad: el alta del paciente escribe
+ * `{ folio, nombre }` y la corrección de la ficha guarda el antes y el
+ * después de siete columnas, entre ellas `phone`, `email` y `curp`. La
+ * anonimización solo tocaba `eduPatient`, así que se anonimizaba a la
+ * paciente, se abría «Bitácora de este paciente» —el botón está en la
+ * propia pantalla de ARCO— y ahí seguía su nombre y su teléfono.
+ *
+ * 🔴 SE SUSTITUYE EL VALOR, NO SE BORRA EL RENGLÓN. Que alguien corrigió el
+ * teléfono el 3 de marzo es la constancia que la NOM-024 quiere poder leer,
+ * y es lo que separa esta tabla de un cajón. Lo que deja de estar es CUÁL
+ * era el teléfono. Por eso tampoco se toca `folio`: es la llave con la que
+ * la escuela encuentra el expediente en papel, y la propia anonimización lo
+ * conserva (prefijado) por ese mismo motivo.
+ *
+ * 🔴 Y NO ES RECURSIVO. Los `before`/`after` de esta bitácora son objetos
+ * planos de un nivel —los arma `eduAuditDiff` a partir de listas cerradas
+ * de columnas— y una sustitución que baje por estructuras anidadas es una
+ * que un día sustituye una clave que resultó llamarse igual dentro de otra
+ * cosa. Si algún día se guarda algo anidado, esto se queda corto de forma
+ * VISIBLE (el valor sigue ahí) y no en silencio.
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Devuelve `null` en `valor` cuando no había nada que redactar, para que
+ * quien llama sepa que ese renglón no hace falta reescribirlo.
+ */
+export function eduAuditRedactaClaves(
+  crudo: unknown,
+  claves: readonly string[],
+  marca: string,
+): { valor: Record<string, unknown> | null; cambios: number } {
+  if (typeof crudo !== "object" || crudo === null || Array.isArray(crudo)) {
+    return { valor: null, cambios: 0 };
+  }
+  const set = new Set(claves);
+  const out: Record<string, unknown> = { ...(crudo as Record<string, unknown>) };
+  let cambios = 0;
+  for (const k of Object.keys(out)) {
+    if (!set.has(k)) continue;
+    // Un valor que ya está sustituido no se vuelve a contar: correr la
+    // anonimización dos veces no puede dar dos resultados distintos.
+    if (out[k] === marca || out[k] === null || out[k] === undefined) continue;
+    out[k] = marca;
+    cambios += 1;
+  }
+  return { valor: cambios > 0 ? out : null, cambios };
 }

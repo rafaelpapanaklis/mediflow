@@ -34,6 +34,7 @@ import {
   EDU_CUESTIONARIO_HISTORIAL,
   EDU_RISK_FLAGS,
   EDU_CUESTIONARIO_NOTES_MAX,
+  eduCuestionarioMergeCas,
   eduCuestionarioMergeData,
   eduCuestionarioParseAnswers,
   eduCuestionarioRiskFlags,
@@ -129,6 +130,15 @@ export async function listEduCuestionarios(
   };
 }
 
+/** Señal interna: el compare-and-swap del merge no encontró la ficha como
+ *  se leyó. No sale nunca al cliente — se traduce a un 409 con texto. */
+class EduCuestionarioMergePisado extends Error {
+  constructor() {
+    super("merge pisado");
+    this.name = "EduCuestionarioMergePisado";
+  }
+}
+
 /**
  * GUARDA UNA VERSIÓN NUEVA y mezcla lo clínico en la ficha.
  *
@@ -156,30 +166,39 @@ export async function createEduCuestionario(
   const answers = eduCuestionarioParseAnswers(body?.answers);
   const notes = eduOptionalText(body?.notes, EDU_CUESTIONARIO_NOTES_MAX) ?? null;
 
-  // La ficha, para el merge aditivo y para las dos columnas que alimentan
-  // las banderas (menor de edad y embarazo ya conocido).
-  const ficha = await prisma.eduPatient.findFirst({
-    where: { id: paciente.id, institutionId },
-    select: {
-      allergies: true,
-      chronicConditions: true,
-      currentMedications: true,
-      isChild: true,
-      pregnancy: true,
-    },
-  });
-  if (!ficha) throw new EduPadronError("Ese paciente no existe o no es de tu instituto.", 404);
-
-  const riskFlags = eduCuestionarioRiskFlags(answers, {
-    isChild: ficha.isChild,
-    pregnancy: (ficha.pregnancy as EduPregnancy | null) ?? null,
-  });
-  const mergeData = eduCuestionarioMergeData(answers, ficha, ctx.eduUserId, now);
   const recordedByName =
     `${ctx.user.firstName} ${ctx.user.lastName}`.trim().slice(0, 160) || "—";
 
-  // Tres intentos por la carrera de la versión. Ver el encabezado.
+  // Tres intentos, por DOS carreras: la del número de versión (índice único,
+  // ver el encabezado) y la del merge (compare-and-swap, ver abajo).
   for (let intento = 0; intento < 3; intento++) {
+    // 🔴 LA FICHA SE RELEE EN CADA INTENTO. Si el reintento viene de que
+    // otro escritor tocó los antecedentes, unir otra vez contra la foto
+    // vieja los volvería a borrar: sería un reintento que repite el fallo.
+    //
+    // La ficha, para el merge aditivo y para las dos columnas que alimentan
+    // las banderas (menor de edad y embarazo ya conocido).
+    const ficha = await prisma.eduPatient.findFirst({
+      where: { id: paciente.id, institutionId },
+      select: {
+        allergies: true,
+        chronicConditions: true,
+        currentMedications: true,
+        isChild: true,
+        pregnancy: true,
+      },
+    });
+    if (!ficha) throw new EduPadronError("Ese paciente no existe o no es de tu instituto.", 404);
+
+    const riskFlags = eduCuestionarioRiskFlags(answers, {
+      isChild: ficha.isChild,
+      pregnancy: (ficha.pregnancy as EduPregnancy | null) ?? null,
+    });
+    const mergeData = eduCuestionarioMergeData(answers, ficha, ctx.eduUserId, now);
+    // Las listas TAL COMO SE ACABAN DE LEER, para el `where` de la
+    // escritura. Ver `eduCuestionarioMergeCas`.
+    const mergeCas = eduCuestionarioMergeCas(mergeData, ficha);
+
     const agg = await prisma.eduHealthQuestionnaire.aggregate({
       where: { institutionId, patientId: paciente.id },
       _max: { version: true },
@@ -205,11 +224,19 @@ export async function createEduCuestionario(
 
         // 🔴 EL MERGE, ADITIVO Y EN LA MISMA TRANSACCIÓN. El where lleva
         // el institutionId además del id, como toda escritura del
-        // vertical.
-        await tx.eduPatient.updateMany({
-          where: { id: paciente.id, institutionId },
+        // vertical, y las tres listas clínicas TAL COMO SE LEYERON: si otro
+        // escritor las cambió mientras tanto, esto no escribe nada y se
+        // reintenta contra la ficha de ahora en vez de pisarle una alergia.
+        const escrito = await tx.eduPatient.updateMany({
+          where: { id: paciente.id, institutionId, ...mergeCas },
           data: mergeData as Prisma.EduPatientUncheckedUpdateManyInput,
         });
+        if (escrito.count === 0) {
+          // Se lanza DENTRO de la transacción a propósito: deshace también
+          // la versión recién creada. Un cuestionario cuya versión existe y
+          // cuyo merge no se aplicó es la peor de las dos salidas.
+          throw new EduCuestionarioMergePisado();
+        }
 
         return fila;
       });
@@ -226,7 +253,15 @@ export async function createEduCuestionario(
       return { id: creado.id, version: creado.version, riskFlags };
     } catch (err) {
       const code = (err as { code?: string })?.code;
-      if (code === "P2002" && intento < 2) continue;
+      if ((code === "P2002" || err instanceof EduCuestionarioMergePisado) && intento < 2) {
+        continue;
+      }
+      if (err instanceof EduCuestionarioMergePisado) {
+        throw new EduPadronError(
+          "No se guardó: alguien más está escribiendo los antecedentes de este paciente ahora mismo, y guardar encima le borraría lo que acaba de anotar. Actualiza la pantalla y vuelve a mandarlo.",
+          409,
+        );
+      }
       throw err;
     }
   }
