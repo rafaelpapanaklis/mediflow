@@ -21,6 +21,7 @@ import type { EduRole, EduStudentStatus } from "@/lib/edu/types";
 import {
   EDU_PADRON_MAX_ROWS,
   eduCurrentAssignmentWhere,
+  eduPadronPagina,
   eduPadronScope,
   eduRequiredText,
   eduStudentWhere,
@@ -121,12 +122,21 @@ export async function listEduStudents(
   const institutionId = requireInstitution(ctx);
   const scope = eduPadronScope(ctx);
 
+  // 🔴 H-106 · LA PÁGINA. El padrón se cortaba en 300 filas sin salida: los
+  // alumnos a partir del 301 —los de matrícula más alta, es decir los de la
+  // generación más nueva— no se podían alcanzar más que adivinando un filtro.
+  // El orden es por matrícula ASCENDENTE y es único por instituto, así que el
+  // OFFSET es estable: no hay filas que se repitan ni que se salten entre una
+  // página y la siguiente.
+  const page = eduPadronPagina(filters.page);
+
   // Sin alcance no se consulta nada. La pantalla explica por qué.
-  if (scope.kind === "none") return { rows: [], scope, truncated: false };
+  if (scope.kind === "none") return { rows: [], scope, truncated: false, page };
 
   const rows = await prisma.eduStudent.findMany({
     where: eduStudentWhere({ institutionId, scope, filters, now }),
     orderBy: [{ matricula: "asc" }],
+    skip: (page - 1) * EDU_PADRON_MAX_ROWS,
     take: EDU_PADRON_MAX_ROWS + 1,
     select: {
       id: true,
@@ -152,6 +162,18 @@ export async function listEduStudents(
           supervisor: { select: { firstName: true, lastName: true, email: true } },
         },
       },
+      // H-101 · Lo que queda colgando si se le da de baja. Viaja con la
+      // fila y no en una consulta aparte por alumno: la pantalla necesita
+      // el número en el momento en que se abre el modal, y 300 consultas
+      // sueltas para pintar una tabla saturarían el pooler.
+      _count: {
+        select: {
+          cases: { where: { status: { in: ["SCREENING", "ASSIGNED", "IN_TREATMENT", "ON_HOLD"] } } },
+          appointments: {
+            where: { startsAt: { gte: now }, status: { in: ["SCHEDULED", "CHECKED_IN"] } },
+          },
+        },
+      },
     },
   });
 
@@ -160,6 +182,7 @@ export async function listEduStudents(
   return {
     scope,
     truncated,
+    page,
     rows: rows.slice(0, EDU_PADRON_MAX_ROWS).map((s) => ({
       id: s.id,
       matricula: s.matricula,
@@ -176,6 +199,8 @@ export async function listEduStudents(
       programCode: s.program.code,
       cohortId: s.cohortId,
       cohortName: s.cohort.name,
+      casosAbiertos: s._count.cases,
+      citasFuturas: s._count.appointments,
       supervisors: s.supervisors.map((a) => ({
         assignmentId: a.id,
         supervisorUserId: a.supervisorUserId,
@@ -547,21 +572,40 @@ async function resolvePair(
   institutionId: string,
   programId: string,
   cohortId: string,
+  // H-109 · Solo se exige "activa" cuando el par CAMBIA. Un alumno que ya
+  // está inscrito en una especialidad que después se cerró tiene que poder
+  // seguir editándose (su semestre, su matrícula, su estado): la regla es
+  // "no se inscribe en lo cerrado", no "lo cerrado se congela".
+  exigirActiva = true,
 ): Promise<void> {
   // El programa se comprueba PRIMERO: si faltan los dos, el mensaje útil
   // es "elige un programa", que es el primer campo del formulario.
   const program = await prisma.eduProgram.findFirst({
     where: { id: programId, institutionId },
-    select: { id: true },
+    select: { id: true, isActive: true, name: true },
   });
   if (!program) throw new EduPadronError("Elige una especialidad de este instituto.", 400);
+  // 🔴 H-109 · La pantalla solo ofrece las ACTIVAS (padron-screen.tsx:413) y
+  // el servidor las aceptaba todas: una regla que existía en un solo lado, y
+  // el lado que no es el candado. Un id copiado de un enlace viejo inscribía
+  // en una especialidad cerrada.
+  if (exigirActiva && !program.isActive) {
+    throw new EduPadronError(
+      `La especialidad ${program.name} está desactivada: no se puede inscribir a nadie en ella. Actívala primero en Estructura.`,
+    );
+  }
   const cohort = await prisma.eduCohort.findFirst({
     where: { id: cohortId, institutionId },
-    select: { programId: true },
+    select: { programId: true, isActive: true, name: true },
   });
   if (!cohort) throw new EduPadronError("Elige una generación de este instituto.", 400);
   if (cohort.programId !== programId) {
     throw new EduPadronError("Esa generación no pertenece a la especialidad que elegiste.");
+  }
+  if (exigirActiva && !cohort.isActive) {
+    throw new EduPadronError(
+      `La generación ${cohort.name} está cerrada: no se puede inscribir a nadie en ella. Ábrela primero en Estructura.`,
+    );
   }
 }
 
@@ -630,6 +674,13 @@ export async function createEduStudent(
   });
 }
 
+/**
+ * Los estados de baja del padrón. Los dos significan "ya no está en la
+ * generación", y los dos son el momento en el que hay que decidir qué pasa
+ * con su ACCESO (H-02).
+ */
+const EDU_STATUS_DE_BAJA: EduStudentStatus[] = ["GRADUATED", "WITHDRAWN"];
+
 export async function updateEduStudent(
   ctx: EduPadronContext,
   studentId: string,
@@ -639,13 +690,39 @@ export async function updateEduStudent(
     status?: unknown;
     programId?: unknown;
     cohortId?: unknown;
+    /**
+     * 🔴 H-02 · ¿Se apaga también la CUENTA al darlo de baja del padrón?
+     *
+     * Hasta esta ola, marcar «Baja definitiva» escribía `status` y
+     * `graduatedAt` y nada más: `EduUser.isActive` no se tocaba y la sesión
+     * solo mira eso. Al día siguiente ese exalumno entraba con su misma
+     * contraseña. Desde la Ola A el ALCANCE ya no le devuelve pacientes
+     * —entra a un panel vacío— pero seguía entrando, y "entra a un panel
+     * vacío" no es lo mismo que "no entra".
+     *
+     * Se manda EXPLÍCITO y la pantalla lo trae marcado por defecto, con
+     * aviso en rojo si se desmarca. No se hace en automático a espaldas de
+     * quien guarda: dar de baja una cuenta es quitarle a alguien el acceso
+     * a su propio historial académico, y eso lo decide la dirección — lo que
+     * cambió es que ahora lo decide AQUÍ, en el mismo modal y en la misma
+     * transacción, en vez de tener que acordarse de ir a otra pantalla.
+     */
+    deactivateAccount?: unknown;
   },
   now: Date = new Date(),
-): Promise<{ id: string }> {
+): Promise<{ id: string; cuentaDesactivada: boolean }> {
   const institutionId = requireInstitution(ctx);
   const current = await prisma.eduStudent.findFirst({
     where: { id: studentId, institutionId },
-    select: { id: true, programId: true, cohortId: true, status: true, graduatedAt: true },
+    select: {
+      id: true,
+      programId: true,
+      cohortId: true,
+      status: true,
+      graduatedAt: true,
+      userId: true,
+      user: { select: { isActive: true, role: true } },
+    },
   });
   if (!current) throw new EduPadronError("Ese estudiante no es de este instituto.", 404);
 
@@ -689,15 +766,64 @@ export async function updateEduStudent(
   if (input.programId !== undefined || input.cohortId !== undefined) {
     const programId = typeof input.programId === "string" ? input.programId : current.programId;
     const cohortId = typeof input.cohortId === "string" ? input.cohortId : current.cohortId;
-    await resolvePair(institutionId, programId, cohortId);
+    // Solo se exige "activa" si el par CAMBIA: reenviar el mismo par (el
+    // modal manda el formulario completo) no puede rebotar por una
+    // especialidad que se cerró después de inscribirlo.
+    const cambiaPar = programId !== current.programId || cohortId !== current.cohortId;
+    await resolvePair(institutionId, programId, cohortId, cambiaPar);
     data.programId = programId;
     data.cohortId = cohortId;
   }
 
+  // ── 🔴 H-02 · LA BAJA DEL PADRÓN Y LA BAJA DE LA CUENTA, JUNTAS ───────
+  const bajaAhora =
+    data.status !== undefined &&
+    EDU_STATUS_DE_BAJA.includes(data.status) &&
+    !EDU_STATUS_DE_BAJA.includes(current.status as EduStudentStatus);
+  const quiereDesactivar = parseEduBoolean(input.deactivateAccount) === true;
+  const desactivarCuenta = bajaAhora && quiereDesactivar && current.user.isActive;
+
+  if (quiereDesactivar && !bajaAhora) {
+    // Apagar la cuenta sin dar de baja al alumno no es lo que esta pantalla
+    // hace: para eso está Equipo, que además protege a la última dirección.
+    throw new EduPadronError(
+      "Solo se puede desactivar la cuenta junto con la baja del padrón. Para dar de baja una cuenta sin tocar el padrón, hazlo desde Equipo.",
+    );
+  }
+
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
 
-  await prisma.eduStudent.update({ where: { id: studentId }, data });
-  return { id: studentId };
+  // Una transacción, dos filas. El estado leído va en el `where` de las dos:
+  // entre el findFirst de arriba y esto caben otra pestaña y otra persona de
+  // dirección, y una baja que se pisa con una reinscripción dejaría al
+  // alumno activo en el padrón y con la cuenta apagada — o al revés.
+  await prisma.$transaction(async (tx) => {
+    const escrito = await tx.eduStudent.updateMany({
+      where: { id: studentId, institutionId, status: current.status },
+      data,
+    });
+    if (escrito.count === 0) {
+      throw new EduPadronError(
+        "Alguien más cambió la ficha de este estudiante mientras la editabas. Actualiza la pantalla y vuelve a mirarla.",
+        409,
+      );
+    }
+
+    if (desactivarCuenta) {
+      const apagada = await tx.eduUser.updateMany({
+        where: { id: current.userId, institutionId, isActive: true, role: "ALUMNO" },
+        data: { isActive: false },
+      });
+      if (apagada.count === 0) {
+        throw new EduPadronError(
+          "Alguien más cambió esa cuenta mientras guardabas. Actualiza la pantalla: la baja del padrón no se guardó.",
+          409,
+        );
+      }
+    }
+  });
+
+  return { id: studentId, cuentaDesactivada: desactivarCuenta };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -727,9 +853,22 @@ export async function assignEduSupervisor(
   if (isPrimary === null) throw new EduPadronError("El tipo de asignación no es válido.");
 
   const student = studentId
-    ? await prisma.eduStudent.findFirst({ where: { id: studentId, institutionId }, select: { id: true } })
+    ? await prisma.eduStudent.findFirst({
+        where: { id: studentId, institutionId },
+        select: { id: true, status: true, user: { select: { isActive: true } } },
+      })
     : null;
   if (!student) throw new EduPadronError("Ese estudiante no es de este instituto.", 404);
+  // 🔴 H-111 · Al alumno se le miraba solo `{id, institutionId}`, nunca su
+  // `status`, mientras que al docente sí se le validaba el rol y el estado.
+  // Asignarle un docente a un egresado o a un dado de baja le metía ese
+  // alumno en la carga «de hoy» del docente y le daba visibilidad clínica
+  // sobre sus pacientes históricos.
+  if (student.status !== "ACTIVE") {
+    throw new EduPadronError(
+      "Ese estudiante ya no está activo en el padrón: no se le puede asignar un docente. Si volvió, ponlo en Activo primero.",
+    );
+  }
 
   const supervisor = supervisorUserId
     ? await prisma.eduUser.findFirst({
@@ -743,6 +882,23 @@ export async function assignEduSupervisor(
   }
   if (!supervisor.isActive) {
     throw new EduPadronError("Ese docente está dado de baja. Reactívalo antes de asignarle estudiantes.");
+  }
+  // 🔴 H-16 (tercera llave) · NADIE SE ASIGNA A SÍ MISMO. El comentario de
+  // la propia ruta describía este riesgo (src/app/api/instituto/supervision
+  // /route.ts:10-13) y la función nunca comparaba supervisorUserId con
+  // ctx.eduUserId: con `supervision.assign` prestado, un docente se asignaba
+  // a cualquier alumno, ganaba su expediente, su odontograma y sus
+  // radiografías, y de paso CERRABA al titular anterior, que perdía el
+  // acceso sin enterarse.
+  //
+  // La regla no le quita nada a la dirección: un supervisor tiene que ser
+  // DOCENTE (arriba), así que una cuenta de DIRECCION nunca puede ser el
+  // supervisor de esta comprobación.
+  if (supervisor.id === ctx.eduUserId) {
+    throw new EduPadronError(
+      "No puedes asignarte estudiantes a ti mismo. Las asignaciones las hace la dirección.",
+      403,
+    );
   }
 
   const yaLoLleva = await prisma.eduSupervisorAssignment.findFirst({

@@ -72,10 +72,16 @@ export default async function DocenteResumenPage({ params }: { params: { id: str
             <p className="edu-kpi__value edu-kpi__value--texto">
               {docente.isActive ? "Activa" : "Desactivada"}
             </p>
+            {/* 🔴 H-159 · «no lo puedes ver» y «no hay nada que ver» son dos
+                cosas, y este texto las confundía: se lo leía la dirección,
+                que SÍ administra el equipo, y concluía que le faltaba un
+                permiso que ya tenía. */}
             <p className="edu-kpi__note">
-              {docente.lastLoginLabel
-                ? `Última entrada: ${docente.lastLoginLabel}.`
-                : "La última entrada solo la ve quien administra el equipo."}
+              {!docente.veUltimaEntrada
+                ? "La última entrada solo la ve quien administra el equipo."
+                : docente.lastLoginLabel
+                  ? `Última entrada: ${docente.lastLoginLabel}.`
+                  : "Sin registro de entrada todavía."}
             </p>
           </div>
         </div>

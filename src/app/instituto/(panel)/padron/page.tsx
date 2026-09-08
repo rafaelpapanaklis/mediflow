@@ -105,6 +105,10 @@ export default async function InstitutoPadronPage({
       <EduPadronScreen
         rows={page.rows}
         truncated={page.truncated}
+        // 🔴 H-106 · la página que se está enseñando. Va del servidor y no
+        // del querystring leído en el navegador: el saneo (una página
+        // inventada cae en la primera) vive en un solo sitio.
+        page={page.page}
         scopeKind={page.scope.kind}
         filters={filters}
         maxRows={EDU_PADRON_MAX_ROWS}

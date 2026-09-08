@@ -37,17 +37,22 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import type { EduRole } from "@/lib/edu/types";
-import { eduSearchTokens } from "@/lib/edu/padron-core";
+import { eduCurrentAssignmentWhere, eduSearchTokens } from "@/lib/edu/padron-core";
 import { eduUserSearchIndex } from "@/lib/edu/search";
 import {
   EDU_TEAM_BULK_CHUNK,
   EDU_TEAM_MAX_ROWS,
   EDU_TEMP_PASSWORD_BYTES,
+  EDU_ULTIMA_DIRECCION_ERROR,
+  eduOverrideDejaSinAdministracion,
   eduTeamFullName,
+  eduTeamGuardDireccion,
   eduTeamMemberInput,
+  eduTeamPersonaEditInput,
   eduTempPasswordFromBytes,
   type EduTeamAltaResult,
   type EduTeamFilters,
+  type EduTeamPersonaEdit,
   type EduTeamRow,
 } from "@/lib/edu/equipo-core";
 // P2-8: el saneador del catálogo, que existía desde la Ola 0 esperando a la
@@ -311,6 +316,16 @@ export async function createEduTeamMember(
     error,
   });
 
+  // 🔴 H-16 · CREAR UNA DIRECCIÓN ES COSA DE LA DIRECCIÓN. El <select> del
+  // alta ofrecía los cuatro roles a cualquiera con `equipo.manage`, y esa
+  // llave se presta por override a un coordinador. Con ella se creaba una
+  // cuenta DIRECCION con un correo propio, se leía su contraseña temporal en
+  // la misma pantalla que la crea, y se entraba como dirección del instituto.
+  // Se devuelve como fallo de renglón (no lanza) para que un alta masiva con
+  // una fila de más no tire las otras 199.
+  const guard = eduTeamGuardDireccion(ctx.role, role, "crear");
+  if (guard) return fallo(guard);
+
   // Ya está en ESTE instituto → no se toca Supabase siquiera. El índice
   // único (supabaseId, institutionId) lo rebotaría igual, pero con un error
   // de base de datos que no le dice nada a nadie.
@@ -486,7 +501,8 @@ export async function setEduTeamMemberActive(
   ctx: EduTeamContext,
   memberId: string,
   isActive: boolean,
-): Promise<{ id: string; isActive: boolean }> {
+  now: Date = new Date(),
+): Promise<{ id: string; isActive: boolean; supervisionesCerradas: number }> {
   const institutionId = requireInstitution(ctx);
 
   const persona = await prisma.eduUser.findFirst({
@@ -500,6 +516,14 @@ export async function setEduTeamMemberActive(
       isActive ? "Esa cuenta ya estaba activa." : "Esa cuenta ya estaba dada de baja.",
     );
   }
+
+  // 🔴 H-16 · A una cuenta de DIRECCION solo la toca otra de DIRECCION.
+  // Cubre los dos sentidos a propósito: dar de baja a la dirección que había
+  // era el primer eslabón de la cadena de escalada, y REACTIVAR una
+  // dirección dada de baja es devolverle la llave de la escuela —que es
+  // exactamente la misma decisión, vista del otro lado.
+  const guard = eduTeamGuardDireccion(ctx.role, persona.role as EduRole, isActive ? "reactivar" : "baja");
+  if (guard) throw new EduPadronError(guard, 403);
 
   if (!isActive) {
     // 🔴 Nadie se da de baja a sí mismo. Con una sola dirección en la
@@ -524,8 +548,54 @@ export async function setEduTeamMemberActive(
     }
   }
 
-  await prisma.eduUser.update({ where: { id: persona.id }, data: { isActive } });
-  return { id: persona.id, isActive };
+  // ── LA ESCRITURA, con el estado leído en el `where` ─────────────────
+  // Es el patrón de la casa desde la Ola A (recetas, consentimientos): entre
+  // el `findFirst` de arriba y esta escritura caben otra pestaña y otra
+  // persona de dirección. `updateMany` con `isActive: !isActive` en el where
+  // convierte la carrera en un 409 con texto, en vez de en dos bajas que se
+  // pisan —y, peor, en unas supervisiones cerradas dos veces.
+  //
+  // 🔴 H-99 · DAR DE BAJA A UN DOCENTE CIERRA SUS SUPERVISIONES. Sin esto,
+  // sus 12 asignaciones seguían VIGENTES: la lista lo pintaba «Inactivo · 12
+  // estudiantes hoy», el padrón lo seguía enseñando como titular, y sus 12
+  // alumnos se quedaban con las autorizaciones pendientes en manos de una
+  // persona que ya no entra. El código ya sabía que un docente inactivo no
+  // debe llevar alumnos —`assignEduSupervisor` rebota una asignación NUEVA
+  // contra un docente de baja—; lo que faltaba era cerrar las que ya tenía.
+  //
+  // Se cierran (endsAt = ahora), NUNCA se borran: dentro de un año hay que
+  // poder contestar quién supervisaba a este alumno el 3 de marzo.
+  // Reactivar NO las reabre: quién supervisa a quién hoy es una decisión
+  // académica que se toma en el padrón, no un efecto secundario.
+  const { supervisionesCerradas } = await prisma.$transaction(async (tx) => {
+    const cambio = await tx.eduUser.updateMany({
+      where: { id: persona.id, institutionId, isActive: !isActive },
+      data: { isActive },
+    });
+    if (cambio.count === 0) {
+      throw new EduPadronError(
+        isActive
+          ? "Alguien reactivó esa cuenta mientras mirabas. Actualiza la pantalla."
+          : "Alguien dio de baja esa cuenta mientras mirabas. Actualiza la pantalla.",
+        409,
+      );
+    }
+
+    if (!isActive && persona.role === "DOCENTE") {
+      const cerradas = await tx.eduSupervisorAssignment.updateMany({
+        where: {
+          institutionId,
+          supervisorUserId: persona.id,
+          ...eduCurrentAssignmentWhere(now),
+        },
+        data: { endsAt: now },
+      });
+      return { supervisionesCerradas: cerradas.count };
+    }
+    return { supervisionesCerradas: 0 };
+  });
+
+  return { id: persona.id, isActive, supervisionesCerradas };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -577,7 +647,7 @@ export async function setEduTeamMemberPermissions(
 
   const persona = await prisma.eduUser.findFirst({
     where: { id: memberId, institutionId },
-    select: { id: true },
+    select: { id: true, role: true, isActive: true, permissionsOverride: true },
   });
   if (!persona) throw new EduPadronError("Esa persona no es de este instituto.", 404);
 
@@ -586,6 +656,15 @@ export async function setEduTeamMemberPermissions(
       "No puedes editar tus propios permisos. Pídeselo a otra persona de dirección.",
     );
   }
+
+  // 🔴 H-16 · LOS PERMISOS DE UNA DIRECCIÓN LOS EDITA OTRA DIRECCIÓN. Éste
+  // era el segundo eslabón: con `equipo.manage` prestado se abría «Permisos»
+  // sobre la cuenta de dirección y se le dejaba solo `inicio.view`. Esa
+  // dirección perdía `equipo.manage` y NO podía recuperarlo —hacen falta
+  // permisos que ya no tiene—, así que el instituto se quedaba administrado
+  // por quien había hecho el recorte.
+  const guard = eduTeamGuardDireccion(ctx.role, persona.role as EduRole, "permisos");
+  if (guard) throw new EduPadronError(guard, 403);
 
   let override: string[];
   if (rawKeys === null) {
@@ -601,9 +680,433 @@ export async function setEduTeamMemberPermissions(
     throw new EduPadronError("Manda la lista de permisos, o null para restaurar el rol.", 400);
   }
 
-  await prisma.eduUser.update({
-    where: { id: persona.id },
+  // 🔴 H-16 · Y NADIE VACÍA A LA ÚLTIMA DIRECCIÓN ACTIVA. Con DOS cuentas
+  // de dirección la cadena todavía se podía encadenar: dar de baja a la
+  // primera (permitido, solo se protegía a la última) y recortarle los
+  // permisos a la segunda. Al llegar a la última, quitarle «Administrar el
+  // equipo» deja al instituto sin nadie que pueda devolvérselo — ni a ella
+  // misma, porque nadie edita sus propios permisos.
+  //
+  // Restaurar el rol (`null` → override vacío) NUNCA cae aquí: el default de
+  // DIRECCION lleva `equipo.manage`, así que siempre queda esa salida.
+  if (override.length > 0 && persona.role === "DIRECCION" && persona.isActive) {
+    const otras = await prisma.eduUser.count({
+      where: { institutionId, role: "DIRECCION", isActive: true, NOT: { id: persona.id } },
+    });
+    if (eduOverrideDejaSinAdministracion(override, otras === 0)) {
+      throw new EduPadronError(EDU_ULTIMA_DIRECCION_ERROR, 409);
+    }
+  }
+
+  // El estado leído en el `where`: el ROL. Si otra pestaña le cambió el rol
+  // entre la lectura y esta escritura, el guardia de arriba se resolvió
+  // contra un rol que ya no es el suyo — y los permisos que se guardarían
+  // serían los que se marcaron para el rol viejo.
+  const escrito = await prisma.eduUser.updateMany({
+    where: { id: persona.id, institutionId, role: persona.role },
     data: { permissionsOverride: override },
   });
+  if (escrito.count === 0) {
+    throw new EduPadronError(
+      "Alguien cambió el rol de esa cuenta mientras editabas sus permisos. Actualiza la pantalla y vuelve a mirarlos.",
+      409,
+    );
+  }
   return { id: persona.id, permissionsOverride: override };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6 · CORREGIR A UNA PERSONA (H-04) — nombre, correo, teléfono y ROL
+//
+// Hasta esta ola, los CUATRO únicos escritores de EduUser en todo el repo
+// eran `isActive`, `permissionsOverride`, la cédula profesional y
+// `mustChangePassword`. El alta capturaba cinco campos y el único PATCH
+// admitía dos: un `maria.rodrigez@…` mal tecleado dejaba a esa persona fuera
+// para siempre y la fila vieja huérfana; una alumna que se casaba se quedaba
+// con el apellido viejo firmando notas clínicas el resto de su carrera; y un
+// docente que ascendía a coordinación necesitaba OTRA cuenta, con su
+// historial clínico colgando del id viejo.
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduTeamUpdateResult {
+  id: string;
+  emailChanged: boolean;
+  roleChanged: boolean;
+  /**
+   * 🔴 El override de permisos que se BORRÓ al cambiar de rol. Viaja de
+   * vuelta porque NO HAY DÓNDE GUARDARLO: el vertical no tiene columna de
+   * histórico ni bitácora (H-162), así que la única forma de que no
+   * desaparezca sin dejar rastro es enseñárselo a quien hizo el cambio, en
+   * el momento, para que lo apunte. Vacío si no había o si no cambió el rol.
+   */
+  overrideDescartado: string[];
+}
+
+/**
+ * ¿Esta cuenta de Auth la comparte alguien más? (el panel dental, u otro
+ * instituto)
+ *
+ * Importa para DOS decisiones distintas, y las dos por lo mismo: la cuenta
+ * de Supabase Auth es UNA para todo DaleControl. Cambiarle el correo o la
+ * contraseña desde aquí le cambia el login en el otro producto, y ese otro
+ * producto no es de este vertical.
+ */
+async function cuentaCompartida(
+  supabaseId: string,
+  eduUserId: string,
+): Promise<{ enDental: boolean; enOtroInstituto: boolean }> {
+  const [dental, otro] = await Promise.all([
+    prisma.user.findFirst({ where: { supabaseId }, select: { id: true } }),
+    prisma.eduUser.findFirst({
+      where: { supabaseId, NOT: { id: eduUserId } },
+      select: { id: true },
+    }),
+  ]);
+  return { enDental: Boolean(dental), enOtroInstituto: Boolean(otro) };
+}
+
+/**
+ * Corrige los datos de una persona del instituto.
+ *
+ * ── EL CORREO, QUE NO ES UNA COLUMNA MÁS ────────────────────────────────
+ * Es la IDENTIDAD DE LOGIN en Supabase Auth. Se escribe en LOS DOS lados y
+ * en este orden: Auth primero (es la fuente de verdad del login) y Prisma
+ * solo si Auth contestó OK; si Prisma truena después, se REVIERTE Auth.
+ * Dejar Auth con el correo nuevo y el panel con el viejo es el estado
+ * imposible de depurar que esto viene a cerrar. Es el mismo camino que el
+ * alta y el mismo que el dental (src/app/api/team/[id]/route.ts:144-180).
+ *
+ * ⚠️ Si esa cuenta de Auth la usa TAMBIÉN el panel dental, el correo NO se
+ * cambia desde aquí y se dice por qué: este vertical no escribe tablas del
+ * dental (misma regla que el cambio de contraseña), así que cambiar el login
+ * dejaría al panel dental mostrando un correo que ya no entra.
+ *
+ * ── EL ROL ──────────────────────────────────────────────────────────────
+ * Solo lo cambia una DIRECCION, nunca sobre sí misma, y BORRA el override:
+ * como el override REEMPLAZA al default del rol (no se suma), un override
+ * escrito para el rol viejo seguiría mandando sobre el rol nuevo — un
+ * "docente ascendido a dirección" se quedaría con los permisos de docente y
+ * nadie entendería por qué.
+ */
+export async function updateEduTeamMember(
+  ctx: EduTeamContext,
+  memberId: string,
+  input: {
+    firstName?: unknown;
+    lastName?: unknown;
+    email?: unknown;
+    phone?: unknown;
+    role?: unknown;
+  },
+): Promise<EduTeamUpdateResult> {
+  const institutionId = requireInstitution(ctx);
+
+  const check = eduTeamPersonaEditInput(input);
+  if (!check.value) throw new EduPadronError(check.error);
+  const cambios: EduTeamPersonaEdit = check.value;
+
+  const persona = await prisma.eduUser.findFirst({
+    where: { id: memberId, institutionId },
+    select: {
+      id: true,
+      supabaseId: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      role: true,
+      isActive: true,
+      permissionsOverride: true,
+    },
+  });
+  if (!persona) throw new EduPadronError("Esa persona no es de este instituto.", 404);
+
+  // 🔴 H-16 · a una cuenta de DIRECCION solo la toca otra de DIRECCION.
+  // Cambiarle el correo a la dirección es apoderarse de su login: con el
+  // correo nuevo se pide "olvidé mi contraseña" y se toma la cuenta.
+  const guardActual = eduTeamGuardDireccion(ctx.role, persona.role as EduRole, "datos");
+  if (guardActual) throw new EduPadronError(guardActual, 403);
+
+  const roleChanged = Boolean(cambios.role) && cambios.role !== persona.role;
+  if (roleChanged) {
+    // Cambiar de rol es cambiar quién es esta persona en el instituto: solo
+    // la dirección. Y el rol DESTINO pasa por el mismo guardia, para que
+    // nadie se ascienda a nadie a dirección por la puerta de atrás.
+    if (ctx.role !== "DIRECCION") {
+      throw new EduPadronError(
+        "Solo una cuenta de Dirección puede cambiar el rol de una persona.",
+        403,
+      );
+    }
+    const guardDestino = eduTeamGuardDireccion(ctx.role, cambios.role as EduRole, "crear");
+    if (guardDestino) throw new EduPadronError(guardDestino, 403);
+
+    if (persona.id === ctx.eduUserId) {
+      throw new EduPadronError(
+        "No puedes cambiarte el rol a ti mismo. Pídeselo a otra persona de dirección.",
+      );
+    }
+    // La última dirección activa no se degrada: el instituto se quedaría sin
+    // nadie que pueda dar de alta, dar de baja ni repartir permisos. Es la
+    // misma regla que ya protegía la baja, por el mismo motivo.
+    if (persona.role === "DIRECCION" && persona.isActive) {
+      const otras = await prisma.eduUser.count({
+        where: { institutionId, role: "DIRECCION", isActive: true, NOT: { id: persona.id } },
+      });
+      if (otras === 0) {
+        throw new EduPadronError(
+          "Es la única cuenta de Dirección activa del instituto. Da de alta a otra antes de cambiarle el rol a ésta.",
+        );
+      }
+    }
+  }
+
+  const emailChanged = Boolean(cambios.email) && cambios.email !== persona.email;
+
+  // ── El correo, comprobado ANTES de tocar Supabase ────────────────────
+  let compartida = { enDental: false, enOtroInstituto: false };
+  if (emailChanged) {
+    compartida = await cuentaCompartida(persona.supabaseId, persona.id);
+    if (compartida.enDental) {
+      throw new EduPadronError(
+        "Ese acceso es el mismo que esta persona usa en el panel dental de DaleControl. Cambiarle el correo aquí le cambiaría el login allá, y este panel no escribe los datos del dental: el cambio tiene que hacerse desde ahí.",
+        409,
+      );
+    }
+    const choque = await prisma.eduUser.findFirst({
+      where: { institutionId, email: cambios.email, NOT: { id: persona.id } },
+      select: { id: true },
+    });
+    if (choque) {
+      throw new EduPadronError("Ya hay alguien con ese correo en este instituto.", 409);
+    }
+  }
+
+  // Los valores FINALES, para reescribir el índice sin acentos. Si no se
+  // reescribiera, corregir un apellido dejaría a la persona buscable por el
+  // viejo y no por el nuevo — que es la misma trampa que ya se cerró en el
+  // alta y en la matrícula del padrón.
+  const finalFirst = cambios.firstName ?? persona.firstName;
+  const finalLast = cambios.lastName ?? persona.lastName;
+  const finalEmail = cambios.email ?? persona.email;
+  const finalPhone = cambios.phone !== undefined ? cambios.phone : persona.phone;
+
+  const data: Prisma.EduUserUpdateManyMutationInput = {
+    ...(cambios.firstName !== undefined && { firstName: cambios.firstName }),
+    ...(cambios.lastName !== undefined && { lastName: cambios.lastName }),
+    ...(cambios.phone !== undefined && { phone: cambios.phone }),
+    ...(emailChanged && { email: cambios.email }),
+    ...(roleChanged && { role: cambios.role, permissionsOverride: [] }),
+    searchIndex: eduUserSearchIndex({
+      firstName: finalFirst,
+      lastName: finalLast,
+      email: finalEmail,
+      phone: finalPhone,
+    }),
+  };
+
+  // ── Auth PRIMERO ─────────────────────────────────────────────────────
+  let admin: ReturnType<typeof adminClient> | null = null;
+  if (emailChanged) {
+    admin = adminClient();
+    const { error } = await admin.auth.admin.updateUserById(persona.supabaseId, {
+      email: cambios.email,
+      // Sin esto el correo queda pendiente de confirmar y la persona no
+      // entra hasta hacer clic en un mail que nunca pidió.
+      email_confirm: true,
+    });
+    if (error) {
+      const mensaje = error.message ?? "";
+      const code = (error as { code?: string })?.code;
+      if (esCorreoYaRegistrado(mensaje, code)) {
+        throw new EduPadronError(
+          "Ese correo ya tiene cuenta en DaleControl. Usa otro distinto para esta persona.",
+          409,
+        );
+      }
+      console.error("[instituto] cambio de correo falló en Supabase:", mensaje);
+      throw new EduPadronError(
+        "No se pudo cambiar el correo de acceso. No se guardó ningún cambio.",
+        502,
+      );
+    }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // El estado leído en el `where`: el rol y el correo con los que se
+      // tomaron las decisiones de arriba. Si otra pestaña los cambió en
+      // medio, esto no escribe y contesta 409 en vez de pisar.
+      const escrito = await tx.eduUser.updateMany({
+        where: { id: persona.id, institutionId, role: persona.role, email: persona.email },
+        data,
+      });
+      if (escrito.count === 0) {
+        throw new EduPadronError(
+          "Alguien más cambió los datos de esa persona mientras editabas. Actualiza la pantalla y vuelve a mirarlos.",
+          409,
+        );
+      }
+
+      // El correo es de la CUENTA, no del instituto: si esta persona da
+      // clase en dos, las dos filas tienen que decir el mismo correo — el
+      // login es uno solo. Y con el correo va su índice de búsqueda, o en el
+      // otro instituto dejaría de encontrarse por el correo nuevo.
+      if (emailChanged && compartida.enOtroInstituto) {
+        const hermanas = await tx.eduUser.findMany({
+          where: { supabaseId: persona.supabaseId, NOT: { id: persona.id } },
+          select: { id: true, firstName: true, lastName: true, phone: true },
+        });
+        for (const h of hermanas) {
+          await tx.eduUser.update({
+            where: { id: h.id },
+            data: {
+              email: cambios.email,
+              searchIndex: eduUserSearchIndex({
+                firstName: h.firstName,
+                lastName: h.lastName,
+                email: cambios.email,
+                phone: h.phone,
+              }),
+            },
+          });
+        }
+      }
+    });
+  } catch (err) {
+    // Supabase ya cambió y Prisma no. Se revierte Auth para que la persona
+    // siga entrando con el correo que el panel enseña.
+    if (emailChanged && admin) {
+      const { error: revertError } = await admin.auth.admin.updateUserById(persona.supabaseId, {
+        email: persona.email,
+        email_confirm: true,
+      });
+      if (revertError) {
+        console.error(
+          "[instituto] CUENTAS DESINCRONIZADAS: Supabase quedó con el correo nuevo, Prisma con el viejo, y la reversión también falló.",
+          {
+            eduUserId: persona.id,
+            supabaseId: persona.supabaseId,
+            emailAnterior: persona.email,
+            emailNuevo: cambios.email,
+            causa: err,
+            revertError,
+          },
+        );
+        throw new EduPadronError(
+          `No se guardó el cambio y tampoco se pudo deshacer: esa cuenta quedó entrando con ${cambios.email} aunque el panel siga mostrando ${persona.email}. Avísale a quien administra DaleControl con este dato antes de volver a intentarlo.`,
+          500,
+        );
+      }
+    }
+    throw err;
+  }
+
+  return {
+    id: persona.id,
+    emailChanged,
+    roleChanged,
+    overrideDescartado: roleChanged ? (persona.permissionsOverride ?? []) : [],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 7 · RESTABLECER LA CONTRASEÑA (H-04) — sin pasar por Supabase a mano
+//
+// `equipo-core.ts` decía, y era verdad: «Si se pierde, la dirección tiene que
+// restablecerla desde Supabase». Mientras tanto el login prometía lo
+// contrario —«La dirección de tu instituto da de alta las cuentas y
+// restablece las contraseñas»—. Una tarde de 40 altas y una contraseña
+// apuntada mal dejaban a esa persona fuera hasta que alguien con acceso al
+// proyecto de Supabase la rescatara.
+//
+// Es el mismo camino que el alta, ni uno nuevo: temporal generada aquí +
+// `mustChangePassword`. Y desde H-03, esa marca ya no solo cierra pantallas:
+// cierra la API entera hasta que la persona defina la suya.
+// ═══════════════════════════════════════════════════════════════════════
+
+export async function resetEduTeamMemberPassword(
+  ctx: EduTeamContext,
+  memberId: string,
+): Promise<{ id: string; name: string; email: string; tempPassword: string }> {
+  const institutionId = requireInstitution(ctx);
+
+  const persona = await prisma.eduUser.findFirst({
+    where: { id: memberId, institutionId },
+    select: {
+      id: true,
+      supabaseId: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      isActive: true,
+      mustChangePassword: true,
+    },
+  });
+  if (!persona) throw new EduPadronError("Esa persona no es de este instituto.", 404);
+
+  const guard = eduTeamGuardDireccion(ctx.role, persona.role as EduRole, "contrasena");
+  if (guard) throw new EduPadronError(guard, 403);
+
+  if (!persona.isActive) {
+    throw new EduPadronError(
+      "Esa cuenta está dada de baja. Reactívala antes de restablecerle la contraseña.",
+    );
+  }
+
+  // 🔴 LA MISMA REGLA QUE EL ALTA, Y POR LO MISMO. Si ese acceso lo usa
+  // también el panel dental o otro instituto, cambiarle la contraseña desde
+  // aquí la deja fuera de un producto que no tiene nada que ver con esta
+  // escuela. El alta ya se negaba a enseñar una temporal en ese caso
+  // (`tempPassword: reused ? null : …`); esto es la misma decisión.
+  const compartida = await cuentaCompartida(persona.supabaseId, persona.id);
+  if (compartida.enDental || compartida.enOtroInstituto) {
+    throw new EduPadronError(
+      compartida.enDental
+        ? "Ese acceso es el mismo que esta persona usa en el panel dental de DaleControl: cambiarle la contraseña aquí la dejaría fuera de allá. Que la recupere desde «¿Olvidaste tu contraseña?» del panel dental."
+        : "Esa persona usa el mismo acceso en otro instituto: cambiarle la contraseña aquí la dejaría fuera del otro. Que la recupere desde «¿Olvidaste tu contraseña?».",
+      409,
+    );
+  }
+
+  const tempPassword = eduTempPasswordFromBytes(randomBytes(EDU_TEMP_PASSWORD_BYTES));
+
+  // Auth PRIMERO: es la fuente de verdad del login. Si falla, no se toca
+  // Prisma — marcar `mustChangePassword` con la contraseña vieja todavía
+  // viva sería dejar a la persona sin poder entrar y sin poder cambiarla.
+  const admin = adminClient();
+  const { error } = await admin.auth.admin.updateUserById(persona.supabaseId, {
+    password: tempPassword,
+  });
+  if (error) {
+    console.error("[instituto] restablecer contraseña falló en Supabase:", error.message);
+    throw new EduPadronError(
+      "No se pudo restablecer la contraseña. Intenta de nuevo.",
+      502,
+    );
+  }
+
+  // La temporal la conoce quien la generó: esa persona no puede quedarse con
+  // ella. El estado leído en el `where` es `isActive` — si le dieron de baja
+  // mientras tanto, la marca no se escribe y se dice.
+  const marcado = await prisma.eduUser.updateMany({
+    where: { id: persona.id, institutionId, isActive: true },
+    data: { mustChangePassword: true },
+  });
+  if (marcado.count === 0) {
+    // La contraseña de Auth YA cambió. No se revierte —no la tenemos— pero
+    // se dice exactamente qué pasó, que es lo único útil aquí.
+    throw new EduPadronError(
+      "Se cambió la contraseña, pero alguien dio de baja esa cuenta mientras tanto. Reactívala y vuelve a restablecerla para que se le exija cambiarla al entrar.",
+      409,
+    );
+  }
+
+  return {
+    id: persona.id,
+    name: eduTeamFullName(persona),
+    email: persona.email,
+    tempPassword,
+  };
 }

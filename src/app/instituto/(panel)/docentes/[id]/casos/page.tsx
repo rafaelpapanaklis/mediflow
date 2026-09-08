@@ -19,9 +19,24 @@ import { EduPersonaLink } from "@/components/edu/persona/persona-link";
  * queda corto sin que nadie lo audite.
  *
  * ⚠️ `supervisorUserId` es la COLUMNA DEL CASO: quién respondía por él cuando
- * se abrió. No es lo mismo que "los casos de sus alumnos de hoy" — un docente
- * que rotó sigue figurando en los casos que llevó, y ésa es justamente la
- * pregunta que contesta esta pestaña.
+ * se abrió. No es lo mismo que "los casos de sus alumnos de hoy".
+ *
+ * 🔴 H-102 · Y ESO ES LO QUE ESTA PESTAÑA TODAVÍA NO CONTESTA DEL TODO. El
+ * comentario de antes prometía que «un docente que rotó sigue figurando en
+ * los casos que llevó, y ésa es justamente la pregunta que contesta esta
+ * pestaña», y es falso para el propio docente: el `where` final es un AND
+ * entre la columna del caso y el ALCANCE de quien mira, y el alcance de un
+ * docente son los casos de sus alumnos VIGENTES. Los casos que llevó con
+ * alumnos que ya no supervisa quedan fuera, así que su propia pestaña le
+ * sale vacía y solo la dirección ve su historial.
+ *
+ * Lo que se arregla aquí es la MENTIRA: el vacío se explica por lo que de
+ * verdad pasa, y el promedio del docente ya no lee "no llevó ninguno". Lo
+ * que NO se hace es ensanchar `eduCaseScopeWhere` para que un docente vea
+ * por esta puerta los casos que ya no supervisa: ese `where` lo comparten
+ * Casos, Autorizaciones y Traspasos, donde "puedo verlo" es también "puedo
+ * decidir sobre él". Cambiar el alcance clínico compartido para tapar un
+ * dato no visible es un cambio que se acuerda, no que se cuela.
  */
 export default async function DocenteCasosPage({ params }: { params: { id: string } }) {
   const ctx = await getEduContext();
@@ -61,8 +76,13 @@ export default async function DocenteCasosPage({ params }: { params: { id: strin
           <span className="edu-count">{rows.length}</span>
         </div>
 
-        {scope.kind !== "all" && rows.length > 0 && (
-          <p className="edu-note">Ves los casos de este docente que además te tocan a ti.</p>
+        {scope.kind !== "all" && (
+          <p className="edu-note">
+            Ves los casos de este docente que <strong>además te tocan a ti</strong>: los de tus
+            estudiantes con asignación vigente. Los que llevó con estudiantes que ya no supervisas
+            no salen aquí aunque él figure como responsable — ese historial completo lo ve la
+            dirección.
+          </p>
         )}
 
         {truncated && (
@@ -76,7 +96,12 @@ export default async function DocenteCasosPage({ params }: { params: { id: strin
           <div className="edu-empty">
             <p className="edu-empty__title">Sin casos que mostrarte</p>
             <p className="edu-empty__detail">
-              No figura como responsable en ningún caso que te toque.
+              {scope.kind === "all"
+                ? "No figura como responsable en ningún caso de este instituto."
+                : // 🔴 H-102 · Vacío NO quiere decir "no llevó ninguno". Decirlo
+                  // así hacía que un docente concluyera que su propio historial
+                  // no existe, justo en la pestaña que existe para enseñárselo.
+                  "No figura como responsable en ningún caso de los estudiantes que supervisas hoy. Puede haber llevado otros con estudiantes que ya no supervisas: ese historial lo ve la dirección."}
             </p>
           </div>
         ) : (

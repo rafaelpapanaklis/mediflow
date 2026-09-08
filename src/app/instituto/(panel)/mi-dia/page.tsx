@@ -63,6 +63,19 @@ export default async function InstitutoMiDiaPage({
   const now = new Date();
   const tz = ctx.institution.timezone;
 
+  // ── 🔴 H-14 · EL DOCENTE LLEGA A VALORACIÓN ──────────────────────────
+  // `casos.assign` lo llevan por defecto DIRECCION y DOCENTE, y el ÚNICO
+  // enlace a /instituto/agenda/tamizaje de todo el repo vivía en la Agenda
+  // completa… que redirige a Mi agenda a todo alcance recortado ANTES de
+  // pintarlo. Resultado: el docente tenía la llave y nunca llegaba a la
+  // puerta, así que la valoración inicial —que en una escuela real hace el
+  // docente de guardia, no el director— solo la abría dirección, o quien
+  // supiera teclear la URL exacta.
+  //
+  // El enlace se pinta por PERMISO, no por rol: si una escuela le enciende
+  // `casos.assign` a alguien más por override, también lo ve.
+  const puedeValorar = hasEduPermission(permUser, "casos.assign");
+
   if (scope.kind === "none") {
     return (
       <div className="edu-page">
@@ -135,6 +148,18 @@ export default async function InstitutoMiDiaPage({
           </p>
         </div>
         <div className="edu-pagehead__actions">
+          {/* H-14: el acceso a Valoración de quien tiene casos.assign. Va
+              PRIMERO y con el estilo de acción, no de navegación: es lo que
+              se abre cuando llega un paciente nuevo al piso. */}
+          {puedeValorar && (
+            <Link
+              href="/instituto/agenda/tamizaje"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              title="La valoración inicial: a qué estudiante se le asigna el paciente que acaba de llegar y con qué docente."
+            >
+              Valoración
+            </Link>
+          )}
           {/* El toggle Hoy | Semana son ENLACES, no un useState: se puede
               compartir "mi semana" y sobrevive al refresh del teléfono. */}
           <Link

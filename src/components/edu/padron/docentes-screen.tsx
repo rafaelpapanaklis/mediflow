@@ -226,6 +226,22 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
                         la dirección. El conteo sí es el real.
                       </p>
                     ) : (
+                      <>
+                        {/* 🔴 H-105 · EL RECORTE SE DICE. `listEduCurrentAssignments`
+                            corta en 300 filas y el conteo de arriba viene de un
+                            `_count`, que es el REAL: cuando la lista llegaba
+                            recortada, la diferencia se leía como la restricción
+                            de permisos que explica la nota de abajo —«los
+                            NOMBRES de los estudiantes de otro docente los ve la
+                            dirección»— y no lo era. Una lista que miente por un
+                            motivo equivocado es peor que una lista corta. */}
+                        {alumnos.length < t.currentStudents && (
+                          <p className="edu-note">
+                            Se muestran {alumnos.length} de {t.currentStudents}: la lista se corta
+                            al llegar al techo de filas. No es un permiso — el número de arriba es
+                            el real.
+                          </p>
+                        )}
                       <ul className="edu-chiplist">
                         {alumnos.map((a) => (
                           <li key={a.assignmentId} className="edu-assign">
@@ -250,6 +266,7 @@ export function EduDocentesScreen({ teachers, assignments, canAssign }: EduDocen
                           </li>
                         ))}
                       </ul>
+                      </>
                     )}
                     {canAssign && (
                       <p className="edu-note">
