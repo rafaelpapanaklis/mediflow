@@ -34,6 +34,7 @@ import {
   eduUtcToZoned,
 } from "@/lib/edu/agenda-core";
 import { getEduClinicalPatient } from "@/lib/edu/expediente";
+import { eduClinicalScope } from "@/lib/edu/expediente-core";
 import type { EduClinicaContext } from "@/lib/edu/visibility";
 import {
   EDU_PLAN_DESC_MAX,
@@ -59,7 +60,7 @@ import {
   type EduPlanPartida,
   type EduTreatmentPlanStatus,
 } from "@/lib/edu/plan-tratamiento-core";
-import { eduVisibility, eduScopeIsEmpty } from "@/lib/edu/visibility";
+import { eduCaseScopeWhere, eduVisibility, eduScopeIsEmpty } from "@/lib/edu/visibility";
 import { getEduTarifaDePaciente } from "@/lib/edu/tarifas";
 import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 
@@ -77,6 +78,51 @@ function requireInstitution(ctx: { institutionId?: string }): string {
     throw new EduPadronError("Tu sesión no trae instituto. Vuelve a entrar.", 401);
   }
   return id;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 #3 · EL RECORTE POR CASO. El plan NO se abre solo con el paciente.
+ *
+ * Hasta esta ola las tres puertas del plan —leer, marcar sesión y cambiar
+ * el estado— comprobaban únicamente `getEduClinicalPatient`, que es el
+ * alcance del PACIENTE. Con eso, un paciente con dos casos abiertos deja el
+ * plan de cada alumno a la vista del otro: Ana, que lleva la ortodoncia,
+ * abría `/pacientes/P/plan`, leía el plan de endodoncia de Beto con el
+ * texto de cada sesión y —como escribir un plan es `expediente.write`, que
+ * ALUMNO trae por defecto— podía pulsar «Marcar abandonado», que es
+ * TERMINAL: el plan no se reabre.
+ *
+ * El expediente ya recortaba por CASO y con el motivo escrito al lado
+ * (`listEduPatientRecords`: «un alumno que lleva la endodoncia de esta
+ * señora NO lee las notas de su ortodoncia»). Esto es la misma regla, en el
+ * módulo de al lado.
+ *
+ * ⚠️ UN PLAN «SIN CASO» SIGUE COLGANDO DEL PACIENTE, y es deliberado: el
+ * formulario ofrece «Sin caso» como primera opción y explica que colgarlo
+ * de un caso es lo que lo mete en el seguimiento de ese estudiante. Un plan
+ * sin caso no es de ningún alumno, así que no hay caso ajeno que proteger;
+ * y filtrarlo también dejaría invisibles —para todos, dirección incluida—
+ * los planes que ya existen sin caso, que es perder datos por la puerta de
+ * atrás. Queda con el alcance del paciente, que es el que ya se comprobó.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+function eduPlanScopeWhere(
+  ctx: EduPlanContext,
+  institutionId: string,
+  now: Date,
+): Prisma.EduTreatmentPlanWhereInput {
+  const scope = eduClinicalScope(ctx);
+  // Sin alcance clínico no hay plan que valga. No debería llegarse aquí
+  // —getEduClinicalPatient ya contestó 404— pero un `where` que no filtra
+  // nada es exactamente lo que este helper viene a impedir.
+  if (eduScopeIsEmpty(scope)) return { id: { in: [] } };
+  // Alcance completo (dirección): el paciente ya se comprobó y no hay nada
+  // más que recortar.
+  if (scope.kind === "all") return {};
+  return {
+    OR: [{ caseId: null }, { case: eduCaseScopeWhere({ institutionId, scope, now }) }],
+  };
 }
 
 export interface EduPlanRow {
@@ -127,7 +173,14 @@ export async function listEduPlanes(
   if (!paciente) throw new EduPadronError("Ese paciente no existe o no es de tu instituto.", 404);
 
   const filas = await prisma.eduTreatmentPlan.findMany({
-    where: { institutionId, patientId: paciente.id },
+    // #3 · el recorte por CASO va en el `where`, no en un `.filter()`
+    // después: un recorte fuera de la consulta es un recorte que el
+    // siguiente `findMany` se olvida de copiar.
+    where: {
+      institutionId,
+      patientId: paciente.id,
+      ...eduPlanScopeWhere(ctx, institutionId, now),
+    },
     orderBy: [{ status: "asc" }, { startsAt: "desc" }],
     take: EDU_PLAN_MAX_ROWS,
     include: {
@@ -299,8 +352,21 @@ export async function createEduPlan(
   let caseId: string | null = null;
   const rawCase = eduCleanId(body?.caseId);
   if (rawCase) {
+    // #3 · Y EL CASO TIENE QUE ESTAR EN EL ALCANCE DE QUIEN LO MANDA. Sin
+    // esto se cuelga un plan del caso de OTRO alumno del mismo paciente, y
+    // a partir de ahí el plan es suyo.
+    //
+    // 🔴 Va en `AND` y no esparcido: `eduCaseScopeWhere` puede devolver
+    // `{ institutionId, id: { in: [] } }` (el «ninguno») y una clave `id`
+    // escrita encima lo BORRARÍA. Es literalmente el error contra el que
+    // avisa por escrito arco.ts.
     const caso = await prisma.eduCase.findFirst({
-      where: { id: rawCase, institutionId, patientId: paciente.id },
+      where: {
+        AND: [
+          eduCaseScopeWhere({ institutionId, scope: eduClinicalScope(ctx), now }),
+          { id: rawCase, institutionId, patientId: paciente.id },
+        ],
+      },
       select: { id: true },
     });
     if (!caso) throw new EduPadronError("Ese caso no existe o no es de este paciente.", 404);
@@ -385,7 +451,9 @@ export async function marcarEduPlanSesion(
   if (!pid || !sid) throw new EduPadronError("Falta el plan o la sesión.", 400);
 
   const plan = await prisma.eduTreatmentPlan.findFirst({
-    where: { id: pid, institutionId },
+    // #3 · el CASO, no solo el instituto: el plan de otro alumno del mismo
+    // paciente se ve igual que uno que no existe.
+    where: { id: pid, institutionId, ...eduPlanScopeWhere(ctx, institutionId, now) },
     select: {
       id: true,
       patientId: true,
@@ -511,7 +579,9 @@ export async function cambiarEstadoEduPlan(
   if (!destino) throw new EduPadronError("Ese estado de plan no existe.", 400);
 
   const plan = await prisma.eduTreatmentPlan.findFirst({
-    where: { id: pid, institutionId },
+    // #3 · ídem: cerrar el plan de otro alumno era el daño más grande de
+    // los tres, porque COMPLETADO y ABANDONADO no se reabren.
+    where: { id: pid, institutionId, ...eduPlanScopeWhere(ctx, institutionId, now) },
     select: { id: true, patientId: true, status: true },
   });
   if (!plan) throw new EduPadronError("Ese plan no existe o no es de tu instituto.", 404);
@@ -536,6 +606,30 @@ export async function cambiarEstadoEduPlan(
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 #3 · ABANDONAR NO ES UN CLIC DE ALUMNO.
+  //
+  // `ABANDONADO` no tiene salida (`EDU_PLAN_TRANSITIONS.ABANDONADO = []`):
+  // un plan abandonado no se reabre nunca, se abre otro. Que la misma llave
+  // que sirve para marcar la sesión de hoy —`expediente.write`, que ALUMNO
+  // trae por defecto— sirviera también para cerrar un tratamiento para
+  // siempre es lo que convertía el hallazgo del alcance en daño
+  // irreversible. Con el recorte por caso ya no se puede tocar el plan de
+  // otro; esto cierra el otro lado: el alumno tampoco cierra el suyo de un
+  // clic sin que lo sepa quien lo supervisa.
+  //
+  // Es la puerta MÍNIMA: el motivo ya se exigía, y sigue exigiéndose. Lo que
+  // se añade es quién puede darlo. `COMPLETADO` se deja como está —cerrar
+  // por terminado es la conclusión normal del trabajo del alumno, y su
+  // consecuencia es la que el plan promete— y `PAUSADO` no cierra nada.
+  // ═══════════════════════════════════════════════════════════════════
+  if (destino === "ABANDONADO" && ctx.role !== "DIRECCION" && ctx.role !== "DOCENTE") {
+    throw new EduPadronError(
+      "Abandonar un plan lo cierra para siempre: no se reabre, se abre otro. Eso lo marca tu docente o la dirección. Escribe en la nota de la sesión lo que pasó y díselo.",
+      403,
+    );
+  }
+
   // 🔴 `Unchecked…` y no `…UpdateManyMutationInput`: Prisma deja los
   // escalares de llave foránea (`closedById`) SOLO en la variante
   // "unchecked", porque la otra espera que se escriban por la relación.
@@ -551,7 +645,14 @@ export async function cambiarEstadoEduPlan(
   // esta escritura, count sale 0 y contestamos 409 en vez de pisar su
   // decisión.
   const res = await prisma.eduTreatmentPlan.updateMany({
-    where: { id: plan.id, institutionId, status: desde },
+    // El alcance viaja también a la ESCRITURA, no solo a la lectura de
+    // arriba: es la regla de la casa y cuesta lo mismo.
+    where: {
+      id: plan.id,
+      institutionId,
+      status: desde,
+      ...eduPlanScopeWhere(ctx, institutionId, now),
+    },
     data,
   });
   if (res.count === 0) {

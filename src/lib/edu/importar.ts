@@ -103,6 +103,32 @@ function auditor(ctx: EduImportContext): EduAuditActor {
 // que por dentro es un ejecutable se rechaza antes de que exceljs lo abra.
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * El valor de una celda, SIEMPRE COMO TEXTO (salvo las fechas).
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 A1 · UN `.xlsx` DE VERDAD TRAE NÚMEROS, Y AQUÍ SE VOLVÍAN NULL.
+ *
+ * exceljs devuelve el valor TIPADO de la celda: una matrícula `20260001` y
+ * un teléfono `5544332211` llegan como `number`, porque Excel los convierte
+ * solo al exportar el padrón de cualquier sistema escolar. Y los tres
+ * normalizadores que los reciben —`normalizeEduMatricula`,
+ * `normalizeEduPhone` y `eduRequiredText`— cortan por tipo con
+ * `if (typeof raw !== "string") return null`. Resultado: la simulación salía
+ * al 100 % en rojo con «Falta la matrícula» sobre una matrícula que estaba
+ * ahí, y el mensaje mentía.
+ *
+ * La asimetría probaba que era un descuido y no una decisión: el semestre YA
+ * se convertía antes de leerse (`String(crudoSem).trim()` en
+ * importar-core.ts) y la rama CSV YA venía protegida (todo llega string).
+ * Así que la conversión va donde tenía que ir desde el principio: en el
+ * único sitio por el que pasan TODAS las celdas de la rama xlsx.
+ *
+ * ⚠️ Las fechas se devuelven como `Date` y no como texto: no hay ninguna
+ * columna de fecha en el padrón hoy, y convertirlas aquí decidiría a
+ * escondidas un formato (¿`dd/mm` o `mm/dd`?) para el día que la haya.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
 function celdaATexto(cell: ExcelJS.Cell): unknown {
   const v = cell.value as any;
   if (v === null || v === undefined) return "";
@@ -112,11 +138,11 @@ function celdaATexto(cell: ExcelJS.Cell): unknown {
     // Un `{ formula: "…" }` guardado como matrícula sería una matrícula que
     // nadie puede leer.
     if (v.result !== undefined && v.result !== null && typeof v.result !== "object") {
-      return v.result;
+      return v.result instanceof Date ? v.result : String(v.result);
     }
     return cell.text ?? "";
   }
-  return v;
+  return typeof v === "string" ? v : String(v);
 }
 
 async function hojaDelArchivo(

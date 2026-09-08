@@ -37,16 +37,20 @@ import {
  * (`Edu-XXXX-XXXY`, ~38 bits), así que la puerta giraba libre delante de
  * expedientes clínicos con nombre y apellido de paciente.
  *
- * El contador vive en el SERVIDOR (POST /api/instituto/auth/intento, sobre
- * src/lib/failban.ts, con su propio espacio de nombres `instituto-login`).
- * Aquí solo se le avisa, en tres momentos: antes de intentar, al fallar y
- * al entrar.
+ * 🔴 S-2 · Y ESTE FORMULARIO YA NO HABLA CON GoTrue. La contraseña se manda
+ * a `POST /api/instituto/auth/intento`, que es quien llama a
+ * `signInWithPassword` —en el servidor—, quien ve el resultado y quien
+ * cuenta el fallo o el éxito. Antes autenticaba aquí y venía a DECLARAR lo
+ * que había pasado (`phase: "fail" | "success"`), y como nada probaba esa
+ * declaración, cualquiera bloqueaba desde internet la cuenta de la dirección
+ * mandando cinco `fail`, y cualquiera se desbloqueaba a sí mismo mandando un
+ * `success`. La sesión la deja puesta el endpoint, en la misma cookie de
+ * siempre: para todo lo de después (`auth/session`, el panel) no cambia nada.
  *
- * ⚠️ FAIL-OPEN a propósito: solo un **429 explícito** detiene el intento.
- * Si el endpoint no contesta, o la red se cae, se entra igual. Un problema
- * de infraestructura no puede dejar a una escuela entera en la puerta —y
- * el conteo de fallos sigue siendo del servidor, así que saltarse este
- * aviso desde la consola no salta el bloqueo.
+ * ⚠️ Lo que ya NO es fail-open: si el endpoint no contesta, NO se entra. No
+ * puede serlo, porque ese endpoint es ahora el que autentica. Lo que sigue
+ * siendo fail-open —del lado del servidor— es el CONTADOR: si el candado no
+ * responde, el intento se hace igual. Está escrito en la ruta.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export function EduLoginForm() {
@@ -67,19 +71,6 @@ export function EduLoginForm() {
   // acepte cualquier cosa es un redirect abierto.
   const volver = eduRutaDeVuelta(params.get("volver"));
 
-  /** Avisa al contador de fallos. Nunca lanza: es best-effort. */
-  async function marcar(phase: "fail" | "success", correo: string) {
-    try {
-      await fetch("/api/instituto/auth/intento", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phase, email: correo }),
-      });
-    } catch {
-      /* fail-open */
-    }
-  }
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (loading) return;
@@ -87,40 +78,33 @@ export function EduLoginForm() {
     setLoading(true);
     const correo = email.trim();
     try {
-      const supabase = createClient();
-      // Cerrar sesión previa para evitar contaminación cross-account.
+      // Cerrar sesión previa para evitar contaminación cross-account: la
+      // cookie de Supabase es UNA para todo el dominio, y si viene de una
+      // sesión de clínica la nueva se montaría encima.
       try {
-        await supabase.auth.signOut();
+        await createClient().auth.signOut();
       } catch {
         /* ignore */
       }
 
-      // ── H-153 · ¿esta IP o esta cuenta están bloqueadas? ──────────────
-      // Solo un 429 detiene: cualquier otra cosa (500, red caída, cuerpo
-      // raro) deja pasar. Ver la cabecera.
-      try {
-        const guard = await fetch("/api/instituto/auth/intento", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phase: "check", email: correo }),
-        });
-        if (guard.status === 429) {
-          setError(EDU_LOGIN_MENSAJES.bloqueo);
-          setLoading(false);
-          return;
-        }
-      } catch {
-        /* fail-open */
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: correo,
-        password,
+      // ── S-2 · EL INTENTO LO HACE EL SERVIDOR ─────────────────────────
+      // Se manda correo y contraseña; el endpoint autentica contra GoTrue,
+      // cuenta el fallo o el éxito y deja la cookie de sesión puesta. Un
+      // 429 es el candado (IP o cuenta bloqueada); cualquier otro fallo es
+      // "no entraste", y aquí NO se sigue: sin sesión no hay panel.
+      const intento = await fetch("/api/instituto/auth/intento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: correo, password }),
       });
-      if (authError) {
-        // Fire-and-forget: sumar el fallo no debe retrasar el mensaje.
-        void marcar("fail", correo);
-        setError(EDU_LOGIN_MENSAJES.credenciales);
+      if (intento.status === 429) {
+        setError(EDU_LOGIN_MENSAJES.bloqueo);
+        setLoading(false);
+        return;
+      }
+      if (!intento.ok) {
+        const fallo = (await intento.json().catch(() => null)) as { error?: string } | null;
+        setError(fallo?.error || EDU_LOGIN_MENSAJES.credenciales);
         setLoading(false);
         return;
       }
@@ -141,8 +125,11 @@ export function EduLoginForm() {
       } | null;
 
       if (!check.ok || !data?.ok) {
+        // La sesión la abrió el servidor hace un instante, así que el
+        // cliente se construye AQUÍ: uno creado antes no habría visto la
+        // cookie y `signOut()` no tendría nada que cerrar.
         try {
-          await supabase.auth.signOut();
+          await createClient().auth.signOut();
         } catch {
           /* ignore */
         }
@@ -157,8 +144,8 @@ export function EduLoginForm() {
         return;
       }
 
-      // Entró: se borran los contadores de fallos de esta IP y esta cuenta.
-      void marcar("success", correo);
+      // (Los contadores de fallos de esta IP y esta cuenta ya los borró el
+      // endpoint del intento, que es quien vio que la contraseña era buena.)
 
       // Con la temporal puesta, el panel no abre (el layout redirige): se
       // manda DIRECTO a estrenarla, sin el rebote de por medio.

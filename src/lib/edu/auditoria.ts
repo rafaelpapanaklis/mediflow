@@ -56,6 +56,7 @@ import {
   eduAuditIsEntity,
   eduAuditParseDia,
   eduAuditParseTake,
+  eduAuditRedactaClaves,
   type EduAuditAction,
   type EduAuditEntity,
   type EduAuditRow,
@@ -114,9 +115,14 @@ export async function eduAudit(
       return;
     }
 
-    const esLectura = input.action === "view";
+    // 🔴 LOS SUCESOS SE ESCRIBEN AUNQUE NO HAYA DIFF. `view`, `login` y
+    // `logout` no comparan un antes con un después: son el hecho mismo. Sin
+    // esta lista, el renglón de "entró" se descartaría por `cambios === 0` y
+    // la bitácora seguiría sin poder contestar quién entró esa tarde.
+    const esSuceso =
+      input.action === "view" || input.action === "login" || input.action === "logout";
     const { before, after, cambios } = eduAuditDiff(input.before, input.after);
-    if (!esLectura && cambios === 0) return;
+    if (!esSuceso && cambios === 0) return;
 
     await db.eduAuditLog.create({
       data: {
@@ -138,6 +144,71 @@ export async function eduAudit(
     // Ver el encabezado: la bitácora NUNCA tumba la operación que la
     // generó. Se grita en el servidor y se sigue.
     console.error("[instituto] no se pudo escribir la bitácora:", err);
+  }
+}
+
+/**
+ * Tope de renglones que la anonimización reescribe de un paciente. 2 000 es
+ * mucho más de lo que junta un expediente real (el listado de dirección
+ * corta en 200) y a la vez impide que una ficha con una bitácora enorme
+ * convierta un clic en una consulta sin fin.
+ */
+export const EDU_AUDIT_ANONIMIZA_MAX = 2000;
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 SACA DE LA BITÁCORA EL PII DE UN PACIENTE ANONIMIZADO (ARCO).
+ *
+ * Vive AQUÍ, y no en arco.ts, por la regla de la cabecera: esta tabla tiene
+ * un solo escritor y hay una prueba que falla si alguien la escribe desde
+ * otro archivo. `anonymizeEduPatient` llama a esta función por su nombre.
+ *
+ * Se sustituyen VALORES, no se borran renglones: qué pasó y quién lo hizo
+ * se conserva entero. El porqué y el alcance exacto están en
+ * `eduAuditRedactaClaves` (auditoria-core.ts).
+ *
+ * 🔴 NUNCA LANZA, igual que `eduAudit`. Pero con una diferencia que hay que
+ * decir en voz alta: si esto falla, la anonimización queda a medias —la
+ * ficha limpia y la bitácora no—, así que devuelve cuántos renglones tocó
+ * para que quien llama lo pueda dejar dicho en su propio renglón.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function eduAuditAnonimizarPaciente(
+  institutionId: string,
+  patientId: string,
+  claves: readonly string[],
+  marca: string,
+  db: EduDb = prisma,
+): Promise<number> {
+  try {
+    if (!institutionId || !patientId) return 0;
+    const filas = await db.eduAuditLog.findMany({
+      where: { institutionId, patientId },
+      select: { id: true, before: true, after: true },
+      take: EDU_AUDIT_ANONIMIZA_MAX,
+    });
+
+    let tocados = 0;
+    // En serie y no en `Promise.all`: son escrituras, el pooler es el de
+    // Supabase y la regla de la casa son menos de 7 a la vez. Un paciente
+    // real junta decenas de renglones, no miles.
+    for (const f of filas) {
+      const antes = eduAuditRedactaClaves(f.before, claves, marca);
+      const despues = eduAuditRedactaClaves(f.after, claves, marca);
+      if (antes.cambios === 0 && despues.cambios === 0) continue;
+      await db.eduAuditLog.update({
+        where: { id: f.id },
+        data: {
+          ...(antes.valor ? { before: antes.valor as Prisma.InputJsonValue } : {}),
+          ...(despues.valor ? { after: despues.valor as Prisma.InputJsonValue } : {}),
+        },
+      });
+      tocados += 1;
+    }
+    return tocados;
+  } catch (err) {
+    console.error("[instituto] no se pudo anonimizar la bitácora del paciente:", err);
+    return 0;
   }
 }
 

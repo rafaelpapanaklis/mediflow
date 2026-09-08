@@ -260,7 +260,22 @@ test("H-153 (fuente): el CANJE de una temporal caducada se rechaza", () => {
   assert.ok(iGate > -1 && iSupabase > -1 && iGate < iSupabase);
 });
 
-test("H-153 (fuente): el login cuenta los intentos con failban, en las tres fases", () => {
+/**
+ * ⚠️ ESTA PRUEBA CAMBIÓ EN LA OLA C·FIN (S-2), Y EL CAMBIO ES EL ARREGLO.
+ *
+ * Fijaba «las TRES FASES»: el formulario autenticaba en el navegador y
+ * después venía a DECLARAR aquí qué había pasado (`check` / `fail` /
+ * `success`). Nada probaba esa declaración, así que desde internet y sin
+ * sesión se bloqueaba a cualquiera con cinco `fail` y —peor— uno se
+ * desbloqueaba a sí mismo con un `success`, que borra contador y cerradura.
+ * La forma que esta prueba protegía ERA el agujero.
+ *
+ * Lo que se fija ahora es la forma correcta: el intento lo hace el
+ * ENDPOINT y el conteo cuelga de lo que contestó GoTrue. Lo demás que ya
+ * comprobaba —failban, espacio de nombres propio, el 429 del formulario—
+ * sigue igual, porque eso sí estaba bien.
+ */
+test("H-153 · S-2 (fuente): el login cuenta los intentos, y el intento lo hace el SERVIDOR", () => {
   const ruta = fuente(RUTA_INTENTO);
   assert.match(ruta, /from "@\/lib\/failban"/);
   assert.match(ruta, /failbanGuard\(/);
@@ -271,12 +286,20 @@ test("H-153 (fuente): el login cuenta los intentos con failban, en las tres fase
   assert.match(ruta, /instituto-login/);
   assert.doesNotMatch(ruta, /clinic-login/);
 
+  // 🔴 El endpoint autentica él mismo y NO se cree las fases del cuerpo.
+  assert.match(ruta, /signInWithPassword/);
+  assert.doesNotMatch(ruta, /body\?\.phase/);
+  assert.doesNotMatch(ruta, /phase === "success"/);
+
   const form = fuente(LOGIN_FORM);
   assert.match(form, /\/api\/instituto\/auth\/intento/);
-  for (const fase of ['"check"', '"fail"', '"success"']) {
-    assert.ok(form.includes(fase), `al login le falta la fase ${fase}`);
+  // Y el formulario ya no habla con GoTrue: mientras autentique él, el
+  // conteo depende de que él lo confiese.
+  assert.doesNotMatch(form, /signInWithPassword/);
+  for (const fase of ['phase: "check"', 'phase: "fail"', 'phase: "success"']) {
+    assert.ok(!form.includes(fase), `el login sigue declarando ${fase}`);
   }
-  // FAIL-OPEN: solo un 429 explícito detiene el intento.
+  // El 429 del candado sigue siendo el que detiene.
   assert.match(form, /status === 429/);
 });
 

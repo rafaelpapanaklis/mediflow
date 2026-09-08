@@ -161,6 +161,79 @@ export const EDU_ARCO_CONSERVADO: Record<string, string> = {
   currentMedications:
     "Antecedente clínico: qué toma el paciente cambia qué se le puede recetar y qué anestésico se le pone.",
   bloodType: "Antecedente clínico: hace falta ante una hemorragia, y no identifica a nadie por sí solo.",
+  // 🔴 LOS CUATRO QUE FALTABAN. Esta pantalla existe «para que la de
+  // confirmación no mienta», y hasta esta ola callaba cuatro campos: dos de
+  // ellos son 2 000 caracteres de texto libre cada uno, y los antecedentes
+  // heredofamiliares nombran rutinariamente a la madre y al padre —otras
+  // personas físicas, con sus propios derechos—. Se conservan igual (son el
+  // expediente que la NOM-004 obliga a guardar), pero AHORA SE DICEN: quien
+  // firma la anonimización tiene que poder leer el texto antes de firmar y
+  // vaciarlo a mano desde la ficha si no quiere que se quede.
+  familyHistory:
+    "Antecedentes heredofamiliares: 2 000 caracteres de texto libre del expediente. ⚠️ Suelen nombrar a la madre y al padre — si hay que quitarlos, se vacía el campo en la ficha ANTES de anonimizar.",
+  personalNonPathologicalHistory:
+    "Antecedentes personales no patológicos: 2 000 caracteres de texto libre (vivienda, higiene, alimentación). ⚠️ Mismo aviso: si describe a la persona, se vacía en la ficha antes.",
+  habitsNotes:
+    "El detalle en palabras de los hábitos (tabaco, alcohol, bruxismo). Es expediente clínico, y es texto libre.",
+  deleteReason:
+    "Por qué se dio de baja la ficha. Es la constancia de la propia solicitud: borrarla dejaría la baja sin justificación en la única tabla donde consta.",
+};
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 LAS CLAVES QUE LA ANONIMIZACIÓN TIENE QUE SACAR DE LA BITÁCORA.
+ *
+ * `anonymizeEduPatient` prometía por escrito que «la bitácora no guarda el
+ * PII que se borró» — y sí lo guardaba: el alta escribe `{ folio, nombre }`
+ * y la corrección de la ficha guarda el antes y el después de siete
+ * columnas, entre ellas `phone`, `email` y `curp`. Se anonimizaba a la
+ * paciente, se pulsaba «Bitácora de este paciente» (el botón está en la
+ * propia pantalla de ARCO) y ahí seguía su nombre y su teléfono.
+ *
+ * Son las mismas columnas del PII más los nombres «humanos» con los que
+ * algún renglón guarda lo mismo (`nombre`, `otrosCampos` no, porque ése es
+ * una lista de nombres de campo y no de valores).
+ *
+ * ⚠️ `folio` NO está, a propósito: la anonimización lo conserva prefijado
+ * porque es la llave con la que la escuela encuentra el expediente en
+ * papel. Sacarlo de la bitácora y dejarlo en la ficha sería incoherente.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export const EDU_ARCO_BITACORA_CLAVES: string[] = [
+  ...Object.keys(EDU_ARCO_PII_FIELDS).filter((k) => k !== "searchIndex"),
+  "nombre",
+];
+
+/**
+ * Lo que se le escribe al perfil FISCAL del paciente al anonimizarlo.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EL RFC ES UN IDENTIFICADOR PERSONAL Y NO HAY OBLIGACIÓN DE
+ * CONSERVARLO. `EduPatientTaxProfile` guarda RFC, razón social, código
+ * postal y correo de facturación, y la anonimización no lo tocaba: quedaba
+ * el RFC —que identifica a una persona física de forma única— junto a un
+ * expediente cuyo nombre acababa de sustituirse. Era incoherente con que
+ * `insurancePolicy` SÍ se redacte, y con el argumento escrito para hacerlo
+ * («un número de póliza es un identificador»).
+ *
+ * ⚠️ NO ES UN CFDI TIMBRADO. Los timbrados viven en `EduInvoice` y ésos sí
+ * se conservan: son documentos fiscales emitidos, con su obligación propia.
+ * Esto es la LIBRETA de a nombre de quién facturar la próxima vez.
+ *
+ * 🔴 SE SUSTITUYE, NO SE BORRA LA FILA. Las tres columnas son NOT NULL, y
+ * una fila que desaparece deja al cobro de al lado sin poder explicar por
+ * qué se facturó. `XAXX010101000` es el RFC genérico del SAT para «público
+ * en general»: es exactamente lo que este receptor pasa a ser, y cabe en
+ * los 13 caracteres de la columna (donde `[DATO CANCELADO]`, de 16, no).
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export const EDU_ARCO_RFC_GENERICO = "XAXX010101000";
+
+export const EDU_ARCO_TAX_FIELDS: Record<string, string | null> = {
+  rfc: EDU_ARCO_RFC_GENERICO,
+  legalName: EDU_ARCO_REDACTED,
+  zipCode: "00000",
+  email: null,
 };
 
 // ═══════════════════════════════════════════════════════════════════════

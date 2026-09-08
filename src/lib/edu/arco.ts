@@ -44,14 +44,21 @@ import { eduCleanId } from "@/lib/edu/agenda-core";
 import { eduPatientScopeWhere, eduScopeIsEmpty, eduVisibility } from "@/lib/edu/visibility";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import {
+  EDU_ARCO_BITACORA_CLAVES,
   EDU_ARCO_CONSERVADO,
   EDU_ARCO_PII_FIELD_NAMES,
+  EDU_ARCO_REDACTED,
+  EDU_ARCO_TAX_FIELDS,
   eduArcoAnonymizeData,
   eduArcoMotivoParaNoAnonimizar,
   eduArcoParseReason,
   eduArcoRetentionUntil,
 } from "@/lib/edu/arco-core";
-import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
+import {
+  eduAudit,
+  eduAuditAnonimizarPaciente,
+  type EduAuditActor,
+} from "@/lib/edu/auditoria";
 
 export interface EduArcoContext extends EduAuditActor {
   user: {
@@ -298,6 +305,25 @@ export async function previsualizarEduArco(
  * se sustituyeron, no qué decían: guardar el "antes" aquí sería mover el
  * dato personal a una tabla de la que la anonimización no lo puede sacar.
  * Por eso el `before` es la lista de nombres de campo, no sus valores.
+ *
+ * 🔴 …Y AHORA TAMBIÉN LIMPIA LOS RENGLONES QUE YA ESTABAN ESCRITOS. Esa
+ * promesa de arriba solo valía para el renglón de la propia anonimización:
+ * el alta del paciente guardaba `{ folio, nombre }` y cada corrección de la
+ * ficha guardaba el antes y el después de siete columnas, `phone`, `email` y
+ * `curp` entre ellas. Se anonimizaba a la paciente, se pulsaba «Bitácora de
+ * este paciente» —el botón está en esta misma pantalla— y ahí seguía su
+ * nombre. Se sustituyen los VALORES y se conservan los renglones: qué pasó y
+ * quién lo hizo es justo lo que la constancia tiene que poder decir.
+ *
+ * 🔴 Y EL PERFIL FISCAL. `EduPatientTaxProfile` (RFC, razón social, código
+ * postal, correo de facturación) tampoco se tocaba. El RFC identifica a una
+ * persona física de forma única y esto no es un CFDI timbrado —los timbrados
+ * viven en `EduInvoice` y ésos sí se conservan—: es la libreta de a nombre de
+ * quién facturar la próxima vez. Ver `EDU_ARCO_TAX_FIELDS`.
+ *
+ * ⚠️ LAS TRES ESCRITURAS VAN EN UNA TRANSACCIÓN. Una ficha limpia con su RFC
+ * intacto al lado es peor que no haber empezado: quien firmó la solicitud se
+ * queda creyendo que se cumplió.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export async function anonymizeEduPatient(
@@ -317,13 +343,39 @@ export async function anonymizeEduPatient(
 
   const data = eduArcoAnonymizeData(paciente, ctx.eduUserId, now);
 
-  const res = await prisma.eduPatient.updateMany({
-    where: { id: paciente.id, institutionId, anonymizedAt: null },
-    data: data as Prisma.EduPatientUncheckedUpdateManyInput,
+  const fiscales = await prisma.$transaction(async (tx) => {
+    const res = await tx.eduPatient.updateMany({
+      where: { id: paciente.id, institutionId, anonymizedAt: null },
+      data: data as Prisma.EduPatientUncheckedUpdateManyInput,
+    });
+    if (res.count === 0) {
+      throw new EduPadronError(
+        "Esa ficha se anonimizó mientras la mirabas. Actualiza la pantalla.",
+        409,
+      );
+    }
+
+    // El perfil FISCAL. `updateMany` y no `update`: puede no existir, y un
+    // `update` por una fila que no está lanza P2025. El `where` lleva el
+    // instituto además del paciente, como toda escritura del vertical.
+    const tax = await tx.eduPatientTaxProfile.updateMany({
+      where: { patientId: paciente.id, institutionId },
+      data: EDU_ARCO_TAX_FIELDS as Prisma.EduPatientTaxProfileUncheckedUpdateManyInput,
+    });
+    return tax.count;
   });
-  if (res.count === 0) {
-    throw new EduPadronError("Esa ficha se anonimizó mientras la mirabas. Actualiza la pantalla.", 409);
-  }
+
+  // La bitácora, DESPUÉS de la transacción y sin lanzar. No va dentro a
+  // propósito: son hasta 2 000 escrituras y meterlas en la misma
+  // transacción que la ficha alargaría el candado de la fila del paciente
+  // por algo que, si falla, se puede volver a correr. Si falla, el renglón
+  // de abajo lo dice con un número.
+  const renglones = await eduAuditAnonimizarPaciente(
+    institutionId,
+    paciente.id,
+    EDU_ARCO_BITACORA_CLAVES,
+    EDU_ARCO_REDACTED,
+  );
 
   await eduAudit(ctx, {
     action: "arco",
@@ -332,7 +384,12 @@ export async function anonymizeEduPatient(
     patientId: paciente.id,
     // Los NOMBRES de los campos, nunca sus valores. Ver el encabezado.
     before: { camposSustituidos: EDU_ARCO_PII_FIELD_NAMES.join(", ") },
-    after: { anonymizedAt: now, folio: data.folio },
+    after: {
+      anonymizedAt: now,
+      folio: data.folio,
+      perfilFiscal: fiscales > 0 ? "sustituido" : "no tenía",
+      renglonesDeBitacoraLimpiados: renglones,
+    },
     ...meta,
   });
 

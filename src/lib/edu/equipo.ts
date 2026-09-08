@@ -170,38 +170,72 @@ function esCorreoYaRegistrado(mensaje: string, code?: string): boolean {
   );
 }
 
+/** Por qué NO se pudo (o no se debe) enlazar una cuenta que ya existe. */
+type EduSupabaseIdResuelto =
+  | { supabaseId: string; motivo: null }
+  | { supabaseId: null; motivo: "otro-instituto" | "no-encontrado" };
+
 /**
  * Encuentra el supabaseId de un correo que YA tiene cuenta.
  *
  * Se busca en este orden y no en otro:
  *
- *  1. NUESTRAS tablas. Es el caso real y el barato: la persona ya está en
- *     OTRO instituto (edu_users) o usa el panel dental (users). Una consulta
- *     a una base que ya está abierta, sin salir a la red.
+ *  1. NUESTRAS tablas. Es el caso real y el barato: la persona usa el panel
+ *     dental (users). Una consulta a una base que ya está abierta, sin salir
+ *     a la red.
  *  2. La API de administración de GoTrue, con `filter` por correo. Es UNA
  *     petición, no un recorrido de todos los usuarios del proyecto —que con
  *     el dental vivo en producción serían miles.
  *
- * Devuelve null si no aparece por ningún lado, y entonces quien llama
- * contesta un error que dice qué hacer. Adivinar aquí sería enlazar a una
- * persona con la cuenta de otra.
+ * Devuelve `motivo: "no-encontrado"` si no aparece por ningún lado, y
+ * entonces quien llama contesta un error que dice qué hacer. Adivinar aquí
+ * sería enlazar a una persona con la cuenta de otra.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 S-1 · UNA CUENTA QUE YA ES DE OTRO INSTITUTO NO SE ENLAZA DESDE AQUÍ.
+ *
+ * Hasta esta ola, este helper devolvía el `supabaseId` de la fila de
+ * `edu_users` de CUALQUIER instituto que tuviera ese correo. Ese era el
+ * primer eslabón de la toma de control: con `equipo.manage` en el Instituto
+ * A se daba de alta a alguien con el correo de la dirección del Instituto B,
+ * la fila nueva de A quedaba atada a la cuenta de Auth de la víctima, y a
+ * partir de ahí un PATCH del correo + "olvidé mi contraseña" entregaba su
+ * login. `getEduContext` resuelve por `supabaseId` a la fila MÁS VIEJA, así
+ * que la sesión resultante era la de DIRECCIÓN del Instituto B.
+ *
+ * El enlace entre institutos era una función deliberada —"quien da clase en
+ * dos escuelas entra con el mismo correo"— y se APAGA: no hay forma de
+ * distinguir, desde el Instituto A, a la docente que de verdad da clase en
+ * los dos de la directora de B cuyo correo alguien conoce. Se cambia por un
+ * 409 que lo dice con esas palabras. Enlazar dos institutos vuelve a ser un
+ * acto de quien administra DaleControl, no de quien tiene `equipo.manage`
+ * en uno de ellos.
+ *
+ * ⚠️ El corte va ANTES de GoTrue a propósito: si solo se quitara la primera
+ * consulta, el `filter` de la API de administración devolvería exactamente
+ * el mismo id y el agujero seguiría abierto por la puerta de atrás.
+ * ═══════════════════════════════════════════════════════════════════════
  */
-async function resolverSupabaseIdExistente(email: string): Promise<string | null> {
+async function resolverSupabaseIdExistente(
+  email: string,
+  institutionId: string,
+): Promise<EduSupabaseIdResuelto> {
   const enOtroInstituto = await prisma.eduUser.findFirst({
-    where: { email },
-    select: { supabaseId: true },
-    orderBy: { createdAt: "asc" },
+    where: { email, NOT: { institutionId } },
+    select: { id: true },
   });
-  if (enOtroInstituto?.supabaseId) return enOtroInstituto.supabaseId;
+  if (enOtroInstituto) return { supabaseId: null, motivo: "otro-instituto" };
 
   // El dental. Se lee SOLO el supabaseId: ni el nombre, ni la clínica, ni
-  // nada de ese producto entra a este vertical.
+  // nada de ese producto entra a este vertical. Este enlace SÍ sigue vivo:
+  // el panel dental es otro producto, no otro inquilino de éste, y el PATCH
+  // del correo ya lo bloquea desde la Ola C (`compartida.enDental`).
   const enDental = await prisma.user.findFirst({
     where: { email },
     select: { supabaseId: true },
     orderBy: { createdAt: "asc" },
   });
-  if (enDental?.supabaseId) return enDental.supabaseId;
+  if (enDental?.supabaseId) return { supabaseId: enDental.supabaseId, motivo: null };
 
   try {
     const { url, serviceKey } = supabaseEnv();
@@ -212,7 +246,7 @@ async function resolverSupabaseIdExistente(email: string): Promise<string | null
         cache: "no-store",
       },
     );
-    if (!res.ok) return null;
+    if (!res.ok) return { supabaseId: null, motivo: "no-encontrado" };
     const data = (await res.json()) as { users?: { id?: string; email?: string }[] };
     // 🔴 Comparación EXACTA del correo: `filter` de GoTrue es un LIKE, así
     // que "ana@x.mx" puede traer también "mariana@x.mx". Enlazar a la
@@ -220,11 +254,13 @@ async function resolverSupabaseIdExistente(email: string): Promise<string | null
     const exacto = (data.users ?? []).find(
       (u) => typeof u.email === "string" && u.email.toLowerCase() === email && u.id,
     );
-    return exacto?.id ?? null;
+    return exacto?.id
+      ? { supabaseId: exacto.id, motivo: null }
+      : { supabaseId: null, motivo: "no-encontrado" };
   } catch {
     // La red falló. No es motivo para inventar un id: quien llama lo
     // traduce en un error que le dice a la dirección qué hacer.
-    return null;
+    return { supabaseId: null, motivo: "no-encontrado" };
   }
 }
 
@@ -371,7 +407,7 @@ export async function createEduTeamMember(
   }
   const { firstName, lastName, email, role, phone } = check.value;
   const name = eduTeamFullName({ firstName, lastName, email });
-  const fallo = (error: string): EduTeamAltaResult => ({
+  const fallo = (error: string, status?: number): EduTeamAltaResult => ({
     ok: false,
     email,
     name,
@@ -380,6 +416,7 @@ export async function createEduTeamMember(
     reused: false,
     id: null,
     error,
+    ...(status === undefined ? {} : { status }),
   });
 
   // 🔴 H-16 · CREAR UNA DIRECCIÓN ES COSA DE LA DIRECCIÓN. El <select> del
@@ -432,9 +469,18 @@ export async function createEduTeamMember(
       return fallo(mensaje || "Supabase no pudo crear la cuenta.");
     }
     // 🔴 EL CASO QUE ANTES REVENTABA. El correo ya tiene cuenta en
-    // DaleControl (el panel dental, u otro instituto). No se falla: se
-    // reusa ese supabaseId y se crea SOLO la fila de edu_users.
-    supabaseId = await resolverSupabaseIdExistente(email);
+    // DaleControl (el panel dental, o una cuenta de Auth suelta). No se
+    // falla: se reusa ese supabaseId y se crea SOLO la fila de edu_users.
+    const resuelto = await resolverSupabaseIdExistente(email, institutionId);
+    // 🔴 S-1 · y si esa cuenta ya es de OTRO INSTITUTO, no se enlaza: es el
+    // primer eslabón de la toma de control (ver resolverSupabaseIdExistente).
+    if (resuelto.motivo === "otro-instituto") {
+      return fallo(
+        "Ese correo ya tiene cuenta en otro instituto de DaleControl. Una cuenta no se enlaza a un segundo instituto desde aquí —sería tomar el control de un acceso que no es de esta escuela—: dale de alta con un correo de esta escuela, o pídeselo a quien administra DaleControl.",
+        409,
+      );
+    }
+    supabaseId = resuelto.supabaseId;
     reused = true;
     if (!supabaseId) {
       return fallo(
@@ -908,10 +954,12 @@ async function cuentaCompartida(
  * imposible de depurar que esto viene a cerrar. Es el mismo camino que el
  * alta y el mismo que el dental (src/app/api/team/[id]/route.ts:144-180).
  *
- * ⚠️ Si esa cuenta de Auth la usa TAMBIÉN el panel dental, el correo NO se
- * cambia desde aquí y se dice por qué: este vertical no escribe tablas del
- * dental (misma regla que el cambio de contraseña), así que cambiar el login
- * dejaría al panel dental mostrando un correo que ya no entra.
+ * ⚠️ Si esa cuenta de Auth la usa TAMBIÉN el panel dental —o OTRO INSTITUTO
+ * (S-1)—, el correo NO se cambia desde aquí y se dice por qué: cambiar el
+ * login de una cuenta compartida desde uno solo de los sitios que la usan es
+ * apoderarse de ella, y es exactamente la cadena con la que se tomaba una
+ * cuenta de DIRECCIÓN de otra escuela. Es la misma regla que el cambio de
+ * contraseña (`resetEduTeamMemberPassword`) ya aplicaba a las dos banderas.
  *
  * ── EL ROL ──────────────────────────────────────────────────────────────
  * Solo lo cambia una DIRECCION, nunca sobre sí misma, y BORRA el override:
@@ -1002,6 +1050,19 @@ export async function updateEduTeamMember(
     if (compartida.enDental) {
       throw new EduPadronError(
         "Ese acceso es el mismo que esta persona usa en el panel dental de DaleControl. Cambiarle el correo aquí le cambiaría el login allá, y este panel no escribe los datos del dental: el cambio tiene que hacerse desde ahí.",
+        409,
+      );
+    }
+    // 🔴 S-1 · Y LO MISMO SI LA CUENTA ES DE OTRO INSTITUTO. Es la línea que
+    // `resetEduTeamMemberPassword` ya tenía doscientas más abajo (busca
+    // `compartida.enDental || compartida.enOtroInstituto`), y que aquí
+    // faltaba: sin ella, con `equipo.manage` en el Instituto A se le cambia
+    // el correo de login a la dirección del Instituto B y se toma su cuenta
+    // con un "olvidé mi contraseña". Cambiar el correo de una cuenta
+    // compartida entre dos escuelas no es de ninguna de las dos.
+    if (compartida.enOtroInstituto) {
+      throw new EduPadronError(
+        "Ese acceso es el mismo que esta persona usa en otro instituto de DaleControl. El correo es de la CUENTA, no de esta escuela: cambiarlo aquí le cambiaría el login allá. Pídeselo a quien administra DaleControl.",
         409,
       );
     }
@@ -1098,30 +1159,14 @@ export async function updateEduTeamMember(
         );
       }
 
-      // El correo es de la CUENTA, no del instituto: si esta persona da
-      // clase en dos, las dos filas tienen que decir el mismo correo — el
-      // login es uno solo. Y con el correo va su índice de búsqueda, o en el
-      // otro instituto dejaría de encontrarse por el correo nuevo.
-      if (emailChanged && compartida.enOtroInstituto) {
-        const hermanas = await tx.eduUser.findMany({
-          where: { supabaseId: persona.supabaseId, NOT: { id: persona.id } },
-          select: { id: true, firstName: true, lastName: true, phone: true },
-        });
-        for (const h of hermanas) {
-          await tx.eduUser.update({
-            where: { id: h.id },
-            data: {
-              email: cambios.email,
-              searchIndex: eduUserSearchIndex({
-                firstName: h.firstName,
-                lastName: h.lastName,
-                email: cambios.email,
-                phone: h.phone,
-              }),
-            },
-          });
-        }
-      }
+      // 🔴 S-1 · AQUÍ SE PROPAGABA EL CORREO A LAS FILAS HERMANAS DE LOS
+      // OTROS INSTITUTOS, y ya no. El argumento era bueno —el correo es de
+      // la CUENTA y el login es uno solo, así que las dos filas tienen que
+      // decir lo mismo— pero la conclusión correcta es la contraria: si un
+      // correo lo comparten dos escuelas, no se cambia desde NINGUNA de las
+      // dos. El `if` de arriba corta antes de llegar aquí, así que esto
+      // sería código muerto; se quita para que nadie lo lea como que la
+      // propagación sigue existiendo. Ver el bloque de `compartida`.
     });
   } catch (err) {
     // Supabase ya cambió y Prisma no. Se revierte Auth para que la persona
