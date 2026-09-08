@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
@@ -103,6 +104,20 @@ export default async function InstitutoDireccionPage({
               si algo no se puede saber, esta pantalla lo dice en vez de inventar un número.
               Cada cifra abre la lista que hay detrás.
             </p>
+          </div>
+          {/* 🔴 H-150 · LOS DATOS DE LA PROPIA ESCUELA, a un clic. Es una
+              SUBRUTA y no un item del menú porque esta ola no crea ninguna
+              key de permiso nueva: una key nueva NO le llega a nadie con
+              `permissionsOverride` guardado (el override REEMPLAZA al
+              default) y habría exigido backfill en SQL contra cada escuela. */}
+          <div className="edu-pagehead__actions">
+            <Link
+              href="/instituto/direccion/instituto"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              title="Nombre, contacto y zona horaria del instituto."
+            >
+              Datos del instituto
+            </Link>
           </div>
         </header>
 

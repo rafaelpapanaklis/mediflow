@@ -253,3 +253,191 @@ export async function asignarEduCategoria(
 
   return { id: proc.id, categoryId };
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA C·2 · LA PANTALLA DE CATEGORÍAS (H-90)
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Un procedimiento o un requisito que todavía se compara por texto. */
+export interface EduCategoriaPendiente {
+  id: string;
+  name: string;
+  /** El texto libre que tiene capturado hoy. */
+  texto: string | null;
+  /** La categoría con llave, si ya se emparejó. */
+  categoryId: string | null;
+  /**
+   * La categoría que el emparejado SUGIERE por el texto normalizado.
+   *
+   * 🔴 ES UNA SUGERENCIA Y NO SE APLICA SOLA. Emparejar «Cirugía» con
+   * «Cirugía bucal» es un juicio humano: una migración automática que se
+   * equivoque pone en cero el avance de una generación entera, en silencio,
+   * que es exactamente el fallo H-90. Aquí se PROPONE y una persona
+   * confirma con un clic.
+   */
+  sugerido: string | null;
+}
+
+export interface EduCategoriasPanel {
+  rows: EduCategoriaRow[];
+  /** Los procedimientos del catálogo, con su texto y su llave. */
+  procedimientos: EduCategoriaPendiente[];
+  /** Los requisitos que se comparan por categoría (texto o llave). */
+  requisitos: EduCategoriaPendiente[];
+  /** Textos libres sin ninguna categoría con la que emparejarlos. */
+  sinPareja: string[];
+}
+
+/**
+ * TODO lo que la pantalla de categorías necesita, en una sola pasada.
+ *
+ * Va aparte de `listEduCategorias` —que ya la usa la pantalla de
+ * requisitos— para no engordar aquella lectura con dos consultas que allí
+ * no se pintan.
+ */
+export async function getEduCategoriasPanel(
+  ctx: { institutionId: string },
+): Promise<EduCategoriasPanel> {
+  const institutionId = requireInstitution(ctx);
+
+  const [cats, procedimientos, requisitos] = await Promise.all([
+    prisma.eduProcedureCategory.findMany({
+      where: { institutionId },
+      orderBy: [{ isActive: "desc" }, { orderIndex: "asc" }, { name: "asc" }],
+      take: EDU_CATEGORIA_MAX_ROWS,
+      include: { _count: { select: { procedures: true, requirements: true } } },
+    }),
+    prisma.eduProcedure.findMany({
+      where: { institutionId },
+      orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+      take: 500,
+      select: { id: true, name: true, category: true, categoryId: true },
+    }),
+    // Solo los requisitos que se miden POR CATEGORÍA: los que piden un
+    // procedimiento concreto no tienen nada que emparejar aquí, y
+    // listarlos convertiría esta pantalla en un plan de estudios entero.
+    prisma.eduRequirement.findMany({
+      where: {
+        institutionId,
+        OR: [{ category: { not: null } }, { categoryId: { not: null } }],
+      },
+      orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+      take: 500,
+      select: { id: true, name: true, category: true, categoryId: true },
+    }),
+  ]);
+
+  const rows: EduCategoriaRow[] = cats.map((c) => ({
+    id: c.id,
+    name: c.name,
+    key: c.key,
+    isActive: c.isActive,
+    orderIndex: c.orderIndex,
+    procedimientos: c._count.procedures,
+  }));
+
+  // El emparejado se calcula UNA vez sobre todos los textos que hay
+  // sueltos, y se reparte: dos llamadas separadas darían las mismas
+  // parejas, pero el día que la regla cambie solo se arreglaría una.
+  const textos = [
+    ...procedimientos.map((p) => p.category ?? ""),
+    ...requisitos.map((r) => r.category ?? ""),
+  ].filter(Boolean);
+  const sugerencias = eduCategoriaSugerirEmparejado(textos, rows);
+  const porTexto = new Map(sugerencias.map((s) => [s.texto, s.categoryId]));
+
+  const aPendiente = (x: {
+    id: string;
+    name: string;
+    category: string | null;
+    categoryId: string | null;
+  }): EduCategoriaPendiente => ({
+    id: x.id,
+    name: x.name,
+    texto: x.category,
+    categoryId: x.categoryId,
+    sugerido: x.categoryId ? null : (porTexto.get(x.category ?? "") ?? null),
+  });
+
+  return {
+    rows,
+    procedimientos: procedimientos.map(aPendiente),
+    requisitos: requisitos.map(aPendiente),
+    sinPareja: sugerencias.filter((s) => !s.categoryId).map((s) => s.texto),
+  };
+}
+
+/**
+ * CONECTA un REQUISITO del plan de estudios a una categoría con llave.
+ *
+ * Es la otra mitad de H-90: la categoría del requisito era «texto libre sin
+ * llave», y renombrarla en el catálogo ponía el avance a cero en silencio
+ * para toda la especialidad.
+ *
+ * 🔴 AL PONER LA LLAVE SE LIMPIA EL TEXTO. Dejar los dos puestos haría que
+ * el requisito contara por llave hoy y por texto el día que alguien
+ * desconectara la llave, y el número del alumno cambiaría sin que nadie
+ * tocara su avance. Una fuente, no dos.
+ *
+ * ⚠️ Y SE DICE EN VOZ ALTA: emparejar un requisito PUEDE mover su avance en
+ * el momento, porque los casos cuyo procedimiento todavía no está
+ * emparejado dejan de contar para él. Ésa es la razón de que esta pantalla
+ * empareje primero los procedimientos y avise de los que faltan.
+ */
+export async function asignarEduCategoriaRequisito(
+  ctx: EduCategoriaContext,
+  body: { requirementId?: unknown; categoryId?: unknown },
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+): Promise<{ id: string; categoryId: string | null }> {
+  const institutionId = requireInstitution(ctx);
+  const requirementId = eduCleanId(body?.requirementId);
+  if (!requirementId) throw new EduPadronError("Falta el requisito.", 400);
+
+  const req = await prisma.eduRequirement.findFirst({
+    where: { id: requirementId, institutionId },
+    select: { id: true, name: true, category: true, categoryId: true, procedureId: true },
+  });
+  if (!req) throw new EduPadronError("Ese requisito no existe o no es de tu instituto.", 404);
+  if (req.procedureId) {
+    throw new EduPadronError(
+      "Ese requisito se mide por un PROCEDIMIENTO concreto, no por categoría. Cámbialo en Requisitos si quieres que cuente una categoría entera.",
+      409,
+    );
+  }
+
+  let categoryId: string | null = null;
+  const raw = eduCleanId(body?.categoryId);
+  if (raw) {
+    const cat = await prisma.eduProcedureCategory.findFirst({
+      where: { id: raw, institutionId },
+      select: { id: true },
+    });
+    if (!cat) throw new EduPadronError("Esa categoría no existe o no es de tu instituto.", 404);
+    categoryId = cat.id;
+  }
+
+  // El `where` lleva la llave que se leyó: si otra persona emparejó este
+  // requisito entre la lectura y ahora, esto NO la pisa — contesta 409 y la
+  // pantalla se actualiza. Es el patrón de toda la casa.
+  const res = await prisma.eduRequirement.updateMany({
+    where: { id: req.id, institutionId, categoryId: req.categoryId },
+    data: { categoryId, category: categoryId ? null : req.category },
+  });
+  if (res.count === 0) {
+    throw new EduPadronError(
+      "Alguien cambió la categoría de ese requisito mientras lo mirabas. Actualiza la pantalla.",
+      409,
+    );
+  }
+
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "student",
+    entityId: req.id,
+    before: { requisito: req.name, categoryId: req.categoryId, category: req.category },
+    after: { requisito: req.name, categoryId, category: categoryId ? null : req.category },
+    ...meta,
+  });
+
+  return { id: req.id, categoryId };
+}

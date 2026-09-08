@@ -8516,6 +8516,70 @@ a.edu-ini-acceso:hover {
   border-top: 1px solid var(--edu-line);
 }
 
+/* ── EL BLOQUEO (H-19) ─────────────────────────────────────────────────
+   Festivo, puente o sillón en mantenimiento: las horas que la clínica NO
+   abre, rayadas sobre su columna.
+
+   🔴 `z-index: 0` y ANTES de las tarjetas en el DOM. Un bloqueo NO cancela
+   las citas que ya estaban (ver src/lib/edu/agenda-bloqueos.ts): si el
+   rayado las tapara, el martes del puente se vería cerrado y NO se verían
+   los tres pacientes a los que hay que llamar para reagendar — que es lo
+   único que hay que hacer ese día.
+
+   🔴 `pointer-events: none`, y por eso el rótulo también. El click en un
+   hueco tiene que llegar a la columna para que el alta rebote con el 409
+   que EXPLICA el bloqueo; un rayado que se traga el click deja a recepción
+   tocando una pantalla que no contesta.
+
+   El rayado es un `repeating-linear-gradient` y no una imagen: escala con
+   el zoom de la rejilla (el renglón va de 5 px a 34 px) sin pixelarse y sin
+   una petición más. */
+.edu-ag__bloqueo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--edu-text-3) 9%, transparent);
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--edu-text-3) 22%, transparent) 0 4px,
+    transparent 4px 10px
+  );
+  border-top: 1px solid color-mix(in srgb, var(--edu-text-3) 34%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--edu-text-3) 34%, transparent);
+}
+
+/* El mantenimiento es de UN sillón y se distingue del cierre de la escuela:
+   ámbar (el mismo 700 que pasa AA sobre blanco, ver la cabecera). */
+.edu-ag__bloqueo--mantenimiento {
+  background-color: color-mix(in srgb, var(--edu-amber-700) 12%, transparent);
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--edu-amber-700) 26%, transparent) 0 4px,
+    transparent 4px 10px
+  );
+  border-top-color: color-mix(in srgb, var(--edu-amber-700) 46%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--edu-amber-700) 46%, transparent);
+}
+
+/* El motivo, escrito DENTRO de la banda. Sin él, el rayado es una mancha
+   gris y hay que ir a otra pantalla a preguntar por qué. Se recorta con
+   `text-overflow` y el texto entero va en el `title` y en el `sr-only`. */
+.edu-ag__bloqueo-txt {
+  display: block;
+  padding: 3px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--edu-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ── LA GUÍA DEL CURSOR (src/components/edu/agenda/agenda-guia.tsx) ─────
    Con doce sillones abiertos —o los siete días de la semana— el eje de
    horas queda a media pantalla del hueco que se va a clickear y agendar se
@@ -11068,4 +11132,265 @@ a.edu-ini-acceso:hover {
   color: var(--edu-text-2);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OLA C·2 — LAS LISTAS NUEVAS (agenda y academia)
+
+   Cinco listas nuevas, todas con envoltorio `.edu-tablewrap` y todas
+   medidas con `@container` y no con `@media` (regla 2). Los umbrales están
+   sumados pista a pista (regla 3) y no redondeados a un número bonito: es
+   el `Σ(mínimos) + Σ(gaps) + padding + bordes` real de cada una.
+
+   Van en un bloque propio al final del archivo, y no metidas en los `:is()`
+   de los cubos de arriba, para que esta ola no toque una sola línea que ya
+   estaba: cinco nombres más dentro de esos selectores son cinco conflictos
+   de fusión con las demás casillas que están escribiendo aquí a la vez.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Bloqueos de agenda (H-19)
+     200 (cuándo) + 150 (qué) + 140 (alcance) + 120 (lo puso) + 110 (acciones)
+                                                        = 720 px de pistas
+   + 4 huecos × 12 px                                   =  48 px
+   + padding 12px 16px de .edu-row                      =  32 px
+   + borde de .edu-table                                =   2 px
+   ───────────────────────────────────────────────────────────────────────
+                                                          802 px */
+.edu-table--bloqueos {
+  --edu-cols: minmax(200px, 1.8fr) minmax(150px, 1.3fr) minmax(140px, 1.2fr) minmax(120px, 1fr) 110px;
+}
+
+/* Versiones de un requisito (H-89)
+     90 (versión) + 150 (generación) + 90 (mínimo) + 130 (se exige)
+   + 150 (desde) + 130 (quién)                          = 740 px de pistas
+   + 5 huecos × 12 px                                   =  60 px
+   + padding + borde                                    =  34 px
+   ───────────────────────────────────────────────────────────────────────
+                                                          834 px */
+.edu-table--reqversiones {
+  --edu-cols: 90px minmax(150px, 1.4fr) 90px minmax(130px, 1.1fr) minmax(150px, 1.2fr) minmax(130px, 1fr);
+}
+
+/* Categorías de procedimiento (H-90)
+     160 (categoría) + 120 (clave) + 120 (en uso) + 110 (estado)
+   + 170 (acciones)                                     = 680 px de pistas
+   + 4 huecos × 12 px                                   =  48 px
+   + padding + borde                                    =  34 px
+   ───────────────────────────────────────────────────────────────────────
+                                                          762 px */
+.edu-table--categorias {
+  --edu-cols: minmax(160px, 1.6fr) 120px 120px 110px 170px;
+}
+
+/* Rotación docente programada
+     160 (estudiante) + 150 (docente) + 140 (desde) + 110 (tipo)
+   + 120 (acciones)                                     = 680 px de pistas
+   + 4 huecos × 12 px                                   =  48 px
+   + padding + borde                                    =  34 px
+   ───────────────────────────────────────────────────────────────────────
+                                                          762 px */
+.edu-table--rotaciones {
+  --edu-cols: minmax(160px, 1.6fr) minmax(150px, 1.4fr) minmax(140px, 1.2fr) 110px 120px;
+}
+
+/* Historial del cupo de IA
+     150 (cuándo) + 140 (quién) + 240 (qué cambió)      = 530 px de pistas
+   + 2 huecos × 12 px                                   =  24 px
+   + padding + borde                                    =  34 px
+   ───────────────────────────────────────────────────────────────────────
+                                                          588 px */
+.edu-table--iacupo {
+  --edu-cols: minmax(150px, 1.3fr) minmax(140px, 1.2fr) minmax(240px, 2fr);
+}
+
+/* Cubo 588 px de CONTENIDO (lo mide el envoltorio, no la ventana). iacupo 588 */
+@container edu-tabla (min-width: 588px) {
+  .edu-table--iacupo {
+    gap: 0;
+    /* `fit-content` = al menos su min-content, que es la SUMA de las
+       pistas. Sin esto la tabla se encoge al ancho del envoltorio y la
+       rejilla se sale por debajo en vez de hacer que el envoltorio se
+       desplace (regla 4). */
+    min-width: fit-content;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+  }
+
+  .edu-table--iacupo .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    /* El radio vive aquí y NO en un `overflow: hidden` del padre: ese
+       overflow es el que recorta un botón sin dejar scroll (regla 4). */
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  .edu-table--iacupo .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .edu-table--iacupo .edu-row:last-child {
+    border-bottom: 0;
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
+  }
+
+  .edu-table--iacupo .edu-cell--wide,
+  .edu-table--iacupo .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  .edu-table--iacupo .edu-cell__label {
+    display: none;
+  }
+
+  .edu-table--iacupo .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Cubo 762 px de CONTENIDO. categorias 762 · rotaciones 762 */
+@container edu-tabla (min-width: 762px) {
+  :is(.edu-table--categorias, .edu-table--rotaciones) {
+    gap: 0;
+    min-width: fit-content;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+  }
+
+  :is(.edu-table--categorias, .edu-table--rotaciones) .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  :is(.edu-table--categorias, .edu-table--rotaciones) .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  :is(.edu-table--categorias, .edu-table--rotaciones) .edu-row:last-child {
+    border-bottom: 0;
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
+  }
+
+  :is(.edu-table--categorias, .edu-table--rotaciones) .edu-cell--wide,
+  :is(.edu-table--categorias, .edu-table--rotaciones) .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  :is(.edu-table--categorias, .edu-table--rotaciones) .edu-cell__label {
+    display: none;
+  }
+
+  :is(.edu-table--categorias, .edu-table--rotaciones) .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Cubo 834 px de CONTENIDO. bloqueos 802 · reqversiones 834 */
+@container edu-tabla (min-width: 834px) {
+  :is(.edu-table--bloqueos, .edu-table--reqversiones) {
+    gap: 0;
+    min-width: fit-content;
+    background: var(--edu-surface);
+    border: 1px solid var(--edu-line);
+    border-radius: var(--edu-radius);
+    box-shadow: var(--edu-shadow-1);
+  }
+
+  :is(.edu-table--bloqueos, .edu-table--reqversiones) .edu-rowhead {
+    display: grid;
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--edu-surface-2);
+    border-radius: var(--edu-radius) var(--edu-radius) 0 0;
+    border-bottom: 1px solid var(--edu-line);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--edu-text-3);
+  }
+
+  :is(.edu-table--bloqueos, .edu-table--reqversiones) .edu-row {
+    grid-template-columns: var(--edu-cols);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--edu-line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  :is(.edu-table--bloqueos, .edu-table--reqversiones) .edu-row:last-child {
+    border-bottom: 0;
+    border-radius: 0 0 var(--edu-radius) var(--edu-radius);
+  }
+
+  :is(.edu-table--bloqueos, .edu-table--reqversiones) .edu-cell--wide,
+  :is(.edu-table--bloqueos, .edu-table--reqversiones) .edu-cell__actions {
+    grid-column: auto;
+  }
+
+  :is(.edu-table--bloqueos, .edu-table--reqversiones) .edu-cell__label {
+    display: none;
+  }
+
+  :is(.edu-table--bloqueos, .edu-table--reqversiones) .edu-cell__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Un BOTÓN que se lee como enlace. Lo estrena el aviso de bloqueos de la
+   agenda («Verlos todos»), que abre un modal y por tanto no puede ser un
+   <a>: un enlace que no navega es una promesa rota para quien usa teclado o
+   lector de pantalla. Sin esta regla, el botón hereda el fondo gris y el
+   borde del navegador a mitad de una frase. */
+button.edu-link {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
 }

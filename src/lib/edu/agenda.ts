@@ -54,6 +54,17 @@ import {
   type EduStudentOption,
   type EduSupervisorOption,
 } from "@/lib/edu/agenda-core";
+// 🔴 OLA C·2 · H-19 — LA AGENDA CONSULTA LOS BLOQUEOS. La regla del NULL
+// (instituto / sede / sillón) y el texto del 409 viven en el core de
+// bloqueos, escritos UNA vez: si la rejilla pintara con una regla y el alta
+// rebotara con otra, el hueco cerrado y el hueco que se puede tomar dejarían
+// de ser el mismo, que es peor que no tener bloqueos.
+import {
+  EDU_BLOCK_MAX_ROWS,
+  eduBlockMensaje,
+  eduBlockQueImpide,
+  type EduBlockLike,
+} from "@/lib/edu/agenda-bloqueos-core";
 import {
   eduAppointmentScopeWhere,
   eduCampusCovers,
@@ -72,6 +83,9 @@ import {
   applyEduReminderCancel,
   type EduReminderCancelResult,
 } from "@/lib/edu/recordatorios";
+// 🔴 LA BITÁCORA (NOM-024) TIENE UN SOLO ESCRITOR y NUNCA lanza: si el
+// renglón de auditoría no entra, la cita se agenda igual. Ver auditoria.ts.
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 import {
   EDU_CASE_CLOSED_STATUSES,
   type EduAppointmentStatus,
@@ -645,6 +659,8 @@ async function resolveParties(
   chairId: string;
   supervisorUserId: string | null;
   chairTimeZone: string | null;
+  /** La SEDE del sillón. La necesita la regla del NULL de los bloqueos. */
+  chairCampusId: string;
 }> {
   const patientId = eduCleanId(input.patientId);
   const studentId = eduCleanId(input.studentId);
@@ -710,8 +726,77 @@ async function resolveParties(
     chairId: chair.id,
     supervisorUserId,
     chairTimeZone: chair.campus.timezone || null,
+    chairCampusId: chair.campusId,
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 OLA C·2 · H-19 — EL BLOQUEO REBOTA CON SU MOTIVO
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ¿Hay un bloqueo que impida meter una cita en este hueco?
+ *
+ * Rebota con 409 y con el MOTIVO escrito («Esa hora está bloqueada (esa
+ * sede). Puente o vacaciones: Fiestas patrias.»), no con un "no se puede":
+ * quien choca con esto es recepción con el paciente delante, y un mensaje
+ * mudo la deja llamando por teléfono a preguntar por qué.
+ *
+ * 🔴 EL `where` SOLO FILTRA POR SOLAPE, y el ALCANCE lo decide el core. Se
+ * podría meter la regla del NULL en el `where` con un `OR` de tres ramas —y
+ * entonces habría DOS implementaciones de la misma regla, la del where y la
+ * del core, que se separarían en el primer arreglo. Los bloqueos que
+ * solapan un hueco de una hora son un puñado: el festivo, el puente y el
+ * sillón en mantenimiento. Traerlos y filtrarlos en memoria no cuesta nada
+ * y deja la regla en un solo sitio.
+ *
+ * ⚠️ NO comprueba los bloqueos de una cita que YA está agendada: bloquear
+ * cierra el hueco para lo que VENGA (ver agenda-bloqueos.ts). Lo que ya
+ * estaba se reagenda a mano, con su aviso al paciente.
+ */
+async function assertNoBloqueo(
+  institutionId: string,
+  input: { chairId: string; campusId: string; startsAt: Date; endsAt: Date },
+): Promise<void> {
+  const solapan = await prisma.eduAgendaBlock.findMany({
+    where: {
+      institutionId,
+      deletedAt: null,
+      startsAt: { lt: input.endsAt },
+      endsAt: { gt: input.startsAt },
+    },
+    take: EDU_BLOCK_MAX_ROWS,
+    select: {
+      id: true,
+      kind: true,
+      reason: true,
+      campusId: true,
+      chairId: true,
+      startsAt: true,
+      endsAt: true,
+    },
+  });
+  if (solapan.length === 0) return;
+
+  const impide = eduBlockQueImpide(solapan as EduBlockLike[], {
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    chair: { id: input.chairId, campusId: input.campusId },
+  });
+  if (impide) throw new EduPadronError(eduBlockMensaje(impide), 409);
+}
+
+/**
+ * Lo que hace falta para ESCRIBIR una cita: el contexto del piso clínico
+ * MÁS quién es quien la escribe.
+ *
+ * 🔴 EL `user` NO ES OPCIONAL. Agendar, mover y cerrar una cita son actos
+ * que la bitácora tiene que poder atribuir; con `user?` se podría llamar
+ * sin él y el renglón quedaría sin firmar en silencio, que es el hueco que
+ * H-162 describe. Las tres rutas que las llaman pasan `g.ctx`, que ya lo
+ * trae: ampliar el tipo no obliga a tocar ninguna.
+ */
+export interface EduAgendaWriteContext extends EduClinicaContext, EduAuditActor {}
 
 export interface EduAppointmentInput {
   patientId?: unknown;
@@ -806,7 +891,7 @@ async function resolveAppointmentCaseId(
 }
 
 export async function createEduAppointment(
-  ctx: EduClinicaContext,
+  ctx: EduAgendaWriteContext,
   input: EduAppointmentInput,
   timeZone: string,
   now: Date = new Date(),
@@ -844,6 +929,16 @@ export async function createEduAppointment(
     throw new EduPadronError("Esa fecha está a más de un año. Revisa el año que escribiste.");
   }
 
+  // H-19: el bloqueo va ANTES del choque de agenda. Si el sillón está en
+  // mantenimiento, "ese sillón ya está ocupado a esa hora" sería un mensaje
+  // cierto y completamente inútil.
+  await assertNoBloqueo(institutionId, {
+    chairId: partes.chairId,
+    campusId: partes.chairCampusId,
+    startsAt,
+    endsAt,
+  });
+
   await assertNoClash(institutionId, {
     chairId: partes.chairId,
     studentId: partes.studentId,
@@ -867,6 +962,25 @@ export async function createEduAppointment(
     select: { id: true },
   });
 
+  // 🔴 OLA C·2 · LA CITA ENTRA EN LA BITÁCORA. Va con `patientId` para que
+  // el renglón se pueda encontrar por paciente, que es como se busca en una
+  // auditoría: «qué se le hizo a esta persona y quién lo apuntó».
+  await eduAudit(ctx, {
+    action: "create",
+    entity: "appointment",
+    entityId: created.id,
+    patientId: partes.patientId,
+    after: {
+      startsAt,
+      endsAt,
+      chairId: partes.chairId,
+      studentId: partes.studentId,
+      supervisorUserId: partes.supervisorUserId,
+      caseId,
+      type,
+    },
+  });
+
   return created;
 }
 
@@ -882,7 +996,7 @@ export async function createEduAppointment(
  * sobre quién atendió a quién.
  */
 export async function updateEduAppointment(
-  ctx: EduClinicaContext,
+  ctx: EduAgendaWriteContext,
   appointmentId: string,
   input: EduAppointmentInput,
   timeZone: string,
@@ -905,6 +1019,10 @@ export async function updateEduAppointment(
       endsAt: true,
       supervisorUserId: true,
       caseId: true,
+      // H-19: la sede del sillón que tiene HOY. Hace falta para consultar
+      // los bloqueos cuando se mueve solo la hora (ahí no se vuelve a
+      // resolver el sillón y no habría de dónde sacarla).
+      chair: { select: { campusId: true } },
     },
   });
   if (!current) throw new EduPadronError("Esa cita no es de este instituto.", 404);
@@ -920,6 +1038,9 @@ export async function updateEduAppointment(
 
   let studentId = current.studentId;
   let chairId = current.chairId;
+  // La SEDE del sillón resultante: la de ahora, o la del sillón de destino
+  // si la cita se muda de unidad.
+  let campusId = current.chair.campusId;
   // Ola 11: la zona con la que se interpreta la hora es la de la SEDE del
   // sillón —el de destino si se está mudando la cita—, no la del instituto.
   let zona = timeZone;
@@ -939,6 +1060,7 @@ export async function updateEduAppointment(
     );
     studentId = partes.studentId;
     chairId = partes.chairId;
+    campusId = partes.chairCampusId;
     zona = partes.chairTimeZone ?? timeZone;
     if (cambiaAlumno) data.studentId = partes.studentId;
     if (cambiaSillon) data.chairId = partes.chairId;
@@ -1027,6 +1149,19 @@ export async function updateEduAppointment(
 
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
 
+  if (cambiaHora || cambiaSillon) {
+    // H-19 · REAGENDAR TAMBIÉN CONSULTA LOS BLOQUEOS. Sin esto, el bloqueo
+    // solo cerraba la puerta del alta y la agenda se llenaba igual: basta
+    // arrastrar una cita al martes del puente.
+    //
+    // ⚠️ La condición NO incluye `cambiaAlumno`, y ahí se separa del choque
+    // de abajo: un bloqueo cierra un HUECO (sillón + hora), no una persona.
+    // Cambiarle el alumno a una cita que ya vive dentro de un bloqueo —lo
+    // que hace caja cuando alguien falta— tiene que seguir siendo posible;
+    // lo que no se puede es METERLA ahí.
+    await assertNoBloqueo(institutionId, { chairId, campusId, startsAt, endsAt });
+  }
+
   if (cambiaHora || cambiaSillon || cambiaAlumno) {
     await assertNoClash(institutionId, {
       chairId,
@@ -1080,6 +1215,37 @@ export async function updateEduAppointment(
     });
   }
 
+  // 🔴 OLA C·2 · MOVER UNA CITA SE REGISTRA, con el antes y el después de lo
+  // que se movió. «Se cambió» sin decir de qué a qué no contesta nada:
+  // `eduAuditDiff` recorta a los campos que de verdad cambiaron.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "appointment",
+    entityId: current.id,
+    patientId: current.patientId,
+    before: {
+      startsAt: current.startsAt,
+      endsAt: current.endsAt,
+      chairId: current.chairId,
+      studentId: current.studentId,
+      supervisorUserId: current.supervisorUserId,
+      caseId: current.caseId,
+      type: current.type,
+    },
+    after: {
+      startsAt,
+      endsAt,
+      chairId,
+      studentId,
+      supervisorUserId:
+        input.supervisorUserId !== undefined
+          ? ((data.supervisorUserId as string | null | undefined) ?? null)
+          : current.supervisorUserId,
+      caseId: data.caseId !== undefined ? (data.caseId as string | null) : current.caseId,
+      type: (data.type as EduAppointmentType | undefined) ?? current.type,
+    },
+  });
+
   return { id: current.id };
 }
 
@@ -1098,7 +1264,7 @@ export async function updateEduAppointment(
  * toca se ve exactamente igual que una que no existe.
  */
 export async function setEduAppointmentStatus(
-  ctx: EduClinicaContext,
+  ctx: EduAgendaWriteContext,
   appointmentId: string,
   rawStatus: unknown,
   options: { canManage: boolean; reason?: unknown },
@@ -1146,6 +1312,9 @@ export async function setEduAppointmentStatus(
       // El MOTIVO de una cancelación se anota al final de las notas (ver
       // abajo), así que hay que traer lo que ya había para no pisarlo.
       notes: true,
+      // Para que el renglón de la bitácora se pueda encontrar POR PACIENTE,
+      // que es como se busca en una auditoría.
+      patientId: true,
     },
   });
   if (!current) throw new EduPadronError("Esa cita no es de este instituto.", 404);
@@ -1248,6 +1417,20 @@ export async function setEduAppointmentStatus(
       reason: "Se canceló porque la cita se cerró antes de que saliera el aviso.",
     });
   }
+
+  // 🔴 OLA C·2 · EL MOVIMIENTO DE ESTADO ENTRA EN LA BITÁCORA. Es el
+  // renglón que contesta «¿a qué hora se sentó este paciente y quién lo
+  // apuntó?», y de ahí salen las horas clínicas que la escuela enseña en
+  // una acreditación. El MOTIVO de una cancelación viaja también: sin él,
+  // el renglón dice que se canceló y no por qué.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "appointment",
+    entityId: current.id,
+    patientId: current.patientId,
+    before: { status: current.status },
+    after: { status, ...(motivo ? { motivo } : {}) },
+  });
 
   return { id: current.id, status, recordatorio };
 }

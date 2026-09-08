@@ -81,6 +81,9 @@ const PRECIO_DICTADO: EduIaPrecio = {
   // 0,006 USD por minuto = 100 millonésimas por segundo.
   inUsdMicrosPerMillion: 100_000_000,
   outUsdMicrosPerMillion: 0,
+  // El dictado no tiene caché: null cae al precio de entrada (H-132).
+  cacheReadUsdMicrosPerMillion: null,
+  cacheWriteUsdMicrosPerMillion: null,
   source: "Tarifa pública de OpenAI",
 };
 
@@ -90,6 +93,8 @@ const PRECIO_ANALISIS: EduIaPrecio = {
   unit: "TOKEN",
   inUsdMicrosPerMillion: 5_000_000,
   outUsdMicrosPerMillion: 25_000_000,
+  cacheReadUsdMicrosPerMillion: null,
+  cacheWriteUsdMicrosPerMillion: null,
   source: "Tarifa pública de Anthropic",
 };
 

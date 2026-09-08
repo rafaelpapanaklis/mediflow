@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
@@ -60,6 +61,18 @@ export default async function InstitutoProcedimientosPage() {
             Lo que la clínica hace. El precio no vive aquí: vive en cada lista de precios, para que
             el mismo procedimiento pueda costar distinto según a quién se le cobre.
           </p>
+        </div>
+        {/* H-90 · el catálogo de categorías vive a un clic de aquí y detrás
+            de la MISMA llave: la categoría es del catálogo de
+            procedimientos, no una pantalla aparte del menú (que habría
+            exigido una key de permiso nueva). */}
+        <div className="edu-pagehead__actions">
+          <Link
+            href="/instituto/procedimientos/categorias"
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+          >
+            Categorías
+          </Link>
         </div>
       </header>
 

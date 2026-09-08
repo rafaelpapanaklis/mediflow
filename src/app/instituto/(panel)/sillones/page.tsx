@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { listEduChairs } from "@/lib/edu/sillones";
+import { listEduBloqueos } from "@/lib/edu/agenda-bloqueos";
 import { getEduCampusScope, listEduCampusOptions } from "@/lib/edu/campus";
 import { eduWithCampus } from "@/lib/edu/campus-core";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduSillonesScreen } from "@/components/edu/clinica/sillones-screen";
+import { EduBloqueosPanel } from "@/components/edu/agenda/bloqueos-panel";
 
 export const metadata: Metadata = {
   title: "Sillones · DaleControl Institucional",
@@ -46,13 +48,25 @@ export default async function InstitutoSillonesPage() {
   const canManage = hasEduPermission(permUser, "sillones.manage");
   const sede = await getEduCampusScope(ctx);
   const cctx = eduWithCampus(ctx, sede);
-  const [rows, sedes] = await Promise.all([
+
+  // ── 🔴 OLA C·2 · H-19 — LA VENTANA DE LOS BLOQUEOS ────────────────────
+  // De hace un mes a dentro de un año. El pasado entra a propósito: un
+  // bloqueo que ya pasó explica por qué esa semana no hubo nadie en la
+  // clínica, y esconderlo dejaría a la dirección mirando un hueco sin
+  // explicación. El futuro se topa en un año porque el propio bloqueo no
+  // puede durar más (EDU_BLOCK_MAX_DIAS).
+  const ahora = new Date();
+  const desde = new Date(ahora.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const hasta = new Date(ahora.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+  const [rows, sedes, bloqueos] = await Promise.all([
     listEduChairs(cctx),
     // Las sedes a las que ENTRA quien mira: son las que puede elegir al dar
     // de alta un sillón. Se piden aparte de `sede.options` porque aquéllas
     // son las del SELECTOR (solo las activas, y solo si hay más de una) y
     // aquí hacen falta todas las suyas para poder mudar un sillón.
     listEduCampusOptions(cctx),
+    listEduBloqueos(cctx, { desde: desde.toISOString(), hasta: hasta.toISOString() }),
   ]);
   const misSedes = sedes.filter((s) => sede.campusIds === null || sede.campusIds.includes(s.id));
 
@@ -74,6 +88,41 @@ export default async function InstitutoSillonesPage() {
       </header>
 
       <EduSillonesScreen rows={rows} canManage={canManage} campuses={misSedes} />
+
+      {/* ── 🔴 H-19 · LOS BLOQUEOS, EN LA MISMA PANTALLA QUE LOS SILLONES ──
+          Y no en una pantalla propia del menú, por dos razones que se
+          sostienen solas:
+            1. es la MISMA decisión y la misma llave (`sillones.manage`):
+               "este sillón no da servicio" y "este sillón no da servicio EL
+               MARTES" son la misma frase con una fecha;
+            2. la alternativa —una entrada más en el menú— exige una key de
+               permiso o un item que a la mitad de la escuela le sale vacío.
+          También se puede capturar desde la agenda, que es donde alguien se
+          entera de que el sillón 7 está descompuesto. */}
+      <section className="edu-section">
+        <div className="edu-section__head">
+          <h2 className="edu-section__title">Bloqueos de agenda</h2>
+        </div>
+        <p className="edu-page__lead">
+          Los días y las horas en que NO se puede agendar: un festivo, un puente, o el sillón que se
+          descompuso. La rejilla de la agenda los pinta y agendar ahí rebota con el motivo que
+          escribas. <strong>No cancela las citas que ya estaban</strong>: ésas se reagendan a mano,
+          con su aviso al paciente.
+        </p>
+        <EduBloqueosPanel
+          bloqueos={bloqueos}
+          campuses={misSedes.map((s) => ({ id: s.id, name: s.name }))}
+          chairs={rows.map((c) => ({
+            id: c.id,
+            name: c.name,
+            campusId: c.campusId,
+            campusName: c.campusName,
+          }))}
+          canManage={canManage}
+          timezone={sede.timezone}
+          periodoLabel="del último mes y el próximo año"
+        />
+      </section>
     </div>
   );
 }

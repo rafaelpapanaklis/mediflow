@@ -6,12 +6,15 @@ import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import {
+  eduDayRange,
   eduFormatDayLong,
   eduShiftDayISO,
   eduTodayISO,
+  eduWeekDays,
   parseEduDayISO,
 } from "@/lib/edu/agenda-core";
 import { listEduAgenda, listEduToday } from "@/lib/edu/agenda";
+import { listEduBloqueos } from "@/lib/edu/agenda-bloqueos";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduMiDiaScreen } from "@/components/edu/clinica/mi-dia-screen";
@@ -124,6 +127,25 @@ export default async function InstitutoMiDiaPage({
     : null;
   const hoy = semana ? null : await listEduToday(ctx, tz, now);
 
+  // ── 🔴 OLA C·2 · H-19 — MI DÍA ENSEÑA LOS CIERRES ────────────────────
+  // Es la pantalla que el alumno abre de pie en el piso clínico, y "hoy no
+  // hay clínica" es exactamente lo que necesita saber ANTES de venir. Sin
+  // esto, un festivo se veía igual que un día sin pacientes agendados: una
+  // lista vacía sin explicación.
+  //
+  // El periodo es el MISMO que las citas de esta vista (hoy, o la semana).
+  // Sin filtro de sede a propósito, igual que el resto de esta pantalla: el
+  // día de una persona es su día completo, ruede por el campus que ruede —
+  // y cada línea dice a qué alcanza, así que no engaña.
+  const diasVista = semana ? eduWeekDays(dayISO) : [hoy!.dayISO];
+  const rangoVista = eduDayRange(diasVista[0], tz, diasVista.length);
+  const bloqueos = rangoVista
+    ? await listEduBloqueos(ctx, {
+        desde: rangoVista.from.toISOString(),
+        hasta: rangoVista.to.toISOString(),
+      })
+    : [];
+
   const semanaBase = `/instituto/mi-dia?vista=semana`;
 
   return (
@@ -209,6 +231,8 @@ export default async function InstitutoMiDiaPage({
         days={semana ? page!.days : []}
         hoyISO={hoyISO}
         truncated={semana ? page!.truncated : false}
+        bloqueos={bloqueos}
+        timezone={tz}
       />
     </div>
   );

@@ -63,6 +63,16 @@ import {
   type EduAgendaView,
   type EduAppointmentRow,
 } from "@/lib/edu/agenda-core";
+// 🔴 OLA C·2 · H-19 — LA REJILLA PINTA LOS BLOQUEOS. El recorte a un día
+// y la regla del NULL viven en el core de bloqueos, no aquí: es la MISMA
+// regla con la que el servidor rebota un alta, y dos copias de ella son
+// una rejilla que enseña abierto lo que el alta va a rechazar.
+import {
+  eduBlockAlcanzaSillon,
+  eduBloqueoBandasDelDia,
+  type EduBloqueoBanda,
+  type EduBloqueoVista,
+} from "@/lib/edu/agenda-bloqueos-core";
 import type { EduAppointmentStatus } from "@/lib/edu/types";
 
 export { DEFAULT_SLOT_HPX, slotHeightFor, showHalfHourLabels, CARD_TWO_ROW_MIN_PX };
@@ -505,6 +515,11 @@ export interface EduAgendaColumn {
   chairId: string | null;
   dayISO: string | null;
   rows: EduAppointmentRow[];
+  /**
+   * H-19 · Los cierres que TAPAN esta columna, ya recortados a su día y en
+   * minutos de pared. Vacío cuando no hay ninguno, que es lo normal.
+   */
+  bloqueos: EduBloqueoBanda[];
 }
 
 export interface EduAgendaLayout {
@@ -517,6 +532,14 @@ export interface EduAgendaLayout {
   hiddenRows: number;
   /** ¿Hay más de una sede entre los sillones? Decide si se nombra. */
   variasSedes: boolean;
+  /**
+   * H-19 · Cierres que EXISTEN en el periodo y que esta vista NO pinta como
+   * banda porque no alcanzan a todo lo que se está viendo (el sillón 7 en
+   * mantenimiento, mirando la semana entera). No se esconden: la pantalla
+   * los dice con un aviso, porque «no hay banda» y «no hay bloqueo» no
+   * pueden verse igual.
+   */
+  bloqueosSueltos: EduBloqueoVista[];
 }
 
 /**
@@ -543,17 +566,43 @@ export function eduAgendaLayout(input: {
   timezone: string;
   /** true = solo cabe una columna (teléfono). */
   soloUno: boolean;
+  /** H-19 · Los cierres del periodo. Ausente = esta vista no los pinta. */
+  bloqueos?: readonly EduBloqueoVista[];
 }): EduAgendaLayout {
   const { rows, chairs, query, days, todayISO, timezone, soloUno } = input;
+  const bloqueos = input.bloqueos ?? [];
   const window = eduAgendaWindow({ chairs, rows, view: query.view, days, timezone });
   const variasSedes = new Set(chairs.map((c) => c.campusId)).size > 1;
 
   if (query.view === "semana") {
+    // ═════════════════════════════════════════════════════════════════
+    // 🔴 EN SEMANA UNA COLUMNA ES UN DÍA, NO UN SILLÓN, ASÍ QUE LA BANDA
+    // SOLO SE PINTA SI EL CIERRE ALCANZA A **TODOS** LOS SILLONES QUE SE
+    // ESTÁN VIENDO.
+    //
+    // Si se pintara cualquiera, el sillón 7 en mantenimiento el martes
+    // dejaría el martes entero tachado y la escuela leería «el martes no se
+    // trabaja» — que es exactamente lo contrario de lo que dice ese
+    // bloqueo. Los que no alcanzan a todos salen en `bloqueosSueltos` y la
+    // pantalla los DICE: esconderlos sería el otro error.
+    //
+    // Con un sillón filtrado (`?sillon=`) los "visibles" son ese uno, así
+    // que su mantenimiento SÍ tacha el día. Cae solo de la misma regla.
+    // ═════════════════════════════════════════════════════════════════
+    const visiblesSemana = query.chairId
+      ? chairs.filter((c) => c.id === query.chairId)
+      : chairs;
+    const alcanzaATodos = (b: EduBloqueoVista) =>
+      visiblesSemana.length > 0 && visiblesSemana.every((c) => eduBlockAlcanzaSillon(b, c));
+    const deTodos = bloqueos.filter(alcanzaATodos);
+    const sueltos = bloqueos.filter((b) => !alcanzaATodos(b));
+
     return {
       window,
       variasSedes,
       hiddenChairs: 0,
       hiddenRows: 0,
+      bloqueosSueltos: sueltos,
       columns: days.map((d) => ({
         key: d,
         kind: "day" as const,
@@ -562,6 +611,7 @@ export function eduAgendaLayout(input: {
         chairId: null,
         dayISO: d,
         rows: rows.filter((r) => r.dayISO === d),
+        bloqueos: eduBloqueoBandasDelDia(deTodos, d, null, timezone),
       })),
     };
   }
@@ -574,6 +624,7 @@ export function eduAgendaLayout(input: {
   // decidiendo `?sillon=`, y la pantalla lo DICE.
   const pintados = soloUno ? filtrados.slice(0, 1) : filtrados;
 
+  const diaISO = days[0] ?? null;
   const columns: EduAgendaColumn[] = pintados.map((c) => ({
     key: c.id,
     kind: "chair" as const,
@@ -582,8 +633,11 @@ export function eduAgendaLayout(input: {
       .filter(Boolean)
       .join(" · "),
     chairId: c.id,
-    dayISO: days[0] ?? null,
+    dayISO: diaISO,
     rows: rows.filter((r) => r.chairId === c.id),
+    // En la vista de DÍA cada columna es un sillón: aquí la regla del NULL
+    // se aplica entera y la banda dice exactamente la verdad.
+    bloqueos: diaISO ? eduBloqueoBandasDelDia(bloqueos, diaISO, c, timezone) : [],
   }));
 
   const enColumna = new Set(pintados.map((c) => c.id));
@@ -599,8 +653,12 @@ export function eduAgendaLayout(input: {
       title: "Otros sillones",
       sub: "Dados de baja",
       chairId: null,
-      dayISO: days[0] ?? null,
+      dayISO: diaISO,
       rows: sueltas,
+      // Sin sillón no hay contra qué aplicar la regla del NULL, así que esta
+      // columna no pinta bandas. Pintarlas "por si acaso" tacharía citas de
+      // sillones que ni siquiera están en la lista.
+      bloqueos: [],
     });
   }
 
@@ -610,6 +668,12 @@ export function eduAgendaLayout(input: {
     columns,
     hiddenChairs: Math.max(0, visibles.length - pintados.length),
     hiddenRows: recoger ? 0 : sueltas.length,
+    // En la vista de DÍA todo cierre acaba en la columna de su sillón, así
+    // que no queda ninguno suelto que haya que contar aparte… salvo los de
+    // sillones que la pantalla no está pintando (el teléfono, o un filtro).
+    bloqueosSueltos: bloqueos.filter(
+      (b) => !pintados.some((c) => eduBlockAlcanzaSillon(b, c)),
+    ),
   };
 }
 

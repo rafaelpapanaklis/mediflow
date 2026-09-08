@@ -229,6 +229,7 @@ function req(over: Partial<EduRequirementSpec> = {}): EduRequirementSpec {
     semesterTo: null,
     procedureId: null,
     category: null,
+    categoryId: null,
     requiredCount: 8,
     onlyCompleted: true,
     ...over,
@@ -242,6 +243,7 @@ function caso(over: Partial<EduCountableCase> = {}): EduCountableCase {
     status: "COMPLETED",
     procedureId: null,
     procedureCategory: null,
+    procedureCategoryId: null,
     ...over,
   };
 }
