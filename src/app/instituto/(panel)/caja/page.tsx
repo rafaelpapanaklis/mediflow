@@ -10,7 +10,7 @@ import { getEduPatient } from "@/lib/edu/pacientes";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { eduSafeTimeZone, eduTodayISO } from "@/lib/edu/agenda-core";
 import { getEduCampusScope } from "@/lib/edu/campus";
-import { eduWithCampus } from "@/lib/edu/campus-core";
+import { eduCampusForCharge, eduWithCampus } from "@/lib/edu/campus-core";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduCajaScreen } from "@/components/edu/dinero/caja-screen";
 
@@ -143,6 +143,13 @@ export default async function InstitutoCajaPage({
         canRefund={canRefund}
         canCorte={canCorte}
         canInvoice={canInvoice}
+        // 🔴 H-59 · POR QUÉ NO SE PUEDE COBRAR TODAVÍA, si es el caso. La
+        // misma función que usa el endpoint al emitir: con la vista
+        // consolidada puesta y varias sedes, "todas" no es un lugar. El
+        // modal lo dice ANTES de dejar armar el ticket entero, en vez de
+        // fallar al pulsar "Cobrar" con un aviso que vive fuera del
+        // diálogo y tapado por él.
+        sedeAviso={eduCampusForCharge(sede).reason}
         // 🔴 El hoy del INSTITUTO, calculado aquí. La vista previa del plan
         // a meses arma sus fechas con ESTE día y no con el del navegador:
         // si no, el calendario que ve el mostrador podría no ser el que

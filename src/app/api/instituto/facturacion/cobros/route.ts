@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard } from "@/lib/edu/api-guard";
 import { listEduCobrosFacturables } from "@/lib/edu/facturacion";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,11 @@ export async function GET(request: Request) {
 
   try {
     const q = new URL(request.url).searchParams.get("q") ?? "";
-    const rows = await listEduCobrosFacturables(g.ctx, q);
+    // 🔴 H-69 · EL ALCANCE POR SEDE, el mismo que aplica la lista de Caja.
+    // Sin esto, una cajera del Norte con su sede puesta veía —y podía
+    // timbrar— cobros del Sur con nombre de paciente y monto.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const rows = await listEduCobrosFacturables(cctx, q);
     return NextResponse.json({ rows });
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/facturacion/cobros");

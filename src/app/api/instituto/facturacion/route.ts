@@ -2,8 +2,23 @@ import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { parseEduInvoiceFilters } from "@/lib/edu/facturacion-core";
 import { emitEduInvoice, listEduInvoices } from "@/lib/edu/facturacion";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduWithCampus } from "@/lib/edu/campus-core";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * 🔴 H-82 · TIMBRAR SON CINCO O SEIS SALTOS DE RED (llave de la
+ * organización, lista negra EFOS, alta del receptor, el timbre, la
+ * descarga del XML) y el default de la plataforma corta mucho antes. Cada
+ * corte deja una factura en «Timbrando» que hay que resolver a mano y un
+ * cobro bloqueado, así que lo excepcional dejaba de serlo.
+ *
+ * 60 s es el techo del plan de Vercel en el que corre esto; no lo hace
+ * infalible, pero saca del camino el corte por impaciencia de la
+ * plataforma.
+ */
+export const maxDuration = 60;
 
 /** GET — las facturas del instituto (con sus filtros). */
 export async function GET(request: Request) {
@@ -16,7 +31,11 @@ export async function GET(request: Request) {
     url.searchParams.forEach((value, key) => {
       params[key] = value;
     });
-    const page = await listEduInvoices(g.ctx, parseEduInvoiceFilters(params));
+    const page = await listEduInvoices(g.ctx, parseEduInvoiceFilters(params), {
+      // H-78 · la zona del INSTITUTO: "del 1 al 31 de marzo" tiene que ser
+      // marzo en la escuela, no en UTC.
+      timeZone: g.ctx.institution.timezone,
+    });
     return NextResponse.json(page);
   } catch (err) {
     return eduApiError(err, "GET /api/instituto/facturacion");
@@ -49,7 +68,12 @@ export async function POST(request: Request) {
 
   try {
     const body = await eduReadJson(request);
-    const emitida = await emitEduInvoice(g.ctx, {
+    // 🔴 H-69 · EL ALCANCE POR SEDE. Recortar el buscador tapaba la lista
+    // pero no la puerta: un POST con el id de un cobro de otra sede se
+    // timbraba igual. Timbrar EMITE un documento fiscal, así que el
+    // alcance se aplica también aquí.
+    const cctx = eduWithCampus(g.ctx, await getEduCampusScope(g.ctx));
+    const emitida = await emitEduInvoice(cctx, {
       chargeId: body.chargeId,
       receptor:
         body.receptor && typeof body.receptor === "object"

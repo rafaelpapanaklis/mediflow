@@ -62,8 +62,22 @@ export function EduTarifariosScreen({
   const [editarLista, setEditarLista] = useState<EduFeeScheduleRow | null>(null);
   const [precios, setPrecios] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  // 🔴 H-79 · EL BUSCADOR. Para subir el precio de "ENDO-3" había que
+  // hacer scroll y contar renglones en una tabla de 250 × 4, que es la
+  // pantalla donde más caro sale equivocarse de renglón. Filtra en el
+  // cliente porque las filas ya están todas aquí (el techo es 400).
+  const [filtro, setFiltro] = useState("");
 
   const { schedules, rows, truncated } = tarifario;
+  const termino = filtro.trim().toLowerCase();
+  const visibles = termino
+    ? rows.filter(
+        (r) =>
+          r.procedure.code.toLowerCase().includes(termino) ||
+          r.procedure.name.toLowerCase().includes(termino) ||
+          (r.procedure.category ?? "").toLowerCase().includes(termino),
+      )
+    : rows;
   const activas = schedules.filter((s) => s.isActive);
   const hayDefault = activas.some((s) => s.isDefault);
 
@@ -182,20 +196,49 @@ export function EduTarifariosScreen({
             </p>
           </div>
           <span className="edu-count">
-            {navigating ? "Actualizando…" : `${rows.length} procedimientos`}
+            {navigating
+              ? "Actualizando…"
+              : termino
+                ? `${visibles.length} de ${rows.length} procedimientos`
+                : `${rows.length} procedimientos`}
             {truncated ? ` (se muestran los primeros ${maxRows})` : ""}
           </span>
         </div>
 
-        {schedules.length === 0 || rows.length === 0 ? (
+        {/* 🔴 H-79 · buscar por clave, nombre o categoría. */}
+        <div className="edu-toolbar">
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-tarifas-filtro">
+              Buscar un procedimiento
+            </label>
+            <input
+              id="edu-tarifas-filtro"
+              className="edu-input edu-input--sm"
+              type="search"
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+              placeholder="Clave, nombre o categoría"
+              autoComplete="off"
+            />
+            <span className="edu-field__hint">Filtra mientras escribes, sin recargar.</span>
+          </div>
+        </div>
+
+        {schedules.length === 0 || visibles.length === 0 ? (
           <div className="edu-empty">
             <p className="edu-empty__title">
-              {schedules.length === 0 ? "Primero crea una lista" : "Todavía no hay procedimientos"}
+              {schedules.length === 0
+                ? "Primero crea una lista"
+                : termino
+                  ? "Ningún procedimiento coincide"
+                  : "Todavía no hay procedimientos"}
             </p>
             <p className="edu-empty__detail">
               {schedules.length === 0
                 ? "La tabla compara precios entre listas: sin listas no hay nada que comparar."
-                : "Da de alta el catálogo en Procedimientos y vuelve aquí a ponerle precio."}
+                : termino
+                  ? "Prueba con la clave, con menos letras del nombre, o borra el filtro."
+                  : "Da de alta el catálogo en Procedimientos y vuelve aquí a ponerle precio."}
             </p>
           </div>
         ) : (
@@ -211,7 +254,7 @@ export function EduTarifariosScreen({
               <span />
             </div>
 
-            {rows.map((r) => (
+            {visibles.map((r) => (
               <div
                 key={r.procedure.id}
                 className={`edu-row ${r.procedure.isActive ? "" : "edu-row--off"}`}

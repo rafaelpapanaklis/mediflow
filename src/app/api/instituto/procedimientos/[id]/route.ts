@@ -18,7 +18,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   try {
     const body = await eduReadJson(request);
     const updated = await updateEduProcedure(g.ctx, params.id, body);
-    return NextResponse.json({ ok: true, id: updated.id });
+    // H-75 · al dar de BAJA, `aviso` dice qué casos, requisitos y rúbricas
+    // usan ese procedimiento. No bloquea la baja: la cuenta.
+    return NextResponse.json({ ok: true, id: updated.id, aviso: updated.aviso });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/procedimientos/[id]");
   }

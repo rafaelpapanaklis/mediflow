@@ -16,8 +16,11 @@ import {
   EDU_TAX_MODE_LABELS,
   eduDescribeCancelMotive,
   eduDescribeFormaPago,
+  eduDescribeRegimen,
   eduDescribeUsoCfdi,
+  eduDesgloseIva,
   eduFiscalNotice,
+  eduMetodoPagoDeCobro,
   type EduCobroFacturable,
   type EduFiscalConfigView,
   type EduInvoiceRow,
@@ -56,6 +59,9 @@ export interface EduFacturacionScreenProps {
   config: EduFiscalConfigView | null;
   filtroQ: string;
   filtroEstado: EduInvoiceStatus | null;
+  /** H-78 · el rango de fechas, "AAAA-MM-DD" en la zona del instituto. */
+  filtroDesde: string | null;
+  filtroHasta: string | null;
   maxRows: number;
   canEmit: boolean;
   canCancel: boolean;
@@ -69,6 +75,8 @@ export function EduFacturacionScreen({
   config,
   filtroQ,
   filtroEstado,
+  filtroDesde,
+  filtroHasta,
   maxRows,
   canEmit,
   canCancel,
@@ -81,6 +89,11 @@ export function EduFacturacionScreen({
   const [emitir, setEmitir] = useState<string | null>(cobroInicial);
   const [detalle, setDetalle] = useState<EduInvoiceRow | null>(null);
   const [q, setQ] = useState(filtroQ);
+  const [desde, setDesde] = useState(filtroDesde ?? "");
+  const [hasta, setHasta] = useState(filtroHasta ?? "");
+  // H-77 · el editor de datos fiscales de UN paciente, sin tener que
+  // emitir una factura para llegar a él.
+  const [receptorDe, setReceptorDe] = useState(false);
 
   const aviso = useMemo(() => eduFiscalNotice(config), [config]);
   const puedeEmitirYa = Boolean(config?.isEnabled && config.hasOrg);
@@ -90,10 +103,18 @@ export function EduFacturacionScreen({
     startNav(() => router.refresh());
   }
 
-  function aplicarFiltros(nuevoQ: string, estado: EduInvoiceStatus | null) {
+  function aplicarFiltros(
+    nuevoQ: string,
+    estado: EduInvoiceStatus | null,
+    rango: { desde: string; hasta: string } = { desde, hasta },
+  ) {
     const params = new URLSearchParams();
     if (nuevoQ.trim()) params.set("q", nuevoQ.trim());
     if (estado) params.set("estado", estado);
+    // H-78 · el rango viaja en la URL como todo lo demás: así se puede
+    // guardar el enlace del mes que se está conciliando.
+    if (rango.desde) params.set("desde", rango.desde);
+    if (rango.hasta) params.set("hasta", rango.hasta);
     const qs = params.toString();
     startNav(() => router.push(qs ? `/instituto/facturacion?${qs}` : "/instituto/facturacion"));
   }
@@ -127,16 +148,29 @@ export function EduFacturacionScreen({
         </div>
       )}
 
+      {/* 🔴 H-70 · LO FISCAL Y LO DE PRUEBAS, EN CIFRAS DISTINTAS.
+          Este módulo separa los dos ambientes en el banner, en la etiqueta
+          de cada factura y en el detalle… y luego los KPI los sumaban en
+          el mismo número: doce facturas de práctica de $3,000 hacían leer
+          "Facturado $36,000" antes de emitir un solo comprobante real. */}
       <div className="edu-kpis">
         <div className="edu-kpi">
-          <span className="edu-kpi__label">Facturas timbradas</span>
-          <span className="edu-kpi__value">{page.totals.vivas}</span>
-          <span className="edu-kpi__note">De las que se listan aquí.</span>
+          <span className="edu-kpi__label">Facturas timbradas (fiscales)</span>
+          <span className="edu-kpi__value">{page.totals.live.vivas}</span>
+          <span className="edu-kpi__note">
+            {page.totals.test.vivas > 0
+              ? `Y ${page.totals.test.vivas} de PRUEBAS, que no cuentan.`
+              : "De las que se listan aquí."}
+          </span>
         </div>
         <div className="edu-kpi">
-          <span className="edu-kpi__label">Facturado</span>
-          <span className="edu-kpi__value">{eduMoney(page.totals.totalCents)}</span>
-          <span className="edu-kpi__note">Las canceladas no suman.</span>
+          <span className="edu-kpi__label">Facturado (fiscal)</span>
+          <span className="edu-kpi__value">{eduMoney(page.totals.live.totalCents)}</span>
+          <span className="edu-kpi__note">
+            {page.totals.test.totalCents > 0
+              ? `Aparte, ${eduMoney(page.totals.test.totalCents)} timbrados en PRUEBAS: no llegaron al SAT.`
+              : "Las canceladas no suman."}
+          </span>
         </div>
         <div className="edu-kpi">
           <span className="edu-kpi__label">Canceladas</span>
@@ -167,6 +201,44 @@ export function EduFacturacionScreen({
           <span className="edu-field__hint">Enter para buscar.</span>
         </form>
 
+        {/* 🔴 H-78 · DEL … AL … Sin esto, cerrar un mes y conciliarlo con
+            el corte de caja era imposible: la lista se corta en las 200
+            más recientes y las viejas solo se alcanzaban sabiéndose de
+            memoria el folio, el UUID o el RFC. Los días se cuentan en la
+            zona del INSTITUTO, no en UTC. */}
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-fac-desde">
+            Emitidas desde
+          </label>
+          <input
+            id="edu-fac-desde"
+            className="edu-input edu-input--sm"
+            type="date"
+            value={desde}
+            onChange={(e) => {
+              setDesde(e.target.value);
+              aplicarFiltros(q, filtroEstado, { desde: e.target.value, hasta });
+            }}
+          />
+        </div>
+
+        <div className="edu-field">
+          <label className="edu-field__label" htmlFor="edu-fac-hasta">
+            Hasta
+          </label>
+          <input
+            id="edu-fac-hasta"
+            className="edu-input edu-input--sm"
+            type="date"
+            value={hasta}
+            onChange={(e) => {
+              setHasta(e.target.value);
+              aplicarFiltros(q, filtroEstado, { desde, hasta: e.target.value });
+            }}
+          />
+          <span className="edu-field__hint">Los dos días entran en el rango.</span>
+        </div>
+
         <div className="edu-seg" role="group" aria-label="Estado de la factura">
           <button
             type="button"
@@ -196,6 +268,23 @@ export function EduFacturacionScreen({
                 page.truncated ? ` (se muestran las ${maxRows} más recientes)` : ""
               }`}
         </span>
+        {/* 🔴 H-77 · CAPTURAR O CORREGIR EL RFC DE UN PACIENTE SIN
+            FACTURARLE. El PUT existía, estaba probado y no lo llamaba
+            nadie: la única forma de escribir un perfil fiscal era EMITIR
+            una factura. El paciente que llama el martes para corregir su
+            RFC no tenía dónde, y el error se repetía en la siguiente. */}
+        {canEmit && (
+          <button
+            type="button"
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+            onClick={() => {
+              setFlash(null);
+              setReceptorDe(true);
+            }}
+          >
+            Datos fiscales de un paciente
+          </button>
+        )}
         {canEmit && (
           <button
             type="button"
@@ -277,6 +366,10 @@ export function EduFacturacionScreen({
                 <div className="edu-cell">
                   <span className="edu-cell__label">Cobro</span>
                   <span className="edu-cell__value">{f.chargeFolio}</span>
+                  {/* H-81 · la FECHA DE EMISIÓN. No estaba en ninguna
+                      pantalla, y sin ella no se puede conciliar un mes. La
+                      escribió el servidor en la zona del instituto. */}
+                  <span className="edu-cell__sub">{f.issuedAtLabel}</span>
                 </div>
 
                 <div className="edu-cell">
@@ -321,6 +414,19 @@ export function EduFacturacionScreen({
               ambiente === "LIVE"
                 ? `Factura ${folio} timbrada ante el SAT.`
                 : `Factura ${folio} timbrada EN PRUEBAS: no tiene validez fiscal y no se le puede entregar al paciente como comprobante.`,
+            );
+          }}
+        />
+      )}
+
+      {receptorDe && (
+        <DatosFiscalesPaciente
+          config={config}
+          onClose={() => setReceptorDe(false)}
+          onDone={(nombre) => {
+            setReceptorDe(false);
+            setFlash(
+              `Datos fiscales de ${nombre} guardados. No cambian ninguna factura ya emitida: el receptor se congela en cada CFDI.`,
             );
           }}
         />
@@ -400,6 +506,25 @@ function EmitirFactura({
     if (hit) setElegido(hit);
   }, [cobroPreseleccionado, cobros, elegido]);
 
+  // 🔴 H-71 · LA FORMA DE PAGO, PROPUESTA. `eduSugerirFormaPago` está
+  // escrita y probada desde la Ola 10 y no la llamaba nadie: caja elegía a
+  // mano entre las ~20 formas del SAT en cada factura, con el paciente
+  // delante y el voucher en la otra mano. Se PROPONE la del método con
+  // mayor monto neto y el desplegable la deja cambiar: proponer no es
+  // decidir.
+  useEffect(() => {
+    if (!elegido?.formaPagoSugerida) return;
+    setPaymentForm((actual) => actual || elegido.formaPagoSugerida || "");
+  }, [elegido]);
+
+  // 🔴 H-12 · PUE o PPD. La MISMA función pura que aplica el servidor al
+  // timbrar, para que el aviso de aquí no pueda discrepar de lo que se
+  // emite. Con saldo abierto, la forma de pago no viaja: va "99".
+  const metodoPago = elegido
+    ? eduMetodoPagoDeCobro({ balanceCents: elegido.balanceCents, paymentForm })
+    : null;
+  const esPPD = metodoPago?.metodo === "PPD";
+
   // Al elegir cobro se traen los datos fiscales guardados del paciente.
   useEffect(() => {
     if (!elegido) return;
@@ -467,7 +592,14 @@ function EmitirFactura({
   }
 
   const listo = Boolean(
-    elegido && rfc.trim() && legalName.trim() && taxRegime && zipCode.trim() && paymentForm,
+    elegido &&
+      rfc.trim() &&
+      legalName.trim() &&
+      taxRegime &&
+      zipCode.trim() &&
+      // H-12 · con PPD la forma de pago la fija el SAT ("99 · Por
+      // definir"), así que no se le pide a nadie.
+      (esPPD || paymentForm),
   );
   const enVivo = config?.environment === "LIVE";
 
@@ -696,18 +828,27 @@ function EmitirFactura({
               <select
                 id="edu-fac-forma"
                 className="edu-input"
-                value={paymentForm}
+                value={esPPD ? "" : paymentForm}
+                disabled={esPPD}
                 onChange={(e) => setPaymentForm(e.target.value)}
               >
                 {/* 🔴 Vacía a propósito: no se adivina. Es el dato con el
-                    que el SAT cruza el comprobante contra el depósito. */}
-                <option value="">Elige…</option>
+                    que el SAT cruza el comprobante contra el depósito.
+                    H-71: llega PROPUESTA con la del método de mayor monto
+                    del cobro, y se puede cambiar. */}
+                <option value="">{esPPD ? "99 · Por definir (PPD)" : "Elige…"}</option>
                 {FORMAS_PAGO_SAT.map((f) => (
                   <option key={f.clave} value={f.clave}>
                     {f.clave} · {f.descripcion}
                   </option>
                 ))}
               </select>
+              {!esPPD && elegido?.formaPagoSugerida && (
+                <span className="edu-field__hint">
+                  Propuesta a partir de cómo se pagó este cobro. Cámbiala si el voucher dice otra
+                  cosa.
+                </span>
+              )}
             </div>
 
             <div className="edu-field">
@@ -743,6 +884,22 @@ function EmitirFactura({
               </span>
             </span>
           </label>
+
+          {/* 🔴 H-12 · EL AVISO DEL MÉTODO DE PAGO. Todo salía PUE, también
+              un tratamiento a meses sin un peso pagado — y un PUE sobre un
+              saldo abierto es un comprobante mal emitido que hay que
+              cancelar y rehacer. El texto sale de la misma función pura que
+              decide en el servidor. */}
+          {metodoPago?.aviso && (
+            <div className="edu-banner edu-banner--warn">
+              <div>
+                <p className="edu-banner__title">
+                  Este CFDI sale como PPD (pago en parcialidades o diferido)
+                </p>
+                <p className="edu-banner__detail">{metodoPago.aviso}</p>
+              </div>
+            </div>
+          )}
 
           <div className={`edu-banner ${enVivo ? "edu-alert--ok" : "edu-banner--warn"}`}>
             <div>
@@ -896,6 +1053,27 @@ function DetalleFactura({
               {factura.receptorLegalName} · {factura.receptorRfc}
             </span>
           </div>
+          {/* 🔴 H-81 · EL RECEPTOR CONGELADO, ENTERO. Régimen, CP y correo
+              se guardaban en la factura y no salían a ninguna pantalla, así
+              que no se podía comprobar contra la Constancia del paciente
+              qué se timbró de verdad. `eduDescribeRegimen` estaba escrita y
+              no tenía llamadores. */}
+          <div className="edu-kv">
+            <span className="edu-kv__k">Régimen del receptor</span>
+            <span className="edu-kv__v">{eduDescribeRegimen(factura.receptorTaxRegime)}</span>
+          </div>
+          <div className="edu-kv">
+            <span className="edu-kv__k">CP fiscal del receptor</span>
+            <span className="edu-kv__v">{factura.receptorZip}</span>
+          </div>
+          <div className="edu-kv">
+            <span className="edu-kv__k">Correo del receptor</span>
+            <span className="edu-kv__v">{factura.receptorEmail ?? "—"}</span>
+          </div>
+          <div className="edu-kv">
+            <span className="edu-kv__k">Emitida</span>
+            <span className="edu-kv__v">{factura.issuedAtLabel}</span>
+          </div>
           <div className="edu-kv">
             <span className="edu-kv__k">Paciente</span>
             <span className="edu-kv__v">
@@ -940,9 +1118,39 @@ function DetalleFactura({
             </div>
           )}
 
-          {factura.errorMessage && factura.status !== "VALID" && (
-            <div className="edu-alert" role="note">
+          {/* 🔴 H-72 · EL `errorMessage` SE ENSEÑA SIEMPRE, también en una
+              VALID. Es donde queda escrito lo que dejó el resolver
+              («recuperada a mano») y el descuadre entre lo timbrado y el
+              cobro (H-74). Esconderlo en las válidas era esconder
+              exactamente los dos casos que hay que mirar. */}
+          {factura.errorMessage && (
+            // En una factura VÁLIDA este texto no es un fallo: es la nota
+            // que dejó el resolver ("recuperada a mano") o el aviso de
+            // descuadre. Pintarlo con el estilo de error haría que se
+            // leyera como un problema en una factura sana.
+            <div className={factura.status === "VALID" ? "edu-note" : "edu-alert"} role="note">
               {factura.errorMessage}
+            </div>
+          )}
+
+          {/* 🔴 H-72 · UNA FACTURA RECUPERADA A MANO NO TIENE DOCUMENTO EN
+              FACTURAPI. El resolver escribe el UUID pero no el
+              `facturapiId`, así que no hay PDF, no hay XML y la
+              cancelación desde aquí es imposible — y el botón «Cancelar
+              factura» se pintaba igual y fallaba siempre con 409. Ahora se
+              dice, y el botón no se ofrece. */}
+          {factura.status === "VALID" && !factura.hasDocument && (
+            <div className="edu-banner edu-banner--warn">
+              <div>
+                <p className="edu-banner__title">
+                  Esta factura se registró a mano: aquí no hay documento
+                </p>
+                <p className="edu-banner__detail">
+                  Tiene folio fiscal, pero no quedó guardado su identificador de Facturapi, así que
+                  el PDF, el XML y la cancelación tienen que hacerse en el panel de Facturapi. En
+                  DaleControl seguirá contando como timbrada y su cobro sigue ocupado.
+                </p>
+              </div>
             </div>
           )}
 
@@ -961,7 +1169,30 @@ function DetalleFactura({
             ))}
           </div>
 
+          {/* 🔴 H-74 · EL IVA, DESGLOSADO. Con IVA16 el precio del
+              tarifario YA lo lleva dentro, así que el subtotal guardado es
+              el del COBRO y no la base gravable del CFDI: el contador que
+              pregunta "cuánto IVA trasladamos en marzo" no lo podía sacar
+              de aquí. Se DERIVA de los conceptos congelados —concepto a
+              concepto, como lo calcula Facturapi— y no se guarda: una
+              columna más sería otro sitio del que desincronizarse. */}
           <div className="edu-totales">
+            {(() => {
+              const iva = eduDesgloseIva(factura.conceptos, factura.taxMode);
+              if (!iva) return null;
+              return (
+                <>
+                  <div className="edu-totales__fila">
+                    <span>Base (sin IVA)</span>
+                    <span className="edu-precio">{eduMoney(iva.baseCents)}</span>
+                  </div>
+                  <div className="edu-totales__fila">
+                    <span>IVA 16 % trasladado</span>
+                    <span className="edu-precio">{eduMoney(iva.ivaCents)}</span>
+                  </div>
+                </>
+              );
+            })()}
             <div className="edu-totales__fila edu-totales__fila--fuerte">
               <span>Total</span>
               <span>{eduMoney(factura.totalCents)}</span>
@@ -987,7 +1218,10 @@ function DetalleFactura({
                 PDF
               </a>
             )}
-            {canCancel && factura.status === "VALID" && (
+            {/* H-72 · sin `facturapiId` la cancelación desde aquí SIEMPRE
+                falla con 409: el botón no se ofrece y el banner de arriba
+                dice dónde se cancela. */}
+            {canCancel && factura.status === "VALID" && factura.hasDocument && (
               <button
                 type="button"
                 className="edu-btn edu-btn--danger edu-btn--sm"
@@ -1113,6 +1347,329 @@ function DetalleFactura({
               No hay ningún comprobante: liberar el cobro
             </button>
           </div>
+        </>
+      )}
+    </EduModal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 H-77 · LOS DATOS FISCALES DE UN PACIENTE, SIN FACTURARLE
+//
+// El PUT existía, estaba probado y no lo llamaba nadie: la ÚNICA forma de
+// escribir un perfil fiscal era EMITIR una factura. El paciente que llama
+// el martes para corregir su RFC no tenía dónde, y el RFC malo se volvía a
+// usar en la siguiente factura.
+//
+// ⚠️ Corregirlos NO reescribe ninguna factura ya emitida: el receptor se
+// congela en el CFDI al timbrar. Se dice aquí, porque es lo primero que
+// pregunta quien viene a corregir.
+// ═══════════════════════════════════════════════════════════════════════
+
+function DatosFiscalesPaciente({
+  config,
+  onClose,
+  onDone,
+}: {
+  config: EduFiscalConfigView | null;
+  onClose: () => void;
+  onDone: (nombre: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [resultados, setResultados] = useState<{ id: string; folio: string; name: string }[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [paciente, setPaciente] = useState<{ id: string; folio: string; name: string } | null>(null);
+
+  const [rfc, setRfc] = useState("");
+  const [legalName, setLegalName] = useState("");
+  const [taxRegime, setTaxRegime] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [email, setEmail] = useState("");
+  const [usoCfdi, setUsoCfdi] = useState(config?.defaultUsoCfdi ?? "D01");
+  const [tenia, setTenia] = useState(false);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // El buscador con retardo, igual que el de Caja: sin él, "María
+  // Rodríguez" son quince consultas para pintar una lista de tres.
+  useEffect(() => {
+    if (paciente) return;
+    const termino = q.trim();
+    if (!termino) {
+      setResultados([]);
+      return;
+    }
+    setBuscando(true);
+    const t = window.setTimeout(async () => {
+      try {
+        // `opciones=1` devuelve LO MÍNIMO (id, folio, nombre, estado) y no
+        // la ficha entera: un desplegable no necesita el domicilio ni los
+        // antecedentes de nadie. Es la lección P1-4, y el endpoint tiene
+        // ese modo escrito justamente para esto.
+        const res = await eduRequest<{ rows: { id: string; folio: string; name: string }[] }>(
+          `/api/instituto/pacientes?opciones=1&q=${encodeURIComponent(termino)}`,
+        );
+        setResultados(res.rows.slice(0, 20));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No se pudo buscar.");
+      } finally {
+        setBuscando(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [q, paciente]);
+
+  async function elegir(p: { id: string; folio: string; name: string }) {
+    setPaciente(p);
+    setError(null);
+    try {
+      const data = await eduRequest<{
+        receptor: {
+          rfc: string;
+          legalName: string;
+          taxRegime: string;
+          zipCode: string;
+          email: string | null;
+          usoCfdi: string;
+        } | null;
+      }>(`/api/instituto/facturacion/receptores/${p.id}`);
+      if (data.receptor) {
+        setTenia(true);
+        setRfc(data.receptor.rfc);
+        setLegalName(data.receptor.legalName);
+        setTaxRegime(data.receptor.taxRegime);
+        setZipCode(data.receptor.zipCode);
+        setEmail(data.receptor.email ?? "");
+        setUsoCfdi(data.receptor.usoCfdi);
+      } else {
+        setTenia(false);
+      }
+    } catch {
+      // Que no tenga nada guardado es lo normal la primera vez.
+      setTenia(false);
+    }
+  }
+
+  async function guardar() {
+    if (!paciente) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await eduRequest(`/api/instituto/facturacion/receptores/${paciente.id}`, {
+        method: "PUT",
+        body: {
+          rfc,
+          legalName,
+          taxRegime,
+          zipCode,
+          email: email.trim() || null,
+          usoCfdi,
+        },
+      });
+      onDone(paciente.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron guardar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const listo = Boolean(rfc.trim() && legalName.trim() && taxRegime && zipCode.trim());
+
+  return (
+    <EduModal
+      title="Datos fiscales de un paciente"
+      subtitle={
+        paciente ? `${paciente.name} · ${paciente.folio}` : "Elige de quién son los datos fiscales."
+      }
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
+            Cerrar
+          </button>
+          {paciente && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--primary"
+              onClick={guardar}
+              disabled={busy || !listo}
+            >
+              {busy ? "Guardando…" : tenia ? "Guardar los cambios" : "Guardar"}
+            </button>
+          )}
+        </>
+      }
+    >
+      {error && (
+        <div className="edu-alert" role="alert">
+          {error}
+        </div>
+      )}
+
+      {!paciente ? (
+        <>
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-fac-recep-q">
+              Paciente
+            </label>
+            <input
+              id="edu-fac-recep-q"
+              className="edu-input"
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Nombre, folio o teléfono"
+              autoComplete="off"
+              autoFocus
+            />
+            <span className="edu-field__hint">Escribe y la lista se filtra sola.</span>
+          </div>
+          {buscando && <p className="edu-note">Buscando…</p>}
+          {!buscando && q.trim() !== "" && resultados.length === 0 && (
+            <p className="edu-note">Ningún paciente coincide.</p>
+          )}
+          {resultados.length > 0 && (
+            <ul className="edu-picklist">
+              {resultados.map((p) => (
+                <li key={p.id}>
+                  <button type="button" className="edu-pick" onClick={() => void elegir(p)}>
+                    <span className="edu-pick__name">{p.name}</span>
+                    <span className="edu-pick__sub">{p.folio}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="edu-banner">
+            <div>
+              <p className="edu-banner__title">
+                {tenia
+                  ? "Este paciente ya tenía datos fiscales guardados"
+                  : "Este paciente todavía no tiene datos fiscales"}
+              </p>
+              <p className="edu-banner__detail">
+                Corregirlos NO cambia ninguna factura ya emitida: el receptor se congela en cada
+                CFDI al timbrar. Un comprobante dice a nombre de quién se emitió, no a nombre de
+                quién se emitiría hoy.
+              </p>
+            </div>
+          </div>
+
+          <div className="edu-formgrid edu-formgrid--2">
+            <div className="edu-field">
+              <label className="edu-field__label" htmlFor="edu-recep-rfc">
+                RFC
+              </label>
+              <input
+                id="edu-recep-rfc"
+                className="edu-input"
+                value={rfc}
+                onChange={(e) => setRfc(e.target.value.toUpperCase())}
+                placeholder="XAXX010101000"
+                autoComplete="off"
+              />
+            </div>
+            <div className="edu-field">
+              <label className="edu-field__label" htmlFor="edu-recep-razon">
+                Razón social
+              </label>
+              <input
+                id="edu-recep-razon"
+                className="edu-input"
+                value={legalName}
+                onChange={(e) => setLegalName(e.target.value)}
+                autoComplete="off"
+              />
+              <span className="edu-field__hint">
+                Como está en su Constancia de Situación Fiscal, sin «S.A. de C.V.».
+              </span>
+            </div>
+            <div className="edu-field">
+              <label className="edu-field__label" htmlFor="edu-recep-regimen">
+                Régimen fiscal
+              </label>
+              <select
+                id="edu-recep-regimen"
+                className="edu-input"
+                value={taxRegime}
+                onChange={(e) => setTaxRegime(e.target.value)}
+              >
+                <option value="">Elige…</option>
+                {REGIMENES_FISCALES.map((r) => (
+                  <option key={r.clave} value={r.clave}>
+                    {r.clave} · {r.descripcion}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="edu-field">
+              <label className="edu-field__label" htmlFor="edu-recep-cp">
+                Código postal fiscal
+              </label>
+              <input
+                id="edu-recep-cp"
+                className="edu-input"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                inputMode="numeric"
+                maxLength={5}
+                autoComplete="off"
+              />
+            </div>
+            <div className="edu-field">
+              <label className="edu-field__label" htmlFor="edu-recep-mail">
+                Correo (opcional)
+              </label>
+              <input
+                id="edu-recep-mail"
+                className="edu-input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            <div className="edu-field">
+              <label className="edu-field__label" htmlFor="edu-recep-uso">
+                Uso del CFDI
+              </label>
+              <select
+                id="edu-recep-uso"
+                className="edu-input"
+                value={usoCfdi}
+                onChange={(e) => setUsoCfdi(e.target.value)}
+              >
+                {USOS_CFDI.map((u) => (
+                  <option key={u.clave} value={u.clave}>
+                    {u.clave} · {u.descripcion}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="edu-btn edu-btn--quiet edu-btn--sm"
+            onClick={() => {
+              setPaciente(null);
+              setTenia(false);
+              setRfc("");
+              setLegalName("");
+              setTaxRegime("");
+              setZipCode("");
+              setEmail("");
+            }}
+            disabled={busy}
+          >
+            Cambiar de paciente
+          </button>
         </>
       )}
     </EduModal>

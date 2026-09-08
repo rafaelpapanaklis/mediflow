@@ -48,6 +48,7 @@ import {
   EDU_MAX_CHARGE_ITEMS,
   eduChargeStatusFor,
   eduChargeTotals,
+  eduCorteAgrupar,
   eduCorteMethods,
   eduCorteSpanDays,
   eduLineTotalCents,
@@ -65,6 +66,7 @@ import {
   type EduCorte,
   type EduPagoValidado,
 } from "@/lib/edu/dinero-core";
+import { eduCampusLabel } from "@/lib/edu/campus-core";
 import { eduInstallmentStatus, eduPlanResumen } from "@/lib/edu/pagos-core";
 import { resolveEduChargeLines, type EduLineaCliente } from "@/lib/edu/tarifas";
 import {
@@ -76,7 +78,12 @@ import {
   eduVisibility,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
-import { EDU_CASH_METHOD, type EduPaymentMethod } from "@/lib/edu/types";
+import {
+  EDU_CASH_METHOD,
+  EDU_PAYMENT_METHODS_COBRABLES,
+  EDU_PAYMENT_METHOD_LABELS,
+  type EduPaymentMethod,
+} from "@/lib/edu/types";
 
 export { EduPadronError as EduCajaError };
 
@@ -131,6 +138,11 @@ const CHARGE_SELECT = {
   chargedAt: true,
   cancelledAt: true,
   cancelReason: true,
+  // H-58 · LA SEDE, con nombre. Estaba sellada en la fila y no llegaba al
+  // navegador, así que la vista consolidada anunciaba "los cobros de todas
+  // tus sedes" en una tabla que no decía de cuál era cada uno.
+  campusId: true,
+  campus: { select: { name: true, code: true } },
   patient: { select: { firstName: true, lastName: true, folio: true } },
   chargedBy: { select: { firstName: true, lastName: true, email: true } },
   cancelledBy: { select: { firstName: true, lastName: true, email: true } },
@@ -254,8 +266,14 @@ function toChargeRow(c: ChargePayload, ctx: ChargeCtx): EduChargeRow {
     balanceCents: c.balanceCents,
     status: c.status,
     notes: c.notes,
+    campusId: c.campusId,
+    campusLabel: c.campus ? eduCampusLabel(c.campus) : null,
     chargedByName: persona(c.chargedBy),
     chargedAt: c.chargedAt.toISOString(),
+    // H-61 · el INSTANTE del cobro, escrito por el servidor en la zona del
+    // instituto. El recibo no tenía fecha ni hora: se pintaba una lista de
+    // conceptos sin decir cuándo pasó.
+    chargedAtLabel: ctx.fechaHora.format(c.chargedAt),
     cancelledAt: iso(c.cancelledAt),
     cancelledByName: c.cancelledBy ? persona(c.cancelledBy) : null,
     cancelReason: c.cancelReason,
@@ -423,6 +441,15 @@ export async function listEduCharges(
     select: CHARGE_SELECT,
   });
 
+  // 🔴 H-49 · Lo que entró EN EL TURNO sale de los PAGOS del turno, no de
+  // la columna `paidCents` de los cobros emitidos en él. Solo se consulta
+  // cuando de verdad se está listando un turno: en el histórico la
+  // pregunta no tiene respuesta.
+  const turnoNetCents =
+    applied.soloTurno && sesion
+      ? await sumaNetaDelTurno(ctx, sesion.id)
+      : null;
+
   const cctx = chargeCtx(options.timeZone);
   const visibles = rows.slice(0, EDU_CAJA_MAX_ROWS).map((r) => toChargeRow(r, cctx));
 
@@ -439,7 +466,37 @@ export async function listEduCharges(
     { totalCents: 0, paidCents: 0, balanceCents: 0 },
   );
 
-  return { rows: visibles, truncated: rows.length > EDU_CAJA_MAX_ROWS, totals, applied };
+  return {
+    rows: visibles,
+    truncated: rows.length > EDU_CAJA_MAX_ROWS,
+    totals,
+    turnoNetCents,
+    applied,
+  };
+}
+
+/**
+ * H-49 · El neto que entró en un turno: pagos menos devoluciones, todos
+ * los métodos. Es exactamente el `netCents` del corte, calculado con la
+ * misma fuente (los pagos sellados con ese turno) para que las dos
+ * pantallas no puedan discrepar en un peso.
+ */
+async function sumaNetaDelTurno(ctx: EduClinicaContext, sessionId: string): Promise<number> {
+  const institutionId = requireDinero(ctx);
+  const pagos = await prisma.eduPayment.findMany({
+    where: {
+      ...eduPaymentScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") }),
+      cashSessionId: sessionId,
+      // 🔴 LA SEDE, igual que las filas de esta misma pantalla. `EduPayment`
+      // no guarda sede y `eduPaymentScopeWhere` no la sabe aplicar, así que
+      // se recorta por la del COBRO —la única sellada—. Sin esto, la cajera
+      // de Norte con su sede puesta veía una tabla de Norte y encima un
+      // "Entró en el turno" con el dinero de Sur dentro.
+      ...(Array.isArray(ctx.campusIds) ? { charge: { campusId: { in: ctx.campusIds } } } : {}),
+    },
+    select: { amountCents: true, isRefund: true },
+  });
+  return pagos.reduce((a, p) => a + (p.isRefund ? -p.amountCents : p.amountCents), 0);
 }
 
 /**
@@ -524,11 +581,50 @@ export interface EduPaymentInput {
   msiMonths?: unknown;
 }
 
+/*
+ * 🔴 H-06 · LA CLAVE DE IDEMPOTENCIA DEL ABONO PARCIAL.
+ *
+ * El cobro inicial la tenía desde P2-10 y la mensualidad estaba protegida
+ * por el reclamo atómico de `paymentId: null`. El ABONO SUELTO no: el POST
+ * llegaba, se escribía, la respuesta se perdía en el wifi del mostrador y
+ * la pantalla decía "vuelve a intentarlo" — que es literalmente una
+ * instrucción de cobrar dos veces. Los dos abonos de $500 caben en un saldo
+ * de $2,000, así que el `updateMany` condicional del tope no los para.
+ *
+ * ⚠️ CÓMO SE CIERRA SIN UNA COLUMNA NUEVA: la clave se usa como la LLAVE
+ * PRIMARIA de la primera fila de EduPayment. `id` ya es un índice único, no
+ * hay migración que aplicar, y el segundo POST con la misma clave choca con
+ * un P2002 que revienta la transacción ENTERA — con varias formas de pago
+ * basta con blindar la primera, porque o entran todas o no entra ninguna.
+ * Es el mismo remedio que `EduInstallment.paymentId` le da por accidente a
+ * la mensualidad, aquí a propósito.
+ *
+ * ⚠️ Y POR QUÉ SE VUELVE A LEER CON EL TENANT: `id` es único en TODA la
+ * tabla, no por instituto. Si la clave chocara con un pago de otra escuela
+ * (o de otro cobro), devolver "duplicado" enseñaría una fila ajena. Se
+ * relee con `institutionId` + `chargeId` y, si no es de aquí, se contesta
+ * 409 pidiendo otra clave en vez de un dato que no es suyo.
+ */
+
 export interface EduChargeInput {
   patientId?: unknown;
   caseId?: unknown;
   items?: unknown;
   notes?: unknown;
+  /**
+   * 🔴 H-10 · LA LISTA DE PRECIOS QUE ELIGIÓ CAJA, si eligió alguna.
+   *
+   * Solo se admite una lista ACTIVA con regla MANUAL (un convenio, una
+   * campaña, el personal del instituto): eso es exactamente lo que la
+   * regla MANUAL significa desde que se escribió, y hasta esta ola no se
+   * aplicaba nunca. Las listas de regla automática siguen decidiéndose en
+   * el servidor con el dato que el navegador no controla.
+   *
+   * ⚠️ Esto NO es un precio. El precio de cada línea lo sigue poniendo el
+   * servidor leyendo la lista; lo que viaja es CUÁL de las tarifas de la
+   * escuela se aplica, y queda congelada en el cobro con su nombre.
+   */
+  feeScheduleId?: unknown;
   /**
    * Pago inmediato, que es lo normal en un mostrador. Opcional.
    *
@@ -682,6 +778,10 @@ export async function createEduCharge(
     institutionId,
     patientId,
     lineasCliente,
+    undefined,
+    // H-10 · la lista elegida a mano. La valida tarifas.ts (activa, MANUAL
+    // y de este instituto) y lanza si no cumple.
+    { feeScheduleId: input.feeScheduleId },
   );
 
   const totals = eduChargeTotals(lines);
@@ -705,9 +805,40 @@ export async function createEduCharge(
   const traePago =
     (Array.isArray(input.payments) && input.payments.length > 0) ||
     (input.payment !== undefined && input.payment !== null);
-  const pagos: EduPagoValidado[] = traePago
-    ? leerPagos(input, totals.totalCents, { exacto: false, canRefund: options.canRefund })
-    : [];
+  let pagos: EduPagoValidado[] = [];
+  if (traePago) {
+    try {
+      pagos = leerPagos(input, totals.totalCents, {
+        exacto: false,
+        canRefund: options.canRefund,
+      });
+    } catch (err) {
+      // ── H-64 · EL MENSAJE CUANDO EL TARIFARIO CAMBIÓ EN MEDIO ────────
+      // Si el precio se movió entre abrir el modal y pulsar "Cobrar", lo
+      // que la cajera tecleó ya no cabe en el total nuevo y el error
+      // hablaba de un "saldo" de un cobro que todavía no existe. La causa
+      // real está a la vista: `descartados` cuenta las líneas cuyo precio
+      // vino distinto del servidor.
+      // ⚠️ Y SOLO ese error. Reescribir cualquier fallo de captura —un
+      // cheque sin referencia, un "Otro" sin motivo, el 403 de caja.refund—
+      // como "el precio cambió" es cambiar un mensaje que ayuda por uno que
+      // miente. Se vuelve a leer con un tope imposible: si con ese tope el
+      // cuerpo es válido, lo ÚNICO que falló fue que ya no cabía.
+      const conTopeAmplio = parseEduPagosDivididos(input, EDU_MAX_CHARGE_CENTS, {
+        exacto: false,
+        canRefund: options.canRefund,
+      });
+      const soloElTope =
+        !eduPagosFailed(conTopeAmplio) && conTopeAmplio.sumaCents > totals.totalCents;
+      if (soloElTope && descartados > 0 && err instanceof EduPadronError) {
+        throw new EduPadronError(
+          `El precio de ${descartados} ${descartados === 1 ? "concepto cambió" : "conceptos cambiaron"} mientras armabas este cobro: el total es ahora ${eduMoney(totals.totalCents)}, no el que decía la pantalla. Cierra el diálogo, vuelve a armarlo y cobra con el precio nuevo.`,
+          409,
+        );
+      }
+      throw err;
+    }
+  }
   if (pagos.some((p) => p.isRefund)) {
     throw new EduPadronError("Un cobro no nace con una devolución.");
   }
@@ -908,6 +1039,13 @@ export interface EduPagoAplicar {
   receivedByUserId: string;
   /** El turno ABIERTO AL PAGAR (o null): lo consulta el llamador. */
   cashSessionId: string | null;
+  /**
+   * H-06 · El id DETERMINISTA de esta fila: la clave de idempotencia que
+   * mandó el cliente. `undefined` = que Prisma genere su cuid de siempre.
+   * Con él puesto, un segundo POST idéntico choca contra la llave primaria
+   * y la transacción entera se deshace.
+   */
+  id?: string;
 }
 
 export async function eduApplyEduPaymentInTx(
@@ -948,6 +1086,9 @@ export async function eduApplyEduPaymentInTx(
 
   const creado = await tx.eduPayment.create({
     data: {
+      // H-06: con clave de idempotencia, el id ES la clave (y el índice
+      // único de la llave primaria es el candado). Sin ella, el cuid.
+      ...(pago.id ? { id: pago.id } : {}),
       institutionId,
       chargeId: id,
       method: pago.method,
@@ -1024,10 +1165,22 @@ export async function eduApplyEduPaymentInTx(
 export async function addEduPayment(
   ctx: EduClinicaContext,
   chargeId: string,
-  input: EduPaymentInput & { payment?: EduPaymentInput; payments?: unknown },
+  input: EduPaymentInput & {
+    payment?: EduPaymentInput;
+    payments?: unknown;
+    /** H-06 · la clave de idempotencia del cliente. Opcional. */
+    idempotencyKey?: unknown;
+  },
   options: { canRefund?: boolean } = {},
   now: Date = new Date(),
-): Promise<{ id: string; ids: string[]; status: string; balanceCents: number }> {
+): Promise<{
+  id: string;
+  ids: string[];
+  status: string;
+  balanceCents: number;
+  /** H-06 · true = esta clave ya se había usado y NO se cobró otra vez. */
+  duplicado: boolean;
+}> {
   const institutionId = requireDinero(ctx);
   const id = eduCleanId(chargeId);
   if (!id) throw new EduPadronError("Ese cobro no es válido.", 400);
@@ -1037,11 +1190,42 @@ export async function addEduPayment(
       ...eduChargeScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") }),
       id,
     },
-    select: { id: true, totalCents: true, paidCents: true, status: true },
+    select: {
+      id: true,
+      totalCents: true,
+      paidCents: true,
+      balanceCents: true,
+      status: true,
+    },
   });
   if (!cobro) throw new EduPadronError("Ese cobro no es de este instituto.", 404);
   if (cobro.status === "CANCELLED") {
     throw new EduPadronError("Ese cobro está cancelado: no admite pagos ni devoluciones.", 409);
+  }
+
+  // ── 🔴 H-06 · LA IDEMPOTENCIA, ANTES DE TOCAR NADA ──────────────────
+  // Misma lección P2-10 que `createEduCharge`: si la clave ya está usada,
+  // se devuelve el estado ACTUAL del cobro sin escribir un peso. La
+  // relectura lleva el tenant Y el cobro: `id` es único en toda la tabla y
+  // una colisión con otra escuela no puede devolver su fila.
+  // ⚠️ La relectura lleva SIEMPRE el tenant y el cobro. `id` es único en
+  // toda la tabla, no por instituto: preguntar por el id pelado convertiría
+  // este endpoint en un oráculo de existencia entre escuelas. Si la clave
+  // chocara con la de otra, aquí no se encuentra nada, el insert de abajo
+  // revienta con P2002 y ahí se contesta "usa otra clave" sin decir de
+  // quién era la que ya estaba.
+  const idemKey = parseIdempotencyKey(input.idempotencyKey);
+  if (idemKey) {
+    const previo = await eduPagoDeLaClave(institutionId, id, idemKey);
+    if (previo) {
+      return {
+        id: previo.id,
+        ids: [previo.id],
+        status: cobro.status,
+        balanceCents: cobro.balanceCents,
+        duplicado: true,
+      };
+    }
   }
 
   // ¿Es una devolución? El TOPE hay que elegirlo ANTES de validar y no es
@@ -1075,8 +1259,57 @@ export async function addEduPayment(
     );
   }
 
+  // ── 🔴 H-55 · UNA DEVOLUCIÓN PIDE MOTIVO ────────────────────────────
+  // Cancelar un cobro ofrece dónde escribir por qué; devolver dinero —el
+  // movimiento más delicado del mostrador, el único que SACA dinero del
+  // cajón— salía con un "Referencia (opcional)" pensado para la
+  // autorización de la terminal y nada más. El servidor ya aceptaba
+  // `notes` y nadie las mandaba: ahora se exigen, como el motivo de un
+  // "Otro". Va aquí fuera porque es captura, no carrera.
+  if (esDevolucion && (!pagos[0].notes || pagos[0].notes.trim().length < 3)) {
+    throw new EduPadronError(
+      "Escribe por qué se devuelve el dinero (al menos 3 letras). Es el único movimiento del mostrador que saca dinero del cajón: sin explicación, el arqueo no se puede leer.",
+      400,
+    );
+  }
+
   const sesion = await getEduOpenCashSession(ctx);
 
+  // 🔴 H-06 · Y LA CARRERA DE VERDAD, la de dos POST simultáneos. El
+  // pre-chequeo de arriba solo atrapa el reintento SECUENCIAL; dos
+  // peticiones a la vez pasan las dos y la segunda choca contra la llave
+  // primaria. Sin este catch, ese choque sale como un 500 "Intenta de
+  // nuevo" — que es exactamente la frase que este hallazgo viene a matar.
+  // Es la misma forma que ya tiene `createEduCharge` con su índice único.
+  try {
+    return await aplicarPagos();
+  } catch (err) {
+    if (idemKey && (err as { code?: string })?.code === "P2002") {
+      const ganador = await eduPagoDeLaClave(institutionId, id, idemKey);
+      if (ganador) {
+        const actual = await prisma.eduCharge.findFirst({
+          where: { id, institutionId },
+          select: { status: true, balanceCents: true },
+        });
+        return {
+          id: ganador.id,
+          ids: [ganador.id],
+          status: actual?.status ?? cobro.status,
+          balanceCents: actual?.balanceCents ?? cobro.balanceCents,
+          duplicado: true,
+        };
+      }
+      // La clave existe pero no es de este cobro ni de este instituto: se
+      // pide otra sin decir nada de la fila ajena.
+      throw new EduPadronError(
+        "Esa clave de idempotencia ya está usada en otro movimiento. Recarga la pantalla y vuelve a intentarlo.",
+        409,
+      );
+    }
+    throw err;
+  }
+
+  async function aplicarPagos() {
   const resultado = await prisma.$transaction(async (tx) => {
     // 🔴 El candado del plan, DENTRO de la transacción: un plan creado un
     // instante antes también cuenta. Se pregunta aquí y no en el helper
@@ -1095,6 +1328,57 @@ export async function addEduPayment(
       );
     }
 
+    // ── 🔴 H-47 · UNA DEVOLUCIÓN SALE POR DONDE ENTRÓ EL DINERO ───────
+    // El tope general solo mira el TOTAL pagado, así que se devolvía en
+    // efectivo lo que había entrado con tarjeta: el cajón cerraba
+    // descuadrado y el corte de la terminal también, sin que nada lo
+    // dijera. Ahora el monto se topa contra el NETO DE ESE MÉTODO.
+    //
+    // 🔴 Y VA DENTRO DE LA TRANSACCIÓN, con el candado de la fila tomado
+    // ANTES de leer los pagos. Comprobarlo fuera es un check-then-act de
+    // manual: dos devoluciones simultáneas de $1,000 por débito sobre un
+    // cobro pagado mitad y mitad pasaban las dos y dejaban el débito en
+    // −$1,000. El `increment: 0` no mueve un centavo — lo que compra es el
+    // candado, igual que el decremento provisional de
+    // `eduApplyEduPaymentInTx`.
+    //
+    // La salida de emergencia es "Otro", que exige motivo escrito (una
+    // beca, un vale, una compensación): el movimiento que no sigue el
+    // camino del dinero queda EXPLICADO en el corte en vez de mudo.
+    if (esDevolucion) {
+      const dev = pagos[0];
+      await tx.eduCharge.updateMany({
+        where: { id, institutionId },
+        data: { balanceCents: { increment: 0 } },
+      });
+      const reales = await tx.eduPayment.findMany({
+        where: { institutionId, chargeId: id },
+        select: { method: true, amountCents: true, isRefund: true },
+      });
+      const neto = eduNetoPorMetodo(reales);
+      const disponible = neto.get(dev.method) ?? 0;
+      if (dev.method !== "OTHER" && disponible <= 0) {
+        // Solo se nombran los métodos por los que SÍ se puede devolver: el
+        // legado "CARD" tiene dinero dentro y el parser ya no lo acepta,
+        // así que mandar ahí a alguien sería un callejón sin salida.
+        const conDinero = Array.from(neto.entries())
+          .filter(([m, v]) => v > 0 && (EDU_PAYMENT_METHODS_COBRABLES as string[]).includes(m))
+          .map(([m, v]) => `${EDU_PAYMENT_METHOD_LABELS[m]} ${eduMoney(v)}`);
+        throw new EduPadronError(
+          conDinero.length > 0
+            ? `Por ${EDU_PAYMENT_METHOD_LABELS[dev.method]} no entró nada en este cobro: se pagó con ${conDinero.join(" y ")}. Devuelve por ahí, o usa "Otro" y escribe por qué sale por otro camino.`
+            : `Por ${EDU_PAYMENT_METHOD_LABELS[dev.method]} no entró nada en este cobro, y lo que entró llegó con un método que ya no se puede elegir. Usa "Otro" y escribe en el motivo por dónde sale el dinero.`,
+          409,
+        );
+      }
+      if (dev.method !== "OTHER" && dev.amountCents > disponible) {
+        throw new EduPadronError(
+          `Por ${EDU_PAYMENT_METHOD_LABELS[dev.method]} solo entraron ${eduMoney(disponible)} en este cobro: no se pueden devolver ${eduMoney(dev.amountCents)} por ahí.`,
+          409,
+        );
+      }
+    }
+
     // 🔴 UNA FILA POR FORMA, EN ORDEN Y EN LA MISMA TRANSACCIÓN. Cada
     // llamada reclama SU parte del tope con el updateMany condicional del
     // helper: si la suma pasó la validación de arriba pero otro pago entró
@@ -1105,6 +1389,9 @@ export async function addEduPayment(
     let balanceCents = 0;
     for (const p of pagos) {
       const aplicado = await eduApplyEduPaymentInTx(tx, {
+        // H-06 · solo la PRIMERA fila lleva el id determinista: la
+        // transacción es atómica, así que blindar una blinda a todas.
+        ...(idemKey && ids.length === 0 ? { id: idemKey } : {}),
         institutionId,
         chargeId: id,
         method: p.method,
@@ -1123,10 +1410,43 @@ export async function addEduPayment(
     }
 
     // `id` = el primero, para no romper a ningún cliente que ya lo lee.
-    return { id: ids[0], ids, status, balanceCents };
+    return { id: ids[0], ids, status, balanceCents, duplicado: false };
   });
 
   return resultado;
+  }
+}
+
+/**
+ * H-06 · El pago que ya lleva esa clave, SI es de este instituto y de este
+ * cobro. Nunca pregunta por el `id` pelado: eso diría si la clave existe en
+ * otra escuela.
+ */
+async function eduPagoDeLaClave(
+  institutionId: string,
+  chargeId: string,
+  key: string,
+): Promise<{ id: string } | null> {
+  return prisma.eduPayment.findFirst({
+    where: { id: key, institutionId, chargeId },
+    select: { id: true },
+  });
+}
+
+/**
+ * H-47 · Lo que queda NETO por cada método en un cobro: lo cobrado menos
+ * lo ya devuelto. Es contra esto —y no contra el total pagado— contra lo
+ * que se topa una devolución.
+ */
+function eduNetoPorMetodo(
+  pagos: { method: EduPaymentMethod; amountCents: number; isRefund: boolean }[],
+): Map<EduPaymentMethod, number> {
+  const neto = new Map<EduPaymentMethod, number>();
+  for (const p of pagos) {
+    const previo = neto.get(p.method) ?? 0;
+    neto.set(p.method, previo + (p.isRefund ? -p.amountCents : p.amountCents));
+  }
+  return neto;
 }
 
 /**
@@ -1182,6 +1502,28 @@ export async function cancelEduCharge(
     );
   }
 
+  // ── 🔴 H-11 · Y SU CFDI. El espejo ya existía en el otro sentido
+  // (facturacion.ts: "no se factura un cobro anulado") y faltaba éste: se
+  // cancelaba un cobro de $9,000 sin un peso pagado y su factura seguía
+  // TIMBRADA y viva ante el SAT, colgando de algo que ya no cuenta en
+  // ninguna suma. La cancelación fiscal es un trámite aparte y va PRIMERO.
+  //
+  // "Viva" es exactamente `activeChargeId != null` (la definición del
+  // índice único de EduInvoice): una factura CANCELADA o FALLIDA lo tiene
+  // en NULL y no estorba.
+  const facturaViva = await prisma.eduInvoice.findFirst({
+    where: { institutionId, activeChargeId: id },
+    select: { folio: true, status: true },
+  });
+  if (facturaViva) {
+    throw new EduPadronError(
+      facturaViva.status === "STAMPING"
+        ? `Ese cobro tiene la factura ${facturaViva.folio} a medias («Timbrando»): no se sabe si el timbre salió. Resuélvela en Facturación antes de cancelar el cobro.`
+        : `Ese cobro tiene la factura ${facturaViva.folio} timbrada y viva ante el SAT. Cancela primero el CFDI en Facturación y después el cobro.`,
+      409,
+    );
+  }
+
   // P2-10 (la misma familia): condicionado a que SIGA sin dinero y sin
   // cancelar. Sin la condición, un pago que entrara entre la lectura de
   // arriba y este update dejaría un cobro CANCELADO con dinero dentro — el
@@ -1195,6 +1537,9 @@ export async function cancelEduCharge(
       status: { not: "CANCELLED" },
       paidCents: 0,
       paymentPlans: { none: { status: "ACTIVO" } },
+      // H-11: y ninguna factura VIVA. La lectura de arriba también fue
+      // fuera de la transacción, así que la condición se repite aquí.
+      invoices: { none: { activeChargeId: { not: null } } },
     },
     data: {
       status: "CANCELLED",
@@ -1207,7 +1552,7 @@ export async function cancelEduCharge(
   });
   if (res.count === 0) {
     throw new EduPadronError(
-      "Ese cobro cambió mientras lo cancelabas (entró un pago, un plan de pagos, o alguien lo canceló antes). Recarga la pantalla.",
+      "Ese cobro cambió mientras lo cancelabas (entró un pago, un plan de pagos, una factura, o alguien lo canceló antes). Recarga la pantalla.",
       409,
     );
   }
@@ -1273,7 +1618,21 @@ async function calcularTurno(
         ...eduPaymentScopeWhere({ institutionId, scope }),
         cashSessionId: sessionId,
       },
-      select: { method: true, amountCents: true, isRefund: true },
+      select: {
+        method: true,
+        amountCents: true,
+        isRefund: true,
+        // 🔴 H-09 · LA SEDE del pago se DERIVA de su cobro, porque el pago
+        // no la guarda y el turno tampoco. Es lo único que se puede decir
+        // sin la columna `EduCashSession.campusId`, y se dice con esas
+        // palabras en la pantalla.
+        charge: { select: { campusId: true, campus: { select: { name: true, code: true } } } },
+        // 🔴 H-60 · Quién recibió el dinero. Ya se guardaba desde la Ola 5
+        // y no llegaba a ninguna pantalla: con dos cajeras en el mismo
+        // turno, el corte no podía decir de quién era el faltante.
+        receivedByUserId: true,
+        receivedBy: { select: { firstName: true, lastName: true, email: true } },
+      },
     }),
     prisma.eduCharge.findMany({
       where: {
@@ -1292,8 +1651,33 @@ async function calcularTurno(
   const netCents = methods.reduce((a, m) => a + m.netCents, 0);
   const refundedCents = methods.reduce((a, m) => a + m.refundedCents, 0);
 
+  // H-09 / H-60 · los dos desgloses, con la MISMA función de suma.
+  const porSede = eduCorteAgrupar(
+    pagos.map((p) => ({
+      key: p.charge?.campusId ?? "",
+      label: p.charge?.campus ? eduCampusLabel(p.charge.campus) : "Sin sede sellada",
+      method: p.method,
+      amountCents: p.amountCents,
+      isRefund: p.isRefund,
+    })),
+  );
+  const porCajero = eduCorteAgrupar(
+    pagos.map((p) => ({
+      key: p.receivedByUserId,
+      label: persona(p.receivedBy),
+      method: p.method,
+      amountCents: p.amountCents,
+      isRefund: p.isRefund,
+    })),
+  );
+
   return {
     methods,
+    // Con UNA sola sede (o ninguna) el desglose no dice nada que la tabla
+    // de arriba no diga ya: se devuelve vacío para que la pantalla no
+    // pinte una sección de un solo renglón.
+    porSede: porSede.length > 1 ? porSede : [],
+    porCajero: porCajero.length > 1 ? porCajero : [],
     expectedCashCents,
     netCents,
     refundedCents,
@@ -1345,6 +1729,8 @@ export async function getEduCorte(
       chargedCents: 0,
       pendingCents: 0,
       spanDays: 1,
+      porSede: [],
+      porCajero: [],
       previous,
     };
   }
@@ -1446,8 +1832,16 @@ export async function closeEduCashSession(
 
   const extra = eduOptionalText(input.notes, 500);
 
-  await prisma.eduCashSession.update({
-    where: { id: abierta.id },
+  // ── 🔴 H-48 · EL ESTADO VA EN EL `where`, no solo en la lectura ─────
+  // Era un check-then-act de manual: se leía el turno abierto, se calculaba
+  // el esperado y se escribía con `update({where:{id}})` a secas. Dos
+  // "Cerrar turno" a la vez ganaba el último SIN AVISO, y el segundo
+  // congelaba un esperado calculado sobre un turno que ya estaba cerrado.
+  // Con `closedAt: null` en el `where`, el segundo no escribe y se entera.
+  // Es el mismo patrón que ya usan recetas, consentimientos y la
+  // cancelación de un cobro.
+  const cerrada = await prisma.eduCashSession.updateMany({
+    where: { id: abierta.id, institutionId, closedAt: null },
     data: {
       closedAt: now,
       closedByUserId: ctx.eduUserId,
@@ -1461,6 +1855,12 @@ export async function closeEduCashSession(
         : abierta.notes,
     },
   });
+  if (cerrada.count === 0) {
+    throw new EduPadronError(
+      "Ese turno ya lo cerró alguien mientras contabas el cajón. Recarga la pantalla: el corte que quedó guardado es el suyo.",
+      409,
+    );
+  }
 
   return { id: abierta.id, expectedCents, countedCents, differenceCents };
 }
