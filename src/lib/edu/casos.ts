@@ -535,21 +535,63 @@ export async function createEduCase(
   // crea y el estado no se mueve, el paciente se queda listado como "sin
   // tamizar" para siempre y recepción lo vuelve a mandar a valoración.
   const created = await prisma.$transaction(async (tx) => {
-    const caso = await tx.eduCase.create({
-      data: {
-        institutionId,
-        patientId: partes.patientId,
-        studentId: partes.studentId,
-        programId: partes.programId,
-        supervisorUserId,
-        screeningAppointmentId,
-        procedureId,
-        status: "ASSIGNED",
-        openedAt: now,
-        notes: eduOptionalText(input.notes, 1000) ?? null,
-      },
-      select: { id: true },
-    });
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔴 OLA C·2 · H-35 — EL CÓDIGO RESPETA `edu_cases_uno_vivo_idx`.
+    //
+    // La comprobación de arriba ("Ese paciente ya tiene un caso abierto en
+    // esa especialidad") NO puede cerrar la carrera sola: se lee fuera de
+    // esta transacción y dos transacciones en READ COMMITTED no se ven
+    // entre sí. Es el día normal de una recepción con dos ventanillas —
+    // dos personas abriendo el caso del mismo paciente a la vez— y el
+    // índice único parcial de `sql/edu-ola-c.sql` §12.9 es lo que de
+    // verdad lo impide.
+    //
+    // Pero ese índice es de la BASE, no del esquema Prisma: sin este
+    // `catch` el choque sale por `eduApiError` como un P2002 crudo
+    // («Alguien más acaba de guardar ese mismo dato»), que es cierto y no
+    // dice qué hacer con el paciente que está delante. Se traduce al
+    // MISMO texto y al MISMO 409 que la comprobación previa: quien pierde
+    // la carrera por diez milisegundos lee exactamente lo mismo que quien
+    // la pierde por diez segundos.
+    //
+    // ⚠️ Si Rafael todavía no aplicó el índice (la §12.9 avisa con un
+    // NOTICE cuando los datos ya lo violan), este `catch` no se dispara
+    // nunca y todo sigue como estaba. No hay nada que apagar.
+    //
+    // Es el mismo patrón que la C·2 dejó en `rubricas.ts` para los dos
+    // índices de `edu_case_grades`; aquel archivo era de otra casilla y
+    // éste no, y por eso quedó escrito en su punto 6.
+    // ═══════════════════════════════════════════════════════════════════
+    const caso = await tx.eduCase
+      .create({
+        data: {
+          institutionId,
+          patientId: partes.patientId,
+          studentId: partes.studentId,
+          programId: partes.programId,
+          supervisorUserId,
+          screeningAppointmentId,
+          procedureId,
+          status: "ASSIGNED",
+          openedAt: now,
+          notes: eduOptionalText(input.notes, 1000) ?? null,
+        },
+        select: { id: true },
+      })
+      .catch((err: unknown) => {
+        const e = err as { code?: string; meta?: { target?: unknown } };
+        if (e?.code !== "P2002") throw err;
+        const donde = (
+          Array.isArray(e.meta?.target) ? e.meta?.target.join(" ") : String(e.meta?.target ?? "")
+        ).toLowerCase();
+        if (donde.includes("uno_vivo")) {
+          throw new EduPadronError(
+            "Ese paciente ya tiene un caso abierto en esa especialidad. Ciérralo o transfiérelo antes de abrir otro.",
+            409,
+          );
+        }
+        throw err;
+      });
 
     // 🔴 OLA 6 — LA CITA DE TAMIZAJE SE ENGANCHA AL CASO QUE ABRIÓ.
     //
