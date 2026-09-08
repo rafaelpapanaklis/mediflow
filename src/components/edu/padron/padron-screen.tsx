@@ -3,8 +3,9 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, UserPlus, X } from "lucide-react";
+import { FileUp, Search, UserPlus, X } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
+import { EduImportarPadron } from "@/components/edu/padron/importar-padron";
 import { EduPersonaLink } from "@/components/edu/persona/persona-link";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
@@ -84,6 +85,10 @@ export function EduPadronScreen({
   const [navigating, startNav] = useTransition();
   const [q, setQ] = useState(filters.q ?? "");
   const [abriendoAlta, setAbriendoAlta] = useState(false);
+  // Importar padrón (fila 32 de Dental). Vive aquí y no en una pantalla
+  // propia porque es la MISMA acción que «Inscribir estudiante», hecha
+  // cuarenta veces de un tirón: quien la busca ya está en esta lista.
+  const [importando, setImportando] = useState(false);
   const [ficha, setFicha] = useState<EduStudentRow | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -255,19 +260,41 @@ export function EduPadronScreen({
               }`}
           {scopeKind === "supervised" ? " que supervisas" : ""}
         </span>
-        {canManage && (
-          <button
-            type="button"
-            className="edu-btn edu-btn--primary edu-btn--sm"
-            onClick={() => {
-              setFlash(null);
-              setAbriendoAlta(true);
-            }}
-          >
-            <UserPlus size={16} />
-            Inscribir estudiante
-          </button>
-        )}
+        <div className="edu-actions">
+          {/* 🔴 IMPORTAR pide DOS llaves y por eso se pinta con las dos:
+              `padron.manage` (canManage) porque inscribe en una generación, y
+              `equipo.manage` (canManageTeam) porque crea CUENTAS de acceso.
+              Son las mismas dos que abriría quien hiciera el trabajo a mano,
+              una por una, y esta pantalla no puede ser un atajo para
+              saltarse ninguna. Los dos endpoints las vuelven a exigir. */}
+          {canManage && canManageTeam && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              onClick={() => {
+                setFlash(null);
+                setImportando(true);
+              }}
+              title="Sube un CSV o un Excel con la generación entera: crea su cuenta y los inscribe."
+            >
+              <FileUp size={16} />
+              Importar padrón
+            </button>
+          )}
+          {canManage && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--primary edu-btn--sm"
+              onClick={() => {
+                setFlash(null);
+                setAbriendoAlta(true);
+              }}
+            >
+              <UserPlus size={16} />
+              Inscribir estudiante
+            </button>
+          )}
+        </div>
       </div>
 
       {rows.length === 0 ? (
@@ -429,6 +456,18 @@ export function EduPadronScreen({
           onDone={(nombre) => {
             setAbriendoAlta(false);
             recargar(`${nombre} quedó inscrito como estudiante.`);
+          }}
+        />
+      )}
+
+      {importando && (
+        <EduImportarPadron
+          programs={programs}
+          cohorts={cohorts}
+          onClose={() => setImportando(false)}
+          onDone={(mensaje) => {
+            setImportando(false);
+            recargar(mensaje);
           }}
         />
       )}

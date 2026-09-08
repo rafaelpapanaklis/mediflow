@@ -23,10 +23,13 @@
  * motivo. Cualquier otra que no lo llame es un error, y la prueba
  * `edu-api-guard.test.ts` lo dice con el nombre del archivo.
  *
- * 🔴 Las tres de `auth/` son EXACTAMENTE la allowlist mínima de H-03: la
- * puerta de salida (cerrar sesión), la de arreglo (cambiar la contraseña) y
- * la que solo contesta sí/no. Una persona con la temporal puesta tiene que
- * poder cambiarla y salir; todo lo demás está cerrado hasta entonces.
+ * 🔴 Las de `auth/` son EXACTAMENTE la allowlist mínima de la PUERTA: la
+ * puerta de salida (cerrar sesión), la de arreglo (cambiar la contraseña),
+ * la que solo contesta sí/no, y —desde la Ola C·2b— el contador de intentos
+ * fallidos. Una persona con la temporal puesta tiene que poder cambiarla y
+ * salir; todo lo demás está cerrado hasta entonces. Y las cuatro comparten
+ * el mismo motivo de fondo: **corren cuando todavía no hay panel al que
+ * exigirle permiso**. Ninguna otra ruta del vertical puede decir eso.
  *
  * La clave es la ruta relativa a `src/app/api/instituto`, con barras y sin
  * el `route.ts` final.
@@ -36,6 +39,8 @@ export const EDU_API_RUTAS_SIN_GUARD: Record<string, string> = {
     "H-03 · es la salida de la contraseña temporal. Resuelve la sesión con getEduContext y solo puede tocar la cuenta de quien llama; si pasara por el guardia, quien llega con la temporal no podría cambiarla nunca.",
   "auth/logout":
     "H-03 · cerrar sesión. No lee ni escribe nada del instituto: llama a supabase.auth.signOut(). Cerrarle la puerta de salida a alguien con la temporal puesta lo dejaría encerrado.",
+  "auth/intento":
+    "H-153 · el contador de intentos fallidos del login (src/lib/failban.ts). Corre ANTES de que exista sesión de instituto —el login autentica en el navegador, así que no hay otro punto de servidor previo a validar credenciales—, y exigirle sesión sería exigir haber entrado para poder intentar entrar. No lee ni escribe una sola fila del instituto: solo suma y borra contadores de fallos por IP y por cuenta, y contesta siempre lo mismo (ok o un 429 genérico), sin decir si la cuenta existe.",
   "auth/session":
     "El login pregunta «¿esta sesión es de un instituto?» ANTES de tener panel. Contesta un booleano y nada más — no hay permiso que exigir porque no devuelve ningún dato.",
   "consentimientos/publico/[token]":

@@ -149,7 +149,21 @@ test("🔴 H-03: la allowlist MÍNIMA es cambiar contraseña, cerrar sesión y e
   const deAuth = Object.keys(EDU_API_RUTAS_SIN_GUARD)
     .filter((r) => r.startsWith("auth/"))
     .sort();
-  assert.deepEqual(deAuth, ["auth/cambiar-contrasena", "auth/logout", "auth/session"]);
+  //
+  // `auth/intento` entró con la Ola C·2b (H-153): es el contador de intentos
+  // fallidos del login. Se admitió tras mirarla con esta misma lupa — el
+  // login del vertical autentica en el NAVEGADOR, así que no existe ningún
+  // punto de servidor ANTES de validar credenciales, y ése es justamente el
+  // sitio donde tiene que estar el candado; pedirle sesión sería pedir haber
+  // entrado para poder intentar entrar. No toca ni una fila del instituto
+  // (solo contadores de fallos de src/lib/failban.ts) y su respuesta es
+  // siempre la misma, así que tampoco sirve para enumerar correos.
+  assert.deepEqual(deAuth, [
+    "auth/cambiar-contrasena",
+    "auth/intento",
+    "auth/logout",
+    "auth/session",
+  ]);
 
   // Y las otras exentas no son del panel: dos son públicas de PACIENTE, con
   // el token de la liga como única credencial, y la otra la llama el cron.
@@ -459,7 +473,16 @@ test("🔴 H-04 (fuente): corregir a alguien REESCRIBE su índice de búsqueda",
 
 test("🔴 H-04 (fuente): cambiar de rol BORRA el override y lo devuelve para que se apunte", () => {
   const cuerpo = cuerpoDe(fuente("src", "lib", "edu", "equipo.ts"), "updateEduTeamMember");
-  assert.match(cuerpo, /roleChanged && \{ role: cambios\.role, permissionsOverride: \[\] \}/);
+  // El bloque del cambio de rol, sea de una línea o de varias. Se comprueba
+  // lo que HACE —escribe el rol nuevo y VACÍA el override— y no su
+  // puntuación: la Ola C·2b le añadió dentro el rol anterior y el override
+  // descartado (H-04/H-114) y el `...roleChanged && { … }` pasó a ocupar
+  // seis renglones. Casarse con el formato exacto es cómo una prueba se
+  // pone roja por un cambio que no rompe nada.
+  const bloqueRol = cuerpo.slice(cuerpo.indexOf("roleChanged && {"));
+  assert.notEqual(cuerpo.indexOf("roleChanged && {"), -1, "desapareció el bloque del cambio de rol");
+  assert.match(bloqueRol, /role: cambios\.role/);
+  assert.match(bloqueRol, /permissionsOverride: \[\]/);
   assert.match(cuerpo, /overrideDescartado/);
 });
 
@@ -470,7 +493,13 @@ test("🔴 H-04 (fuente): restablecer la contraseña es el MISMO camino que el a
   assert.match(cuerpo, /eduTempPasswordFromBytes\(randomBytes\(EDU_TEMP_PASSWORD_BYTES\)\)/);
   // Auth primero, la marca después.
   const iAuth = cuerpo.indexOf("updateUserById");
-  const iMarca = cuerpo.indexOf("data: { mustChangePassword: true }");
+  // `mustChangePassword: true` en el `data`, lleve o no compañía. La Ola
+  // C·2b le añadió al lado el rastro de quién restableció (H-04), que es
+  // además lo que ANCLA la caducidad de esa temporal (H-153).
+  // 🔴 `data: {` y no solo la columna: `mustChangePassword: true` aparece
+  // también en el `select` de arriba, y sin el prefijo esta prueba mediría
+  // la LECTURA en vez de la escritura y pasaría (o fallaría) por azar.
+  const iMarca = cuerpo.indexOf("data: { mustChangePassword: true");
   assert.ok(iAuth !== -1 && iMarca !== -1 && iAuth < iMarca);
   // Y el estado leído va en el where.
   assert.match(cuerpo, /updateMany\(\{[\s\S]*?isActive:\s*true/);
