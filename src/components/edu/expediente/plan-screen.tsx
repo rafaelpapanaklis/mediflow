@@ -11,9 +11,11 @@ import {
   EDU_PLAN_STATUS_LABELS,
   EDU_PLAN_TRANSITIONS,
   eduPlanPartidasParaPresupuesto,
+  eduPlanPuedeCerrar,
   type EduTreatmentPlanStatus,
 } from "@/lib/edu/plan-tratamiento-core";
 import { eduMoney } from "@/lib/edu/dinero-core";
+import type { EduRole } from "@/lib/edu/types";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -64,6 +66,13 @@ export interface EduPlanUI {
   nextExpectedLabel: string | null;
   closeReason: string | null;
   createdByName: string;
+  /**
+   * 🔴 OLA C·fin 2 · ¿es MÍO? El alumno del caso, o quien lo armó cuando no
+   * hay caso. Es lo que decide si se pinta el botón que CIERRA el plan: el
+   * servidor contesta 403 igual, pero un botón que siempre falla es un
+   * botón que enseña a ignorar los errores.
+   */
+  esMio: boolean;
   kpis: { hechas: number; total: number; avance: number; siguienteNumero: number | null; atrasado: boolean };
   sesiones: EduPlanSesionUI[];
 }
@@ -84,8 +93,29 @@ export interface EduPlanScreenProps {
   veDinero: boolean;
   /** `caja.charge`: convertir el plan en presupuesto es armar dinero. */
   canPresupuestar: boolean;
+  /**
+   * 🔴 EL ROL DE QUIEN MIRA, para no pintar botones que van a fallar. Los
+   * dos estados TERMINALES se ofrecen con la MISMA regla que aplica el
+   * servidor (`eduPlanPuedeCerrar`, en el core): abandonar es de docente o
+   * dirección; terminar, además, del alumno que lleva el plan. Hasta esta
+   * ola «Marcar abandonado» se le pintaba a un alumno y el 403 llegaba
+   * después del clic.
+   */
+  role: EduRole;
   motivoSinPermiso: string;
 }
+
+/**
+ * Los dos valores que NO son un caso, escritos una vez.
+ *
+ * `SIN_ELEGIR` es el «todavía no has dicho» del selector y no se manda
+ * nunca al servidor; `SIN_CASO` es la decisión explícita de que el plan no
+ * cuelgue de ningún caso. Antes los dos eran la cadena vacía, y por eso no
+ * se distinguían: no decidir y decidir «ninguno» acababan en el mismo
+ * plan.
+ */
+const SIN_ELEGIR = "__elige__";
+const SIN_CASO = "__sin_caso__";
 
 interface PartidaForm {
   procedureId: string;
@@ -269,7 +299,13 @@ export function EduPlanScreen(props: EduPlanScreenProps) {
           <div className="edu-stack edu-stack--tight">
             {props.rows.map((plan) => {
               const cerrado = plan.status === "COMPLETADO" || plan.status === "ABANDONADO";
-              const destinos = EDU_PLAN_TRANSITIONS[plan.status] ?? [];
+              // 🔴 OLA C·fin 2 · los dos estados TERMINALES se ofrecen solo
+              // a quien de verdad puede darlos, con la misma regla que el
+              // servidor: terminarlo, el dueño del plan (o docente y
+              // dirección); abandonarlo, solo docente y dirección.
+              const destinos = (EDU_PLAN_TRANSITIONS[plan.status] ?? []).filter((d) =>
+                eduPlanPuedeCerrar(props.role, plan.esMio, d),
+              );
               const cerrandoAqui = cerrando?.planId === plan.id;
               return (
                 <article
@@ -575,7 +611,22 @@ function NuevoPlan({
   onDone: (mensaje: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [caseId, setCaseId] = useState(casos.length === 1 ? casos[0].id : "");
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·fin 2 · CON DOS CASOS, LA PANTALLA NO ELIGE POR TI.
+  //
+  // Esto era `casos.length === 1 ? casos[0].id : ""`, y ese `""` es «Sin
+  // caso»: con DOS casos abiertos —un paciente con la ortodoncia de un
+  // alumno y la endodoncia de otro— el formulario elegía solo, en silencio,
+  // la opción que deja el plan fuera del seguimiento de los dos. Ahora hay
+  // un tercer valor, `SIN_ELEGIR`, que no se puede guardar: con dos casos
+  // hay que decir cuál, o decir «sin caso» a propósito.
+  //
+  // Con UN caso se sigue preseleccionando (no hay nada que elegir) y con
+  // NINGUNO se queda en «sin caso», que es la única opción que existe.
+  // ═══════════════════════════════════════════════════════════════════
+  const [caseId, setCaseId] = useState(
+    casos.length === 1 ? casos[0].id : casos.length === 0 ? SIN_CASO : SIN_ELEGIR,
+  );
   const [description, setDescription] = useState("");
   const [totalSessions, setTotalSessions] = useState("1");
   const [intervalo, setIntervalo] = useState("30");
@@ -608,7 +659,7 @@ function NuevoPlan({
           method: "POST",
           body: {
             name,
-            caseId: caseId || undefined,
+            caseId: caseId === SIN_CASO || caseId === SIN_ELEGIR ? undefined : caseId,
             description: description.trim() || undefined,
             totalSessions,
             sessionIntervalDays: intervalo,
@@ -642,7 +693,7 @@ function NuevoPlan({
             type="button"
             className="edu-btn edu-btn--primary"
             onClick={guardar}
-            disabled={busy || name.trim().length < 2}
+            disabled={busy || name.trim().length < 2 || caseId === SIN_ELEGIR}
           >
             {busy ? "Creando…" : "Crear el plan"}
           </button>
@@ -681,7 +732,10 @@ function NuevoPlan({
             value={caseId}
             onChange={(e) => setCaseId(e.target.value)}
           >
-            <option value="">Sin caso</option>
+            {casos.length > 1 && (
+              <option value={SIN_ELEGIR}>Elige de qué caso cuelga…</option>
+            )}
+            <option value={SIN_CASO}>Sin caso (queda a tu nombre)</option>
             {casos.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
@@ -690,7 +744,8 @@ function NuevoPlan({
           </select>
           <span className="edu-field__hint">
             Colgarlo de un caso es lo que hace que el plan aparezca en el seguimiento de ese
-            estudiante y su docente.
+            estudiante y su docente. «Sin caso» no es «de nadie»: queda a nombre de quien lo arma, y
+            solo lo ven esa persona, su docente y la dirección.
           </span>
         </div>
 

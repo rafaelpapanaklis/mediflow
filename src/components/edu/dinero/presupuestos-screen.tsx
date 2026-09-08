@@ -326,7 +326,11 @@ export function EduPresupuestosScreen({
                   <span className="edu-cell__value">{r.title}</span>
                   <span className="edu-cell__sub">
                     {r.items.length} {r.items.length === 1 ? "partida" : "partidas"}
-                    {r.validUntil ? ` · vale hasta el ${r.validUntil.slice(0, 10)}` : ""}
+                    {/* 🔴 OLA C·fin 2 · el DÍA lo escribe el servidor en la
+                        zona del instituto. Recortar el ISO a diez
+                        caracteres pinta el día en UTC, y el fin de un día
+                        mexicano cae ya en el siguiente. */}
+                    {r.validUntilDia ? ` · vale hasta el ${r.validUntilDia}` : ""}
                   </span>
                 </div>
 

@@ -50,12 +50,14 @@ import {
   eduQuoteMotivoParaNoAceptar,
   eduQuoteParseItems,
   eduQuoteParsePct,
+  eduQuoteParseVigencia,
   eduQuoteParseStatus,
   eduQuoteParseTitulo,
   eduQuotePuedeTransicionar,
   eduQuoteTextoCanonico,
   eduQuoteTotales,
   eduQuoteVencido,
+  eduQuoteVigenciaDiaISO,
   eduQuoteVigenciaPorDefecto,
   type EduQuoteEstadoVisible,
   type EduQuoteFilters,
@@ -68,7 +70,20 @@ import { EDU_MAX_CHARGE_ITEMS } from "@/lib/edu/dinero-core";
 import { createEduCharge } from "@/lib/edu/caja";
 import { createEduPaymentPlan } from "@/lib/edu/pagos";
 
-export interface EduQuoteContext extends EduClinicaContext, EduAuditActor {}
+export interface EduQuoteContext extends EduClinicaContext, EduAuditActor {
+  /**
+   * 🔴 OLA C·fin 2 · LA ZONA DEL INSTITUTO, que hasta ahora no llegaba
+   * hasta aquí aunque `getEduContext` la tuviera delante. La vigencia de un
+   * presupuesto es una FECHA CIVIL (presupuestos-core.ts) y una fecha civil
+   * sin zona no es una fecha: es un instante que se corre treinta horas.
+   */
+  institution: { timezone: string };
+}
+
+/** La zona del instituto, ya saneada. Un `timezone` roto cae en UTC. */
+function zonaDe(ctx: EduQuoteContext): string {
+  return eduSafeTimeZone(ctx?.institution?.timezone);
+}
 
 function requireInstitution(ctx: { institutionId?: string }): string {
   const id = ctx?.institutionId;
@@ -127,7 +142,7 @@ const QUOTE_INCLUDE = {
 
 type QuoteConItems = Prisma.EduQuoteGetPayload<{ include: typeof QUOTE_INCLUDE }>;
 
-function aRow(q: QuoteConItems, now: Date): EduQuoteRow {
+function aRow(q: QuoteConItems, now: Date, timeZone: string): EduQuoteRow {
   return {
     id: q.id,
     folio: q.folio,
@@ -142,6 +157,7 @@ function aRow(q: QuoteConItems, now: Date): EduQuoteRow {
     patientFolio: q.patient?.folio ?? "—",
     caseId: q.caseId,
     validUntil: q.validUntil?.toISOString() ?? null,
+    validUntilDia: eduQuoteVigenciaDiaISO(q.validUntil, timeZone),
     subtotalCents: q.subtotalCents,
     discountPct: q.discountPct === null ? null : Number(q.discountPct),
     discountCents: q.discountCents,
@@ -187,7 +203,8 @@ export async function listEduQuotes(
     take: EDU_QUOTE_MAX_ROWS,
     include: QUOTE_INCLUDE,
   });
-  return filas.map((q) => aRow(q, now));
+  const tz = zonaDe(ctx);
+  return filas.map((q) => aRow(q, now, tz));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -272,8 +289,9 @@ export async function listEduQuotesPanel(
     include: QUOTE_INCLUDE,
   });
 
+  const tz = zonaDe(ctx);
   return {
-    rows: filas.slice(0, EDU_QUOTE_MAX_ROWS).map((q) => aRow(q, now)),
+    rows: filas.slice(0, EDU_QUOTE_MAX_ROWS).map((q) => aRow(q, now, tz)),
     truncated: filas.length > EDU_QUOTE_MAX_ROWS,
     filters,
   };
@@ -293,7 +311,7 @@ export async function getEduQuote(
     where: { id, institutionId },
     include: QUOTE_INCLUDE,
   });
-  return q ? aRow(q, now) : null;
+  return q ? aRow(q, now, zonaDe(ctx)) : null;
 }
 
 /**
@@ -353,11 +371,15 @@ export async function updateEduQuote(
       : Number.parseInt(String(body.discountCents), 10) || 0;
   const totales = eduQuoteTotales(items, discountPct, discountCentsRaw);
 
+  // 🔴 OLA C·fin 2 · FECHA CIVIL EN LA ZONA DEL INSTITUTO. Ver el bloque
+  // de la vigencia en presupuestos-core.ts: `new Date("2026-09-08")` es
+  // medianoche UTC, o sea las 18:00 del 7 en México.
   let validUntil: Date | null = null;
   if (body?.validUntil) {
-    const d = new Date(String(body.validUntil));
-    if (Number.isNaN(d.getTime())) throw new EduPadronError("La vigencia no se entiende.", 400);
-    validUntil = d;
+    validUntil = eduQuoteParseVigencia(body.validUntil, zonaDe(ctx));
+    if (!validUntil) {
+      throw new EduPadronError("La vigencia no se entiende: mándala como 2026-09-30.", 400);
+    }
   }
 
   await prisma.$transaction(async (tx) => {
@@ -558,11 +580,15 @@ export async function createEduQuote(
       : Number.parseInt(String(body.discountCents), 10) || 0;
   const totales = eduQuoteTotales(items, discountPct, discountCentsRaw);
 
+  // 🔴 OLA C·fin 2 · FECHA CIVIL EN LA ZONA DEL INSTITUTO. Ver el bloque
+  // de la vigencia en presupuestos-core.ts: `new Date("2026-09-08")` es
+  // medianoche UTC, o sea las 18:00 del 7 en México.
   let validUntil: Date | null = null;
   if (body?.validUntil) {
-    const d = new Date(String(body.validUntil));
-    if (Number.isNaN(d.getTime())) throw new EduPadronError("La vigencia no se entiende.", 400);
-    validUntil = d;
+    validUntil = eduQuoteParseVigencia(body.validUntil, zonaDe(ctx));
+    if (!validUntil) {
+      throw new EduPadronError("La vigencia no se entiende: mándala como 2026-09-30.", 400);
+    }
   }
 
   const createdByName = `${ctx.user.firstName} ${ctx.user.lastName}`.trim().slice(0, 160) || "—";
@@ -659,13 +685,17 @@ export async function presentarEduQuote(
   }
 
   const acceptToken = q.acceptToken ?? randomBytes(32).toString("hex").slice(0, 64);
+  // 🔴 OLA C·fin 2 · la vigencia es una FECHA CIVIL del instituto, y la de
+  // por defecto también: ver presupuestos-core.ts.
+  const tz = zonaDe(ctx);
   let validUntil = q.validUntil;
   if (body?.validUntil) {
-    const d = new Date(String(body.validUntil));
-    if (Number.isNaN(d.getTime())) throw new EduPadronError("La vigencia no se entiende.", 400);
-    validUntil = d;
+    validUntil = eduQuoteParseVigencia(body.validUntil, tz);
+    if (!validUntil) {
+      throw new EduPadronError("La vigencia no se entiende: mándala como 2026-09-30.", 400);
+    }
   } else if (!validUntil) {
-    validUntil = eduQuoteVigenciaPorDefecto(now);
+    validUntil = eduQuoteVigenciaPorDefecto(now, tz);
   }
 
   const res = await prisma.eduQuote.updateMany({
@@ -809,9 +839,22 @@ export async function cambiarEstadoEduQuote(
     if (!papel) throw new EduPadronError("Ese presupuesto ya no está.", 404);
 
     const ante = `${ctx.user.firstName} ${ctx.user.lastName}`.trim() || "el mostrador";
+    // 🔴 OLA C·fin 2 · Y EL NOMBRE ES OBLIGATORIO, con el MISMO mínimo que
+    // la pantalla (3 letras). Era opcional por la API y obligatorio por el
+    // formulario: un `PATCH {"status":"ACEPTADO"}` a pelo registraba la
+    // aceptación como «el paciente, en el mostrador ante <quien opera>» —
+    // una evidencia que no dice quién dijo que sí. La liga pública ya
+    // exigía exactamente esto (`aceptarEduQuotePorToken`); las dos puertas
+    // del mismo papel no pueden pedir cosas distintas.
     const quien = eduOptionalText(body?.acceptedByName, 80);
+    if (!quien || quien.trim().length < 3) {
+      throw new EduPadronError(
+        "Escribe el nombre completo de quien acepta el presupuesto: es la evidencia de quién dijo que sí.",
+        400,
+      );
+    }
     data.acceptedAt = now;
-    data.acceptedByName = `${quien ?? "el paciente"}, en el mostrador ante ${ante}`.slice(0, 160);
+    data.acceptedByName = `${quien.trim()}, en el mostrador ante ${ante}`.slice(0, 160);
     data.acceptedHash = createHash("sha256")
       .update(eduQuoteTextoCanonico({ ...papel, items: papel.items }))
       .digest("hex");
@@ -1165,7 +1208,16 @@ export async function convertirEduQuote(
         // La clave se DERIVA del presupuesto y no la manda el cliente
         // porque la regla es "un presupuesto, un cobro": es la misma llave
         // que la columna `chargeId`, aplicada un instante antes.
-        idempotencyKey: `presupuesto-${q.id}`,
+        //
+        // 🔴 OLA C·fin 2 · Y YA NO VIAJA POR AQUÍ. `presupuesto-<id>` cabía
+        // de sobra en lo que `parseIdempotencyKey` acepta del cliente, y el
+        // id del presupuesto está en la URL: quien tuviera `caja.charge`
+        // podía crear ANTES un cobro manual con esa misma clave, y la
+        // conversión le devolvía ESE cobro como duplicado y le sellaba
+        // `chargeId` contra él — un presupuesto convertido en algo que no
+        // son sus partidas. La clave la deriva ahora `createEduCharge` de
+        // `options.quoteId` (caja.ts), con una forma que el parser del
+        // cliente rechaza, así que no hay manera de tecleársela.
       },
       {
         campusId: options.campusId ?? null,
@@ -1340,6 +1392,8 @@ export async function getEduQuotePorToken(
   title: string;
   estadoVisible: EduQuoteEstadoVisible;
   validUntil: string | null;
+  /** El DÍA de la vigencia en la zona del INSTITUTO, que es el que se pinta. */
+  validUntilDia: string | null;
   totalCents: number;
   subtotalCents: number;
   discountCents: number;
@@ -1351,7 +1405,13 @@ export async function getEduQuotePorToken(
 
   const q = await prisma.eduQuote.findFirst({
     where: { acceptToken: t },
-    include: { items: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      items: { orderBy: { sortOrder: "asc" } },
+      // 🔴 SOLO LA ZONA, no el instituto. Aquí no hay sesión y lo que sale
+      // por esta puerta acaba en un WhatsApp reenviado: la zona hace falta
+      // para rotular el día de la vigencia y no dice nada de la escuela.
+      institution: { select: { timezone: true } },
+    },
   });
   if (!q) return null;
 
@@ -1372,6 +1432,7 @@ export async function getEduQuotePorToken(
       now,
     ),
     validUntil: q.validUntil?.toISOString() ?? null,
+    validUntilDia: eduQuoteVigenciaDiaISO(q.validUntil, eduSafeTimeZone(q.institution?.timezone)),
     totalCents: q.totalCents,
     subtotalCents: q.subtotalCents,
     discountCents: q.discountCents,

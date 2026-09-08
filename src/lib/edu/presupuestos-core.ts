@@ -27,6 +27,13 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 
+import {
+  eduShiftDayISO,
+  eduUtcToZoned,
+  eduZonedToUtc,
+  parseEduDayISO,
+} from "@/lib/edu/agenda-core";
+
 // ═══════════════════════════════════════════════════════════════════════
 // 1 · EL ESTADO
 // ═══════════════════════════════════════════════════════════════════════
@@ -96,12 +103,92 @@ export function eduQuoteParseStatus(raw: unknown): EduQuoteStatus | null {
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA C·fin 2 · LA VIGENCIA ES UNA **FECHA CIVIL**, NO UN INSTANTE.
+ *
+ * El `<input type="date">` manda `"2026-09-08"` y el servidor hacía
+ * `new Date("2026-09-08")`, que es **medianoche UTC** = las **18:00 del
+ * día 7** en Ciudad de México. Con eso, un presupuesto que dice «vigente
+ * hasta el 8 de septiembre» salía VENCIDO desde las seis de la tarde del
+ * 7, y el 8 entero también. Mientras eso solo pintaba un rótulo era feo;
+ * desde que aceptar un vencido contesta 409 (`cambiarEstadoEduQuote`) es
+ * dinero que no se cobra con el paciente delante.
+ *
+ * La regla, en una línea: **vence al final de ese día en la zona del
+ * instituto** (`EduInstitution.timezone`, por defecto America/Mexico_City).
+ * Se normaliza AL ESCRIBIR —aquí, y en los tres sitios que guardan
+ * `validUntil`— y no al leer, para que el instante guardado ya sea el
+ * bueno y las tres puertas (el 409 del mostrador, el 404 de la liga
+ * pública y el rótulo «vence el…») comparen el MISMO número sin volver a
+ * saber de zonas. `eduQuoteVencido` sigue siendo una resta de instantes,
+ * que es lo que tiene que ser.
+ *
+ * ⚠️ La conversión va en el ESCRITOR y no en el lector a propósito: un
+ * lector que convierte tiene que adivinar en qué zona se guardó la fila, y
+ * esa pregunta no tiene respuesta. Aquí no hay filas viejas que arreglar
+ * —`edu_quotes` la crea `sql/edu-ola-c.sql`, que todavía no se ha
+ * aplicado—, así que la normalización al escribir es completa.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+
+/** El ÚLTIMO INSTANTE de ese día de calendario en esa zona (23:59:59.999). */
+export function eduQuoteFinDelDia(dayISO: string, timeZone: string): Date | null {
+  const dia = parseEduDayISO(dayISO);
+  if (!dia) return null;
+  // Se calcula como "la medianoche del día siguiente, menos un
+  // milisegundo" y no como "23:59 de este día": así el día que cambia el
+  // horario de verano —que puede durar 23 o 25 horas— sigue terminando
+  // donde de verdad termina.
+  const manana = eduZonedToUtc(eduShiftDayISO(dia, 1), 0, timeZone);
+  return manana ? new Date(manana.getTime() - 1) : null;
+}
+
+/**
+ * La vigencia que llega del cliente → el instante en que de verdad vence.
+ *
+ * Acepta `"2026-09-08"` (lo que manda un `<input type="date">`) y también
+ * un ISO completo, del que se toma su DÍA tal como está escrito. Los dos
+ * significan lo mismo —«el día 8»— y contestar cosas distintas a las dos
+ * formas del mismo texto es cómo un cliente que no sea nuestra pantalla
+ * pierde treinta horas sin enterarse.
+ *
+ * Devuelve `null` cuando no se entiende; el llamador contesta 400.
+ */
+export function eduQuoteParseVigencia(raw: unknown, timeZone: string): Date | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const texto = typeof raw === "string" ? raw.trim() : "";
+  if (!texto) return null;
+  const dia = parseEduDayISO(texto.slice(0, 10));
+  return dia ? eduQuoteFinDelDia(dia, timeZone) : null;
+}
+
+/**
+ * El DÍA que rotula una vigencia, en la zona del instituto.
+ *
+ * Es lo que se manda a las pantallas en vez del ISO: `.slice(0, 10)` sobre
+ * el instante guardado devuelve el día en **UTC**, que para un fin de día
+ * mexicano es el SIGUIENTE. El rótulo lo calcula el servidor por lo mismo
+ * que la etiqueta de una cita: en el navegador saldría en la zona de quien
+ * mira, que puede no ser la de la escuela.
+ */
+export function eduQuoteVigenciaDiaISO(
+  validUntil: Date | null | undefined,
+  timeZone: string,
+): string | null {
+  return validUntil ? eduUtcToZoned(validUntil, timeZone).dayISO : null;
+}
+
+/**
  * ¿Está vencido?
  *
  * 🔴 SOLO UN PRESENTADO PUEDE VENCER. Un borrador sin presentar no vence
  * (nadie lo ha visto), y un aceptado tampoco: la aceptación ocurrió
  * dentro de la vigencia y el reloj deja de importar. Rechazado y
  * cancelado son finales.
+ *
+ * 🔴 Y ES UNA RESTA DE INSTANTES, sin zonas: `validUntil` ya se guardó
+ * como el final del día civil del instituto (bloque de arriba). Meter aquí
+ * una conversión sería convertir dos veces.
  */
 export function eduQuoteVencido(
   quote: { status: EduQuoteStatus; validUntil: Date | null },
@@ -395,8 +482,16 @@ export function eduQuoteParseItems(raw: unknown): (EduQuoteItemInput & { lineTot
  */
 export const EDU_QUOTE_VIGENCIA_DIAS = 30;
 
-export function eduQuoteVigenciaPorDefecto(now: Date): Date {
-  return new Date(now.getTime() + EDU_QUOTE_VIGENCIA_DIAS * 24 * 60 * 60 * 1000);
+export function eduQuoteVigenciaPorDefecto(now: Date, timeZone: string): Date {
+  // También en FECHA CIVIL, y no `now + 30 días` a secas: si la propuesta
+  // fuera un instante, el presupuesto presentado a las 9 de la mañana y el
+  // presentado a las 7 de la tarde del mismo día vencerían en días
+  // distintos, y el rótulo «vale hasta el…» diría lo mismo en los dos.
+  const hoy = eduUtcToZoned(now, timeZone).dayISO;
+  return (
+    eduQuoteFinDelDia(eduShiftDayISO(hoy, EDU_QUOTE_VIGENCIA_DIAS), timeZone) ??
+    new Date(now.getTime() + EDU_QUOTE_VIGENCIA_DIAS * 24 * 60 * 60 * 1000)
+  );
 }
 
 /**
@@ -454,6 +549,13 @@ export interface EduQuoteRow {
   patientFolio: string;
   caseId: string | null;
   validUntil: string | null;
+  /**
+   * El DÍA de la vigencia en la zona del instituto ("2026-09-08"), que es
+   * lo que se pinta. El ISO de arriba se queda para quien necesite el
+   * instante; recortarlo a diez caracteres pinta el día en UTC, que para
+   * un fin de día mexicano es el siguiente.
+   */
+  validUntilDia: string | null;
   subtotalCents: number;
   discountPct: number | null;
   discountCents: number;
