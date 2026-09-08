@@ -230,3 +230,42 @@ test("🟠 #2 · y sigue pidiendo el PACIENTE en el alcance: no abre nada nuevo"
   // Dirección no pasa por aquí (sale antes con el alcance completo).
   assert.match(helper, /if \(scope\.kind === "all"\) return \{\};/);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3 · EL ALUMNO SALIENTE Y EL CASO QUE ENTREGÓ
+// ═══════════════════════════════════════════════════════════════════════
+
+test("🟠 #3 · el plan del caso TRANSFERIDO sale del alcance de quien lo entregó", () => {
+  const helper = ALCANCE_PLAN();
+  // `eduCaseScopeWhere` conserva el caso transferido a propósito (es la
+  // historia académica del alumno). El PLAN VIVO no: A cerraba como
+  // COMPLETADO —terminal— el tratamiento que hoy lleva B.
+  assert.match(
+    helper,
+    /case:\s*\{\s*\.\.\.eduCaseScopeWhere\(\{ institutionId, scope, now \}\),\s*status:\s*\{\s*not:\s*"TRANSFERRED"\s*\}\s*,?\s*\}/,
+  );
+  assert.ok(
+    !/\{ case: eduCaseScopeWhere\(\{ institutionId, scope, now \}\) \}/.test(helper),
+    "el alcance de casos a secas deja al saliente cerrando el plan que entregó",
+  );
+});
+
+test("🟠 #3 · el descarte NO se le aplica a la lista de casos ni al alcance compartido", () => {
+  // El helper del vertical se queda como está: quitar el transferido de ahí
+  // borraría la historia académica del alumno, que es de lo que vive la
+  // bitácora. El recorte es SOLO del plan.
+  const visibilidad = sinComentarios(
+    tramo(crudo("src/lib/edu/visibility.ts"), "export function eduCaseScopeWhere", "export interface EduStudentScopeInput"),
+  );
+  assert.ok(
+    !/TRANSFERRED/.test(visibilidad),
+    "eduCaseScopeWhere conserva el caso entregado a propósito: es la historia académica",
+  );
+});
+
+test("🟠 #3 · dirección sigue viendo y cerrando el plan del caso entregado", () => {
+  // No pasa por el recorte: sale antes con el alcance completo.
+  assert.match(ALCANCE_PLAN(), /if \(scope\.kind === "all"\) return \{\};/);
+  const cerrar = sinComentarios(crudo("src/lib/edu/plan-tratamiento-core.ts"));
+  assert.match(cerrar, /role === "DIRECCION" \|\| role === "DOCENTE"/);
+});

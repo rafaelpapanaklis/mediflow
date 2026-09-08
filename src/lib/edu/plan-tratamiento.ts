@@ -201,10 +201,35 @@ function eduPlanScopeWhere(
           ],
         };
 
+  // 🔴 OLA C·fin 3 · EL CASO ENTREGADO NO LLEVA SU PLAN CONSIGO.
+  //
+  // `eduCaseScopeWhere` NO descarta los casos TRANSFERRED, y es deliberado:
+  // la lista de casos del alumno es su historia académica y tiene que poder
+  // decir «llevó este caso de marzo a julio y lo entregó» (el motivo está
+  // escrito en visibility.ts). Pero para el PLAN VIVO eso es otra cosa: si
+  // a la alumna A le traspasan el caso #1 a B y A conserva otro caso vivo
+  // con el mismo paciente, A seguía viendo el plan del caso que entregó
+  // —`case.student.userId` no se reescribe en un traspaso— y `eduPlanEsMio`
+  // le decía que era suyo, así que lo cerraba como COMPLETADO, que es
+  // TERMINAL. El tratamiento que hoy lleva otra persona, cerrado para
+  // siempre por quien ya no atiende.
+  //
+  // Dirección no pasa por aquí (salió arriba con el alcance completo), así
+  // que el plan de un caso entregado se sigue viendo y cerrando desde ahí.
+  //
+  // ⚠️ Lo que esto NO hace: que B —quien recibió el caso— lo vea. Eso pide
+  // que el traspaso reapunte el plan al caso nuevo, y `traspasos.ts` no
+  // toca `edu_treatment_plans` en ninguna línea. No es una línea y no es de
+  // este viaje: va al reporte.
   return {
     OR: [
       { caseId: null, patient: eduPatientScopeWhere({ institutionId, scope, now }), ...dueno },
-      { case: eduCaseScopeWhere({ institutionId, scope, now }) },
+      {
+        case: {
+          ...eduCaseScopeWhere({ institutionId, scope, now }),
+          status: { not: "TRANSFERRED" },
+        },
+      },
     ],
   };
 }
