@@ -175,17 +175,29 @@ export function EduPlanScreen(props: EduPlanScreenProps) {
         method: "POST",
         body: {
           patientId: props.patientId,
+          // 🔴 OLA C·2 · EL ENLACE AL PLAN, que faltaba. La columna
+          // `EduQuote.treatmentPlanId` la dejó puesta la C·base y no la
+          // llenaba nadie: sin ella, un presupuesto nacido de un plan no
+          // sabía de qué plan salía, y la única pista era la nota escrita
+          // en español. El servidor comprueba que el plan sea de este
+          // paciente y hereda su caso si no le mandamos uno.
+          treatmentPlanId: plan.id,
           caseId: plan.caseId ?? undefined,
           title: plan.name,
           notes: `Sale del plan de tratamiento «${plan.name}».`,
           items,
         },
       });
+      // Y SE VA AL PRESUPUESTO CREADO. Antes solo se decía el folio y había
+      // que ir a buscarlo a mano a otra pantalla: quien presupuesta lo hace
+      // con el paciente delante, y el siguiente paso —presentarlo— está
+      // allí. El filtro por folio deja UNO en la lista.
       hecho(
         `Quedó el presupuesto ${r.folio} con ${items.length} ${
           items.length === 1 ? "partida" : "partidas"
-        }. Se presenta y se acepta desde Caja → Presupuestos.`,
+        }. Te llevamos a él.`,
       );
+      router.push(`/instituto/caja/presupuestos?q=${encodeURIComponent(r.folio)}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo crear el presupuesto.");
     } finally {

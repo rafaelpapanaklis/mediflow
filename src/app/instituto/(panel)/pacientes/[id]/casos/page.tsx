@@ -12,7 +12,7 @@ import {
 } from "@/lib/edu/agenda";
 import { listEduCurrentAssignments } from "@/lib/edu/padron";
 import { eduFormatDayShort } from "@/lib/edu/agenda-core";
-import { eduVisibility } from "@/lib/edu/visibility";
+import { eduScopeIsEmpty, eduVisibility } from "@/lib/edu/visibility";
 import { getEduCaseApprovalState } from "@/lib/edu/autorizaciones";
 import {
   EDU_APPOINTMENT_STATUS_LABELS,
@@ -69,6 +69,19 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
   const canRegistrarSesion = hasEduPermission(permUser, "expediente.write");
   const canTraspasar = hasEduPermission(permUser, "traspaso.manage");
   const canFirmar = hasEduPermission(permUser, "autorizaciones.decide");
+  // ── Ola C·2 · PRESUPUESTAR el caso ───────────────────────────────────
+  // 🔴 DOS CERRADURAS, las mismas que el resto del dinero: el permiso
+  // `caja.charge` MÁS el alcance de "charges", que para DOCENTE y ALUMNO
+  // es "none". Encenderle caja.charge a un alumno por error sigue sin
+  // pintarle el botón — y el endpoint lo volvería a comprobar igual.
+  //
+  // En esta pantalla eso significa, en la práctica, SOLO la dirección:
+  // caja no llega aquí (no tiene `casos.view`). Y por eso el botón vive
+  // aquí y no en Presupuestos: caja no ve casos, así que aquella pantalla
+  // no puede ofrecer un selector de casos sin romper el contrato de la
+  // Ola 2.
+  const canPresupuestar =
+    hasEduPermission(permUser, "caja.charge") && !eduScopeIsEmpty(eduVisibility(ctx, "charges"));
 
   const [casos, citas, alumnosDestino, docentes] = await Promise.all([
     listEduPatientCases(ctx, p.id),
@@ -269,6 +282,7 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
                     docentes={docentes}
                     supervisorUserId={c.supervisorUserId}
                     supervisorName={c.supervisorName}
+                    canPresupuestar={canPresupuestar && !cerrado}
                   />
                 </div>
               );

@@ -34,6 +34,7 @@ import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import { eduCleanId, eduOptionalText, eduSafeTimeZone } from "@/lib/edu/agenda-core";
 import { eduPatientFullName } from "@/lib/edu/pacientes-core";
+import { getEduTarifaDePaciente } from "@/lib/edu/tarifas";
 import { eduSearchTokens } from "@/lib/edu/padron-core";
 import {
   eduScopeIsEmpty,
@@ -473,15 +474,80 @@ export async function createEduQuote(
     treatmentPlanId = plan.id;
   }
 
-  const title = eduQuoteParseTitulo(body?.title ?? plan?.name);
+  // ── EL CASO del que sale, si sale de uno ────────────────────────────
+  // Se resuelve aquí arriba, junto al plan, porque desde la C·2 también
+  // puede SEMBRAR la primera partida (ver abajo). El que manden gana; si no
+  // mandan ninguno y hay plan, se hereda el del plan — perder ese enlace al
+  // presupuestar desde un plan sería tirar un dato que ya se sabía.
+  let caseId: string | null = plan?.caseId ?? null;
+  let caso: { id: string; procedureId: string | null; procedureName: string | null; programName: string } | null =
+    null;
+  const rawCase = eduCleanId(body?.caseId);
+  if (rawCase) {
+    const c = await prisma.eduCase.findFirst({
+      where: { id: rawCase, institutionId, patientId: paciente.id },
+      select: {
+        id: true,
+        procedureId: true,
+        procedure: { select: { name: true } },
+        program: { select: { name: true } },
+      },
+    });
+    if (!c) throw new EduPadronError("Ese caso no existe o no es de este paciente.", 404);
+    caseId = c.id;
+    caso = {
+      id: c.id,
+      procedureId: c.procedureId,
+      procedureName: c.procedure?.name ?? null,
+      programName: c.program.name,
+    };
+  }
+
+  const title = eduQuoteParseTitulo(body?.title ?? plan?.name ?? caso?.procedureName ?? caso?.programName);
   const notes = eduOptionalText(body?.notes, EDU_QUOTE_NOTES_MAX) ?? null;
-  // Sin partidas y con plan, se siembra UNA con el nombre del plan y su
-  // importe. Sin plan, `eduQuoteParseItems` sigue exigiendo al menos una:
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LA PRIMERA PARTIDA, CUANDO NO MANDAN NINGUNA.
+  //
+  // Sin partidas y con PLAN, se siembra una con el nombre del plan y su
+  // importe (la C·2 lo dejó así). Sin plan y con CASO —el botón
+  // «Presupuestar» de la pantalla del caso, que la ola siguiente añadió—
+  // se siembra con el PROCEDIMIENTO PRINCIPAL del caso y su precio.
+  //
+  // 🔴 Y EL PRECIO SALE DE LA TARIFA DEL PACIENTE, aquí en el servidor,
+  // con la MISMA función que usa la pantalla de caja
+  // (`getEduTarifaDePaciente`). No se calcula a mano y no se le pide al
+  // navegador: la regla (d) de la casa es que el precio tiene una sola
+  // fuente, y un segundo sitio que lo resolviera sería un segundo sitio
+  // donde equivocarse — o donde cobrar de menos.
+  //
+  // Si el caso no tiene procedimiento principal, o si ese procedimiento no
+  // tiene precio en ninguna lista, se siembra con importe CERO y el nombre
+  // que haya: caja lo corrige antes de presentarlo. Cero es visible;
+  // inventarse un precio, no.
+  //
+  // Sin plan y sin caso, `eduQuoteParseItems` sigue exigiendo al menos una:
   // un presupuesto vacío no es un presupuesto.
-  const itemsCrudos =
-    plan && (!Array.isArray(body?.items) || body.items.length === 0)
-      ? [{ name: plan.name, quantity: 1, unitPriceCents: plan.totalCents }]
-      : body?.items;
+  // ═══════════════════════════════════════════════════════════════════
+  const sinPartidas = !Array.isArray(body?.items) || body.items.length === 0;
+  let itemsCrudos: unknown = body?.items;
+  if (sinPartidas && plan) {
+    itemsCrudos = [{ name: plan.name, quantity: 1, unitPriceCents: plan.totalCents }];
+  } else if (sinPartidas && caso) {
+    let precio = 0;
+    if (caso.procedureId) {
+      const tarifa = await getEduTarifaDePaciente(ctx, paciente.id);
+      precio = tarifa.prices.find((x) => x.procedureId === caso.procedureId)?.priceCents ?? 0;
+    }
+    itemsCrudos = [
+      {
+        procedureId: caso.procedureId ?? undefined,
+        name: caso.procedureName ?? caso.programName,
+        quantity: 1,
+        unitPriceCents: precio,
+      },
+    ];
+  }
   const items = eduQuoteParseItems(itemsCrudos);
   const discountPct = eduQuoteParsePct(body?.discountPct);
   const discountCentsRaw =
@@ -495,19 +561,6 @@ export async function createEduQuote(
     const d = new Date(String(body.validUntil));
     if (Number.isNaN(d.getTime())) throw new EduPadronError("La vigencia no se entiende.", 400);
     validUntil = d;
-  }
-
-  // El caso: el que manden, y si no el del plan (perder el enlace al
-  // abrirlo desde un plan sería tirar un dato que ya se sabía).
-  let caseId: string | null = plan?.caseId ?? null;
-  const rawCase = eduCleanId(body?.caseId);
-  if (rawCase) {
-    const caso = await prisma.eduCase.findFirst({
-      where: { id: rawCase, institutionId, patientId: paciente.id },
-      select: { id: true },
-    });
-    if (!caso) throw new EduPadronError("Ese caso no existe o no es de este paciente.", 404);
-    caseId = caso.id;
   }
 
   const createdByName = `${ctx.user.firstName} ${ctx.user.lastName}`.trim().slice(0, 160) || "—";

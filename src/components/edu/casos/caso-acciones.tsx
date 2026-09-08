@@ -31,6 +31,11 @@ import type { EduCaseStatus } from "@/lib/edu/types";
  *   · TRASPASAR — cierra este caso como TRANSFERRED y abre uno nuevo con
  *     el alumno destino (el servidor exige misma especialidad, y desde
  *     H-39 el `<select>` ya solo ofrece los que la cumplen).
+ *   · PRESUPUESTAR — el POST a /api/instituto/presupuestos con este
+ *     `caseId`, que lleva al presupuesto recién creado. Solo lo ve quien
+ *     puede armar dinero (`caja.charge` + el alcance de "charges"), que en
+ *     esta pantalla es la DIRECCIÓN: caja no ve casos, y por eso el botón
+ *     tiene que vivir aquí y no en la pantalla de Presupuestos.
  *   · CAMBIAR EL DOCENTE RESPONSABLE (H-34) — el PATCH de
  *     `supervisorUserId`, que el core aceptaba desde la Ola 2 y que
  *     ninguna pantalla mandaba: un caso abierto con el docente equivocado
@@ -74,6 +79,11 @@ export interface EduCasoAccionesProps {
   docentes: EduSupervisorOption[];
   supervisorUserId: string | null;
   supervisorName: string | null;
+  /**
+   * ¿Puede armar dinero? (`caja.charge` MÁS el alcance de "charges", los
+   * dos comprobados en el servidor). El botón «Presupuestar» de este caso.
+   */
+  canPresupuestar: boolean;
 }
 
 type Decision = "APPROVED" | "CHANGES_REQUESTED" | "REJECTED";
@@ -97,6 +107,7 @@ export function EduCasoAcciones({
   docentes,
   supervisorUserId,
   supervisorName,
+  canPresupuestar,
 }: EduCasoAccionesProps) {
   const router = useRouter();
   const [, startNav] = useTransition();
@@ -203,6 +214,48 @@ export function EduCasoAcciones({
   }
 
   /**
+   * ═══════════════════════════════════════════════════════════════════
+   * PRESUPUESTAR ESTE CASO.
+   *
+   * 🔴 POR QUÉ EL BOTÓN VIVE AQUÍ Y NO EN LA PANTALLA DE PRESUPUESTOS.
+   * `POST /api/instituto/presupuestos` acepta `caseId` desde la C·2, pero
+   * la pantalla de Caja no puede ofrecer un selector de casos: CAJA NO VE
+   * CASOS, y esa es una línea del contrato escrita desde la Ola 2
+   * (visibility.ts, recurso "cases" → "none" para caja). El botón tiene
+   * que salir de donde el caso SE VE, que es esta ficha.
+   *
+   * Consecuencia, y es la correcta: en esta pantalla el botón solo le sale
+   * a la DIRECCIÓN, que es la única que ve un caso Y arma dinero.
+   *
+   * NO se mandan partidas: las siembra el servidor con el procedimiento
+   * principal del caso y su precio de la tarifa DEL PACIENTE. Un precio
+   * calculado en el navegador es un precio que el navegador puede cambiar.
+   * ═══════════════════════════════════════════════════════════════════
+   */
+  async function presupuestar() {
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await eduRequest<{ folio: string }>("/api/instituto/presupuestos", {
+        method: "POST",
+        body: {
+          patientId,
+          caseId,
+          notes: `Sale del caso «${caseLabel}».`,
+        },
+      });
+      setFlash(`Quedó el presupuesto ${r.folio}. Te llevamos a él.`);
+      // El filtro por folio deja UNO en la lista: presentarlo y aceptarlo
+      // se hace allí, que es el paso siguiente de quien acaba de pulsar.
+      router.push(`/instituto/caja/presupuestos?q=${encodeURIComponent(r.folio)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo crear el presupuesto.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
    * H-34 · CORREGIR EL DOCENTE RESPONSABLE.
    *
    * El core (`updateEduCase`) aceptaba `supervisorUserId` desde la Ola 2 —
@@ -303,7 +356,8 @@ export function EduCasoAcciones({
   const puedeCambiarDocente = canMoverEstado && docentes.length > 0;
 
   const hayAcciones =
-    (!cerrado && (canMoverEstado || canRegistrarSesion || canTraspasar)) || firmables.length > 0;
+    (!cerrado && (canMoverEstado || canRegistrarSesion || canTraspasar || canPresupuestar)) ||
+    firmables.length > 0;
   if (!hayAcciones && !flash && !error) return null;
 
   return (
@@ -543,6 +597,19 @@ export function EduCasoAcciones({
               }}
             >
               Traspasar
+            </button>
+          )}
+
+          {/* Presupuestar el caso. Va junto a Traspasar y no arriba con
+              los estados: no mueve el caso, abre un papel al lado. */}
+          {canPresupuestar && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              disabled={busy}
+              onClick={() => void presupuestar()}
+            >
+              Presupuestar
             </button>
           )}
 
