@@ -563,6 +563,14 @@ export interface EduQuoteRow {
   notes: string | null;
   presentedAt: string | null;
   acceptedAt: string | null;
+  /**
+   * El DÍA de la aceptación en la zona del instituto, por lo mismo que
+   * `validUntilDia`: recortar el ISO a diez caracteres pinta el día en UTC,
+   * y una aceptación de las 19:30 hora de México se rotulaba un día después
+   * en el modal y el día correcto en el PDF. Dos pantallas que discrepan
+   * sobre cuándo firmó el paciente.
+   */
+  acceptedAtDia: string | null;
   acceptedByName: string | null;
   chargeId: string | null;
   treatmentPlanId: string | null;

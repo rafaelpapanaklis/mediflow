@@ -280,6 +280,24 @@ export function eduImportValidaMapeo(
   return `Falta decir qué columna es ${faltan.join(", ")}. Sin ${faltan.length === 1 ? "esa columna" : "esas columnas"} no se puede crear a nadie.`;
 }
 
+/**
+ * Las DOS columnas donde un número de Excel es el dato de verdad.
+ *
+ * 🔴 OLA C·fin 3 · Y SON DOS, NO TODAS. Un `.xlsx` exportado por un sistema
+ * escolar trae la matrícula `20260001` y el teléfono `5544332211` como
+ * `number`, y los normalizadores cortan por tipo: sin este `String()` la
+ * simulación salía en rojo con «Falta la matrícula» sobre una matrícula que
+ * estaba ahí. Pero convertirlo TODO —que es lo que hacía la rama de lectura
+ * antes de esta ola— es lo que dejaba pasar un número como nombre y una
+ * fecha como persona. Un número en la columna del Nombre o del Correo NO es
+ * un descuido de formato: es un archivo mal mapeado, y tiene que verse.
+ *
+ * El semestre no está en la lista porque ya se convierte donde se lee
+ * (`String(crudoSem).trim()`, más abajo), y meterlo aquí sería una segunda
+ * conversión del mismo dato.
+ */
+const EDU_IMPORT_CAMPOS_NUMERICOS = new Set(["matricula", "phone"]);
+
 /** Aplica el mapeo: fila por encabezado → fila por campo canónico. */
 export function eduImportAplicaMapeo(
   filas: Record<string, unknown>[],
@@ -291,10 +309,76 @@ export function eduImportAplicaMapeo(
     for (const [col, campo] of pares) {
       const v = cruda[col];
       if (v === undefined || v === null || String(v).trim() === "") continue;
-      if (out[campo] === undefined) out[campo] = v;
+      if (out[campo] !== undefined) continue;
+      // 🔴 El número SOLO en sus dos columnas. Una fecha NO se convierte
+      // aquí ni en ningún sitio: se marca en rojo en `eduImportSimula`.
+      out[campo] =
+        typeof v === "number" && EDU_IMPORT_CAMPOS_NUMERICOS.has(campo) ? String(v) : v;
     }
     return out;
   });
+}
+
+/**
+ * Los errores de Excel, escritos como los escribe Excel.
+ *
+ * Llegan de dos formas y las dos acaban en el mismo sitio: exceljs devuelve
+ * `{ error: "#N/A" }` para una celda de error, y un CSV exportado de esa
+ * misma hoja trae la cadena `"#N/A"` pelada. `eduRequiredText("#N/A", 80)`
+ * la acepta como nombre válido, así que sin esto se crea una cuenta llamada
+ * «#N/A» — y las cuentas de este producto no se borran.
+ */
+const EDU_IMPORT_ERRORES_EXCEL =
+  /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NULL!|NUM!|SPILL!|CALC!|GETTING_DATA)$/i;
+
+function eduImportErrorDeExcel(v: unknown): string | null {
+  if (v && typeof v === "object" && typeof (v as { error?: unknown }).error === "string") {
+    return (v as { error: string }).error;
+  }
+  if (typeof v === "string" && EDU_IMPORT_ERRORES_EXCEL.test(v.trim())) {
+    return v.trim().toUpperCase();
+  }
+  return null;
+}
+
+/**
+ * Las celdas que NO son texto y que no se pueden adivinar: la fecha que
+ * Excel autoformateó y el error de una fórmula.
+ *
+ * 🔴 OLA C·fin 3 · POR QUÉ SE REBOTA CON MOTIVO EN VEZ DE CONVERTIR.
+ * Ninguno de los campos del padrón es una fecha, así que un `Date` en
+ * cualquiera de ellos es Excel adivinando: una matrícula tecleada `3/22` se
+ * guarda como el 22 de marzo. Convertirla con `Date.toString()` —que es lo
+ * que devuelve `Cell.text`, sin aplicar el `numFmt`— produce «Sun Mar 22
+ * 2026 00:00:00 GMT+0000 (Coordinated Universal Time)»: 62 caracteres que
+ * NO arreglan la matrícula (pasa de 30) y en cambio PASAN por el nombre
+ * (≤ 80) y por el teléfono (`normalizeEduPhone` le saca "2220260000000000").
+ * El renglón salía en verde y creaba una cuenta con nombre de fecha.
+ *
+ * El mensaje dice la columna y qué hacer, porque «Falta la matrícula» sobre
+ * una celda que tiene algo escrito es exactamente el mensaje que mentía.
+ */
+function eduImportCeldasIlegibles(
+  cruda: Record<string, unknown>,
+  entidad: EduImportEntidad,
+): string[] {
+  const problemas: string[] = [];
+  for (const campo of EDU_IMPORT_CAMPOS[entidad]) {
+    const v = cruda[campo.key];
+    if (v instanceof Date) {
+      problemas.push(
+        `La columna ${campo.label} trae una FECHA de Excel, no texto: Excel autoformatea a fecha lo que se le parece (3/22 → 22 de marzo). Dale formato de Texto a esa columna —o escribe un apóstrofo delante: '3/22— y vuelve a exportar el archivo.`,
+      );
+      continue;
+    }
+    const error = eduImportErrorDeExcel(v);
+    if (error) {
+      problemas.push(
+        `La columna ${campo.label} trae un error de Excel (${error}). Arregla esa celda en el archivo y vuelve a exportarlo.`,
+      );
+    }
+  }
+  return problemas;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -419,6 +503,26 @@ export function eduImportSimula(opciones: {
       avisos: [],
     };
 
+    // 🔴 ANTES QUE NADA: las celdas que Excel guardó como fecha o como
+    // error. Se rebotan con SU motivo y el renglón no sigue, porque el
+    // mensaje que darían los normalizadores («Falta la matrícula» sobre una
+    // celda que tiene algo escrito) es el que hay que dejar de dar.
+    const ilegibles = eduImportCeldasIlegibles(cruda, entidad);
+    if (ilegibles.length > 0) {
+      fila.estado = "error";
+      fila.problemas.push(...ilegibles);
+      // Lo que se alcanzó a leer, para que la pantalla pueda enseñar de
+      // QUIÉN es el renglón malo (igual que en la rama de abajo).
+      fila.datos = {
+        firstName: texto(cruda.firstName),
+        lastName: texto(cruda.lastName),
+        email: texto(cruda.email).toLowerCase(),
+        phone: null,
+      };
+      salida.push(fila);
+      continue;
+    }
+
     // 🔴 LA MISMA validación que el alta individual y que el pegado de
     // Excel (`eduTeamMemberInput`, equipo-core.ts). Tres validaciones
     // distintas para el mismo campo acaban aceptando en un sitio lo que
@@ -530,6 +634,10 @@ export function eduImportFilasListas(filas: EduImportFila[]): EduImportFila[] {
 
 function texto(raw: unknown): string {
   if (raw === undefined || raw === null) return "";
+  // Una fecha de Excel o un error de fórmula no son el nombre de nadie:
+  // pintarlos aquí repetiría en pantalla justo la cadena que este módulo
+  // existe para no guardar («Sun Mar 22 2026 00:00:00 GMT+0000…»).
+  if (raw instanceof Date || eduImportErrorDeExcel(raw)) return "";
   return String(raw).trim().slice(0, 160);
 }
 

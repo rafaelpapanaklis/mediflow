@@ -163,24 +163,73 @@ function eduPlanScopeWhere(
   // más que recortar.
   if (scope.kind === "all") return {};
 
-  // Quién es «el dueño» de un plan sin caso. Para el DOCENTE son dos
-  // opciones y no una: los planes que armó él y los que armaron los alumnos
+  // 🔴 OLA C·fin 3 · Y LA TERCERA RAMA: EL PLAN QUE ARMA LA ESCUELA.
+  //
+  // El recorte de la C·fin 2 miraba solo `createdById`, y un EduUser de
+  // DIRECCIÓN no tiene `studentProfile`: no caía en ninguna rama. Resultado
+  // —del lado cerrado, pero roto igual—: el plan sin caso que arma la
+  // dirección o un docente quedaba INVISIBLE para el alumno que lo tiene
+  // que ejecutar. Y ése es justo el caso de uso por el que `caseId` es
+  // nulable, escrito en el schema: «la valoración inicial propone un plan
+  // antes de que haya alumno asignado». Con cero casos, además, el
+  // formulario solo ofrece «sin caso».
+  //
+  // No abre nada nuevo: esta rama vive DENTRO del `{ caseId: null,
+  // patient: eduPatientScopeWhere(...) }` de abajo, así que el paciente
+  // sigue teniendo que estar en el alcance de quien mira. Lo que añade es
+  // que el autor pueda ser quien enseña, no solo quien ejecuta.
+  //
+  // ⚠️ Ver, sí; CERRARLO, no: `eduPlanEsMio` sigue mirando `createdById`,
+  // así que el alumno no lo pasa a COMPLETADO (lo hacen su docente y la
+  // dirección, `eduPlanPuedeCerrar`). Falla del lado cerrado.
+  const armadoPorLaEscuela: Prisma.EduTreatmentPlanWhereInput = {
+    createdBy: { role: { in: ["DIRECCION", "DOCENTE"] } },
+  };
+
+  // Quién es «el dueño» de un plan sin caso. Para el DOCENTE son tres
+  // opciones y no una: los planes que armó él, los que armaron los alumnos
   // que supervisa HOY (la vigencia la pone el mismo helper que el resto del
-  // vertical, no una copia local del predicado).
+  // vertical, no una copia local del predicado) y los que armó la escuela.
   const dueno: Prisma.EduTreatmentPlanWhereInput =
     scope.kind === "own"
-      ? { createdById: scope.studentUserId }
+      ? { OR: [{ createdById: scope.studentUserId }, armadoPorLaEscuela] }
       : {
           OR: [
             { createdById: scope.supervisorUserId },
             { createdBy: { studentProfile: eduStudentScopeWhere({ institutionId, scope, now }) } },
+            armadoPorLaEscuela,
           ],
         };
 
+  // 🔴 OLA C·fin 3 · EL CASO ENTREGADO NO LLEVA SU PLAN CONSIGO.
+  //
+  // `eduCaseScopeWhere` NO descarta los casos TRANSFERRED, y es deliberado:
+  // la lista de casos del alumno es su historia académica y tiene que poder
+  // decir «llevó este caso de marzo a julio y lo entregó» (el motivo está
+  // escrito en visibility.ts). Pero para el PLAN VIVO eso es otra cosa: si
+  // a la alumna A le traspasan el caso #1 a B y A conserva otro caso vivo
+  // con el mismo paciente, A seguía viendo el plan del caso que entregó
+  // —`case.student.userId` no se reescribe en un traspaso— y `eduPlanEsMio`
+  // le decía que era suyo, así que lo cerraba como COMPLETADO, que es
+  // TERMINAL. El tratamiento que hoy lleva otra persona, cerrado para
+  // siempre por quien ya no atiende.
+  //
+  // Dirección no pasa por aquí (salió arriba con el alcance completo), así
+  // que el plan de un caso entregado se sigue viendo y cerrando desde ahí.
+  //
+  // ⚠️ Lo que esto NO hace: que B —quien recibió el caso— lo vea. Eso pide
+  // que el traspaso reapunte el plan al caso nuevo, y `traspasos.ts` no
+  // toca `edu_treatment_plans` en ninguna línea. No es una línea y no es de
+  // este viaje: va al reporte.
   return {
     OR: [
       { caseId: null, patient: eduPatientScopeWhere({ institutionId, scope, now }), ...dueno },
-      { case: eduCaseScopeWhere({ institutionId, scope, now }) },
+      {
+        case: {
+          ...eduCaseScopeWhere({ institutionId, scope, now }),
+          status: { not: "TRANSFERRED" },
+        },
+      },
     ],
   };
 }

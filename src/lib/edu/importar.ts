@@ -104,7 +104,7 @@ function auditor(ctx: EduImportContext): EduAuditActor {
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
- * El valor de una celda, SIEMPRE COMO TEXTO (salvo las fechas).
+ * El valor de una celda, TAL COMO EXCEL LO GUARDÓ.
  *
  * ═══════════════════════════════════════════════════════════════════════
  * 🔴 A1 · UN `.xlsx` DE VERDAD TRAE NÚMEROS, Y AQUÍ SE VOLVÍAN NULL.
@@ -118,47 +118,69 @@ function auditor(ctx: EduImportContext): EduAuditActor {
  * al 100 % en rojo con «Falta la matrícula» sobre una matrícula que estaba
  * ahí, y el mensaje mentía.
  *
- * La asimetría probaba que era un descuido y no una decisión: el semestre YA
- * se convertía antes de leerse (`String(crudoSem).trim()` en
- * importar-core.ts) y la rama CSV YA venía protegida (todo llega string).
- * Así que la conversión va donde tenía que ir desde el principio: en el
- * único sitio por el que pasan TODAS las celdas de la rama xlsx.
+ * 🔴 OLA C·fin 3 · PERO ESA CONVERSIÓN NO VA AQUÍ, VA POR COLUMNA. Este
+ * sitio no sabe qué columna está leyendo —el mapeo se decide después— y
+ * convertir TODO a texto es lo que dejó pasar los dos renglones de abajo.
+ * El `String()` del número vive ahora en `eduImportAplicaMapeo`, donde ya
+ * se sabe el campo, y solo para MATRÍCULA y TELÉFONO, que son las dos
+ * columnas donde un número es el dato de verdad. Un número en la columna
+ * del nombre o del correo sigue siendo un renglón rojo, que es lo que es.
  *
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 OLA C·fin 2 · Y UNA CELDA-FECHA EN UNA COLUMNA QUE NO ES DE FECHA.
+ * 🔴 OLA C·fin 3 · UNA CELDA-FECHA SE DEVUELVE COMO `Date`, A PROPÓSITO.
  *
- * Aquí las fechas se devolvían como `Date`, con el motivo escrito: no hay
- * ninguna columna de fecha en el padrón, y convertirlas decidiría a
- * escondidas un formato (¿`dd/mm` o `mm/dd`?) para el día que la haya. Solo
- * que Excel AUTOFORMATEA a fecha cualquier celda ambigua —una matrícula
- * tecleada `3/22` se guarda como el 22 de marzo—, así que el `Date` no
- * llegaba a ninguna columna de fecha: llegaba a la de la MATRÍCULA, donde
- * `normalizeEduMatricula` corta por tipo y la fila volvía a salir en rojo
- * con «Falta la matrícula» — el mismo mensaje que mentía antes del arreglo
- * de las celdas numéricas.
+ * El intento anterior devolvía «lo que Excel enseña» (`cell.text`) con el
+ * argumento de que eso es lo que la persona escribió. NO LO ES:
+ * `Cell.text` de una fecha es `this._value.toString()`
+ * (`node_modules/exceljs/lib/doc/cell.js`), o sea el `toString()` de un
+ * `Date` de JavaScript, y **no aplica el `numFmt` de la celda**. Con
+ * `numFmt="d/m"` sale igual la cadena entera:
  *
- * Se devuelve **lo que Excel enseña en la celda** (`cell.text`), que es lo
- * que la persona escribió y lo que tiene delante cuando lee el error. No es
- * inventarse un formato: es no inventarse ninguno y usar el que el propio
- * archivo trae. El día que exista una columna de fecha de verdad, quien la
- * añada la parsea en su normalizador, que es donde se sabe qué se espera.
+ *     "Sun Mar 22 2026 00:00:00 GMT+0000 (Coordinated Universal Time)"
+ *
+ * Medido: eso NO arregla la matrícula (62 caracteres > 30, sigue en rojo) y
+ * en cambio PASA por el nombre (`eduRequiredText(_, 80)`: 62 ≤ 80) y por el
+ * teléfono (`normalizeEduPhone` le saca "2220260000000000"). Cambiaba un
+ * error ruidoso por una cuenta de Supabase llamada «Sun Mar 22 2026…» y un
+ * teléfono inventado — y las cuentas de este producto NO SE BORRAN (ver el
+ * encabezado del archivo).
+ *
+ * Así que la fecha viaja como `Date`, sin convertir, y `eduImportSimula` la
+ * marca EN ROJO CON SU MOTIVO («esa columna trae una fecha de Excel, dale
+ * formato de Texto») en vez del «Falta la matrícula» que mentía. Formatear
+ * el `Date` con el `numFmt` de la celda sería el arreglo de verdad, pero no
+ * es una línea y no es de este viaje.
+ *
+ * Y lo mismo con los ERRORES de Excel (`#N/A`, `#REF!`…): exceljs los
+ * devuelve como `{ error: "#N/A" }` y `cell.text` los aplana a la cadena
+ * `"#N/A"`, que `eduRequiredText` acepta como nombre válido. Viajan como el
+ * objeto que son y se marcan en rojo por el mismo camino.
  * ═══════════════════════════════════════════════════════════════════════
  */
-function celdaATexto(cell: ExcelJS.Cell): unknown {
+function valorDeCelda(cell: ExcelJS.Cell): unknown {
   const v = cell.value as any;
   if (v === null || v === undefined) return "";
-  if (v instanceof Date) return cell.text || v;
+  if (v instanceof Date) return v;
   if (typeof v === "object") {
-    // Fórmula, hipervínculo o texto enriquecido → el texto ya renderizado.
-    // Un `{ formula: "…" }` guardado como matrícula sería una matrícula que
-    // nadie puede leer.
-    if (v.result !== undefined && v.result !== null && typeof v.result !== "object") {
-      // Ídem para el resultado de una fórmula: lo que se ve en la celda.
-      return v.result instanceof Date ? cell.text || v.result : String(v.result);
+    // Un error de Excel viaja como `{ error: "#N/A" }`. Se devuelve el
+    // objeto, no su texto: aplanarlo es cómo `#N/A` acaba siendo el nombre
+    // de una cuenta.
+    if (typeof v.error === "string") return v;
+    if (v.result !== undefined && v.result !== null) {
+      // El resultado de una fórmula: una fecha sigue siendo una fecha y un
+      // error sigue siendo un error; lo demás es lo que se ve en la celda.
+      if (v.result instanceof Date) return v.result;
+      if (typeof v.result === "object") {
+        return typeof v.result.error === "string" ? v.result : (cell.text ?? "");
+      }
+      return String(v.result);
     }
+    // Hipervínculo o texto enriquecido → el texto ya renderizado. Un
+    // `{ formula: "…" }` guardado como matrícula sería una matrícula que
+    // nadie puede leer.
     return cell.text ?? "";
   }
-  return typeof v === "string" ? v : String(v);
+  return v;
 }
 
 async function hojaDelArchivo(
@@ -260,7 +282,7 @@ export async function eduImportLeeArchivo(
     const obj: Record<string, unknown> = {};
     let algo = false;
     for (const h of encabezados) {
-      const crudo = celdaATexto(row.getCell(h.col));
+      const crudo = valorDeCelda(row.getCell(h.col));
       obj[h.key] = crudo;
       if (String(crudo ?? "").trim() !== "") algo = true;
     }

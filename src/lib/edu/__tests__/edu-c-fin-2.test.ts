@@ -390,12 +390,20 @@ test("«quién acepta» pide tres letras también en el servidor", () => {
   assert.match(sinComentarios(crudo(PANTALLA_PRESU)), /aceptante\.trim\(\)\.length < 3/);
 });
 
-test("una celda-fecha de un .xlsx entra como lo que Excel enseña", () => {
+test("una celda-fecha de un .xlsx NO se aplana a texto: se rebota con su motivo", () => {
+  // 🔴 OLA C·fin 3 · ESTA PRUEBA PEDÍA LO CONTRARIO, y pedía mal. Lo que
+  // afirmaba —que `cell.text` devuelve «lo que Excel enseña en la celda»—
+  // es falso: para una fecha es `Date.toString()` y NO aplica el `numFmt`
+  // de la celda, así que salía «Sun Mar 22 2026 00:00:00 GMT+0000 (…)».
+  // Eso no arreglaba la matrícula (62 caracteres > 30) y en cambio pasaba
+  // por el nombre (62 ≤ 80) y por el teléfono, creando una cuenta de
+  // Supabase con nombre de fecha y un teléfono inventado. El comportamiento
+  // que sí se quiere se ejecuta contra un `.xlsx` de verdad en
+  // edu-c-fin-3.test.ts; aquí se deja fijada la forma que no puede volver.
   const limpio = sinComentarios(crudo(IMPORTAR));
+  assert.match(limpio, /if \(v instanceof Date\) return v;/);
   assert.ok(
-    !/if \(v instanceof Date\) return v;/.test(limpio),
-    "devolver el Date crudo hace que normalizeEduMatricula corte por tipo y la fila salga en rojo mintiendo",
+    !/cell\.text \|\| v/.test(limpio),
+    "`cell.text` de una fecha es Date.toString(): aplanarla ahí es inventarse un formato",
   );
-  assert.match(limpio, /if \(v instanceof Date\) return cell\.text \|\| v;/);
-  assert.match(limpio, /v\.result instanceof Date \? cell\.text \|\| v\.result/);
 });

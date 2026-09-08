@@ -72,6 +72,7 @@ const EQUIPO = "src/lib/edu/equipo.ts";
 const PLAN = "src/lib/edu/plan-tratamiento.ts";
 const CUESTIONARIO = "src/lib/edu/cuestionario.ts";
 const IMPORTAR = "src/lib/edu/importar.ts";
+const CORE_IMPORTAR = "src/lib/edu/importar-core.ts";
 const INSTITUCION = "src/lib/edu/institucion.ts";
 const ARCO = "src/lib/edu/arco.ts";
 const FUSION = "src/lib/edu/fusion.ts";
@@ -448,31 +449,40 @@ test("S-2 · el contador sigue siendo fail-open del lado del servidor", () => {
 // 5 · #7 · UN .xlsx DE VERDAD TRAE NÚMEROS
 // ═══════════════════════════════════════════════════════════════════════
 
-test("#7 · la celda se convierte a texto antes de normalizar matrícula y teléfono", () => {
-  const cuerpo = tramo(crudo(IMPORTAR), "function celdaATexto", "async function hojaDelArchivo");
-  const limpio = sinComentarios(cuerpo);
-
-  assert.match(
-    limpio,
-    /return typeof v === "string" \? v : String\(v\)/,
-    "una matrícula 20260001 llega como number y los tres normalizadores cortan por tipo",
+test("#7 · el número de una celda se convierte a texto en matrícula y teléfono", () => {
+  // 🔴 OLA C·fin 3 · ESTA PRUEBA MIRABA EL SITIO EQUIVOCADO. El `String(v)`
+  // estaba en la lectura de la celda, que NO sabe qué columna está leyendo
+  // —el mapeo se decide después—, así que convertía TODO: una fecha
+  // autoformateada y un `#N/A` acababan pasando por nombre y por teléfono.
+  // La conversión vive ahora donde ya se sabe el campo, y solo en los dos
+  // donde un número es el dato de verdad. Lo que se comprueba de punta a
+  // punta, contra un `.xlsx` escrito en la prueba, está en
+  // edu-c-fin-3.test.ts.
+  const aplica = sinComentarios(
+    tramo(crudo(CORE_IMPORTAR), "export function eduImportAplicaMapeo", "function eduImportErrorDeExcel"),
   );
-  // 🔴 OLA C·fin 2 · LA CELDA-FECHA YA NO SALE COMO `Date` CRUDO.
-  //
-  // La decisión de esta prueba era «no convertir a la ligera: no hay
-  // columna de fecha y elegir formato sería inventárselo». Solo que Excel
-  // AUTOFORMATEA a fecha cualquier celda ambigua —una matrícula tecleada
-  // `3/22`—, así que el `Date` no llegaba a ninguna columna de fecha:
-  // llegaba a la de la matrícula, donde `normalizeEduMatricula` corta por
-  // tipo y la fila volvía a salir en rojo con «Falta la matrícula», que es
-  // el mensaje que este mismo arreglo vino a dejar de decir.
-  //
-  // Se devuelve lo que Excel ENSEÑA en la celda, que no es inventarse un
-  // formato: es usar el que el propio archivo trae.
-  assert.match(limpio, /v instanceof Date/, "la rama de las fechas sigue siendo explícita");
-  assert.match(limpio, /if \(v instanceof Date\) return cell\.text \|\| v;/);
-  // Y el resultado de una fórmula, igual.
-  assert.match(limpio, /v\.result instanceof Date \? cell\.text \|\| v\.result/);
+  assert.match(aplica, /EDU_IMPORT_CAMPOS_NUMERICOS\.has\(campo\) \? String\(v\) : v/);
+  assert.match(
+    sinComentarios(crudo(CORE_IMPORTAR)),
+    /EDU_IMPORT_CAMPOS_NUMERICOS = new Set\(\["matricula", "phone"\]\)/,
+    "una matrícula 20260001 y un teléfono 5544332211 llegan como number y los normalizadores cortan por tipo",
+  );
+
+  // Y la lectura de la celda ya NO aplana nada: la fecha sale como `Date` y
+  // el error de Excel como el objeto que es, para poder marcarlos en rojo
+  // con su motivo en vez de guardarlos como si fueran texto de alguien.
+  const celda = sinComentarios(
+    tramo(crudo(IMPORTAR), "function valorDeCelda", "async function hojaDelArchivo"),
+  );
+  assert.match(celda, /if \(v instanceof Date\) return v;/);
+  assert.ok(
+    !/cell\.text \|\| v/.test(celda),
+    "`cell.text` de una fecha es `Date.toString()`: no aplica el numFmt y no es lo que Excel enseña",
+  );
+  assert.ok(
+    !/String\(v\)/.test(celda),
+    "convertir TODA celda a texto es lo que dejó pasar una cuenta con nombre de fecha",
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════════
