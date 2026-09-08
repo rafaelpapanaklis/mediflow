@@ -191,3 +191,42 @@ test("🔴 #1 (fuente): la fecha se devuelve como `Date`, sin pasar por `cell.te
     "`Cell.text` de una fecha es `Date.toString()` y no aplica el numFmt: convertirla ahí es inventarse un formato",
   );
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// 2 · EL PLAN «SIN CASO» QUE ARMA LA ESCUELA
+//
+// `eduPlanScopeWhere` no se exporta y su archivo importa prisma en la
+// primera línea, así que se comprueba LEYENDO LA FUENTE acotada a la
+// función — el mismo camino, por el mismo motivo, que edu-c-fin-2.test.ts.
+// ═══════════════════════════════════════════════════════════════════════
+
+const ALCANCE_PLAN = () =>
+  sinComentarios(tramo(crudo(PLAN), "function eduPlanScopeWhere", "export interface EduPlanRow"));
+
+test("🟠 #2 · el plan sin caso que arma DIRECCIÓN o un DOCENTE lo VE su alumno", () => {
+  const helper = ALCANCE_PLAN();
+  // La tercera rama: el autor puede ser quien enseña, no solo quien ejecuta.
+  assert.match(helper, /createdBy:\s*\{\s*role:\s*\{\s*in:\s*\["DIRECCION",\s*"DOCENTE"\]\s*\}\s*\}/);
+  // Y el alumno la lleva: sin esto, la valoración inicial que documenta el
+  // schema («un plan antes de que haya alumno asignado») nace invisible.
+  assert.match(
+    helper,
+    /scope\.kind === "own"\s*\?\s*\{\s*OR:\s*\[\{\s*createdById:\s*scope\.studentUserId\s*\},\s*armadoPorLaEscuela\s*\]/,
+  );
+  // El docente también, junto a lo suyo y a lo de sus alumnos vigentes.
+  assert.match(helper, /createdBy:\s*\{\s*studentProfile:\s*eduStudentScopeWhere\(/);
+});
+
+test("🟠 #2 · y sigue pidiendo el PACIENTE en el alcance: no abre nada nuevo", () => {
+  const helper = ALCANCE_PLAN();
+  // La rama vive DENTRO del `caseId: null` + paciente en alcance. Si el
+  // `armadoPorLaEscuela` saliera de ahí, cualquier alumno leería el plan de
+  // cualquier paciente del instituto.
+  assert.match(helper, /caseId:\s*null,\s*patient:\s*eduPatientScopeWhere\(\{ institutionId, scope, now \}\),\s*\.\.\.dueno/);
+  assert.ok(
+    !/OR:\s*\[\{\s*caseId:\s*null\s*\}/.test(helper),
+    "la rama `{ caseId: null }` a secas abre el plan a cualquiera del paciente",
+  );
+  // Dirección no pasa por aquí (sale antes con el alcance completo).
+  assert.match(helper, /if \(scope\.kind === "all"\) return \{\};/);
+});

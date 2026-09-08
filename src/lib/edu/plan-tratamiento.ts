@@ -163,17 +163,41 @@ function eduPlanScopeWhere(
   // más que recortar.
   if (scope.kind === "all") return {};
 
-  // Quién es «el dueño» de un plan sin caso. Para el DOCENTE son dos
-  // opciones y no una: los planes que armó él y los que armaron los alumnos
+  // 🔴 OLA C·fin 3 · Y LA TERCERA RAMA: EL PLAN QUE ARMA LA ESCUELA.
+  //
+  // El recorte de la C·fin 2 miraba solo `createdById`, y un EduUser de
+  // DIRECCIÓN no tiene `studentProfile`: no caía en ninguna rama. Resultado
+  // —del lado cerrado, pero roto igual—: el plan sin caso que arma la
+  // dirección o un docente quedaba INVISIBLE para el alumno que lo tiene
+  // que ejecutar. Y ése es justo el caso de uso por el que `caseId` es
+  // nulable, escrito en el schema: «la valoración inicial propone un plan
+  // antes de que haya alumno asignado». Con cero casos, además, el
+  // formulario solo ofrece «sin caso».
+  //
+  // No abre nada nuevo: esta rama vive DENTRO del `{ caseId: null,
+  // patient: eduPatientScopeWhere(...) }` de abajo, así que el paciente
+  // sigue teniendo que estar en el alcance de quien mira. Lo que añade es
+  // que el autor pueda ser quien enseña, no solo quien ejecuta.
+  //
+  // ⚠️ Ver, sí; CERRARLO, no: `eduPlanEsMio` sigue mirando `createdById`,
+  // así que el alumno no lo pasa a COMPLETADO (lo hacen su docente y la
+  // dirección, `eduPlanPuedeCerrar`). Falla del lado cerrado.
+  const armadoPorLaEscuela: Prisma.EduTreatmentPlanWhereInput = {
+    createdBy: { role: { in: ["DIRECCION", "DOCENTE"] } },
+  };
+
+  // Quién es «el dueño» de un plan sin caso. Para el DOCENTE son tres
+  // opciones y no una: los planes que armó él, los que armaron los alumnos
   // que supervisa HOY (la vigencia la pone el mismo helper que el resto del
-  // vertical, no una copia local del predicado).
+  // vertical, no una copia local del predicado) y los que armó la escuela.
   const dueno: Prisma.EduTreatmentPlanWhereInput =
     scope.kind === "own"
-      ? { createdById: scope.studentUserId }
+      ? { OR: [{ createdById: scope.studentUserId }, armadoPorLaEscuela] }
       : {
           OR: [
             { createdById: scope.supervisorUserId },
             { createdBy: { studentProfile: eduStudentScopeWhere({ institutionId, scope, now }) } },
+            armadoPorLaEscuela,
           ],
         };
 
