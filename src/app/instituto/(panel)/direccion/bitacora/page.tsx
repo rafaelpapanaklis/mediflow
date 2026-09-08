@@ -59,10 +59,14 @@ export const metadata: Metadata = {
  * segundo sitio donde el recorte pudiera equivocarse — el `where` vive
  * entero en `listEduAuditLog`.
  *
- * ⚠️ NO HAY ENTRADA EN EL MENÚ, y no es un olvido: `EDU_NAV_ITEMS` vive en
- * `src/lib/edu/types.ts`, un archivo compartido FUERA del área de esta
- * casilla. Se llega desde la lista de pacientes y desde la ficha. Queda
- * escrito en el punto 6 del reporte.
+ * 🔴 SÍ HAY ENTRADA EN EL MENÚ desde la integración de la Ola C·2:
+ * `bitacora` en `EDU_NAV_ITEMS` (`src/lib/edu/types.ts`), sección
+ * Administración y con ESTE MISMO permiso `direccion.panel` — item y
+ * pantalla comparten candado, así que el menú no puede ofrecer algo que
+ * esta página niegue. Cuando se escribió, ese archivo era compartido y
+ * quedaba fuera del área de la casilla; se cerró al juntar la ola.
+ * Los dos caminos de antes siguen abiertos y son los útiles en el día a
+ * día: desde la lista de pacientes y desde la ficha (ya filtrada).
  * ═══════════════════════════════════════════════════════════════════════
  */
 export default async function DireccionBitacoraPage({

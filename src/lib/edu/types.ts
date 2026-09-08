@@ -1017,6 +1017,34 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "equipo.manage",
   },
+  // ── Ola C·2 · la bitácora del instituto (NOM-024) ────────────────────
+  {
+    // La pantalla la entregó la Ola C·2 y se quedó SIN item de menú porque
+    // este archivo es compartido y no era de aquella casilla: se llegaba
+    // solo desde la lista de pacientes y desde la ficha. Esto es esa
+    // entrada, puesta al integrar la ola.
+    //
+    // Va en ADMINISTRACIÓN y no en Operación: no se abre cada mañana, se
+    // abre cuando hay que CONTESTAR algo —una queja, una auditoría, un
+    // "¿quién vio este expediente?"—, que es el mismo ritmo que Equipo o
+    // Sedes.
+    //
+    // ⚠️ `direccion.panel` y NO una key nueva, que es exactamente lo que
+    // ya protege la pantalla: una key nueva NO le llega a quien tenga
+    // `permissionsOverride` guardado —el override REEMPLAZA al default— y
+    // habría dejado el item invisible justo para el director que ya se
+    // personalizó los permisos. Item y pantalla comparten candado, así que
+    // no hay forma de que el menú ofrezca algo que la página niegue.
+    //
+    // El href es MÁS LARGO que el de "Dirección" y el sidebar marca activo
+    // el que coincide más, así que abrir la bitácora no enciende también
+    // el item del panel.
+    key: "bitacora",
+    href: "/instituto/direccion/bitacora",
+    icon: "scroll-text",
+    section: "administracion",
+    permission: "direccion.panel",
+  },
   // ── Ola 11 · las sedes ───────────────────────────────────
   {
     // Va en ADMINISTRACIÓN y no en Operación: una sede se da de alta al
@@ -1147,6 +1175,10 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   // micrófono" no supiera que es aquí.
   ia: "Consumo de IA",
   whatsapp: "WhatsApp",
+  // Ola C·2. "Bitácora" y no "Auditoría": es como la NOM-024 y como la
+  // propia escuela le dicen al libro de quién hizo qué. "Auditoría" se lee
+  // como algo que le hacen a uno desde fuera.
+  bitacora: "Bitácora",
   facturacion: "Facturación",
 };
 
