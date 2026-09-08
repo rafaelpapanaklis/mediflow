@@ -13,8 +13,15 @@ import {
 import {
   EDU_APPOINTMENT_TRANSITIONS,
   eduFormatDayShort,
+  eduUtcToZoned,
   type EduAppointmentRow,
 } from "@/lib/edu/agenda-core";
+import {
+  EDU_BLOCK_KIND_LABELS,
+  eduBloqueoRangoLabel,
+  eduBloqueoLinea,
+  type EduBloqueoVista,
+} from "@/lib/edu/agenda-bloqueos-core";
 
 /**
  * /instituto/mi-dia — MI AGENDA: la pantalla del alumno.
@@ -52,6 +59,56 @@ export interface EduMiDiaScreenProps {
   /** Hoy en el calendario del INSTITUTO, para resaltar su columna. */
   hoyISO: string;
   truncated: boolean;
+  /**
+   * H-19 · Los cierres del periodo que se está viendo.
+   *
+   * 🔴 POR QUÉ AQUÍ Y NO SOLO EN LA AGENDA: ésta es la pantalla que el
+   * alumno abre de pie, y «hoy no hay clínica» es justo lo que necesita
+   * saber ANTES de venir. Sin ella, un festivo se veía exactamente igual
+   * que un día sin pacientes: una lista vacía y sin explicación.
+   */
+  bloqueos: EduBloqueoVista[];
+  /** La zona del instituto: con ella se rotulan los rangos. */
+  timezone: string;
+}
+
+/**
+ * El aviso de los cierres. Va ARRIBA del todo y no al final: si el día está
+ * cerrado, es lo primero —y a veces lo único— que hay que leer.
+ */
+function AvisoBloqueos({
+  bloqueos,
+  timezone,
+  vista,
+}: {
+  bloqueos: EduBloqueoVista[];
+  timezone: string;
+  vista: "hoy" | "semana";
+}) {
+  if (bloqueos.length === 0) return null;
+  return (
+    <div className="edu-banner edu-banner--warn" role="status">
+      <div>
+        <p className="edu-banner__title">
+          {bloqueos.length === 1
+            ? `${EDU_BLOCK_KIND_LABELS[bloqueos[0].kind]}: ${bloqueos[0].reason}`
+            : `Hay ${bloqueos.length} bloqueos ${vista === "semana" ? "esta semana" : "hoy"}`}
+        </p>
+        <div className="edu-banner__detail">
+          {bloqueos.map((b) => (
+            <p key={b.id} style={{ margin: 0 }}>
+              {eduBloqueoRangoLabel(b.startsAt, b.endsAt, timezone)} · {eduBloqueoLinea(b)}
+            </p>
+          ))}
+          <p style={{ margin: "6px 0 0" }}>
+            Un bloqueo cierra la agenda para lo que venga:{" "}
+            <strong>las citas que ya estaban siguen aquí</strong> y hay que reagendarlas a mano. Si
+            alguna de las de abajo cae dentro, avisa a recepción.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const TAG_BY_STATUS: Record<EduAppointmentStatus, string> = {
@@ -87,6 +144,8 @@ export function EduMiDiaScreen({
   days,
   hoyISO,
   truncated,
+  bloqueos,
+  timezone,
 }: EduMiDiaScreenProps) {
   const router = useRouter();
   const [, startNav] = useTransition();
@@ -196,8 +255,26 @@ export function EduMiDiaScreen({
       lista.push(r);
       porDia.set(r.dayISO, lista);
     }
+    // Los cierres, agrupados por día de calendario del instituto, para
+    // marcar la sección de cada día que esté cerrado.
+    const bloqueosPorDia = new Map<string, EduBloqueoVista[]>();
+    for (const b of bloqueos) {
+      const zi = eduUtcToZoned(new Date(b.startsAt), timezone);
+      const zf = eduUtcToZoned(new Date(b.endsAt), timezone);
+      for (const d of days) {
+        // El extremo derecho es exclusivo: un bloqueo que acaba a las 00:00
+        // del jueves NO cierra el jueves.
+        if (d < zi.dayISO) continue;
+        if (d > zf.dayISO || (d === zf.dayISO && zf.minuteOfDay === 0)) continue;
+        const lista = bloqueosPorDia.get(d) ?? [];
+        lista.push(b);
+        bloqueosPorDia.set(d, lista);
+      }
+    }
+
     return (
       <>
+        <AvisoBloqueos bloqueos={bloqueos} timezone={timezone} vista="semana" />
         {truncated && (
           <div className="edu-banner edu-banner--warn">
             <div>
@@ -233,6 +310,14 @@ export function EduMiDiaScreen({
                     </h2>
                     <span className="edu-count">{delDia.length}</span>
                   </div>
+                  {/* Un día cerrado se DICE, aunque tenga citas: «sin citas»
+                      y «ese día no hay clínica» son dos respuestas
+                      distintas, y solo una obliga a llamar a alguien. */}
+                  {(bloqueosPorDia.get(d) ?? []).map((b) => (
+                    <p key={b.id} className="edu-note">
+                      <strong>{EDU_BLOCK_KIND_LABELS[b.kind]}:</strong> {b.reason}
+                    </p>
+                  ))}
                   {delDia.length === 0 ? (
                     <p className="edu-note">Sin citas.</p>
                   ) : (
@@ -264,6 +349,8 @@ export function EduMiDiaScreen({
           {error}
         </div>
       )}
+
+      <AvisoBloqueos bloqueos={bloqueos} timezone={timezone} vista="hoy" />
 
       <p className="edu-note" style={{ textTransform: "capitalize" }}>
         {dayLabel}

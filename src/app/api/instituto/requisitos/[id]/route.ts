@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
+import { eduAuditRequestMeta } from "@/lib/edu/auditoria";
 import { updateEduRequirement } from "@/lib/edu/evaluacion";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if ("response" in g) return g.response;
 
   try {
-    const updated = await updateEduRequirement(g.ctx, params.id, await eduReadJson(request));
+    const updated = await updateEduRequirement(
+      g.ctx,
+      params.id,
+      await eduReadJson(request),
+      eduAuditRequestMeta(request),
+    );
     return NextResponse.json({ ok: true, id: updated.id });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/requisitos/[id]");

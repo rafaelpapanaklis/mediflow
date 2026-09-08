@@ -32,6 +32,8 @@ import {
   eduPadronScope,
   type EduAssignmentRow,
 } from "@/lib/edu/padron-core";
+// 🔴 LA BITÁCORA TIENE UN SOLO ESCRITOR y nunca lanza. Ver auditoria.ts.
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 import { EDU_APPOINTMENT_SELECT, eduAppointmentToRow } from "@/lib/edu/agenda";
 import { eduCleanId, eduSafeTimeZone, type EduAppointmentRow } from "@/lib/edu/agenda-core";
 import { EDU_CASE_CLOSED_STATUSES } from "@/lib/edu/types";
@@ -321,4 +323,317 @@ export async function listEduDocenteCitas(
       .slice(0, EDU_ESTUDIANTE_MAX_FILAS)
       .map((a) => eduAppointmentToRow(a, eduSafeTimeZone(timeZone))),
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// OLA C·2 · LA ROTACIÓN DOCENTE PROGRAMADA
+//
+// «El docente que rota deja su nombre pegado en las citas futuras y no hay
+// lote.» La mitad de eso —cambiar de titular— ya existía, pero SIEMPRE con
+// efecto inmediato: `assignEduSupervisor` escribe `startsAt: now` a pelo.
+// En una escuela real la rotación se decide en junta y arranca el lunes
+// siguiente, y hacerla el lunes a mano es como se llega a un alumno sin
+// docente durante tres días.
+//
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 CERO SQL, CERO COLUMNAS. La columna `startsAt` existe desde la Ola 1A
+// y `eduCurrentAssignmentWhere` (padron-core.ts) YA filtra `startsAt <= now`
+// en las tres lecturas del vertical. Lo único que faltaba era poder
+// escribir una fecha futura, y que se pudiera VER lo programado antes de
+// que llegue: una asignación que existe y no se puede ver es peor que no
+// tenerla.
+//
+// 🔴 Y NO VIVE EN padron.ts. `assignEduSupervisor` y
+// `endEduSupervisorAssignment` son de otra casilla de esta ola; estas tres
+// funciones no tocan ni una línea suya y comparten con ellas el mismo
+// predicado de vigencia, que sigue viviendo en padron-core.ts.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Una rotación que TODAVÍA no arrancó. */
+export interface EduRotacionProgramada {
+  id: string;
+  studentId: string;
+  studentName: string;
+  matricula: string;
+  programName: string;
+  supervisorUserId: string;
+  supervisorName: string;
+  isPrimary: boolean;
+  /** ISO. Siempre en el futuro mientras esté en esta lista. */
+  startsAt: string;
+  /** Quién la lleva HOY, para poder leer el cambio de un vistazo. */
+  titularActual: string | null;
+}
+
+/**
+ * LO PROGRAMADO: las asignaciones cuya vigencia todavía no empezó.
+ *
+ * 🔴 SE RECORTA CON EL MISMO ALCANCE DEL PADRÓN. Un DOCENTE ve lo de SUS
+ * alumnos vigentes y no el reparto entero de la escuela: de esta lista
+ * salen la matrícula y el nombre de cada alumno, que es exactamente lo que
+ * `eduPadronScope` existe para no repartir.
+ */
+export async function listEduRotacionesProgramadas(
+  ctx: EduClinicaContext,
+  now: Date = new Date(),
+): Promise<EduRotacionProgramada[]> {
+  const institutionId = requireInstitution(ctx);
+  const alcance = eduPadronScope(ctx);
+  if (alcance.kind === "none") return [];
+
+  const filas = await prisma.eduSupervisorAssignment.findMany({
+    where: {
+      institutionId,
+      // Lo PROGRAMADO es, exactamente, lo que el predicado de vigencia
+      // descarta por la izquierda: `startsAt > now`. Escrito así —y no como
+      // una columna "programada"— no hay dos verdades que mantener.
+      startsAt: { gt: now },
+      OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+      ...(alcance.kind === "supervised"
+        ? {
+            student: {
+              supervisors: {
+                some: {
+                  supervisorUserId: alcance.supervisorUserId,
+                  ...eduCurrentAssignmentWhere(now),
+                },
+              },
+            },
+          }
+        : {}),
+    },
+    orderBy: [{ startsAt: "asc" }],
+    take: EDU_ESTUDIANTE_MAX_FILAS,
+    select: {
+      id: true,
+      studentId: true,
+      supervisorUserId: true,
+      isPrimary: true,
+      startsAt: true,
+      supervisor: { select: { firstName: true, lastName: true, email: true } },
+      student: {
+        select: {
+          matricula: true,
+          user: { select: { firstName: true, lastName: true, email: true } },
+          program: { select: { name: true } },
+          // El titular de HOY, para que la fila diga «de X a Y» y no solo
+          // «Y desde el lunes». Se pide con el mismo predicado de vigencia.
+          supervisors: {
+            where: { isPrimary: true, ...eduCurrentAssignmentWhere(now) },
+            take: 1,
+            select: { supervisor: { select: { firstName: true, lastName: true, email: true } } },
+          },
+        },
+      },
+    },
+  });
+
+  return filas.map((a) => ({
+    id: a.id,
+    studentId: a.studentId,
+    studentName: personName(a.student.user),
+    matricula: a.student.matricula,
+    programName: a.student.program.name,
+    supervisorUserId: a.supervisorUserId,
+    supervisorName: personName(a.supervisor),
+    isPrimary: a.isPrimary,
+    startsAt: a.startsAt.toISOString(),
+    titularActual: a.student.supervisors[0]
+      ? personName(a.student.supervisors[0].supervisor)
+      : null,
+  }));
+}
+
+/**
+ * PROGRAMA una rotación para una fecha futura.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 LO QUE **NO** HACE, Y ES LA DECISIÓN IMPORTANTE: no cierra al titular
+ * de hoy.
+ *
+ * `assignEduSupervisor` (padron.ts) sí lo cierra, y ahí es correcto: pone
+ * la asignación en vigor AHORA, así que el saliente tiene que salir ahora.
+ * Aquí el relevo es el lunes que viene: cerrar hoy al titular dejaría al
+ * alumno TRES DÍAS SIN DOCENTE —sin supervisión clínica y sin nadie que le
+ * firme una autorización— y eso no es lo que pidió quien programó la
+ * rotación.
+ *
+ * El titular saliente se cierra el día que el relevo entra, y eso lo hace
+ * la propia asignación nueva: el `isPrimary` del entrante convive con el
+ * del saliente hasta esa fecha, y desde ella los dos están vigentes. Es la
+ * consecuencia que hay que decir en voz alta y no esconder — ver el punto
+ * 6 del reporte y `endsAt`, que sigue siendo la forma de cerrar al
+ * saliente cuando la dirección lo decida.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function programarEduRotacion(
+  ctx: EduClinicaContext & EduAuditActor,
+  input: { studentId?: unknown; supervisorUserId?: unknown; isPrimary?: unknown; startsAt?: unknown },
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+  now: Date = new Date(),
+): Promise<{ id: string; startsAt: string }> {
+  const institutionId = requireInstitution(ctx);
+
+  const studentId = eduCleanId(input?.studentId);
+  const supervisorUserId = eduCleanId(input?.supervisorUserId);
+  if (!studentId) throw new EduPadronError("Elige el estudiante que rota.", 400);
+  if (!supervisorUserId) throw new EduPadronError("Elige el docente que lo va a llevar.", 400);
+
+  const startsAt = new Date(String(input?.startsAt ?? ""));
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new EduPadronError("La fecha de arranque no se entiende.", 400);
+  }
+  if (startsAt.getTime() <= now.getTime()) {
+    // Una rotación "programada" para ayer no es una rotación programada: es
+    // una asignación normal, y ésa se hace desde el botón de siempre. Con un
+    // camino que aceptara las dos, el titular saliente se quedaría abierto
+    // sin que nadie lo hubiera decidido (ver el bloque de arriba).
+    throw new EduPadronError(
+      "Una rotación programada arranca en el FUTURO. Para que entre ya, asígnalo con el botón normal: ése sí cierra al titular anterior en el mismo acto.",
+      400,
+    );
+  }
+  if (startsAt.getTime() > now.getTime() + 366 * 24 * 60 * 60 * 1000) {
+    throw new EduPadronError(
+      "Esa fecha está a más de un año. Revisa el año que escribiste.",
+      400,
+    );
+  }
+
+  const [student, supervisor] = await Promise.all([
+    prisma.eduStudent.findFirst({
+      where: { id: studentId, institutionId },
+      select: { id: true, status: true, matricula: true },
+    }),
+    prisma.eduUser.findFirst({
+      where: { id: supervisorUserId, institutionId },
+      select: { id: true, role: true, isActive: true, firstName: true, lastName: true },
+    }),
+  ]);
+
+  if (!student) throw new EduPadronError("Ese estudiante no es de este instituto.", 404);
+  if (student.status !== "ACTIVE") {
+    throw new EduPadronError(
+      "Ese estudiante ya no está activo en el padrón: no se le puede programar un docente.",
+    );
+  }
+  if (!supervisor) throw new EduPadronError("Ese docente no es de este instituto.", 404);
+  if (supervisor.role !== "DOCENTE") {
+    throw new EduPadronError("Solo se puede asignar como supervisor a alguien con rol Docente.");
+  }
+  if (!supervisor.isActive) {
+    throw new EduPadronError("Ese docente está dado de baja. Reactívalo antes de programarle alumnos.");
+  }
+  // 🔴 H-16 · NADIE SE PROGRAMA A SÍ MISMO, igual que en la asignación
+  // inmediata. Con `supervision.assign` prestado, un docente se daría
+  // acceso al expediente de cualquier alumno — solo que con fecha.
+  if (supervisor.id === ctx.eduUserId) {
+    throw new EduPadronError(
+      "No puedes programarte estudiantes a ti mismo. Las asignaciones las hace la dirección.",
+      403,
+    );
+  }
+
+  const isPrimary = input?.isPrimary === undefined ? true : input.isPrimary !== false;
+
+  // Ya programada la misma pareja para el mismo día: se rebota en vez de
+  // dejar dos filas idénticas que nadie sabrá cuál cerrar.
+  const repetida = await prisma.eduSupervisorAssignment.findFirst({
+    where: {
+      institutionId,
+      studentId: student.id,
+      supervisorUserId: supervisor.id,
+      startsAt: { gt: now },
+      OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+    },
+    select: { id: true },
+  });
+  if (repetida) {
+    throw new EduPadronError("Ese docente ya está programado para este estudiante.", 409);
+  }
+
+  const creada = await prisma.eduSupervisorAssignment.create({
+    data: {
+      institutionId,
+      studentId: student.id,
+      supervisorUserId: supervisor.id,
+      isPrimary,
+      startsAt,
+    },
+    select: { id: true, startsAt: true },
+  });
+
+  await eduAudit(ctx, {
+    action: "create",
+    entity: "student",
+    entityId: student.id,
+    after: {
+      rotacionProgramada: `${supervisor.firstName} ${supervisor.lastName}`.trim(),
+      matricula: student.matricula,
+      startsAt: creada.startsAt,
+      isPrimary,
+    },
+    ...meta,
+  });
+
+  return { id: creada.id, startsAt: creada.startsAt.toISOString() };
+}
+
+/**
+ * CANCELA una rotación que todavía no arrancó.
+ *
+ * 🔴 NO BORRA LA FILA, y no es simetría por simetría: dentro de un año hay
+ * que poder contestar «esto se programó y se dio marcha atrás», que no es
+ * lo mismo que «nunca se programó». Se escribe `endsAt = startsAt`, con lo
+ * que la asignación NUNCA llega a estar vigente —el predicado de vigencia
+ * pide `startsAt <= now` Y `endsAt > now`, y con los dos iguales no hay
+ * ningún instante que cumpla las dos— y la fila se queda con sus fechas.
+ *
+ * 🔴 Y SOLO LO QUE NO HA ARRANCADO. Una asignación que ya está en vigor se
+ * cierra con el botón de siempre (`endsAt = ahora`, PATCH
+ * /api/instituto/supervision/[id]): eso sí es un hecho del pasado y borrar
+ * su vigencia reescribiría quién supervisaba cuando ocurrió algo.
+ */
+export async function cancelarEduRotacionProgramada(
+  ctx: EduClinicaContext & EduAuditActor,
+  assignmentId: string,
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+  now: Date = new Date(),
+): Promise<{ id: string }> {
+  const institutionId = requireInstitution(ctx);
+  const id = eduCleanId(assignmentId);
+  if (!id) throw new EduPadronError("Falta la rotación.", 400);
+
+  const actual = await prisma.eduSupervisorAssignment.findFirst({
+    where: { id, institutionId },
+    select: { id: true, startsAt: true, endsAt: true, studentId: true, supervisorUserId: true },
+  });
+  if (!actual) throw new EduPadronError("Esa rotación no es de este instituto.", 404);
+  if (actual.startsAt.getTime() <= now.getTime()) {
+    throw new EduPadronError(
+      "Esa asignación ya está en vigor: no se cancela, se cierra. Ciérrala desde la ficha del estudiante y quedará con su fecha de fin.",
+      409,
+    );
+  }
+
+  // El `where` lleva el `endsAt` leído: si otra persona la canceló entre la
+  // lectura y ahora, esto contesta 409 en vez de pisarla. Patrón de la casa.
+  const res = await prisma.eduSupervisorAssignment.updateMany({
+    where: { id: actual.id, institutionId, endsAt: actual.endsAt },
+    data: { endsAt: actual.startsAt },
+  });
+  if (res.count === 0) {
+    throw new EduPadronError("Esa rotación ya estaba cancelada. Actualiza la pantalla.", 409);
+  }
+
+  await eduAudit(ctx, {
+    action: "delete",
+    entity: "student",
+    entityId: actual.studentId,
+    before: { rotacionProgramadaDesde: actual.startsAt, endsAt: actual.endsAt },
+    after: { rotacionProgramadaDesde: actual.startsAt, endsAt: actual.startsAt, cancelada: true },
+    ...meta,
+  });
+
+  return { id: actual.id };
 }

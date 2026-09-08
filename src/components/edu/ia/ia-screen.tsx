@@ -49,10 +49,69 @@ import {
  *     escrito: las tarifas se LEEN de la tabla y se pintan tal cual.
  * ═══════════════════════════════════════════════════════════════════════
  */
+/** Un renglón del historial del cupo, tal como viaja del servidor. */
+export interface EduIaCupoCambio {
+  id: string;
+  createdAt: string;
+  changedByName: string;
+  before: unknown;
+  after: unknown;
+}
+
 export interface EduIaScreenProps {
   panel: EduIaPanel & { mesAnteriorLabel: string; mesAnteriorCostLabel: string };
   /** Hasta cuándo vale el contrato del instituto, ya formateado. */
   contratoHasta: string;
+  /**
+   * EL HISTORIAL DEL CUPO: quién lo cambió, cuándo y qué.
+   *
+   * 🔴 POR QUÉ EXISTE. Lo dejó escrito el propio `EduAiQuota` en el
+   * esquema: sus dos columnas de autoría «guardan el ÚLTIMO cambio, no la
+   * historia». Encender el excedente y subir el tope duro cuestan dinero
+   * REAL de la escuela, y «quién lo subió y cuándo» no se contesta con dos
+   * columnas que se pisan en cada guardado.
+   */
+  cupoHistorial: EduIaCupoCambio[];
+  /** La zona del instituto: con ella se fecha cada renglón. */
+  timezone: string;
+}
+
+/**
+ * «Permitió gastar de más · Tope: 75.00 USD» — el DIFF de un cambio de
+ * cupo, en palabras.
+ *
+ * 🔴 SE COMPARA CAMPO A CAMPO Y SOLO SE PINTA LO QUE CAMBIÓ. Un renglón que
+ * repita los cuatro valores cada vez obliga a leer los cuatro para
+ * encontrar el que se movió, que es como se deja de leer un historial.
+ */
+function cambioEnPalabras(before: unknown, after: unknown): string {
+  const b = (before ?? {}) as Record<string, unknown>;
+  const a = (after ?? {}) as Record<string, unknown>;
+  const partes: string[] = [];
+
+  const usd = (v: unknown) =>
+    typeof v === "number" && Number.isFinite(v) ? `${(v / 100).toFixed(2)} USD` : "sin tope";
+
+  if (b.isEnabled !== a.isEnabled) {
+    partes.push(a.isEnabled === false ? "Apagó la IA" : "Encendió la IA");
+  }
+  if (b.allowOverage !== a.allowOverage) {
+    partes.push(
+      a.allowOverage === true
+        ? "Autorizó gastar de más de lo incluido"
+        : "Dejó de autorizar el excedente",
+    );
+  }
+  if (b.hardCapUsdCents !== a.hardCapUsdCents) {
+    partes.push(`Tope duro: ${usd(b.hardCapUsdCents)} → ${usd(a.hardCapUsdCents)}`);
+  }
+  if (b.contactNote !== a.contactNote) {
+    partes.push("Cambió a quién pedirle más cupo");
+  }
+
+  // Un guardado que no movió nada no debería llegar aquí (el servidor no lo
+  // escribe), pero si llega se dice en vez de pintar un renglón en blanco.
+  return partes.length > 0 ? partes.join(" · ") : "Guardó sin cambiar nada";
 }
 
 const TAG_BY_MOTIVO: Record<string, string> = {
@@ -65,7 +124,12 @@ const TAG_BY_MOTIVO: Record<string, string> = {
   suspendida: "edu-tag--danger",
 };
 
-export function EduIaScreen({ panel, contratoHasta }: EduIaScreenProps) {
+export function EduIaScreen({
+  panel,
+  contratoHasta,
+  cupoHistorial,
+  timezone,
+}: EduIaScreenProps) {
   const [editando, setEditando] = useState(false);
   const { cupo } = panel;
 
@@ -295,6 +359,19 @@ export function EduIaScreen({ panel, contratoHasta }: EduIaScreenProps) {
                         ? eduIaPrecioLabel(p.outUsdMicrosPerMillion, p.unit)
                         : "—"}
                     </span>
+                    {/* 🔴 H-132 · EL ESCALÓN DE CACHÉ, DICHO. Los tokens que
+                        el proveedor lee de caché no cuestan lo mismo que
+                        uno nuevo, y hasta esta ola se cobraban igual. Si no
+                        hay escalón capturado se dice también: «se cobra
+                        como entrada» es un dato, no un hueco. */}
+                    <span className="edu-cell__sub">
+                      {p.cacheReadUsdMicrosPerMillion === null
+                        ? "Caché: se cobra como entrada"
+                        : `Caché leída: ${eduIaPrecioLabel(
+                            p.cacheReadUsdMicrosPerMillion,
+                            p.unit,
+                          )}`}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -302,6 +379,69 @@ export function EduIaScreen({ panel, contratoHasta }: EduIaScreenProps) {
           </div>
         )}
       </section>
+
+      {/* ── 5b. EL HISTORIAL DEL CUPO ────────────────────────────────── */}
+      {cupo && (
+        <section className="edu-section">
+          <div className="edu-section__head">
+            <div>
+              <h2 className="edu-section__title">Historial del cupo</h2>
+              <p className="edu-section__lead">
+                Quién cambió la configuración del cupo, cuándo y qué. Encender el excedente y subir
+                el tope duro cuestan dinero real de la escuela: eso no se contesta con una columna
+                que se pisa en cada guardado.
+              </p>
+            </div>
+          </div>
+
+          {cupoHistorial.length === 0 ? (
+            <p className="edu-note">
+              Nadie ha cambiado la configuración del cupo desde que existe este historial. Lo que
+              INCLUYE el contrato no se edita desde el panel y por eso no aparece aquí: se cambia
+              con DaleControl.
+            </p>
+          ) : (
+            <div className="edu-tablewrap">
+              {/* `edu-tablewrap` mide esta lista contra SÍ MISMA
+                  (`@container`) y la deja desplazarse en vez de recortar. */}
+              <div className="edu-table edu-table--iacupo">
+                <div className="edu-rowhead" aria-hidden="true">
+                  <span>Cuándo</span>
+                  <span>Quién</span>
+                  <span>Qué cambió</span>
+                </div>
+                {cupoHistorial.map((c) => (
+                  <div key={c.id} className="edu-row">
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Cuándo</span>
+                      <span className="edu-cell__value">
+                        {new Intl.DateTimeFormat("es-MX", {
+                          timeZone: timezone,
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }).format(new Date(c.createdAt))}
+                      </span>
+                    </div>
+                    <div className="edu-cell">
+                      <span className="edu-cell__label">Quién</span>
+                      <span className="edu-cell__value">{c.changedByName}</span>
+                    </div>
+                    <div className="edu-cell edu-cell--wide">
+                      <span className="edu-cell__label">Qué cambió</span>
+                      <span className="edu-cell__value">
+                        {cambioEnPalabras(c.before, c.after)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── 6. El detalle, uso por uso ───────────────────────────────── */}
       {cupo && panel.usos.length > 0 && (

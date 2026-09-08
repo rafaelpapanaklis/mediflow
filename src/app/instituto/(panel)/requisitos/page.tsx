@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
-import { listEduPrograms } from "@/lib/edu/padron";
+import { listEduCohorts, listEduPrograms } from "@/lib/edu/padron";
+import { listEduCategorias } from "@/lib/edu/categorias";
 import { listEduProcedures } from "@/lib/edu/tarifas";
 import { listEduRequirements } from "@/lib/edu/evaluacion";
 import { EduDenied } from "@/components/edu/edu-denied";
@@ -40,10 +41,17 @@ export default async function InstitutoRequisitosPage() {
     );
   }
 
-  const [rows, programs, procedures] = await Promise.all([
+  const [rows, programs, procedures, cohortes, categorias] = await Promise.all([
     listEduRequirements(ctx),
     listEduPrograms(ctx),
     listEduProcedures(ctx, { soloActivos: true }),
+    // H-89 · las GENERACIONES. Una versión de un requisito puede aplicar a
+    // una sola («la de 2024 se gradúa con 8, la de 2025 con 12») y sin la
+    // lista no hay forma de capturarlo.
+    listEduCohorts(ctx),
+    // H-90 · el catálogo de categorías CON LLAVE, que convive con el texto
+    // libre de abajo. Ver src/lib/edu/categorias.ts.
+    listEduCategorias(ctx),
   ]);
 
   // Las categorías salen del catálogo de procedimientos y no de una lista
@@ -85,6 +93,20 @@ export default async function InstitutoRequisitosPage() {
           category: p.category,
         }))}
         categories={categories}
+        /* H-90 · el catálogo con llave. Solo las ACTIVAS se ofrecen para
+           capturar; una categoría desactivada sigue contando en los
+           requisitos que ya la usan (no se borra nada), pero no se propone
+           para requisitos nuevos. */
+        catalogo={categorias.rows
+          .filter((c) => c.isActive)
+          .map((c) => ({ id: c.id, name: c.name }))}
+        /* H-89 · las generaciones, para versionar por cohorte. */
+        cohorts={cohortes.map((c) => ({
+          id: c.id,
+          name: c.name,
+          programId: c.programId,
+          isActive: c.isActive,
+        }))}
       />
     </div>
   );

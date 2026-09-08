@@ -12,6 +12,7 @@ import {
   type DragMoveEvent,
 } from "@dnd-kit/core";
 import {
+  CalendarOff,
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
@@ -19,7 +20,13 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { EduModal } from "@/components/edu/edu-modal";
 import { EduSedeSelector } from "@/components/edu/sedes/sede-selector";
+import {
+  EduBloqueosPanel,
+  type EduBloqueoConAutor,
+} from "@/components/edu/agenda/bloqueos-panel";
+import { eduBloqueoLinea } from "@/lib/edu/agenda-bloqueos-core";
 import type { EduCampusOption } from "@/lib/edu/campus-core";
 import {
   EDU_APPOINTMENT_STATUSES,
@@ -152,6 +159,21 @@ export interface EduAgendaScreenProps {
   todayISO: string;
   /** La zona del INSTITUTO (o de la sede). Solo se usa para el choque. */
   timezone: string;
+  /**
+   * H-19 · Los cierres del MISMO periodo que las citas. La rejilla los
+   * pinta como banda y el botón «Bloqueos» los administra sin salir de
+   * aquí — que es donde alguien se entera de que el sillón 7 no sirve.
+   */
+  bloqueos: EduBloqueoConAutor[];
+  /**
+   * `sillones.manage`, no `agenda.manage`: cerrar la agenda de un martes es
+   * la misma decisión que capturar el horario de un sillón, y caja —que sí
+   * agenda— no la toma. Sin él, el panel se ve pero no deja escribir, y lo
+   * DICE (botón deshabilitado con motivo, nunca un no-op).
+   */
+  canManageBloqueos: boolean;
+  /** Las sedes a las que ENTRA quien mira, para el alta de un bloqueo. */
+  campuses: { id: string; name: string }[];
   sede: {
     options: EduCampusOption[];
     activeId: string | null;
@@ -175,6 +197,9 @@ export function EduAgendaScreen({
   canManage,
   todayISO,
   timezone,
+  bloqueos,
+  canManageBloqueos,
+  campuses,
   sede,
 }: EduAgendaScreenProps) {
   const router = useRouter();
@@ -182,6 +207,7 @@ export function EduAgendaScreen({
   const [alta, setAlta] = useState<{ chairId: string; startLabel: string } | null>(null);
   const [altaAbierta, setAltaAbierta] = useState(false);
   const [detalle, setDetalle] = useState<EduAppointmentRow | null>(null);
+  const [bloqueosAbiertos, setBloqueosAbiertos] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState(query.q ?? "");
 
@@ -349,8 +375,9 @@ export function EduAgendaScreen({
         todayISO,
         timezone,
         soloUno: angosto && query.view === "dia",
+        bloqueos,
       }),
-    [rows, chairs, query, days, todayISO, timezone, angosto],
+    [rows, chairs, query, days, todayISO, timezone, angosto, bloqueos],
   );
 
   const slots = eduAgendaSlots(layout.window);
@@ -653,6 +680,24 @@ export function EduAgendaScreen({
                     query.view === "semana" ? "esta semana" : "este día"
                   }${truncated ? ` (se muestran las primeras ${maxRows})` : ""}`}
             </span>
+            {/* 🔴 H-19 · EL BOTÓN SE PINTA AUNQUE NO SE PUEDA ESCRIBIR, y no
+                es un no-op: quien abre la agenda con `agenda.view` tiene que
+                poder VER por qué un hueco está cerrado. Dentro, el alta va
+                bajo `canManageBloqueos` y el botón de retirar sale
+                deshabilitado CON motivo. */}
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              onClick={() => {
+                setFlash(null);
+                setBloqueosAbiertos(true);
+              }}
+              title="Festivos, puentes y sillones en mantenimiento del periodo que estás viendo."
+            >
+              <CalendarOff size={16} />
+              Bloqueos
+              {bloqueos.length > 0 ? ` (${bloqueos.length})` : ""}
+            </button>
             {canManage && (
               <button
                 type="button"
@@ -944,6 +989,34 @@ export function EduAgendaScreen({
           </p>
         )}
 
+        {/* 🔴 H-19 · «NO HAY BANDA» Y «NO HAY BLOQUEO» NO PUEDEN VERSE
+            IGUAL. En la vista de SEMANA la columna es un día, así que solo
+            se raya lo que cierra a TODOS los sillones que se están viendo:
+            el sillón 7 en mantenimiento el martes no tacha el martes entero
+            —diría que la escuela no trabaja, que es lo contrario— pero
+            tampoco desaparece. Se cuenta aquí, con el camino para verlo. */}
+        {!pintaLista && layout.bloqueosSueltos.length > 0 && (
+          <p className="edu-ag__aviso">
+            <CalendarOff size={14} aria-hidden="true" />
+            <span>
+              Hay {layout.bloqueosSueltos.length}{" "}
+              {layout.bloqueosSueltos.length === 1 ? "bloqueo" : "bloqueos"} de este periodo que esta
+              vista no puede rayar porque no alcanzan a todo lo que estás viendo
+              {layout.bloqueosSueltos.length <= 3
+                ? `: ${layout.bloqueosSueltos.map((b) => eduBloqueoLinea(b)).join(" · ")}.`
+                : "."}{" "}
+              <button
+                type="button"
+                className="edu-link"
+                onClick={() => setBloqueosAbiertos(true)}
+              >
+                Verlos todos
+              </button>
+              {query.view === "semana" ? ", o pásate a la vista de Día." : "."}
+            </span>
+          </p>
+        )}
+
         {/* 🔴 UN EJE CORTO NO SE EXPLICA SOLO. Cuando los sillones tienen
             horario, el eje pinta ESE horario y no la jornada de siempre — es
             lo correcto, pero visto desde fuera es idéntico a una agenda
@@ -1003,6 +1076,28 @@ export function EduAgendaScreen({
             recargar(mensaje);
           }}
         />
+      )}
+
+      {bloqueosAbiertos && (
+        <EduModal
+          title="Bloqueos de agenda"
+          subtitle="Festivos, puentes y sillones fuera de servicio del periodo que estás viendo. Cierran el hueco para lo que venga; no cancelan lo que ya está agendado."
+          onClose={() => setBloqueosAbiertos(false)}
+        >
+          <EduBloqueosPanel
+            bloqueos={bloqueos}
+            campuses={campuses}
+            chairs={chairs.map((c) => ({
+              id: c.id,
+              name: c.name,
+              campusId: c.campusId,
+              campusName: c.campusName,
+            }))}
+            canManage={canManageBloqueos}
+            timezone={timezone}
+            periodoLabel={query.view === "semana" ? "esta semana" : "este día"}
+          />
+        </EduModal>
       )}
 
       {pendiente && (

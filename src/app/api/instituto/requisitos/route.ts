@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { eduCleanId } from "@/lib/edu/agenda-core";
+import { eduAuditRequestMeta } from "@/lib/edu/auditoria";
 import { createEduRequirement, listEduRequirements } from "@/lib/edu/evaluacion";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,11 @@ export async function POST(request: Request) {
   if ("response" in g) return g.response;
 
   try {
-    const created = await createEduRequirement(g.ctx, await eduReadJson(request));
+    const created = await createEduRequirement(
+      g.ctx,
+      await eduReadJson(request),
+      eduAuditRequestMeta(request),
+    );
     return NextResponse.json({ ok: true, id: created.id }, { status: 201 });
   } catch (err) {
     return eduApiError(err, "POST /api/instituto/requisitos");

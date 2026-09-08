@@ -17,6 +17,11 @@ import {
   type EduAgendaColumn,
   type EduAgendaLayout,
 } from "@/lib/edu/agenda-rejilla";
+import {
+  EDU_BLOCK_ALCANCE_LABELS,
+  EDU_BLOCK_KIND_LABELS,
+  type EduBloqueoBanda,
+} from "@/lib/edu/agenda-bloqueos-core";
 import { EduAgendaGuia, useEduAgendaHover } from "./agenda-guia";
 import { eduMinutesToLabel, type EduAppointmentRow } from "@/lib/edu/agenda-core";
 import {
@@ -271,6 +276,59 @@ function Tarjeta({
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Una BANDA DE BLOQUEO (H-19)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * El rayado que tapa las horas cerradas de una columna.
+ *
+ * 🔴 VA DEBAJO DE LAS TARJETAS, no encima. Un bloqueo NO cancela las citas
+ * que ya estaban (ver agenda-bloqueos.ts): si el rayado las tapara, quien
+ * mira el martes del puente vería la clínica cerrada y NO vería a los tres
+ * pacientes que hay que llamar para reagendar — que es justo lo único que
+ * hay que hacer ese día.
+ *
+ * 🔴 Y NO CAPTURA EL PUNTERO (`pointer-events: none`, en el CSS): el clic
+ * en un hueco tiene que seguir llegando a la columna para que el alta
+ * rebote con el 409 que EXPLICA el bloqueo. Un rayado que se traga el clic
+ * deja a recepción tocando una pantalla que no contesta.
+ */
+function Banda({
+  banda,
+  window,
+}: {
+  banda: EduBloqueoBanda;
+  window: { dayStart: number; dayEnd: number };
+}) {
+  const topSlots = (banda.startMinute - window.dayStart * 60) / EDU_AGENDA_SLOT_MINUTES;
+  const spanSlots = Math.max(
+    0.5,
+    (banda.endMinute - banda.startMinute) / EDU_AGENDA_SLOT_MINUTES,
+  );
+  const titulo = `${EDU_BLOCK_KIND_LABELS[banda.kind]} · ${banda.reason} · ${
+    EDU_BLOCK_ALCANCE_LABELS[banda.alcance]
+  }`;
+
+  return (
+    <div
+      className={`edu-ag__bloqueo edu-ag__bloqueo--${banda.kind.toLowerCase()}`}
+      style={{
+        top: `calc(${topSlots} * var(--edu-ag-slot-h))`,
+        height: `calc(${spanSlots} * var(--edu-ag-slot-h))`,
+      }}
+      title={titulo}
+    >
+      <span className="edu-ag__bloqueo-txt">
+        {banda.desdeAntes ? "← " : ""}
+        {banda.reason}
+        {banda.hastaDespues ? " →" : ""}
+      </span>
+      <span className="edu-sr-only">{titulo}</span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Una columna
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -353,6 +411,11 @@ function Columna({
           aria-hidden="true"
           style={{ top: `calc(${(h * 60) / EDU_AGENDA_SLOT_MINUTES} * var(--edu-ag-slot-h))` }}
         />
+      ))}
+      {/* H-19 · antes que las tarjetas para que quede DEBAJO de ellas: un
+          bloqueo cierra el hueco de lo que venga, no borra lo agendado. */}
+      {column.bloqueos.map((b) => (
+        <Banda key={b.id} banda={b} window={layout.window} />
       ))}
       {column.rows.map((row) => {
         const carril = carriles.get(row.id) ?? { lane: 0, laneCount: 1 };
@@ -446,6 +509,10 @@ export function EduAgendaRejilla({
               <span className="edu-ag__cabecera-sub">
                 {c.sub ? `${c.sub} · ` : ""}
                 {c.rows.length} {c.rows.length === 1 ? "cita" : "citas"}
+                {/* Un cierre de punta a punta no se ve como banda cuando la
+                    columna está vacía —el rayado sobre nada es solo un
+                    fondo—, así que la cabecera lo NOMBRA. */}
+                {c.bloqueos.some((b) => b.todoElDia) ? " · cerrado" : ""}
               </span>
             </div>
           ))}
