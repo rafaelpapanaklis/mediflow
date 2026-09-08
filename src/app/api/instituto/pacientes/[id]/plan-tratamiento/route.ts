@@ -18,7 +18,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const g = await eduApiGuard("expediente.view");
   if ("response" in g) return g.response;
   try {
-    return NextResponse.json({ rows: await listEduPlanes(g.ctx, params.id) });
+    return NextResponse.json({
+      rows: await listEduPlanes(g.ctx, params.id, g.ctx.institution.timezone),
+    });
   } catch (err) {
     return eduApiError(err, `GET /api/instituto/pacientes/${params.id}/plan-tratamiento`);
   }

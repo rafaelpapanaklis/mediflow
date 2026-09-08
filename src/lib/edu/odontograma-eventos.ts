@@ -40,6 +40,12 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import { getEduClinicalPatient } from "@/lib/edu/expediente";
+import {
+  eduFormatDayShort,
+  eduFormatTime,
+  eduSafeTimeZone,
+  eduUtcToZoned,
+} from "@/lib/edu/agenda-core";
 import type { EduClinicaContext } from "@/lib/edu/visibility";
 import {
   EDU_ODONTO_EVENT_LABELS,
@@ -109,14 +115,17 @@ export async function eduOdontoEvent(
 export async function listEduOdontoEventos(
   ctx: EduOdontoEventContext,
   patientId: string,
+  timeZone: string,
   query: { tooth?: unknown; surface?: unknown; condition?: unknown } = {},
   now: Date = new Date(),
-): Promise<EduOdontoEventRow[]> {
+): Promise<{ rows: EduOdontoEventRow[]; truncated: boolean }> {
   const institutionId = ctx?.institutionId;
   if (!institutionId) throw new EduPadronError("Tu sesión no trae instituto. Vuelve a entrar.", 401);
 
   const paciente = await getEduClinicalPatient(ctx, patientId, now);
   if (!paciente) throw new EduPadronError("Ese paciente no existe o no es de tu instituto.", 404);
+
+  const tz = eduSafeTimeZone(timeZone);
 
   const where: Prisma.EduOdontogramEventWhereInput = {
     institutionId,
@@ -129,10 +138,13 @@ export async function listEduOdontoEventos(
     where.condition = query.condition.trim().slice(0, 40);
   }
 
+  // 🔴 UNA DE MÁS PARA PODER DECIR QUE SE CORTÓ (S-12). Con `take: MAX` a
+  // secas, doscientos movimientos y doscientos cuarenta se ven idénticos
+  // desde aquí, y quien busca el suyo concluye que nunca existió.
   const filas = await prisma.eduOdontogramEvent.findMany({
     where,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: EDU_ODONTO_EVENT_MAX_ROWS,
+    take: EDU_ODONTO_EVENT_MAX_ROWS + 1,
     select: {
       id: true,
       createdAt: true,
@@ -146,17 +158,26 @@ export async function listEduOdontoEventos(
     },
   });
 
-  return filas.map((e) => ({
-    id: e.id,
-    createdAt: e.createdAt.toISOString(),
-    actorName: e.actorName,
-    action: e.action,
-    actionLabel:
-      EDU_ODONTO_EVENT_LABELS[e.action as EduOdontogramEventAction] ?? e.action,
-    tooth: e.tooth,
-    surface: e.surface,
-    condition: e.condition,
-    notes: e.notes,
-    reason: e.reason,
-  }));
+  const truncated = filas.length > EDU_ODONTO_EVENT_MAX_ROWS;
+
+  return {
+    truncated,
+    rows: filas.slice(0, EDU_ODONTO_EVENT_MAX_ROWS).map((e) => ({
+      id: e.id,
+      createdAt: e.createdAt.toISOString(),
+      createdLabel: `${eduFormatDayShort(eduUtcToZoned(e.createdAt, tz).dayISO)} ${eduFormatTime(
+        e.createdAt,
+        tz,
+      )}`,
+      actorName: e.actorName,
+      action: e.action,
+      actionLabel:
+        EDU_ODONTO_EVENT_LABELS[e.action as EduOdontogramEventAction] ?? e.action,
+      tooth: e.tooth,
+      surface: e.surface,
+      condition: e.condition,
+      notes: e.notes,
+      reason: e.reason,
+    })),
+  };
 }

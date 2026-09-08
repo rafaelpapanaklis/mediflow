@@ -81,6 +81,20 @@ import {
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
 import { EDU_CASE_CLOSED_STATUSES, type EduPatientStatus } from "@/lib/edu/types";
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * OLA C·2 · LA SESIÓN QUE NECESITAN LAS ESCRITURAS DE LA FICHA.
+ *
+ * Es `EduClinicaContext` (el tenant y el alcance) MÁS lo que la BITÁCORA
+ * necesita para congelar el nombre de quien escribió. Las LECTURAS siguen
+ * pidiendo solo `EduClinicaContext`: una lista de pacientes no escribe
+ * renglones y exigirle el actor completo obligaría a tocar diez llamadas
+ * que no lo necesitan.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduPacienteEscrituraContext extends EduClinicaContext, EduAuditActor {}
 
 /**
  * El error con status HTTP del vertical. Es el MISMO de la Ola 1A y no uno
@@ -184,6 +198,18 @@ const PATIENT_SELECT = {
   pregnancy: true,
   isChild: true,
   privacyNoticeAcceptedAt: true,
+
+  // ── OLA C·2 · ARCO y FUSIÓN ──────────────────────────────────────────
+  // Viajan en la fila COMPLETA por la misma razón que los antecedentes:
+  // la ficha del perdedor de una fusión tiene que poder redirigir al
+  // ganador, y una fila que a veces trae el puntero y a veces no es una
+  // que un día deja a alguien escribiendo en el expediente equivocado.
+  deletedAt: true,
+  deleteReason: true,
+  anonymizedAt: true,
+  mergedIntoId: true,
+  mergedAt: true,
+  mergedInto: { select: { folio: true } },
   // H-12b · quién tocó la ficha por última vez. `updatedAt` existía desde
   // el primer día y no se pintaba en ninguna pantalla.
   updatedAt: true,
@@ -259,6 +285,13 @@ function toRow(p: PatientPayload, now: Date): EduPatientRow {
     privacyNoticeAcceptedAt: iso(p.privacyNoticeAcceptedAt),
     updatedAt: p.updatedAt.toISOString(),
     updatedByName: p.updatedBy ? personName(p.updatedBy) : null,
+
+    deletedAt: iso(p.deletedAt),
+    deleteReason: p.deleteReason,
+    anonymizedAt: iso(p.anonymizedAt),
+    mergedIntoId: p.mergedIntoId,
+    mergedIntoFolio: p.mergedInto?.folio ?? null,
+    mergedAt: iso(p.mergedAt),
   };
 }
 
@@ -283,6 +316,29 @@ function patientsWhere(
   const institutionId = requireInstitution(ctx);
   const scope = eduVisibility(ctx, "patients");
   const where = eduPatientScopeWhere({ institutionId, scope, now });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·2 · LAS FICHAS DADAS DE BAJA NO SALEN. NI EN LA LISTA, NI EN
+  // EL BUSCADOR, NI EN EL CSV.
+  //
+  // Es la mitad visible del derecho ARCO: `bajaEduPatient` y
+  // `anonymizeEduPatient` ponen `deletedAt`, y sin este renglón la ficha
+  // seguiría saliendo al teclear el apellido de alguien que pidió
+  // justamente que dejara de salir. La fusión también lo pone en el
+  // perdedor, así que el duplicado desaparece de la lista con el mismo
+  // filtro.
+  //
+  // ⚠️ VA AQUÍ Y NO EN `eduPatientScopeWhere`: ese helper lo comparten
+  // agenda, expediente, caja y odontograma, y el expediente de una ficha
+  // dada de baja SIGUE existiendo — la NOM-004 obliga a conservarlo cinco
+  // años. Lo que sale de las listas es la FICHA, no su historia.
+  //
+  // ⚠️ Y `getEduPatient` NO lo lleva, a propósito: dirección tiene que
+  // poder abrir una ficha dada de baja para reactivarla, y el perdedor de
+  // una fusión tiene que poder abrirse para redirigir al ganador. Un
+  // 404 ahí dejaría la baja sin marcha atrás.
+  // ═══════════════════════════════════════════════════════════════════
+  where.deletedAt = null;
 
   const and: Prisma.EduPatientWhereInput[] = [];
   if (filters.status) and.push({ status: filters.status });
@@ -533,6 +589,17 @@ export async function listEduPatientOptions(
   // 🔴 H-05 · sin INACTIVE. El porqué —y por qué DISCHARGED sí sale— está
   // entero en la cabecera de la función.
   where.status = { not: "INACTIVE" };
+
+  // 🔴 OLA C·2 · y sin las dadas de BAJA ni las FUSIONADAS. Agendarle una
+  // cita a una ficha anonimizada por solicitud ARCO —o al duplicado que
+  // acaba de fusionarse— es exactamente lo que las dos operaciones
+  // vinieron a cerrar. `mergedIntoId` va aparte de `deletedAt` porque el
+  // perdedor de una fusión que YA estaba dado de baja antes seguiría
+  // teniendo las dos, y con una sola de las dos condiciones bastaría —
+  // pero una fusión futura que decidiera no dar de baja al perdedor se
+  // colaría por aquí sin que nadie lo notara.
+  where.deletedAt = null;
+  where.mergedIntoId = null;
 
   const and = eduPatientSearchAnd(q);
   if (and.length > 0) where.AND = and;
@@ -1056,7 +1123,7 @@ export function parseEduPatientOlaB(
 }
 
 export async function createEduPatient(
-  ctx: EduClinicaContext,
+  ctx: EduPacienteEscrituraContext,
   input: EduPatientInput,
   options: { canSetOrigin: boolean; allowDuplicate?: boolean } = { canSetOrigin: false },
   now: Date = new Date(),
@@ -1204,6 +1271,20 @@ export async function createEduPatient(
       ? "Se registró sin fecha de nacimiento. Si es menor de edad, su ficha tiene que decir quién es su tutor antes de poder emitirle una carta de consentimiento."
       : null;
 
+  // 🔴 EL RENGLÓN DE LA BITÁCORA NO GUARDA LA FICHA ENTERA. Solo folio,
+  // nombre y estado: `edu_audit_logs` se lee desde una pantalla de
+  // dirección, y copiar ahí el teléfono, el correo, el CURP y el domicilio
+  // sería mover el PII a una tabla de la que la anonimización ARCO no lo
+  // puede sacar. Es la misma regla que ya aplica `anonymizeEduPatient`.
+  const alta = (created: { id: string; folio: string }) =>
+    eduAudit(ctx, {
+      action: "create",
+      entity: "patient",
+      entityId: created.id,
+      patientId: created.id,
+      after: { folio: created.folio, nombre: `${firstName} ${lastName}`.trim() },
+    });
+
   if (folioTecleado) {
     const dup = await prisma.eduPatient.findFirst({
       where: { institutionId, folio: folioTecleado },
@@ -1214,6 +1295,7 @@ export async function createEduPatient(
       data: conIndice(folioTecleado),
       select: { id: true, folio: true },
     });
+    await alta(created);
     return { ...created, aviso };
   }
 
@@ -1227,6 +1309,7 @@ export async function createEduPatient(
         data: conIndice(folio),
         select: { id: true, folio: true },
       });
+      await alta(created);
       return { ...created, aviso };
     } catch (err) {
       const code = (err as { code?: string })?.code;
@@ -1298,7 +1381,7 @@ function motivoGrupoCerrado(grupo: EduPatientFieldGroup): string {
  * confiar en que el body venga de esa pantalla.
  */
 export async function updateEduPatient(
-  ctx: EduClinicaContext,
+  ctx: EduPacienteEscrituraContext,
   patientId: string,
   input: EduPatientInput,
   // 🔴 `options` es OBLIGATORIO y `groups` dentro de él también. Con un
@@ -1357,6 +1440,11 @@ export async function updateEduPatient(
       email: true,
       birthDate: true,
       guardianName: true,
+      // Ola C·2 · el ESTADO se lee para el renglón de la bitácora. Sin él,
+      // guardar la ficha con el mismo estado que ya tenía escribiría un
+      // diff «— → ACTIVE» que no cambió nada, y una bitácora llena de
+      // renglones que mienten deja de leerse.
+      status: true,
       cases: { select: { status: true } },
     },
   });
@@ -1562,6 +1650,46 @@ export async function updateEduPatient(
   data.updatedById = ctx.eduUserId ?? null;
 
   await prisma.eduPatient.update({ where: { id: current.id }, data });
+
+  // ── LA BITÁCORA (NOM-024) ────────────────────────────────────────────
+  // 🔴 EL DIFF SE ARMA CON LO QUE DE VERDAD CAMBIÓ, y `eduAuditDiff` (en
+  // auditoria-core) descarta los campos que llegaron iguales y no escribe
+  // renglón si no cambió ninguno: un guardado que no cambió nada es un
+  // botón que alguien pulsó dos veces.
+  //
+  // 🔴 Y NO ENTRA EL PII COMPLETO. Se comparan solo los siete campos que
+  // el índice de búsqueda ya toca más el estado — no el domicilio, ni el
+  // tutor, ni las notas. Copiar la ficha entera a cada renglón haría de la
+  // bitácora un sitio del que la anonimización ARCO no puede sacar el dato
+  // personal, y la haría ilegible de paso. `searchIndex` está en la lista
+  // de campos ignorados del core, así que ni aparece.
+  const mirados = ["folio", "firstName", "lastName", "phone", "email", "status", "curp"] as const;
+  const antes: Record<string, unknown> = {};
+  const despues: Record<string, unknown> = {};
+  for (const k of mirados) {
+    if (!(k in data)) continue;
+    antes[k] = (current as Record<string, unknown>)[k] ?? null;
+    despues[k] = (data as Record<string, unknown>)[k] ?? null;
+  }
+  // Los campos que sí cambiaron pero no se detallan: se cuentan, para que
+  // el renglón no mienta diciendo que no pasó nada.
+  const otros = Object.keys(data).filter(
+    (k) => !(mirados as readonly string[]).includes(k) && k !== "searchIndex" && k !== "updatedById",
+  );
+  if (otros.length > 0) {
+    antes.otrosCampos = "—";
+    despues.otrosCampos = otros.join(", ").slice(0, 300);
+  }
+
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "patient",
+    entityId: current.id,
+    patientId: current.id,
+    before: antes,
+    after: despues,
+  });
+
   return { id: current.id };
 }
 
@@ -1573,7 +1701,7 @@ export async function updateEduPatient(
  * y CUÁNDO. Si un día no cuadra una cuenta, hay que poder preguntarlo.
  */
 export async function setEduPatientOrigin(
-  ctx: EduClinicaContext,
+  ctx: EduPacienteEscrituraContext,
   patientId: string,
   input: { referredByStudentId?: unknown },
   now: Date = new Date(),
@@ -1624,6 +1752,19 @@ export async function setEduPatientOrigin(
       updatedById: ctx.eduUserId ?? null,
     },
   });
+
+  // El ORIGEN decide la TARIFA del paciente, así que su cambio es de los
+  // que hay que poder contestar dentro de un año. La fila ya guarda quién
+  // y cuándo; el renglón de bitácora guarda además de QUÉ a QUÉ.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "patient",
+    entityId: current.id,
+    patientId: current.id,
+    before: { referredByStudentId: current.referredByStudentId },
+    after: { referredByStudentId: studentId },
+  });
+
   return { id: current.id };
 }
 
@@ -1653,7 +1794,7 @@ export async function setEduPatientOrigin(
  * índice solo se alimenta de folio/nombre/teléfono/correo (Ola 1B).
  */
 export async function updateEduPatientAntecedentes(
-  ctx: EduClinicaContext,
+  ctx: EduPacienteEscrituraContext,
   patientId: string,
   input: EduAntecedentesInput,
   now: Date = new Date(),
@@ -1686,5 +1827,22 @@ export async function updateEduPatientAntecedentes(
       updatedById: ctx.eduUserId ?? null,
     },
   });
+
+  // 🔴 EL RENGLÓN DICE QUE SE REVISARON, NO QUÉ DECÍAN. Las alergias, los
+  // padecimientos y la medicación de una persona son dato de salud: en la
+  // bitácora —que abre dirección entera y de la que la anonimización ARCO
+  // no puede sacar nada— se guarda el HECHO de la revisión y cuántos
+  // campos trae, no su contenido. Quien necesite el contenido abre el
+  // expediente, que es donde vive y donde la lectura también queda
+  // registrada.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "patient",
+    entityId: current.id,
+    patientId: current.id,
+    before: { antecedentesRevisadosAt: "—" },
+    after: { antecedentesRevisadosAt: now },
+  });
+
   return { id: current.id };
 }

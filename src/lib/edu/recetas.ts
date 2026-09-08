@@ -61,6 +61,7 @@ import {
   eduRecetaPrintable,
   eduRecetaSendable,
   eduRecetaSnapshot,
+  eduRecetaArchivable,
   eduRecetaVoidable,
   eduRecetaWriteWhere,
   type EduRecetaCaseOption,
@@ -136,6 +137,10 @@ const RECETA_SELECT = {
   voidedByName: true,
   voidedAt: true,
   voidReason: true,
+  // Ola C · el archivado de una RECHAZADA (H-24).
+  archivedByName: true,
+  archivedAt: true,
+  archiveReason: true,
   createdAt: true,
   case: { select: { program: { select: { name: true } } } },
   items: {
@@ -245,6 +250,10 @@ function toRow(
     voidedAtLabel: r.voidedAt ? stampLabel(r.voidedAt, timeZone) : null,
     voidReason: r.voidReason,
 
+    archivedByName: r.archivedByName,
+    archivedAtLabel: r.archivedAt ? stampLabel(r.archivedAt, timeZone) : null,
+    archiveReason: r.archiveReason,
+
     integridad: verificarIntegridad(r),
 
     lastDecisionNote,
@@ -254,6 +263,7 @@ function toRow(
     editable: eduRecetaEditable(status),
     sendable: eduRecetaSendable(status),
     voidable: eduRecetaVoidable(status),
+    archivable: eduRecetaArchivable(status),
   };
 }
 

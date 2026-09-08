@@ -374,3 +374,212 @@ export function eduCuestionarioMergeData(
 
   return data;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 · EL FORMULARIO, COMO DATO (Ola C·2)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 LAS PREGUNTAS SON UN DATO Y VIVEN AQUÍ, no en el JSX de la pantalla.
+ *
+ * La razón es concreta y ya mordió una vez en este vertical: las CLAVES de
+ * las respuestas son las que `eduCuestionarioRiskFlags` y
+ * `eduCuestionarioMergeData` van a leer. Si la pantalla escribe
+ * `anticoagulante` (singular) y el servidor busca `anticoagulantes`, el
+ * cuestionario se guarda perfectamente, la ficha se actualiza a medias y
+ * la bandera roja NO SE ENCIENDE — sin error, sin aviso, y el fallo se
+ * descubre con el paciente sangrando. Con las claves aquí, la pantalla las
+ * recorre y no las teclea, y una prueba comprueba que las que el servidor
+ * mira están todas en esta lista.
+ *
+ * 🔴 CADA ESCUELA PUEDE AÑADIR LAS SUYAS Y NO PASA NADA: `answers` es Json
+ * y el servidor solo MIRA estas claves. Una pregunta extra se guarda y se
+ * lee en el historial; simplemente no enciende banderas.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export type EduCuestionarioTipo = "SI_NO" | "TEXTO" | "LISTA" | "HABITO" | "EMBARAZO";
+
+export interface EduCuestionarioPregunta {
+  clave: string;
+  etiqueta: string;
+  tipo: EduCuestionarioTipo;
+  /** La línea de ayuda, cuando la pregunta necesita explicarse. */
+  ayuda?: string;
+  /** true = si se contesta que sí, enciende una bandera CRÍTICA. */
+  critica?: boolean;
+}
+
+export interface EduCuestionarioBloque {
+  id: string;
+  titulo: string;
+  lead: string;
+  preguntas: EduCuestionarioPregunta[];
+}
+
+export const EDU_CUESTIONARIO_BLOQUES: EduCuestionarioBloque[] = [
+  {
+    id: "alertas",
+    titulo: "Lo que puede parar un procedimiento",
+    lead:
+      "Las cuatro respuestas que se leen antes de infiltrar un anestésico o de sacar una pieza. Si alguna es «sí», la ficha lo dice en rojo en todas sus pestañas.",
+    preguntas: [
+      {
+        clave: "anticoagulantes",
+        etiqueta: "¿Toma anticoagulantes?",
+        tipo: "SI_NO",
+        ayuda: "Warfarina, acenocumarol, rivaroxabán, apixabán, clopidogrel, aspirina a dosis alta.",
+        critica: true,
+      },
+      {
+        clave: "alergiaFarmacos",
+        etiqueta: "¿A qué medicamentos es alérgico?",
+        tipo: "LISTA",
+        ayuda: "Sepáralos con comas. Anestésicos y antibióticos, primero.",
+        critica: true,
+      },
+      {
+        clave: "embarazo",
+        etiqueta: "¿Embarazo o lactancia?",
+        tipo: "EMBARAZO",
+        ayuda: "Cambia la radiografía y el fármaco.",
+        critica: true,
+      },
+      {
+        clave: "bifosfonatos",
+        etiqueta: "¿Toma o ha tomado bifosfonatos?",
+        tipo: "SI_NO",
+        ayuda: "Alendronato, ácido zoledrónico. Riesgo de osteonecrosis tras una extracción.",
+        critica: true,
+      },
+    ],
+  },
+  {
+    id: "padecimientos",
+    titulo: "Padecimientos",
+    lead: "Lo que cambia la cicatrización, la infección y la dosis.",
+    preguntas: [
+      { clave: "cardiopatia", etiqueta: "¿Cardiopatía, prótesis valvular o endocarditis previa?", tipo: "SI_NO" },
+      { clave: "diabetes", etiqueta: "¿Diabetes?", tipo: "SI_NO" },
+      { clave: "hipertension", etiqueta: "¿Hipertensión?", tipo: "SI_NO" },
+      {
+        clave: "inmunosupresion",
+        etiqueta: "¿Inmunosupresión?",
+        tipo: "SI_NO",
+        ayuda: "Quimioterapia, VIH, trasplante, corticoides de largo plazo.",
+      },
+      {
+        clave: "padecimientos",
+        etiqueta: "Otros padecimientos crónicos",
+        tipo: "LISTA",
+        ayuda: "Se SUMAN a los que la ficha ya tenía; contestar aquí no borra nada.",
+      },
+    ],
+  },
+  {
+    id: "medicacion",
+    titulo: "Medicación y alergias",
+    lead: "Qué toma y a qué es alérgico, más allá de los fármacos.",
+    preguntas: [
+      { clave: "medicamentos", etiqueta: "¿Qué medicamentos toma?", tipo: "LISTA" },
+      {
+        clave: "alergias",
+        etiqueta: "Otras alergias",
+        tipo: "LISTA",
+        ayuda: "Látex, níquel, yodo, alimentos.",
+      },
+      { clave: "tipoSangre", etiqueta: "Tipo de sangre", tipo: "TEXTO" },
+    ],
+  },
+  {
+    id: "habitos",
+    titulo: "Hábitos",
+    lead: "Periodontal, cicatrización y desgaste.",
+    preguntas: [
+      { clave: "tabaco", etiqueta: "Tabaco", tipo: "HABITO" },
+      { clave: "alcohol", etiqueta: "Alcohol", tipo: "HABITO" },
+      { clave: "bruxismo", etiqueta: "Bruxismo", tipo: "HABITO" },
+      { clave: "habitosNotas", etiqueta: "Notas sobre hábitos", tipo: "TEXTO" },
+    ],
+  },
+  {
+    id: "nom004",
+    titulo: "Antecedentes (NOM-004)",
+    lead:
+      "Heredofamiliares y personales no patológicos. Son los dos que la norma pide por su nombre y los que la ficha no tenía dónde guardar.",
+    preguntas: [
+      { clave: "heredofamiliares", etiqueta: "Heredofamiliares", tipo: "TEXTO" },
+      { clave: "noPatologicos", etiqueta: "Personales no patológicos", tipo: "TEXTO" },
+    ],
+  },
+];
+
+/** Todas las claves del formulario, aplanadas. Lo usa la prueba. */
+export const EDU_CUESTIONARIO_CLAVES: string[] = EDU_CUESTIONARIO_BLOQUES.flatMap((b) =>
+  b.preguntas.map((p) => p.clave),
+);
+
+/** La etiqueta de una clave, para el historial y el diff. */
+export function eduCuestionarioEtiqueta(clave: string): string {
+  for (const b of EDU_CUESTIONARIO_BLOQUES) {
+    for (const p of b.preguntas) if (p.clave === clave) return p.etiqueta;
+  }
+  // Una clave que esta escuela añadió por su cuenta: se pinta tal cual en
+  // vez de esconderse. El historial es lo que se contestó, no lo que este
+  // archivo sabe preguntar.
+  return clave;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6 · EL DIFF ENTRE DOS VERSIONES
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduCuestionarioCambio {
+  clave: string;
+  etiqueta: string;
+  antes: string;
+  despues: string;
+}
+
+/** Un valor de respuesta, escrito para una persona. */
+export function eduCuestionarioTexto(v: unknown): string {
+  if (v === undefined || v === null || v === "") return "—";
+  if (typeof v === "boolean") return v ? "Sí" : "No";
+  if (Array.isArray(v)) return v.map((x) => String(x)).join(", ") || "—";
+  return String(v);
+}
+
+/**
+ * QUÉ CAMBIÓ entre dos versiones del cuestionario.
+ *
+ * 🔴 SOLO LO QUE CAMBIÓ, y las claves de las DOS versiones. Una pregunta
+ * que la versión nueva ya no trae también es un cambio —dejó de
+ * contestarse— y esconderla haría que el diff dijera que no pasó nada. Es
+ * la misma regla que el diff de la bitácora.
+ *
+ * `nueva` primero en la firma porque es como se lee la pantalla: «la 4
+ * comparada con la 3».
+ */
+export function eduCuestionarioDiff(
+  nueva: EduCuestionarioAnswers | null | undefined,
+  vieja: EduCuestionarioAnswers | null | undefined,
+): EduCuestionarioCambio[] {
+  const a = (vieja ?? {}) as Record<string, unknown>;
+  const b = (nueva ?? {}) as Record<string, unknown>;
+  const claves = Array.from(new Set([...Object.keys(a), ...Object.keys(b)]));
+  const out: EduCuestionarioCambio[] = [];
+  for (const clave of claves) {
+    const antes = eduCuestionarioTexto(a[clave]);
+    const despues = eduCuestionarioTexto(b[clave]);
+    if (antes === despues) continue;
+    out.push({ clave, etiqueta: eduCuestionarioEtiqueta(clave), antes, despues });
+  }
+  // El orden del formulario primero, y lo que no está en él al final: un
+  // diff ordenado por el objeto JSON sale en el orden en que se tecleó,
+  // que no es ningún orden.
+  const peso = (clave: string) => {
+    const i = EDU_CUESTIONARIO_CLAVES.indexOf(clave);
+    return i < 0 ? EDU_CUESTIONARIO_CLAVES.length : i;
+  };
+  return out.sort((x, y) => peso(x.clave) - peso(y.clave));
+}

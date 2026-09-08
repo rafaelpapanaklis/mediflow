@@ -329,3 +329,35 @@ export function eduAuditCampos(
   const claves = Array.from(new Set([...Object.keys(b), ...Object.keys(a)]));
   return claves.map((campo) => ({ campo, antes: b[campo] ?? null, despues: a[campo] ?? null }));
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 · EL RANGO DE FECHAS (Ola C·2)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Un día `YYYY-MM-DD` del filtro, convertido al instante que le
+ * corresponde en UTC.
+ *
+ * ⚠️ SE FILTRA EN UTC Y LA PANTALLA LO DICE. La bitácora guarda
+ * `createdAt` en UTC y esta función no sabe la zona del instituto, así que
+ * «7 de septiembre» aquí es de 00:00Z a 24:00Z. En México eso desplaza el
+ * corte unas horas: un renglón de las 19:00 del día 6 en Tijuana cae en el
+ * 7. Se acepta a propósito —el filtro es para acotar, no para cuadrar un
+ * libro contable— y el renglón trae SU hora escrita, que es el dato con el
+ * que se responde de verdad. Convertirlo bien pide la zona del instituto
+ * en el cliente de la pantalla, y esa es una vuelta que no cambia ninguna
+ * respuesta.
+ *
+ * `fin: true` devuelve el instante EXCLUSIVO del día siguiente, para que
+ * «hasta el 7» incluya el 7 entero. Un `lte` sobre las 00:00 del 7 se
+ * comería el día completo, que es el error clásico de este filtro.
+ */
+export function eduAuditParseDia(raw: unknown, fin = false): Date | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const d = new Date(`${v}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  if (fin) d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}

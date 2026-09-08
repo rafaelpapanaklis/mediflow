@@ -54,6 +54,7 @@ import {
   eduAuditDiff,
   eduAuditIsAction,
   eduAuditIsEntity,
+  eduAuditParseDia,
   eduAuditParseTake,
   type EduAuditAction,
   type EduAuditEntity,
@@ -166,6 +167,10 @@ export interface EduAuditQuery {
   actorUserId?: unknown;
   entity?: unknown;
   action?: unknown;
+  /** Día `YYYY-MM-DD` inclusivo. Ver `eduAuditParseDia`. */
+  desde?: unknown;
+  /** Día `YYYY-MM-DD` inclusivo (se traduce a `< día siguiente`). */
+  hasta?: unknown;
   cursor?: unknown;
   take?: unknown;
 }
@@ -211,6 +216,26 @@ export async function listEduAuditLog(
   if (actorUserId) where.actorUserId = actorUserId;
   if (eduAuditIsEntity(query.entity)) where.entity = query.entity;
   if (eduAuditIsAction(query.action)) where.action = query.action;
+
+  // ── EL RANGO DE FECHAS ──────────────────────────────────────────────
+  // 🔴 VA EN `createdAt` Y **NO** EN EL MISMO OBJETO QUE EL CURSOR. El
+  // cursor se expresa con un `OR` sobre `createdAt`, y escribir las dos
+  // cosas como `where.createdAt` haría que la segunda pisara a la
+  // primera: el paginador saltaría a la primera página cada vez que
+  // alguien filtrara por fecha, sin error y sin pista. Por eso el rango
+  // entra por `AND`, que es acumulativo.
+  const desde = eduAuditParseDia(query.desde);
+  const hasta = eduAuditParseDia(query.hasta, true);
+  if (desde || hasta) {
+    where.AND = [
+      {
+        createdAt: {
+          ...(desde ? { gte: desde } : {}),
+          ...(hasta ? { lt: hasta } : {}),
+        },
+      },
+    ];
+  }
 
   const cursor = eduAuditCursorDecode(query.cursor);
   if (cursor) {
@@ -266,4 +291,43 @@ export async function listEduAuditLog(
       ? eduAuditCursorEncode(visibles[visibles.length - 1])
       : null,
   };
+}
+
+/**
+ * QUIÉN aparece en la bitácora, para el desplegable del filtro.
+ *
+ * 🔴 SALE DE LA PROPIA BITÁCORA (`distinct`), no del padrón. Dos razones,
+ * y las dos importan: el filtro solo debe ofrecer a gente que TIENE
+ * renglones —ofrecer 120 cuentas de las que 4 escribieron es una lista
+ * inútil— y una cuenta dada de baja sigue teniendo su historia aquí, así
+ * que tiene que poder filtrarse aunque ya no esté en el padrón. El nombre
+ * es el CONGELADO del renglón, por lo mismo.
+ *
+ * ⚠️ `distinct` sobre `actorUserId` con un tope: una bitácora grande
+ * tiene miles de renglones y unas decenas de actores. El tope está para
+ * que una escuela enorme no traiga una lista sin fondo, y se dice cuándo
+ * muerde.
+ */
+export const EDU_AUDIT_MAX_ACTORES = 200;
+
+export async function listEduAuditActores(
+  ctx: { institutionId: string },
+): Promise<{ id: string; name: string; role: string }[]> {
+  const institutionId = ctx?.institutionId;
+  if (!institutionId || typeof institutionId !== "string") {
+    throw new EduPadronError("Tu sesión no trae instituto. Vuelve a entrar.", 401);
+  }
+  const filas = await prisma.eduAuditLog.findMany({
+    where: { institutionId, actorUserId: { not: null } },
+    distinct: ["actorUserId"],
+    orderBy: [{ actorUserId: "asc" }],
+    take: EDU_AUDIT_MAX_ACTORES,
+    select: { actorUserId: true, actorName: true, actorRole: true },
+  });
+  return filas
+    .filter((f): f is { actorUserId: string; actorName: string; actorRole: string } =>
+      Boolean(f.actorUserId),
+    )
+    .map((f) => ({ id: f.actorUserId, name: f.actorName, role: f.actorRole }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }

@@ -417,6 +417,11 @@ export interface EduRecetaRow {
   voidedAtLabel: string | null;
   voidReason: string | null;
 
+  /** Ola C · el ARCHIVADO de una RECHAZADA (H-24). Ver `eduRecetaArchivable`. */
+  archivedByName: string | null;
+  archivedAtLabel: string | null;
+  archiveReason: string | null;
+
   /**
    * 🔴 Se RECALCULA al leer y se compara con `issuedHash` (ver
    * EduRecetaIntegridad). `null` = la receta no está expedida ni anulada,
@@ -438,6 +443,13 @@ export interface EduRecetaRow {
   editable: boolean;
   sendable: boolean;
   voidable: boolean;
+  /**
+   * Ola C · ¿se puede ARCHIVAR? Solo una RECHAZADA. Se deriva en el
+   * servidor con `eduRecetaArchivable` y no en la pantalla: la pantalla
+   * que decide sola qué botón pintar es la que acaba pintando uno que el
+   * endpoint rebota con 409.
+   */
+  archivable: boolean;
 }
 
 /** Un caso al que se le puede colgar una receta nueva. */

@@ -8,6 +8,7 @@ import { EDU_PATIENT_PAGE_SIZE, parseEduPatientFilters } from "@/lib/edu/pacient
 import { listEduPatients } from "@/lib/edu/pacientes";
 import { listEduStudentOptions } from "@/lib/edu/agenda";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
+import Link from "next/link";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduPacientesScreen } from "@/components/edu/clinica/pacientes-screen";
 
@@ -107,6 +108,40 @@ export default async function InstitutoPacientesPage({
                 : "Los pacientes de los estudiantes que supervisas hoy. Cuando la dirección te asigne o te quite alguno, esta lista lo refleja sola."}
           </p>
         </div>
+
+        {/* ── OLA C·2 · LAS DOS PANTALLAS DE DIRECCIÓN ────────────────────
+            🔴 ESTA LISTA YA NO ENSEÑA LAS FICHAS DADAS DE BAJA, y ése es
+            justo el derecho ARCO: salen del listado y del buscador. Sin
+            una puerta a ellas, una baja no se podría deshacer nunca y
+            «¿anonimizaron a fulano?» solo se contestaría en Postgres.
+
+            🔴 Y LA BITÁCORA (NOM-024) cuelga de aquí y no del menú: la
+            entrada del sidebar vive en `EDU_NAV_ITEMS` (src/lib/edu/types.ts),
+            que es un archivo COMPARTIDO fuera del área de esta casilla.
+            Queda escrito en el punto 6 del reporte; mientras tanto se
+            llega desde donde se pregunta —la lista de pacientes— y desde
+            la ficha, que es donde alguien se hace la pregunta.
+
+            Las dos piden `direccion.panel`; la primera, además,
+            `pacientes.manage`. El servidor las vuelve a exigir. */}
+        {hasEduPermission(permUser, "direccion.panel") && (
+          <div className="edu-pagehead__actions">
+            {hasEduPermission(permUser, "pacientes.manage") && (
+              <Link
+                href="/instituto/pacientes/arco"
+                className="edu-btn edu-btn--ghost edu-btn--sm"
+              >
+                Fichas fuera de la lista
+              </Link>
+            )}
+            <Link
+              href="/instituto/direccion/bitacora"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+            >
+              Bitácora
+            </Link>
+          </div>
+        )}
       </header>
 
       <EduPacientesScreen
@@ -137,6 +172,16 @@ export default async function InstitutoPacientesPage({
            exactamente "tu inscripción no está activa", sin una consulta
            más. */
         inscripcionInactiva={scope.kind === "own" && alumnos.length === 0}
+        /* 🔴 H-05 · LAS DOS LLAVES DE ARCO, resueltas aquí. Fusionar mueve
+           el expediente de una persona a otra ficha: `pacientes.manage` lo
+           lleva CAJA por defecto y eso no es una decisión de mostrador. Con
+           las dos, solo DIRECCIÓN — y sin inventar ninguna key nueva, que
+           no le llegaría a nadie con `permissionsOverride` guardado. La
+           capa de datos las vuelve a exigir. */
+        canArco={
+          hasEduPermission(permUser, "pacientes.manage") &&
+          hasEduPermission(permUser, "direccion.panel")
+        }
       />
     </div>
   );

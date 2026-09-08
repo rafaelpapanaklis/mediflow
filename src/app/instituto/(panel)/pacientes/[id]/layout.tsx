@@ -37,6 +37,13 @@ import { eduTodayISO } from "@/lib/edu/agenda-core";
 import { getEduCampusScope } from "@/lib/edu/campus";
 import { eduWithCampus } from "@/lib/edu/campus-core";
 import { getEduPatientKpis } from "@/lib/edu/resumen";
+import { eduClinicalScope } from "@/lib/edu/expediente-core";
+import { eduScopeIsEmpty } from "@/lib/edu/visibility";
+import { getEduRiskFlagsVigentes } from "@/lib/edu/cuestionario";
+import {
+  EDU_RISK_FLAGS_CRITICAS,
+  EDU_RISK_FLAG_LABELS,
+} from "@/lib/edu/cuestionario-core";
 import { eduMoney } from "@/lib/edu/dinero-core";
 import {
   EDU_PATIENT_STATUS_LABELS,
@@ -46,6 +53,7 @@ import {
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduPacienteTabs, type EduPacienteTab } from "@/components/edu/expediente/paciente-tabs";
 import { EduPacienteAcciones } from "@/components/edu/expediente/paciente-acciones";
+import { EduPacienteArco } from "@/components/edu/expediente/paciente-arco";
 
 export const metadata: Metadata = {
   title: "Paciente · DaleControl Institucional",
@@ -139,6 +147,29 @@ export default async function InstitutoPacienteLayout({
   const paciente = await getEduPatient(ctx, params.id);
   if (!paciente) notFound();
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·2 · LA FICHA DE UN DUPLICADO FUSIONADO REDIRIGE A LA
+  // GANADORA, con aviso.
+  //
+  // El folio del perdedor está escrito en un consentimiento firmado y
+  // dictado por teléfono: alguien lo va a teclear. Dejarle abrir una ficha
+  // vacía —sus citas, sus notas y sus cobros se movieron— sería enseñarle
+  // un expediente que existe pero ya no vive ahí, y es exactamente donde
+  // se escribe una nota en el paciente equivocado.
+  //
+  // El aviso viaja en `?fusionadaDe=` y lo pinta `EduPacienteArco` en la
+  // ficha ganadora, que además LIMPIA el parámetro de la barra: sin eso, el
+  // enlace se compartiría con el aviso pegado.
+  //
+  // ⚠️ `redirect()` de Next lanza una excepción de control por dentro, así
+  // que va ANTES de cualquier consulta más: lo que se ponga debajo no se
+  // ejecuta para una ficha fusionada.
+  if (paciente.mergedIntoId) {
+    redirect(
+      `/instituto/pacientes/${paciente.mergedIntoId}?fusionadaDe=${encodeURIComponent(paciente.folio)}`,
+    );
+  }
+
   const base = `/instituto/pacientes/${paciente.id}`;
 
   // Las iniciales del recuadro de la cabecera. Mismo cálculo que el avatar
@@ -216,9 +247,35 @@ export default async function InstitutoPacienteLayout({
       },
       { key: "casos", href: `${base}/casos`, label: "Casos", permission: "casos.view" },
       {
+        // Ola C·2 · EL CUESTIONARIO DE SALUD VERSIONADO (fila 7). Va ANTES
+        // del expediente y después de Casos: es lo que se pregunta al
+        // sentar al paciente, y de ahí salen las banderas rojas que la
+        // cabecera pinta en todas las pestañas.
+        //
+        // Pestaña propia y no una sección de «Datos» a propósito: en Datos
+        // vive la tarjeta de antecedentes, que escribe el estado ACTUAL de
+        // la ficha. Esto es el HISTÓRICO de qué se preguntó cada vez, y
+        // meterlas juntas haría creer que una edita a la otra.
+        key: "salud",
+        href: `${base}/salud`,
+        label: "Salud",
+        permission: "expediente.view",
+      },
+      {
         key: "expediente",
         href: `${base}/expediente`,
         label: "Expediente",
+        permission: "expediente.view",
+      },
+      {
+        // Ola C·2 · EL PLAN DE TRATAMIENTO (fila 25). Pegado al
+        // expediente: son las dos caras del mismo acto clínico (qué se
+        // hizo / qué falta por hacer). MISMA key que el expediente y
+        // ninguna nueva — el plan es parte del expediente, y quien escribe
+        // la nota de una sesión es quien la hizo.
+        key: "plan",
+        href: `${base}/plan`,
+        label: "Plan",
         permission: "expediente.view",
       },
       {
@@ -300,13 +357,13 @@ export default async function InstitutoPacienteLayout({
 
   // ── LOS KPI DE LA CABECERA ────────────────────────────────────────────
   // Próxima cita, última visita y —solo con permiso Y alcance— el saldo,
-  // visibles en LAS DOCE pestañas y no solo en el Resumen.
+  // visibles en LAS CATORCE pestañas y no solo en el Resumen.
   //
   // 🔴 UNA SOLA LLAMADA, y la comparte con el Resumen. `getEduPatientKpis`
   // va memoizada por petición con el `cache()` de React, así que en la
   // pestaña Resumen esto se ejecuta una vez y `getEduPatientResumen`
   // reutiliza el resultado en lugar de repetir las cinco consultas. En las
-  // otras once pestañas es esa única llamada y nada más: la ficha NO paga
+  // otras trece pestañas es esa única llamada y nada más: la ficha NO paga
   // el resumen entero por cambiar de pestaña.
   const kpis = await getEduPatientKpis(
     ctx.institutionId,
@@ -319,6 +376,26 @@ export default async function InstitutoPacienteLayout({
   // decide si se consultó (`kpis.saldo === null` = no se consultó, no
   // viaja en el payload) y el permiso decide si se pinta.
   const veSaldo = kpis.saldo !== null && hasEduPermission(permUser, "caja.view");
+
+  // ── OLA C·2 · LAS BANDERAS DE RIESGO, EN LA CABECERA ──────────────────
+  //
+  // 🔴 SUBEN AQUÍ Y NO SE QUEDAN EN LA PESTAÑA «SALUD» por la misma razón
+  // que las alergias: un alumno a punto de infiltrar anestesia tiene que
+  // leer «Toma anticoagulantes» esté donde esté de la ficha, no solo si se
+  // le ocurre abrir el cuestionario. Van JUNTO a los chips de
+  // antecedentes, en la misma fila, y las CRÍTICAS primero — el orden lo
+  // resolvió el servidor y aquí no se recalcula.
+  //
+  // 🔴 SOLO PARA QUIEN ABRE EL EXPEDIENTE, y es deliberado: el
+  // cuestionario se lee con el alcance CLÍNICO ("cases"), que para CAJA es
+  // `none`. Caja sigue viendo las alergias —las captura ella en Datos— y
+  // no ve las banderas derivadas del cuestionario, que son la lectura
+  // clínica de la misma información. Con el `if` delante, además, para
+  // caja esta consulta ni se hace.
+  const veBanderas =
+    hasEduPermission(permUser, "expediente.view") &&
+    !eduScopeIsEmpty(eduClinicalScope(ctx));
+  const riesgo = veBanderas ? await getEduRiskFlagsVigentes(ctx, paciente.id, now) : null;
 
   const tabs: EduPacienteTab[] = definicion
     .filter((t) => {
@@ -411,7 +488,7 @@ export default async function InstitutoPacienteLayout({
           </div>
         </div>
 
-        {/* ── LOS KPI, EN LAS DOCE PESTAÑAS ────────────────────────────
+        {/* ── LOS KPI, EN LAS CATORCE PESTAÑAS ─────────────────────────
             Estaban solo en el Resumen: quien estaba en Estudios o en
             Recetas no sabía si el paciente tenía cita mañana sin volver a
             la portada. No cuestan una consulta por pestaña — ver
@@ -518,12 +595,71 @@ export default async function InstitutoPacienteLayout({
             );
           })}
 
+          {/* ── LAS BANDERAS DE RIESGO DEL CUESTIONARIO (Ola C·2) ───────
+              Van al FINAL de la fila de chips y no al principio: las
+              alergias de la ficha ya encabezan en rojo, y colar delante
+              otra tanda de rojos las empuja a segunda lectura. Dentro de
+              la tanda sí mandan las críticas, y ese orden lo puso el
+              servidor.
+
+              🔴 El `title` dice de QUÉ VERSIÓN salen. Una bandera sin
+              fecha se lee como un hecho permanente, y no lo es: es lo que
+              se contestó ese día. */}
+          {riesgo?.flags.map((f) => {
+            const critica = (EDU_RISK_FLAGS_CRITICAS as string[]).includes(f);
+            return (
+              <span
+                key={`riesgo-${f}`}
+                className={`edu-tag ${critica ? "edu-tag--danger" : "edu-tag--warn"}`}
+                title={`Del cuestionario de salud, versión ${riesgo.version}.${
+                  critica ? " Se lee antes de infiltrar un anestésico o de sacar una pieza." : ""
+                }`}
+              >
+                <AlertTriangle size={12} strokeWidth={1.75} aria-hidden />
+                {EDU_RISK_FLAG_LABELS[f]}
+              </span>
+            );
+          })}
+
           <Link href={`${base}/datos#antecedentes`} className="edu-fichaalertas__link">
             <ClipboardList size={12} strokeWidth={1.75} aria-hidden />
             Antecedentes
           </Link>
+          {veBanderas && (
+            <Link href={`${base}/salud`} className="edu-fichaalertas__link">
+              <HeartPulse size={12} strokeWidth={1.75} aria-hidden />
+              {riesgo ? `Cuestionario v${riesgo.version}` : "Sin cuestionario"}
+            </Link>
+          )}
         </div>
       </header>
+
+      {/* ── OLA C·2 · ARCO Y FUSIÓN ──────────────────────────────────
+          Va ENTRE la cabecera y las acciones del día a día, y no dentro
+          de ellas: dar de baja, anonimizar y fusionar no son «agendar» ni
+          «cobrar». Son actos de datos personales, los firma dirección y
+          se leen aparte. El componente también pinta los avisos de una
+          ficha dada de baja, anonimizada o a la que redirigió un
+          duplicado — esos SÍ los ve cualquiera que abra la ficha. */}
+      <EduPacienteArco
+        patientId={paciente.id}
+        folio={paciente.folio}
+        nombre={nombreCompleto}
+        /* 🔴 LAS DOS LLAVES, resueltas en el servidor. `pacientes.manage`
+           lo lleva CAJA por defecto, y anonimizar el expediente de una
+           persona no es una decisión de mostrador: con las dos, solo
+           DIRECCIÓN. La capa de datos vuelve a exigirlas
+           (`eduArcoAsegurarPermiso`), así que esto solo decide qué se
+           pinta. */
+        canArco={
+          hasEduPermission(permUser, "pacientes.manage") &&
+          hasEduPermission(permUser, "direccion.panel")
+        }
+        canBitacora={hasEduPermission(permUser, "direccion.panel")}
+        deletedAt={paciente.deletedAt}
+        deleteReason={paciente.deleteReason}
+        anonymizedAt={paciente.anonymizedAt}
+      />
 
       <EduPacienteAcciones
         patientId={paciente.id}

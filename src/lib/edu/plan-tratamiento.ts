@@ -25,28 +25,51 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
-import { eduCleanId, eduOptionalText } from "@/lib/edu/agenda-core";
+import {
+  eduCleanId,
+  eduFormatDayShort,
+  eduFormatTime,
+  eduOptionalText,
+  eduSafeTimeZone,
+  eduUtcToZoned,
+} from "@/lib/edu/agenda-core";
 import { getEduClinicalPatient } from "@/lib/edu/expediente";
 import type { EduClinicaContext } from "@/lib/edu/visibility";
 import {
   EDU_PLAN_DESC_MAX,
+  EDU_PLAN_MAX_PARTIDAS,
   EDU_PLAN_MAX_ROWS,
   EDU_PLAN_MAX_SESIONES,
   EDU_PLAN_SESSION_NOTES_MAX,
   EDU_PLAN_STATUSES_CERRADOS,
   eduPlanAtrasado,
+  eduPlanDescripcionCon,
+  eduPlanDescripcionHumana,
   eduPlanKpis,
   eduPlanParseEntero,
+  eduPlanParseFechaHecha,
   eduPlanParseNombre,
+  eduPlanParsePartidasPedidas,
   eduPlanParseStatus,
+  eduPlanPartidasParse,
+  eduPlanPartidasTotal,
   eduPlanProximaFecha,
   eduPlanPuedeTransicionar,
   type EduPlanKpis,
+  type EduPlanPartida,
   type EduTreatmentPlanStatus,
 } from "@/lib/edu/plan-tratamiento-core";
+import { eduVisibility, eduScopeIsEmpty } from "@/lib/edu/visibility";
+import { getEduTarifaDePaciente } from "@/lib/edu/tarifas";
 import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 
 export interface EduPlanContext extends EduClinicaContext, EduAuditActor {}
+
+/** El nombre de una persona, con el correo de respaldo. Mismo criterio que
+ *  el resto del vertical: una fila sin nombre no se pinta en blanco. */
+function personName(u: { firstName: string; lastName: string; email?: string }): string {
+  return [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || "Sin nombre";
+}
 
 function requireInstitution(ctx: { institutionId?: string }): string {
   const id = ctx?.institutionId;
@@ -59,7 +82,16 @@ function requireInstitution(ctx: { institutionId?: string }): string {
 export interface EduPlanRow {
   id: string;
   name: string;
+  /**
+   * La descripción TAL CUAL está en la base, bloque de partidas incluido.
+   * La pantalla pinta `descripcion` (la parte humana) y `partidas` por
+   * separado: ver el encabezado de las partidas en el core.
+   */
   description: string | null;
+  /** Lo que escribió una persona, sin el bloque canónico del servidor. */
+  descripcion: string;
+  /** Las partidas del tarifario con las que se armó el importe. */
+  partidas: EduPlanPartida[];
   caseId: string | null;
   status: EduTreatmentPlanStatus;
   totalCents: number;
@@ -75,7 +107,11 @@ export interface EduPlanRow {
     sessionNumber: number;
     notes: string | null;
     completedAt: string | null;
+    /** Quién la marcó: en la clínica de una escuela, el alumno que la hizo. */
+    completedByName: string | null;
     appointmentId: string | null;
+    /** «12 mar · 10:00 · Sillón 3», o null si no está ligada a ninguna cita. */
+    appointmentLabel: string | null;
   }[];
 }
 
@@ -83,6 +119,7 @@ export interface EduPlanRow {
 export async function listEduPlanes(
   ctx: EduPlanContext,
   patientId: string,
+  timeZone: string,
   now: Date = new Date(),
 ): Promise<EduPlanRow[]> {
   const institutionId = requireInstitution(ctx);
@@ -102,10 +139,23 @@ export async function listEduPlanes(
           notes: true,
           completedAt: true,
           appointmentId: true,
+          // 🔴 QUIÉN la marcó, no solo cuándo. Una sesión hecha sin firma
+          // no contesta la pregunta que un expediente tiene que contestar,
+          // y en una clínica de escuela la respuesta ES la evaluación de
+          // alguien. El nombre sale de la relación y no de una columna
+          // congelada porque `EduTreatmentSession` no la tiene; si la
+          // cuenta se desactiva, el FK es SetNull y aquí queda null — el
+          // rastro dice cuándo aunque ya no pueda decir quién.
+          completedBy: { select: { firstName: true, lastName: true, email: true } },
+          appointment: {
+            select: { startsAt: true, chair: { select: { name: true } } },
+          },
         },
       },
     },
   });
+
+  const tz = eduSafeTimeZone(timeZone);
 
   return filas.map((p) => {
     const kpis = eduPlanKpis(p.sessions, p.totalSessions);
@@ -113,6 +163,8 @@ export async function listEduPlanes(
       id: p.id,
       name: p.name,
       description: p.description,
+      descripcion: eduPlanDescripcionHumana(p.description),
+      partidas: eduPlanPartidasParse(p.description),
       caseId: p.caseId,
       status: p.status as EduTreatmentPlanStatus,
       totalCents: p.totalCents,
@@ -131,7 +183,17 @@ export async function listEduPlanes(
         sessionNumber: s.sessionNumber,
         notes: s.notes,
         completedAt: s.completedAt?.toISOString() ?? null,
+        completedByName: s.completedBy ? personName(s.completedBy) : null,
         appointmentId: s.appointmentId,
+        // La cita se rotula EN EL SERVIDOR y en la zona del INSTITUTO: en
+        // el navegador saldría en la zona de quien mira, y una cita de las
+        // 19:00 en Tijuana se pintaría al día siguiente.
+        appointmentLabel: s.appointment
+          ? `${eduFormatDayShort(eduUtcToZoned(s.appointment.startsAt, tz).dayISO)} ${eduFormatTime(
+              s.appointment.startsAt,
+              tz,
+            )}${s.appointment.chair ? ` · ${s.appointment.chair.name}` : ""}`
+          : null,
       })),
     };
   });
@@ -160,6 +222,8 @@ export async function createEduPlan(
     totalSessions?: unknown;
     sessionIntervalDays?: unknown;
     totalCents?: unknown;
+    /** Las partidas del tarifario: `[{ procedureId, quantity }]`. */
+    items?: unknown;
   },
   meta: { ip?: string | null; userAgent?: string | null } = {},
   now: Date = new Date(),
@@ -169,10 +233,68 @@ export async function createEduPlan(
   if (!paciente) throw new EduPadronError("Ese paciente no existe o no es de tu instituto.", 404);
 
   const name = eduPlanParseNombre(body?.name);
-  const description = eduOptionalText(body?.description, EDU_PLAN_DESC_MAX) ?? null;
+  const humana = eduOptionalText(body?.description, EDU_PLAN_DESC_MAX) ?? null;
   const totalSessions = eduPlanParseEntero(body?.totalSessions, "Las sesiones", 1, EDU_PLAN_MAX_SESIONES, 1);
   const sessionIntervalDays = eduPlanParseEntero(body?.sessionIntervalDays, "El intervalo en días", 1, 365, 30);
-  const totalCents = eduPlanParseEntero(body?.totalCents, "El importe en centavos", 0, 99_999_999, 0);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 LAS PARTIDAS Y EL IMPORTE — Y EL PRECIO LO PONE EL TARIFARIO.
+  //
+  // Lo que el navegador manda son PROCEDIMIENTOS Y CANTIDADES; el precio
+  // de cada uno lo resuelve `getEduTarifaDePaciente`, que es la misma
+  // función que usa caja y la que aplica la lista que a ESTE paciente le
+  // toca (convenio, campaña, «lo trajo un alumno»). Un `unitPriceCents`
+  // que llega del cliente es un precio que el cliente puede cambiar, y la
+  // regla (d) de la casa dice que la fuente es la tabla, no la pantalla.
+  //
+  // 🔴 Y LAS PARTIDAS SON DEL DINERO, ASÍ QUE PIDEN EL ALCANCE DEL DINERO.
+  // El plan lo abre el alcance CLÍNICO (un alumno arma el suyo), pero
+  // ponerle precio no: para docente y alumno el recurso "charges" es
+  // `none` y el tarifario ni se consulta. Un alumno crea el plan sin
+  // importe, que es exactamente lo que su rol puede contestar.
+  // ═══════════════════════════════════════════════════════════════════
+  const veDinero = !eduScopeIsEmpty(eduVisibility(ctx, "charges"));
+  const pedidas = eduPlanParsePartidasPedidas(body?.items);
+  let partidas: EduPlanPartida[] = [];
+  if (pedidas.length > 0) {
+    if (!veDinero) {
+      throw new EduPadronError(
+        "Tu rol no pone precios: arma el plan sin partidas y que la dirección le ponga el importe desde el tarifario.",
+        403,
+      );
+    }
+    const tarifa = await getEduTarifaDePaciente(ctx, paciente.id);
+    const porId = new Map(tarifa.prices.map((x) => [x.procedureId, x]));
+    for (const pedida of pedidas) {
+      // `prices` solo trae los que TIENEN precio en la lista que le toca
+      // a este paciente; los que no, van en `sinPrecio`. Por eso basta con
+      // no encontrarlo aquí para saber que no se puede presupuestar.
+      const precio = porId.get(pedida.procedureId);
+      if (!precio) {
+        throw new EduPadronError(
+          "Uno de los procedimientos que elegiste no tiene precio en la lista que le toca a este paciente. Ponle precio en Tarifarios o quítalo del plan.",
+          409,
+        );
+      }
+      partidas.push({
+        name: precio.name,
+        quantity: pedida.quantity,
+        unitPriceCents: precio.priceCents,
+      });
+    }
+  }
+
+  // Sin partidas, el importe puede llegar a mano (es el caso de un plan
+  // cerrado a tanto alzado). Con partidas manda la suma: dos números para
+  // lo mismo es cómo se llega a un presupuesto que no cuadra con su plan.
+  const totalCents =
+    partidas.length > 0
+      ? eduPlanPartidasTotal(partidas)
+      : veDinero
+        ? eduPlanParseEntero(body?.totalCents, "El importe en centavos", 0, 99_999_999, 0)
+        : 0;
+
+  const description = eduPlanDescripcionCon(humana, partidas);
 
   let caseId: string | null = null;
   const rawCase = eduCleanId(body?.caseId);
@@ -222,7 +344,7 @@ export async function createEduPlan(
     entity: "treatmentPlan",
     entityId: creado.id,
     patientId: paciente.id,
-    after: { name, totalSessions, totalCents },
+    after: { name, totalSessions, totalCents, partidas: partidas.length },
     ...meta,
   });
 
@@ -245,7 +367,14 @@ export async function marcarEduPlanSesion(
   ctx: EduPlanContext,
   planId: string,
   sessionId: string,
-  body: { hecha?: unknown; notes?: unknown },
+  body: {
+    hecha?: unknown;
+    notes?: unknown;
+    /** La fecha en que se hizo, si no fue hoy. Nunca futura. */
+    completedAt?: unknown;
+    /** La CITA en la que se hizo, si la hubo. `null` la desliga. */
+    appointmentId?: unknown;
+  },
   meta: { ip?: string | null; userAgent?: string | null } = {},
   now: Date = new Date(),
 ): Promise<{ id: string; completedAt: string | null; kpis: EduPlanKpis }> {
@@ -281,6 +410,29 @@ export async function marcarEduPlanSesion(
 
   const hecha = body?.hecha !== false;
   const notes = eduOptionalText(body?.notes, EDU_PLAN_SESSION_NOTES_MAX);
+  // La fecha REAL del acto, cuando no es hoy (se documenta el jueves lo
+  // que se hizo el martes). Sin ella se sella `now`, que es el caso normal.
+  const fechaHecha = hecha ? eduPlanParseFechaHecha(body?.completedAt, now) : null;
+
+  // 🔴 LA CITA SE COMPRUEBA CONTRA EL MISMO PACIENTE, y no se cree lo que
+  // llega en el cuerpo. Sin esto se podría colgar la sesión de una cita de
+  // otra persona pasando su id: el alcance comprobó el PACIENTE, no la
+  // cita. `null` explícito desliga; `undefined` no toca la columna.
+  let appointmentId: string | null | undefined;
+  if (body?.appointmentId === null || body?.appointmentId === "") {
+    appointmentId = null;
+  } else if (body?.appointmentId !== undefined) {
+    const cita = eduCleanId(body.appointmentId);
+    if (!cita) throw new EduPadronError("Esa cita no se entiende.", 400);
+    const existe = await prisma.eduAppointment.findFirst({
+      where: { id: cita, institutionId, patientId: plan.patientId },
+      select: { id: true },
+    });
+    if (!existe) {
+      throw new EduPadronError("Esa cita no existe o no es de este paciente.", 404);
+    }
+    appointmentId = existe.id;
+  }
 
   const kpis = await prisma.$transaction(async (tx) => {
     const res = await tx.eduTreatmentSession.updateMany({
@@ -293,9 +445,10 @@ export async function marcarEduPlanSesion(
         completedAt: hecha ? null : { not: null },
       },
       data: {
-        completedAt: hecha ? now : null,
+        completedAt: hecha ? (fechaHecha ?? now) : null,
         completedById: hecha ? ctx.eduUserId : null,
         ...(notes === undefined ? {} : { notes }),
+        ...(appointmentId === undefined ? {} : { appointmentId }),
       },
     });
     if (res.count === 0) {
@@ -329,7 +482,11 @@ export async function marcarEduPlanSesion(
     ...meta,
   });
 
-  return { id: sid, completedAt: hecha ? now.toISOString() : null, kpis };
+  return {
+    id: sid,
+    completedAt: hecha ? (fechaHecha ?? now).toISOString() : null,
+    kpis,
+  };
 }
 
 /**

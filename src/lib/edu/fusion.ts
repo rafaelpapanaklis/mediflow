@@ -308,3 +308,133 @@ export async function listEduFusionCandidatos(
         : "Mismo teléfono",
   }));
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// LA PREVISUALIZACIÓN — qué se va a mover, ANTES de moverlo
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduFusionPreview {
+  ganador: { id: string; folio: string; nombre: string };
+  perdedor: { id: string; folio: string; nombre: string };
+  /** Cuántas filas se moverían de cada colección, en orden de la fusión. */
+  mueve: { label: string; n: number }[];
+  /** Hallazgos del odontograma que se QUEDAN por chocar contra el índice. */
+  sePierdenPorChoque: number;
+  /** Versiones del cuestionario que se renumeran. */
+  cuestionarios: number;
+  /** El motivo por el que NO se puede fusionar, o null si sí. */
+  bloqueo: string | null;
+}
+
+/**
+ * QUÉ PASARÍA si se fusionan estas dos fichas. No escribe nada.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EXISTE PARA QUE LA PANTALLA DE CONFIRMACIÓN NO MIENTA, igual que
+ * `previsualizarEduArco`. Fusionar mueve el expediente de una persona a
+ * otra ficha y no se deshace con un botón: quien firma tiene derecho a
+ * ver el número exacto de citas, notas, estudios, fotos, consentimientos,
+ * recetas y cobros que va a mover — no un texto redactado a mano en un
+ * componente, que es lo que se desincroniza en la primera ola que agregue
+ * una colección.
+ *
+ * 🔴 LOS `count` SALEN DE LAS MISMAS OCHO TABLAS Y EN EL MISMO ORDEN que
+ * la fusión (`EDU_FUSION_TABLAS`), recorriendo la constante y no una
+ * lista copiada: una tabla nueva aparece aquí sola.
+ *
+ * ⚠️ SON DOS FOTOS EN DOS INSTANTES. Entre la previsualización y el
+ * `POST` alguien puede escribir una nota más, así que estos números son
+ * los de ANTES y el resumen que devuelve la fusión es el de VERDAD. La
+ * pantalla enseña los dos.
+ *
+ * ⚠️ Y EL POOLER: ocho `count` más tres consultas son once viajes. Se
+ * parten en tandas de seis, que es el límite escrito en CLAUDE.md.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function previsualizarEduFusion(
+  ctx: EduArcoContext,
+  ganadorId: string,
+  perdedorId: string,
+  now: Date = new Date(),
+): Promise<EduFusionPreview> {
+  eduArcoAsegurarPermiso(ctx);
+  const institutionId = requireInstitution(ctx);
+
+  const gid = eduCleanId(ganadorId);
+  const pid = eduCleanId(perdedorId);
+  if (!gid || !pid) throw new EduPadronError("Faltan las dos fichas que se van a fusionar.", 400);
+
+  const scope = eduVisibility(ctx, "patients");
+  if (eduScopeIsEmpty(scope)) throw new EduPadronError("Tu rol no alcanza a esos pacientes.", 403);
+
+  const encontrados = await prisma.eduPatient.findMany({
+    where: {
+      ...eduPatientScopeWhere({ institutionId, scope, now }),
+      id: { in: [gid, pid] },
+    },
+    select: {
+      id: true,
+      folio: true,
+      firstName: true,
+      lastName: true,
+      institutionId: true,
+      deletedAt: true,
+      anonymizedAt: true,
+      mergedIntoId: true,
+    },
+  });
+  const ganador = encontrados.find((p) => p.id === gid);
+  const perdedor = encontrados.find((p) => p.id === pid);
+  if (!ganador || !perdedor) {
+    throw new EduPadronError("Una de las dos fichas no existe o no es de tu instituto.", 404);
+  }
+
+  // Las ocho, recorriendo la MISMA constante que la fusión. En dos tandas
+  // de menos de siete: el pooler de este proyecto tiene su límite escrito.
+  const mueve: { label: string; n: number }[] = [];
+  for (let i = 0; i < EDU_FUSION_TABLAS.length; i += 6) {
+    const tanda = EDU_FUSION_TABLAS.slice(i, i + 6);
+    const cuentas = await Promise.all(
+      tanda.map((t) => {
+        const delegate = (prisma as unknown as Record<string, {
+          count: (a: unknown) => Promise<number>;
+        }>)[t.model];
+        return delegate.count({ where: { institutionId, patientId: perdedor.id } });
+      }),
+    );
+    tanda.forEach((t, j) => mueve.push({ label: t.label, n: cuentas[j] }));
+  }
+
+  const [odontoPerdedor, odontoGanador, cuestionarios] = await Promise.all([
+    prisma.eduOdontogramEntry.findMany({
+      where: { institutionId, patientId: perdedor.id },
+      select: { id: true, tooth: true, surface: true, condition: true },
+    }),
+    prisma.eduOdontogramEntry.findMany({
+      where: { institutionId, patientId: ganador.id },
+      select: { tooth: true, surface: true, condition: true },
+    }),
+    prisma.eduHealthQuestionnaire.count({
+      where: { institutionId, patientId: perdedor.id },
+    }),
+  ]);
+  const plan = eduFusionOdontogramaPlan(odontoPerdedor, odontoGanador);
+  mueve.push({ label: "hallazgos del odontograma", n: plan.mover.length });
+
+  return {
+    ganador: {
+      id: ganador.id,
+      folio: ganador.folio,
+      nombre: `${ganador.firstName} ${ganador.lastName}`.trim(),
+    },
+    perdedor: {
+      id: perdedor.id,
+      folio: perdedor.folio,
+      nombre: `${perdedor.firstName} ${perdedor.lastName}`.trim(),
+    },
+    mueve,
+    sePierdenPorChoque: plan.sePierdenPorChoque.length,
+    cuestionarios,
+    bloqueo: eduFusionMotivoParaNoFusionar(ganador, perdedor),
+  };
+}

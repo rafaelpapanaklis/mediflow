@@ -6,6 +6,7 @@ import { hasEduPermission } from "@/lib/edu/permissions";
 import { EDU_CLINICAL_NONE_DETAIL, eduClinicalScope } from "@/lib/edu/expediente-core";
 import { getEduClinicalPatient } from "@/lib/edu/expediente";
 import { listEduOdontogramHistory } from "@/lib/edu/odontograma";
+import { listEduOdontoEventos } from "@/lib/edu/odontograma-eventos";
 import {
   eduOdontogramDefaultDentition,
   eduOdontogramLiveEntries,
@@ -55,11 +56,20 @@ export default async function PacienteOdontogramaPage({ params }: { params: { id
   // historial quiere también lo RETIRADO; pedirlos por separado serían dos
   // fotos tomadas en instantes distintos, y un hallazgo que alguien quita
   // entre una y otra saldría dibujado sin aparecer en el historial.
-  const historial = await listEduOdontogramHistory(
-    ctx,
-    paciente.id,
-    ctx.institution.timezone,
-  );
+  // 🔴 N-3 · DOS LECTURAS Y NO UNA, y son dos preguntas distintas:
+  //   · `listEduOdontogramHistory` → el ESTADO de cada hallazgo (una fila
+  //     por llave). De ahí sale el DIBUJO y la lista de abajo, y es lo
+  //     único que puede contestar por lo que se marcó antes de que
+  //     existiera el libro de movimientos.
+  //   · `listEduOdontoEventos`     → los MOVIMIENTOS (una fila por acto):
+  //     quién marcó, quién quitó y CUÁNDO, aunque después se remarcara mil
+  //     veces. Es lo que hace verdad los dos rótulos de la pantalla.
+  // Van en paralelo: son dos tablas distintas y esperar una para pedir la
+  // otra solo suma latencia.
+  const [historial, movimientos] = await Promise.all([
+    listEduOdontogramHistory(ctx, paciente.id, ctx.institution.timezone),
+    listEduOdontoEventos(ctx, paciente.id, ctx.institution.timezone),
+  ]);
 
   return (
     <EduOdontogramaScreen
@@ -67,6 +77,8 @@ export default async function PacienteOdontogramaPage({ params }: { params: { id
       entries={eduOdontogramLiveEntries(historial.rows)}
       historial={historial.rows}
       historialTruncado={historial.truncated}
+      movimientos={movimientos.rows}
+      movimientosTruncados={movimientos.truncated}
       // Dentición inicial: un paciente con dentición temporal abre en los
       // cuadrantes 5-8 en vez de obligar a quien atiende a cambiarlo cada
       // vez. Se puede cambiar a mano — es el punto de partida, no un

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
@@ -13,6 +14,8 @@ import {
   getEduClinicalPatient,
   listEduPatientCaseOptions,
   listEduPatientRecords,
+  listEduPatientRecordsRetiradas,
+  registrarEduLecturaExpediente,
 } from "@/lib/edu/expediente";
 import { eduScopeIsEmpty } from "@/lib/edu/visibility";
 import { eduIaEstadoActual } from "@/lib/edu/ia-cupo";
@@ -73,7 +76,34 @@ export default async function PacienteExpedientePage({
   // quien mira: uno inventado no recorta nada raro, simplemente no está.
   const casoParam = typeof searchParams?.caso === "string" ? searchParams.caso : "";
 
-  const [page, cases, iaDictado] = await Promise.all([
+  const canWrite = hasEduPermission(permUser, "expediente.write");
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 NOM-024 §6.3.5 · SE REGISTRA QUE ALGUIEN **ABRIÓ** EL EXPEDIENTE.
+  //
+  // Es la mitad que siempre falta y la que la norma pide con nombre
+  // propio: una bitácora que solo apunta escrituras contesta «¿quién
+  // cambió esto?» y no contesta «¿quién leyó el expediente de mi
+  // paciente?», que es con la que llega una queja de privacidad. El dental
+  // ya lo hace en el `page.tsx` de su ficha (fila 21 del informe).
+  //
+  // Va AQUÍ y no dentro de `listEduPatientRecords` a propósito: esa lista
+  // la usan también el Resumen y la bandeja del docente, y registrar una
+  // lectura por cada uso llenaría la bitácora de renglones que no son
+  // «alguien abrió el expediente». Lo que la norma quiere registrar es el
+  // ACCESO, y el acceso es esta pantalla.
+  //
+  // `eduAudit` NUNCA lanza: abrir un expediente no puede fallar porque no
+  // se pudo escribir el renglón que dice que se abrió.
+  // ═══════════════════════════════════════════════════════════════════
+  const h = headers();
+  const fwd = h.get("x-forwarded-for") ?? "";
+  await registrarEduLecturaExpediente(ctx, paciente.id, {
+    ip: (fwd.split(",")[0]?.trim() || h.get("x-real-ip") || null)?.slice(0, 60) ?? null,
+    userAgent: h.get("user-agent")?.slice(0, 300) ?? null,
+  });
+
+  const [page, cases, iaDictado, retiradas] = await Promise.all([
     listEduPatientRecords(ctx, paciente.id, ctx.institution.timezone, { caseId: casoParam }),
     listEduPatientCaseOptions(ctx, paciente.id),
     // 🔴 Se resuelve AQUÍ, en el servidor, y desde la Ola 8 mira además el
@@ -82,6 +112,12 @@ export default async function PacienteExpedientePage({
     // saber cuánto le queda de presupuesto a la escuela. Llega ya decidido
     // y con el motivo escrito para una persona.
     eduIaEstadoActual(ctx, "DICTADO", ctx.institution.timezone),
+    // Solo para quien puede RETIRAR: quien no puede tampoco necesita el
+    // registro de quién retiró qué. Es el mismo criterio que «Retirados»
+    // en Estudios, y con el `if` delante la consulta ni se hace.
+    canWrite
+      ? listEduPatientRecordsRetiradas(ctx, paciente.id, ctx.institution.timezone)
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -95,12 +131,13 @@ export default async function PacienteExpedientePage({
       // Solo se le pasa si de verdad es uno de sus casos: así el
       // desplegable nunca queda marcando algo que la lista no filtró.
       casoFiltro={cases.some((c) => c.id === casoParam) ? casoParam : null}
-      canWrite={hasEduPermission(permUser, "expediente.write")}
+      canWrite={canWrite}
       // P2-13: firmar es otra key. El alumno (write sin sign) entrega; la
       // nota la cierra su docente. El endpoint lo vuelve a exigir.
       canSign={hasEduPermission(permUser, "expediente.sign")}
       meUserId={ctx.eduUserId}
       iaDictado={iaDictado}
+      retiradas={retiradas}
     />
   );
 }

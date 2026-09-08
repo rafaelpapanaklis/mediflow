@@ -104,6 +104,14 @@ export interface EduPacientesScreenProps {
    * verdad: la clínica tiene pacientes, y su cuenta ya no los alcanza.
    */
   inscripcionInactiva?: boolean;
+  /**
+   * Ola C·2 · ¿Puede FUSIONAR duplicados? Son las DOS llaves de ARCO
+   * (`pacientes.manage` + `direccion.panel`), resueltas en el servidor:
+   * `pacientes.manage` lo lleva CAJA por defecto y mover el expediente de
+   * una persona a otra ficha no es una decisión de mostrador. La capa de
+   * datos las vuelve a exigir; esto solo decide qué se pinta.
+   */
+  canArco?: boolean;
 }
 
 const TAG_BY_STATUS: Record<EduPatientStatus, string> = {
@@ -125,6 +133,7 @@ export function EduPacientesScreen({
   canOrigin,
   sinAlumnosAsignados = false,
   inscripcionInactiva = false,
+  canArco = false,
 }: EduPacientesScreenProps) {
   const router = useRouter();
   const [navigating, startNav] = useTransition();
@@ -541,6 +550,29 @@ export function EduPacientesScreen({
                       Editar
                     </button>
                   )}
+                  {/* ── H-05 · FUSIONAR, DESDE LA LISTA ─────────────
+                      Es donde se DESCUBRE un duplicado: dos renglones
+                      seguidos con el mismo nombre. El botón lleva a la
+                      ficha con `?fusionar=1` y allí se abre el diálogo —
+                      con sus candidatos, su previsualización de qué se
+                      mueve y su motivo obligatorio.
+
+                      🔴 SE VA A LA FICHA Y NO SE MONTA EL DIÁLOGO AQUÍ, y
+                      es deliberado: quién gana lo decide una persona
+                      MIRANDO las dos fichas (cuál tiene el folio bueno, el
+                      teléfono correcto y la historia más larga), y desde
+                      un renglón de tabla no se ve ninguna de las dos. De
+                      paso, una sola copia del diálogo: dos es como una se
+                      queda sin la previsualización. */}
+                  {canArco && (
+                    <Link
+                      href={`/instituto/pacientes/${p.id}?fusionar=1`}
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      title="Buscar duplicados de esta ficha y fusionarlos. Ésta sería la GANADORA."
+                    >
+                      Fusionar
+                    </Link>
+                  )}
                   <Link
                     href={`/instituto/pacientes/${p.id}`}
                     className="edu-btn edu-btn--ghost edu-btn--sm"
@@ -584,6 +616,7 @@ export function EduPacientesScreen({
         <AltaPaciente
           students={students}
           canOrigin={canOrigin}
+          canArco={canArco}
           onClose={() => setAlta(false)}
           onDone={(folio, aviso) => {
             setAlta(false);
@@ -619,14 +652,28 @@ export function EduPacientesScreen({
 // Alta
 // ═══════════════════════════════════════════════════════════════════════
 
+/** La forma del duplicado que devuelve el alta. Espejo de
+ *  `EduPatientDuplicate` (pacientes.ts), escrito aquí para no arrastrar el
+ *  módulo de servidor a un componente "use client". */
+interface EduPatientDuplicateUI {
+  id: string;
+  folio: string;
+  name: string;
+  phone: string | null;
+  motivo: "telefono" | "nombre";
+}
+
 function AltaPaciente({
   students,
   canOrigin,
+  canArco,
   onClose,
   onDone,
 }: {
   students: EduStudentOption[];
   canOrigin: boolean;
+  /** Las dos llaves de ARCO: decide si el aviso ofrece «Fusionar». */
+  canArco: boolean;
   onClose: () => void;
   /** El folio, y el AVISO del servidor si lo hubo (N-8). */
   onDone: (folio: string, aviso?: string | null) => void;
@@ -663,7 +710,13 @@ function AltaPaciente({
    * duplicado no se borra (NOM-004) ni se junta con el otro. Lo único que
    * se puede hacer después es marcarlo INACTIVE, que lo deja en la lista.
    */
-  const [duplicado, setDuplicado] = useState<string | null>(null);
+  /** El aviso de duplicado: el texto del servidor Y las fichas a las que
+   *  se parece. Antes solo se guardaba el texto, y por eso no se podía ni
+   *  abrir la ficha existente ni fusionarla. */
+  const [duplicado, setDuplicado] = useState<{
+    aviso: string;
+    filas: EduPatientDuplicateUI[];
+  } | null>(null);
 
   // 🔴 N-8 · LA MISMA FUNCIÓN QUE EL SERVIDOR (`eduPatientTutorConflict`,
   // pacientes-core), no una segunda redacción de la regla. El servidor la
@@ -684,7 +737,7 @@ function AltaPaciente({
         ok: boolean;
         folio?: string;
         aviso?: string;
-        duplicados?: { folio: string; name: string }[];
+        duplicados?: EduPatientDuplicateUI[];
       }>("/api/instituto/pacientes", {
         method: "POST",
         body: {
@@ -707,7 +760,10 @@ function AltaPaciente({
       // español, que es como un cambio de redacción convertiría este alto
       // ámbar en un error rojo sin que nada falle—.
       if (!res.ok && res.duplicados?.length) {
-        setDuplicado(res.aviso ?? "Puede que este paciente ya esté registrado.");
+        setDuplicado({
+          aviso: res.aviso ?? "Puede que este paciente ya esté registrado.",
+          filas: res.duplicados,
+        });
         return;
       }
       // 🔴 N-8 · el aviso NO impide nada: el paciente YA quedó registrado.
@@ -753,7 +809,50 @@ function AltaPaciente({
         <div className="edu-banner edu-banner--warn" role="alert">
           <div>
             <p className="edu-banner__title">Puede que ya esté registrado</p>
-            <p className="edu-banner__detail">{duplicado}</p>
+            <p className="edu-banner__detail">{duplicado.aviso}</p>
+            {/* ── H-05 · LA SALIDA DEL AVISO, QUE ANTES NO ESTABA ────────
+                El aviso decía «se parece a P-0031» y ahí se acababa: no
+                había forma de ABRIR esa ficha para comprobarlo, ni de
+                arreglarlo si resultaba que sí era la misma persona. Ahora
+                el aviso lleva a las dos cosas.
+
+                🔴 «Fusionar con ésta» abre el diálogo de fusión SOBRE LA
+                FICHA QUE YA EXISTE, que es la que tiene la historia: es la
+                GANADORA natural. Solo se ofrece a quien lleva las dos
+                llaves de ARCO — mover el expediente de una persona a otra
+                ficha no es una decisión de mostrador. */}
+            <ul className="edu-chiplist">
+              {duplicado.filas.map((d) => (
+                <li key={d.id} className="edu-assign">
+                  <span>
+                    <strong>{d.folio}</strong> · {d.name}
+                    {d.phone ? ` · ${d.phone}` : ""} ·{" "}
+                    {d.motivo === "telefono" ? "mismo teléfono" : "mismo nombre y nacimiento"}
+                  </span>
+                  <a
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    href={`/instituto/pacientes/${d.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Abrir su ficha
+                  </a>
+                  {canArco && (
+                    <a
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      href={`/instituto/pacientes/${d.id}?fusionar=1`}
+                    >
+                      Fusionar con ésta
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <p className="edu-banner__detail">
+              Si de verdad es otra persona, pulsa «Sí, es otra persona: registrar». Si es la misma
+              y ya la registraste dos veces, se arregla fusionando: mueve todo a una ficha y la
+              otra queda apuntando a ella, sin borrar nada.
+            </p>
           </div>
         </div>
       )}

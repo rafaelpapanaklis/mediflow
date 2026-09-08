@@ -342,3 +342,164 @@ export async function anonymizeEduPatient(
     campos: EDU_ARCO_PII_FIELD_NAMES.length,
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 3 · EL LISTADO — quién está de baja y quién está anonimizado
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Tope del listado. Es una pantalla de dirección, no un export. */
+export const EDU_ARCO_MAX_ROWS = 200;
+
+export type EduArcoTipo = "BAJA" | "ANONIMIZADO" | "FUSIONADO";
+
+export const EDU_ARCO_TIPO_LABELS: Record<EduArcoTipo, string> = {
+  BAJA: "Dados de baja",
+  ANONIMIZADO: "Anonimizados",
+  FUSIONADO: "Fusionados",
+};
+
+export interface EduArcoRow {
+  id: string;
+  folio: string;
+  nombre: string;
+  tipo: EduArcoTipo;
+  /** Cuándo pasó lo que la puso en esta lista. */
+  cuandoISO: string | null;
+  quien: string | null;
+  motivo: string | null;
+  /** Solo en FUSIONADO: la ficha que se quedó con el expediente. */
+  ganadorId: string | null;
+  ganadorFolio: string | null;
+}
+
+/**
+ * LAS FICHAS QUE SALIERON DE LA LISTA, para dirección.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EXISTE PORQUE UNA BAJA QUE NO SE PUEDE VER NO SE PUEDE DESHACER.
+ *
+ * `bajaEduPatient` y `anonymizeEduPatient` sacan la ficha de la lista de
+ * pacientes y del buscador — que es justo lo que la solicitud ARCO pide—,
+ * y sin esta pantalla el resultado sería que nadie puede volver a
+ * encontrarla: ni para reactivarla, ni para contestar «¿anonimizaron a
+ * fulano?» en una auditoría. La constancia está en la bitácora, pero un
+ * renglón de bitácora no tiene botón de deshacer.
+ *
+ * 🔴 LAS TRES SON DISTINTAS Y NO SE MEZCLAN:
+ *   · BAJA        → reversible. Tiene botón de reactivar.
+ *   · ANONIMIZADO → irreversible. NO tiene botón de nada.
+ *   · FUSIONADO   → su expediente vive en otra ficha, y se dice en cuál.
+ *
+ * 🔴 LAS DOS LLAVES, como el resto de ARCO (`pacientes.manage` +
+ * `direccion.panel`): esta lista dice quién pidió la cancelación de sus
+ * datos y por qué, que es tan personal como los datos que se cancelaron.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function listEduPatientsArco(
+  ctx: EduArcoContext,
+  query: { tipo?: unknown; q?: unknown } = {},
+  now: Date = new Date(),
+): Promise<{ rows: EduArcoRow[]; truncated: boolean }> {
+  eduArcoAsegurarPermiso(ctx);
+  const institutionId = requireInstitution(ctx);
+
+  const scope = eduVisibility(ctx, "patients");
+  if (eduScopeIsEmpty(scope)) return { rows: [], truncated: false };
+
+  const tipo =
+    query?.tipo === "BAJA" || query?.tipo === "ANONIMIZADO" || query?.tipo === "FUSIONADO"
+      ? (query.tipo as EduArcoTipo)
+      : null;
+
+  // 🔴 LAS TRES CONDICIONES VAN EN UN `OR`… **DENTRO DEL `AND`**, Y ESA ES
+  // LA LÍNEA QUE IMPORTA.
+  //
+  // `eduPatientScopeWhere` expresa el alcance de un ALUMNO y el de un
+  // DOCENTE con un `OR` de primer nivel («un caso mío» o «una cita mía»).
+  // Escribir aquí `{ ...base, OR: condiciones }` lo PISARÍA: el recorte
+  // desaparecería entero y esta pantalla enseñaría las fichas dadas de baja
+  // de toda la escuela. Hoy no explota porque las dos llaves de ARCO solo
+  // las lleva DIRECCION, cuyo alcance es `all` y no trae `OR` — pero
+  // `permissionsOverride` es editable, y un candado que solo aguanta
+  // mientras nadie toque el catálogo de permisos no es un candado. Es
+  // exactamente el aviso que `patientsWhere` (pacientes.ts) lleva escrito.
+  //
+  // Y son TRES condiciones y no `deletedAt: { not: null }` a secas porque
+  // una fusionada también queda con `deletedAt`: sin distinguirlas, la
+  // pestaña «Dados de baja» ofrecería reactivar una ficha cuyo expediente
+  // ya está en otra parte.
+  const condiciones: Prisma.EduPatientWhereInput[] = [];
+  if (!tipo || tipo === "ANONIMIZADO") condiciones.push({ anonymizedAt: { not: null } });
+  if (!tipo || tipo === "FUSIONADO") condiciones.push({ mergedIntoId: { not: null } });
+  if (!tipo || tipo === "BAJA") {
+    condiciones.push({ deletedAt: { not: null }, anonymizedAt: null, mergedIntoId: null });
+  }
+
+  const where: Prisma.EduPatientWhereInput = eduPatientScopeWhere({ institutionId, scope, now });
+  const and: Prisma.EduPatientWhereInput[] = [{ OR: condiciones }];
+
+  const q = typeof query?.q === "string" ? query.q.trim().slice(0, 80) : "";
+  if (q) {
+    // Sobre `searchIndex`, igual que la lista viva. En una anonimizada esa
+    // columna está vacía a propósito, así que solo se la encuentra por
+    // folio — que es exactamente lo que la anonimización promete.
+    and.push({
+      OR: [
+        { searchIndex: { contains: q.toLowerCase(), mode: "insensitive" } },
+        { folio: { contains: q, mode: "insensitive" } },
+      ],
+    });
+  }
+  where.AND = and;
+
+  const filas = await prisma.eduPatient.findMany({
+    where,
+    orderBy: [{ deletedAt: "desc" }, { id: "desc" }],
+    take: EDU_ARCO_MAX_ROWS + 1,
+    select: {
+      id: true,
+      folio: true,
+      firstName: true,
+      lastName: true,
+      deletedAt: true,
+      deleteReason: true,
+      anonymizedAt: true,
+      mergedIntoId: true,
+      mergedAt: true,
+      deletedBy: { select: { firstName: true, lastName: true, email: true } },
+      anonymizedBy: { select: { firstName: true, lastName: true, email: true } },
+      mergedBy: { select: { firstName: true, lastName: true, email: true } },
+      mergedInto: { select: { id: true, folio: true } },
+    },
+  });
+
+  const truncated = filas.length > EDU_ARCO_MAX_ROWS;
+  const nombre = (u: { firstName: string; lastName: string; email?: string } | null) =>
+    u ? [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || null : null;
+
+  return {
+    truncated,
+    rows: filas.slice(0, EDU_ARCO_MAX_ROWS).map((p) => {
+      const t: EduArcoTipo = p.mergedIntoId
+        ? "FUSIONADO"
+        : p.anonymizedAt
+          ? "ANONIMIZADO"
+          : "BAJA";
+      return {
+        id: p.id,
+        folio: p.folio,
+        nombre: `${p.firstName} ${p.lastName}`.trim(),
+        tipo: t,
+        cuandoISO:
+          (t === "FUSIONADO" ? p.mergedAt : t === "ANONIMIZADO" ? p.anonymizedAt : p.deletedAt)
+            ?.toISOString() ?? null,
+        quien: nombre(
+          t === "FUSIONADO" ? p.mergedBy : t === "ANONIMIZADO" ? p.anonymizedBy : p.deletedBy,
+        ),
+        motivo: p.deleteReason,
+        ganadorId: p.mergedInto?.id ?? null,
+        ganadorFolio: p.mergedInto?.folio ?? null,
+      };
+    }),
+  };
+}
