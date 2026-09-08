@@ -54,6 +54,7 @@ import {
   EDU_WA_MAX_ROWS,
   eduClampReminderHours,
   eduDecideWaSend,
+  eduDocumentDedupeKey,
   eduParseWaTemplates,
   eduSanitizeWaTemplates,
   eduWaConnState,
@@ -730,7 +731,14 @@ export interface EduWaSendArgs {
   appointmentId?: string | null;
   consentId?: string | null;
   chargeId?: string | null;
-  /** Llave de idempotencia (solo los recordatorios la usan). */
+  /**
+   * Llave de idempotencia. La usan los recordatorios (con la hora de la
+   * cita dentro) y, desde la C·2 · H-116, también los DOCUMENTOS de la
+   * ficha —recibo y consentimiento— con un cubo de la ventana de repetición
+   * (`eduDocumentDedupeKey`). Lo que la llave respalda es el índice único
+   * `(institutionId, dedupeKey)`: es lo único que cierra dos envíos de
+   * verdad simultáneos, porque el SELECT previo no puede.
+   */
   dedupeKey?: string | null;
   scheduledFor?: Date | null;
   /** Quién lo mandó. Null = el cron. */
@@ -1343,6 +1351,8 @@ export async function sendEduConsentWhatsapp(
     throw new EduPadronError("Esa carta ya venció. Emite una nueva y mándala.", 409);
   }
 
+  // H-116 · el SELECT da el 409 explicado; la LLAVE de abajo es la que lo
+  // garantiza cuando dos peticiones llegan a la vez y ninguna ve a la otra.
   if (await seMandoHaceNada(institutionId, "CONSENTIMIENTO", "consentId", consent.id, now)) {
     throw new EduPadronError("Esa carta se acaba de mandar hace un momento.", 409);
   }
@@ -1361,6 +1371,12 @@ export async function sendEduConsentWhatsapp(
       `${siteBase()}/instituto/consentimiento/${consent.token}`,
     ],
     consentId: consent.id,
+    dedupeKey: eduDocumentDedupeKey(
+      "CONSENTIMIENTO",
+      consent.id,
+      now,
+      EDU_WA_REPEAT_WINDOW_MS,
+    ),
     sentByUserId: ctx.eduUserId,
     sentByName: eduActorName(ctx),
     now,
@@ -1436,6 +1452,7 @@ export async function sendEduReceiptWhatsapp(
     throw new EduPadronError("Ese cobro está cancelado: su recibo ya no vale.", 409);
   }
 
+  // H-116 · igual que el consentimiento: el SELECT explica, la llave cierra.
   if (await seMandoHaceNada(institutionId, "RECIBO", "chargeId", charge.id, now)) {
     throw new EduPadronError("Ese recibo se acaba de mandar hace un momento.", 409);
   }
@@ -1455,6 +1472,7 @@ export async function sendEduReceiptWhatsapp(
       eduMoney(charge.balanceCents),
     ],
     chargeId: charge.id,
+    dedupeKey: eduDocumentDedupeKey("RECIBO", charge.id, now, EDU_WA_REPEAT_WINDOW_MS),
     sentByUserId: ctx.eduUserId,
     sentByName: eduActorName(ctx),
     now,
