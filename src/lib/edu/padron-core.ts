@@ -580,6 +580,13 @@ export interface EduAssignmentRow {
   studentId: string;
   matricula: string;
   name: string;
+  /**
+   * Ola C·2 · H-39. La ESPECIALIDAD del alumno, que sale de su ficha y no
+   * de la asignación. Está aquí porque el destino de un traspaso se elige
+   * de esta lista y el servidor exige misma especialidad: sin la llave, el
+   * `<select>` ofrecía alumnos que iban a rebotar con 409.
+   */
+  programId: string;
   isPrimary: boolean;
 }
 

@@ -5,7 +5,11 @@ import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
 import { listEduPatientCases } from "@/lib/edu/casos";
-import { listEduPatientAppointments, listEduStudentOptions } from "@/lib/edu/agenda";
+import {
+  listEduPatientAppointments,
+  listEduStudentOptions,
+  listEduSupervisorOptions,
+} from "@/lib/edu/agenda";
 import { listEduCurrentAssignments } from "@/lib/edu/padron";
 import { eduFormatDayShort } from "@/lib/edu/agenda-core";
 import { eduVisibility } from "@/lib/edu/visibility";
@@ -66,7 +70,7 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
   const canTraspasar = hasEduPermission(permUser, "traspaso.manage");
   const canFirmar = hasEduPermission(permUser, "autorizaciones.decide");
 
-  const [casos, citas, alumnosDestino] = await Promise.all([
+  const [casos, citas, alumnosDestino, docentes] = await Promise.all([
     listEduPatientCases(ctx, p.id),
     hasEduPermission(permUser, "agenda.view")
       ? listEduPatientAppointments(ctx, p.id, ctx.institution.timezone)
@@ -74,15 +78,33 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
     // El destino del traspaso, por ALCANCE (la lección del P1-4: el padrón
     // completo no viaja al navegador de quien no lo ve): un DOCENTE recibe
     // SOLO sus alumnos vigentes; dirección, los activos del instituto.
+    //
+    // ⚠️ Ola C·2 · H-39: cada opción viaja con su `programId` porque el
+    // componente descarta las de otra especialidad — el traspaso la exige
+    // y hasta ahora el desplegable ofrecía alumnos que rebotaban con 409.
     canTraspasar
       ? scope.kind === "all"
         ? listEduStudentOptions(ctx).then((rows) =>
-            rows.map((a) => ({ id: a.id, matricula: a.matricula, name: a.name })),
+            rows.map((a) => ({
+              id: a.id,
+              matricula: a.matricula,
+              name: a.name,
+              programId: a.programId,
+            })),
           )
         : listEduCurrentAssignments(ctx, new Date(), ctx.eduUserId).then((rows) =>
-            rows.map((a) => ({ id: a.studentId, matricula: a.matricula, name: a.name })),
+            rows.map((a) => ({
+              id: a.studentId,
+              matricula: a.matricula,
+              name: a.name,
+              programId: a.programId,
+            })),
           )
       : Promise.resolve([]),
+    // Ola C·2 · H-34: los docentes, para CORREGIR el responsable del caso.
+    // Solo para quien tiene el permiso que exige el PATCH: al resto no le
+    // llega ni la lista ni el botón.
+    canMoverEstado ? listEduSupervisorOptions(ctx) : Promise.resolve([]),
   ]);
 
   // ── Ola 4 · el estado de autorización de CADA caso ───────────────────
@@ -241,7 +263,12 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
                     canTraspasar={canTraspasar}
                     canFirmar={canFirmar}
                     pendientes={(auth?.rows ?? []).filter((r) => r.status === "PENDING")}
+                    programId={c.programId}
+                    programName={c.programName}
                     alumnosDestino={alumnosDestino}
+                    docentes={docentes}
+                    supervisorUserId={c.supervisorUserId}
+                    supervisorName={c.supervisorName}
                   />
                 </div>
               );

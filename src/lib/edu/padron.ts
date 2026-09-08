@@ -339,6 +339,10 @@ export async function listEduCurrentAssignments(
         select: {
           id: true,
           matricula: true,
+          // Ola C·2 · H-39: la especialidad viaja con el alumno porque el
+          // destino de un traspaso se elige de esta lista y el servidor
+          // exige que coincida con la del caso.
+          programId: true,
           user: { select: { firstName: true, lastName: true, email: true } },
         },
       },
@@ -350,6 +354,7 @@ export async function listEduCurrentAssignments(
     studentId: a.student.id,
     matricula: a.student.matricula,
     name: fullName(a.student.user),
+    programId: a.student.programId,
     isPrimary: a.isPrimary,
   }));
 }

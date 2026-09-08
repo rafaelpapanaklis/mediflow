@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EduModal } from "@/components/edu/edu-modal";
 import { EDU_APPROVAL_NOTE_MIN, type EduApprovalRow } from "@/lib/edu/autorizaciones-core";
+import type { EduSupervisorOption } from "@/lib/edu/agenda-core";
 import type { EduCaseStatus } from "@/lib/edu/types";
 
 /**
@@ -28,7 +29,12 @@ import type { EduCaseStatus } from "@/lib/edu/types";
  *   · REGISTRAR SESIÓN — una nota SOAP que nace BORRADOR en el
  *     expediente, colgada de ESTE caso.
  *   · TRASPASAR — cierra este caso como TRANSFERRED y abre uno nuevo con
- *     el alumno destino (el servidor exige misma especialidad).
+ *     el alumno destino (el servidor exige misma especialidad, y desde
+ *     H-39 el `<select>` ya solo ofrece los que la cumplen).
+ *   · CAMBIAR EL DOCENTE RESPONSABLE (H-34) — el PATCH de
+ *     `supervisorUserId`, que el core aceptaba desde la Ola 2 y que
+ *     ninguna pantalla mandaba: un caso abierto con el docente equivocado
+ *     se quedaba así para siempre.
  *
  * ⚠️ Cada `can*` viene DERIVADO DEL SERVIDOR (permiso + estado): esconder
  * no cierra nada — el candado es el guard de cada endpoint — pero a nadie
@@ -50,7 +56,24 @@ export interface EduCasoAccionesProps {
   canFirmar: boolean;
   /** Las PENDIENTES del caso (sin recetas), tal como las armó el server. */
   pendientes: EduApprovalRow[];
-  alumnosDestino: { id: string; matricula: string; name: string }[];
+  /**
+   * H-39 · La especialidad DEL CASO. El filtro del `<select>` de traspaso
+   * vive aquí dentro y no en la página a propósito: es UN solo sitio y
+   * vale para cualquier página que monte este componente. El servidor
+   * sigue siendo el candado —`/api/instituto/traspasos` exige que
+   * coincidan— y esto solo evita ofrecer lo que va a rebotar.
+   */
+  programId: string;
+  programName: string;
+  alumnosDestino: { id: string; matricula: string; name: string; programId: string }[];
+  /**
+   * H-34 · Los docentes del instituto, para CORREGIR el responsable.
+   * Llega vacío si quien mira no tiene `casos.assign` — que es el mismo
+   * permiso que exige el PATCH.
+   */
+  docentes: EduSupervisorOption[];
+  supervisorUserId: string | null;
+  supervisorName: string | null;
 }
 
 type Decision = "APPROVED" | "CHANGES_REQUESTED" | "REJECTED";
@@ -68,7 +91,12 @@ export function EduCasoAcciones({
   canTraspasar,
   canFirmar,
   pendientes,
+  programId,
+  programName,
   alumnosDestino,
+  docentes,
+  supervisorUserId,
+  supervisorName,
 }: EduCasoAccionesProps) {
   const router = useRouter();
   const [, startNav] = useTransition();
@@ -92,6 +120,10 @@ export function EduCasoAcciones({
   const [modalTraspaso, setModalTraspaso] = useState(false);
   const [destino, setDestino] = useState("");
   const [motivoTraspaso, setMotivoTraspaso] = useState("");
+
+  // H-34 · corregir el docente responsable del caso.
+  const [modalDocente, setModalDocente] = useState(false);
+  const [docenteNuevo, setDocenteNuevo] = useState(supervisorUserId ?? "");
 
   // La decisión de una pendiente: cuál está abierta y qué se escribe.
   const [decidiendo, setDecidiendo] = useState<string | null>(null);
@@ -170,6 +202,46 @@ export function EduCasoAcciones({
     }
   }
 
+  /**
+   * H-34 · CORREGIR EL DOCENTE RESPONSABLE.
+   *
+   * El core (`updateEduCase`) aceptaba `supervisorUserId` desde la Ola 2 —
+   * comprueba que sea DOCENTE de este instituto y que esté vigente— y el
+   * endpoint le pasa el body entero. Lo que faltaba era la pantalla: un
+   * caso abierto en el tamizaje con el docente equivocado no se corregía
+   * por ninguna vía, y el nombre mal puesto es el que firma las
+   * autorizaciones del alumno.
+   *
+   * Cadena vacía = quitarlo, que el core traduce a NULL. Se ofrece a
+   * propósito: un caso sin responsable se ve, y uno con el responsable
+   * equivocado no.
+   */
+  async function cambiarDocente() {
+    setError(null);
+    if (docenteNuevo === (supervisorUserId ?? "")) {
+      setError("Ese ya es el docente responsable del caso.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await eduRequest(`/api/instituto/casos/${caseId}`, {
+        method: "PATCH",
+        body: { supervisorUserId: docenteNuevo || null },
+      });
+      setModalDocente(false);
+      setFlash(
+        docenteNuevo
+          ? "Docente responsable corregido. Queda registrado en la bitácora del caso."
+          : "El caso se quedó sin docente responsable. Asígnale uno antes de que pida autorización.",
+      );
+      startNav(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cambiar el docente responsable.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function decidir(approvalId: string, decision: Decision) {
     setError(null);
     if (decision !== "APPROVED" && nota.trim().length < EDU_APPROVAL_NOTE_MIN) {
@@ -201,6 +273,21 @@ export function EduCasoAcciones({
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 H-39 — EL DESTINO DEL TRASPASO, SOLO DE LA MISMA ESPECIALIDAD.
+  //
+  // `/api/instituto/traspasos` lo exige y contesta 409 si no coincide,
+  // pero el `<select>` ofrecía el padrón entero que le tocara a quien
+  // mira: dirección veía a los 200 alumnos del instituto y elegía entre
+  // ellos, y solo al pulsar "Traspasar" —con el modal ya lleno y el motivo
+  // escrito— descubría que ese alumno es de otra especialidad.
+  //
+  // Se filtra AQUÍ y no en la página porque es un solo sitio para
+  // cualquier página que monte este componente. El candado sigue siendo el
+  // servidor; esto es no ofrecer lo que va a rebotar.
+  // ═══════════════════════════════════════════════════════════════════
+  const destinos = alumnosDestino.filter((a) => a.programId === programId);
+
   const firmables = canFirmar
     ? // Lo PROPIO no se ofrece SALVO a la dirección: el server marca con
       // batchSkip "propia" (rol + id de la sesión) lo que quien mira no
@@ -208,6 +295,12 @@ export function EduCasoAcciones({
       // firma en la bandeja, donde está el campo de la cédula.
       pendientes.filter((p) => p.stage !== "PRESCRIPTION")
     : [];
+
+  // H-34: corregir el responsable NO se ofrece en un caso cerrado, igual
+  // que el resto de la barra — un caso terminado es historia, y su
+  // responsable de entonces es parte de esa historia. Se corrige mientras
+  // está vivo, que es cuando el error todavía hace daño.
+  const puedeCambiarDocente = canMoverEstado && docentes.length > 0;
 
   const hayAcciones =
     (!cerrado && (canMoverEstado || canRegistrarSesion || canTraspasar)) || firmables.length > 0;
@@ -452,6 +545,26 @@ export function EduCasoAcciones({
               Traspasar
             </button>
           )}
+
+          {/* H-34 · el docente responsable, corregible. El rótulo dice
+              "Cambiar docente" y no "Reasignar": reasignar es lo que se
+              hace en Estudiantes con la supervisión del ALUMNO, y son dos
+              cosas distintas — un caso puede tener otro responsable que el
+              titular del alumno. */}
+          {puedeCambiarDocente && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              disabled={busy}
+              onClick={() => {
+                setModalDocente(true);
+                setDocenteNuevo(supervisorUserId ?? "");
+                setError(null);
+              }}
+            >
+              Cambiar docente
+            </button>
+          )}
         </div>
       )}
 
@@ -619,8 +732,9 @@ export function EduCasoAcciones({
         >
           <p className="edu-note">
             Esto NO reasigna: cierra este caso como TRANSFERIDO y abre uno nuevo con el estudiante
-            destino (misma especialidad — el servidor lo exige). El estudiante que entrega pierde el
-            acceso al paciente en el mismo acto; su expediente se queda donde ocurrió.
+            destino. El estudiante que entrega pierde el acceso al paciente en el mismo acto; su
+            expediente se queda donde ocurrió. La lista solo trae estudiantes de {programName},
+            que es la especialidad de este caso: el servidor exige que coincida.
           </p>
           <div className="edu-field">
             <label className="edu-field__label" htmlFor="tras-destino">
@@ -631,14 +745,23 @@ export function EduCasoAcciones({
               className="edu-input"
               value={destino}
               onChange={(e) => setDestino(e.target.value)}
+              disabled={destinos.length === 0}
             >
-              <option value="">Elige un estudiante…</option>
-              {alumnosDestino.map((a) => (
+              <option value="">
+                {destinos.length === 0 ? "No hay a quién traspasarlo" : "Elige un estudiante…"}
+              </option>
+              {destinos.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.matricula} · {a.name}
                 </option>
               ))}
             </select>
+            {destinos.length === 0 && (
+              <p className="edu-field__hint">
+                Ninguno de los estudiantes que ves cursa {programName}, que es la especialidad de
+                este caso. Un traspaso a otra especialidad lo rechaza el servidor.
+              </p>
+            )}
           </div>
           <div className="edu-field">
             <label className="edu-field__label" htmlFor="tras-motivo">
@@ -651,6 +774,70 @@ export function EduCasoAcciones({
               onChange={(e) => setMotivoTraspaso(e.target.value)}
               placeholder="Ej.: rotación de semestre, egreso"
             />
+          </div>
+        </EduModal>
+      )}
+
+      {/* ── H-34 · CORREGIR EL DOCENTE RESPONSABLE ───────────────────── */}
+      {modalDocente && (
+        <EduModal
+          title="Docente responsable del caso"
+          subtitle={caseLabel}
+          busy={busy}
+          onClose={() => setModalDocente(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="edu-btn edu-btn--quiet"
+                onClick={() => setModalDocente(false)}
+                disabled={busy}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary"
+                onClick={cambiarDocente}
+                disabled={busy}
+              >
+                Guardar
+              </button>
+            </>
+          }
+        >
+          <p className="edu-note">
+            Quien responde por ESTE caso y firma sus autorizaciones. No es la supervisión del
+            estudiante —esa se asigna en Estudiantes y puede ser otra persona—: un caso se abre en
+            la valoración, y ahí es donde se pone el docente equivocado.
+          </p>
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="caso-docente">
+              Docente responsable
+            </label>
+            <select
+              id="caso-docente"
+              className="edu-input"
+              value={docenteNuevo}
+              onChange={(e) => setDocenteNuevo(e.target.value)}
+            >
+              <option value="">Sin docente responsable</option>
+              {/* Los dados de baja se marcan y NO se ofrecen para elegir:
+                  el core los rechaza con "Ese docente está dado de baja".
+                  Se pinta el que ya está puesto aunque esté de baja, para
+                  que el desplegable no mienta sobre lo que hay hoy. */}
+              {docentes
+                .filter((d) => d.isActive || d.id === supervisorUserId)
+                .map((d) => (
+                  <option key={d.id} value={d.id} disabled={!d.isActive}>
+                    {d.name}
+                    {d.isActive ? "" : " · dado de baja"}
+                  </option>
+                ))}
+            </select>
+            <p className="edu-field__hint">
+              Ahora mismo: {supervisorName ?? "sin docente responsable"}.
+            </p>
           </div>
         </EduModal>
       )}
