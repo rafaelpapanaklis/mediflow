@@ -44,27 +44,31 @@
  * al revivir.
  *
  * ═══════════════════════════════════════════════════════════════════════
- * 🔴 N-3 · HASTA DÓNDE LLEGA EL RASTRO HOY, Y QUÉ FALTA (Ola C)
+ * 🔴 N-3 · CERRADO EN LA OLA C·2, Y NO CON UN DROP INDEX
  *
- * UNA FILA POR LLAVE ES UNA FILA POR HALLAZGO, NO POR MOVIMIENTO. Esa es
- * la frase entera. El historial se alimenta de estas mismas filas, así
+ * UNA FILA POR LLAVE ES UNA FILA POR HALLAZGO, NO POR MOVIMIENTO. Ésa era
+ * la frase entera: el historial se alimentaba de estas mismas filas, así
  * que de un hallazgo que se marca, se quita y se vuelve a marcar solo
- * puede contar UN estado, no la secuencia.
- *
- * Lo que SÍ contesta hoy, sin una línea de SQL:
- *   · un hallazgo retirado y no remarcado → quién lo quitó y cuándo;
- *   · un hallazgo retirado y REMARCADO   → quién lo había quitado
- *     (`deletedById` sobrevive al revivir; ver `eduOdontogramReviveData`).
- *
- * Lo que NO contesta, y por eso los rótulos de la pantalla no lo prometen:
+ * podía contar UN estado, nunca la secuencia. Faltaban dos cosas:
  *   · CUÁNDO se quitó, si después se remarcó — esa fecha es `deletedAt` y
  *     hay que soltarla para que la fila vuelva a estar viva;
- *   · la cadena completa (quitado por A, remarcado por B, quitado por C…):
- *     solo queda el último que pasó la goma.
+ *   · la cadena completa (quitado por A, remarcado por B, quitado por C…).
  *
- * EL ARREGLO DE VERDAD, para la Ola C, es que dos filas del mismo
- * hallazgo puedan coexistir cuando una está retirada. Son dos sentencias,
- * y llevan DROP INDEX, que es exactamente lo que la Ola B no hace:
+ * LO QUE LO CIERRA es una tabla de MOVIMIENTOS —`edu_odontogram_events`,
+ * de la Ola C·base— donde cada marcar, quitar, revivir y editar escribe SU
+ * fila, con su autor y su hora. Las tres escrituras de este archivo llaman
+ * a `eduOdontoEvent(...)` DENTRO de su transacción, y la pantalla lee ese
+ * libro. Estas filas siguen siendo el ESTADO —que es otra pregunta— y por
+ * eso el historial de la pantalla tiene las dos secciones.
+ *
+ * ⚠️ LO QUE EL LIBRO NO PUEDE CONTAR: lo que se marcó ANTES de que la
+ * tabla existiera. Esos actos no dejaron renglón y no se inventan; la
+ * pantalla lo dice con todas sus letras en su sección vacía.
+ *
+ * EL OTRO CAMINO, el que NO se tomó, queda escrito por si algún día se
+ * prefiere: que dos filas del mismo hallazgo puedan coexistir cuando una
+ * está retirada. Son dos sentencias, y llevan DROP INDEX —que es
+ * exactamente lo que estas olas no hacen sin un OK explícito:
  *
  *     DROP INDEX IF EXISTS "edu_odontogram_hallazgo_key";
  *     CREATE UNIQUE INDEX IF NOT EXISTS "edu_odontogram_hallazgo_vivo_key"
@@ -72,10 +76,11 @@
  *          ("institutionId", "patientId", "tooth", "surface", "condition")
  *       WHERE "deletedAt" IS NULL;
  *
- * Con ese índice, `setEduOdontogramFinding` deja de necesitar el upsert
- * que revive y pasa a INSERTAR una fila nueva por cada marcaje, y el
- * historial cuenta la secuencia entera. Es un cambio de escritura, no
- * solo de índice: no se hace a medias.
+ * Con ese índice, `setEduOdontogramFinding` dejaría de necesitar el upsert
+ * que revive y pasaría a INSERTAR una fila nueva por cada marcaje. Es un
+ * cambio de ESCRITURA, no solo de índice, y ya no hace falta: el libro de
+ * movimientos contesta lo mismo sin borrar nada. Va comentado al final de
+ * sql/edu-ola-c.sql (§14.A).
  *
  * ⚠️ El índice PARCIAL de `edu_case_approvals` (una PENDING por fila
  * apuntada) ya existe en la base y Prisma no sabe expresarlo: si algún
@@ -104,6 +109,24 @@ import {
   type EduOdontogramEntryRow,
 } from "@/lib/edu/odontograma-core";
 import { eduScopeIsEmpty, type EduClinicaContext } from "@/lib/edu/visibility";
+import {
+  eduOdontoEvent,
+  type EduOdontoEventContext,
+} from "@/lib/edu/odontograma-eventos";
+import { eduOdontoEventAccionAlMarcar } from "@/lib/edu/odontograma-eventos-core";
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * OLA C·2 · LA SESIÓN QUE PIDEN LAS TRES ESCRITURAS.
+ *
+ * Es `EduClinicaContext` (tenant + alcance) MÁS el actor completo, porque
+ * cada escritura deja ahora su renglón en el LIBRO DE MOVIMIENTOS
+ * (`edu_odontogram_events`) y ese renglón congela el nombre de quien la
+ * hizo. Las LECTURAS siguen pidiendo solo `EduClinicaContext`: dibujar un
+ * odontograma no escribe nada.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export type EduOdontogramaEscrituraContext = EduOdontoEventContext;
 
 export { EduPadronError as EduOdontogramaError };
 export type { EduOdontogramEntryRow } from "@/lib/edu/odontograma-core";
@@ -371,7 +394,7 @@ export interface EduOdontogramWriteInput {
  * de las dos.
  */
 export async function setEduOdontogramFinding(
-  ctx: EduClinicaContext,
+  ctx: EduOdontogramaEscrituraContext,
   patientId: string,
   input: EduOdontogramWriteInput,
   now: Date = new Date(),
@@ -392,13 +415,47 @@ export async function setEduOdontogramFinding(
   const autor = { userId: ctx.eduUserId, at: now };
 
   if (present) {
-    await prisma.eduOdontogramEntry.upsert({
-      where: { institutionId_patientId_tooth_surface_condition: llave },
-      // Marcar algo que ya estaba marcado REFRESCA quién y cuándo (si un
-      // docente reconfirma un hallazgo del alumno, el expediente tiene que
-      // decir que lo reconfirmó él) y, si estaba RETIRADO, lo revive.
-      update: eduOdontogramReviveData(autor),
-      create: { ...llave, ...eduOdontogramCreateData(autor) },
+    // ═══════════════════════════════════════════════════════════════
+    // 🔴 N-3 · LA FOTO DE ANTES ES LO QUE DISTINGUE «MARCA» DE «REVIVE».
+    //
+    // Con la fila ya escrita no hay forma de saberlo: el upsert pisa
+    // `deletedAt` y `recordedAt`, y desde fuera un hallazgo nuevo y uno
+    // que alguien había quitado se ven idénticos. Por eso se LEE primero,
+    // dentro de la misma transacción que escribe: entre el `findUnique` y
+    // el `upsert` nadie puede colar una baja.
+    // ═══════════════════════════════════════════════════════════════
+    await prisma.$transaction(async (tx) => {
+      const previa = await tx.eduOdontogramEntry.findUnique({
+        where: { institutionId_patientId_tooth_surface_condition: llave },
+        select: { id: true, deletedAt: true, notes: true },
+      });
+
+      const fila = await tx.eduOdontogramEntry.upsert({
+        where: { institutionId_patientId_tooth_surface_condition: llave },
+        // Marcar algo que ya estaba marcado REFRESCA quién y cuándo (si un
+        // docente reconfirma un hallazgo del alumno, el expediente tiene que
+        // decir que lo reconfirmó él) y, si estaba RETIRADO, lo revive.
+        update: eduOdontogramReviveData(autor),
+        create: { ...llave, ...eduOdontogramCreateData(autor) },
+        select: { id: true },
+      });
+
+      // 🔴 EL MOVIMIENTO VA DENTRO DE LA TRANSACCIÓN, con la `tx`: el
+      // hallazgo y su renglón entran o no entran juntos. `eduOdontoEvent`
+      // nunca lanza, así que un fallo del libro no tumba el marcaje.
+      await eduOdontoEvent(
+        ctx,
+        {
+          patientId: pid,
+          entryId: fila.id,
+          tooth,
+          surface,
+          condition,
+          action: eduOdontoEventAccionAlMarcar(previa),
+          notes: previa?.notes ?? null,
+        },
+        tx,
+      );
     });
   } else {
     // 🔴 BAJA LÓGICA, no DELETE (H-17). `updateMany` y no `update`: quitar
@@ -406,9 +463,36 @@ export async function setEduOdontogramFinding(
     // enseñarle a nadie (pasa con un doble clic) y `update` lanzaría
     // P2025. El `deletedAt: null` del `where` es lo que hace que volver a
     // quitar NO reescriba la firma de quien lo quitó de verdad.
-    await prisma.eduOdontogramEntry.updateMany({
-      where: { ...llave, deletedAt: null },
-      data: eduOdontogramBajaData(autor),
+    await prisma.$transaction(async (tx) => {
+      const previa = await tx.eduOdontogramEntry.findUnique({
+        where: { institutionId_patientId_tooth_surface_condition: llave },
+        select: { id: true, deletedAt: true, notes: true },
+      });
+
+      const { count } = await tx.eduOdontogramEntry.updateMany({
+        where: { ...llave, deletedAt: null },
+        data: eduOdontogramBajaData(autor),
+      });
+
+      // 🔴 SOLO SI DE VERDAD SE QUITÓ ALGO. `count === 0` es el doble clic
+      // o la pestaña vieja: escribir un «lo quitó» ahí llenaría el
+      // historial de actos que no ocurrieron, que es la forma exacta de
+      // volverlo ilegible.
+      if (count > 0 && previa) {
+        await eduOdontoEvent(
+          ctx,
+          {
+            patientId: pid,
+            entryId: previa.id,
+            tooth,
+            surface,
+            condition,
+            action: "QUITA",
+            notes: previa.notes,
+          },
+          tx,
+        );
+      }
     });
   }
 
@@ -454,7 +538,7 @@ export interface EduOdontogramClearInput {
  * primero.
  */
 export async function clearEduOdontogramTooth(
-  ctx: EduClinicaContext,
+  ctx: EduOdontogramaEscrituraContext,
   patientId: string,
   input: EduOdontogramClearInput,
   now: Date = new Date(),
@@ -467,9 +551,47 @@ export async function clearEduOdontogramTooth(
     throw new EduPadronError("Ese número de diente no existe en la nomenclatura FDI.");
   }
 
-  const { count } = await prisma.eduOdontogramEntry.updateMany({
-    where: { institutionId, patientId: pid, tooth, deletedAt: null },
-    data: eduOdontogramBajaData({ userId: ctx.eduUserId, at: now }),
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 N-3 · SE LEE QUÉ HABÍA ANTES DE QUITARLO, y por eso esto es una
+  // transacción y no la sentencia suelta que era.
+  //
+  // «Limpiar diente» sigue siendo UNA escritura sobre la tabla del
+  // odontograma (H-22: un UPDATE con `tooth = $n` ya es atómico), pero el
+  // libro de movimientos necesita UNA FILA POR HALLAZGO — «quitó caries en
+  // 16-O», «quitó corona en 16»— y para escribirlas hay que saber cuáles
+  // estaban vivas. Leerlas fuera de la transacción dejaría la ventana en
+  // la que otro alumno marca un hallazgo entre la lectura y el borrado: se
+  // borraría sin renglón, que es exactamente el agujero que N-3 cierra.
+  // ═══════════════════════════════════════════════════════════════════
+  const { count } = await prisma.$transaction(async (tx) => {
+    const previas = await tx.eduOdontogramEntry.findMany({
+      where: { institutionId, patientId: pid, tooth, deletedAt: null },
+      select: { id: true, tooth: true, surface: true, condition: true, notes: true },
+    });
+
+    const res = await tx.eduOdontogramEntry.updateMany({
+      where: { institutionId, patientId: pid, tooth, deletedAt: null },
+      data: eduOdontogramBajaData({ userId: ctx.eduUserId, at: now }),
+    });
+
+    for (const e of previas) {
+      await eduOdontoEvent(
+        ctx,
+        {
+          patientId: pid,
+          entryId: e.id,
+          tooth: e.tooth,
+          surface: e.surface,
+          condition: e.condition,
+          action: "QUITA",
+          notes: e.notes,
+          reason: "Se limpió el diente entero",
+        },
+        tx,
+      );
+    }
+
+    return { count: res.count };
   });
 
   return { tooth, removed: count };
@@ -492,7 +614,7 @@ export async function clearEduOdontogramTooth(
  * ahí hubo una nota, qué decía y quién la quitó.
  */
 export async function setEduOdontogramNote(
-  ctx: EduClinicaContext,
+  ctx: EduOdontogramaEscrituraContext,
   patientId: string,
   input: { tooth?: unknown; notes?: unknown },
   now: Date = new Date(),
@@ -522,17 +644,66 @@ export async function setEduOdontogramNote(
     // El `deletedAt: null` evita que vaciar dos veces reescriba la firma de
     // quien la quitó de verdad. El TEXTO no se borra: la nota retirada
     // queda legible en el historial, que es de lo que se trata.
-    await prisma.eduOdontogramEntry.updateMany({
-      where: { ...llave, deletedAt: null },
-      data: eduOdontogramBajaData(autor),
+    await prisma.$transaction(async (tx) => {
+      const previa = await tx.eduOdontogramEntry.findUnique({
+        where: { institutionId_patientId_tooth_surface_condition: llave },
+        select: { id: true, notes: true },
+      });
+      const { count } = await tx.eduOdontogramEntry.updateMany({
+        where: { ...llave, deletedAt: null },
+        data: eduOdontogramBajaData(autor),
+      });
+      // Solo si de verdad se retiró: ver la nota de `setEduOdontogramFinding`.
+      if (count > 0 && previa) {
+        await eduOdontoEvent(
+          ctx,
+          {
+            patientId: pid,
+            entryId: previa.id,
+            tooth,
+            surface: EDU_TOOTH_WHOLE,
+            condition: EDU_ODONTOGRAM_NOTE_KEY,
+            action: "QUITA",
+            // 🔴 EL TEXTO QUE TENÍA SE COPIA AL RENGLÓN. Es la única forma
+            // de contestar «¿qué decía la nota que borraron?» cuando la
+            // fila se reviva mañana con otro texto encima.
+            notes: previa.notes,
+          },
+          tx,
+        );
+      }
     });
     return { tooth, notes: null };
   }
 
-  await prisma.eduOdontogramEntry.upsert({
-    where: { institutionId_patientId_tooth_surface_condition: llave },
-    update: { notes: texto, ...eduOdontogramReviveData(autor) },
-    create: { ...llave, notes: texto, ...eduOdontogramCreateData(autor) },
+  await prisma.$transaction(async (tx) => {
+    const previa = await tx.eduOdontogramEntry.findUnique({
+      where: { institutionId_patientId_tooth_surface_condition: llave },
+      select: { id: true, deletedAt: true },
+    });
+    const fila = await tx.eduOdontogramEntry.upsert({
+      where: { institutionId_patientId_tooth_surface_condition: llave },
+      update: { notes: texto, ...eduOdontogramReviveData(autor) },
+      create: { ...llave, notes: texto, ...eduOdontogramCreateData(autor) },
+      select: { id: true },
+    });
+    await eduOdontoEvent(
+      ctx,
+      {
+        patientId: pid,
+        entryId: fila.id,
+        tooth,
+        surface: EDU_TOOTH_WHOLE,
+        condition: EDU_ODONTOGRAM_NOTE_KEY,
+        // Escribir la nota de un diente que no la tenía es MARCA; volver a
+        // escribirla sobre una retirada es REVIVE; cambiarla es EDITA. La
+        // misma función que el pincel, para que el historial no tenga dos
+        // vocabularios.
+        action: eduOdontoEventAccionAlMarcar(previa),
+        notes: texto,
+      },
+      tx,
+    );
   });
 
   return { tooth, notes: texto };

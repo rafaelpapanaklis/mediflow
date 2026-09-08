@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EduModal } from "@/components/edu/edu-modal";
 import {
@@ -48,7 +49,11 @@ const TAG_POR_ESTADO: Record<string, string> = {
   EXPEDIDA: "edu-tag--ok",
   RECHAZADA: "edu-tag--danger",
   ANULADA: "edu-tag--danger",
+  ARCHIVADA: "edu-tag--muted",
 };
+
+/** Tope del motivo de archivado. El mismo `@db.VarChar(500)` de la columna. */
+const ARCHIVO_MOTIVO_MAX = 500;
 
 interface ItemForm {
   drug: string;
@@ -118,6 +123,18 @@ export function EduRecetasScreen({
   /** Qué tarjeta tiene abierto el campo del motivo de anulación. */
   const [anulando, setAnulando] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("");
+  /** Y cuál el de ARCHIVAR una RECHAZADA (H-24). */
+  const [archivando, setArchivando] = useState<string | null>(null);
+  const [motivoArchivo, setMotivoArchivo] = useState("");
+  /** ¿Se está enseñando la sección «Archivadas»? Va plegada. */
+  const [verArchivadas, setVerArchivadas] = useState(false);
+
+  // 🔴 LA LISTA VIVA Y LAS ARCHIVADAS SE PARTEN AQUÍ, sobre las MISMAS
+  // filas que llegaron del servidor: no hay una segunda consulta ni un
+  // segundo endpoint que pudiera recortar distinto. Una ARCHIVADA es
+  // exactamente una receta que salió del trabajo pendiente.
+  const vivas = useMemo(() => rows.filter((r) => r.status !== "ARCHIVADA"), [rows]);
+  const archivadas = useMemo(() => rows.filter((r) => r.status === "ARCHIVADA"), [rows]);
 
   function abrirNueva() {
     setError(null);
@@ -277,12 +294,50 @@ export function EduRecetasScreen({
     }
   }
 
+  /**
+   * ARCHIVA una RECHAZADA (H-24).
+   *
+   * 🔴 ARCHIVAR NO ES ANULAR, y por eso no comparte botón ni endpoint. Una
+   * ANULADA se IMPRIME —marcada, con su motivo— y una receta rechazada
+   * nunca llevó la cédula de un docente: darle ese camino sacaría papel sin
+   * firma de la escuela. Una ARCHIVADA no es imprimible.
+   *
+   * 🔴 EL MOTIVO ES OPCIONAL, al revés que el de anular: el porqué del
+   * RECHAZO ya lo escribió el docente en su autorización y se lee arriba,
+   * en la tarjeta. Lo que se escribe aquí es el porqué de GUARDARLA («ya se
+   * le hizo otra», «el paciente no volvió»), y exigirlo produciría "asdf".
+   */
+  async function archivar(row: EduRecetaRow) {
+    setError(null);
+    setBusyId(row.id);
+    try {
+      await eduRequest(`/api/instituto/recetas/${row.id}/archivar`, {
+        method: "POST",
+        body: { reason: motivoArchivo.trim() || undefined },
+      });
+      setFlash(
+        "Archivada. Sale de la lista viva y se puede seguir leyendo en «Archivadas», con su motivo.",
+      );
+      setArchivando(null);
+      setMotivoArchivo("");
+      startNav(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo archivar la receta.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function tarjeta(row: EduRecetaRow) {
     const ocupada = busyId === row.id;
     const anulandoAqui = anulando === row.id;
+    const archivandoAqui = archivando === row.id;
 
     return (
-      <article key={row.id} className="edu-nota">
+      <article
+        key={row.id}
+        className={`edu-nota ${row.status === "ARCHIVADA" ? "edu-nota--borrador" : ""}`}
+      >
         <div className="edu-nota__head">
           <div>
             <span className="edu-nota__when">{row.createdAtLabel}</span>
@@ -351,12 +406,26 @@ export function EduRecetasScreen({
           </p>
         )}
 
-        {row.lastDecisionNote && (row.status === "BORRADOR" || row.status === "RECHAZADA") && (
-          <p className="edu-auth-historial__nota">
-            {row.status === "RECHAZADA" ? "El docente la rechazó" : "El docente pidió cambios"}:
-            {" "}“{row.lastDecisionNote}”
+        {row.status === "ARCHIVADA" && (
+          <p className="edu-receta__anulada">
+            Archivada{row.archivedAtLabel ? ` el ${row.archivedAtLabel}` : ""}
+            {row.archivedByName ? ` por ${row.archivedByName}` : ""}
+            {row.archiveReason ? `. Motivo: ${row.archiveReason}` : "."} Archivar NO es anular:
+            esta receta nunca llevó cédula, así que no se imprime.
           </p>
         )}
+
+        {row.lastDecisionNote &&
+          (row.status === "BORRADOR" ||
+            row.status === "RECHAZADA" ||
+            row.status === "ARCHIVADA") && (
+            <p className="edu-auth-historial__nota">
+              {row.status === "BORRADOR"
+                ? "El docente pidió cambios"
+                : "El docente la rechazó"}
+              : “{row.lastDecisionNote}”
+            </p>
+          )}
 
         <div className="edu-receta__acciones">
           {row.printable && (
@@ -399,6 +468,27 @@ export function EduRecetasScreen({
               Editar
             </button>
           )}
+          {/* 🔴 H-24 · LA SALIDA DE UNA RECHAZADA. Antes no la tenía:
+              `EDU_PRESCRIPTION_TRANSITIONS.RECHAZADA` era `[]` y la receta
+              se quedaba en la lista de trabajo del alumno para siempre.
+              Pide `recetas.propose` y NO `recetas.void`: quien armó la
+              propuesta es quien la guarda cuando el docente le dice que no
+              — obligar a un docente a archivar los rechazos de sus alumnos
+              convierte un gesto de limpieza en un trámite. */}
+          {row.archivable && canPropose && !archivandoAqui && (
+            <button
+              type="button"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              onClick={() => {
+                setError(null);
+                setMotivoArchivo("");
+                setArchivando(row.id);
+              }}
+              disabled={ocupada}
+            >
+              Archivar
+            </button>
+          )}
           {row.voidable && canVoid && !anulandoAqui && (
             <button
               type="button"
@@ -414,6 +504,46 @@ export function EduRecetasScreen({
             </button>
           )}
         </div>
+
+        {archivandoAqui && (
+          <div className="edu-auth-card__motivo">
+            <label className="edu-field__label" htmlFor={`archivar-${row.id}`}>
+              ¿Por qué se guarda? (opcional)
+            </label>
+            <textarea
+              id={`archivar-${row.id}`}
+              className="edu-input"
+              rows={2}
+              maxLength={ARCHIVO_MOTIVO_MAX}
+              value={motivoArchivo}
+              autoFocus
+              onChange={(e) => setMotivoArchivo(e.target.value)}
+              placeholder="Ej.: ya se le expidió otra con la dosis corregida."
+            />
+            <span className="edu-field__hint">
+              El porqué del RECHAZO ya lo escribió el docente y está arriba. Esto es el porqué de
+              guardarla, y es opcional a propósito.
+            </span>
+            <div className="edu-receta__acciones">
+              <button
+                type="button"
+                className="edu-btn edu-btn--primary edu-btn--sm"
+                onClick={() => void archivar(row)}
+                disabled={ocupada}
+              >
+                Archivarla
+              </button>
+              <button
+                type="button"
+                className="edu-btn edu-btn--quiet edu-btn--sm"
+                onClick={() => setArchivando(null)}
+                disabled={ocupada}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         {anulandoAqui && (
           <div className="edu-auth-card__motivo">
@@ -471,7 +601,7 @@ export function EduRecetasScreen({
       <section className="edu-section">
         <div className="edu-section__head">
           <h2 className="edu-section__title">Recetas</h2>
-          <span className="edu-count">{rows.length}</span>
+          <span className="edu-count">{vivas.length}</span>
           {canPropose && cases.length > 0 && (
             <button
               type="button"
@@ -490,18 +620,61 @@ export function EduRecetasScreen({
           </p>
         )}
 
-        {rows.length === 0 ? (
+        {vivas.length === 0 ? (
           <div className="edu-empty">
             <p className="edu-empty__title">Sin recetas que mostrarte</p>
             <p className="edu-empty__detail">
               Aquí el estudiante propone la receta y el docente con cédula la expide: hasta esa firma no
               hay papel que entregar. Las que te toquen de este paciente saldrán aquí con su estado.
+              {archivadas.length > 0
+                ? " Las archivadas están más abajo, plegadas."
+                : ""}
             </p>
           </div>
         ) : (
-          <div className="edu-stack edu-stack--tight">{rows.map(tarjeta)}</div>
+          <div className="edu-stack edu-stack--tight">{vivas.map(tarjeta)}</div>
         )}
       </section>
+
+      {/* ══ H-24 · «ARCHIVADAS» ══════════════════════════════════════════
+          🔴 SALEN DE LA LISTA VIVA Y NO DESAPARECEN. Ése es el arreglo
+          entero: una RECHAZADA se quedaba arriba, con las que hay que
+          trabajar, para siempre — y la única forma de limpiarla habría sido
+          borrarla, que en un expediente no se hace.
+
+          🔴 VA PLEGADA, y también es la decisión. Lo archivado no es
+          trabajo pendiente: si se pintara abierto, la pestaña empezaría por
+          lo que ya no se va a hacer. Se abre cuando alguien pregunta «¿y la
+          que el docente rechazó la semana pasada?», que es exactamente
+          cuando hace falta. Mismo patrón que «Retirados» en Estudios. */}
+      {archivadas.length > 0 && (
+        <section className="edu-retirados">
+          <button
+            type="button"
+            className="edu-retirados__head"
+            aria-expanded={verArchivadas}
+            onClick={() => setVerArchivadas((v) => !v)}
+          >
+            {verArchivadas ? (
+              <ChevronDown size={16} aria-hidden />
+            ) : (
+              <ChevronRight size={16} aria-hidden />
+            )}
+            <span className="edu-retirados__title">Archivadas</span>
+            <span className="edu-count">{archivadas.length}</span>
+          </button>
+
+          {verArchivadas && (
+            <div className="edu-retirados__cuerpo">
+              <p className="edu-note">
+                Recetas que el docente rechazó y que alguien guardó para que dejaran de estar en la
+                lista de trabajo. No se borran y no se imprimen: nunca llevaron cédula.
+              </p>
+              <div className="edu-stack edu-stack--tight">{archivadas.map(tarjeta)}</div>
+            </div>
+          )}
+        </section>
+      )}
 
       {editor && (
         <EduModal

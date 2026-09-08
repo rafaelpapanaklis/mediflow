@@ -42,9 +42,11 @@ import {
   eduCleanId,
   eduFormatDayShort,
   eduFormatTime,
+  eduOptionalText,
   eduSafeTimeZone,
   eduUtcToZoned,
 } from "@/lib/edu/agenda-core";
+import type { EduRetiradoRow } from "@/lib/edu/estudios-core";
 import {
   EDU_RECORD_DIAGNOSIS_MAX,
   EDU_RECORD_MAX_ROWS,
@@ -71,6 +73,18 @@ import {
   eduScopeIsEmpty,
   type EduClinicaContext,
 } from "@/lib/edu/visibility";
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * OLA C·2 · LA SESIÓN QUE NECESITAN LAS ESCRITURAS Y LA LECTURA REGISTRADA.
+ *
+ * `EduClinicaContext` (tenant + alcance) MÁS lo que la BITÁCORA necesita
+ * para congelar el nombre. Las lecturas que NO se registran siguen
+ * pidiendo solo `EduClinicaContext`.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduExpedienteContext extends EduClinicaContext, EduAuditActor {}
 import { EDU_CASE_CLOSED_STATUSES, EDU_ROLE_LABELS, type EduRecordStatus } from "@/lib/edu/types";
 
 export { EduPadronError as EduExpedienteError };
@@ -371,7 +385,7 @@ export interface EduRecordInput {
  * editar.
  */
 export async function createEduRecord(
-  ctx: EduClinicaContext,
+  ctx: EduExpedienteContext,
   patientId: string,
   input: EduRecordInput,
   now: Date = new Date(),
@@ -474,6 +488,18 @@ export async function createEduRecord(
     select: { id: true },
   });
 
+  // 🔴 LA BITÁCORA NO GUARDA EL TEXTO DE LA NOTA. Una SOAP es dato de
+  // salud y `edu_audit_logs` se abre desde dirección entera: se registra
+  // QUE se escribió una nota, en qué caso y de qué paciente. El contenido
+  // vive en el expediente, que es donde la lectura también queda escrita.
+  await eduAudit(ctx, {
+    action: "create",
+    entity: "record",
+    entityId: created.id,
+    patientId: caso.patientId,
+    after: { caseId: caso.id, status: "BORRADOR" },
+  });
+
   return created;
 }
 
@@ -499,7 +525,7 @@ export async function createEduRecord(
  * el caso equivocado se anula con una corrección, igual que en papel.
  */
 export async function updateEduRecord(
-  ctx: EduClinicaContext,
+  ctx: EduExpedienteContext,
   recordId: string,
   input: EduRecordInput & { status?: unknown },
   options: { canSign: boolean },
@@ -675,6 +701,24 @@ export async function updateEduRecord(
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
 
   await prisma.eduRecord.update({ where: { id: actual.id }, data });
+
+  // 🔴 FIRMAR ES `sign`, NO `update`. Son dos actos distintos y la
+  // pregunta de una auditoría es distinta ("¿quién firmó esta nota?" no es
+  // "¿quién la editó?"). El catálogo de acciones tiene las dos, así que no
+  // hay que elegir.
+  //
+  // Los CAMPOS que cambiaron se cuentan, no se copian: ver el renglón de
+  // `createEduRecord`.
+  const tocados = Object.keys(data).filter((k) => k !== "signedAt" && k !== "signedById");
+  await eduAudit(ctx, {
+    action: siguiente === "FIRMADA" && actual.status !== "FIRMADA" ? "sign" : "update",
+    entity: "record",
+    entityId: actual.id,
+    patientId: actual.patientId,
+    before: { status: actual.status },
+    after: { status: siguiente, campos: tocados.join(", ").slice(0, 300) || "—" },
+  });
+
   return { id: actual.id, status: siguiente };
 }
 
@@ -697,19 +741,32 @@ export async function updateEduRecord(
  *     retiró y cuándo. Un expediente del que se puede hacer desaparecer una
  *     página deja de ser el registro de lo que pasó.
  *
- * 🔴 SIN MOTIVO ESCRITO, Y ES DELIBERADO — lo dice el propio schema. No hay
- * columna `deleteReason` y esta ola no añade SQL: retirar un borrador vacío
- * no es un acto clínico que haya que justificar por escrito, y un campo de
- * motivo obligatorio en el sitio equivocado solo produce "asdf". Lo que sí
- * queda escrito es quién y cuándo, que es la pregunta que se hace después.
+ * 🔴 OLA C·2 · EL MOTIVO, Y POR QUÉ ES **OPCIONAL**.
+ *
+ * La Ola B lo dejó fuera con este argumento, y era bueno: «retirar un
+ * borrador vacío no es un acto clínico que haya que justificar por escrito,
+ * y un campo de motivo obligatorio en el sitio equivocado solo produce
+ * "asdf"». Lo que faltaba era la COLUMNA — y ya está
+ * (`edu_records.deleteReason`, Ola C·base). Así que ahora se PIDE y no se
+ * EXIGE: quien retira la nota que abrió en el paciente equivocado escribe
+ * por qué en dos palabras, y quien retira un borrador vacío le da a
+ * "Retirar" y sale. Es la misma decisión que el motivo de archivar una
+ * receta rechazada, y por la misma razón.
+ *
+ * 🔴 Y AHORA SE PUEDEN LEER (`listEduPatientRecordsRetiradas`). Un motivo
+ * obligatorio que ninguna pantalla enseña es peor que ninguno: fue el
+ * hallazgo N-16 en los estudios y las fotos, y no se repite aquí.
  *
  * `updateMany` con `deletedAt: null` en el `where` y no `update`: retirar
  * dos veces (un doble clic, una pestaña vieja) no reescribe la firma de
  * quien la retiró de verdad, ni lanza P2025 en la cara de nadie.
  */
+export const EDU_RECORD_DELETE_REASON_MAX = 500;
+
 export async function withdrawEduRecord(
-  ctx: EduClinicaContext,
+  ctx: EduExpedienteContext,
   recordId: string,
+  body: { reason?: unknown } = {},
   now: Date = new Date(),
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
@@ -729,13 +786,15 @@ export async function withdrawEduRecord(
       deletedAt: null,
       case: eduCaseScopeWhere({ institutionId, scope, now }),
     },
-    select: { id: true, status: true },
+    select: { id: true, status: true, patientId: true },
   });
   if (!actual) throw new EduPadronError("Esa nota no existe o no te toca.", 404);
 
   if (!eduRecordCanWithdraw(actual.status)) {
     throw new EduPadronError(EDU_RECORD_WITHDRAW_DENIED, 409);
   }
+
+  const reason = eduOptionalText(body?.reason, EDU_RECORD_DELETE_REASON_MAX) ?? null;
 
   // ══════════════════════════════════════════════════════════════════
   // 🔴 N-1 · RETIRAR LA NOTA CIERRA SUS PETICIONES DE AUTORIZACIÓN.
@@ -767,7 +826,7 @@ export async function withdrawEduRecord(
   await prisma.$transaction(async (tx) => {
     await tx.eduRecord.updateMany({
       where: { id: actual.id, institutionId, deletedAt: null },
-      data: { deletedAt: now, deletedById: ctx.eduUserId },
+      data: { deletedAt: now, deletedById: ctx.eduUserId, deleteReason: reason },
     });
 
     await tx.eduCaseApproval.updateMany({
@@ -785,5 +844,119 @@ export async function withdrawEduRecord(
     });
   });
 
+  await eduAudit(ctx, {
+    action: "delete",
+    entity: "record",
+    entityId: actual.id,
+    patientId: actual.patientId,
+    before: { status: actual.status, deletedAt: null },
+    after: { deletedAt: now, deleteReason: reason ?? "—" },
+  });
+
   return { id: actual.id };
+}
+
+/**
+ * LAS NOTAS RETIRADAS de un paciente, con su motivo (N-16 aplicado al
+ * expediente).
+ *
+ * 🔴 EXISTE PORQUE UN MOTIVO QUE NADIE LEE NO ES UNA CONSTANCIA. Es
+ * exactamente el hallazgo que la Ola C cerró en estudios y fotos: se pedía
+ * el motivo, se guardaba en `deleteReason`, y la única forma de leerlo era
+ * abrir Postgres. Aquí se pinta en la sección plegada «Retiradas», con la
+ * MISMA forma (`EduRetiradoRow`) que las otras dos.
+ *
+ * 🔴 EL MISMO RECORTE QUE LAS VIVAS: cuelga del CASO, no del paciente. Un
+ * alumno que lleva la endodoncia no lee las notas retiradas de la
+ * ortodoncia, igual que no lee las vivas.
+ */
+export const EDU_RECORD_RETIRADAS_MAX_ROWS = 60;
+
+export async function listEduPatientRecordsRetiradas(
+  ctx: EduClinicaContext,
+  patientId: string,
+  timeZone: string,
+  now: Date = new Date(),
+): Promise<EduRetiradoRow[]> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduClinicalScope(ctx);
+  if (eduScopeIsEmpty(scope)) return [];
+  const id = eduCleanId(patientId);
+  if (!id) return [];
+
+  const rows = await prisma.eduRecord.findMany({
+    where: {
+      institutionId,
+      patientId: id,
+      deletedAt: { not: null },
+      case: eduCaseScopeWhere({ institutionId, scope, now }),
+    },
+    orderBy: [{ deletedAt: "desc" }],
+    take: EDU_RECORD_RETIRADAS_MAX_ROWS,
+    select: {
+      id: true,
+      createdAt: true,
+      deletedAt: true,
+      deleteReason: true,
+      case: { select: { program: { select: { name: true } } } },
+      deletedBy: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+
+  const tz = eduSafeTimeZone(timeZone);
+  return rows.map((r) => ({
+    id: r.id,
+    // El QUÉ de una nota retirada no puede ser su texto —es dato clínico y
+    // esta sección la ve todo el que ve el expediente— así que se rotula
+    // con lo que la identifica sin contarla: de qué caso era y de cuándo.
+    que: `Nota del ${eduFormatDayShort(eduUtcToZoned(r.createdAt, tz).dayISO)} · ${
+      r.case?.program?.name ?? "sin caso"
+    }`,
+    quien: r.deletedBy
+      ? [r.deletedBy.firstName, r.deletedBy.lastName].filter(Boolean).join(" ").trim() ||
+        r.deletedBy.email ||
+        ""
+      : "",
+    cuando: r.deletedAt
+      ? `${eduFormatDayShort(eduUtcToZoned(r.deletedAt, tz).dayISO)} ${eduFormatTime(r.deletedAt, tz)}`
+      : "",
+    porQue: r.deleteReason ?? "",
+  }));
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * REGISTRA QUE ALGUIEN **ABRIÓ** EL EXPEDIENTE (NOM-024 §6.3.5).
+ *
+ * 🔴 ESTA ES LA MITAD QUE SIEMPRE FALTA. Una bitácora que solo apunta
+ * escrituras contesta «¿quién cambió esto?» y no contesta «¿QUIÉN LEYÓ EL
+ * EXPEDIENTE DE MI PACIENTE?», que es la pregunta con la que llega una
+ * queja de privacidad. El dental ya lo hace en el `page.tsx` de su ficha
+ * (fila 21 del informe); esto es lo mismo para el instituto.
+ *
+ * 🔴 SE LLAMA DESDE EL `page.tsx` DE LA PESTAÑA, no desde `listEduPatientRecords`.
+ * La lista se usa también desde sitios que NO son «abrir el expediente»
+ * (el resumen de la ficha, la bandeja del docente), y registrar una
+ * lectura por cada uno llenaría la bitácora de renglones que no
+ * corresponden a que nadie abriera nada. Lo que la norma pide es el
+ * ACCESO, y el acceso es la pantalla.
+ *
+ * 🔴 NUNCA LANZA (es `eduAudit` por dentro): abrir un expediente no puede
+ * fallar porque no se pudo escribir el renglón que dice que se abrió.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function registrarEduLecturaExpediente(
+  ctx: EduExpedienteContext,
+  patientId: string,
+  meta: { ip?: string | null; userAgent?: string | null } = {},
+): Promise<void> {
+  const id = eduCleanId(patientId);
+  if (!id) return;
+  await eduAudit(ctx, {
+    action: "view",
+    entity: "record",
+    entityId: null,
+    patientId: id,
+    ...meta,
+  });
 }

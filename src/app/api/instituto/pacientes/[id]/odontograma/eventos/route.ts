@@ -28,12 +28,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
   if ("response" in g) return g.response;
   try {
     const p = new URL(request.url).searchParams;
-    const rows = await listEduOdontoEventos(g.ctx, params.id, {
+    const page = await listEduOdontoEventos(g.ctx, params.id, g.ctx.institution.timezone, {
       tooth: p.get("tooth"),
       surface: p.get("surface"),
       condition: p.get("condition"),
     });
-    return NextResponse.json({ rows });
+    return NextResponse.json(page);
   } catch (err) {
     return eduApiError(err, `GET /api/instituto/pacientes/${params.id}/odontograma/eventos`);
   }

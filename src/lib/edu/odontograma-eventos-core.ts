@@ -82,6 +82,14 @@ export function eduOdontoEventAccionAlMarcar(
 export interface EduOdontoEventRow {
   id: string;
   createdAt: string;
+  /**
+   * El instante YA ESCRITO por el servidor en la zona del INSTITUTO
+   * («12 mar 14:20»). Formatearlo en el navegador lo pintaría en la zona
+   * de quien mira —dos cadenas distintas para el mismo dato entre el
+   * render del servidor y el del cliente, que es un aviso de hidratación—
+   * y en UTC un acto de las 19:00 en Tijuana se fecharía al día siguiente.
+   */
+  createdLabel: string;
   actorName: string;
   action: EduOdontogramEventAction | string;
   actionLabel: string;

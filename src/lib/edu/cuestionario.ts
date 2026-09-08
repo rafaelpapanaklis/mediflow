@@ -32,6 +32,7 @@ import { getEduClinicalPatient } from "@/lib/edu/expediente";
 import type { EduClinicaContext } from "@/lib/edu/visibility";
 import {
   EDU_CUESTIONARIO_HISTORIAL,
+  EDU_RISK_FLAGS,
   EDU_CUESTIONARIO_NOTES_MAX,
   eduCuestionarioMergeData,
   eduCuestionarioParseAnswers,
@@ -234,4 +235,50 @@ export async function createEduCuestionario(
     "No se pudo guardar el cuestionario: otra persona está capturando el mismo. Inténtalo otra vez.",
     409,
   );
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * LAS BANDERAS DE LA VERSIÓN VIGENTE, para los chips de la cabecera.
+ *
+ * 🔴 SOLO LAS BANDERAS, NO LAS RESPUESTAS. La cabecera de la ficha se
+ * pinta en LAS CATORCE PESTAÑAS: traerse el `answers` completo en cada una
+ * sería mover los antecedentes médicos de alguien al payload de la
+ * pestaña de Pagos. Se leen dos columnas de UNA fila.
+ *
+ * 🔴 Y **NO** REGISTRA UNA LECTURA EN LA BITÁCORA, a diferencia de
+ * `listEduCuestionarios`. La NOM-024 pide constancia de quién ABRIÓ el
+ * expediente, y esto no es abrirlo: es el chip rojo que avisa de un
+ * anticoagulante en la cabecera de cualquier pestaña. Registrarlo metería
+ * un renglón por cada navegación —catorce por paciente y por rato— y
+ * ahogaría los accesos de verdad, que son los que la norma quiere poder
+ * leer. La lectura del expediente se registra donde se abre el expediente.
+ *
+ * ⚠️ Devuelve `[]` —y NO lanza— cuando el paciente no está en el alcance
+ * de quien mira o cuando no hay ninguna versión: es una cabecera, y un
+ * throw aquí dejaría la ficha entera en blanco por un chip.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export async function getEduRiskFlagsVigentes(
+  ctx: EduClinicaContext,
+  patientId: string,
+  now: Date = new Date(),
+): Promise<{ flags: EduRiskFlag[]; version: number; recordedAt: string } | null> {
+  const institutionId = ctx?.institutionId;
+  if (!institutionId) return null;
+  const paciente = await getEduClinicalPatient(ctx, patientId, now);
+  if (!paciente) return null;
+
+  const fila = await prisma.eduHealthQuestionnaire.findFirst({
+    where: { institutionId, patientId: paciente.id },
+    orderBy: { version: "desc" },
+    select: { version: true, riskFlags: true, recordedAt: true },
+  });
+  if (!fila) return null;
+
+  const crudas = Array.isArray(fila.riskFlags) ? (fila.riskFlags as unknown[]) : [];
+  const flags = crudas.filter((f): f is EduRiskFlag =>
+    typeof f === "string" && (EDU_RISK_FLAGS as readonly string[]).includes(f),
+  );
+  return { flags, version: fila.version, recordedAt: fila.recordedAt.toISOString() };
 }
