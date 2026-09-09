@@ -36,7 +36,9 @@
 .chevron { width: 13px !important; height: 13px !important; opacity: .7; }
 .context { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .menu { min-width: 210px; padding: 6px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); box-shadow: 0 14px 35px color-mix(in srgb, var(--text-1) 16%, transparent); }
+.groupLabel { padding: 8px 10px 4px; color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .menuItem { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 8px; color: var(--text-1); font-size: 13px; text-decoration: none; outline: none; }
+.menuItem[aria-current="page"] { color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, transparent); }
 .menuItem svg { width: 16px; height: 16px; color: var(--primary); }
 .menuItem:hover, .menuItem:focus { background: color-mix(in srgb, var(--primary) 11%, transparent); }
 

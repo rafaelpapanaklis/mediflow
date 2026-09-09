@@ -13,9 +13,15 @@ const frequentItems = [
   { href: "/dashboard/inbox", label: "Mensajes", icon: Inbox },
 ];
 
-const moreItems = [
-  { href: "/dashboard/clinical", label: "Actividad clínica", icon: ClipboardList },
-  { href: "/dashboard/settings", label: "Configuración", icon: Settings },
+const moreGroups = [
+  {
+    label: "Trabajo clínico",
+    items: [{ href: "/dashboard/clinical", label: "Actividad clínica", icon: ClipboardList }],
+  },
+  {
+    label: "Espacio",
+    items: [{ href: "/dashboard/settings", label: "Configuración", icon: Settings }],
+  },
 ];
 
 export function HomeNavigation() {
@@ -42,13 +48,18 @@ export function HomeNavigation() {
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content className={styles.menu} align="start" sideOffset={8}>
-                {moreItems.map(({ href, label, icon: Icon }) => (
-                  <DropdownMenu.Item key={href} asChild>
-                    <Link href={href} className={styles.menuItem}>
-                      <Icon aria-hidden />
-                      {label}
-                    </Link>
-                  </DropdownMenu.Item>
+                {moreGroups.map((group) => (
+                  <DropdownMenu.Group key={group.label}>
+                    <DropdownMenu.Label className={styles.groupLabel}>{group.label}</DropdownMenu.Label>
+                    {group.items.map(({ href, label, icon: Icon }) => (
+                      <DropdownMenu.Item key={href} asChild>
+                        <Link href={href} className={styles.menuItem} aria-current={pathname.startsWith(href) ? "page" : undefined}>
+                          <Icon aria-hidden />
+                          {label}
+                        </Link>
+                      </DropdownMenu.Item>
+                    ))}
+                  </DropdownMenu.Group>
                 ))}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>

@@ -49,7 +49,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
 
   return (
     <>
-      <div style={{
+      <div data-home-header="admin" style={{
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "space-between",

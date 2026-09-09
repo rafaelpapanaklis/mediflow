@@ -59,7 +59,7 @@ export function HomeReceptionist({ user, data }: Props) {
 
   return (
     <>
-      <div style={{
+      <div data-home-header="receptionist" style={{
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "space-between",

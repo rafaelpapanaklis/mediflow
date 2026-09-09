@@ -43,7 +43,7 @@ export function HomeDoctor({ user, data }: Props) {
 
   return (
     <>
-      <div style={{
+      <div data-home-header="doctor" style={{
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "space-between",
