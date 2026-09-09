@@ -30,6 +30,7 @@ import { MUST_CHANGE_PASSWORD_PATH } from "@/lib/auth/must-change-password";
 import { isPlanExpired, isAllowedWhileSuspended, isInTrial as inTrialNow } from "@/lib/plan-status";
 import { getBranchQuota } from "@/lib/branches";
 import { HIDE_SUPPLY_MODULES } from "@/lib/hidden-modules";
+import { HomeNavigation } from "@/components/dashboard/home/home-navigation";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -198,7 +199,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     {/* Fondo --bg plano (Variante A): inline y solo aquí — .dashboard-shell la
         comparten labs/proveedores/afiliados, que no entran en el piloto. */}
     <div className="dashboard-shell flex min-h-screen font-sans" style={{ background: "var(--bg)" }}>
-      <Sidebar
+      {!pathname || pathname !== "/dashboard" ? <Sidebar
         user={{
           firstName: user.firstName,
           lastName:  user.lastName,
@@ -229,7 +230,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         clinicModuleKeys={clinicModuleKeys}
         sidebarCollapsed={(user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? []}
         isExpired={isExpired}
-      />
+      /> : null}
       {/* min-w-0 — CAUSA RAÍZ del scroll horizontal del panel a 1280. Un hijo de
           flex trae `min-width: auto`, así que esta columna NO podía encogerse por
           debajo del min-content de la pantalla que renderiza: una tabla ancha o una
@@ -244,6 +245,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           plan={clinic.plan as any}
           userRole={user.role}
         />
+        {pathname === "/dashboard" ? <HomeNavigation /> : null}
         <PatientContextBar />
         <main
           id="main-content"

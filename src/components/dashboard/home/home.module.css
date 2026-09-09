@@ -27,14 +27,18 @@
    ──────────────────────────────────────────────────────────────────── */
 
 .shell {
-  max-width: 1240px;
+  max-width: 1120px;
   margin: 0 auto;
   width: 100%;
-  /* Sin padding lateral: ese lo pone el <main> del layout. */
-  padding: clamp(16px, 2.4vw, 28px) 0 clamp(24px, 2.8vw, 32px);
+  padding: clamp(20px, 3vw, 36px) clamp(4px, 1vw, 14px) clamp(30px, 4vw, 48px);
   container-type: inline-size;
   container-name: home;
 }
+
+.shell :global(h1) { letter-spacing: -0.025em; }
+.shell :global([data-home-primary]) { border-color: color-mix(in srgb, var(--primary) 28%, var(--border-soft)); box-shadow: 0 10px 30px color-mix(in srgb, var(--primary) 7%, transparent); }
+.shell :global([data-status="success"]) { color: var(--success, #0f9f78); }
+.shell :global([data-status="warning"]) { color: var(--warning, #c47b16); }
 
 /* Admin y recepción: contenido principal 2fr + panel lateral 1fr. */
 .gridMain {
