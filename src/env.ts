@@ -38,7 +38,9 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
 
   // ── Crons & secretos administrativos ──────────────────────────────
-  CRON_SECRET: z.string().min(32, "CRON_SECRET debe tener al menos 32 caracteres"),
+  // Los endpoints cron validan este secreto al autorizar cada request. No debe
+  // bloquear páginas públicas como login cuando los crons no están configurados.
+  CRON_SECRET: z.string().min(32, "CRON_SECRET debe tener al menos 32 caracteres").optional(),
   ADMIN_SECRET_TOKEN: z.string().min(16).optional(),
   ADMIN_PASSWORD: z.string().min(8).optional(),
   ADMIN_TOTP_SECRET: z.string().optional(),
