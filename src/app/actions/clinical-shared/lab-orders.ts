@@ -14,6 +14,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
 import { LabOrderDocument } from "@/lib/pdf/lab-order-document";
+import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
 import {
   LAB_ORDER_STATUS_LABELS,
   LAB_ORDER_TYPE_LABELS,
@@ -272,7 +273,9 @@ async function renderLabOrderPdfDataUrl(args: { orderId: string }): Promise<stri
         select: { firstName: true, lastName: true, cedulaProfesional: true },
       },
       partner: { select: { name: true, contactName: true, phone: true, address: true } },
-      clinic: { select: { name: true } },
+      // El laboratorio necesita saber a qué clínica devolver el trabajo: la
+      // cabecera común pide nombre, dirección, teléfono, correo y logo.
+      clinic: { select: CLINIC_LETTERHEAD_SELECT },
     },
   });
   if (!o) throw new Error("Orden no encontrada");
@@ -284,9 +287,13 @@ async function renderLabOrderPdfDataUrl(args: { orderId: string }): Promise<stri
     }
   }
 
+  // Baja el logo (con plazo y camino de respaldo): si el bucket falla, esto
+  // devuelve el membrete sin logo y la orden se genera igual.
+  const membrete = await clinicLetterheadProps(o.clinic);
+
   const stream = await renderToStream(
     LabOrderDocument({
-      clinicName: o.clinic.name,
+      ...membrete,
       doctorAuthorName: `${o.author.firstName} ${o.author.lastName}`,
       doctorAuthorCedula: o.author.cedulaProfesional ?? null,
       partnerName: o.partner?.name ?? null,
