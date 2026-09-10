@@ -1,0 +1,171 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Piezas reusables de Sabina: contenido con markdown ligero, rastro de
+   herramientas y avisos de error. Mismos tokens que el resto del panel
+   (globals.css) — nada de hex crudo, dark mode automático vía .dark global.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Contenido (message-content.tsx) ──────────────────────────── */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.heading {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.paragraph {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.bullets {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+.paragraph code,
+.bullets code {
+  font-family: var(--font-mono, monospace);
+  background: var(--bg-elev-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* Hecho medido: tratamiento neutro, apenas se distingue de un párrafo
+   normal — es un DATO, no debe competir visualmente con la sugerencia. */
+.toneFact {
+  padding: 8px 10px;
+  background: var(--bg-elev-2);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0 8px 8px 0;
+}
+
+/* Sugerencia/opinión: color de marca, para que salte a la vista que es UN
+   CONSEJO y no una medición (CONTRATO.md, regla 6). */
+.toneOpinion {
+  padding: 8px 10px 8px 30px;
+  background: var(--brand-softer);
+  border-left: 3px solid var(--brand);
+  border-radius: 0 8px 8px 0;
+  position: relative;
+}
+.toneOpinion::before {
+  content: "💡";
+  position: absolute;
+  left: 9px;
+  top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ─── Rastro de herramientas (tool-trace.tsx) ──────────────────── */
+.toolTrace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 3px 9px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  width: fit-content;
+  max-width: 100%;
+}
+.toolTrace span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Avisos de error (error-notice.tsx) ───────────────────────── */
+.errorNotice {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg, 12px);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+}
+/* sin saldo / auth: tono de advertencia. rate limit / model down / red: tono
+   neutro — no es culpa del doctor ni de la clínica, así que no se pinta
+   como un error de la clínica (rojo). */
+.errorNotice[data-kind="no_balance"],
+.errorNotice[data-kind="auth"] {
+  background: var(--warning-soft, var(--bg-elev-2));
+  border-color: var(--warning-border-strong, var(--border-soft));
+}
+.errorIcon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+}
+.errorNotice[data-kind="no_balance"] .errorIcon,
+.errorNotice[data-kind="auth"] .errorIcon {
+  background: var(--warning-soft-strong, var(--brand-soft));
+  color: var(--warning-strong, var(--brand));
+}
+.errorBody { flex: 1; min-width: 0; }
+.errorTitle { font-size: 12.5px; font-weight: 700; color: var(--text-1); margin-bottom: 2px; }
+.errorMessage { font-size: 12px; line-height: 1.5; color: var(--text-2); }
+.errorActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.errorLink,
+.errorRetryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.errorLink {
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+  text-decoration: none;
+}
+.errorLink:hover { background: var(--brand-hover, var(--violet-700)); }
+.errorRetryBtn {
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border-soft);
+}
+.errorRetryBtn:hover:not(:disabled) { background: var(--brand-softer); color: var(--brand); border-color: var(--brand-soft); }
+.errorRetryBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.spin { animation: sabinaSpin 900ms linear infinite; }
+@keyframes sabinaSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation: none; }
+}

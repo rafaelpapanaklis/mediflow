@@ -6,7 +6,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Home, Calendar, Users, MessageCircle, Inbox as InboxIcon,
-  Sparkles, Camera, FlaskConical, Dumbbell, Footprints,
+  Sparkles, Bot, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, Wallet, PiggyBank, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor, Truck, ShoppingCart,
@@ -172,6 +172,10 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "marketplace",  section: "workspace", label: "Marketplace", href: "/dashboard/marketplace",   icon: ShoppingBag,   permission: "marketplace.view", moduleKey: "marketplace", comingSoon: true },
 
   { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles, moduleKey: "ai-assistant" },
+  // Sabina vive JUNTO al Asistente IA, no lo sustituye (CONTRATO.md de
+  // 20260910-1338-construir-sabina-la-capa-de-herramientas). Sin moduleKey:
+  // es área core, igual que "ai" — no se gatea por marketplace.
+  { id: "sabina",       section: "clinico", label: "Sabina",       href: "/dashboard/sabina",       icon: Bot },
   // Inventario vive en CLÍNICO, justo debajo de "IA asistente": al ocultar
   // Proveedores/Laboratorios (ver HIDE_SUPPLY_MODULES) era el único superviviente
   // de "Catálogo" y no ameritaba sección propia. Los filtros por `categories`,
