@@ -10,6 +10,12 @@
 import { prisma } from "@/lib/prisma";
 import { itemQuantity, itemUnitPrice, itemLineTotal, invoicePrintTotals, round2 } from "@/lib/invoice-totals";
 import {
+  ClinicLetterhead,
+  CLINIC_LETTERHEAD_SELECT,
+  clinicLetterheadProps,
+  type ClinicLetterheadClinic,
+} from "@/lib/pdf/clinic-letterhead";
+import {
   renderToBuffer,
   Document,
   Page,
@@ -50,14 +56,7 @@ function estadoSello(status: string, paid: number, balance: number): { label: st
 const styles = StyleSheet.create({
   page: { padding: 40, fontFamily: "Helvetica", fontSize: 10, color: "#0f172a" },
 
-  header: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start",
-    borderBottomWidth: 2, borderBottomColor: BRAND, paddingBottom: 12, marginBottom: 16,
-  },
-  brand: { fontSize: 18, color: BRAND, fontFamily: "Helvetica-Bold" },
-  clinicLine: { fontSize: 9, color: "#475569", marginTop: 2 },
-
-  metaBox: { textAlign: "right", maxWidth: 220 },
+  metaBox: { textAlign: "right" },
   metaTitle: { fontSize: 12, color: "#0f172a", fontFamily: "Helvetica-Bold", letterSpacing: 0.5 },
   metaLabel: { fontSize: 8.5, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 6 },
   metaValue: { fontSize: 10.5, color: "#0f172a", fontFamily: "Helvetica-Bold" },
@@ -118,10 +117,11 @@ const styles = StyleSheet.create({
     position: "absolute", bottom: 30, left: 40, right: 40, fontSize: 8, color: "#94a3b8",
     textAlign: "center", borderTopWidth: 0.5, borderTopColor: "#e2e8f0", paddingTop: 8,
   },
+  pageNum: { fontSize: 7.5, color: "#94a3b8", textAlign: "center", marginTop: 2 },
 });
 
 interface ComprobanteProps {
-  clinic: { name: string; address: string | null; city: string | null; state: string | null; phone: string | null; email: string | null; rfcEmisor: string | null };
+  clinic: ClinicLetterheadClinic;
   invoice: { invoiceNumber: string; createdAt: Date; status: string; subtotal: number; discount: number; total: number; paid: number; balance: number; cfdiUuid: string | null; taxRate: number | null; taxIncluded: boolean | null };
   patient: { name: string; rfc: string | null; razonSocial: string | null; regimen: string | null; cp: string | null };
   items: { description: string; quantity: number; unitPrice: number; total: number }[];
@@ -133,29 +133,28 @@ function ComprobanteDocument(p: ComprobanteProps) {
   // Renglones de dinero que hacen cuadrar el documento: con "IVA agregado" las
   // líneas suman la base y el TOTAL trae el impuesto encima.
   const totales = invoicePrintTotals(p.invoice);
-  const clinicAddr = [p.clinic.address, [p.clinic.city, p.clinic.state].filter(Boolean).join(", ")].filter(Boolean);
 
   return (
-    <Document title={`Comprobante ${p.invoice.invoiceNumber}`} author={p.clinic.name} subject="Comprobante de pago">
+    <Document title={`Comprobante ${p.invoice.invoiceNumber}`} author={p.clinic.clinicName} subject="Comprobante de pago">
       <Page size="LETTER" style={styles.page} wrap>
-        {/* Encabezado */}
-        <View style={styles.header}>
-          <View style={{ maxWidth: 300 }}>
-            <Text style={styles.brand}>{p.clinic.name}</Text>
-            {clinicAddr.map((l, i) => <Text key={i} style={styles.clinicLine}>{l}</Text>)}
-            {p.clinic.phone ? <Text style={styles.clinicLine}>Tel: {p.clinic.phone}</Text> : null}
-            {p.clinic.email ? <Text style={styles.clinicLine}>{p.clinic.email}</Text> : null}
-            {p.clinic.rfcEmisor ? <Text style={styles.clinicLine}>RFC: {p.clinic.rfcEmisor}</Text> : null}
-          </View>
-          <View style={styles.metaBox}>
-            <Text style={styles.metaTitle}>COMPROBANTE DE PAGO</Text>
-            <Text style={styles.metaLabel}>Folio</Text>
-            <Text style={styles.metaValue}>{p.invoice.invoiceNumber}</Text>
-            <Text style={styles.metaLabel}>Fecha</Text>
-            <Text style={styles.metaValue}>{fmtFecha(p.invoice.createdAt)}</Text>
-            <Text style={[styles.sello, { color: sello.color, backgroundColor: sello.bg }]}>{sello.label}</Text>
-          </View>
-        </View>
+        {/* Encabezado — membrete común (logo + clínica) y, a la derecha, folio,
+            fecha y sello de estado. El RFC del emisor entra por el membrete:
+            este comprobante NO es fiscal, pero quien lo recibe necesita saber
+            de qué clínica sale. */}
+        <ClinicLetterhead
+          {...p.clinic}
+          accent={BRAND}
+          right={
+            <View style={styles.metaBox}>
+              <Text style={styles.metaTitle}>COMPROBANTE DE PAGO</Text>
+              <Text style={styles.metaLabel}>Folio</Text>
+              <Text style={styles.metaValue}>{p.invoice.invoiceNumber}</Text>
+              <Text style={styles.metaLabel}>Fecha</Text>
+              <Text style={styles.metaValue}>{fmtFecha(p.invoice.createdAt)}</Text>
+              <Text style={[styles.sello, { color: sello.color, backgroundColor: sello.bg }]}>{sello.label}</Text>
+            </View>
+          }
+        />
 
         {/* Paciente + fiscales */}
         <View style={styles.infoRow}>
@@ -242,11 +241,19 @@ function ComprobanteDocument(p: ComprobanteProps) {
           </Text>
         </View>
 
-        {/* Pie */}
-        <Text style={styles.footer} fixed>
-          Este documento es un comprobante de pago, NO es una factura fiscal (CFDI).
-          {p.invoice.cfdiUuid ? `\nCFDI timbrado · UUID: ${p.invoice.cfdiUuid}` : ""}
-        </Text>
+        {/* Pie — va `fixed`, así que es lo que sostiene la identidad en la
+            página 2 y siguientes: el membrete solo sale en la primera. */}
+        <View style={styles.footer} fixed>
+          <Text>
+            {p.clinic.clinicName} · Comprobante {p.invoice.invoiceNumber} · Este documento es un
+            comprobante de pago, NO es una factura fiscal (CFDI).
+            {p.invoice.cfdiUuid ? `\nCFDI timbrado · UUID: ${p.invoice.cfdiUuid}` : ""}
+          </Text>
+          <Text
+            style={styles.pageNum}
+            render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
+          />
+        </View>
       </Page>
     </Document>
   );
@@ -273,7 +280,9 @@ export async function buildInvoicePrintPdf(
       // Sin estas dos el comprobante no sabía si el TOTAL trae IVA agregado.
       taxRate: true, taxIncluded: true,
       items: true,
-      clinic:  { select: { name: true, address: true, city: true, state: true, phone: true, email: true, rfcEmisor: true } },
+      // logoUrl entra por CLINIC_LETTERHEAD_SELECT; rfcEmisor se suma aparte
+      // porque el membrete solo pinta el fiscal donde corresponde y aquí sí.
+      clinic:  { select: { ...CLINIC_LETTERHEAD_SELECT, rfcEmisor: true } },
       patient: { select: { firstName: true, lastName: true, rfcPaciente: true, razonSocialPac: true, regimenFiscalPac: true, cpPaciente: true } },
       payments: { orderBy: { paidAt: "asc" }, select: { amount: true, method: true, reference: true, paidAt: true } },
     },
@@ -307,14 +316,12 @@ export async function buildInvoicePrintPdf(
   });
 
   const props: ComprobanteProps = {
+    // El logo se baja aquí (data URL + proporción). Si el bucket falla, tarda o
+    // guarda un formato que @react-pdf no pinta, esto devuelve null y la
+    // cabecera saca el nombre en grande: el comprobante SIEMPRE se genera.
     clinic: {
-      name:    invoice.clinic?.name ?? "Clínica",
-      address: invoice.clinic?.address ?? null,
-      city:    invoice.clinic?.city ?? null,
-      state:   invoice.clinic?.state ?? null,
-      phone:   invoice.clinic?.phone ?? null,
-      email:   invoice.clinic?.email ?? null,
-      rfcEmisor: invoice.clinic?.rfcEmisor ?? null,
+      ...(await clinicLetterheadProps(invoice.clinic)),
+      clinicTaxId: invoice.clinic?.rfcEmisor ?? null,
     },
     invoice: {
       invoiceNumber: invoice.invoiceNumber,

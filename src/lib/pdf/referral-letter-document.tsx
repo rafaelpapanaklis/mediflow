@@ -1,13 +1,18 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { ClinicLetterhead, type ClinicLetterheadClinic } from "@/lib/pdf/clinic-letterhead";
 
 /**
  * ReferralLetterDocument — PDF de hoja de referencia/interconsulta.
  * Header con clínica + fecha + status, bloque del paciente, bloque del
  * doctor receptor (si hay contacto), motivo, summary del módulo origen
  * y firma del médico autor.
+ *
+ * Esta carta va dirigida a OTRO MÉDICO, que casi nunca conoce la clínica que
+ * refiere: sin dirección ni teléfono no puede contestar la interconsulta. Por
+ * eso la cabecera es la común (`ClinicLetterhead`) y no el nombre suelto.
  */
 
-export interface ReferralLetterDocumentProps {
+export interface ReferralLetterDocumentProps extends ClinicLetterheadClinic {
   clinicName: string;
   doctorAuthorName: string;
   doctorAuthorCedula: string | null;
@@ -25,32 +30,17 @@ export interface ReferralLetterDocumentProps {
   summary: string;
 }
 
+/** Acento del documento: el morado del resto de la familia clínica. */
+const ACCENT = "#7c3aed";
+
 const styles = StyleSheet.create({
   page: {
     padding: 40,
+    paddingBottom: 64,
     fontFamily: "Helvetica",
     fontSize: 10,
     color: "#14101f",
     lineHeight: 1.5,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    borderBottomWidth: 2,
-    borderBottomColor: "#7c3aed",
-    paddingBottom: 12,
-    marginBottom: 18,
-  },
-  brand: {
-    fontSize: 18,
-    color: "#7c3aed",
-    fontFamily: "Helvetica-Bold",
-  },
-  brandSub: {
-    fontSize: 9,
-    color: "#6b6b78",
-    marginTop: 2,
   },
   metaRight: {
     fontSize: 9,
@@ -130,6 +120,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#e5e5ed",
     paddingTop: 8,
   },
+  pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2 },
 });
 
 function fmtDate(iso: string | null): string {
@@ -165,20 +156,23 @@ export function ReferralLetterDocument(props: ReferralLetterDocumentProps) {
   return (
     <Document>
       <Page size="LETTER" style={styles.page} wrap>
-        <View style={styles.header} fixed>
-          <View>
-            <Text style={styles.brand}>{props.clinicName}</Text>
-            <Text style={styles.brandSub}>Hoja de referencia · interconsulta</Text>
-          </View>
-          <View>
-            <Text style={styles.metaRight}>Módulo origen</Text>
-            <Text style={styles.metaValue}>
-              {MODULE_LABELS[props.module] ?? props.module}
-            </Text>
-            <Text style={[styles.metaRight, { marginTop: 6 }]}>Fecha</Text>
-            <Text style={styles.metaValue}>{fmtDate(props.generatedAt)}</Text>
-          </View>
-        </View>
+        {/* Membrete común. Va solo en la primera página: la identidad de las
+            siguientes la lleva el pie, que sí es `fixed`. */}
+        <ClinicLetterhead
+          {...props}
+          accent={ACCENT}
+          subtitle="Hoja de referencia · interconsulta"
+          right={
+            <View>
+              <Text style={styles.metaRight}>Módulo origen</Text>
+              <Text style={styles.metaValue}>
+                {MODULE_LABELS[props.module] ?? props.module}
+              </Text>
+              <Text style={[styles.metaRight, { marginTop: 6 }]}>Fecha</Text>
+              <Text style={styles.metaValue}>{fmtDate(props.generatedAt)}</Text>
+            </View>
+          }
+        />
 
         <View style={styles.block}>
           <View style={styles.twoCol}>
@@ -232,9 +226,18 @@ export function ReferralLetterDocument(props: ReferralLetterDocumentProps) {
           </Text>
         </View>
 
-        <Text style={styles.footer} fixed>
-          Generada en DaleControl el {fmtDate(props.generatedAt)} · Documento informativo
-        </Text>
+        {/* El médico receptor recibe hojas sueltas: en el pie va SIEMPRE de qué
+            clínica sale la referencia, no solo el nombre del software. */}
+        <View style={styles.footer} fixed>
+          <Text>
+            {props.clinicName} · Hoja de referencia del {fmtDate(props.generatedAt)} · Documento
+            informativo
+          </Text>
+          <Text
+            style={styles.pageNum}
+            render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
+          />
+        </View>
       </Page>
     </Document>
   );
