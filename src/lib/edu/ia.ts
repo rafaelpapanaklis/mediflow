@@ -363,6 +363,14 @@ async function getEstudioEnAlcance(
   mimeType: string;
   sizeBytes: bigint;
   storagePath: string;
+  /**
+   * 🔴 N-13 · null = vivo. Se SELECCIONA y no se filtra en el `where`, por
+   * lo mismo que en `getEduStudyForViewer`: LEER los análisis de un estudio
+   * retirado está bien —es lo que había cuando se decidió— y lo que no
+   * puede es ANALIZARLO otra vez. Quien llama decide, y aquí cada quien
+   * decide distinto.
+   */
+  deletedAt: Date | null;
 } | null> {
   const institutionId = requireInstitution(ctx);
   const scope = eduClinicalScope(ctx);
@@ -383,6 +391,7 @@ async function getEstudioEnAlcance(
       mimeType: true,
       sizeBytes: true,
       storagePath: true,
+      deletedAt: true,
     },
   });
 }
@@ -462,6 +471,27 @@ export async function analyzeEduStudy(
 
   const estudio = await getEstudioEnAlcance(ctx, studyId, now);
   if (!estudio) throw new EduPadronError("Ese estudio no existe o no te toca.", 404);
+
+  /**
+   * 🔴 N-13 · UN ESTUDIO RETIRADO NO SE ANALIZA, Y NO GASTA CUPO.
+   *
+   * Se retira una placa porque se subió al paciente equivocado; con la
+   * pestaña vieja abierta se analizaba igual: se descargaba el binario, se
+   * llamaba al modelo, se COBRABA el cupo del instituto y quedaba un
+   * análisis colgado de una fila retirada. El corte va ANTES de todo lo
+   * demás —del formato, del tamaño, del freno de doble clic y del cupo—
+   * porque es el más barato de todos: ya está leído.
+   *
+   * Es el mismo 409 y las mismas palabras que `updateEduStudy` y
+   * `softDeleteEduStudy`: dos puertas del mismo expediente no pueden
+   * explicar lo mismo de dos maneras.
+   */
+  if (estudio.deletedAt) {
+    throw new EduPadronError(
+      "Ese estudio está retirado del expediente: ya no se analiza.",
+      409,
+    );
+  }
 
   if (!eduAnalisisMimeOk(estudio.mimeType)) {
     throw new EduPadronError(

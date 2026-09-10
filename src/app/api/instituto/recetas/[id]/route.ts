@@ -14,7 +14,17 @@ export const dynamic = "force-dynamic";
  *     edita sea QUIEN LA PROPUSO — su nombre es el que va congelado en el
  *     papel, y nadie escribe bajo el nombre de otro.
  *
- * Una EXPEDIDA jamás pasa por aquí: se anula y se hace otra.
+ * Una EXPEDIDA jamás pasa por aquí: se anula y se hace otra. Y desde
+ * WS2-T3 la escritura lleva el ESTADO en el `where` (H-16): si la receta
+ * dejó de estar en el estado que se leyó —porque el docente la firmó en
+ * esa misma ventana— la edición no cae encima, contesta 409.
+ *
+ * El cuerpo acepta también `caseId`: MOVER un borrador al caso correcto.
+ * La pantalla lo mandaba desde el primer día y el servidor lo tiraba en
+ * silencio, así que el usuario creía haber movido la receta. El caso se
+ * comprueba dentro del alcance, tiene que ser del mismo paciente y estar
+ * abierto; una PENDIENTE no se mueve (su petición ya está en la bandeja
+ * del docente del caso viejo).
  */
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const g = await eduApiGuard("recetas.propose");

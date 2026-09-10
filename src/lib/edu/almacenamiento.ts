@@ -8,10 +8,18 @@
  * ═══════════════════════════════════════════════════════════════════════
  * 🔴 EL CONSUMO SE CUENTA, NO SE GUARDA
  *
- * `SUM(sizeBytes)` de EduStudy con un `aggregate`, filtrando por
- * institutionId (el índice edu_studies_patient_idx empieza justo por esa
- * columna). Nunca se traen las filas: una escuela con 40 000 estudios
- * tumbaría la pantalla que intenta contarlos en memoria.
+ * `SUM(sizeBytes)` con un `aggregate`, filtrando por institutionId (el
+ * índice edu_studies_patient_idx y el edu_clinical_photos_patient_idx
+ * empiezan justo por esa columna). Nunca se traen las filas: una escuela
+ * con 40 000 estudios tumbaría la pantalla que intenta contarlos en
+ * memoria.
+ *
+ * 🔴 OLA B — SON DOS TABLAS Y UNA SOLA BOLSA. A la suma de EduStudy se le
+ * suma la de EduClinicalPhoto (sin las dadas de baja). La cuota es del
+ * INSTITUTO y es una sola: dos medidores separados le harían creer a una
+ * escuela que tiene el doble de espacio del que contrató. Las dos
+ * consultas van en un `Promise.all` de DOS —muy por debajo de las siete
+ * que satura el pooler.
  *
  * No hay columna "bytes usados" a propósito, igual que en el cupo de IA de
  * la Ola 8: un contador guardado se desincroniza el día que una escritura
@@ -69,6 +77,7 @@
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
 import {
+  eduAlmacenamientoFotosWhere,
   eduAlmacenamientoWhere,
   eduAlmBytesDeTb,
   eduAlmCostoExtraMxn,
@@ -106,16 +115,27 @@ function aNumero(v: bigint | number | null | undefined): number {
  */
 export async function eduAlmacenamientoUsado(
   institutionId: string,
-): Promise<{ usadoBytes: number; estudios: number }> {
-  const agg = await prisma.eduStudy.aggregate({
-    where: eduAlmacenamientoWhere(institutionId),
-    _sum: { sizeBytes: true },
-    _count: { _all: true },
-  });
+): Promise<{ usadoBytes: number; estudios: number; fotos: number }> {
+  // Los dos `where` salen de almacenamiento-core.ts y no se escriben aquí:
+  // el de fotos lleva `deletedAt: null` y ése es justo el recorte que un
+  // handler futuro se olvidaría de copiar.
+  const [aggEstudios, aggFotos] = await Promise.all([
+    prisma.eduStudy.aggregate({
+      where: eduAlmacenamientoWhere(institutionId),
+      _sum: { sizeBytes: true },
+      _count: { _all: true },
+    }),
+    prisma.eduClinicalPhoto.aggregate({
+      where: eduAlmacenamientoFotosWhere(institutionId),
+      _sum: { sizeBytes: true },
+      _count: { _all: true },
+    }),
+  ]);
   return {
-    // Sin estudios, `_sum.sizeBytes` es null y no 0.
-    usadoBytes: aNumero(agg._sum.sizeBytes),
-    estudios: agg._count._all ?? 0,
+    // Sin filas, `_sum.sizeBytes` es null y no 0.
+    usadoBytes: aNumero(aggEstudios._sum.sizeBytes) + aNumero(aggFotos._sum.sizeBytes),
+    estudios: aggEstudios._count._all ?? 0,
+    fotos: aggFotos._count._all ?? 0,
   };
 }
 
@@ -146,6 +166,7 @@ export async function getEduAlmacenamientoMedidor(institutionId: string): Promis
   return {
     usadoBytes: usado.usadoBytes,
     estudios: usado.estudios,
+    fotos: usado.fotos,
     // Un instituto que no existe no puede subir nada: cuota 0. No se cae
     // aquí porque quien llama ya tiene sesión válida de ese instituto.
     cuotaBytes: aNumero(institucion?.storageQuotaBytes),
@@ -180,9 +201,11 @@ export async function getEduAlmacenamientoPanel(
  * Todos los institutos con su cuota, su consumo y lo que hay que
  * facturarles al mes por el TB extra.
  *
- * DOS consultas para N institutos y no N+1: la lista, y UN `groupBy` que
- * suma los estudios de todos de una vez. La tercera cuenta las sedes, que
- * es informativo (no dividen la cuota: son ilimitadas y comparten bolsa).
+ * TRES consultas para N institutos y no N+1: la lista, y DOS `groupBy`
+ * que suman de una vez los estudios y las fotos de todos (Ola B: la cuota
+ * es una bolsa con dos sumandos). Las sedes se cuentan dentro de la
+ * primera y son informativas — no dividen la cuota: son ilimitadas y
+ * comparten bolsa.
  */
 export async function listEduAlmacenamientoAdmin(): Promise<EduAlmAdminRow[]> {
   const institutos = await prisma.eduInstitution.findMany({
@@ -198,26 +221,52 @@ export async function listEduAlmacenamientoAdmin(): Promise<EduAlmAdminRow[]> {
   });
   if (institutos.length === 0) return [];
 
-  const porInstituto = await prisma.eduStudy.groupBy({
-    by: ["institutionId"],
-    _sum: { sizeBytes: true },
-    _count: { _all: true },
-  });
+  const [porInstituto, fotosPorInstituto] = await Promise.all([
+    // ws2-t2 · Los RETIRADOS tampoco cuentan aquí. El mismo recorte que
+    // `eduAlmacenamientoWhere` aplica en el medidor de una sola escuela:
+    // el /admin y el panel de dirección no pueden contestar cosas
+    // distintas sobre el mismo instituto.
+    prisma.eduStudy.groupBy({
+      by: ["institutionId"],
+      where: { deletedAt: null },
+      _sum: { sizeBytes: true },
+      _count: { _all: true },
+    }),
+    // 🔴 Las dadas de baja NO cuentan. El `where` es el mismo punto único
+    // que usa el medidor de una escuela, para que el /admin y el panel de
+    // dirección no puedan contestar cosas distintas.
+    prisma.eduClinicalPhoto.groupBy({
+      by: ["institutionId"],
+      where: { deletedAt: null },
+      _sum: { sizeBytes: true },
+      _count: { _all: true },
+    }),
+  ]);
 
-  const usoPorId = new Map<string, { usadoBytes: number; estudios: number }>();
+  const usoPorId = new Map<string, { usadoBytes: number; estudios: number; fotos: number }>();
   for (const fila of porInstituto) {
     usoPorId.set(fila.institutionId, {
       usadoBytes: aNumero(fila._sum.sizeBytes),
       estudios: fila._count._all ?? 0,
+      fotos: 0,
+    });
+  }
+  for (const fila of fotosPorInstituto) {
+    const previo = usoPorId.get(fila.institutionId) ?? { usadoBytes: 0, estudios: 0, fotos: 0 };
+    usoPorId.set(fila.institutionId, {
+      usadoBytes: previo.usadoBytes + aNumero(fila._sum.sizeBytes),
+      estudios: previo.estudios,
+      fotos: fila._count._all ?? 0,
     });
   }
 
   return institutos.map((i) => {
-    const uso = usoPorId.get(i.id) ?? { usadoBytes: 0, estudios: 0 };
+    const uso = usoPorId.get(i.id) ?? { usadoBytes: 0, estudios: 0, fotos: 0 };
     const cuotaBytes = aNumero(i.storageQuotaBytes);
     const medidor: EduAlmMedidor = {
       usadoBytes: uso.usadoBytes,
       estudios: uso.estudios,
+      fotos: uso.fotos,
       cuotaBytes,
     };
     return {

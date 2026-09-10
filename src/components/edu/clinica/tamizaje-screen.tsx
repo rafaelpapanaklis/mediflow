@@ -6,8 +6,17 @@ import { Stethoscope } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EduPersonaLink } from "@/components/edu/persona/persona-link";
+import {
+  EduPacienteSelector,
+  type EduPacienteOpcion,
+} from "@/components/edu/clinica/paciente-selector";
 import { EDU_APPOINTMENT_STATUS_LABELS } from "@/lib/edu/types";
-import { eduFormatDayShort, type EduAppointmentRow, type EduStudentOption, type EduSupervisorOption } from "@/lib/edu/agenda-core";
+import {
+  eduFormatDayShort,
+  type EduAppointmentRow,
+  type EduStudentOption,
+  type EduSupervisorOption,
+} from "@/lib/edu/agenda-core";
 
 /**
  * /instituto/agenda/tamizaje — LA VALORACIÓN INICIAL.
@@ -30,6 +39,10 @@ import { eduFormatDayShort, type EduAppointmentRow, type EduStudentOption, type 
 export interface EduTamizajeScreenProps {
   pendientes: EduAppointmentRow[];
   patients: { id: string; folio: string; name: string; status: string }[];
+  /** Si la primera página de pacientes se quedó corta. Lo dice el servidor
+   *  (`listEduPatientOptions`) y llega hasta el desplegable, que es quien
+   *  ofrece el buscador para llegar al resto. */
+  patientsTruncated: boolean;
   students: EduStudentOption[];
   supervisors: EduSupervisorOption[];
   programs: { id: string; name: string; code: string }[];
@@ -38,6 +51,7 @@ export interface EduTamizajeScreenProps {
 export function EduTamizajeScreen({
   pendientes,
   patients,
+  patientsTruncated,
   students,
   supervisors,
   programs,
@@ -128,6 +142,7 @@ export function EduTamizajeScreen({
         <FormularioTamizaje
           cita={abierto === "libre" ? null : abierto}
           patients={patients}
+          patientsTruncated={patientsTruncated}
           students={students}
           supervisors={supervisors}
           programs={programs}
@@ -146,6 +161,7 @@ export function EduTamizajeScreen({
 function FormularioTamizaje({
   cita,
   patients,
+  patientsTruncated,
   students,
   supervisors,
   programs,
@@ -154,6 +170,7 @@ function FormularioTamizaje({
 }: {
   cita: EduAppointmentRow | null;
   patients: { id: string; folio: string; name: string; status: string }[];
+  patientsTruncated: boolean;
   students: EduStudentOption[];
   supervisors: EduSupervisorOption[];
   programs: { id: string; name: string; code: string }[];
@@ -161,6 +178,11 @@ function FormularioTamizaje({
   onDone: (mensaje: string) => void;
 }) {
   const [patientId, setPatientId] = useState(cita?.patientId ?? "");
+  /** El elegido EN EL DESPLEGABLE. Hace falta aparte porque desde que hay
+   *  buscador el paciente puede venir de una búsqueda y NO estar en
+   *  `patients`, que es solo la primera página que pintó el servidor: sin
+   *  esto el mensaje de cierre decía "El paciente quedó asignado". */
+  const [pacienteElegido, setPacienteElegido] = useState<EduPacienteOpcion | null>(null);
   const [studentId, setStudentId] = useState("");
   const [programId, setProgramId] = useState("");
   const [supervisorUserId, setSupervisorUserId] = useState("");
@@ -171,7 +193,10 @@ function FormularioTamizaje({
   const alumno = students.find((s) => s.id === studentId) ?? null;
   const supervisorEfectivo = supervisorUserId || alumno?.supervisorUserId || "";
   const nombrePaciente =
-    cita?.patientName ?? patients.find((p) => p.id === patientId)?.name ?? "El paciente";
+    cita?.patientName ??
+    pacienteElegido?.name ??
+    patients.find((p) => p.id === patientId)?.name ??
+    "El paciente";
 
   async function guardar() {
     setError(null);
@@ -238,24 +263,19 @@ function FormularioTamizaje({
       )}
 
       {!cita && (
-        <div className="edu-field">
-          <label className="edu-field__label" htmlFor="edu-tz-paciente">
-            Paciente
-          </label>
-          <select
-            id="edu-tz-paciente"
-            className="edu-input"
-            value={patientId}
-            onChange={(e) => setPatientId(e.target.value)}
-          >
-            <option value="">Elige…</option>
-            {patients.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.folio} · {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        /* El MISMO desplegable con buscador que la agenda (H-06): sin él
+           solo salían los 300 primeros por folio, los más antiguos, y a un
+           paciente registrado hoy no se le podía abrir su caso desde aquí. */
+        <EduPacienteSelector
+          id="edu-tz-paciente"
+          value={patientId}
+          onChange={(pid, opcion) => {
+            setPatientId(pid);
+            setPacienteElegido(opcion);
+          }}
+          iniciales={patients}
+          inicialesTruncadas={patientsTruncated}
+        />
       )}
 
       <div className="edu-formgrid edu-formgrid--2">

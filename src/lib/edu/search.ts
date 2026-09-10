@@ -126,19 +126,48 @@ export function eduStudentSearchIndex(s: { matricula?: string | null }): string 
   return eduSearchIndexOf([s.matricula]);
 }
 
-/** edu_patients: folio, nombre, apellido, dígitos del teléfono y correo. */
+/**
+ * edu_patients: folio, CURP, nombre, apellido, los dígitos de los DOS
+ * teléfonos y el correo.
+ *
+ * ── QUÉ CAMBIÓ EN LA OLA B (ws2-t3) ────────────────────────────────────
+ * Entraron el **CURP** y el **segundo teléfono**. Los dos por el mismo
+ * motivo práctico: en el mostrador el paciente dicta lo que trae a mano —el
+ * CURP de la constancia, el teléfono de su casa— y hasta hoy el buscador
+ * contestaba cero con el paciente delante. Y el segundo teléfono muerde
+ * doble: es justo el que recepción apuntaba en `notes`, donde nadie podía
+ * buscarlo.
+ *
+ * 🔴 EL ORDEN NO ES CASUAL. `slice(0, 400)` recorta el índice al tamaño de
+ * la columna (VARCHAR(400)), y con los máximos de todo lo que se indexa
+ * —folio 30 + CURP 18 + nombre 80 + apellido 80 + dos teléfonos 30+30 +
+ * correo 160— se puede pasar de 400 por unos pocos caracteres. El correo va
+ * el ÚLTIMO porque es el más largo y el que menos se busca; el CURP y los
+ * teléfonos van delante para que no puedan caer nunca en ese recorte.
+ *
+ * ⚠️ NO HAY BACKFILL, y es deliberado (el encargo prohíbe SQL nuevo): los
+ * pacientes que ya existen NO se encuentran por CURP ni por su segundo
+ * teléfono hasta que alguien guarde su ficha una vez — que es exactamente
+ * cuando esos dos datos se capturan, porque hasta esta ola no había dónde
+ * escribirlos. Un paciente viejo con CURP en la base no existe: la columna
+ * se creó vacía en la Ola B.
+ */
 export function eduPatientSearchIndex(p: {
   folio?: string | null;
+  curp?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
+  phone2?: string | null;
   email?: string | null;
 }): string {
   return eduSearchIndexOf([
     p.folio,
+    p.curp,
+    eduDigitsOnly(p.phone),
+    eduDigitsOnly(p.phone2),
     p.firstName,
     p.lastName,
-    eduDigitsOnly(p.phone),
     p.email,
   ]);
 }

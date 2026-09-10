@@ -4,6 +4,7 @@ import { useState } from "react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { eduRequest } from "@/components/edu/edu-http";
 import { EduPersonaLink } from "@/components/edu/persona/persona-link";
+import { EduPacienteSelector } from "@/components/edu/clinica/paciente-selector";
 import {
   EDU_APPOINTMENT_STATUS_LABELS,
   EDU_APPOINTMENT_TYPES,
@@ -15,7 +16,6 @@ import {
 import {
   EDU_APPOINTMENT_DEFAULT_MINUTES,
   EDU_APPOINTMENT_TRANSITIONS,
-  EDU_CLINICA_MAX_ROWS,
   eduFormatDayShort,
   type EduAppointmentRow,
   type EduChairOption,
@@ -168,30 +168,20 @@ export function EduAgendaAlta({
         </div>
       )}
 
-      <div className="edu-field">
-        <label className="edu-field__label" htmlFor="edu-ac-paciente">
-          Paciente
-        </label>
-        <select
-          id="edu-ac-paciente"
-          className="edu-input"
-          value={patientId}
-          onChange={(e) => setPatientId(e.target.value)}
-        >
-          <option value="">Elige…</option>
-          {patients.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.folio} · {p.name}
-            </option>
-          ))}
-        </select>
-        {patientsTruncated && (
-          <span className="edu-field__hint">
-            Se muestran los primeros {EDU_CLINICA_MAX_ROWS} pacientes por folio. Si no está el
-            que buscas, ábrelo desde Pacientes.
-          </span>
-        )}
-      </div>
+      {/* El desplegable con BUSCADOR (H-06). Antes era un `<select>` con los
+          300 primeros por folio —los más ANTIGUOS— y un aviso que mandaba a
+          otra pantalla: al paciente registrado esta mañana no se le podía
+          agendar desde aquí. El buscador pega contra el mismo endpoint con
+          el mismo permiso y el mismo alcance; lo único que cambia es qué
+          opciones hay dentro. Es el MISMO componente que monta la
+          valoración: uno solo, para que no se quede uno atrás. */}
+      <EduPacienteSelector
+        id="edu-ac-paciente"
+        value={patientId}
+        onChange={(pid) => setPatientId(pid)}
+        iniciales={patients}
+        inicialesTruncadas={patientsTruncated}
+      />
 
       <div className="edu-formgrid edu-formgrid--2">
         <div className="edu-field">

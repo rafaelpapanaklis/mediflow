@@ -552,12 +552,20 @@ test("los hallazgos se nombran en español, no con su id", () => {
   assert.equal(eduConditionLabel(EDU_ODONTOGRAM_NOTE_KEY), "Nota del diente");
 });
 
+/**
+ * Una fila del odontograma tal como llega a la pantalla.
+ *
+ * `baja` (Ola B): la fecha en que se RETIRÓ el hallazgo, o null si sigue
+ * vivo. Se pasa por parámetro y no se inventa dentro para que las pruebas
+ * del rastro puedan armar el par vivo/retirado del mismo diente.
+ */
 function fila(
   id: string,
   tooth: number,
   surface: string,
   condition: string,
   notes: string | null = null,
+  baja: string | null = null,
 ): EduOdontogramEntryRow {
   return {
     id,
@@ -569,6 +577,12 @@ function fila(
     recordedByName: "Quien sea",
     recordedAt: "2026-08-29T18:00:00.000Z",
     recordedLabel: "sáb 29 ago 12:00",
+    deletedAt: baja,
+    deletedById: baja ? "u_2" : null,
+    deletedByName: baja ? "Quien la quitó" : null,
+    deletedLabel: baja ? "lun 31 ago 09:00" : null,
+    firstRecordedAt: "2026-08-29T18:00:00.000Z",
+    firstRecordedLabel: "sáb 29 ago 12:00",
   };
 }
 

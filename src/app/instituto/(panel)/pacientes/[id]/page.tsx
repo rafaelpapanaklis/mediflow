@@ -49,6 +49,20 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
 
   const veCasos = r.casos !== null && hasEduPermission(permUser, "casos.view");
   const veSaldo = r.saldo !== null && hasEduPermission(permUser, "caja.view");
+  /**
+   * 🔴 N-11 · EL PERMISO, NO SOLO EL ALCANCE.
+   *
+   * `r.fotos` solo se anula por ALCANCE, nunca por permiso — igual que
+   * `r.casos` y `r.saldo`, que por eso llevan su `hasEduPermission` desde
+   * siempre. A quien le apagaron `estudios.view` con un override le
+   * desaparecía la pestaña Fotos y seguía leyendo aquí «Fotos clínicas · 7
+   * · última: …» con un enlace que le contestaba denegado.
+   *
+   * Y el enlace de SUBIR pide el permiso de escritura: ofrecerle «Subir la
+   * primera» a quien no puede subir es mandarlo a un 403.
+   */
+  const veFotos = r.fotos !== null && hasEduPermission(permUser, "estudios.view");
+  const subeFotos = hasEduPermission(permUser, "estudios.upload");
   const base = `/instituto/pacientes/${p.id}`;
 
   return (
@@ -211,6 +225,50 @@ export default async function PacienteResumenPage({ params }: { params: { id: st
                 </li>
               ))}
             </ol>
+          )}
+        </section>
+      )}
+
+      {/* ── ws2-t2 · LAS FOTOS CLÍNICAS, en una línea ──────────────────────
+          Hasta hoy, una foto de la sonrisa subida como estudio aparecía en
+          «Últimos estudios» rotulada «Radiografía» —el servidor asume
+          RADIOGRAFIA para TODA imagen— y no había ni una palabra sobre las
+          fotos clínicas de verdad, que viven en su propia tabla y en su
+          propia pestaña. Esto lo dice: cuántas hay y de cuándo es la
+          última, con el enlace para verlas y compararlas.
+
+          Una línea y no tres miniaturas a propósito: firmar tres URLs más
+          de Storage en cada carga de la ficha para repetir lo que la
+          pestaña Fotos enseña mejor no vale lo que cuesta. */}
+      {veFotos && r.fotos !== null && (
+        <section className="edu-section">
+          <div className="edu-section__head">
+            <h2 className="edu-section__title">Fotos clínicas</h2>
+            <span className="edu-count">{r.fotos.total}</span>
+          </div>
+          {r.fotos.total === 0 ? (
+            <p className="edu-note">
+              Todavía no hay fotos de este paciente.{" "}
+              {subeFotos ? (
+                <>
+                  <Link href={`${base}/fotos`} className="edu-link">
+                    Subir la primera
+                  </Link>{" "}
+                  —{" "}
+                </>
+              ) : null}
+              con dos, una de «Antes» y otra de «Después», el comparador enseña el cambio.
+            </p>
+          ) : (
+            <p className="edu-note">
+              <strong>
+                {r.fotos.total} {r.fotos.total === 1 ? "foto clínica" : "fotos clínicas"}
+              </strong>
+              {r.fotos.ultimaLabel ? ` · última: ${r.fotos.ultimaLabel}` : ""} ·{" "}
+              <Link href={`${base}/fotos`} className="edu-link">
+                Verlas y comparar antes/después
+              </Link>
+            </p>
           )}
         </section>
       )}

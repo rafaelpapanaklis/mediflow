@@ -83,6 +83,7 @@ export default async function InstitutoTamizajePage() {
           name: p.name,
           status: p.status,
         }))}
+        patientsTruncated={pacientes.truncated}
         students={alumnos}
         supervisors={docentes}
         programs={programas

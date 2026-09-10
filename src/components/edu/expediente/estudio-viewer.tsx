@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import { Download, ZoomIn, ZoomOut } from "lucide-react";
+import { eduRequest } from "@/components/edu/edu-http";
 import { EduModal } from "@/components/edu/edu-modal";
 import { EduVisorModal } from "@/components/edu/estudios/visor-modal";
 import { eduVisorPorExtension } from "@/components/edu/estudios/visor-tipo";
+import { EduEstudioAnotaciones } from "@/components/edu/estudios/anotaciones";
+import { EduEstudioEditar } from "@/components/edu/estudios/estudio-editar";
+import type { EduCaseOption } from "@/lib/edu/expediente-core";
 import type { EduStudyRow } from "@/lib/edu/estudios-core";
 import type { EduIaEstado } from "@/lib/edu/ia-core";
 import type { Dictionary } from "@/i18n/t";
@@ -27,47 +31,106 @@ import { EduAnalisisIa } from "@/components/edu/expediente/analisis-ia";
  * la IA), pero ya no se pregunta ni se pinta como si fuera una taxonomía
  * que alguien eligió.
  *
- * 🔴 DÓNDE VIVEN LAS NOTAS. En `EduStudy.notes`, una sola columna. En el
- * CBCT el propio visor las EDITA contra `/api/instituto/estudios/[id]/notas`
- * —por eso ahí no se repiten abajo, se vería la copia vieja mientras se
- * escribe la nueva—; en el resto se enseñan tal cual, como hasta ahora.
+ * 🔴 DÓNDE VIVEN LAS NOTAS. En `EduStudy.notes`, una sola columna, y se
+ * escriben SIEMPRE contra `/api/instituto/estudios/[id]/notas`.
+ *
+ * ── H-14 · LA NOTA DE CUALQUIER ESTUDIO SE CORRIGE ──────────────────────
+ * Hasta ahora solo se podía con un `.zip`: el panel editable venía DENTRO
+ * del visor CBCT del dental, y para todo lo demás la nota era un `<p>` de
+ * texto plano. El alumno subía `panoramica.jpg` con la nota equivocada —o
+ * con el apellido de otro paciente— y no había forma de arreglarla: ni
+ * editar, ni mover de caso, ni renombrar, ni borrar. Con un .zip sí; con el
+ * .jpg, que es lo que más se sube, no. El endpoint existía desde el primer
+ * día y ninguna pantalla lo llamaba salvo el visor del dental.
+ *
+ * ── S-7 · Y SOLO SI SE PUEDE ESCRIBIR ───────────────────────────────────
+ * Las notas piden `estudios.upload`, no `estudios.view`. Con solo `view` el
+ * "Guardar" del CBCT existía y fallaba SIEMPRE (403). Ahora, sin permiso de
+ * escritura, no se ofrece: la nota se lee y punto — también la del CBCT,
+ * cuyo panel editable se tapa desde el CSS del vertical.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export function EduEstudioViewer({
   estudio,
   patientId,
+  cases,
   onClose,
+  onCorregido,
+  onRetirado,
   iaAnalisis,
   canAnalyze,
+  canUpload,
   dict3d,
 }: {
   estudio: EduStudyRow;
   patientId: string;
+  /** Los casos del paciente DENTRO del alcance: mover un estudio a un caso
+   *  que no se puede ver sería esconderlo. */
+  cases: EduCaseOption[];
   onClose: () => void;
+  /** ws2-t2 · se corrigió algo (nombre, tipo, caso, fecha, nota). */
+  onCorregido: (mensaje: string) => void;
+  /** ws2-t2 · se retiró del expediente: baja suave, con motivo. */
+  onRetirado: (nombre: string) => void;
   /** Si el apoyo de IA está disponible, y si no, por qué. */
   iaAnalisis: EduIaEstado;
   canAnalyze: boolean;
+  /**
+   * S-7 · `estudios.upload`. Es el permiso que pide el PATCH de las notas:
+   * escribir en el expediente, no mirarlo. Sin él no se ofrece editar
+   * nada — ni aquí, ni dentro del visor CBCT del dental.
+   */
+  canUpload: boolean;
   /** El trozo de diccionario que necesita el visor de mallas. */
   dict3d: Dictionary;
 }) {
   const [zoom, setZoom] = useState(false);
 
   const sinUrl = !estudio.url;
-  const tipoVisor = sinUrl ? null : eduVisorPorExtension(estudio.name);
+  // 🔴 POR LA EXTENSIÓN REAL (la del path que compuso el servidor) y no
+  // por el nombre: desde ws2-t2 el nombre SE PUEDE CORREGIR, y uno
+  // renombrado a «tomografía de Ana» dejaría sin visor a un .zip que
+  // sigue siendo un .zip.
+  // `eduVisorPorExtension` se queda con lo que hay tras el último punto,
+  // así que una extensión pelada ("zip") le vale igual que un nombre.
+  const tipoVisor = sinUrl ? null : eduVisorPorExtension(estudio.ext);
 
   const subtitulo = `${estudio.sizeLabel} · subió ${estudio.uploadedByName}`;
+
+  // El CBCT trae su propio editor de notas DENTRO del visor del dental, así
+  // que ahí no se repite abajo: se vería la copia vieja mientras alguien
+  // escribe la nueva. Salvo que no se pueda escribir — entonces ese panel se
+  // tapa y la nota se lee aquí, como en cualquier otro estudio.
+  const notasEnElVisorCbct = tipoVisor === "cbct" && canUpload;
 
   /* Notas, apoyo de IA y ficha del estudio. Van igual en las dos hojas: en
      la del visor quedan bajo la rejilla, a un desplazamiento — la rejilla
      se dimensiona para ocupar la primera pantalla, no para tapar esto. */
   const extras = (
     <>
-      {estudio.notes && tipoVisor !== "cbct" && (
-        <div>
-          <span className="edu-kv__k">Notas</span>
-          <p className="edu-estudio__notes">{estudio.notes}</p>
-        </div>
-      )}
+      {/* ws2-t2 · H-14 · CORREGIR Y RETIRAR. Va ARRIBA de las notas y del
+          apoyo de IA a propósito: quien abre un estudio para arreglarlo
+          («éste no es de este paciente») no tiene por qué recorrer el panel
+          de IA antes de encontrar el botón. */}
+      <EduEstudioEditar
+        estudio={estudio}
+        cases={cases}
+        canUpload={canUpload}
+        onCorregido={onCorregido}
+        onRetirado={onRetirado}
+      />
+
+      {!notasEnElVisorCbct &&
+        (canUpload ? (
+          <NotasDelEstudio estudioId={estudio.id} notas={estudio.notes} />
+        ) : (
+          estudio.notes && (
+            <div>
+              <span className="edu-kv__k">Notas</span>
+              <p className="edu-estudio__notes">{estudio.notes}</p>
+            </div>
+          )
+        ))}
 
       {/* El apoyo de IA vive DENTRO del visor y no en la galería: la
           lectura solo tiene sentido con la imagen delante. El panel se
@@ -98,6 +161,11 @@ export function EduEstudioViewer({
         subtitle={subtitulo}
         notes={estudio.notes}
         dict3d={dict3d}
+        // S-7: sin `estudios.upload`, el panel de notas que trae el visor
+        // CBCT del dental se tapa. Su "Guardar" pega contra el PATCH del
+        // instituto, que exige ese permiso: era un botón que fallaba
+        // siempre, con el estudio abierto y el paciente delante.
+        notasSoloLectura={!canUpload}
         onClose={onClose}
       >
         {extras}
@@ -143,15 +211,19 @@ export function EduEstudioViewer({
             configurado en este entorno, o que el objeto ya no exista en el bucket.
           </div>
         ) : estudio.isImage ? (
-          <div className={`edu-visor__marco ${zoom ? "edu-visor__marco--zoom" : ""}`}>
-            {/* <img> y no next/image a propósito: la URL es FIRMADA y
-                caduca, así que el optimizador de Next la cachearía en una
-                ruta que después devuelve 403. Además el dominio de Supabase
-                tendría que ir en next.config.js, que es un archivo del
-                dental y esta ola no lo toca. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={estudio.url} alt={estudio.name} />
-          </div>
+          /* ws2-t2 · La imagen ya no es un <img> suelto: lleva encima la
+             capa de ANOTACIONES (marcas x/y con etiqueta, columna
+             `annotations`, que existía desde la Ola B y no leía nadie).
+             Sin `estudios.upload` es solo lectura y no aparece ni un botón
+             que pudiera contestar 403. */
+          <EduEstudioAnotaciones
+            estudioId={estudio.id}
+            url={estudio.url}
+            alt={estudio.name}
+            marcas={estudio.annotations}
+            canUpload={canUpload}
+            zoom={zoom}
+          />
         ) : estudio.isPdf ? (
           <object className="edu-visor__pdf" data={estudio.url} type="application/pdf">
             <p className="edu-note">
@@ -173,5 +245,87 @@ export function EduEstudioViewer({
         {extras}
       </div>
     </EduModal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// H-14 · LA NOTA DEL ESTUDIO, editable sea cual sea el archivo
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Escribe `EduStudy.notes` contra el endpoint que ya existía
+ * (`PATCH /api/instituto/estudios/[id]/notas`, permiso `estudios.upload`).
+ *
+ * Es la MISMA columna que rellena el formulario de subida y que lee la
+ * línea de tiempo del expediente: una sola nota por estudio, un solo sitio.
+ *
+ * Guarda al pulsar y NO al perder el foco, a propósito: la nota de un
+ * estudio lleva autor implícito y quedarse a medias por un clic fuera es
+ * cómo se guardan frases cortadas. Y si no cambió nada, no manda nada — la
+ * misma regla que la nota del odontograma (H-18).
+ */
+function NotasDelEstudio({ estudioId, notas }: { estudioId: string; notas: string | null }) {
+  const [texto, setTexto] = useState(notas ?? "");
+  const [guardado, setGuardado] = useState(notas ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+
+  const cambio = texto !== guardado;
+
+  async function guardar() {
+    if (!cambio) return;
+    setError(null);
+    setOk(false);
+    setBusy(true);
+    try {
+      await eduRequest(`/api/instituto/estudios/${estudioId}/notas`, {
+        method: "PATCH",
+        body: { notes: texto },
+      });
+      setGuardado(texto);
+      setOk(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar la nota.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="edu-field">
+      <label className="edu-field__label" htmlFor={`edu-est-notas-${estudioId}`}>
+        Notas del estudio
+      </label>
+      <textarea
+        id={`edu-est-notas-${estudioId}`}
+        className="edu-input"
+        rows={3}
+        value={texto}
+        maxLength={1000}
+        disabled={busy}
+        onChange={(e) => {
+          setTexto(e.target.value);
+          setOk(false);
+        }}
+        placeholder="Qué se ve, para qué se pidió, de qué sesión es."
+      />
+      {error && (
+        <div className="edu-alert" role="alert">
+          {error}
+        </div>
+      )}
+      <div className="edu-actions">
+        <button
+          type="button"
+          className="edu-btn edu-btn--ghost edu-btn--sm"
+          onClick={guardar}
+          disabled={busy || !cambio}
+        >
+          {busy ? "Guardando…" : "Guardar la nota"}
+        </button>
+        {ok && !cambio && <span className="edu-field__hint">Guardada.</span>}
+      </div>
+    </div>
   );
 }

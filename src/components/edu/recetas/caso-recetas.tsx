@@ -49,6 +49,13 @@ export function EduCasoRecetas({ patientId, rows }: EduCasoRecetasProps) {
                 .join(", ")}
               {r.items.length > 3 ? "…" : ""}
             </span>
+            {/* H-16: si la huella no cuadra se dice también AQUÍ. La tarjeta
+                del caso es donde el docente mira sus recetas de un vistazo;
+                enseñar una alterada como si fuera normal sería el peor
+                sitio para callárselo. El detalle está en la pestaña. */}
+            {r.integridad === "alterada" && (
+              <span className="edu-tag edu-tag--danger">integridad: alterada</span>
+            )}
           </li>
         ))}
       </ul>

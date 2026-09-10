@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { getEduClinicalPatient } from "@/lib/edu/expediente";
 import {
+  clearEduOdontogramTooth,
   listEduOdontogram,
   setEduOdontogramFinding,
   setEduOdontogramNote,
@@ -80,5 +81,37 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ ok: true, ...res });
   } catch (err) {
     return eduApiError(err, "PATCH /api/instituto/pacientes/[id]/odontograma");
+  }
+}
+
+/**
+ * POST /api/instituto/pacientes/[id]/odontograma — LIMPIAR UN DIENTE
+ * entero (sus hallazgos, los de todas sus caras y su nota). Body:
+ * { tooth }.
+ *
+ * 🔴 Existe para que «Limpiar diente» sea UNA escritura y no N (H-22).
+ * Con una petición por hallazgo, un fallo a media tanda dejaba la pantalla
+ * repintando cosas que la base ya había borrado. Aquí solo hay dos
+ * resultados posibles: se limpió, o no se limpió nada.
+ *
+ * POST y no DELETE: el identificador del diente va en el cuerpo, y un
+ * DELETE con cuerpo es de esas cosas que funcionan hasta que un proxy
+ * decide que no — la misma razón por la que quitar UN hallazgo va por PUT
+ * con `present: false` y no por DELETE.
+ *
+ * Mismo permiso que las otras dos escrituras (`odontograma.edit`) y la
+ * misma puerta de pertenencia dentro (el paciente tiene que estar en el
+ * alcance clínico de quien escribe).
+ */
+export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const g = await eduApiGuard("odontograma.edit");
+  if ("response" in g) return g.response;
+
+  try {
+    const body = await eduReadJson(request);
+    const res = await clearEduOdontogramTooth(g.ctx, params.id, body);
+    return NextResponse.json({ ok: true, ...res });
+  } catch (err) {
+    return eduApiError(err, "POST /api/instituto/pacientes/[id]/odontograma");
   }
 }

@@ -371,123 +371,131 @@ export function EduCajaScreen({
           </p>
         </div>
       ) : (
-        <div className="edu-table edu-table--cobros">
-          <div className="edu-rowhead" aria-hidden="true">
-            <span>Folio</span>
-            <span>Paciente</span>
-            <span>Tarifa</span>
-            <span>Total</span>
-            <span>Saldo</span>
-            <span>Pago</span>
-            <span>Estado</span>
-            <span />
-          </div>
-
-          {rows.map((c) => (
-            <div key={c.id} className={`edu-row ${c.status === "CANCELLED" ? "edu-row--off" : ""}`}>
-              <div className="edu-cell">
-                <span className="edu-cell__label">Folio</span>
-                <span className="edu-cell__value edu-cell__value--strong">{c.folio}</span>
-              </div>
-
-              <div className="edu-cell edu-cell--wide">
-                <span className="edu-cell__label">Paciente</span>
-                <span className="edu-cell__value edu-cell__value--strong">
-                  <EduPersonaLink kind="paciente" id={c.patientId}>
-                    {c.patientName}
-                  </EduPersonaLink>
-                </span>
-                <span className="edu-cell__sub">{c.patientFolio}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Tarifa</span>
-                <span className="edu-cell__value">{c.feeScheduleLabel ?? "—"}</span>
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Total</span>
-                <span className="edu-cell__value edu-precio">{eduMoney(c.totalCents)}</span>
-                {c.discountCents > 0 && (
-                  <span className="edu-cell__sub">−{eduMoney(c.discountCents)} de descuento</span>
-                )}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Saldo</span>
-                <span className="edu-cell__value edu-precio">{eduMoney(c.balanceCents)}</span>
-              </div>
-
-              {/* ── CON QUÉ SE PAGÓ, o el plan a meses ────────────────
-                  Con un plan activo, la fila dice cuántas van y cuándo
-                  vence la siguiente: era la queja del mostrador ("no se
-                  sabe cada cuándo paga"), y el dato ya venía derivado del
-                  servidor sin pintarse. Sin plan, los métodos: "Efectivo",
-                  "Efectivo + Crédito". */}
-              <div className="edu-cell">
-                <span className="edu-cell__label">Pago</span>
-                {c.plan ? (
-                  <>
-                    <span
-                      className={`edu-tag ${c.plan.overdueCount > 0 ? "edu-tag--warn" : "edu-tag--info"}`}
-                    >
-                      A meses · {c.plan.paidCount}/{c.plan.months}
-                      {c.plan.nextDueISO ? ` · próx. ${eduFechaCorta(c.plan.nextDueISO)}` : ""}
-                    </span>
-                    {c.plan.overdueCount > 0 && (
-                      <span className="edu-cell__sub">
-                        {c.plan.overdueCount}{" "}
-                        {c.plan.overdueCount === 1 ? "vencida" : "vencidas"}
-                      </span>
-                    )}
-                  </>
-                ) : c.methods.length > 0 ? (
-                  <span className="edu-cell__value">
-                    {c.methods.map((m) => EDU_PAYMENT_METHOD_SHORT[m]).join(" + ")}
-                  </span>
-                ) : (
-                  <span className="edu-cell__value">—</span>
-                )}
-              </div>
-
-              <div className="edu-cell">
-                <span className="edu-cell__label">Estado</span>
-                {/* Un cobro con plan activo NO es "Por cobrar": se está
-                    cobrando, mes a mes. Se deriva aquí, en la UI, y no con
-                    un estado nuevo en el enum — el estado del cobro sigue
-                    siendo (total, pagado, cancelado) y nada más. */}
-                <span
-                  className={`edu-tag ${c.plan ? "edu-tag--info" : TAG_BY_STATUS[c.status]}`}
-                >
-                  {c.plan ? "A meses" : EDU_CHARGE_STATUS_LABELS[c.status]}
-                </span>
-              </div>
-
-              <div className="edu-cell__actions">
-                <button
-                  type="button"
-                  className="edu-btn edu-btn--ghost edu-btn--sm"
-                  onClick={() => {
-                    setFlash(null);
-                    setRecibo(c);
-                  }}
-                >
-                  Recibo
-                </button>
-                {/* Ola 10. Un cobro CANCELADO no se factura, así que ni
-                    se ofrece: un botón que siempre contesta que no es
-                    peor que no tenerlo. */}
-                {canInvoice && c.status !== "CANCELLED" && (
-                  <Link
-                    className="edu-btn edu-btn--ghost edu-btn--sm"
-                    href={`/instituto/facturacion?cobro=${c.id}`}
-                  >
-                    Facturar
-                  </Link>
-                )}
-              </div>
+        <div className="edu-tablewrap">
+          {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+             mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+             hace que se DESPLACE en vez de recortar si algún día no cabe.
+             Sin él, la forma renglón de esta tabla no se estrena nunca:
+             desde la Ola B su umbral vive en un `@container`, no en un
+             `@media`. */}
+          <div className="edu-table edu-table--cobros">
+            <div className="edu-rowhead" aria-hidden="true">
+              <span>Folio</span>
+              <span>Paciente</span>
+              <span>Tarifa</span>
+              <span>Total</span>
+              <span>Saldo</span>
+              <span>Pago</span>
+              <span>Estado</span>
+              <span />
             </div>
-          ))}
+
+            {rows.map((c) => (
+              <div key={c.id} className={`edu-row ${c.status === "CANCELLED" ? "edu-row--off" : ""}`}>
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Folio</span>
+                  <span className="edu-cell__value edu-cell__value--strong">{c.folio}</span>
+                </div>
+
+                <div className="edu-cell edu-cell--wide">
+                  <span className="edu-cell__label">Paciente</span>
+                  <span className="edu-cell__value edu-cell__value--strong">
+                    <EduPersonaLink kind="paciente" id={c.patientId}>
+                      {c.patientName}
+                    </EduPersonaLink>
+                  </span>
+                  <span className="edu-cell__sub">{c.patientFolio}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Tarifa</span>
+                  <span className="edu-cell__value">{c.feeScheduleLabel ?? "—"}</span>
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Total</span>
+                  <span className="edu-cell__value edu-precio">{eduMoney(c.totalCents)}</span>
+                  {c.discountCents > 0 && (
+                    <span className="edu-cell__sub">−{eduMoney(c.discountCents)} de descuento</span>
+                  )}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Saldo</span>
+                  <span className="edu-cell__value edu-precio">{eduMoney(c.balanceCents)}</span>
+                </div>
+
+                {/* ── CON QUÉ SE PAGÓ, o el plan a meses ────────────────
+                    Con un plan activo, la fila dice cuántas van y cuándo
+                    vence la siguiente: era la queja del mostrador ("no se
+                    sabe cada cuándo paga"), y el dato ya venía derivado del
+                    servidor sin pintarse. Sin plan, los métodos: "Efectivo",
+                    "Efectivo + Crédito". */}
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Pago</span>
+                  {c.plan ? (
+                    <>
+                      <span
+                        className={`edu-tag ${c.plan.overdueCount > 0 ? "edu-tag--warn" : "edu-tag--info"}`}
+                      >
+                        A meses · {c.plan.paidCount}/{c.plan.months}
+                        {c.plan.nextDueISO ? ` · próx. ${eduFechaCorta(c.plan.nextDueISO)}` : ""}
+                      </span>
+                      {c.plan.overdueCount > 0 && (
+                        <span className="edu-cell__sub">
+                          {c.plan.overdueCount}{" "}
+                          {c.plan.overdueCount === 1 ? "vencida" : "vencidas"}
+                        </span>
+                      )}
+                    </>
+                  ) : c.methods.length > 0 ? (
+                    <span className="edu-cell__value">
+                      {c.methods.map((m) => EDU_PAYMENT_METHOD_SHORT[m]).join(" + ")}
+                    </span>
+                  ) : (
+                    <span className="edu-cell__value">—</span>
+                  )}
+                </div>
+
+                <div className="edu-cell">
+                  <span className="edu-cell__label">Estado</span>
+                  {/* Un cobro con plan activo NO es "Por cobrar": se está
+                      cobrando, mes a mes. Se deriva aquí, en la UI, y no con
+                      un estado nuevo en el enum — el estado del cobro sigue
+                      siendo (total, pagado, cancelado) y nada más. */}
+                  <span
+                    className={`edu-tag ${c.plan ? "edu-tag--info" : TAG_BY_STATUS[c.status]}`}
+                  >
+                    {c.plan ? "A meses" : EDU_CHARGE_STATUS_LABELS[c.status]}
+                  </span>
+                </div>
+
+                <div className="edu-cell__actions">
+                  <button
+                    type="button"
+                    className="edu-btn edu-btn--ghost edu-btn--sm"
+                    onClick={() => {
+                      setFlash(null);
+                      setRecibo(c);
+                    }}
+                  >
+                    Recibo
+                  </button>
+                  {/* Ola 10. Un cobro CANCELADO no se factura, así que ni
+                      se ofrece: un botón que siempre contesta que no es
+                      peor que no tenerlo. */}
+                  {canInvoice && c.status !== "CANCELLED" && (
+                    <Link
+                      className="edu-btn edu-btn--ghost edu-btn--sm"
+                      href={`/instituto/facturacion?cobro=${c.id}`}
+                    >
+                      Facturar
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -183,12 +183,24 @@ test("el estado del caso NO entra en el recorte del entrante salvo por el descar
   const scope = eduVisibility(actor("ALUMNO", ENTRANTE), "patients");
   const where = eduPatientScopeWhere({ institutionId: INST, scope, now: AHORA });
   const statuses = valoresDe(where, "status");
+  // 🔴 `valoresDe` recoge TODA clave "status", y desde H-07 el recorte de
+  // PACIENTES lleva también la del ALUMNO (su estado académico) delante de
+  // cada estado de caso. Se escriben las dos: si mañana alguien mete un
+  // estado de CASO de más, esta lista lo caza igual.
+  const ALUMNO_DENTRO = { notIn: ["GRADUATED", "WITHDRAWN"] };
   assert.deepEqual(
     statuses,
     // Una por rama (el caso propio y la cita), más la tercera del arreglo
     // del P0-2: la que dice "y este paciente no es uno que YO entregué".
-    // TRANSFERRED es el único literal que aparece en las tres.
-    [{ not: "TRANSFERRED" }, { not: "TRANSFERRED" }, "TRANSFERRED"],
+    // TRANSFERRED es el único literal de CASO que aparece en las tres.
+    [
+      ALUMNO_DENTRO,
+      { not: "TRANSFERRED" },
+      ALUMNO_DENTRO,
+      { not: "TRANSFERRED" },
+      ALUMNO_DENTRO,
+      "TRANSFERRED",
+    ],
     "ningún otro estado puede aparecer en el recorte de pacientes",
   );
 });

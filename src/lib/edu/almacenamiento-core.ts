@@ -26,11 +26,15 @@
  *
  * 🔴 LO QUE ESTE MEDIDOR CUENTA, Y LO QUE NO
  *
- * Cuenta ESTUDIOS: la suma de EduStudy.sizeBytes del instituto. El bucket
- * `edu-files` guarda además las FIRMAS de consentimiento, que no tienen
- * fila con su tamaño, así que no entran — y no se estiman: un medidor que
- * inventa bytes es peor que no tener medidor, porque se le cree. La
- * pantalla lo DICE con todas sus letras (EDU_ALM_NOTA_ALCANCE).
+ * Desde la Ola B cuenta DOS cosas y no una: la suma de EduStudy.sizeBytes
+ * MÁS la de EduClinicalPhoto.sizeBytes de las fotos que NO están dadas de
+ * baja. Las dos van a la MISMA bolsa porque la cuota es una sola: partirla
+ * en dos medidores solo consigue que alguien crea que tiene el doble.
+ *
+ * El bucket `edu-files` guarda además las FIRMAS de consentimiento, que no
+ * tienen fila con su tamaño, así que no entran — y no se estiman: un
+ * medidor que inventa bytes es peor que no tener medidor, porque se le
+ * cree. La pantalla lo DICE con todas sus letras (EDU_ALM_NOTA_ALCANCE).
  * ═══════════════════════════════════════════════════════════════════════
  */
 import { eduFormatBytes } from "@/lib/edu/estudios-core";
@@ -84,7 +88,8 @@ export const EDU_ALM_TB_MAX = 1000;
  * "todo lo que hay en el bucket", y no lo es.
  */
 export const EDU_ALM_NOTA_ALCANCE =
-  "Se cuentan los ESTUDIOS del expediente (radiografías, tomografías, fotos y PDFs). " +
+  "Se cuentan los ESTUDIOS del expediente (radiografías, tomografías y PDFs) y las FOTOS " +
+  "CLÍNICAS del paciente, sin los que estén retirados ni las que estén dadas de baja. " +
   "Las firmas de consentimiento también viven en el almacenamiento, pero no se registra " +
   "su tamaño y no se estiman: este medidor no inventa bytes.";
 
@@ -95,11 +100,11 @@ export const EDU_ALM_NOTA_ALCANCE =
 /**
  * Lo que hace falta para contestar "¿cuánto llevo y cuánto me queda?".
  *
- * 🔴 `usadoBytes` NO sale de ninguna columna: se CUENTA sumando
- * EduStudy.sizeBytes del instituto cada vez que alguien pregunta (misma
- * decisión que el cupo de IA de la Ola 8 y que el avance académico de la
- * Ola 6). Un contador guardado se desincroniza el día que una escritura
- * falle a la mitad.
+ * 🔴 `usadoBytes` NO sale de ninguna columna: se CUENTA cada vez que
+ * alguien pregunta, sumando EduStudy.sizeBytes y EduClinicalPhoto.sizeBytes
+ * del instituto (misma decisión que el cupo de IA de la Ola 8 y que el
+ * avance académico de la Ola 6). Un contador guardado se desincroniza el
+ * día que una escritura falle a la mitad.
  *
  * Los dos son `number` y no `bigint` a propósito: un BigInt no se
  * serializa a JSON —revienta el route handler con "Do not know how to
@@ -108,12 +113,27 @@ export const EDU_ALM_NOTA_ALCANCE =
  * de Number.MAX_SAFE_INTEGER (9.0e15).
  */
 export interface EduAlmMedidor {
-  /** Suma de EduStudy.sizeBytes del INSTITUTO (todas sus sedes juntas). */
+  /**
+   * Lo que lleva usado el INSTITUTO (todas sus sedes juntas).
+   *
+   * Ola B: son DOS sumandos y no uno — EduStudy.sizeBytes MÁS
+   * EduClinicalPhoto.sizeBytes de las que no están dadas de baja. Sigue
+   * siendo un solo número aquí a propósito: la cuota es una bolsa, y
+   * partirla en dos medidores solo invita a que alguien crea que tiene el
+   * doble.
+   */
   usadoBytes: number;
   /** La cuota contratada, EduInstitution.storageQuotaBytes. */
   cuotaBytes: number;
   /** Cuántos estudios son. Es lo que da derecho a decir "de estudios". */
   estudios: number;
+  /**
+   * Cuántas FOTOS CLÍNICAS vivas son. OPCIONAL a propósito: la tarjeta de
+   * dirección y las pruebas que ya existen construyen medidores sin este
+   * campo, y hacerlo obligatorio las rompería sin ganar nada. Quien lo
+   * pinte usa `?? 0`.
+   */
+  fotos?: number;
 }
 
 /** Un número que se pueda sumar, o 0. Blinda la aritmética de nulls y NaN. */
@@ -135,11 +155,50 @@ function sano(n: unknown): number {
  * filtro y devuelve las de TODAS las escuelas. Aquí eso sería sumarle a un
  * instituto el consumo del vecino.
  */
-export function eduAlmacenamientoWhere(institutionId: string): { institutionId: string } {
+export function eduAlmacenamientoWhere(
+  institutionId: string,
+): { institutionId: string; deletedAt: null } {
   if (typeof institutionId !== "string" || !institutionId) {
     throw new Error("eduAlmacenamientoWhere: falta el institutionId");
   }
-  return { institutionId };
+  // 🔴 ws2-t2 · `deletedAt: null` — un estudio RETIRADO no cuenta para la
+  // cuota, exactamente igual que una foto dada de baja. Son dos tablas
+  // hermanas con la misma decisión de producto (baja suave, binario
+  // conservado); si una descontara y la otra no, la misma acción liberaría
+  // espacio o no según el archivo, y nadie sabría explicar por qué.
+  //
+  // ⚠️ Y la contrapartida, dicha en voz alta y sin adornos: el BINARIO
+  // sigue en el bucket. Esos bytes se pagan y no salen en el medidor —
+  // el mismo hueco que los huérfanos de subida (H-26), y se cierra con el
+  // mismo barrido periódico, que no es de esta casilla.
+  return { institutionId, deletedAt: null };
+}
+
+/**
+ * El `where` de la suma de FOTOS. Una llave más que el de estudios, y esa
+ * llave es la diferencia entera:
+ *
+ * 🔴 `deletedAt: null` — una foto dada de baja no cuenta para la cuota.
+ * Vive aquí, con su prueba, y no dentro del `aggregate`, por lo mismo que
+ * `eduAlmacenamientoWhere`: un recorte escrito a mano en el handler es un
+ * recorte que el segundo handler no copia.
+ *
+ * ⚠️ Y la contrapartida, dicha en voz alta: el BINARIO de una foto dada de
+ * baja sigue en el bucket (la baja es suave: no destruye evidencia
+ * clínica). Esos bytes se pagan y no aparecen aquí — el mismo hueco que
+ * los huérfanos de los estudios, y se cierra con el mismo barrido.
+ *
+ * 🔴 Un institutionId vacío revienta por lo mismo que arriba: en Prisma
+ * `where: { institutionId: undefined }` BORRA el filtro y devuelve las
+ * filas de TODAS las escuelas.
+ */
+export function eduAlmacenamientoFotosWhere(
+  institutionId: string,
+): { institutionId: string; deletedAt: null } {
+  if (typeof institutionId !== "string" || !institutionId) {
+    throw new Error("eduAlmacenamientoFotosWhere: falta el institutionId");
+  }
+  return { institutionId, deletedAt: null };
 }
 
 /** Lo que queda, en bytes. Nunca negativo. */
@@ -202,6 +261,14 @@ export interface EduAlmTexto {
  * que a partir del 80 % diga cuánto queda, y que al 100 % diga que la
  * subida está bloqueada Y qué hacer al respecto. Un semáforo que solo
  * cambia de color deja a quien lo mira adivinando qué se espera de él.
+ *
+ * 🔴 N-16 · Y HABLA DE «ARCHIVOS», NO SOLO DE ESTUDIOS. Desde la Ola B la
+ * bolsa suma DOS tablas —`EduStudy` y `EduClinicalPhoto`— y las dos se
+ * bloquean a la vez, porque las dos consultan la misma cuota antes de
+ * firmar. El texto se quedó hablando solo de estudios: decía «la subida de
+ * estudios está BLOQUEADA» y «ni una radiografía más» a alguien que lo que
+ * no podía subir era una foto, y que por lo tanto no entendía qué le
+ * estaban explicando.
  */
 export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
   const restante = eduAlmRestanteBytes(m);
@@ -209,12 +276,13 @@ export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
 
   if (nivel === "lleno") {
     return {
-      titulo: "Almacenamiento lleno: la subida de estudios está BLOQUEADA",
+      titulo: "Almacenamiento lleno: la subida de archivos está BLOQUEADA",
       detalle:
         `Se llegó a la cuota de ${eduFormatBytes(sano(m?.cuotaBytes))} y no se puede subir ` +
-        "ni una radiografía más. Hay dos salidas: contratar más TB con DaleControl " +
-        `(${eduAlmPrecioLabel()}) o liberar espacio borrando estudios que ya no hagan falta. ` +
-        "Lo demás del panel sigue funcionando igual.",
+        "ni un archivo más: ni estudios (radiografías, tomografías, PDFs) ni fotos clínicas, " +
+        "porque las dos cosas comparten la misma bolsa. Hay dos salidas: contratar más TB con " +
+        `DaleControl (${eduAlmPrecioLabel()}) o liberar espacio retirando archivos que ya no ` +
+        "hagan falta. Lo demás del panel sigue funcionando igual.",
     };
   }
 
@@ -223,8 +291,8 @@ export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
       titulo: `Queda ${eduFormatBytes(restante)} de almacenamiento`,
       detalle:
         "Es menos del 5 % de la cuota: con una tomografía se acaba. Cuando llegue a cero " +
-        "no se podrá subir ningún estudio, así que conviene contratar más TB ahora " +
-        `(${eduAlmPrecioLabel()}) y no cuando ya esté detenido.`,
+        "no se podrá subir ningún archivo —ni estudios ni fotos clínicas—, así que conviene " +
+        `contratar más TB ahora (${eduAlmPrecioLabel()}) y no cuando ya esté detenido.`,
     };
   }
 
@@ -233,7 +301,8 @@ export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
       titulo: `Queda ${eduFormatBytes(restante)} de almacenamiento`,
       detalle:
         `Ya se usó el ${eduAlmPorcentaje(m)} % de la cuota. Todavía no bloquea nada, pero es ` +
-        "el momento de decidir: más TB con DaleControl o una limpieza de estudios viejos.",
+        "el momento de decidir: más TB con DaleControl o una limpieza de archivos viejos " +
+        "(estudios y fotos).",
     };
   }
 
@@ -241,8 +310,8 @@ export function eduAlmTexto(m: EduAlmMedidor): EduAlmTexto {
     titulo: `Queda ${eduFormatBytes(restante)} de almacenamiento`,
     detalle:
       `Va el ${eduAlmPorcentaje(m)} % de la cuota del contrato. Cuando llegue al ` +
-      `${EDU_ALM_UMBRAL_AVISO} % esta tarjeta lo avisa, y al 100 % la subida de estudios se ` +
-      "detiene.",
+      `${EDU_ALM_UMBRAL_AVISO} % esta tarjeta lo avisa, y al 100 % se detiene la subida de ` +
+      "archivos: estudios y fotos clínicas, que comparten la misma bolsa.",
   };
 }
 
@@ -272,8 +341,9 @@ export function eduAlmRechazo(m: EduAlmMedidor, bytes: number): string {
   if (restante <= 0) {
     return (
       `El almacenamiento del instituto está lleno (${eduFormatBytes(sano(m?.cuotaBytes))} de ` +
-      "cuota) y no se pueden subir más estudios. Avísale a la dirección: hay que contratar " +
-      "más espacio o liberar el que hay. Lo que ya está subido no se pierde."
+      "cuota) y no se pueden subir más archivos: ni estudios ni fotos clínicas, porque " +
+      "comparten la misma bolsa. Avísale a la dirección: hay que contratar más espacio o " +
+      "liberar el que hay. Lo que ya está subido no se pierde."
     );
   }
   return (

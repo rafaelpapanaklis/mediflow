@@ -3,7 +3,13 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, Download, GraduationCap } from "lucide-react";
+import {
+  ArrowLeftRight,
+  CalendarRange,
+  Download,
+  GraduationCap,
+  Layers,
+} from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
 import { EduPersonaLink, useEduPersonaLinks } from "@/components/edu/persona/persona-link";
 import { eduRequest } from "@/components/edu/edu-http";
@@ -106,6 +112,14 @@ export function EduBitacoraScreen({
   }
 
   const verdict = page.verdict;
+  // Iniciales del recuadro, mismo cálculo que las otras tres cabeceras.
+  const iniciales =
+    page.studentName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((parte) => parte.charAt(0).toUpperCase())
+      .join("")
+      .slice(0, 2) || page.studentName.charAt(0).toUpperCase();
   const abiertos = page.cases.filter(
     (c) => c.status !== "COMPLETED" && c.status !== "TRANSFERRED" && c.status !== "ABANDONED",
   );
@@ -120,40 +134,74 @@ export function EduBitacoraScreen({
         </div>
       )}
 
-      {/* ── Quién es, y cómo va ─────────────────────────────────────── */}
-      <div className="edu-fichahead">
-        <div>
-          <span className="edu-fichahead__folio">{page.matricula}</span>
-          <h2 className="edu-fichahead__name">{page.studentName}</h2>
-          <p className="edu-fichahead__meta">
-            {page.programName} · {page.cohortName} · {page.semester}º semestre · {page.statusLabel}
-          </p>
-          <p className="edu-fichahead__meta">
+      {/* ── Quién es, y cómo va ───────────────────────────────────────
+          La misma cabecera que las tres fichas del vertical
+          (`.edu-fichahero`, Ola B). Antes era `.edu-fichahead` plano, con
+          el nombre a 19 px y dos líneas grises de 13 px donde el ciclo de
+          la generación —que es de lo que depende TODO el cálculo de
+          atraso de esta pantalla— pesaba lo mismo que el semestre. */}
+      <div className="edu-fichahero">
+        <div className="edu-fichahero__main">
+          <span className="edu-fichahero__avatar" aria-hidden="true">
+            {iniciales}
+          </span>
+
+          <div className="edu-fichahero__info">
+            <span className="edu-fichahero__folio">Matrícula {page.matricula}</span>
+            <h2 className="edu-fichahero__name">{page.studentName}</h2>
+            <span className="edu-fichahero__estado">
+              <span className="edu-tag edu-tag--muted">{page.statusLabel}</span>
+            </span>
+          </div>
+
+          <div className="edu-fichahero__datos">
+            <span className="edu-fichadato">
+              <GraduationCap size={13} strokeWidth={1.9} aria-hidden />
+              {page.programName}
+            </span>
+            <span className="edu-fichadato">
+              <CalendarRange size={13} strokeWidth={1.9} aria-hidden />
+              {page.cohortName}
+            </span>
+            <span className="edu-fichadato">
+              <Layers size={13} strokeWidth={1.9} aria-hidden />
+              {page.semester}º semestre
+            </span>
+          </div>
+        </div>
+
+        {/* El ciclo va abajo y a ancho completo, no comprimido en una
+            píldora: cuando FALTA, la frase explica que sin él no se puede
+            calcular el atraso, y eso no cabe en un chip. */}
+        <div className="edu-fichahero__chips">
+          <span className="edu-tag edu-tag--muted">
             {page.cohortStartLabel && page.cohortEndLabel
               ? `Ciclo del ${page.cohortStartLabel} al ${page.cohortEndLabel}`
               : "A su generación le faltan fechas: sin ellas no se puede calcular si va atrasado."}
-          </p>
-        </div>
-        {/* Esta bitácora es la de evaluación (casos, calificaciones); la
-            ficha académica (matrícula, generación, docente supervisor) vive
-            en /instituto/estudiantes/{id}.
+          </span>
 
-            ⚠️ El BOTÓN se esconde con el mismo booleano que decide el
-            enlace, y hay que preguntarlo aparte: EduPersonaLink sin permiso
-            NO desaparece, devuelve `children` en texto plano — que aquí
-            dejaría un "Ver su ficha" suelto, con pinta de rótulo huérfano y
-            sin nada que hacer. La regla del componente (pintar el nombre
-            aunque no enlace) es la correcta para un NOMBRE y la equivocada
-            para una ACCIÓN, y por eso existe useEduPersonaLinks. */}
-        {personaLinks.estudiante && (
-          <EduPersonaLink
-            kind="estudiante"
-            id={page.studentId}
-            className="edu-btn edu-btn--ghost edu-btn--sm"
-          >
-            Ver su ficha
-          </EduPersonaLink>
-        )}
+          {/* Esta bitácora es la de evaluación (casos, calificaciones); la
+              ficha académica (matrícula, generación, docente supervisor)
+              vive en /instituto/estudiantes/{id}.
+
+              ⚠️ El BOTÓN se esconde con el mismo booleano que decide el
+              enlace, y hay que preguntarlo aparte: EduPersonaLink sin
+              permiso NO desaparece, devuelve `children` en texto plano —
+              que aquí dejaría un "Ver su ficha" suelto, con pinta de rótulo
+              huérfano y sin nada que hacer. La regla del componente (pintar
+              el nombre aunque no enlace) es la correcta para un NOMBRE y la
+              equivocada para una ACCIÓN, y por eso existe
+              useEduPersonaLinks. */}
+          {personaLinks.estudiante && (
+            <EduPersonaLink
+              kind="estudiante"
+              id={page.studentId}
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+            >
+              Ver su ficha
+            </EduPersonaLink>
+          )}
+        </div>
       </div>
 
       <div className="edu-kpis">
@@ -299,93 +347,101 @@ export function EduBitacoraScreen({
         {page.cases.length === 0 ? (
           <p className="edu-note">Todavía no tiene ningún caso asignado.</p>
         ) : (
-          <div className="edu-table edu-table--bitacora">
-            <div className="edu-rowhead" aria-hidden="true">
-              <span>Paciente</span>
-              <span>Procedimiento</span>
-              <span>Estado</span>
-              <span>Abierto</span>
-              <span>Calificación</span>
-              <span />
-            </div>
-            {page.cases.map((c) => (
-              <div
-                key={c.id}
-                className={`edu-row ${c.status === "TRANSFERRED" ? "edu-row--off" : ""}`}
-              >
-                <div className="edu-cell edu-cell--wide">
-                  <span className="edu-cell__label">Paciente</span>
-                  <span className="edu-cell__value edu-cell__value--strong">
-                    <EduPersonaLink kind="paciente" id={c.patientId}>
-                      {c.patientName}
-                    </EduPersonaLink>
-                  </span>
-                  <span className="edu-cell__sub">
-                    {c.patientFolio} · {c.programName}
-                    {c.transferredFromCaseId ? " · viene de un traspaso" : ""}
-                  </span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Procedimiento</span>
-                  <span className="edu-cell__value">
-                    {c.procedureName ?? <em className="edu-sin">sin capturar</em>}
-                  </span>
-                  {c.procedureCategory && (
-                    <span className="edu-cell__sub">{c.procedureCategory}</span>
-                  )}
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Estado</span>
-                  <span className={`edu-tag ${TAG_BY_CASE[c.status]}`}>
-                    {EDU_CASE_STATUS_LABELS[c.status]}
-                  </span>
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Abierto</span>
-                  <span className="edu-cell__value">{c.openedLabel}</span>
-                  {c.closedLabel && (
-                    <span className="edu-cell__sub">cerrado el {c.closedLabel}</span>
-                  )}
-                </div>
-
-                <div className="edu-cell">
-                  <span className="edu-cell__label">Calificación</span>
-                  <span className="edu-cell__value edu-precio">
-                    {c.gradeLabel ? `${c.gradeLabel} / ${c.gradeScaleMax}` : "—"}
-                  </span>
-                </div>
-
-                <div className="edu-cell__actions">
-                  <Link
-                    href={`/instituto/pacientes/${encodeURIComponent(c.patientId)}`}
-                    className="edu-btn edu-btn--quiet edu-btn--sm"
-                    prefetch={false}
-                  >
-                    Ficha
-                  </Link>
-                  {canGrade && (
-                    <button
-                      type="button"
-                      className="edu-btn edu-btn--ghost edu-btn--sm"
-                      onClick={() => {
-                        setFlash(null);
-                        setCalificando({
-                          caseId: c.id,
-                          patientName: c.patientName,
-                          corrige: null,
-                        });
-                      }}
-                    >
-                      <GraduationCap size={15} />
-                      {c.gradeLabel ? "Calificar otra vez" : "Calificar"}
-                    </button>
-                  )}
-                </div>
+          <div className="edu-tablewrap">
+            {/* `edu-tablewrap` no es decoración: es lo que hace que esta lista se
+               mida a SÍ MISMA (`@container`) en vez de a la ventana, y lo que
+               hace que se DESPLACE en vez de recortar si algún día no cabe.
+               Sin él, la forma renglón de esta tabla no se estrena nunca:
+               desde la Ola B su umbral vive en un `@container`, no en un
+               `@media`. */}
+            <div className="edu-table edu-table--bitacora">
+              <div className="edu-rowhead" aria-hidden="true">
+                <span>Paciente</span>
+                <span>Procedimiento</span>
+                <span>Estado</span>
+                <span>Abierto</span>
+                <span>Calificación</span>
+                <span />
               </div>
-            ))}
+              {page.cases.map((c) => (
+                <div
+                  key={c.id}
+                  className={`edu-row ${c.status === "TRANSFERRED" ? "edu-row--off" : ""}`}
+                >
+                  <div className="edu-cell edu-cell--wide">
+                    <span className="edu-cell__label">Paciente</span>
+                    <span className="edu-cell__value edu-cell__value--strong">
+                      <EduPersonaLink kind="paciente" id={c.patientId}>
+                        {c.patientName}
+                      </EduPersonaLink>
+                    </span>
+                    <span className="edu-cell__sub">
+                      {c.patientFolio} · {c.programName}
+                      {c.transferredFromCaseId ? " · viene de un traspaso" : ""}
+                    </span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Procedimiento</span>
+                    <span className="edu-cell__value">
+                      {c.procedureName ?? <em className="edu-sin">sin capturar</em>}
+                    </span>
+                    {c.procedureCategory && (
+                      <span className="edu-cell__sub">{c.procedureCategory}</span>
+                    )}
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Estado</span>
+                    <span className={`edu-tag ${TAG_BY_CASE[c.status]}`}>
+                      {EDU_CASE_STATUS_LABELS[c.status]}
+                    </span>
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Abierto</span>
+                    <span className="edu-cell__value">{c.openedLabel}</span>
+                    {c.closedLabel && (
+                      <span className="edu-cell__sub">cerrado el {c.closedLabel}</span>
+                    )}
+                  </div>
+
+                  <div className="edu-cell">
+                    <span className="edu-cell__label">Calificación</span>
+                    <span className="edu-cell__value edu-precio">
+                      {c.gradeLabel ? `${c.gradeLabel} / ${c.gradeScaleMax}` : "—"}
+                    </span>
+                  </div>
+
+                  <div className="edu-cell__actions">
+                    <Link
+                      href={`/instituto/pacientes/${encodeURIComponent(c.patientId)}`}
+                      className="edu-btn edu-btn--quiet edu-btn--sm"
+                      prefetch={false}
+                    >
+                      Ficha
+                    </Link>
+                    {canGrade && (
+                      <button
+                        type="button"
+                        className="edu-btn edu-btn--ghost edu-btn--sm"
+                        onClick={() => {
+                          setFlash(null);
+                          setCalificando({
+                            caseId: c.id,
+                            patientName: c.patientName,
+                            corrige: null,
+                          });
+                        }}
+                      >
+                        <GraduationCap size={15} />
+                        {c.gradeLabel ? "Calificar otra vez" : "Calificar"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>

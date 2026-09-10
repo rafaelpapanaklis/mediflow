@@ -326,13 +326,36 @@ async function caducarPendientesViejos(now: Date, institutionId?: string): Promi
  *
  * Multi-tenant: la lectura y la escritura van acotadas por institutionId.
  */
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * N-15 · QUÉ PASÓ CON EL RECORDATORIO. Lo que la pantalla necesita saber.
+ *
+ * `cancelados` son los que se pararon a tiempo. `yaSalieron` son los que ya
+ * se le entregaron al paciente y NO se tocan —son la constancia, y borrarla
+ * dejaría al instituto sin poder contestar «¿le avisamos?»—.
+ *
+ * Los dos números viajan hasta el modal de cancelar porque prometía, sin
+ * condición, que «el recordatorio automático no sale». Con recordatorio a
+ * 24 h, cita del jueves a las 10:00 y cancelación el miércoles a las 18:00,
+ * el aviso salió hace ocho horas: el paciente lo tiene en el teléfono,
+ * nadie le manda la cancelación y se presenta.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduReminderCancelResult {
+  /** Los que estaban en cola y se pararon. */
+  cancelados: number;
+  /** Los que YA se entregaron: al paciente hay que avisarle a mano. */
+  yaSalieron: number;
+}
+
 export async function applyEduReminderCancel(args: {
   institutionId: string;
   appointmentId: string;
   /** Motivo que queda en la fila; lo lee la pantalla. */
   reason: string;
-}): Promise<number> {
-  if (!args.institutionId || !args.appointmentId) return 0;
+}): Promise<EduReminderCancelResult> {
+  const nada: EduReminderCancelResult = { cancelados: 0, yaSalieron: 0 };
+  if (!args.institutionId || !args.appointmentId) return nada;
   try {
     const filas = await prisma.eduWhatsappMessage.findMany({
       where: {
@@ -342,8 +365,15 @@ export async function applyEduReminderCancel(args: {
       },
       select: { id: true, status: true, attempts: true, dedupeKey: true },
     });
+    // 🔴 «Ya salió» es SENT y solo SENT. `planEduReminderCancel` mete en
+    // `keepIds` todo lo que no se puede cancelar —lo entregado, pero
+    // también lo que ya estaba CANCELLED de una vuelta anterior—, y contar
+    // eso como «el paciente ya lo tiene» sería mentirle a quien cancela por
+    // segunda vez. El plan sigue decidiendo qué se escribe; esto solo
+    // cuenta lo que hay que CONTAR.
+    const yaSalieron = filas.filter((f) => f.status === "SENT").length;
     const plan = planEduReminderCancel(filas);
-    if (plan.cancelIds.length === 0) return 0;
+    if (plan.cancelIds.length === 0) return { cancelados: 0, yaSalieron };
 
     const res = await prisma.eduWhatsappMessage.updateMany({
       // El estado se repite en el `where` para que dos caminos simultáneos
@@ -356,9 +386,33 @@ export async function applyEduReminderCancel(args: {
       },
       data: { status: "CANCELLED", errorMsg: args.reason.slice(0, 500) },
     });
-    return res.count;
+    return { cancelados: res.count, yaSalieron };
   } catch (e) {
     console.error("[instituto/recordatorios] no se pudieron cancelar (best-effort):", e);
-    return 0;
+    return nada;
   }
+}
+
+/**
+ * La frase que lee quien acaba de cancelar la cita (N-15).
+ *
+ * Pura y aquí —no en el componente— para que el modal, la agenda general y
+ * cualquier pantalla que cancele digan LO MISMO, y para que se pruebe sin
+ * base de datos. Tres casos y ni uno de más:
+ *   · ya salió       → hay que avisarle a mano, y eso es lo único que
+ *                      importa de las tres frases;
+ *   · se paró a tiempo → no le llega nada;
+ *   · no había nada   → tampoco le llega nada, pero por otra razón (no
+ *                      tiene WhatsApp, o la cita era de hoy). Se dice
+ *                      igual, sin prometer que «se canceló» algo que nunca
+ *                      existió.
+ */
+export function eduReminderCancelLabel(res: EduReminderCancelResult): string {
+  if (res.yaSalieron > 0) {
+    return "El recordatorio automático YA le había salido al paciente: avísale tú de que la cita se canceló.";
+  }
+  if (res.cancelados > 0) {
+    return "El recordatorio automático estaba en cola y se canceló: al paciente no le llega nada.";
+  }
+  return "No había ningún recordatorio automático en cola para esta cita.";
 }

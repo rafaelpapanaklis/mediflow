@@ -102,13 +102,18 @@ function alPorciento(pct: number, cuotaBytes = EDU_ALM_INCLUIDO_BYTES): EduAlmMe
 // 1 · LA CUOTA ES POR INSTITUTO. LAS SEDES NO LA DIVIDEN.
 // ─────────────────────────────────────────────────────────────────────
 
-test("el where de la suma tiene UNA sola llave: el instituto", () => {
+test("el where de la suma se filtra por INSTITUTO y por lo que sigue vivo", () => {
   const w = eduAlmacenamientoWhere("inst-1");
-  assert.deepEqual(w, { institutionId: "inst-1" });
-  // La prueba que importa: NADA de campus. En cuanto alguien agregue un
-  // campusId "para afinar el reporte", una escuela con dos edificios ve la
-  // mitad de su consumo y cree que le sobra el doble de espacio.
-  assert.equal(Object.keys(w).length, 1);
+  // ws2-t2 · La segunda llave es nueva y es una decisión de producto: un
+  // estudio RETIRADO (baja suave, con motivo) deja de contar para la
+  // cuota, exactamente igual que una foto dada de baja. Son dos tablas
+  // hermanas con el mismo trato; si una descontara y la otra no, la misma
+  // acción liberaría espacio o no según el archivo.
+  assert.deepEqual(w, { institutionId: "inst-1", deletedAt: null });
+  // La prueba que importa y que NO cambió: NADA de campus. En cuanto
+  // alguien agregue un campusId "para afinar el reporte", una escuela con
+  // dos edificios ve la mitad de su consumo y cree que le sobra el doble
+  // de espacio.
   assert.equal("campusId" in w, false);
 });
 

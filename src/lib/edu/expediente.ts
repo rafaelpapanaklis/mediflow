@@ -22,6 +22,15 @@
  *      · una nota FIRMADA no se edita. Se corrige con una nota NUEVA que
  *        la referencia.
  *
+ * 4. OLA B · UN BORRADOR SE RETIRA, Y RETIRAR NO ES BORRAR (H-23). Una
+ *    nota que se abrió en el paciente equivocado —o que quedó vacía de un
+ *    doble clic— se puede sacar del expediente con `deletedAt` +
+ *    `deletedById`. La fila se queda; lo que cambia es que TODAS las
+ *    lecturas de aquí filtran `deletedAt: null`, así que deja de pintarse,
+ *    deja de contar como nota en el Resumen y deja de poder mandarse a
+ *    autorizar. Solo un BORRADOR: una ENVIADA se devuelve primero y una
+ *    FIRMADA no se retira nunca.
+ *
  * Las escrituras NO comprueban permisos: eso lo hace el endpoint con
  * assertEduPermission antes de llamar. Aquí se comprueba la PERTENENCIA,
  * que es lo que un permiso no puede saber.
@@ -42,6 +51,11 @@ import {
   EDU_RECORD_TEXT_MAX,
   eduClinicalScope,
   eduRecordCanTransition,
+  EDU_RECORD_CONTENT_FIELDS,
+  EDU_RECORD_EMPTY_DENIED,
+  EDU_RECORD_WITHDRAW_DENIED,
+  EDU_RECORD_WITHDRAWN_APPROVAL_NOTE,
+  eduRecordCanWithdraw,
   eduRecordHasContent,
   eduRecordIsEditable,
   eduRecordStamps,
@@ -177,7 +191,20 @@ export async function getEduClinicalPatient(
   ctx: EduClinicaContext,
   patientId: string,
   now: Date = new Date(),
-): Promise<{ id: string; folio: string; firstName: string; lastName: string } | null> {
+): Promise<{
+  id: string;
+  folio: string;
+  firstName: string;
+  lastName: string;
+  /**
+   * Dentición TEMPORAL (Ola B). Lo captura la ficha del paciente; aquí solo
+   * se LEE, y viaja en esta puerta —y no en una consulta aparte— porque
+   * quien lo necesita es el odontograma, que ya pasa por aquí
+   * obligatoriamente. Una segunda consulta para un booleano sería un viaje
+   * más al pooler en la pantalla que más se abre desde un teléfono.
+   */
+  isChild: boolean;
+} | null> {
   const institutionId = requireInstitution(ctx);
   const scope = eduClinicalScope(ctx);
   if (eduScopeIsEmpty(scope)) return null;
@@ -189,7 +216,7 @@ export async function getEduClinicalPatient(
     // "patients". Para caja, "patients" es `all` y "cases" es `none`: con
     // el alcance equivocado, caja abriría el expediente de toda la escuela.
     where: { ...eduPatientScopeWhere({ institutionId, scope, now }), id },
-    select: { id: true, folio: true, firstName: true, lastName: true },
+    select: { id: true, folio: true, firstName: true, lastName: true, isChild: true },
   });
 }
 
@@ -226,6 +253,11 @@ export async function listEduPatientRecords(
   const where: Prisma.EduRecordWhereInput = {
     institutionId,
     patientId: id,
+    // 🔴 Ola B · las RETIRADAS no viajan, y el recorte va en el `where` y
+    // no en un `.filter()` después: un recorte fuera de la consulta es un
+    // recorte que el siguiente `findMany` se olvida de copiar. Además
+    // arruinaría el `truncated` de abajo, que cuenta filas traídas.
+    deletedAt: null,
     case: eduCaseScopeWhere({ institutionId, scope, now }),
   };
   const caseId = eduCleanId(options.caseId);
@@ -385,7 +417,8 @@ export async function createEduRecord(
     const id = eduCleanId(input.correctsId);
     const previa = id
       ? await prisma.eduRecord.findFirst({
-          where: { id, institutionId, caseId: caso.id },
+          // Una nota retirada no se corrige: no está en el expediente.
+          where: { id, institutionId, caseId: caso.id, deletedAt: null },
           select: { id: true, status: true },
         })
       : null;
@@ -396,6 +429,31 @@ export async function createEduRecord(
       );
     }
     correctsId = previa.id;
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 H-23 · UNA NOTA NACE CON ALGO ESCRITO. LO EXIGE EL SERVIDOR.
+  //
+  // El botón de la pantalla ya lo pedía (`!tieneAlgo(draft)` apaga
+  // "Guardar" en expediente-screen.tsx), pero eso es una cortesía de la
+  // pantalla y no una regla del expediente: un POST a mano, un doble clic
+  // que manda el formulario vacío o el siguiente cliente que se escriba
+  // creaban una nota sin una sola palabra, que después hay que RETIRAR
+  // —con su fila de baja y su firma— para sacarla de en medio.
+  //
+  // Se comprueba sobre el texto YA SANEADO (`eduRecordText` recorta y
+  // devuelve undefined si solo había espacios), que es lo que se va a
+  // guardar, y no sobre el body crudo.
+  // ══════════════════════════════════════════════════════════════════
+  const contenido = {
+    subjetivo: eduRecordText(input.subjetivo, EDU_RECORD_TEXT_MAX) ?? null,
+    objetivo: eduRecordText(input.objetivo, EDU_RECORD_TEXT_MAX) ?? null,
+    analisis: eduRecordText(input.analisis, EDU_RECORD_TEXT_MAX) ?? null,
+    plan: eduRecordText(input.plan, EDU_RECORD_TEXT_MAX) ?? null,
+    diagnostico: eduRecordText(input.diagnostico, EDU_RECORD_DIAGNOSIS_MAX) ?? null,
+  };
+  if (!eduRecordHasContent(contenido)) {
+    throw new EduPadronError(EDU_RECORD_EMPTY_DENIED);
   }
 
   const created = await prisma.eduRecord.create({
@@ -411,11 +469,7 @@ export async function createEduRecord(
       appointmentId,
       correctsId,
       status: "BORRADOR",
-      subjetivo: eduRecordText(input.subjetivo, EDU_RECORD_TEXT_MAX) ?? null,
-      objetivo: eduRecordText(input.objetivo, EDU_RECORD_TEXT_MAX) ?? null,
-      analisis: eduRecordText(input.analisis, EDU_RECORD_TEXT_MAX) ?? null,
-      plan: eduRecordText(input.plan, EDU_RECORD_TEXT_MAX) ?? null,
-      diagnostico: eduRecordText(input.diagnostico, EDU_RECORD_DIAGNOSIS_MAX) ?? null,
+      ...contenido,
     },
     select: { id: true },
   });
@@ -464,6 +518,10 @@ export async function updateEduRecord(
     where: {
       institutionId,
       id,
+      // Una nota RETIRADA no se edita ni se mueve de estado: para el
+      // expediente ya no está, y contestar 404 es lo mismo que contesta
+      // una que no le toca a quien pregunta.
+      deletedAt: null,
       case: eduCaseScopeWhere({ institutionId, scope, now }),
     },
     select: {
@@ -522,6 +580,32 @@ export async function updateEduRecord(
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 S-3 · REESCRIBIR UNA NOTA ENTREGADA REFRESCA LA ENTREGA.
+  //
+  // Una nota ENVIADA sigue siendo editable, y eso es deliberado: es el
+  // mismo criterio que la receta PENDIENTE —quien ve el dedazo lo corrige
+  // sin tener que pedir que se lo devuelvan—. Lo que NO era deliberado es
+  // que `submittedAt` se quedara con la hora de la PRIMERA entrega: el
+  // docente leía "entregada a las 9:10", firmaba, y lo que firmaba era un
+  // texto de las 11:40 que nunca vio marcado como nuevo.
+  //
+  // La receta tiene un hash que vence la firma cuando la editan después de
+  // mandarla (Ola 4). El expediente NO tiene esa maquinaria y no se le
+  // inventa una aquí: se hace lo mínimo que vuelve honesta la fila, que es
+  // que "entregada" diga cuándo se entregó ESTO. La bandeja del docente
+  // reordena sola y una nota tocada vuelve a subir.
+  //
+  // Solo cuenta un cambio REAL del contenido: guardar sin tocar nada —o
+  // firmar en el mismo PATCH, que ya trae su propio sello— no reabre nada.
+  // ══════════════════════════════════════════════════════════════════
+  const cambioElTexto = EDU_RECORD_CONTENT_FIELDS.some(
+    (f) => data[f] !== undefined && (data[f] as string | null) !== actual[f],
+  );
+  if (actual.status === "ENVIADA" && cambioElTexto && input.status === undefined) {
+    data.submittedAt = now;
+  }
+
   let siguiente: EduRecordStatus = actual.status;
   if (input.status !== undefined) {
     const st = parseEduRecordStatus(input.status);
@@ -544,23 +628,6 @@ export async function updateEduRecord(
         );
       }
 
-      // Una nota VACÍA no se entrega ni se firma. Se comprueba con lo que
-      // va a quedar guardado (lo que ya estaba MÁS lo que llega en este
-      // mismo PATCH), no solo con lo de la base: si no, escribir y firmar
-      // en una sola petición rebotaría siempre.
-      if (st !== "BORRADOR") {
-        const final = {
-          subjetivo: (data.subjetivo as string | null | undefined) ?? actual.subjetivo,
-          objetivo: (data.objetivo as string | null | undefined) ?? actual.objetivo,
-          analisis: (data.analisis as string | null | undefined) ?? actual.analisis,
-          plan: (data.plan as string | null | undefined) ?? actual.plan,
-          diagnostico: (data.diagnostico as string | null | undefined) ?? actual.diagnostico,
-        };
-        if (!eduRecordHasContent(final)) {
-          throw new EduPadronError("La nota está vacía: escribe algo antes de entregarla o firmarla.");
-        }
-      }
-
       const sellos = eduRecordStamps(st, now, ctx.eduUserId, { submittedAt: actual.submittedAt });
       data.status = st;
       data.submittedAt = sellos.submittedAt;
@@ -574,8 +641,149 @@ export async function updateEduRecord(
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 H-23 · LA NOTA VACÍA SE COMPRUEBA SIEMPRE, NO SOLO AL CAMBIAR DE ESTADO.
+  //
+  // Este chequeo vivía DENTRO del `if (input.status !== undefined)`, así
+  // que un PATCH que solo mandaba texto —el "Guardar" del modal de
+  // edición— podía dejar en blanco los cinco campos de una nota ENVIADA y
+  // el servidor lo aceptaba: el docente abría la bandeja y encontraba una
+  // página en blanco esperando su firma, con la hora de entrega intacta.
+  //
+  // Ahora se juzga por el ESTADO EN EL QUE VA A QUEDAR (`siguiente`) y con
+  // lo que va a quedar guardado (lo de la base MÁS lo que llega en este
+  // mismo PATCH): escribir y firmar en una sola petición sigue pasando, y
+  // vaciar una ENVIADA sin tocar su estado ya no.
+  //
+  // Un BORRADOR SÍ se puede quedar vacío, y es deliberado: es un papel a
+  // medio escribir, y para el que nunca debió existir está "Retirar"
+  // (H-23), que deja su fila con quién y cuándo.
+  // ══════════════════════════════════════════════════════════════════
+  if (siguiente !== "BORRADOR") {
+    const final = {
+      subjetivo: (data.subjetivo as string | null | undefined) ?? actual.subjetivo,
+      objetivo: (data.objetivo as string | null | undefined) ?? actual.objetivo,
+      analisis: (data.analisis as string | null | undefined) ?? actual.analisis,
+      plan: (data.plan as string | null | undefined) ?? actual.plan,
+      diagnostico: (data.diagnostico as string | null | undefined) ?? actual.diagnostico,
+    };
+    if (!eduRecordHasContent(final)) {
+      throw new EduPadronError(EDU_RECORD_EMPTY_DENIED);
+    }
+  }
+
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
 
   await prisma.eduRecord.update({ where: { id: actual.id }, data });
   return { id: actual.id, status: siguiente };
+}
+
+/**
+ * RETIRAR UN BORRADOR — baja lógica, con autor (H-23, Ola B).
+ *
+ * 🔴 QUÉ PROBLEMA RESUELVE, PORQUE NO ES "UN BOTÓN DE BORRAR". Una nota se
+ * podía abrir en el paciente equivocado, o quedar completamente vacía de un
+ * doble clic, y ya no había forma de sacarla: el expediente se quedaba con
+ * ella para siempre, contándose como nota en el Resumen y ofreciéndose en
+ * el desplegable de "¿qué mando a autorizar?". La única salida era pedirle
+ * a alguien que la editara para que dijera "esto no va".
+ *
+ * 🔴 Y QUÉ **NO** RESUELVE, que es la mitad importante:
+ *   · SOLO un BORRADOR (`eduRecordCanWithdraw`). Una ENVIADA está en la
+ *     bandeja de un docente que puede haberla leído: se devuelve primero.
+ *     Una FIRMADA no se retira NUNCA — es la NOM-004, y se corrige con una
+ *     nota nueva que la referencia.
+ *   · la fila NO se borra. `deletedAt` + `deletedById` dejan quién la
+ *     retiró y cuándo. Un expediente del que se puede hacer desaparecer una
+ *     página deja de ser el registro de lo que pasó.
+ *
+ * 🔴 SIN MOTIVO ESCRITO, Y ES DELIBERADO — lo dice el propio schema. No hay
+ * columna `deleteReason` y esta ola no añade SQL: retirar un borrador vacío
+ * no es un acto clínico que haya que justificar por escrito, y un campo de
+ * motivo obligatorio en el sitio equivocado solo produce "asdf". Lo que sí
+ * queda escrito es quién y cuándo, que es la pregunta que se hace después.
+ *
+ * `updateMany` con `deletedAt: null` en el `where` y no `update`: retirar
+ * dos veces (un doble clic, una pestaña vieja) no reescribe la firma de
+ * quien la retiró de verdad, ni lanza P2025 en la cara de nadie.
+ */
+export async function withdrawEduRecord(
+  ctx: EduClinicaContext,
+  recordId: string,
+  now: Date = new Date(),
+): Promise<{ id: string }> {
+  const institutionId = requireInstitution(ctx);
+  const scope = eduClinicalScope(ctx);
+  if (eduScopeIsEmpty(scope)) throw new EduPadronError("Esa nota no existe o no te toca.", 404);
+
+  const id = eduCleanId(recordId);
+  if (!id) throw new EduPadronError("Esa nota no existe o no te toca.", 404);
+
+  // Se busca DENTRO del alcance, igual que en updateEduRecord: una nota que
+  // no le toca a quien pregunta se ve exactamente igual que una que no
+  // existe. Y una ya retirada también da 404, que es lo que es.
+  const actual = await prisma.eduRecord.findFirst({
+    where: {
+      institutionId,
+      id,
+      deletedAt: null,
+      case: eduCaseScopeWhere({ institutionId, scope, now }),
+    },
+    select: { id: true, status: true },
+  });
+  if (!actual) throw new EduPadronError("Esa nota no existe o no te toca.", 404);
+
+  if (!eduRecordCanWithdraw(actual.status)) {
+    throw new EduPadronError(EDU_RECORD_WITHDRAW_DENIED, 409);
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🔴 N-1 · RETIRAR LA NOTA CIERRA SUS PETICIONES DE AUTORIZACIÓN.
+  //
+  // Un BORRADOR se puede mandar a autorizar, y retirarlo después dejaba la
+  // petición PENDING viva: la bandeja la pintaba con el resumen de una nota
+  // que ninguna lectura del expediente devuelve ya, el docente la firmaba
+  // con su cédula, y la puerta del caso avanzaba de etapa sobre una página
+  // que no está en el expediente. El modal de la pantalla promete justo lo
+  // contrario ("deja de poder mandarse a autorizar").
+  //
+  // Se cierran como CHANGES_REQUESTED, con `decidedAt` y SIN `decidedById`:
+  // es EXACTAMENTE el patrón que ya usa el reenvío en
+  // `requestEduApproval` (autorizaciones.ts), y por la misma razón — nadie
+  // la decidió, la cerró un hecho. No se usa EXPIRED, que en este vertical
+  // significa "se firmó y luego el contenido cambió" y haría que las
+  // pantallas dijeran que hubo una firma que nunca existió
+  // (autorizaciones-core.ts:752-754). Y no se BORRA ninguna fila: las
+  // filas son el historial de qué se pidió y cuándo.
+  //
+  // Las dos escrituras van en UNA transacción: una nota retirada con su
+  // petición todavía esperando firma es el agujero entero, y un corte de
+  // red entre dos escrituras sueltas lo reabre.
+  //
+  // El `deletedAt: null` de `loadTargets` (autorizaciones.ts) es la otra
+  // mitad, y hace falta igual: cubre las peticiones de notas retiradas
+  // ANTES de este arreglo, que ya están en la base.
+  // ══════════════════════════════════════════════════════════════════
+  await prisma.$transaction(async (tx) => {
+    await tx.eduRecord.updateMany({
+      where: { id: actual.id, institutionId, deletedAt: null },
+      data: { deletedAt: now, deletedById: ctx.eduUserId },
+    });
+
+    await tx.eduCaseApproval.updateMany({
+      where: {
+        institutionId,
+        targetType: "EduRecord",
+        targetId: actual.id,
+        status: "PENDING",
+      },
+      data: {
+        status: "CHANGES_REQUESTED",
+        decidedAt: now,
+        decisionNote: EDU_RECORD_WITHDRAWN_APPROVAL_NOTE,
+      },
+    });
+  });
+
+  return { id: actual.id };
 }
