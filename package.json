@@ -21,6 +21,8 @@
     "test:hover-slot": "tsx --test src/lib/agenda/__tests__/hover-slot.test.ts",
     "test:agenda-legend": "tsx --test src/lib/agenda/__tests__/doctor-legend.test.ts",
     "test:permissions": "tsx --test src/lib/auth/__tests__/permissions-matrix.test.ts",
+    "test:sabina-core": "tsx --test src/lib/sabina/engine-core.test.ts",
+    "test:sabina-motor": "tsx --test src/lib/sabina/engine.test.ts",
     "test:endpoint-gates": "tsx --test src/lib/auth/__tests__/endpoint-permission-gates.test.ts",
     "test:endpoint-gates-resto": "tsx --test src/lib/auth/__tests__/endpoint-permission-gates-resto.test.ts",
     "test:team-fields": "tsx --test src/lib/team/__tests__/member-fields.test.ts",
