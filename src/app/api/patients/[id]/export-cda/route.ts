@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { buildCdaXml } from "@/lib/hl7/cda";
+import { buildCdaXml, readCdaAddenda } from "@/lib/hl7/cda";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +99,12 @@ export async function GET(req: NextRequest, { params }: Params) {
         code: dx.cie10Code,
         description: dx.cie10.description,
       })),
+      // Adendas (hallazgo 25): correcciones firmadas que se guardan encima de
+      // la nota sin tocarla. El `findMany` de arriba no lleva `select`, así que
+      // `specialtyData` —donde las escribe POST /api/clinical-notes/[id]/addendum—
+      // ya viene en la fila: no hace falta ninguna consulta más. Lo que faltaba
+      // era exportarlas.
+      addenda: readCdaAddenda(r.specialtyData),
     })),
     prescriptions: prescriptions.map((rx) => ({
       id: rx.id,
