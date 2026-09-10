@@ -13,6 +13,7 @@
     "seed": "tsx prisma/seed.ts",
     "db:seed": "tsx prisma/seed.ts",
     "smoke:dental": "tsx scripts/smoke-test-dental.ts",
+    "test:sabina-pantalla": "tsx --test src/components/sabina/__tests__/sabina-core.test.ts",
     "test:marketplace": "tsx --test src/lib/marketplace/access-control.test.ts",
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
     "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts",
