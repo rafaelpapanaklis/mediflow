@@ -8,6 +8,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { ownPrivateRecordsOnly } from "@/lib/branches";
 import {
   ClinicalNoteDocument,
+  readNoteAddenda,
   type ClinicalNoteDxRow,
 } from "@/lib/pdf/clinical-note-document";
 
@@ -92,6 +93,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .map((p) => (typeof p === "string" ? p : p?.name ?? ""))
     .filter((s) => s.length > 0);
 
+  // Adendas (hallazgo 25): correcciones firmadas que se guardan encima de la
+  // nota sin tocarla. El `select` de arriba ya trae `specialtyData`, que es
+  // donde las escribe POST /api/clinical-notes/[id]/addendum, así que no hace
+  // falta pedir nada más a la base; lo que faltaba era imprimirlas.
+  const addenda = readNoteAddenda(record.specialtyData);
+
   const patientName = `${record.patient.firstName} ${record.patient.lastName}`;
   const doctorName = record.doctor
     ? `Dr/a. ${record.doctor.firstName} ${record.doctor.lastName}`
@@ -113,6 +120,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     plan: record.plan,
     diagnoses,
     procedures,
+    addenda,
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
