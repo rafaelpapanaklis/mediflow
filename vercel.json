@@ -82,6 +82,10 @@
     {
       "path": "/api/cron/subscription-lapse",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/instituto/cron/recordatorios",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
