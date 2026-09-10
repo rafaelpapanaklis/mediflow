@@ -346,6 +346,7 @@ function req(over: Partial<EduRequirementSpec> = {}): EduRequirementSpec {
     semesterTo: null,
     procedureId: null,
     category: null,
+    categoryId: null,
     requiredCount: 4,
     onlyCompleted: false,
     ...over,
@@ -391,7 +392,16 @@ test("P2-5 · el semáforo suma la expectativa POR requisito (y deja de regañar
   // espera, no cuándo se hizo.
   const conCaso = eduRequirementProgress(
     req({ id: "b2", name: "B2", semesterFrom: 5, semesterTo: 6, requiredCount: 1 }),
-    [{ id: "c1", programId: "prog_endo", status: "COMPLETED", procedureId: null, procedureCategory: null }],
+    [
+      {
+        id: "c1",
+        programId: "prog_endo",
+        status: "COMPLETED",
+        procedureId: null,
+        procedureCategory: null,
+        procedureCategoryId: null,
+      },
+    ],
     0.5,
     1,
   );

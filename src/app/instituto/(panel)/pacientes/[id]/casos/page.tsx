@@ -5,10 +5,14 @@ import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduPatient } from "@/lib/edu/pacientes";
 import { listEduPatientCases } from "@/lib/edu/casos";
-import { listEduPatientAppointments, listEduStudentOptions } from "@/lib/edu/agenda";
+import {
+  listEduPatientAppointments,
+  listEduStudentOptions,
+  listEduSupervisorOptions,
+} from "@/lib/edu/agenda";
 import { listEduCurrentAssignments } from "@/lib/edu/padron";
 import { eduFormatDayShort } from "@/lib/edu/agenda-core";
-import { eduVisibility } from "@/lib/edu/visibility";
+import { eduScopeIsEmpty, eduVisibility } from "@/lib/edu/visibility";
 import { getEduCaseApprovalState } from "@/lib/edu/autorizaciones";
 import {
   EDU_APPOINTMENT_STATUS_LABELS,
@@ -65,8 +69,21 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
   const canRegistrarSesion = hasEduPermission(permUser, "expediente.write");
   const canTraspasar = hasEduPermission(permUser, "traspaso.manage");
   const canFirmar = hasEduPermission(permUser, "autorizaciones.decide");
+  // ── Ola C·2 · PRESUPUESTAR el caso ───────────────────────────────────
+  // 🔴 DOS CERRADURAS, las mismas que el resto del dinero: el permiso
+  // `caja.charge` MÁS el alcance de "charges", que para DOCENTE y ALUMNO
+  // es "none". Encenderle caja.charge a un alumno por error sigue sin
+  // pintarle el botón — y el endpoint lo volvería a comprobar igual.
+  //
+  // En esta pantalla eso significa, en la práctica, SOLO la dirección:
+  // caja no llega aquí (no tiene `casos.view`). Y por eso el botón vive
+  // aquí y no en Presupuestos: caja no ve casos, así que aquella pantalla
+  // no puede ofrecer un selector de casos sin romper el contrato de la
+  // Ola 2.
+  const canPresupuestar =
+    hasEduPermission(permUser, "caja.charge") && !eduScopeIsEmpty(eduVisibility(ctx, "charges"));
 
-  const [casos, citas, alumnosDestino] = await Promise.all([
+  const [casos, citas, alumnosDestino, docentes] = await Promise.all([
     listEduPatientCases(ctx, p.id),
     hasEduPermission(permUser, "agenda.view")
       ? listEduPatientAppointments(ctx, p.id, ctx.institution.timezone)
@@ -74,15 +91,33 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
     // El destino del traspaso, por ALCANCE (la lección del P1-4: el padrón
     // completo no viaja al navegador de quien no lo ve): un DOCENTE recibe
     // SOLO sus alumnos vigentes; dirección, los activos del instituto.
+    //
+    // ⚠️ Ola C·2 · H-39: cada opción viaja con su `programId` porque el
+    // componente descarta las de otra especialidad — el traspaso la exige
+    // y hasta ahora el desplegable ofrecía alumnos que rebotaban con 409.
     canTraspasar
       ? scope.kind === "all"
         ? listEduStudentOptions(ctx).then((rows) =>
-            rows.map((a) => ({ id: a.id, matricula: a.matricula, name: a.name })),
+            rows.map((a) => ({
+              id: a.id,
+              matricula: a.matricula,
+              name: a.name,
+              programId: a.programId,
+            })),
           )
         : listEduCurrentAssignments(ctx, new Date(), ctx.eduUserId).then((rows) =>
-            rows.map((a) => ({ id: a.studentId, matricula: a.matricula, name: a.name })),
+            rows.map((a) => ({
+              id: a.studentId,
+              matricula: a.matricula,
+              name: a.name,
+              programId: a.programId,
+            })),
           )
       : Promise.resolve([]),
+    // Ola C·2 · H-34: los docentes, para CORREGIR el responsable del caso.
+    // Solo para quien tiene el permiso que exige el PATCH: al resto no le
+    // llega ni la lista ni el botón.
+    canMoverEstado ? listEduSupervisorOptions(ctx) : Promise.resolve([]),
   ]);
 
   // ── Ola 4 · el estado de autorización de CADA caso ───────────────────
@@ -241,7 +276,13 @@ export default async function PacienteCasosPage({ params }: { params: { id: stri
                     canTraspasar={canTraspasar}
                     canFirmar={canFirmar}
                     pendientes={(auth?.rows ?? []).filter((r) => r.status === "PENDING")}
+                    programId={c.programId}
+                    programName={c.programName}
                     alumnosDestino={alumnosDestino}
+                    docentes={docentes}
+                    supervisorUserId={c.supervisorUserId}
+                    supervisorName={c.supervisorName}
+                    canPresupuestar={canPresupuestar && !cerrado}
                   />
                 </div>
               );

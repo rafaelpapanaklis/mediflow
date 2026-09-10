@@ -7,7 +7,9 @@ import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import {
   EDU_AGENDA_MAX_ROWS,
+  eduDayRange,
   eduTodayISO,
+  eduWeekDays,
   parseEduAgendaQuery,
 } from "@/lib/edu/agenda-core";
 import {
@@ -17,6 +19,8 @@ import {
   listEduSupervisorOptions,
 } from "@/lib/edu/agenda";
 import { listEduPatientOptions } from "@/lib/edu/pacientes";
+import { listEduBloqueos } from "@/lib/edu/agenda-bloqueos";
+import { listEduCampusOptions } from "@/lib/edu/campus";
 import { listEduPrograms } from "@/lib/edu/padron";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { getEduCampusScope } from "@/lib/edu/campus";
@@ -102,6 +106,11 @@ export default async function InstitutoAgendaPage({
 
   const canManage = hasEduPermission(permUser, "agenda.manage");
   const canAssign = hasEduPermission(permUser, "casos.assign");
+  // 🔴 H-19 · CAPTURAR UN BLOQUEO NO ES AGENDAR. Pide `sillones.manage` —la
+  // misma llave con la que se captura el horario de un sillón—, así que
+  // caja, que sí agenda, NO cierra la agenda de un martes. Ninguna key
+  // nueva: ver src/lib/edu/agenda-bloqueos.ts.
+  const canManageBloqueos = hasEduPermission(permUser, "sillones.manage");
 
   // Un solo `now` y una sola zona para TODAS las consultas de la pantalla.
   const now = new Date();
@@ -109,6 +118,14 @@ export default async function InstitutoAgendaPage({
   const cctx = eduWithCampus(ctx, sede);
   const tz = sede.timezone;
   const query = parseEduAgendaQuery(searchParams, tz, now);
+
+  // ── 🔴 OLA C·2 · H-19 — EL RANGO DE BLOQUEOS QUE PINTA LA REJILLA ─────
+  // Es EL MISMO periodo que las citas (un día, o la semana), calculado con
+  // el mismo helper: si se pidiera otro, la rejilla podría pintar el día
+  // abierto mientras el alta lo rechaza — que es peor que no tener
+  // bloqueos. El extremo derecho es exclusivo, igual que en la agenda.
+  const diasVista = query.view === "semana" ? eduWeekDays(query.dayISO) : [query.dayISO];
+  const rangoVista = eduDayRange(diasVista[0], tz, diasVista.length);
 
   const [page, sillones, alumnos, docentes, programas, pacientes] = await Promise.all([
     listEduAgenda(cctx, query, tz, now),
@@ -129,6 +146,21 @@ export default async function InstitutoAgendaPage({
     canManage
       ? listEduPatientOptions(ctx, now)
       : Promise.resolve({ rows: [], truncated: false }),
+  ]);
+
+  // Segunda tanda, y no una séptima consulta en el `Promise.all` de arriba:
+  // la regla de la casa es menos de 7 por tanda (el pooler se satura). Son
+  // dos lecturas baratas y acotadas.
+  const [bloqueos, sedesDelAlta] = await Promise.all([
+    rangoVista
+      ? listEduBloqueos(cctx, {
+          desde: rangoVista.from.toISOString(),
+          hasta: rangoVista.to.toISOString(),
+        })
+      : Promise.resolve([]),
+    // Las sedes a las que ENTRA quien mira: son las que puede elegir al
+    // capturar un bloqueo desde aquí. Solo hace falta si va a poder.
+    canManageBloqueos ? listEduCampusOptions(cctx) : Promise.resolve([]),
   ]);
 
   return (
@@ -202,6 +234,13 @@ export default async function InstitutoAgendaPage({
         canManage={canManage}
         todayISO={eduTodayISO(tz, now)}
         timezone={tz}
+        /* H-19 · los cierres del MISMO periodo que las citas. La rejilla los
+           pinta y el botón «Bloqueos» los administra sin salir de aquí. */
+        bloqueos={bloqueos}
+        canManageBloqueos={canManageBloqueos}
+        campuses={sedesDelAlta
+          .filter((c) => sede.campusIds === null || sede.campusIds.includes(c.id))
+          .map((c) => ({ id: c.id, name: c.name }))}
         /* El selector de sede que ya existe arriba, montado también en los
            filtros de la agenda: es EL MISMO componente y la MISMA cookie —
            dos controles del mismo estado que se puedan contradecir es

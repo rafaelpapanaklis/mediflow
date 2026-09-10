@@ -70,6 +70,12 @@ export default async function InstitutoEquipoPage({
         truncated={page.truncated}
         maxRows={EDU_TEAM_MAX_ROWS}
         filters={filters}
+        // 🔴 H-16 · el rol de quien mira. `equipo.manage` se presta por
+        // override a un coordinador, y con esa llave se podía crear una
+        // cuenta DIRECCION y vaciarle los permisos a la que había. El
+        // candado está en el servidor; esto es para que la pantalla no
+        // ofrezca botones que el servidor va a rebotar.
+        viewerRole={ctx.role}
       />
     </div>
   );

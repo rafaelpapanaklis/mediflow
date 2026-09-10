@@ -406,10 +406,20 @@ test("H-24 · un BORRADOR se mueve de caso; una PENDIENTE no", () => {
 test("H-24 · retirar una receta NO la anula: es PENDIENTE → BORRADOR", () => {
   // La decisión explicada en el reporte: darle a lo no-expedido un camino a
   // ANULADA contradice dos reglas escritas que siguen teniendo razón.
+  //
+  // 🔴 OLA C: RECHAZADA dejó de ser un callejón sin salida, pero la regla
+  // que esta prueba protege NO cambió. La única salida es ARCHIVADA, que
+  // NO es imprimible (se comprueba dos líneas más abajo); ANULADA sigue
+  // fuera de su alcance, que es exactamente lo que aquí se vigilaba.
   assert.deepEqual(
     EDU_PRESCRIPTION_TRANSITIONS.RECHAZADA,
-    [],
-    "si RECHAZADA vuelve a tener salidas, revisa la decisión de H-24 en el reporte de ws2-t3",
+    ["ARCHIVADA"],
+    "si RECHAZADA gana una salida a ANULADA, revisa la decisión de H-24 en el reporte de ws2-t3",
+  );
+  assert.equal(
+    eduRecetaPrintable("ARCHIVADA"),
+    false,
+    "archivar una rechazada NO puede abrir la puerta del PDF: nunca llevó cédula",
   );
   assert.ok(
     eduRecetaPrintable("ANULADA"),

@@ -6,15 +6,19 @@ import { notFound, redirect } from "next/navigation";
 import {
   ArrowLeft,
   BookOpen,
+  CalendarCheck,
   CalendarRange,
   ClipboardList,
   GraduationCap,
   Layers,
+  Mail,
+  Phone,
   UserCheck,
 } from "lucide-react";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission, type EduPermissionKey } from "@/lib/edu/permissions";
 import { getEduEstudianteFicha } from "@/lib/edu/estudiante";
+import { eduFichaFecha } from "@/lib/edu/estudiante-core";
 import { EDU_STUDENT_STATUS_LABELS } from "@/lib/edu/types";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduPacienteTabs, type EduPacienteTab } from "@/components/edu/expediente/paciente-tabs";
@@ -221,6 +225,36 @@ export default async function InstitutoEstudianteLayout({
                 }`}
               </span>
             )}
+
+            {/* 🔴 H-103 · CORREO, TELÉFONO Y FECHAS. La ficha los traía desde
+                la Ola de Personas y no pintaba ninguno: un docente que quiere
+                llamar a su alumno porque no llegó a la clínica no tenía su
+                teléfono, y las fechas que la escuela imprime en una
+                constancia no se veían en ningún sitio del producto. Son
+                enlaces `mailto:`/`tel:` porque quien los mira lo hace desde
+                el móvil, en el piso, con el sillón vacío. */}
+            <span className="edu-fichadato">
+              <Mail size={13} strokeWidth={1.9} aria-hidden />
+              <a href={`mailto:${alumno.email}`} className="edu-link">
+                {alumno.email}
+              </a>
+            </span>
+
+            {alumno.phone && (
+              <span className="edu-fichadato">
+                <Phone size={13} strokeWidth={1.9} aria-hidden />
+                <a href={`tel:${alumno.phone}`} className="edu-link">
+                  {alumno.phone}
+                </a>
+              </span>
+            )}
+
+            <span className="edu-fichadato">
+              <CalendarCheck size={13} strokeWidth={1.9} aria-hidden />
+              {alumno.graduatedAt
+                ? `Egresó el ${eduFichaFecha(alumno.graduatedAt)}`
+                : `Inscrito desde el ${eduFichaFecha(alumno.enrolledAt)}`}
+            </span>
           </div>
         </div>
       </header>

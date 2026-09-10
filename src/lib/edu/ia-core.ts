@@ -213,7 +213,33 @@ export interface EduIaPrecio {
   inUsdMicrosPerMillion: number;
   /** Lo mismo para la salida. En el dictado va en cero. */
   outUsdMicrosPerMillion: number;
+  /**
+   * ── 🔴 H-132 · EL ESCALÓN DE CACHÉ ─────────────────────────────────
+   * «Los tokens leídos de caché se le cobran al instituto a precio de
+   * token nuevo. El prompt se manda con `cache_control: ephemeral` y el
+   * consumo suma los tres tipos de token al mismo precio de entrada. El
+   * cupo baja más deprisa que la factura real del proveedor, y la escuela
+   * se queda sin IA antes de lo que le tocaba.»
+   *
+   * `null` = este modelo NO cobra la caché aparte, y entonces se cae a
+   * `inUsdMicrosPerMillion` — que es exactamente lo que se hacía antes de
+   * esta ola. Una escuela sin estos precios capturados no nota ningún
+   * cambio; una con ellos deja de pagar de más.
+   */
+  cacheReadUsdMicrosPerMillion: number | null;
+  cacheWriteUsdMicrosPerMillion: number | null;
   source: string | null;
+}
+
+/** Las unidades de una llamada, partidas por cómo se cobran (H-132). */
+export interface EduIaUnidades {
+  /** Tokens de entrada NUEVOS (ni escritos ni leídos de caché). */
+  inputUnits: number;
+  /** Tokens que el proveedor LEYÓ de la caché. Se cobran más baratos. */
+  cacheReadUnits?: number;
+  /** Tokens que el proveedor ESCRIBIÓ en la caché. Se cobran más caros. */
+  cacheWriteUnits?: number;
+  outputUnits: number;
 }
 
 /**
@@ -233,12 +259,62 @@ export function eduIaCosto(
   inputUnits: number,
   outputUnits: number,
 ): number | null {
+  return eduIaCostoDetallado(precio, { inputUnits, outputUnits });
+}
+
+/**
+ * Lo mismo, PARTIENDO la entrada por cómo se cobra (H-132).
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 EL TOKEN LEÍDO DE CACHÉ NO CUESTA LO MISMO QUE UNO NUEVO, y hasta esta
+ * ola se le cobraba igual a la escuela. El análisis de una placa manda el
+ * prompt del dental con `cache_control: ephemeral` —lo estable de la
+ * petición— así que la segunda placa seguida lee de caché casi todo el
+ * prefijo: el proveedor lo factura a una fracción y el instituto lo pagaba
+ * entero. El cupo bajaba más deprisa que la factura real y la escuela se
+ * quedaba sin IA antes de lo que le tocaba.
+ *
+ * 🔴 SIN PRECIO DE CACHÉ SE CAE AL DE ENTRADA, y eso NO es un apaño: es lo
+ * que el producto hacía hasta hoy. Una escuela cuyos `edu_ai_prices` no
+ * tengan el escalón capturado sigue viendo exactamente los mismos números
+ * que antes de esta ola — nada se mueve solo, y quien capture el escalón
+ * empieza a pagar lo que de verdad cuesta.
+ *
+ * ⚠️ Y el REDONDEO es uno solo, al final. Redondear cada sumando por
+ * separado (entrada, caché, salida) y luego sumar deja hasta tres
+ * millonésimas de diferencia por llamada; con veinte mil llamadas al año
+ * eso es un renglón que no cuadra y que nadie sabe explicar.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduIaCostoDetallado(
+  precio: EduIaPrecio | null | undefined,
+  unidades: EduIaUnidades,
+): number | null {
   if (!precio || typeof precio !== "object") return null;
-  const inU = Number.isFinite(inputUnits) && inputUnits > 0 ? inputUnits : 0;
-  const outU = Number.isFinite(outputUnits) && outputUnits > 0 ? outputUnits : 0;
-  const inP = Number.isFinite(precio.inUsdMicrosPerMillion) ? precio.inUsdMicrosPerMillion : 0;
-  const outP = Number.isFinite(precio.outUsdMicrosPerMillion) ? precio.outUsdMicrosPerMillion : 0;
-  return Math.max(0, Math.round((inU * inP + outU * outP) / 1_000_000));
+  const positivo = (v: unknown): number =>
+    typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
+
+  const inP = positivo(precio.inUsdMicrosPerMillion);
+  const outP = positivo(precio.outUsdMicrosPerMillion);
+  // El null cae al precio de entrada: ver el bloque de arriba.
+  const cacheReadP =
+    typeof precio.cacheReadUsdMicrosPerMillion === "number" &&
+    Number.isFinite(precio.cacheReadUsdMicrosPerMillion)
+      ? Math.max(0, precio.cacheReadUsdMicrosPerMillion)
+      : inP;
+  const cacheWriteP =
+    typeof precio.cacheWriteUsdMicrosPerMillion === "number" &&
+    Number.isFinite(precio.cacheWriteUsdMicrosPerMillion)
+      ? Math.max(0, precio.cacheWriteUsdMicrosPerMillion)
+      : inP;
+
+  const total =
+    positivo(unidades.inputUnits) * inP +
+    positivo(unidades.cacheReadUnits) * cacheReadP +
+    positivo(unidades.cacheWriteUnits) * cacheWriteP +
+    positivo(unidades.outputUnits) * outP;
+
+  return Math.max(0, Math.round(total / 1_000_000));
 }
 
 /** "5.00 USD por millón de tokens" — para la tabla de tarifas del panel. */

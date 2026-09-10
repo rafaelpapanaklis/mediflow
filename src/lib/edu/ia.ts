@@ -77,6 +77,7 @@ import {
   eduAnalisisMimeOk,
   eduDictadoMimeOk,
   eduIaCosto,
+  eduIaCostoDetallado,
   eduIaRestanteUsdMicros,
   EDU_DICTADO_MAX_SECONDS,
   EDU_IA_MODELOS,
@@ -611,7 +612,27 @@ export async function analyzeEduStudy(
 
   const usage = (data.usage ?? {}) as Record<string, unknown>;
   const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-  const inputTokens = num(usage.input_tokens) + num(usage.cache_creation_input_tokens) + num(usage.cache_read_input_tokens);
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 H-132 · LOS TRES TIPOS DE TOKEN DE ENTRADA, POR SEPARADO.
+  //
+  // «El prompt se manda con `cache_control: ephemeral` y el consumo suma
+  // los tres tipos de token AL MISMO PRECIO de entrada. El cupo baja más
+  // deprisa que la factura real del proveedor, y la escuela se queda sin IA
+  // antes de lo que le tocaba.»
+  //
+  // El prefijo cacheado de esta llamada es el prompt del dental más la
+  // herramienta —lo estable—, así que analizar dos placas seguidas lee de
+  // caché casi toda la entrada. El proveedor la factura a una fracción;
+  // aquí se cobraba entera.
+  //
+  // `inputTokens` sigue siendo la SUMA porque es lo que se pinta y se
+  // guarda como "unidades de entrada" (una cifra que ya está en la base y
+  // en la pantalla); lo que cambia es CÓMO se cobra, más abajo.
+  // ═══════════════════════════════════════════════════════════════════
+  const inputNuevos = num(usage.input_tokens);
+  const cacheWriteTokens = num(usage.cache_creation_input_tokens);
+  const cacheReadTokens = num(usage.cache_read_input_tokens);
+  const inputTokens = inputNuevos + cacheWriteTokens + cacheReadTokens;
   const outputTokens = num(usage.output_tokens);
   const totalTokens = inputTokens + outputTokens;
 
@@ -656,7 +677,17 @@ export async function analyzeEduStudy(
   const sinMedicion = totalTokens <= 0;
   const inputCobrados = sinMedicion ? 0 : inputTokens;
   const outputCobrados = sinMedicion ? EDU_ANALISIS_MAX_TOKENS : outputTokens;
-  const costUsdMicros = eduIaCosto(permiso.precio, inputCobrados, outputCobrados) ?? 0;
+  // H-132 · cada tipo de token a SU precio. Si `edu_ai_prices` no trae el
+  // escalón de caché (los dos NULL), `eduIaCostoDetallado` cae al precio de
+  // entrada y el número sale idéntico al de antes de esta ola: nada se
+  // mueve solo, y quien capture el escalón deja de pagar de más.
+  const costUsdMicros =
+    eduIaCostoDetallado(permiso.precio, {
+      inputUnits: sinMedicion ? 0 : inputNuevos,
+      cacheReadUnits: sinMedicion ? 0 : cacheReadTokens,
+      cacheWriteUnits: sinMedicion ? 0 : cacheWriteTokens,
+      outputUnits: outputCobrados,
+    }) ?? 0;
 
   const nombre = await eduIaNombreDeSesion(ctx);
 

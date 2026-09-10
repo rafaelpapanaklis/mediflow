@@ -60,6 +60,14 @@ export interface EduTeamParsedRow {
   lastName: string;
   email: string;
   role: EduRole | null;
+  /**
+   * H-104 · La QUINTA columna. Se interpretaba y se validaba desde la Ola 1B
+   * —un teléfono malo marcaba el renglón en rojo e impedía crear esa
+   * cuenta— y después no viajaba a ninguna parte: el alta masiva mandaba
+   * cuatro campos y el teléfono se perdía. Se cobraba el precio de validarlo
+   * sin quedarse con el dato.
+   */
+  phone: string | null;
   error: string | null;
   /** Un encabezado de hoja de cálculo pegado sin querer: se ignora, no falla. */
   isHeader: boolean;
@@ -78,6 +86,14 @@ export interface EduTeamAltaResult {
   reused: boolean;
   id: string | null;
   error: string | null;
+  /**
+   * El código HTTP que le toca a ESTE renglón cuando el alta es individual
+   * (ausente = 400, que es lo que era todo antes). Existe por S-1: "ese
+   * correo ya es de otro instituto" es un CONFLICTO con algo que ya está en
+   * la base, no un dato mal escrito, y el alta masiva lo sigue tratando como
+   * un renglón en rojo sin tumbar los otros 24.
+   */
+  status?: number;
 }
 
 /** Una persona del equipo, tal como viaja a la pantalla. */
@@ -110,6 +126,13 @@ export interface EduTeamRow {
   matricula: string | null;
   lastLogin: string | null;
   createdAt: string;
+  /**
+   * 🔴 H-112 · Las sedes a las que entra. **VACÍO = TODAS**, que es la regla
+   * de la ola de sedes y la lectura que sorprende: la ausencia de filas
+   * concede MÁS acceso, no menos. Por eso viaja a la pantalla — para que la
+   * fila lo pueda DECIR en vez de dejar un hueco que se lee como "ninguna".
+   */
+  campusIds: string[];
 }
 
 export interface EduTeamFilters {
@@ -289,6 +312,7 @@ export function parseEduTeamPaste(
       lastName: campos[1] ?? "",
       email: campos[2] ?? "",
       role: null,
+      phone: null,
       error: null,
       isHeader: false,
     };
@@ -341,6 +365,9 @@ export function parseEduTeamPaste(
       lastName: limpio.lastName,
       email: limpio.email,
       role: limpio.role,
+      // H-104: el teléfono ya venía saneado por eduTeamMemberInput. Antes se
+      // tiraba aquí y el alta masiva mandaba cuatro campos.
+      phone: limpio.phone,
       error: null,
       isHeader: false,
     });
@@ -465,4 +492,199 @@ export function parseEduTeamFilters(
     estado: estado === "activos" || estado === "inactivos" ? estado : null,
     q: typeof q === "string" && q.trim() ? q.trim().slice(0, 60) : null,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 5 · QUIÉN PUEDE TOCAR A QUIÉN (H-16) — la escalada, cerrada por escrito
+//
+// `equipo.manage` es la llave de la escuela: crea cuentas, las da de baja y
+// escribe permisos. Es de DIRECCION por defecto, pero el producto invita a
+// prestarla por override («a sabiendas y una por una», permissions.ts), y
+// ése es el caso de un coordinador académico. Hasta esta ola, con esa llave
+// prestada se podía:
+//
+//   · CREAR una cuenta con rol DIRECCION y el correo propio —el <select>
+//     del alta ofrecía los cuatro roles—, entrar con la temporal que la
+//     propia pantalla enseña, y ya se era dirección; y
+//   · VACIARLE los permisos a la dirección que había (dejarle solo
+//     `inicio.view`): esa cuenta perdía `equipo.manage` y no podía
+//     recuperarlo, porque para recuperarlo hace falta tenerlo.
+//
+// Las reglas de abajo cierran las dos, y viven aquí —puras, sin base— para
+// que se puedan probar de verdad y para que la pantalla y el servidor no
+// las escriban dos veces distintas.
+//
+// ⚠️ Lo que estas reglas NO deciden: quién tiene `equipo.manage`. Eso lo
+// decide el editor de permisos, y prestar la llave sigue siendo una
+// decisión de la dirección. Lo que cambia es que la llave prestada ya no
+// alcanza al rol que la reparte.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Las tres cosas que se le pueden hacer a la cuenta de otra persona. */
+export type EduTeamAccion = "crear" | "baja" | "reactivar" | "permisos" | "datos" | "contrasena";
+
+const ACCION_TEXTO: Record<EduTeamAccion, string> = {
+  crear: "crear una cuenta de Dirección",
+  baja: "dar de baja a una cuenta de Dirección",
+  reactivar: "reactivar una cuenta de Dirección",
+  permisos: "editar los permisos de una cuenta de Dirección",
+  datos: "cambiar los datos de una cuenta de Dirección",
+  contrasena: "restablecer la contraseña de una cuenta de Dirección",
+};
+
+/**
+ * ¿Puede `actorRole` hacer `accion` sobre alguien con rol `targetRole`?
+ *
+ * Devuelve el motivo del rechazo (en español, para pintarlo) o `null` si se
+ * puede. La regla es una sola: **a una cuenta de DIRECCION solo la toca otra
+ * cuenta de DIRECCION**. Con cualquier otro rol destino no opina — para eso
+ * están los permisos.
+ *
+ * Se usa también al CREAR: ahí `targetRole` es el rol que se va a crear.
+ */
+export function eduTeamGuardDireccion(
+  actorRole: EduRole,
+  targetRole: EduRole,
+  accion: EduTeamAccion,
+): string | null {
+  if (targetRole !== "DIRECCION") return null;
+  if (actorRole === "DIRECCION") return null;
+  return `Solo una cuenta de Dirección puede ${ACCION_TEXTO[accion]}. Pídeselo a quien dirige el instituto.`;
+}
+
+/**
+ * ¿Este override deja a la ÚLTIMA dirección activa sin poder administrar?
+ *
+ * `keys` es lo que se va a guardar (ya saneado). `esUltimaDireccion` lo sabe
+ * el servidor contando filas. Si la última dirección se queda sin
+ * `equipo.manage`, el instituto se queda sin nadie que pueda dar de alta, dar
+ * de baja ni devolverle el permiso a nadie —ni a sí misma—: es una puerta que
+ * se cierra desde dentro con la llave puesta fuera, y no hay pantalla que la
+ * abra.
+ *
+ * `null` (restaurar el rol) nunca cae aquí: el default de DIRECCION lleva
+ * `equipo.manage`, así que restaurar siempre es una salida.
+ */
+export function eduOverrideDejaSinAdministracion(
+  keys: string[],
+  esUltimaDireccion: boolean,
+): boolean {
+  if (!esUltimaDireccion) return false;
+  return !keys.includes("equipo.manage");
+}
+
+export const EDU_ULTIMA_DIRECCION_ERROR =
+  "Es la única cuenta de Dirección activa del instituto: no puedes dejarla sin «Administrar el equipo», porque entonces nadie podría devolvérselo. Da de alta a otra dirección antes de recortarle los permisos.";
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6 · CORREGIR A UNA PERSONA DESPUÉS DEL ALTA (H-04)
+//
+// Hasta esta ola, los CUATRO únicos escritores de EduUser en todo el repo
+// eran `isActive`, `permissionsOverride`, la cédula profesional (como efecto
+// secundario de expedir una receta) y `mustChangePassword`. El alta capturaba
+// cinco campos y ninguno se podía corregir: un correo mal tecleado dejaba a
+// esa persona fuera para siempre, una alumna que se casaba se quedaba con el
+// apellido viejo impreso en cada nota clínica que firmara el resto de su
+// carrera, y un docente que ascendía a coordinación necesitaba OTRA cuenta
+// —con su historial clínico colgando del id viejo—.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Los campos corregibles de una persona. Solo viaja lo que se manda. */
+export interface EduTeamPersonaEdit {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string | null;
+  role?: EduRole;
+}
+
+export interface EduTeamPersonaEditCheck {
+  value: EduTeamPersonaEdit | null;
+  error: string | null;
+}
+
+/**
+ * Valida una CORRECCIÓN: solo los campos presentes, con las mismas reglas
+ * que el alta (los mismos helpers, no una copia — dos validaciones distintas
+ * para el mismo campo acaban aceptando en un sitio lo que el otro rechaza).
+ *
+ * `phone: null` o `""` significa BORRAR el teléfono, y eso es legítimo: se
+ * capturó mal y no hay otro. Por eso `phone` se distingue de "no lo mandes".
+ *
+ * ⚠️ El correo se normaliza a minúsculas igual que en el alta: Supabase
+ * trata el login como insensible a mayúsculas y guardar "Ana@x.mx" haría que
+ * la comparación "¿cambió?" diera true en cada guardado.
+ */
+export function eduTeamPersonaEditInput(input: {
+  firstName?: unknown;
+  lastName?: unknown;
+  email?: unknown;
+  phone?: unknown;
+  role?: unknown;
+}): EduTeamPersonaEditCheck {
+  const mal = (error: string): EduTeamPersonaEditCheck => ({ value: null, error });
+  const value: EduTeamPersonaEdit = {};
+
+  if (input.firstName !== undefined) {
+    const firstName = eduRequiredText(input.firstName, 80);
+    if (!firstName) return mal("Falta el nombre (máximo 80 caracteres).");
+    value.firstName = firstName;
+  }
+
+  if (input.lastName !== undefined) {
+    const lastName = eduRequiredText(input.lastName, 80);
+    if (!lastName) return mal("Faltan los apellidos (máximo 80 caracteres).");
+    value.lastName = lastName;
+  }
+
+  if (input.email !== undefined) {
+    const email = normalizeEduEmail(input.email);
+    if (!email) return mal("Ese correo no parece un correo.");
+    value.email = email;
+  }
+
+  if (input.phone !== undefined) {
+    if (input.phone === null || input.phone === "") {
+      value.phone = null;
+    } else {
+      const phone = normalizeEduPhone(input.phone);
+      if (!phone) return mal("Ese teléfono no tiene números suficientes.");
+      value.phone = phone;
+    }
+  }
+
+  if (input.role !== undefined) {
+    const role = parseEduTeamRole(input.role);
+    if (!role) {
+      return mal(
+        `El rol tiene que ser uno de: ${EDU_ROLES.map((r) => EDU_ROLE_LABELS[r]).join(", ")}.`,
+      );
+    }
+    value.role = role;
+  }
+
+  if (Object.keys(value).length === 0) return mal("No mandaste ningún cambio.");
+  return { value, error: null };
+}
+
+/**
+ * El aviso que la pantalla enseña ANTES de confirmar un cambio de rol.
+ *
+ * Cambiar de rol no es editar una columna: reescribe qué ve y qué puede
+ * hacer esa persona en todo el panel, y —porque el override REEMPLAZA al
+ * default del rol— un override viejo escrito para el rol anterior seguiría
+ * mandando sobre el rol nuevo. Por eso el cambio de rol lo BORRA, y por eso
+ * este texto lo dice antes y no después.
+ */
+export function eduCambioDeRolAviso(
+  nombre: string,
+  from: EduRole,
+  to: EduRole,
+  teniaOverride: boolean,
+): string {
+  const base = `${nombre} deja de ser ${EDU_ROLE_LABELS[from]} y pasa a ser ${EDU_ROLE_LABELS[to]}. Lo que ya hizo —notas, casos, cobros, calificaciones— no se toca: sigue siendo suyo.`;
+  if (!teniaOverride) {
+    return `${base} Sus permisos pasan a ser los de ${EDU_ROLE_LABELS[to]}.`;
+  }
+  return `${base} Tenía permisos personalizados y se BORRAN: pasa a los de ${EDU_ROLE_LABELS[to]}. Si los necesitas, apúntalos antes — no se guardan en ninguna parte.`;
 }

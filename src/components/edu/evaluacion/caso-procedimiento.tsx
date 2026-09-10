@@ -25,6 +25,18 @@ import { eduRequest } from "@/components/edu/edu-http";
  * uno, y esta pantalla lo DICE. Contarlo "por si acaso" es cómo se gradúa
  * alguien que no hizo lo que dice que hizo; esconderlo es cómo se pasa un
  * semestre creyendo que no se avanza.
+ *
+ * 🔴 OLA C · H-84 — UN CASO CERRADO NO SE RE-CLASIFICA, PERO SÍ SE
+ * CLASIFICA POR PRIMERA VEZ.
+ *
+ * La regla de esta pantalla era "cerrado = campo bloqueado", y con ella un
+ * caso TERMINADO sin procedimiento no se podía clasificar NUNCA: el alumno
+ * se quedaba atrasado para siempre por trabajo que sí hizo, y el semáforo
+ * de la generación entera salía falso hacia abajo. La regla escrita —"lo
+ * que contó, contó"— protege de REESCRIBIR el pasado, y eso se respeta:
+ * un caso cerrado que YA tiene procedimiento sigue congelado. Lo que se
+ * abre es el hueco que la regla no cubría, porque un caso que nunca se
+ * clasificó nunca contó para nada: no hay pasado que reescribir.
  * ═══════════════════════════════════════════════════════════════════════
  */
 export interface EduCasoProcedimientoProps {
@@ -70,7 +82,10 @@ export function EduCasoProcedimiento({
     }
   }
 
-  if (!canEdit || cerrado) {
+  // H-84: congelado solo si está cerrado Y ya tiene procedimiento. La
+  // primera captura de un caso cerrado sin clasificar sí se deja.
+  const congelado = cerrado && Boolean(procedureId);
+  if (!canEdit || congelado) {
     return (
       <p className="edu-estudio__meta">
         Procedimiento:{" "}
@@ -107,6 +122,9 @@ export function EduCasoProcedimiento({
         {valor
           ? "Es lo que hace que este caso cuente para un requisito del plan de estudios."
           : "Sin procedimiento, este caso no cuenta para ningún requisito que pida uno."}
+        {cerrado
+          ? " Este caso ya está cerrado: se puede clasificar una vez, y después queda congelado."
+          : ""}
       </p>
       {error && (
         <p className="edu-note" role="alert">

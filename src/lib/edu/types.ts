@@ -1017,6 +1017,46 @@ export const EDU_NAV_ITEMS: EduNavItemDef[] = [
     section: "administracion",
     permission: "equipo.manage",
   },
+  // ── Ola C·2 · la bitácora del instituto (NOM-024) ────────────────────
+  {
+    // La pantalla la entregó la Ola C·2 y se quedó SIN item de menú porque
+    // este archivo es compartido y no era de aquella casilla: se llegaba
+    // solo desde la lista de pacientes y desde la ficha. Esto es esa
+    // entrada, puesta al integrar la ola.
+    //
+    // Va en ADMINISTRACIÓN y no en Operación: no se abre cada mañana, se
+    // abre cuando hay que CONTESTAR algo —una queja, una auditoría, un
+    // "¿quién vio este expediente?"—, que es el mismo ritmo que Equipo o
+    // Sedes.
+    //
+    // ⚠️ `direccion.panel` y NO una key nueva, que es exactamente lo que
+    // ya protege la pantalla: una key nueva NO le llega a quien tenga
+    // `permissionsOverride` guardado —el override REEMPLAZA al default— y
+    // habría dejado el item invisible justo para el director que ya se
+    // personalizó los permisos. Item y pantalla comparten candado, así que
+    // no hay forma de que el menú ofrezca algo que la página niegue.
+    //
+    // El href es MÁS LARGO que el de "Dirección" y el sidebar marca activo
+    // el que coincide más, así que abrir la bitácora no enciende también
+    // el item del panel.
+    //
+    // 🔴 LA KEY ES "bitacora-instituto" Y NO "bitacora" A PROPÓSITO. En
+    // este vertical hay DOS bitácoras y son cosas distintas:
+    //   · la de EVALUACIÓN — el historial de un alumno, que se exporta en
+    //     CSV desde /api/instituto/evaluacion/[id]/export y NO tiene item
+    //     de menú porque se llega desde Evaluación, que es donde uno está
+    //     cuando pregunta por un alumno concreto (Ola 6);
+    //   · ÉSTA — el libro NOM-024 del instituto entero.
+    // La Ola 6 dejó clavado `enMenu.has("bitacora") === false` para que la
+    // suya no se colara al menú por descuido, y esa cerradura sigue siendo
+    // correcta: es la de evaluación la que no va en el menú. Usar aquí esa
+    // misma key la habría roto midiendo un texto en vez de una intención.
+    key: "bitacora-instituto",
+    href: "/instituto/direccion/bitacora",
+    icon: "scroll-text",
+    section: "administracion",
+    permission: "direccion.panel",
+  },
   // ── Ola 11 · las sedes ───────────────────────────────────
   {
     // Va en ADMINISTRACIÓN y no en Operación: una sede se da de alta al
@@ -1147,6 +1187,12 @@ export const EDU_NAV_LABELS: Record<string, string> = {
   // micrófono" no supiera que es aquí.
   ia: "Consumo de IA",
   whatsapp: "WhatsApp",
+  // Ola C·2. "Bitácora" y no "Auditoría": es como la NOM-024 y como la
+  // propia escuela le dicen al libro de quién hizo qué. "Auditoría" se lee
+  // como algo que le hacen a uno desde fuera. La key lleva el sufijo
+  // porque hay otra bitácora en el vertical (la de evaluación); lo que se
+  // LEE en el menú es solo "Bitácora", que es como la llama la escuela.
+  "bitacora-instituto": "Bitácora",
   facturacion: "Facturación",
 };
 
@@ -1266,7 +1312,8 @@ export type EduPrescriptionStatus =
   | "PENDIENTE"
   | "EXPEDIDA"
   | "RECHAZADA"
-  | "ANULADA";
+  | "ANULADA"
+  | "ARCHIVADA";
 
 export const EDU_PRESCRIPTION_STATUSES: EduPrescriptionStatus[] = [
   "BORRADOR",
@@ -1274,6 +1321,7 @@ export const EDU_PRESCRIPTION_STATUSES: EduPrescriptionStatus[] = [
   "EXPEDIDA",
   "RECHAZADA",
   "ANULADA",
+  "ARCHIVADA",
 ];
 
 export const EDU_PRESCRIPTION_STATUS_LABELS: Record<EduPrescriptionStatus, string> = {
@@ -1282,6 +1330,7 @@ export const EDU_PRESCRIPTION_STATUS_LABELS: Record<EduPrescriptionStatus, strin
   EXPEDIDA: "Expedida",
   RECHAZADA: "Rechazada",
   ANULADA: "Anulada",
+  ARCHIVADA: "Archivada",
 };
 
 export const EDU_PRESCRIPTION_STATUS_DESCRIPTIONS: Record<EduPrescriptionStatus, string> = {
@@ -1292,17 +1341,43 @@ export const EDU_PRESCRIPTION_STATUS_DESCRIPTIONS: Record<EduPrescriptionStatus,
   RECHAZADA: "El docente dijo que no, y dejó escrito por qué. No se imprime.",
   ANULADA:
     "Se anuló después de expedida, con motivo. No se borra: el documento existió y sale marcado.",
+  ARCHIVADA:
+    "Rechazada y guardada: sale de la lista de trabajo sin borrarse. La propuesta y el motivo del docente se siguen leyendo.",
 };
 
 /**
  * A qué estados puede pasar una receta desde donde está.
  *
- * EXPEDIDA solo lleva a ANULADA, y ANULADA y RECHAZADA no llevan a ningún
- * lado: la regla "una expedida se anula y se hace otra" escrita como dato
- * en vez de como un `if` que alguien puede olvidar en el segundo endpoint.
- * PENDIENTE → BORRADOR es la vuelta que da el docente al pedir cambios;
- * PENDIENTE → EXPEDIDA / RECHAZADA son su firma y su no, y las tres las
- * escribe la MISMA transacción que decide la autorización de la Ola 4.
+ * EXPEDIDA solo lleva a ANULADA: la regla "una expedida se anula y se hace
+ * otra", escrita como dato en vez de como un `if` que alguien puede olvidar
+ * en el segundo endpoint. PENDIENTE → BORRADOR es la vuelta que da el
+ * docente al pedir cambios; PENDIENTE → EXPEDIDA / RECHAZADA son su firma y
+ * su no, y las tres las escribe la MISMA transacción que decide la
+ * autorización de la Ola 4.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA C · RECHAZADA → ARCHIVADA, Y POR QUÉ ESTO **NO** CONTRADICE LA
+ * DECISIÓN QUE LA CASILLA ANTERIOR DEJÓ ESCRITA.
+ *
+ * H-24 quedó a medias: mover de caso en BORRADOR y retirar lo propuesto se
+ * arreglaron, pero RECHAZADA seguía sin salida (`[]`) y la receta se
+ * quedaba en la lista del alumno PARA SIEMPRE. La casilla de entonces se
+ * negó —con razón— a abrir RECHAZADA → ANULADA, y lo dejó por escrito: una
+ * ANULADA **se imprime** (marcada, con su motivo), así que darle ese camino
+ * a algo que nunca llevó la cédula de un docente sacaría papel sin firma de
+ * la escuela. Ésa era la regla, y sigue teniendo razón.
+ *
+ * ARCHIVADA no la toca. NO es imprimible —`eduRecetaPrintable` sigue
+ * diciendo que sí solo a EXPEDIDA y a ANULADA— y no es una anulación: es
+ * "guardada, fuera de la vista de trabajo". La propuesta existió, el
+ * docente dijo que no y por qué, y las dos cosas se siguen leyendo. Con
+ * motivo, con autor y con fecha, en cuatro columnas propias
+ * (`archivedAt`, `archivedByUserId`, `archivedByName`, `archiveReason`)
+ * que NO reutilizan las de la anulación: dos actos distintos compartiendo
+ * columna es cómo se pierde cuál de los dos ocurrió.
+ *
+ * ARCHIVADA es terminal. Una receta archivada no vuelve: se propone otra.
+ * ═══════════════════════════════════════════════════════════════════════
  */
 export const EDU_PRESCRIPTION_TRANSITIONS: Record<
   EduPrescriptionStatus,
@@ -1311,8 +1386,9 @@ export const EDU_PRESCRIPTION_TRANSITIONS: Record<
   BORRADOR: ["PENDIENTE"],
   PENDIENTE: ["EXPEDIDA", "RECHAZADA", "BORRADOR"],
   EXPEDIDA: ["ANULADA"],
-  RECHAZADA: [],
+  RECHAZADA: ["ARCHIVADA"],
   ANULADA: [],
+  ARCHIVADA: [],
 };
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -12,6 +12,11 @@ import {
   eduRecordsSummary,
   type EduOdontogramEntryRow,
 } from "@/lib/edu/odontograma-core";
+import {
+  EDU_ODONTO_EVENT_MAX_ROWS,
+  eduOdontoEventPieza,
+  type EduOdontoEventRow,
+} from "@/lib/edu/odontograma-eventos-core";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 🔴 EL DIBUJO ES **DEL INSTITUTO**. Vive en src/components/edu/odontograma/
@@ -80,6 +85,14 @@ export interface EduOdontogramaScreenProps {
   historial: EduOdontogramEntryRow[];
   /** true = la consulta se topó con el techo y hay historia más vieja. */
   historialTruncado: boolean;
+  /**
+   * OLA C·2 · EL LIBRO DE MOVIMIENTOS (N-3): una fila por ACTO —quién
+   * marcó, quién quitó, cuándo—, no una por hallazgo. Es lo que hace
+   * verdad los dos rótulos de abajo.
+   */
+  movimientos: EduOdontoEventRow[];
+  /** true = el libro se topó con su techo y hay actos más viejos. */
+  movimientosTruncados: boolean;
   /** Con qué dentición abre (temporal si el paciente es `isChild`). */
   denticionInicial: Dentition;
   /** true = el paciente está marcado como de dentición temporal. */
@@ -108,6 +121,8 @@ export function EduOdontogramaScreen({
   entries,
   historial,
   historialTruncado,
+  movimientos,
+  movimientosTruncados,
   denticionInicial,
   esInfantil,
   canEdit,
@@ -564,30 +579,195 @@ export function EduOdontogramaScreen({
         </div>
       )}
 
+      <LibroDeMovimientos rows={movimientos} truncado={movimientosTruncados} />
+
       <HistorialDeHallazgos entries={historial} truncado={historialTruncado} />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// QUIÉN MARCÓ QUÉ — Y QUIÉN LO QUITÓ.
+// EL LIBRO DE MOVIMIENTOS (N-3) — UNA FILA POR ACTO.
 //
-// El dibujo enseña el ESTADO; esta lista enseña la HISTORIA, que es lo que
-// un expediente tiene que poder contestar. Desde la Ola B enseña las dos
-// caras: hasta ahora un hallazgo quitado desaparecía de la tabla y de aquí,
-// así que la pregunta "¿quién pasó la goma sobre lo que yo marqué?" no
-// tenía dónde contestarse.
+// 🔴 QUÉ ARREGLA, PASO A PASO. La Ola B cambió el DELETE del odontograma
+// por una baja lógica (H-17) y la auditoría encontró que se deshacía sola:
 //
-// ⚠️ HASTA DÓNDE LLEGA, DICHO AQUÍ PARA QUE NADIE LO DESCUBRA SOLO (N-3):
-// esta lista sale de las MISMAS filas que el dibujo, y hay UNA fila por
-// hallazgo, no una por movimiento. De un hallazgo que se quitó y se volvió
-// a marcar queda quién lo quitó (`deletedById` sobrevive al revivir) pero
-// no cuándo, ni la cadena si pasó más de una vez. La secuencia completa
-// pide el índice único parcial de la Ola C — el SQL exacto está en la
-// cabecera de lib/edu/odontograma.ts.
+//   ortodoncia marca caries en 16-O → endodoncia la quita → ortodoncia la
+//   vuelve a marcar → el upsert cae en `update` y revive LA MISMA FILA.
 //
-// 🔴 Y YA NO CORTA EN SILENCIO (S-12). Cortaba a 40 filas sin decir una
-// palabra: un odontograma con 41 movimientos y uno con 400 se veían
+// En base quedaba un hallazgo vivo y ninguna huella de que endodoncia lo
+// había borrado, porque el historial se alimentaba de esas mismas filas:
+// UNA POR HALLAZGO, no una por MOVIMIENTO. De un hallazgo marcado, quitado
+// y remarcado solo se podía contar un estado, nunca la secuencia.
+//
+// Esta lista sale de `edu_odontogram_events`, donde cada marcar, quitar,
+// revivir y editar escribe SU renglón, con su autor y su hora. Sobrevive a
+// que la fila del hallazgo se reviva mil veces — y a que desaparezca: las
+// tres columnas del hallazgo van copiadas en cada renglón.
+//
+// ⚠️ Y LO QUE ESTE LIBRO **NO** PUEDE CONTAR, dicho aquí para que nadie lo
+// descubra solo: lo que se marcó ANTES de que existiera la tabla. Esos
+// actos no dejaron renglón y no se pueden inventar. Por eso debajo sigue
+// estando «Estado de cada hallazgo», que sale de las filas del
+// odontograma y sí cubre lo viejo.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Cuántos actos se pintan antes de pedir «ver todo». */
+const MOVIMIENTOS_PRIMEROS = 40;
+
+function LibroDeMovimientos({
+  rows,
+  truncado,
+}: {
+  rows: EduOdontoEventRow[];
+  truncado: boolean;
+}) {
+  const router = useRouter();
+  const [actualizando, startNav] = useTransition();
+  const [verTodo, setVerTodo] = useState(false);
+
+  const visibles = verTodo ? rows : rows.slice(0, MOVIMIENTOS_PRIMEROS);
+  const ocultos = rows.length - visibles.length;
+  const quitados = rows.filter((e) => e.action === "QUITA").length;
+  const revividos = rows.filter((e) => e.action === "REVIVE").length;
+
+  return (
+    <section className="edu-section">
+      <div className="edu-section__head">
+        <div>
+          <h2 className="edu-section__title">Quién marcó qué, y quién lo quitó</h2>
+          <p className="edu-section__lead">
+            Un renglón por ACTO: marcar, quitar, volver a marcar y cambiar la nota. Sobrevive a
+            que el mismo hallazgo se ponga y se quite mil veces.
+          </p>
+        </div>
+        <span className="edu-count">{rows.length}</span>
+        <button
+          type="button"
+          className="edu-btn edu-btn--ghost edu-btn--sm"
+          onClick={() => startNav(() => router.refresh())}
+          disabled={actualizando}
+        >
+          {actualizando ? "Actualizando…" : "Actualizar"}
+        </button>
+      </div>
+
+      {/* 🔴 EL RÓTULO VUELVE A SER VERDAD. Prometía «quitar no borra, deja
+          escrito quién lo quitó y cuándo» — y con una fila por hallazgo la
+          FECHA se perdía al remarcar, porque `deletedAt` es justo la
+          columna que hay que soltar para revivir. Con el libro de
+          movimientos la fecha, el autor y la cadena entera quedan escritos,
+          así que esta frase ya no promete de más. */}
+      <p className="edu-note">
+        Así estaba al abrir la pantalla. Lo que marques ahora se guarda al instante y aparece aquí
+        al actualizar.
+        {quitados > 0
+          ? ` Incluye ${quitados} ${quitados === 1 ? "retiro" : "retiros"}: quitar no borra, y queda escrito quién lo quitó Y CUÁNDO, aunque después se haya vuelto a marcar.`
+          : ""}
+        {revividos > 0
+          ? ` ${revividos === 1 ? "Un hallazgo se volvió a marcar" : `${revividos} hallazgos se volvieron a marcar`} después de haberse retirado: los dos actos están, cada uno con su autor y su hora.`
+          : ""}
+      </p>
+
+      {truncado && (
+        <div className="edu-banner edu-banner--warn" role="status">
+          <div>
+            <p className="edu-banner__title">
+              Este odontograma tiene más movimientos de los que caben en una consulta.
+            </p>
+            <p className="edu-banner__detail">
+              Se trajeron los {EDU_ODONTO_EVENT_MAX_ROWS} más recientes. Los anteriores{" "}
+              <strong>no se borran</strong>: el techo es de lectura. Se avisa porque una historia
+              que se corta en silencio se lee como una historia que no existió.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {rows.length === 0 ? (
+        <div className="edu-empty">
+          <p className="edu-empty__title">Todavía no hay movimientos registrados</p>
+          <p className="edu-empty__detail">
+            El libro de movimientos se empezó a escribir en esta versión del producto: lo que se
+            marcó antes no dejó renglón y no se puede inventar. Lo que sí hay de lo viejo está
+            abajo, en «Estado de cada hallazgo». En cuanto alguien marque o quite algo, el acto
+            aparece aquí con su nombre y su hora.
+          </p>
+        </div>
+      ) : (
+        <ul className="edu-chiplist">
+          {visibles.map((e) => (
+            <li
+              key={e.id}
+              className={`edu-assign ${e.action === "QUITA" ? "edu-assign--baja" : ""}`}
+            >
+              <span>
+                <strong>
+                  Diente {eduOdontoEventPieza(e.tooth, e.surface === EDU_TOOTH_WHOLE ? "" : e.surface)}
+                </strong>{" "}
+                ·{" "}
+                {e.condition === EDU_ODONTOGRAM_NOTE_KEY
+                  ? `nota${e.notes ? `: ${e.notes}` : ""}`
+                  : eduConditionLabel(e.condition)}{" "}
+                · {e.actorName} · {e.createdLabel}
+                {e.reason ? ` · ${e.reason}` : ""}
+              </span>
+              <span
+                className={`edu-tag ${
+                  e.action === "QUITA"
+                    ? "edu-tag--danger"
+                    : e.action === "REVIVE"
+                      ? "edu-tag--warn"
+                      : e.action === "EDITA"
+                        ? "edu-tag--info"
+                        : "edu-tag--ok"
+                }`}
+              >
+                {e.actionLabel}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {ocultos > 0 && (
+        <p>
+          <button
+            type="button"
+            className="edu-btn edu-btn--ghost edu-btn--sm"
+            onClick={() => setVerTodo(true)}
+          >
+            Ver los {ocultos} movimientos restantes
+          </button>
+        </p>
+      )}
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ESTADO DE CADA HALLAZGO — una fila por LLAVE, no por movimiento.
+//
+// El dibujo enseña el ESTADO DE HOY; esta lista enseña el estado de CADA
+// hallazgo, incluidos los retirados. Ya NO es «la historia»: la historia
+// —la secuencia de actos— es el libro de movimientos de arriba, y esta
+// sección se quedó con el trabajo que sí sabe hacer.
+//
+// 🔴 POR QUÉ SIGUE AQUÍ, Y NO ES DUPLICADO. El libro de movimientos se
+// empezó a escribir en la Ola C·2: de todo lo que se marcó ANTES no hay ni
+// un renglón, y esos actos no se pueden inventar. Estas filas sí existen
+// desde el primer día, así que son la única respuesta a «¿qué tiene este
+// paciente en el 16 y desde cuándo?» para un odontograma viejo. Cuando el
+// libro tenga años, esto sigue siendo útil por otra razón: es el ESTADO,
+// que es una pregunta distinta de la secuencia.
+//
+// ⚠️ Y HASTA DÓNDE LLEGA, dicho aquí igual que antes: hay UNA fila por
+// hallazgo, no una por movimiento. De uno que se quitó y se volvió a marcar
+// queda quién lo quitó (`deletedById` sobrevive al revivir) pero no cuándo.
+// Esa fecha —y la cadena entera— están arriba, en el libro.
+//
+// 🔴 Y NO CORTA EN SILENCIO (S-12). Cortaba a 40 filas sin decir una
+// palabra: un odontograma con 41 hallazgos y uno con 400 se veían
 // idénticos, y el que buscaba el suyo concluía que nunca existió. Ahora se
 // pintan 40 y hay un botón que enseña el resto, con el número escrito.
 // ═══════════════════════════════════════════════════════════════════════
@@ -632,42 +812,39 @@ function HistorialDeHallazgos({
   return (
     <section className="edu-section">
       <div className="edu-section__head">
-        <h2 className="edu-section__title">Quién marcó qué</h2>
+        <h2 className="edu-section__title">Estado de cada hallazgo</h2>
         <span className="edu-count">{historial.length}</span>
       </div>
       {/* Honestidad, no adorno: los hallazgos se guardan de uno en uno y sin
           recargar (marcar y esperar medio segundo por diente es
           insoportable), así que esta lista es la foto de cuando se abrió la
           pantalla. El CONTADOR de arriba sí va en vivo. */}
-      {/* 🔴 N-3 · EL RÓTULO DICE EXACTAMENTE LO QUE HAY, NI UNA PALABRA MÁS.
-          Prometía "constancia de quién lo quitó" a secas. Es verdad para un
-          hallazgo retirado y también, desde N-3, para uno que se quitó y se
-          volvió a marcar (revivir conserva `deletedById`) — pero de ése ya
-          no queda la FECHA, ni la cadena entera si pasó más de una vez:
-          una fila por hallazgo solo puede contar un movimiento. El arreglo
-          completo pide el índice único parcial, y eso es un DROP INDEX:
-          está escrito con su SQL exacto en la cabecera de lib/edu/odontograma.ts,
-          para la Ola C. */}
+      {/* 🔴 EL RÓTULO DICE EXACTAMENTE LO QUE HAY, NI UNA PALABRA MÁS, Y
+          AHORA APUNTA A DONDE ESTÁ EL RESTO. Prometía «quién lo quitó y
+          cuándo» y de un hallazgo remarcado la fecha no estaba: `deletedAt`
+          es justo la columna que hay que soltar para revivir la fila. Ya no
+          se promete aquí — se promete arriba, en el libro de movimientos,
+          donde sí está. */}
       <p className="edu-note">
-        Así estaba al abrir la pantalla. Lo que marques ahora se guarda al
+        El estado de cada hallazgo al abrir la pantalla. Lo que marques ahora se guarda al
         instante, pero aparece en esta lista al actualizar.
         {bajas > 0
-          ? ` Incluye ${bajas} ${bajas === 1 ? "hallazgo retirado" : "hallazgos retirados"}: quitar no borra, deja escrito quién lo quitó y cuándo.`
+          ? ` Incluye ${bajas} ${bajas === 1 ? "hallazgo retirado" : "hallazgos retirados"}: quitar no borra.`
           : ""}
         {revividos > 0
-          ? ` De los que siguen marcados, ${revividos === 1 ? "uno se había retirado antes" : `${revividos} se habían retirado antes`}: se conserva quién pasó la goma, no la fecha en que lo hizo.`
+          ? ` De los que siguen marcados, ${revividos === 1 ? "uno se había retirado antes" : `${revividos} se habían retirado antes`}: aquí queda quién pasó la goma; la fecha y la secuencia completa están arriba, en los movimientos.`
           : ""}
       </p>
       {truncado && (
         <div className="edu-banner edu-banner--warn" role="status">
           <div>
             <p className="edu-banner__title">
-              Este odontograma tiene más historia de la que cabe en una consulta.
+              Este odontograma tiene más hallazgos de los que caben en una consulta.
             </p>
             <p className="edu-banner__detail">
-              Se trajeron los movimientos más recientes y todos los hallazgos que siguen
-              marcados: el dibujo está completo, la lista de abajo no. Se avisa porque una
-              historia que se corta en silencio se lee como una historia que no existió.
+              Se trajeron todos los que siguen marcados y los retirados más recientes: el dibujo
+              está completo, esta lista no. Se avisa porque una lista que se corta en silencio se
+              lee como una lista completa.
             </p>
           </div>
         </div>
@@ -707,12 +884,24 @@ function HistorialDeHallazgos({
               </span>
             ) : e.deletedById ? (
               /* 🔴 N-3 · Sigue marcado, pero alguien lo había quitado y se
-                 volvió a marcar. Sin esta línea, revivir dejaba el rastro
-                 en la base y en ninguna pantalla — que es lo mismo que no
-                 dejarlo. No se dice CUÁNDO a propósito: esa fecha era
-                 `deletedAt` y hay que soltarla para revivir la fila. */
-              <span className="edu-tag edu-tag--muted">
-                Se había retirado{e.deletedByName ? ` (${e.deletedByName})` : ""} y volvió a ponerse
+                 volvió a marcar.
+                 El rótulo es CORTO —y el quién va en el `title`— por dos
+                 razones, y las dos son de las que se pagan una vez: una
+                 píldora `.edu-tag` es `white-space: nowrap`, así que la
+                 frase larga que había aquí se salía 84 px de la pantalla a
+                 390 px de ancho (regla 4); y la historia completa —quién lo
+                 quitó, cuándo, y la cadena entera si pasó más de una vez—
+                 ya no vive en esta fila: está arriba, en el libro de
+                 movimientos. */
+              <span
+                className="edu-tag edu-tag--muted"
+                title={
+                  e.deletedByName
+                    ? `Lo había retirado ${e.deletedByName}. La fecha y la secuencia completa están en «Quién marcó qué, y quién lo quitó».`
+                    : "Se había retirado antes. La fecha y la secuencia completa están en «Quién marcó qué, y quién lo quitó»."
+                }
+              >
+                Volvió a ponerse
               </span>
             ) : null}
           </li>
@@ -725,7 +914,7 @@ function HistorialDeHallazgos({
             className="edu-btn edu-btn--ghost edu-btn--sm"
             onClick={() => setVerTodo(true)}
           >
-            Ver los {ocultas} movimientos restantes
+            Ver los {ocultas} hallazgos restantes
           </button>
         </p>
       )}

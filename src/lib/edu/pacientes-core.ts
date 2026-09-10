@@ -493,6 +493,31 @@ export interface EduPatientRow {
    *  pantalla; sin el nombre al lado tampoco servía de mucho. */
   updatedAt: string;
   updatedByName: string | null;
+
+  // ═════════════════════════════════════════════════════════════════════
+  // OLA C·2 · ARCO Y FUSIÓN — el estado de la FICHA, no el del paciente
+  //
+  // 🔴 SON OTRA COSA QUE `status`. `status` dice en qué punto del embudo
+  // está la persona (nueva, activa, dada de alta, dejó de venir); esto
+  // dice qué pasó con SU FICHA: se dio de baja, se anonimizó, o se
+  // fusionó con otra. Mezclarlos habría hecho que «dar de alta otra vez» y
+  // «deshacer la baja ARCO» fueran el mismo botón.
+  //
+  // 🔴 VIAJAN SIEMPRE, aunque casi todas las fichas los traigan en null:
+  // la ficha del perdedor de una fusión tiene que poder REDIRIGIR al
+  // ganador, y una que a veces trae el puntero y a veces no es una que un
+  // día deja a alguien escribiendo en el expediente equivocado.
+  // ═════════════════════════════════════════════════════════════════════
+
+  /** Baja lógica ARCO. Con fecha = la ficha salió de listas y buscador. */
+  deletedAt: string | null;
+  deleteReason: string | null;
+  /** Anonimización. Con fecha = el PII ya se sustituyó. IRREVERSIBLE. */
+  anonymizedAt: string | null;
+  /** Fusión: la ficha GANADORA que se quedó con el expediente. */
+  mergedIntoId: string | null;
+  mergedIntoFolio: string | null;
+  mergedAt: string | null;
 }
 
 export interface EduPatientsPage {

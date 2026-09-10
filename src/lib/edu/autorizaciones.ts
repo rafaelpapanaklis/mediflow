@@ -83,11 +83,13 @@ import {
   type EduGateVerdict,
 } from "@/lib/edu/autorizaciones-core";
 import { eduApprovalHash } from "@/lib/edu/autorizaciones-hash";
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 import { eduRecetaCleanCedula, eduRecetaSnapshot } from "@/lib/edu/recetas-core";
 import { EDU_SOAP_LABELS } from "@/lib/edu/expediente-core";
 import {
   EDU_APPOINTMENT_TYPE_LABELS,
   EDU_APPROVAL_STAGE_LABELS,
+  EDU_CASE_CLOSED_STATUSES,
   EDU_CASE_STATUS_LABELS,
   type EduApprovalStage,
   type EduCaseStatus,
@@ -650,7 +652,20 @@ export async function listEduApprovalInbox(
     where: {
       institutionId,
       status: "PENDING",
-      case: eduCaseScopeWhere({ institutionId, scope, now }),
+      case: {
+        ...eduCaseScopeWhere({ institutionId, scope, now }),
+        // 🔴 OLA C · H-32 — LA BANDEJA NO ARRASTRA CASOS CERRADOS.
+        //
+        // El `where` filtraba por PENDING y por alcance, nunca por el
+        // estado del CASO: la petición de un caso terminado, abandonado o
+        // TRASPASADO se quedaba arriba para siempre, poniéndose cada día
+        // más roja, y no había nada que firmar —el traspaso no toca las
+        // autorizaciones y el caso nuevo nace con las suyas—. La fila NO se
+        // borra ni se cambia de estado: sigue en la base como lo que fue,
+        // una petición que se quedó sin caso. Lo que deja de hacer es
+        // pedirle una firma a alguien.
+        status: { notIn: EDU_CASE_CLOSED_STATUSES },
+      },
     },
     orderBy: [{ isEmergency: "desc" }, { requestedAt: "asc" }],
     take: EDU_APPROVAL_MAX_ROWS + 1,
@@ -827,10 +842,25 @@ async function resolveCase(
   const caso = id
     ? await prisma.eduCase.findFirst({
         where: { ...eduCaseScopeWhere({ institutionId, scope, now }), id },
-        select: { id: true, studentId: true, patientId: true },
+        select: { id: true, studentId: true, patientId: true, status: true },
       })
     : null;
   if (!caso) throw new EduPadronError("Ese caso no existe o no te toca.", 404);
+
+  // 🔴 OLA C · H-42 — UN CASO CERRADO NO PIDE FIRMAS.
+  //
+  // Esta función comprobaba el tenant y el alcance, nunca el ESTADO: una
+  // pestaña vieja —o un POST a mano— metía en la bandeja la petición de un
+  // caso terminado, abandonado o ya traspasado, donde va a quedarse para
+  // siempre porque no hay nada que autorizar. Las dos puertas del gate
+  // (PLAN para "en tratamiento", ALTA para "terminado") se piden con el
+  // caso VIVO, así que aquí no se cierra ningún camino legítimo.
+  if ((EDU_CASE_CLOSED_STATUSES as string[]).includes(caso.status)) {
+    throw new EduPadronError(
+      `Ese caso está en "${EDU_CASE_STATUS_LABELS[caso.status as EduCaseStatus]}": un caso cerrado no manda nada a autorización. Si el paciente volvió, reábrelo primero.`,
+      409,
+    );
+  }
   return caso;
 }
 
@@ -1064,8 +1094,42 @@ function datosDeDecision(
  *  3. que no la haya pedido él mismo — salvo si quien decide es la
  *     DIRECCIÓN, que sí firma lo suyo y queda marcado como tal.
  */
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA C·2 · LA BITÁCORA DE LAS DECISIONES DE AUTORIZACIÓN.
+ *
+ * Firmar, rechazar o pedir cambios es EL acto de gobierno de este vertical
+ * —es lo que separa una escuela de una clínica— y era el único que no
+ * dejaba renglón en `/instituto/direccion/bitacora`. La fila
+ * `EduCaseApproval` guarda quién decidió y cuándo, pero es un dato por
+ * fila: la pregunta "¿qué firmó la Dra. Pérez el martes?" no se contestaba
+ * desde ninguna pantalla, que es justo lo que la bitácora existe para
+ * contestar.
+ *
+ * La C·2 lo dejó escrito en su punto 6 porque este archivo no era de esa
+ * casilla; se cierra al juntar la ola.
+ *
+ * ⚠️ SE ESCRIBE DESPUÉS DE LA TRANSACCIÓN, no dentro, y es una desviación
+ * DELIBERADA de cómo lo dejó pedido la casilla («una llamada dentro de la
+ * transacción que ya hay»). El encabezado de `auditoria.ts` dice que
+ * `eduAudit` NUNCA tumba la operación que la generó, y dentro de una
+ * transacción no puede cumplirlo: un INSERT que falla en Postgres deja la
+ * transacción ENVENENADA y el `catch` de `eduAudit` no la resucita —
+ * reventaría al hacer commit, y con ella la firma del docente. Es
+ * exactamente el caso que ese encabezado describe ("un paciente esperando
+ * en el sillón por un problema de contabilidad"), y por eso los otros
+ * veintitantos escritores del vertical también llaman fuera. El día que la
+ * bitácora tenga que ser a prueba de fallos se mueven TODOS a la vez, que
+ * es lo que ese mismo encabezado deja escrito.
+ *
+ * Consecuencia, dicha en voz alta: si el renglón no entra, la decisión sí
+ * queda. Es best-effort, como el resto de la bitácora.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export interface EduApprovalDecisionContext extends EduClinicaContext, EduAuditActor {}
+
 export async function decideEduApproval(
-  ctx: EduClinicaContext,
+  ctx: EduApprovalDecisionContext,
   approvalId: string,
   input: EduApprovalDecisionInput,
   now: Date = new Date(),
@@ -1095,6 +1159,12 @@ export async function decideEduApproval(
       targetId: true,
       requestedById: true,
       isEmergency: true,
+      // Ola C·2: para el renglón de bitácora. La entidad es el CASO
+      // —que es lo que se busca cuando se pregunta "¿quién autorizó
+      // esto?"— y el paciente hace que salga en la bitácora filtrada de
+      // su ficha.
+      caseId: true,
+      case: { select: { patientId: true } },
     },
   });
   if (!actual) throw new EduPadronError("Esa autorización no existe o no te toca.", 404);
@@ -1220,8 +1290,23 @@ export async function decideEduApproval(
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.eduCaseApproval.update({
-      where: { id: actual.id },
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔴 OLA C · H-07 — LA DECISIÓN NO PISA OTRA DECISIÓN.
+    //
+    // El `status !== "PENDING"` de arriba se lee FUERA de la transacción, y
+    // entre esa lectura y este UPDATE caben 300 ms: el titular rechaza con
+    // su motivo escrito, el de guardia pulsa "Autorizar" sobre la tarjeta
+    // vieja y el REJECTED se convertía en APPROVED con el motivo borrado.
+    // Estas filas SON el historial: no hay otro sitio donde mirar qué se
+    // decidió.
+    //
+    // `updateMany` acotado a PENDING —el mismo patrón que la receta quince
+    // líneas más abajo, y el que ya usaban `persistExpired` y los cierres
+    // de la Ola 4— y 409 si no movió nada. El throw deshace la transacción
+    // entera, así que tampoco queda la receta expedida.
+    // ═══════════════════════════════════════════════════════════════════
+    const decidida = await tx.eduCaseApproval.updateMany({
+      where: { institutionId, id: actual.id, status: "PENDING" },
       data: datosDeDecision(decision, ctx, now, {
         note,
         hash,
@@ -1230,6 +1315,12 @@ export async function decideEduApproval(
         signatureUrl,
       }),
     });
+    if (decidida.count === 0) {
+      throw new EduPadronError(
+        "Esa autorización ya la decidió alguien mientras la mirabas. Refresca la bandeja para ver en qué quedó: si la rechazaron, el motivo está ahí.",
+        409,
+      );
+    }
 
     if (esReceta && recetaData) {
       // `updateMany` acotado a PENDIENTE: si la receta ya no está
@@ -1255,6 +1346,34 @@ export async function decideEduApproval(
         });
       }
     }
+  });
+
+  // ── Ola C·2 · el renglón de la bitácora ────────────────────────────
+  // Fuera de la transacción a propósito (ver EduApprovalDecisionContext).
+  // Si el `updateMany` de arriba rebotó con 409, esto no se ejecuta: no
+  // hay decisión que registrar.
+  //
+  // `before/after` con el estado y el motivo, que es lo que `eduAuditDiff`
+  // convierte en el «Pendiente → Rechazada» que se lee en la pantalla. Se
+  // registra como "sign" incluso cuando es un RECHAZO: la acción del
+  // catálogo es "firmó una decisión", y partirla en dos verbos dejaría los
+  // rechazos fuera de quien filtra por "Firmó" — que es exactamente quien
+  // los está buscando.
+  await eduAudit(ctx, {
+    action: "sign",
+    entity: "case",
+    entityId: actual.caseId,
+    patientId: actual.case.patientId,
+    before: { etapa: actual.stage, estado: "PENDING" },
+    after: {
+      etapa: actual.stage,
+      estado: decision,
+      motivo: note,
+      urgencia: actual.isEmergency,
+      autorizacionId: actual.id,
+    },
+    ip: input.ip ?? null,
+    userAgent: input.userAgent ?? null,
   });
 
   return { id: actual.id, status: decision };
@@ -1285,7 +1404,7 @@ export interface EduApprovalBatchResult {
  * una: un "no" en lote es un "no" que nadie explicó.
  */
 export async function decideEduApprovalBatch(
-  ctx: EduClinicaContext,
+  ctx: EduApprovalDecisionContext,
   ids: unknown,
   input: { ip?: string | null; userAgent?: string | null } = {},
   now: Date = new Date(),
@@ -1321,12 +1440,15 @@ export async function decideEduApprovalBatch(
       targetType: true,
       targetId: true,
       requestedById: true,
+      // Ola C·2: para el renglón de bitácora de cada una (ver abajo).
+      caseId: true,
+      case: { select: { patientId: true } },
     },
   });
 
   const hashes = await loadTargetHashes(prisma, institutionId, filas);
   const skipped: { id: string; reason: EduApprovalBatchSkip }[] = [];
-  const aprobables: { id: string; hash: string }[] = [];
+  const aprobables: { id: string; hash: string; fila: (typeof filas)[number] }[] = [];
 
   // Las que ni siquiera aparecieron (otra escuela, otro docente, id
   // inventado) se reportan como "ya no está esperando firma": desde fuera se
@@ -1361,19 +1483,29 @@ export async function decideEduApprovalBatch(
     }
     // `contentChanged` es false, así que este hash existe; el `?? ""` solo
     // calla al compilador.
-    aprobables.push({ id: f.id, hash: h ?? "" });
+    aprobables.push({ id: f.id, hash: h ?? "", fila: f });
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C · H-31 — EL LOTE TAMPOCO RESUCITA UN RECHAZO.
+  //
+  // Antes esto eran `update({ where: { id } })` sobre filas leídas al
+  // principio de la función, con un comentario que decía que la ventana era
+  // de milisegundos y que "lo peor que pasa es que se re-firme algo ya
+  // firmado". No era lo peor: entre la lectura y la transacción cabe un
+  // RECHAZO de otro docente, y el lote lo convertía en APPROVED borrando el
+  // motivo. Con `updateMany` el `status: "PENDING"` SÍ entra en el `where`
+  // (es lo que `update` no admite y por lo que el comentario se rindió), y
+  // la que no se movió se reporta con el motivo que ya existía en el
+  // catálogo de exclusiones: "no-pendiente", el mismo que ve quien marca
+  // una que otro acaba de firmar.
+  // ═══════════════════════════════════════════════════════════════════
+  let approved = 0;
   if (aprobables.length > 0) {
-    await prisma.$transaction(
+    const movidas = await prisma.$transaction(
       aprobables.map((a) =>
-        prisma.eduCaseApproval.update({
-          // El `status: "PENDING"` del where no se puede poner en un
-          // `update` de Prisma, así que la carrera se cierra con la
-          // comprobación de arriba; la ventana es de milisegundos y lo peor
-          // que pasa es que se re-firme algo ya firmado con el mismo
-          // contenido.
-          where: { id: a.id },
+        prisma.eduCaseApproval.updateMany({
+          where: { institutionId, id: a.id, status: "PENDING" },
           data: datosDeDecision("APPROVED", ctx, now, {
             note: null,
             hash: a.hash,
@@ -1383,9 +1515,46 @@ export async function decideEduApprovalBatch(
         }),
       ),
     );
+    // Ola C·2 · UN RENGLÓN DE BITÁCORA POR CADA UNA QUE SE MOVIÓ DE
+    // VERDAD, y ninguno por las que el `updateMany` no tocó: un lote de
+    // cuarenta en el que otro docente ya había firmado seis tiene que
+    // dejar treinta y cuatro renglones, no cuarenta.
+    //
+    // En SERIE y no con un `Promise.all`: el lote llega hasta
+    // EDU_APPROVAL_BATCH_MAX (40) y el pooler de Supabase se satura por
+    // encima de siete a la vez. Va después del commit, así que ir despacio
+    // aquí no tiene ninguna fila bloqueada esperando.
+    const firmadas: (typeof aprobables)[number][] = [];
+    aprobables.forEach((a, i) => {
+      if ((movidas[i]?.count ?? 0) > 0) {
+        approved += 1;
+        firmadas.push(a);
+      } else skipped.push({ id: a.id, reason: "no-pendiente" });
+    });
+
+    for (const a of firmadas) {
+      await eduAudit(ctx, {
+        action: "sign",
+        entity: "case",
+        entityId: a.fila.caseId,
+        patientId: a.fila.case.patientId,
+        before: { etapa: a.fila.stage, estado: "PENDING" },
+        after: {
+          etapa: a.fila.stage,
+          estado: "APPROVED",
+          // Se dice que fue EN LOTE: una firma en lote y una leída una por
+          // una no valen lo mismo cuando alguien viene a preguntar, y la
+          // bitácora no puede hacerlas indistinguibles.
+          enLote: true,
+          autorizacionId: a.fila.id,
+        },
+        ip: input.ip ?? null,
+        userAgent: input.userAgent ?? null,
+      });
+    }
   }
 
-  return { approved: aprobables.length, skipped };
+  return { approved, skipped };
 }
 
 // ═══════════════════════════════════════════════════════════════════════

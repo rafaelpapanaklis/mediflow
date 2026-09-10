@@ -348,6 +348,8 @@ function fila(sobre: Partial<EduCasosPanelRow>): EduCasosPanelRow {
     openedLabel: "sáb 1 ago",
     closedLabel: null,
     espera: { kind: "nada", label: "En tratamiento, nada pendiente" },
+    // H-41: cuántas firmas de este caso se pidieron por la ruta de urgencia.
+    urgencias: 0,
     ...sobre,
   };
 }

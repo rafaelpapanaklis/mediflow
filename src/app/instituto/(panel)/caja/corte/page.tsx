@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { getEduCorte } from "@/lib/edu/caja";
+import { getEduCampusScope } from "@/lib/edu/campus";
+import { eduCampusForCharge, eduCampusLabel } from "@/lib/edu/campus-core";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { eduSafeTimeZone } from "@/lib/edu/agenda-core";
 import { EduDenied } from "@/components/edu/edu-denied";
@@ -54,7 +56,19 @@ export default async function InstitutoCortePage() {
 
   const canCorte = hasEduPermission(permUser, "caja.corte");
   const zona = eduSafeTimeZone(ctx.institution.timezone);
-  const corte = await getEduCorte(ctx, ctx.institution.timezone);
+
+  // 🔴 Ola C · H-09 · LA SEDE, resuelta EN EL SERVIDOR con la misma
+  // función que decide dónde se emite un cobro. El turno que se pinta —y
+  // el que se abre, se cierra y se corrige— es el de ESTA sede: si esta
+  // pantalla eligiera turno por su cuenta, enseñaría el arqueo de un turno
+  // distinto de aquel en el que está entrando el dinero.
+  const sede = await getEduCampusScope(ctx);
+  const elegida = eduCampusForCharge(sede);
+  const corte = await getEduCorte(ctx, ctx.institution.timezone, new Date(), {
+    campusId: elegida.campusId,
+    campusLabel: sede.active ? eduCampusLabel(sede.active) : null,
+    bloqueo: elegida.reason,
+  });
 
   const fmt = new Intl.DateTimeFormat("es-MX", {
     timeZone: zona,
@@ -76,6 +90,11 @@ export default async function InstitutoCortePage() {
         },
       ]),
     ),
+    // Los turnos abiertos en OTRAS sedes, también con la fecha escrita
+    // aquí: formatearla en el cliente pintaría la zona del navegador.
+    otros: Object.fromEntries(
+      corte.otrosTurnos.map((t) => [t.id, fmt.format(new Date(t.openedAt))]),
+    ),
   };
 
   return (
@@ -86,6 +105,11 @@ export default async function InstitutoCortePage() {
           <p className="edu-page__lead">
             Es el corte del <strong>turno</strong>, no el del día: la ventana va de la apertura
             hasta ahora. Si el turno lleva varios días abierto, esta pantalla te lo dice.
+            {corte.campusLabel
+              ? ` Estás en ${corte.campusLabel}: cada sede abre y cierra su propio turno.`
+              : sede.showPicker
+                ? " Elige arriba en qué sede estás: desde esta ola cada sede tiene su propio turno y su propio arqueo."
+                : ""}
           </p>
         </div>
         <div className="edu-pagehead__actions">

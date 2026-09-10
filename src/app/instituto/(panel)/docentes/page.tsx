@@ -5,9 +5,12 @@ import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { listEduCurrentAssignments, listEduTeachers } from "@/lib/edu/padron";
+import { listEduRotacionesProgramadas } from "@/lib/edu/docente";
+import { listEduStudentOptions, listEduSupervisorOptions } from "@/lib/edu/agenda";
 import { eduPadronScope } from "@/lib/edu/padron-core";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduDocentesScreen } from "@/components/edu/padron/docentes-screen";
+import { EduRotacionProgramadaPanel } from "./rotacion-programada";
 
 export const metadata: Metadata = {
   title: "Docentes · DaleControl Institucional",
@@ -64,13 +67,23 @@ export default async function InstitutoDocentesPage() {
   // un descuido: "cuántos alumnos lleva cada quien hoy" es para lo que
   // existe esta pantalla y es un número, no una identidad.
   const alcance = eduPadronScope(ctx);
-  const [docentes, asignaciones] = await Promise.all([
+  const [docentes, asignaciones, rotaciones, alumnos, docentesOpciones] = await Promise.all([
     listEduTeachers(ctx, now),
     alcance.kind === "all"
       ? listEduCurrentAssignments(ctx, now)
       : alcance.kind === "supervised"
         ? listEduCurrentAssignments(ctx, now, alcance.supervisorUserId)
         : Promise.resolve([]),
+    // 🔴 OLA C·2 · LO QUE YA ESTÁ PROGRAMADO. Se recorta con el MISMO
+    // alcance del padrón que la lista nominal de arriba: de aquí salen la
+    // matrícula y el nombre de cada alumno.
+    listEduRotacionesProgramadas(ctx, now),
+    // Los desplegables del alta solo viajan a quien va a poder usarlos: sin
+    // este guard, el navegador de un docente recibiría la lista de alumnos
+    // a los que no le toca repartir (es el P1-4 de la auditoría, aplicado
+    // aquí desde el primer día).
+    canAssign ? listEduStudentOptions(ctx, now) : Promise.resolve([]),
+    canAssign ? listEduSupervisorOptions(ctx) : Promise.resolve([]),
   ]);
 
   const total = docentes.reduce((n, d) => n + d.currentStudents, 0);
@@ -89,6 +102,23 @@ export default async function InstitutoDocentesPage() {
       </header>
 
       <EduDocentesScreen teachers={docentes} assignments={asignaciones} canAssign={canAssign} />
+
+      {/* 🔴 OLA C·2 · LA ROTACIÓN PROGRAMADA, en la misma pantalla que el
+          reparto de hoy. Cero SQL: `startsAt` existe desde la Ola 1A y el
+          predicado de vigencia ya lo respeta; lo que faltaba era escribir
+          una fecha futura y poder VER lo programado antes de que llegue. */}
+      <EduRotacionProgramadaPanel
+        rows={rotaciones}
+        students={alumnos.map((a) => ({
+          id: a.id,
+          matricula: a.matricula,
+          name: a.name,
+          programName: a.programName,
+        }))}
+        teachers={docentesOpciones.map((d) => ({ id: d.id, name: d.name }))}
+        canAssign={canAssign}
+        timezone={ctx.institution.timezone}
+      />
     </div>
   );
 }

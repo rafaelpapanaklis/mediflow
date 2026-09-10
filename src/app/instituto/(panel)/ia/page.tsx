@@ -6,6 +6,7 @@ import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { getEduIaPanel } from "@/lib/edu/ia-cupo";
+import { listEduAiQuotaChanges } from "@/lib/edu/ia-cupo-historial";
 import { eduContractNotice, formatEduContractDate } from "@/lib/edu/contract";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduIaScreen } from "@/components/edu/ia/ia-screen";
@@ -69,7 +70,12 @@ export default async function InstitutoIaPage() {
   }
 
   const puedeEditar = hasEduPermission(permUser, "ia.manage");
-  const panel = await getEduIaPanel(ctx, ctx.institution.timezone, { puedeEditar });
+  const [panel, cupoHistorial] = await Promise.all([
+    getEduIaPanel(ctx, ctx.institution.timezone, { puedeEditar }),
+    // El historial del cupo se abre con `ia.view`, la MISMA llave que esta
+    // pantalla: ninguna key nueva. Ver ia-cupo-historial.ts.
+    listEduAiQuotaChanges(ctx, 50),
+  ]);
 
   // El cupo es un renglón del CONTRATO, así que la pantalla dice hasta
   // cuándo vale ese contrato. Sin esa fecha, "tu cupo es de 50 USD al mes"
@@ -101,6 +107,8 @@ export default async function InstitutoIaPage() {
       <EduIaScreen
         panel={panel}
         contratoHasta={formatEduContractDate(ctx.institution.contractEndsAt)}
+        cupoHistorial={cupoHistorial}
+        timezone={ctx.institution.timezone}
       />
     </div>
   );

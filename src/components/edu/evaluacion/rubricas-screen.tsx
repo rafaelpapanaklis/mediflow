@@ -161,10 +161,30 @@ export function EduRubricasScreen({ rows, programs, procedures }: EduRubricasScr
 
                 <div className="edu-cell">
                   <span className="edu-cell__label">Criterios</span>
-                  <span className="edu-cell__value">{r.criteria.length}</span>
-                  <span className="edu-cell__sub">
-                    {r.criteria.map((c) => `${c.name} ${c.weightPercent}%`).join(" · ")}
+                  {/* 🔴 OLA C·2 · H-93 — SE CUENTAN LOS VIGENTES, y los
+                      retirados se dicen aparte. Antes un criterio quitado se
+                      BORRABA y dejaba en NULL el `criterionId` de todas las
+                      calificaciones puestas con él; ahora se desactiva, así
+                      que la fila sigue existiendo — y contarla como si
+                      siguiera midiendo sería mentir en la otra dirección. */}
+                  <span className="edu-cell__value">
+                    {r.criteria.filter((c) => c.isActive).length}
                   </span>
+                  <span className="edu-cell__sub">
+                    {r.criteria
+                      .filter((c) => c.isActive)
+                      .map((c) => `${c.name} ${c.weightPercent}%`)
+                      .join(" · ")}
+                  </span>
+                  {r.criteria.some((c) => !c.isActive) && (
+                    <span className="edu-cell__sub">
+                      Retirados (no se califican, pero el historial sigue enlazado):{" "}
+                      {r.criteria
+                        .filter((c) => !c.isActive)
+                        .map((c) => c.name)
+                        .join(" · ")}
+                    </span>
+                  )}
                 </div>
 
                 <div className="edu-cell">
@@ -242,8 +262,14 @@ function EditorRubrica({
   const [scaleMax, setScaleMax] = useState(String(rubrica?.scaleMax ?? 10));
   const [notes, setNotes] = useState(rubrica?.notes ?? "");
   const [criterios, setCriterios] = useState<CriterioUI[]>(() => {
-    if (rubrica && rubrica.criteria.length > 0) {
-      return rubrica.criteria.map((c, i) => ({
+    // 🔴 H-93 · EL EDITOR ARRANCA CON LOS VIGENTES. Un criterio retirado no
+    // se precarga —quitarlo fue una decisión— pero volver a escribir su
+    // nombre exacto lo REVIVE en el servidor, con su mismo id, y el
+    // historial de calificaciones vuelve a enlazar solo. Esa es la razón de
+    // que la lista de arriba diga cuáles están retirados.
+    const vigentes = rubrica ? rubrica.criteria.filter((c) => c.isActive) : [];
+    if (vigentes.length > 0) {
+      return vigentes.map((c, i) => ({
         key: `c${i}`,
         name: c.name,
         description: c.description ?? "",
@@ -303,7 +329,7 @@ function EditorRubrica({
       if (rubrica) {
         await eduRequest(`/api/instituto/rubricas/${rubrica.id}`, { method: "PATCH", body });
         onDone(
-          `Rúbrica "${body.name}" guardada. Las calificaciones que ya se pusieron con ella conservan sus pesos y su escala: no se recalcula nada.`,
+          `Rúbrica "${body.name}" guardada. Las calificaciones que ya se pusieron con ella conservan sus pesos y su escala: no se recalcula nada, y un criterio que quitaste se RETIRA en vez de borrarse — su historial sigue enlazado.`,
         );
       } else {
         await eduRequest("/api/instituto/rubricas", { method: "POST", body });
@@ -437,6 +463,14 @@ function EditorRubrica({
             value={scaleMax}
             onChange={(e) => setScaleMax(e.target.value)}
           />
+          {/* H-92: dejarlo vacío al CREAR daba 0–100 en silencio, y la
+              escala se congela en cada calificación. Ahora el servidor lo
+              pregunta; esto lo dice antes de mandar. */}
+          <span className="edu-field__hint">
+            {rubrica
+              ? "Vacío conserva la escala que ya tenía."
+              : "Obligatorio: la escala queda congelada en cada calificación que se ponga con esta rúbrica."}
+          </span>
         </div>
       </div>
 

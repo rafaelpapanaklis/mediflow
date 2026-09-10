@@ -294,6 +294,19 @@ export interface EduRequirementSpec {
   semesterTo: number | null;
   procedureId: string | null;
   category: string | null;
+  /**
+   * 🔴 OLA C·2 · H-90 — LA CATEGORÍA CON LLAVE.
+   *
+   * «Un requisito por CATEGORÍA es texto libre sin llave. Renombrar la
+   * categoría en el catálogo pone el avance a cero EN SILENCIO para toda la
+   * especialidad.» Cuando este id está puesto, MANDA sobre `category` y
+   * renombrar la categoría deja de mover un solo número.
+   *
+   * Null = ese requisito todavía se compara por texto, exactamente como
+   * antes de esta ola. Es lo que hace que aplicarla no cambie nada para una
+   * escuela que aún no ha emparejado su catálogo.
+   */
+  categoryId: string | null;
   requiredCount: number;
   onlyCompleted: boolean;
 }
@@ -306,6 +319,8 @@ export interface EduCountableCase {
   procedureId: string | null;
   /** La categoría del procedimiento del caso, si tiene procedimiento. */
   procedureCategory: string | null;
+  /** H-90 · la MISMA categoría, pero con llave. Null = todavía sin emparejar. */
+  procedureCategoryId: string | null;
 }
 
 /**
@@ -339,6 +354,24 @@ export function eduCaseCountsFor(
   if (req.onlyCompleted && caso.status !== "COMPLETED") return false;
 
   if (req.procedureId) return caso.procedureId === req.procedureId;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 H-90 · LA LLAVE MANDA SOBRE EL TEXTO, Y NO SE MEZCLAN.
+  //
+  // Con `categoryId` puesto se compara SOLO por id: renombrar «Endodoncia»
+  // a «Endodoncia y retratamiento» deja de mover un número, que es lo que
+  // el hallazgo pedía. Y no se cae al texto como respaldo — si se cayera,
+  // un procedimiento todavía sin emparejar seguiría contando por su texto
+  // y el avance dependería de CUÁLES filas alguien ya migró: dos alumnos
+  // con el mismo trabajo tendrían números distintos según el orden en que
+  // se hizo la limpieza del catálogo. Con la llave puesta, un caso sin
+  // emparejar NO cuenta, y eso se ve y se arregla emparejándolo.
+  //
+  // Sin `categoryId` se compara por texto exactamente como antes de esta
+  // ola: una escuela que no haya emparejado nada no nota ningún cambio.
+  // ═══════════════════════════════════════════════════════════════════
+  if (req.categoryId) return caso.procedureCategoryId === req.categoryId;
+
   if (req.category) {
     if (!caso.procedureCategory) return false;
     return caso.procedureCategory.trim().toLowerCase() === req.category.trim().toLowerCase();
@@ -1138,6 +1171,21 @@ export interface EduRubricCriterionRow {
   description: string | null;
   weightPercent: number;
   orderIndex: number;
+  /**
+   * 🔴 OLA C·2 · H-93 — un criterio RETIRADO sigue existiendo.
+   *
+   * «Los criterios de una rúbrica se BORRAN de verdad, y renombrar uno deja
+   * huérfano el historial: el `criterionId` de todos los EduCaseGradeItem
+   * anteriores pasa a NULL, y la pregunta que el propio código dice querer
+   * contestar ("¿cómo va la escuela en Aislamiento?") deja de tener
+   * respuesta.»
+   *
+   * Con esta bandera, quitar un criterio de la rúbrica lo desactiva: deja
+   * de ofrecerse al calificar y las calificaciones viejas siguen enlazadas
+   * a él. La pantalla lo pinta aparte, para que «lo quité» y «nunca estuvo»
+   * no se vean igual.
+   */
+  isActive: boolean;
 }
 
 export interface EduRubricRow {
@@ -1205,11 +1253,21 @@ export interface EduRequirementRow {
   procedureId: string | null;
   procedureName: string | null;
   category: string | null;
+  /** H-90 · la categoría con llave, si ya se emparejó. */
+  categoryId: string | null;
+  /** El nombre de esa categoría, para pintarla sin una segunda consulta. */
+  categoryName: string | null;
   requiredCount: number;
   onlyCompleted: boolean;
   isActive: boolean;
   orderIndex: number;
   notes: string | null;
+  /**
+   * H-89 · Cuántas VERSIONES tiene capturadas este requisito. Cero = nunca
+   * se ha versionado y todo el mundo se mide contra la fila viva, que es
+   * como funcionaba antes de esta ola.
+   */
+  versiones: number;
 }
 
 /** Un traspaso, tal como se lee en la bitácora. */
@@ -1237,6 +1295,10 @@ export interface EduBitacoraCaseRow {
   patientId: string;
   patientName: string;
   patientFolio: string;
+  /** H-91: la especialidad DEL CASO. La rúbrica se elige contra ésta, no
+   *  contra la del alumno: un caso traspasado o de otra especialidad se
+   *  calificaba con la rúbrica equivocada y la escala quedaba congelada. */
+  programId: string;
   programName: string;
   procedureId: string | null;
   procedureName: string | null;
@@ -1356,6 +1418,16 @@ export interface EduBitacoraPage {
   hours: EduClinicalHours;
   hoursLabel: string;
   cases: EduBitacoraCaseRow[];
+  /**
+   * 🔴 OLA C · H-85 — cuántos casos hay DE VERDAD, y si la tabla los pinta
+   * todos. El avance y el semáforo se cuentan sobre TODOS (como hace la
+   * lista de Evaluación, que no pone tope); lo que se corta es la tabla, y
+   * cuando se corta se dice. Antes el tope se aplicaba a la CUENTA: la
+   * lista decía «Cumplido 12 de 12 · Al día» y la bitácora del mismo alumno
+   * «Te faltan 4 de 12 · Atrasado», sin un solo aviso.
+   */
+  casesTotal: number;
+  casesTruncated: boolean;
   /** Casos sin procedimiento: no cuentan para requisitos que pidan uno. */
   casesWithoutProcedure: number;
   grades: EduGradeRow[];
@@ -1363,6 +1435,15 @@ export interface EduBitacoraPage {
   averageX100: number | null;
   averageLabel: string | null;
   averageScaleMax: number | null;
+  /**
+   * 🔴 OLA C · H-86 — CUÁNTAS CALIFICACIONES SE QUEDARON FUERA DEL
+   * PROMEDIO por estar en otra escala. `eduAverageScore` lo calcula y lo
+   * devuelve desde el primer día; se descartaba antes de llegar a la
+   * pantalla, y la prueba que «garantizaba» que se decía comprobaba el
+   * valor de retorno, no la pantalla. Un promedio que tira notas sin
+   * decirlo es un promedio que no se puede defender en una acreditación.
+   */
+  averageIgnored: number;
   generatedLabel: string;
 }
 

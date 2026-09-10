@@ -509,6 +509,48 @@ export function eduReminderDedupeKey(
 }
 
 /**
+ * ═══════════════════════════════════════════════════════════════════════
+ * 🔴 OLA C·2 · H-116 — LA MISMA LLAVE, PARA RECIBOS Y CONSENTIMIENTOS.
+ *
+ * Los recordatorios se apoyan en el índice único `(institutionId,
+ * dedupeKey)`: dos crones simultáneos chocan y el segundo se va sin mandar
+ * nada. Los DOCUMENTOS de la ficha —el recibo de un cobro y la carta de
+ * consentimiento— nacían con `dedupeKey: null`, así que ese índice no les
+ * decía nada: lo único que los protegía era `seMandoHaceNada`, un SELECT
+ * de los últimos dos minutos hecho ANTES de escribir. Entre ese SELECT y
+ * el INSERT caben dos peticiones, y ese SELECT solo mira las que ya están
+ * SENT — dos clics de verdad simultáneos no ven ninguna, crean dos filas y
+ * el paciente recibe la carta dos veces (y Meta cobra dos plantillas).
+ *
+ * La llave lleva un CUBO DE TIEMPO y no puede no llevarlo: el índice es
+ * permanente, así que una llave fija por documento prohibiría para siempre
+ * volver a mandar la carta que el paciente perdió. El cubo es exactamente
+ * `EDU_WA_REPEAT_WINDOW_MS`, la misma ventana que ya usa `seMandoHaceNada`
+ * — una sola regla, un solo número, expresada dos veces: la primera para
+ * poder dar un 409 explicado, la segunda para que la base lo garantice
+ * cuando la primera pierde la carrera.
+ *
+ * ⚠️ Lo que esto NO cierra, dicho en voz alta: dos envíos que caen a los
+ * dos lados del borde de un cubo (a milisegundos, y con el primero todavía
+ * en PENDING) siguen pasando los dos. Un cubo es una ventana fija y
+ * `seMandoHaceNada` una deslizante; juntas dejan ese resquicio y sin la
+ * llave el agujero es de dos minutos enteros.
+ *
+ * Misma forma que `eduReminderDedupeKey` —id : discriminante : instante—
+ * para que las tres llaves del vertical se lean igual.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+export function eduDocumentDedupeKey(
+  kind: EduWhatsappKind,
+  documentId: string,
+  now: Date,
+  windowMs: number,
+): string {
+  const cubo = Math.floor(now.getTime() / windowMs);
+  return `${documentId}:${kind}:${cubo}`;
+}
+
+/**
  * Los estados en los que una cita TODAVÍA NO SE HA CERRADO.
  *
  * Son exactamente el complemento de los tres terminales (CANCELLED,
@@ -731,6 +773,18 @@ export interface EduWaConnectionDTO {
   receiptEnabled: boolean;
   /** Plantilla registrada por tipo (nombre, idioma, estado). */
   templates: EduWaTemplateMap;
+  /**
+   * 🔴 OLA C · H-130 — CUÁNDO SE LE PREGUNTÓ A META, por tipo, ya escrito.
+   *
+   * `checkedAt` se guardaba desde el primer día y la pantalla no lo pintaba
+   * nunca: el panel enseñaba «APPROVED» sobre una comprobación de hace tres
+   * meses. Meta pausó la plantilla la semana pasada, el interruptor sigue
+   * encendido y el barrido falla en silencio. El propio código dice «la
+   * pantalla dice CUÁNDO se preguntó»; ahora lo dice.
+   *
+   * Ya formateado en la zona del instituto, por lo mismo que `whenLabel`.
+   */
+  templatesCheckedLabel: Partial<Record<EduWhatsappKind, string>>;
   /** Qué puede salir y qué no, con el porqué. */
   readiness: EduWaKindReadiness[];
 }
@@ -756,4 +810,23 @@ export interface EduWaMessageRow {
   attempts: number;
   sentByName: string | null;
   createdAt: string;
+  /**
+   * 🔴 OLA C · H-119 — EL ACUSE DE META. Es lo ÚNICO con lo que se le
+   * reclama a Meta un mensaje concreto, se guardaba desde el primer día y
+   * no se seleccionaba: la pantalla no podía enseñarlo ni aunque quisiera.
+   */
+  wamid: string | null;
+  /**
+   * 🔴 OLA C · H-119 — CUÁNDO. «Últimos envíos» no enseñaba ni la fecha ni
+   * la hora, y el texto de arriba prometía que sí: «quedará aquí con su
+   * resultado, SU HORA y el texto exacto». Un paciente llama enfadado
+   * porque le llegó el recordatorio a las once de la noche y la directora
+   * veía cincuenta tarjetas idénticas sin una sola hora.
+   *
+   * Se formatea en el SERVIDOR, en la zona del instituto: un `Intl` en el
+   * cliente pintaría la hora del navegador —la de quien mira, no la de la
+   * escuela— y además no cuadraría entre el render del servidor y el del
+   * navegador.
+   */
+  whenLabel: string;
 }

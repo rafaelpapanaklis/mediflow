@@ -832,6 +832,20 @@ export interface EduAppointmentRow {
   endLabel: string;
   minutes: number;
   type: EduAppointmentType;
+  /**
+   * 🔴 OLA C · H-26 — LOS SELLOS DE TIEMPO, YA ESCRITOS.
+   *
+   * `checkedInAt`, `startedAt` y `completedAt` se escriben solos al mover
+   * el estado y son la base de las horas clínicas que la escuela enseña en
+   * una acreditación. No viajaban: un docente no podía ver si la sesión
+   * duró 40 minutos o tres horas, ni recepción a qué hora llegó de verdad
+   * el paciente.
+   */
+  checkedInLabel: string | null;
+  startedLabel: string | null;
+  completedLabel: string | null;
+  /** Minutos entre el inicio y el fin REALES (no los agendados). */
+  sessionMinutes: number | null;
   status: EduAppointmentStatus;
   notes: string | null;
 

@@ -807,6 +807,43 @@ export interface EduTarifaMatch {
   reason: string;
   /** true si se cayó a la lista default porque ninguna regla disparó. */
   isDefault: boolean;
+  /**
+   * 🔴 H-10 · true = la eligió CAJA a mano al cobrar (una lista de regla
+   * MANUAL: un convenio, una campaña, el personal del instituto). Una
+   * elección a mano GANA a la regla automática — es lo que significa firmar
+   * un convenio— y queda escrita en el recibo con el nombre de la lista.
+   */
+  manual: boolean;
+}
+
+/**
+ * 🔴 Ola C · H-76 · EL RASTRO DE UN PRECIO: quién lo puso y cuándo.
+ *
+ * Vive AQUÍ, en el módulo puro, y no en tarifas.ts, por la misma razón
+ * escrita en campus-core.ts: los componentes "use client" lo necesitan y
+ * tarifas.ts importa prisma. Un `import type` se borra al compilar, pero
+ * basta con que alguien le quite el `type` para arrastrar el runtime de
+ * Prisma al navegador. Si el tipo no vive ahí, no hay de dónde.
+ *
+ * ⚠️ NO es un historial: es UNA fila por lista con el ÚLTIMO autor, la
+ * fecha del último cambio de IMPORTE y, si el precio se retiró, quién lo
+ * retiró. «¿Cuánto costaba en febrero?» pide una tabla de movimientos que
+ * esta ola no crea.
+ */
+export interface EduPrecioRastroRow {
+  feeScheduleId: string;
+  feeScheduleName: string;
+  feeScheduleKey: string;
+  /** El importe vigente, o el ÚLTIMO que tuvo si está retirado. */
+  priceCents: number;
+  /** true = el precio está retirado (baja lógica). */
+  retirado: boolean;
+  updatedByName: string | null;
+  /** Cuándo cambió EL PRECIO por última vez. ISO, o null si nunca se anotó. */
+  priceSetAt: string | null;
+  createdByName: string | null;
+  deletedByName: string | null;
+  deletedAt: string | null;
 }
 
 /** El precio de UN procedimiento para UN paciente, ya resuelto. */
@@ -876,11 +913,30 @@ export interface EduChargeRow {
   balanceCents: number;
   status: EduChargeStatus;
   notes: string | null;
+  /** H-58 · en qué sede se cobró. null = no se sabe (cobro anterior a la ola 11). */
+  campusId: string | null;
+  campusLabel: string | null;
   chargedByName: string;
   chargedAt: string;
+  /**
+   * H-61 · el instante del cobro YA ESCRITO en la zona del INSTITUTO,
+   * igual que `paidAtLabel` de cada pago. Formatearlo en el cliente
+   * pintaría la zona del navegador y rompería la hidratación.
+   */
+  chargedAtLabel: string;
   cancelledAt: string | null;
   cancelledByName: string | null;
   cancelReason: string | null;
+  /**
+   * 🔴 Ola C · DE QUÉ PRESUPUESTO VIENE. `null` = se tecleó en caja.
+   *
+   * Importa porque un cobro convertido lleva los precios CONGELADOS del
+   * presupuesto que el paciente aceptó, no los del tarifario de hoy: sin
+   * este folio, quien mira el recibo y compara con Tarifarios ve una
+   * diferencia que no puede explicar.
+   */
+  quoteId: string | null;
+  quoteFolio: string | null;
   items: EduChargeItemRow[];
   payments: EduPaymentRow[];
   /**
@@ -936,6 +992,18 @@ export interface EduChargesPage {
   /** Suma de lo cobrado y lo pendiente de las filas devueltas. */
   totals: { totalCents: number; paidCents: number; balanceCents: number };
   /**
+   * 🔴 H-49 · LO QUE DE VERDAD ENTRÓ EN EL TURNO, neto y por todos los
+   * métodos.
+   *
+   * El KPI "Pagado" de arriba suma `paidCents`, que es lo pagado de esos
+   * cobros EN TODA SU VIDA, y el filtro del turno se aplica al turno DEL
+   * COBRO. Un martes que solo cobra deudas de ayer enseñaba "Pagado $0"
+   * teniendo el cajón lleno. Esto se calcula desde los PAGOS del turno,
+   * que es el mismo número del corte, y es `null` cuando no se está
+   * mirando un turno (entonces la pregunta no tiene sentido).
+   */
+  turnoNetCents: number | null;
+  /**
    * QUÉ SE LISTÓ de verdad. La pantalla pinta el selector y el vacío con
    * ESTO y no con los filtros de la URL: si leyera los filtros, el
    * selector diría "solo el turno abierto" mientras la tabla enseña el
@@ -964,6 +1032,110 @@ export interface EduCashSessionRow {
   notes: string | null;
   openedByName: string;
   closedByName: string | null;
+  /**
+   * 🔴 Ola C · H-09 · LA SEDE DEL TURNO, ya sellada en la fila.
+   *
+   * `null` NO es un hueco: es «el turno del INSTITUTO», que es lo que son
+   * todos los turnos anteriores a esta ola y lo que sigue siendo el turno
+   * de una escuela de una sola sede. La pantalla lo dice con esas
+   * palabras en vez de pintar un guion, porque el arqueo de uno y el de
+   * otro no significan lo mismo: el del instituto suma los dos cajones.
+   */
+  campusId: string | null;
+  campusLabel: string | null;
+  /**
+   * 🔴 H-53 · EL DESGLOSE POR MÉTODO **CONGELADO** al cerrar. Es lo que
+   * permite reimprimir el corte del 14 de febrero exactamente como salió:
+   * no se recalcula, se LEE. `null` = turno abierto, o turno cerrado
+   * ANTES de esta ola (no hay foto que enseñar, y la pantalla lo dice).
+   */
+  desglose: EduCorteDesgloseRow | null;
+}
+
+/**
+ * El desglose congelado, en la forma que viaja a la pantalla.
+ *
+ * Es un ESPEJO de `EduCorteDesglose` (caja-cierre-core.ts) y no un
+ * `import` suyo, por lo mismo que el resto de este archivo: `dinero-core`
+ * es el módulo que leen los componentes "use client" y no puede depender
+ * de la cadena del servidor. Que los dos no se desincronicen lo fija una
+ * prueba de TIPOS en edu-dinero-c2.test.ts.
+ */
+export interface EduCorteDesgloseRow {
+  version: number;
+  renglones: {
+    method: EduPaymentMethod;
+    count: number;
+    chargedCents: number;
+    refundedCents: number;
+    netCents: number;
+  }[];
+  netoTotalCents: number;
+}
+
+/**
+ * 🔴 H-09 / H-60 · UN RENGLÓN DEL DESGLOSE DEL TURNO.
+ *
+ * El turno de caja es del INSTITUTO y no de la sede (`EduCashSession` no
+ * tiene `campusId`), así que con dos mostradores abiertos los dos sellan
+ * sus pagos con el MISMO turno y el arqueo le pide a quien cierra el
+ * efectivo de los dos cajones. Mientras esa columna no exista, lo que sí
+ * se puede es DECIR de quién es cada peso: la sede sale del cobro
+ * (`EduCharge.campusId`, que sí está sellado) y el cajero del pago
+ * (`EduPayment.receivedByUserId`, que ya se guardaba y no se pintaba).
+ *
+ * ⚠️ El FONDO de apertura no se reparte y no se puede: es uno solo y es
+ * del turno. Por eso aquí hay "efectivo del turno" y no "efectivo
+ * esperado" — la pantalla lo dice con esas palabras.
+ */
+export interface EduCorteGrupoInput {
+  /** "" = sin sede sellada (o sin cajero identificado). */
+  key: string;
+  label: string;
+  method: EduPaymentMethod;
+  amountCents: number;
+  isRefund: boolean;
+}
+
+export interface EduCorteGrupo {
+  key: string;
+  label: string;
+  /** Neto SOLO en efectivo: lo que de verdad está (o falta) en un cajón. */
+  cashNetCents: number;
+  /** Neto de todos los métodos. */
+  netCents: number;
+  /** Movimientos, devoluciones incluidas. */
+  count: number;
+}
+
+/**
+ * Agrupa los pagos de la ventana por una clave (la sede, o el cajero).
+ *
+ * Es UNA función para los dos desgloses a propósito: dos copias de esta
+ * suma son dos formas de contar el mismo dinero, y esa es exactamente la
+ * clase de par que un día no cuadra.
+ *
+ * Orden: por efectivo neto de mayor a menor, y a igualdad por etiqueta,
+ * para que la hoja que alguien firma no "baile" entre recargas.
+ */
+export function eduCorteAgrupar(filas: EduCorteGrupoInput[]): EduCorteGrupo[] {
+  const grupos = new Map<string, EduCorteGrupo>();
+  for (const f of filas ?? []) {
+    if (!f) continue;
+    let g = grupos.get(f.key);
+    if (!g) {
+      g = { key: f.key, label: f.label, cashNetCents: 0, netCents: 0, count: 0 };
+      grupos.set(f.key, g);
+    }
+    const signo = f.isRefund ? -1 : 1;
+    const monto = Number.isFinite(f.amountCents) ? f.amountCents : 0;
+    g.netCents += signo * monto;
+    if (f.method === EDU_CASH_METHOD) g.cashNetCents += signo * monto;
+    g.count += 1;
+  }
+  const salida: EduCorteGrupo[] = [];
+  grupos.forEach((g) => salida.push(g));
+  return salida.sort((a, b) => b.cashNetCents - a.cashNetCents || a.label.localeCompare(b.label, "es"));
 }
 
 export interface EduCorte {
@@ -985,8 +1157,46 @@ export interface EduCorte {
    * en vez de titular "hoy" unos datos que no son de hoy.
    */
   spanDays: number;
+  /**
+   * 🔴 H-09 · El efectivo del turno DERIVADO por sede (la del cobro).
+   * Vacío cuando el instituto no tiene sedes o no hay turno abierto.
+   */
+  porSede: EduCorteGrupo[];
+  /** 🔴 H-60 · Quién cobró qué dentro del turno. */
+  porCajero: EduCorteGrupo[];
   /** Turnos cerrados recientes, para poder reimprimir un corte. */
   previous: EduCashSessionRow[];
+  /**
+   * 🔴 Ola C · H-09 · LOS TURNOS ABIERTOS EN OTRAS SEDES.
+   *
+   * Desde que el turno es POR SEDE, «no hay turno abierto» dejó de ser
+   * una sola cosa: puede no haberlo AQUÍ y haberlo en el campus de al
+   * lado. Sin esta lista, quien abre caja en Sur no tiene forma de saber
+   * que Norte lleva seis horas cobrando, y el primer aviso llega al
+   * cuadrar. Vacía cuando el instituto no tiene sedes.
+   */
+  otrosTurnos: {
+    id: string;
+    campusLabel: string;
+    openedByName: string;
+    openedAt: string;
+  }[];
+  /**
+   * La sede que se está mirando, ya resuelta (la del selector de la barra
+   * superior). `null` = vista consolidada o instituto sin sedes.
+   */
+  campusId: string | null;
+  campusLabel: string | null;
+  /**
+   * Por qué NO se puede abrir turno ahora mismo, con la frase entera, o
+   * `null` si sí se puede. Es la misma pregunta que `eduCampusForCharge`
+   * contesta para cobrar y por la misma razón: un turno se abre en un
+   * mostrador concreto, y «todas las sedes» no es un mostrador.
+   *
+   * 🔴 SE MANDA EL MOTIVO, NO UN BOOLEANO. Un botón deshabilitado sin
+   * explicación es la queja que ya costó una ola entera en este vertical.
+   */
+  abrirBloqueado: string | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════

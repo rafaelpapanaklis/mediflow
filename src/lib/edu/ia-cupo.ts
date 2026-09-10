@@ -55,6 +55,11 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EduPadronError } from "@/lib/edu/padron";
+// 🔴 EL HISTORIAL DEL CUPO (Ola C·2). Es best-effort y nunca lanza, como la
+// bitácora: si el renglón no entra, el cupo que sí se guardó no puede
+// parecer que no se guardó. Ver ia-cupo-historial.ts.
+import { eduAiQuotaChange } from "@/lib/edu/ia-cupo-historial";
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 import {
   eduFormatDayShort,
   eduFormatTime,
@@ -166,6 +171,10 @@ const PRICE_SELECT = {
   unit: true,
   inUsdMicrosPerMillion: true,
   outUsdMicrosPerMillion: true,
+  // H-132 · el escalón de caché. NULL = este modelo no la cobra aparte y
+  // se cae al precio de entrada, que es lo que se hacía hasta esta ola.
+  cacheReadUsdMicrosPerMillion: true,
+  cacheWriteUsdMicrosPerMillion: true,
   source: true,
 } satisfies Prisma.EduAiPriceSelect;
 
@@ -176,6 +185,8 @@ function toPrecio(p: Prisma.EduAiPriceGetPayload<{ select: typeof PRICE_SELECT }
     unit: p.unit as EduAiUnit,
     inUsdMicrosPerMillion: p.inUsdMicrosPerMillion,
     outUsdMicrosPerMillion: p.outUsdMicrosPerMillion,
+    cacheReadUsdMicrosPerMillion: p.cacheReadUsdMicrosPerMillion,
+    cacheWriteUsdMicrosPerMillion: p.cacheWriteUsdMicrosPerMillion,
     source: p.source,
   };
 }
@@ -688,7 +699,17 @@ export async function updateEduAiQuota(
 
   const actual = await prisma.eduAiQuota.findUnique({
     where: { institutionId },
-    select: { id: true, monthlyUsdCents: true, allowOverage: true, hardCapUsdCents: true },
+    // `isEnabled` y `contactNote` entran para el HISTORIAL: sin el ANTES,
+    // el renglón diría "cambió el cupo" y no "apagó la IA", que es la única
+    // frase que sirve de algo cuando alguien pregunta qué pasó el martes.
+    select: {
+      id: true,
+      monthlyUsdCents: true,
+      allowOverage: true,
+      hardCapUsdCents: true,
+      isEnabled: true,
+      contactNote: true,
+    },
   });
   if (!actual) {
     throw new EduPadronError(
@@ -700,6 +721,8 @@ export async function updateEduAiQuota(
   }
 
   const data: Prisma.EduAiQuotaUpdateInput = {};
+  const antesIsEnabled = actual.isEnabled;
+  const antesContactNote = actual.contactNote;
 
   if (body.isEnabled !== undefined) data.isEnabled = parseBool(body.isEnabled, "isEnabled");
 
@@ -756,6 +779,59 @@ export async function updateEduAiQuota(
   data.updatedByName = (await eduIaNombreDeSesion(ctx)).slice(0, 160);
 
   await prisma.eduAiQuota.update({ where: { institutionId }, data });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🔴 OLA C·2 · EL HISTORIAL DEL CUPO
+  //
+  // Lo dejó escrito el propio `EduAiQuota` en el esquema: «updatedByUserId
+  // / updatedByName guardan el ÚLTIMO cambio, no la historia». Encender el
+  // excedente y subir el tope duro cuestan dinero REAL de la escuela, y
+  // «quién lo subió y cuándo» no se contesta con dos columnas que se pisan
+  // en cada guardado.
+  //
+  // 🔴 VA DESPUÉS DEL UPDATE Y ES BEST-EFFORT (`eduAiQuotaChange` nunca
+  // lanza), por la misma razón que la bitácora: si el renglón del historial
+  // falla, lo que NO puede pasar es que la dirección crea que no se guardó
+  // el cupo que sí se guardó. La contrapartida se dice en voz alta aquí y
+  // en ia-cupo-historial.ts.
+  // ═══════════════════════════════════════════════════════════════════
+  // Y el mismo cambio en la BITÁCORA general (entity `aiQuota`), que es
+  // donde la dirección lo busca junto a todo lo demás. No es duplicar: el
+  // historial de arriba es el LIBRO del cupo —se lee en la pantalla de IA,
+  // con `ia.view`— y la bitácora es el registro NOM-024 de toda la escuela,
+  // que solo abre `direccion.panel`. Dos preguntas distintas, dos lectores
+  // distintos.
+  await eduAudit(ctx as EduAuditActor, {
+    action: "update",
+    entity: "aiQuota",
+    entityId: actual.id,
+    before: {
+      allowOverage: actual.allowOverage,
+      hardCapUsdCents: actual.hardCapUsdCents,
+      isEnabled: antesIsEnabled,
+    },
+    after: {
+      allowOverage: permite,
+      hardCapUsdCents: tope,
+      isEnabled: (data.isEnabled as boolean | undefined) ?? antesIsEnabled,
+    },
+  });
+
+  await eduAiQuotaChange(
+    ctx as EduAuditActor,
+    {
+      allowOverage: actual.allowOverage,
+      hardCapUsdCents: actual.hardCapUsdCents,
+      isEnabled: antesIsEnabled,
+      contactNote: antesContactNote,
+    },
+    {
+      allowOverage: permite,
+      hardCapUsdCents: tope,
+      isEnabled: (data.isEnabled as boolean | undefined) ?? antesIsEnabled,
+      contactNote: (data.contactNote as string | null | undefined) ?? antesContactNote,
+    },
+  );
 
   const actualizado = await getEduIaCupo(ctx, timeZone, now);
   if (!actualizado) throw new EduPadronError("No se pudo leer el cupo de IA.", 500);

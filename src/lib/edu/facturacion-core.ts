@@ -396,6 +396,117 @@ export function eduSugerirFormaPago(pagos: EduPagoParaForma[]): string | null {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// 4b · 🔴 H-12 · PUE o PPD: EL MÉTODO DE PAGO SALE DEL SALDO
+//
+// La FORMA de pago (c_FormaPago: efectivo, transferencia, tarjeta…) dice
+// CON QUÉ se pagó. El MÉTODO (c_MetodoPago) dice SI YA SE PAGÓ:
+//   · PUE — pago en una sola exhibición: el comprobante se emite por algo
+//     que ya está cobrado;
+//   · PPD — pago en parcialidades o diferido: queda saldo abierto, y el
+//     pago se documenta después con un complemento de pago (REP).
+//
+// Hasta esta ola TODO salía PUE, incluida una factura de $6,000 de un
+// tratamiento con $2,000 de enganche y diez mensualidades por delante. Un
+// PUE sobre un saldo abierto es un comprobante mal emitido: hay que
+// cancelarlo y rehacerlo.
+//
+// 🔴 Y CON PPD LA FORMA DE PAGO ES "99 · Por definir". Lo exige el SAT en
+// CFDI 4.0 y no es opcional: todavía no se sabe con qué se va a pagar el
+// resto. Por eso esta función devuelve las DOS cosas juntas y no se pueden
+// desincronizar.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** c_MetodoPago del CFDI. */
+export type EduMetodoPago = "PUE" | "PPD";
+
+/**
+ * "99 · Por definir". No está en `FORMAS_PAGO_SAT` —el catálogo del
+ * dental, que solo lista las que una persona elige a mano— porque ésta no
+ * la elige nadie: la pone el servidor cuando el método es PPD.
+ */
+export const EDU_FORMA_PAGO_POR_DEFINIR = "99";
+
+export interface EduMetodoPagoDecision {
+  metodo: EduMetodoPago;
+  /** La forma de pago que se timbra DE VERDAD (99 si el método es PPD). */
+  paymentForm: string;
+  /** Explicación para el modal y para el detalle. null si no hay nada que decir. */
+  aviso: string | null;
+}
+
+/**
+ * PUE o PPD a partir del saldo del cobro CONGELADO.
+ *
+ * Puro: recibe los números y no consulta nada, para que la pantalla pueda
+ * avisar ANTES de gastar un timbre con exactamente la misma regla que el
+ * servidor aplica al emitir.
+ */
+export function eduMetodoPagoDeCobro(input: {
+  balanceCents: number;
+  paymentForm: string;
+}): EduMetodoPagoDecision {
+  const saldo = Number.isFinite(input.balanceCents) ? input.balanceCents : 0;
+  if (saldo <= 0) {
+    return { metodo: "PUE", paymentForm: input.paymentForm, aviso: null };
+  }
+  return {
+    metodo: "PPD",
+    paymentForm: EDU_FORMA_PAGO_POR_DEFINIR,
+    aviso:
+      `Este cobro debe ${eduPesosCfdi(saldo)}, así que el CFDI sale como PPD (pago en parcialidades o diferido) ` +
+      "y su forma de pago será «99 · Por definir», como exige el SAT. La forma que elijas aquí no viaja: " +
+      "se documenta cuando el paciente liquide, con un complemento de pago.",
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 4c · 🔴 H-74 · EL IVA, DESGLOSADO PARA MIRARLO
+//
+// Con `taxMode: "IVA16"` el precio del tarifario YA lleva el IVA dentro
+// (`tax_included: true`), así que el `subtotalCents` que se guarda en la
+// factura es el subtotal DEL COBRO, no la base gravable del CFDI: quien
+// tenía que contestar "cuánto IVA trasladamos en marzo" no lo podía sacar
+// de ninguna pantalla.
+//
+// Se DERIVA y no se guarda: es aritmética exacta sobre números que ya
+// están congelados, y una columna más sería otro sitio del que
+// desincronizarse. Concepto a concepto, como lo calcula Facturapi.
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface EduDesgloseIva {
+  /** Base gravable: el total sin el IVA que lleva dentro. */
+  baseCents: number;
+  /** El IVA trasladado. */
+  ivaCents: number;
+  /** El total timbrado, que no cambia: es lo que pagó el paciente. */
+  totalCents: number;
+}
+
+/** `null` cuando el comprobante es EXENTO: ahí no hay nada que desglosar. */
+export function eduDesgloseIva(
+  conceptos: { totalCents: number }[],
+  taxMode: EduTaxMode,
+): EduDesgloseIva | null {
+  if (taxMode !== "IVA16") return null;
+  let baseCents = 0;
+  let totalCents = 0;
+  for (const c of conceptos ?? []) {
+    const t = Number.isFinite(c?.totalCents) ? c.totalCents : 0;
+    totalCents += t;
+    baseCents += Math.round(t / 1.16);
+  }
+  return { baseCents, ivaCents: totalCents - baseCents, totalCents };
+}
+
+/** Centavos → "$1,234.50" para los textos de este archivo. */
+function eduPesosCfdi(cents: number): string {
+  return `$${(Math.round(cents) / 100).toLocaleString("es-MX", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // 5 · LOS CONCEPTOS: DEL COBRO CONGELADO AL CFDI
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -623,9 +734,30 @@ export interface EduInvoiceFilters {
   q: string;
   /** null = todos los estados. */
   status: EduInvoiceStatus | null;
+  /**
+   * 🔴 H-78 · DESDE / HASTA, en días de calendario "AAAA-MM-DD" y en la
+   * zona del INSTITUTO. Sin ellos no se podía cerrar un mes ni conciliar
+   * contra el corte de caja: la lista se corta en 200 y las facturas más
+   * viejas eran inalcanzables salvo sabiéndose de memoria el folio, el
+   * UUID o el RFC. Los dos extremos son INCLUSIVOS para quien los teclea
+   * (el `hasta` se traduce a "< medianoche del día siguiente").
+   */
+  desde: string | null;
+  hasta: string | null;
 }
 
-export const EDU_INVOICE_EMPTY_FILTERS: EduInvoiceFilters = { q: "", status: null };
+export const EDU_INVOICE_EMPTY_FILTERS: EduInvoiceFilters = {
+  q: "",
+  status: null,
+  desde: null,
+  hasta: null,
+};
+
+/** "AAAA-MM-DD" o null. No se acepta nada más: entra en un `where`. */
+function diaISO(raw: string): string | null {
+  const v = raw.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+}
 
 function primero(v: string | string[] | undefined): string {
   if (Array.isArray(v)) return v[0] ?? "";
@@ -638,11 +770,158 @@ export function parseEduInvoiceFilters(
   if (!params) return { ...EDU_INVOICE_EMPTY_FILTERS };
   const q = primero(params.q).trim().slice(0, 80);
   const rawStatus = primero(params.estado).trim().toUpperCase();
-  return { q, status: esEduInvoiceStatus(rawStatus) ? rawStatus : null };
+  return {
+    q,
+    status: esEduInvoiceStatus(rawStatus) ? rawStatus : null,
+    desde: diaISO(primero(params.desde)),
+    hasta: diaISO(primero(params.hasta)),
+  };
 }
 
 export function eduHasInvoiceFilters(f: EduInvoiceFilters): boolean {
-  return Boolean(f.q) || f.status !== null;
+  return Boolean(f.q) || f.status !== null || Boolean(f.desde) || Boolean(f.hasta);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 H-78 (la otra mitad) · LA EXPORTACIÓN A CSV
+//
+// «Facturación no tiene filtro por fecha ni exportación, y se corta en
+// 200. Cerrar el mes y conciliar con el corte de caja es imposible desde
+// el panel.» El filtro por fecha lo puso la C·1; esto es la exportación,
+// que era la entrega aparte que aquel reporte dejó escrita.
+//
+// 🔴 SE EXPORTA LO QUE SE ESTÁ VIENDO. El CSV usa los MISMOS filtros que
+// la lista, leídos por la MISMA función (`parseEduInvoiceFilters`): un
+// export que trae algo distinto de lo que la pantalla enseña es un export
+// en el que no se puede confiar, y nadie lo descubre hasta que el total
+// no cuadra con el del contador.
+//
+// 🔴 Y ES **PURO**: recibe filas y devuelve texto. Sin prisma, sin fechas
+// inventadas, sin `Intl` propio — la fecha ya viene escrita en la zona del
+// instituto desde `toInvoiceRow`. Así se puede probar con una tabla a
+// mano, que es lo único que atrapa un separador mal escapado.
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Las columnas del CSV, en el orden en que salen. Se declaran como DATO
+ * para que el encabezado y la fila no puedan desalinearse: si alguien
+ * añade una columna en un sitio y no en el otro, todo el archivo queda
+ * corrido y el error se ve una semana después, en una conciliación.
+ */
+export const EDU_INVOICE_CSV_COLUMNAS = [
+  "Folio",
+  "Estado",
+  "Ambiente",
+  "Emitida",
+  "UUID",
+  "RFC receptor",
+  "Razón social",
+  "Régimen",
+  "CP",
+  "Correo",
+  "Uso CFDI",
+  "Forma de pago",
+  "IVA",
+  "Subtotal",
+  "Descuento",
+  "Total",
+  "Cobro",
+  "Paciente",
+  "Folio del paciente",
+  "Emitió",
+  "Cancelada",
+  "Motivo SAT",
+  "Motivo escrito",
+] as const;
+
+/**
+ * Escapa UNA celda.
+ *
+ * 🔴 EL `'` DE DELANTE NO ES DECORACIÓN. Una celda que empieza por `=`,
+ * `+`, `-` o `@` la ejecuta Excel como fórmula al abrir el archivo: es la
+ * inyección CSV de manual, y aquí hay campos que escribe una persona (la
+ * razón social del receptor, el motivo de una cancelación). Se antepone
+ * un apóstrofo, que Excel entiende como "esto es texto" y no se ve al
+ * imprimir.
+ *
+ * ⚠️ Un `-` inicial también dispara la fórmula, y por eso los importes se
+ * escriben SIN signo menos: el descuento va en su propia columna, en
+ * positivo, como en el resto del vertical.
+ */
+export function eduCsvCelda(valor: unknown): string {
+  const texto = valor === null || valor === undefined ? "" : String(valor);
+  const seguro = /^[=+\-@\t\r]/.test(texto) ? `'${texto}` : texto;
+  return `"${seguro.replace(/"/g, '""')}"`;
+}
+
+/** Centavos → "1234.56", en punto decimal y sin símbolo: es para una hoja. */
+export function eduCsvImporte(cents: number): string {
+  const abs = Math.abs(Math.round(cents));
+  return `${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+/**
+ * El CSV completo de una página de facturas.
+ *
+ * 🔴 LLEVA BOM (`\uFEFF`) Y SALTOS `\r\n`. Sin el BOM, Excel en español
+ * abre el archivo en la codificación del sistema y "Rodríguez" sale
+ * "RodrÃ­guez" en todas las filas; sin `\r\n`, Excel antiguo mete todo
+ * en una sola línea. Los dos son detalles feos y los dos son la
+ * diferencia entre un archivo que sirve y uno que hay que rehacer a mano.
+ */
+export function eduInvoicesCsv(rows: EduInvoiceRow[]): string {
+  const lineas: string[] = [EDU_INVOICE_CSV_COLUMNAS.map(eduCsvCelda).join(",")];
+  for (const r of rows ?? []) {
+    lineas.push(
+      [
+        r.folio,
+        EDU_INVOICE_STATUS_LABELS[r.status] ?? r.status,
+        EDU_FISCAL_ENV_LABELS[r.environment] ?? r.environment,
+        r.issuedAtLabel,
+        r.uuid ?? "",
+        r.receptorRfc,
+        r.receptorLegalName,
+        r.receptorTaxRegime,
+        r.receptorZip,
+        r.receptorEmail ?? "",
+        r.usoCfdi,
+        r.paymentForm,
+        r.taxMode === "EXENTO" ? "Exento" : "16 %",
+        eduCsvImporte(r.subtotalCents),
+        eduCsvImporte(r.discountCents),
+        eduCsvImporte(r.totalCents),
+        r.chargeFolio,
+        r.patientName,
+        r.patientFolio,
+        r.issuedByName,
+        r.cancelledAt ? r.cancelledByName ?? "sí" : "",
+        r.cancelMotive ?? "",
+        r.cancelReason ?? "",
+      ]
+        .map(eduCsvCelda)
+        .join(","),
+    );
+  }
+  return `\uFEFF${lineas.join("\r\n")}\r\n`;
+}
+
+/**
+ * El nombre del archivo, con el rango que se exportó DENTRO.
+ *
+ * Un `facturas.csv` en la carpeta de descargas junto a otros cuatro
+ * `facturas (1).csv` no dice de qué mes es ninguno. Si hay filtro de
+ * fechas, va en el nombre.
+ */
+export function eduInvoicesCsvNombre(f: EduInvoiceFilters): string {
+  const tramo =
+    f.desde && f.hasta
+      ? `-${f.desde}_a_${f.hasta}`
+      : f.desde
+        ? `-desde-${f.desde}`
+        : f.hasta
+          ? `-hasta-${f.hasta}`
+          : "";
+  return `facturas${tramo}.csv`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -693,6 +972,10 @@ export interface EduInvoiceRow {
   patientFolio: string;
   receptorRfc: string;
   receptorLegalName: string;
+  /** H-81 · el receptor congelado, entero: régimen, CP y correo. */
+  receptorTaxRegime: string;
+  receptorZip: string;
+  receptorEmail: string | null;
   usoCfdi: string;
   paymentForm: string;
   taxMode: EduTaxMode;
@@ -703,6 +986,14 @@ export interface EduInvoiceRow {
   uuid: string | null;
   stampedAt: string | null;
   issuedAt: string;
+  /**
+   * 🔴 H-81 · La FECHA DE EMISIÓN ya escrita, en la zona del INSTITUTO y
+   * por el servidor. No estaba en ninguna pantalla —ni en la lista ni en
+   * el detalle— así que no se podía ordenar ni conciliar un mes mirando.
+   * Formatearla en el cliente pintaría la zona del navegador y rompería la
+   * hidratación, como en el recibo de caja.
+   */
+  issuedAtLabel: string;
   issuedByName: string;
   cancelledAt: string | null;
   cancelledByName: string | null;
@@ -718,8 +1009,24 @@ export interface EduInvoiceRow {
 export interface EduInvoicesPage {
   rows: EduInvoiceRow[];
   truncated: boolean;
-  /** Suma de las TIMBRADAS y vivas. Las canceladas y las fallidas no suman. */
-  totals: { vivas: number; totalCents: number; canceladas: number };
+  /**
+   * Suma de las TIMBRADAS y vivas. Las canceladas y las fallidas no suman.
+   *
+   * 🔴 H-70 · Y VAN SEPARADAS POR AMBIENTE. Todo el módulo se desvive por
+   * distinguir una factura de PRUEBAS de una fiscal —banner, etiqueta por
+   * factura, aviso en el detalle— y luego los KPI sumaban las dos en el
+   * mismo número: una escuela que practicó con doce facturas de $3,000
+   * leía "Facturado $36,000" antes de emitir un solo comprobante real.
+   * `totalCents`/`vivas` siguen siendo el gran total (nadie que ya los lea
+   * se rompe) y `live`/`test` dicen de dónde sale cada peso.
+   */
+  totals: {
+    vivas: number;
+    totalCents: number;
+    canceladas: number;
+    live: { vivas: number; totalCents: number };
+    test: { vivas: number; totalCents: number };
+  };
 }
 
 /** Un cobro candidato a facturarse, para el selector del modal. */
@@ -733,6 +1040,13 @@ export interface EduCobroFacturable {
   paidCents: number;
   balanceCents: number;
   chargedAt: string;
+  /**
+   * 🔴 H-71 · La forma de pago del SAT que corresponde a cómo se pagó este
+   * cobro (la del método con mayor monto neto). null = no se puede
+   * proponer ninguna (sin pagos, o el que gana es "Otro"), y ahí el modal
+   * obliga a elegirla.
+   */
+  formaPagoSugerida: string | null;
   /** Folio de la factura VIVA de este cobro, si ya tiene una. */
   facturaFolio: string | null;
   /** El estado de esa factura viva (para decir "se está timbrando"). */
@@ -745,6 +1059,10 @@ export function eduDescribeUsoCfdi(clave: string): string {
 }
 
 export function eduDescribeFormaPago(clave: string): string {
+  // H-12 · el "99" no está en el catálogo del dental porque nadie lo elige
+  // a mano: lo pone el servidor con PPD. Sin este renglón, el detalle de
+  // una factura diferida pintaría el código pelado.
+  if (clave === EDU_FORMA_PAGO_POR_DEFINIR) return "Por definir (pago en parcialidades)";
   return FORMAS_PAGO_SAT.find((f) => f.clave === clave)?.descripcion ?? clave;
 }
 
@@ -763,9 +1081,29 @@ export function eduDescribeCancelMotive(clave: string | null): string {
  * coincida con el numérico (sin él "F-9" iría después de "F-10"), igual que
  * el folio del cobro de la Ola 5 y el del paciente de la Ola 2.
  */
-export function eduNextInvoiceFolio(prefix: string, ultimo: string | null): string {
+export function eduNextInvoiceFolio(
+  prefix: string,
+  ultimo: string | null,
+  /**
+   * 🔴 H-68 · CUÁNTAS FACTURAS HAY YA CON ESE PREFIJO.
+   *
+   * El relleno a cuatro dígitos hace que el orden alfabético de Postgres
+   * coincida con el numérico… hasta F-9999. A partir de ahí los folios
+   * tienen CINCO dígitos y alfabéticamente "F-10000" va ANTES que
+   * "F-9999", así que el "último" seguía siendo F-9999 para siempre: se
+   * proponía F-10000, chocaba con el índice único y toda emisión posterior
+   * moría en 409 invitando a reintentar algo que no se iba a arreglar.
+   *
+   * El conteo no tiene ese techo. Se usa el MAYOR de los dos: el conteo
+   * manda cuando el alfabético se atasca, y el alfabético manda si alguna
+   * vez hubiera huecos (nada borra folios, pero no se apuesta a eso).
+   */
+  emitidas = 0,
+): string {
   const p = (prefix || "F").toUpperCase().slice(0, 6);
   const m = ultimo?.match(new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-(\\d{1,6})$`));
-  const n = m ? Number(m[1]) + 1 : 1;
+  const desdeUltimo = m ? Number(m[1]) : 0;
+  const desdeConteo = Number.isFinite(emitidas) && emitidas > 0 ? Math.floor(emitidas) : 0;
+  const n = Math.max(desdeUltimo, desdeConteo) + 1;
   return `${p}-${String(n).padStart(4, "0")}`;
 }

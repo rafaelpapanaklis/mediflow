@@ -85,6 +85,12 @@ import {
   type EduRequirementSpec,
   type EduTransferRow,
 } from "@/lib/edu/evaluacion-core";
+// 🔴 OLA C·2 · H-89 — LA REGLA DE QUÉ VERSIÓN APLICA A QUIÉN vive en su
+// core probado, no aquí. Esta pantalla solo la USA.
+import { eduRequisitoEfectivo } from "@/lib/edu/requisitos-version-core";
+// 🔴 LA BITÁCORA TIENE UN SOLO ESCRITOR (auditoria.ts) y nunca lanza: si el
+// renglón no entra, la operación que lo generó sigue. Ver su encabezado.
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 import { listEduStudentGrades } from "@/lib/edu/rubricas";
 import { EDU_MAX_SEMESTER } from "@/lib/edu/padron-core";
 
@@ -142,6 +148,9 @@ const REQUIREMENT_SELECT = {
   semesterTo: true,
   procedureId: true,
   category: true,
+  // H-90 · la categoría con llave, y su nombre para pintarla sin una
+  // consulta más. Conviven con el texto libre: la llave manda cuando está.
+  categoryId: true,
   requiredCount: true,
   onlyCompleted: true,
   isActive: true,
@@ -149,6 +158,10 @@ const REQUIREMENT_SELECT = {
   notes: true,
   program: { select: { name: true } },
   procedure: { select: { name: true } },
+  categoryRef: { select: { name: true } },
+  // H-89 · cuántas versiones tiene. Cero = nunca se versionó y todo el
+  // mundo se mide contra la fila viva, como antes de esta ola.
+  _count: { select: { versions: true } },
 } satisfies Prisma.EduRequirementSelect;
 
 type RequirementPayload = Prisma.EduRequirementGetPayload<{ select: typeof REQUIREMENT_SELECT }>;
@@ -164,11 +177,14 @@ function toRequirementRow(r: RequirementPayload): EduRequirementRow {
     procedureId: r.procedureId,
     procedureName: r.procedure?.name ?? null,
     category: r.category,
+    categoryId: r.categoryId,
+    categoryName: r.categoryRef?.name ?? null,
     requiredCount: r.requiredCount,
     onlyCompleted: r.onlyCompleted,
     isActive: r.isActive,
     orderIndex: r.orderIndex,
     notes: r.notes,
+    versiones: r._count.versions,
   };
 }
 
@@ -199,6 +215,8 @@ export interface EduRequirementInput {
   semesterTo?: unknown;
   procedureId?: unknown;
   category?: unknown;
+  /** H-90 · la categoría CON LLAVE. Manda sobre `category` cuando viene. */
+  categoryId?: unknown;
   requiredCount?: unknown;
   onlyCompleted?: unknown;
   isActive?: unknown;
@@ -217,8 +235,26 @@ export interface EduRequirementInput {
 async function resolveRequirementTarget(
   institutionId: string,
   input: EduRequirementInput,
-): Promise<{ procedureId: string | null; category: string | null }> {
+): Promise<{ procedureId: string | null; category: string | null; categoryId: string | null }> {
   const category = eduEvalOptionalText(input.category, EDU_REQUIREMENT_CATEGORY_MAX) ?? null;
+
+  // ── 🔴 H-90 · LA CATEGORÍA CON LLAVE ─────────────────────────────────
+  // Se comprueba contra ESTE instituto, como todo lo demás. Y se guarda
+  // JUNTO al texto libre, no en su lugar: el texto es lo que la escuela
+  // capturó y sigue siendo la respuesta para quien todavía no ha
+  // emparejado su catálogo. Ver categorias-core.ts.
+  let categoryId: string | null = null;
+  if (input.categoryId !== undefined && input.categoryId !== null && input.categoryId !== "") {
+    const id = eduCleanId(input.categoryId);
+    const c = id
+      ? await prisma.eduProcedureCategory.findFirst({
+          where: { id, institutionId },
+          select: { id: true },
+        })
+      : null;
+    if (!c) throw new EduPadronError("Esa categoría no es de este instituto.", 404);
+    categoryId = c.id;
+  }
 
   let procedureId: string | null = null;
   if (input.procedureId !== undefined && input.procedureId !== null && input.procedureId !== "") {
@@ -230,18 +266,36 @@ async function resolveRequirementTarget(
     procedureId = p.id;
   }
 
-  if (procedureId && category) {
+  if (procedureId && (category || categoryId)) {
     throw new EduPadronError(
       "Elige un procedimiento O una categoría, no las dos: juntas casi nunca coinciden y el requisito contaría cero.",
     );
   }
 
-  return { procedureId, category };
+  return { procedureId, category, categoryId };
+}
+
+/**
+ * Lo que hace falta para escribir un requisito: el contexto del piso
+ * clínico MÁS quién es.
+ *
+ * 🔴 EL `user` NO ES OPCIONAL, y eso es el arreglo. H-89 echaba en falta
+ * tres cosas —«ni cohorte, ni versión, ni AUTOR»— y el autor solo se puede
+ * escribir si la función sabe quién llama. Con `user?` se podría llamar sin
+ * él y la fila quedaría sin firmar en silencio, que es exactamente el
+ * estado que este hallazgo describe.
+ */
+export interface EduRequisitoContext extends EduClinicaContext, EduAuditActor {}
+
+/** «Ana Pérez», recortado al tope de la columna. */
+function autorDe(ctx: EduRequisitoContext): string {
+  return `${ctx.user.firstName} ${ctx.user.lastName}`.trim().slice(0, 160) || "—";
 }
 
 export async function createEduRequirement(
-  ctx: EduClinicaContext,
+  ctx: EduRequisitoContext,
   input: EduRequirementInput,
+  meta: { ip?: string | null; userAgent?: string | null } = {},
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
 
@@ -288,20 +342,43 @@ export async function createEduRequirement(
       semesterTo,
       procedureId: target.procedureId,
       category: target.category,
+      categoryId: target.categoryId,
       requiredCount,
       onlyCompleted: eduEvalBoolean(input.onlyCompleted) ?? true,
       orderIndex: eduEvalInt(input.orderIndex, 0, 999) ?? 0,
       notes: eduEvalOptionalText(input.notes, EDU_REQUIREMENT_NOTES_MAX) ?? null,
+      // H-89 · QUIÉN. El `updatedAt` decía cuándo y no quién, y la pregunta
+      // que se hace el alumno cuyo avance cayó una tarde es la segunda.
+      updatedByUserId: ctx.eduUserId || null,
+      updatedByName: autorDe(ctx),
     },
     select: { id: true },
   });
+
+  // Bitácora: el plan de estudios es el criterio con el que se mide a la
+  // escuela entera, así que cambiarlo es un acto que se registra.
+  await eduAudit(ctx, {
+    action: "create",
+    entity: "student",
+    entityId: created.id,
+    after: {
+      requisito: name,
+      programId: program.id,
+      requiredCount,
+      procedureId: target.procedureId,
+      categoryId: target.categoryId,
+    },
+    ...meta,
+  });
+
   return created;
 }
 
 export async function updateEduRequirement(
-  ctx: EduClinicaContext,
+  ctx: EduRequisitoContext,
   requirementId: string,
   input: EduRequirementInput,
+  meta: { ip?: string | null; userAgent?: string | null } = {},
 ): Promise<{ id: string }> {
   const institutionId = requireInstitution(ctx);
   const id = eduCleanId(requirementId);
@@ -314,6 +391,13 @@ export async function updateEduRequirement(
           programId: true,
           semesterFrom: true,
           semesterTo: true,
+          // Lo que la bitácora tiene que poder comparar. Sin el ANTES, el
+          // renglón diría "modificó el requisito" y no "subió el mínimo de
+          // 8 a 12", que es la única frase que sirve de algo.
+          requiredCount: true,
+          onlyCompleted: true,
+          isActive: true,
+          categoryId: true,
         },
       })
     : null;
@@ -361,12 +445,19 @@ export async function updateEduRequirement(
     data.semesterTo = to;
   }
 
-  if (input.procedureId !== undefined || input.category !== undefined) {
+  if (
+    input.procedureId !== undefined ||
+    input.category !== undefined ||
+    input.categoryId !== undefined
+  ) {
     const target = await resolveRequirementTarget(institutionId, input);
     data.procedure = target.procedureId
       ? { connect: { id: target.procedureId } }
       : { disconnect: true };
     data.category = target.category;
+    data.categoryRef = target.categoryId
+      ? { connect: { id: target.categoryId } }
+      : { disconnect: true };
   }
 
   if (input.onlyCompleted !== undefined) {
@@ -386,7 +477,40 @@ export async function updateEduRequirement(
 
   if (Object.keys(data).length === 0) throw new EduPadronError("No mandaste ningún cambio.");
 
+  // H-89 · el autor, en la misma escritura que el cambio.
+  data.updatedByName = autorDe(ctx);
+  data.updatedBy = ctx.eduUserId ? { connect: { id: ctx.eduUserId } } : { disconnect: true };
+
   await prisma.eduRequirement.update({ where: { id: actual.id }, data });
+
+  // 🔴 LA BITÁCORA REGISTRA EL ANTES Y EL DESPUÉS DEL MÍNIMO. Es el dato
+  // que H-89 describe: «de 8 a 12 en marzo y toda la escuela pasa de
+  // "Cumplido 8 de 8" a "Te faltan 4 de 12", sin explicación y sin fecha».
+  // La fecha y la explicación son esto y las VERSIONES.
+  await eduAudit(ctx, {
+    action: "update",
+    entity: "student",
+    entityId: actual.id,
+    before: {
+      requisito: actual.name,
+      requiredCount: actual.requiredCount,
+      onlyCompleted: actual.onlyCompleted,
+      isActive: actual.isActive,
+      categoryId: actual.categoryId,
+    },
+    after: {
+      requisito: (data.name as string | undefined) ?? actual.name,
+      requiredCount: (data.requiredCount as number | undefined) ?? actual.requiredCount,
+      onlyCompleted: (data.onlyCompleted as boolean | undefined) ?? actual.onlyCompleted,
+      isActive: (data.isActive as boolean | undefined) ?? actual.isActive,
+      categoryId:
+        input.categoryId !== undefined || input.category !== undefined || input.procedureId !== undefined
+          ? ((await resolveRequirementTarget(institutionId, input)).categoryId)
+          : actual.categoryId,
+    },
+    ...meta,
+  });
+
   return { id: actual.id };
 }
 
@@ -403,7 +527,7 @@ const CASE_FOR_COUNT_SELECT = {
   closedAt: true,
   transferredFromCaseId: true,
   patientId: true,
-  procedure: { select: { name: true, category: true } },
+  procedure: { select: { name: true, category: true, categoryId: true } },
   patient: { select: { firstName: true, lastName: true, folio: true } },
   program: { select: { name: true } },
 } satisfies Prisma.EduCaseSelect;
@@ -417,6 +541,7 @@ function toCountable(c: CaseForCount): EduCountableCase {
     status: c.status as EduCaseStatus,
     procedureId: c.procedureId,
     procedureCategory: c.procedure?.category ?? null,
+    procedureCategoryId: c.procedure?.categoryId ?? null,
   };
 }
 
@@ -583,13 +708,38 @@ export async function listEduEvaluacion(
     }),
   ]);
 
+  // ── 🔴 H-89 · LAS VERSIONES DE LOS REQUISITOS QUE SE ESTÁN MIDIENDO ──
+  // Una sola consulta más, acotada a los requisitos que ya se leyeron. Va
+  // en su propia tanda y no dentro del `Promise.all` de arriba: la regla de
+  // la casa es menos de 7 consultas por tanda (el pooler se satura), y
+  // aquélla ya lleva cuatro pesadas.
+  //
+  // ⚠️ SIN `effectiveFrom <= now` en el `where`: la regla de resolución
+  // (eduRequisitoVersionVigente) ya descarta las futuras, y filtrarlas aquí
+  // TAMBIÉN sería una segunda copia de la misma regla — la que se olvidaría
+  // de arreglar el día que cambie.
+  const versiones =
+    requisitos.length === 0
+      ? []
+      : await prisma.eduRequirementVersion.findMany({
+          where: { institutionId, requirementId: { in: requisitos.map((r) => r.id) } },
+          select: REQ_VERSION_SELECT,
+        });
+  const versionesPorRequisito = agrupar(versiones, (v) => v.requirementId);
+
   const casosPorAlumno = agrupar(casos, (c) => c.studentId);
   const citasPorAlumno = agrupar(citas, (c) => c.studentId);
   const notasPorAlumno = agrupar(calificaciones, (g) => g.studentId);
   const requisitosPorPrograma = agrupar(requisitos, (r) => r.programId);
 
   const rows: EduEvaluacionRow[] = visibles.map((a) => {
-    const specs = (requisitosPorPrograma.get(a.programId) ?? []).map(toSpec);
+    // H-89 · el mínimo con el que se mide a ESTE alumno es el de la versión
+    // vigente para SU generación. Sin esto, subir el mínimo de 8 a 12 en
+    // marzo pasaba a toda la escuela —incluida la que se gradúa en junio—
+    // de «Cumplido 8 de 8» a «Te faltan 4 de 12» esa misma tarde.
+    const specs = (requisitosPorPrograma.get(a.programId) ?? []).map((r) =>
+      specEfectivo(toSpec(r), versionesPorRequisito.get(r.id), a.cohortId, now),
+    );
     const suyos = (casosPorAlumno.get(a.id) ?? []).map(toCountable);
     const fraccion = eduCycleFraction(a.cohort, now);
     // P2-5: el semestre ACTUAL del alumno afina la expectativa de los
@@ -676,8 +826,91 @@ function toSpec(r: RequirementPayload): EduRequirementSpec {
     semesterTo: r.semesterTo,
     procedureId: r.procedureId,
     category: r.category,
+    categoryId: r.categoryId,
     requiredCount: r.requiredCount,
     onlyCompleted: r.onlyCompleted,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔴 OLA C·2 · H-89 — CADA GENERACIÓN SE MIDE CONTRA SU PROPIA VERSIÓN
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Lo mínimo de una versión, tal como sale de la base.
+ *
+ * Se lee UNA vez por pantalla y se reparte en memoria: un `findMany` por
+ * alumno serían mil consultas para pintar una lista de ciento veinte, que
+ * es la versión de esta pantalla que la escuela deja de abrir.
+ */
+const REQ_VERSION_SELECT = {
+  id: true,
+  requirementId: true,
+  version: true,
+  cohortId: true,
+  effectiveFrom: true,
+  requiredCount: true,
+  semesterFrom: true,
+  semesterTo: true,
+  onlyCompleted: true,
+  notes: true,
+} satisfies Prisma.EduRequirementVersionSelect;
+
+type ReqVersionPayload = Prisma.EduRequirementVersionGetPayload<{
+  select: typeof REQ_VERSION_SELECT;
+}>;
+
+/**
+ * El requisito EFECTIVO para una generación: la versión que le aplique, o
+ * la fila viva si no hay ninguna.
+ *
+ * 🔴 LA REGLA DE RESOLUCIÓN NO SE ESCRIBE AQUÍ. Vive en
+ * `eduRequisitoEfectivo` (requisitos-version-core.ts), probada sin base de
+ * datos delante; esta función solo le da forma de `EduRequirementSpec` para
+ * que `eduRequirementProgress` no tenga que enterarse de que existen
+ * versiones. Si la regla estuviera en dos sitios, el número que ve el
+ * alumno y el que ve la dirección se separarían en el primer arreglo.
+ *
+ * ⚠️ `null` en versiones = la fila viva, tal cual, sin copiarla: es lo que
+ * hace que una escuela que nunca ha versionado nada funcione EXACTAMENTE
+ * como antes de esta ola.
+ */
+function specEfectivo(
+  spec: EduRequirementSpec,
+  versiones: ReqVersionPayload[] | undefined,
+  cohortId: string | null,
+  now: Date,
+): EduRequirementSpec {
+  if (!versiones || versiones.length === 0) return spec;
+  const efectivo = eduRequisitoEfectivo(
+    {
+      requiredCount: spec.requiredCount,
+      semesterFrom: spec.semesterFrom,
+      semesterTo: spec.semesterTo,
+      onlyCompleted: spec.onlyCompleted,
+      notes: null,
+    },
+    versiones.map((v) => ({
+      id: v.id,
+      version: v.version,
+      cohortId: v.cohortId,
+      effectiveFrom: v.effectiveFrom,
+      requiredCount: v.requiredCount,
+      semesterFrom: v.semesterFrom,
+      semesterTo: v.semesterTo,
+      onlyCompleted: v.onlyCompleted,
+      notes: v.notes,
+    })),
+    cohortId,
+    now,
+  );
+  if (efectivo.version === null) return spec;
+  return {
+    ...spec,
+    requiredCount: efectivo.snapshot.requiredCount,
+    semesterFrom: efectivo.snapshot.semesterFrom,
+    semesterTo: efectivo.snapshot.semesterTo,
+    onlyCompleted: efectivo.snapshot.onlyCompleted,
   };
 }
 
@@ -714,6 +947,10 @@ export async function getEduBitacora(
       semester: true,
       status: true,
       programId: true,
+      // H-89 · su GENERACIÓN. Es con la que se decide qué versión del
+      // requisito le aplica: sin ella, la bitácora del alumno y la lista de
+      // Evaluación dirían números distintos sobre el mismo alumno.
+      cohortId: true,
       user: { select: { firstName: true, lastName: true, email: true } },
       program: { select: { name: true } },
       cohort: { select: { name: true, startDate: true, endDate: true } },
@@ -727,10 +964,13 @@ export async function getEduBitacora(
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
       select: REQUIREMENT_SELECT,
     }),
+    // 🔴 OLA C · H-85 — SIN TOPE, como la lista de Evaluación (que no lo
+    // pone). El tope estaba sobre la consulta que alimenta el AVANCE, así
+    // que no acotaba: falsificaba. Son los casos de UN alumno, no los de
+    // trescientos; la tabla sí se corta más abajo, y lo dice.
     prisma.eduCase.findMany({
       where: { institutionId, studentId: alumno.id },
       orderBy: [{ openedAt: "desc" }],
-      take: EDU_EVALUACION_MAX_ROWS,
       select: CASE_FOR_COUNT_SELECT,
     }),
     prisma.eduAppointment.findMany({
@@ -745,17 +985,35 @@ export async function getEduBitacora(
 
   const fraccion = eduCycleFraction(alumno.cohort, now);
   const contables = casos.map(toCountable);
+
+  // H-89 · las versiones de SUS requisitos. Una consulta más, acotada.
+  const versiones =
+    requisitos.length === 0
+      ? []
+      : await prisma.eduRequirementVersion.findMany({
+          where: { institutionId, requirementId: { in: requisitos.map((r) => r.id) } },
+          select: REQ_VERSION_SELECT,
+        });
+  const versionesPorRequisito = agrupar(versiones, (v) => v.requirementId);
+
   // P2-5: mismo afinado por semestre que la lista de evaluación — la
   // bitácora y el semáforo no pueden discrepar sobre cuánto se le espera.
+  // Y desde la C·2, la misma resolución de VERSIÓN por generación: los dos
+  // números salen de `specEfectivo`, así que no pueden separarse.
   const progresos = requisitos.map((r) =>
-    eduRequirementProgress(toSpec(r), contables, fraccion, alumno.semester),
+    eduRequirementProgress(
+      specEfectivo(toSpec(r), versionesPorRequisito.get(r.id), alumno.cohortId, now),
+      contables,
+      fraccion,
+      alumno.semester,
+    ),
   );
   const verdict = eduAtrasoVerdict(progresos, fraccion);
   const horas = eduClinicalHours(citas);
 
   // La calificación vigente de cada caso, para la columna de la tabla.
   const notasPorCaso = agrupar(grades, (g) => g.caseId);
-  const casesRows: EduBitacoraCaseRow[] = casos.map((c) => {
+  const casesRows: EduBitacoraCaseRow[] = casos.slice(0, EDU_EVALUACION_MAX_ROWS).map((c) => {
     const vigente = eduCurrentGrade(notasPorCaso.get(c.id) ?? []);
     return {
       id: c.id,
@@ -763,6 +1021,7 @@ export async function getEduBitacora(
       patientId: c.patientId,
       patientName: patientName(c.patient),
       patientFolio: c.patient.folio,
+      programId: c.programId,
       programName: c.program.name,
       procedureId: c.procedureId,
       procedureName: c.procedure?.name ?? null,
@@ -800,12 +1059,15 @@ export async function getEduBitacora(
     hours: horas,
     hoursLabel: eduHoursLabel(horas.totalMinutes),
     cases: casesRows,
+    casesTotal: casos.length,
+    casesTruncated: casos.length > EDU_EVALUACION_MAX_ROWS,
     casesWithoutProcedure: casos.filter((c) => !c.procedureId).length,
     grades,
     transfers,
     averageX100: promedio.averageX100,
     averageLabel: promedio.averageX100 === null ? null : eduScoreLabel(promedio.averageX100),
     averageScaleMax: promedio.scaleMax,
+    averageIgnored: promedio.ignored,
     generatedLabel: fechaHora(now, zona),
   };
 }

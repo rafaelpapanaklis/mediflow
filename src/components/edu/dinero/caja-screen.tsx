@@ -92,6 +92,13 @@ export interface EduCajaScreenProps {
    */
   cobrarPreseleccion: { id: string; folio: string; name: string } | null;
   /**
+   * 🔴 H-59 · Por qué NO se puede cobrar ahora mismo (vista consolidada
+   * con varias sedes), o null. Lo resuelve el servidor con la MISMA
+   * función que el endpoint al emitir, y el modal lo dice ANTES de dejar
+   * armar el ticket entero.
+   */
+  sedeAviso: string | null;
+  /**
    * 🔴 EL HOY DEL INSTITUTO, "AAAA-MM-DD", calculado en el SERVIDOR.
    *
    * Con él se arma la vista previa del calendario del plan (qué día cae
@@ -138,6 +145,7 @@ export function EduCajaScreen({
   canCorte,
   canInvoice,
   cobrarPreseleccion,
+  sedeAviso,
   todayISO,
 }: EduCajaScreenProps) {
   const router = useRouter();
@@ -315,6 +323,16 @@ export function EduCajaScreen({
           <Link href="/instituto/caja/planes" className="edu-btn edu-btn--ghost edu-btn--sm">
             Pagos a meses
           </Link>
+          {/* 🔴 Ola C·2 · PRESUPUESTOS (fila 26 del comparativo con el
+              dental). Cuelga de Caja y no del menú principal a propósito:
+              un presupuesto es la antesala de un cobro, lo llevan las
+              mismas personas y se convierte en uno con un clic. El enlace
+              NO cuelga de `canCharge` — quien puede VER la caja puede ver
+              lo que se le propuso a un paciente; crear sí pide
+              `caja.charge`, y eso lo decide la pantalla de allá. */}
+          <Link href="/instituto/caja/presupuestos" className="edu-btn edu-btn--ghost edu-btn--sm">
+            Presupuestos
+          </Link>
           {canCharge && (
             <button
               type="button"
@@ -335,19 +353,61 @@ export function EduCajaScreen({
         // 🔴 Los cancelados NO están en estas sumas. Un cobro anulado no es
         // dinero de la escuela ni deuda del paciente, y contarlo es
         // exactamente el bug que el producto dental ya pagó.
+        //
+        // 🔴 H-57 · Y CADA CIFRA DICE SOBRE QUÉ SE CALCULÓ. El aviso de
+        // truncado vivía pegado al CONTADOR DE FILAS, tres bloques más
+        // arriba, así que dirección leía "Por cobrar $41,300" y decidía la
+        // cobranza del mes sobre la cartera de los 300 cobros más
+        // recientes sin saberlo.
         <div className="edu-kpis">
           <div className="edu-kpi">
             <span className="edu-kpi__label">Cobrado</span>
             <span className="edu-kpi__value">{eduMoney(totals.totalCents)}</span>
+            {truncated && (
+              <span className="edu-kpi__note">Solo de los {maxRows} cobros que caben aquí.</span>
+            )}
           </div>
           <div className="edu-kpi">
-            <span className="edu-kpi__label">Pagado</span>
+            <span className="edu-kpi__label">Pagado de estos cobros</span>
             <span className="edu-kpi__value">{eduMoney(totals.paidCents)}</span>
+            <span className="edu-kpi__note">
+              {/* 🔴 H-49 · ESTO NO ES "lo que entró hoy". Suma lo pagado de
+                  estos cobros EN TODA SU VIDA, y el filtro del turno mira
+                  el turno DEL COBRO: un martes que solo cobra deudas de
+                  ayer marcaba "$0" con el cajón lleno. */}
+              {truncated
+                ? `En toda la vida de esos ${maxRows} cobros, no solo hoy.`
+                : "En toda la vida de estos cobros, no solo hoy."}
+            </span>
           </div>
           <div className="edu-kpi">
             <span className="edu-kpi__label">Por cobrar</span>
             <span className="edu-kpi__value">{eduMoney(totals.balanceCents)}</span>
+            {truncated && (
+              <span className="edu-kpi__note">
+                Solo de los {maxRows} más recientes: la deuda más vieja no está en esta cifra.
+              </span>
+            )}
           </div>
+          {/* 🔴 H-49 · EL NÚMERO HONESTO DEL TURNO, y el camino al corte.
+              Sale de los PAGOS sellados con este turno —la misma fuente que
+              el corte— así que no puede discrepar de él. */}
+          {page.turnoNetCents !== null && (
+            <div className="edu-kpi">
+              <span className="edu-kpi__label">Entró en el turno</span>
+              <span className="edu-kpi__value">{eduMoney(page.turnoNetCents)}</span>
+              <span className="edu-kpi__note">
+                Pagos menos devoluciones de ESTE turno, con cobros de cualquier día.{" "}
+                {canCorte ? (
+                  <Link href="/instituto/caja/corte" className="edu-auth-card__link">
+                    Ver el corte
+                  </Link>
+                ) : (
+                  "El desglose por método está en el corte."
+                )}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -404,7 +464,14 @@ export function EduCajaScreen({
                       {c.patientName}
                     </EduPersonaLink>
                   </span>
-                  <span className="edu-cell__sub">{c.patientFolio}</span>
+                  {/* 🔴 H-58 · DE QUÉ SEDE ES ESTE COBRO. Estaba sellado en
+                      la fila y no llegaba al navegador, así que la vista
+                      consolidada anunciaba "los cobros de todas tus sedes"
+                      en una tabla que no decía de cuál era cada uno. */}
+                  <span className="edu-cell__sub">
+                    {c.patientFolio}
+                    {c.campusLabel ? ` · ${c.campusLabel}` : ""}
+                  </span>
                 </div>
 
                 <div className="edu-cell">
@@ -502,6 +569,7 @@ export function EduCajaScreen({
       {cobrando && (
         <Cobrar
           preseleccion={cobrarPreseleccion}
+          sedeAviso={sedeAviso}
           todayISO={todayISO}
           onClose={() => {
             setCobrando(false);
@@ -555,6 +623,27 @@ interface TarifaRespuesta {
   applied: EduTarifaMatch | null;
   prices: EduPrecioResuelto[];
   sinPrecio: { id: string; code: string; name: string }[];
+  /** 🔴 H-10 · las listas MANUAL activas que caja puede elegir a mano. */
+  manuales: { id: string; name: string; key: string }[];
+}
+
+/**
+ * 🔴 P2-10 / H-06 · UNA CLAVE DE IDEMPOTENCIA NUEVA.
+ *
+ * `randomUUID` no existe en http sin certificado; ahí se arma una
+ * equivalente a mano. Vive fuera de los componentes porque la usan los
+ * dos: el cobro (que ya la tenía) y el abono parcial (que no).
+ */
+function eduNuevaClaveIdem(): string {
+  try {
+    // Acceso defensivo: el tipo Crypto de un lib.dom viejo no declara
+    // randomUUID, y en http sin certificado tampoco existe en runtime.
+    const uuid = (globalThis.crypto as { randomUUID?: () => string } | undefined)?.randomUUID?.();
+    if (uuid) return uuid;
+  } catch {
+    /* cae al método de abajo */
+  }
+  return `idem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 interface LineaUI {
@@ -571,12 +660,15 @@ interface LineaUI {
 
 function Cobrar({
   preseleccion,
+  sedeAviso,
   todayISO,
   onClose,
   onDone,
 }: {
   /** Ola 12: el paciente que ya viene decidido desde la ficha, o null. */
   preseleccion: PacienteBusqueda | null;
+  /** H-59: por qué no se puede cobrar todavía (falta elegir sede), o null. */
+  sedeAviso: string | null;
   /** El hoy del INSTITUTO: con él se arma el calendario del plan. */
   todayISO: string;
   onClose: () => void;
@@ -601,6 +693,11 @@ function Cobrar({
   const [pagos, setPagos] = useState<EduPagoDraft[]>(() => [eduNuevoPagoDraft(0)]);
   const [pagosTocados, setPagosTocados] = useState(false);
   const [notas, setNotas] = useState("");
+  // 🔴 H-10 · la lista MANUAL elegida a mano ("" = la que decide el
+  // servidor). Cambiarla vuelve a PREGUNTAR la tarifa: los precios los
+  // sigue poniendo el servidor, aquí solo se dice con cuál de las tarifas
+  // de la escuela se cobra.
+  const [listaElegida, setListaElegida] = useState("");
   // El plan a meses lo arma <PlanAMeses/> y lo deja aquí YA validado —o
   // null mientras no cuadre—, con su calendario de fechas y montos.
   const [planDatos, setPlanDatos] = useState<EduPlanDatos | null>(null);
@@ -695,17 +792,60 @@ function Cobrar({
     return () => window.clearTimeout(t);
   }, [q, tarifa]);
 
-  async function elegirPaciente(p: PacienteBusqueda) {
+  async function elegirPaciente(p: PacienteBusqueda, lista = "") {
     setError(null);
     setBusy(true);
     try {
       // 🔴 AQUÍ SE PREGUNTA LA TARIFA. La pantalla no la deduce.
+      // H-10: y con la lista MANUAL elegida, si hay una. El servidor la
+      // valida (activa, de regla MANUAL y de este instituto) y devuelve
+      // los precios de ESA lista.
       const res = await eduRequest<TarifaRespuesta>(
-        `/api/instituto/caja/tarifa?paciente=${encodeURIComponent(p.id)}`,
+        `/api/instituto/caja/tarifa?paciente=${encodeURIComponent(p.id)}${
+          lista ? `&lista=${encodeURIComponent(lista)}` : ""
+        }`,
       );
       setTarifa(res);
       setResultados(null);
     } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo leer la tarifa.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * 🔴 H-10 · CAMBIAR DE LISTA. Se vuelve a cotizar TODO con el servidor y
+   * se vacían las líneas: los precios ya puestos son de la lista anterior,
+   * y mezclarlos sería exactamente el "cobrar a ojo" que esta pantalla
+   * existe para impedir.
+   */
+  async function cambiarLista(lista: string) {
+    if (!tarifa) return;
+    // ⚠️ Nada se toca hasta que la cotización LLEGA. Fijar la lista antes
+    // del `await` dejaba, si el GET fallaba (red, o un 409 porque acaban de
+    // desactivarla), los precios de la lista ANTERIOR en pantalla y el id
+    // de la NUEVA en el cuerpo del cobro: se cobraría con una tarifa
+    // distinta de la que se está enseñando.
+    const paciente = {
+      id: tarifa.patientId,
+      folio: tarifa.patientFolio,
+      name: tarifa.patientName,
+    };
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await eduRequest<TarifaRespuesta>(
+        `/api/instituto/caja/tarifa?paciente=${encodeURIComponent(paciente.id)}${
+          lista ? `&lista=${encodeURIComponent(lista)}` : ""
+        }`,
+      );
+      setTarifa(res);
+      setLineas([]);
+      setListaElegida(lista);
+    } catch (err) {
+      // El `<select>` vuelve solo a la lista de antes: su valor ES
+      // `listaElegida`, que no se movió.
       setError(err instanceof Error ? err.message : "No se pudo leer la tarifa.");
     } finally {
       setBusy(false);
@@ -766,25 +906,19 @@ function Cobrar({
     setLibre(false);
   }
 
-  // ── 🔴 P2-10 · LA CLAVE DE IDEMPOTENCIA ──────────────────────────────
-  // Una por APERTURA del diálogo, estable mientras viva: si el POST sale y
-  // la respuesta se pierde (red), el reintento manda LA MISMA clave y el
-  // servidor devuelve el cobro que ya emitió en vez de emitir otro. Un
-  // diálogo nuevo es una intención nueva y estrena clave. `randomUUID` no
-  // existe en http sin certificado — ahí se arma una equivalente a mano.
-  const [idemKey] = useState(() => {
-    try {
-      // Acceso defensivo: el tipo Crypto de un lib.dom viejo no declara
-      // randomUUID, y en http sin certificado tampoco existe en runtime.
-      const uuid = (
-        globalThis.crypto as { randomUUID?: () => string } | undefined
-      )?.randomUUID?.();
-      if (uuid) return uuid;
-    } catch {
-      /* cae al método de abajo */
-    }
-    return `idem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}-${Math.random().toString(36).slice(2, 12)}`;
-  });
+  // ── 🔴 P2-10 + H-46 · LA CLAVE DE IDEMPOTENCIA ───────────────────────
+  // Una por INTENCIÓN DE COBRO: si el POST sale y la respuesta se pierde
+  // (red), el reintento manda LA MISMA clave y el servidor devuelve el
+  // cobro que ya emitió en vez de emitir otro.
+  //
+  // 🔴 H-46 · Y SE RENUEVA AL CAMBIAR DE PACIENTE. Se fijaba UNA VEZ por
+  // apertura del diálogo, así que tras un fallo de red la cajera cambiaba
+  // de paciente, armaba otro ticket, cobraba… y el servidor reconocía la
+  // clave del paciente ANTERIOR y devolvía aquel cobro con `duplicado:
+  // true`. Juan no quedaba cobrado, María tenía un cobro que nadie quiso y
+  // el dinero estaba en el cajón sin respaldo. Cambiar de paciente es una
+  // intención nueva: clave nueva.
+  const [idemKey, setIdemKey] = useState(eduNuevaClaveIdem);
 
   async function cobrar() {
     if (!tarifa) return;
@@ -793,37 +927,47 @@ function Cobrar({
     setError(null);
     setBusy(true);
     try {
-      const res = await eduRequest<{ id: string; folio: string; descartados: number }>(
-        "/api/instituto/caja/cobros",
-        {
-          method: "POST",
-          body: {
-            patientId: tarifa.patientId,
-            idempotencyKey: idemKey,
-            notes: notas.trim() || null,
-            items: lineas.map((l) => ({
-              procedureId: l.procedureId ?? undefined,
-              description: l.procedureId ? undefined : l.description,
-              quantity: Number(l.quantity) || 1,
-              // 🔴 Va, y el servidor lo DESCARTA cuando hay procedureId.
-              // Se manda para que pueda detectar que esta pantalla tenía
-              // un precio viejo, no para que lo use.
-              unitPriceCents: eduMoneyInputValue(l.unitPriceCents),
-              discountCents: l.discount.trim() || undefined,
-            })),
-            // 🔴 UNA ENTRADA POR FORMA DE PAGO. El servidor crea una fila
-            // por cada una, en la misma transacción que el cobro.
-            payments:
-              pagoModo === "ahora" && totals.totalCents > 0
-                ? eduSerializarPagos(pagos)
-                : undefined,
-          },
+      const res = await eduRequest<{
+        id: string;
+        folio: string;
+        descartados: number;
+        duplicado?: boolean;
+      }>("/api/instituto/caja/cobros", {
+        method: "POST",
+        body: {
+          patientId: tarifa.patientId,
+          idempotencyKey: idemKey,
+          // 🔴 H-10 · con qué lista se cobra, si caja eligió una a mano.
+          // No es un precio: el precio lo sigue poniendo el servidor.
+          feeScheduleId: listaElegida || undefined,
+          notes: notas.trim() || null,
+          items: lineas.map((l) => ({
+            procedureId: l.procedureId ?? undefined,
+            description: l.procedureId ? undefined : l.description,
+            quantity: Number(l.quantity) || 1,
+            // 🔴 Va, y el servidor lo DESCARTA cuando hay procedureId.
+            // Se manda para que pueda detectar que esta pantalla tenía
+            // un precio viejo, no para que lo use.
+            unitPriceCents: eduMoneyInputValue(l.unitPriceCents),
+            discountCents: l.discount.trim() || undefined,
+          })),
+          // 🔴 UNA ENTRADA POR FORMA DE PAGO. El servidor crea una fila
+          // por cada una, en la misma transacción que el cobro.
+          payments:
+            pagoModo === "ahora" && totals.totalCents > 0
+              ? eduSerializarPagos(pagos)
+              : undefined,
         },
-      );
+      });
       const aviso =
         (res.descartados ?? 0) > 0
           ? ` Ojo: ${res.descartados} ${res.descartados === 1 ? "concepto salió" : "conceptos salieron"} con el precio del servidor porque el de la pantalla estaba viejo.`
           : "";
+      // 🔴 H-46 · LA BANDERA QUE NADIE LEÍA. `duplicado: true` significa
+      // "esta clave ya se había usado: NO se cobró otra vez y te devuelvo
+      // el cobro de antes". La pantalla anunciaba "Cobro C-0041 emitido"
+      // igual, que es exactamente la frase que hace que nadie lo note.
+      const yaEstaba = res.duplicado === true;
 
       if (pagoModo === "meses" && planDatos) {
         // 🔴 EL PLAN, EN UNA SEGUNDA PETICIÓN. El enganche viaja DENTRO
@@ -868,7 +1012,11 @@ function Cobrar({
         return;
       }
 
-      onDone(`Cobro ${res.folio} emitido.${aviso}`);
+      onDone(
+        yaEstaba
+          ? `Ese cobro ya estaba emitido: es el ${res.folio}, y NO se cobró otra vez. Si querías cobrarle a otro paciente, cierra y vuelve a abrir "Cobrar".${aviso}`
+          : `Cobro ${res.folio} emitido.${aviso}`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cobrar.");
     } finally {
@@ -879,6 +1027,9 @@ function Cobrar({
   const listo =
     Boolean(tarifa) &&
     lineas.length > 0 &&
+    // H-59 · con la vista consolidada puesta no hay mostrador al que
+    // apuntar el cobro: el botón no se ofrece habilitado.
+    !sedeAviso &&
     (pagoModo !== "meses" || planDatos !== null) &&
     (pagoModo !== "ahora" || errorPagos === null);
 
@@ -915,6 +1066,23 @@ function Cobrar({
       {error && (
         <div className="edu-alert" role="alert">
           {error}
+        </div>
+      )}
+
+      {/* 🔴 H-59 · SI NO SE PUEDE COBRAR, SE DICE AQUÍ Y AHORA. Antes se
+          dejaba armar el ticket entero —cuatro conceptos, método, monto— y
+          se fallaba al pulsar "Cobrar $2,340" con un aviso que vivía en el
+          lead de la página, fuera del diálogo y tapado por él. El selector
+          que hay que tocar está en la barra de arriba. */}
+      {sedeAviso && (
+        <div className="edu-banner edu-banner--warn" role="alert">
+          <div>
+            <p className="edu-banner__title">Todavía no se puede cobrar</p>
+            <p className="edu-banner__detail">
+              {sedeAviso} Cierra este diálogo, elige la sede en el selector de la barra de arriba y
+              vuelve a abrir «Cobrar».
+            </p>
+          </div>
         </div>
       )}
 
@@ -995,6 +1163,50 @@ function Cobrar({
                 cobrar.
               </p>
             )}
+
+            {/* ── 🔴 H-10 · LA LISTA QUE SE ELIGE A MANO ────────────────
+                Las listas de regla MANUAL —convenios, campañas, el personal
+                del instituto— no se aplicaban NUNCA: la dirección capturaba
+                cuarenta precios de "Convenio sindicato" y al día siguiente
+                se le cobraba al afiliado la tarifa de público general, con
+                el recibo diciendo "Público general". Tres textos del
+                producto prometían lo contrario, empezando por el que define
+                la regla ("nace MANUAL y se elige a mano al cobrar").
+
+                Solo salen las ACTIVAS y solo las MANUAL: las automáticas se
+                aplican solas con un dato que el navegador no controla, y
+                elegirlas aquí sería saltárselo. Elegir una GANA a la regla
+                automática — es lo que significa firmar un convenio — y
+                queda congelada en el recibo con su nombre.
+
+                Y esto NO es teclear un precio: el precio lo sigue poniendo
+                el servidor leyendo esa lista. */}
+            {tarifa.manuales.length > 0 && (
+              <div className="edu-field">
+                <label className="edu-field__label" htmlFor="edu-cobro-lista">
+                  Lista de precios
+                </label>
+                <select
+                  id="edu-cobro-lista"
+                  className="edu-input edu-input--sm"
+                  value={listaElegida}
+                  disabled={busy}
+                  onChange={(e) => void cambiarLista(e.target.value)}
+                >
+                  <option value="">La que decide el servidor (la de arriba)</option>
+                  {tarifa.manuales.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="edu-field__hint">
+                  {listaElegida
+                    ? "Elegida a mano: gana a la lista que le tocaría por regla, y queda escrita en el recibo."
+                    : "Convenios, campañas y personal se eligen aquí. Cambiarla vuelve a cotizar los conceptos."}
+                </span>
+              </div>
+            )}
             <button
               type="button"
               className="edu-btn edu-btn--quiet edu-btn--sm"
@@ -1002,6 +1214,11 @@ function Cobrar({
                 setTarifa(null);
                 setLineas([]);
                 setResultados(null);
+                setListaElegida("");
+                // 🔴 H-46 · CLAVE NUEVA. Sin esto, el ticket del paciente
+                // siguiente reusaba la clave del anterior y el servidor
+                // devolvía aquel cobro con `duplicado: true`.
+                setIdemKey(eduNuevaClaveIdem());
               }}
               disabled={busy}
             >
@@ -1311,10 +1528,48 @@ function Recibo({
   const [pagos, setPagos] = useState<EduPagoDraft[]>(() => [
     eduNuevoPagoDraft(charge.balanceCents),
   ]);
+  // 🔴 H-47 · POR DÓNDE ENTRÓ EL DINERO DE ESTE COBRO, método a método y
+  // ya en neto (pagos menos devoluciones). Es la misma cuenta que hace el
+  // servidor antes de aceptar una devolución.
+  const netoPorMetodo = useMemo(() => {
+    const neto = new Map<EduPaymentMethod, number>();
+    for (const p of charge.payments) {
+      const previo = neto.get(p.method) ?? 0;
+      neto.set(p.method, previo + (p.isRefund ? -p.amountCents : p.amountCents));
+    }
+    // Los que quedaron en cero (o en negativo) no son opciones: por ahí ya
+    // no hay nada que devolver.
+    const vivos = new Map<EduPaymentMethod, number>();
+    neto.forEach((v, m) => {
+      if (v > 0) vivos.set(m, v);
+    });
+    return vivos;
+  }, [charge.payments]);
+
   // 🔴 La DEVOLUCIÓN es UN movimiento y no se divide: mantiene su método
   // y su monto sueltos. Partir un reembolso en tres formas haría
   // imposible cuadrarlo contra el pago que revierte.
-  const [metodo, setMetodo] = useState<EduPaymentMethod>("CASH");
+  //
+  // H-47 · y arranca por el método con MÁS dinero dentro, no por
+  // "Efectivo" siempre.
+  //
+  // ⚠️ Solo entre los COBRABLES. El método legado "CARD" puede ser el que
+  // más dinero tiene y NO está en el desplegable: arrancar ahí pintaba
+  // "Efectivo" con el estado en "CARD" y el servidor rebotaba con un 400
+  // que no venía a cuento.
+  const [metodo, setMetodo] = useState<EduPaymentMethod>(() => {
+    let mejor: EduPaymentMethod = "CASH";
+    let max = 0;
+    for (const p of charge.payments) {
+      if (p.isRefund) continue;
+      if (!(EDU_PAYMENT_METHODS_COBRABLES as readonly string[]).includes(p.method)) continue;
+      if (p.amountCents > max) {
+        max = p.amountCents;
+        mejor = p.method;
+      }
+    }
+    return mejor;
+  });
   const [monto, setMonto] = useState(eduMoneyInputValue(charge.paidCents));
   const [referencia, setReferencia] = useState("");
   // El motivo de una devolución con método "Otro": el servidor lo EXIGE
@@ -1322,6 +1577,13 @@ function Recibo({
   // la pantalla tiene que ofrecer dónde escribirlo.
   const [devNotas, setDevNotas] = useState("");
   const [motivo, setMotivo] = useState("");
+  // 🔴 H-06 · LA CLAVE DE IDEMPOTENCIA DEL ABONO. El cobro inicial la
+  // tenía desde P2-10 y el abono suelto no: el POST salía, se escribía, la
+  // respuesta se perdía en el wifi del mostrador y la pantalla contestaba
+  // "No se pudo conectar… vuelve a intentarlo", que es literalmente una
+  // instrucción de cobrar dos veces. Se renueva cada vez que se ENTRA a
+  // registrar un movimiento: cada entrada es una intención distinta.
+  const [movKey, setMovKey] = useState(eduNuevaClaveIdem);
   // Cobrar la siguiente mensualidad del plan, desde este mismo recibo.
   const [mensPagos, setMensPagos] = useState<EduPagoDraft[]>([]);
   // Pagar a meses, desde un cobro YA emitido con saldo.
@@ -1404,20 +1666,34 @@ function Recibo({
     setError(null);
     setBusy(true);
     try {
-      await eduRequest(`/api/instituto/caja/cobros/${charge.id}/pagos`, {
-        method: "POST",
-        // El pago admite varias formas; la devolución, una sola.
-        body: isRefund
-          ? {
-              method: metodo,
-              amountCents: monto,
-              reference: referencia.trim() || null,
-              notes: devNotas.trim() || null,
-              isRefund: true,
-            }
-          : { payments: eduSerializarPagos(pagos) },
-      });
-      onDone(isRefund ? "Devolución registrada." : "Pago registrado.");
+      const res = await eduRequest<{ duplicado?: boolean }>(
+        `/api/instituto/caja/cobros/${charge.id}/pagos`,
+        {
+          method: "POST",
+          // El pago admite varias formas; la devolución, una sola.
+          body: isRefund
+            ? {
+                // 🔴 H-06 · la misma clave en el reintento = UN solo
+                // movimiento. El servidor la usa como llave primaria de la
+                // fila y devuelve `duplicado: true` sin escribir nada.
+                idempotencyKey: movKey,
+                method: metodo,
+                amountCents: monto,
+                reference: referencia.trim() || null,
+                notes: devNotas.trim() || null,
+                isRefund: true,
+              }
+            : { idempotencyKey: movKey, payments: eduSerializarPagos(pagos) },
+        },
+      );
+      const yaEstaba = res?.duplicado === true;
+      onDone(
+        yaEstaba
+          ? "Ese movimiento ya estaba registrado: NO se cobró (ni se devolvió) otra vez."
+          : isRefund
+            ? "Devolución registrada."
+            : "Pago registrado.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo registrar.");
     } finally {
@@ -1455,9 +1731,25 @@ function Recibo({
       onClose={onClose}
       busy={busy}
       footer={
-        <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
-          Cerrar
-        </button>
+        <>
+          {/* 🔴 H-52 · CON EL PACIENTE EN EL MOSTRADOR, EL RECIBO SE
+              ENTREGA. Este pie tenía un solo botón, "Cerrar": el recibo del
+              PLAN sí se podía imprimir y el del cobro no, así que había que
+              salir de Caja, buscar al paciente en el padrón y entrar a su
+              pestaña de WhatsApp para mandarle algo. Imprimir es del
+              navegador y no necesita ni una ruta nueva. */}
+          <button
+            type="button"
+            className="edu-btn edu-btn--ghost"
+            onClick={() => window.print()}
+            disabled={busy}
+          >
+            Imprimir
+          </button>
+          <button type="button" className="edu-btn edu-btn--ghost" onClick={onClose} disabled={busy}>
+            Cerrar
+          </button>
+        </>
       }
     >
       {error && (
@@ -1479,6 +1771,11 @@ function Recibo({
         </div>
       )}
 
+      {/* 🔴 H-61 · UN RECIBO SIN FECHA NO ES UN RECIBO. `chargedAt` y la
+          nota del cobro se guardaban y no se pintaban nunca: la nota era un
+          campo de SOLO ESCRITURA — se pedía al cobrar, se guardaba y no la
+          leía nadie. La fecha la escribió el servidor en la zona del
+          instituto. */}
       <div className="edu-kv edu-kv--2">
         <div>
           <span className="edu-kv__k">Tarifa aplicada</span>
@@ -1488,7 +1785,22 @@ function Recibo({
           <span className="edu-kv__k">Cobró</span>
           <span className="edu-kv__v">{charge.chargedByName}</span>
         </div>
+        <div>
+          <span className="edu-kv__k">Fecha del cobro</span>
+          <span className="edu-kv__v">{charge.chargedAtLabel}</span>
+        </div>
+        <div>
+          <span className="edu-kv__k">Sede</span>
+          <span className="edu-kv__v">{charge.campusLabel ?? "—"}</span>
+        </div>
       </div>
+
+      {charge.notes && (
+        <div className="edu-kv">
+          <span className="edu-kv__k">Nota del cobro</span>
+          <span className="edu-kv__v">{charge.notes}</span>
+        </div>
+      )}
 
       <div className="edu-lineas">
         {charge.items.map((i) => (
@@ -1682,6 +1994,7 @@ function Recibo({
               className="edu-btn edu-btn--primary edu-btn--sm"
               onClick={() => {
                 setPagos([eduNuevoPagoDraft(charge.balanceCents)]);
+                setMovKey(eduNuevaClaveIdem());
                 setModo("pago");
               }}
             >
@@ -1703,6 +2016,7 @@ function Recibo({
               className="edu-btn edu-btn--ghost edu-btn--sm"
               onClick={() => {
                 setMonto(eduMoneyInputValue(charge.paidCents));
+                setMovKey(eduNuevaClaveIdem());
                 setModo("devolucion");
               }}
             >
@@ -1813,9 +2127,23 @@ function Recibo({
               {EDU_PAYMENT_METHODS_COBRABLES.map((m) => (
                 <option key={m} value={m}>
                   {EDU_PAYMENT_METHOD_LABELS[m]}
+                  {netoPorMetodo.get(m) ? ` — entraron ${eduMoney(netoPorMetodo.get(m) ?? 0)}` : ""}
                 </option>
               ))}
             </select>
+            {/* 🔴 H-47 · UNA DEVOLUCIÓN SALE POR DONDE ENTRÓ EL DINERO.
+                Este desplegable arrancaba SIEMPRE en "Efectivo" y el
+                servidor solo topaba contra el total pagado, así que se
+                devolvía en efectivo lo que había entrado con tarjeta y el
+                arqueo cerraba descuadrado sin que nada lo dijera. Ahora
+                arranca por el método con más dinero dentro, cada opción
+                dice cuánto entró por ella, y el servidor rebota lo que no
+                cabe. La salida es "Otro", que exige el motivo escrito. */}
+            <span className="edu-field__hint">
+              {netoPorMetodo.size > 0
+                ? "Sale por donde entró. Si de verdad tiene que salir por otro camino, usa «Otro» y explícalo en el motivo."
+                : "Este cobro no tiene pagos que devolver."}
+            </span>
           </div>
           <div className="edu-field">
             <label className="edu-field__label" htmlFor="edu-rec-monto">
@@ -1832,47 +2160,49 @@ function Recibo({
               Como mucho lo pagado: {eduMoney(charge.paidCents)}.
             </span>
           </div>
+          {/* 🔴 H-55 · EL MOTIVO, SIEMPRE Y OBLIGATORIO. Cancelar un cobro
+              ofrecía dónde escribir por qué; devolver dinero —el movimiento
+              más delicado del mostrador, el único que SACA dinero del
+              cajón— solo ofrecía "Referencia (opcional)", pensada para la
+              autorización de la terminal. El servidor ya aceptaba la nota y
+              nadie la mandaba; ahora la exige. */}
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-rec-mot">
+              Motivo de la devolución
+            </label>
+            <input
+              id="edu-rec-mot"
+              className="edu-input"
+              value={devNotas}
+              onChange={(e) => setDevNotas(e.target.value)}
+              placeholder="Se canceló el tratamiento; se le devuelve el anticipo"
+              autoComplete="off"
+            />
+            <span className="edu-field__hint">
+              Obligatorio: al menos 3 letras. Es lo que explica el movimiento en el corte de quien
+              cierre el turno.
+            </span>
+          </div>
+
           {/* 🔴 El campo contextual, igual que en el bloque de formas de
-              pago: un cheque SIN número no se puede rastrear y un "Otro"
-              sin motivo es un agujero en el arqueo. El servidor exige los
-              dos, así que la pantalla tiene que ofrecerlos —y decir que
-              son obligatorios— en vez de rebotar con un 400. */}
-          {metodo === "OTHER" ? (
-            <div className="edu-field">
-              <label className="edu-field__label" htmlFor="edu-rec-mot">
-                Motivo (beca, vale, cortesía)
-              </label>
-              <input
-                id="edu-rec-mot"
-                className="edu-input"
-                value={devNotas}
-                onChange={(e) => setDevNotas(e.target.value)}
-                placeholder="Cortesía de la dirección"
-                autoComplete="off"
-              />
+              pago: un cheque SIN número no se puede rastrear. */}
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-rec-ref">
+              {metodo === "CHECK" ? "Número de cheque y banco" : "Referencia (opcional)"}
+            </label>
+            <input
+              id="edu-rec-ref"
+              className="edu-input"
+              value={referencia}
+              onChange={(e) => setReferencia(e.target.value)}
+              autoComplete="off"
+            />
+            {metodo === "CHECK" && (
               <span className="edu-field__hint">
-                Obligatorio: al menos 3 letras. Es lo que explica el movimiento en el corte.
+                Obligatorio: sin él, un cheque devuelto no se puede rastrear.
               </span>
-            </div>
-          ) : (
-            <div className="edu-field">
-              <label className="edu-field__label" htmlFor="edu-rec-ref">
-                {metodo === "CHECK" ? "Número de cheque y banco" : "Referencia (opcional)"}
-              </label>
-              <input
-                id="edu-rec-ref"
-                className="edu-input"
-                value={referencia}
-                onChange={(e) => setReferencia(e.target.value)}
-                autoComplete="off"
-              />
-              {metodo === "CHECK" && (
-                <span className="edu-field__hint">
-                  Obligatorio: sin él, un cheque devuelto no se puede rastrear.
-                </span>
-              )}
-            </div>
-          )}
+            )}
+          </div>
           <div className="edu-actions">
             <button
               type="button"
@@ -1880,7 +2210,7 @@ function Recibo({
               onClick={() => registrar(true)}
               disabled={
                 busy ||
-                (metodo === "OTHER" && devNotas.trim().length < 3) ||
+                devNotas.trim().length < 3 ||
                 (metodo === "CHECK" && referencia.trim() === "")
               }
             >

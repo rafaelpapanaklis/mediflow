@@ -44,6 +44,7 @@ import {
   EDU_RUBRIC_NAME_MAX,
   EDU_RUBRIC_NOTES_MAX,
   eduComputeFinalScore,
+  eduCurrentGrade,
   eduEvalBoolean,
   eduEvalInt,
   eduEvalOptionalText,
@@ -55,6 +56,9 @@ import {
   type EduGradeRow,
   type EduRubricRow,
 } from "@/lib/edu/evaluacion-core";
+// 🔴 LA BITÁCORA TIENE UN SOLO ESCRITOR y NUNCA lanza: si el renglón no
+// entra, la calificación se guarda igual. Ver auditoria.ts.
+import { eduAudit, type EduAuditActor } from "@/lib/edu/auditoria";
 
 function requireInstitution(ctx: EduClinicaContext): string {
   const id = ctx?.institutionId;
@@ -85,13 +89,19 @@ const RUBRIC_SELECT = {
   program: { select: { name: true } },
   procedure: { select: { name: true } },
   criteria: {
-    orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+    // 🔴 H-93 · SE LEEN TODOS, activos y retirados, y los ACTIVOS PRIMERO.
+    // La pantalla necesita poder enseñar «este criterio se retiró» — que no
+    // es lo mismo que «nunca estuvo»— y el editor necesita saber que el
+    // nombre sigue ocupado por una fila desactivada: volver a añadirlo la
+    // REVIVE en vez de chocar contra el índice único (rubricId, name).
+    orderBy: [{ isActive: "desc" }, { orderIndex: "asc" }, { name: "asc" }],
     select: {
       id: true,
       name: true,
       description: true,
       weightPercent: true,
       orderIndex: true,
+      isActive: true,
     },
   },
   _count: { select: { grades: true } },
@@ -117,6 +127,7 @@ function toRubricRow(r: RubricPayload): EduRubricRow {
       name: c.name,
       description: c.description,
       weightPercent: c.weightPercent,
+      isActive: c.isActive,
       orderIndex: c.orderIndex,
     })),
     usedIn: r._count.grades,
@@ -262,7 +273,20 @@ export async function createEduRubric(
   if (!name) throw new EduPadronError("Ponle nombre a la rúbrica.");
 
   const scaleMin = eduEvalInt(input.scaleMin, 0, 1000) ?? 0;
-  const scaleMax = eduEvalInt(input.scaleMax, 0, 1000) ?? 100;
+  // 🔴 OLA C · H-92 — LA ESCALA NO SE COACCIONA EN SILENCIO AL CREAR.
+  //
+  // El `?? 100` convertía "dejé el campo vacío" en "de 0 a 100". El docente
+  // calificaba cinco casos poniendo 8 pensando sobre 10, se guardaban como
+  // 8/100 y la escala SE CONGELA en cada calificación: no hay arreglo
+  // después, una calificación no se edita. Al EDITAR el vacío sí conserva
+  // la escala previa (ahí no hay nada que adivinar); al crear no hay nada
+  // previo, así que se pregunta.
+  const scaleMax = eduEvalInt(input.scaleMax, 0, 1000);
+  if (scaleMax === null || scaleMax === undefined) {
+    throw new EduPadronError(
+      "Escribe hasta cuánto se califica con esta rúbrica (por ejemplo 10, o 100). No se puede suponer: la escala queda congelada en cada calificación que se ponga con ella.",
+    );
+  }
   const escalaMala = eduScaleCheck(scaleMin, scaleMax);
   if (escalaMala) throw new EduPadronError(escalaMala);
 
@@ -420,27 +444,54 @@ export async function updateEduRubric(
       // ═══════════════════════════════════════════════════════════════
       const previos = await tx.eduRubricCriterion.findMany({
         where: { institutionId, rubricId: actual.id },
-        select: { id: true, name: true },
+        select: { id: true, name: true, isActive: true },
       });
-      const porNombre = new Map(previos.map((p) => [p.name, p.id]));
+      const porNombre = new Map(previos.map((p) => [p.name, p]));
       const nombresNuevos = new Set(criterios.map((c) => c.name));
 
-      const sobran = previos.filter((p) => !nombresNuevos.has(p.name)).map((p) => p.id);
+      // ═══════════════════════════════════════════════════════════════
+      // 🔴 OLA C·2 · H-93 — UN CRITERIO QUE SOBRA SE DESACTIVA, NO SE
+      // BORRA.
+      //
+      // «Los criterios de una rúbrica se BORRAN de verdad, y renombrar uno
+      // deja huérfano el historial. Corregir "Aislamento" → "Aislamiento"
+      // es, para la llave natural, un borrado y un alta: el `criterionId`
+      // de TODOS los EduCaseGradeItem anteriores pasa a NULL, y la
+      // pregunta que el propio código dice querer contestar ("¿cómo va la
+      // escuela en Aislamiento?") deja de tener respuesta. Nadie ve nada
+      // raro. En todo el resto del vertical nada se borra: se desactiva.»
+      //
+      // Con `isActive: false` la rúbrica deja de OFRECER el criterio y las
+      // calificaciones que ya se pusieron con él conservan su
+      // `criterionId`: la pregunta sigue teniendo respuesta.
+      //
+      // ⚠️ Y el índice único es `(rubricId, name)`, así que el nombre sigue
+      // ocupado por la fila desactivada. Eso es lo correcto y es lo que
+      // hace que volver a añadirlo lo REVIVA (abajo) en vez de chocar.
+      // ═══════════════════════════════════════════════════════════════
+      const sobran = previos
+        .filter((p) => !nombresNuevos.has(p.name) && p.isActive)
+        .map((p) => p.id);
       if (sobran.length > 0) {
-        await tx.eduRubricCriterion.deleteMany({
+        await tx.eduRubricCriterion.updateMany({
           where: { institutionId, rubricId: actual.id, id: { in: sobran } },
+          data: { isActive: false },
         });
       }
 
       for (const c of criterios) {
-        const previoId = porNombre.get(c.name);
-        if (previoId) {
+        const previo = porNombre.get(c.name);
+        if (previo) {
           await tx.eduRubricCriterion.update({
-            where: { id: previoId },
+            where: { id: previo.id },
             data: {
               description: c.description,
               weightPercent: c.weightPercent,
               orderIndex: c.orderIndex,
+              // Volver a poner un criterio que se había quitado lo REVIVE.
+              // Es la misma fila y el mismo `criterionId`, así que el
+              // historial de calificaciones vuelve a enlazar solo.
+              isActive: true,
             },
           });
         } else {
@@ -649,6 +700,17 @@ export async function listEduStudentGrades(
   return marcarVigentes(rows, timeZone);
 }
 
+/**
+ * Lo que hace falta para PONER una calificación: el contexto del piso
+ * clínico MÁS quién la pone.
+ *
+ * 🔴 EL `user` NO ES OPCIONAL. Una calificación es lo que decide si alguien
+ * se gradúa: la bitácora tiene que poder atribuirla, y con `user?` se
+ * podría llamar sin él y el renglón quedaría sin firmar en silencio. La
+ * ruta que la llama pasa `g.ctx`, que ya lo trae.
+ */
+export interface EduGradeWriteContext extends EduClinicaContext, EduAuditActor {}
+
 export interface EduGradeInput {
   caseId?: unknown;
   rubricId?: unknown;
@@ -678,7 +740,7 @@ export interface EduGradeInput {
  *     sabría calcular una mejor.
  */
 export async function createEduGrade(
-  ctx: EduClinicaContext,
+  ctx: EduGradeWriteContext,
   input: EduGradeInput,
   now: Date = new Date(),
 ): Promise<{ id: string; finalScoreX100: number }> {
@@ -693,7 +755,20 @@ export async function createEduGrade(
 
   const caso = await prisma.eduCase.findFirst({
     where: { ...eduCaseScopeWhere({ institutionId, scope, now }), id: caseId },
-    select: { id: true, studentId: true, student: { select: { userId: true } } },
+    select: {
+      id: true,
+      studentId: true,
+      // H-91: la rúbrica se valida contra la especialidad y el
+      // procedimiento DEL CASO, no contra los del alumno.
+      programId: true,
+      procedureId: true,
+      // Para que el renglón de la bitácora se pueda encontrar POR PACIENTE,
+      // que es como se busca en una auditoría.
+      patientId: true,
+      program: { select: { name: true } },
+      procedure: { select: { name: true } },
+      student: { select: { userId: true } },
+    },
   });
   if (!caso) throw new EduPadronError("Ese caso no es de este instituto.", 404);
 
@@ -712,10 +787,17 @@ export async function createEduGrade(
         select: {
           id: true,
           name: true,
+          programId: true,
+          procedureId: true,
           scaleMin: true,
           scaleMax: true,
           isActive: true,
           criteria: {
+            // 🔴 H-93 · SOLO LOS ACTIVOS. Un criterio desactivado sigue en
+            // la tabla para que el historial de calificaciones no quede
+            // huérfano, pero exigir su puntuación al calificar hoy sería
+            // pedirle al docente algo que la rúbrica ya no mide.
+            where: { isActive: true },
             orderBy: [{ orderIndex: "asc" }],
             select: { id: true, name: true, weightPercent: true, orderIndex: true },
           },
@@ -728,6 +810,32 @@ export async function createEduGrade(
   }
   if (rubrica.criteria.length === 0) {
     throw new EduPadronError("Esa rúbrica no tiene criterios: no se puede calificar con ella.");
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // 🔴 OLA C · H-91 — LA RÚBRICA TIENE QUE SER LA DEL CASO.
+  //
+  // El único filtro era del CLIENTE, y encima filtraba por la especialidad
+  // del ALUMNO y no la del CASO: por API una endodoncia se calificaba con
+  // la rúbrica de Ortodoncia y quedaba guardada con su escala y sus
+  // criterios, sin nada que la marcara. La escala se CONGELA en la fila, así
+  // que eso no se arregla después: se rebota antes de escribir.
+  //
+  // `programId`/`procedureId` en null significan "para todas" y "para
+  // cualquiera" (así lo dice el schema), y se siguen aceptando. El
+  // procedimiento solo se compara cuando el caso tiene uno capturado: en el
+  // tamizaje muchas veces todavía no se sabe, y exigirlo aquí dejaría al
+  // docente sin poder calificar trabajo que sí hizo.
+  // ═════════════════════════════════════════════════════════════════════
+  if (rubrica.programId && rubrica.programId !== caso.programId) {
+    throw new EduPadronError(
+      `Esa rúbrica no es de la especialidad de este caso (${caso.program?.name ?? "la del caso"}). Elige una de esa especialidad, o una general.`,
+    );
+  }
+  if (rubrica.procedureId && caso.procedureId && rubrica.procedureId !== caso.procedureId) {
+    throw new EduPadronError(
+      `Esa rúbrica es de otro procedimiento. Este caso está capturado como "${caso.procedure?.name ?? "otro procedimiento"}".`,
+    );
   }
 
   // La corrección tiene que ser del MISMO caso: encadenar la calificación
@@ -745,37 +853,44 @@ export async function createEduGrade(
     if (!previa) {
       throw new EduPadronError("Esa calificación anterior no es de este caso.", 404);
     }
-    const yaCorregida = await prisma.eduCaseGrade.findFirst({
-      where: { institutionId, correctsId: previa.id },
-      select: { id: true },
-    });
-    if (yaCorregida) {
-      throw new EduPadronError(
-        "Esa calificación ya se corrigió. Recarga la pantalla: estás mirando una versión vieja.",
-        409,
-      );
-    }
     correctsId = previa.id;
   }
 
   // 2 · Las puntuaciones, criterio por criterio y contra la rúbrica.
   const crudos = Array.isArray(input.items) ? input.items : [];
   const porCriterio = new Map<string, { scoreX100: number; comment: string | null }>();
+  // 🔴 OLA C · H-96 — "FUERA DE ESCALA" NO ES "FALTA".
+  //
+  // Los dos casos caían en el mismo `continue` y salían con el mismo
+  // mensaje: «Falta la puntuación de: Conformación» con el campo LLENO, un
+  // 12 sobre una escala de 10. El docente lo relee tres veces, de pie en el
+  // piso clínico, y no hay nada más que leer. Se separan: si venía algo
+  // escrito y no encajó, el error dice QUÉ pasa con lo que escribió.
+  const fueraDeEscala = new Set<string>();
   for (const raw of crudos) {
     if (typeof raw !== "object" || raw === null) continue;
     const it = raw as Record<string, unknown>;
     const cid = eduCleanId(it.criterionId);
     if (!cid) continue;
-    const score = eduParseScoreX100(
-      it.scoreX100 !== undefined ? it.scoreX100 : it.score,
-      rubrica.scaleMin,
-      rubrica.scaleMax,
-    );
-    if (score === null) continue;
+    const bruto = it.scoreX100 !== undefined ? it.scoreX100 : it.score;
+    const score = eduParseScoreX100(bruto, rubrica.scaleMin, rubrica.scaleMax);
+    if (score === null) {
+      const escrito =
+        bruto === null || bruto === undefined ? "" : String(bruto).trim();
+      if (escrito) fueraDeEscala.add(cid);
+      continue;
+    }
     porCriterio.set(cid, {
       scoreX100: score,
       comment: eduEvalOptionalText(it.comment, EDU_GRADE_ITEM_COMMENT_MAX) ?? null,
     });
+  }
+
+  const malos = rubrica.criteria.filter((c) => fueraDeEscala.has(c.id));
+  if (malos.length > 0) {
+    throw new EduPadronError(
+      `Esta puntuación no cabe en la escala de la rúbrica: ${malos.map((c) => c.name).join(", ")}. Esta rúbrica se califica entre ${rubrica.scaleMin} y ${rubrica.scaleMax}, con dos decimales como mucho.`,
+    );
   }
 
   const faltan = rubrica.criteria.filter((c) => !porCriterio.has(c.id));
@@ -801,23 +916,114 @@ export async function createEduGrade(
   const finalScoreX100 = eduComputeFinalScore(items);
 
   const created = await prisma.$transaction(async (tx) => {
-    const g = await tx.eduCaseGrade.create({
-      data: {
-        institutionId,
-        caseId: caso.id,
-        studentId: caso.studentId,
-        rubricId: rubrica.id,
-        rubricName: rubrica.name,
-        scaleMin: rubrica.scaleMin,
-        scaleMax: rubrica.scaleMax,
-        gradedById: ctx.eduUserId,
-        gradedAt: now,
-        finalScoreX100,
-        comment: eduEvalOptionalText(input.comment, EDU_GRADE_COMMENT_MAX) ?? null,
-        correctsId,
-      },
-      select: { id: true },
+    // ═══════════════════════════════════════════════════════════════════
+    // 🔴 OLA C · H-05 y H-95 — UN CASO CUENTA UNA VEZ EN EL PROMEDIO.
+    //
+    // La regla de la casa es «la vigente es la que nadie corrige»
+    // (`eduCurrentGrade`, derivada y no guardada), y solo se sostiene si no
+    // se pueden crear DOS RAÍCES. Se podían de dos maneras, y las dos
+    // salieron en producción:
+    //
+    //  · H-05 · el botón «Calificar otra vez» mandaba `corrige: null`, así
+    //    que una segunda calificación del mismo caso nacía suelta. Las dos
+    //    quedaban vigentes, `eduAverageScore` promediaba las dos y la
+    //    bitácora decía «2 casos calificados» con un solo caso. El mismo
+    //    resultado sin que nadie se equivoque: dos docentes con asignación
+    //    vigente sobre el mismo alumno calificando el mismo caso.
+    //  · H-95 · la comprobación de «esta ya se corrigió» vivía FUERA de la
+    //    transacción y por delante de toda la validación de la rúbrica —una
+    //    ventana enorme—, y el índice `(institutionId, correctsId)` es
+    //    normal, no único: dos correcciones de la misma raíz cabían las dos.
+    //
+    // Ahora las dos se comprueban aquí, con UNA lectura, contra las filas
+    // que hay en este instante y con la misma regla que usa la pantalla.
+    //
+    // ⚠️ Lo que esto NO puede dar sin SQL es la garantía absoluta: dos
+    // transacciones simultáneas en READ COMMITTED no se ven entre sí. La
+    // ventana pasa de «toda la validación» a «lo que tarda el INSERT», y el
+    // candado que la cierra del todo es un índice único parcial sobre
+    // `edu_case_grades` — está pedido en el reporte de esta ola (punto 6).
+    // ═══════════════════════════════════════════════════════════════════
+    const hermanas = await tx.eduCaseGrade.findMany({
+      where: { institutionId, caseId: caso.id },
+      select: { id: true, correctsId: true },
+      orderBy: [{ gradedAt: "desc" }],
     });
+    const corregidas = new Set(
+      hermanas.map((g) => g.correctsId).filter((x): x is string => typeof x === "string"),
+    );
+    if (correctsId) {
+      if (corregidas.has(correctsId)) {
+        throw new EduPadronError(
+          "Esa calificación ya se corrigió. Recarga la pantalla: estás mirando una versión vieja.",
+          409,
+        );
+      }
+    } else if (eduCurrentGrade(hermanas)) {
+      throw new EduPadronError(
+        "Ese caso ya tiene calificación. Una segunda suelta lo haría contar DOS VECES en el promedio del alumno. Abre la calificación que está vigente y usa «Corregir»: la anterior se queda en el historial con quién la puso.",
+        409,
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🔴 OLA C·2 · H-95 — EL CÓDIGO RESPETA LOS ÍNDICES ÚNICOS PARCIALES.
+    //
+    // `sql/edu-ola-c.sql` §12.9 crea dos candados que la comprobación de
+    // arriba no puede dar sola (dos transacciones simultáneas en READ
+    // COMMITTED no se ven entre sí):
+    //   · `edu_case_grades_una_raiz_idx`       — una sola raíz por caso;
+    //   · `edu_case_grades_una_correccion_idx` — una sola corrección por raíz.
+    //
+    // Son índices de la BASE, no del esquema Prisma, así que un choque
+    // llega como un P2002 crudo y —sin esto— saldría por `eduApiError` como
+    // «Alguien más acaba de guardar ese mismo dato», que es cierto y no
+    // dice qué hacer. Se traduce al MISMO mensaje que la comprobación de
+    // arriba: el docente que pierde la carrera por diez milisegundos tiene
+    // que leer exactamente lo mismo que el que la pierde por diez segundos.
+    //
+    // ⚠️ Si Rafael no aplicó esos índices (la §12.9 avisa con un NOTICE
+    // cuando los datos ya los violan), este `catch` simplemente no se
+    // dispara nunca y todo sigue como antes. No hay nada que apagar.
+    // ═══════════════════════════════════════════════════════════════
+    const g = await tx.eduCaseGrade
+      .create({
+        data: {
+          institutionId,
+          caseId: caso.id,
+          studentId: caso.studentId,
+          rubricId: rubrica.id,
+          rubricName: rubrica.name,
+          scaleMin: rubrica.scaleMin,
+          scaleMax: rubrica.scaleMax,
+          gradedById: ctx.eduUserId,
+          gradedAt: now,
+          finalScoreX100,
+          comment: eduEvalOptionalText(input.comment, EDU_GRADE_COMMENT_MAX) ?? null,
+          correctsId,
+        },
+        select: { id: true },
+      })
+      .catch((err: unknown) => {
+        const e = err as { code?: string; meta?: { target?: unknown } };
+        if (e?.code !== "P2002") throw err;
+        const donde = (
+          Array.isArray(e.meta?.target) ? e.meta?.target.join(" ") : String(e.meta?.target ?? "")
+        ).toLowerCase();
+        if (donde.includes("una_correccion")) {
+          throw new EduPadronError(
+            "Esa calificación ya se corrigió. Recarga la pantalla: estás mirando una versión vieja.",
+            409,
+          );
+        }
+        if (donde.includes("una_raiz")) {
+          throw new EduPadronError(
+            "Ese caso ya tiene calificación. Una segunda suelta lo haría contar DOS VECES en el promedio del alumno. Abre la calificación que está vigente y usa «Corregir»: la anterior se queda en el historial con quién la puso.",
+            409,
+          );
+        }
+        throw err;
+      });
 
     await tx.eduCaseGradeItem.createMany({
       data: items.map((it) => ({
@@ -833,6 +1039,26 @@ export async function createEduGrade(
     });
 
     return g;
+  });
+
+  // 🔴 OLA C·2 · LA CALIFICACIÓN ENTRA EN LA BITÁCORA, con la acción
+  // `sign` y no `create`: poner una nota es un acto FIRMADO —decide si
+  // alguien se gradúa— y en el catálogo de la bitácora `sign` es
+  // exactamente eso («firmar una nota, expedir una receta»). Una
+  // corrección se distingue por su `corrige`.
+  await eduAudit(ctx, {
+    action: "sign",
+    entity: "case",
+    entityId: caso.id,
+    patientId: caso.patientId,
+    after: {
+      calificacion: created.id,
+      rubrica: rubrica.name,
+      finalScoreX100,
+      escala: `${rubrica.scaleMin}-${rubrica.scaleMax}`,
+      studentId: caso.studentId,
+      corrige: correctsId,
+    },
   });
 
   return { id: created.id, finalScoreX100 };

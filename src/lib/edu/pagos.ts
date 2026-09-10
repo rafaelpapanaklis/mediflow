@@ -382,7 +382,19 @@ export async function createEduPaymentPlan(
       ...eduChargeScopeWhere({ institutionId, scope: eduVisibility(ctx, "charges") }),
       id,
     },
-    select: { id: true, folio: true, patientId: true, totalCents: true, paidCents: true, status: true },
+    // 🔴 Ola C · H-09 · `campusId`: el enganche (y las mensualidades) caen
+    // en el turno DE LA SEDE DEL COBRO. El dinero de un cobro y el de sus
+    // pagos tienen que quedar en el mismo corte; si no, el arqueo de una
+    // sede enseña el enganche de la otra.
+    select: {
+      id: true,
+      folio: true,
+      patientId: true,
+      campusId: true,
+      totalCents: true,
+      paidCents: true,
+      status: true,
+    },
   });
   if (!cobro) throw new EduPadronError("Ese cobro no es de este instituto.", 404);
   if (cobro.status === "CANCELLED") {
@@ -418,7 +430,7 @@ export async function createEduPaymentPlan(
   const fechas = eduPlanDueDates(startISO, dueDay, months);
   if (!fechas) throw new EduPadronError("No se pudieron calcular las fechas del plan.", 400);
 
-  const sesion = enganche ? await getEduOpenCashSession(ctx) : null;
+  const sesion = enganche ? await getEduOpenCashSession(ctx, cobro.campusId) : null;
 
   const creado = await prisma.$transaction(async (tx) => {
     // 1 · UN solo plan ACTIVO por cobro. Dentro de la transacción, como el
@@ -600,7 +612,9 @@ export async function payEduInstallment(
           status: true,
           chargeId: true,
           months: true,
-          charge: { select: { folio: true } },
+          // 🔴 Ola C · H-09 · la sede del cobro decide en qué turno cae
+          // esta mensualidad. Ver la nota de `createEduPaymentPlan`.
+          charge: { select: { folio: true, campusId: true, patientId: true } },
         },
       },
     },
@@ -663,7 +677,7 @@ export async function payEduInstallment(
   }
   const pagos = leidos.pagos;
 
-  const sesion = await getEduOpenCashSession(ctx);
+  const sesion = await getEduOpenCashSession(ctx, fila.plan.charge.campusId);
 
   const resultado = await prisma.$transaction(async (tx) => {
     // Los pagos, por el ÚNICO camino que recalcula el cobro. 🔴 El monto

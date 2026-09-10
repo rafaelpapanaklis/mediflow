@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import { getEduContext, type EduContext } from "@/lib/edu-auth";
 import { assertEduPermission, EduForbiddenError, type EduPermissionKey } from "@/lib/edu/permissions";
 import { EduPadronError } from "@/lib/edu/padron";
+import { eduMensajeP2002, EDU_TEMP_PASSWORD_ERROR } from "@/lib/edu/api-guard-core";
 
 export type EduApiGuard = { ctx: EduContext } | { response: NextResponse };
 
@@ -31,6 +32,30 @@ export async function eduApiGuard(permission: EduPermissionKey): Promise<EduApiG
         { error: "Tu sesión caducó. Vuelve a entrar." },
         { status: 401 },
       ),
+    };
+  }
+
+  // ── 🔴 H-03 · LA CONTRASEÑA TEMPORAL TAMBIÉN CIERRA LA API ────────────
+  // El gate de `mustChangePassword` vivía SOLO en el layout del panel
+  // (src/app/instituto/(panel)/layout.tsx), y un layout no protege una API:
+  // quien tuviera la temporal en la mano —y la dirección se queda con 40 en
+  // una tarde de altas— podía llamar directo a POST .../expediente o
+  // .../recetas y firmar una nota clínica con el nombre de un alumno que
+  // nunca ha entrado al sistema.
+  //
+  // Va ANTES del permiso a propósito: no es una cuestión de qué puede hacer
+  // esta cuenta, sino de que la cuenta todavía no es de quien dice ser. Un
+  // 403 con el motivo se lee mejor que un 403 de permiso que confundiría.
+  //
+  // La allowlist NO se comprueba aquí porque no hace falta: las tres rutas
+  // exentas (cambiar contraseña, cerrar sesión, ¿es de instituto?) no pasan
+  // por este guardia — resuelven la sesión ellas mismas. Están escritas, con
+  // su motivo, en EDU_API_RUTAS_SIN_GUARD (api-guard-core.ts), y la prueba
+  // edu-api-guard.test.ts recorre src/app/api/instituto entera para que
+  // ninguna ruta nueva se salte el guardia sin quedar declarada.
+  if (ctx.user.mustChangePassword) {
+    return {
+      response: NextResponse.json({ error: EDU_TEMP_PASSWORD_ERROR }, { status: 403 }),
     };
   }
 
@@ -88,6 +113,19 @@ export function eduApiError(err: unknown, where: string): NextResponse {
       { error: `Tu cuenta no tiene el permiso ${err.permission}.` },
       { status: 403 },
     );
+  }
+  // ── H-107 · EL CHOQUE DE ÍNDICE ÚNICO SE LEE ──────────────────────────
+  // Cinco escrituras del padrón son check-then-act (leer "¿existe ya esta
+  // matrícula?" y escribir después), con su índice único detrás haciendo de
+  // red. Cuando dos personas de dirección dan de alta a la vez, la segunda
+  // recibía «No se pudo completar la operación» —el 500 genérico de abajo—
+  // mientras la primera había leído «La matrícula ENDO-2026-07 ya está en
+  // uso». El índice hacía bien su trabajo y el mensaje lo tiraba a la basura.
+  //
+  // 409 y no 500: no falló el servidor, se adelantó otra persona.
+  if ((err as { code?: string })?.code === "P2002") {
+    const target = (err as { meta?: { target?: unknown } })?.meta?.target;
+    return NextResponse.json({ error: eduMensajeP2002(target) }, { status: 409 });
   }
   console.error(`[instituto] ${where} falló:`, err);
   return NextResponse.json(

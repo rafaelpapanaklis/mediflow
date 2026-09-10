@@ -24,6 +24,7 @@ import {
   MessageCircle,
   Receipt,
   Ruler,
+  ScrollText,
   Sparkles,
   Stamp,
   Sun,
@@ -94,6 +95,9 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   receipt: Receipt,
   // Ola de la Clínica en vivo — la rejilla de sillones del piso.
   "layout-grid": LayoutGrid,
+  // Ola C·2 — la bitácora del instituto (NOM-024). Un rollo escrito, que
+  // es lo que es: el libro de quién hizo qué.
+  "scroll-text": ScrollText,
 };
 
 export interface EduShellProps {

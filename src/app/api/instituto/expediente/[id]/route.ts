@@ -75,13 +75,25 @@ export async function PATCH(request: Request, { params }: { params: { id: string
  * administrativo aparte. La PERTENENCIA la comprueba la función dentro, con
  * el alcance clínico: una nota que no te toca contesta 404, igual que una
  * que no existe.
+ *
+ * 🔴 OLA C·2 · ACEPTA UN MOTIVO EN EL CUERPO, Y ES OPCIONAL. La columna
+ * (`edu_records.deleteReason`) llegó con el SQL de la Ola C; el motivo se
+ * PIDE y no se EXIGE, por lo mismo que el de archivar una receta
+ * rechazada: obligarlo en un borrador vacío solo produce "asdf". Un DELETE
+ * con cuerpo es raro, y por eso el cuerpo se lee de forma tolerante: sin
+ * él, la petición sigue funcionando igual que antes.
  */
-export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   const g = await eduApiGuard("expediente.write");
   if ("response" in g) return g.response;
 
   try {
-    const retirada = await withdrawEduRecord(g.ctx, params.id);
+    // Tolerante a propósito: un DELETE sin cuerpo —el que manda cualquier
+    // cliente viejo— tiene que seguir retirando la nota, no reventar.
+    const body = await request
+      .json()
+      .catch(() => ({}) as { reason?: unknown });
+    const retirada = await withdrawEduRecord(g.ctx, params.id, body);
     return NextResponse.json({ ok: true, id: retirada.id });
   } catch (err) {
     return eduApiError(err, "DELETE /api/instituto/expediente/[id]");

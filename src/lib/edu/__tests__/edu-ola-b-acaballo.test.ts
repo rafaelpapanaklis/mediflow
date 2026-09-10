@@ -171,19 +171,23 @@ test("buscador · el `truncated` del servidor llega hasta las dos pantallas", ()
 // 3 · EL NÚMERO DE PESTAÑAS
 // ═══════════════════════════════════════════════════════════════════════
 
-test("las pestañas de la ficha son DOCE, y los comentarios lo dicen", () => {
+test("las pestañas de la ficha son CATORCE, y los comentarios lo dicen", () => {
   const src = crudo(...LAYOUT_FICHA.split("/"));
   const cuantas = (src.match(/^\s*(?:key: "|\{ key: ")/gm) ?? []).length;
   // Se cuenta por `key:` dentro de `definicion`, que es la lista completa
   // ANTES de filtrar por permiso. Lo que ve una persona depende de sus
   // llaves; lo que se documenta es la lista.
+  // Ola C·2: entraron «Salud» (el cuestionario versionado, fila 7) y
+  // «Plan» (el plan de tratamiento, fila 25).
   assert.equal(
     cuantas,
-    12,
+    14,
     "cambió el número de pestañas de la ficha: actualiza también los comentarios de " +
       "layout.tsx y paciente-tabs.tsx, que llevaban tres olas diciendo «DIEZ»",
   );
   assert.ok(!/DIEZ/.test(src), "layout.tsx vuelve a decir «DIEZ pestañas»");
+  assert.ok(!/DOCE/.test(src), "layout.tsx se quedó diciendo «DOCE pestañas»");
   const tabs = crudo("src", "components", "edu", "expediente", "paciente-tabs.tsx");
   assert.ok(!/DIEZ/.test(tabs), "paciente-tabs.tsx vuelve a decir «DIEZ pestañas»");
+  assert.ok(!/LAS DOCE/.test(tabs), "paciente-tabs.tsx se quedó diciendo «LAS DOCE pestañas»");
 });

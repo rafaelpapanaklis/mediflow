@@ -354,6 +354,25 @@ export function eduRecetaVoidable(status: EduPrescriptionStatus): boolean {
   return status === "EXPEDIDA";
 }
 
+/**
+ * 🔴 OLA C · ¿Se puede ARCHIVAR? Solo lo RECHAZADO (H-24).
+ *
+ * Archivar NO es anular, y por eso son dos funciones y no un parámetro:
+ *   · ANULAR   → lo EXPEDIDO. El documento existió, llevaba cédula, y el
+ *     PDF sigue saliendo marcado «ANULADA».
+ *   · ARCHIVAR → lo RECHAZADO. Nunca fue documento y nunca produce papel
+ *     (`eduRecetaPrintable` sigue diciendo que no). Solo sale de la vista
+ *     de trabajo del alumno, donde hasta hoy se quedaba PARA SIEMPRE
+ *     porque `EDU_PRESCRIPTION_TRANSITIONS.RECHAZADA` era `[]`.
+ *
+ * El motivo del rechazo lo escribió el docente en su autorización y no se
+ * toca; el de archivar es de quien archiva («ya se le hizo otra»,
+ * «el paciente no volvió»).
+ */
+export function eduRecetaArchivable(status: EduPrescriptionStatus): boolean {
+  return status === "RECHAZADA";
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 5 · LAS FORMAS QUE VIAJAN A LA PANTALLA
 //
@@ -398,6 +417,11 @@ export interface EduRecetaRow {
   voidedAtLabel: string | null;
   voidReason: string | null;
 
+  /** Ola C · el ARCHIVADO de una RECHAZADA (H-24). Ver `eduRecetaArchivable`. */
+  archivedByName: string | null;
+  archivedAtLabel: string | null;
+  archiveReason: string | null;
+
   /**
    * 🔴 Se RECALCULA al leer y se compara con `issuedHash` (ver
    * EduRecetaIntegridad). `null` = la receta no está expedida ni anulada,
@@ -419,6 +443,13 @@ export interface EduRecetaRow {
   editable: boolean;
   sendable: boolean;
   voidable: boolean;
+  /**
+   * Ola C · ¿se puede ARCHIVAR? Solo una RECHAZADA. Se deriva en el
+   * servidor con `eduRecetaArchivable` y no en la pantalla: la pantalla
+   * que decide sola qué botón pintar es la que acaba pintando uno que el
+   * endpoint rebota con 409.
+   */
+  archivable: boolean;
 }
 
 /** Un caso al que se le puede colgar una receta nueva. */

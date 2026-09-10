@@ -472,12 +472,26 @@ test("la pantalla enseña las bajas y ya no corta a 40 en silencio (S-12)", () =
   const src = fuente(PANTALLA_ODO);
   assert.match(src, /Retirado \{e\.deletedLabel\}/, "el historial no dice qué se retiró");
   assert.match(src, /por \$\{e\.deletedByName\}/, "el historial no dice QUIÉN lo retiró");
+  // Ola C·2 · la sección de las FILAS pasó a llamarse «Estado de cada
+  // hallazgo» (la HISTORIA la cuenta ahora el libro de movimientos), así
+  // que su botón ofrece hallazgos y no movimientos. Se exigen los DOS: uno
+  // por sección, y ninguna de las dos puede volver a cortar en silencio.
   assert.match(
     src,
-    /Ver los \{ocultas\} movimientos restantes/,
-    "el historial volvió a cortar sin ofrecer el resto",
+    /Ver los \{ocultas\} hallazgos restantes/,
+    "el estado de los hallazgos volvió a cortar sin ofrecer el resto",
+  );
+  assert.match(
+    src,
+    /Ver los \{ocultos\} movimientos restantes/,
+    "el libro de movimientos corta sin ofrecer el resto",
   );
   assert.match(src, /historialTruncado/, "la pantalla no recibe el aviso de que el servidor cortó");
+  assert.match(
+    src,
+    /movimientosTruncados/,
+    "la pantalla no recibe el aviso de que el LIBRO de movimientos cortó",
+  );
   // El dibujo recibe lo VIVO y el historial lo TODO: dos props distintas.
   const pagina = fuente(PAGINA_ODO);
   assert.match(pagina, /entries=\{eduOdontogramLiveEntries\(historial\.rows\)\}/);
@@ -568,7 +582,8 @@ test("retirar es una BAJA LÓGICA con autor, no un borrado", () => {
 test("el endpoint de retirar pide `expediente.write` y no inventa un permiso", () => {
   const ruta = fuente(RUTA_NOTA);
   assert.match(ruta, /export async function DELETE/);
-  assert.match(ruta, /withdrawEduRecord\(g\.ctx, params\.id\)/);
+  // Ola C·2 · el tercer argumento es el cuerpo con el MOTIVO (opcional).
+  assert.match(ruta, /withdrawEduRecord\(g\.ctx, params\.id, body\)/);
   const i = ruta.indexOf("export async function DELETE");
   assert.match(ruta.slice(i), /eduApiGuard\("expediente\.write"\)/);
 });
@@ -795,20 +810,29 @@ test("🔴 N-14 · en solo lectura, la rejilla de caras y la mini-paleta se apag
 
 test("N-3 · los rótulos del odontograma ya no prometen más de lo que hay", () => {
   // La promesa vieja era "quitar no borra, deja constancia de quién lo
-  // quitó", a secas. Hoy es verdad para lo retirado Y para lo que se
-  // remarcó — pero de esto último no queda la fecha, y el rótulo lo dice.
+  // quitó", a secas — y con UNA FILA POR HALLAZGO la fecha se perdía al
+  // remarcar. La Ola C·2 la hace verdad con el LIBRO DE MOVIMIENTOS, así
+  // que el rótulo puede volver a prometer el "cuándo": ya está.
   const pantalla = crudo(PANTALLA_ODO);
   assert.ok(
     !pantalla.includes("deja constancia de quién lo quitó"),
     "el rótulo sigue prometiendo una constancia que se pierde al remarcar",
   );
+  assert.ok(
+    !pantalla.includes("se conserva quién pasó la goma, no la fecha en que lo hizo"),
+    "ese rótulo era el recorte de la Ola B: con el libro de movimientos la fecha SÍ está, y " +
+      "dejarlo escrito manda a nadie a buscar lo que ya se puede leer",
+  );
   assert.match(
     pantalla,
-    /se conserva quién pasó la goma, no la fecha en que lo hizo/,
-    "falta decir hasta dónde llega el rastro",
+    /queda escrito quién lo quitó Y CUÁNDO/,
+    "el rótulo tiene que apoyarse en el libro de movimientos, que es donde está la fecha",
   );
+  // Y la sección de las FILAS dice a dónde va quien busque la secuencia.
+  assert.match(pantalla, /la fecha y la secuencia completa están arriba, en los movimientos/);
 
-  // Y el índice exacto de la Ola C queda anotado donde se va a buscar.
+  // El índice parcial de la Ola C sigue anotado donde se va a buscar: es
+  // el camino que NO se tomó, y queda escrito para que nadie lo redescubra.
   const servidor = crudo(ODONTOGRAMA);
   assert.match(servidor, /DROP INDEX IF EXISTS "edu_odontogram_hallazgo_key"/);
   assert.match(servidor, /WHERE "deletedAt" IS NULL/);

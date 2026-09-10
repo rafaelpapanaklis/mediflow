@@ -125,6 +125,11 @@ export default async function InstitutoCasosPage({
         programas={programas.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive }))}
         alumnos={alumnos}
         docentes={docentes}
+        // H-44: los dos desplegables se cortan en EDU_CLINICA_MAX_ROWS y no
+        // lo decían, mientras la lista sí avisa. Si llegó justo el techo, es
+        // que hay más.
+        alumnosTruncados={alumnos.length >= EDU_CLINICA_MAX_ROWS}
+        docentesTruncados={docentes.length >= EDU_CLINICA_MAX_ROWS}
       />
     </div>
   );

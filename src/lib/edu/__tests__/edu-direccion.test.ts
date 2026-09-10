@@ -649,6 +649,8 @@ function ahoraDePrueba(): EduDirAhora {
     alumnosAtendiendo: 3,
     sillonesEnUso: 3,
     sillonesTotal: 20,
+    // H-124: sin especialidad elegida, el cociente 3/20 es legítimo.
+    especialidadFiltrada: false,
     docentesResponsables: 2,
     sillonesSinDocente: 1,
     esperandoFirma: 1,

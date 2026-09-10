@@ -39,10 +39,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   try {
     const body = await eduReadJson(request);
-    const invoice = await resolveEduStuckInvoice(g.ctx, params.id, {
-      uuid: body.uuid,
-      sinTimbre: body.sinTimbre,
-    });
+    const invoice = await resolveEduStuckInvoice(
+      g.ctx,
+      params.id,
+      { uuid: body.uuid, sinTimbre: body.sinTimbre },
+      // H-81 · la zona del INSTITUTO, como en la lista.
+      { timeZone: g.ctx.institution.timezone },
+    );
     return NextResponse.json({ ok: true, invoice });
   } catch (err) {
     return eduApiError(err, "POST /api/instituto/facturacion/[id]/resolver");

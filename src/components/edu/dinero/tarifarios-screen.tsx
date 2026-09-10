@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
@@ -9,6 +9,7 @@ import {
   eduMoney,
   eduMoneyInputValue,
   type EduFeeScheduleRow,
+  type EduPrecioRastroRow,
   type EduTarifario,
 } from "@/lib/edu/dinero-core";
 import {
@@ -62,8 +63,22 @@ export function EduTarifariosScreen({
   const [editarLista, setEditarLista] = useState<EduFeeScheduleRow | null>(null);
   const [precios, setPrecios] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  // 🔴 H-79 · EL BUSCADOR. Para subir el precio de "ENDO-3" había que
+  // hacer scroll y contar renglones en una tabla de 250 × 4, que es la
+  // pantalla donde más caro sale equivocarse de renglón. Filtra en el
+  // cliente porque las filas ya están todas aquí (el techo es 400).
+  const [filtro, setFiltro] = useState("");
 
   const { schedules, rows, truncated } = tarifario;
+  const termino = filtro.trim().toLowerCase();
+  const visibles = termino
+    ? rows.filter(
+        (r) =>
+          r.procedure.code.toLowerCase().includes(termino) ||
+          r.procedure.name.toLowerCase().includes(termino) ||
+          (r.procedure.category ?? "").toLowerCase().includes(termino),
+      )
+    : rows;
   const activas = schedules.filter((s) => s.isActive);
   const hayDefault = activas.some((s) => s.isDefault);
 
@@ -182,20 +197,49 @@ export function EduTarifariosScreen({
             </p>
           </div>
           <span className="edu-count">
-            {navigating ? "Actualizando…" : `${rows.length} procedimientos`}
+            {navigating
+              ? "Actualizando…"
+              : termino
+                ? `${visibles.length} de ${rows.length} procedimientos`
+                : `${rows.length} procedimientos`}
             {truncated ? ` (se muestran los primeros ${maxRows})` : ""}
           </span>
         </div>
 
-        {schedules.length === 0 || rows.length === 0 ? (
+        {/* 🔴 H-79 · buscar por clave, nombre o categoría. */}
+        <div className="edu-toolbar">
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="edu-tarifas-filtro">
+              Buscar un procedimiento
+            </label>
+            <input
+              id="edu-tarifas-filtro"
+              className="edu-input edu-input--sm"
+              type="search"
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+              placeholder="Clave, nombre o categoría"
+              autoComplete="off"
+            />
+            <span className="edu-field__hint">Filtra mientras escribes, sin recargar.</span>
+          </div>
+        </div>
+
+        {schedules.length === 0 || visibles.length === 0 ? (
           <div className="edu-empty">
             <p className="edu-empty__title">
-              {schedules.length === 0 ? "Primero crea una lista" : "Todavía no hay procedimientos"}
+              {schedules.length === 0
+                ? "Primero crea una lista"
+                : termino
+                  ? "Ningún procedimiento coincide"
+                  : "Todavía no hay procedimientos"}
             </p>
             <p className="edu-empty__detail">
               {schedules.length === 0
                 ? "La tabla compara precios entre listas: sin listas no hay nada que comparar."
-                : "Da de alta el catálogo en Procedimientos y vuelve aquí a ponerle precio."}
+                : termino
+                  ? "Prueba con la clave, con menos letras del nombre, o borra el filtro."
+                  : "Da de alta el catálogo en Procedimientos y vuelve aquí a ponerle precio."}
             </p>
           </div>
         ) : (
@@ -211,7 +255,7 @@ export function EduTarifariosScreen({
               <span />
             </div>
 
-            {rows.map((r) => (
+            {visibles.map((r) => (
               <div
                 key={r.procedure.id}
                 className={`edu-row ${r.procedure.isActive ? "" : "edu-row--off"}`}
@@ -495,6 +539,36 @@ function FormPrecios({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── 🔴 H-76 · QUIÉN PUSO CADA PRECIO Y CUÁNDO ──────────────────────
+  // «Nadie sabe quién cambió un precio ni cuándo, y borrar un precio es un
+  // DELETE físico.» Ahora la fila guarda autor y fecha DEL PRECIO
+  // (`priceSetAt`, aparte de `updatedAt`), y quitar un precio es una baja
+  // lógica: el rastro sobrevive. Se pide al abrir el modal, no en la
+  // tabla: son 40 procedimientos × N listas y nadie mira eso de un
+  // vistazo — se pregunta por el procedimiento que se está tocando.
+  const [rastro, setRastro] = useState<EduPrecioRastroRow[] | null>(null);
+  const procedureId = fila?.procedure.id ?? null;
+  useEffect(() => {
+    if (!procedureId) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await eduRequest<{ rows: EduPrecioRastroRow[] }>(
+          `/api/instituto/tarifarios/precios?procedimiento=${encodeURIComponent(procedureId)}`,
+        );
+        if (vivo) setRastro(res.rows);
+      } catch {
+        // El rastro es información de apoyo: si no llega, la captura de
+        // precios sigue funcionando igual. No se pinta un error rojo por
+        // no poder decir quién puso un precio.
+        if (vivo) setRastro([]);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [procedureId]);
+
   if (!fila) return null;
 
   async function guardar() {
@@ -551,7 +625,9 @@ function FormPrecios({
 
       <p className="edu-note">
         Cambiar un precio aquí NO reescribe ningún cobro ya emitido: el precio de un cobro vive
-        congelado en su renglón. Esto decide lo que costará el próximo.
+        congelado en su renglón. Esto decide lo que costará el próximo. Y{" "}
+        <strong>vaciar un campo ya no borra la fila</strong>: la lista deja de cubrir el
+        procedimiento y queda escrito quién lo quitó.
       </p>
 
       <div className="edu-formgrid">
@@ -571,9 +647,65 @@ function FormPrecios({
               placeholder="0.00"
               autoComplete="off"
             />
+            {/* 🔴 H-76 · el AUTOR y la FECHA DEL PRECIO, debajo del campo
+                que se está tocando. `priceSetAt` no es `updatedAt`: lo que
+                hay que poder contestar es cuándo cambió EL PRECIO, no
+                cuándo se tocó la fila. */}
+            <span className="edu-field__hint">{rastroDe(rastro, s.id)}</span>
           </div>
         ))}
       </div>
+
+      {/* ── El historial CORTO, y dice lo que NO es ──────────────────── */}
+      {rastro && rastro.some((r) => r.retirado) && (
+        <>
+          <p className="edu-note">
+            <strong>Precios retirados de este procedimiento</strong> — la fila sigue ahí, sin
+            cotizar: volver a escribir un importe la revive.
+          </p>
+          <ul className="edu-picklist">
+            {rastro
+              .filter((r) => r.retirado)
+              .map((r) => (
+                <li key={r.feeScheduleId} className="edu-note">
+                  {r.feeScheduleName}: valía {eduMoney(r.priceCents)} · lo quitó{" "}
+                  {r.deletedByName ?? "—"}
+                  {r.deletedAt ? ` el ${r.deletedAt.slice(0, 10)}` : ""}
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
+
+      {rastro !== null && (
+        <p className="edu-note">
+          Esto es el rastro del precio que está puesto hoy, no un historial completo: para poder
+          contestar «¿cuánto costaba en febrero?» haría falta una tabla de movimientos de precio,
+          que todavía no existe.
+        </p>
+      )}
     </EduModal>
   );
+}
+
+/**
+ * La línea de rastro de UNA lista, escrita para una persona.
+ *
+ * `null` = todavía no llegó del servidor; `[]` = llegó y no hay nada que
+ * decir. Los dos casos tienen que verse distintos de "nadie lo puso": un
+ * hueco silencioso donde debería ir un nombre se lee como si el dato no
+ * existiera.
+ */
+function rastroDe(rastro: EduPrecioRastroRow[] | null, feeScheduleId: string): string {
+  if (rastro === null) return "Leyendo quién lo puso…";
+  const r = rastro.find((x) => x.feeScheduleId === feeScheduleId);
+  if (!r) return "Esta lista nunca ha cubierto este procedimiento.";
+  if (r.retirado) {
+    return `Retirado por ${r.deletedByName ?? "—"}${r.deletedAt ? ` el ${r.deletedAt.slice(0, 10)}` : ""}. Valía ${eduMoney(r.priceCents)}.`;
+  }
+  const quien = r.updatedByName ?? r.createdByName;
+  if (!quien && !r.priceSetAt) {
+    return "Sin rastro: este precio se capturó antes de que se guardara el autor.";
+  }
+  return `Lo puso ${quien ?? "—"}${r.priceSetAt ? ` el ${r.priceSetAt.slice(0, 10)}` : ""}.`;
 }

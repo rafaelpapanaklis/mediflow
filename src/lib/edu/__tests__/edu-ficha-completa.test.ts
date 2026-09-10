@@ -153,6 +153,14 @@ function paciente(over: Partial<EduPatientRow> = {}): EduPatientRow {
     privacyNoticeAcceptedAt: null,
     updatedAt: "2026-01-10T12:00:00.000Z",
     updatedByName: null,
+    // Ola C·2 · ARCO y fusión: en null es el estado de CUALQUIER ficha
+    // viva, que es contra el que hay que probar.
+    deletedAt: null,
+    deleteReason: null,
+    anonymizedAt: null,
+    mergedIntoId: null,
+    mergedIntoFolio: null,
+    mergedAt: null,
     ...over,
   };
 }

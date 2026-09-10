@@ -4,6 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { FilePlus2, PenLine, Send, Signature, Trash2, Undo2 } from "lucide-react";
 import { EduModal } from "@/components/edu/edu-modal";
+import { EduRetirados } from "@/components/edu/estudios/retirados";
+import type { EduRetiradoRow } from "@/lib/edu/estudios-core";
 import { eduRequest } from "@/components/edu/edu-http";
 import {
   EDU_RECORD_DIAGNOSIS_MAX,
@@ -83,6 +85,16 @@ export interface EduExpedienteScreenProps {
    * motivo escrito para una persona.
    */
   iaDictado: EduIaEstado;
+  /**
+   * Ola C·2 · LAS NOTAS RETIRADAS, con su motivo (N-16 en el expediente).
+   *
+   * 🔴 Un motivo que ninguna pantalla lee no es una constancia. Es
+   * exactamente el hallazgo que se cerró en estudios y en fotos: se pedía
+   * el motivo, se guardaba, y la única forma de leerlo era abrir Postgres.
+   * Solo viajan para quien puede ESCRIBIR el expediente — quien no puede
+   * retirar tampoco necesita el registro de quién retiró qué.
+   */
+  retiradas: EduRetiradoRow[];
 }
 
 const TAG_BY_STATUS: Record<EduRecordStatus, string> = {
@@ -119,6 +131,7 @@ export function EduExpedienteScreen({
   canSign,
   meUserId,
   iaDictado,
+  retiradas,
 }: EduExpedienteScreenProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -131,6 +144,8 @@ export function EduExpedienteScreen({
   const [firmando, setFirmando] = useState<EduRecordRow | null>(null);
   /** H-23: el BORRADOR que se está a punto de retirar, esperando el "sí". */
   const [retirando, setRetirando] = useState<EduRecordRow | null>(null);
+  /** Ola C·2: el motivo de ese retiro. OPCIONAL — ver el modal. */
+  const [motivoRetiro, setMotivoRetiro] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const casosAbiertos = useMemo(() => cases.filter((c) => c.isOpen), [cases]);
@@ -156,6 +171,13 @@ export function EduExpedienteScreen({
   }
 
   /** S-1: firmar no se dispara al primer clic; abre la confirmación. */
+  function confirmarRetiro(nota: EduRecordRow) {
+    setFlash(null);
+    setError(null);
+    setMotivoRetiro("");
+    setRetirando(nota);
+  }
+
   function confirmarFirma(nota: EduRecordRow) {
     setFlash(null);
     setError(null);
@@ -167,12 +189,26 @@ export function EduExpedienteScreen({
    * queda constancia de quién la sacó. El servidor rebota una ENVIADA o
    * una FIRMADA con 409 aunque se fabrique la petición a mano.
    */
-  async function retirar(nota: EduRecordRow) {
+  async function retirar(nota: EduRecordRow, motivo: string) {
     setError(null);
     setBusyId(nota.id);
     try {
-      await eduRequest(`/api/instituto/expediente/${nota.id}`, { method: "DELETE" });
-      recargar("El borrador quedó retirado del expediente.");
+      // 🔴 OLA C·2 · EL MOTIVO VIAJA Y ES OPCIONAL. La columna
+      // (`edu_records.deleteReason`) llegó con el SQL de la Ola C; se PIDE
+      // y no se EXIGE, porque retirar un borrador vacío no es un acto
+      // clínico que haya que justificar por escrito y un campo obligatorio
+      // en el sitio equivocado solo produce "asdf". Y ahora SE LEE, en la
+      // sección «Retiradas»: un motivo que ninguna pantalla enseña no es
+      // una constancia (N-16).
+      await eduRequest(`/api/instituto/expediente/${nota.id}`, {
+        method: "DELETE",
+        body: { reason: motivo.trim() || undefined },
+      });
+      recargar(
+        motivo.trim()
+          ? "El borrador quedó retirado del expediente, con el motivo escrito."
+          : "El borrador quedó retirado del expediente.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo retirar la nota.");
     } finally {
@@ -494,11 +530,7 @@ export function EduExpedienteScreen({
                     <button
                       type="button"
                       className="edu-btn edu-btn--ghost edu-btn--sm edu-btn--danger"
-                      onClick={() => {
-                        setFlash(null);
-                        setError(null);
-                        setRetirando(n);
-                      }}
+                      onClick={() => confirmarRetiro(n)}
                       disabled={trabajando}
                     >
                       <Trash2 size={15} />
@@ -610,8 +642,10 @@ export function EduExpedienteScreen({
                 className="edu-btn edu-btn--danger"
                 onClick={() => {
                   const n = retirando;
+                  const m = motivoRetiro;
                   setRetirando(null);
-                  void retirar(n);
+                  setMotivoRetiro("");
+                  void retirar(n, m);
                 }}
                 disabled={busyId === retirando.id}
               >
@@ -634,11 +668,54 @@ export function EduExpedienteScreen({
               </p>
             </div>
           </div>
+          {/* 🔴 EL MOTIVO ES OPCIONAL, Y ESTÁ AQUÍ POR LO QUE DICE EL
+              HINT. Exigirlo en el borrador vacío que alguien abrió de un
+              doble clic solo produce "asdf"; ofrecerlo en el que se abrió
+              en el paciente equivocado es lo que contesta la pregunta
+              dentro de un año. Se lee después en «Retiradas». */}
+          <div className="edu-field">
+            <label className="edu-field__label" htmlFor="retirar-motivo">
+              ¿Por qué se retira? (opcional)
+            </label>
+            <textarea
+              id="retirar-motivo"
+              className="edu-input"
+              rows={2}
+              maxLength={500}
+              value={motivoRetiro}
+              onChange={(e) => setMotivoRetiro(e.target.value)}
+              placeholder="Ej.: se abrió en el paciente equivocado · quedó vacía de un doble clic."
+            />
+            <span className="edu-field__hint">
+              Queda escrito con tu nombre y la fecha, y se lee en la sección «Retiradas» de abajo.
+            </span>
+          </div>
+
           <p className="edu-note">
             Solo se retiran BORRADORES. Una nota entregada se devuelve primero a borrador; una
             firmada no se retira nunca: se corrige con una nota nueva y se leen las dos.
           </p>
         </EduModal>
+      )}
+
+      {/* ══ N-16 · «RETIRADAS» ═════════════════════════════════════════
+          El MISMO componente que Estudios y Fotos, y el mismo criterio: va
+          PLEGADA, porque lo retirado no es parte del expediente vivo — si
+          se pintara abierto, la pestaña empezaría por lo que ya no está. Se
+          abre cuando alguien pregunta «¿y la nota de ayer?», que es
+          exactamente cuando hace falta.
+
+          🔴 El QUÉ de cada renglón NO es el texto de la nota: es de qué
+          caso era y de cuándo. Esta sección la ve todo el que ve el
+          expediente y una SOAP es dato clínico; lo que hace falta aquí es
+          identificar la nota, no volver a contarla. */}
+      {canWrite && retiradas.length > 0 && (
+        <EduRetirados
+          rows={retiradas}
+          titulo="Retiradas"
+          vacio="Ninguna nota se ha retirado de este expediente."
+          detalle="Borradores que alguien sacó del expediente. La fila no se borró: queda con quién la retiró, cuándo y por qué. Una nota entregada se devuelve primero a borrador; una firmada no se retira nunca."
+        />
       )}
 
       {editar && (

@@ -25,10 +25,13 @@ import { EduPacienteTabsMas } from "@/components/edu/expediente/paciente-tabs-ma
  * vuelve a exigir el suyo. Esconder una pestaña no cierra ninguna puerta:
  * basta con teclear la URL.
  *
- * ── LAS DOCE PESTAÑAS NO CABEN ──────────────────────────────────────────
- * Medido: la tira de la ficha de un paciente pide 1118 px y `.edu-page` la
- * topa en 1100. Sobraban 18 px a 1440 de ventana, 68 a 1366 y 154 a 1280:
- * la última salía cortada como «R». La tira SÍ se desplazaba, pero
+ * ── LAS CATORCE PESTAÑAS NO CABEN ───────────────────────────────────────
+ * Medido con DOCE: la tira de la ficha pedía 1118 px y `.edu-page` la topa
+ * en 1100. Sobraban 18 px a 1440 de ventana, 68 a 1366 y 154 a 1280: la
+ * última salía cortada como «R». Con las dos de la Ola C·2 («Salud» y
+ * «Plan») sobra todavía más, y por eso el colapso de abajo no es una
+ * comodidad: es lo único que hace que la tira quepa con un ratón. La tira
+ * SÍ se desplazaba, pero
  * `scrollbar-width: none` escondía la barra y no había ni degradado ni
  * flecha — con un ratón, ninguna pista de que hubiera más (regla 5 de la
  * cabecera de edu-theme.css).

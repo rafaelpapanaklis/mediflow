@@ -782,14 +782,18 @@ test("los datos fiscales NO llevan item de menú propio (se llega desde Facturac
 });
 
 test("los filtros de la lista se leen de la URL y descartan lo inventado", () => {
-  assert.deepEqual(parseEduInvoiceFilters(undefined), { q: "", status: null });
+  // ⚠️ Ola C·1 (H-78): los filtros ganaron `desde` y `hasta` para poder
+  // cerrar un mes y conciliarlo con el corte de caja. Ausentes = null.
+  const vacio = { q: "", status: null, desde: null, hasta: null };
+  assert.deepEqual(parseEduInvoiceFilters(undefined), vacio);
   assert.deepEqual(parseEduInvoiceFilters({ q: "  F-0001 ", estado: "valid" }), {
+    ...vacio,
     q: "F-0001",
     status: "VALID",
   });
-  assert.deepEqual(parseEduInvoiceFilters({ estado: "LO-QUE-SEA" }), { q: "", status: null });
+  assert.deepEqual(parseEduInvoiceFilters({ estado: "LO-QUE-SEA" }), vacio);
   // Un array (?q=a&q=b) toma el primero en vez de reventar.
-  assert.deepEqual(parseEduInvoiceFilters({ q: ["uno", "dos"] }), { q: "uno", status: null });
+  assert.deepEqual(parseEduInvoiceFilters({ q: ["uno", "dos"] }), { ...vacio, q: "uno" });
 });
 
 test("el folio interno se rellena con ceros (si no, F-9 iría después de F-10)", () => {

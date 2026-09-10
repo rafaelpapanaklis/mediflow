@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { eduApiError, eduApiGuard, eduReadJson } from "@/lib/edu/api-guard";
 import { createEduTeamMember, createEduTeamMembers } from "@/lib/edu/equipo";
+import { eduParseCampusIds } from "@/lib/edu/campus";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,18 @@ export const dynamic = "force-dynamic";
  * 🔴 La respuesta lleva la CONTRASEÑA TEMPORAL, y es la única vez que
  * existe: no se guarda en ninguna parte. Sale en el cuerpo a propósito,
  * igual que en el alta de equipo del dental, y la pantalla la enseña con un
- * botón de copiar. Si se pierde, hay que restablecerla desde Supabase.
+ * botón de copiar. Si se pierde, se restablece desde la ficha de la persona.
+ *
+ * 🔴 H-112 · `campusIds` — LAS SEDES, EN EL MISMO PASO. Hasta esta ola el
+ * alta no las preguntaba y, por la regla de la ola de sedes («sin filas =
+ * TODAS»), cada cuenta nueva nacía con acceso al instituto entero. Se
+ * validan UNA vez aquí —no una por fila— y valen para el alta individual y
+ * para las 25 del trozo masivo: una generación entera se da de alta con su
+ * sede puesta de un tirón.
+ *
+ * ⚠️ Ausente o vacío = TODAS las sedes, que es lo que hacía antes. La
+ * compatibilidad se conserva a propósito; lo que cambia es que ahora la
+ * pantalla lo PREGUNTA y dice qué significa no marcar ninguna.
  */
 export async function POST(request: Request) {
   const g = await eduApiGuard("equipo.manage");
@@ -37,9 +49,13 @@ export async function POST(request: Request) {
   try {
     const body = await eduReadJson(request);
     const nombreInstituto = g.ctx.institution.name;
+    // Validadas contra ESTE instituto y contra "la sede sigue abierta". Si
+    // una no es de aquí, se rebota entero: crear a medias a cuarenta
+    // residentes con la sede equivocada es peor que no crear ninguno.
+    const campusIds = await eduParseCampusIds(g.ctx, body.campusIds);
 
     if (Array.isArray(body.rows)) {
-      const results = await createEduTeamMembers(g.ctx, body.rows, nombreInstituto);
+      const results = await createEduTeamMembers(g.ctx, body.rows, nombreInstituto, campusIds);
       const creadas = results.filter((r) => r.ok).length;
       // 200 y no 201 aunque haya creaciones: en un alta masiva lo normal es
       // que unas pasen y otras no, y un 201 diría que se creó "el recurso",
@@ -47,9 +63,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ results, creadas, total: results.length });
     }
 
-    const result = await createEduTeamMember(g.ctx, body, nombreInstituto);
+    const result = await createEduTeamMember(g.ctx, body, nombreInstituto, campusIds);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      // 400 salvo que el renglón traiga el suyo: S-1 contesta 409 porque el
+      // correo ya es de otro instituto, que es un conflicto con la base y no
+      // un dato mal escrito.
+      return NextResponse.json({ error: result.error }, { status: result.status ?? 400 });
     }
     return NextResponse.json(result, { status: 201 });
   } catch (err) {

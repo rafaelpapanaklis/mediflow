@@ -6,12 +6,15 @@ import { redirect } from "next/navigation";
 import { getEduContext } from "@/lib/edu-auth";
 import { hasEduPermission } from "@/lib/edu/permissions";
 import {
+  eduDayRange,
   eduFormatDayLong,
   eduShiftDayISO,
   eduTodayISO,
+  eduWeekDays,
   parseEduDayISO,
 } from "@/lib/edu/agenda-core";
 import { listEduAgenda, listEduToday } from "@/lib/edu/agenda";
+import { listEduBloqueos } from "@/lib/edu/agenda-bloqueos";
 import { eduVisibility, EDU_VISIBILITY_NONE_DETAIL } from "@/lib/edu/visibility";
 import { EduDenied } from "@/components/edu/edu-denied";
 import { EduMiDiaScreen } from "@/components/edu/clinica/mi-dia-screen";
@@ -63,6 +66,19 @@ export default async function InstitutoMiDiaPage({
   const now = new Date();
   const tz = ctx.institution.timezone;
 
+  // ── 🔴 H-14 · EL DOCENTE LLEGA A VALORACIÓN ──────────────────────────
+  // `casos.assign` lo llevan por defecto DIRECCION y DOCENTE, y el ÚNICO
+  // enlace a /instituto/agenda/tamizaje de todo el repo vivía en la Agenda
+  // completa… que redirige a Mi agenda a todo alcance recortado ANTES de
+  // pintarlo. Resultado: el docente tenía la llave y nunca llegaba a la
+  // puerta, así que la valoración inicial —que en una escuela real hace el
+  // docente de guardia, no el director— solo la abría dirección, o quien
+  // supiera teclear la URL exacta.
+  //
+  // El enlace se pinta por PERMISO, no por rol: si una escuela le enciende
+  // `casos.assign` a alguien más por override, también lo ve.
+  const puedeValorar = hasEduPermission(permUser, "casos.assign");
+
   if (scope.kind === "none") {
     return (
       <div className="edu-page">
@@ -111,6 +127,25 @@ export default async function InstitutoMiDiaPage({
     : null;
   const hoy = semana ? null : await listEduToday(ctx, tz, now);
 
+  // ── 🔴 OLA C·2 · H-19 — MI DÍA ENSEÑA LOS CIERRES ────────────────────
+  // Es la pantalla que el alumno abre de pie en el piso clínico, y "hoy no
+  // hay clínica" es exactamente lo que necesita saber ANTES de venir. Sin
+  // esto, un festivo se veía igual que un día sin pacientes agendados: una
+  // lista vacía sin explicación.
+  //
+  // El periodo es el MISMO que las citas de esta vista (hoy, o la semana).
+  // Sin filtro de sede a propósito, igual que el resto de esta pantalla: el
+  // día de una persona es su día completo, ruede por el campus que ruede —
+  // y cada línea dice a qué alcanza, así que no engaña.
+  const diasVista = semana ? eduWeekDays(dayISO) : [hoy!.dayISO];
+  const rangoVista = eduDayRange(diasVista[0], tz, diasVista.length);
+  const bloqueos = rangoVista
+    ? await listEduBloqueos(ctx, {
+        desde: rangoVista.from.toISOString(),
+        hasta: rangoVista.to.toISOString(),
+      })
+    : [];
+
   const semanaBase = `/instituto/mi-dia?vista=semana`;
 
   return (
@@ -135,6 +170,18 @@ export default async function InstitutoMiDiaPage({
           </p>
         </div>
         <div className="edu-pagehead__actions">
+          {/* H-14: el acceso a Valoración de quien tiene casos.assign. Va
+              PRIMERO y con el estilo de acción, no de navegación: es lo que
+              se abre cuando llega un paciente nuevo al piso. */}
+          {puedeValorar && (
+            <Link
+              href="/instituto/agenda/tamizaje"
+              className="edu-btn edu-btn--ghost edu-btn--sm"
+              title="La valoración inicial: a qué estudiante se le asigna el paciente que acaba de llegar y con qué docente."
+            >
+              Valoración
+            </Link>
+          )}
           {/* El toggle Hoy | Semana son ENLACES, no un useState: se puede
               compartir "mi semana" y sobrevive al refresh del teléfono. */}
           <Link
@@ -184,6 +231,8 @@ export default async function InstitutoMiDiaPage({
         days={semana ? page!.days : []}
         hoyISO={hoyISO}
         truncated={semana ? page!.truncated : false}
+        bloqueos={bloqueos}
+        timezone={tz}
       />
     </div>
   );
