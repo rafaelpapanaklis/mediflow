@@ -120,7 +120,14 @@ const styles = StyleSheet.create({
     borderTopColor: "#e5e5ed",
     paddingTop: 8,
   },
-  pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2 },
+  // `lineHeight: ""` NO es decorativo. Esta página lleva `lineHeight: 1.5`, y
+  // @react-pdf 4.x vuelve a resolver los estilos al pintar un `render` (el
+  // «Página N de M»): multiplica otra vez el interlineado heredado (1.5×10 → 15
+  // → 15×7.5) y el pie entero acaba a millones de puntos, FUERA del papel. Con
+  // "" el nodo no hereda nada que se pueda multiplicar. Medido con
+  // `_texto-del-pdf.ts`; la orden de lab y el comprobante no lo necesitan
+  // porque su página no declara `lineHeight`.
+  pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2, lineHeight: "" },
 });
 
 function fmtDate(iso: string | null): string {

@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { ClinicLetterhead, type ClinicLetterheadClinic } from "@/lib/pdf/clinic-letterhead";
 
 /**
  * ClinicalNoteDocument — PDF de nota SOAP firmada para el expediente del
@@ -7,6 +8,13 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
  *
  * Fuentes: Helvetica built-in (sin Font.register para evitar dependencias
  * externas).
+ *
+ * CABECERA. La misma que el comprobante, la orden de laboratorio y la carta de
+ * referencia (`ClinicLetterhead`): logo de la clínica arriba a la izquierda y
+ * sus datos al lado. Antes ponía «DaleControl» arriba y la clínica a un lado,
+ * y era el único de los cuatro documentos que se entregan sin el logo. Como en
+ * los otros tres, va solo en la primera página; en las siguientes la identidad
+ * la lleva el pie, que es `fixed`: clínica, fecha de la visita y página.
  *
  * ADENDAS (hallazgo 25 · WS1-T5). Una nota firmada es inalterable por la
  * NOM-024, así que la corrección no se escribe encima: se añade como ADENDA
@@ -38,7 +46,7 @@ export interface ClinicalNoteAddendumRow {
   createdAt: string;             // ISO
 }
 
-export interface ClinicalNoteDocumentProps {
+export interface ClinicalNoteDocumentProps extends ClinicLetterheadClinic {
   clinicName: string;
   patientName: string;
   patientDob: string | null;     // ISO o null
@@ -59,32 +67,19 @@ export interface ClinicalNoteDocumentProps {
   addenda?: ClinicalNoteAddendumRow[];
 }
 
+/** Acento del documento: el morado de la familia clínica (igual que la referencia). */
+const ACCENT = "#7c3aed";
+
 const styles = StyleSheet.create({
   page: {
     padding: 40,
+    // Colchón para el pie fijo, que ahora lleva tres renglones (clínica, NOM-024
+    // y página): sin él el cuerpo se le mete debajo en las páginas llenas.
+    paddingBottom: 80,
     fontFamily: "Helvetica",
     fontSize: 10,
     color: "#14101f",
     lineHeight: 1.5,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    borderBottomWidth: 2,
-    borderBottomColor: "#7c3aed",
-    paddingBottom: 12,
-    marginBottom: 18,
-  },
-  brand: {
-    fontSize: 18,
-    color: "#7c3aed",
-    fontFamily: "Helvetica-Bold",
-  },
-  brandSub: {
-    fontSize: 9,
-    color: "#6b6b78",
-    marginTop: 2,
   },
   meta: {
     fontSize: 9,
@@ -198,12 +193,20 @@ const styles = StyleSheet.create({
     borderTopColor: "#e5e5ed",
     paddingTop: 8,
   },
+  // `lineHeight: ""` NO es decorativo. Esta página lleva `lineHeight: 1.5`, y
+  // @react-pdf 4.x vuelve a resolver los estilos al pintar un `render` (el
+  // «Página N de M»): multiplica otra vez el interlineado heredado (1.5×10 → 15
+  // → 15×7.5) y el pie entero acaba a millones de puntos, FUERA del papel. Con
+  // "" el nodo no hereda nada que se pueda multiplicar. Medido con
+  // `_texto-del-pdf.ts`; la orden de lab y el comprobante no lo necesitan
+  // porque su página no declara `lineHeight`.
+  pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2, lineHeight: "" },
 
   /** El pie fijo crece una línea cuando hay adendas; sin este colchón el
    *  cuerpo se le mete debajo. Se aplica SOLO en ese caso: una nota sin
-   *  adendas conserva el `padding: 40` de siempre y sale exactamente igual. */
+   *  adendas conserva el colchón de `page` y no cambia por esto. */
   pageWithAddenda: {
-    paddingBottom: 74,
+    paddingBottom: 100,
   },
 
   // ── Adendas ───────────────────────────────────────────────────────────────
@@ -284,7 +287,8 @@ const styles = StyleSheet.create({
   },
   footerAddenda: {
     position: "absolute",
-    bottom: 52,
+    // Justo encima del pie de tres renglones (30 + ~46 de alto).
+    bottom: 80,
     left: 40,
     right: 40,
     fontSize: 8,
@@ -402,18 +406,19 @@ export function ClinicalNoteDocument(props: ClinicalNoteDocumentProps) {
   return (
     <Document>
       <Page size="LETTER" style={hasAddenda ? [styles.page, styles.pageWithAddenda] : styles.page} wrap>
-        <View style={styles.header} fixed>
-          <View>
-            <Text style={styles.brand}>DaleControl</Text>
-            <Text style={styles.brandSub}>Nota clínica · expediente electrónico</Text>
-          </View>
-          <View>
-            <Text style={styles.meta}>Clínica</Text>
-            <Text style={styles.metaValue}>{clinicName}</Text>
-            <Text style={[styles.meta, { marginTop: 6 }]}>Fecha de visita</Text>
-            <Text style={styles.metaValue}>{fmtDateTime(visitDate)}</Text>
-          </View>
-        </View>
+        {/* Membrete común. Va solo en la primera página: la identidad de las
+            siguientes la lleva el pie, que sí es `fixed`. */}
+        <ClinicLetterhead
+          {...props}
+          accent={ACCENT}
+          subtitle="Nota clínica · expediente electrónico"
+          right={
+            <View>
+              <Text style={styles.meta}>Fecha de visita</Text>
+              <Text style={styles.metaValue}>{fmtDateTime(visitDate)}</Text>
+            </View>
+          }
+        />
 
         <View style={styles.patientBlock}>
           <View style={styles.patientCol}>
@@ -539,10 +544,21 @@ export function ClinicalNoteDocument(props: ClinicalNoteDocumentProps) {
           <Text style={styles.footerAddenda} fixed>{frasePie}</Text>
         )}
 
-        <Text style={styles.footer} fixed>
-          DaleControl · Expediente clínico electrónico conforme a NOM-024-SSA3-2012 ·
-          Generado el {fmtDateTime(generatedAt)}
-        </Text>
+        {/* La cabecera ya no se repite: en una hoja suelta, el pie es lo que
+            dice de qué clínica y de qué visita es la nota, y qué página es. */}
+        <View style={styles.footer} fixed>
+          <Text>
+            {clinicName} · Nota clínica del {fmtDateTime(visitDate)}
+          </Text>
+          <Text>
+            DaleControl · Expediente clínico electrónico conforme a NOM-024-SSA3-2012 ·
+            Generado el {fmtDateTime(generatedAt)}
+          </Text>
+          <Text
+            style={styles.pageNum}
+            render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
+          />
+        </View>
       </Page>
     </Document>
   );

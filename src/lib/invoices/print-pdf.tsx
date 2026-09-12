@@ -54,7 +54,11 @@ function estadoSello(status: string, paid: number, balance: number): { label: st
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontFamily: "Helvetica", fontSize: 10, color: "#0f172a" },
+  // paddingBottom: colchón para el pie fijo, que puede llevar tres renglones
+  // (leyenda, UUID del CFDI y «Página N de M»). Sin él, en un comprobante que
+  // pagina, el filete del pie tachaba el último renglón del cuerpo —medido: el
+  // «Subtotal» de una factura de 45 conceptos—.
+  page: { padding: 40, paddingBottom: 80, fontFamily: "Helvetica", fontSize: 10, color: "#0f172a" },
 
   metaBox: { textAlign: "right" },
   metaTitle: { fontSize: 12, color: "#0f172a", fontFamily: "Helvetica-Bold", letterSpacing: 0.5 },

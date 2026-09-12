@@ -24,6 +24,7 @@ import {
 } from "../referral-letter-document";
 import { logoBox, clinicNameFontSize } from "../clinic-letterhead";
 import { makePng } from "./_imagenes-de-prueba";
+import { separacionCuerpoPie, textoVisiblePorPagina } from "./_texto-del-pdf";
 
 // ── Recorrer el árbol ──────────────────────────────────────────────────
 //
@@ -233,6 +234,51 @@ describe("el logo va arriba a la izquierda, y si no hay, manda el nombre", () =>
       );
       assert.equal(largo, clinicNameFontSize(NOMBRE_LARGO, false));
       assert.ok(largo! < clinicNameFontSize("Clínica Sonrisa", false));
+    });
+  }
+});
+
+// ── 2b. El pie se IMPRIME, dentro de la hoja ───────────────────────────
+//
+// El árbol puede llevar el pie y el PDF no pintarlo: @react-pdf 4.x re-resuelve
+// los estilos en las páginas con `render` y multiplica otra vez el
+// `lineHeight` heredado de la página. La carta de referencia (lineHeight 1.5)
+// escribía su pie a ~20 millones de puntos de altura: fuera del papel. Aquí se
+// mira el PDF final, con la posición de cada texto.
+
+describe("el pie sale impreso DENTRO de la hoja en todas las páginas", () => {
+  const LARGO = Array.from(
+    { length: 30 },
+    (_, i) => `Cita ${i + 1}: tratamiento de conductos en 46, irrigación con hipoclorito y obturación con gutapercha; control radiográfico sin lesión periapical.`,
+  ).join("\n");
+  const CASOS: Array<[string, () => ReactNode, RegExp]> = [
+    [
+      "orden de laboratorio",
+      () => LabOrderDocument(ordenLab({ spec: Array.from({ length: 40 }, (_, i) => ({ label: `Especificación ${i + 1}`, value: "Zirconia monolítica" })) })),
+      /Clínica Sonrisa · Orden de laboratorio del/,
+    ],
+    ["carta de referencia", () => ReferralLetterDocument(referencia({ summary: LARGO })), /Clínica Sonrisa · Hoja de referencia del/],
+  ];
+
+  for (const [nombre, hacer, identidad] of CASOS) {
+    it(`${nombre}: cada página imprime la clínica y su «Página N de M»`, async () => {
+      const buf = await renderToBuffer(hacer() as Parameters<typeof renderToBuffer>[0]);
+      const paginas = textoVisiblePorPagina(buf);
+      assert.ok(paginas.length > 1, `el caso tiene que paginar: ${paginas.length} página(s)`);
+      const numeros = new Set<string>();
+      for (const texto of paginas) {
+        assert.match(texto, identidad, "una hoja sale sin el pie de la clínica");
+        const n = /Página (\d+) de (\d+)/.exec(texto);
+        assert.ok(n, "una hoja sale sin número de página");
+        assert.equal(Number(n![2]), paginas.length);
+        numeros.add(n![1]);
+      }
+      assert.equal(numeros.size, paginas.length, "los números de página se repiten o faltan");
+
+      // Y el filete del pie no tacha el último renglón del cuerpo.
+      for (const [i, m] of separacionCuerpoPie(buf, (s) => /Página \d+ de|laboratorio del|referencia del/.test(s)).entries()) {
+        assert.ok(m.separacion >= 18, `hoja ${i + 1}: cuerpo en y=${m.cuerpoMasBajo.toFixed(1)}, pie hasta y=${m.pieMasAlto.toFixed(1)}`);
+      }
     });
   }
 });

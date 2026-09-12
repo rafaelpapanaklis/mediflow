@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { makePng, WEBP } from "@/lib/pdf/__tests__/_imagenes-de-prueba";
+import { separacionCuerpoPie, textoVisiblePorPagina } from "@/lib/pdf/__tests__/_texto-del-pdf";
 
 const CLINICA = "clinic_1";
 
@@ -27,6 +28,8 @@ const CLINICA = "clinic_1";
 let selectPedido: Record<string, unknown> | null = null;
 /** La clínica que devuelve el doble; cada prueba la cambia. */
 let clinicRow: Record<string, unknown> = {};
+/** Lo que una prueba quiera cambiar de la factura (conceptos, UUID…). */
+let facturaExtra: Record<string, unknown> = {};
 
 function invoiceRow() {
   return {
@@ -66,7 +69,7 @@ mock.module("@/lib/prisma", {
           // El doble respeta el filtro de tenant: si alguien quitara el
           // clinicId de la consulta, esto lo canta en vez de seguir verde.
           if (where?.clinicId !== CLINICA) return null;
-          return invoiceRow();
+          return { ...invoiceRow(), ...facturaExtra };
         },
       },
     },
@@ -188,6 +191,37 @@ describe("comprobante de pago — la cabecera de la clínica", () => {
     const out = await generar();
     assert.ok(out);
     assert.equal(out!.buffer.subarray(0, 5).toString("latin1"), "%PDF-");
+  });
+
+  it("factura larga y timbrada: el pie no tacha el cuerpo en ninguna página", async () => {
+    // El pie más alto que puede salir: clínica + leyenda, UUID del CFDI y
+    // «Página N de M». Con 45 conceptos el comprobante pagina y el Subtotal
+    // cae al final de una hoja, justo encima del filete del pie.
+    clinica({ logoUrl: `${base}/logo-ancho.png` });
+    facturaExtra = {
+      cfdiUuid: "6F9619FF-8B86-D011-B42D-00C04FC964FF",
+      items: Array.from({ length: 45 }, (_, i) => ({
+        description: `Concepto ${i + 1} · Limpieza y profilaxis dental`,
+        quantity: 1,
+        unitPrice: 100,
+        total: 100,
+      })),
+    };
+    try {
+      const out = await generar();
+      const hojas = textoVisiblePorPagina(out!.buffer);
+      assert.ok(hojas.length > 1, `el caso tiene que paginar: ${hojas.length}`);
+      for (const h of hojas) assert.match(h, /Página \d+ de \d+/, "una hoja sale sin su pie");
+      const medidas = separacionCuerpoPie(out!.buffer, (s) => /Página \d+ de|Comprobante|UUID/.test(s));
+      for (const [i, m] of medidas.entries()) {
+        assert.ok(
+          m.separacion >= 18,
+          `hoja ${i + 1}: el cuerpo baja hasta y=${m.cuerpoMasBajo.toFixed(1)} y el pie sube hasta y=${m.pieMasAlto.toFixed(1)} — el filete tacha un renglón`,
+        );
+      }
+    } finally {
+      facturaExtra = {};
+    }
   });
 
   it("sigue aislando por clínica: otra clínica no ve la factura", async () => {

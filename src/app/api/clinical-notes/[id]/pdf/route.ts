@@ -11,6 +11,7 @@ import {
   readNoteAddenda,
   type ClinicalNoteDxRow,
 } from "@/lib/pdf/clinical-note-document";
+import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
           firstName: true, lastName: true, dob: true, gender: true,
         },
       },
-      clinic: { select: { name: true } },
+      // La cabecera común pide nombre, dirección, teléfono, correo y logo.
+      clinic: { select: CLINIC_LETTERHEAD_SELECT },
       diagnoses_v2: {
         select: { cie10: { select: { code: true, description: true } } },
         orderBy: { isPrimary: "desc" },
@@ -104,8 +106,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
     ? `Dr/a. ${record.doctor.firstName} ${record.doctor.lastName}`
     : null;
 
+  // Baja el logo (con plazo y camino de respaldo): si el bucket falla, esto
+  // devuelve el membrete sin logo y la nota se genera igual.
+  const membrete = await clinicLetterheadProps(record.clinic);
+
   const element = createElement(ClinicalNoteDocument, {
-    clinicName: record.clinic.name,
+    ...membrete,
     patientName,
     patientDob: record.patient.dob ? record.patient.dob.toISOString() : null,
     patientGender: record.patient.gender ?? null,
