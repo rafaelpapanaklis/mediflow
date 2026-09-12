@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { persistentRateLimit } from "@/lib/failban";
-import { addAiTokens, aiTokenLimitError } from "@/lib/ai-tokens";
-import { canSpend } from "@/lib/ai-billing/wallet";
-import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
-import {
-  appendMessages,
-  createConversation,
-  getConversation,
-  isAiHistoryStorageMissing,
-} from "@/lib/ai-assistant/conversations";
+import { canSpend, chargeUsage } from "@/lib/ai-billing/wallet";
+import { isAiHistoryStorageMissing } from "@/lib/ai-assistant/conversations";
 import { ejecutarSabina } from "@/lib/sabina/engine";
 import { AI_FEATURE_SABINA, SABINA_TOOLS } from "@/lib/sabina/engine-catalog";
 import { SABINA_MAX_PREGUNTA_CHARS, construirRastro } from "@/lib/sabina/engine-core";
+import {
+  anexarTurnosSabina,
+  crearConversacionSabina,
+  leerConversacionSabina,
+} from "@/lib/sabina/engine-historial";
+import { crearSabinaCtx } from "@/lib/sabina/tipos";
 
 /**
  * POST /api/sabina
@@ -34,7 +33,11 @@ export async function POST(req: NextRequest) {
   try {
     /* ── 1. Quién pregunta ─────────────────────────────────────────── */
     const ctx = await getAuthContext();
-    if (!ctx) {
+    // El ctx de las herramientas: clínica, persona, rol, permisos y zona
+    // horaria, TODO de la sesión. `null` si algo puede faltar — con
+    // `clinicId: undefined` Prisma no filtra y se leerían todas las clínicas.
+    const sabinaCtx = crearSabinaCtx(ctx);
+    if (!ctx || !sabinaCtx) {
       return NextResponse.json({ error: "No has iniciado sesión." }, { status: 401 });
     }
 
@@ -47,11 +50,10 @@ export async function POST(req: NextRequest) {
     });
     if (rl) return rl;
 
-    /* ── 3. La cuota del plan ──────────────────────────────────────── */
-    const limite = await aiTokenLimitError(ctx.clinicId);
-    if (limite) return NextResponse.json(limite, { status: 429 });
-
-    /* ── 4. El monedero ────────────────────────────────────────────── */
+    /* ── 3. El monedero. Sabina se paga con el saldo de la clínica, como
+          el bot de WhatsApp, y NO con el cupo de IA del plan: descontar de
+          los dos cobraría dos veces el mismo token, y dejaría sin cupo al
+          Asistente IA de una clínica que ya pagó en pesos ──────────────── */
     if (!(await canSpend(ctx.clinicId))) {
       return NextResponse.json(
         {
@@ -79,13 +81,16 @@ export async function POST(req: NextRequest) {
         : null;
 
     /* ── 6. El hilo previo (si lo hay). Va con el scope de la SESIÓN:
-          clínica y usuario, nunca lo que mande el cliente ─────────────── */
+          clínica y usuario, nunca lo que mande el cliente. Y solo si es una
+          conversación de SABINA: un id del Asistente IA no es contexto ─── */
     const scope = { clinicId: ctx.clinicId, userId: ctx.userId };
     let historial: Array<{ role: "user" | "assistant"; content: string }> = [];
+    let conversacionPrevia: string | null = null;
     if (conversacionPedida) {
       try {
-        const previa = await getConversation(scope, conversacionPedida);
+        const previa = await leerConversacionSabina(scope, conversacionPedida);
         if (previa) {
+          conversacionPrevia = conversacionPedida;
           historial = previa.messages.map((m) => ({ role: m.role, content: m.content }));
         }
       } catch (e) {
@@ -95,31 +100,38 @@ export async function POST(req: NextRequest) {
 
     /* ── 7. El bucle. El clinicId lo pone AQUÍ el servidor ──────────── */
     const salida = await ejecutarSabina({
-      ctx: { clinicId: ctx.clinicId, userId: ctx.userId, ahora: new Date() },
-      usuario: { role: ctx.role, permissionsOverride: ctx.permissionsOverride },
+      ctx: sabinaCtx,
       pregunta,
       historial,
       tools: SABINA_TOOLS,
-      conversacionId: conversacionPedida,
+      conversacionId: conversacionPrevia,
     });
 
     /* ── 8. Cobrar SIEMPRE lo que se gastó, aunque la respuesta fallara:
           los tokens ya se los quedó Anthropic ────────────────────────── */
-    const totalTokens = salida.tokens.entrada + salida.tokens.salida;
-    if (totalTokens > 0) {
-      // Cupo del plan. El slug va a "other" porque AI_FEATURES es una unión
-      // CERRADA en src/lib/ai-tokens.ts y ese archivo no es de esta tarea;
-      // añadir "sabina" allí es una línea, y está en el punto 6 del reporte.
-      await addAiTokens(ctx.clinicId, totalTokens, "other", ctx.userId);
-      // Costo real para la Tesorería. billedCents = 0: el plan lo absorbe, a la
-      // clínica NO se le cobra dinero nuevo por Sabina (ver punto 4).
-      await recordUsageNoCharge({
-        clinicId: ctx.clinicId,
-        feature: AI_FEATURE_SABINA,
-        model: salida.modelo,
-        inputTokens: salida.tokens.entrada,
-        outputTokens: salida.tokens.salida,
-      });
+    // Del MONEDERO de la clínica, igual que el bot de WhatsApp (chatMetered):
+    // canSpend arriba como puerta, chargeUsage después de la llamada real, y un
+    // fallo del cobro no le quita al doctor la respuesta que ya se pagó a
+    // Anthropic. Un cargo —y su AiUsageEvent— por MODELO, con sus tokens: hoy
+    // `computeCostUsdMicros` tiene un precio único, y cuando entren los precios
+    // por modelo cada cargo tomará el suyo sin tocar esta ruta.
+    for (const uso of salida.consumo) {
+      if (uso.entrada + uso.salida <= 0) continue;
+      try {
+        await chargeUsage({
+          clinicId: ctx.clinicId,
+          feature: AI_FEATURE_SABINA,
+          model: uso.modelo,
+          inputTokens: uso.entrada,
+          outputTokens: uso.salida,
+        });
+      } catch (e) {
+        console.error("[sabina] no se pudo cobrar el consumo al monedero", {
+          clinicId: ctx.clinicId,
+          modelo: uso.modelo,
+          err: e instanceof Error ? e.message : "desconocido",
+        });
+      }
     }
 
     /* ── 9. Si el modelo no contestó → 503, nunca un 500 mudo ───────── */
@@ -132,29 +144,32 @@ export async function POST(req: NextRequest) {
 
     /* ── 10. La conversación guardada. AQUÍ —y solo aquí— viven el texto
            de la pregunta y el de la respuesta ─────────────────────────── */
-    let conversacionId = conversacionPedida;
+    let conversacionId = conversacionPrevia;
+    const turnos: Array<{ role: "user" | "assistant"; content: string }> = [
+      { role: "user", content: pregunta },
+      { role: "assistant", content: salida.respuesta },
+    ];
     try {
       if (conversacionId) {
-        const ok = await appendMessages(scope, conversacionId, [
-          { role: "user", content: pregunta },
-          { role: "assistant", content: salida.respuesta },
-        ]);
-        if (!ok) conversacionId = null; // no era suya: se abre una nueva
+        const ok = await anexarTurnosSabina(scope, conversacionId, turnos);
+        if (!ok) conversacionId = null; // no era suya o no es de Sabina: se abre una nueva
       }
       if (!conversacionId) {
-        const nueva = await createConversation(scope, {
-          group: "admin",
-          messages: [
-            { role: "user", content: pregunta },
-            { role: "assistant", content: salida.respuesta },
-          ],
-        });
-        conversacionId = nueva.conversation.id;
+        conversacionId = await crearConversacionSabina(scope, turnos);
       }
     } catch (e) {
       // El .sql del historial se aplica a mano; si la tabla aún no está, la
       // respuesta sigue su camino sin guardarse (mismo criterio que /api/ai).
-      if (!isAiHistoryStorageMissing(e)) throw e;
+      // Y cualquier otro fallo al guardar, igual: la respuesta YA se cobró, y
+      // un 503 aquí la tiraría y la pantalla ofrecería reintentar — y cobrar
+      // otra vez. Sin texto de la pregunta en el log.
+      conversacionId = null;
+      if (!isAiHistoryStorageMissing(e)) {
+        console.error("[sabina] no se pudo guardar la conversación", {
+          clinicId: ctx.clinicId,
+          code: (e as { code?: string })?.code ?? null,
+        });
+      }
     }
 
     /* ── 11. El rastro. Por LISTA BLANCA: ni la pregunta ni la respuesta

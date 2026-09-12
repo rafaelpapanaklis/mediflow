@@ -15,6 +15,7 @@ import {
   debeEscalar,
   fraseSinPermiso,
   garantizarAvisoSinPermiso,
+  hoyParaPrompt,
   modeloPara,
   resultadoParaModelo,
   sanearArgumentos,
@@ -94,7 +95,9 @@ const herramientaDoble: SabinaTool<any, unknown> = {
   descripcion: "Citas de una fecha.",
   parametros: z.object({ fecha: z.string().min(10) }),
   permiso: "agenda.view",
-  ejecutar: async () => ({ ok: true, datos: [], resumen: "" }),
+  ejecutar: async () => [],
+  resumir: () => "",
+  vacio: () => false,
 };
 
 test("el clinicId nunca viaja dentro de un argumento del modelo", () => {
@@ -237,6 +240,36 @@ test("el esquema que ve el modelo respeta obligatorios y opcionales", () => {
   assert.deepEqual(props.agrupar.enum, ["dia", "semana", "mes"]);
   // Solo `desde` es obligatorio: los otros dos son optional/default.
   assert.deepEqual(esquema.required, ["desde"]);
+});
+
+test("una fecha con regex llega con su pattern, también detrás de un refine", () => {
+  const esquema = zodAJsonSchema(
+    z.object({
+      fecha: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .refine((s) => s !== "0000-00-00")
+        .optional(),
+    }),
+  );
+  const fecha = (esquema.properties as Record<string, any>).fecha;
+  assert.equal(fecha.type, "string");
+  assert.equal(fecha.pattern, "^\\d{4}-\\d{2}-\\d{2}$");
+});
+
+/* ── El «hoy» del prompt ────────────────────────────────────────────── */
+
+test("el «hoy» es el de la clínica aunque el servidor (UTC) ya vaya en mañana", () => {
+  // 02:00 UTC del 12 = 20:00 del 11 en Ciudad de México.
+  const instante = new Date("2026-09-12T02:00:00Z");
+  assert.match(hoyParaPrompt(instante, "America/Mexico_City"), /11 de septiembre de 2026 \(2026-09-11\)$/);
+  assert.match(hoyParaPrompt(instante, "UTC"), /\(2026-09-12\)$/);
+});
+
+test("una zona ilegible no tumba el turno: cae a la de México", () => {
+  const instante = new Date("2026-09-12T02:00:00Z");
+  assert.match(hoyParaPrompt(instante, "Marte/Olympus"), /\(2026-09-11\)$/);
+  assert.match(hoyParaPrompt(instante, ""), /\(2026-09-11\)$/);
 });
 
 test("el tope de rondas es el mismo que el del bot de barbería", () => {

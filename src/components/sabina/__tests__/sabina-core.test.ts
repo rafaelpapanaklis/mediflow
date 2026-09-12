@@ -6,6 +6,7 @@ import {
   formatToolsUsed,
   humanizeToolName,
   classifySabinaError,
+  SABINA_ERROR_COPY,
   parseSabinaMarkdown,
   classifyParagraphTone,
   tokenizeInline,
@@ -50,6 +51,18 @@ test("classifySabinaError — mapea cada código del contrato, y null a 'network
   assert.equal(classifySabinaError(null), "network");
   assert.equal(classifySabinaError(500), "unknown");
   assert.equal(classifySabinaError(200), "unknown");
+});
+
+test("classifySabinaError — el 429 del CUPO DEL PLAN no es el de «muchas preguntas seguidas»", () => {
+  // Cuerpo real de /api/sabina cuando aiTokenLimitError corta (plan sin IA o cupo agotado).
+  const cupo = { error: "Tu plan no incluye esta función de IA o agotaste el cupo mensual. Sube de plan.", limitReached: true };
+  assert.equal(classifySabinaError(429, cupo), "plan_limit");
+  // Reintentar no lo arregla: la pantalla no puede ofrecerlo.
+  assert.equal(SABINA_ERROR_COPY.plan_limit.retryable, false);
+  // El freno por ráfaga (persistentRateLimit) sigue siendo reintentable.
+  assert.equal(classifySabinaError(429, { error: "Demasiadas solicitudes" }), "rate_limited");
+  assert.equal(classifySabinaError(429, null), "rate_limited");
+  assert.equal(classifySabinaError(429), "rate_limited");
 });
 
 test("classifyParagraphTone — reconoce el vocabulario de sugerencia y de hecho medido", () => {

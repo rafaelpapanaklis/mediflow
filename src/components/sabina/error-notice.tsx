@@ -7,6 +7,7 @@ const ICON_BY_KIND: Record<SabinaErrorKind, typeof AlertTriangle> = {
   auth: LogIn,
   no_balance: Wallet,
   rate_limited: Hourglass,
+  plan_limit: Hourglass,
   model_down: CloudOff,
   network: CloudOff,
   unknown: AlertTriangle,

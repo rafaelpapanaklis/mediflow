@@ -124,7 +124,12 @@
     "test:sabina-dinero": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/dinero.test.ts",
     "test:sabina-pacientes": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/pacientes.test.ts",
     "test:sabina-resumen": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/resumen-clinica.test.ts",
-    "test:sabina-pantalla": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/numeros-vs-pantalla.test.ts",
+    "test:sabina-numeros": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/numeros-vs-pantalla.test.ts",
+    "test:sabina-punta-a-punta": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/punta-a-punta.test.ts",
+    "test:sabina-historial": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/historial.test.ts",
+    "test:sabina-scripts": "tsx --test src/lib/sabina/__tests__/scripts-sabina.test.ts",
+    "//sabina:pregunta-real": "GASTA DINERO: tres preguntas a Sabina contra la API REAL de Anthropic (motor y herramientas reales, base de prueba en memoria). Sin SABINA_LLAMADA_REAL=1 y ANTHROPIC_API_KEY se salta entero. Solo lo corre Rafael.",
+    "sabina:pregunta-real": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/pregunta-real.ts",
     "//seed:edu-demo": "Siembra UN instituto de DEMO (slug demo-volumen) con el volumen del cliente que viene: 3 sedes, 32 sillones, 120 estudiantes, ~600 pacientes y ~16 000 citas. Se niega a correr contra una base que no sea local salvo que se declare el host, y NO crea WhatsApp ni cuentas de Supabase. `-- --medir` recorre el panel con cronometro; `-- --sql-borrado` imprime el DELETE.",
     "seed:edu-demo": "tsx scripts/edu-seed-demo.ts"
   },

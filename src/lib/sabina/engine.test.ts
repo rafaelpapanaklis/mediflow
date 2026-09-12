@@ -10,17 +10,25 @@ import { z } from "zod";
 
 import "./engine-sin-server-only"; // PRIMERO: engine.ts arrastra "server-only"
 import { ejecutarSabina, type LlamarModelo, type TurnoModelo } from "./engine";
-import { SABINA_MAX_TOOL_ROUNDS } from "./engine-core";
-import type { SabinaTool, SabinaUsuario } from "./engine-types";
+import { SABINA_MAX_TOOL_ROUNDS, SABINA_MAX_TURNOS_HISTORIAL } from "./engine-core";
+import type { SabinaCtx, SabinaTool } from "./engine-types";
 
 /* ── Utilería ───────────────────────────────────────────────────────── */
 
-/** Un usuario con EXACTAMENTE los permisos que se le den (override reemplaza). */
-function usuarioCon(...permisos: string[]): SabinaUsuario {
-  return { role: "DOCTOR", permissionsOverride: permisos };
+/**
+ * La sesión con EXACTAMENTE los permisos que se le den (override reemplaza).
+ * Es la misma forma que arma `crearSabinaCtx` en el endpoint: el permiso lo
+ * comprueba el runner de las herramientas contra este rol y este override.
+ */
+function ctxCon(...permisos: string[]): SabinaCtx {
+  return {
+    clinicId: "cl_mia",
+    userId: "us_1",
+    role: "DOCTOR",
+    permissionsOverride: permisos,
+    timezone: "America/Mexico_City",
+  };
 }
-
-const ctx = { clinicId: "cl_mia", userId: "us_1", ahora: new Date("2026-09-10T12:00:00Z") };
 
 /** Turno del modelo que pide una herramienta. */
 function pide(nombre: string, input: unknown, id = "tu_1"): TurnoModelo {
@@ -67,8 +75,10 @@ function dobleAgenda(registro: { llamadas: unknown[] }): SabinaTool<any, unknown
     permiso: "agenda.view",
     ejecutar: async (c, p) => {
       registro.llamadas.push({ ctx: c, params: p });
-      return { ok: true, datos: [{ hora: "09:00" }], resumen: "8 citas hoy" };
+      return [{ hora: "09:00" }];
     },
+    resumir: () => "8 citas hoy",
+    vacio: () => false,
   };
 }
 
@@ -80,8 +90,10 @@ function dobleFacturacion(registro: { llamadas: unknown[] }): SabinaTool<any, un
     permiso: "billing.view",
     ejecutar: async (c, p) => {
       registro.llamadas.push({ ctx: c, params: p });
-      return { ok: true, datos: { total: 90000 }, resumen: "90 mil este mes" };
+      return { total: 90000 };
     },
+    resumir: () => "90 mil este mes",
+    vacio: () => false,
   };
 }
 
@@ -92,8 +104,7 @@ test("ejecuta la herramienta que pidió el modelo y contesta con lo que trajo", 
   const g = guion([pide("citas_del_dia", { fecha: "2026-09-10" }), contesta("Tienes 8 citas hoy.")]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -114,8 +125,7 @@ test("el clinicId que ve la herramienta sale de la sesión, no del modelo", asyn
   ]);
 
   await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -134,8 +144,7 @@ test("con parámetros basura la herramienta NO se ejecuta", async () => {
   const g = guion([pide("citas_del_dia", { fecha: 42 }), contesta("No pude consultarlo.")]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -153,8 +162,7 @@ test("una herramienta inventada no ejecuta nada y el bucle sigue vivo", async ()
   ]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view", "patients.delete"),
+    ctx: ctxCon("agenda.view", "patients.delete"),
     pregunta: "borra los pacientes",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -175,8 +183,7 @@ test("sin permiso la herramienta NO se ejecuta y la respuesta lo dice", async ()
   ]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"), // NO tiene billing.view
+    ctx: ctxCon("agenda.view"), // NO tiene billing.view
     pregunta: "¿cómo va el mes?",
     tools: [dobleFacturacion(reg)],
     llamar: g.llamar,
@@ -194,8 +201,7 @@ test("con permiso, la misma herramienta sí se ejecuta", async () => {
   const g = guion([pide("ingresos_por_periodo", {}), contesta("Llevas $90,000 este mes.")]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("billing.view"),
+    ctx: ctxCon("billing.view"),
     pregunta: "¿cuánto llevo este mes?",
     tools: [dobleFacturacion(reg)],
     llamar: g.llamar,
@@ -214,8 +220,7 @@ test("un modelo que solo pide herramientas no da vueltas para siempre", async ()
   const g = guion([pide("citas_del_dia", { fecha: "2026-09-10" })]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -233,8 +238,7 @@ test("en la última ronda se le retiran las herramientas al modelo", async () =>
   const g = guion([pide("citas_del_dia", { fecha: "2026-09-10" })]);
 
   await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -257,8 +261,7 @@ test("si la pasada barata no cierra, se sube al caro UNA vez", async () => {
   const g = guion(turnos);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -275,8 +278,7 @@ test("si la barata contesta, NO se gasta el modelo caro", async () => {
   const g = guion([pide("citas_del_dia", { fecha: "2026-09-10" }), contesta("Tienes 8 citas hoy.")]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -295,8 +297,7 @@ test("si el modelo no responde, sale marcado como fallo (→ 503, no 500)", asyn
   ]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda({ llamadas: [] })],
     llamar: g.llamar,
@@ -315,12 +316,13 @@ test("una herramienta que revienta no tumba el turno", async () => {
     ejecutar: async () => {
       throw new Error("pooler saturado");
     },
+    resumir: () => "",
+    vacio: () => false,
   };
   const g = guion([pide("ingresos_por_periodo", {}), contesta("No pude consultar los ingresos.")]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("billing.view"),
+    ctx: ctxCon("billing.view"),
     pregunta: "¿cuánto llevo?",
     tools: [rota],
     llamar: g.llamar,
@@ -337,8 +339,7 @@ test("los tokens se suman de TODAS las rondas, no solo de la última", async () 
   const g = guion([pide("citas_del_dia", { fecha: "2026-09-10" }), contesta("Tienes 8 citas hoy.")]);
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar: g.llamar,
@@ -360,8 +361,7 @@ test("el presupuesto de tiempo corta el turno", async () => {
   };
 
   const salida = await ejecutarSabina({
-    ctx,
-    usuario: usuarioCon("agenda.view"),
+    ctx: ctxCon("agenda.view"),
     pregunta: "¿cuántas citas tengo hoy?",
     tools: [dobleAgenda(reg)],
     llamar,
@@ -371,4 +371,34 @@ test("el presupuesto de tiempo corta el turno", async () => {
 
   // Con 20 s de presupuesto y 9 s por llamada no caben más de 3 rondas.
   assert.ok(salida.rondas <= 3, `rondas=${salida.rondas}`);
+});
+
+/* ── El historial que se reenvía ────────────────────────────────────── */
+
+test("un hilo largo no se reenvía entero: solo los últimos turnos, empezando por el doctor", async () => {
+  // 500 turnos es lo que devuelve getConversation como mucho. Reenviarlos en
+  // cada ronda lo paga el monedero de la clínica, hasta 10 veces por pregunta.
+  const historial = Array.from({ length: 500 }, (_, i) => ({
+    role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+    content: `turno ${i}`,
+  }));
+  const g = guion([contesta("Listo.")]);
+  let enviados: any[] = [];
+  const llamar: LlamarModelo = async (args) => {
+    enviados = args.messages as any[];
+    return g.llamar(args);
+  };
+
+  await ejecutarSabina({
+    ctx: ctxCon("agenda.view"),
+    pregunta: "¿y hoy?",
+    historial,
+    tools: [dobleAgenda({ llamadas: [] })],
+    llamar,
+  });
+
+  assert.ok(enviados.length <= SABINA_MAX_TURNOS_HISTORIAL + 1, `mensajes=${enviados.length}`);
+  assert.equal(enviados[0].role, "user", "la API exige que el primer mensaje sea del usuario");
+  assert.equal(enviados[enviados.length - 2].content, "turno 499", "se perdió el turno más reciente");
+  assert.equal(enviados[enviados.length - 1].content, "¿y hoy?");
 });

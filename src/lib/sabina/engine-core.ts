@@ -12,6 +12,7 @@
  * diferencias y por qué.
  */
 import { ALL_PERMISSIONS, type PermissionKey } from "@/lib/auth/permissions";
+import { DEFAULT_TZ } from "@/lib/agenda/date-ranges";
 import type {
   SabinaDificultad,
   SabinaRastro,
@@ -48,6 +49,14 @@ export const SABINA_CALL_TIMEOUT_MS = 12_000;
 
 /** Techo de salida por llamada. Una respuesta de panel no es un ensayo. */
 export const SABINA_MAX_OUTPUT_TOKENS = 1_200;
+
+/**
+ * Turnos previos de la conversación que se le reenvían al modelo. El historial
+ * guardado devuelve hasta 500, y reenviarlos en cada ronda —hasta 10 llamadas
+ * por pregunta— lo paga el monedero de la clínica. Veinte turnos son diez
+ * intercambios: de sobra para «¿y el mes pasado?».
+ */
+export const SABINA_MAX_TURNOS_HISTORIAL = 20;
 
 /** La pregunta que entra por el endpoint. Más que esto no es una pregunta. */
 export const SABINA_MAX_PREGUNTA_CHARS = 2_000;
@@ -383,6 +392,31 @@ export function resultadoParaModelo(res: SabinaResultado): string {
   });
 }
 
+/**
+ * El «hoy» que lee el modelo: el día de la CLÍNICA, con nombre y en
+ * `AAAA-MM-DD` —el formato que piden los parámetros de fecha—, para que no
+ * tenga que traducir «viernes, 12 de septiembre» y equivocarse.
+ *
+ * Con la zona del proceso (UTC en Vercel), a partir de las 18:00 de México el
+ * servidor ya va en el día siguiente. Una zona ilegible cae al default de
+ * México, igual que `crearSabinaCtx`, en vez de tumbar el turno.
+ */
+export function hoyParaPrompt(instante: Date, timezone: string): string {
+  const formatear = (timeZone: string) =>
+    `${instante.toLocaleDateString("es-MX", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone,
+    })} (${new Intl.DateTimeFormat("en-CA", { timeZone }).format(instante)})`;
+  try {
+    return formatear(timezone || DEFAULT_TZ);
+  } catch {
+    return formatear(DEFAULT_TZ);
+  }
+}
+
 /** El prompt del sistema. Es donde viven las reglas 3, 5 y 6 del contrato. */
 export function construirSystemPrompt(opciones: {
   dificultad: SabinaDificultad;
@@ -392,6 +426,7 @@ export function construirSystemPrompt(opciones: {
 
 CÓMO CONSIGUES LOS DATOS
 Los números salen SIEMPRE de tus herramientas. No tienes ningún dato de la clínica en la cabeza.
+- Las fechas que les pases van en formato AAAA-MM-DD.
 - Si no llamaste a una herramienta, no tienes la cifra: no la escribas.
 - Si una herramienta vuelve con "sin_datos", di que no hay dato de eso. NO estimes, NO promedies, NO rellenes con un número parecido, NO uses cifras de ejemplo.
 - Si no existe una herramienta para lo que te preguntan, dilo: "eso no lo puedo consultar todavía".
@@ -534,6 +569,9 @@ function convertir(esquema: any): Record<string, unknown> {
       for (const chequeo of d.checks ?? []) {
         if (chequeo.kind === "min") nodo.minLength = chequeo.value;
         if (chequeo.kind === "max") nodo.maxLength = chequeo.value;
+        // Sin esto las fechas de las herramientas llegaban como «string» a
+        // secas y el modelo tenía que adivinar el formato (y perder una ronda).
+        if (chequeo.kind === "regex" && chequeo.regex instanceof RegExp) nodo.pattern = chequeo.regex.source;
       }
       return conDesc(nodo);
     }

@@ -1,14 +1,15 @@
 import "server-only";
-import { hasPermission } from "@/lib/auth/permissions";
 import {
   SABINA_CALL_TIMEOUT_MS,
   SABINA_MAX_OUTPUT_TOKENS,
   SABINA_MAX_TOOL_ROUNDS,
+  SABINA_MAX_TURNOS_HISTORIAL,
   SABINA_TURN_BUDGET_MS,
   clasificarDificultad,
   construirSystemPrompt,
   debeEscalar,
   garantizarAvisoSinPermiso,
+  hoyParaPrompt,
   modeloPara,
   resultadoParaModelo,
   toolsParaModelo,
@@ -17,14 +18,15 @@ import {
 } from "./engine-core";
 import type { ValidacionFallo } from "./engine-core";
 import type {
+  SabinaConsumo,
   SabinaCtx,
   SabinaDificultad,
   SabinaRespuesta,
   SabinaResultado,
   SabinaResultadoFallo,
   SabinaTool,
-  SabinaUsuario,
 } from "./engine-types";
+import { correrHerramienta } from "./tools/base";
 
 /**
  * Sabina — el bucle.
@@ -125,41 +127,27 @@ export const llamarAnthropic: LlamarModelo = async (args) => {
 /* ── Ejecutar UNA herramienta ─────────────────────────────────────────── */
 
 /**
- * Comprueba el permiso y ejecuta. El permiso se mira ANTES de tocar la base:
- * un `sin_permiso` no puede costar una consulta, y sobre todo no puede
- * devolver datos que luego «se omitan» en la redacción.
+ * Ejecuta por el runner de las herramientas (`correrHerramienta`), que corta en
+ * el orden del contrato: sesión → permiso → parámetros → consulta. El permiso
+ * se mira ANTES de tocar la base, con el rol y el override del ctx de la
+ * sesión: un `sin_permiso` no puede costar una consulta, y sobre todo no puede
+ * devolver datos que luego «se omitan» en la redacción. Y es el runner el que
+ * produce el `resumen` y el `sin_datos`: llamando a `tool.ejecutar` directo, el
+ * modelo recibía el dato sin su resumen y una lista vacía como `ok`.
  */
 export async function ejecutarHerramienta(
   tool: SabinaTool<any, any>,
   ctx: SabinaCtx,
-  usuario: SabinaUsuario,
   params: unknown,
 ): Promise<SabinaResultado> {
-  if (!hasPermission({ role: usuario.role, permissionsOverride: usuario.permissionsOverride }, tool.permiso)) {
-    return { ok: false, motivo: "sin_permiso", permiso: tool.permiso };
-  }
-  try {
-    const datos = await tool.ejecutar(ctx, params);
-    // Una herramienta bien escrita ya devuelve el SabinaResultado del contrato.
-    // Si devolviera el dato pelado, se envuelve aquí en vez de reventar.
-    if (datos && typeof datos === "object" && "ok" in (datos as Record<string, unknown>)) {
-      return datos as SabinaResultado;
-    }
-    return { ok: true, datos, resumen: "" };
-  } catch (err) {
-    return {
-      ok: false,
-      motivo: "error",
-      detalle: err instanceof Error ? err.message : "la consulta falló",
-    };
-  }
+  return correrHerramienta(tool, ctx, params);
 }
 
 /* ── El bucle ─────────────────────────────────────────────────────────── */
 
 export interface SabinaEjecutarInput {
+  /** De `crearSabinaCtx(await getAuthContext())`: clínica, persona, rol, permisos y zona. */
   ctx: SabinaCtx;
-  usuario: SabinaUsuario;
   pregunta: string;
   /** Turnos previos de la conversación guardada, ya en orden. */
   historial?: ReadonlyArray<{ role: "user" | "assistant"; content: string }>;
@@ -181,17 +169,19 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const limite = arranque + presupuesto;
 
   const dificultad: SabinaDificultad = clasificarDificultad(input.pregunta);
-  const hoy = (input.ctx.ahora ?? new Date()).toLocaleDateString("es-MX", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  // El «hoy» de la CLÍNICA, no el del proceso (UTC en Vercel): a las 19:00 de
+  // México el servidor ya va en el día siguiente, y el modelo pediría las citas
+  // de mañana.
+  const hoy = hoyParaPrompt(new Date(arranque), input.ctx.timezone);
 
   const esquemas = toolsParaModelo(input.tools, (t) => zodAJsonSchema(t.parametros));
 
+  // Solo los últimos turnos, y arrancando por uno del doctor: la API rechaza
+  // una conversación que empieza con el asistente.
+  const previos = (input.historial ?? []).slice(-SABINA_MAX_TURNOS_HISTORIAL);
+  while (previos.length > 0 && previos[0].role !== "user") previos.shift();
   const messages: unknown[] = [
-    ...(input.historial ?? []).map((m) => ({ role: m.role, content: m.content })),
+    ...previos.map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: input.pregunta },
   ];
 
@@ -199,6 +189,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const sinPermiso: string[] = [];
   let tokensEntrada = 0;
   let tokensSalida = 0;
+  const consumo: SabinaConsumo[] = [];
   let rondas = 0;
   let respuesta: string | null = null;
   let fallo = false;
@@ -236,6 +227,13 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       rondas += 1;
       tokensEntrada += turno.tokensEntrada;
       tokensSalida += turno.tokensSalida;
+      let delModelo = consumo.find((c) => c.modelo === modelo);
+      if (!delModelo) {
+        delModelo = { modelo, entrada: 0, salida: 0 };
+        consumo.push(delModelo);
+      }
+      delModelo.entrada += turno.tokensEntrada;
+      delModelo.salida += turno.tokensSalida;
 
       if (turno.error) {
         // El texto de la pregunta NO viaja al log; sí el motivo y la clínica.
@@ -289,16 +287,22 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
           continue;
         }
 
-        const resultado = await ejecutarHerramienta(
-          validacion.tool,
-          input.ctx,
-          input.usuario,
-          validacion.params,
-        );
+        const resultado = await ejecutarHerramienta(validacion.tool, input.ctx, validacion.params);
         if (!herramientasUsadas.includes(nombre)) herramientasUsadas.push(nombre);
         const fallado = resultado as SabinaResultadoFallo;
         if (resultado.ok !== true && fallado.motivo === "sin_permiso" && !sinPermiso.includes(fallado.permiso)) {
           sinPermiso.push(fallado.permiso);
+        }
+        // Una herramienta compuesta (`resumen_clinica`) contesta `ok` y apunta en
+        // `datos.omitidas` las secciones que el usuario no puede ver. También
+        // entran a la red de la regla 3: si el modelo se calla la parte de
+        // dinero, el aviso lo pone el motor.
+        const omitidas = resultado.ok === true ? (resultado.datos as { omitidas?: unknown })?.omitidas : null;
+        if (Array.isArray(omitidas)) {
+          for (const o of omitidas) {
+            const permiso = (o as { permiso?: unknown })?.permiso;
+            if (typeof permiso === "string" && permiso && !sinPermiso.includes(permiso)) sinPermiso.push(permiso);
+          }
         }
 
         resultados.push({
@@ -334,6 +338,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
     respuesta: texto,
     herramientasUsadas,
     tokens: { entrada: tokensEntrada, salida: tokensSalida },
+    consumo,
     modelo,
     dificultad,
     escalado,

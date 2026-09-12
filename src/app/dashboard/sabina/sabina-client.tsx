@@ -271,7 +271,7 @@ export function SabinaClient({ firstName }: { firstName: string }) {
         }
 
         if (!res.ok) {
-          const kind = classifySabinaError(res.status);
+          const kind = classifySabinaError(res.status, data);
           setMessages((prev) =>
             prev.map((m) => (m.id === targetId ? { ...m, role: "system", content: "", pending: false, errorKind: kind } : m)),
           );

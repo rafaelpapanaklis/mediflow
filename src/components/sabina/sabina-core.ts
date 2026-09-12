@@ -75,12 +75,20 @@ export type SabinaErrorKind =
   | "auth" // 401 sin sesión
   | "no_balance" // 402 sin saldo en el monedero
   | "rate_limited" // 429 pasado el límite
+  | "plan_limit" // 429 del cupo del plan (`limitReached: true`): reintentar no lo arregla
   | "model_down" // 503 el modelo no responde
   | "network" // fetch nunca llegó a tener status (offline, CORS, DNS…)
   | "unknown"; // cualquier otro código — "nunca un 500 mudo", pero por si acaso
 
-/** `res.status` (o `null` si la petición ni siquiera respondió) → el motivo. */
-export function classifySabinaError(status: number | null): SabinaErrorKind {
+/**
+ * `res.status` (o `null` si la petición ni siquiera respondió) → el motivo.
+ *
+ * El 429 tiene dos orígenes en `/api/sabina` y no se arreglan igual: el freno
+ * por ráfaga (se pasa esperando un minuto) y el cupo del plan agotado —o un plan
+ * sin IA—, que el motor marca con `limitReached: true` y que ningún reintento
+ * arregla. Por eso se mira también el cuerpo.
+ */
+export function classifySabinaError(status: number | null, body?: unknown): SabinaErrorKind {
   if (status === null) return "network";
   switch (status) {
     case 401:
@@ -88,7 +96,7 @@ export function classifySabinaError(status: number | null): SabinaErrorKind {
     case 402:
       return "no_balance";
     case 429:
-      return "rate_limited";
+      return (body as { limitReached?: unknown } | null)?.limitReached === true ? "plan_limit" : "rate_limited";
     case 503:
       return "model_down";
     default:
@@ -119,6 +127,12 @@ export const SABINA_ERROR_COPY: Record<SabinaErrorKind, SabinaErrorCopy> = {
     title: "Muchas preguntas seguidas",
     message: "Dale un momento a Sabina y vuelve a intentar en un minuto.",
     retryable: true,
+  },
+  plan_limit: {
+    title: "Se acabó el cupo de IA del plan",
+    message:
+      "El plan de la clínica no incluye esta función de IA o ya se usó el cupo de este mes. Pídele a un administrador que revise el plan.",
+    retryable: false,
   },
   model_down: {
     title: "Sabina no responde ahora mismo",

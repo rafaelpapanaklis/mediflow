@@ -22,6 +22,7 @@ import Module from "node:module";
 const STUBBED = new Set(["server-only", "client-only"]);
 const M = Module as unknown as {
   _load: (request: string, parent: unknown, isMain: boolean) => unknown;
+  _resolveFilename: (request: string, ...rest: unknown[]) => string;
   __sabinaStubInstalled?: boolean;
 };
 
@@ -30,6 +31,14 @@ if (!M.__sabinaStubInstalled) {
   M._load = function (request: string, parent: unknown, isMain: boolean) {
     if (STUBBED.has(request)) return {};
     return original.call(this, request, parent, isMain);
+  };
+  // Con `--experimental-test-module-mocks` Node resuelve la ruta ANTES de
+  // llegar a `_load`, y ahí truena igual. Se resuelve a este mismo archivo,
+  // que no exporta nada: el mismo objeto vacío de arriba.
+  const resolver = M._resolveFilename;
+  M._resolveFilename = function (request: string, ...rest: unknown[]) {
+    if (STUBBED.has(request)) return __filename;
+    return resolver.call(this, request, ...rest);
   };
   M.__sabinaStubInstalled = true;
 }
