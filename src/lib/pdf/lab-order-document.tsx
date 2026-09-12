@@ -1,12 +1,18 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { ClinicLetterhead, type ClinicLetterheadClinic } from "@/lib/pdf/clinic-letterhead";
 
 /**
  * LabOrderDocument — PDF imprimible de orden de laboratorio. La sección
  * "Especificaciones" itera el JSON `spec` (clave: valor) — esto permite
  * que cada módulo guarde sus propios campos sin que el PDF lo conozca.
+ *
+ * Esta orden SALE DE LA CLÍNICA: la recibe un laboratorio externo, que tiene
+ * que saber quién se la manda, adónde devolver el trabajo y a qué teléfono
+ * llamar si hay dudas. Por eso la cabecera es la común (`ClinicLetterhead`) y
+ * no solo el nombre suelto que se pintaba antes.
  */
 
-export interface LabOrderDocumentProps {
+export interface LabOrderDocumentProps extends ClinicLetterheadClinic {
   clinicName: string;
   doctorAuthorName: string;
   doctorAuthorCedula: string | null;
@@ -25,18 +31,11 @@ export interface LabOrderDocumentProps {
   notes: string | null;
 }
 
+/** Acento del documento: el verde azulado que ya distinguía a la orden de lab. */
+const ACCENT = "#0f766e";
+
 const styles = StyleSheet.create({
-  page: { padding: 40, fontFamily: "Helvetica", fontSize: 10, color: "#14101f" },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderBottomWidth: 2,
-    borderBottomColor: "#0f766e",
-    paddingBottom: 10,
-    marginBottom: 14,
-  },
-  brand: { fontSize: 18, color: "#0f766e", fontFamily: "Helvetica-Bold" },
-  brandSub: { fontSize: 9, color: "#6b6b78", marginTop: 2 },
+  page: { padding: 40, paddingBottom: 64, fontFamily: "Helvetica", fontSize: 10, color: "#14101f" },
   metaRight: { fontSize: 9, color: "#6b6b78", textAlign: "right" },
   metaValue: {
     fontSize: 11,
@@ -95,6 +94,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#e5e5ed",
     paddingTop: 6,
   },
+  pageNum: { fontSize: 7.5, color: "#9b9aa8", textAlign: "center", marginTop: 2 },
 });
 
 const MODULE_LABELS: Record<string, string> = {
@@ -116,20 +116,23 @@ export function LabOrderDocument(props: LabOrderDocumentProps) {
   return (
     <Document>
       <Page size="LETTER" style={styles.page} wrap>
-        <View style={styles.header} fixed>
-          <View>
-            <Text style={styles.brand}>{props.clinicName}</Text>
-            <Text style={styles.brandSub}>Orden de laboratorio</Text>
-          </View>
-          <View>
-            <Text style={styles.metaRight}>Módulo</Text>
-            <Text style={styles.metaValue}>
-              {MODULE_LABELS[props.module] ?? props.module}
-            </Text>
-            <Text style={[styles.metaRight, { marginTop: 6 }]}>Fecha</Text>
-            <Text style={styles.metaValue}>{fmtDate(props.generatedAt)}</Text>
-          </View>
-        </View>
+        {/* Membrete común. Va solo en la primera página: la identidad de las
+            siguientes la lleva el pie, que sí es `fixed`. */}
+        <ClinicLetterhead
+          {...props}
+          accent={ACCENT}
+          subtitle="Orden de laboratorio"
+          right={
+            <View>
+              <Text style={styles.metaRight}>Módulo</Text>
+              <Text style={styles.metaValue}>
+                {MODULE_LABELS[props.module] ?? props.module}
+              </Text>
+              <Text style={[styles.metaRight, { marginTop: 6 }]}>Fecha</Text>
+              <Text style={styles.metaValue}>{fmtDate(props.generatedAt)}</Text>
+            </View>
+          }
+        />
 
         <View style={styles.block}>
           <View style={styles.twoCol}>
@@ -205,9 +208,17 @@ export function LabOrderDocument(props: LabOrderDocumentProps) {
           </Text>
         </View>
 
-        <Text style={styles.footer} fixed>
-          Generada en DaleControl el {fmtDate(props.generatedAt)}
-        </Text>
+        {/* El laboratorio recibe hojas sueltas: en el pie va SIEMPRE de quién
+            es la orden, no solo el nombre del software. */}
+        <View style={styles.footer} fixed>
+          <Text>
+            {props.clinicName} · Orden de laboratorio del {fmtDate(props.generatedAt)}
+          </Text>
+          <Text
+            style={styles.pageNum}
+            render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
+          />
+        </View>
       </Page>
     </Document>
   );

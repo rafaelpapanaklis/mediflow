@@ -12,6 +12,7 @@ import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/re
 import { buildPediatricSummary } from "@/lib/clinical-shared/referral/summary";
 import { buildOrthoSummary } from "@/lib/clinical-shared/referral/summary-orthodontics";
 import { ReferralLetterDocument } from "@/lib/pdf/referral-letter-document";
+import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
 
 const moduleEnum = z.nativeEnum(ClinicalModule);
 const channelEnum = z.nativeEnum(ReferralLetterChannel);
@@ -312,14 +313,20 @@ async function renderReferralPdfBase64(args: {
           email: true,
         },
       },
-      clinic: { select: { name: true } },
+      // El médico receptor casi nunca conoce la clínica que refiere: sin
+      // dirección ni teléfono no puede contestar la interconsulta.
+      clinic: { select: CLINIC_LETTERHEAD_SELECT },
     },
   });
   if (!r) throw new Error("Referral no encontrada");
 
+  // Baja el logo (con plazo y camino de respaldo): si el bucket falla, esto
+  // devuelve el membrete sin logo y la carta se genera igual.
+  const membrete = await clinicLetterheadProps(r.clinic);
+
   const stream = await renderToStream(
     ReferralLetterDocument({
-      clinicName: r.clinic.name,
+      ...membrete,
       doctorAuthorName: `${r.author.firstName} ${r.author.lastName}`,
       doctorAuthorCedula: r.author.cedulaProfesional ?? null,
       module: r.module,
