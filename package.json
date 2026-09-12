@@ -91,6 +91,8 @@
     "test:jornada-clinica": "tsx --test --experimental-test-module-mocks src/app/api/__tests__/jornada-clinica.test.ts",
     "test:consulta-activa": "tsx --test --experimental-test-module-mocks src/app/api/dashboard/consultations/__tests__/consulta-activa.test.ts",
     "test:nota-firmada": "tsx --test --experimental-test-module-mocks src/app/api/clinical-notes/__tests__/nota-firmada.test.ts",
+    "//test:nota-adendas": "La otra mitad del hallazgo 25: que las adendas de una nota firmada salgan en el PDF del expediente. Necesita --experimental-test-module-mocks (ejecuta el route handler de verdad con Prisma y el renderer sustituidos) y --tsconfig tsconfig.test.json porque el arbol del PDF es JSX y el tsconfig de la app deja jsx en preserve.",
+    "test:nota-adendas": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/pdf/__tests__/nota-clinica-adendas.test.ts",
     "test:botones-prometidos": "tsx --test src/app/dashboard/__tests__/botones-prometidos.test.ts",
     "test:caja-dinero": "tsx --test src/lib/__tests__/caja-dinero.test.ts",
     "test:paid-at": "TZ=America/Mexico_City tsx --test src/lib/billing/__tests__/paid-at.test.ts",
