@@ -64,12 +64,21 @@ export function aiBillingFeatureLabel(feature: string): string {
 /** Sobregiro de gracia (centavos MXN) permitido SOLO con auto-recarga + tarjeta. */
 export const GRACE_OVERDRAFT_CENTS = 10_000;
 
-/** Precios efectivos (lo que devuelve getPricingConfig). Espeja AiPricingConfig. */
-export interface PricingConfig {
+/** Precio de Anthropic de UN modelo, en USD por millón de tokens. */
+export interface ModelPrice {
   inputUsdPerMtok: number;
   outputUsdPerMtok: number;
   cacheWriteUsdPerMtok: number;
   cacheReadUsdPerMtok: number;
+}
+
+/**
+ * Precios efectivos (lo que devuelve getPricingConfig). Cada llamada se cobra al
+ * precio de SU modelo; fx y fee salen de la fila `default` de AiPricingConfig.
+ */
+export interface PricingConfig {
+  /** Id canónico del modelo → precio vigente (lista de Anthropic + lo editado en el admin). */
+  models: Record<string, ModelPrice>;
   usdToMxnRate: number;
   feePct: number;
 }

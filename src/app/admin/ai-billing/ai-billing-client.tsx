@@ -12,13 +12,18 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 
 // ---- Tipos del GET /api/admin/ai-billing ----
+type ModelPriceKey = "inputUsdPerMtok" | "outputUsdPerMtok" | "cacheWriteUsdPerMtok" | "cacheReadUsdPerMtok";
+/** Espeja ModelPriceRow de @/lib/ai-billing/pricing-core (ese módulo no se importa en cliente). */
+type ModelPriceRow = Record<ModelPriceKey, number> & {
+  model: string;
+  list: Record<ModelPriceKey, number>;
+  edited: boolean;
+};
 type Pricing = {
-  inputUsdPerMtok: number;
-  outputUsdPerMtok: number;
-  cacheWriteUsdPerMtok: number;
-  cacheReadUsdPerMtok: number;
   usdToMxnRate: number;
   feePct: number;
+  /** Cada llamada se cobra al precio de SU modelo. */
+  models: ModelPriceRow[];
 };
 type Margin = { incomeMxn: number; realCostMxn: number; marginMxn: number; marginPct: number | null };
 /** prepaid = monedero WhatsApp · included = IA clínica que absorbe el plan. */
@@ -101,13 +106,16 @@ const fmtUSD = (n: number) =>
     maximumFractionDigits: 2,
   }).format(n ?? 0);
 
-const PRICE_FIELDS: { key: keyof Pricing; label: string; hint?: string; step: number }[] = [
-  { key: "inputUsdPerMtok", label: "Input · USD/Mtok", step: 0.01 },
-  { key: "outputUsdPerMtok", label: "Output · USD/Mtok", step: 0.01 },
-  { key: "cacheWriteUsdPerMtok", label: "Cache write · USD/Mtok", step: 0.01 },
-  { key: "cacheReadUsdPerMtok", label: "Cache read · USD/Mtok", step: 0.01 },
+const PRICE_FIELDS: { key: "usdToMxnRate" | "feePct"; label: string; hint?: string; step: number }[] = [
   { key: "usdToMxnRate", label: "Tipo de cambio USD a MXN", step: 0.1 },
   { key: "feePct", label: "Fee oculto (%)", hint: "La clínica nunca lo ve", step: 0.5 },
+];
+
+const MODEL_PRICE_FIELDS: { key: ModelPriceKey; label: string }[] = [
+  { key: "inputUsdPerMtok", label: "Input" },
+  { key: "outputUsdPerMtok", label: "Output" },
+  { key: "cacheWriteUsdPerMtok", label: "Cache write" },
+  { key: "cacheReadUsdPerMtok", label: "Cache read" },
 ];
 
 const labelStyle = { fontSize: 11, color: "var(--text-3)", fontWeight: 600 } as const;
@@ -177,10 +185,17 @@ export function AiBillingClient() {
     if (!priceForm) return;
     setSavingPrice(true);
     try {
+      // Solo los modelos que se tocaron: un modelo sin editar sigue el precio de lista.
+      const loaded = new Map((data?.pricing.models ?? []).map((m) => [m.model, m]));
+      const models = Object.fromEntries(
+        (priceForm.models ?? [])
+          .filter((m) => MODEL_PRICE_FIELDS.some((f) => loaded.get(m.model)?.[f.key] !== m[f.key]))
+          .map((m) => [m.model, Object.fromEntries(MODEL_PRICE_FIELDS.map((f) => [f.key, m[f.key]]))]),
+      );
       const res = await fetch("/api/admin/ai-billing/pricing", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(priceForm),
+        body: JSON.stringify({ usdToMxnRate: priceForm.usdToMxnRate, feePct: priceForm.feePct, models }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Error");
       toast.success("Precios actualizados");
@@ -417,6 +432,58 @@ export function AiBillingClient() {
                 {f.hint && <span style={{ fontSize: 10, color: "var(--text-3)" }}>{f.hint}</span>}
               </label>
             ))}
+          </div>
+          <div style={{ marginTop: 16, ...labelStyle }}>
+            Precio por modelo · USD por millón de tokens · cada llamada se cobra al de SU modelo
+          </div>
+          <div style={{ overflowX: "auto", marginTop: 6 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th style={{ ...labelStyle, textAlign: "left", padding: "4px 6px" }}>Modelo</th>
+                  {MODEL_PRICE_FIELDS.map((f) => (
+                    <th key={f.key} style={{ ...labelStyle, textAlign: "left", padding: "4px 6px" }}>{f.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(priceForm?.models ?? []).map((m) => (
+                  <tr key={m.model}>
+                    <td style={{ padding: "4px 6px", whiteSpace: "nowrap" }}>
+                      <code>{m.model}</code>
+                      {m.edited && (
+                        <span style={{ marginLeft: 6 }}>
+                          <BadgeNew tone="warning">editado</BadgeNew>
+                        </span>
+                      )}
+                    </td>
+                    {MODEL_PRICE_FIELDS.map((f) => (
+                      <td key={f.key} style={{ padding: "4px 6px", minWidth: 90 }}>
+                        <input
+                          className="input-new"
+                          type="number"
+                          step={0.01}
+                          min={0}
+                          value={m[f.key]}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? 0 : Number(e.target.value);
+                            setPriceForm((p) =>
+                              p ? { ...p, models: p.models.map((x) => (x.model === m.model ? { ...x, [f.key]: v } : x)) } : p,
+                            );
+                          }}
+                        />
+                        {m[f.key] !== m.list[f.key] && (
+                          <span style={{ fontSize: 10, color: "var(--text-3)" }}>lista: {m.list[f.key]}</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 10, color: "var(--text-3)" }}>
+            Un modelo que no esté en esta lista se cobra al precio más alto de la tabla.
           </div>
           <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
             <ButtonNew variant="primary" onClick={savePricing} disabled={savingPrice}>

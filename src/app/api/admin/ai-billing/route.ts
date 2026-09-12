@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isAdminAuthed } from "@/lib/admin-auth";
-import { getPricingConfig } from "@/lib/ai-billing/pricing";
+import { getPricingConfig, modelPriceRows } from "@/lib/ai-billing/pricing";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -211,12 +211,10 @@ export async function GET(_req: NextRequest) {
 
     return NextResponse.json({
       pricing: {
-        inputUsdPerMtok: pricing.inputUsdPerMtok,
-        outputUsdPerMtok: pricing.outputUsdPerMtok,
-        cacheWriteUsdPerMtok: pricing.cacheWriteUsdPerMtok,
-        cacheReadUsdPerMtok: pricing.cacheReadUsdPerMtok,
         usdToMxnRate: pricing.usdToMxnRate,
         feePct: pricing.feePct,
+        // Cada llamada se cobra al precio de SU modelo.
+        models: modelPriceRows(pricing),
       },
       anthropic: {
         rechargedUsd,
