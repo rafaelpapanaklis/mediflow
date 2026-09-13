@@ -22,6 +22,7 @@ import type {
   ResourceDTO,
 } from "@/lib/agenda/types";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
+import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { getResourceSchedule } from "@/lib/agenda/mutations";
@@ -301,10 +302,22 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
           setSubmitting(false);
           return;
         }
+        // El cuerpo ya se leyó: releerlo abajo daría {} y el toast genérico.
+        // Reglas del servidor con 422 (pasado, paciente archivado): su frase.
+        toast.error(
+          bookingRuleMessage(body) ?? t("appointments.newApptDialog.toastCreateFailed"),
+        );
+        setSubmitting(false);
+        return;
       }
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        toast.error(errBody.error ?? t("appointments.newApptDialog.toastCreateFailed"));
+        // Reglas del servidor (pasado, paciente archivado, motivo): su frase, no el código crudo.
+        toast.error(
+          bookingRuleMessage(errBody) ??
+            errBody.error ??
+            t("appointments.newApptDialog.toastCreateFailed"),
+        );
         setSubmitting(false);
         return;
       }
