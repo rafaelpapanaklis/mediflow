@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isAdminAuthed } from "@/lib/admin-auth";
-import { getPricingConfig } from "@/lib/ai-billing/pricing";
+import { getPricingConfig, modelPriceRows } from "@/lib/ai-billing/pricing";
+import { unpricedModelsFromUsage } from "@/lib/ai-billing/pricing-core";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -76,7 +77,7 @@ export async function GET(_req: NextRequest) {
 
     // --- Batch 2: por-clínica + quema (la quema suma los DOS bloques: es
     // dinero que sale a Anthropic venga de donde venga) ---
-    const [burnAgg, prepaidByClinic, absorbedByClinic, wallets] = await Promise.all([
+    const [burnAgg, prepaidByClinic, absorbedByClinic, wallets, usageByModel] = await Promise.all([
       prisma.aiUsageEvent.aggregate({ _sum: { costUsdMicros: true }, where: { createdAt: { gte: burnSince } } }),
       prisma.aiUsageEvent.groupBy({
         by: ["clinicId"],
@@ -91,6 +92,14 @@ export async function GET(_req: NextRequest) {
         _count: true,
       }),
       prisma.aiWallet.findMany({ orderBy: { balanceCents: "asc" }, take: MAX_ROWS }),
+      // Cobros de la ventana por modelo: los de un modelo sin precio en la
+      // tabla se cobraron con el precio de respaldo y se enseñan en rojo.
+      prisma.aiUsageEvent.groupBy({
+        by: ["model"],
+        where: { createdAt: { gte: burnSince } },
+        _count: { _all: true },
+        _sum: { billedCents: true },
+      }),
     ]);
 
     // ---- Saldo Anthropic (USD): TODO el consumo, prepago + absorbido ----
@@ -211,13 +220,14 @@ export async function GET(_req: NextRequest) {
 
     return NextResponse.json({
       pricing: {
-        inputUsdPerMtok: pricing.inputUsdPerMtok,
-        outputUsdPerMtok: pricing.outputUsdPerMtok,
-        cacheWriteUsdPerMtok: pricing.cacheWriteUsdPerMtok,
-        cacheReadUsdPerMtok: pricing.cacheReadUsdPerMtok,
         usdToMxnRate: pricing.usdToMxnRate,
         feePct: pricing.feePct,
+        // Cada llamada se cobra al precio de SU modelo.
+        models: modelPriceRows(pricing),
       },
+      // Modelos SIN precio en la tabla que se cobraron en los últimos
+      // BURN_WINDOW_DAYS días con el precio de respaldo (Sonnet 4.6).
+      unpricedModels: unpricedModelsFromUsage(usageByModel, pricing),
       anthropic: {
         rechargedUsd,
         consumedUsd,

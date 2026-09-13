@@ -245,6 +245,35 @@ test("la búsqueda mira título y contenido, y sigue clavada al dueño", only, a
   await limpiar();
 });
 
+test("la barra del Asistente no lista las conversaciones de Sabina, pero sí las de legacyId NULL", only, async () => {
+  const { createConversation, importLegacyConversations, listConversations } = await mod();
+  const prisma = await db();
+  await limpiar();
+
+  // Una normal (legacyId NULL, la inmensa mayoría), una migrada desde
+  // localStorage (legacyId con valor) y una de Sabina (legacyId "sabina:<uuid>",
+  // como la escribe src/lib/sabina/engine-historial.ts).
+  await createConversation(A, { title: "Endodoncia 46", messages: [{ role: "user", content: "gutapercha" }] });
+  await importLegacyConversations(A, [
+    { id: "conv-del-navegador", title: "Migrada gutapercha", messages: [{ role: "user", content: "hola" }] },
+  ]);
+  await prisma.aiConversation.create({
+    data: {
+      ...A, legacyId: "sabina:6f1c2a4e-0000-4000-8000-000000000001", title: "¿Cuántas citas tengo hoy? gutapercha", groupKey: "admin",
+      messages: { create: [{ ...A, role: "user", content: "gutapercha" }] },
+    },
+  });
+
+  const titulos = (await listConversations(A)).map((c) => c.title).sort();
+  assert.deepEqual(titulos, ["Endodoncia 46", "Migrada gutapercha"],
+    "la barra del Asistente IA tiene que listar las normales y las migradas, y NUNCA las de Sabina");
+  // La búsqueda tampoco la trae de vuelta.
+  const buscadas = (await listConversations(A, { search: "gutapercha" })).map((c) => c.title).sort();
+  assert.deepEqual(buscadas, ["Endodoncia 46", "Migrada gutapercha"]);
+
+  await limpiar();
+});
+
 test("un scope sin clínica o sin usuario CORTA antes de consultar", only, async () => {
   const { AiScopeError, listConversations } = await mod();
 

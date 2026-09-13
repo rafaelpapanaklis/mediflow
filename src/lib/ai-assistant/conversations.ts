@@ -86,6 +86,20 @@ export function isAiHistoryStorageMissing(e: unknown): boolean {
   return code === "P2021" || code === "P2022" || code === "42P01" || code === "42703";
 }
 
+/**
+ * Las conversaciones de Sabina viven en esta misma tabla, marcadas con
+ * `legacyId = "sabina:<uuid>"` (ver `src/lib/sabina/engine-historial.ts`), y no
+ * son del Asistente IA: su barra no las lista.
+ *
+ * ⚠️ `legacyId` es NULL en casi todas las conversaciones del Asistente. Un
+ * `NOT startsWith` a secas en SQL da NULL para esas filas y las esconde a
+ * TODAS; por eso el `legacyId: null` va explícito.
+ */
+export const SABINA_LEGACY_PREFIX = "sabina:";
+export const NOT_SABINA_WHERE = {
+  OR: [{ legacyId: null }, { NOT: { legacyId: { startsWith: SABINA_LEGACY_PREFIX } } }],
+};
+
 const SUMMARY_SELECT = {
   id: true,
   title: true,
@@ -135,6 +149,7 @@ export async function listConversations(
     where: {
       clinicId,
       userId,
+      AND: [NOT_SABINA_WHERE],
       ...(search
         ? {
             OR: [
