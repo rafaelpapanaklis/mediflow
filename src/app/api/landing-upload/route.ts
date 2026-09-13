@@ -5,6 +5,7 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { BUCKETS } from "@/lib/storage";
 import { allPhotoSlotIds } from "@/app/[slug]/_shared/template-manifest";
+import { LOGO_ALLOWED_MIME_TYPES } from "@/lib/clinic-logo";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -34,6 +35,13 @@ const MAX_SIZE = 4 * 1024 * 1024;
 // entonces NINGUNA clínica podía subir la foto de un doctor.
 const CAMPOS_LEGADO = ["cover", "gallery", "avatar"];
 
+// El logo de la clínica (Clinic.logoUrl) — Ajustes → Mi clínica (WS1-T6).
+// Aparte de CAMPOS_LEGADO porque su permiso y sus tipos permitidos son
+// distintos: lo edita "settings.edit", no "landing.edit", y solo acepta
+// PNG/JPG porque además de la mini-web pinta la cabecera de los PDF, que
+// @react-pdf no sabe renderizar en webp/gif.
+const CAMPO_LOGO = "logo";
+
 // Las imágenes de la landing pública de cada clínica viven en un bucket
 // PÚBLICO separado (CLINIC_PUBLIC). El bucket clínico (PATIENT_FILES) está
 // privado y sólo se accede con signed URLs de TTL corto.
@@ -51,27 +59,40 @@ export async function POST(req: NextRequest) {
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
   const destino = (field ?? "").trim();
-  if (!destino || (!CAMPOS_LEGADO.includes(destino) && !allPhotoSlotIds().includes(destino))) {
+  if (!destino || (!CAMPOS_LEGADO.includes(destino) && destino !== CAMPO_LOGO && !allPhotoSlotIds().includes(destino))) {
     return NextResponse.json({ error: "Destino de imagen no válido" }, { status: 400 });
   }
 
   // PERMISOS — cada destino se gatea igual que la escritura que alimenta, para
   // que subir no sea nunca más permisivo que guardar:
   //   avatar → PATCH /api/team/[id] exige admin (requireAdmin).
+  //   logo   → PATCH /api/settings exige "settings.edit" (Ajustes → Mi clínica).
   //   resto  → PATCH /api/clinic-landing exige "landing.edit".
   // Sin esto, cualquier usuario con sesión (incluido uno de solo lectura) podía
   // dejar objetos en el bucket público de la clínica.
   if (destino === "avatar") {
     const err = requireAdmin(ctx);
     if (err) return err;
+  } else if (destino === CAMPO_LOGO) {
+    const denied = denyIfMissingPermission(ctx, "settings.edit");
+    if (denied) return denied;
   } else {
     const denied = denyIfMissingPermission(ctx, "landing.edit");
     if (denied) return denied;
   }
 
-  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "image/bmp", "image/tiff"];
+  // El logo, aparte: sale también en la cabecera de los PDF (factura, receta,
+  // orden de laboratorio, carta de referencia) y @react-pdf no pinta webp/gif
+  // — deja el hueco en blanco sin avisar. Ver src/lib/clinic-logo.ts.
+  const ALLOWED_TYPES = destino === CAMPO_LOGO
+    ? [...LOGO_ALLOWED_MIME_TYPES]
+    : ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "image/bmp", "image/tiff"];
   if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: "Tipo de archivo no permitido" }, { status: 400 });
+    return NextResponse.json({
+      error: destino === CAMPO_LOGO
+        ? "El logo tiene que ser PNG o JPG: son los únicos formatos que también se ven en tus PDF (facturas, recetas, órdenes de laboratorio)."
+        : "Tipo de archivo no permitido",
+    }, { status: 400 });
   }
   if (file.size > MAX_SIZE) {
     const mb = (file.size / (1024 * 1024)).toFixed(1);

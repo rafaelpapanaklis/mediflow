@@ -7,6 +7,7 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { encryptField, isEnvelope } from "@/lib/crypto/envelope";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { sanitizeReminderSettings, sanitizeRecallSettings } from "@/lib/reminders/config";
+import { esUrlDeLogoValida } from "@/lib/clinic-logo";
 
 /**
  * ISO-01 — esta ruta reescribe la IDENTIDAD de la clínica.
@@ -54,6 +55,20 @@ export async function PATCH(req: NextRequest) {
   const data: Record<string, any> = {};
   for (const key of allowed) {
     if (key in body) data[key] = body[key];
+  }
+
+  // WS1-T6 — logoUrl entraba tal cual, sin mirar ni la URL. Esta columna
+  // ahora pinta también la cabecera de los PDF (factura, receta, orden de
+  // laboratorio, carta de referencia) y @react-pdf no sabe pintar webp/gif/
+  // svg: dejaba el hueco en blanco sin avisar. Null limpia el logo; una URL
+  // que no sea png/jpg no se guarda.
+  if ("logoUrl" in data && data.logoUrl !== null) {
+    if (!esUrlDeLogoValida(data.logoUrl)) {
+      return NextResponse.json(
+        { error: "El logo tiene que ser una URL http(s) en formato PNG o JPG." },
+        { status: 400 },
+      );
+    }
   }
 
   // reminderSettings = config de recordatorios de cita (offsets/canal/plantilla)

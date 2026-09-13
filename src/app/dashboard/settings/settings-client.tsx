@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle, Handshake } from "lucide-react";
+import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle, Handshake, ImagePlus, Trash2, Lock } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
@@ -84,9 +84,14 @@ interface Props {
   /** true = FACTURAPI_ENV=live → el timbrado va al SAT con validez fiscal. Es el
    *  ÚNICO dato del ambiente que llega al cliente (nunca la env completa). */
   cfdiLive?: boolean;
+  /** settings.edit resuelto en el servidor (WS1-T6). READONLY llega aquí con
+   *  settings.view pero sin esto: la pestaña "Mi clínica" se ve completa y no
+   *  se puede tocar, en vez de dejar los controles activos para que el PATCH
+   *  responda 403 sin explicación. */
+  puedeEditarClinica?: boolean;
 }
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true }: Props) {
   const t = useT();
   const [tab,      setTab]      = useState(() => {
     const requested = initialTab || "clinica";
@@ -231,6 +236,52 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
   // Google Calendar status
   const gcalConnected = !!user.googleCalendarEnabled;
+
+  // Logo de la clínica (WS1-T6) — el MISMO Clinic.logoUrl que usa la mini-web
+  // (/dashboard/landing). Se sube por /api/landing-upload (destino "logo") y
+  // se guarda por /api/settings, que ya tenía logoUrl en su whitelist y el
+  // mismo gate "settings.edit" que el resto de esta pestaña.
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  async function uploadLogo(file: File) {
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("field", "logo");
+      const up = await fetch("/api/landing-upload", { method: "POST", body: formData });
+      const upData = await up.json().catch(() => null);
+      if (!up.ok) throw new Error(upData?.error ?? "No pudimos subir el logo.");
+      const res = await fetch("/api/settings", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl: upData.url }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No pudimos guardar el logo.");
+      setClinic((c: any) => ({ ...c, logoUrl: upData.url }));
+      toast.success("Logo actualizado");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Error al subir el logo");
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  async function removeLogo() {
+    const prev = clinic.logoUrl;
+    setClinic((c: any) => ({ ...c, logoUrl: null }));
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl: null }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Logo eliminado");
+    } catch {
+      setClinic((c: any) => ({ ...c, logoUrl: prev }));
+      toast.error("Error al quitar el logo");
+    }
+  }
 
   // ── Save functions ────────────────────────────────────────────────────────
   async function saveClinic() {
@@ -509,11 +560,63 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <div className="card__header">
             <div className="card__title">{t("settings.client.clinicDataTitle")}</div>
           </div>
-          <div className="card__body space-y-4">
+          {/* Solo lectura: mismo permiso que exige el PATCH (settings.edit),
+              resuelto en el servidor. Sin esto, un rol de solo lectura veía
+              los campos activos y el guardado le devolvía un 403 mudo. */}
+          {!puedeEditarClinica && (
+            <div className="mx-5 mt-4 flex items-center gap-2 rounded-[var(--radius)] px-3 py-2.5 text-xs font-medium"
+              style={{ background: "var(--bg-elev-2)", color: "var(--text-3)" }}>
+              <Lock size={14} strokeWidth={1.75} />
+              Puedes ver estos datos, pero no editarlos. Pídele a un administrador que haga el cambio.
+            </div>
+          )}
+          <div className="card__body space-y-4" style={puedeEditarClinica ? undefined : { opacity: 0.65, pointerEvents: "none" }}>
           <div className="field-new">
             <label className="field-new__label">{t("settings.client.clinicNameLabel")}</label>
             <Input value={clinic.name ?? ""} onChange={e => setClinic((c: any) => ({ ...c, name: e.target.value }))} />
           </div>
+
+          {/* Logo — el MISMO Clinic.logoUrl que usa la mini-web pública
+              (/dashboard/landing): cambiarlo aquí lo cambia allá también. */}
+          <div className="field-new">
+            <label className="field-new__label">Logo de la clínica</label>
+            <p className="text-[11px] text-muted-foreground -mt-0.5 mb-2">
+              Aparece en tu página pública y en la cabecera de tus facturas, recetas, órdenes de
+              laboratorio y cartas de referencia. Usa PNG o JPG — son los únicos formatos que también
+              se ven bien en tus documentos.
+            </p>
+            {clinic.logoUrl ? (
+              <div className="flex items-center gap-3">
+                <img src={clinic.logoUrl} alt="Logo de la clínica"
+                  className="h-16 w-16 object-contain rounded-[var(--radius)] border border-[color:var(--border-soft)] bg-white" />
+                <div className="flex flex-col gap-1.5">
+                  <label className="btn-new btn-new--secondary text-xs cursor-pointer">
+                    {uploadingLogo ? "Subiendo…" : "Cambiar logo"}
+                    <input type="file" accept="image/png,image/jpeg" className="hidden" disabled={uploadingLogo}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ""; }} />
+                  </label>
+                  <button type="button" onClick={removeLogo} disabled={uploadingLogo}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--danger)] hover:underline disabled:opacity-50">
+                    <Trash2 size={13} strokeWidth={1.75} /> Quitar logo
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs font-medium mb-2" style={{ color: "var(--warning-strong)" }}>
+                  Aún no tienes logo. Tus facturas, recetas y demás documentos van a salir solo con
+                  el nombre de la clínica hasta que subas uno.
+                </p>
+                <label className="flex flex-col items-center justify-center gap-2 text-center border border-dashed border-[color:var(--border-strong)] rounded-[var(--radius-lg)] py-6 px-4 cursor-pointer text-[color:var(--text-2)] hover:border-[color:var(--border-brand)] hover:bg-[color:var(--brand-softer)] transition-colors">
+                  <ImagePlus size={20} strokeWidth={1.75} className="text-[color:var(--brand)]" />
+                  <span className="text-sm font-semibold">{uploadingLogo ? "Subiendo…" : "Subir logo"}</span>
+                  <input type="file" accept="image/png,image/jpeg" className="hidden" disabled={uploadingLogo}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ""; }} />
+                </label>
+              </div>
+            )}
+          </div>
+
           <div className="field-new">
             <label className="field-new__label">{t("settings.client.categoryLabel")}</label>
             <select className="flex h-10 w-full rounded-[var(--radius)] border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
@@ -647,7 +750,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <span className={`badge-new ${clinic.plan === "CLINIC" || clinic.plan === "PRO" ? "badge-new--brand" : "badge-new--neutral"}`}>
               {t("settings.client.planBadge", { plan: clinic.plan })}
             </span>
-            <Button onClick={saveClinic} disabled={saving}>{saving ? t("common.saving") : t("common.saveChanges")}</Button>
+            <Button onClick={saveClinic} disabled={saving || !puedeEditarClinica}>{saving ? t("common.saving") : t("common.saveChanges")}</Button>
           </div>
           </div>
         </div>
