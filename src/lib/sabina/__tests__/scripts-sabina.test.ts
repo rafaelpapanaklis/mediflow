@@ -33,6 +33,7 @@ test("cada archivo de prueba de Sabina tiene un script que lo corre", () => {
     "src/lib/sabina/__tests__/punta-a-punta.test.ts",
     "src/lib/sabina/__tests__/historial.test.ts",
     "src/lib/sabina/__tests__/scripts-sabina.test.ts",
+    "src/lib/sabina/__tests__/cobro-por-modelo.test.ts",
   ]) {
     assert.ok(lineas.includes(archivo), `${archivo} no lo corre ningún script`);
   }

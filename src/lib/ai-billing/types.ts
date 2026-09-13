@@ -47,6 +47,9 @@ export const AI_BILLING_FEATURE_LABEL_ES: Record<string, string> = {
   [AI_FEATURE_CONSULT_ANALYSIS]: "Análisis de consulta",
   [AI_FEATURE_XRAY_ANALYSIS]: "Análisis de radiografías",
   [AI_FEATURE_PRESCRIPTION_CHECK]: "Revisión de recetas",
+  // AI_FEATURE_SABINA vive en src/lib/sabina/engine-catalog.ts (server-only);
+  // test:sabina-cobro comprueba que el slug y esta clave coinciden.
+  sabina: "Sabina",
 };
 
 /**

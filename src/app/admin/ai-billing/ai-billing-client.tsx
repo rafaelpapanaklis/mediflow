@@ -58,6 +58,8 @@ type CostBlock = {
 };
 type Dashboard = {
   pricing: Pricing;
+  /** Modelos sin precio en la tabla cobrados con el respaldo (Sonnet 4.6), últimos burnWindowDays días. */
+  unpricedModels?: Array<{ model: string; events: number; billedCents: number }>;
   anthropic: {
     rechargedUsd: number;
     consumedUsd: number;
@@ -329,6 +331,21 @@ export function AiBillingClient() {
         </ButtonNew>
       </div>
 
+      {(d.unpricedModels?.length ?? 0) > 0 && (
+        <div
+          role="alert"
+          style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 20, padding: "12px 14px", borderRadius: 10, border: "1px solid var(--danger)", background: "var(--danger-soft)", color: "var(--danger)", fontSize: 13 }}
+        >
+          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <strong>Hay modelos sin precio en la tabla.</strong> En los últimos {a.burnWindowDays} días estas llamadas se
+            calcularon con el precio de respaldo (Sonnet 4.6), no con el suyo:{" "}
+            {d.unpricedModels!.map((m) => `${m.model || "(vacío)"} · ${m.events} llamadas · ${formatCurrency(m.billedCents / 100, "MXN")} cobrado`).join(" — ")}.
+            Añade el modelo a la tabla de precios del código.
+          </div>
+        </div>
+      )}
+
       {/* KPIs principales */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
         <KpiCard
@@ -483,7 +500,7 @@ export function AiBillingClient() {
             </table>
           </div>
           <div style={{ marginTop: 6, fontSize: 10, color: "var(--text-3)" }}>
-            Un modelo que no esté en esta lista se cobra al precio más alto de la tabla.
+            Un modelo que no esté en esta lista se cobra al precio de Sonnet 4.6, y sale en rojo arriba.
           </div>
           <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
             <ButtonNew variant="primary" onClick={savePricing} disabled={savingPrice}>

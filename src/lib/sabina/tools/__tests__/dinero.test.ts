@@ -26,7 +26,8 @@ import assert from "node:assert/strict";
 
 import { ejecutarHerramienta } from "../index";
 import { sumarDias } from "../fechas";
-import { HOY_N, adminNorte, base, conPermisos, doctorNorte } from "./siembra";
+import { HOY_N, adminNorte, base, conPermisos, datosDePrueba, doctorNorte } from "./siembra";
+import { crearBase } from "./doble-base";
 
 /** El rango en el que cae todo el dinero sembrado (últimos 10 días). */
 const RANGO = { desde: sumarDias(HOY_N, -10), hasta: HOY_N };
@@ -302,4 +303,31 @@ test("🔴 quien no tiene billing.view no recibe NINGUNA cifra de dinero", async
   // Y lo de agenda y pacientes sí lo contesta: el corte es por área, no total.
   const citas = await ejecutarHerramienta("citas_del_dia", ctx, { fecha: HOY_N });
   assert.equal(citas.ok, true);
+});
+
+test("🔴 tratamientos: un concepto llamado «__proto__» o «constructor» no contamina nada ni sale en NaN", async () => {
+  // El nombre del concepto es texto libre de la clínica y se usaba como clave de
+  // un objeto normal: con «__proto__» el acumulado era Object.prototype, y
+  // `acc.importe += base` dejaba `importe`/`veces`/`cantidad` = NaN en TODOS los
+  // objetos del proceso — que en serverless atiende también a otras clínicas.
+  const datos = datosDePrueba();
+  const inv1 = datos.invoices.find((f) => f.id === "inv-1")!;
+  inv1.items = [
+    { description: "__proto__", quantity: 1, unitPrice: 1000, total: 1000 },
+    { description: "constructor", quantity: 4, unitPrice: 1000, total: 4000 },
+  ];
+  try {
+    const r = await ejecutarHerramienta("tratamientos_por_ingreso", adminNorte(crearBase(datos)), RANGO);
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "importe"), false, "se contaminó Object.prototype");
+    assert.equal(({} as any).veces, undefined, "se contaminó Object.prototype");
+    const filas = r.datos.tratamientos.filas as Array<{ tratamiento: string; importe: number; veces: number }>;
+    const proto = filas.find((f) => f.tratamiento === "__proto__");
+    const ctor = filas.find((f) => f.tratamiento === "constructor");
+    assert.deepEqual(proto && { importe: proto.importe, veces: proto.veces }, { importe: 1000, veces: 1 });
+    assert.deepEqual(ctor && { importe: ctor.importe, veces: ctor.veces }, { importe: 4000, veces: 1 });
+  } finally {
+    for (const k of ["importe", "veces", "cantidad"]) delete (Object.prototype as any)[k];
+  }
 });

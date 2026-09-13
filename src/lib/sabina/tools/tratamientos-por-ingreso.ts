@@ -110,7 +110,9 @@ export const tratamientosPorIngreso = definirHerramienta<ParamsTratamientos, Dat
       );
     }
 
-    const acumulado: Record<string, { importe: number; veces: number; cantidad: number }> = {};
+    // Sin prototipo: la clave es el texto libre del concepto, y «__proto__» o
+    // «constructor» en un objeto normal pisarían Object.prototype o su método.
+    const acumulado: Record<string, { importe: number; veces: number; cantidad: number }> = Object.create(null);
     let totalFacturado = 0;
     let ajustes = 0;
 

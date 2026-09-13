@@ -65,7 +65,7 @@ export type PricingRow = {
 /**
  * Id canónico: sin espacios, en minúsculas y sin sufijo de fecha. El chat del
  * asistente manda `claude-haiku-4-5-20251001`; sin esto caería en "desconocido"
- * y se cobraría al precio más caro.
+ * y se cobraría al precio de respaldo.
  */
 export function normalizeModelId(model: unknown): string {
   if (typeof model !== "string") return "";
@@ -75,14 +75,16 @@ export function normalizeModelId(model: unknown): string {
 const isPositive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 const hasOwn = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
-/** El precio más alto de la tabla, campo por campo: nunca sale más barato que ningún modelo. */
-function highestPrice(models: Record<string, ModelPrice>): ModelPrice {
-  const out: ModelPrice = { inputUsdPerMtok: 0, outputUsdPerMtok: 0, cacheWriteUsdPerMtok: 0, cacheReadUsdPerMtok: 0 };
-  for (const price of Object.values(models)) {
-    for (const k of PRICE_KEYS) out[k] = Math.max(out[k], price[k]);
-  }
-  return out;
-}
+/**
+ * Con qué modelo se cobra un modelo SIN precio en la tabla: Sonnet 4.6.
+ *
+ * Decisión de Rafael (2026-09-13), en vez del precio más alto de la tabla: en
+ * dental solo se usan Sonnet y Haiku, y cobrar Opus/Fable serían cinco o más
+ * veces lo que costó — eso ya no es un error que el cliente reclama, es un
+ * cobro que duele. Sonnet 4.6 era el precio único con el que se cobraba TODO
+ * antes de los precios por modelo, así que nunca cobra menos de lo de antes.
+ */
+export const FALLBACK_PRICE_MODEL = "claude-sonnet-4-6";
 
 /**
  * Arma el config desde las filas de `ai_pricing_configs`:
@@ -119,27 +121,38 @@ export function pricingConfigFromRows(rows: readonly PricingRow[]): PricingConfi
   };
 }
 
-// Un aviso por modelo desconocido y proceso: que se vea en los logs sin inundarlos.
-const warnedUnknown = new Set<string>();
-
 /**
  * Precio con el que se cobra `model`. Si no está en la tabla (vacío, alias,
- * modelo nuevo puesto por env) se cobra al precio MÁS ALTO conocido: cobrar de
- * menos lo absorbe DaleControl sin que nadie lo note; cobrar de más se ve y se
- * corrige añadiendo el modelo a la tabla.
+ * modelo nuevo puesto por env) se cobra al precio VIGENTE de Sonnet 4.6
+ * (`FALLBACK_PRICE_MODEL`, con lo editado en el admin si lo hay). Pura: no
+ * registra nada; el registro va en `computeCostUsdMicros`, que es el cobro.
  */
 export function resolveModelPrice(model: unknown, cfg: PricingConfig): { price: ModelPrice; known: boolean } {
   const id = normalizeModelId(model);
   if (cfg.models && hasOwn(cfg.models, id)) return { price: cfg.models[id], known: true };
 
-  const fallback = highestPrice(cfg.models ?? {});
-  const price = isPositive(fallback.inputUsdPerMtok) ? fallback : highestPrice(ANTHROPIC_MODEL_PRICES);
-  const key = String(model);
-  if (!warnedUnknown.has(key)) {
-    warnedUnknown.add(key);
-    console.warn("[ai-billing] modelo sin precio en la tabla; se cobra al precio más alto conocido", { model });
-  }
+  const vigente = cfg.models?.[FALLBACK_PRICE_MODEL];
+  const price = vigente && PRICE_KEYS.every((k) => isPositive(vigente[k]))
+    ? vigente
+    : ANTHROPIC_MODEL_PRICES[FALLBACK_PRICE_MODEL];
   return { price, known: false };
+}
+
+/**
+ * Registro de CADA cobro que cae en el precio de respaldo. Si empieza a saltar
+ * es que hay un modelo sin precio en la tabla y se está cobrando a Sonnet a
+ * todas las clínicas que lo usen: sin aviso, eso dura meses. Sin deduplicar a
+ * propósito (antes era una vez por modelo y proceso, y en serverless eso es
+ * casi nunca). Etiqueta fija para buscarlo en los logs de Vercel. La constancia
+ * que no depende de los logs ya existe: cada cobro guarda su `model` en
+ * AiUsageEvent, y /admin/ai-billing lista los que no tienen precio
+ * (`unpricedModelsFromUsage`).
+ */
+function logFallbackPrice(model: unknown): void {
+  console.error("[ai-billing] PRECIO_DE_RESPALDO: modelo sin precio en la tabla; se cobra como Sonnet 4.6", {
+    model,
+    cobradoComo: FALLBACK_PRICE_MODEL,
+  });
 }
 
 /**
@@ -163,13 +176,36 @@ export function computeCostUsdMicros(
   cfg: PricingConfig,
   cacheWriteTokens = 0,
 ): number {
-  const { price } = resolveModelPrice(model, cfg);
+  const { price, known } = resolveModelPrice(model, cfg);
+  if (!known) logFallbackPrice(model);
   const micros =
     inputTokens * price.inputUsdPerMtok +
     outputTokens * price.outputUsdPerMtok +
     cacheTokens * price.cacheReadUsdPerMtok +
     cacheWriteTokens * price.cacheWriteUsdPerMtok;
   return Math.max(0, Math.round(micros));
+}
+
+/** Una fila de `aiUsageEvent.groupBy({ by: ["model"], _count: { _all }, _sum: { billedCents } })`. */
+export type UsageByModelRow = {
+  model: string;
+  _count: { _all: number };
+  _sum: { billedCents: number | null };
+};
+
+/**
+ * De los cobros guardados agrupados por modelo, los que se cobraron con el
+ * precio de respaldo (modelo que hoy no está en la tabla), de más a menos
+ * eventos. Es lo que /admin/ai-billing enseña en rojo.
+ */
+export function unpricedModelsFromUsage(
+  rows: readonly UsageByModelRow[],
+  cfg: PricingConfig,
+): Array<{ model: string; events: number; billedCents: number }> {
+  return rows
+    .filter((r) => !resolveModelPrice(r.model, cfg).known)
+    .map((r) => ({ model: r.model, events: r._count._all, billedCents: r._sum.billedCents ?? 0 }))
+    .sort((a, b) => b.events - a.events);
 }
 
 /** Convierte costo (micro-USD) a centavos MXN cobrados, fee OCULTO incluido. */

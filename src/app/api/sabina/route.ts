@@ -112,9 +112,9 @@ export async function POST(req: NextRequest) {
     // Del MONEDERO de la clínica, igual que el bot de WhatsApp (chatMetered):
     // canSpend arriba como puerta, chargeUsage después de la llamada real, y un
     // fallo del cobro no le quita al doctor la respuesta que ya se pagó a
-    // Anthropic. Un cargo —y su AiUsageEvent— por MODELO, con sus tokens: hoy
-    // `computeCostUsdMicros` tiene un precio único, y cuando entren los precios
-    // por modelo cada cargo tomará el suyo sin tocar esta ruta.
+    // Anthropic. Un cargo —y su AiUsageEvent— por MODELO, con sus tokens: cada
+    // cargo se cobra al precio de SU modelo (`pricing-core.ts`, #242); lo fija
+    // `npm run test:sabina-cobro` con el monedero de verdad.
     for (const uso of salida.consumo) {
       if (uso.entrada + uso.salida <= 0) continue;
       try {

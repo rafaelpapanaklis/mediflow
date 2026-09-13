@@ -32,10 +32,9 @@ import {
  * índice único (clinicId, userId, legacyId) no estorba con un uuid. Ninguna
  * ruta del Asistente IA la edita.
  *
- * ⚠️ Lo que esto NO arregla: el Asistente IA lista todas las filas de la
- * persona, así que las conversaciones de Sabina aparecen también en SU barra
- * (grupo «admin»). Ocultarlas es un filtro en `listConversations`, que no es
- * archivo de Sabina. Va en el reporte.
+ * Y al revés: la barra del Asistente IA no lista las de Sabina, por el filtro
+ * `NOT_SABINA_WHERE` de `listConversations` (conversations.ts), que usa esta
+ * misma marca.
  *
  * Toda función exige scope completo y lo mete en el `where`: `clinicId:
  * undefined` no filtra nada en Prisma.
