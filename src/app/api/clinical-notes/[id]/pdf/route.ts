@@ -8,8 +8,10 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { ownPrivateRecordsOnly } from "@/lib/branches";
 import {
   ClinicalNoteDocument,
+  readNoteAddenda,
   type ClinicalNoteDxRow,
 } from "@/lib/pdf/clinical-note-document";
+import { CLINIC_LETTERHEAD_SELECT, clinicLetterheadProps } from "@/lib/pdf/clinic-letterhead";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +52,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
           firstName: true, lastName: true, dob: true, gender: true,
         },
       },
-      clinic: { select: { name: true } },
+      // La cabecera común pide nombre, dirección, teléfono, correo y logo.
+      clinic: { select: CLINIC_LETTERHEAD_SELECT },
       diagnoses_v2: {
         select: { cie10: { select: { code: true, description: true } } },
         orderBy: { isPrimary: "desc" },
@@ -92,13 +95,23 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .map((p) => (typeof p === "string" ? p : p?.name ?? ""))
     .filter((s) => s.length > 0);
 
+  // Adendas (hallazgo 25): correcciones firmadas que se guardan encima de la
+  // nota sin tocarla. El `select` de arriba ya trae `specialtyData`, que es
+  // donde las escribe POST /api/clinical-notes/[id]/addendum, así que no hace
+  // falta pedir nada más a la base; lo que faltaba era imprimirlas.
+  const addenda = readNoteAddenda(record.specialtyData);
+
   const patientName = `${record.patient.firstName} ${record.patient.lastName}`;
   const doctorName = record.doctor
     ? `Dr/a. ${record.doctor.firstName} ${record.doctor.lastName}`
     : null;
 
+  // Baja el logo (con plazo y camino de respaldo): si el bucket falla, esto
+  // devuelve el membrete sin logo y la nota se genera igual.
+  const membrete = await clinicLetterheadProps(record.clinic);
+
   const element = createElement(ClinicalNoteDocument, {
-    clinicName: record.clinic.name,
+    ...membrete,
     patientName,
     patientDob: record.patient.dob ? record.patient.dob.toISOString() : null,
     patientGender: record.patient.gender ?? null,
@@ -113,6 +126,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     plan: record.plan,
     diagnoses,
     procedures,
+    addenda,
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -179,3 +179,78 @@ test("CDA R2 · el contenido clínico viaja entero: mismos datos, bien envueltos
     assert.ok(xml.includes(dato), `falta en el CDA: ${dato}`);
   }
 });
+
+// ── Adendas (#244) sobre el CDA que valida (#241) ───────────────────────────
+// Las dos ramas tocan `cda.ts` por separado: el #244 le mete las adendas de la
+// nota firmada y el #241 lo pone a validar. Por separado ninguna prueba mira
+// las dos cosas a la vez: el #241 no conoce las adendas, y el #244 validaba
+// solo contra una tabla de orden escrita a mano. Aquí se exige lo que tiene
+// que salir de la integración: el CDA CON adendas valida contra el XSD
+// oficial, 0 errores, y las adendas viajan con su LOINC y su referencia a la
+// nota firmada.
+const LOINC_ADENDA = "55107-7";
+
+function conAdendas(): Input {
+  const input = expediente();
+  input.records[0].addenda = [
+    // Llegan desordenadas: la segunda es anterior a la primera.
+    { id: "ad_2", text: "Se amplía: exposición pulpar puntiforme <no visible> & sin síntomas.", authorId: "usr_2", authorName: "Dr/a. Luis Prado", createdAt: "2026-09-03T09:15:00.000Z" },
+    { id: "ad_1", text: "Donde dice «pieza 26» debe decir «pieza 27».", authorId: "usr_1", authorName: "Dr/a. Ana Ruiz", createdAt: "2026-09-02T14:32:00.000Z" },
+  ];
+  input.records[1].addenda = [
+    // Sin autor y con una fecha que no se entiende: se declara con nullFlavor.
+    { id: "ad_3", text: "Sin autor registrado.", authorId: null, authorName: null, createdAt: "el martes pasado" },
+  ];
+  return input;
+}
+
+const CASOS_ADENDAS: Array<[string, (i: Input) => void]> = [
+  ["con cédula, especialidad y CLUES", () => {}],
+  ["médico sin cédula ni especialidad; clínica sin CLUES; paciente con pasaporte", (i) => {
+    i.doctor.cedulaProfesional = null; i.doctor.especialidad = null;
+    i.clinic.clues = null; i.patient.curp = null; i.patient.passportNo = "G12345678";
+  }],
+];
+
+for (const [nombre, ajusta] of CASOS_ADENDAS) {
+  test(`CDA R2 · CON adendas valida contra el XSD oficial y las lleva — ${nombre}`, () => {
+    const input = conAdendas();
+    ajusta(input);
+    const xml = buildCdaXml(input);
+
+    const errores = erroresDeEsquema(xml);
+    assert.deepEqual(errores, [], `El CDA con adendas no valida contra el XSD de CDA R2:\n  ${errores.join("\n  ")}`);
+
+    // Las tres adendas viajan como entrada estructurada, con LOINC 55107-7…
+    const traducciones = xml.match(new RegExp(`<translation code="${LOINC_ADENDA}" codeSystem="2\\.16\\.840\\.1\\.113883\\.6\\.1"`, "g")) ?? [];
+    assert.equal(traducciones.length, 3, "no viajan las tres adendas con su LOINC 55107-7");
+    for (const t of ["pieza 27", "exposición pulpar puntiforme &lt;no visible&gt; &amp; sin síntomas", "Sin autor registrado."]) {
+      assert.ok(xml.includes(t), `falta el texto de una adenda: ${t}`);
+    }
+
+    // …y cada una apunta por SUBJ al id de SU nota firmada, que el documento
+    // también declara en la sección de esa nota.
+    const refs = [...xml.matchAll(/<reference typeCode="SUBJ">\s*<externalDocument classCode="DOCCLIN" moodCode="EVN">\s*<id root="([^"]+)" extension="([^"]+)"\/>/g)]
+      .map((m) => m[2]);
+    assert.deepEqual(refs, ["mr_1", "mr_1", "mr_2"], "las adendas no apuntan por SUBJ a su nota firmada");
+    const raizNota = [...xml.matchAll(/<reference typeCode="SUBJ">\s*<externalDocument[^>]*>\s*<id root="([^"]+)"/g)][0][1];
+    for (const nota of ["mr_1", "mr_2"]) {
+      assert.ok(xml.includes(`<id root="${raizNota}" extension="${nota}"/>`), `la sección de ${nota} no lleva el id al que apunta la adenda`);
+    }
+    // Una nota sin adendas no cambia: no lleva id de sección.
+    assert.ok(!xml.includes(`extension="mr_3"`), "una nota sin adendas no debería cambiar");
+  });
+}
+
+test("CDA R2 · el autor de una adenda es el mismo usuario que el autor del documento: misma raíz", () => {
+  // El #241 identifica al médico sin cédula por su id de usuario bajo una raíz
+  // UUID; el #244 identificaba al autor de la adenda —también un usuario— bajo
+  // un OID propio. Juntos, la MISMA persona salía con dos identificadores y un
+  // receptor no podía saber que era ella.
+  const input = conAdendas();
+  input.doctor.cedulaProfesional = null;
+  const xml = buildCdaXml(input);
+  const idsDeUsr1 = [...xml.matchAll(/<id root="([^"]+)" extension="usr_1"[^>]*\/>/g)].map((m) => m[0]);
+  assert.equal(idsDeUsr1.length, 2, `se esperaba usr_1 como autor del documento y de una adenda:\n${idsDeUsr1.join("\n")}`);
+  assert.equal(idsDeUsr1[0], idsDeUsr1[1], `usr_1 sale con dos identificadores distintos:\n${idsDeUsr1.join("\n")}`);
+});
