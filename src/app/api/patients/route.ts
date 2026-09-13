@@ -10,7 +10,7 @@ import {
   PatientNumberExhaustedError,
 } from "@/lib/patients/next-patient-number";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
-import { normalizeVisibleUserIds } from "@/lib/patient-visibility";
+import { canSeePatient, normalizeVisibleUserIds } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
@@ -21,9 +21,9 @@ import {
   patientSearchTokens,
   matchesDebtFilter,
   isDebtFilterActive,
-  isProbablePatientDuplicate,
 } from "@/lib/patients/patient-search-core";
 import { findPatientIdsBySearch } from "@/lib/patients/patient-search";
+import { splitPatientDuplicates, validatePatientCreateBody } from "@/lib/patients/patient-create-core";
 
 export const dynamic = "force-dynamic";
 
@@ -633,7 +633,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json();
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Cuerpo inválido", code: "INVALID_PATIENT", field: "body" }, { status: 400 });
+  }
+
+  // N7 — el cuerpo se valida AQUÍ, no solo en el modal: sin esto un alta sin
+  // nombre, con fecha o género inválidos llegaba a Prisma y salía un 500 con su
+  // mensaje interno, y un nombre "" se guardaba. Obligatorios de verdad: nombre
+  // y apellido; lo demás, si llega, tiene que ser válido. Ver patient-create-core.ts.
+  const valid = validatePatientCreateBody(body);
+  if (valid.ok === false) {
+    return NextResponse.json({ error: valid.error, code: "INVALID_PATIENT", field: valid.field }, { status: 400 });
+  }
 
   // NOM-024 identificación: validar coherencia curp/curpStatus/passportNo.
   const curpStatusRaw = body.curpStatus ?? "PENDING";
@@ -658,15 +672,21 @@ export async function POST(req: NextRequest) {
   // el modal después de que el usuario confirme — el aviso avisa, no prohíbe:
   // dos personas pueden llamarse igual y recepción tiene que poder seguir.
   //
-  // Los candidatos pasan por buildPatientWhere: la guarda NO puede convertirse
-  // en una forma de averiguar que existe un paciente restringido por
-  // visibleUserIds preguntando por su nombre.
+  // N8 — los candidatos salen de TODA la clínica. Antes pasaban por
+  // buildPatientWhere, que para un DOCTOR es «solo mis pacientes»: el paciente
+  // de otro doctor nunca era candidato y el expediente se partía en dos. La
+  // visibilidad decide ahora QUÉ SE DICE, no SI SE AVISA: datos solo de los
+  // pacientes que este usuario ya puede listar; de los demás, solo que existen
+  // (`hasHiddenDuplicates`, sí/no: ni siquiera cuántos). Y un paciente restringido a otros no se delata con
+  // solo el nombre: la guarda no puede servir para averiguar que existe. Las
+  // reglas están en splitPatientDuplicates (patient-create-core.ts), que coteja
+  // con el mismo criterio compartido de siempre, isProbablePatientDuplicate.
   const alta = {
-    firstName: String(body.firstName ?? "").trim(),
-    lastName: String(body.lastName ?? "").trim(),
+    firstName: valid.firstName,
+    lastName: valid.lastName,
     phone: typeof body.phone === "string" ? body.phone : null,
   };
-  if (body.allowDuplicate !== true && alta.firstName && alta.lastName) {
+  if (body.allowDuplicate !== true) {
     const dupIds = await findPatientIdsBySearch({
       clinicIds: [ctx.clinicId],
       tokens: patientSearchTokens(`${alta.firstName} ${alta.lastName}`),
@@ -674,21 +694,38 @@ export async function POST(req: NextRequest) {
     });
     if (dupIds && dupIds.length > 0) {
       const candidatos = await prisma.patient.findMany({
-        where: buildPatientWhere(ctx, { id: { in: dupIds } }),
-        select: { id: true, patientNumber: true, firstName: true, lastName: true, phone: true },
+        where: { clinicId: ctx.clinicId, deletedAt: null, id: { in: dupIds } },
+        select: { id: true, patientNumber: true, firstName: true, lastName: true, phone: true, visibleUserIds: true },
       });
-      const duplicados = candidatos.filter((c) => isProbablePatientDuplicate(c, alta));
-      if (duplicados.length > 0) {
+      // Para un admin buildPatientWhere no recorta nada: todos están a su alcance.
+      let enAlcance = new Set(candidatos.map((c) => c.id));
+      if (!ctx.isAdmin && candidatos.length > 0) {
+        const listables = await prisma.patient.findMany({
+          where: buildPatientWhere(ctx, { id: { in: candidatos.map((c) => c.id) } }),
+          select: { id: true },
+        });
+        enAlcance = new Set(listables.map((c) => c.id));
+      }
+      const { visibles, ocultos } = splitPatientDuplicates({
+        candidatos,
+        alta,
+        enMiAlcance: (id) => enAlcance.has(id),
+        puedeVer: (lista) => canSeePatient({ userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId }, lista),
+      });
+      if (visibles.length > 0 || ocultos > 0) {
         return NextResponse.json(
           {
-            error: `Ya existe un paciente con nombre "${alta.firstName} ${alta.lastName}".`,
+            error: visibles.length > 0
+              ? `Ya existe un paciente con nombre "${alta.firstName} ${alta.lastName}".`
+              : `Ya existe en la clínica un paciente con estos datos fuera de tu alcance. Pide a un administrador que lo revise antes de crear otro expediente.`,
             code: "DUPLICATE_PATIENT",
-            duplicates: duplicados.map((d) => ({
+            duplicates: visibles.map((d) => ({
               id: d.id,
               patientNumber: d.patientNumber,
               fullName: `${d.firstName} ${d.lastName}`.trim(),
               phone: d.phone,
             })),
+            hasHiddenDuplicates: ocultos > 0,
           },
           { status: 409 },
         );
@@ -722,12 +759,12 @@ export async function POST(req: NextRequest) {
         data: {
           clinicId: ctx.clinicId,
           patientNumber,
-          firstName: body.firstName,
-          lastName: body.lastName,
+          firstName: valid.firstName,
+          lastName: valid.lastName,
           email: body.email ?? null,
           phone: body.phone ?? null,
-          dob: body.dob ? new Date(body.dob) : null,
-          gender: body.gender ?? "OTHER",
+          dob: valid.dob,
+          gender: valid.gender,
           bloodType: body.bloodType ?? null,
           address: body.address ?? null,
           notes: body.notes ?? null,
