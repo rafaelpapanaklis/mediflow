@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./settings-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import { getServerT } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
@@ -20,6 +21,11 @@ export default async function SettingsPage({ searchParams }: Props) {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "settings.view");
   const { t } = await getServerT();
+
+  // "Mi clínica" — READONLY entra con settings.view pero no debe guardar
+  // (ni el nombre, ni el logo). Se resuelve en el servidor: es la MISMA
+  // llave que exige el PATCH (/api/clinic, /api/settings), no una nueva.
+  const puedeEditarClinica = hasPermission(user, "settings.edit");
 
   const clinic = await prisma.clinic.findUnique({
     where:   { id: user.clinicId },
@@ -47,6 +53,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         gcalStatus={searchParams.gcal}
         cfdiLive={isFacturapiLive()}
         teamMembers={teamMembers as any}
+        puedeEditarClinica={puedeEditarClinica}
       />
     </ErrorBoundary>
   );
