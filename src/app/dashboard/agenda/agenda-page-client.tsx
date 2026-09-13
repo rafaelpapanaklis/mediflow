@@ -38,6 +38,7 @@ import { slotIndexToUtc } from "@/lib/agenda/time-utils";
 import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import { updateWaitlist, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
+import { bookingRuleMessage } from "@/lib/agenda/booking-rules";
 import {
   detectOverlap,
   recomputeTimes,
@@ -544,7 +545,8 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
           resourceId: newResourceId,
         }));
       } else {
-        toast.error(t("agenda.pageClient.rescheduleFailed"));
+        // Reglas del servidor (mover al pasado, cita cerrada…): su frase, no el genérico.
+        toast.error(bookingRuleMessage(apiErr) ?? t("agenda.pageClient.rescheduleFailed"));
       }
     } finally {
       setRescheduling(false);

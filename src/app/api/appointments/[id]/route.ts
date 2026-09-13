@@ -29,6 +29,10 @@ import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { scheduleViolation } from "@/lib/agenda/clinic-hours";
 import {
+  bookingRuleBody,
+  rescheduleRuleViolation,
+} from "@/lib/agenda/booking-rules";
+import {
   syncUpdateToGoogleCalendar,
   syncDeleteFromGoogleCalendar,
 } from "@/lib/agenda/google-sync";
@@ -83,6 +87,8 @@ export async function PATCH(
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
+    // El estado del paciente lo necesita la regla de «no reagendar archivados».
+    include: { patient: { select: { status: true } } },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -188,6 +194,31 @@ export async function PATCH(
   }
   if (newEnds <= newStarts) {
     return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
+  }
+
+  // Mover una cita cancelada/completada/no asistió, moverla al pasado, reagendar
+  // a un paciente archivado o dejarla sin motivo (WS1-T3, N1 y N13): antes solo
+  // lo frenaba la pantalla, y mover una cancelada volvía a encolar recordatorios.
+  const ruleViolation = rescheduleRuleViolation({
+    current: {
+      status: existing.status,
+      startsAt: existing.startsAt,
+      doctorId: existing.doctorId,
+      reason: existing.type,
+    },
+    next: {
+      startsAt: newStarts,
+      doctorId: body.doctorId || existing.doctorId,
+    },
+    reason: body.reason,
+    patientStatus: existing.patient?.status,
+    slotMinutes: session.clinic.defaultSlotMinutes,
+    now: new Date(),
+  });
+  if (ruleViolation) {
+    return NextResponse.json(bookingRuleBody(ruleViolation), {
+      status: ruleViolation.httpStatus,
+    });
   }
 
   // P1-13: fuera-de-horario/día cerrado AVISA en vez de bloquear con 422.

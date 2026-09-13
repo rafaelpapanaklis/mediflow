@@ -21,6 +21,10 @@ import {
 } from "@/lib/agenda/time-utils";
 import { scheduleViolation } from "@/lib/agenda/clinic-hours";
 import {
+  bookingRuleBody,
+  newAppointmentRuleViolation,
+} from "@/lib/agenda/booking-rules";
+import {
   canOverrideOverlap,
   isAppointmentOverlapError,
 } from "@/lib/agenda/transitions";
@@ -219,7 +223,7 @@ export async function POST(req: NextRequest) {
   const [patient, doctor, resource] = await Promise.all([
     prisma.patient.findFirst({
       where: { id: body.patientId, clinicId: session.clinic.id },
-      select: { id: true },
+      select: { id: true, status: true },
     }),
     prisma.user.findFirst({
       where: {
@@ -258,6 +262,22 @@ export async function POST(req: NextRequest) {
   if (visDenied) return visDenied;
   if (!doctor) {
     return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
+  }
+
+  // Motivo, pasado y paciente archivado (WS1-T3, N13): antes solo los frenaba el
+  // formulario. Va DESPUÉS del assert de visibilidad para no revelar si un
+  // paciente que no puedes ver está archivado.
+  const ruleViolation = newAppointmentRuleViolation({
+    startsAt,
+    reason: body.reason,
+    patientStatus: patient.status,
+    slotMinutes: session.clinic.defaultSlotMinutes,
+    now: new Date(),
+  });
+  if (ruleViolation) {
+    return NextResponse.json(bookingRuleBody(ruleViolation), {
+      status: ruleViolation.httpStatus,
+    });
   }
   if (body.resourceId && !resource) {
     return NextResponse.json({ error: "resource_not_found" }, { status: 404 });

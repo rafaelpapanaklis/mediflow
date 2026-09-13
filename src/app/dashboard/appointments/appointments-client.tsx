@@ -493,7 +493,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       toast.success(t("appointments.toast.created"));
       // La API guarda la cita fuera de horario pero avisa; si no lo mostramos,
       // el aviso se pierde.
-      if (body.scheduleWarning) toast(String(body.scheduleWarning));
+      if (body.scheduleWarning?.message) toast(body.scheduleWarning.message, { duration: 6000 });
     } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
   }
 
@@ -521,7 +521,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       setShowEdit(false);
       setShowDetail(null);
       toast.success(t("appointments.toast.updated"));
-      if (body.scheduleWarning) toast(String(body.scheduleWarning));
+      if (body.scheduleWarning?.message) toast(body.scheduleWarning.message, { duration: 6000 });
     } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
   }
 
