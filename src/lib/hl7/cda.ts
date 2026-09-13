@@ -24,6 +24,24 @@ const OID_CIE10 = "2.16.840.1.113883.6.3";
 const OID_CUMS_MX = "2.16.840.1.113883.3.7777.2.1"; // local CUMS
 const TEMPLATE_ID_NOM024 = "2.16.840.1.113883.3.7777.10.1";
 
+// Identificadores nacionales: OIDs publicados por la DGIS (Secretaría de Salud)
+// en «OID'S Registrados → Identificadores y Catálogos de Ámbito Nacional»
+// (dgis.salud.gob.mx/contenidos/intercambio/consultaoid_gobmx.html). No se
+// inventan: un OID falso que valida es peor que uno que no valida.
+const OID_CURP = "2.16.840.1.113883.4.629";
+const OID_CLUES = "2.16.840.1.113883.4.631";
+const OID_CEDULA_PROFESIONAL = "2.16.840.1.113883.3.215.12.18";
+
+// Cuando no hay identificador nacional, lo que viaja es un id interno, y no
+// puede ir bajo el OID de CURP/cédula/CLUES: el receptor se lo creería. HL7
+// admite un UUID como raíz sin registrarlo en ningún sitio; estos se
+// generaron una vez y no cambian. El pasaporte va aquí porque solo lo piden
+// los pacientes FOREIGN y no guardamos el país emisor: el OID del pasaporte
+// mexicano (…4.330.484) sería falso para ellos.
+const UUID_DALECONTROL_USUARIO = "B8752DA0-AB3F-4F7A-9501-0433E0A94C0A";
+const UUID_DALECONTROL_CLINICA = "CA08668A-9A58-4A67-9A97-EE6625BBBD52";
+const UUID_PASAPORTE_SIN_PAIS = "7129B8F4-9494-4E57-94F0-C85345AEDB7A";
+
 function fmtDate(d: Date | null | undefined): string {
   if (!d) return "00000000";
   return d.toISOString().slice(0, 10).replace(/-/g, "");
@@ -107,9 +125,12 @@ export function buildCdaXml(input: BuildInput): string {
   // ── recordTarget (paciente) ─────────────────────────────────────────
   const rt = doc.ele("recordTarget").ele("patientRole");
   if (input.patient.curp) {
-    rt.ele("id", { root: "2.16.840.1.113883.3.7777.curp", extension: input.patient.curp });
+    rt.ele("id", { root: OID_CURP, extension: input.patient.curp });
   } else if (input.patient.passportNo) {
-    rt.ele("id", { root: "2.16.840.1.113883.3.7777.passport", extension: input.patient.passportNo });
+    rt.ele("id", {
+      root: UUID_PASAPORTE_SIN_PAIS, extension: input.patient.passportNo,
+      assigningAuthorityName: "Pasaporte (país emisor no registrado)",
+    });
   } else {
     rt.ele("id", { root: OID_MEDIFLOW_PATIENT, extension: input.patient.id });
   }
@@ -132,23 +153,23 @@ export function buildCdaXml(input: BuildInput): string {
   const author = doc.ele("author");
   author.ele("time", { value: fmtDateTime(input.effectiveTime) });
   const aPerson = author.ele("assignedAuthor");
-  aPerson.ele("id", {
-    root: "2.16.840.1.113883.3.7777.cedula",
-    extension: input.doctor.cedulaProfesional ?? input.doctor.id,
-  });
+  aPerson.ele("id", input.doctor.cedulaProfesional
+    ? { root: OID_CEDULA_PROFESIONAL, extension: input.doctor.cedulaProfesional }
+    : { root: UUID_DALECONTROL_USUARIO, extension: input.doctor.id, assigningAuthorityName: "DaleControl (usuario)" });
+  // El esquema pide <code> ANTES de <assignedPerson>, y un CE no admite texto
+  // dentro: la especialidad es texto libre, así que va como originalText.
+  if (input.doctor.especialidad) {
+    aPerson.ele("code", { nullFlavor: "OTH" }).ele("originalText").txt(input.doctor.especialidad);
+  }
   const aName = aPerson.ele("assignedPerson").ele("name");
   aName.ele("given").txt(input.doctor.firstName).up()
        .ele("family").txt(input.doctor.lastName).up();
-  if (input.doctor.especialidad) {
-    aPerson.ele("code").txt(input.doctor.especialidad);
-  }
 
   // ── custodian (clínica) ─────────────────────────────────────────────
   const cust = doc.ele("custodian").ele("assignedCustodian").ele("representedCustodianOrganization");
-  cust.ele("id", {
-    root: "2.16.840.1.113883.3.7777.clues",
-    extension: input.clinic.clues ?? input.clinic.id,
-  });
+  cust.ele("id", input.clinic.clues
+    ? { root: OID_CLUES, extension: input.clinic.clues }
+    : { root: UUID_DALECONTROL_CLINICA, extension: input.clinic.id, assigningAuthorityName: "DaleControl (clínica)" });
   cust.ele("name").txt(input.clinic.name);
   if (input.clinic.phone) {
     cust.ele("telecom", { value: `tel:${input.clinic.phone}` });
@@ -191,6 +212,9 @@ export function buildCdaXml(input: BuildInput): string {
     if (r.diagnoses.length) {
       const dxEntry = sec.ele("entry");
       const obs = dxEntry.ele("observation", { classCode: "OBS", moodCode: "EVN" });
+      // <code> es obligatorio en <observation>: dice QUÉ se observa (LOINC
+      // 29308-4, "Diagnosis"); los <value> CIE-10 son la respuesta.
+      obs.ele("code", { code: "29308-4", codeSystem: "2.16.840.1.113883.6.1", codeSystemName: "LOINC", displayName: "Diagnosis" });
       for (const dx of r.diagnoses) {
         obs.ele("value", {
           "xsi:type": "CD",
