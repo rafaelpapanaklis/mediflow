@@ -50,8 +50,11 @@
  */
 import type { z } from "zod";
 import type { PermissionKey } from "@/lib/auth/permissions";
+import { leerTabla, type SabinaEnlace, type SabinaTabla } from "./engine-propuestas-core";
 import { definirHerramienta } from "./tools/base";
 import type { SabinaCtx, SabinaTool } from "./tipos";
+
+export type { SabinaEnlace, SabinaTabla };
 
 /* ═══════════════════════════════════════════════════════════════════════
    LO QUE VE EL USUARIO ANTES DE CONFIRMAR
@@ -74,6 +77,8 @@ export interface SabinaTarjeta {
   detalles: SabinaDetalle[];
   /** Lo que hay que saber ANTES de confirmar: «El paciente no recibirá aviso». */
   avisos: string[];
+  /** Conceptos con sus columnas y totales (una factura, una receta). Ver `SabinaTabla`. */
+  tabla?: SabinaTabla;
 }
 
 /**
@@ -89,8 +94,12 @@ export type SabinaDeshacer =
    ═══════════════════════════════════════════════════════════════════════ */
 
 export type SabinaPreparacion<D> =
-  /** Todo resuelto: se propone. */
-  | { tipo: "propuesta"; datos: D; tarjeta: SabinaTarjeta }
+  /**
+   * Todo resuelto: se propone. `deshacer` solo si ESTA propuesta se deshace distinto
+   * que la acción en general (una factura que nace en borrador se elimina; una que
+   * nace pendiente solo se anula): si no, la tarjeta diría algo falso.
+   */
+  | { tipo: "propuesta"; datos: D; tarjeta: SabinaTarjeta; deshacer?: SabinaDeshacer }
   /** Falta un dato o hay ambigüedad (dos «María García»): Sabina pregunta, no elige. */
   | { tipo: "aclarar"; pregunta: string; opciones?: string[] }
   /** Una regla de rol que no es la key (p. ej. un DOCTOR no cancela). */
@@ -133,7 +142,8 @@ export interface LlaveEscritura {
 }
 
 export type SabinaEjecucion =
-  | { ok: true; frase: string; entidad?: { tipo: string; id: string } }
+  /** `enlace`: lo creado, para abrirlo desde la tarjeta (el comprobante). Solo rutas de la app. */
+  | { ok: true; frase: string; entidad?: { tipo: string; id: string }; enlace?: SabinaEnlace }
   | { ok: false; tipo: "sin_permiso" | "conflicto" | "invalido" | "error"; frase: string };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -202,6 +212,7 @@ export type DatosDeAccion =
       frase: string;
       detalles: SabinaDetalle[];
       avisos: string[];
+      tabla?: SabinaTabla;
       se_puede_deshacer: boolean;
       instruccion: string;
     }
@@ -272,18 +283,28 @@ export function herramientaDeAccion<P, D>(accion: SabinaAccion<P, D>): SabinaToo
             throw new Error(`datos_de_propuesta_no_sobreviven_a_json (${accion.nombre})`);
           }
           const huella = await accion.huella(ctx, releidos.data);
+          // Una tabla que no cuadra (filas de otro ancho) o que la pantalla recortaría
+          // (demasiadas filas, celdas larguísimas) es un fallo de la acción: se lanza, en
+          // vez de proponer con una tarjeta que calla conceptos del total que enseña.
+          const tabla = prep.tarjeta.tabla === undefined ? null : leerTabla(prep.tarjeta.tabla);
+          if (prep.tarjeta.tabla !== undefined && (!tabla || JSON.stringify(tabla.filas) !== JSON.stringify(prep.tarjeta.tabla.filas))) {
+            throw new Error(`tabla_de_tarjeta_invalida (${accion.nombre})`);
+          }
           const tarjeta: SabinaTarjeta = {
             frase: prep.tarjeta.frase,
             detalles: Array.isArray(prep.tarjeta.detalles) ? prep.tarjeta.detalles : [],
             avisos: Array.isArray(prep.tarjeta.avisos) ? prep.tarjeta.avisos : [],
+            ...(tabla ? { tabla } : {}),
           };
+          const deshacer = prep.deshacer ?? accion.deshacer;
           const salida: DatosDeAccion = {
             estado: "propuesta_sin_confirmar",
             titulo: accion.titulo,
             frase: tarjeta.frase,
             detalles: tarjeta.detalles,
             avisos: tarjeta.avisos,
-            se_puede_deshacer: accion.deshacer.reversible,
+            ...(tabla ? { tabla } : {}),
+            se_puede_deshacer: deshacer.reversible,
             instruccion: INSTRUCCION_PROPUESTA,
           };
           PROPUESTA_DE_DATOS.set(salida, {
@@ -291,7 +312,7 @@ export function herramientaDeAccion<P, D>(accion: SabinaAccion<P, D>): SabinaToo
             titulo: accion.titulo,
             boton: accion.boton,
             queHace: accion.queHace,
-            deshacer: accion.deshacer,
+            deshacer,
             tarjeta,
             datos: almacenados,
             huella: String(huella ?? ""),

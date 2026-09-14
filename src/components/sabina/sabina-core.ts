@@ -233,25 +233,36 @@ export function parseSabinaMarkdown(raw: string): SabinaBlock[] {
   return blocks;
 }
 
-// ── Formato inline (negrita / itálica / código) ─────────────────────────
+// ── Formato inline (negrita / itálica / código / enlace) ────────────────
 export interface InlineToken {
   text: string;
   bold?: boolean;
   italic?: boolean;
   code?: boolean;
+  /** Ruta de la propia app (el comprobante de una factura). */
+  href?: string;
 }
 
-/** `"cita **hoy** a las *3pm*"` → tokens que el cliente convierte a JSX. */
+/**
+ * `"cita **hoy** a las *3pm*"` → tokens que el cliente convierte a JSX.
+ *
+ * Enlaces `[texto](/ruta)` SOLO hacia rutas de la propia app (`/api/…`,
+ * `/dashboard/…`): es lo que deja a Sabina dar el comprobante en PDF. Una URL con
+ * dominio, `javascript:` o `//otro.sitio` se queda como texto plano: el modelo
+ * escribe lo que leyó, y lo que leyó puede venir de un campo que tecleó cualquiera.
+ */
 export function tokenizeInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
-  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`/g;
+  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[([^\]\n]{1,80})\]\((\/(?:api|dashboard)\/[A-Za-z0-9_\-./]*)\)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
+    if (m[5] !== undefined && (m[5].includes("..") || m[5].includes("//"))) continue;
     if (m.index > last) tokens.push({ text: text.slice(last, m.index) });
     if (m[1] !== undefined) tokens.push({ text: m[1], bold: true });
     else if (m[2] !== undefined) tokens.push({ text: m[2], italic: true });
     else if (m[3] !== undefined) tokens.push({ text: m[3], code: true });
+    else if (m[4] !== undefined) tokens.push({ text: m[4], href: m[5] });
     last = re.lastIndex;
   }
   if (last < text.length) tokens.push({ text: text.slice(last) });

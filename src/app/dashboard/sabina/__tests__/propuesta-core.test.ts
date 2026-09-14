@@ -157,3 +157,35 @@ test("al reabrir, cada tarjeta va bajo la respuesta de Sabina de su turno", () =
   assert.deepEqual(r[1].propuestas?.map((p) => p.id), ["primera"]);
   assert.deepEqual(r[3].propuestas?.map((p) => p.id), ["segunda"]);
 });
+
+/* ── Tabla de conceptos y enlace a lo creado (dinero, ws1-t2) ─────────── */
+
+test("la tabla llega entera o no llega: una fila de otro ancho la descarta (los importes caerían bajo otra columna)", () => {
+  const tabla = {
+    columnas: [{ titulo: "Concepto" }, { titulo: "Importe", numerica: true }],
+    filas: [["Limpieza", "$800.00"], ["Resina", "$651.00"]],
+    pie: [{ etiqueta: "Total", valor: "$1,451.00", fuerte: true }],
+  };
+  const buena = leerPropuesta({ ...vista(), tarjeta: { ...vista().tarjeta, tabla } });
+  assert.deepEqual(buena?.tarjeta.tabla, tabla);
+
+  const rota = leerPropuesta({ ...vista(), tarjeta: { ...vista().tarjeta, tabla: { ...tabla, filas: [["Limpieza"]] } } });
+  assert.ok(rota, "la propuesta se sigue pintando");
+  assert.equal(rota!.tarjeta.tabla, undefined, "pero sin la tabla desalineada");
+  assert.equal(leerPropuesta(vista())?.tarjeta.tabla, undefined, "sin tabla, nada");
+});
+
+test("el enlace del resultado solo abre rutas de la app; uno hacia fuera se ignora", () => {
+  const conEnlace = (url: string) =>
+    leerRespuestaPropuesta(200, {
+      propuesta: { ...vista({ estado: "hecha" }), resultado: { ok: true, tipo: "hecha", frase: "Listo.", enlace: { texto: "Comprobante MF-0016", url } } },
+    }, T0);
+  const buena = conEnlace("/api/invoices/inv_1/print");
+  assert.equal(buena.tipo, "propuesta");
+  assert.deepEqual((buena as any).propuesta.resultado.enlace, { texto: "Comprobante MF-0016", url: "/api/invoices/inv_1/print" });
+  for (const mala of ["https://otro.sitio/x", "javascript:alert(1)", "//otro.sitio/api/x", "/api/../../etc/passwd", "/login"]) {
+    const r = conEnlace(mala);
+    assert.equal((r as any).propuesta.resultado.enlace, undefined, mala);
+    assert.equal((r as any).propuesta.resultado.frase, "Listo.", "la frase se conserva");
+  }
+});
