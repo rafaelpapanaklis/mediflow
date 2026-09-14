@@ -5,6 +5,9 @@ import { CATALOGO_SABINA } from "./tools";
 import { proponerHorarios } from "./tools/agenda-acciones";
 import { accionAgendarCita, accionCancelarCita, accionReagendarCita } from "./acciones-agenda";
 import { accionRegistrarPaciente } from "./acciones-pacientes";
+import { recetas } from "./tools/recetas";
+import { estudiosDelPaciente } from "./tools/estudios-del-paciente";
+import { analisisYNotasDeEstudio } from "./tools/analisis-y-notas-de-estudio";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -19,11 +22,18 @@ import { accionRegistrarPaciente } from "./acciones-pacientes";
  */
 
 /* ── CONSULTAS ─────────────────────────────────────────────────────────────
-   Las diez de `./tools`, en el orden de `CATALOGO_SABINA`, y `proponer_horarios`
-   (ws1-t2), que solo lee. Se ejecutan dentro del bucle, bajo el candado de solo
-   lectura. `proponer_horarios` va aquí y no en `CATALOGO_SABINA` porque las
-   pruebas de contrato de ese catálogo fijan las diez de consulta. */
-const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [...CATALOGO_SABINA, proponerHorarios];
+   Las diez de `./tools`, en el orden de `CATALOGO_SABINA`, `proponer_horarios`
+   (ws1-t2) y las tres de CLÍNICO (ws1-t4: recetas, estudios_del_paciente,
+   analisis_y_notas_de_estudio), todas de solo lectura. Se ejecutan dentro del
+   bucle, bajo el candado de solo lectura. Ninguna va en `CATALOGO_SABINA`
+   porque las pruebas de contrato de ese catálogo fijan las diez de consulta. */
+const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
+  ...CATALOGO_SABINA,
+  proponerHorarios,
+  recetas,
+  estudiosDelPaciente,
+  analisisYNotasDeEstudio,
+];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────
    Lo que ESCRIBE. Cada una se declara con `definirAccion` (engine-acciones.ts)

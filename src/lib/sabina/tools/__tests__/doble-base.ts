@@ -29,6 +29,12 @@ export interface Datos {
   invoices?: Fila[];
   payments?: Fila[];
   records?: Fila[];
+  /** ws1-t4 (área CLÍNICO): recetas, estudios y catálogo CUMS. */
+  prescriptions?: Fila[];
+  prescriptionItems?: Fila[];
+  cumsItems?: Fila[];
+  patientFiles?: Fila[];
+  xrayAnalyses?: Fila[];
 }
 
 interface Relacion {
@@ -67,6 +73,11 @@ const MODELO_DE: Record<string, string> = {
   clinicSchedule: "clinicSchedules",
   user: "users",
   record: "records",
+  prescription: "prescriptions",
+  prescriptionItem: "prescriptionItems",
+  cumsItem: "cumsItems",
+  patientFile: "patientFiles",
+  xrayAnalysis: "xrayAnalyses",
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -87,6 +98,11 @@ export function crearBase(datos: Datos): BaseDoble {
     invoices: datos.invoices ?? [],
     payments: datos.payments ?? [],
     records: datos.records ?? [],
+    prescriptions: datos.prescriptions ?? [],
+    prescriptionItems: datos.prescriptionItems ?? [],
+    cumsItems: datos.cumsItems ?? [],
+    patientFiles: datos.patientFiles ?? [],
+    xrayAnalyses: datos.xrayAnalyses ?? [],
   };
   const contador: Contador = { llamadas: [] };
 
@@ -167,6 +183,11 @@ export function crearBase(datos: Datos): BaseDoble {
     clinic: delegado("clinic") as any,
     resource: delegado("resource") as any,
     clinicSchedule: delegado("clinicSchedule") as any,
+    prescription: delegado("prescription") as any,
+    prescriptionItem: delegado("prescriptionItem") as any,
+    cumsItem: delegado("cumsItem") as any,
+    patientFile: delegado("patientFile") as any,
+    xrayAnalysis: delegado("xrayAnalysis") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo
