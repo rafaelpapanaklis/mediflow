@@ -278,6 +278,9 @@
 .avatarSabina { background: linear-gradient(135deg, var(--brand), var(--violet-700)); }
 
 .bubbleCol { display: flex; flex-direction: column; gap: 3px; max-width: 82%; min-width: 0; }
+/* Con tarjeta de confirmación la columna usa todo el ancho: a 390 px el 88 % no
+   deja sitio para dos botones de 44 px y una fila «antes → después». */
+.bubbleColWide { flex: 1; max-width: 560px; }
 .messageUser .bubbleCol { align-items: flex-end; }
 .bubble {
   padding: 9px 12px;
@@ -373,6 +376,7 @@
   .header { padding: 9px 10px; }
   .composerWrap { padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
   .bubbleCol { max-width: 88%; }
+  .bubbleColWide { max-width: 100%; }
   .suggestions { grid-template-columns: 1fr; }
   .welcomeText { font-size: 12.5px; }
 }

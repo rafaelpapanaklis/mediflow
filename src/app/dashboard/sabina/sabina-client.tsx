@@ -24,6 +24,16 @@ import {
 import { SabinaMessageContent } from "@/components/sabina/message-content";
 import { ToolTrace } from "@/components/sabina/tool-trace";
 import { SabinaErrorNotice } from "@/components/sabina/error-notice";
+import { PropuestaCard } from "./propuesta-card";
+import {
+  actualizarPropuesta,
+  desfaseReloj,
+  leerPropuestas,
+  leerRespuestaPropuesta,
+  marcarReemplazadas,
+  repartirPropuestas,
+  type SabinaPropuestaVista,
+} from "./propuesta-core";
 import styles from "./sabina.module.css";
 
 interface SabinaMessage {
@@ -36,6 +46,8 @@ interface SabinaMessage {
   modelo?: string;
   /** Solo cuando role === "system": por qué falló ESTA pantalla al preguntar. */
   errorKind?: SabinaErrorKind;
+  /** Lo que Sabina propuso hacer en este turno (tarjetas de confirmación). */
+  propuestas?: SabinaPropuestaVista[];
 }
 
 interface HistoryRow {
@@ -123,7 +135,7 @@ function ThinkingIndicator({ startedAt }: { startedAt: number }) {
   );
 }
 
-export function SabinaClient({ firstName }: { firstName: string }) {
+export function SabinaClient({ firstName, puedeProponer = false }: { firstName: string; puedeProponer?: boolean }) {
   const [messages, setMessages] = useState<SabinaMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversationTitle, setConversationTitle] = useState<string | null>(null);
@@ -144,6 +156,14 @@ export function SabinaClient({ firstName }: { firstName: string }) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
   const historyLoadedRef = useRef(false);
+
+  // ── Propuestas (tarjetas de confirmación) ───────────────────────────
+  const [desfase, setDesfase] = useState(0);
+  const [trabajando, setTrabajando] = useState<{ id: string; tipo: "confirmar" | "descartar" | "consultar" } | null>(null);
+  const [dudosas, setDudosas] = useState<string[]>([]);
+
+  const messagesRef = useRef<SabinaMessage[]>([]);
+  messagesRef.current = messages;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -238,13 +258,35 @@ export function SabinaClient({ firstName }: { firstName: string }) {
       const msgs = (Array.isArray(data?.messages) ? data.messages : [])
         .map(toSabinaMessage)
         .filter((m: SabinaMessage | null): m is SabinaMessage => m !== null);
-      setMessages(msgs);
+      setDesfase(desfaseReloj(data?.ahora, Date.now()));
+      setMessages(repartirPropuestas(msgs, leerPropuestas(data?.propuestas)));
       const meta = toHistoryRow(data?.conversation);
       if (meta) setConversationTitle(meta.title);
     } catch {
       setActiveFailed(true);
     } finally {
       setOpeningConv(false);
+    }
+  }, []);
+
+  /**
+   * En qué quedó una propuesta, por GET (solo lectura). `silencioso`: refresco de
+   * fondo de tarjetas cuya copia local puede estar vieja, sin bloquear la pantalla.
+   */
+  const consultar = useCallback(async (id: string, silencioso = false) => {
+    if (!silencioso) setTrabajando({ id, tipo: "consultar" });
+    try {
+      const res = await fetch(`/api/sabina/propuestas/${encodeURIComponent(id)}`);
+      const lectura = leerRespuestaPropuesta(res.status, await res.json().catch(() => null), Date.now());
+      if (lectura.tipo === "propuesta") {
+        setDesfase(lectura.desfase);
+        setMessages((prev) => actualizarPropuesta(prev, lectura.propuesta));
+        setDudosas((prev) => prev.filter((d) => d !== id));
+      }
+    } catch {
+      /* sin red: la tarjeta sigue como estaba (dudosa, si lo era) */
+    } finally {
+      if (!silencioso) setTrabajando(null);
     }
   }, []);
 
@@ -263,6 +305,8 @@ export function SabinaClient({ firstName }: { firstName: string }) {
           herramientasUsadas?: unknown;
           conversacionId?: unknown;
           modelo?: unknown;
+          propuestas?: unknown;
+          ahora?: unknown;
         } | null = null;
         try {
           data = await res.json();
@@ -284,6 +328,8 @@ export function SabinaClient({ firstName }: { firstName: string }) {
           : [];
         const modelo = typeof data?.modelo === "string" ? data.modelo : undefined;
         const convId = typeof data?.conversacionId === "string" ? data.conversacionId : null;
+        const propuestas = leerPropuestas(data?.propuestas);
+        if (propuestas.length > 0) setDesfase(desfaseReloj(data?.ahora, Date.now()));
 
         if (convId && convId !== conversationId) {
           setConversationId(convId);
@@ -304,11 +350,32 @@ export function SabinaClient({ firstName }: { firstName: string }) {
           });
         }
 
+        if (propuestas.length > 0) {
+          // Las que la pantalla va a dar por sustituidas: que el servidor confirme
+          // en qué quedaron (pudieron confirmarse desde otra pestaña).
+          const nuevos = propuestas.map((p) => p.id);
+          messagesRef.current
+            .flatMap((m) => m.propuestas ?? [])
+            .filter((p) => p.estado === "pendiente" && !nuevos.includes(p.id))
+            .forEach((p) => void consultar(p.id, true));
+        }
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === targetId
-              ? { ...m, role: "assistant", content: respuesta, pending: false, herramientasUsadas, modelo, errorKind: undefined }
-              : m,
+          marcarReemplazadas(
+            prev.map((m) =>
+              m.id === targetId
+                ? {
+                    ...m,
+                    role: "assistant",
+                    content: respuesta,
+                    pending: false,
+                    herramientasUsadas,
+                    modelo,
+                    errorKind: undefined,
+                    propuestas: propuestas.length > 0 ? propuestas : undefined,
+                  }
+                : m,
+            ),
+            propuestas.map((p) => p.id),
           ),
         );
       } catch {
@@ -321,7 +388,67 @@ export function SabinaClient({ firstName }: { firstName: string }) {
       }
       void isNewTurn; // solo documenta la intención en el sitio de llamada
     },
-    [conversationId],
+    [conversationId, consultar],
+  );
+
+  /**
+   * Confirmar o descartar UNA propuesta. Es la fase 2: la única forma de que lo
+   * que Sabina propuso se haga es este botón. El servidor decide; la tarjeta
+   * enseña lo que conteste.
+   */
+  const actuar = useCallback(
+    async (id: string, tipo: "confirmar" | "descartar") => {
+      if (trabajando || sending) return;
+      setTrabajando({ id, tipo });
+      let status: number | null = null;
+      let cuerpo: unknown = null;
+      try {
+        const res = await fetch(`/api/sabina/propuestas/${encodeURIComponent(id)}/${tipo}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        status = res.status;
+        cuerpo = await res.json().catch(() => null);
+      } catch {
+        status = null;
+      }
+      const lectura = leerRespuestaPropuesta(status, cuerpo, Date.now());
+      if (lectura.tipo === "propuesta") {
+        setDesfase(lectura.desfase);
+        setMessages((prev) => actualizarPropuesta(prev, lectura.propuesta));
+        setDudosas((prev) => prev.filter((d) => d !== id));
+      } else if (lectura.tipo === "sin_propuesta") {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.propuestas?.some((p) => p.id === id)
+              ? {
+                  ...m,
+                  propuestas: m.propuestas.map((p) =>
+                    p.id === id
+                      ? {
+                          ...p,
+                          // Sin propuesta en la respuesta no se sabe su estado: si
+                          // era descartar o una 404, ya no se puede usar; si fue un
+                          // corte al confirmar, se dice tal cual.
+                          estado: lectura.resultado.tipo === "no_encontrada" ? "caducada" : p.estado,
+                          resultado: lectura.resultado,
+                        }
+                      : p,
+                  ),
+                }
+              : m,
+          ),
+        );
+        if (tipo === "confirmar" && lectura.resultado.tipo === "error") {
+          setDudosas((prev) => (prev.includes(id) ? prev : [...prev, id]));
+        }
+      } else if (tipo === "confirmar") {
+        setDudosas((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      }
+      setTrabajando(null);
+    },
+    [trabajando, sending],
   );
 
   const ask = useCallback(
@@ -484,7 +611,7 @@ export function SabinaClient({ firstName }: { firstName: string }) {
                     <div className={m.role === "user" ? styles.avatarUser : styles.avatarSabina}>
                       {m.role === "user" ? (firstName ? firstName[0]?.toUpperCase() : "D") : <Sparkles size={13} aria-hidden />}
                     </div>
-                    <div className={styles.bubbleCol}>
+                    <div className={`${styles.bubbleCol} ${m.propuestas?.length ? styles.bubbleColWide : ""}`}>
                       <div className={styles.bubble}>
                         {m.pending ? (
                           <ThinkingIndicator startedAt={m.timestamp} />
@@ -494,6 +621,22 @@ export function SabinaClient({ firstName }: { firstName: string }) {
                           <p className={styles.userText}>{m.content}</p>
                         )}
                       </div>
+                      {!m.pending &&
+                        m.role === "assistant" &&
+                        m.propuestas?.map((p) => (
+                          <PropuestaCard
+                            key={p.id}
+                            propuesta={p}
+                            desfase={desfase}
+                            ocupado={sending || (trabajando !== null && trabajando.id !== p.id)}
+                            trabajando={trabajando?.id === p.id ? trabajando.tipo : null}
+                            dudoso={dudosas.includes(p.id)}
+                            onConfirmar={() => void actuar(p.id, "confirmar")}
+                            onDescartar={() => void actuar(p.id, "descartar")}
+                            onConsultar={() => void consultar(p.id)}
+                            onCaducar={() => void consultar(p.id, true)}
+                          />
+                        ))}
                       {!m.pending && m.role === "assistant" && <ToolTrace tools={m.herramientasUsadas} />}
                       <span className={styles.timestamp}>{formatTime(m.timestamp)}</span>
                     </div>
@@ -529,7 +672,11 @@ export function SabinaClient({ firstName }: { firstName: string }) {
                 <Send size={15} aria-hidden />
               </button>
             </div>
-            <div className={styles.composerHint}>Sabina solo lee datos — no agenda, no cobra, no edita nada.</div>
+            <div className={styles.composerHint}>
+              {puedeProponer
+                ? "Sabina propone; nada se hace hasta que tú lo confirmas en la tarjeta."
+                : "Sabina solo lee datos — no agenda, no cobra, no edita nada."}
+            </div>
           </div>
         </div>
       </div>

@@ -11,12 +11,20 @@ import {
   crearConversacionSabina,
   leerConversacionSabina,
 } from "@/lib/sabina/engine-historial";
+import { guardarPropuesta } from "@/lib/sabina/engine-propuestas";
+import type { SabinaPropuestaVista } from "@/lib/sabina/engine-propuestas-core";
 import { crearSabinaCtx } from "@/lib/sabina/tipos";
 
 /**
  * POST /api/sabina
  *   → { pregunta: string, conversacionId?: string }
- *   ← { respuesta, herramientasUsadas, conversacionId, tokens:{entrada,salida}, modelo }
+ *   ← { respuesta, herramientasUsadas, conversacionId, tokens:{entrada,salida}, modelo,
+ *       propuestas?: SabinaPropuestaVista[], ahora? }
+ *
+ * `propuestas` (solo si las hay) es lo que Sabina PROPUSO hacer, sin hacerlo: la pantalla lo pinta
+ * como tarjeta y solo se ejecuta con POST /api/sabina/propuestas/:id/confirmar.
+ * `ahora` es el reloj del servidor, para que la cuenta atrás de la tarjeta no
+ * dependa del reloj del navegador.
  *
  * 401 sin sesión · 402 sin saldo · 429 pasado el límite · 503 si el modelo no
  * responde. NUNCA un 500 mudo: el catch final también contesta con su motivo.
@@ -172,7 +180,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    /* ── 11. El rastro. Por LISTA BLANCA: ni la pregunta ni la respuesta
+    /* ── 11. Lo que Sabina propuso. Se guarda AQUÍ, después del bucle y
+           fuera del candado de solo lectura: guardar una propuesta no es
+           ejecutarla. Si no se puede guardar, no hay tarjeta y se dice ─── */
+    let respuesta = salida.respuesta;
+    const propuestas: SabinaPropuestaVista[] = [];
+    for (const propuesta of salida.propuestas) {
+      try {
+        propuestas.push(
+          await guardarPropuesta({
+            ctx: sabinaCtx,
+            propuesta,
+            pedido: pregunta,
+            conversacionId,
+            modelo: salida.modelo,
+            req,
+          }),
+        );
+      } catch (e) {
+        console.error("[sabina] no se pudo guardar la propuesta", {
+          clinicId: ctx.clinicId,
+          accion: propuesta.accion,
+          err: e instanceof Error ? e.message : "desconocido",
+        });
+        respuesta = `${respuesta}\n\nNo pude dejar lista la propuesta para que la confirmes, así que no hay nada que confirmar. Pídemelo otra vez en un momento.`;
+      }
+    }
+
+    /* ── 12. El rastro. Por LISTA BLANCA: ni la pregunta ni la respuesta
            salen a los logs, pueden llevar datos de paciente ───────────── */
     console.info(
       "[sabina]",
@@ -189,15 +224,19 @@ export async function POST(req: NextRequest) {
         tokensSalida: salida.tokens.salida,
         ms: Date.now() - arranque,
         sinPermiso: salida.sinPermiso,
+        propuestas: salida.propuestas.map((p) => p.accion),
       }),
     );
 
     return NextResponse.json({
-      respuesta: salida.respuesta,
+      respuesta,
       herramientasUsadas: salida.herramientasUsadas,
       conversacionId,
       tokens: salida.tokens,
       modelo: salida.modelo,
+      // Solo si hubo propuesta: sin ella la respuesta es la misma de siempre
+      // (la fija `test:sabina-punta-a-punta`).
+      ...(propuestas.length > 0 ? { propuestas, ahora: Date.now() } : {}),
     });
   } catch (err) {
     // Sin texto de la pregunta en el log, por lo mismo de siempre.

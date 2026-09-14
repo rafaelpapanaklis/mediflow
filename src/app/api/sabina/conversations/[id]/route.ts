@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { aiHistoryErrorResponse, resolveAiScope } from "@/lib/ai-assistant/api";
 import { leerConversacionSabina } from "@/lib/sabina/engine-historial";
+import { propuestasDeConversacion } from "@/lib/sabina/engine-propuestas";
+import type { SabinaPropuestaVista } from "@/lib/sabina/engine-propuestas-core";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +12,8 @@ interface Params {
 
 /**
  * GET /api/sabina/conversations/[id]
- *   ← { conversation: { id, title, updatedAt, … }, messages: [{ id, role, content, timestamp }] }
+ *   ← { conversation: { id, title, updatedAt, … }, messages: [{ id, role, content, timestamp }],
+ *       propuestas: SabinaPropuestaVista[], ahora }
  *
  * Una conversación de Sabina con sus turnos. El where lleva clinicId + userId
  * de la SESIÓN y la marca de Sabina: una conversación de otra clínica, de un
@@ -23,7 +26,19 @@ export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const found = await leerConversacionSabina(auth.scope, params.id);
     if (!found) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    return NextResponse.json(found);
+    // Las tarjetas de lo que Sabina propuso en este hilo, con su estado de hoy
+    // (pendiente, hecha, caducada…). Si no se pueden leer, la conversación se
+    // abre igual, sin tarjetas: nada que confirmar es el lado seguro.
+    let propuestas: SabinaPropuestaVista[] = [];
+    try {
+      propuestas = await propuestasDeConversacion({ ctx: auth.scope, conversacionId: params.id });
+    } catch (e) {
+      console.error("[sabina] no se pudieron leer las propuestas de la conversación", {
+        clinicId: auth.scope.clinicId,
+        err: e instanceof Error ? e.message : "desconocido",
+      });
+    }
+    return NextResponse.json({ ...found, propuestas, ahora: Date.now() });
   } catch (e) {
     return aiHistoryErrorResponse(e);
   }
