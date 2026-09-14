@@ -144,6 +144,7 @@
     "test:sabina-agenda": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/agenda.test.ts",
     "test:sabina-dinero": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/dinero.test.ts",
     "test:sabina-pacientes": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/pacientes.test.ts",
+    "test:sabina-alta-paciente": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/registrar-paciente.test.ts src/lib/sabina/tools/__tests__/registrar-paciente-ruta.test.ts",
     "test:sabina-resumen": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/resumen-clinica.test.ts",
     "test:sabina-numeros": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/numeros-vs-pantalla.test.ts",
     "test:sabina-acciones-agenda": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/agenda-acciones.test.ts",

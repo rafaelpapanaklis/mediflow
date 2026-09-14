@@ -107,6 +107,7 @@ export {
 export { TOPE_FILAS, correrHerramienta, tienePermiso, type Lista } from "./base";
 export { MAX_DIAS_RANGO } from "./fechas";
 export { ESTADOS_ACTIVOS, ESTADOS_AGENDADOS, ESTADOS_CUMPLIDOS } from "./estados";
+export { registrarPaciente } from "./registrar-paciente"; // acción en dos fases: entra en CATALOGO_SABINA junto con la confirmación (ws1-t1)
 
 export type { DatosCitasDelDia } from "./citas-del-dia";
 export type { DatosOcupacion } from "./agenda-ocupacion";
