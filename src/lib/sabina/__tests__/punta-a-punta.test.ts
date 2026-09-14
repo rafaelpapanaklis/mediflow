@@ -107,7 +107,12 @@ before(async () => {
   mock.module("@/lib/auth/two-factor-identity", {
     namedExports: { personaTieneDosFactores: async () => false, dosFactoresDeLaPersona: async () => false },
   });
-  const prismaDoble = new Proxy({}, { get: (_t, clave) => (estado.db as any)?.[clave] });
+  // Sin fila en sabina_user_permissions: Sabina con todo lo del usuario, lo de
+  // siempre. El recorte del Super Admin se prueba en `test:sabina-permisos-equipo`.
+  const sinAjustesSabina = { findFirst: async () => null };
+  const prismaDoble = new Proxy({}, {
+    get: (_t, clave) => (clave === "sabinaUserPermission" ? sinAjustesSabina : (estado.db as any)?.[clave]),
+  });
   mock.module("@/lib/prisma", { namedExports: { prisma: prismaDoble } });
 
   // Los where-builders reales; solo la sesión es de la prueba.

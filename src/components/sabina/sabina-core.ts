@@ -73,6 +73,7 @@ export function formatToolsUsed(tools: readonly string[] | null | undefined): st
 // ── Errores del endpoint (CONTRATO.md → "El contrato del endpoint") ─────
 export type SabinaErrorKind =
   | "auth" // 401 sin sesión
+  | "apagada" // 403 `sabinaApagada`: el Super Admin apagó a Sabina para este usuario
   | "no_balance" // 402 sin saldo en el monedero
   | "rate_limited" // 429 pasado el límite
   | "plan_limit" // 429 del cupo del plan (`limitReached: true`): reintentar no lo arregla
@@ -95,6 +96,9 @@ export function classifySabinaError(status: number | null, body?: unknown): Sabi
       return "auth";
     case 402:
       return "no_balance";
+    case 403:
+      // Solo el 403 que lo dice: otro 403 no es «te la apagaron».
+      return (body as { sabinaApagada?: unknown } | null)?.sabinaApagada === true ? "apagada" : "unknown";
     case 429:
       return (body as { limitReached?: unknown } | null)?.limitReached === true ? "plan_limit" : "rate_limited";
     case 503:
@@ -115,6 +119,12 @@ export const SABINA_ERROR_COPY: Record<SabinaErrorKind, SabinaErrorCopy> = {
   auth: {
     title: "Tu sesión terminó",
     message: "Vuelve a iniciar sesión para seguir hablando con Sabina.",
+    retryable: false,
+  },
+  apagada: {
+    title: "Sabina está apagada para tu usuario",
+    message:
+      "El Super Admin de la clínica apagó a Sabina para ti, así que no puede consultar ni hacer nada en tu nombre. Si crees que es un error, pídele que la vuelva a activar en Equipo.",
     retryable: false,
   },
   no_balance: {

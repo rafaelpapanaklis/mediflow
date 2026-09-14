@@ -154,6 +154,7 @@
     "test:sabina-historial": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/historial.test.ts",
     "test:sabina-scripts": "tsx --test src/lib/sabina/__tests__/scripts-sabina.test.ts",
     "//test:sabina-cobro": "Sabina cobra cada modelo a SU precio con el monedero de verdad (chargeUsage + pricing), no con el registrador de punta-a-punta: sin el #242, Haiku se cobraba a tarifa de Sonnet y ninguna otra prueba lo decía. Y un modelo sin precio se cobra como Sonnet 4.6 dejando registro en cada cobro.",
+    "test:sabina-permisos-equipo": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/permisos-equipo.test.ts src/lib/sabina/__tests__/permisos-equipo-rutas.test.ts",
     "test:sabina-cobro": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/cobro-por-modelo.test.ts",
     "//test:asistente-sin-sabina": "La barra del Asistente IA no lista las conversaciones de Sabina (legacyId sabina:<uuid>) y sigue listando las de legacyId NULL. La prueba contra Postgres real es src/lib/ai-assistant/__tests__/conversations.integration.test.ts (se salta sin DATABASE_URL).",
     "test:asistente-sin-sabina": "tsx --test --experimental-test-module-mocks src/lib/ai-assistant/__tests__/sin-sabina.test.ts",

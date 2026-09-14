@@ -1232,9 +1232,43 @@ model User {
   // Multi-Clínica Fase 2 — vínculos de pacientes que este dueño creó.
   patientLinksCreated ClinicPatientLink[] @relation("ClinicPatientLinkCreatedBy")
 
+  // Lo que Sabina puede hacer en nombre de este usuario. Relación virtual: no
+  // añade columnas a "users" (ver el porqué en SabinaUserPermission).
+  sabinaPermissions SabinaUserPermission?
+
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
   @@map("users")
+}
+
+/// Lo que Sabina puede hacer en nombre de UN usuario. Lo edita el SUPER_ADMIN
+/// desde Equipo → Sabina y lo aplica `crearSabinaCtx` (src/lib/sabina/tipos.ts).
+///
+/// Sin fila = Sabina activa y con todo lo que el usuario puede. Con fila:
+///  · enabled false → Sabina no hace NADA en su nombre, ni consultar.
+///  · permissions vacío → todo lo que el usuario puede; con keys → EXACTAMENTE
+///    esas (misma convención que User.permissionsOverride: reemplaza, no suma).
+/// En los dos casos se intersecan con los permisos del usuario: Sabina nunca
+/// puede más que quien le escribe.
+///
+/// Tabla aparte y no dos columnas en "users" a propósito: `getAuthContext` lee el
+/// usuario sin `select`, así que Prisma pide TODAS sus columnas por nombre. Una
+/// columna del schema que aún no existe en la base (el .sql se aplica a mano)
+/// tumbaría el login de todo el panel. Una tabla que falta solo afecta a Sabina,
+/// y ahí se trata como «sin fila». Ver sql/sabina-permisos.sql.
+model SabinaUserPermission {
+  userId      String   @id
+  clinicId    String
+  enabled     Boolean  @default(true)
+  permissions String[] @default([])
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@map("sabina_user_permissions")
 }
 
 enum Role {

@@ -95,7 +95,12 @@ before(async () => {
     return new Response(JSON.stringify(siguiente), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
 
-  const prismaDoble = new Proxy({}, { get: (_t, k) => (estado.base.db as any)[k] });
+  // Sin fila en sabina_user_permissions: Sabina con todo lo del usuario, lo de
+  // siempre. El recorte del Super Admin se prueba en `test:sabina-permisos-equipo`.
+  const sinAjustesSabina = { findFirst: async () => null };
+  const prismaDoble = new Proxy({}, {
+    get: (_t, k) => (k === "sabinaUserPermission" ? sinAjustesSabina : (estado.base.db as any)[k]),
+  });
   mock.module("@/lib/prisma", { namedExports: { prisma: prismaDoble } });
   mock.module("@/lib/auth/two-factor-identity", {
     namedExports: { personaTieneDosFactores: async () => false, dosFactoresDeLaPersona: async () => false },

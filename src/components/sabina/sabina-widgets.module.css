@@ -104,7 +104,8 @@
    neutro — no es culpa del doctor ni de la clínica, así que no se pinta
    como un error de la clínica (rojo). */
 .errorNotice[data-kind="no_balance"],
-.errorNotice[data-kind="auth"] {
+.errorNotice[data-kind="auth"],
+.errorNotice[data-kind="apagada"] {
   background: var(--warning-soft, var(--bg-elev-2));
   border-color: var(--warning-border-strong, var(--border-soft));
 }
@@ -119,7 +120,8 @@
   color: var(--text-2);
 }
 .errorNotice[data-kind="no_balance"] .errorIcon,
-.errorNotice[data-kind="auth"] .errorIcon {
+.errorNotice[data-kind="auth"] .errorIcon,
+.errorNotice[data-kind="apagada"] .errorIcon {
   background: var(--warning-soft-strong, var(--brand-soft));
   color: var(--warning-strong, var(--brand));
 }
