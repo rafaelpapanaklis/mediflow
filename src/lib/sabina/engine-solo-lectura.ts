@@ -207,6 +207,9 @@ export function codigoSql(sql: string): string | null {
       continue;
     }
     if (c === '"') {
+      // U&"\0064…": el nombre va escrito con escapes y no se puede leer.
+      if (i > 0 && sql[i - 1] === "&") return null;
+      const inicio = i + 1;
       i += 1;
       let cerrada = false;
       while (i < n) {
@@ -222,7 +225,10 @@ export function codigoSql(sql: string): string | null {
         i += 1;
       }
       if (!cerrada) return null;
-      salida += '""';
+      // Un identificador entre comillas es un NOMBRE, no un dato: `"nextval"(…)`
+      // ejecuta nextval. Se deja su texto, CON las comillas, para que el filtro de
+      // palabras lo vea y `"true"` (una columna) no se confunda con el literal.
+      salida += ` "${sql.slice(inicio, i - 1)}" `;
       continue;
     }
     if (c === "$") {

@@ -2,6 +2,9 @@ import type { SabinaAccion } from "./engine-acciones";
 import { herramientaDeAccion } from "./engine-acciones";
 import type { SabinaTool } from "./engine-types";
 import { CATALOGO_SABINA } from "./tools";
+import { proponerHorarios } from "./tools/agenda-acciones";
+import { accionAgendarCita, accionCancelarCita, accionReagendarCita } from "./acciones-agenda";
+import { accionRegistrarPaciente } from "./acciones-pacientes";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -16,9 +19,11 @@ import { CATALOGO_SABINA } from "./tools";
  */
 
 /* ── CONSULTAS ─────────────────────────────────────────────────────────────
-   Las diez de `./tools`, en el orden de `CATALOGO_SABINA`. Se ejecutan dentro
-   del bucle, bajo el candado de solo lectura. */
-const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = CATALOGO_SABINA;
+   Las diez de `./tools`, en el orden de `CATALOGO_SABINA`, y `proponer_horarios`
+   (ws1-t2), que solo lee. Se ejecutan dentro del bucle, bajo el candado de solo
+   lectura. `proponer_horarios` va aquí y no en `CATALOGO_SABINA` porque las
+   pruebas de contrato de ese catálogo fijan las diez de consulta. */
+const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [...CATALOGO_SABINA, proponerHorarios];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────
    Lo que ESCRIBE. Cada una se declara con `definirAccion` (engine-acciones.ts)
@@ -28,8 +33,12 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = CATALOGO_SABINA;
 
    Al añadir una: importa la acción arriba y pon su línea en su bloque. */
 export const ACCIONES_SABINA: ReadonlyArray<SabinaAccion<any, any>> = [
-  // agenda (ws1-t2)
-  // pacientes (ws1-t3)
+  // agenda (ws1-t2) — adaptadas en acciones-agenda.ts
+  accionAgendarCita,
+  accionReagendarCita,
+  accionCancelarCita,
+  // pacientes (ws1-t3) — adaptada en acciones-pacientes.ts
+  accionRegistrarPaciente,
 ];
 
 /** Lo que ve el motor: consultas + la mitad «proponer» de cada acción. */

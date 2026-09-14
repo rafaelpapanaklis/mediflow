@@ -243,16 +243,20 @@ const LAS_DIEZ = [
   "tratamientos_por_ingreso",
 ];
 
-test("el modelo recibe las diez herramientas del contrato, con su esquema", async () => {
+/** Las de agenda y pacientes (ws1-t2, ws1-t3): proponer_horarios lee; las otras cuatro solo proponen. */
+const LAS_NUEVAS = ["agendar_cita", "cancelar_cita", "proponer_horarios", "reagendar_cita", "registrar_paciente"];
+
+test("el modelo recibe las diez de consulta y las cinco de agenda y pacientes, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
 
   const tools = estado.peticiones[0]?.tools ?? [];
-  assert.deepEqual(tools.map((t: any) => t.name).sort(), LAS_DIEZ);
+  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS].sort());
 
+  const { SABINA_TOOLS } = await import("../engine-catalog");
   for (const t of tools) {
-    const tool = herramientas.CATALOGO_SABINA.find((h) => h.nombre === t.name)!;
+    const tool = SABINA_TOOLS.find((h) => h.nombre === t.name)!;
     assert.equal(t.input_schema.type, "object", t.name);
     assert.ok(t.description.length > 40, `${t.name}: sin descripción para el modelo`);
     // Cada parámetro del zod aparece en el esquema, y ninguno es clinicId.
