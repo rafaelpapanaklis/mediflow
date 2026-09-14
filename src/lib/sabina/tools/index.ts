@@ -118,3 +118,6 @@ export type { DatosNuevos } from "./pacientes-nuevos";
 export type { DatosInactivos } from "./pacientes-inactivos";
 export type { DatosBuscar } from "./buscar-paciente";
 export type { DatosResumen, SeccionOmitida } from "./resumen-clinica";
+
+// Acciones de agenda (WS1-T2): PROPONEN, no escriben. Fuera de CATALOGO_SABINA hasta que las enganche la confirmación en dos fases; ver ./agenda-acciones.
+export { HERRAMIENTAS_AGENDA, interpretarRespuestaAgenda, revalidarPropuestaAgenda, type DatosAccionAgenda, type PropuestaAgenda } from "./agenda-acciones";
