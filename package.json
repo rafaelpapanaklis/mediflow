@@ -141,6 +141,7 @@
     "test:sabina-pacientes": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/pacientes.test.ts",
     "test:sabina-resumen": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/resumen-clinica.test.ts",
     "test:sabina-numeros": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/numeros-vs-pantalla.test.ts",
+    "test:sabina-acciones-agenda": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/agenda-acciones.test.ts",
     "test:sabina-punta-a-punta": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/punta-a-punta.test.ts",
     "test:sabina-historial": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/historial.test.ts",
     "test:sabina-scripts": "tsx --test src/lib/sabina/__tests__/scripts-sabina.test.ts",
