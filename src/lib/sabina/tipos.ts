@@ -94,6 +94,17 @@ export interface SabinaDb {
   };
   clinic: {
     findFirst(args: any): Promise<any>;
+    findUnique(args: any): Promise<any>;
+  };
+  /** Caja: la lee `@/lib/caja` con este mismo cliente (ver `CajaDb`). */
+  cashRegister: {
+    findFirst(args: any): Promise<any>;
+    findMany(args: any): Promise<any[]>;
+  };
+  /** La bandera `canAccessCaja` de quien pregunta y los nombres de operador/doctor de Caja. */
+  user: {
+    findFirst(args: any): Promise<any>;
+    findMany(args: any): Promise<any[]>;
   };
   resource: {
     count(args: any): Promise<number>;
@@ -102,6 +113,31 @@ export interface SabinaDb {
     findMany(args: any): Promise<any[]>;
   };
   $queryRaw(query: any): Promise<any[]>;
+}
+
+/**
+ * Un candado que NO es una key del catálogo de permisos.
+ *
+ * Existe por Caja: la pantalla pide `billing.view` Y además `canUseCaja` (la
+ * bandera `User.canAccessCaja`). `billing.view` lo tienen los cinco roles, así
+ * que con la key sola Sabina enseñaría la caja a quien la pantalla se la niega
+ * —el hallazgo 23, que ya se cerró una vez en /api/caja/current—. El `permiso`
+ * de una herramienta es UNA key, y el runner solo sabía decir `sin_permiso` por
+ * ella: un candado de bandera tenía que lanzar (y el modelo decía «falló») o
+ * devolver datos con una marca inventada.
+ */
+export interface SabinaCandado {
+  /**
+   * Lo que viaja en `sin_permiso.permiso`. NO es una key: nombra el candado
+   * (`caja.acceso`), y su prefijo decide la frase («No tienes acceso a Caja»).
+   */
+  etiqueta: string;
+  /**
+   * ¿Abre para quien pregunta? Corre bajo el candado de solo lectura y con
+   * `ctx.db`. Tiene que llamar a la MISMA función que la pantalla, no
+   * reescribir su criterio. Si lanza, sale `error`, nunca datos.
+   */
+  abre(ctx: SabinaCtx): Promise<boolean>;
 }
 
 /** Una herramienta del catálogo, tal cual la define el contrato. */
@@ -114,6 +150,8 @@ export interface SabinaTool<P = any, R = any> {
   parametros: z.ZodType<P>;
   /** Key de permiso que exige, del catálogo de @/lib/auth/permissions. */
   permiso: PermissionKey;
+  /** Candado extra que no es una key (ver `SabinaCandado`). Se mira DESPUÉS de la key. */
+  candado?: SabinaCandado;
   /** La consulta. `ctx` trae clinicId y userId de la sesión, ya validados. */
   ejecutar(ctx: SabinaCtx, params: P): Promise<R>;
   /**
@@ -124,6 +162,14 @@ export interface SabinaTool<P = any, R = any> {
   resumir(datos: R, params: P): string;
   /** ¿Este resultado es «sin datos»? Decide `motivo: "sin_datos"`. */
   vacio(datos: R): boolean;
+  /**
+   * Una advertencia que la respuesta final TIENE que llevar si se usó este
+   * resultado (el efectivo esperado de Caja «es un cálculo, no dinero
+   * contado»). Si el texto del modelo no contiene `marca`, el motor añade
+   * `frase` al final, igual que hace con `sin_permiso`: el prompt lo pide, esto
+   * lo garantiza. `null` = este resultado no obliga a nada.
+   */
+  avisoObligatorio?(datos: R): { frase: string; marca: string } | null;
 }
 
 /** El resultado de ejecutar una herramienta. Siempre esta forma. */

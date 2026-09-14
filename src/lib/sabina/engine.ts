@@ -9,6 +9,7 @@ import {
   construirSystemPrompt,
   debeEscalar,
   garantizarAvisoPropuesta,
+  garantizarAvisosObligatorios,
   garantizarAvisoSinPermiso,
   garantizarAvisoSinPermisoAccion,
   hoyParaPrompt,
@@ -221,6 +222,8 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const herramientasUsadas: string[] = [];
   const sinPermiso: string[] = [];
   const sinPermisoAcciones: Array<{ frase: string; queHace: string; permiso: string }> = [];
+  // Advertencias que la respuesta tiene que llevar (ver `avisoObligatorio` en tipos.ts).
+  const avisosObligatorios: Array<{ frase: string; marca: string }> = [];
   const propuestas: PropuestaPreparada[] = [];
   let tokensEntrada = 0;
   let tokensSalida = 0;
@@ -362,6 +365,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         // `datos.omitidas` las secciones que el usuario no puede ver. También
         // entran a la red de la regla 3: si el modelo se calla la parte de
         // dinero, el aviso lo pone el motor.
+        if (resultado.ok === true && validacion.tool.avisoObligatorio) {
+          const aviso = validacion.tool.avisoObligatorio((resultado as { datos: unknown }).datos);
+          if (aviso) avisosObligatorios.push(aviso);
+        }
         const omitidas = resultado.ok === true ? (resultado.datos as { omitidas?: unknown })?.omitidas : null;
         if (Array.isArray(omitidas)) {
           for (const o of omitidas) {
@@ -403,7 +410,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   }
 
   const texto = garantizarAvisoPropuesta(
-    garantizarAvisoSinPermisoAccion(garantizarAvisoSinPermiso(respuesta ?? "", sinPermiso), sinPermisoAcciones),
+    garantizarAvisoSinPermisoAccion(
+      garantizarAvisoSinPermiso(garantizarAvisosObligatorios(respuesta ?? "", avisosObligatorios), sinPermiso),
+      sinPermisoAcciones,
+    ),
     propuestas.length > 0,
   );
 

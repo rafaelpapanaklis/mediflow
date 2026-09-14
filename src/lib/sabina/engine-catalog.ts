@@ -5,6 +5,7 @@ import { CATALOGO_SABINA } from "./tools";
 import { proponerHorarios } from "./tools/agenda-acciones";
 import { accionAgendarCita, accionCancelarCita, accionReagendarCita } from "./acciones-agenda";
 import { accionRegistrarPaciente } from "./acciones-pacientes";
+import { caja } from "./tools/caja";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -22,8 +23,10 @@ import { accionRegistrarPaciente } from "./acciones-pacientes";
    Las diez de `./tools`, en el orden de `CATALOGO_SABINA`, y `proponer_horarios`
    (ws1-t2), que solo lee. Se ejecutan dentro del bucle, bajo el candado de solo
    lectura. `proponer_horarios` va aquí y no en `CATALOGO_SABINA` porque las
-   pruebas de contrato de ese catálogo fijan las diez de consulta. */
-const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [...CATALOGO_SABINA, proponerHorarios];
+   pruebas de contrato de ese catálogo fijan las diez de consulta. `caja`
+   (ws1-t3) igual, con sus pruebas en tools/__tests__/caja.test.ts: solo lee;
+   Sabina no abre, no retira y no cierra (MAPA-caja §10). */
+const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [...CATALOGO_SABINA, proponerHorarios, caja];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────
    Lo que ESCRIBE. Cada una se declara con `definirAccion` (engine-acciones.ts)

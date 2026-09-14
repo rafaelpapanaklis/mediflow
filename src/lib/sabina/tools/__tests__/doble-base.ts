@@ -13,6 +13,10 @@
  * aggregate, groupBy, distinct, orderBy, take, select con relaciones anidadas, y
  * los filtros AND/OR/NOT, in/notIn/not, gt/gte/lt/lte, contains, isEmpty, has,
  * some/is. `$queryRaw` LANZA a propósito (ver abajo).
+ *
+ * Caja (ws1-t3) añade `findUnique`, `include` (con `select`/`include` anidados)
+ * y las tablas de cajas y retiros: `@/lib/caja` las lee con `include`, y la
+ * herramienta `caja` le pasa este doble en vez del `prisma` global.
  */
 
 import type { SabinaDb } from "../../tipos";
@@ -29,6 +33,8 @@ export interface Datos {
   invoices?: Fila[];
   payments?: Fila[];
   records?: Fila[];
+  cashRegisters?: Fila[];
+  cashWithdrawals?: Fila[];
 }
 
 interface Relacion {
@@ -51,9 +57,17 @@ const RELACIONES: Record<string, Record<string, Relacion>> = {
   invoice: {
     patient: { modelo: "patients", via: (i, p) => i.patientId === p.id, lista: false },
     payments: { modelo: "payments", via: (i, g) => g.invoiceId === i.id, lista: true },
+    appointment: { modelo: "appointments", via: (i, a) => i.appointmentId === a.id, lista: false },
   },
   payment: {
     invoice: { modelo: "invoices", via: (g, i) => g.invoiceId === i.id, lista: false },
+  },
+  cashRegister: {
+    operator: { modelo: "users", via: (c, u) => c.operatorId === u.id, lista: false },
+    withdrawals: { modelo: "cashWithdrawals", via: (c, w) => w.cashRegisterId === c.id, lista: true },
+  },
+  cashWithdrawal: {
+    recordedByUser: { modelo: "users", via: (w, u) => w.recordedBy === u.id, lista: false },
   },
 };
 
@@ -67,6 +81,8 @@ const MODELO_DE: Record<string, string> = {
   clinicSchedule: "clinicSchedules",
   user: "users",
   record: "records",
+  cashRegister: "cashRegisters",
+  cashWithdrawal: "cashWithdrawals",
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -87,6 +103,8 @@ export function crearBase(datos: Datos): BaseDoble {
     invoices: datos.invoices ?? [],
     payments: datos.payments ?? [],
     records: datos.records ?? [],
+    cashRegisters: datos.cashRegisters ?? [],
+    cashWithdrawals: datos.cashWithdrawals ?? [],
   };
   const contador: Contador = { llamadas: [] };
 
@@ -112,7 +130,7 @@ export function crearBase(datos: Datos): BaseDoble {
         }
         if (typeof args.skip === "number") out = out.slice(args.skip);
         if (typeof args.take === "number") out = out.slice(0, args.take);
-        return out.map((f) => proyectar(entidad, f, args.select, tablas));
+        return out.map((f) => proyectar(entidad, f, args.select, tablas, args.include));
       },
       async count(args: any = {}): Promise<number> {
         contador.llamadas.push({ modelo: entidad, op: "count" });
@@ -121,7 +139,14 @@ export function crearBase(datos: Datos): BaseDoble {
       async findFirst(args: any = {}): Promise<Fila | null> {
         contador.llamadas.push({ modelo: entidad, op: "findFirst" });
         const out = ordenar(filtrar(entidad, args.where), args.orderBy);
-        return out.length ? proyectar(entidad, out[0], args.select, tablas) : null;
+        return out.length ? proyectar(entidad, out[0], args.select, tablas, args.include) : null;
+      },
+      // Para el doble, un `findUnique` es un `findFirst` sin orden: el `where`
+      // lleva la clave única y como mucho sale una fila.
+      async findUnique(args: any = {}): Promise<Fila | null> {
+        contador.llamadas.push({ modelo: entidad, op: "findUnique" });
+        const out = filtrar(entidad, args.where);
+        return out.length ? proyectar(entidad, out[0], args.select, tablas, args.include) : null;
       },
       async aggregate(args: any = {}): Promise<Fila> {
         contador.llamadas.push({ modelo: entidad, op: "aggregate" });
@@ -167,6 +192,8 @@ export function crearBase(datos: Datos): BaseDoble {
     clinic: delegado("clinic") as any,
     resource: delegado("resource") as any,
     clinicSchedule: delegado("clinicSchedule") as any,
+    user: delegado("user") as any,
+    cashRegister: delegado("cashRegister") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo
@@ -406,37 +433,50 @@ function maximos(filas: Fila[], spec: any): Fila {
 }
 
 /**
- * Proyecta el `select`. Las relaciones anidadas (`{ where, orderBy, take,
- * select }`) se resuelven igual que Prisma; los campos escalares se copian tal
- * cual. Si no hay `select`, se devuelve la fila entera.
+ * Proyecta el `select` o el `include`. Las relaciones anidadas (`{ where,
+ * orderBy, take, select, include }`) se resuelven igual que Prisma; los campos
+ * escalares se copian tal cual. Sin `select`, sale la fila entera, más las
+ * relaciones que pida `include`.
  */
 function proyectar(
   entidad: string,
   fila: Fila,
   select: any,
   tablas: Record<string, Fila[]>,
+  include?: any,
 ): Fila {
-  if (!select) return { ...fila };
+  if (!select) {
+    const out: Fila = { ...fila };
+    for (const clave of Object.keys(include ?? {})) {
+      const rel = RELACIONES[entidad] ? RELACIONES[entidad][clave] : undefined;
+      if (rel && include[clave]) out[clave] = relacionadas(rel, fila, include[clave], tablas);
+    }
+    return out;
+  }
   const out: Fila = {};
   for (const clave of Object.keys(select)) {
     const spec = select[clave];
     if (!spec) continue;
     const rel = RELACIONES[entidad] ? RELACIONES[entidad][clave] : undefined;
     if (rel) {
-      const entidadRel = entidadDeModelo(rel.modelo);
-      let hijas = (tablas[rel.modelo] ?? []).filter((o) => rel.via(fila, o));
-      if (spec !== true) {
-        hijas = hijas.filter((o) => coincide(entidadRel, o, spec.where, tablas));
-        hijas = ordenar(hijas, spec.orderBy);
-        if (typeof spec.take === "number") hijas = hijas.slice(0, spec.take);
-        hijas = hijas.map((o) => proyectar(entidadRel, o, spec.select, tablas));
-      } else {
-        hijas = hijas.map((o) => ({ ...o }));
-      }
-      out[clave] = rel.lista ? hijas : hijas.length ? hijas[0] : null;
+      out[clave] = relacionadas(rel, fila, spec, tablas);
       continue;
     }
     out[clave] = fila[clave] ?? null;
   }
   return out;
+}
+
+function relacionadas(rel: Relacion, fila: Fila, spec: any, tablas: Record<string, Fila[]>): Fila[] | Fila | null {
+  const entidadRel = entidadDeModelo(rel.modelo);
+  let hijas = (tablas[rel.modelo] ?? []).filter((o) => rel.via(fila, o));
+  if (spec !== true) {
+    hijas = hijas.filter((o) => coincide(entidadRel, o, spec.where, tablas));
+    hijas = ordenar(hijas, spec.orderBy);
+    if (typeof spec.take === "number") hijas = hijas.slice(0, spec.take);
+    hijas = hijas.map((o) => proyectar(entidadRel, o, spec.select, tablas, spec.include));
+  } else {
+    hijas = hijas.map((o) => ({ ...o }));
+  }
+  return rel.lista ? hijas : hijas.length ? hijas[0] : null;
 }
