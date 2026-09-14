@@ -8,7 +8,9 @@ import {
   clasificarDificultad,
   construirSystemPrompt,
   debeEscalar,
+  garantizarAvisoPropuesta,
   garantizarAvisoSinPermiso,
+  garantizarAvisoSinPermisoAccion,
   hoyParaPrompt,
   modeloPara,
   resultadoParaModelo,
@@ -16,7 +18,7 @@ import {
   validarLlamada,
   zodAJsonSchema,
 } from "./engine-core";
-import type { ValidacionFallo } from "./engine-core";
+import type { ValidacionFallo, ValidacionLlamada } from "./engine-core";
 import type {
   SabinaConsumo,
   SabinaCtx,
@@ -27,6 +29,15 @@ import type {
   SabinaTool,
 } from "./engine-types";
 import { correrHerramienta } from "./tools/base";
+import {
+  accionDeHerramienta,
+  fraseSinPermisoAccion,
+  propuestaDeDatos,
+  type DatosDeAccion,
+  type PropuestaPreparada,
+} from "./engine-acciones";
+import { SABINA_MAX_PROPUESTAS_POR_TURNO } from "./engine-propuestas-core";
+import { CandadoNoDisponible, EscrituraBloqueada, soloLectura } from "./engine-solo-lectura";
 
 /**
  * Sabina — el bucle.
@@ -127,6 +138,13 @@ export const llamarAnthropic: LlamarModelo = async (args) => {
 /* ── Ejecutar UNA herramienta ─────────────────────────────────────────── */
 
 /**
+ * 🔴 Toda herramienta corre bajo `soloLectura` (engine-solo-lectura.ts). Dentro
+ * del bucle del modelo NADA escribe —ni Prisma, ni un `fetch`/`http` que no sea
+ * GET—, la herramienta sea de consulta, de acción o una que alguien escriba
+ * mañana sin saber de este mecanismo. Escribir es la fase 2, y la fase 2 es otra
+ * petición que dispara el usuario (POST /api/sabina/propuestas/:id/confirmar).
+ * Si una herramienta lo intenta, su resultado es un `error` y queda en el log.
+ *
  * Ejecuta por el runner de las herramientas (`correrHerramienta`), que corta en
  * el orden del contrato: sesión → permiso → parámetros → consulta. El permiso
  * se mira ANTES de tocar la base, con el rol y el override del ctx de la
@@ -140,7 +158,19 @@ export async function ejecutarHerramienta(
   ctx: SabinaCtx,
   params: unknown,
 ): Promise<SabinaResultado> {
-  return correrHerramienta(tool, ctx, params);
+  try {
+    return await soloLectura(`herramienta ${tool.nombre}`, () => correrHerramienta(tool, ctx, params));
+  } catch (e) {
+    if (e instanceof EscrituraBloqueada || e instanceof CandadoNoDisponible) {
+      console.error("[sabina] herramienta frenada por el candado de solo lectura", {
+        clinicId: ctx.clinicId,
+        herramienta: tool.nombre,
+        detalle: e.message,
+      });
+      return { ok: false, motivo: "error", detalle: e.message };
+    }
+    return { ok: false, motivo: "error", detalle: e instanceof Error ? e.message : "error_desconocido" };
+  }
 }
 
 /* ── El bucle ─────────────────────────────────────────────────────────── */
@@ -175,6 +205,9 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const hoy = hoyParaPrompt(new Date(arranque), input.ctx.timezone);
 
   const esquemas = toolsParaModelo(input.tools, (t) => zodAJsonSchema(t.parametros));
+  const queHacen = input.tools
+    .map((t) => accionDeHerramienta(t)?.queHace)
+    .filter((q): q is string => typeof q === "string" && q.length > 0);
 
   // Solo los últimos turnos, y arrancando por uno del doctor: la API rechaza
   // una conversación que empieza con el asistente.
@@ -187,6 +220,8 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
 
   const herramientasUsadas: string[] = [];
   const sinPermiso: string[] = [];
+  const sinPermisoAcciones: Array<{ frase: string; queHace: string; permiso: string }> = [];
+  const propuestas: PropuestaPreparada[] = [];
   let tokensEntrada = 0;
   let tokensSalida = 0;
   const consumo: SabinaConsumo[] = [];
@@ -215,7 +250,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       );
       const turno = await llamar({
         modelo,
-        system: construirSystemPrompt({ dificultad, hoy }),
+        system: construirSystemPrompt({ dificultad, hoy, acciones: queHacen }),
         messages,
         // Última vuelta sin herramientas: el modelo tiene que cerrar con
         // palabras, no pedir otra consulta que ya no cabe.
@@ -272,7 +307,11 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       const resultados: unknown[] = [];
       for (const llamada of llamadas) {
         const nombre = llamada.name ?? "";
-        const validacion = validarLlamada(input.tools, nombre, llamada.input);
+        // El zod de una herramienta puede llevar `refine`/`transform`, que es
+        // código: también valida bajo el candado.
+        const validacion: ValidacionLlamada<any> = await soloLectura(`validar ${nombre}`, async () =>
+          validarLlamada(input.tools, nombre, llamada.input),
+        ).catch((e) => ({ ok: false as const, motivo: "parametros" as const, detalle: e instanceof Error ? e.message : "error" }));
 
         if (!validacion.ok) {
           // Herramienta inventada o parámetros basura: se le dice al modelo y
@@ -287,11 +326,37 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
           continue;
         }
 
+        const accion = accionDeHerramienta(validacion.tool);
+
         const resultado = await ejecutarHerramienta(validacion.tool, input.ctx, validacion.params);
         if (!herramientasUsadas.includes(nombre)) herramientasUsadas.push(nombre);
         const fallado = resultado as SabinaResultadoFallo;
-        if (resultado.ok !== true && fallado.motivo === "sin_permiso" && !sinPermiso.includes(fallado.permiso)) {
-          sinPermiso.push(fallado.permiso);
+        let fraseSinPermiso: string | undefined;
+        let sustituyeOtra = false;
+        if (resultado.ok !== true && fallado.motivo === "sin_permiso") {
+          if (accion) {
+            fraseSinPermiso = fraseSinPermisoAccion(accion.queHace);
+            sinPermisoAcciones.push({ frase: fraseSinPermiso, queHace: accion.queHace, permiso: accion.permiso });
+          } else if (!sinPermiso.includes(fallado.permiso)) {
+            sinPermiso.push(fallado.permiso);
+          }
+        }
+        if (accion && resultado.ok === true) {
+          const datosAccion = resultado.datos as DatosDeAccion;
+          if (datosAccion?.estado === "sin_permiso") {
+            sinPermisoAcciones.push({ frase: datosAccion.frase, queHace: accion.queHace, permiso: accion.permiso });
+          }
+          // Solo una herramienta de acción REAL produce propuesta: se busca por la
+          // referencia de sus datos, no por lo que diga el JSON.
+          const propuesta = propuestaDeDatos(resultado.datos);
+          if (propuesta) {
+            // Una propuesta por turno, y vale la ÚLTIMA: si el modelo corrige la
+            // suya (otro paciente tras buscar mejor, la pasada cara que arregla la
+            // barata), la equivocada no sale (ver engine-propuestas-core.ts).
+            sustituyeOtra = propuestas.length >= SABINA_MAX_PROPUESTAS_POR_TURNO;
+            if (sustituyeOtra) propuestas.splice(0, propuestas.length - SABINA_MAX_PROPUESTAS_POR_TURNO + 1);
+            propuestas.push(propuesta);
+          }
         }
         // Una herramienta compuesta (`resumen_clinica`) contesta `ok` y apunta en
         // `datos.omitidas` las secciones que el usuario no puede ver. También
@@ -308,7 +373,12 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         resultados.push({
           type: "tool_result",
           tool_use_id: llamada.id,
-          content: resultadoParaModelo(resultado),
+          content: sustituyeOtra
+            ? JSON.stringify({
+                ...JSON.parse(resultadoParaModelo(resultado, { fraseSinPermiso })),
+                sustituye: "Esta propuesta SUSTITUYE a la que preparaste antes en este turno: el usuario solo verá esta. Una propuesta a la vez.",
+              })
+            : resultadoParaModelo(resultado, { fraseSinPermiso }),
         });
       }
 
@@ -332,7 +402,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
     modelo = modeloPara("abierta");
   }
 
-  const texto = garantizarAvisoSinPermiso(respuesta ?? "", sinPermiso);
+  const texto = garantizarAvisoPropuesta(
+    garantizarAvisoSinPermisoAccion(garantizarAvisoSinPermiso(respuesta ?? "", sinPermiso), sinPermisoAcciones),
+    propuestas.length > 0,
+  );
 
   return {
     respuesta: texto,
@@ -343,7 +416,8 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
     dificultad,
     escalado,
     rondas,
-    sinPermiso,
+    sinPermiso: Array.from(new Set([...sinPermiso, ...sinPermisoAcciones.map((f) => f.permiso)])),
+    propuestas,
     fallo: fallo || texto.trim().length === 0,
   };
 }

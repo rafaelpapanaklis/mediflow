@@ -1,0 +1,221 @@
+/* ═══════════════════════════════════════════════════════════════════
+   La tarjeta de confirmación de Sabina (propuesta-card.tsx).
+   Mismos tokens que el chat (globals.css). Pensada a 390 px primero:
+   botones de 44 px de alto, separados, y el de confirmar a la derecha.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.card {
+  margin-top: 6px;
+  width: 100%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--brand);
+  border-radius: 13px;
+  overflow: hidden;
+  box-shadow: var(--shadow-1, none);
+}
+.card[data-irreversible="true"][data-estado="pendiente"] { border-left-color: var(--danger); }
+.card[data-estado="hecha"] { border-left-color: var(--success); }
+.card[data-estado="fallida"],
+.card[data-estado="dudoso"] { border-left-color: var(--warning); }
+.card[data-estado="descartada"],
+.card[data-estado="reemplazada"],
+.card[data-estado="caducada"] { border-left-color: var(--border-strong); }
+.card[data-estado="descartada"] .body,
+.card[data-estado="reemplazada"] .body,
+.card[data-estado="caducada"] .body { opacity: 0.72; }
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 12px 0;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.badge[data-tono="bien"] { background: var(--success-soft); color: var(--success-strong, var(--success)); }
+.badge[data-tono="mal"] { background: var(--warning-soft); color: var(--warning-strong, var(--warning)); }
+.badge[data-tono="neutro"] { background: var(--bg-elev-2); color: var(--text-2); }
+.timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.body { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+.title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.frase {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--text-1);
+  word-wrap: break-word;
+}
+
+.detalles {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-soft);
+}
+.fila {
+  display: grid;
+  grid-template-columns: minmax(72px, 32%) 1fr;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.fila dt { color: var(--text-3); }
+.fila dd {
+  margin: 0;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  word-break: break-word;
+}
+.valor { font-weight: 600; }
+.antes { color: var(--text-3); }
+.flecha { color: var(--text-3); flex-shrink: 0; }
+
+.avisos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.avisos li {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--warning-soft);
+  color: var(--text-1);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.avisos li svg { color: var(--warning); flex-shrink: 0; margin-top: 1px; }
+
+.irreversible {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  color: var(--text-1);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.irreversible svg { color: var(--danger); flex-shrink: 0; margin-top: 1px; }
+.irreversible strong { color: var(--danger-strong, var(--danger)); }
+
+.deshacer { margin: 0; font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
+
+.resultado {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--warning-soft);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.resultado[data-ok="true"] { background: var(--success-soft); }
+.nota { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.45; }
+
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 12px 2px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  cursor: pointer;
+  min-height: 40px;
+}
+.casilla input { width: 18px; height: 18px; accent-color: var(--danger); flex-shrink: 0; margin: 0; }
+
+.acciones {
+  display: flex;
+  gap: 10px;
+  padding: 8px 12px 12px;
+}
+.descartar,
+.confirmar {
+  min-height: 44px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease);
+}
+.descartar {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border-strong);
+}
+.descartar:hover:not(:disabled) { background: var(--bg-elev-2); color: var(--text-1); }
+.confirmar {
+  flex: 1 1 auto;
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+}
+.confirmar:hover:not(:disabled) { background: var(--violet-700, var(--brand)); }
+.confirmar[data-peligro="true"] { background: var(--danger); border-color: var(--danger); }
+.confirmar[data-peligro="true"]:hover:not(:disabled) { background: var(--danger-strong, var(--danger)); }
+.descartar:focus-visible,
+.confirmar:focus-visible { outline: none; box-shadow: var(--ring); }
+.descartar:disabled,
+.confirmar:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 480px) {
+  .frase { font-size: 14.5px; }
+  .fila { grid-template-columns: minmax(64px, 30%) 1fr; }
+}

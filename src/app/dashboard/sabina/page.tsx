@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
+import { ACCIONES_SABINA } from "@/lib/sabina/engine-catalog";
 import { SabinaClient } from "./sabina-client";
 
 export const metadata: Metadata = { title: "Sabina — DaleControl" };
@@ -16,5 +17,5 @@ export const metadata: Metadata = { title: "Sabina — DaleControl" };
  */
 export default async function SabinaPage() {
   const user = await getCurrentUser();
-  return <SabinaClient key={user.clinicId} firstName={user.firstName} />;
+  return <SabinaClient key={user.clinicId} firstName={user.firstName} puedeProponer={ACCIONES_SABINA.length > 0} />;
 }

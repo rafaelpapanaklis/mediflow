@@ -14,6 +14,7 @@
  * arrastrar prisma.
  */
 import type { SabinaCtx, SabinaResultado, SabinaTool } from "./tipos";
+import type { PropuestaPreparada } from "./engine-acciones";
 
 export type { SabinaCtx, SabinaResultado, SabinaTool };
 
@@ -51,6 +52,8 @@ export interface SabinaRastro {
   tokensSalida: number;
   ms: number;
   sinPermiso: string[];
+  /** Nombres de las acciones que se PROPUSIERON (no ejecutaron) en el turno. */
+  propuestas: string[];
 }
 
 /**
@@ -76,6 +79,12 @@ export interface SabinaRespuesta {
   rondas: number;
   /** Permisos que faltaron; el endpoint no los publica, van al rastro. */
   sinPermiso: string[];
+  /**
+   * Lo que Sabina PROPUSO hacer en este turno, sin ejecutar. El endpoint lo guarda
+   * y lo devuelve como tarjeta; solo se ejecuta si el usuario la confirma en otra
+   * petición (engine-propuestas.ts).
+   */
+  propuestas: PropuestaPreparada[];
   /** true si el modelo nunca contestó (→ 503, nunca un 500 mudo). */
   fallo: boolean;
 }

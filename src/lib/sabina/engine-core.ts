@@ -345,6 +345,62 @@ export function garantizarAvisoSinPermiso(
   return base ? `${base}\n\n${avisos}` : avisos;
 }
 
+/**
+ * La misma red, para las ACCIONES: si a quien escribe le faltó el permiso para
+ * hacer algo (la key, o una regla de rol como «un doctor no cancela»), la
+ * respuesta tiene que decirlo. `frases` son las de cada acción, ya redactadas
+ * («No tienes permiso para agendar citas…»).
+ *
+ * Se da por avisado si la respuesta ya contiene la frase, o si habla de permiso
+ * y nombra lo que no se pudo hacer (`queHace`).
+ */
+export function garantizarAvisoSinPermisoAccion(
+  respuesta: string,
+  faltas: ReadonlyArray<{ frase: string; queHace: string }>,
+): string {
+  if (faltas.length === 0) return respuesta;
+  const texto = normalizar(respuesta);
+  const hablaDePermiso =
+    texto.includes("permiso") || texto.includes("tu rol") || texto.includes("no puedes");
+  const vistas = new Set<string>();
+  const pendientes = faltas.filter((f) => {
+    if (vistas.has(f.frase)) return false;
+    vistas.add(f.frase);
+    if (texto.includes(normalizar(f.frase))) return false;
+    return !(hablaDePermiso && texto.includes(normalizar(f.queHace)));
+  });
+  if (pendientes.length === 0) return respuesta;
+  const avisos = pendientes.map((f) => f.frase).join(" ");
+  const base = respuesta.trim();
+  return base ? `${base}\n\n${avisos}` : avisos;
+}
+
+/**
+ * Frases que dan algo por HECHO, sobre el texto normalizado (sin acentos). Un
+ * «quedó confirmada» menciona «confirm» y aun así afirma lo que no pasó: por eso
+ * esto se mira aunque la respuesta hable de confirmar.
+ */
+const AFIRMA_HECHO =
+  /\b(listo|hecho|ya (quedo|quedaron|esta|estan|lo hice|la hice)|quedo (agendad|cancelad|registrad|confirmad|movid|reagendad|hech|list|dad)\w*|(agende|cancele|registre|movi|reagende|confirme|di de alta|anote|programe)\b)/;
+
+/** Lo que se añade si Sabina propuso algo y la respuesta no manda a confirmarlo. */
+export const AVISO_PROPUESTA_PENDIENTE =
+  "Todavía no hice nada: revisa la propuesta y confírmala con el botón si está bien.";
+
+/**
+ * Red determinista de la confirmación: si hubo propuesta, la respuesta tiene que
+ * dejar claro que falta confirmarla. Un «listo, ya quedó agendada» con una
+ * tarjeta pendiente debajo es justo la mentira que este mecanismo existe para
+ * impedir; el prompt lo pide, y esto lo garantiza.
+ */
+export function garantizarAvisoPropuesta(respuesta: string, huboPropuesta: boolean): string {
+  if (!huboPropuesta) return respuesta;
+  const texto = normalizar(respuesta);
+  if (texto.includes("confirm") && !AFIRMA_HECHO.test(texto)) return respuesta;
+  const base = respuesta.trim();
+  return base ? `${base}\n\n${AVISO_PROPUESTA_PENDIENTE}` : AVISO_PROPUESTA_PENDIENTE;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    LO QUE VE EL MODELO
    ═══════════════════════════════════════════════════════════════════════ */
@@ -355,7 +411,10 @@ export function garantizarAvisoSinPermiso(
  * `sin_permiso` no se le entrega como un fallo cualquiera: lleva una ORDEN
  * explícita, porque de esa frase depende que la respuesta no salga falsa.
  */
-export function resultadoParaModelo(res: SabinaResultado): string {
+export function resultadoParaModelo(
+  res: SabinaResultado,
+  opciones?: { fraseSinPermiso?: string },
+): string {
   // Se estrecha por `motivo` (texto) y no por `ok` (booleano): ver la nota de
   // SabinaResultado en engine-types.ts — este repo compila con "strict": false.
   if (res.ok === true) {
@@ -363,6 +422,18 @@ export function resultadoParaModelo(res: SabinaResultado): string {
     return JSON.stringify({ ok: true, resumen: bien.resumen, datos: bien.datos });
   }
   const mal = res as SabinaResultadoFallo;
+  if (mal.motivo === "sin_permiso" && opciones?.fraseSinPermiso) {
+    // Una ACCIÓN sin permiso no es «no te lo puedo contestar»: es «no puedes
+    // hacerlo». La frase la da la acción (engine-acciones.ts).
+    return JSON.stringify({
+      ok: false,
+      motivo: "sin_permiso",
+      permiso: mal.permiso,
+      instruccion:
+        `EL USUARIO NO TIENE PERMISO PARA HACER ESTO. No lo intentes por otro camino ni lo omitas en silencio: ` +
+        `DI textualmente "${opciones.fraseSinPermiso}"`,
+    });
+  }
   if (mal.motivo === "sin_permiso") {
     return JSON.stringify({
       ok: false,
@@ -421,7 +492,13 @@ export function hoyParaPrompt(instante: Date, timezone: string): string {
 export function construirSystemPrompt(opciones: {
   dificultad: SabinaDificultad;
   hoy: string;
+  /**
+   * Lo que el catálogo le deja PROPONER («agendar citas»). Vacío o ausente: Sabina
+   * solo lee, y el prompt lo dice así.
+   */
+  acciones?: readonly string[];
 }): string {
+  const acciones = (opciones.acciones ?? []).filter(Boolean);
   return `Eres Sabina, la asistente de una clínica dental en México. Contestas al doctor y a su equipo sobre SU clínica, en español neutro y de tú. Hoy es ${opciones.hoy}.
 
 CÓMO CONSIGUES LOS DATOS
@@ -444,9 +521,21 @@ Separa siempre las dos cosas, y en este orden:
 2. Lo que sugieres, dicho como sugerencia: "yo movería ortodoncia a los martes".
 Nunca mezcles las dos en la misma frase, y nunca presentes una opinión con el tono de un dato.
 
-LO QUE NO HACES
+${
+  acciones.length === 0
+    ? `LO QUE NO HACES
 Solo lees. No agendas citas, no cobras, no editas expedientes, no mandas mensajes. Si te lo piden, di que no puedes hacerlo y ofrece el dato que sí tienes.
-
+`
+    : `LO QUE PUEDES PREPARAR, Y CÓMO
+Además de consultar, puedes preparar esto: ${acciones.join("; ")}. Nada más: no cobras, no editas expedientes, no mandas mensajes.
+- Tus herramientas de acción NO hacen nada. Preparan una PROPUESTA que el usuario ve en una tarjeta y confirma con un botón. Hasta que la confirme, no pasó nada.
+- Después de proponer, di en una o dos frases qué propones y que lo confirme en la tarjeta. NUNCA digas "ya quedó", "listo" ni "ya lo hice".
+- Un "sí" escrito en el chat NO confirma nada. Si te escriben "sí" o "confírmalo", diles que usen el botón de la tarjeta.
+- Una propuesta a la vez. Si te piden dos cosas, propón la primera y avisa de que después sigues con la otra.
+- Si falta un dato, pregunta el dato ("¿con qué doctor?"), no la acción. Si hay dos pacientes con el mismo nombre, pregunta cuál; nunca elijas tú.
+- Si una acción vuelve con "sin_permiso", dilo con la frase que te da la herramienta.
+`
+}
 CÓMO ESCRIBES
 ${
   opciones.dificultad === "abierta"
@@ -482,6 +571,7 @@ export function construirRastro(estado: {
   tokensSalida: number;
   ms: number;
   sinPermiso: readonly string[];
+  propuestas?: readonly string[];
 }): SabinaRastro {
   return {
     clinicId: estado.clinicId,
@@ -496,6 +586,7 @@ export function construirRastro(estado: {
     tokensSalida: estado.tokensSalida,
     ms: estado.ms,
     sinPermiso: [...estado.sinPermiso],
+    propuestas: [...(estado.propuestas ?? [])],
   };
 }
 
