@@ -389,6 +389,82 @@
     "userMenuAria": "User: {name}. Open session menu.",
     "logout": "Log out"
   },
+  "menuDosNiveles": {
+    "nav": {
+      "home": "Today",
+      "appointments": "Schedule",
+      "patients": "Patients",
+      "inbox": "Messages",
+      "billing": "Cash register",
+      "sabina": "Sabina",
+      "finanzas": "Finances",
+      "analytics": "Analytics",
+      "reports": "Reports",
+      "team": "Team",
+      "resources": "Resources",
+      "inventory": "Inventory",
+      "procedures": "Procedures",
+      "clinic-layout": "My Visual Clinic",
+      "before-after": "Before/After",
+      "formulas": "Formulas",
+      "exercises": "Exercises",
+      "orthotics": "Orthotics",
+      "landing": "Website",
+      "resenas": "Reviews",
+      "tv-modes": "TV screens",
+      "messages": "WhatsApp & reminders",
+      "settings": "Settings",
+      "auditoria": "Activity log",
+      "soporte": "Tech support",
+      "pediatrics": "Pediatric dentistry",
+      "endodontics": "Endodontics",
+      "periodontics": "Periodontics",
+      "orthodontics": "Orthodontics",
+      "implants": "Implantology",
+      "packages": "Packages",
+      "suppliers": "Suppliers",
+      "compras": "My purchases",
+      "laboratorios": "Labs",
+      "ordenes-laboratorio": "My lab orders",
+      "ai": "AI assistant",
+      "marketplace": "Marketplace",
+      "facturacion": "Billing"
+    },
+    "grupo": {
+      "dinero": "Money",
+      "clinica": "Clinic",
+      "pacientes": "Patients",
+      "sistema": "System",
+      "especialidades": "Specialties",
+      "catalogo": "Catalog",
+      "mas": "More"
+    },
+    "rol": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "doctor": "Doctor",
+      "receptionist": "Front desk",
+      "readonly": "Read only",
+      "accountant": "Accounting"
+    },
+    "admin": {
+      "titulo": "Administration",
+      "cerrar": "Close administration",
+      "buscar": "Search administration…",
+      "sinResultados": "Nothing in administration matches “{query}”."
+    },
+    "sucursales": {
+      "one": "{count} branch",
+      "other": "{count} branches"
+    },
+    "nuevaCita": "New appointment",
+    "proximamente": "Coming soon",
+    "cajaSinAcceso": "The cash register is enabled person by person and your user doesn't have it. Ask the clinic owner.",
+    "cajaSinAccesoCorto": "No access",
+    "miPerfil": "My profile",
+    "volver": "Back",
+    "migasAria": "You are here"
+  },
   "shell": {
     "topbar": {
       "routeHoy": "Today",

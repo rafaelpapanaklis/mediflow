@@ -3,8 +3,13 @@ export const dynamic = "force-dynamic";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
-import { Sidebar } from "@/components/dashboard/sidebar";
+import { Sidebar, type SidebarProps } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
+import { MenuDosNiveles } from "@/components/dashboard/menu-dos-niveles/menu-dos-niveles";
+import { TopbarDosNiveles } from "@/components/dashboard/menu-dos-niveles/topbar-dos-niveles";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { canUseCaja } from "@/lib/caja-pin";
+import { getResolvedPlan } from "@/lib/plans";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -167,10 +172,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // camino de la clínica activa: ahí siguen siendo las mismas 3 en paralelo.
   // getUserClinics NO se salta: el switcher es la vía de escape del dueño con
   // varias sedes hacia una activa (y el propio menú reducido lo renderiza).
-  const [allClinics, clinicModuleKeys, onboardingCompleted] = await Promise.all([
+  //
+  // MENÚ DE DOS NIVELES — interruptor POR CLÍNICA (sql/menu-dos-niveles.sql).
+  // Falla cerrado: sin la tabla, sin fila o con error devuelve false y se pinta
+  // el menú de siempre. clinic.id sale de la sesión (getCurrentUser).
+  const [allClinics, clinicModuleKeys, onboardingCompleted, menuDosNiveles] = await Promise.all([
     getUserClinics(),
     isExpired ? Promise.resolve<string[]>([]) : getActiveClinicModuleKeys(clinic.id),
     isExpired ? Promise.resolve<string[]>([]) : getOnboardingCompleted(clinic.id, clinic.waConnected),
+    menuDosNivelesEncendido(clinic.id),
   ]);
 
   // Multi-Clínica Fase 1 — cupo de sucursales para el switcher del sidebar.
@@ -183,6 +193,47 @@ export default async function DashboardLayout({ children }: { children: React.Re
     isOwner: user.role === "SUPER_ADMIN",
     ownedCount: allClinics.filter((c) => c.role === "SUPER_ADMIN").length,
   });
+
+  // Las props del menú, UNA sola vez: el de siempre y el de dos niveles reciben
+  // exactamente lo mismo, así que ven a la persona igual.
+  const sidebarProps: SidebarProps = {
+    user: {
+      firstName: user.firstName,
+      lastName:  user.lastName,
+      email:     user.email,
+      role:      user.role,
+      color:     user.color ?? "#7c3aed",
+      // Prisma user.permissionsOverride es String[] @default([]) en
+      // schema; el tipo generado lo expone non-nullable. Sin cast, así
+      // el sidebar lo recibe correctamente y filtra los items.
+      permissionsOverride: user.permissionsOverride,
+    },
+    clinicName: clinic.name,
+    clinicId: clinic.id,
+    plan: clinic.plan,
+    clinicCategory: (clinic as any).category ?? "OTHER",
+    allClinics,
+    branches: {
+      quota: branchQuota,
+      defaults: {
+        category: (clinic as any).category ?? "OTHER",
+        city: clinic.city ?? "",
+        state: clinic.state ?? "",
+      },
+    },
+    onboardingCompleted,
+    trialEndsAt,
+    isInTrial,
+    clinicModuleKeys,
+    sidebarCollapsed: (user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? [],
+    isExpired,
+  };
+
+  // Solo el menú nuevo pinta el nombre del plan («Profesional · 2 sucursales»).
+  // getBranchQuota ya dejó plan_configs en la caché de 60 s: no hay otra consulta.
+  const planEtiqueta = menuDosNiveles
+    ? await getResolvedPlan(clinic.plan).then((p) => p.label).catch(() => null)
+    : null;
 
   return (
     <I18nProvider locale={locale} dict={dict}>
@@ -198,38 +249,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     {/* Fondo --bg plano (Variante A): inline y solo aquí — .dashboard-shell la
         comparten labs/proveedores/afiliados, que no entran en el piloto. */}
     <div className="dashboard-shell flex min-h-screen font-sans" style={{ background: "var(--bg)" }}>
-      <Sidebar
-        user={{
-          firstName: user.firstName,
-          lastName:  user.lastName,
-          email:     user.email,
-          role:      user.role,
-          color:     user.color ?? "#7c3aed",
-          // Prisma user.permissionsOverride es String[] @default([]) en
-          // schema; el tipo generado lo expone non-nullable. Sin cast, así
-          // el sidebar lo recibe correctamente y filtra los items.
-          permissionsOverride: user.permissionsOverride,
-        }}
-        clinicName={clinic.name}
-        clinicId={clinic.id}
-        plan={clinic.plan}
-        clinicCategory={(clinic as any).category ?? "OTHER"}
-        allClinics={allClinics}
-        branches={{
-          quota: branchQuota,
-          defaults: {
-            category: (clinic as any).category ?? "OTHER",
-            city: clinic.city ?? "",
-            state: clinic.state ?? "",
-          },
-        }}
-        onboardingCompleted={onboardingCompleted}
-        trialEndsAt={trialEndsAt}
-        isInTrial={isInTrial}
-        clinicModuleKeys={clinicModuleKeys}
-        sidebarCollapsed={(user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? []}
-        isExpired={isExpired}
-      />
+      {menuDosNiveles ? (
+        <MenuDosNiveles
+          {...sidebarProps}
+          puedeUsarCaja={canUseCaja(user)}
+          planEtiqueta={planEtiqueta}
+        />
+      ) : (
+        <Sidebar {...sidebarProps} />
+      )}
       {/* min-w-0 — CAUSA RAÍZ del scroll horizontal del panel a 1280. Un hijo de
           flex trae `min-width: auto`, así que esta columna NO podía encogerse por
           debajo del min-content de la pantalla que renderiza: una tabla ancha o una
@@ -239,11 +267,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
           su propio ancho intrínseco (scroll dentro de su contenedor, o apilado). */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <GlobalAnnouncementBanner />
-        <Topbar
-          clinicName={clinic.name}
-          plan={clinic.plan as any}
-          userRole={user.role}
-        />
+        {menuDosNiveles ? (
+          <TopbarDosNiveles clinicName={clinic.name} userRole={user.role} />
+        ) : (
+          <Topbar
+            clinicName={clinic.name}
+            plan={clinic.plan as any}
+            userRole={user.role}
+          />
+        )}
         <PatientContextBar />
         <main
           id="main-content"

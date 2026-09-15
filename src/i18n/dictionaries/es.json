@@ -389,6 +389,82 @@
     "userMenuAria": "Usuario: {name}. Abrir menú de sesión.",
     "logout": "Cerrar sesión"
   },
+  "menuDosNiveles": {
+    "nav": {
+      "home": "Hoy",
+      "appointments": "Agenda",
+      "patients": "Pacientes",
+      "inbox": "Mensajes",
+      "billing": "Caja",
+      "sabina": "Sabina",
+      "finanzas": "Finanzas",
+      "analytics": "Analítica",
+      "reports": "Reportes",
+      "team": "Equipo",
+      "resources": "Recursos",
+      "inventory": "Inventario",
+      "procedures": "Procedimientos",
+      "clinic-layout": "Mi Clínica Visual",
+      "before-after": "Antes/Después",
+      "formulas": "Fórmulas",
+      "exercises": "Ejercicios",
+      "orthotics": "Ortesis",
+      "landing": "Página web",
+      "resenas": "Reseñas",
+      "tv-modes": "Pantallas TV",
+      "messages": "WhatsApp y recordatorios",
+      "settings": "Configuración",
+      "auditoria": "Bitácora de actividad",
+      "soporte": "Soporte Técnico",
+      "pediatrics": "Odontopediatría",
+      "endodontics": "Endodoncia",
+      "periodontics": "Periodoncia",
+      "orthodontics": "Ortodoncia",
+      "implants": "Implantología",
+      "packages": "Paquetes",
+      "suppliers": "Proveedores",
+      "compras": "Mis compras",
+      "laboratorios": "Laboratorios",
+      "ordenes-laboratorio": "Mis órdenes de laboratorio",
+      "ai": "IA asistente",
+      "marketplace": "Marketplace",
+      "facturacion": "Facturación"
+    },
+    "grupo": {
+      "dinero": "Dinero",
+      "clinica": "Clínica",
+      "pacientes": "Pacientes",
+      "sistema": "Sistema",
+      "especialidades": "Especialidades",
+      "catalogo": "Catálogo",
+      "mas": "Más"
+    },
+    "rol": {
+      "owner": "Dueño/a",
+      "admin": "Administrador/a",
+      "doctor": "Doctor/a",
+      "receptionist": "Recepción",
+      "readonly": "Solo lectura",
+      "accountant": "Contabilidad"
+    },
+    "admin": {
+      "titulo": "Administración",
+      "cerrar": "Cerrar administración",
+      "buscar": "Buscar en administración…",
+      "sinResultados": "Nada en administración se llama «{query}»."
+    },
+    "sucursales": {
+      "one": "{count} sucursal",
+      "other": "{count} sucursales"
+    },
+    "nuevaCita": "Nueva cita",
+    "proximamente": "Próximamente",
+    "cajaSinAcceso": "Caja se activa persona por persona y tu usuario no la tiene activada. Pídesela al dueño de la clínica.",
+    "cajaSinAccesoCorto": "Sin acceso",
+    "miPerfil": "Mi perfil",
+    "volver": "Volver",
+    "migasAria": "Estás en"
+  },
   "shell": {
     "topbar": {
       "routeHoy": "Hoy",

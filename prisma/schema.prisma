@@ -8108,6 +8108,26 @@ model ClinicPatientLink {
   @@map("clinic_patient_links")
 }
 
+// Interruptores POR CLÍNICA para encender una función nueva en una sola sede
+// antes de dársela a todas. Hoy la única clave es "menu-dos-niveles"
+// (src/lib/menu-dos-niveles/interruptor.ts). Una sede dental es su propia fila
+// de `clinics`: encenderlo aquí lo ve todo el equipo de esa sede y nadie más.
+//
+// SIN relación declarada con Clinic A PROPÓSITO: así el modelo Clinic no cambia
+// y ningún `include: { clinic: true }` (el del login incluido) depende de esta
+// tabla. La llave foránea con ON DELETE CASCADE vive en el SQL.
+// Si la tabla no existe, el lector devuelve `false`: el panel sigue como hoy.
+// Requiere sql/menu-dos-niveles.sql aplicado en Supabase.
+model ClinicFeatureFlag {
+  clinicId  String
+  flag      String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@id([clinicId, flag])
+  @@map("clinic_feature_flags")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BLOG SEO PÚBLICO — contenido GLOBAL de marca (dalecontrol.com/blog).
 //

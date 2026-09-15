@@ -21,7 +21,7 @@ import type { ClinicPlan } from "./sidebar";
 
 // Mapa ruta -> clave de traducción. El valor visible se resuelve con t() en
 // tiempo de render (resolveCurrentLabel recibe la t del componente).
-const ROUTE_LABELS: Record<string, string> = {
+export const ROUTE_LABELS: Record<string, string> = {
   "/dashboard":               "shell.topbar.routeHoy",
   "/dashboard/agenda":        "shell.topbar.routeAgenda",
   "/dashboard/appointments":  "shell.topbar.routeAgenda",
