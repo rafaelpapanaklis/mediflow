@@ -10,7 +10,7 @@
  *   import { crearSabinaCtx } from "@/lib/sabina/tipos";
  *   import { CATALOGO_SABINA, ejecutarHerramienta } from "@/lib/sabina/tools";
  *
- *   const ctx = crearSabinaCtx(await getAuthContext());
+ *   const ctx = await crearSabinaCtx(await getAuthContext());
  *   if (!ctx) return 401;                       // sin clinicId no se consulta
  *   const r = await ejecutarHerramienta("citas_del_dia", ctx, { fecha: "2026-09-10" });
  *

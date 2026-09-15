@@ -135,7 +135,19 @@ function ThinkingIndicator({ startedAt }: { startedAt: number }) {
   );
 }
 
-export function SabinaClient({ firstName, puedeProponer = false }: { firstName: string; puedeProponer?: boolean }) {
+export function SabinaClient({
+  firstName,
+  puedeProponer = false,
+  apagada: apagadaAlEntrar = false,
+}: {
+  firstName: string;
+  puedeProponer?: boolean;
+  /** El Super Admin apagó a Sabina para este usuario. Solo avisa; el endpoint impide. */
+  apagada?: boolean;
+}) {
+  // Arranca con lo que leyó la página y se enciende también si el endpoint
+  // contesta que está apagada (se la apagaron con la pantalla abierta).
+  const [apagada, setApagada] = useState(apagadaAlEntrar);
   const [messages, setMessages] = useState<SabinaMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversationTitle, setConversationTitle] = useState<string | null>(null);
@@ -316,6 +328,7 @@ export function SabinaClient({ firstName, puedeProponer = false }: { firstName: 
 
         if (!res.ok) {
           const kind = classifySabinaError(res.status, data);
+          if (kind === "apagada") setApagada(true);
           setMessages((prev) =>
             prev.map((m) => (m.id === targetId ? { ...m, role: "system", content: "", pending: false, errorKind: kind } : m)),
           );
@@ -454,7 +467,7 @@ export function SabinaClient({ firstName, puedeProponer = false }: { firstName: 
   const ask = useCallback(
     (raw: string) => {
       const clean = sanitizeQuestion(raw);
-      if (!clean || sending || activeFailed) return;
+      if (!clean || sending || activeFailed || apagada) return;
 
       setInput("");
       setLastQuestion(clean);
@@ -470,7 +483,7 @@ export function SabinaClient({ firstName, puedeProponer = false }: { firstName: 
 
       void runRequest(clean, placeholderId, true);
     },
-    [sending, activeFailed, runRequest],
+    [sending, activeFailed, apagada, runRequest],
   );
 
   const retry = useCallback(
@@ -575,6 +588,10 @@ export function SabinaClient({ firstName, puedeProponer = false }: { firstName: 
                   <RotateCcw size={12} aria-hidden /> Empezar una nueva
                 </button>
               </div>
+            ) : empty && apagada ? (
+              <div className={styles.systemRow}>
+                <SabinaErrorNotice kind="apagada" />
+              </div>
             ) : empty ? (
               <div className={styles.welcome}>
                 <div className={styles.welcomeIcon}><Sparkles size={24} aria-hidden /></div>
@@ -659,21 +676,23 @@ export function SabinaClient({ firstName, puedeProponer = false }: { firstName: 
                 maxLength={SABINA_QUESTION_MAX_CHARS}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKey}
-                disabled={activeFailed}
+                disabled={activeFailed || apagada}
                 rows={1}
               />
               <button
                 type="button"
                 className={styles.sendBtn}
                 onClick={() => ask(input)}
-                disabled={!input.trim() || sending || activeFailed}
+                disabled={!input.trim() || sending || activeFailed || apagada}
                 aria-label="Preguntar"
               >
                 <Send size={15} aria-hidden />
               </button>
             </div>
             <div className={styles.composerHint}>
-              {puedeProponer
+              {apagada
+                ? "Sabina está apagada para tu usuario."
+                : puedeProponer
                 ? "Sabina propone; nada se hace hasta que tú lo confirmas en la tarjeta."
                 : "Sabina solo lee datos — no agenda, no cobra, no edita nada."}
             </div>

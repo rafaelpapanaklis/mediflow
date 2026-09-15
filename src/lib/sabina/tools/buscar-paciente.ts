@@ -47,6 +47,7 @@ import {
   dbDe,
   definirHerramienta,
   fraseRecorte,
+  lineasDeLista,
   plural,
   recortar,
   type Lista,
@@ -196,9 +197,15 @@ export const buscarPaciente = definirHerramienta<ParamsBuscar, DatosBuscar>({
       const cita = p.proximaCita ? `, próxima cita el ${p.proximaCita.fecha}` : ", sin cita agendada";
       return `${p.paciente} (folio ${p.folio ?? "sin folio"}${p.telefono ? `, tel. ${p.telefono}` : ""})${cita}.`;
     }
+    // Con varios, el usuario tiene que elegir cuál: uno por línea, con lo que los
+    // distingue (folio y teléfono).
+    const lista = lineasDeLista(
+      d.resultados.filas,
+      (p) => `${p.paciente} (folio ${p.folio ?? "sin folio"}${p.telefono ? `, tel. ${p.telefono}` : ""})`,
+    );
     return (
       `${plural(d.resultados.total, "paciente coincide", "pacientes coinciden")} con "${d.termino}"` +
-      `${fraseRecorte(d.resultados, "pacientes")}.`
+      `${fraseRecorte(d.resultados, "pacientes")}.${lista}`
     );
   },
 });

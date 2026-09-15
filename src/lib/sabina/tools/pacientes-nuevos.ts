@@ -24,6 +24,7 @@ import {
   dbDe,
   definirHerramienta,
   fraseRecorte,
+  lineasDeLista,
   plural,
   recortar,
   type Lista,
@@ -145,9 +146,11 @@ export const pacientesNuevos = definirHerramienta<ParamsNuevos, DatosNuevos>({
       top && top.origen !== "sin registrar"
         ? ` El origen más frecuente es ${top.origen} con ${top.altas}.`
         : "";
+    // Uno por línea, del alta más reciente a la más antigua (el orden de la consulta).
+    const lista = lineasDeLista(d.nuevos.filas, (n) => `${n.paciente} — alta ${n.alta}${n.origen ? ` (${n.origen})` : ""}`);
     return (
       `${plural(d.nuevos.total, "paciente nuevo", "pacientes nuevos")} entre ${d.desde} y ` +
-      `${d.hasta}${comparacion}${fraseRecorte(d.nuevos, "pacientes")}.${origen}`
+      `${d.hasta}${comparacion}${fraseRecorte(d.nuevos, "pacientes")}.${origen}${lista}`
     );
   },
 });

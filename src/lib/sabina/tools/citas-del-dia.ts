@@ -23,6 +23,7 @@ import {
   comoAuthContext,
   dbDe,
   definirHerramienta,
+  lineasDeLista,
   plural,
   recortar,
   visorDe,
@@ -172,7 +173,14 @@ export const citasDelDia = definirHerramienta<ParamsCitasDelDia, DatosCitasDelDi
     if (d.canceladas > 0) partes.push(`${d.canceladas} cancelada${d.canceladas === 1 ? "" : "s"}`);
     if (d.noAsistieron > 0) partes.push(`${d.noAsistieron} sin asistir`);
     if (d.proxima) partes.push(`la próxima a las ${d.proxima.hora.split("–")[0]} con ${d.proxima.paciente}`);
-    return `${partes.join("; ")}.`;
+    // La primera línea contesta «¿cuántas?»; la agenda, una cita por línea con la
+    // hora delante, contesta «¿cuáles?». El doctor que pregunta por lo suyo no
+    // necesita leer su propio nombre en cada línea.
+    const lista = lineasDeLista(d.citas.filas, (c) => {
+      const quien = d.alcance === "propio" ? c.estado : `${c.doctor}, ${c.estado}`;
+      return `${c.hora} ${c.paciente}${c.motivo ? ` — ${c.motivo}` : ""} (${quien})`;
+    });
+    return `${partes.join("; ")}.${lista ? " La agenda:" : ""}${lista}`;
   },
 });
 

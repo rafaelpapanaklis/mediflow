@@ -27,7 +27,7 @@
 import { z } from "zod";
 import { invoiceLineBases, itemQuantity, PRICE_ADJUST_FLAG, round2 } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
-import { dbDe, definirHerramienta, fraseRecorte, pesos, recortar, visorDe, type Lista } from "./base";
+import { dbDe, definirHerramienta, fraseRecorte, lineasDeLista, pesos, pesosDeLista, recortar, visorDe, type Lista } from "./base";
 import { esquemaRango, resolverRango, type ParamsRango } from "./fechas";
 import type { SabinaCtx } from "../tipos";
 
@@ -78,7 +78,7 @@ export const tratamientosPorIngreso = definirHerramienta<ParamsTratamientos, Dat
     "El ranking de tratamientos por dinero FACTURADO en un rango: importe, veces facturado, unidades, " +
     "precio medio y qué porcentaje del total representa cada uno. Úsala para «¿qué tratamiento me deja " +
     "más?», «¿en qué se me va el trabajo?», «¿qué debería promocionar?» o para razonar sobre mezcla de " +
-    "servicios y rentabilidad. Mide lo facturado, no lo cobrado: para la caja usa ingresos_por_periodo.",
+    "servicios y rentabilidad. Mide lo facturado, no lo cobrado: para lo cobrado usa ingresos_por_periodo.",
   parametros,
   permiso: "billing.view",
 
@@ -171,15 +171,18 @@ export const tratamientosPorIngreso = definirHerramienta<ParamsTratamientos, Dat
   vacio: (d) => d.tratamientos.total === 0,
 
   resumir(d) {
-    const top = d.tratamientos.filas.slice(0, 3);
-    const lista = top
-      .map((t) => `${t.tratamiento} ${pesos(t.importe)} (${t.participacionPct}%)`)
-      .join(", ");
+    // Antes: «Los que más dejan: Resina $4,000 (37%), Limpieza $3,000 (28%), …» en
+    // una línea, y el modelo lo repetía así. Ahora una línea por tratamiento, de
+    // mayor a menor, con las cantidades en la misma forma.
+    const filas = d.tratamientos.filas;
+    const monto = pesosDeLista(filas.map((t) => t.importe));
+    const lista = lineasDeLista(filas, (t) => `${t.tratamiento} — ${monto(t.importe)} (${t.participacionPct}%)`);
+    const cola = lista ? " De mayor a menor:" : filas[0] ? ` Es ${filas[0].tratamiento} con ${pesos(filas[0].importe)}.` : "";
     return (
       `${pesos(d.totalFacturado)} facturados en ${d.facturas} factura${d.facturas === 1 ? "" : "s"} ` +
       `entre ${d.desde} y ${d.hasta}, repartidos en ${d.tratamientos.total} ` +
       `tratamiento${d.tratamientos.total === 1 ? "" : "s"}` +
-      `${fraseRecorte(d.tratamientos, "tratamientos")}. Los que más dejan: ${lista}.`
+      `${fraseRecorte(d.tratamientos, "tratamientos")}.${cola}${lista}`
     );
   },
 });

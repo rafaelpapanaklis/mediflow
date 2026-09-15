@@ -18,6 +18,25 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { invoiceTaxPortion } from "@/lib/invoice-totals";
+import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
+
+/**
+ * Lo único que Caja LEE de la base, y nada más.
+ *
+ * Existe para que Sabina pueda leer la caja con ESTAS funciones —no con una copia
+ * de sus reglas— pasándoles su propio cliente (`ctx.db`): en producción es el
+ * mismo `prisma`, y en las pruebas es el doble con dos clínicas sembradas, que es
+ * lo único que demuestra que la lectura no cruza de clínica. Por defecto sigue
+ * siendo `prisma`, así que la pantalla y las rutas no cambian. Y como solo lista
+ * lecturas, por aquí no entra un `create` ni por accidente.
+ */
+export type CajaDb = {
+  cashRegister: Pick<typeof prisma.cashRegister, "findFirst" | "findMany">;
+  payment:      Pick<typeof prisma.payment, "findMany">;
+  invoice:      Pick<typeof prisma.invoice, "aggregate">;
+  clinic:       Pick<typeof prisma.clinic, "findUnique">;
+  user:         Pick<typeof prisma.user, "findMany">;
+};
 
 // Métodos de pago (PaymentMethod en payment-modal.tsx):
 // "cash" | "debit" | "credit" | "transfer" | "check" | "other".
@@ -188,8 +207,8 @@ function conceptOf(items: unknown): string {
 }
 
 /** Caja OPEN de la clínica (o null). Incluye operador y retiros. */
-export async function getOpenRegister(clinicId: string) {
-  return prisma.cashRegister.findFirst({
+export async function getOpenRegister(clinicId: string, db: CajaDb = prisma) {
+  return db.cashRegister.findFirst({
     where:   { clinicId, status: "OPEN" },
     include: {
       operator:    { select: { firstName: true, lastName: true } },
@@ -219,10 +238,21 @@ export async function getOpenRegister(clinicId: string) {
  * facturas que se CREARON en ella. Mezclar las dos poblaciones hacía que una
  * factura emitida hoy con $20,000 de descuento y sin cobrar imprimiera
  * "Ingresos $2,000 · Descuentos $20,000" en el corte.
+ *
+ * `opts.viewer`: si llega, el nombre de un paciente restringido que ese usuario
+ * no puede ver sale como "Paciente privado" — el criterio de la pestaña Facturas
+ * (canSeePatient), que enmascara SIN sacar la fila para que los totales cuadren.
+ * Sin viewer, la lista sale como siempre (la pantalla de Caja no lo pasa hoy).
  */
-export async function deriveWindow(clinicId: string, from: Date, to: Date) {
+export async function deriveWindow(
+  clinicId: string,
+  from: Date,
+  to: Date,
+  opts: { db?: CajaDb; viewer?: VisibilityViewer } = {},
+) {
+  const db = opts.db ?? prisma;
   const [payments, courtesyAgg, clinic] = await Promise.all([
-    prisma.payment.findMany({
+    db.payment.findMany({
       where: { paidAt: { gte: from, lte: to }, invoice: { clinicId, status: { notIn: ["CANCELLED"] } } },
       include: {
         invoice: {
@@ -241,7 +271,8 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
             // suelto (sin relación Prisma), así que se resuelve abajo con una
             // segunda query en vez de un include.
             doctorId:    true,
-            patient:     { select: { firstName: true, lastName: true } },
+            // visibleUserIds solo decide el enmascarado de `opts.viewer`; no sale en la fila.
+            patient:     { select: { firstName: true, lastName: true, visibleUserIds: true } },
             appointment: { select: { doctor: { select: { firstName: true, lastName: true } } } },
           },
         },
@@ -255,7 +286,7 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
     // cortes. Es justo la cifra con la que el dueño detecta tratamientos
     // regalados, así que se cuenta en el turno en que se emitió: es el único
     // momento en que existe. El resto de los descuentos viaja con el cobro.
-    prisma.invoice.aggregate({
+    db.invoice.aggregate({
       _sum:  { discount: true },
       where: {
         clinicId,
@@ -268,7 +299,7 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
     // Preferencia fiscal de la clínica — desempata las facturas que no traen una
     // señal propia (ver resolveTaxMode). SOLO esa columna: serializar la fila
     // Clinic completa filtra columnas secretas.
-    prisma.clinic.findUnique({ where: { id: clinicId }, select: { cfdiTaxMode: true } }),
+    db.clinic.findUnique({ where: { id: clinicId }, select: { cfdiTaxMode: true } }),
   ]);
   const clinicTaxMode = clinic?.cfdiTaxMode ?? null;
 
@@ -280,7 +311,7 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
   ));
   const attributedById = new Map<string, { firstName: string | null; lastName: string | null }>();
   if (attributedIds.length > 0) {
-    const docs = await prisma.user.findMany({
+    const docs = await db.user.findMany({
       where:  { id: { in: attributedIds }, clinicId },
       select: { id: true, firstName: true, lastName: true },
     });
@@ -327,7 +358,9 @@ export async function deriveWindow(clinicId: string, from: Date, to: Date) {
     return {
       paymentId:   p.id,
       at:          p.paidAt.toISOString(),
-      patientName: fullName(p.invoice?.patient),
+      patientName: opts.viewer && p.invoice?.patient && !canSeePatient(opts.viewer, p.invoice.patient.visibleUserIds)
+        ? "Paciente privado"
+        : fullName(p.invoice?.patient),
       concept:     conceptOf(p.invoice?.items),
       amount,
       method:      p.method,
@@ -498,13 +531,13 @@ export function netRevenueSeries(
  * Por eso el campo del modal de apertura es editable y sigue siéndolo: es una
  * sugerencia, no un arqueo, y quien abre la caja cuenta el dinero.
  */
-async function computeSuggestedOpening(clinicId: string, todayStart: Date, now: Date): Promise<number> {
+async function computeSuggestedOpening(clinicId: string, todayStart: Date, now: Date, db: CajaDb = prisma): Promise<number> {
   const [cashPayments, closedToday] = await Promise.all([
-    prisma.payment.findMany({
+    db.payment.findMany({
       where:  cashOnHandPaymentWhere(clinicId, todayStart, now),
       select: { amount: true, paidAt: true },
     }),
-    prisma.cashRegister.findMany({
+    db.cashRegister.findMany({
       where:  { clinicId, status: "CLOSED", closedAt: { gte: todayStart } },
       select: { openedAt: true, closedAt: true },
     }),
@@ -522,7 +555,7 @@ async function computeSuggestedOpening(clinicId: string, todayStart: Date, now: 
  *  - pendingToday: Σ saldo por cobrar de esas mismas facturas de hoy.
  *  - overdueToday: Σ saldo de facturas VENCIDAS (dueDate < hoy) con saldo > 0.
  */
-async function computeDayBilling(clinicId: string, todayStart: Date, now: Date) {
+async function computeDayBilling(clinicId: string, todayStart: Date, now: Date, db: CajaDb = prisma) {
   const issuedToday: Prisma.InvoiceWhereInput = {
     clinicId,
     status:    { notIn: ["DRAFT", "CANCELLED"] },
@@ -533,9 +566,9 @@ async function computeDayBilling(clinicId: string, todayStart: Date, now: Date) 
   const overdue = overdueInvoiceWhere(clinicId, todayStart);
 
   const [billedAgg, pendingAgg, overdueAgg] = await Promise.all([
-    prisma.invoice.aggregate({ _sum: { total: true },   where: issuedToday }),
-    prisma.invoice.aggregate({ _sum: { balance: true }, where: issuedToday }),
-    prisma.invoice.aggregate({ _sum: { balance: true }, where: overdue }),
+    db.invoice.aggregate({ _sum: { total: true },   where: issuedToday }),
+    db.invoice.aggregate({ _sum: { balance: true }, where: issuedToday }),
+    db.invoice.aggregate({ _sum: { balance: true }, where: overdue }),
   ]);
 
   return {
@@ -544,6 +577,9 @@ async function computeDayBilling(clinicId: string, todayStart: Date, now: Date) 
     overdueToday: overdueAgg._sum.balance ?? 0,
   };
 }
+
+/** El TURNO abierto: la parte de CajaState que no depende del «hoy». */
+export type CajaShift = Pick<CajaState, "register" | "totals" | "withdrawals" | "list">;
 
 /**
  * Estado completo de la caja para la UI y GET /api/caja/current.
@@ -567,7 +603,33 @@ export async function getCajaState(clinicId: string): Promise<CajaState> {
     overdueToday:     money(dayBilling.overdueToday),
   };
 
-  if (!reg) return { register: null, totals: null, withdrawals: [], list: [], ...day };
+  return { ...(await shiftOf(clinicId, reg, now, {})), ...day };
+}
+
+/**
+ * Solo el turno abierto, sin el resumen del día. Lo usa Sabina.
+ *
+ * Es el mismo cálculo que getCajaState —las dos pasan por shiftOf—, sin las
+ * cinco consultas del resumen del día: Sabina no repite esas cuatro cifras
+ * («cobrado hoy» no es lo cobrado y la apertura sugerida no es un conteo), y
+ * además van en UTC−6 fijo, no en la zona de la clínica.
+ */
+export async function getCajaShift(
+  clinicId: string,
+  opts: { db?: CajaDb; viewer?: VisibilityViewer; now?: Date } = {},
+): Promise<CajaShift> {
+  const db = opts.db ?? prisma;
+  const reg = await getOpenRegister(clinicId, db);
+  return shiftOf(clinicId, reg, opts.now ?? new Date(), { db, viewer: opts.viewer });
+}
+
+async function shiftOf(
+  clinicId: string,
+  reg: Awaited<ReturnType<typeof getOpenRegister>>,
+  now: Date,
+  opts: { db?: CajaDb; viewer?: VisibilityViewer },
+): Promise<CajaShift> {
+  if (!reg) return { register: null, totals: null, withdrawals: [], list: [] };
 
   // Ventana del TURNO: arranca en la apertura de la caja, NO a medianoche. Es lo
   // correcto para un corte (el arqueo cuadra contra el efectivo desde que se
@@ -575,7 +637,7 @@ export async function getCajaState(clinicId: string): Promise<CajaState> {
   // naturales si la caja no se cierra: la UI debe etiquetarlos como del turno y
   // fechar las filas cuando cruzan de día (ver caja-client.tsx).
   const from = reg.openedAt;
-  const derived = await deriveWindow(clinicId, from, now);
+  const derived = await deriveWindow(clinicId, from, now, opts);
 
   const withdrawalsTotal = reg.withdrawals.reduce((s, w) => s + (w.amount ?? 0), 0);
   // Fórmula ÚNICA, compartida con /api/caja/close (antes estaba escrita dos
@@ -619,7 +681,6 @@ export async function getCajaState(clinicId: string): Promise<CajaState> {
       recordedByName: fullName(w.recordedByUser),
     })),
     list: derived.list,
-    ...day,
   };
 }
 
@@ -691,8 +752,8 @@ export function buildCloseSummary(args: {
 }
 
 /** Historial de cortes CERRADOS (para la pestaña de historial). */
-export async function getCajaHistory(clinicId: string, limit = 30) {
-  const rows = await prisma.cashRegister.findMany({
+export async function getCajaHistory(clinicId: string, limit = 30, db: CajaDb = prisma) {
+  const rows = await db.cashRegister.findMany({
     where:   { clinicId, status: "CLOSED" },
     include: { operator: { select: { firstName: true, lastName: true } } },
     orderBy: { closedAt: "desc" },

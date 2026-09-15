@@ -3685,6 +3685,30 @@
       "savePermissionsCount": "Guardar permisos ({count})",
       "saveError": "Error al guardar permisos",
       "updated": "Permisos actualizados"
+    },
+    "sabinaPermissions": {
+      "button": "Sabina",
+      "title": "Sabina en nombre de {name}",
+      "intro": "Sabina actúa en nombre de quien le escribe. Aquí decides qué puede consultar y proponer cuando {name} le pide algo. Nunca puede más que {name}: si a {name} le quitas un permiso, Sabina lo pierde en ese mismo momento.",
+      "enabled": "Sabina activa para {name}",
+      "enabledHint": "Sabina consulta y propone en nombre de {name}, con los permisos de abajo.",
+      "disabledHint": "Sabina no hará nada en nombre de {name}, ni siquiera consultar. Si {name} le escribe, verá un aviso de que está apagada.",
+      "sameAsUser": "Lo mismo que {name}",
+      "sameAsUserHint": "Sabina puede todo lo que {name} puede y sigue sus cambios de permisos al instante. Desmárcalo para quitarle a Sabina permiso por permiso.",
+      "customHint": "Sabina puede solo lo marcado. Ojo: si más adelante le das a {name} un permiso nuevo, Sabina no lo recibe sola; tendrás que marcarlo aquí.",
+      "summary": "Sabina podrá usar {sabina} de los {user} permisos de {name}.",
+      "summaryOff": "Sabina está apagada para {name}: no usará ningún permiso.",
+      "userLacksBadge": "no lo tiene",
+      "userLacksLegend": "Las casillas grises marcadas «no lo tiene» están apagadas porque {name} tampoco tiene ese permiso, y Sabina nunca puede más que {name}. Para dárselo a Sabina, primero dáselo a {name} en Permisos.",
+      "userLacksTitle": "{name} no tiene este permiso, así que Sabina tampoco puede usarlo. Dáselo primero en Permisos.",
+      "emptyCustom": "Marca al menos un permiso. Si no quieres que Sabina haga nada, apágala arriba.",
+      "missingSql": "Falta aplicar sql/sabina-permisos.sql en la base. Hasta entonces Sabina puede todo lo que puede cada usuario y aquí no se puede guardar nada.",
+      "saveSameAsUser": "Guardar: lo mismo que el usuario",
+      "saveCount": "Guardar permisos de Sabina ({count})",
+      "saveDisabled": "Guardar: Sabina apagada",
+      "saveError": "Error al guardar los permisos de Sabina",
+      "loadError": "No se pudieron leer los permisos de Sabina",
+      "updated": "Permisos de Sabina actualizados"
     }
   },
   "procurement": {

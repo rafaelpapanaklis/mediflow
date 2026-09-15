@@ -23,6 +23,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { CATALOGO_SABINA, TOPE_FILAS, ejecutarHerramienta } from "../index";
+// Para «5b · LA FORMA DEL RESUMEN».
+import { parseSabinaMarkdown } from "@/components/sabina/sabina-core";
+import { filasConMonto } from "@/components/sabina/sabina-listas";
+import { lineasDeLista, pesos, pesosDeLista, recortar } from "../base";
+import { ausencias } from "../ausencias";
+import { buscarPaciente } from "../buscar-paciente";
+import { pacientesConDeuda } from "../pacientes-con-deuda";
+import { doctorNorte } from "./siembra";
 import { sumarDias } from "../fechas";
 import { crearBase, type Datos } from "./doble-base";
 import {
@@ -38,6 +46,7 @@ import {
   conPermisos,
 } from "./siembra";
 import { crearSabinaCtx, type SabinaCtx } from "../../tipos";
+import { ROLE_DEFAULT_PERMISSIONS } from "@/lib/auth/permissions";
 
 /** Parámetros con los que cada herramienta SÍ encuentra datos en la siembra. */
 function paramsConDatos(nombre: string): Record<string, unknown> {
@@ -377,51 +386,203 @@ test("parámetros basura se explican; no se consulta a ciegas", async () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════
+ * 5b · LA FORMA DEL RESUMEN — las listas llegan en líneas, no con comas
+ * ══════════════════════════════════════════════════════════════════════
+ * El 14-sep-2026 Rafael pidió «enlista los pacientes que deben» y le llegó una
+ * tira de nombres y montos separados por comas. El modelo copia la forma del
+ * `resumen`, así que aquí se fija esa forma: la PRIMERA línea contesta
+ * «¿cuántos/cuánto?» (y sigue valiendo sola), y debajo va una línea por elemento
+ * con «- », con el dinero en la misma forma en todas. Y se pasa por el MISMO
+ * parser de la pantalla, para demostrar que llega pintada como lista.
+ */
+
+/** Cabecera y líneas de un resumen. */
+function partir(resumen: string): { cabecera: string; lineas: string[] } {
+  const [cabecera, ...lineas] = resumen.split("\n");
+  return { cabecera, lineas };
+}
+
+test("forma: pacientes_con_deuda — una línea por paciente, de mayor a menor, y la pantalla la pinta como lista", async () => {
+  const r = await ejecutarHerramienta("pacientes_con_deuda", adminNorte(base()), {});
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  const { cabecera, lineas } = partir(r.resumen);
+  assert.equal(cabecera, "4 pacientes con saldo por $12,277, de los que $3,000 ya están vencidos. De mayor a menor:");
+  assert.deepEqual(lineas, [
+    "- Paula Restringida — $7,777",
+    "- Beto Munoz — $3,000",
+    "- Dora Sanchez — $1,000",
+    "- Carla Gomez — $500",
+  ]);
+  // Lo que vio Rafael: «…$7,777, Beto Munoz $3,000, …». Ya no.
+  assert.doesNotMatch(r.resumen, /\$[\d,.]+, [A-ZÁÉÍÓÚÑ]/);
+
+  const bloques = parseSabinaMarkdown(r.resumen);
+  assert.deepEqual(bloques.map((b) => b.kind), ["paragraph", "bullets"]);
+  const filas = filasConMonto((bloques[1] as { items: string[] }).items);
+  assert.deepEqual(
+    filas?.map((f) => [f.etiqueta, f.monto]),
+    [["Paula Restringida", "$7,777"], ["Beto Munoz", "$3,000"], ["Dora Sanchez", "$1,000"], ["Carla Gomez", "$500"]],
+  );
+});
+
+test("forma: pacientes_con_deuda — centavos en todas o en ninguna; un solo deudor es una frase, no una lista", () => {
+  const fila = (paciente: string, saldo: number, facturas = 1) => ({ paciente, folio: null, saldo, facturas });
+  const varios = pacientesConDeuda.resumir(
+    { deudores: recortar([fila("Paula", 7777), fila("Beto", 820.5, 3)]), totalAdeudado: 8597.5, totalVencido: 0, vencidoAlDia: "" },
+    {},
+  );
+  assert.deepEqual(partir(varios).lineas, ["- Paula — $7,777.00", "- Beto — $820.50 (3 facturas)"]);
+  assert.match(partir(varios).cabecera, /por \$8,597\.50\. De mayor a menor:$/);
+
+  const uno = pacientesConDeuda.resumir(
+    { deudores: recortar([fila("Paula", 7777)]), totalAdeudado: 7777, totalVencido: 0, vencidoAlDia: "" },
+    {},
+  );
+  assert.equal(uno, "1 paciente con saldo por $7,777. Es Paula con $7,777.");
+});
+
+test("forma: tratamientos_por_ingreso — el ranking va en líneas, no «Resina $4,000 (37%), Limpieza…»", async () => {
+  const r = await ejecutarHerramienta("tratamientos_por_ingreso", adminNorte(base()), paramsConDatos("tratamientos_por_ingreso"));
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  const { cabecera, lineas } = partir(r.resumen);
+  assert.match(cabecera, /^\$10,900 facturados en 4 facturas .* repartidos en 4 tratamientos\. De mayor a menor:$/);
+  assert.deepEqual(lineas, ["- Resina — $4,000 (37%)", "- Limpieza dental — $3,000 (28%)", "- Endodoncia — $3,000 (28%)", "- Blanqueamiento — $900 (8%)"]);
+  assert.doesNotMatch(r.resumen, /Los que más dejan/);
+});
+
+test("forma: citas_del_dia — la primera línea sigue contestando «¿cuántas?»; debajo, una cita por línea con la hora delante", async () => {
+  const r = await ejecutarHerramienta("citas_del_dia", adminNorte(base()), { fecha: HOY_N });
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  const { cabecera, lineas } = partir(r.resumen);
+  assert.match(cabecera, /^4 citas activas de la clínica el /);
+  assert.equal(lineas.length, r.datos.citas.filas.length);
+  for (const l of lineas) assert.match(l, /^- \d{2}:\d{2}/, l);
+  assert.ok(lineas.includes("- 07:30–08:15 Ana Perez — Urgencia (Hugo Salas, confirmada)"), lineas.join("\n"));
+
+  // Al doctor que pregunta por lo suyo no se le repite su nombre en cada línea.
+  const propio = await ejecutarHerramienta("citas_del_dia", doctorNorte(base()), { fecha: HOY_N });
+  assert.equal(propio.ok, true);
+  if (!propio.ok) return;
+  assert.ok(partir(propio.resumen).lineas.length > 1, propio.resumen);
+  for (const l of partir(propio.resumen).lineas) assert.doesNotMatch(l, /Hugo Salas/, l);
+});
+
+test("forma: inactivos, nuevos, reincidentes y búsqueda con varios — una línea por elemento", async () => {
+  const db = base();
+  const inactivos = await ejecutarHerramienta("pacientes_inactivos", adminNorte(db), {});
+  assert.equal(inactivos.ok, true);
+  if (inactivos.ok) {
+    // Las fechas de la siembra se mueven con «hoy»; los días sin venir, no.
+    const [primera, segunda, ...resto] = partir(inactivos.resumen).lineas;
+    assert.match(primera, /^- Irma Antigua — 600 días \(última visita \d{4}-\d{2}-\d{2}, tel\. 5511110005\)$/);
+    assert.match(segunda, /^- Ines Vieja — 400 días \(última visita \d{4}-\d{2}-\d{2}, tel\. 5511110001\)$/);
+    assert.equal(resto.length, 0);
+  }
+
+  const nuevos = await ejecutarHerramienta("pacientes_nuevos", adminNorte(db), paramsConDatos("pacientes_nuevos"));
+  assert.equal(nuevos.ok, true);
+  if (nuevos.ok) {
+    assert.match(partir(nuevos.resumen).cabecera, /^4 pacientes nuevos /);
+    assert.equal(partir(nuevos.resumen).lineas.length, 4);
+    for (const l of partir(nuevos.resumen).lineas) assert.match(l, /^- .+ — alta \d{4}-\d{2}-\d{2}/, l);
+  }
+
+  const rein = ausencias.resumir(
+    { desde: "a", hasta: "b", alcance: "clinica", ausencias: recortar([], 5), citasAgendadas: 10, tasaPct: 50, reincidentes: [{ paciente: "Beto", veces: 3 }, { paciente: "Ana", veces: 2 }] },
+    {} as any,
+  );
+  assert.deepEqual(partir(rein).lineas, ["- Beto — 3 veces", "- Ana — 2 veces"]);
+
+  const fila = (paciente: string, folio: string, telefono: string | null) =>
+    ({ paciente, folio, telefono, correo: null, edad: null, estado: "ACTIVE", ultimaVisita: null, proximaCita: null });
+  const busca = buscarPaciente.resumir({ termino: "Ana", resultados: recortar([fila("Ana Perez", "P0001", "55 1"), fila("Ana Ruiz", "P0009", null)]), busquedaDegradada: false }, {} as any);
+  assert.deepEqual(partir(busca).lineas, ["- Ana Perez (folio P0001, tel. 55 1)", "- Ana Ruiz (folio P0009)"]);
+});
+
+test("forma: una lista recortada lleva como mucho 50 líneas y dice que hay más", async () => {
+  const r = await ejecutarHerramienta("citas_del_dia", adminNorte(base()), { fecha: DIA_LLENO });
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  assert.equal(partir(r.resumen).lineas.length, TOPE_FILAS);
+});
+
+test("forma: el dinero siempre con la misma forma — nunca «$1,500.5»", () => {
+  assert.equal(pesos(1500), "$1,500");
+  assert.equal(pesos(1500.5), "$1,500.50");
+  assert.equal(pesos(1500, true), "$1,500.00");
+  const monto = pesosDeLista([1500, 820.5]);
+  assert.deepEqual([monto(1500), monto(820.5)], ["$1,500.00", "$820.50"]);
+  const entero = pesosDeLista([1500, 800]);
+  assert.deepEqual([entero(1500), entero(800)], ["$1,500", "$800"]);
+  // Un nombre con saltos de línea no rompe la lista en dos.
+  assert.equal(lineasDeLista(["Ana\nPérez", "Luis"], (n) => n), "\n- Ana Pérez\n- Luis");
+  // Con uno solo no hay lista.
+  assert.equal(lineasDeLista(["Ana"], (n) => n), "");
+});
+
+/* ══════════════════════════════════════════════════════════════════════
  * 6 · La puerta de entrada del motor
  * ══════════════════════════════════════════════════════════════════════ */
 
-test("🔴 crearSabinaCtx: sin sesión devuelve null, y un clinicId a medias también", () => {
-  // Es la línea que va a escribir el motor: `crearSabinaCtx(await getAuthContext())`.
+// Sin fila de ajustes de Sabina: lo de siempre. La intersección con lo que deja
+// el Super Admin tiene su propia suite (`npm run test:sabina-permisos-equipo`).
+const sinAjustes = { leerAjustes: async () => null };
+
+test("🔴 crearSabinaCtx: sin sesión devuelve null, y un clinicId a medias también", async () => {
+  // Es la línea que escribe el motor: `await crearSabinaCtx(await getAuthContext())`.
   // `getAuthContext()` devuelve null sin sesión, así que tiene que aceptarlo.
-  assert.equal(crearSabinaCtx(null), null);
-  assert.equal(crearSabinaCtx(undefined), null);
-  assert.equal(crearSabinaCtx({}), null);
-  assert.equal(crearSabinaCtx({ clinicId: "", userId: "u1", role: "ADMIN" }), null);
-  assert.equal(crearSabinaCtx({ clinicId: "  ", userId: "u1", role: "ADMIN" }), null);
-  assert.equal(crearSabinaCtx({ clinicId: "c1", userId: "", role: "ADMIN" }), null);
-  assert.equal(crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "" }), null);
+  // Y corta ANTES de leer nada de la base: aquí no se inyecta lector.
+  assert.equal(await crearSabinaCtx(null), null);
+  assert.equal(await crearSabinaCtx(undefined), null);
+  assert.equal(await crearSabinaCtx({}), null);
+  assert.equal(await crearSabinaCtx({ clinicId: "", userId: "u1", role: "ADMIN" }), null);
+  assert.equal(await crearSabinaCtx({ clinicId: "  ", userId: "u1", role: "ADMIN" }), null);
+  assert.equal(await crearSabinaCtx({ clinicId: "c1", userId: "", role: "ADMIN" }), null);
+  assert.equal(await crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "" }), null);
 });
 
-test("crearSabinaCtx: la zona sale de la CLÍNICA, y sin ella cae a México (no a UTC)", () => {
-  const conZona = crearSabinaCtx({
-    clinicId: "c1",
-    userId: "u1",
-    role: "ADMIN",
-    clinic: { timezone: "America/Cancun", category: "DENTAL" },
-  });
+test("crearSabinaCtx: la zona sale de la CLÍNICA, y sin ella cae a México (no a UTC)", async () => {
+  const conZona = await crearSabinaCtx(
+    {
+      clinicId: "c1",
+      userId: "u1",
+      role: "ADMIN",
+      clinic: { timezone: "America/Cancun", category: "DENTAL" },
+    },
+    sinAjustes,
+  );
   assert.equal(conZona.timezone, "America/Cancun");
   assert.equal(conZona.clinicCategory, "DENTAL");
 
   // Una zona vacía NO puede caer al runtime default (UTC en Vercel): ése es el
   // offset de -6 h que vaciaba la vista Mes. Cae al mismo default que `safeTz`.
   for (const clinic of [null, {}, { timezone: null }, { timezone: "" }]) {
-    const sinZona = crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "ADMIN", clinic } as any);
+    const sinZona = await crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "ADMIN", clinic } as any, sinAjustes);
     assert.equal(sinZona.timezone, "America/Mexico_City");
   }
 });
 
-test("crearSabinaCtx: `permissionsOverride` siempre llega como array", () => {
-  // Si llegara `undefined`, la comprobación de permiso caería al default del rol
-  // ignorando el override que sí está en la base — el mismo cinturón que pone
-  // `getAuthContext`.
-  assert.deepEqual(crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR" }).permissionsOverride, []);
+test("crearSabinaCtx: `permissionsOverride` siempre llega como lista LLENA con lo que el usuario puede", async () => {
+  // Si llegara `undefined` o `[]`, la comprobación de permiso caería al default
+  // del rol ignorando el override que sí está en la base. Ahora el ctx lleva el
+  // conjunto ya resuelto, así que nunca depende de ese «vacío = rol».
+  const doctor = await crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR" }, sinAjustes);
+  assert.deepEqual(doctor.permissionsOverride, ROLE_DEFAULT_PERMISSIONS.DOCTOR);
   assert.deepEqual(
-    crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR", permissionsOverride: null }).permissionsOverride,
-    [],
+    (await crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR", permissionsOverride: null }, sinAjustes))
+      .permissionsOverride,
+    ROLE_DEFAULT_PERMISSIONS.DOCTOR,
   );
   assert.deepEqual(
-    crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR", permissionsOverride: ["agenda.view"] })
-      .permissionsOverride,
+    (
+      await crearSabinaCtx(
+        { clinicId: "c1", userId: "u1", role: "DOCTOR", permissionsOverride: ["agenda.view"] },
+        sinAjustes,
+      )
+    ).permissionsOverride,
     ["agenda.view"],
   );
 });

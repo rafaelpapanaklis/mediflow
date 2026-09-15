@@ -19,6 +19,7 @@ import {
   comoAuthContext,
   dbDe,
   definirHerramienta,
+  lineasDeLista,
   plural,
   recortar,
   visorDe,
@@ -136,10 +137,13 @@ export const ausencias = definirHerramienta<ParamsAusencias, DatosAusencias>({
       return `Ninguna ausencia entre ${d.desde} y ${d.hasta}, sobre ${plural(d.citasAgendadas, "cita agendada", "citas agendadas")}.`;
     }
     const n = d.reincidentes.length;
+    // Los reincidentes son a quién hay que llamar: con dos o más, uno por línea.
+    // Las ausencias sueltas (hasta 50) se quedan en `datos`: casi siempre se
+    // pregunta cuántas, y listarlas aquí engordaría cada respuesta.
     const rein = n > 0
       ? n === 1
-        ? " 1 paciente falló más de una vez."
-        : ` ${n} pacientes fallaron más de una vez.`
+        ? ` 1 paciente falló más de una vez: ${d.reincidentes[0].paciente} (${d.reincidentes[0].veces} veces).`
+        : ` ${n} pacientes fallaron más de una vez:${lineasDeLista(d.reincidentes, (r) => `${r.paciente} — ${r.veces} veces`)}`
       : "";
     return `${plural(d.ausencias.total, "ausencia", "ausencias")} entre ${d.desde} y ${d.hasta}${tasa}.${rein}`;
   },

@@ -288,6 +288,10 @@ test("detecta cuando la respuesta manda a confirmar en una tarjeta o botón", ()
     "No hay problema, confírmala en la tarjeta.",
     "Dale a «Sí, dar de alta» y queda.",
     "Toca el botón de la tarjeta para agendarla.",
+    // Dinero (ws1-t2): el método de pago no puede tapar a la tarjeta de Sabina en la misma frase.
+    "Perfecto, confirma el cobro con tarjeta de débito en la tarjeta.",
+    "Te dejé el cobro de $500 con tarjeta listo: confírmalo en la tarjeta.",
+    "Para mandarle el aviso, toca «Sí, mandar el aviso».",
   ]) {
     assert.equal(mandaAConfirmarTarjeta(texto, false), true, texto);
   }
@@ -308,6 +312,8 @@ test("no confunde la tarjeta del cobro, una cita confirmada ni la frase honesta"
     "Tienes 3 citas confirmadas; 2 se pagaron con tarjeta de crédito.",
     "Los ingresos de tarjeta están abajo, detallados por semana.",
     "Revisa la tarjeta de ingresos del inicio: ahí está el total.",
+    "La MF-0042 se pagó con la tarjeta de crédito del paciente, el martes.",
+    "¿Le cobro los $500 con tarjeta o en efectivo?",
     "¿Me confirmas el motivo de la cita?",
     "Todavía no preparé ninguna propuesta, así que no hay ninguna tarjeta que confirmar.",
     "¿Te agendo a Juan el martes a las 10? Dime «sí, agéndala» y la preparo.",
@@ -352,4 +358,31 @@ test("el prompt dice si hay tarjeta en pantalla; un «sí» ya no se manda a una
   assert.match(con, /UNA propuesta sin confirmar: «Agendar a Ana el jueves»/);
   assert.match(con, /diles que usen el botón de su tarjeta/);
   assert.doesNotMatch(con, /NO hay ninguna tarjeta en pantalla/);
+});
+
+/* ── Cómo escribe: listas cuando toca, y no más caro ───────────────────── */
+
+test("el prompt pide lista para «quiénes/cuáles» y frase para «cuántos», en las dos dificultades", () => {
+  for (const dificultad of ["directa", "abierta"] as const) {
+    const prompt = construirSystemPrompt({ dificultad, hoy: "hoy" });
+    assert.match(prompt, /Si piden quiénes o cuáles y son varios, uno por línea con "- "/, dificultad);
+    assert.match(prompt, /cópialas tal cual/, dificultad);
+    assert.match(prompt, /Si piden cuántos o cuánto, o es uno solo, una frase/, dificultad);
+    // «en el chat»: la tarjeta de una factura SÍ trae tabla (la arma el servidor).
+    assert.match(prompt, /Sin tablas en el chat: se lee en el teléfono/, dificultad);
+  }
+  // «Dos o tres líneas» a secas era lo que apretaba ocho deudores en una línea con comas.
+  const directa = construirSystemPrompt({ dificultad: "directa", hoy: "hoy" });
+  assert.match(directa, /Dos o tres líneas, más la lista si la hay/);
+  assert.doesNotMatch(directa, /Dos o tres líneas\. /);
+});
+
+test("la sección «CÓMO ESCRIBES» no engorda: se paga en cada llamada al modelo", () => {
+  // Medido el 14-sep-2026: 410 caracteres (directa) y 428 (abierta), +197 y +173
+  // sobre la versión anterior. Si alguien la alarga, que sea a propósito.
+  for (const [dificultad, tope] of [["directa", 420], ["abierta", 440]] as const) {
+    const prompt = construirSystemPrompt({ dificultad, hoy: "hoy" });
+    const seccion = prompt.slice(prompt.indexOf("CÓMO ESCRIBES"));
+    assert.ok(seccion.length <= tope, `${dificultad}: ${seccion.length} caracteres`);
+  }
 });

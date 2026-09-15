@@ -105,6 +105,70 @@
 .antes { color: var(--text-3); }
 .flecha { color: var(--text-3); flex-shrink: 0; }
 
+/* Tabla de conceptos: importes a la derecha y en cifras tabulares, para que el
+   ojo pueda sumar la columna. Scroll propio en pantallas angostas. */
+.tablaCaja { overflow-x: auto; border-top: 1px solid var(--border-soft); }
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.tabla th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  padding: 6px 6px 4px 0;
+  white-space: nowrap;
+}
+.tabla td {
+  padding: 6px 6px 6px 0;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text-1);
+  vertical-align: top;
+}
+.tabla th[data-numerica="true"],
+.tabla td[data-numerica="true"] {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tabla th:last-child,
+.tabla td:last-child { padding-right: 0; }
+.pie {
+  margin: 0;
+  padding: 4px 0 2px;
+  border-top: 1px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pie div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.pie dt { color: var(--text-3); }
+.pie dd { margin: 0; min-width: 88px; text-align: right; color: var(--text-1); }
+.pie div[data-fuerte="true"] { font-size: 14px; font-weight: 700; }
+.pie div[data-fuerte="true"] dt { color: var(--text-1); }
+
+.enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  font-weight: 700;
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .avisos {
   margin: 0;
   padding: 0;

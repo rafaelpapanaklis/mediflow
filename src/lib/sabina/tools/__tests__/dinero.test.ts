@@ -154,7 +154,9 @@ test("deuda: ordenada de mayor a menor, con el mayor en el resumen", async () =>
     r.datos.deudores.filas.map((f) => f.saldo),
     [7777, 3000, 1000, 500],
   );
-  assert.match(r.resumen, /El mayor es Paula Restringida/);
+  // El mayor ya no va en una frase aparte: es la primera línea de la lista (ver
+  // «LA FORMA DEL RESUMEN» en contrato-herramientas.test.ts).
+  assert.equal(r.resumen.split("\n")[1], "- Paula Restringida — $7,777");
 });
 
 test("deuda: `saldoMinimo` estrecha, nunca ensancha", async () => {

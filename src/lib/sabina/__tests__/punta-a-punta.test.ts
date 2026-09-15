@@ -107,7 +107,12 @@ before(async () => {
   mock.module("@/lib/auth/two-factor-identity", {
     namedExports: { personaTieneDosFactores: async () => false, dosFactoresDeLaPersona: async () => false },
   });
-  const prismaDoble = new Proxy({}, { get: (_t, clave) => (estado.db as any)?.[clave] });
+  // Sin fila en sabina_user_permissions: Sabina con todo lo del usuario, lo de
+  // siempre. El recorte del Super Admin se prueba en `test:sabina-permisos-equipo`.
+  const sinAjustesSabina = { findFirst: async () => null };
+  const prismaDoble = new Proxy({}, {
+    get: (_t, clave) => (clave === "sabinaUserPermission" ? sinAjustesSabina : (estado.db as any)?.[clave]),
+  });
   mock.module("@/lib/prisma", { namedExports: { prisma: prismaDoble } });
 
   // Los where-builders reales; solo la sesión es de la prueba.
@@ -243,16 +248,35 @@ const LAS_DIEZ = [
   "tratamientos_por_ingreso",
 ];
 
-/** Las de agenda y pacientes (ws1-t2, ws1-t3): proponer_horarios lee; las otras cuatro solo proponen. */
-const LAS_NUEVAS = ["agendar_cita", "cancelar_cita", "proponer_horarios", "reagendar_cita", "registrar_paciente"];
+/**
+ * Las de agenda y pacientes (ws1-t2, ws1-t3) y las de dinero (ws1-t2):
+ * proponer_horarios y facturas_de_paciente leen; las demás solo proponen.
+ */
+const LAS_NUEVAS = [
+  "agendar_cita",
+  "avisar_saldo_whatsapp",
+  "cancelar_cita",
+  "cobrar_factura",
+  "crear_factura",
+  "facturas_de_paciente",
+  "proponer_horarios",
+  "reagendar_cita",
+  "registrar_paciente",
+];
 
-test("el modelo recibe las diez de consulta y las cinco de agenda y pacientes, con su esquema", async () => {
+/** Caja (ws1-t3): una sola consulta con tres vistas. Sabina no abre, no retira y no cierra. */
+const LAS_DE_CAJA = ["caja"];
+
+/** Las tres de CLÍNICO (ws1-t4): todas de solo lectura. */
+const LAS_DE_CLINICO = ["recetas", "estudios_del_paciente", "analisis_y_notas_de_estudio"];
+
+test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja y las tres de clínico, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
 
   const tools = estado.peticiones[0]?.tools ?? [];
-  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS].sort());
+  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS, ...LAS_DE_CAJA, ...LAS_DE_CLINICO].sort());
 
   const { SABINA_TOOLS } = await import("../engine-catalog");
   for (const t of tools) {

@@ -20,6 +20,7 @@ import { CHARGEABLE_INVOICE_STATUSES } from "@/components/dashboard/billing/invo
 import { buildInvoicePrintPdf } from "@/lib/invoices/print-pdf";
 import { sendWhatsAppLogged, type WhatsAppOutboundAttachment } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppBlockedError } from "@/lib/whatsapp/errors";
+import { buildPaymentNotice } from "@/lib/invoices/payment-notice";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
@@ -28,25 +29,6 @@ export const maxDuration = 60;
 // Cobrables SIN el borrador: un DRAFT todavía no es un saldo exigible y el
 // aviso le cobraría al paciente algo que la clínica no ha confirmado.
 const SENDABLE_STATUSES = CHARGEABLE_INVOICE_STATUSES.filter((s) => s !== "DRAFT");
-
-function fmtMXN(n: number): string {
-  const v = new Intl.NumberFormat("es-MX", {
-    style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 2,
-  }).format(Number.isFinite(n) ? n : 0);
-  return `${v} MXN`;
-}
-
-/** "Limpieza, Resina y 2 más" — resumen corto de los conceptos para el texto. */
-function summarizeItems(raw: unknown): string {
-  const items = Array.isArray(raw) ? (raw as any[]) : [];
-  const names = items
-    .map((it) => String(it?.description ?? it?.name ?? "").trim())
-    .filter((s) => s.length > 0);
-  if (names.length === 0) return "";
-  const shown = names.slice(0, 3);
-  const rest = names.length - shown.length;
-  return rest > 0 ? `${shown.join(", ")} y ${rest} más` : shown.join(", ");
-}
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const limited = rateLimit(req, 10);
@@ -114,15 +96,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
-  const patientName =
-    `${invoice.patient?.firstName ?? ""} ${invoice.patient?.lastName ?? ""}`.trim() || "Paciente";
-  const monto = fmtMXN(invoice.balance);
-  const conceptos = summarizeItems(invoice.items);
-  const body =
-    `Hola ${patientName}, te saludamos de ${clinic.name}. ` +
-    `Tienes un saldo pendiente de ${monto} de tu nota ${invoice.invoiceNumber}` +
-    `${conceptos ? ` (${conceptos})` : ""}. ` +
-    `Puedes pagar en la clínica o llamarnos al ${clinicPhone} para coordinarlo. ¡Gracias!`;
+  // El texto sale de lib/invoices/payment-notice: Sabina enseña ESE MISMO texto en
+  // su tarjeta antes de que alguien confirme el envío.
+  const { body, templateParams } = buildPaymentNotice({
+    patient: invoice.patient,
+    clinicName: clinic.name,
+    clinicPhone,
+    invoiceNumber: invoice.invoiceNumber,
+    balance: invoice.balance,
+    items: invoice.items,
+  });
 
   // Comprobante PDF — solo sale con la ventana abierta (en modo plantilla el
   // helper lo ignora). Best-effort: sin PDF el aviso sigue valiendo.
@@ -148,8 +131,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       to: patientPhone,
       body,
       kind: "payment_notice",
-      // Orden del spec dc_aviso_saldo: paciente, clínica, monto, teléfono.
-      templateParams: [patientName, clinic.name, monto, clinicPhone],
+      templateParams,
       attachment,
     });
   } catch (e) {

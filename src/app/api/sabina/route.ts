@@ -13,6 +13,7 @@ import {
 } from "@/lib/sabina/engine-historial";
 import { guardarPropuesta, propuestasDeConversacion } from "@/lib/sabina/engine-propuestas";
 import type { SabinaPropuestaVista } from "@/lib/sabina/engine-propuestas-core";
+import { FRASE_SABINA_APAGADA } from "@/lib/sabina/permisos-sabina";
 import { crearSabinaCtx } from "@/lib/sabina/tipos";
 
 /**
@@ -26,7 +27,8 @@ import { crearSabinaCtx } from "@/lib/sabina/tipos";
  * `ahora` es el reloj del servidor, para que la cuenta atrás de la tarjeta no
  * dependa del reloj del navegador.
  *
- * 401 sin sesión · 402 sin saldo · 429 pasado el límite · 503 si el modelo no
+ * 401 sin sesión · 403 `{ sabinaApagada: true }` si el Super Admin apagó a Sabina
+ * para este usuario · 402 sin saldo · 429 pasado el límite · 503 si el modelo no
  * responde. NUNCA un 500 mudo: el catch final también contesta con su motivo.
  *
  * Sabina vive AL LADO del Asistente IA actual; no lo toca ni lo sustituye.
@@ -44,9 +46,17 @@ export async function POST(req: NextRequest) {
     // El ctx de las herramientas: clínica, persona, rol, permisos y zona
     // horaria, TODO de la sesión. `null` si algo puede faltar — con
     // `clinicId: undefined` Prisma no filtra y se leerían todas las clínicas.
-    const sabinaCtx = crearSabinaCtx(ctx);
+    // Los permisos ya vienen recortados a lo que el Super Admin deja hacer a
+    // Sabina en nombre de este usuario (nunca más de lo que él puede).
+    const sabinaCtx = await crearSabinaCtx(ctx);
     if (!ctx || !sabinaCtx) {
       return NextResponse.json({ error: "No has iniciado sesión." }, { status: 401 });
+    }
+
+    /* ── 1b. Apagada para este usuario: ni consultar. Antes del freno y del
+          monedero, que no se gaste nada en decir que no ───────────────── */
+    if (sabinaCtx.sabina?.apagada) {
+      return NextResponse.json({ error: FRASE_SABINA_APAGADA, sabinaApagada: true }, { status: 403 });
     }
 
     /* ── 2. Freno de gasto por CLÍNICA (no por IP: el consultorio la

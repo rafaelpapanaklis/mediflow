@@ -293,7 +293,39 @@ export function hasPermission(
   // Cinturón por si algo llega casteado (`ctx.role as any`): un rol suelto no
   // es un usuario y no tiene override que consultar → se niega, no se adivina.
   if (typeof user !== "object" || user === null) return false;
-  return getEffectivePermissions({ role: user.role as Role, permissionsOverride: user.permissionsOverride }).includes(key);
+  if (!getEffectivePermissions({ role: user.role as Role, permissionsOverride: user.permissionsOverride }).includes(key)) {
+    return false;
+  }
+  const deSabina = permisosDeSabinaEnCurso();
+  return deSabina === null || deSabina.has(key);
+}
+
+/**
+ * Sabina — el recorte que viaja al endpoint.
+ *
+ * Cuando el doctor confirma una propuesta, la acción de Sabina llama al route
+ * handler REAL con la sesión del doctor (src/lib/sabina/engine-propuestas.ts),
+ * y ese handler comprueba el permiso del doctor, no el de Sabina. Mientras ese
+ * handler corre, `src/lib/sabina/recorte-en-curso.ts` deja aquí el conjunto de
+ * keys que Sabina puede en nombre de ese doctor —ya calculado por
+ * `permisosDeSabina` al armar el ctx, no se recalcula— y cada `hasPermission`
+ * exige además estar en él. Así un endpoint que pida una key que la acción no
+ * declaró tampoco le da a Sabina lo que el Super Admin le quitó.
+ *
+ * Fuera de esa llamada no hay nada registrado y esto devuelve `null`: ningún
+ * otro camino del panel cambia. Va por `globalThis` y no por un import porque
+ * este archivo lo cargan también componentes de cliente, y `AsyncLocalStorage`
+ * es solo de Node.
+ */
+export const CLAVE_PERMISOS_SABINA_EN_CURSO = Symbol.for("dalecontrol.sabina.permisos-en-curso");
+
+function permisosDeSabinaEnCurso(): ReadonlySet<string> | null {
+  const leer = (globalThis as Record<symbol, unknown>)[CLAVE_PERMISOS_SABINA_EN_CURSO];
+  if (typeof leer !== "function") return null;
+  const conjunto = (leer as () => unknown)();
+  if (conjunto === null || conjunto === undefined) return null; // fuera de una llamada de Sabina
+  // Algo raro en el almacén: se niega todo en vez de abrir.
+  return conjunto instanceof Set ? (conjunto as ReadonlySet<string>) : new Set<string>();
 }
 
 // ════════════════════════════════════════════════════════════════════

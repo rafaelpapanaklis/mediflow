@@ -13,6 +13,7 @@
  */
 import { ALL_PERMISSIONS, type PermissionKey } from "@/lib/auth/permissions";
 import { DEFAULT_TZ } from "@/lib/agenda/date-ranges";
+import { FRASE_SABINA_APAGADA, type CausaSinPermiso } from "./permisos-sabina";
 import type {
   SabinaDificultad,
   SabinaRastro,
@@ -288,6 +289,8 @@ export function validarLlamada(
 const AREA_POR_PREFIJO: Record<string, string> = {
   agenda: "la agenda",
   billing: "facturación",
+  // No es una key: es el candado de la bandera canAccessCaja (tools/candado-caja.ts).
+  caja: "Caja",
   patients: "los pacientes",
   medicalRecord: "el expediente clínico",
   prescription: "las recetas",
@@ -313,7 +316,13 @@ export function areaDePermiso(permiso: string): string {
  *   ❌ «No tengo datos de facturación»  → suena a que la clínica no facturó.
  *   ✅ «No tienes acceso a facturación, eso no te lo puedo contestar.»
  */
-export function fraseSinPermiso(permiso: string): string {
+export function fraseSinPermiso(permiso: string, causa: CausaSinPermiso = "usuario"): string {
+  // Dos razones distintas, y el doctor merece saber cuál: si ÉL sí tiene el
+  // permiso, «no tienes acceso» es falso y lo manda a pedir algo que ya tiene.
+  if (causa === "apagada") return FRASE_SABINA_APAGADA;
+  if (causa === "sabina") {
+    return `Tú sí tienes acceso a ${areaDePermiso(permiso)}, pero el Super Admin de la clínica no me deja consultarlo en tu nombre, así que eso no te lo puedo contestar.`;
+  }
   return `No tienes acceso a ${areaDePermiso(permiso)}, eso no te lo puedo contestar.`;
 }
 
@@ -332,6 +341,8 @@ export function fraseSinPermiso(permiso: string): string {
 export function garantizarAvisoSinPermiso(
   respuesta: string,
   permisos: readonly string[],
+  // Por qué faltó cada uno (ver `causaSinPermiso`). Sin él, «el usuario no lo tiene».
+  causaDe: (permiso: string) => CausaSinPermiso = () => "usuario",
 ): string {
   if (permisos.length === 0) return respuesta;
 
@@ -341,14 +352,22 @@ export function garantizarAvisoSinPermiso(
     texto.includes("no tengo permiso") ||
     texto.includes("sin permiso") ||
     texto.includes("no tienes permiso");
+  // Si fue el Super Admin quien se lo quitó a Sabina, un «no tienes acceso a
+  // facturación» NO cuenta como avisado: es la frase falsa. Tiene que nombrar
+  // al Super Admin.
+  const habla_del_super_admin = texto.includes("super admin") || texto.includes("superadmin");
 
   const faltantes = Array.from(new Set(permisos)).filter((p) => {
+    const causa = causaDe(p);
+    if (texto.includes(normalizar(fraseSinPermiso(p, causa)))) return false;
+    if (causa !== "usuario") return !(habla_del_super_admin && (causa === "apagada" || texto.includes(normalizar(areaDePermiso(p)))));
     if (!habla_de_acceso) return true;
     return !texto.includes(normalizar(areaDePermiso(p)));
   });
   if (faltantes.length === 0) return respuesta;
 
-  const avisos = faltantes.map((p) => fraseSinPermiso(p)).join(" ");
+  // Una sola vez la frase de «apagada», aunque falten varias áreas.
+  const avisos = Array.from(new Set(faltantes.map((p) => fraseSinPermiso(p, causaDe(p))))).join(" ");
   const base = respuesta.trim();
   return base ? `${base}\n\n${avisos}` : avisos;
 }
@@ -396,6 +415,34 @@ export const AVISO_PROPUESTA_PENDIENTE =
   "Todavía no hice nada: revisa la propuesta y confírmala con el botón si está bien.";
 
 /**
+ * Red determinista de `avisoObligatorio` (tipos.ts): si una herramienta dijo que
+ * su dato no se puede dar sin una advertencia y la respuesta no la trae (no
+ * contiene su `marca`), se añade al final. Existe por Caja: una pregunta
+ * «directa» se contesta en dos líneas, y «en caja hay $1,900» sin «es un
+ * cálculo» es cómo alguien cuadra mal una caja.
+ */
+export function garantizarAvisosObligatorios(
+  respuesta: string,
+  avisos: ReadonlyArray<{ frase: string; marca: string }>,
+): string {
+  // Sin respuesta no hay cifra que advertir. Y rellenarla con el aviso solo
+  // taparía el fallo: el motor da por fallida una respuesta vacía (503), y un
+  // «Ojo: es un cálculo» a secas no contesta nada.
+  if (!respuesta || respuesta.trim() === "") return respuesta;
+  const texto = normalizar(respuesta);
+  const vistos = new Set<string>();
+  const faltan: string[] = [];
+  for (const a of avisos) {
+    if (vistos.has(a.frase)) continue;
+    vistos.add(a.frase);
+    if (!texto.includes(normalizar(a.marca))) faltan.push(a.frase);
+  }
+  if (faltan.length === 0) return respuesta;
+  const base = respuesta.trim();
+  return base ? `${base}\n\n${faltan.join(" ")}` : faltan.join(" ");
+}
+
+/**
  * Red determinista de la confirmación: si hubo propuesta, la respuesta tiene que
  * dejar claro que falta confirmarla. Un «listo, ya quedó agendada» con una
  * tarjeta pendiente debajo es justo la mentira que este mecanismo existe para
@@ -439,14 +486,19 @@ const CONFIRMAR_ESO = /\bconfirm(ala|alo|alas|alos|arla|arlo|arlas|arlos|es)\b/;
 const TOCAR = /\b(toca|toque|tocar|pulsa|pulse|pulsar|presiona|presione|aprieta|oprime|dale|clic|click)\b/;
 /** Lo que, junto a «tarjeta», también manda a mirarla: «revisa la tarjeta de abajo». */
 const MIRAR = /\b(revisa|revisala|revisalo|abajo|debajo)\b/;
-/** «cobraste con tarjeta», «la tarjeta de ingresos del inicio»: no es la tarjeta de Sabina. */
-const OTRA_TARJETA = /\b(con|por|en|de) tarjetas?\b|\btarjetas? de (credito|debito|ingresos|cobros?|pagos?|fidelidad|presentacion|regalo)\b/;
+/**
+ * «cobraste con tarjeta», «la tarjeta de ingresos del inicio»: no es la tarjeta de Sabina.
+ * Se BORRA de la oración antes de buscar la de Sabina, no descarta la oración entera:
+ * desde que Sabina cobra (ws1-t2), el método de pago y la tarjeta de la propuesta
+ * caben en la misma frase («confirma el cobro con tarjeta de débito en la tarjeta»).
+ */
+const OTRA_TARJETA = /\b(con|por|en|de) tarjetas?\b|\btarjetas? de (credito|debito|ingresos|cobros?|pagos?|fidelidad|presentacion|regalo)\b/g;
 /**
  * Los botones de las tarjetas son «Sí, <infinitivo>» («Sí, agendar», «Sí, dar de
  * alta»…). Con el infinitivo: «dime "sí, agéndala" y la preparo» es una pregunta
  * de Sabina, no un botón.
  */
-const ETIQUETA_DE_BOTON = /["«“]\s*si,\s*(agendar|mover|cancelar|dar de alta|registrar|cobrar|crear|facturar|avisar)\b/;
+const ETIQUETA_DE_BOTON = /["«“]\s*si,\s*(agendar|mover|cancelar|dar de alta|registrar|cobrar|crear|facturar|avisar|mandar)\b/;
 /**
  * «No hay ninguna tarjeta que confirmar» es justo la frase honesta, no la mentira.
  * La negación tiene que ir SOBRE la tarjeta: «No hay problema, confírmala en la
@@ -472,7 +524,7 @@ export function mandaAConfirmarTarjeta(respuesta: string, huboAccion: boolean): 
       // «Sí, agendar», «Sí, dar de alta»: el nombre de un botón de tarjeta ya lo dice todo.
       if (ETIQUETA_DE_BOTON.test(oracion)) return true;
       const ordena = CONFIRMAR.test(oracion) || TOCAR.test(oracion);
-      const tarjeta = TARJETA.test(oracion) && !OTRA_TARJETA.test(oracion);
+      const tarjeta = TARJETA.test(oracion.replace(OTRA_TARJETA, " "));
       if (tarjeta && (ordena || BOTON.test(oracion))) return true;
       if (!huboAccion) return false;
       if (tarjeta && MIRAR.test(oracion)) return true;
@@ -544,7 +596,7 @@ export function garantizarSinTarjetaFantasma(
  */
 export function resultadoParaModelo(
   res: SabinaResultado,
-  opciones?: { fraseSinPermiso?: string },
+  opciones?: { fraseSinPermiso?: string; causa?: CausaSinPermiso },
 ): string {
   // Se estrecha por `motivo` (texto) y no por `ok` (booleano): ver la nota de
   // SabinaResultado en engine-types.ts — este repo compila con "strict": false.
@@ -553,6 +605,20 @@ export function resultadoParaModelo(
     return JSON.stringify({ ok: true, resumen: bien.resumen, datos: bien.datos });
   }
   const mal = res as SabinaResultadoFallo;
+  const causa = opciones?.causa ?? "usuario";
+  if (mal.motivo === "sin_permiso" && causa !== "usuario") {
+    // El usuario SÍ tiene el permiso: el recorte es de Sabina. Si el modelo dice
+    // «no tienes acceso», miente — por eso la orden lo prohíbe con todas las letras.
+    return JSON.stringify({
+      ok: false,
+      motivo: "sin_permiso",
+      permiso: mal.permiso,
+      instruccion:
+        `EL USUARIO SÍ TIENE ESTE PERMISO, pero el Super Admin de la clínica no deja a Sabina usarlo en su nombre. ` +
+        `NO digas que el usuario no tiene acceso ni lo mandes a pedir el permiso. No lo intentes por otro camino ni lo omitas en silencio: ` +
+        `DI textualmente "${opciones?.fraseSinPermiso ?? fraseSinPermiso(mal.permiso, causa)}"`,
+    });
+  }
   if (mal.motivo === "sin_permiso" && opciones?.fraseSinPermiso) {
     // Una ACCIÓN sin permiso no es «no te lo puedo contestar»: es «no puedes
     // hacerlo». La frase la da la acción (engine-acciones.ts).
@@ -619,7 +685,20 @@ export function hoyParaPrompt(instante: Date, timezone: string): string {
   }
 }
 
-/** El prompt del sistema. Es donde viven las reglas 3, 5 y 6 del contrato. */
+/**
+ * El prompt del sistema. Es donde viven las reglas 3, 5 y 6 del contrato.
+ *
+ * «CÓMO ESCRIBES» decía «dos o tres líneas» y «nada de tablas» sin más, y con eso
+ * una lista de ocho deudores salía apretada en una línea separada por comas (lo
+ * vivió Rafael el 14-sep-2026). La forma de la lista la ponen el `resumen` de cada
+ * herramienta (`lineasDeLista`) y la pantalla (`parseSabinaMarkdown`); aquí solo va
+ * CUÁNDO usarla, en pocas palabras: esto se paga en cada llamada al modelo.
+ *
+ * «Sin tablas EN EL CHAT»: desde que Sabina factura, la tarjeta de la propuesta sí
+ * trae una tabla de conceptos, pero la arma el servidor, no el modelo. Sin «en el
+ * chat» la regla podía leerse como si también valiera para la tarjeta. Los once
+ * caracteres salen de «pesos mexicanos» → «pesos» (México ya va en la primera línea).
+ */
 export function construirSystemPrompt(opciones: {
   dificultad: SabinaDificultad;
   hoy: string;
@@ -660,6 +739,7 @@ Si una herramienta vuelve con "sin_permiso", NO puedes omitir esa parte en silen
 - MAL: "No tengo datos de facturación." (el doctor entiende que la clínica no facturó nada)
 - BIEN: "No tienes acceso a facturación, eso no te lo puedo contestar."
 Dilo con esas palabras, ANTES de cualquier conclusión, y sigue contestando lo que sí puedas. Si te faltó una pieza, avisa de que tu respuesta va sobre medio cuadro: un consejo sobre datos incompletos, dicho con seguridad, es peor que no contestar.
+Hay dos razones distintas y NO son intercambiables: que el usuario no tenga el permiso, o que el usuario sí lo tenga y el Super Admin no te deje usarlo en su nombre. Usa SIEMPRE la frase exacta que te da la herramienta; nunca le digas "no tienes acceso" a quien sí lo tiene.
 
 PRIMERO EL HECHO, DESPUÉS LA OPINIÓN
 Separa siempre las dos cosas, y en este orden:
@@ -673,7 +753,7 @@ ${
 Solo lees. No agendas citas, no cobras, no editas expedientes, no mandas mensajes. Si te lo piden, di que no puedes hacerlo y ofrece el dato que sí tienes.
 `
     : `LO QUE PUEDES PREPARAR, Y CÓMO
-Además de consultar, puedes preparar esto: ${acciones.join("; ")}. Nada más: no cobras, no editas expedientes, no mandas mensajes.
+Además de consultar, puedes preparar esto: ${acciones.join("; ")}. Nada más: lo que no está en esa lista no lo haces (no editas expedientes, no timbras CFDI, no cancelas ni reembolsas facturas).
 - Tus herramientas de acción NO hacen nada. Preparan una PROPUESTA que el usuario ve en una tarjeta y confirma con un botón. Hasta que la confirme, no pasó nada.
 - Después de proponer, di en una o dos frases qué propones y que lo confirme en la tarjeta. NUNCA digas "ya quedó", "listo" ni "ya lo hice".
 - Un "sí" escrito en el chat NO confirma nada: lo único que confirma es el botón de una tarjeta.
@@ -683,13 +763,18 @@ ${lineaDelSi}
 - Si una acción vuelve con "sin_permiso", dilo con la frase que te da la herramienta.
 `
 }
+LO CLÍNICO: LÍMITES QUE NO SE NEGOCIAN
+- No emites, firmas ni anulas recetas, y no redactas una para que alguien la copie: crear una receta en este sistema ES emitirla, con QR válido para surtir en farmacia. Si te piden recetar algo, dilo así: "eso lo tienes que hacer tú en el modal de receta", y no ofrezcas ningún atajo.
+- No subes ni finges subir archivos o radiografías: no puedes recibir un archivo, así que jamás digas "listo, ya lo guardé". Si te piden subir algo, di que se sube desde la ficha del paciente o desde /dashboard/xrays.
+- No lanzas un análisis de radiografía nuevo ni lo repites: solo puedes leer el análisis que YA está guardado.
+- Si te preguntan por interacciones o contraindicaciones entre medicamentos ("¿puedo dar ibuprofeno con warfarina?"), NUNCA contestes con lo que sabes de memoria: no tienes esa herramienta todavía. Dilo así, y explica que ese chequeo lo hace el sistema desde la receta y queda guardado con modelo y fecha — una respuesta suelta del chat no deja evidencia y es un acto médico.
 CÓMO ESCRIBES
 ${
   opciones.dificultad === "abierta"
     ? "Es una pregunta abierta: consulta lo que necesites, cruza los datos y razona. Termina con lo medido primero y tus sugerencias después, separadas y claras."
-    : "Es una pregunta directa: contesta con el dato y poco más. Dos o tres líneas. Sin rodeos y sin resumen ejecutivo."
+    : "Es una pregunta directa: contesta con el dato y poco más. Dos o tres líneas, más la lista si la hay. Sin rodeos y sin resumen ejecutivo."
 }
-Nada de markdown pesado ni tablas: esto se lee en un panel. Cifras en pesos mexicanos.`;
+Si piden quiénes o cuáles y son varios, uno por línea con "- " (si el resumen ya trae esas líneas, cópialas tal cual). Si piden cuántos o cuánto, o es uno solo, una frase. Sin tablas en el chat: se lee en el teléfono. Cifras en pesos, con la forma del resumen.`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

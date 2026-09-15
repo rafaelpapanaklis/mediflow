@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { AlertTriangle, CloudOff, Hourglass, Wallet, LogIn, RotateCcw } from "lucide-react";
+import { AlertTriangle, CloudOff, Hourglass, Wallet, LogIn, PowerOff, RotateCcw } from "lucide-react";
 import { SABINA_ERROR_COPY, type SabinaErrorKind } from "./sabina-core";
 import styles from "./sabina-widgets.module.css";
 
 const ICON_BY_KIND: Record<SabinaErrorKind, typeof AlertTriangle> = {
   auth: LogIn,
+  apagada: PowerOff,
   no_balance: Wallet,
   rate_limited: Hourglass,
   plan_limit: Hourglass,

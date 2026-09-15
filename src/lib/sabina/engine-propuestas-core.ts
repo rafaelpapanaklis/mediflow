@@ -82,6 +82,83 @@ export interface ResultadoVista {
   /** `sin_permiso` · `conflicto` · `invalido` · `error` · `cambio` · `caducada`… */
   tipo: string;
   frase: string;
+  /** Lo que se creó, para abrirlo: «Ver comprobante MF-0043». Solo rutas de la propia app. */
+  enlace?: SabinaEnlace;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TABLA Y ENLACE — lo que «etiqueta: valor» no sabe decir
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Una tabla dentro de la tarjeta. Existe porque tres conceptos con precio,
+ * cantidad y descuento, escritos como filas «etiqueta: valor», se leen como una
+ * sopa y nadie comprueba el total antes de confirmar. Es genérica a propósito:
+ * la factura trae conceptos; una receta, medicamentos.
+ *
+ * Todo viaja ya formateado en texto (montos con signo de pesos): la pantalla no
+ * hace cuentas, pinta lo que la acción calculó, que es lo que se va a guardar.
+ */
+export interface SabinaTabla {
+  columnas: Array<{ titulo: string; /** Alinea a la derecha (importes, cantidades). */ numerica?: boolean }>;
+  filas: string[][];
+  /** Totales bajo la tabla, alineados a la derecha. `fuerte` para el que se cobra. */
+  pie?: Array<{ etiqueta: string; valor: string; fuerte?: boolean }>;
+}
+
+export interface SabinaEnlace {
+  texto: string;
+  /** Ruta de la propia app (`/api/…` o `/dashboard/…`). Nunca una URL con dominio. */
+  url: string;
+}
+
+const TABLA_MAX_COLUMNAS = 6;
+const TABLA_MAX_FILAS = 40;
+const TABLA_MAX_CELDA = 200;
+
+function textoCorto(v: unknown, max = TABLA_MAX_CELDA): string | null {
+  return typeof v === "string" ? v.slice(0, max) : null;
+}
+
+/**
+ * Lee una tabla a la defensiva (viene de la base, o del JSON del servidor). Una
+ * tabla que no cuadra —filas de otro ancho, columnas vacías— se descarta entera:
+ * pintar media tabla desalineada es peor que no pintarla, porque los importes
+ * caerían bajo la columna que no es.
+ */
+export function leerTabla(raw: unknown): SabinaTabla | null {
+  const t = raw as { columnas?: unknown; filas?: unknown; pie?: unknown } | null;
+  if (!t || typeof t !== "object" || !Array.isArray(t.columnas) || !Array.isArray(t.filas)) return null;
+  const columnas = t.columnas
+    .slice(0, TABLA_MAX_COLUMNAS)
+    .map((c: any) => (c && typeof c.titulo === "string" ? { titulo: c.titulo.slice(0, 40), ...(c.numerica === true ? { numerica: true } : {}) } : null));
+  if (columnas.length === 0 || columnas.some((c) => c === null) || t.columnas.length > TABLA_MAX_COLUMNAS) return null;
+  const filas: string[][] = [];
+  for (const f of t.filas.slice(0, TABLA_MAX_FILAS)) {
+    if (!Array.isArray(f) || f.length !== columnas.length) return null;
+    const celdas = f.map((c) => textoCorto(c));
+    if (celdas.some((c) => c === null)) return null;
+    filas.push(celdas as string[]);
+  }
+  const pie = Array.isArray(t.pie)
+    ? t.pie
+        .filter((p: any) => p && typeof p.etiqueta === "string" && typeof p.valor === "string")
+        .slice(0, 6)
+        .map((p: any) => ({ etiqueta: p.etiqueta.slice(0, 60), valor: p.valor.slice(0, 60), ...(p.fuerte === true ? { fuerte: true } : {}) }))
+    : [];
+  return { columnas: columnas as SabinaTabla["columnas"], filas, ...(pie.length ? { pie } : {}) };
+}
+
+/**
+ * Un enlace del resultado, solo si apunta DENTRO de la app. La tarjeta lo pinta
+ * como `<a href>`: una ruta que llegara como `javascript:` o `https://otro.sitio`
+ * desde una fila de base manipulada sería un enlace del panel hacia fuera.
+ */
+export function leerEnlace(raw: unknown): SabinaEnlace | null {
+  const e = raw as { texto?: unknown; url?: unknown } | null;
+  if (!e || typeof e !== "object" || typeof e.texto !== "string" || typeof e.url !== "string") return null;
+  if (!/^\/(api|dashboard)\/[A-Za-z0-9_\-./]*$/.test(e.url) || e.url.includes("..") || e.url.includes("//")) return null;
+  return { texto: e.texto.slice(0, 80), url: e.url };
 }
 
 export interface SabinaPropuestaVista {
@@ -93,6 +170,7 @@ export interface SabinaPropuestaVista {
     frase: string;
     detalles: Array<{ etiqueta: string; valor: string; antes?: string }>;
     avisos: string[];
+    tabla?: SabinaTabla;
   };
   deshacer: { reversible: true; como: string } | { reversible: false; aviso: string };
   /** Epoch ms del servidor. */
@@ -163,10 +241,12 @@ export function vistaDePropuesta(
 
   if (resultadoEv) {
     const r = cambios(resultadoEv);
+    const enlace = leerEnlace(r.enlace);
     resultado = {
       ok: r.ok === true,
       tipo: typeof r.tipo === "string" ? r.tipo : r.ok === true ? "hecha" : "error",
       frase: typeof r.frase === "string" ? r.frase : "",
+      ...(enlace ? { enlace } : {}),
     };
     estado = resultado.ok ? "hecha" : "fallida";
   } else if (final?.action === EVENTO.confirmar) {
@@ -179,6 +259,7 @@ export function vistaDePropuesta(
     estado = "pendiente";
   }
 
+  const tabla = leerTabla(tarjeta.tabla);
   return {
     id,
     accion: c.accion,
@@ -188,6 +269,7 @@ export function vistaDePropuesta(
       frase: tarjeta.frase,
       detalles: Array.isArray(tarjeta.detalles) ? tarjeta.detalles : [],
       avisos: Array.isArray(tarjeta.avisos) ? tarjeta.avisos : [],
+      ...(tabla ? { tabla } : {}),
     },
     deshacer,
     creadaEn: ms(propuesta.createdAt),

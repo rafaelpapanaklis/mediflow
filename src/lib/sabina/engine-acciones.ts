@@ -50,8 +50,12 @@
  */
 import type { z } from "zod";
 import type { PermissionKey } from "@/lib/auth/permissions";
+import { leerTabla, type SabinaEnlace, type SabinaTabla } from "./engine-propuestas-core";
+import { FRASE_SABINA_APAGADA, type CausaSinPermiso } from "./permisos-sabina";
 import { definirHerramienta } from "./tools/base";
 import type { SabinaCtx, SabinaTool } from "./tipos";
+
+export type { SabinaEnlace, SabinaTabla };
 
 /* ═══════════════════════════════════════════════════════════════════════
    LO QUE VE EL USUARIO ANTES DE CONFIRMAR
@@ -74,6 +78,8 @@ export interface SabinaTarjeta {
   detalles: SabinaDetalle[];
   /** Lo que hay que saber ANTES de confirmar: «El paciente no recibirá aviso». */
   avisos: string[];
+  /** Conceptos con sus columnas y totales (una factura, una receta). Ver `SabinaTabla`. */
+  tabla?: SabinaTabla;
 }
 
 /**
@@ -89,8 +95,12 @@ export type SabinaDeshacer =
    ═══════════════════════════════════════════════════════════════════════ */
 
 export type SabinaPreparacion<D> =
-  /** Todo resuelto: se propone. */
-  | { tipo: "propuesta"; datos: D; tarjeta: SabinaTarjeta }
+  /**
+   * Todo resuelto: se propone. `deshacer` solo si ESTA propuesta se deshace distinto
+   * que la acción en general (una factura que nace en borrador se elimina; una que
+   * nace pendiente solo se anula): si no, la tarjeta diría algo falso.
+   */
+  | { tipo: "propuesta"; datos: D; tarjeta: SabinaTarjeta; deshacer?: SabinaDeshacer }
   /** Falta un dato o hay ambigüedad (dos «María García»): Sabina pregunta, no elige. */
   | { tipo: "aclarar"; pregunta: string; opciones?: string[] }
   /** Una regla de rol que no es la key (p. ej. un DOCTOR no cancela). */
@@ -133,7 +143,8 @@ export interface LlaveEscritura {
 }
 
 export type SabinaEjecucion =
-  | { ok: true; frase: string; entidad?: { tipo: string; id: string } }
+  /** `enlace`: lo creado, para abrirlo desde la tarjeta (el comprobante). Solo rutas de la app. */
+  | { ok: true; frase: string; entidad?: { tipo: string; id: string }; enlace?: SabinaEnlace }
   | { ok: false; tipo: "sin_permiso" | "conflicto" | "invalido" | "error"; frase: string };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -202,6 +213,7 @@ export type DatosDeAccion =
       frase: string;
       detalles: SabinaDetalle[];
       avisos: string[];
+      tabla?: SabinaTabla;
       se_puede_deshacer: boolean;
       instruccion: string;
     }
@@ -227,8 +239,18 @@ export function propuestaDeDatos(datos: unknown): PropuestaPreparada | null {
   return datos && typeof datos === "object" ? PROPUESTA_DE_DATOS.get(datos) ?? null : null;
 }
 
-/** «No tienes permiso para agendar citas. Lo da el administrador en Equipo.» */
-export function fraseSinPermisoAccion(queHace: string): string {
+/**
+ * «No tienes permiso para agendar citas. Lo da el administrador en Equipo.»
+ *
+ * Con `causa` distinta de "usuario" el doctor SÍ tiene el permiso: decirle «no
+ * tienes permiso» sería mentirle y mandarlo a pedir algo que ya tiene. Lo que
+ * pasa es que el Super Admin no deja a Sabina hacerlo en su nombre.
+ */
+export function fraseSinPermisoAccion(queHace: string, causa: CausaSinPermiso = "usuario"): string {
+  if (causa === "apagada") return FRASE_SABINA_APAGADA;
+  if (causa === "sabina") {
+    return `Tú sí puedes ${queHace}, pero el Super Admin de la clínica no me deja hacerlo en tu nombre. Puedes hacerlo tú desde el panel, o pedirle que me lo active en Equipo.`;
+  }
   return `No tienes permiso para ${queHace}. Ese permiso lo da el administrador de la clínica en Equipo.`;
 }
 
@@ -236,6 +258,14 @@ const INSTRUCCION_PROPUESTA =
   "TODAVÍA NO SE HIZO NADA. El usuario ve esta propuesta en una tarjeta con un botón para confirmarla o descartarla. " +
   "Dile en una o dos frases qué propones y que lo confirme en la tarjeta. NUNCA digas que ya quedó hecho. " +
   "Un «sí» escrito en el chat no ejecuta nada: si te lo escribe, dile que use el botón.";
+
+/**
+ * Solo cuando la tarjeta trae tabla (los conceptos de una factura). El prompt dice
+ * «uno por línea» para las listas y «sin tablas en el chat»; con los conceptos a la
+ * vista en `tabla`, nada le decía que ya se ven en la tarjeta y podía repetirlos en
+ * el chat. Aquí se le dice, y solo se paga en el turno que propone con tabla.
+ */
+const INSTRUCCION_TABLA = "Los conceptos ya salen en la tabla de la tarjeta: no los copies en el chat, ni en tabla ni en lista.";
 
 /**
  * La herramienta que el motor ofrece al modelo por cada acción.
@@ -272,26 +302,36 @@ export function herramientaDeAccion<P, D>(accion: SabinaAccion<P, D>): SabinaToo
             throw new Error(`datos_de_propuesta_no_sobreviven_a_json (${accion.nombre})`);
           }
           const huella = await accion.huella(ctx, releidos.data);
+          // Una tabla que no cuadra (filas de otro ancho) o que la pantalla recortaría
+          // (demasiadas filas, celdas larguísimas) es un fallo de la acción: se lanza, en
+          // vez de proponer con una tarjeta que calla conceptos del total que enseña.
+          const tabla = prep.tarjeta.tabla === undefined ? null : leerTabla(prep.tarjeta.tabla);
+          if (prep.tarjeta.tabla !== undefined && (!tabla || JSON.stringify(tabla.filas) !== JSON.stringify(prep.tarjeta.tabla.filas))) {
+            throw new Error(`tabla_de_tarjeta_invalida (${accion.nombre})`);
+          }
           const tarjeta: SabinaTarjeta = {
             frase: prep.tarjeta.frase,
             detalles: Array.isArray(prep.tarjeta.detalles) ? prep.tarjeta.detalles : [],
             avisos: Array.isArray(prep.tarjeta.avisos) ? prep.tarjeta.avisos : [],
+            ...(tabla ? { tabla } : {}),
           };
+          const deshacer = prep.deshacer ?? accion.deshacer;
           const salida: DatosDeAccion = {
             estado: "propuesta_sin_confirmar",
             titulo: accion.titulo,
             frase: tarjeta.frase,
             detalles: tarjeta.detalles,
             avisos: tarjeta.avisos,
-            se_puede_deshacer: accion.deshacer.reversible,
-            instruccion: INSTRUCCION_PROPUESTA,
+            ...(tabla ? { tabla } : {}),
+            se_puede_deshacer: deshacer.reversible,
+            instruccion: tabla ? `${INSTRUCCION_PROPUESTA} ${INSTRUCCION_TABLA}` : INSTRUCCION_PROPUESTA,
           };
           PROPUESTA_DE_DATOS.set(salida, {
             accion: accion.nombre,
             titulo: accion.titulo,
             boton: accion.boton,
             queHace: accion.queHace,
-            deshacer: accion.deshacer,
+            deshacer,
             tarjeta,
             datos: almacenados,
             huella: String(huella ?? ""),

@@ -11,6 +11,7 @@ import {
   construirSystemPrompt,
   debeEscalar,
   garantizarAvisoPropuesta,
+  garantizarAvisosObligatorios,
   garantizarAvisoSinPermiso,
   garantizarAvisoSinPermisoAccion,
   garantizarSinTarjetaFantasma,
@@ -42,6 +43,7 @@ import {
 } from "./engine-acciones";
 import { SABINA_MAX_PROPUESTAS_POR_TURNO } from "./engine-propuestas-core";
 import { CandadoNoDisponible, EscrituraBloqueada, soloLectura } from "./engine-solo-lectura";
+import { FRASE_SABINA_APAGADA, causaSinPermiso, type CausaSinPermiso } from "./permisos-sabina";
 
 /**
  * Sabina — el bucle.
@@ -180,7 +182,7 @@ export async function ejecutarHerramienta(
 /* ── El bucle ─────────────────────────────────────────────────────────── */
 
 export interface SabinaEjecutarInput {
-  /** De `crearSabinaCtx(await getAuthContext())`: clínica, persona, rol, permisos y zona. */
+  /** De `await crearSabinaCtx(await getAuthContext())`: clínica, persona, rol, permisos (ya recortados para Sabina) y zona. */
   ctx: SabinaCtx;
   pregunta: string;
   /** Turnos previos de la conversación guardada, ya en orden. */
@@ -210,6 +212,27 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const limite = arranque + presupuesto;
 
   const dificultad: SabinaDificultad = clasificarDificultad(input.pregunta);
+
+  // Apagada para este usuario: ni una llamada al modelo. Las herramientas ya
+  // dirían «sin permiso» a todo (el ctx no tiene ninguno), pero el modelo podría
+  // contestar de memoria con el historial, y cada vuelta se cobra al monedero.
+  // El endpoint corta antes; esto es para quien llame al motor por otro lado.
+  if (input.ctx.sabina?.apagada) {
+    return {
+      respuesta: FRASE_SABINA_APAGADA,
+      herramientasUsadas: [],
+      tokens: { entrada: 0, salida: 0 },
+      consumo: [],
+      modelo: modeloPara(dificultad),
+      dificultad,
+      escalado: false,
+      rondas: 0,
+      sinPermiso: [],
+      propuestas: [],
+      fallo: false,
+    };
+  }
+
   // El «hoy» de la CLÍNICA, no el del proceso (UTC en Vercel): a las 19:00 de
   // México el servidor ya va en el día siguiente, y el modelo pediría las citas
   // de mañana.
@@ -232,6 +255,8 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const herramientasUsadas: string[] = [];
   const sinPermiso: string[] = [];
   const sinPermisoAcciones: Array<{ frase: string; queHace: string; permiso: string }> = [];
+  // Advertencias que la respuesta tiene que llevar (ver `avisoObligatorio` en tipos.ts).
+  const avisosObligatorios: Array<{ frase: string; marca: string }> = [];
   const propuestas: PropuestaPreparada[] = [];
   const tarjetaPendiente = typeof input.tarjetaPendiente === "string" && input.tarjetaPendiente.trim() ? input.tarjetaPendiente : null;
   // Para la red de la tarjeta que no existe: si corrió alguna acción en el turno,
@@ -239,6 +264,9 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   let huboAccion = false;
   let ultimaAccion: DesenlaceAccion | null = null;
   let corregido = false;
+  // Lo que el modelo dijo antes de la vuelta de corrección: si esa vuelta no llega a
+  // contestar, vuelve para que la red de abajo lo sustituya por la verdad.
+  let antesDeCorregir: string | null = null;
   let tokensEntrada = 0;
   let tokensSalida = 0;
   const consumo: SabinaConsumo[] = [];
@@ -349,10 +377,14 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         if (!herramientasUsadas.includes(nombre)) herramientasUsadas.push(nombre);
         const fallado = resultado as SabinaResultadoFallo;
         let fraseSinPermiso: string | undefined;
+        let causa: CausaSinPermiso | undefined;
         let sustituyeOtra = false;
         if (resultado.ok !== true && fallado.motivo === "sin_permiso") {
+          // Solo la frase: quién no tenía el permiso, el usuario o Sabina. La
+          // decisión ya la tomó el runner con el ctx recortado.
+          causa = causaSinPermiso(input.ctx, fallado.permiso);
           if (accion) {
-            fraseSinPermiso = fraseSinPermisoAccion(accion.queHace);
+            fraseSinPermiso = fraseSinPermisoAccion(accion.queHace, causa);
             sinPermisoAcciones.push({ frase: fraseSinPermiso, queHace: accion.queHace, permiso: accion.permiso });
           } else if (!sinPermiso.includes(fallado.permiso)) {
             sinPermiso.push(fallado.permiso);
@@ -383,6 +415,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         // `datos.omitidas` las secciones que el usuario no puede ver. También
         // entran a la red de la regla 3: si el modelo se calla la parte de
         // dinero, el aviso lo pone el motor.
+        if (resultado.ok === true && validacion.tool.avisoObligatorio) {
+          const aviso = validacion.tool.avisoObligatorio((resultado as { datos: unknown }).datos);
+          if (aviso) avisosObligatorios.push(aviso);
+        }
         const omitidas = resultado.ok === true ? (resultado.datos as { omitidas?: unknown })?.omitidas : null;
         if (Array.isArray(omitidas)) {
           for (const o of omitidas) {
@@ -396,10 +432,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
           tool_use_id: llamada.id,
           content: sustituyeOtra
             ? JSON.stringify({
-                ...JSON.parse(resultadoParaModelo(resultado, { fraseSinPermiso })),
+                ...JSON.parse(resultadoParaModelo(resultado, { fraseSinPermiso, causa })),
                 sustituye: "Esta propuesta SUSTITUYE a la que preparaste antes en este turno: el usuario solo verá esta. Una propuesta a la vez.",
               })
-            : resultadoParaModelo(resultado, { fraseSinPermiso }),
+            : resultadoParaModelo(resultado, { fraseSinPermiso, causa }),
         });
       }
 
@@ -426,6 +462,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       limite - ahora() > SABINA_MARGEN_CORRECCION_MS
     ) {
       corregido = true;
+      antesDeCorregir = respuesta;
       messages.push({ role: "assistant", content: respuesta });
       messages.push({ role: "user", content: CORRECCION_SIN_TARJETA });
       respuesta = null;
@@ -449,6 +486,18 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
     modelo = modeloPara("abierta");
   }
 
+  // La vuelta de corrección se quedó sin contestar (se acabó el tiempo a media vuelta o
+  // falló esa llamada). Sin esto el turno salía vacío y como `fallo`: un 503 con los
+  // tokens ya cobrados, cuando lo que había que decir ya se sabe. La respuesta que se
+  // corrigió vuelve y `garantizarSinTarjetaFantasma` la cambia por la verdad (la
+  // pregunta de la acción, su porqué o «no hay ninguna tarjeta que confirmar»).
+  // Solo SIN propuesta: con una, esa red no toca el texto, y el viejo (escrito antes de
+  // correr ninguna herramienta) podría narrar otra cosa que la tarjeta real.
+  if (corregido && !respuesta && antesDeCorregir && propuestas.length === 0) {
+    respuesta = antesDeCorregir;
+    fallo = false;
+  }
+
   // Sin acciones en el catálogo no existen tarjetas: no hay nada que vigilar, y
   // una respuesta de consulta no se toca.
   const honesta =
@@ -461,7 +510,14 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         })
       : respuesta ?? "";
   const texto = garantizarAvisoPropuesta(
-    garantizarAvisoSinPermisoAccion(garantizarAvisoSinPermiso(honesta, sinPermiso), sinPermisoAcciones),
+    garantizarAvisoSinPermisoAccion(
+      garantizarAvisoSinPermiso(
+        garantizarAvisosObligatorios(honesta, avisosObligatorios),
+        sinPermiso,
+        (p) => causaSinPermiso(input.ctx, p),
+      ),
+      sinPermisoAcciones,
+    ),
     propuestas.length > 0,
   );
 

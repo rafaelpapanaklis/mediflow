@@ -5,6 +5,7 @@
  * saneadores y los pequeños parsers que comparte el cliente con sus tests.
  * Todo lo que toque `/api/sabina` vive en `./sabina-client.tsx`.
  */
+import { celdasDe, empiezaTabla, esRenglonDeCuenta, sinMarcador, tipoDeElemento } from "./sabina-listas";
 
 // ── Límites del lado del cliente ────────────────────────────────────────
 // Techo defensivo de la pregunta que se manda. El motor puede tener el suyo
@@ -73,6 +74,7 @@ export function formatToolsUsed(tools: readonly string[] | null | undefined): st
 // ── Errores del endpoint (CONTRATO.md → "El contrato del endpoint") ─────
 export type SabinaErrorKind =
   | "auth" // 401 sin sesión
+  | "apagada" // 403 `sabinaApagada`: el Super Admin apagó a Sabina para este usuario
   | "no_balance" // 402 sin saldo en el monedero
   | "rate_limited" // 429 pasado el límite
   | "plan_limit" // 429 del cupo del plan (`limitReached: true`): reintentar no lo arregla
@@ -95,6 +97,9 @@ export function classifySabinaError(status: number | null, body?: unknown): Sabi
       return "auth";
     case 402:
       return "no_balance";
+    case 403:
+      // Solo el 403 que lo dice: otro 403 no es «te la apagaron».
+      return (body as { sabinaApagada?: unknown } | null)?.sabinaApagada === true ? "apagada" : "unknown";
     case 429:
       return (body as { limitReached?: unknown } | null)?.limitReached === true ? "plan_limit" : "rate_limited";
     case 503:
@@ -115,6 +120,12 @@ export const SABINA_ERROR_COPY: Record<SabinaErrorKind, SabinaErrorCopy> = {
   auth: {
     title: "Tu sesión terminó",
     message: "Vuelve a iniciar sesión para seguir hablando con Sabina.",
+    retryable: false,
+  },
+  apagada: {
+    title: "Sabina está apagada para tu usuario",
+    message:
+      "El Super Admin de la clínica apagó a Sabina para ti, así que no puede consultar ni hacer nada en tu nombre. Si crees que es un error, pídele que la vuelva a activar en Equipo.",
     retryable: false,
   },
   no_balance: {
@@ -176,24 +187,55 @@ export function classifyParagraphTone(text: string): SabinaParagraphTone {
 
 export type SabinaBlock =
   | { kind: "heading"; level: 2 | 3; text: string }
-  | { kind: "bullets"; items: string[]; tone: SabinaParagraphTone }
+  // `ordered` solo aparece en las numeradas («1. », «2) »).
+  | { kind: "bullets"; items: string[]; tone: SabinaParagraphTone; ordered?: true }
+  | { kind: "table"; header: string[]; rows: string[][] }
   | { kind: "paragraph"; text: string; tone: SabinaParagraphTone };
 
 /**
- * Markdown MUY ligero: encabezados `##`/`###`, listas `- `/`• ` y párrafos.
- * No es un parser general — cubre lo que un modelo de chat suele escribir,
- * nada más. Negritas/itálicas/código dentro de un bloque se resuelven aparte
- * con `tokenizeInline`, porque eso ya pinta JSX y este archivo no importa React.
+ * Markdown MUY ligero: encabezados `##`/`###`, listas (`- `, `• `, `* `, `1. `),
+ * tablas `| a | b |` y párrafos. No es un parser general — cubre lo que un modelo
+ * de chat suele escribir, nada más. Negritas/itálicas/código dentro de un bloque
+ * se resuelven aparte con `tokenizeInline`, porque eso ya pinta JSX y este archivo
+ * no importa React.
+ *
+ * Hasta el 14-sep-2026 se aplastaba en un solo párrafo todo lo que no fuera
+ * `- `/`• `: la lista numerada, la tabla y hasta las líneas sueltas («Ana — $1,500»
+ * y debajo «Luis — $800» se leían seguidas en una línea). Ahora el párrafo conserva
+ * sus saltos de línea, dos o más líneas seguidas de «etiqueta — $cantidad» son una
+ * lista aunque no traigan viñeta, y una lista de un solo elemento se pinta como
+ * frase: una viñeta sola es ruido. Lo fino de cada caso está en `sabina-listas.ts`.
  */
 export function parseSabinaMarkdown(raw: string): SabinaBlock[] {
   const lines = raw.replace(/\r\n/g, "\n").split("\n");
   const blocks: SabinaBlock[] = [];
   let buf: string[] = [];
 
-  const flush = () => {
-    const text = buf.join(" ").replace(/\s+/g, " ").trim();
-    buf = [];
+  const pushParagraph = (renglones: string[]) => {
+    const text = renglones.join("\n").trim();
     if (text) blocks.push({ kind: "paragraph", text, tone: classifyParagraphTone(text) });
+  };
+
+  const flush = () => {
+    const renglones = buf.map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+    buf = [];
+    let parrafo: string[] = [];
+    let j = 0;
+    while (j < renglones.length) {
+      let fin = j;
+      while (fin < renglones.length && esRenglonDeCuenta(renglones[fin])) fin++;
+      if (fin - j >= 2) {
+        pushParagraph(parrafo);
+        parrafo = [];
+        const items = renglones.slice(j, fin);
+        blocks.push({ kind: "bullets", items, tone: classifyParagraphTone(items[0]) });
+        j = fin;
+      } else {
+        parrafo.push(renglones[j]);
+        j++;
+      }
+    }
+    pushParagraph(parrafo);
   };
 
   let i = 0;
@@ -214,14 +256,48 @@ export function parseSabinaMarkdown(raw: string): SabinaBlock[] {
       continue;
     }
 
-    if (/^[-•]\s+/.test(trimmed)) {
+    if (empiezaTabla(lines, i)) {
       flush();
-      const items: string[] = [];
-      while (i < lines.length && /^[-•]\s+/.test(lines[i].trim())) {
-        items.push(lines[i].trim().replace(/^[-•]\s+/, ""));
+      const header = celdasDe(lines[i]);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && lines[i].trim().includes("|")) {
+        rows.push(celdasDe(lines[i]).slice(0, header.length));
         i++;
       }
-      blocks.push({ kind: "bullets", items, tone: classifyParagraphTone(items[0] ?? "") });
+      // Una tabla de una fila es una frase disfrazada: «Citas hoy: 4 · Canceladas: 1».
+      if (rows.length === 1) {
+        pushParagraph([header.map((h, j) => `${h}: ${rows[0][j] ?? ""}`).join(" · ")]);
+      } else if (rows.length > 1) {
+        blocks.push({ kind: "table", header, rows });
+      }
+      continue;
+    }
+
+    const tipo = tipoDeElemento(trimmed);
+    if (tipo) {
+      flush();
+      const items: string[] = [];
+      const primera = trimmed;
+      while (i < lines.length) {
+        const actual = lines[i].trim();
+        if (actual && tipoDeElemento(actual) === tipo) {
+          items.push(sinMarcador(actual));
+          i++;
+          continue;
+        }
+        // Un renglón en blanco entre dos elementos no parte la lista («1. Ana⏎⏎2. Luis»).
+        let k = i;
+        while (k < lines.length && !lines[k].trim()) k++;
+        if (!actual && k < lines.length && tipoDeElemento(lines[k]) === tipo) {
+          i = k;
+          continue;
+        }
+        break;
+      }
+      // Sola, la viñeta sobra; el número no («1. Llama a Ana» sigue siendo un paso).
+      if (items.length === 1) pushParagraph([tipo === "number" ? primera : items[0]]);
+      else blocks.push({ kind: "bullets", items, tone: classifyParagraphTone(items[0] ?? ""), ...(tipo === "number" ? { ordered: true as const } : {}) });
       continue;
     }
 
@@ -233,25 +309,36 @@ export function parseSabinaMarkdown(raw: string): SabinaBlock[] {
   return blocks;
 }
 
-// ── Formato inline (negrita / itálica / código) ─────────────────────────
+// ── Formato inline (negrita / itálica / código / enlace) ────────────────
 export interface InlineToken {
   text: string;
   bold?: boolean;
   italic?: boolean;
   code?: boolean;
+  /** Ruta de la propia app (el comprobante de una factura). */
+  href?: string;
 }
 
-/** `"cita **hoy** a las *3pm*"` → tokens que el cliente convierte a JSX. */
+/**
+ * `"cita **hoy** a las *3pm*"` → tokens que el cliente convierte a JSX.
+ *
+ * Enlaces `[texto](/ruta)` SOLO hacia rutas de la propia app (`/api/…`,
+ * `/dashboard/…`): es lo que deja a Sabina dar el comprobante en PDF. Una URL con
+ * dominio, `javascript:` o `//otro.sitio` se queda como texto plano: el modelo
+ * escribe lo que leyó, y lo que leyó puede venir de un campo que tecleó cualquiera.
+ */
 export function tokenizeInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
-  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`/g;
+  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[([^\]\n]{1,80})\]\((\/(?:api|dashboard)\/[A-Za-z0-9_\-./]*)\)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
+    if (m[5] !== undefined && (m[5].includes("..") || m[5].includes("//"))) continue;
     if (m.index > last) tokens.push({ text: text.slice(last, m.index) });
     if (m[1] !== undefined) tokens.push({ text: m[1], bold: true });
     else if (m[2] !== undefined) tokens.push({ text: m[2], italic: true });
     else if (m[3] !== undefined) tokens.push({ text: m[3], code: true });
+    else if (m[4] !== undefined) tokens.push({ text: m[4], href: m[5] });
     last = re.lastIndex;
   }
   if (last < text.length) tokens.push({ text: text.slice(last) });
