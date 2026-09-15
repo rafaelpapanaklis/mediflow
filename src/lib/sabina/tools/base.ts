@@ -10,7 +10,7 @@
 
 import type { AuthContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/auth/permissions";
-import type { VisibilityViewer } from "@/lib/patient-visibility";
+import { patientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import type {
   PermissionKey,
@@ -111,6 +111,33 @@ export function comoAuthContext(ctx: SabinaCtx): AuthContext {
 /** El `viewer` mínimo de @/lib/patient-visibility. clinicId SIEMPRE de la sesión. */
 export function visorDe(ctx: SabinaCtx): VisibilityViewer {
   return { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId };
+}
+
+/**
+ * ¿Este paciente existe en la clínica, no está archivado y el usuario lo puede
+ * ver? Un solo query, para las herramientas que reciben un `patientId` ya
+ * resuelto (recetas, estudios, análisis — MAPA-clinico.md).
+ *
+ * 🔴 Existe porque `canViewPatient` (@/lib/patient-visibility) NO mira
+ * `deletedAt` (hallazgo N19): un paciente archivado por ARCO sigue "visible"
+ * para esa función, y ni `POST /api/prescriptions` ni `POST /api/xrays` lo
+ * comprueban aparte. Aquí se añade el filtro a mano en vez de heredar el
+ * hueco: Sabina no debe recetar ni mostrar clínica de un paciente archivado.
+ */
+export async function pacienteVisibleYActivo(ctx: SabinaCtx, patientId: string): Promise<boolean> {
+  if (!patientId) return false;
+  const db = dbDe(ctx);
+  const visAnd = patientVisibilityAnd(visorDe(ctx));
+  const hit = await db.patient.findFirst({
+    where: {
+      id: patientId,
+      clinicId: ctx.clinicId, // 🔴 SIEMPRE de la sesión
+      deletedAt: null,
+      ...(visAnd.length ? { AND: visAnd } : {}),
+    },
+    select: { id: true },
+  });
+  return hit !== null;
 }
 
 /** ¿El usuario de la sesión tiene esta key? Mismo criterio que los endpoints. */

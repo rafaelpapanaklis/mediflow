@@ -103,6 +103,8 @@ export interface SabinaDb {
     findMany(args: any): Promise<any[]>;
     count(args: any): Promise<number>;
     groupBy(args: any): Promise<any[]>;
+    /** Usado por `pacienteVisibleYActivo`: un solo registro, con `deletedAt` en el `where` (N19). */
+    findFirst(args: any): Promise<any | null>;
   };
   invoice: {
     findMany(args: any): Promise<any[]>;
@@ -131,6 +133,27 @@ export interface SabinaDb {
     count(args: any): Promise<number>;
   };
   clinicSchedule: {
+    findMany(args: any): Promise<any[]>;
+  };
+  /** Recetas (área CLÍNICO, ws1-t4) — solo lectura. */
+  prescription: {
+    findMany(args: any): Promise<any[]>;
+    count(args: any): Promise<number>;
+  };
+  prescriptionItem: {
+    findMany(args: any): Promise<any[]>;
+  };
+  /** Catálogo CUMS: sin `clinicId` — es global, igual para todas las clínicas. */
+  cumsItem: {
+    findMany(args: any): Promise<any[]>;
+    count(args: any): Promise<number>;
+  };
+  /** Estudios/archivos del paciente (área CLÍNICO, ws1-t4) — solo lectura. */
+  patientFile: {
+    findMany(args: any): Promise<any[]>;
+    count(args: any): Promise<number>;
+  };
+  xrayAnalysis: {
     findMany(args: any): Promise<any[]>;
   };
   $queryRaw(query: any): Promise<any[]>;
