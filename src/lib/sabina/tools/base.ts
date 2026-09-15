@@ -10,10 +10,11 @@
 
 import type { AuthContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/auth/permissions";
-import type { VisibilityViewer } from "@/lib/patient-visibility";
+import { patientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import type {
   PermissionKey,
+  SabinaCandado,
   SabinaCtx,
   SabinaDb,
   SabinaResultado,
@@ -112,6 +113,33 @@ export function visorDe(ctx: SabinaCtx): VisibilityViewer {
   return { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId };
 }
 
+/**
+ * ¿Este paciente existe en la clínica, no está archivado y el usuario lo puede
+ * ver? Un solo query, para las herramientas que reciben un `patientId` ya
+ * resuelto (recetas, estudios, análisis — MAPA-clinico.md).
+ *
+ * 🔴 Existe porque `canViewPatient` (@/lib/patient-visibility) NO mira
+ * `deletedAt` (hallazgo N19): un paciente archivado por ARCO sigue "visible"
+ * para esa función, y ni `POST /api/prescriptions` ni `POST /api/xrays` lo
+ * comprueban aparte. Aquí se añade el filtro a mano en vez de heredar el
+ * hueco: Sabina no debe recetar ni mostrar clínica de un paciente archivado.
+ */
+export async function pacienteVisibleYActivo(ctx: SabinaCtx, patientId: string): Promise<boolean> {
+  if (!patientId) return false;
+  const db = dbDe(ctx);
+  const visAnd = patientVisibilityAnd(visorDe(ctx));
+  const hit = await db.patient.findFirst({
+    where: {
+      id: patientId,
+      clinicId: ctx.clinicId, // 🔴 SIEMPRE de la sesión
+      deletedAt: null,
+      ...(visAnd.length ? { AND: visAnd } : {}),
+    },
+    select: { id: true },
+  });
+  return hit !== null;
+}
+
 /** ¿El usuario de la sesión tiene esta key? Mismo criterio que los endpoints. */
 export function tienePermiso(ctx: SabinaCtx, key: PermissionKey): boolean {
   return hasPermission({ role: ctx.role, permissionsOverride: ctx.permissionsOverride }, key);
@@ -140,10 +168,23 @@ export function exigirSesion(ctx: SabinaCtx): void {
 }
 
 /**
+ * ¿Abre el candado? `false` ante cualquier cosa que no sea un `true` explícito:
+ * un candado que devuelve `undefined` por un despiste queda cerrado, no abierto.
+ */
+async function abreCandado(candado: SabinaCandado, ctx: SabinaCtx): Promise<boolean> {
+  return (await candado.abre(ctx)) === true;
+}
+
+/**
  * Declara una herramienta. Lo único que hace de más respecto al literal es
  * envolver `ejecutar` con `exigirSesion`, para que la guarda del tenant corra
  * también si alguien llama `tool.ejecutar(...)` directo, sin pasar por el
  * runner.
+ *
+ * Con el `candado` hace lo mismo: el runner ya lo mira antes (y es el que dice
+ * `sin_permiso`), pero una llamada directa a `ejecutar` —otra puerta, un script,
+ * una herramienta que llame a otra— no se lo salta. Lanza en vez de devolver
+ * datos. Cuesta una lectura más; es el precio de que el hallazgo 23 no vuelva.
  */
 export function definirHerramienta<P, R>(def: SabinaTool<P, R>): SabinaTool<P, R> {
   const crudo = def.ejecutar;
@@ -151,7 +192,12 @@ export function definirHerramienta<P, R>(def: SabinaTool<P, R>): SabinaTool<P, R
     ...def,
     ejecutar(ctx: SabinaCtx, params: P): Promise<R> {
       exigirSesion(ctx);
-      return crudo(ctx, params);
+      const candado = def.candado;
+      if (!candado) return crudo(ctx, params);
+      return abreCandado(candado, ctx).then((abre) => {
+        if (!abre) throw new Error(`sin_permiso: ${candado.etiqueta}`);
+        return crudo(ctx, params);
+      });
     },
   };
 }
@@ -162,7 +208,9 @@ export function definirHerramienta<P, R>(def: SabinaTool<P, R>): SabinaTool<P, R
  * El orden de los cortes importa y es el del contrato:
  *  1. sesión — sin clinicId no se consulta (regla 1).
  *  2. permiso — y si falta, `sin_permiso` CON la key, para que el motor pueda
- *     decir «no tienes acceso a X» en vez de «no hay datos» (regla 3).
+ *     decir «no tienes acceso a X» en vez de «no hay datos» (regla 3). Después,
+ *     el `candado` si la herramienta lo trae, con la misma salida: lo que no es
+ *     una key también se DICE. Va antes de los parámetros, igual que la key.
  *  3. parámetros — lo que manda el modelo se valida con zod; un rango absurdo
  *     es un `error` explicado, no una consulta a ciegas.
  *  4. la consulta — y cualquier excepción sale como `error` con su detalle. Un
@@ -181,6 +229,16 @@ export async function correrHerramienta<P, R>(
 
   if (!tienePermiso(ctx, tool.permiso)) {
     return { ok: false, motivo: "sin_permiso", permiso: tool.permiso };
+  }
+
+  if (tool.candado) {
+    let abre: boolean;
+    try {
+      abre = await abreCandado(tool.candado, ctx);
+    } catch (e) {
+      return { ok: false, motivo: "error", detalle: mensaje(e) };
+    }
+    if (!abre) return { ok: false, motivo: "sin_permiso", permiso: tool.candado.etiqueta };
   }
 
   const parseado = tool.parametros.safeParse(paramsCrudos ?? {});

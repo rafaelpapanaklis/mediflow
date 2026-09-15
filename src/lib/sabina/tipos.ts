@@ -24,6 +24,8 @@
 import type { z } from "zod";
 import type { PermissionKey } from "@/lib/auth/permissions";
 import { DEFAULT_TZ } from "@/lib/agenda/date-ranges";
+import { leerAjustesSabina } from "./ajustes-sabina";
+import { overrideDeSabina, permisosDeSabina, type AjustesSabina } from "./permisos-sabina";
 
 export type { PermissionKey };
 
@@ -45,8 +47,27 @@ export interface SabinaCtx {
   userId: string;
   /** Role de Prisma como string ("ADMIN" | "DOCTOR" | …). */
   role: string;
-  /** Override granular. Siempre presente como array (vacío = default del rol). */
+  /**
+   * Override granular. Siempre presente como array (vacío = default del rol).
+   *
+   * 🔴 En el ctx que arma `crearSabinaCtx` NO es el del usuario: es lo que
+   * SABINA puede en su nombre (usuario ∩ lo que dejó el SUPER_ADMIN), escrito
+   * siempre como lista llena. Por eso todo `hasPermission` que se haga con este
+   * ctx —el runner, la confirmación, una herramienta que lo mire por su cuenta—
+   * ya queda recortado. Ver ./permisos-sabina.
+   */
   permissionsOverride: string[];
+  /**
+   * El recorte que aplicó `crearSabinaCtx`, SOLO para la frase: distinguir «tú no
+   * tienes ese permiso» de «el Super Admin se lo quitó a Sabina». No decide nada;
+   * lo que decide es `permissionsOverride`. Ausente en los dobles de prueba.
+   */
+  sabina?: {
+    /** El SUPER_ADMIN apagó a Sabina para este usuario. */
+    apagada: boolean;
+    /** Lo que el usuario puede y Sabina no. */
+    quitadas: PermissionKey[];
+  };
   /**
    * Zona horaria de LA CLÍNICA, no la del servidor. En Vercel el proceso corre
    * en UTC: una clínica de México que pregunta «cuántas citas tengo hoy» a las
@@ -82,6 +103,8 @@ export interface SabinaDb {
     findMany(args: any): Promise<any[]>;
     count(args: any): Promise<number>;
     groupBy(args: any): Promise<any[]>;
+    /** Usado por `pacienteVisibleYActivo`: un solo registro, con `deletedAt` en el `where` (N19). */
+    findFirst(args: any): Promise<any | null>;
   };
   invoice: {
     findMany(args: any): Promise<any[]>;
@@ -94,6 +117,17 @@ export interface SabinaDb {
   };
   clinic: {
     findFirst(args: any): Promise<any>;
+    findUnique(args: any): Promise<any>;
+  };
+  /** Caja: la lee `@/lib/caja` con este mismo cliente (ver `CajaDb`). */
+  cashRegister: {
+    findFirst(args: any): Promise<any>;
+    findMany(args: any): Promise<any[]>;
+  };
+  /** La bandera `canAccessCaja` de quien pregunta y los nombres de operador/doctor de Caja. */
+  user: {
+    findFirst(args: any): Promise<any>;
+    findMany(args: any): Promise<any[]>;
   };
   resource: {
     count(args: any): Promise<number>;
@@ -101,7 +135,53 @@ export interface SabinaDb {
   clinicSchedule: {
     findMany(args: any): Promise<any[]>;
   };
+  /** Recetas (área CLÍNICO, ws1-t4) — solo lectura. */
+  prescription: {
+    findMany(args: any): Promise<any[]>;
+    count(args: any): Promise<number>;
+  };
+  prescriptionItem: {
+    findMany(args: any): Promise<any[]>;
+  };
+  /** Catálogo CUMS: sin `clinicId` — es global, igual para todas las clínicas. */
+  cumsItem: {
+    findMany(args: any): Promise<any[]>;
+    count(args: any): Promise<number>;
+  };
+  /** Estudios/archivos del paciente (área CLÍNICO, ws1-t4) — solo lectura. */
+  patientFile: {
+    findMany(args: any): Promise<any[]>;
+    count(args: any): Promise<number>;
+  };
+  xrayAnalysis: {
+    findMany(args: any): Promise<any[]>;
+  };
   $queryRaw(query: any): Promise<any[]>;
+}
+
+/**
+ * Un candado que NO es una key del catálogo de permisos.
+ *
+ * Existe por Caja: la pantalla pide `billing.view` Y además `canUseCaja` (la
+ * bandera `User.canAccessCaja`). `billing.view` lo tienen los cinco roles, así
+ * que con la key sola Sabina enseñaría la caja a quien la pantalla se la niega
+ * —el hallazgo 23, que ya se cerró una vez en /api/caja/current—. El `permiso`
+ * de una herramienta es UNA key, y el runner solo sabía decir `sin_permiso` por
+ * ella: un candado de bandera tenía que lanzar (y el modelo decía «falló») o
+ * devolver datos con una marca inventada.
+ */
+export interface SabinaCandado {
+  /**
+   * Lo que viaja en `sin_permiso.permiso`. NO es una key: nombra el candado
+   * (`caja.acceso`), y su prefijo decide la frase («No tienes acceso a Caja»).
+   */
+  etiqueta: string;
+  /**
+   * ¿Abre para quien pregunta? Corre bajo el candado de solo lectura y con
+   * `ctx.db`. Tiene que llamar a la MISMA función que la pantalla, no
+   * reescribir su criterio. Si lanza, sale `error`, nunca datos.
+   */
+  abre(ctx: SabinaCtx): Promise<boolean>;
 }
 
 /** Una herramienta del catálogo, tal cual la define el contrato. */
@@ -114,6 +194,8 @@ export interface SabinaTool<P = any, R = any> {
   parametros: z.ZodType<P>;
   /** Key de permiso que exige, del catálogo de @/lib/auth/permissions. */
   permiso: PermissionKey;
+  /** Candado extra que no es una key (ver `SabinaCandado`). Se mira DESPUÉS de la key. */
+  candado?: SabinaCandado;
   /** La consulta. `ctx` trae clinicId y userId de la sesión, ya validados. */
   ejecutar(ctx: SabinaCtx, params: P): Promise<R>;
   /**
@@ -124,6 +206,14 @@ export interface SabinaTool<P = any, R = any> {
   resumir(datos: R, params: P): string;
   /** ¿Este resultado es «sin datos»? Decide `motivo: "sin_datos"`. */
   vacio(datos: R): boolean;
+  /**
+   * Una advertencia que la respuesta final TIENE que llevar si se usó este
+   * resultado (el efectivo esperado de Caja «es un cálculo, no dinero
+   * contado»). Si el texto del modelo no contiene `marca`, el motor añade
+   * `frase` al final, igual que hace con `sin_permiso`: el prompt lo pide, esto
+   * lo garantiza. `null` = este resultado no obliga a nada.
+   */
+  avisoObligatorio?(datos: R): { frase: string; marca: string } | null;
 }
 
 /** El resultado de ejecutar una herramienta. Siempre esta forma. */
@@ -141,11 +231,21 @@ export type SabinaResultado<R = any> =
  * punto entero de la función: con `clinicId: undefined` Prisma descarta la clave
  * y una herramienta devolvería las filas de TODAS las clínicas. Se corta aquí,
  * antes de que exista un ctx con el que consultar.
+ *
+ * 🔴 Y es el CANDADO de «Sabina nunca puede más que quien le escribe»: lee lo que
+ * el SUPER_ADMIN dejó para este usuario y escribe en el ctx la intersección
+ * (`permisosDeSabina`). Es asíncrona por eso, y a propósito: no existe forma de
+ * obtener un `SabinaCtx` de la sesión sin haber pasado por el recorte, y quien
+ * olvide el `await` no compila. Si la lectura falla por algo que no sea «la
+ * tabla aún no existe», lanza: sin saber qué se le quitó a Sabina, no se arma
+ * el ctx.
+ *
+ * `opciones.leerAjustes` solo lo inyectan las pruebas.
  */
-export function crearSabinaCtx(
+export async function crearSabinaCtx(
   // Acepta `null` a propósito: `getAuthContext()` devuelve null sin sesión, y el
-  // motor tiene que poder escribir `crearSabinaCtx(await getAuthContext())` de
-  // una línea sin un guard previo. Un null entra y sale como null.
+  // motor tiene que poder escribir `await crearSabinaCtx(await getAuthContext())`
+  // de una línea sin un guard previo. Un null entra y sale como null.
   auth:
     | {
         clinicId?: string | null;
@@ -156,18 +256,24 @@ export function crearSabinaCtx(
       }
     | null
     | undefined,
-): SabinaCtx | null {
+  opciones?: { leerAjustes?: (clinicId: string, userId: string) => Promise<AjustesSabina | null> },
+): Promise<SabinaCtx | null> {
   const clinicId = typeof auth?.clinicId === "string" ? auth.clinicId.trim() : "";
   const userId = typeof auth?.userId === "string" ? auth.userId.trim() : "";
   const role = typeof auth?.role === "string" ? auth.role.trim() : "";
   if (!clinicId || !userId || !role) return null;
+
+  const leer = opciones?.leerAjustes ?? leerAjustesSabina;
+  const ajustes = await leer(clinicId, userId);
+  const recorte = permisosDeSabina({ role, permissionsOverride: auth?.permissionsOverride ?? [] }, ajustes);
 
   const tz = auth?.clinic?.timezone;
   return {
     clinicId,
     userId,
     role,
-    permissionsOverride: auth?.permissionsOverride ?? [],
+    permissionsOverride: overrideDeSabina(recorte.permitidas),
+    sabina: { apagada: recorte.apagada, quitadas: recorte.quitadas },
     // Mismo criterio que `safeTz`: una tz vacía cae al default de México, NO a
     // la del proceso (UTC en Vercel), que es el fallo que vaciaba el tablero a
     // las 18:00.

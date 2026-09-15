@@ -10,13 +10,16 @@
  * que la pantalla no invite al error: que no se pueda confirmar sin querer, y que
  * nunca diga «hecho» sin que el servidor lo haya dicho.
  */
-import type {
-  EstadoPropuesta,
-  ResultadoVista,
-  SabinaPropuestaVista,
+import {
+  leerEnlace,
+  leerTabla,
+  type EstadoPropuesta,
+  type ResultadoVista,
+  type SabinaPropuestaVista,
+  type SabinaTabla,
 } from "@/lib/sabina/engine-propuestas-core";
 
-export type { EstadoPropuesta, ResultadoVista, SabinaPropuestaVista };
+export type { EstadoPropuesta, ResultadoVista, SabinaPropuestaVista, SabinaTabla };
 
 /**
  * El botón de confirmar nace apagado este rato. Una tarjeta aparece cuando llega
@@ -44,7 +47,13 @@ function texto(v: unknown): string | null {
 function leerResultado(raw: unknown): ResultadoVista | null {
   const r = raw as { ok?: unknown; tipo?: unknown; frase?: unknown } | null;
   if (!r || typeof r !== "object" || typeof r.frase !== "string") return null;
-  return { ok: r.ok === true, tipo: texto(r.tipo) ?? (r.ok === true ? "hecha" : "error"), frase: r.frase };
+  const enlace = leerEnlace((r as { enlace?: unknown }).enlace);
+  return {
+    ok: r.ok === true,
+    tipo: texto(r.tipo) ?? (r.ok === true ? "hecha" : "error"),
+    frase: r.frase,
+    ...(enlace ? { enlace } : {}),
+  };
 }
 
 /** Una propuesta cruda del servidor → vista pintable, o `null` si no cuadra. */
@@ -75,6 +84,7 @@ export function leerPropuesta(raw: unknown): SabinaPropuestaVista | null {
         .filter((d: any) => d && typeof d.etiqueta === "string" && typeof d.valor === "string")
         .map((d: any) => ({ etiqueta: d.etiqueta, valor: d.valor, ...(typeof d.antes === "string" ? { antes: d.antes } : {}) })),
       avisos: (Array.isArray(p.tarjeta.avisos) ? p.tarjeta.avisos : []).filter((a: unknown) => typeof a === "string"),
+      ...(leerTabla(p.tarjeta.tabla) ? { tabla: leerTabla(p.tarjeta.tabla)! } : {}),
     },
     deshacer,
     creadaEn: typeof p.creadaEn === "number" ? p.creadaEn : Date.now(),

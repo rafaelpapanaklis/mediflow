@@ -78,7 +78,7 @@ export const tratamientosPorIngreso = definirHerramienta<ParamsTratamientos, Dat
     "El ranking de tratamientos por dinero FACTURADO en un rango: importe, veces facturado, unidades, " +
     "precio medio y qué porcentaje del total representa cada uno. Úsala para «¿qué tratamiento me deja " +
     "más?», «¿en qué se me va el trabajo?», «¿qué debería promocionar?» o para razonar sobre mezcla de " +
-    "servicios y rentabilidad. Mide lo facturado, no lo cobrado: para la caja usa ingresos_por_periodo.",
+    "servicios y rentabilidad. Mide lo facturado, no lo cobrado: para lo cobrado usa ingresos_por_periodo.",
   parametros,
   permiso: "billing.view",
 

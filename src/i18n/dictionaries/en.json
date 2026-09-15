@@ -3685,6 +3685,30 @@
       "savePermissionsCount": "Save permissions ({count})",
       "saveError": "Error saving permissions",
       "updated": "Permissions updated"
+    },
+    "sabinaPermissions": {
+      "button": "Sabina",
+      "title": "Sabina on behalf of {name}",
+      "intro": "Sabina acts on behalf of whoever is writing to her. Here you decide what she can look up and propose when {name} asks for something. She can never do more than {name}: if you remove a permission from {name}, Sabina loses it at that very moment.",
+      "enabled": "Sabina enabled for {name}",
+      "enabledHint": "Sabina looks things up and proposes actions on behalf of {name}, with the permissions below.",
+      "disabledHint": "Sabina will do nothing on behalf of {name}, not even look things up. If {name} writes to her, they will see a notice that she is turned off.",
+      "sameAsUser": "Same as {name}",
+      "sameAsUserHint": "Sabina can do everything {name} can and follows their permission changes instantly. Uncheck it to remove permissions from Sabina one by one.",
+      "customHint": "Sabina can only use what is checked. Note: if you later give {name} a new permission, Sabina does not get it automatically; you will have to check it here.",
+      "summary": "Sabina will be able to use {sabina} of {name}'s {user} permissions.",
+      "summaryOff": "Sabina is turned off for {name}: she will not use any permission.",
+      "userLacksBadge": "doesn't have it",
+      "userLacksLegend": "Grey switches marked “doesn't have it” are off because {name} doesn't have that permission either, and Sabina can never do more than {name}. To give it to Sabina, first give it to {name} in Permissions.",
+      "userLacksTitle": "{name} doesn't have this permission, so Sabina can't use it either. Give it to them first in Permissions.",
+      "emptyCustom": "Check at least one permission. If you don't want Sabina to do anything, turn her off above.",
+      "missingSql": "sql/sabina-permisos.sql has not been applied to the database yet. Until then Sabina can do everything each user can, and nothing can be saved here.",
+      "saveSameAsUser": "Save: same as the user",
+      "saveCount": "Save Sabina permissions ({count})",
+      "saveDisabled": "Save: Sabina off",
+      "saveError": "Error saving Sabina's permissions",
+      "loadError": "Could not load Sabina's permissions",
+      "updated": "Sabina's permissions updated"
     }
   },
   "procurement": {

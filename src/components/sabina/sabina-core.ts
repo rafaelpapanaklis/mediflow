@@ -73,6 +73,7 @@ export function formatToolsUsed(tools: readonly string[] | null | undefined): st
 // ── Errores del endpoint (CONTRATO.md → "El contrato del endpoint") ─────
 export type SabinaErrorKind =
   | "auth" // 401 sin sesión
+  | "apagada" // 403 `sabinaApagada`: el Super Admin apagó a Sabina para este usuario
   | "no_balance" // 402 sin saldo en el monedero
   | "rate_limited" // 429 pasado el límite
   | "plan_limit" // 429 del cupo del plan (`limitReached: true`): reintentar no lo arregla
@@ -95,6 +96,9 @@ export function classifySabinaError(status: number | null, body?: unknown): Sabi
       return "auth";
     case 402:
       return "no_balance";
+    case 403:
+      // Solo el 403 que lo dice: otro 403 no es «te la apagaron».
+      return (body as { sabinaApagada?: unknown } | null)?.sabinaApagada === true ? "apagada" : "unknown";
     case 429:
       return (body as { limitReached?: unknown } | null)?.limitReached === true ? "plan_limit" : "rate_limited";
     case 503:
@@ -115,6 +119,12 @@ export const SABINA_ERROR_COPY: Record<SabinaErrorKind, SabinaErrorCopy> = {
   auth: {
     title: "Tu sesión terminó",
     message: "Vuelve a iniciar sesión para seguir hablando con Sabina.",
+    retryable: false,
+  },
+  apagada: {
+    title: "Sabina está apagada para tu usuario",
+    message:
+      "El Super Admin de la clínica apagó a Sabina para ti, así que no puede consultar ni hacer nada en tu nombre. Si crees que es un error, pídele que la vuelva a activar en Equipo.",
     retryable: false,
   },
   no_balance: {
@@ -233,25 +243,36 @@ export function parseSabinaMarkdown(raw: string): SabinaBlock[] {
   return blocks;
 }
 
-// ── Formato inline (negrita / itálica / código) ─────────────────────────
+// ── Formato inline (negrita / itálica / código / enlace) ────────────────
 export interface InlineToken {
   text: string;
   bold?: boolean;
   italic?: boolean;
   code?: boolean;
+  /** Ruta de la propia app (el comprobante de una factura). */
+  href?: string;
 }
 
-/** `"cita **hoy** a las *3pm*"` → tokens que el cliente convierte a JSX. */
+/**
+ * `"cita **hoy** a las *3pm*"` → tokens que el cliente convierte a JSX.
+ *
+ * Enlaces `[texto](/ruta)` SOLO hacia rutas de la propia app (`/api/…`,
+ * `/dashboard/…`): es lo que deja a Sabina dar el comprobante en PDF. Una URL con
+ * dominio, `javascript:` o `//otro.sitio` se queda como texto plano: el modelo
+ * escribe lo que leyó, y lo que leyó puede venir de un campo que tecleó cualquiera.
+ */
 export function tokenizeInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
-  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`/g;
+  const re = /\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[([^\]\n]{1,80})\]\((\/(?:api|dashboard)\/[A-Za-z0-9_\-./]*)\)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
+    if (m[5] !== undefined && (m[5].includes("..") || m[5].includes("//"))) continue;
     if (m.index > last) tokens.push({ text: text.slice(last, m.index) });
     if (m[1] !== undefined) tokens.push({ text: m[1], bold: true });
     else if (m[2] !== undefined) tokens.push({ text: m[2], italic: true });
     else if (m[3] !== undefined) tokens.push({ text: m[3], code: true });
+    else if (m[4] !== undefined) tokens.push({ text: m[4], href: m[5] });
     last = re.lastIndex;
   }
   if (last < text.length) tokens.push({ text: text.slice(last) });

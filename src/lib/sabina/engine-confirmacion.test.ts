@@ -34,7 +34,7 @@ import { PrismaClient } from "@prisma/client";
 import { ejecutarSabina, type LlamarModelo, type TurnoModelo } from "./engine";
 import type { SabinaCtx, SabinaTool } from "./engine-types";
 import { definirAccion, herramientaDeAccion, type SabinaAccion } from "./engine-acciones";
-import { garantizarAvisoPropuesta } from "./engine-core";
+import { garantizarAvisoPropuesta, mandaAConfirmarTarjeta } from "./engine-core";
 import { esSqlDeLectura } from "./engine-solo-lectura";
 import { buildPatientSearchSql } from "@/lib/patients/patient-search";
 import { patientSearchTokens } from "@/lib/patients/patient-search-core";
@@ -570,6 +570,81 @@ test("sin tiempo para corregir, no se gasta otra llamada: va directo a la frase 
   });
   assert.equal(g.recibidos.length, 1);
   assert.match(salida.respuesta, /no hay ninguna tarjeta que confirmar/);
+});
+
+test("si la vuelta de corrección se queda sin tiempo a media vuelta, no sale un 503: sale la pregunta de la acción", async () => {
+  let reloj = 0;
+  const aclarar: SabinaAccion = {
+    ...accionDePrueba({ preparar: 0, ejecutar: 0 }),
+    preparar: async () => ({ tipo: "aclarar", pregunta: "¿Cuál es el motivo de la cita?" }),
+  };
+  const turnos = [contesta("Listo, confírmala en la tarjeta."), pide("agendar_cita", { paciente: "Juan" })];
+  // 1ª llamada al segundo 1 (queda de sobra para corregir); la corrección pide la
+  // herramienta y ya no queda para la llamada que cerraría con palabras.
+  const saltos = [1_000, 4_000];
+  const llamar: LlamarModelo = async () => {
+    reloj += saltos.shift() ?? 0;
+    const t = turnos.shift();
+    assert.ok(t, "se llamó al modelo más veces de las previstas");
+    return t;
+  };
+  const salida = await ejecutarSabina({
+    ctx: ctxCon("agenda.create"),
+    pregunta: "sí",
+    tools: [herramientaDeAccion(aclarar)],
+    llamar,
+    ahora: () => reloj,
+    presupuestoMs: 6_000,
+  });
+  assert.equal(salida.fallo, false, "el turno salió como fallo (503) teniendo qué contestar");
+  assert.equal(salida.respuesta, "¿Cuál es el motivo de la cita?");
+});
+
+test("si la llamada de la corrección falla, tampoco hay 503 ni tarjeta fantasma: sale la frase honesta", async () => {
+  let reloj = 0;
+  const turnos: TurnoModelo[] = [
+    contesta("Confírmala en la tarjeta."),
+    { bloques: [], stopReason: "error", tokensEntrada: 0, tokensSalida: 0, error: "timeout" },
+  ];
+  const llamar: LlamarModelo = async () => {
+    reloj += 1_000;
+    const t = turnos.shift();
+    assert.ok(t, "se llamó al modelo más veces de las previstas");
+    return t;
+  };
+  const salida = await ejecutarSabina({
+    ctx: ctxCon("agenda.create"),
+    pregunta: "sí",
+    tools: [herramientaDeAccion(accionDePrueba({ preparar: 0, ejecutar: 0 }))],
+    llamar,
+    ahora: () => reloj,
+    presupuestoMs: 20_000,
+  });
+  assert.equal(salida.fallo, false);
+  assert.match(salida.respuesta, /no hay ninguna tarjeta que confirmar/);
+  assert.equal(mandaAConfirmarTarjeta(salida.respuesta, false), false);
+});
+
+test("si la corrección SÍ preparó la tarjeta y la llamada que cierra falla, no se rescata el texto viejo junto a ella", async () => {
+  const turnos: TurnoModelo[] = [
+    contesta("Te agendé a María el martes, confírmala en la tarjeta."),
+    pide("agendar_cita", { paciente: "María López" }),
+    { bloques: [], stopReason: "error", tokensEntrada: 0, tokensSalida: 0, error: "timeout" },
+  ];
+  const llamar: LlamarModelo = async () => {
+    const t = turnos.shift();
+    assert.ok(t, "se llamó al modelo más veces de las previstas");
+    return t;
+  };
+  const salida = await ejecutarSabina({
+    ctx: ctxCon("agenda.create"),
+    pregunta: "sí",
+    tools: [herramientaDeAccion(accionDePrueba({ preparar: 0, ejecutar: 0 }))],
+    llamar,
+  });
+  assert.equal(salida.propuestas.length, 1);
+  assert.doesNotMatch(salida.respuesta, /el martes/, "el texto de antes de corregir salió al lado de la tarjeta real");
+  assert.equal(salida.fallo, true, "sin texto que describa la tarjeta, sigue siendo un fallo, como antes");
 });
 
 test("con acciones en el catálogo el prompt explica la confirmación; sin ellas, sigue diciendo «Solo lees»", async () => {

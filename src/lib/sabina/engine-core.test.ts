@@ -288,6 +288,10 @@ test("detecta cuando la respuesta manda a confirmar en una tarjeta o botón", ()
     "No hay problema, confírmala en la tarjeta.",
     "Dale a «Sí, dar de alta» y queda.",
     "Toca el botón de la tarjeta para agendarla.",
+    // Dinero (ws1-t2): el método de pago no puede tapar a la tarjeta de Sabina en la misma frase.
+    "Perfecto, confirma el cobro con tarjeta de débito en la tarjeta.",
+    "Te dejé el cobro de $500 con tarjeta listo: confírmalo en la tarjeta.",
+    "Para mandarle el aviso, toca «Sí, mandar el aviso».",
   ]) {
     assert.equal(mandaAConfirmarTarjeta(texto, false), true, texto);
   }
@@ -308,6 +312,8 @@ test("no confunde la tarjeta del cobro, una cita confirmada ni la frase honesta"
     "Tienes 3 citas confirmadas; 2 se pagaron con tarjeta de crédito.",
     "Los ingresos de tarjeta están abajo, detallados por semana.",
     "Revisa la tarjeta de ingresos del inicio: ahí está el total.",
+    "La MF-0042 se pagó con la tarjeta de crédito del paciente, el martes.",
+    "¿Le cobro los $500 con tarjeta o en efectivo?",
     "¿Me confirmas el motivo de la cita?",
     "Todavía no preparé ninguna propuesta, así que no hay ninguna tarjeta que confirmar.",
     "¿Te agendo a Juan el martes a las 10? Dime «sí, agéndala» y la preparo.",

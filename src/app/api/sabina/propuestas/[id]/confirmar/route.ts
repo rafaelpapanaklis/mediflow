@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     const ctx = await getAuthContext();
-    const sabinaCtx = crearSabinaCtx(ctx);
+    const sabinaCtx = await crearSabinaCtx(ctx);
     if (!ctx || !sabinaCtx) {
       return NextResponse.json({ error: "No has iniciado sesión." }, { status: 401 });
     }

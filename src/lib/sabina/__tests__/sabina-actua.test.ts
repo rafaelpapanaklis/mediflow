@@ -158,6 +158,9 @@ const prismaDoble: any = new Proxy(
   {
     get(_t, k: string) {
       if (k === "auditLog") return m.propuestas.db.auditLog;
+      // Sin fila en sabina_user_permissions: Sabina con todo lo del usuario, lo de
+      // siempre. El recorte del Super Admin se prueba en `test:sabina-permisos-equipo`.
+      if (k === "sabinaUserPermission") return { findFirst: async () => null };
       if (k === "$executeRaw") return m.propuestas.db.$executeRaw;
       if (k === "$transaction") {
         return (fn: (tx: any) => Promise<unknown>) =>
@@ -376,7 +379,11 @@ test("el motor ve las cinco nuevas y la confirmación ejecuta las cuatro que esc
     assert.ok(nombres.includes(n), `el motor no ve ${n}`);
   }
   assert.equal(new Set(nombres).size, nombres.length, "hay nombres repetidos en el catálogo del motor");
-  assert.equal(nombres.length, 15, "diez de consulta + proponer_horarios + cuatro acciones");
+  assert.equal(
+    nombres.length,
+    23,
+    "diez de consulta + proponer_horarios + facturas_de_paciente + caja + tres de clínico (recetas, estudios_del_paciente, analisis_y_notas_de_estudio) + siete acciones",
+  );
 
   const keys = Object.fromEntries(catalogo.ACCIONES_SABINA.map((a) => [a.nombre, a.permiso]));
   // La key de cada acción es la que exige su handler (`denyIfMissingPermission`).
@@ -385,6 +392,10 @@ test("el motor ve las cinco nuevas y la confirmación ejecuta las cuatro que esc
     reagendar_cita: "agenda.edit",
     cancelar_cita: "agenda.delete",
     registrar_paciente: "patients.create",
+    // dinero (ws1-t2): sus caminos enteros, en sabina-dinero-actua.test.ts
+    cobrar_factura: "billing.charge",
+    crear_factura: "billing.create",
+    avisar_saldo_whatsapp: "whatsapp.send",
   });
 
   // proponer_horarios es consulta: no produce tarjeta. Las otras cuatro, sí.

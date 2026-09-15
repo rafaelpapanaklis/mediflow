@@ -5,6 +5,14 @@ import { CATALOGO_SABINA } from "./tools";
 import { proponerHorarios } from "./tools/agenda-acciones";
 import { accionAgendarCita, accionCancelarCita, accionReagendarCita } from "./acciones-agenda";
 import { accionRegistrarPaciente } from "./acciones-pacientes";
+import { accionAvisarSaldo } from "./dinero/avisar-saldo";
+import { accionCobrarFactura } from "./dinero/cobrar-factura";
+import { accionCrearFactura } from "./dinero/crear-factura";
+import { facturasDePaciente } from "./dinero/facturas-de-paciente";
+import { caja } from "./tools/caja";
+import { recetas } from "./tools/recetas";
+import { estudiosDelPaciente } from "./tools/estudios-del-paciente";
+import { analisisYNotasDeEstudio } from "./tools/analisis-y-notas-de-estudio";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -22,8 +30,21 @@ import { accionRegistrarPaciente } from "./acciones-pacientes";
    Las diez de `./tools`, en el orden de `CATALOGO_SABINA`, y `proponer_horarios`
    (ws1-t2), que solo lee. Se ejecutan dentro del bucle, bajo el candado de solo
    lectura. `proponer_horarios` va aquí y no en `CATALOGO_SABINA` porque las
-   pruebas de contrato de ese catálogo fijan las diez de consulta. */
-const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [...CATALOGO_SABINA, proponerHorarios];
+   pruebas de contrato de ese catálogo fijan las diez de consulta; lo mismo
+   `facturas_de_paciente` (dinero, ws1-t2), con sus pruebas en dinero/__tests__;
+   `caja` (ws1-t3), con sus pruebas en tools/__tests__/caja.test.ts: solo lee;
+   Sabina no abre, no retira y no cierra (MAPA-caja §10); y las tres de CLÍNICO
+   (ws1-t4: recetas, estudios_del_paciente, analisis_y_notas_de_estudio), todas
+   de solo lectura. */
+const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
+  ...CATALOGO_SABINA,
+  proponerHorarios,
+  facturasDePaciente,
+  caja,
+  recetas,
+  estudiosDelPaciente,
+  analisisYNotasDeEstudio,
+];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────
    Lo que ESCRIBE. Cada una se declara con `definirAccion` (engine-acciones.ts)
@@ -39,6 +60,11 @@ export const ACCIONES_SABINA: ReadonlyArray<SabinaAccion<any, any>> = [
   accionCancelarCita,
   // pacientes (ws1-t3) — adaptada en acciones-pacientes.ts
   accionRegistrarPaciente,
+  // dinero (ws1-t2) — en dinero/. Timbrar, reembolsar, cancelar y editar precio NO
+  // están, a propósito: MAPA-dinero §7.
+  accionCobrarFactura,
+  accionCrearFactura,
+  accionAvisarSaldo,
 ];
 
 /** Lo que ve el motor: consultas + la mitad «proponer» de cada acción. */
