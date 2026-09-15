@@ -693,6 +693,11 @@ export function hoyParaPrompt(instante: Date, timezone: string): string {
  * vivió Rafael el 14-sep-2026). La forma de la lista la ponen el `resumen` de cada
  * herramienta (`lineasDeLista`) y la pantalla (`parseSabinaMarkdown`); aquí solo va
  * CUÁNDO usarla, en pocas palabras: esto se paga en cada llamada al modelo.
+ *
+ * «Sin tablas EN EL CHAT»: desde que Sabina factura, la tarjeta de la propuesta sí
+ * trae una tabla de conceptos, pero la arma el servidor, no el modelo. Sin «en el
+ * chat» la regla podía leerse como si también valiera para la tarjeta. Los once
+ * caracteres salen de «pesos mexicanos» → «pesos» (México ya va en la primera línea).
  */
 export function construirSystemPrompt(opciones: {
   dificultad: SabinaDificultad;
@@ -769,7 +774,7 @@ ${
     ? "Es una pregunta abierta: consulta lo que necesites, cruza los datos y razona. Termina con lo medido primero y tus sugerencias después, separadas y claras."
     : "Es una pregunta directa: contesta con el dato y poco más. Dos o tres líneas, más la lista si la hay. Sin rodeos y sin resumen ejecutivo."
 }
-Si piden quiénes o cuáles y son varios, uno por línea con "- " (si el resumen ya trae esas líneas, cópialas tal cual). Si piden cuántos o cuánto, o es uno solo, una frase. Sin tablas: se lee en el teléfono. Cifras en pesos mexicanos, con la forma del resumen.`;
+Si piden quiénes o cuáles y son varios, uno por línea con "- " (si el resumen ya trae esas líneas, cópialas tal cual). Si piden cuántos o cuánto, o es uno solo, una frase. Sin tablas en el chat: se lee en el teléfono. Cifras en pesos, con la forma del resumen.`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

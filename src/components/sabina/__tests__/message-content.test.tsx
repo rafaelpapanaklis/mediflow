@@ -80,3 +80,20 @@ test("una tabla se pinta como tabla, con la etiqueta de su columna en cada celda
   assert.match(html, /<td data-label="Saldo" class="num"><span>\$7,777<\/span><\/td>/);
   assert.doesNotMatch(html, /\|/);
 });
+
+test("integración #259 + #260: el enlace al comprobante sobrevive dentro de la lista con cantidades, de la tabla y del párrafo", () => {
+  const lista = pintar(
+    "Las facturas de Juan:\n- [Comprobante MF-0043](/api/invoices/inv_1/print) — $1,500.00\n- [Comprobante MF-0044](/api/invoices/inv_2/print) — $820.50",
+  );
+  assert.equal(veces(lista, '<li class="row">'), 2, lista);
+  assert.match(lista, /<span class="rowLabel"><a href="\/api\/invoices\/inv_1\/print"[^>]*>Comprobante MF-0043<\/a><\/span><span class="rowAmount">\$1,500\.00<\/span>/);
+
+  const tabla = pintar("| Factura | Saldo |\n|---|---|\n| [MF-0043](/api/invoices/inv_1/print) | $1,500 |\n| MF-0044 | $820 |");
+  assert.match(tabla, /<td data-label="Factura"><span><a href="\/api\/invoices\/inv_1\/print"/);
+
+  // Dos renglones de párrafo con enlace: el salto se conserva y el enlace también.
+  const parrafo = pintar("Listo, aquí está:\n[Comprobante MF-0043](/api/invoices/inv_1/print)");
+  assert.match(parrafo, /aquí está:\n<a href="\/api\/invoices\/inv_1\/print"/);
+  // Y hacia fuera sigue sin haber enlace.
+  assert.doesNotMatch(pintar("- [clic](https://otro.sitio/robo) — $1\n- Beto — $2"), /<a /);
+});

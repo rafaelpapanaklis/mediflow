@@ -515,6 +515,9 @@ test("el motor recibe la tabla y el «deshacer» de ESTA propuesta, no el genera
   if (!r.ok) return;
   assert.equal((r.datos as any).se_puede_deshacer, true);
   assert.ok((r.datos as any).tabla);
+  // Integración #259 + #260: el prompt dice «sin tablas en el chat»; la de la tarjeta
+  // la arma el servidor, y al modelo se le dice que no la repita.
+  assert.match((r.datos as any).instruccion, /ya salen en la tabla de la tarjeta: no los copies en el chat/);
   const guardada = propuestaDeDatos(r.datos)!;
   assert.equal(guardada.deshacer.reversible, true);
   assert.equal(guardada.tarjeta.tabla?.filas.length, 2);
@@ -529,6 +532,14 @@ test("el motor recibe la tabla y el «deshacer» de ESTA propuesta, no el genera
   const mal = await correrHerramienta(herramientaDeAccion(rota), recepcion(db), {});
   assert.equal(mal.ok, false);
   assert.match((mal as any).detalle, /tabla_de_tarjeta_invalida/);
+
+  // Sin tabla (un cobro), la instrucción no paga esa frase de más.
+  const cobro = await correrHerramienta(herramientaDeAccion(accionCobrarFactura), admin(db), { factura: "MF-0010", metodo: "cash" });
+  assert.equal(cobro.ok, true, JSON.stringify(cobro));
+  if (!cobro.ok) return;
+  assert.equal((cobro.datos as any).estado, "propuesta_sin_confirmar");
+  assert.equal((cobro.datos as any).tabla, undefined);
+  assert.doesNotMatch((cobro.datos as any).instruccion, /tabla/);
 });
 
 /* ══════════════════════════════════════════════════════════════════════

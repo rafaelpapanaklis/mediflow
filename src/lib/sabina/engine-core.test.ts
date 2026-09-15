@@ -368,7 +368,8 @@ test("el prompt pide lista para «quiénes/cuáles» y frase para «cuántos», 
     assert.match(prompt, /Si piden quiénes o cuáles y son varios, uno por línea con "- "/, dificultad);
     assert.match(prompt, /cópialas tal cual/, dificultad);
     assert.match(prompt, /Si piden cuántos o cuánto, o es uno solo, una frase/, dificultad);
-    assert.match(prompt, /Sin tablas: se lee en el teléfono/, dificultad);
+    // «en el chat»: la tarjeta de una factura SÍ trae tabla (la arma el servidor).
+    assert.match(prompt, /Sin tablas en el chat: se lee en el teléfono/, dificultad);
   }
   // «Dos o tres líneas» a secas era lo que apretaba ocho deudores en una línea con comas.
   const directa = construirSystemPrompt({ dificultad: "directa", hoy: "hoy" });

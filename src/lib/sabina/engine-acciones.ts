@@ -260,6 +260,14 @@ const INSTRUCCION_PROPUESTA =
   "Un «sí» escrito en el chat no ejecuta nada: si te lo escribe, dile que use el botón.";
 
 /**
+ * Solo cuando la tarjeta trae tabla (los conceptos de una factura). El prompt dice
+ * «uno por línea» para las listas y «sin tablas en el chat»; con los conceptos a la
+ * vista en `tabla`, nada le decía que ya se ven en la tarjeta y podía repetirlos en
+ * el chat. Aquí se le dice, y solo se paga en el turno que propone con tabla.
+ */
+const INSTRUCCION_TABLA = "Los conceptos ya salen en la tabla de la tarjeta: no los copies en el chat, ni en tabla ni en lista.";
+
+/**
  * La herramienta que el motor ofrece al modelo por cada acción.
  *
  * Su `ejecutar` solo PREPARA: llama a `accion.preparar`, valida los datos contra
@@ -316,7 +324,7 @@ export function herramientaDeAccion<P, D>(accion: SabinaAccion<P, D>): SabinaToo
             avisos: tarjeta.avisos,
             ...(tabla ? { tabla } : {}),
             se_puede_deshacer: deshacer.reversible,
-            instruccion: INSTRUCCION_PROPUESTA,
+            instruccion: tabla ? `${INSTRUCCION_PROPUESTA} ${INSTRUCCION_TABLA}` : INSTRUCCION_PROPUESTA,
           };
           PROPUESTA_DE_DATOS.set(salida, {
             accion: accion.nombre,
