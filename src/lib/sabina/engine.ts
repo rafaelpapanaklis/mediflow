@@ -264,6 +264,9 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   let huboAccion = false;
   let ultimaAccion: DesenlaceAccion | null = null;
   let corregido = false;
+  // Lo que el modelo dijo antes de la vuelta de corrección: si esa vuelta no llega a
+  // contestar, vuelve para que la red de abajo lo sustituya por la verdad.
+  let antesDeCorregir: string | null = null;
   let tokensEntrada = 0;
   let tokensSalida = 0;
   const consumo: SabinaConsumo[] = [];
@@ -459,6 +462,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       limite - ahora() > SABINA_MARGEN_CORRECCION_MS
     ) {
       corregido = true;
+      antesDeCorregir = respuesta;
       messages.push({ role: "assistant", content: respuesta });
       messages.push({ role: "user", content: CORRECCION_SIN_TARJETA });
       respuesta = null;
@@ -480,6 +484,18 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
 
     escalado = true;
     modelo = modeloPara("abierta");
+  }
+
+  // La vuelta de corrección se quedó sin contestar (se acabó el tiempo a media vuelta o
+  // falló esa llamada). Sin esto el turno salía vacío y como `fallo`: un 503 con los
+  // tokens ya cobrados, cuando lo que había que decir ya se sabe. La respuesta que se
+  // corrigió vuelve y `garantizarSinTarjetaFantasma` la cambia por la verdad (la
+  // pregunta de la acción, su porqué o «no hay ninguna tarjeta que confirmar»).
+  // Solo SIN propuesta: con una, esa red no toca el texto, y el viejo (escrito antes de
+  // correr ninguna herramienta) podría narrar otra cosa que la tarjeta real.
+  if (corregido && !respuesta && antesDeCorregir && propuestas.length === 0) {
+    respuesta = antesDeCorregir;
+    fallo = false;
   }
 
   // Sin acciones en el catálogo no existen tarjetas: no hay nada que vigilar, y

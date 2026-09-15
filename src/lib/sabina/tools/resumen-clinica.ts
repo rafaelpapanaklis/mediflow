@@ -42,6 +42,8 @@ import { pacientesConDeuda, type DatosDeuda } from "./pacientes-con-deuda";
 import { pacientesNuevos, type DatosNuevos } from "./pacientes-nuevos";
 import { fechaDe, hoyEnClinica, ventanaDelMes } from "./fechas";
 import type { PermissionKey, SabinaCtx } from "../tipos";
+import { fraseSinPermiso } from "../engine-core";
+import { causaSinPermiso, type CausaSinPermiso } from "../permisos-sabina";
 
 const parametros = z.object({});
 
@@ -52,6 +54,11 @@ export interface SeccionOmitida {
   seccion: string;
   /** Qué habría hecho falta. El motor lo convierte en una frase explícita. */
   permiso: PermissionKey;
+  /**
+   * Solo si NO es «el usuario no lo tiene»: el usuario sí lo tiene y el Super Admin
+   * se lo quitó a Sabina (o la apagó). Cambia la frase, no lo que se omite.
+   */
+  causa?: Exclude<CausaSinPermiso, "usuario">;
 }
 
 export interface DatosResumen {
@@ -92,7 +99,7 @@ export const resumenClinica = definirHerramienta<ParamsResumen, DatosResumen>({
     "para arrancar cualquier pregunta ABIERTA («¿cómo va mi clínica?», «¿qué hago para crecer?», " +
     "«¿por qué bajaron mis ingresos?») y para saber de un golpe dónde mirar después. Si a quien " +
     "pregunta le falta permiso para alguna parte, esa parte viene en `omitidas` y HAY QUE DECÍRSELO: " +
-    "no es que no haya datos, es que no tiene acceso.",
+    "no es que no haya datos, es que no tiene acceso (dilo con la frase que venga en el resumen).",
   parametros,
   permiso: "today.view",
 
@@ -107,7 +114,8 @@ export const resumenClinica = definirHerramienta<ParamsResumen, DatosResumen>({
     const omitidas: SeccionOmitida[] = [];
     const puede = (nombre: string, permiso: PermissionKey): boolean => {
       if (tienePermiso(ctx, permiso)) return true;
-      omitidas.push({ seccion: nombre, permiso });
+      const causa = causaSinPermiso(ctx, permiso);
+      omitidas.push(causa === "usuario" ? { seccion: nombre, permiso } : { seccion: nombre, permiso, causa });
       return false;
     };
 
@@ -178,8 +186,23 @@ export const resumenClinica = definirHerramienta<ParamsResumen, DatosResumen>({
 
     const cuerpo = partes.length > 0 ? `${d.fecha}: ${partes.join("; ")}.` : `${d.fecha}.`;
     if (d.omitidas.length === 0) return cuerpo;
-    const falta = d.omitidas.map((o) => `${o.seccion} (falta ${o.permiso})`).join(", ");
-    return `${cuerpo} NO tienes acceso a: ${falta} — dilo, no lo presentes como que no hay datos.`;
+    const delUsuario = d.omitidas.filter((o) => !o.causa);
+    // Lo que el Super Admin le quitó a Sabina: «NO tienes acceso» sería mentirle a quien
+    // sí lo tiene, y el motor añadiría después la frase correcta, contradiciéndolo.
+    const deSabina = d.omitidas.filter((o) => o.causa);
+    const avisos: string[] = [];
+    if (delUsuario.length > 0) {
+      const falta = delUsuario.map((o) => `${o.seccion} (falta ${o.permiso})`).join(", ");
+      avisos.push(`NO tienes acceso a: ${falta} — dilo, no lo presentes como que no hay datos.`);
+    }
+    if (deSabina.length > 0) {
+      const frases = Array.from(new Set(deSabina.map((o) => fraseSinPermiso(o.permiso, o.causa))));
+      avisos.push(
+        `Omití ${deSabina.map((o) => o.seccion).join(", ")}: el usuario SÍ tiene ese acceso, pero el Super Admin no te deja usarlo en su nombre. ` +
+          `NO digas que no tiene acceso; di textualmente: "${frases.join(" ")}"`,
+      );
+    }
+    return `${cuerpo} ${avisos.join(" ")}`;
   },
 });
 

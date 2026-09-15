@@ -35,6 +35,7 @@ import {
   type SabinaPreparacion,
 } from "../engine-acciones";
 import { soloLectura } from "../engine-solo-lectura";
+import { causaSinPermiso } from "../permisos-sabina";
 import { tienePermiso } from "../tools/base";
 import { fechaLarga } from "../tools/agenda-comun";
 import { hoyEnClinica } from "../tools/fechas";
@@ -137,10 +138,16 @@ export async function prepararCobro(ctx: SabinaCtx, p: ParamsCobrar): Promise<Sa
   // Confirmar un borrador lo hace POST /confirm, que pide `billing.create`. Sin ese
   // permiso la tarjeta prometería algo que el servidor va a rechazar a medias.
   if (confirmarPrimero && !tienePermiso(ctx, "billing.create")) {
-    return {
-      tipo: "sin_permiso",
-      frase: `La factura ${f.folio} sigue en borrador y confirmarla pide el permiso de crear facturas, que no tienes. Que la confirme alguien con ese permiso y luego la cobro.`,
-    };
+    // Con el recorte de Sabina (ctx ya recortado), «que no tienes» puede ser falso.
+    return causaSinPermiso(ctx, "billing.create") === "sabina"
+      ? {
+          tipo: "sin_permiso",
+          frase: `La factura ${f.folio} sigue en borrador y confirmarla pide el permiso de crear facturas. Tú sí lo tienes, pero el Super Admin de la clínica no me deja usarlo en tu nombre: confírmala tú desde el panel y luego la cobro.`,
+        }
+      : {
+          tipo: "sin_permiso",
+          frase: `La factura ${f.folio} sigue en borrador y confirmarla pide el permiso de crear facturas, que no tienes. Que la confirme alguien con ese permiso y luego la cobro.`,
+        };
   }
 
   return { tipo: "propuesta", datos: datosDe(f, modo, monto, p.metodo), tarjeta: tarjetaDe(ctx, f, modo, monto, p.metodo) };

@@ -25,6 +25,7 @@ import { round2 } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import type { SabinaPreparacion } from "../engine-acciones";
+import { FRASE_SABINA_APAGADA, causaSinPermiso } from "../permisos-sabina";
 import { tienePermiso, visorDe } from "../tools/base";
 import type { AgendaDb, OpcionAgenda } from "../tools/agenda-comun";
 import { nombreDe, telefonoParcial } from "../tools/agenda-comun";
@@ -245,6 +246,17 @@ export function foliosCandidatos(texto: string, prefijo: "MF" | "P"): string[] {
  */
 export function sinVerFacturacion(ctx: SabinaCtx): SabinaPreparacion<never> | null {
   if (tienePermiso(ctx, "billing.view")) return null;
+  // El ctx ya viene recortado (permisos de Sabina por usuario): si quien pregunta SÍ
+  // ve facturación y fue el Super Admin quien se lo quitó a Sabina, «no tienes
+  // permiso» es falso y lo manda a pedir algo que ya tiene.
+  const causa = causaSinPermiso(ctx, "billing.view");
+  if (causa === "apagada") return { tipo: "sin_permiso", frase: FRASE_SABINA_APAGADA };
+  if (causa === "sabina") {
+    return {
+      tipo: "sin_permiso",
+      frase: "Tú sí puedes ver facturación, pero el Super Admin de la clínica no me deja verla en tu nombre, así que no puedo enseñarte ni preparar nada sobre facturas. Puedes hacerlo tú desde el panel, o pedirle que me lo active en Equipo.",
+    };
+  }
   return {
     tipo: "sin_permiso",
     frase: "No tienes permiso para ver facturación, así que no puedo enseñarte ni preparar nada sobre facturas. Ese permiso lo da el administrador de la clínica en Equipo.",

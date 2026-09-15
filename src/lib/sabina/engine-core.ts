@@ -486,14 +486,19 @@ const CONFIRMAR_ESO = /\bconfirm(ala|alo|alas|alos|arla|arlo|arlas|arlos|es)\b/;
 const TOCAR = /\b(toca|toque|tocar|pulsa|pulse|pulsar|presiona|presione|aprieta|oprime|dale|clic|click)\b/;
 /** Lo que, junto a «tarjeta», también manda a mirarla: «revisa la tarjeta de abajo». */
 const MIRAR = /\b(revisa|revisala|revisalo|abajo|debajo)\b/;
-/** «cobraste con tarjeta», «la tarjeta de ingresos del inicio»: no es la tarjeta de Sabina. */
-const OTRA_TARJETA = /\b(con|por|en|de) tarjetas?\b|\btarjetas? de (credito|debito|ingresos|cobros?|pagos?|fidelidad|presentacion|regalo)\b/;
+/**
+ * «cobraste con tarjeta», «la tarjeta de ingresos del inicio»: no es la tarjeta de Sabina.
+ * Se BORRA de la oración antes de buscar la de Sabina, no descarta la oración entera:
+ * desde que Sabina cobra (ws1-t2), el método de pago y la tarjeta de la propuesta
+ * caben en la misma frase («confirma el cobro con tarjeta de débito en la tarjeta»).
+ */
+const OTRA_TARJETA = /\b(con|por|en|de) tarjetas?\b|\btarjetas? de (credito|debito|ingresos|cobros?|pagos?|fidelidad|presentacion|regalo)\b/g;
 /**
  * Los botones de las tarjetas son «Sí, <infinitivo>» («Sí, agendar», «Sí, dar de
  * alta»…). Con el infinitivo: «dime "sí, agéndala" y la preparo» es una pregunta
  * de Sabina, no un botón.
  */
-const ETIQUETA_DE_BOTON = /["«“]\s*si,\s*(agendar|mover|cancelar|dar de alta|registrar|cobrar|crear|facturar|avisar)\b/;
+const ETIQUETA_DE_BOTON = /["«“]\s*si,\s*(agendar|mover|cancelar|dar de alta|registrar|cobrar|crear|facturar|avisar|mandar)\b/;
 /**
  * «No hay ninguna tarjeta que confirmar» es justo la frase honesta, no la mentira.
  * La negación tiene que ir SOBRE la tarjeta: «No hay problema, confírmala en la
@@ -519,7 +524,7 @@ export function mandaAConfirmarTarjeta(respuesta: string, huboAccion: boolean): 
       // «Sí, agendar», «Sí, dar de alta»: el nombre de un botón de tarjeta ya lo dice todo.
       if (ETIQUETA_DE_BOTON.test(oracion)) return true;
       const ordena = CONFIRMAR.test(oracion) || TOCAR.test(oracion);
-      const tarjeta = TARJETA.test(oracion) && !OTRA_TARJETA.test(oracion);
+      const tarjeta = TARJETA.test(oracion.replace(OTRA_TARJETA, " "));
       if (tarjeta && (ordena || BOTON.test(oracion))) return true;
       if (!huboAccion) return false;
       if (tarjeta && MIRAR.test(oracion)) return true;
@@ -735,7 +740,7 @@ ${
 Solo lees. No agendas citas, no cobras, no editas expedientes, no mandas mensajes. Si te lo piden, di que no puedes hacerlo y ofrece el dato que sí tienes.
 `
     : `LO QUE PUEDES PREPARAR, Y CÓMO
-Además de consultar, puedes preparar esto: ${acciones.join("; ")}. Nada más: lo que no está en esa lista no lo haces (no editas expedientes, no timbras CFDI, no cancelas ni reembolsas).
+Además de consultar, puedes preparar esto: ${acciones.join("; ")}. Nada más: lo que no está en esa lista no lo haces (no editas expedientes, no timbras CFDI, no cancelas ni reembolsas facturas).
 - Tus herramientas de acción NO hacen nada. Preparan una PROPUESTA que el usuario ve en una tarjeta y confirma con un botón. Hasta que la confirme, no pasó nada.
 - Después de proponer, di en una o dos frases qué propones y que lo confirme en la tarjeta. NUNCA digas "ya quedó", "listo" ni "ya lo hice".
 - Un "sí" escrito en el chat NO confirma nada: lo único que confirma es el botón de una tarjeta.

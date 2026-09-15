@@ -159,6 +159,9 @@ async function sqlCrudo(q: any, ...valores: unknown[]): Promise<any[]> {
 const prismaDoble: any = new Proxy({}, {
   get(_t, k: string) {
     if (k === "auditLog") return m.propuestas.db.auditLog;
+    // Sin fila en sabina_user_permissions (#254): Sabina con todo lo del usuario, lo de
+    // siempre. El recorte del Super Admin sobre dinero se prueba en `test:sabina-candados-integrados`.
+    if (k === "sabinaUserPermission") return { findFirst: async () => null };
     if (k === "$executeRaw") return m.propuestas.db.$executeRaw;
     if (k === "$transaction") {
       return (fn: (tx: any) => Promise<unknown>) =>
