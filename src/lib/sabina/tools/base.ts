@@ -274,15 +274,55 @@ export function plural(n: number, singular: string, muchos: string): string {
   return `${n} ${n === 1 ? singular : muchos}`;
 }
 
-/** Importe en pesos, como lo escribe el panel. */
-export function pesos(n: number): string {
-  return `$${(Math.round((n + Number.EPSILON) * 100) / 100).toLocaleString("es-MX", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+/**
+ * Importe en pesos, como lo escribe el panel: sin centavos si es entero.
+ *
+ * Con centavos van SIEMPRE los dos dígitos. Antes 1500.5 salía «$1,500.5», y el
+ * modelo lo copiaba así junto a un «$820.00» que había formateado él.
+ * `conCentavos` fuerza los dos decimales aunque sea entero: es lo que usa una
+ * lista para que todas sus cantidades tengan la misma forma (ver `pesosDeLista`).
+ */
+export function pesos(n: number, conCentavos = false): string {
+  const redondo = Math.round((n + Number.EPSILON) * 100) / 100;
+  const decimales = conCentavos || !Number.isInteger(redondo) ? 2 : 0;
+  return `$${redondo.toLocaleString("es-MX", {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
   })}`;
 }
 
 /** Porcentaje entero, o "n/d" cuando no se puede calcular (regla 5: no se inventa). */
 export function pct(n: number | null): string {
   return n === null ? "n/d" : `${n}%`;
+}
+
+/**
+ * El listado de un `resumen`: una fila por línea, cada una con «- ».
+ *
+ * Existe por lo que vivió Rafael el 14-sep-2026: pidió «enlista los pacientes que
+ * deben» y Sabina contestó nombres y montos separados por comas. El modelo copia
+ * la forma del `resumen` que le llega; si el resumen trae la lista ya partida en
+ * líneas y con el dinero formateado, la respuesta sale igual, y la pantalla la
+ * pinta como lista (`parseSabinaMarkdown`).
+ *
+ * Con menos de dos filas devuelve "": una lista de un solo elemento es ruido, y
+ * ese caso se dice en la frase de arriba. Va con salto de línea delante para
+ * pegarlo directo detrás de la cabecera.
+ */
+export function lineasDeLista<T>(filas: readonly T[], aLinea: (fila: T) => string): string {
+  if (filas.length < 2) return "";
+  return filas
+    .slice(0, TOPE_FILAS)
+    .map((f) => `\n- ${aLinea(f).replace(/\s+/g, " ").trim()}`)
+    .join("");
+}
+
+/**
+ * Formateador para las cantidades de UNA lista: si alguna trae centavos, todas los
+ * llevan. Así la columna se lee igual en cada línea («$1,500.00» y «$820.50», no
+ * «$1,500» y «$820.50») y la pantalla las alinea.
+ */
+export function pesosDeLista(montos: readonly number[]): (n: number) => string {
+  const conCentavos = montos.some((m) => !Number.isInteger(Math.round((m + Number.EPSILON) * 100) / 100));
+  return (n) => pesos(n, conCentavos);
 }

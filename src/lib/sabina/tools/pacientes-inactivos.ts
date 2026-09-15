@@ -31,6 +31,7 @@ import {
   dbDe,
   definirHerramienta,
   fraseRecorte,
+  lineasDeLista,
   plural,
   recortar,
   type Lista,
@@ -164,12 +165,19 @@ export const pacientesInactivos = definirHerramienta<ParamsInactivos, DatosInact
   resumir(d) {
     const aprox = d.totalAproximado ? " al menos" : "";
     const primero = d.inactivos.filas[0];
-    const cola = primero
-      ? ` El que lleva más tiempo es ${primero.paciente}, ${primero.diasSinVenir} días desde el ${primero.ultimaVisita}.`
-      : "";
+    // Es la lista de «a quién llamo»: con varios, uno por línea y con su teléfono.
+    const lista = lineasDeLista(
+      d.inactivos.filas,
+      (p) => `${p.paciente} — ${p.diasSinVenir} días (última visita ${p.ultimaVisita}${p.telefono ? `, tel. ${p.telefono}` : ""})`,
+    );
+    const cola = lista
+      ? " Del que lleva más tiempo al que menos:"
+      : primero
+        ? ` Es ${primero.paciente}, ${primero.diasSinVenir} días desde el ${primero.ultimaVisita}.`
+        : "";
     return (
       `Hay${aprox} ${plural(d.inactivos.total, "paciente sin volver", "pacientes sin volver")} en ` +
-      `${d.dias} días y sin cita agendada${fraseRecorte(d.inactivos, "pacientes")}.${cola}`
+      `${d.dias} días y sin cita agendada${fraseRecorte(d.inactivos, "pacientes")}.${cola}${lista}`
     );
   },
 });

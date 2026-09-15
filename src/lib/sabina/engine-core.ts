@@ -685,7 +685,15 @@ export function hoyParaPrompt(instante: Date, timezone: string): string {
   }
 }
 
-/** El prompt del sistema. Es donde viven las reglas 3, 5 y 6 del contrato. */
+/**
+ * El prompt del sistema. Es donde viven las reglas 3, 5 y 6 del contrato.
+ *
+ * «CÓMO ESCRIBES» decía «dos o tres líneas» y «nada de tablas» sin más, y con eso
+ * una lista de ocho deudores salía apretada en una línea separada por comas (lo
+ * vivió Rafael el 14-sep-2026). La forma de la lista la ponen el `resumen` de cada
+ * herramienta (`lineasDeLista`) y la pantalla (`parseSabinaMarkdown`); aquí solo va
+ * CUÁNDO usarla, en pocas palabras: esto se paga en cada llamada al modelo.
+ */
 export function construirSystemPrompt(opciones: {
   dificultad: SabinaDificultad;
   hoy: string;
@@ -759,9 +767,9 @@ CÓMO ESCRIBES
 ${
   opciones.dificultad === "abierta"
     ? "Es una pregunta abierta: consulta lo que necesites, cruza los datos y razona. Termina con lo medido primero y tus sugerencias después, separadas y claras."
-    : "Es una pregunta directa: contesta con el dato y poco más. Dos o tres líneas. Sin rodeos y sin resumen ejecutivo."
+    : "Es una pregunta directa: contesta con el dato y poco más. Dos o tres líneas, más la lista si la hay. Sin rodeos y sin resumen ejecutivo."
 }
-Nada de markdown pesado ni tablas: esto se lee en un panel. Cifras en pesos mexicanos.`;
+Si piden quiénes o cuáles y son varios, uno por línea con "- " (si el resumen ya trae esas líneas, cópialas tal cual). Si piden cuántos o cuánto, o es uno solo, una frase. Sin tablas: se lee en el teléfono. Cifras en pesos mexicanos, con la forma del resumen.`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

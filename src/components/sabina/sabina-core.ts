@@ -5,6 +5,7 @@
  * saneadores y los pequeños parsers que comparte el cliente con sus tests.
  * Todo lo que toque `/api/sabina` vive en `./sabina-client.tsx`.
  */
+import { celdasDe, empiezaTabla, esRenglonDeCuenta, sinMarcador, tipoDeElemento } from "./sabina-listas";
 
 // ── Límites del lado del cliente ────────────────────────────────────────
 // Techo defensivo de la pregunta que se manda. El motor puede tener el suyo
@@ -186,24 +187,55 @@ export function classifyParagraphTone(text: string): SabinaParagraphTone {
 
 export type SabinaBlock =
   | { kind: "heading"; level: 2 | 3; text: string }
-  | { kind: "bullets"; items: string[]; tone: SabinaParagraphTone }
+  // `ordered` solo aparece en las numeradas («1. », «2) »).
+  | { kind: "bullets"; items: string[]; tone: SabinaParagraphTone; ordered?: true }
+  | { kind: "table"; header: string[]; rows: string[][] }
   | { kind: "paragraph"; text: string; tone: SabinaParagraphTone };
 
 /**
- * Markdown MUY ligero: encabezados `##`/`###`, listas `- `/`• ` y párrafos.
- * No es un parser general — cubre lo que un modelo de chat suele escribir,
- * nada más. Negritas/itálicas/código dentro de un bloque se resuelven aparte
- * con `tokenizeInline`, porque eso ya pinta JSX y este archivo no importa React.
+ * Markdown MUY ligero: encabezados `##`/`###`, listas (`- `, `• `, `* `, `1. `),
+ * tablas `| a | b |` y párrafos. No es un parser general — cubre lo que un modelo
+ * de chat suele escribir, nada más. Negritas/itálicas/código dentro de un bloque
+ * se resuelven aparte con `tokenizeInline`, porque eso ya pinta JSX y este archivo
+ * no importa React.
+ *
+ * Hasta el 14-sep-2026 se aplastaba en un solo párrafo todo lo que no fuera
+ * `- `/`• `: la lista numerada, la tabla y hasta las líneas sueltas («Ana — $1,500»
+ * y debajo «Luis — $800» se leían seguidas en una línea). Ahora el párrafo conserva
+ * sus saltos de línea, dos o más líneas seguidas de «etiqueta — $cantidad» son una
+ * lista aunque no traigan viñeta, y una lista de un solo elemento se pinta como
+ * frase: una viñeta sola es ruido. Lo fino de cada caso está en `sabina-listas.ts`.
  */
 export function parseSabinaMarkdown(raw: string): SabinaBlock[] {
   const lines = raw.replace(/\r\n/g, "\n").split("\n");
   const blocks: SabinaBlock[] = [];
   let buf: string[] = [];
 
-  const flush = () => {
-    const text = buf.join(" ").replace(/\s+/g, " ").trim();
-    buf = [];
+  const pushParagraph = (renglones: string[]) => {
+    const text = renglones.join("\n").trim();
     if (text) blocks.push({ kind: "paragraph", text, tone: classifyParagraphTone(text) });
+  };
+
+  const flush = () => {
+    const renglones = buf.map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+    buf = [];
+    let parrafo: string[] = [];
+    let j = 0;
+    while (j < renglones.length) {
+      let fin = j;
+      while (fin < renglones.length && esRenglonDeCuenta(renglones[fin])) fin++;
+      if (fin - j >= 2) {
+        pushParagraph(parrafo);
+        parrafo = [];
+        const items = renglones.slice(j, fin);
+        blocks.push({ kind: "bullets", items, tone: classifyParagraphTone(items[0]) });
+        j = fin;
+      } else {
+        parrafo.push(renglones[j]);
+        j++;
+      }
+    }
+    pushParagraph(parrafo);
   };
 
   let i = 0;
@@ -224,14 +256,48 @@ export function parseSabinaMarkdown(raw: string): SabinaBlock[] {
       continue;
     }
 
-    if (/^[-•]\s+/.test(trimmed)) {
+    if (empiezaTabla(lines, i)) {
       flush();
-      const items: string[] = [];
-      while (i < lines.length && /^[-•]\s+/.test(lines[i].trim())) {
-        items.push(lines[i].trim().replace(/^[-•]\s+/, ""));
+      const header = celdasDe(lines[i]);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && lines[i].trim().includes("|")) {
+        rows.push(celdasDe(lines[i]).slice(0, header.length));
         i++;
       }
-      blocks.push({ kind: "bullets", items, tone: classifyParagraphTone(items[0] ?? "") });
+      // Una tabla de una fila es una frase disfrazada: «Citas hoy: 4 · Canceladas: 1».
+      if (rows.length === 1) {
+        pushParagraph([header.map((h, j) => `${h}: ${rows[0][j] ?? ""}`).join(" · ")]);
+      } else if (rows.length > 1) {
+        blocks.push({ kind: "table", header, rows });
+      }
+      continue;
+    }
+
+    const tipo = tipoDeElemento(trimmed);
+    if (tipo) {
+      flush();
+      const items: string[] = [];
+      const primera = trimmed;
+      while (i < lines.length) {
+        const actual = lines[i].trim();
+        if (actual && tipoDeElemento(actual) === tipo) {
+          items.push(sinMarcador(actual));
+          i++;
+          continue;
+        }
+        // Un renglón en blanco entre dos elementos no parte la lista («1. Ana⏎⏎2. Luis»).
+        let k = i;
+        while (k < lines.length && !lines[k].trim()) k++;
+        if (!actual && k < lines.length && tipoDeElemento(lines[k]) === tipo) {
+          i = k;
+          continue;
+        }
+        break;
+      }
+      // Sola, la viñeta sobra; el número no («1. Llama a Ana» sigue siendo un paso).
+      if (items.length === 1) pushParagraph([tipo === "number" ? primera : items[0]]);
+      else blocks.push({ kind: "bullets", items, tone: classifyParagraphTone(items[0] ?? ""), ...(tipo === "number" ? { ordered: true as const } : {}) });
       continue;
     }
 

@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { parseSabinaMarkdown, tokenizeInline, type SabinaBlock, type SabinaParagraphTone } from "./sabina-core";
+import { columnasNumericas, filasConMonto } from "./sabina-listas";
 import styles from "./sabina-widgets.module.css";
 
 /**
@@ -30,16 +31,77 @@ function Block({ block }: { block: SabinaBlock }) {
     const Tag = block.level === 2 ? "h3" : "h4";
     return <Tag className={styles.heading}>{renderInline(block.text)}</Tag>;
   }
+  if (block.kind === "table") return <Table header={block.header} rows={block.rows} />;
   if (block.kind === "bullets") {
+    const List = block.ordered ? "ol" : "ul";
+    const filas = filasConMonto(block.items);
+    if (filas) {
+      // «Ana López — $1,500» en cada línea: la cantidad va a su propia columna,
+      // alineada a la derecha, para que la lista se lea en diagonal. Una fila por
+      // renglón cabe igual a 360 px que en el escritorio (el nombre se parte, la
+      // cantidad no).
+      return (
+        <List className={`${styles.rows} ${toneClass(block.tone)}`}>
+          {filas.map((f, i) => (
+            <li key={i} className={styles.row}>
+              <span className={styles.rowLabel}>
+                {block.ordered && <span className={styles.rowIndex}>{i + 1}.</span>}
+                {renderInline(f.etiqueta)}
+                {f.detalle && <span className={styles.rowDetail}> {renderInline(f.detalle)}</span>}
+              </span>
+              <span className={styles.rowAmount}>{f.monto}</span>
+            </li>
+          ))}
+        </List>
+      );
+    }
     return (
-      <ul className={`${styles.bullets} ${toneClass(block.tone)}`}>
+      <List className={`${styles.bullets} ${toneClass(block.tone)}`}>
         {block.items.map((item, i) => (
           <li key={i}>{renderInline(item)}</li>
         ))}
-      </ul>
+      </List>
     );
   }
   return <p className={`${styles.paragraph} ${toneClass(block.tone)}`}>{renderInline(block.text)}</p>;
+}
+
+/**
+ * El prompt le pide a Sabina que no haga tablas; si aun así escribe una, no se
+ * enseña como texto con barras. En el escritorio es una tabla; en el teléfono
+ * (≤ 480 px, ver el CSS) cada fila se vuelve una ficha con «columna: valor»,
+ * porque una tabla de cinco columnas en una burbuja de 300 px no se lee.
+ */
+function Table({ header, rows }: { header: string[]; rows: string[][] }) {
+  const numericas = columnasNumericas(rows, header.length);
+  const etiqueta = (h: string) => h.replace(/[*`]/g, "");
+  return (
+    <div className={styles.tableWrap}>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            {header.map((h, j) => (
+              <th key={j} className={numericas[j] ? styles.num : undefined}>
+                {renderInline(h)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              {header.map((h, j) => (
+                <td key={j} data-label={etiqueta(h)} className={numericas[j] ? styles.num : undefined}>
+                  {/* Un solo hijo: en el teléfono la celda es flex, y «**Ana** López» suelto se repartiría a lo ancho. */}
+                  <span>{renderInline(r[j] ?? "")}</span>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function toneClass(tone: SabinaParagraphTone): string {

@@ -29,7 +29,18 @@
 import { overdueInvoiceWhere } from "@/lib/caja";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { round2 } from "@/lib/invoice-totals";
-import { dbDe, definirHerramienta, fraseRecorte, pesos, plural, recortar, visorDe, type Lista } from "./base";
+import {
+  dbDe,
+  definirHerramienta,
+  fraseRecorte,
+  lineasDeLista,
+  pesos,
+  pesosDeLista,
+  plural,
+  recortar,
+  visorDe,
+  type Lista,
+} from "./base";
 import { inicioDeHoy } from "./fechas";
 import { z } from "zod";
 import type { SabinaCtx } from "../tipos";
@@ -153,9 +164,20 @@ export const pacientesConDeuda = definirHerramienta<ParamsDeuda, DatosDeuda>({
   resumir(d) {
     const cab = `${plural(d.deudores.total, "paciente con saldo", "pacientes con saldo")} por ${pesos(d.totalAdeudado)}`;
     const venc = d.totalVencido > 0 ? `, de los que ${pesos(d.totalVencido)} ya están vencidos` : "";
-    const mayor = d.deudores.filas[0]
-      ? ` El mayor es ${d.deudores.filas[0].paciente} con ${pesos(d.deudores.filas[0].saldo)}.`
-      : "";
-    return `${cab}${venc}${fraseRecorte(d.deudores, "pacientes")}.${mayor}`;
+    const filas = d.deudores.filas;
+    // La primera línea contesta «¿cuánto me deben?»; la lista, «¿quién me debe?».
+    // Antes solo venía «el mayor es…» y el modelo armaba la lista con los números
+    // crudos de `datos`, en una línea y separados por comas.
+    const monto = pesosDeLista(filas.map((f) => f.saldo));
+    const lista = lineasDeLista(
+      filas,
+      (f) => `${f.paciente} — ${monto(f.saldo)}${f.facturas > 1 ? ` (${f.facturas} facturas)` : ""}`,
+    );
+    const cola = lista
+      ? " De mayor a menor:"
+      : filas[0]
+        ? ` Es ${filas[0].paciente} con ${pesos(filas[0].saldo)}.`
+        : "";
+    return `${cab}${venc}${fraseRecorte(d.deudores, "pacientes")}.${cola}${lista}`;
   },
 });

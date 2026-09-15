@@ -359,3 +359,29 @@ test("el prompt dice si hay tarjeta en pantalla; un «sí» ya no se manda a una
   assert.match(con, /diles que usen el botón de su tarjeta/);
   assert.doesNotMatch(con, /NO hay ninguna tarjeta en pantalla/);
 });
+
+/* ── Cómo escribe: listas cuando toca, y no más caro ───────────────────── */
+
+test("el prompt pide lista para «quiénes/cuáles» y frase para «cuántos», en las dos dificultades", () => {
+  for (const dificultad of ["directa", "abierta"] as const) {
+    const prompt = construirSystemPrompt({ dificultad, hoy: "hoy" });
+    assert.match(prompt, /Si piden quiénes o cuáles y son varios, uno por línea con "- "/, dificultad);
+    assert.match(prompt, /cópialas tal cual/, dificultad);
+    assert.match(prompt, /Si piden cuántos o cuánto, o es uno solo, una frase/, dificultad);
+    assert.match(prompt, /Sin tablas: se lee en el teléfono/, dificultad);
+  }
+  // «Dos o tres líneas» a secas era lo que apretaba ocho deudores en una línea con comas.
+  const directa = construirSystemPrompt({ dificultad: "directa", hoy: "hoy" });
+  assert.match(directa, /Dos o tres líneas, más la lista si la hay/);
+  assert.doesNotMatch(directa, /Dos o tres líneas\. /);
+});
+
+test("la sección «CÓMO ESCRIBES» no engorda: se paga en cada llamada al modelo", () => {
+  // Medido el 14-sep-2026: 410 caracteres (directa) y 428 (abierta), +197 y +173
+  // sobre la versión anterior. Si alguien la alarga, que sea a propósito.
+  for (const [dificultad, tope] of [["directa", 420], ["abierta", 440]] as const) {
+    const prompt = construirSystemPrompt({ dificultad, hoy: "hoy" });
+    const seccion = prompt.slice(prompt.indexOf("CÓMO ESCRIBES"));
+    assert.ok(seccion.length <= tope, `${dificultad}: ${seccion.length} caracteres`);
+  }
+});
