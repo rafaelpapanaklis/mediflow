@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 
 import {
+  FRASE_SIN_TARJETA,
   SABINA_MAX_TOOL_ROUNDS,
   clasificarDificultad,
   construirRastro,
@@ -15,7 +16,9 @@ import {
   debeEscalar,
   fraseSinPermiso,
   garantizarAvisoSinPermiso,
+  garantizarSinTarjetaFantasma,
   hoyParaPrompt,
+  mandaAConfirmarTarjeta,
   modeloPara,
   resultadoParaModelo,
   sanearArgumentos,
@@ -274,4 +277,79 @@ test("una zona ilegible no tumba el turno: cae a la de México", () => {
 
 test("el tope de rondas es el mismo que el del bot de barbería", () => {
   assert.equal(SABINA_MAX_TOOL_ROUNDS, 4);
+});
+
+/* ── La tarjeta que no existe (el fallo en vivo del 14-sep-2026) ────── */
+
+test("detecta cuando la respuesta manda a confirmar en una tarjeta o botón", () => {
+  for (const texto of [
+    "Para agendarla, confírmala con el botón «Sí, agendar» de la tarjeta.",
+    "Te dejé la cita del domingo lista: confírmala en la tarjeta.",
+    "No hay problema, confírmala en la tarjeta.",
+    "Dale a «Sí, dar de alta» y queda.",
+    "Toca el botón de la tarjeta para agendarla.",
+  ]) {
+    assert.equal(mandaAConfirmarTarjeta(texto, false), true, texto);
+  }
+  // Con una acción en el turno cabe menos duda: también sin la orden explícita sobre la tarjeta.
+  for (const texto of [
+    "Listo, revisa la tarjeta de abajo.",
+    "Te preparé la cita; confirma la propuesta.",
+    "Ya está lista para que la confirmes.",
+  ]) {
+    assert.equal(mandaAConfirmarTarjeta(texto, true), true, texto);
+    assert.equal(mandaAConfirmarTarjeta(texto, false), false, `sin acción no se da por mentira: ${texto}`);
+  }
+});
+
+test("no confunde la tarjeta del cobro, una cita confirmada ni la frase honesta", () => {
+  for (const texto of [
+    "Este mes cobraste $12,000 con tarjeta y $8,000 en efectivo.",
+    "Tienes 3 citas confirmadas; 2 se pagaron con tarjeta de crédito.",
+    "Los ingresos de tarjeta están abajo, detallados por semana.",
+    "Revisa la tarjeta de ingresos del inicio: ahí está el total.",
+    "¿Me confirmas el motivo de la cita?",
+    "Todavía no preparé ninguna propuesta, así que no hay ninguna tarjeta que confirmar.",
+    "¿Te agendo a Juan el martes a las 10? Dime «sí, agéndala» y la preparo.",
+    "",
+  ]) {
+    assert.equal(mandaAConfirmarTarjeta(texto, true), false, texto);
+  }
+  // Sin acción en el turno, explicar un botón del panel no es una tarjeta de Sabina.
+  assert.equal(mandaAConfirmarTarjeta("Para confirmar una cita, ábrela en la agenda y toca el botón Confirmar.", false), false);
+});
+
+test("la red sustituye la respuesta solo si no hay tarjeta de verdad, y dice el porqué de la acción", () => {
+  const mentira = "Confírmala en la tarjeta.";
+  const base = { huboPropuesta: false, tarjetaPendiente: false, huboAccion: true, ultimaAccion: null };
+
+  assert.equal(garantizarSinTarjetaFantasma(mentira, { ...base, huboPropuesta: true }), mentira, "hay tarjeta en este turno");
+  assert.equal(garantizarSinTarjetaFantasma(mentira, { ...base, tarjetaPendiente: true }), mentira, "hay una tarjeta esperando en pantalla");
+  assert.equal(garantizarSinTarjetaFantasma("Tienes 3 citas.", base), "Tienes 3 citas.");
+
+  assert.match(garantizarSinTarjetaFantasma(mentira, base), new RegExp(FRASE_SIN_TARJETA.slice(0, 30)));
+  assert.equal(
+    garantizarSinTarjetaFantasma(mentira, { ...base, ultimaAccion: { estado: "falta_aclarar", pregunta: "¿Cuál es el motivo de la cita?" } }),
+    "¿Cuál es el motivo de la cita?",
+  );
+  const cerrado = garantizarSinTarjetaFantasma(mentira, {
+    ...base,
+    ultimaAccion: { estado: "no_se_puede", frase: "La clínica está cerrada el domingo 20 de septiembre." },
+  });
+  assert.match(cerrado, /^La clínica está cerrada el domingo 20 de septiembre\. Por eso no preparé ninguna propuesta/);
+  assert.equal(mandaAConfirmarTarjeta(cerrado, true), false, "la frase honesta no vuelve a disparar la red");
+  assert.match(garantizarSinTarjetaFantasma(mentira, { ...base, ultimaAccion: { estado: "error" } }), /falló la consulta/);
+});
+
+test("el prompt dice si hay tarjeta en pantalla; un «sí» ya no se manda a una tarjeta a ciegas", () => {
+  const sin = construirSystemPrompt({ dificultad: "directa", hoy: "hoy", acciones: ["agendar citas"] });
+  assert.match(sin, /NO hay ninguna tarjeta en pantalla/);
+  assert.match(sin, /llama a la herramienta de acción/);
+  assert.doesNotMatch(sin, /diles que usen el botón/);
+  assert.match(sin, /"sí" escrito en el chat NO confirma nada/);
+
+  const con = construirSystemPrompt({ dificultad: "directa", hoy: "hoy", acciones: ["agendar citas"], tarjetaPendiente: "Agendar a Ana el jueves" });
+  assert.match(con, /UNA propuesta sin confirmar: «Agendar a Ana el jueves»/);
+  assert.match(con, /diles que usen el botón de su tarjeta/);
+  assert.doesNotMatch(con, /NO hay ninguna tarjeta en pantalla/);
 });

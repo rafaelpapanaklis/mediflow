@@ -47,6 +47,14 @@ export const SABINA_TURN_BUDGET_MS = 20_000;
 /** Cada llamada al modelo, acotada aparte (AbortSignal). */
 export const SABINA_CALL_TIMEOUT_MS = 12_000;
 
+/**
+ * Tiempo mínimo que tiene que quedar del turno para darle al modelo UNA vuelta
+ * de corrección cuando manda a una tarjeta que no preparó (ver
+ * `mandaAConfirmarTarjeta`). Con menos, no le da para llamar a la herramienta y
+ * contestar: se va directo a la frase honesta.
+ */
+export const SABINA_MARGEN_CORRECCION_MS = 3_000;
+
 /** Techo de salida por llamada. Una respuesta de panel no es un ensayo. */
 export const SABINA_MAX_OUTPUT_TOKENS = 1_200;
 
@@ -402,6 +410,129 @@ export function garantizarAvisoPropuesta(respuesta: string, huboPropuesta: boole
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   LA TARJETA QUE NO EXISTE — la otra mitad de la misma mentira
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/*
+ * `garantizarAvisoPropuesta` cubre «hay tarjeta y Sabina dice que ya quedó». Esto
+ * cubre lo contrario, que es lo que vivió Rafael el 14-sep-2026: NO hay tarjeta y
+ * Sabina dice «confírmalo en la tarjeta». Para el doctor es peor que un error: ve
+ * una instrucción y una pantalla donde no hay nada que apretar.
+ *
+ * Se mira por oración y sobre el texto normalizado (sin acentos). «tarjeta» a
+ * secas no basta —la clínica cobra con tarjeta— y «confirmada» tampoco —es un
+ * estado de cita—: hace falta LA tarjeta junto a la orden de confirmar o tocar.
+ * Ante la duda, que se escape: un falso positivo borra una respuesta buena, y
+ * para lo que se escapa ya está el prompt.
+ */
+/** La tarjeta de Sabina siempre lleva artículo («en la tarjeta»); la del cobro, no («pagos de tarjeta»). */
+const TARJETA = /\b(la|las|esta|esa|una|tu|su) tarjetas?\b/;
+const BOTON = /\bboton(es)?\b/;
+const PROPUESTA = /\bpropuestas?\b/;
+/** «confírmala», «confirmar», «confirma»… pero no «confirmada(s)/confirmado(s)». */
+const CONFIRMAR = /\bconfirm(?!ad[ao]s?\b)[a-z]*/;
+/**
+ * «para que la confirmes», «confírmala»: confirmar ESO que se preparó. No «¿me
+ * confirmas el motivo?» ni «confírmame la hora», que es Sabina pidiendo un dato.
+ */
+const CONFIRMAR_ESO = /\bconfirm(ala|alo|alas|alos|arla|arlo|arlas|arlos|es)\b/;
+const TOCAR = /\b(toca|toque|tocar|pulsa|pulse|pulsar|presiona|presione|aprieta|oprime|dale|clic|click)\b/;
+/** Lo que, junto a «tarjeta», también manda a mirarla: «revisa la tarjeta de abajo». */
+const MIRAR = /\b(revisa|revisala|revisalo|abajo|debajo)\b/;
+/** «cobraste con tarjeta», «la tarjeta de ingresos del inicio»: no es la tarjeta de Sabina. */
+const OTRA_TARJETA = /\b(con|por|en|de) tarjetas?\b|\btarjetas? de (credito|debito|ingresos|cobros?|pagos?|fidelidad|presentacion|regalo)\b/;
+/**
+ * Los botones de las tarjetas son «Sí, <infinitivo>» («Sí, agendar», «Sí, dar de
+ * alta»…). Con el infinitivo: «dime "sí, agéndala" y la preparo» es una pregunta
+ * de Sabina, no un botón.
+ */
+const ETIQUETA_DE_BOTON = /["«“]\s*si,\s*(agendar|mover|cancelar|dar de alta|registrar|cobrar|crear|facturar|avisar)\b/;
+/**
+ * «No hay ninguna tarjeta que confirmar» es justo la frase honesta, no la mentira.
+ * La negación tiene que ir SOBRE la tarjeta: «No hay problema, confírmala en la
+ * tarjeta» sigue siendo la mentira.
+ */
+const NIEGA = /\b(no hay|ninguna|ningun)\b[^,;:]{0,25}\b(tarjetas?|propuestas?|boton(es)?)\b/;
+
+/**
+ * ¿La respuesta manda al usuario a confirmar en una tarjeta o botón?
+ *
+ * `huboAccion`: en el turno corrió alguna herramienta de acción. Sin acción solo
+ * cuenta la orden explícita sobre LA tarjeta o su botón («confírmala en la
+ * tarjeta», «toca "Sí, agendar"»): «revisa los datos abajo» o «usa el botón
+ * Confirmar de la cita en la agenda» son respuestas de consulta, no tarjetas de
+ * Sabina. Con acción cabe menos duda, y cuentan también «revisa la tarjeta de
+ * abajo», «confirma la propuesta» y «para que la confirmes».
+ */
+export function mandaAConfirmarTarjeta(respuesta: string, huboAccion: boolean): boolean {
+  return normalizar(respuesta ?? "")
+    .split(/[.!?\n¿¡]+/)
+    .some((oracion) => {
+      if (!oracion.trim() || NIEGA.test(oracion)) return false;
+      // «Sí, agendar», «Sí, dar de alta»: el nombre de un botón de tarjeta ya lo dice todo.
+      if (ETIQUETA_DE_BOTON.test(oracion)) return true;
+      const ordena = CONFIRMAR.test(oracion) || TOCAR.test(oracion);
+      const tarjeta = TARJETA.test(oracion) && !OTRA_TARJETA.test(oracion);
+      if (tarjeta && (ordena || BOTON.test(oracion))) return true;
+      if (!huboAccion) return false;
+      if (tarjeta && MIRAR.test(oracion)) return true;
+      if (ordena && (BOTON.test(oracion) || PROPUESTA.test(oracion))) return true;
+      return CONFIRMAR_ESO.test(oracion);
+    });
+}
+
+/**
+ * Lo que se le dice al modelo, en su propio turno, cuando acaba de mandar a una
+ * tarjeta que no preparó. Va como mensaje de usuario porque es la única forma de
+ * meterlo en medio del bucle; no se guarda en el historial.
+ */
+export const CORRECCION_SIN_TARJETA =
+  "[Aviso del sistema; esto no lo escribió el usuario] En este turno no preparaste ninguna propuesta: en pantalla NO hay " +
+  "ninguna tarjeta ni ningún botón, así que el usuario no tiene nada que confirmar. Si ya tienes los datos de lo que pidió, " +
+  "llama AHORA a la herramienta de acción para preparar la propuesta. Si falta un dato, pregúntalo; si no se puede, explica " +
+  "por qué. No menciones ninguna tarjeta que no hayas preparado.";
+
+export const FRASE_SIN_TARJETA = "Todavía no preparé ninguna propuesta, así que no hay ninguna tarjeta que confirmar.";
+
+/** En qué quedó la última herramienta de acción del turno, si no dejó propuesta. */
+export type DesenlaceAccion =
+  | { estado: "falta_aclarar"; pregunta: string }
+  | { estado: "sin_permiso" | "no_se_puede"; frase: string }
+  | { estado: "error" };
+
+/**
+ * Red determinista: si en el turno no hubo propuesta, no hay otra tarjeta
+ * pendiente en pantalla y la respuesta aun así manda a confirmar, la respuesta se
+ * sustituye. No se recorta la oración: lo que queda alrededor («te preparé la
+ * cita del martes…») sigue describiendo algo que no existe.
+ *
+ * Si la acción SÍ corrió y dijo por qué no (el día está cerrado, falta el motivo,
+ * sin permiso), se dice ESO: «no puedo agendar porque…» sirve; «no hay tarjeta» a
+ * secas deja al doctor igual de perdido.
+ */
+export function garantizarSinTarjetaFantasma(
+  respuesta: string,
+  estado: {
+    huboPropuesta: boolean;
+    tarjetaPendiente: boolean;
+    huboAccion: boolean;
+    ultimaAccion: DesenlaceAccion | null;
+  },
+): string {
+  if (estado.huboPropuesta || estado.tarjetaPendiente) return respuesta;
+  if (!mandaAConfirmarTarjeta(respuesta, estado.huboAccion)) return respuesta;
+  const a = estado.ultimaAccion;
+  if (a?.estado === "falta_aclarar" && a.pregunta.trim()) return a.pregunta;
+  if ((a?.estado === "no_se_puede" || a?.estado === "sin_permiso") && a.frase.trim()) {
+    return `${a.frase.trim()} Por eso no preparé ninguna propuesta: no hay ninguna tarjeta que confirmar.`;
+  }
+  if (a?.estado === "error") {
+    return "No pude preparar la propuesta porque falló la consulta de los datos, así que no hay ninguna tarjeta que confirmar. Pídemelo otra vez en un momento.";
+  }
+  return `${FRASE_SIN_TARJETA} Dime otra vez qué quieres hacer, con sus datos, y te la preparo.`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    LO QUE VE EL MODELO
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -497,8 +628,23 @@ export function construirSystemPrompt(opciones: {
    * solo lee, y el prompt lo dice así.
    */
   acciones?: readonly string[];
+  /**
+   * La frase de la tarjeta de ESTA conversación que sigue esperando el botón, o
+   * `null` si no hay ninguna. El modelo no la ve de otra forma: el historial es
+   * solo texto, y «confírmalo en la tarjeta» de un turno anterior no dice si esa
+   * tarjeta ya se confirmó, caducó o nunca existió.
+   */
+  tarjetaPendiente?: string | null;
 }): string {
   const acciones = (opciones.acciones ?? []).filter(Boolean);
+  const pendiente = typeof opciones.tarjetaPendiente === "string" ? opciones.tarjetaPendiente.trim() : "";
+  // 🔴 Esta línea era incondicional: «si te escriben "sí", diles que usen el botón
+  // de la tarjeta». Agendar casi siempre pasa por una pregunta («¿te la agendo?»),
+  // y el «sí» que la contesta acababa mandado a una tarjeta que nunca se preparó
+  // (el fallo en vivo del 14-sep-2026). Ahora depende de si la tarjeta existe.
+  const lineaDelSi = pendiente
+    ? `- Ahora mismo el usuario tiene en pantalla UNA propuesta sin confirmar: «${pendiente}». Si te escriben "sí" o "confírmalo" sobre ESA propuesta, diles que usen el botón de su tarjeta.`
+    : `- Ahora mismo NO hay ninguna tarjeta en pantalla. Solo hay tarjeta cuando en ESTE turno una herramienta de acción te devuelve "propuesta_sin_confirmar". Si el usuario contesta "sí" a algo que tú le preguntaste («¿te la agendo?», «¿es este paciente?»), eso es su respuesta: llama a la herramienta de acción con los datos de la conversación para preparar la propuesta. NUNCA le pidas que confirme en una tarjeta que no preparaste.`;
   return `Eres Sabina, la asistente de una clínica dental en México. Contestas al doctor y a su equipo sobre SU clínica, en español neutro y de tú. Hoy es ${opciones.hoy}.
 
 CÓMO CONSIGUES LOS DATOS
@@ -530,7 +676,8 @@ Solo lees. No agendas citas, no cobras, no editas expedientes, no mandas mensaje
 Además de consultar, puedes preparar esto: ${acciones.join("; ")}. Nada más: no cobras, no editas expedientes, no mandas mensajes.
 - Tus herramientas de acción NO hacen nada. Preparan una PROPUESTA que el usuario ve en una tarjeta y confirma con un botón. Hasta que la confirme, no pasó nada.
 - Después de proponer, di en una o dos frases qué propones y que lo confirme en la tarjeta. NUNCA digas "ya quedó", "listo" ni "ya lo hice".
-- Un "sí" escrito en el chat NO confirma nada. Si te escriben "sí" o "confírmalo", diles que usen el botón de la tarjeta.
+- Un "sí" escrito en el chat NO confirma nada: lo único que confirma es el botón de una tarjeta.
+${lineaDelSi}
 - Una propuesta a la vez. Si te piden dos cosas, propón la primera y avisa de que después sigues con la otra.
 - Si falta un dato, pregunta el dato ("¿con qué doctor?"), no la acción. Si hay dos pacientes con el mismo nombre, pregunta cuál; nunca elijas tú.
 - Si una acción vuelve con "sin_permiso", dilo con la frase que te da la herramienta.
