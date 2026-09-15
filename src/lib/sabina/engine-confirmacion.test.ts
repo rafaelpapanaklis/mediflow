@@ -471,6 +471,107 @@ test("si el modelo dice «listo, ya quedó» tras proponer, el motor aclara que 
   assert.match(salida.respuesta, /Todavía no hice nada/);
 });
 
+/* ── La tarjeta que no existe (el fallo en vivo del 14-sep-2026) ─────── */
+
+/** Guion que además apunta cada `messages` y `system` que recibió el modelo. */
+function guionConMensajes(turnos: TurnoModelo[]) {
+  const g = guion(turnos);
+  const recibidos: Array<{ system: string; messages: any[] }> = [];
+  const llamar: LlamarModelo = async (args) => {
+    recibidos.push({ system: args.system, messages: [...(args.messages as any[])] });
+    return g.llamar(args);
+  };
+  return { ...g, llamar, recibidos };
+}
+
+test("«sí» sin tarjeta: el modelo manda a una tarjeta que no preparó, el motor le dice la verdad UNA vez y la propuesta sale", async () => {
+  const registro = { preparar: 0, ejecutar: 0 };
+  const tool = herramientaDeAccion(accionDePrueba(registro));
+  const g = guionConMensajes([
+    contesta("Para agendarla, confírmala en la tarjeta."),
+    pide("agendar_cita", { paciente: "María López" }),
+    contesta("Te propongo agendar a María López el jueves 18 a las 10:00. Confírmalo en la tarjeta."),
+  ]);
+  const salida = await ejecutarSabina({
+    ctx: ctxCon("agenda.create"),
+    pregunta: "sí",
+    historial: [
+      { role: "user", content: "¿tiene hueco el Dr. Ruiz el jueves a las 10 para María López?" },
+      { role: "assistant", content: "Sí, a las 10:00 está libre. ¿Te agendo a María López?" },
+    ],
+    tools: [tool],
+    llamar: g.llamar,
+  });
+  assert.equal(salida.propuestas.length, 1, `sin tarjeta: «${salida.respuesta}»`);
+  assert.equal(registro.preparar, 1);
+  assert.equal(registro.ejecutar, 0, "corregir no ejecuta nada");
+  assert.match(salida.respuesta, /Confírmalo en la tarjeta/);
+  // La corrección va en el MISMO turno, después de lo que dijo el modelo.
+  const enviados = g.recibidos[1].messages;
+  assert.deepEqual(enviados.slice(-2).map((m) => m.role), ["assistant", "user"]);
+  assert.match(enviados[enviados.length - 1].content, /no preparaste ninguna propuesta/i);
+  assert.equal(salida.modelo, "claude-haiku-4-5", "una corrección no es un escalado al modelo caro");
+});
+
+test("si insiste, se corrige UNA sola vez y la respuesta es la frase honesta", async () => {
+  const g = guionConMensajes([contesta("Confírmala en la tarjeta.")]);
+  const salida = await ejecutarSabina({
+    ctx: ctxCon("agenda.create"),
+    pregunta: "sí",
+    tools: [herramientaDeAccion(accionDePrueba({ preparar: 0, ejecutar: 0 }))],
+    llamar: g.llamar,
+  });
+  assert.equal(g.recibidos.length, 2, "una llamada y una sola corrección");
+  assert.equal(salida.propuestas.length, 0);
+  assert.match(salida.respuesta, /no hay ninguna tarjeta que confirmar/);
+  assert.doesNotMatch(salida.respuesta, /Confírmala/);
+  assert.equal(salida.fallo, false);
+});
+
+test("con una tarjeta de verdad esperando en pantalla, «usa el botón» es verdad: ni corrección ni sustitución", async () => {
+  const g = guionConMensajes([contesta("Para agendarla toca el botón «Sí, agendar» de la tarjeta.")]);
+  const salida = await ejecutarSabina({
+    ctx: ctxCon("agenda.create"),
+    pregunta: "sí, confírmalo",
+    tools: [herramientaDeAccion(accionDePrueba({ preparar: 0, ejecutar: 0 }))],
+    tarjetaPendiente: "Agendar a María López el jueves 18 a las 10:00 con el Dr. Ruiz",
+    llamar: g.llamar,
+  });
+  assert.equal(g.recibidos.length, 1);
+  assert.equal(salida.respuesta, "Para agendarla toca el botón «Sí, agendar» de la tarjeta.");
+  assert.match(g.recibidos[0].system, /propuesta sin confirmar: «Agendar a María López/);
+});
+
+test("si la acción corrió y pidió un dato, la frase honesta es SU pregunta", async () => {
+  const aclarar: SabinaAccion = {
+    ...accionDePrueba({ preparar: 0, ejecutar: 0 }),
+    preparar: async () => ({ tipo: "aclarar", pregunta: "¿Cuál es el motivo de la cita?" }),
+  };
+  const g = guionConMensajes([pide("agendar_cita", { paciente: "Juan" }), contesta("Listo, confírmala en la tarjeta.")]);
+  const salida = await ejecutarSabina({ ctx: ctxCon("agenda.create"), pregunta: "agenda a Juan el jueves", tools: [herramientaDeAccion(aclarar)], llamar: g.llamar });
+  assert.equal(salida.propuestas.length, 0);
+  assert.equal(salida.respuesta, "¿Cuál es el motivo de la cita?");
+});
+
+test("sin tiempo para corregir, no se gasta otra llamada: va directo a la frase honesta", async () => {
+  let reloj = 0;
+  const g = guionConMensajes([contesta("Confírmala en la tarjeta.")]);
+  const llamar: LlamarModelo = async (args) => {
+    reloj += 1_000;
+    return g.llamar(args);
+  };
+  const salida = await ejecutarSabina({
+    ctx: ctxCon("agenda.create"),
+    pregunta: "sí",
+    tools: [herramientaDeAccion(accionDePrueba({ preparar: 0, ejecutar: 0 }))],
+    llamar,
+    ahora: () => reloj,
+    presupuestoMs: 3_500,
+  });
+  assert.equal(g.recibidos.length, 1);
+  assert.match(salida.respuesta, /no hay ninguna tarjeta que confirmar/);
+});
+
 test("con acciones en el catálogo el prompt explica la confirmación; sin ellas, sigue diciendo «Solo lees»", async () => {
   const prompts: string[] = [];
   const llamar: LlamarModelo = async (a) => {

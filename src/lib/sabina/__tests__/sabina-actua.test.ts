@@ -36,6 +36,7 @@ import { idsQueCasan } from "../tools/__tests__/busqueda-falsa";
 import {
   CL_A,
   DIA,
+  DOMINGO,
   TZ_A,
   U_ADMIN,
   U_DOC1,
@@ -453,10 +454,13 @@ test("«agéndame a María García» → pregunta cuál → «la del folio P0002
   assert.deepEqual(m.escrituras, [], "proponer no escribió nada");
   assert.equal(citasDelDia().length, antes);
 
-  /* 3. Un «sí» escrito no ejecuta nada. */
+  /* 3. Un «sí» escrito no ejecuta nada. Aquí la tarjeta SÍ está en pantalla
+        (la del paso 2), así que mandar al botón es verdad y el motor lo deja pasar. */
   m.guion = [dice("Para agendarla toca el botón «Sí, agendar» de la tarjeta.")];
   const r3 = await preguntar("sí, confírmalo", "conv_1");
   assert.equal(r3.propuestas, undefined);
+  assert.equal(r3.respuesta, "Para agendarla toca el botón «Sí, agendar» de la tarjeta.");
+  assert.match(m.alModelo[m.alModelo.length - 1].system, /propuesta sin confirmar: «Agendar a María García/);
   assert.deepEqual(m.escrituras, []);
   assert.deepEqual(eventosDe(tarjeta.id), [EVENTO.proponer]);
 
@@ -693,5 +697,99 @@ test("alta: si aparece un gemelo entre la tarjeta y el botón, no se crea", asyn
   const c = await confirmar(propuestas[0].id);
   assert.equal(c.json.propuesta.estado, "fallida");
   assert.equal(c.json.propuesta.resultado.tipo, "cambio");
+  assert.deepEqual(m.escrituras, []);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   5. LA TARJETA QUE NO EXISTE — el fallo que vivió Rafael (14-sep-2026)
+
+   «Ya me creó el paciente, pero para agendar me pide confirmar en la tarjeta
+   y no hay ninguna tarjeta ni ningún botón.»
+
+   Todo lo de arriba pasa: cuando `agendar_cita` corre, la tarjeta sale. Lo que
+   se rompía es el turno en el que NO corre. Agendar casi nunca cabe en un
+   mensaje (el motivo es obligatorio, y luego doctor, sillón u hora), así que
+   Sabina termina un turno preguntando «¿te la agendo?». El «sí» que llega
+   después caía en la regla del prompt «si te escriben "sí", diles que usen el
+   botón de la tarjeta» —sin mirar si había tarjeta—, y el motor dejaba salir
+   esa frase aunque en el turno no hubiera ninguna propuesta. Registrar un
+   paciente se libraba porque su tarjeta sale en el mismo mensaje del pedido.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * La respuesta ORDENA confirmar en una tarjeta o botón («confírmala en la
+ * tarjeta», «toca el botón»). «No hay ninguna tarjeta que confirmar» no ordena nada.
+ */
+const MANDA_A_LA_TARJETA = /conf[ií]rm(a|al[ao]|e)\b.*(tarjeta|bot[oó]n)|(tarjeta|bot[oó]n).*conf[ií]rm(a|al[ao]|e)\b|toca el bot[oó]n/i;
+
+test("«¿te la agendo?» → «sí» sin tarjeta en pantalla: Sabina prepara la cita de verdad y la tarjeta sale", async () => {
+  m.sesion = sesionDe(U_ADMIN, "ADMIN");
+
+  /* Turno 1: consulta horas y PREGUNTA. No prepara nada: no hay tarjeta. */
+  m.guion = [
+    pide("proponer_horarios", { doctor: "Rojas", fecha: DIA, horaPreferida: "09:00" }),
+    dice(`La Dra. Nadia Rojas tiene libre a las 09:00 el ${DIA}. ¿Te agendo a Juan Pérez a esa hora para su limpieza?`),
+  ];
+  const r1 = await preguntar(`¿la Dra. Rojas puede el ${DIA} a las 9? es para la limpieza de Juan Pérez`);
+  assert.equal(r1.propuestas, undefined, "consultar horas no deja tarjeta");
+
+  /* Turno 2: «sí». El modelo hace lo que le mandaba el prompt con un «sí»:
+     mandarlo a la tarjeta. Si el motor le dice la verdad, prepara la cita. */
+  const desde = m.alModelo.length;
+  m.guion = [
+    dice("Para agendarla, confírmala con el botón «Sí, agendar» de la tarjeta."),
+    pide("agendar_cita", { paciente: "Juan Pérez", doctor: "Rojas", fecha: DIA, hora: "09:00", motivo: "Limpieza" }),
+    dice("Te propongo agendar a Juan Pérez a las 09:00 con la Dra. Rojas. Confírmalo en la tarjeta."),
+  ];
+  const r2 = await preguntar("sí", "conv_1");
+  const alModelo = m.alModelo.slice(desde);
+
+  assert.equal(r2.propuestas?.length, 1, `no salió ninguna tarjeta y Sabina dijo: «${r2.respuesta}»`);
+  assert.equal(r2.propuestas[0].accion, "agendar_cita");
+  assert.equal(r2.propuestas[0].estado, "pendiente");
+  assert.match(r2.propuestas[0].tarjeta.frase, /Juan Pérez.*09:00.*Nadia Rojas.*Limpieza/);
+  assert.match(r2.respuesta, MANDA_A_LA_TARJETA, "ahora la tarjeta existe: mandar a ella es verdad");
+
+  // La tarjeta sale porque el motor le dijo al modelo que NO había ninguna.
+  const correccion = alModelo[1]?.messages?.[alModelo[1].messages.length - 1];
+  assert.equal(correccion?.role, "user");
+  assert.match(String(correccion?.content), /no preparaste ninguna propuesta/i);
+
+  // Y el prompt ya no manda un «sí» a una tarjeta sin saber si la hay.
+  assert.doesNotMatch(alModelo[0].system, /Si te escriben "sí" o "confírmalo", diles que usen el botón de la tarjeta\./);
+  assert.match(alModelo[0].system, /NO hay ninguna tarjeta/);
+
+  // Proponer no escribió nada; el botón sí.
+  assert.deepEqual(m.escrituras, []);
+  const c = await confirmar(r2.propuestas[0].id);
+  assert.equal(c.json.propuesta.estado, "hecha", JSON.stringify(c.json.propuesta.resultado));
+  assert.deepEqual(m.escrituras.map((e) => e.op), ["appointment.create"]);
+});
+
+test("si el modelo insiste en una tarjeta que no preparó, la respuesta NO manda a confirmar nada", async () => {
+  m.guion = [
+    dice("Listo, te la dejé en la tarjeta: confírmala con el botón «Sí, agendar»."),
+    dice("Confírmala en la tarjeta, por favor."),
+  ];
+  const r = await preguntar("sí, agéndala");
+  assert.equal(r.propuestas, undefined);
+  assert.doesNotMatch(r.respuesta, MANDA_A_LA_TARJETA, `Sabina sigue mandando a una tarjeta que no existe: «${r.respuesta}»`);
+  assert.match(r.respuesta, /no hay ninguna tarjeta/i, r.respuesta);
+  assert.deepEqual(m.escrituras, []);
+});
+
+test("si agendar NO se puede (la clínica cierra ese día), Sabina lo explica en vez de pedir una confirmación imposible", async () => {
+  m.guion = [
+    pide("agendar_cita", { paciente: "Juan Pérez", doctor: "Rojas", fecha: DOMINGO, hora: "10:00", motivo: "Limpieza" }),
+    dice("Te dejé la cita del domingo lista: confírmala en la tarjeta."),
+    dice("Ya está, confírmala en la tarjeta."),
+  ];
+  const r = await preguntar(`agenda a Juan Pérez el ${DOMINGO} a las 10 con la Dra. Rojas, limpieza`);
+  assert.equal(r.propuestas, undefined);
+  const resultado = ultimoToolResult();
+  assert.equal(resultado?.datos?.estado, "no_se_puede", JSON.stringify(resultado));
+  assert.doesNotMatch(r.respuesta, MANDA_A_LA_TARJETA, `pide confirmar lo imposible: «${r.respuesta}»`);
+  // El porqué es el de la herramienta, no una frase genérica.
+  assert.ok(r.respuesta.includes(resultado.datos.frase), `no explica por qué: «${r.respuesta}»`);
   assert.deepEqual(m.escrituras, []);
 });

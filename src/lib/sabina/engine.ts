@@ -1,6 +1,8 @@
 import "server-only";
 import {
+  CORRECCION_SIN_TARJETA,
   SABINA_CALL_TIMEOUT_MS,
+  SABINA_MARGEN_CORRECCION_MS,
   SABINA_MAX_OUTPUT_TOKENS,
   SABINA_MAX_TOOL_ROUNDS,
   SABINA_MAX_TURNOS_HISTORIAL,
@@ -11,14 +13,16 @@ import {
   garantizarAvisoPropuesta,
   garantizarAvisoSinPermiso,
   garantizarAvisoSinPermisoAccion,
+  garantizarSinTarjetaFantasma,
   hoyParaPrompt,
+  mandaAConfirmarTarjeta,
   modeloPara,
   resultadoParaModelo,
   toolsParaModelo,
   validarLlamada,
   zodAJsonSchema,
 } from "./engine-core";
-import type { ValidacionFallo, ValidacionLlamada } from "./engine-core";
+import type { DesenlaceAccion, ValidacionFallo, ValidacionLlamada } from "./engine-core";
 import type {
   SabinaConsumo,
   SabinaCtx,
@@ -183,6 +187,13 @@ export interface SabinaEjecutarInput {
   historial?: ReadonlyArray<{ role: "user" | "assistant"; content: string }>;
   tools: readonly SabinaTool<any, any>[];
   conversacionId?: string | null;
+  /**
+   * La frase de la tarjeta de esta conversación que sigue esperando el botón
+   * (`propuestasDeConversacion`), o `null`. Sin ella, cualquier «confírmalo en la
+   * tarjeta» de un turno sin propuesta se trata como lo que sería: una tarjeta
+   * que no existe.
+   */
+  tarjetaPendiente?: string | null;
   /** Seam de pruebas: por defecto la llamada real. */
   llamar?: LlamarModelo;
   /** Seam de pruebas: reloj. */
@@ -222,6 +233,12 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const sinPermiso: string[] = [];
   const sinPermisoAcciones: Array<{ frase: string; queHace: string; permiso: string }> = [];
   const propuestas: PropuestaPreparada[] = [];
+  const tarjetaPendiente = typeof input.tarjetaPendiente === "string" && input.tarjetaPendiente.trim() ? input.tarjetaPendiente : null;
+  // Para la red de la tarjeta que no existe: si corrió alguna acción en el turno,
+  // y en qué quedó la última que no dejó propuesta (su «por qué no»).
+  let huboAccion = false;
+  let ultimaAccion: DesenlaceAccion | null = null;
+  let corregido = false;
   let tokensEntrada = 0;
   let tokensSalida = 0;
   const consumo: SabinaConsumo[] = [];
@@ -250,7 +267,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       );
       const turno = await llamar({
         modelo,
-        system: construirSystemPrompt({ dificultad, hoy, acciones: queHacen }),
+        system: construirSystemPrompt({ dificultad, hoy, acciones: queHacen, tarjetaPendiente }),
         messages,
         // Última vuelta sin herramientas: el modelo tiene que cerrar con
         // palabras, no pedir otra consulta que ya no cabe.
@@ -341,6 +358,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
             sinPermiso.push(fallado.permiso);
           }
         }
+        if (accion) {
+          huboAccion = true;
+          ultimaAccion = desenlaceDeAccion(resultado, fraseSinPermiso);
+        }
         if (accion && resultado.ok === true) {
           const datosAccion = resultado.datos as DatosDeAccion;
           if (datosAccion?.estado === "sin_permiso") {
@@ -388,6 +409,32 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
 
     if (fallo) break;
 
+    // 🔴 La tarjeta que no existe. El modelo cerró mandando al usuario a confirmar
+    // en una tarjeta, pero en este turno no preparó ninguna y no hay otra esperando
+    // en pantalla. Es lo que vivió Rafael el 14-sep-2026: «sí» a «¿te la agendo?» →
+    // «confírmala en la tarjeta» → ninguna tarjeta. Pedírselo al prompt no basta:
+    // se le dice la verdad UNA vez, en su mismo turno y con sus herramientas, para
+    // que prepare la propuesta de verdad (o diga por qué no). Si insiste, la red de
+    // abajo (`garantizarSinTarjetaFantasma`) sustituye la respuesta.
+    if (
+      !corregido &&
+      respuesta &&
+      queHacen.length > 0 &&
+      propuestas.length === 0 &&
+      !tarjetaPendiente &&
+      mandaAConfirmarTarjeta(respuesta, huboAccion) &&
+      limite - ahora() > SABINA_MARGEN_CORRECCION_MS
+    ) {
+      corregido = true;
+      messages.push({ role: "assistant", content: respuesta });
+      messages.push({ role: "user", content: CORRECCION_SIN_TARJETA });
+      respuesta = null;
+      // Otra vuelta de ESTA pasada, con el mismo modelo: es una corrección, no un
+      // escalado al caro.
+      pasada -= 1;
+      continue;
+    }
+
     const escalar = debeEscalar({
       dificultad,
       yaEscalado: escalado,
@@ -402,8 +449,19 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
     modelo = modeloPara("abierta");
   }
 
+  // Sin acciones en el catálogo no existen tarjetas: no hay nada que vigilar, y
+  // una respuesta de consulta no se toca.
+  const honesta =
+    queHacen.length > 0
+      ? garantizarSinTarjetaFantasma(respuesta ?? "", {
+          huboPropuesta: propuestas.length > 0,
+          tarjetaPendiente: tarjetaPendiente !== null,
+          huboAccion,
+          ultimaAccion,
+        })
+      : respuesta ?? "";
   const texto = garantizarAvisoPropuesta(
-    garantizarAvisoSinPermisoAccion(garantizarAvisoSinPermiso(respuesta ?? "", sinPermiso), sinPermisoAcciones),
+    garantizarAvisoSinPermisoAccion(garantizarAvisoSinPermiso(honesta, sinPermiso), sinPermisoAcciones),
     propuestas.length > 0,
   );
 
@@ -420,4 +478,26 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
     propuestas,
     fallo: fallo || texto.trim().length === 0,
   };
+}
+
+/**
+ * En qué quedó una herramienta de acción que NO dejó propuesta, con la frase que
+ * explica por qué. `null` si dejó propuesta (entonces hay tarjeta de verdad).
+ */
+function desenlaceDeAccion(resultado: SabinaResultado, fraseSinPermiso?: string): DesenlaceAccion | null {
+  if (resultado.ok !== true) {
+    const fallado = resultado as SabinaResultadoFallo;
+    if (fallado.motivo === "sin_permiso" && fraseSinPermiso) return { estado: "sin_permiso", frase: fraseSinPermiso };
+    return { estado: "error" };
+  }
+  const datos = (resultado as { datos: DatosDeAccion }).datos;
+  switch (datos?.estado) {
+    case "falta_aclarar":
+      return { estado: "falta_aclarar", pregunta: datos.pregunta };
+    case "sin_permiso":
+    case "no_se_puede":
+      return { estado: datos.estado, frase: datos.frase };
+    default:
+      return null;
+  }
 }

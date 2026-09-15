@@ -11,7 +11,7 @@ import {
   crearConversacionSabina,
   leerConversacionSabina,
 } from "@/lib/sabina/engine-historial";
-import { guardarPropuesta } from "@/lib/sabina/engine-propuestas";
+import { guardarPropuesta, propuestasDeConversacion } from "@/lib/sabina/engine-propuestas";
 import type { SabinaPropuestaVista } from "@/lib/sabina/engine-propuestas-core";
 import { crearSabinaCtx } from "@/lib/sabina/tipos";
 
@@ -106,6 +106,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    /* ── 6b. ¿Hay una tarjeta de ESTE hilo esperando el botón? El historial
+          es solo texto: sin esto, el motor no distingue «confírmalo en la
+          tarjeta» de verdad del de una tarjeta que nunca se preparó (el fallo
+          en vivo del 14-sep-2026). Si la lectura falla, se sigue como si no
+          hubiera: lo peor es que Sabina vuelva a preparar la propuesta ─── */
+    let tarjetaPendiente: string | null = null;
+    if (conversacionPrevia) {
+      try {
+        const previas = await propuestasDeConversacion({ ctx: sabinaCtx, conversacionId: conversacionPrevia });
+        tarjetaPendiente = previas.filter((p) => p.estado === "pendiente").pop()?.tarjeta.frase ?? null;
+      } catch (e) {
+        console.error("[sabina] no se pudo leer si hay una propuesta pendiente", {
+          clinicId: ctx.clinicId,
+          err: e instanceof Error ? e.message : "desconocido",
+        });
+      }
+    }
+
     /* ── 7. El bucle. El clinicId lo pone AQUÍ el servidor ──────────── */
     const salida = await ejecutarSabina({
       ctx: sabinaCtx,
@@ -113,6 +131,7 @@ export async function POST(req: NextRequest) {
       historial,
       tools: SABINA_TOOLS,
       conversacionId: conversacionPrevia,
+      tarjetaPendiente,
     });
 
     /* ── 8. Cobrar SIEMPRE lo que se gastó, aunque la respuesta fallara:
