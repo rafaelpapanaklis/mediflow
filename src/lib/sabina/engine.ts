@@ -42,6 +42,7 @@ import {
 } from "./engine-acciones";
 import { SABINA_MAX_PROPUESTAS_POR_TURNO } from "./engine-propuestas-core";
 import { CandadoNoDisponible, EscrituraBloqueada, soloLectura } from "./engine-solo-lectura";
+import { FRASE_SABINA_APAGADA, causaSinPermiso, type CausaSinPermiso } from "./permisos-sabina";
 
 /**
  * Sabina — el bucle.
@@ -180,7 +181,7 @@ export async function ejecutarHerramienta(
 /* ── El bucle ─────────────────────────────────────────────────────────── */
 
 export interface SabinaEjecutarInput {
-  /** De `crearSabinaCtx(await getAuthContext())`: clínica, persona, rol, permisos y zona. */
+  /** De `await crearSabinaCtx(await getAuthContext())`: clínica, persona, rol, permisos (ya recortados para Sabina) y zona. */
   ctx: SabinaCtx;
   pregunta: string;
   /** Turnos previos de la conversación guardada, ya en orden. */
@@ -210,6 +211,27 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const limite = arranque + presupuesto;
 
   const dificultad: SabinaDificultad = clasificarDificultad(input.pregunta);
+
+  // Apagada para este usuario: ni una llamada al modelo. Las herramientas ya
+  // dirían «sin permiso» a todo (el ctx no tiene ninguno), pero el modelo podría
+  // contestar de memoria con el historial, y cada vuelta se cobra al monedero.
+  // El endpoint corta antes; esto es para quien llame al motor por otro lado.
+  if (input.ctx.sabina?.apagada) {
+    return {
+      respuesta: FRASE_SABINA_APAGADA,
+      herramientasUsadas: [],
+      tokens: { entrada: 0, salida: 0 },
+      consumo: [],
+      modelo: modeloPara(dificultad),
+      dificultad,
+      escalado: false,
+      rondas: 0,
+      sinPermiso: [],
+      propuestas: [],
+      fallo: false,
+    };
+  }
+
   // El «hoy» de la CLÍNICA, no el del proceso (UTC en Vercel): a las 19:00 de
   // México el servidor ya va en el día siguiente, y el modelo pediría las citas
   // de mañana.
@@ -349,10 +371,14 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         if (!herramientasUsadas.includes(nombre)) herramientasUsadas.push(nombre);
         const fallado = resultado as SabinaResultadoFallo;
         let fraseSinPermiso: string | undefined;
+        let causa: CausaSinPermiso | undefined;
         let sustituyeOtra = false;
         if (resultado.ok !== true && fallado.motivo === "sin_permiso") {
+          // Solo la frase: quién no tenía el permiso, el usuario o Sabina. La
+          // decisión ya la tomó el runner con el ctx recortado.
+          causa = causaSinPermiso(input.ctx, fallado.permiso);
           if (accion) {
-            fraseSinPermiso = fraseSinPermisoAccion(accion.queHace);
+            fraseSinPermiso = fraseSinPermisoAccion(accion.queHace, causa);
             sinPermisoAcciones.push({ frase: fraseSinPermiso, queHace: accion.queHace, permiso: accion.permiso });
           } else if (!sinPermiso.includes(fallado.permiso)) {
             sinPermiso.push(fallado.permiso);
@@ -396,10 +422,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
           tool_use_id: llamada.id,
           content: sustituyeOtra
             ? JSON.stringify({
-                ...JSON.parse(resultadoParaModelo(resultado, { fraseSinPermiso })),
+                ...JSON.parse(resultadoParaModelo(resultado, { fraseSinPermiso, causa })),
                 sustituye: "Esta propuesta SUSTITUYE a la que preparaste antes en este turno: el usuario solo verá esta. Una propuesta a la vez.",
               })
-            : resultadoParaModelo(resultado, { fraseSinPermiso }),
+            : resultadoParaModelo(resultado, { fraseSinPermiso, causa }),
         });
       }
 
@@ -461,7 +487,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         })
       : respuesta ?? "";
   const texto = garantizarAvisoPropuesta(
-    garantizarAvisoSinPermisoAccion(garantizarAvisoSinPermiso(honesta, sinPermiso), sinPermisoAcciones),
+    garantizarAvisoSinPermisoAccion(
+      garantizarAvisoSinPermiso(honesta, sinPermiso, (p) => causaSinPermiso(input.ctx, p)),
+      sinPermisoAcciones,
+    ),
     propuestas.length > 0,
   );
 

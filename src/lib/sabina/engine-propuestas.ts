@@ -25,6 +25,8 @@ import {
   type SabinaPropuestaVista,
 } from "./engine-propuestas-core";
 import { EscrituraBloqueada, enSoloLectura, soloLectura } from "./engine-solo-lectura";
+import { causaSinPermiso } from "./permisos-sabina";
+import { conPermisosDeSabina } from "./recorte-en-curso";
 import { tienePermiso } from "./tools/base";
 import type { SabinaCtx } from "./tipos";
 
@@ -322,7 +324,12 @@ function paraRastro(valor: unknown): unknown {
  * archivo no hay forma de fabricar una llave que `llamar` acepte, y la que existe
  * muere al terminar `ejecutar`.
  */
-function acunarLlave(propuestaId: string, req: PeticionOrigen, registro: RegistroLlamada[]) {
+function acunarLlave(
+  propuestaId: string,
+  req: PeticionOrigen,
+  registro: RegistroLlamada[],
+  ctx: Pick<SabinaCtx, "role" | "permissionsOverride">,
+) {
   let viva = true;
   const llave: LlaveEscritura = Object.freeze({
     propuestaId,
@@ -347,7 +354,9 @@ function acunarLlave(propuestaId: string, req: PeticionOrigen, registro: Registr
       const t0 = Date.now();
       let res: Response;
       try {
-        res = await manejador(interna, { params: peticion.params ?? {} });
+        // El handler mira los permisos de la sesión (los del usuario); con esto
+        // mira además los de Sabina, que ya vienen recortados en el ctx.
+        res = await conPermisosDeSabina(ctx, async () => manejador(interna, { params: peticion.params ?? {} }));
       } catch (e) {
         registro.push({ metodo, ruta, status: 0, cuerpo: e instanceof Error ? e.message : "excepcion", ms: Date.now() - t0 });
         throw e;
@@ -432,7 +441,11 @@ export async function confirmarPropuesta(args: {
   if (!accion) {
     resultado = { ok: false, tipo: "error", frase: FRASE.accionDesconocida };
   } else if (!tienePermiso(ctx, accion.permiso)) {
-    resultado = { ok: false, tipo: "sin_permiso", frase: fraseSinPermisoAccion(accion.queHace) };
+    resultado = {
+      ok: false,
+      tipo: "sin_permiso",
+      frase: fraseSinPermisoAccion(accion.queHace, causaSinPermiso(ctx, accion.permiso)),
+    };
   } else {
     const datos = accion.datos.safeParse(cambios.datos);
     if (!datos.success) {
@@ -454,7 +467,7 @@ export async function confirmarPropuesta(args: {
       } else if (huella !== String(cambios.huella ?? "")) {
         resultado = { ok: false, tipo: "cambio", frase: FRASE.cambio };
       } else {
-        const { llave, revocar } = acunarLlave(id, args.req, llamadas);
+        const { llave, revocar } = acunarLlave(id, args.req, llamadas, ctx);
         try {
           const ej = await accion.ejecutar(llave, ctx, datos.data);
           if (ej && ej.ok === true) {

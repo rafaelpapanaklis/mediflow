@@ -158,6 +158,9 @@ const prismaDoble: any = new Proxy(
   {
     get(_t, k: string) {
       if (k === "auditLog") return m.propuestas.db.auditLog;
+      // Sin fila en sabina_user_permissions: Sabina con todo lo del usuario, lo de
+      // siempre. El recorte del Super Admin se prueba en `test:sabina-permisos-equipo`.
+      if (k === "sabinaUserPermission") return { findFirst: async () => null };
       if (k === "$executeRaw") return m.propuestas.db.$executeRaw;
       if (k === "$transaction") {
         return (fn: (tx: any) => Promise<unknown>) =>

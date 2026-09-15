@@ -50,6 +50,7 @@
  */
 import type { z } from "zod";
 import type { PermissionKey } from "@/lib/auth/permissions";
+import { FRASE_SABINA_APAGADA, type CausaSinPermiso } from "./permisos-sabina";
 import { definirHerramienta } from "./tools/base";
 import type { SabinaCtx, SabinaTool } from "./tipos";
 
@@ -227,8 +228,18 @@ export function propuestaDeDatos(datos: unknown): PropuestaPreparada | null {
   return datos && typeof datos === "object" ? PROPUESTA_DE_DATOS.get(datos) ?? null : null;
 }
 
-/** «No tienes permiso para agendar citas. Lo da el administrador en Equipo.» */
-export function fraseSinPermisoAccion(queHace: string): string {
+/**
+ * «No tienes permiso para agendar citas. Lo da el administrador en Equipo.»
+ *
+ * Con `causa` distinta de "usuario" el doctor SÍ tiene el permiso: decirle «no
+ * tienes permiso» sería mentirle y mandarlo a pedir algo que ya tiene. Lo que
+ * pasa es que el Super Admin no deja a Sabina hacerlo en su nombre.
+ */
+export function fraseSinPermisoAccion(queHace: string, causa: CausaSinPermiso = "usuario"): string {
+  if (causa === "apagada") return FRASE_SABINA_APAGADA;
+  if (causa === "sabina") {
+    return `Tú sí puedes ${queHace}, pero el Super Admin de la clínica no me deja hacerlo en tu nombre. Puedes hacerlo tú desde el panel, o pedirle que me lo active en Equipo.`;
+  }
   return `No tienes permiso para ${queHace}. Ese permiso lo da el administrador de la clínica en Equipo.`;
 }
 

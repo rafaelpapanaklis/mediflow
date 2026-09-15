@@ -38,6 +38,7 @@ import {
   conPermisos,
 } from "./siembra";
 import { crearSabinaCtx, type SabinaCtx } from "../../tipos";
+import { ROLE_DEFAULT_PERMISSIONS } from "@/lib/auth/permissions";
 
 /** Parámetros con los que cada herramienta SÍ encuentra datos en la siembra. */
 function paramsConDatos(nombre: string): Record<string, unknown> {
@@ -380,48 +381,62 @@ test("parámetros basura se explican; no se consulta a ciegas", async () => {
  * 6 · La puerta de entrada del motor
  * ══════════════════════════════════════════════════════════════════════ */
 
-test("🔴 crearSabinaCtx: sin sesión devuelve null, y un clinicId a medias también", () => {
-  // Es la línea que va a escribir el motor: `crearSabinaCtx(await getAuthContext())`.
+// Sin fila de ajustes de Sabina: lo de siempre. La intersección con lo que deja
+// el Super Admin tiene su propia suite (`npm run test:sabina-permisos-equipo`).
+const sinAjustes = { leerAjustes: async () => null };
+
+test("🔴 crearSabinaCtx: sin sesión devuelve null, y un clinicId a medias también", async () => {
+  // Es la línea que escribe el motor: `await crearSabinaCtx(await getAuthContext())`.
   // `getAuthContext()` devuelve null sin sesión, así que tiene que aceptarlo.
-  assert.equal(crearSabinaCtx(null), null);
-  assert.equal(crearSabinaCtx(undefined), null);
-  assert.equal(crearSabinaCtx({}), null);
-  assert.equal(crearSabinaCtx({ clinicId: "", userId: "u1", role: "ADMIN" }), null);
-  assert.equal(crearSabinaCtx({ clinicId: "  ", userId: "u1", role: "ADMIN" }), null);
-  assert.equal(crearSabinaCtx({ clinicId: "c1", userId: "", role: "ADMIN" }), null);
-  assert.equal(crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "" }), null);
+  // Y corta ANTES de leer nada de la base: aquí no se inyecta lector.
+  assert.equal(await crearSabinaCtx(null), null);
+  assert.equal(await crearSabinaCtx(undefined), null);
+  assert.equal(await crearSabinaCtx({}), null);
+  assert.equal(await crearSabinaCtx({ clinicId: "", userId: "u1", role: "ADMIN" }), null);
+  assert.equal(await crearSabinaCtx({ clinicId: "  ", userId: "u1", role: "ADMIN" }), null);
+  assert.equal(await crearSabinaCtx({ clinicId: "c1", userId: "", role: "ADMIN" }), null);
+  assert.equal(await crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "" }), null);
 });
 
-test("crearSabinaCtx: la zona sale de la CLÍNICA, y sin ella cae a México (no a UTC)", () => {
-  const conZona = crearSabinaCtx({
-    clinicId: "c1",
-    userId: "u1",
-    role: "ADMIN",
-    clinic: { timezone: "America/Cancun", category: "DENTAL" },
-  });
+test("crearSabinaCtx: la zona sale de la CLÍNICA, y sin ella cae a México (no a UTC)", async () => {
+  const conZona = await crearSabinaCtx(
+    {
+      clinicId: "c1",
+      userId: "u1",
+      role: "ADMIN",
+      clinic: { timezone: "America/Cancun", category: "DENTAL" },
+    },
+    sinAjustes,
+  );
   assert.equal(conZona.timezone, "America/Cancun");
   assert.equal(conZona.clinicCategory, "DENTAL");
 
   // Una zona vacía NO puede caer al runtime default (UTC en Vercel): ése es el
   // offset de -6 h que vaciaba la vista Mes. Cae al mismo default que `safeTz`.
   for (const clinic of [null, {}, { timezone: null }, { timezone: "" }]) {
-    const sinZona = crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "ADMIN", clinic } as any);
+    const sinZona = await crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "ADMIN", clinic } as any, sinAjustes);
     assert.equal(sinZona.timezone, "America/Mexico_City");
   }
 });
 
-test("crearSabinaCtx: `permissionsOverride` siempre llega como array", () => {
-  // Si llegara `undefined`, la comprobación de permiso caería al default del rol
-  // ignorando el override que sí está en la base — el mismo cinturón que pone
-  // `getAuthContext`.
-  assert.deepEqual(crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR" }).permissionsOverride, []);
+test("crearSabinaCtx: `permissionsOverride` siempre llega como lista LLENA con lo que el usuario puede", async () => {
+  // Si llegara `undefined` o `[]`, la comprobación de permiso caería al default
+  // del rol ignorando el override que sí está en la base. Ahora el ctx lleva el
+  // conjunto ya resuelto, así que nunca depende de ese «vacío = rol».
+  const doctor = await crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR" }, sinAjustes);
+  assert.deepEqual(doctor.permissionsOverride, ROLE_DEFAULT_PERMISSIONS.DOCTOR);
   assert.deepEqual(
-    crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR", permissionsOverride: null }).permissionsOverride,
-    [],
+    (await crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR", permissionsOverride: null }, sinAjustes))
+      .permissionsOverride,
+    ROLE_DEFAULT_PERMISSIONS.DOCTOR,
   );
   assert.deepEqual(
-    crearSabinaCtx({ clinicId: "c1", userId: "u1", role: "DOCTOR", permissionsOverride: ["agenda.view"] })
-      .permissionsOverride,
+    (
+      await crearSabinaCtx(
+        { clinicId: "c1", userId: "u1", role: "DOCTOR", permissionsOverride: ["agenda.view"] },
+        sinAjustes,
+      )
+    ).permissionsOverride,
     ["agenda.view"],
   );
 });

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, ClipboardList, Users as UsersIcon, Camera, Loader2 } from "lucide-react";
+import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, ClipboardList, Users as UsersIcon, Camera, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -12,6 +12,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
+import { SabinaPermissionsModal } from "@/components/dashboard/team/sabina-permissions-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { prepararImagen } from "@/lib/image-client";
 
@@ -520,6 +521,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   const [editMember, setEditMember] = useState<TeamMember | null>(null);
   // Member cuyo modal de permisos está abierto. Solo SUPER_ADMIN puede abrirlo.
   const [permsMember, setPermsMember] = useState<TeamMember | null>(null);
+  const [sabinaMember, setSabinaMember] = useState<TeamMember | null>(null);
   const [loading,    setLoading]    = useState(false);
   const [filter,     setFilter]     = useState<"active"|"all"|"inactive">("active");
   const [tempPass,   setTempPass]   = useState<string | null>(null);
@@ -932,6 +934,17 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                         {t("settings.team.permissions")}
                       </ButtonNew>
                     )}
+                    {/* Sabina: qué puede hacer en nombre de este miembro. Mismo
+                     *  gate que Permisos (y el endpoint repite las defensas). */}
+                    {isSuperAdmin && m.role !== "SUPER_ADMIN" && (
+                      <ButtonNew
+                        variant="secondary"
+                        icon={<Sparkles size={16} strokeWidth={1.75} />}
+                        onClick={() => setSabinaMember(m)}
+                      >
+                        {t("settings.sabinaPermissions.button")}
+                      </ButtonNew>
+                    )}
                     {m.id !== currentUserId && (
                       <>
                         <button
@@ -1022,6 +1035,14 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             m.id === memberId ? { ...m, permissionsOverride: newOverride } : m,
           ));
         }}
+      />
+
+      {/* Sabina en nombre de cada miembro — solo SUPER_ADMIN. Lee lo guardado
+       *  al abrir, así refleja al instante lo que se cambió en Permisos. */}
+      <SabinaPermissionsModal
+        open={sabinaMember !== null}
+        member={sabinaMember}
+        onClose={() => setSabinaMember(null)}
       />
     </div>
   );

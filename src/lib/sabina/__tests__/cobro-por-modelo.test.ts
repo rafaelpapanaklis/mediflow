@@ -38,6 +38,9 @@ const estado = {
 };
 
 const monedero = {
+  // Sin fila en sabina_user_permissions: Sabina con todo lo del usuario, lo de
+  // siempre. El recorte del Super Admin se prueba en `test:sabina-permisos-equipo`.
+  sabinaUserPermission: { findFirst: async () => null },
   aiPricingConfig: { findMany: async () => [] },
   aiWallet: {
     upsert: async () => ({

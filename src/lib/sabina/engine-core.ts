@@ -13,6 +13,7 @@
  */
 import { ALL_PERMISSIONS, type PermissionKey } from "@/lib/auth/permissions";
 import { DEFAULT_TZ } from "@/lib/agenda/date-ranges";
+import { FRASE_SABINA_APAGADA, type CausaSinPermiso } from "./permisos-sabina";
 import type {
   SabinaDificultad,
   SabinaRastro,
@@ -313,7 +314,13 @@ export function areaDePermiso(permiso: string): string {
  *   ❌ «No tengo datos de facturación»  → suena a que la clínica no facturó.
  *   ✅ «No tienes acceso a facturación, eso no te lo puedo contestar.»
  */
-export function fraseSinPermiso(permiso: string): string {
+export function fraseSinPermiso(permiso: string, causa: CausaSinPermiso = "usuario"): string {
+  // Dos razones distintas, y el doctor merece saber cuál: si ÉL sí tiene el
+  // permiso, «no tienes acceso» es falso y lo manda a pedir algo que ya tiene.
+  if (causa === "apagada") return FRASE_SABINA_APAGADA;
+  if (causa === "sabina") {
+    return `Tú sí tienes acceso a ${areaDePermiso(permiso)}, pero el Super Admin de la clínica no me deja consultarlo en tu nombre, así que eso no te lo puedo contestar.`;
+  }
   return `No tienes acceso a ${areaDePermiso(permiso)}, eso no te lo puedo contestar.`;
 }
 
@@ -332,6 +339,8 @@ export function fraseSinPermiso(permiso: string): string {
 export function garantizarAvisoSinPermiso(
   respuesta: string,
   permisos: readonly string[],
+  // Por qué faltó cada uno (ver `causaSinPermiso`). Sin él, «el usuario no lo tiene».
+  causaDe: (permiso: string) => CausaSinPermiso = () => "usuario",
 ): string {
   if (permisos.length === 0) return respuesta;
 
@@ -341,14 +350,22 @@ export function garantizarAvisoSinPermiso(
     texto.includes("no tengo permiso") ||
     texto.includes("sin permiso") ||
     texto.includes("no tienes permiso");
+  // Si fue el Super Admin quien se lo quitó a Sabina, un «no tienes acceso a
+  // facturación» NO cuenta como avisado: es la frase falsa. Tiene que nombrar
+  // al Super Admin.
+  const habla_del_super_admin = texto.includes("super admin") || texto.includes("superadmin");
 
   const faltantes = Array.from(new Set(permisos)).filter((p) => {
+    const causa = causaDe(p);
+    if (texto.includes(normalizar(fraseSinPermiso(p, causa)))) return false;
+    if (causa !== "usuario") return !(habla_del_super_admin && (causa === "apagada" || texto.includes(normalizar(areaDePermiso(p)))));
     if (!habla_de_acceso) return true;
     return !texto.includes(normalizar(areaDePermiso(p)));
   });
   if (faltantes.length === 0) return respuesta;
 
-  const avisos = faltantes.map((p) => fraseSinPermiso(p)).join(" ");
+  // Una sola vez la frase de «apagada», aunque falten varias áreas.
+  const avisos = Array.from(new Set(faltantes.map((p) => fraseSinPermiso(p, causaDe(p))))).join(" ");
   const base = respuesta.trim();
   return base ? `${base}\n\n${avisos}` : avisos;
 }
@@ -544,7 +561,7 @@ export function garantizarSinTarjetaFantasma(
  */
 export function resultadoParaModelo(
   res: SabinaResultado,
-  opciones?: { fraseSinPermiso?: string },
+  opciones?: { fraseSinPermiso?: string; causa?: CausaSinPermiso },
 ): string {
   // Se estrecha por `motivo` (texto) y no por `ok` (booleano): ver la nota de
   // SabinaResultado en engine-types.ts — este repo compila con "strict": false.
@@ -553,6 +570,20 @@ export function resultadoParaModelo(
     return JSON.stringify({ ok: true, resumen: bien.resumen, datos: bien.datos });
   }
   const mal = res as SabinaResultadoFallo;
+  const causa = opciones?.causa ?? "usuario";
+  if (mal.motivo === "sin_permiso" && causa !== "usuario") {
+    // El usuario SÍ tiene el permiso: el recorte es de Sabina. Si el modelo dice
+    // «no tienes acceso», miente — por eso la orden lo prohíbe con todas las letras.
+    return JSON.stringify({
+      ok: false,
+      motivo: "sin_permiso",
+      permiso: mal.permiso,
+      instruccion:
+        `EL USUARIO SÍ TIENE ESTE PERMISO, pero el Super Admin de la clínica no deja a Sabina usarlo en su nombre. ` +
+        `NO digas que el usuario no tiene acceso ni lo mandes a pedir el permiso. No lo intentes por otro camino ni lo omitas en silencio: ` +
+        `DI textualmente "${opciones?.fraseSinPermiso ?? fraseSinPermiso(mal.permiso, causa)}"`,
+    });
+  }
   if (mal.motivo === "sin_permiso" && opciones?.fraseSinPermiso) {
     // Una ACCIÓN sin permiso no es «no te lo puedo contestar»: es «no puedes
     // hacerlo». La frase la da la acción (engine-acciones.ts).
@@ -660,6 +691,7 @@ Si una herramienta vuelve con "sin_permiso", NO puedes omitir esa parte en silen
 - MAL: "No tengo datos de facturación." (el doctor entiende que la clínica no facturó nada)
 - BIEN: "No tienes acceso a facturación, eso no te lo puedo contestar."
 Dilo con esas palabras, ANTES de cualquier conclusión, y sigue contestando lo que sí puedas. Si te faltó una pieza, avisa de que tu respuesta va sobre medio cuadro: un consejo sobre datos incompletos, dicho con seguridad, es peor que no contestar.
+Hay dos razones distintas y NO son intercambiables: que el usuario no tenga el permiso, o que el usuario sí lo tenga y el Super Admin no te deje usarlo en su nombre. Usa SIEMPRE la frase exacta que te da la herramienta; nunca le digas "no tienes acceso" a quien sí lo tiene.
 
 PRIMERO EL HECHO, DESPUÉS LA OPINIÓN
 Separa siempre las dos cosas, y en este orden:

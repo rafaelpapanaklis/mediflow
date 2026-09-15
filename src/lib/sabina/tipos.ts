@@ -24,6 +24,8 @@
 import type { z } from "zod";
 import type { PermissionKey } from "@/lib/auth/permissions";
 import { DEFAULT_TZ } from "@/lib/agenda/date-ranges";
+import { leerAjustesSabina } from "./ajustes-sabina";
+import { overrideDeSabina, permisosDeSabina, type AjustesSabina } from "./permisos-sabina";
 
 export type { PermissionKey };
 
@@ -45,8 +47,27 @@ export interface SabinaCtx {
   userId: string;
   /** Role de Prisma como string ("ADMIN" | "DOCTOR" | …). */
   role: string;
-  /** Override granular. Siempre presente como array (vacío = default del rol). */
+  /**
+   * Override granular. Siempre presente como array (vacío = default del rol).
+   *
+   * 🔴 En el ctx que arma `crearSabinaCtx` NO es el del usuario: es lo que
+   * SABINA puede en su nombre (usuario ∩ lo que dejó el SUPER_ADMIN), escrito
+   * siempre como lista llena. Por eso todo `hasPermission` que se haga con este
+   * ctx —el runner, la confirmación, una herramienta que lo mire por su cuenta—
+   * ya queda recortado. Ver ./permisos-sabina.
+   */
   permissionsOverride: string[];
+  /**
+   * El recorte que aplicó `crearSabinaCtx`, SOLO para la frase: distinguir «tú no
+   * tienes ese permiso» de «el Super Admin se lo quitó a Sabina». No decide nada;
+   * lo que decide es `permissionsOverride`. Ausente en los dobles de prueba.
+   */
+  sabina?: {
+    /** El SUPER_ADMIN apagó a Sabina para este usuario. */
+    apagada: boolean;
+    /** Lo que el usuario puede y Sabina no. */
+    quitadas: PermissionKey[];
+  };
   /**
    * Zona horaria de LA CLÍNICA, no la del servidor. En Vercel el proceso corre
    * en UTC: una clínica de México que pregunta «cuántas citas tengo hoy» a las
@@ -141,11 +162,21 @@ export type SabinaResultado<R = any> =
  * punto entero de la función: con `clinicId: undefined` Prisma descarta la clave
  * y una herramienta devolvería las filas de TODAS las clínicas. Se corta aquí,
  * antes de que exista un ctx con el que consultar.
+ *
+ * 🔴 Y es el CANDADO de «Sabina nunca puede más que quien le escribe»: lee lo que
+ * el SUPER_ADMIN dejó para este usuario y escribe en el ctx la intersección
+ * (`permisosDeSabina`). Es asíncrona por eso, y a propósito: no existe forma de
+ * obtener un `SabinaCtx` de la sesión sin haber pasado por el recorte, y quien
+ * olvide el `await` no compila. Si la lectura falla por algo que no sea «la
+ * tabla aún no existe», lanza: sin saber qué se le quitó a Sabina, no se arma
+ * el ctx.
+ *
+ * `opciones.leerAjustes` solo lo inyectan las pruebas.
  */
-export function crearSabinaCtx(
+export async function crearSabinaCtx(
   // Acepta `null` a propósito: `getAuthContext()` devuelve null sin sesión, y el
-  // motor tiene que poder escribir `crearSabinaCtx(await getAuthContext())` de
-  // una línea sin un guard previo. Un null entra y sale como null.
+  // motor tiene que poder escribir `await crearSabinaCtx(await getAuthContext())`
+  // de una línea sin un guard previo. Un null entra y sale como null.
   auth:
     | {
         clinicId?: string | null;
@@ -156,18 +187,24 @@ export function crearSabinaCtx(
       }
     | null
     | undefined,
-): SabinaCtx | null {
+  opciones?: { leerAjustes?: (clinicId: string, userId: string) => Promise<AjustesSabina | null> },
+): Promise<SabinaCtx | null> {
   const clinicId = typeof auth?.clinicId === "string" ? auth.clinicId.trim() : "";
   const userId = typeof auth?.userId === "string" ? auth.userId.trim() : "";
   const role = typeof auth?.role === "string" ? auth.role.trim() : "";
   if (!clinicId || !userId || !role) return null;
+
+  const leer = opciones?.leerAjustes ?? leerAjustesSabina;
+  const ajustes = await leer(clinicId, userId);
+  const recorte = permisosDeSabina({ role, permissionsOverride: auth?.permissionsOverride ?? [] }, ajustes);
 
   const tz = auth?.clinic?.timezone;
   return {
     clinicId,
     userId,
     role,
-    permissionsOverride: auth?.permissionsOverride ?? [],
+    permissionsOverride: overrideDeSabina(recorte.permitidas),
+    sabina: { apagada: recorte.apagada, quitadas: recorte.quitadas },
     // Mismo criterio que `safeTz`: una tz vacía cae al default de México, NO a
     // la del proceso (UTC en Vercel), que es el fallo que vaciaba el tablero a
     // las 18:00.
