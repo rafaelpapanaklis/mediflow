@@ -11,6 +11,7 @@ import {
   construirSystemPrompt,
   debeEscalar,
   garantizarAvisoPropuesta,
+  garantizarAvisosObligatorios,
   garantizarAvisoSinPermiso,
   garantizarAvisoSinPermisoAccion,
   garantizarSinTarjetaFantasma,
@@ -254,6 +255,8 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   const herramientasUsadas: string[] = [];
   const sinPermiso: string[] = [];
   const sinPermisoAcciones: Array<{ frase: string; queHace: string; permiso: string }> = [];
+  // Advertencias que la respuesta tiene que llevar (ver `avisoObligatorio` en tipos.ts).
+  const avisosObligatorios: Array<{ frase: string; marca: string }> = [];
   const propuestas: PropuestaPreparada[] = [];
   const tarjetaPendiente = typeof input.tarjetaPendiente === "string" && input.tarjetaPendiente.trim() ? input.tarjetaPendiente : null;
   // Para la red de la tarjeta que no existe: si corrió alguna acción en el turno,
@@ -409,6 +412,10 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
         // `datos.omitidas` las secciones que el usuario no puede ver. También
         // entran a la red de la regla 3: si el modelo se calla la parte de
         // dinero, el aviso lo pone el motor.
+        if (resultado.ok === true && validacion.tool.avisoObligatorio) {
+          const aviso = validacion.tool.avisoObligatorio((resultado as { datos: unknown }).datos);
+          if (aviso) avisosObligatorios.push(aviso);
+        }
         const omitidas = resultado.ok === true ? (resultado.datos as { omitidas?: unknown })?.omitidas : null;
         if (Array.isArray(omitidas)) {
           for (const o of omitidas) {
@@ -488,7 +495,11 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       : respuesta ?? "";
   const texto = garantizarAvisoPropuesta(
     garantizarAvisoSinPermisoAccion(
-      garantizarAvisoSinPermiso(honesta, sinPermiso, (p) => causaSinPermiso(input.ctx, p)),
+      garantizarAvisoSinPermiso(
+        garantizarAvisosObligatorios(honesta, avisosObligatorios),
+        sinPermiso,
+        (p) => causaSinPermiso(input.ctx, p),
+      ),
       sinPermisoAcciones,
     ),
     propuestas.length > 0,

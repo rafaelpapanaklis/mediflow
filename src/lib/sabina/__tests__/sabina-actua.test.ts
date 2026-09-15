@@ -379,7 +379,7 @@ test("el motor ve las cinco nuevas y la confirmación ejecuta las cuatro que esc
     assert.ok(nombres.includes(n), `el motor no ve ${n}`);
   }
   assert.equal(new Set(nombres).size, nombres.length, "hay nombres repetidos en el catálogo del motor");
-  assert.equal(nombres.length, 19, "diez de consulta + proponer_horarios + facturas_de_paciente + siete acciones");
+  assert.equal(nombres.length, 20, "diez de consulta + proponer_horarios + facturas_de_paciente + caja + siete acciones");
 
   const keys = Object.fromEntries(catalogo.ACCIONES_SABINA.map((a) => [a.nombre, a.permiso]));
   // La key de cada acción es la que exige su handler (`denyIfMissingPermission`).

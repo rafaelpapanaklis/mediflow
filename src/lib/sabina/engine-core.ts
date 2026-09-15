@@ -289,6 +289,8 @@ export function validarLlamada(
 const AREA_POR_PREFIJO: Record<string, string> = {
   agenda: "la agenda",
   billing: "facturación",
+  // No es una key: es el candado de la bandera canAccessCaja (tools/candado-caja.ts).
+  caja: "Caja",
   patients: "los pacientes",
   medicalRecord: "el expediente clínico",
   prescription: "las recetas",
@@ -411,6 +413,34 @@ const AFIRMA_HECHO =
 /** Lo que se añade si Sabina propuso algo y la respuesta no manda a confirmarlo. */
 export const AVISO_PROPUESTA_PENDIENTE =
   "Todavía no hice nada: revisa la propuesta y confírmala con el botón si está bien.";
+
+/**
+ * Red determinista de `avisoObligatorio` (tipos.ts): si una herramienta dijo que
+ * su dato no se puede dar sin una advertencia y la respuesta no la trae (no
+ * contiene su `marca`), se añade al final. Existe por Caja: una pregunta
+ * «directa» se contesta en dos líneas, y «en caja hay $1,900» sin «es un
+ * cálculo» es cómo alguien cuadra mal una caja.
+ */
+export function garantizarAvisosObligatorios(
+  respuesta: string,
+  avisos: ReadonlyArray<{ frase: string; marca: string }>,
+): string {
+  // Sin respuesta no hay cifra que advertir. Y rellenarla con el aviso solo
+  // taparía el fallo: el motor da por fallida una respuesta vacía (503), y un
+  // «Ojo: es un cálculo» a secas no contesta nada.
+  if (!respuesta || respuesta.trim() === "") return respuesta;
+  const texto = normalizar(respuesta);
+  const vistos = new Set<string>();
+  const faltan: string[] = [];
+  for (const a of avisos) {
+    if (vistos.has(a.frase)) continue;
+    vistos.add(a.frase);
+    if (!texto.includes(normalizar(a.marca))) faltan.push(a.frase);
+  }
+  if (faltan.length === 0) return respuesta;
+  const base = respuesta.trim();
+  return base ? `${base}\n\n${faltan.join(" ")}` : faltan.join(" ");
+}
 
 /**
  * Red determinista de la confirmación: si hubo propuesta, la respuesta tiene que

@@ -264,13 +264,16 @@ const LAS_NUEVAS = [
   "registrar_paciente",
 ];
 
-test("el modelo recibe las diez de consulta y las cinco de agenda y pacientes, con su esquema", async () => {
+/** Caja (ws1-t3): una sola consulta con tres vistas. Sabina no abre, no retira y no cierra. */
+const LAS_DE_CAJA = ["caja"];
+
+test("el modelo recibe las diez de consulta, las cinco de agenda y pacientes y la de caja, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
 
   const tools = estado.peticiones[0]?.tools ?? [];
-  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS].sort());
+  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS, ...LAS_DE_CAJA].sort());
 
   const { SABINA_TOOLS } = await import("../engine-catalog");
   for (const t of tools) {

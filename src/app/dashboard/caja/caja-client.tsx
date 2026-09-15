@@ -15,6 +15,7 @@ import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import { BillingClient } from "../billing/billing-client";
 import type { CajaState, CajaHistoryRow } from "@/lib/caja";
+import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
 
 interface BillingProps {
   invoices:      any[];
@@ -67,9 +68,6 @@ const REFUND = "refund";
 const isRefundRow = (r: { method: string }) => r.method === REFUND;
 /** Importe con signo para mostrar: los reembolsos se guardan en POSITIVO y se pintan en negativo. */
 const signedAmount = (r: { method: string; amount: number }) => (isRefundRow(r) ? `−${fmtMXNdec(r.amount)}` : fmtMXNdec(r.amount));
-
-/** A partir de estas horas abiertas sugerimos hacer el corte (solo aviso). */
-const STALE_SHIFT_HOURS = 18;
 
 export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, billing }: Props) {
   const t = useT();
@@ -152,16 +150,9 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
 
   // Día natural de la clínica como clave comparable ("2026-07-27"). Se arma con
   // formatToParts y no con un locale prestado (en-CA) para que el formato no
-  // dependa de los locales que tenga instalados el navegador.
-  const dayKeyFmt = useMemo(
-    () => new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }),
-    [tz],
-  );
-  const dayKey = useCallback((at: string | number | Date) => {
-    const parts = dayKeyFmt.formatToParts(new Date(at));
-    const get = (type: string) => parts.find(p => p.type === type)?.value ?? "";
-    return `${get("year")}-${get("month")}-${get("day")}`;
-  }, [dayKeyFmt]);
+  // dependa de los locales que tenga instalados el navegador. Vive en
+  // lib/caja-turno porque Sabina decide el aviso de «sin cortar» con la misma.
+  const dayKey = useMemo(() => dayKeyIn(tz), [tz]);
 
   /**
    * Días naturales distintos que toca un turno. Cuenta también las anclas
@@ -212,11 +203,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
 
   const staleShift = useMemo(() => {
     if (!reg || nowMs == null) return null;
-    const hours = (nowMs - new Date(reg.openedAt).getTime()) / 3_600_000;
-    // Cruzar a otro día natural también amerita el aviso aunque lleve pocas horas.
-    const crossedDay = dayKey(reg.openedAt) !== dayKey(nowMs);
-    if (hours < STALE_SHIFT_HOURS && !crossedDay) return null;
-    return { hours: Math.max(0, Math.floor(hours)) };
+    // 18 h o cambio de día: la regla es de lib/caja-turno y Sabina usa la misma.
+    return staleShiftOf(reg.openedAt, nowMs, dayKey);
   }, [reg, nowMs, dayKey]);
 
   // Facturación del día (siempre disponible, con o sin caja abierta).
