@@ -53,6 +53,13 @@ function renderInline(text: string) {
     if (tok.bold) return <strong key={i}>{tok.text}</strong>;
     if (tok.italic) return <em key={i}>{tok.text}</em>;
     if (tok.code) return <code key={i}>{tok.text}</code>;
+    if (tok.href) {
+      return (
+        <a key={i} href={tok.href} target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+          {tok.text}
+        </a>
+      );
+    }
     return <Fragment key={i}>{tok.text}</Fragment>;
   });
 }

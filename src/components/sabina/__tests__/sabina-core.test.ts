@@ -111,6 +111,23 @@ test("tokenizeInline — separa negrita, itálica y código sin perder el texto 
   ]);
 });
 
+test("tokenizeInline — enlaces solo hacia rutas de la app (el comprobante), nunca hacia fuera", () => {
+  assert.deepEqual(tokenizeInline("Aquí está [el comprobante MF-0043](/api/invoices/inv_1/print)."), [
+    { text: "Aquí está " },
+    { text: "el comprobante MF-0043", href: "/api/invoices/inv_1/print" },
+    { text: "." },
+  ]);
+  for (const malo of [
+    "[clic](https://otro.sitio/robo)",
+    "[clic](javascript:alert(1))",
+    "[clic](//otro.sitio/api/x)",
+    "[clic](/api/../../etc)",
+    "[clic](/login)",
+  ]) {
+    assert.ok(tokenizeInline(malo).every((t) => !t.href), malo);
+  }
+});
+
 test("tokenizeInline — texto sin marcado devuelve un único token plano", () => {
   assert.deepEqual(tokenizeInline("sin nada especial"), [{ text: "sin nada especial" }]);
 });

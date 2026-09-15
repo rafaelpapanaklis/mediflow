@@ -248,8 +248,21 @@ const LAS_DIEZ = [
   "tratamientos_por_ingreso",
 ];
 
-/** Las de agenda y pacientes (ws1-t2, ws1-t3): proponer_horarios lee; las otras cuatro solo proponen. */
-const LAS_NUEVAS = ["agendar_cita", "cancelar_cita", "proponer_horarios", "reagendar_cita", "registrar_paciente"];
+/**
+ * Las de agenda y pacientes (ws1-t2, ws1-t3) y las de dinero (ws1-t2):
+ * proponer_horarios y facturas_de_paciente leen; las demás solo proponen.
+ */
+const LAS_NUEVAS = [
+  "agendar_cita",
+  "avisar_saldo_whatsapp",
+  "cancelar_cita",
+  "cobrar_factura",
+  "crear_factura",
+  "facturas_de_paciente",
+  "proponer_horarios",
+  "reagendar_cita",
+  "registrar_paciente",
+];
 
 test("el modelo recibe las diez de consulta y las cinco de agenda y pacientes, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");

@@ -29,6 +29,12 @@ export interface Datos {
   invoices?: Fila[];
   payments?: Fila[];
   records?: Fila[];
+  // Las de dinero (ws1-t2): presupuestos, el Inbox (tope de avisos) y la bitácora.
+  quotes?: Fila[];
+  quoteItems?: Fila[];
+  inboxThreads?: Fila[];
+  inboxMessages?: Fila[];
+  auditLogs?: Fila[];
 }
 
 interface Relacion {
@@ -55,6 +61,13 @@ const RELACIONES: Record<string, Record<string, Relacion>> = {
   payment: {
     invoice: { modelo: "invoices", via: (g, i) => g.invoiceId === i.id, lista: false },
   },
+  quote: {
+    items: { modelo: "quoteItems", via: (q, it) => it.quoteId === q.id, lista: true },
+    patient: { modelo: "patients", via: (q, p) => q.patientId === p.id, lista: false },
+  },
+  inboxMessage: {
+    thread: { modelo: "inboxThreads", via: (m, t) => m.threadId === t.id, lista: false },
+  },
 };
 
 const MODELO_DE: Record<string, string> = {
@@ -67,6 +80,11 @@ const MODELO_DE: Record<string, string> = {
   clinicSchedule: "clinicSchedules",
   user: "users",
   record: "records",
+  quote: "quotes",
+  quoteItem: "quoteItems",
+  inboxThread: "inboxThreads",
+  inboxMessage: "inboxMessages",
+  auditLog: "auditLogs",
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -87,6 +105,11 @@ export function crearBase(datos: Datos): BaseDoble {
     invoices: datos.invoices ?? [],
     payments: datos.payments ?? [],
     records: datos.records ?? [],
+    quotes: datos.quotes ?? [],
+    quoteItems: datos.quoteItems ?? [],
+    inboxThreads: datos.inboxThreads ?? [],
+    inboxMessages: datos.inboxMessages ?? [],
+    auditLogs: datos.auditLogs ?? [],
   };
   const contador: Contador = { llamadas: [] };
 
@@ -167,6 +190,9 @@ export function crearBase(datos: Datos): BaseDoble {
     clinic: delegado("clinic") as any,
     resource: delegado("resource") as any,
     clinicSchedule: delegado("clinicSchedule") as any,
+    quote: delegado("quote") as any,
+    inboxMessage: delegado("inboxMessage") as any,
+    auditLog: delegado("auditLog") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo
@@ -257,6 +283,12 @@ function coincideCampo(valor: any, cond: any): boolean {
   if (cond instanceof Date) return cmp(valor, cond) === 0;
   if (typeof cond !== "object" || Array.isArray(cond)) return igual(valor, cond);
 
+  // Filtro sobre un campo JSON: `{ path: ["accion"], equals: "x" }`, como Prisma en Postgres.
+  if (Array.isArray(cond.path)) {
+    const dentro = cond.path.reduce((v: any, k: string) => (v && typeof v === "object" ? v[k] : undefined), valor);
+    return igual(dentro, cond.equals);
+  }
+
   for (const op of Object.keys(cond)) {
     const esperado = cond[op];
     switch (op) {
@@ -305,6 +337,11 @@ function coincideCampo(valor: any, cond: any): boolean {
         if (!(insensible ? a.toLowerCase().indexOf(b.toLowerCase()) !== -1 : a.indexOf(b) !== -1)) {
           return false;
         }
+        break;
+      }
+      case "startsWith": {
+        const a = String(valor ?? "");
+        if (!a.startsWith(String(esperado ?? ""))) return false;
         break;
       }
       case "mode":

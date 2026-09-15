@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Check,
   Clock,
+  FileText,
   HelpCircle,
   Loader2,
   ShieldAlert,
@@ -162,6 +163,45 @@ export function PropuestaCard({
           </dl>
         )}
 
+        {propuesta.tarjeta.tabla && (
+          // Con scroll propio: en 390 px una tabla de cuatro columnas no cabe y
+          // lo que no se puede es partir un importe en dos renglones.
+          <div className={styles.tablaCaja}>
+            <table className={styles.tabla}>
+              <thead>
+                <tr>
+                  {propuesta.tarjeta.tabla.columnas.map((c, i) => (
+                    <th key={i} scope="col" data-numerica={c.numerica || undefined}>
+                      {c.titulo}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {propuesta.tarjeta.tabla.filas.map((fila, i) => (
+                  <tr key={i}>
+                    {fila.map((celda, j) => (
+                      <td key={j} data-numerica={propuesta.tarjeta.tabla!.columnas[j]?.numerica || undefined}>
+                        {celda}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {propuesta.tarjeta.tabla.pie && (
+              <dl className={styles.pie}>
+                {propuesta.tarjeta.tabla.pie.map((p, i) => (
+                  <div key={`${p.etiqueta}-${i}`} data-fuerte={p.fuerte || undefined}>
+                    <dt>{p.etiqueta}</dt>
+                    <dd>{p.valor}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        )}
+
         {pendiente && propuesta.tarjeta.avisos.length > 0 && (
           <ul className={styles.avisos}>
             {propuesta.tarjeta.avisos.map((a, i) => (
@@ -191,6 +231,17 @@ export function PropuestaCard({
           {propuesta.resultado && !dudoso && (
             <p className={styles.resultado} data-ok={propuesta.resultado.ok || undefined}>
               {propuesta.resultado.frase}
+              {propuesta.resultado.enlace && (
+                <a
+                  className={styles.enlace}
+                  href={propuesta.resultado.enlace.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <FileText size={13} aria-hidden />
+                  {propuesta.resultado.enlace.texto}
+                </a>
+              )}
             </p>
           )}
           {dudoso && (

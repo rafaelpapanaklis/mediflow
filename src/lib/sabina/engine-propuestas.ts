@@ -19,6 +19,7 @@ import {
   SABINA_PEDIDO_MAX_CHARS,
   SABINA_PROPUESTA_TTL_MS,
   esIdDePropuesta,
+  leerEnlace,
   vistaDePropuesta,
   type EventoPropuesta,
   type ResultadoVista,
@@ -471,7 +472,9 @@ export async function confirmarPropuesta(args: {
         try {
           const ej = await accion.ejecutar(llave, ctx, datos.data);
           if (ej && ej.ok === true) {
-            resultado = { ok: true, tipo: "hecha", frase: ej.frase };
+            // El enlace pasa por el mismo filtro que al leerlo: solo rutas de la app.
+            const enlace = leerEnlace((ej as { enlace?: unknown }).enlace);
+            resultado = { ok: true, tipo: "hecha", frase: ej.frase, ...(enlace ? { enlace } : {}) };
             entidad = ej.entidad;
           } else {
             const fallo = ej as { tipo?: string; frase?: string } | null;
@@ -499,7 +502,7 @@ export async function confirmarPropuesta(args: {
         ctx,
         id,
         EVENTO.resultado,
-        { accion: vista.accion, ok: resultado.ok, tipo: resultado.tipo, frase: resultado.frase, entidad: entidad ?? null, llamadas, ms: ahora() - t0 },
+        { accion: vista.accion, ok: resultado.ok, tipo: resultado.tipo, frase: resultado.frase, enlace: resultado.enlace ?? null, entidad: entidad ?? null, llamadas, ms: ahora() - t0 },
         args.req,
       ),
     );
