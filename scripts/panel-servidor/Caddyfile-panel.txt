@@ -1,0 +1,15 @@
+# Bloque que se AÑADE al final de /etc/caddy/Caddyfile (no sustituye nada).
+# El sitio del tablero (108-181-149-130.sslip.io) queda intacto.
+# Deshacer: sudo cp /etc/caddy/Caddyfile.antes-panel-dental /etc/caddy/Caddyfile && sudo systemctl reload caddy
+
+# ── Panel dental TEMPORAL (WS1-T1, 15-sep-2026) ── sin contraseña a propósito ──
+panel.108-181-149-130.sslip.io {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3300
+	log {
+		output file /var/log/caddy/panel.log {
+			roll_size 10MiB
+			roll_keep 3
+		}
+	}
+}

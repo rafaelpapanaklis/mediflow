@@ -1,0 +1,6 @@
+[Unit]
+Description=Vigía del panel dental: reinicia si deja de contestar
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/panel-dental/panel.sh vigia
