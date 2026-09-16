@@ -44,9 +44,14 @@ import s from "./menu-dos-niveles.module.css";
 // los importes de un botón «Cobrar $1,250.00» y los de una columna de precios
 // escritos en un campo bailarían. `inherit` les devuelve lo que toque: tabular
 // en el panel, y lo del diseño dentro del menú.
+//
+// Esa regla va SIN `:root` delante a propósito, al contrario que la del <body>:
+// solo tiene que ganarle a la hoja del navegador, y así cualquier clase que
+// alguien ponga a un botón o a un campo (`tabular-nums`, y el día de mañana
+// `proportional-nums` o `slashed-zero`) le sigue ganando a esto.
 const CSS = [
   `:root body{--font-sans:${instrumentSans.style.fontFamily};font-variant-numeric:tabular-nums}`,
-  `:root body button,:root body input,:root body select,:root body textarea{font-variant-numeric:inherit}`,
+  `body button,body input,body select,body textarea{font-variant-numeric:inherit}`,
   `:root body .${s.tokens}{font-variant-numeric:normal}`,
 ].join("");
 

@@ -27,17 +27,26 @@ const RAIZ = join(__dirname, "..", "..", "..", "..", "..");
 const leer = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
 
 const COMPONENTE = "src/components/dashboard/menu-dos-niveles/tipografia-panel.tsx";
+const BARRA = "src/components/dashboard/menu-dos-niveles/topbar-dos-niveles.tsx";
 const LAYOUT = "src/app/dashboard/layout.tsx";
+const MODULO_CSS = "src/components/dashboard/menu-dos-niveles/menu-dos-niveles.module.css";
 
 test("la tipografía se monta SOLO con el interruptor del menú encendido", () => {
-  const layout = leer(LAYOUT);
-  assert.match(layout, /import \{ TipografiaPanel \} from "@\/components\/dashboard\/menu-dos-niveles\/tipografia-panel"/);
-  // Dentro de la rama del menú nuevo del ternario, NO como hermano suelto: un
-  // hijo más en el layout le cambia a React los `useId`, y el HTML de las
-  // clínicas sin interruptor dejaría de ser idéntico al de hoy.
-  assert.match(layout, /menuDosNiveles \? \(\s*<>[\s\S]{0,1400}?<TipografiaPanel \/>\s*<MenuDosNiveles/);
-  assert.doesNotMatch(layout, /\{menuDosNiveles && <TipografiaPanel/);
-  assert.equal((layout.match(/<TipografiaPanel/g) ?? []).length, 1);
+  // Va dentro de la barra superior del diseño nuevo: el layout solo la pinta
+  // con el interruptor encendido y, a diferencia del menú —que en el teléfono
+  // vive en un cajón y no se monta hasta abrirlo—, la barra está siempre.
+  const barra = leer(BARRA);
+  assert.match(barra, /import \{ TipografiaPanel \} from "\.\/tipografia-panel"/);
+  assert.equal((barra.match(/<TipografiaPanel/g) ?? []).length, 1);
+  assert.match(leer(LAYOUT), /menuDosNiveles \? \(\s*<TopbarDosNiveles/);
+});
+
+test("el layout no se entera: el camino del menú de siempre queda intacto", () => {
+  // Un hijo más entre los del layout —aunque su condición casi siempre dé
+  // falso— le cambia a React el número de ranuras de ese nivel, y con él los
+  // `useId` de todo lo que cuelga: las clínicas SIN interruptor dejarían de
+  // recibir el HTML de hoy. Medido: con este montaje sale idéntico.
+  assert.doesNotMatch(leer(LAYOUT), /TipografiaPanel/);
 });
 
 test("nadie más lo monta: el panel tiene una sola raíz de tipografía", () => {
@@ -56,7 +65,7 @@ test("nadie más lo monta: el panel tiene una sola raíz de tipografía", () => 
   recorrer("src");
   assert.deepEqual(encontrados.sort(), [
     COMPONENTE,
-    LAYOUT,
+    BARRA,
     "src/components/dashboard/menu-dos-niveles/__tests__/tipografia-panel.test.ts",
   ].sort());
 });
@@ -97,9 +106,20 @@ test("redefine --font-sans sobre el <body>, y nada más", () => {
 test("los números siguen siendo de ancho fijo, incluso en botones y campos", () => {
   const css = reglas();
   assert.match(css, /:root body\{--font-sans:[\s\S]*?;font-variant-numeric:tabular-nums\}/);
-  assert.match(css, /:root body button,:root body input,:root body select,:root body textarea\{font-variant-numeric:inherit\}/);
+  // Sin `:root` delante: solo tiene que ganarle a la hoja del navegador, para
+  // que una clase puesta a mano en un botón o un campo siga mandando.
+  assert.match(css, /`body button,body input,body select,body textarea\{font-variant-numeric:inherit\}`/);
   // Y el menú conserva los suyos.
   assert.match(css, /:root body \.\$\{s\.tokens\}\{font-variant-numeric:normal\}/);
+});
+
+test("la clase con la que se excluye al menú sigue existiendo", () => {
+  // `s.tokens` sale de un módulo CSS: TypeScript lo da por `string` aunque la
+  // clase no exista, así que un renombre dejaría el selector en `.undefined`
+  // —válido, silencioso y sin efecto— y el menú perdería los numerales de su
+  // diseño. Esto lo caza aquí.
+  assert.match(leer(MODULO_CSS), /^\.tokens \{/m);
+  assert.match(leer("src/components/dashboard/menu-dos-niveles/menu-dos-niveles.tsx"), /s\.tokens/);
 });
 
 test("los PDF y los correos se quedan fuera", () => {

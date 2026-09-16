@@ -7,7 +7,6 @@ import { Sidebar, type SidebarProps } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { MenuDosNiveles } from "@/components/dashboard/menu-dos-niveles/menu-dos-niveles";
 import { TopbarDosNiveles } from "@/components/dashboard/menu-dos-niveles/topbar-dos-niveles";
-import { TipografiaPanel } from "@/components/dashboard/menu-dos-niveles/tipografia-panel";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { canUseCaja } from "@/lib/caja-pin";
 import { getResolvedPlan } from "@/lib/plans";
@@ -251,24 +250,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         comparten labs/proveedores/afiliados, que no entran en el piloto. */}
     <div className="dashboard-shell flex min-h-screen font-sans" style={{ background: "var(--bg)" }}>
       {menuDosNiveles ? (
-        <>
-          {/* La tipografía del diseño nuevo en TODO el panel, no solo en el menú
-              (WS1-T3). Cuelga del MISMO interruptor que el menú —Rafael prueba
-              «el diseño nuevo» como una sola cosa— así que se enciende y se
-              apaga con él, sin otra bandera ni más SQL.
-              Va DENTRO de esta rama, y no como hermano suelto del ternario, para
-              que el camino del menú de siempre quede intacto hasta el último
-              carácter: una expresión más entre los hijos del layout le cambia a
-              React el camino con el que numera los `useId`, y los ids de los
-              menús de Radix salían distintos en las clínicas que NO tienen el
-              interruptor. No se veía, pero su HTML dejaba de ser el de hoy. */}
-          <TipografiaPanel />
-          <MenuDosNiveles
-            {...sidebarProps}
-            puedeUsarCaja={canUseCaja(user)}
-            planEtiqueta={planEtiqueta}
-          />
-        </>
+        <MenuDosNiveles
+          {...sidebarProps}
+          puedeUsarCaja={canUseCaja(user)}
+          planEtiqueta={planEtiqueta}
+        />
       ) : (
         <Sidebar {...sidebarProps} />
       )}
