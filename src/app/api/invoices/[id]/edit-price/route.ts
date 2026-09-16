@@ -6,6 +6,7 @@ import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
 import {
   sumInvoiceItems, computeInvoiceTotal, round2, PRICE_ADJUST_FLAG,
 } from "@/lib/invoice-totals";
@@ -70,6 +71,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (invoice.status === "CANCELLED" || invoice.status === "PAID") {
     return NextResponse.json({ error: "No se puede modificar una factura cerrada" }, { status: 400 });
   }
+  // Con CFDI, el precio nuevo no coincidiría con el CFDI vigente ante el SAT (N3).
+  const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "cambiar el precio de");
+  if (cfdiDenied) return cfdiDenied;
 
   // INVARIANTE: total = Σ(conceptos) − descuento (+IVA si va agregado). Antes,
   // la rama {total} escribía el total del body y "cuadraba" subtotal = total +
@@ -134,8 +138,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const newBalance = round2(newTotal - invoice.paid);
 
-  await prisma.invoice.updateMany({
-    where: { id: params.id, clinicId },
+  // `cfdiUuid` igual al leído: si alguien la timbró desde la lectura, el precio no cambia.
+  const { count } = await prisma.invoice.updateMany({
+    where: { id: params.id, clinicId, cfdiUuid: invoice.cfdiUuid },
     data: {
       items:    newItems,
       subtotal: newSubtotal,
@@ -144,6 +149,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       balance:  Math.max(0, newBalance),
     },
   });
+  if (count === 0) return cfdiVigenteResponse(null, "cambiar el precio de");
 
   await logMutation({
     req, clinicId, userId: ctx.userId,

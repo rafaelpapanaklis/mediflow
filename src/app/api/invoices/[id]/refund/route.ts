@@ -7,6 +7,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { round2 } from "@/lib/invoice-totals";
+import { denyIfCfdiVigente } from "@/lib/invoices/cfdi-vigente";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -59,6 +60,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (visDenied) return visDenied;
   }
   if (invoice.status === "CANCELLED") return NextResponse.json({ error: "La factura está cancelada" }, { status: 400 });
+  // Con CFDI, reembolsar aquí lo dejaría vigente ante el SAT por el total (N3).
+  const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "reembolsar");
+  if (cfdiDenied) return cfdiDenied;
   if (invoice.paid <= 0)              return NextResponse.json({ error: "Esta factura no tiene pagos para reembolsar" }, { status: 400 });
   // Lo pagado se compara REDONDEADO: una factura legada con paid =
   // 1000.0099999999999 rechazaba el reembolso completo de $1,000.01.
