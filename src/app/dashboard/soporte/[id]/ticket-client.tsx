@@ -36,6 +36,7 @@ import type {
   SupportMessageDTO,
   SupportTicketSummary,
 } from "@/lib/support/types";
+import { TicketRediseno } from "@/components/dashboard/soporte-rediseno/ticket";
 
 // ── Presentación ─────────────────────────────────────────────────────────────
 
@@ -284,7 +285,12 @@ function CloseDialog({
 
 // ── Componente principal ─────────────────────────────────────────────────────
 
-export function TicketClient({ ticketId }: { ticketId: string }) {
+/**
+ * `rediseno` (ws1-t4): el MISMO interruptor por clínica que enciende el menú de
+ * dos niveles, leído en page.tsx. Apagado (o ausente), esta pantalla se pinta
+ * exactamente como siempre: nada de lo de abajo cambia.
+ */
+export function TicketClient({ ticketId, rediseno = false }: { ticketId: string; rediseno?: boolean }) {
   const [ticket, setTicket] = useState<SupportTicketSummary | null>(null);
   const [messages, setMessages] = useState<SupportMessageDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -468,6 +474,40 @@ export function TicketClient({ ticketId }: { ticketId: string }) {
     } finally {
       setClosing(false);
     }
+  }
+
+  // ── Rediseño ───────────────────────────────────────────────────────────────
+  // Mismo hilo, mismo redactor, mismos fetch y el mismo PATCH de cierre; solo
+  // cambia quién los pinta. Va ANTES de los estados de página para que también
+  // «cargando», «no encontrado» y «error» salgan con el diseño nuevo. Todos los
+  // hooks ya corrieron arriba, así que este retorno temprano no altera su orden.
+  if (rediseno) {
+    return (
+      <TicketRediseno
+        loading={loading}
+        notFound={notFound}
+        loadError={loadError}
+        ticket={ticket}
+        visibleMessages={visibleMessages}
+        reintentar={() => loadTicket()}
+        body={body}
+        setBody={setBody}
+        pendingFiles={pendingFiles}
+        uploading={uploading}
+        sending={sending}
+        fileRef={fileRef}
+        bottomRef={bottomRef}
+        fileAccept={ACCEPT_ATTR}
+        handleFiles={handleFiles}
+        removePending={removePending}
+        handleSend={handleSend}
+        onComposerKeyDown={onComposerKeyDown}
+        closeOpen={closeOpen}
+        setCloseOpen={setCloseOpen}
+        closing={closing}
+        handleCloseTicket={handleCloseTicket}
+      />
+    );
   }
 
   // ── Estados de página ──────────────────────────────────────────────────────
