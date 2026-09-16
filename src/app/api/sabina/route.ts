@@ -15,10 +15,12 @@ import { guardarPropuesta, propuestasDeConversacion } from "@/lib/sabina/engine-
 import type { SabinaPropuestaVista } from "@/lib/sabina/engine-propuestas-core";
 import { FRASE_SABINA_APAGADA } from "@/lib/sabina/permisos-sabina";
 import { crearSabinaCtx } from "@/lib/sabina/tipos";
+import { bloqueDeContexto, resolverContextoSabina } from "@/lib/sabina/contexto";
 
 /**
  * POST /api/sabina
- *   → { pregunta: string, conversacionId?: string }
+ *   → { pregunta: string, conversacionId?: string,
+ *       contexto?: { pantalla?: string, pacienteId?: string, fecha?: string } }
  *   ← { respuesta, herramientasUsadas, conversacionId, tokens:{entrada,salida}, modelo,
  *       propuestas?: SabinaPropuestaVista[], ahora? }
  *
@@ -98,6 +100,25 @@ export async function POST(req: NextRequest) {
         ? body.conversacionId.trim()
         : null;
 
+    /* ── 5b. Dónde estaba quien pregunta (ws1-t1). Es una PISTA, no una
+          llave: el `pacienteId` que manda la pantalla se vuelve a comprobar
+          aquí contra la sesión —clínica, visibilidad, `deletedAt` y
+          `patients.view`— y si no pasa, se cae en silencio y la pregunta
+          sigue sin él. Nunca autoriza nada: las herramientas lo comprueban
+          todo otra vez por su cuenta ─────────────────────────────────── */
+    let contexto: string | null = null;
+    try {
+      contexto = bloqueDeContexto(await resolverContextoSabina(sabinaCtx, body.contexto)) || null;
+    } catch (e) {
+      // Sin contexto se contesta igual que antes de que Sabina viviera en un
+      // cajón. Nunca es motivo para tirar la pregunta.
+      console.error("[sabina] no se pudo resolver el contexto de pantalla", {
+        clinicId: ctx.clinicId,
+        err: e instanceof Error ? e.message : "desconocido",
+      });
+      contexto = null;
+    }
+
     /* ── 6. El hilo previo (si lo hay). Va con el scope de la SESIÓN:
           clínica y usuario, nunca lo que mande el cliente. Y solo si es una
           conversación de SABINA: un id del Asistente IA no es contexto ─── */
@@ -142,6 +163,7 @@ export async function POST(req: NextRequest) {
       tools: SABINA_TOOLS,
       conversacionId: conversacionPrevia,
       tarjetaPendiente,
+      contexto,
     });
 
     /* ── 8. Cobrar SIEMPRE lo que se gastó, aunque la respuesta fallara:

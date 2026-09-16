@@ -714,8 +714,19 @@ export function construirSystemPrompt(opciones: {
    * tarjeta ya se confirmó, caducó o nunca existió.
    */
   tarjetaPendiente?: string | null;
+  /**
+   * El bloque de «dónde está quien pregunta», ya construido y ya comprobado
+   * contra la sesión (`bloqueDeContexto` de ./contexto). Llega como TEXTO y no
+   * como objeto a propósito: este módulo no sabe de base ni de permisos, y así
+   * no hay forma de que un id sin comprobar entre al prompt por aquí.
+   *
+   * Vacío o ausente = la pregunta cuesta exactamente lo que costaba antes de
+   * que Sabina se abriera en un cajón: el contexto NO es parte fija.
+   */
+  contexto?: string | null;
 }): string {
   const acciones = (opciones.acciones ?? []).filter(Boolean);
+  const contexto = typeof opciones.contexto === "string" ? opciones.contexto.trim() : "";
   const pendiente = typeof opciones.tarjetaPendiente === "string" ? opciones.tarjetaPendiente.trim() : "";
   // 🔴 Esta línea era incondicional: «si te escriben "sí", diles que usen el botón
   // de la tarjeta». Agendar casi siempre pasa por una pregunta («¿te la agendo?»),
@@ -725,7 +736,7 @@ export function construirSystemPrompt(opciones: {
     ? `- Ahora mismo el usuario tiene en pantalla UNA propuesta sin confirmar: «${pendiente}». Si te escriben "sí" o "confírmalo" sobre ESA propuesta, diles que usen el botón de su tarjeta.`
     : `- Ahora mismo NO hay ninguna tarjeta en pantalla. Solo hay tarjeta cuando en ESTE turno una herramienta de acción te devuelve "propuesta_sin_confirmar". Si el usuario contesta "sí" a algo que tú le preguntaste («¿te la agendo?», «¿es este paciente?»), eso es su respuesta: llama a la herramienta de acción con los datos de la conversación para preparar la propuesta. NUNCA le pidas que confirme en una tarjeta que no preparaste.`;
   return `Eres Sabina, la asistente de una clínica dental en México. Contestas al doctor y a su equipo sobre SU clínica, en español neutro y de tú. Hoy es ${opciones.hoy}.
-
+${contexto ? `\n${contexto}\n` : ""}
 CÓMO CONSIGUES LOS DATOS
 Los números salen SIEMPRE de tus herramientas. No tienes ningún dato de la clínica en la cabeza.
 - Las fechas que les pases van en formato AAAA-MM-DD.

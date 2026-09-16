@@ -47,6 +47,14 @@ export interface Datos {
   cumsItems?: Fila[];
   patientFiles?: Fila[];
   xrayAnalyses?: Fila[];
+  /**
+   * ws1-t1: el odontograma. OJO — estas filas NO llevan `clinicId` (la tabla
+   * real tampoco): cuelgan del paciente. Es a propósito, y es lo que hace que
+   * la prueba de aislamiento valga: si `odontograma` se saltara el
+   * `pacienteVisibleYActivo`, este doble le devolvería los hallazgos del
+   * paciente de la otra clínica igual que Prisma.
+   */
+  odontogramEntries?: Fila[];
 }
 
 interface Relacion {
@@ -112,6 +120,7 @@ const MODELO_DE: Record<string, string> = {
   cumsItem: "cumsItems",
   patientFile: "patientFiles",
   xrayAnalysis: "xrayAnalyses",
+  odontogramEntry: "odontogramEntries",
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -144,6 +153,7 @@ export function crearBase(datos: Datos): BaseDoble {
     cumsItems: datos.cumsItems ?? [],
     patientFiles: datos.patientFiles ?? [],
     xrayAnalyses: datos.xrayAnalyses ?? [],
+    odontogramEntries: datos.odontogramEntries ?? [],
   };
   const contador: Contador = { llamadas: [] };
 
@@ -241,6 +251,7 @@ export function crearBase(datos: Datos): BaseDoble {
     cumsItem: delegado("cumsItem") as any,
     patientFile: delegado("patientFile") as any,
     xrayAnalysis: delegado("xrayAnalysis") as any,
+    odontogramEntry: delegado("odontogramEntry") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo

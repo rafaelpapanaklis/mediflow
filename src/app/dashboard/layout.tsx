@@ -13,6 +13,7 @@ import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { TwoFactorFetchGuard } from "@/components/dashboard/two-factor-fetch-guard";
 import { ChatLauncher } from "@/components/dashboard/chat/chat-launcher";
+import { SabinaLanzador } from "@/components/dashboard/sabina/lanzador";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 import { I18nProvider } from "@/i18n/i18n-provider";
@@ -266,6 +267,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         Sus 2 pestañas son Proveedores + Laboratorios, así que se apaga junto con
         esos módulos (HIDE_SUPPLY_MODULES); si no, seguiría siendo su puerta visible. */}
     {!HIDE_SUPPLY_MODULES && <ChatLauncher />}
+    {/* Sabina, en TODAS las pantallas del panel: botón fijo abajo a la derecha
+        y Alt+S. No consulta nada al montarse y abrirla no llama al modelo —
+        solo preguntar cobra. En /dashboard/sabina se apaga sola. */}
+    <SabinaLanzador clinicId={clinic.id} firstName={user.firstName} oculto={isExpired} />
     </NewAppointmentProvider>
     </NewPatientProvider>
     </ActiveConsultProvider>

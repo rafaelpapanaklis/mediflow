@@ -1,0 +1,145 @@
+/* ═══════════════════════════════════════════════════════════════════
+   EL CAJÓN DE SABINA — la puerta que está en todas las pantallas.
+
+   Solo el MARCO: el botón flotante, el cajón y su cabecera. El hilo y la
+   caja de texto los pinta <SabinaConversacion>, que trae los estilos de la
+   pantalla de Sabina — ahí vive el vocabulario visual y no se duplica.
+
+   En escritorio el cajón se superpone por la derecha SIN velo: la idea es
+   preguntar «sin salir de donde estás», y un velo negro encima de la ficha
+   que estabas leyendo es justo salir de donde estás. En el teléfono ocupa
+   todo el ancho, y ahí sí lleva velo porque tapa la pantalla entera.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.fab {
+  position: fixed;
+  right: 20px;
+  z-index: 58;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand), var(--violet-700));
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-3, 0 12px 30px -8px rgba(15, 10, 30, 0.35));
+  transition: transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.fab:hover { transform: translateY(-2px); }
+.fab:active { transform: scale(0.96); }
+.fab:focus-visible { outline: none; box-shadow: var(--ring); }
+/* Con el cajón abierto el botón sobra y además queda debajo: se esconde. */
+.fabOculto { opacity: 0; pointer-events: none; transform: scale(0.9); }
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 69;
+  background: rgba(15, 10, 30, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border: none;
+  cursor: pointer;
+  /* En escritorio no hay velo: se sigue trabajando con el cajón abierto. */
+  display: none;
+}
+
+.panel {
+  --brand-hover: var(--violet-700);
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  width: min(420px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text-1);
+  border-left: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-3, -18px 0 48px -18px rgba(15, 10, 30, 0.35));
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 14px;
+  transform: translateX(100%);
+  /* `visibility` hace el trabajo que en React haría `inert`: con el cajón
+     cerrado sus botones y su caja de texto SALEN del orden de tabulación, así
+     que no se tabula a un chat invisible desde la pantalla de debajo. El
+     retardo deja que la transición de salida se vea entera. */
+  visibility: hidden;
+  transition: transform var(--dur-2) var(--ease), visibility 0s linear var(--dur-2);
+}
+.panelAbierto {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform var(--dur-2) var(--ease), visibility 0s linear 0s;
+}
+
+.cabecera {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+}
+.marca {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand), var(--violet-700));
+  color: #fff;
+  flex-shrink: 0;
+}
+.titulos { flex: 1; min-width: 0; }
+.titulo { font-size: 13.5px; font-weight: 700; line-height: 1.2; }
+.subtitulo {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.boton {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  text-decoration: none;
+}
+.boton:hover { background: var(--brand-softer); color: var(--brand); border-color: var(--brand-soft); }
+.boton:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* El cartelito de honestidad: qué está viendo Sabina ahora mismo. */
+.contexto {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--brand-softer);
+  border-bottom: 1px solid var(--border-soft);
+}
+.contexto strong { font-weight: 600; color: var(--text-1); }
+
+@media (max-width: 768px) {
+  .velo { display: block; }
+  .fab { right: 16px; width: 48px; height: 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab, .panel { transition: none !important; }
+}
