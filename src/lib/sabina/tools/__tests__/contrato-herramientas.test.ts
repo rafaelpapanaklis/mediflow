@@ -557,6 +557,29 @@ test("crearSabinaCtx: la zona sale de la CLÍNICA, y sin ella cae a México (no 
   assert.equal(conZona.timezone, "America/Cancun");
   assert.equal(conZona.clinicCategory, "DENTAL");
 
+  // ws1-t5 — la tarjeta de identidad. Sale de la fila de `Clinic` que
+  // `getAuthContext()` ya trae, y se limpia: una sola línea, sin comillas que
+  // cierren la frase del prompt antes de tiempo, y recortada.
+  const conNombre = await crearSabinaCtx(
+    {
+      clinicId: "c1",
+      userId: "u1",
+      role: "ADMIN",
+      clinic: { timezone: "America/Cancun", category: "DENTAL", name: 'Clínica «Sonrisa»\n S.A.', city: "Cancún", state: "Quintana Roo" },
+    } as any,
+    sinAjustes,
+  );
+  assert.equal(conNombre.clinicaNombre, "Clínica Sonrisa S.A.");
+  assert.equal(conNombre.clinicaLugar, "Cancún, Quintana Roo");
+  assert.equal(conZona.clinicaNombre, undefined);
+  assert.equal(conZona.clinicaLugar, undefined);
+
+  const nombreLargo = await crearSabinaCtx(
+    { clinicId: "c1", userId: "u1", role: "ADMIN", clinic: { name: "x".repeat(500) } } as any,
+    sinAjustes,
+  );
+  assert.equal(nombreLargo.clinicaNombre!.length, 80, "el nombre entra en el prompt de CADA pregunta: va con tope");
+
   // Una zona vacía NO puede caer al runtime default (UTC en Vercel): ése es el
   // offset de -6 h que vaciaba la vista Mes. Cae al mismo default que `safeTz`.
   for (const clinic of [null, {}, { timezone: null }, { timezone: "" }]) {

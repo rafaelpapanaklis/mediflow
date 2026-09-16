@@ -34,7 +34,7 @@ interface Sesion {
   clinicId: string;
   role: string;
   permissionsOverride: string[];
-  clinic: { timezone: string; category: string };
+  clinic: { timezone: string; category: string; name?: string; city?: string; state?: string };
   isAdmin: boolean;
 }
 
@@ -60,7 +60,7 @@ function sesionAdminNorte(): Sesion {
     clinicId: CL_NORTE,
     role: "ADMIN",
     permissionsOverride: [],
-    clinic: { timezone: TZ_NORTE, category: "DENTAL" },
+    clinic: { timezone: TZ_NORTE, category: "DENTAL", name: "Clínica Norte", city: "Ciudad de México", state: "CDMX" },
     isAdmin: true,
   };
 }
@@ -270,13 +270,16 @@ const LAS_DE_CAJA = ["caja"];
 /** Las tres de CLÍNICO (ws1-t4): todas de solo lectura. */
 const LAS_DE_CLINICO = ["recetas", "estudios_del_paciente", "analisis_y_notas_de_estudio"];
 
+/** Las dos de LA CLÍNICA (ws1-t5): el catálogo de precios y el cuadro de profesionales. */
+const LAS_DE_LA_CLINICA = ["procedimientos_y_precios", "equipo_clinica"];
+
 test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja y las tres de clínico, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
 
   const tools = estado.peticiones[0]?.tools ?? [];
-  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS, ...LAS_DE_CAJA, ...LAS_DE_CLINICO].sort());
+  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS, ...LAS_DE_CAJA, ...LAS_DE_CLINICO, ...LAS_DE_LA_CLINICA].sort());
 
   const { SABINA_TOOLS } = await import("../engine-catalog");
   for (const t of tools) {
@@ -340,6 +343,45 @@ test("«¿cuántas citas tengo hoy?» — de la pregunta al JSON, con el número
   assert.equal(json.modelo, "claude-haiku-4-5");
   assert.deepEqual(json.tokens, { entrada: 2200, salida: 130 });
   assert.equal(json.conversacionId, "conv-sabina");
+});
+
+test("ws1-t5: el prompt trae el nombre de la clínica, y NINGÚN precio suyo", async () => {
+  estado.guion = () => contesta("Hola.");
+  await preguntar("hola");
+
+  const system = estado.peticiones[0].system;
+  assert.match(system, /Se llama «Clínica Norte» y está en «Ciudad de México, CDMX»/);
+  // 🔴 El catálogo NO viaja en el prompt: se paga en cada pregunta de cada
+  // clínica, y volvería mentira el «no tienes ningún dato de la clínica en la
+  // cabeza» que está tres párrafos más arriba en el mismo prompt.
+  for (const del of ["Profilaxis", "800", "Restauración resina", "Hugo Salas", "Ortodoncia"]) {
+    assert.ok(!system.includes(del), `el prompt lleva «${del}»: eso se paga en cada pregunta`);
+  }
+});
+
+test("ws1-t5: «¿cuánto cobramos por una limpieza?» sale de la base, con su precio y su duración", async () => {
+  const { procedimientosYPrecios } = await import("../tools/procedimientos-y-precios");
+  const { correrHerramienta } = await import("../tools/base");
+  const directo = await correrHerramienta(procedimientosYPrecios, adminNorte(estado.db!), { busqueda: "limpieza" });
+  assert.equal(directo.ok, true, JSON.stringify(directo));
+
+  estado.guion = ({ n, messages }) => {
+    if (n === 1) return pideHerramienta("procedimientos_y_precios", { busqueda: "limpieza" });
+    const r = ultimoToolResult(messages);
+    assert.equal(r?.ok, true, JSON.stringify(r));
+    assert.match(r.resumen, /\$800/);
+    assert.match(r.resumen, /40 min/);
+    // El modelo contesta SIN el matiz: la red del motor tiene que ponerlo.
+    return contesta("La limpieza son $800 y dura 40 minutos.");
+  };
+
+  const res = await preguntar("¿cuánto cobramos por una limpieza?");
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.deepEqual(json.herramientasUsadas, ["procedimientos_y_precios"]);
+  assert.match(json.respuesta, /\$800/);
+  // El motor añade el aviso obligatorio si el modelo se lo come.
+  assert.match(json.respuesta, /precio de lista/);
 });
 
 test("sin permiso de facturación, lo DICE — con la herramienta real y el permiso real", async () => {
