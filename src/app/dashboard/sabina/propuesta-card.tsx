@@ -24,6 +24,42 @@ import {
   type SabinaPropuestaVista,
 } from "./propuesta-core";
 import styles from "./propuesta.module.css";
+import piel from "@/components/dashboard/sabina-rx-ia-rediseno/rediseno.module.css";
+
+/**
+ * REDISEÑO (interruptor `menu-dos-niveles`): la tarjeta conserva su JSX y
+ * elige el juego de clases con `rediseno`, igual que `sabina-client.tsx`.
+ * Apagado, `propuesta.module.css` tal cual; encendido, las piezas de
+ * `sabina-rx-ia-rediseno/rediseno.module.css`.
+ */
+const CLASES_REDISENO: Record<string, string> = {
+  card: piel.propuesta,
+  head: piel.propuestaCabeza,
+  badge: piel.propuestaInsignia,
+  timer: piel.propuestaReloj,
+  body: piel.propuestaCuerpo,
+  title: piel.propuestaTitulo,
+  frase: piel.propuestaFrase,
+  detalles: piel.propuestaDetalles,
+  fila: piel.propuestaFila,
+  antes: piel.propuestaAntes,
+  flecha: piel.propuestaFlecha,
+  valor: piel.propuestaValor,
+  tablaCaja: piel.propuestaTablaCaja,
+  tabla: piel.propuestaTabla,
+  pie: piel.propuestaPie,
+  avisos: piel.propuestaAvisos,
+  irreversible: piel.propuestaIrreversible,
+  deshacer: piel.propuestaDeshacer,
+  resultado: piel.propuestaResultado,
+  enlace: piel.propuestaEnlace,
+  nota: piel.propuestaNota,
+  acciones: piel.propuestaAcciones,
+  confirmar: piel.propuestaConfirmar,
+  descartar: piel.propuestaDescartar,
+  casilla: piel.propuestaCasilla,
+  spin: piel.girar,
+};
 
 const ICONO_TONO = {
   pendiente: Sparkles,
@@ -55,6 +91,7 @@ export function PropuestaCard({
   onDescartar,
   onConsultar,
   onCaducar,
+  rediseno = false,
 }: {
   propuesta: SabinaPropuestaVista;
   /** ms que va adelantado el reloj del servidor (ver `desfaseReloj`). */
@@ -70,7 +107,10 @@ export function PropuestaCard({
   onConsultar: () => void;
   /** El plazo venció en pantalla: que el servidor diga en qué quedó. */
   onCaducar: () => void;
+  /** Interruptor `menu-dos-niveles` de la clínica: viste la tarjeta con el rediseño. */
+  rediseno?: boolean;
 }) {
+  const c: Record<string, string> = rediseno ? CLASES_REDISENO : styles;
   const [ahora, setAhora] = useState(() => Date.now());
   const [armada, setArmada] = useState(false);
   const [casilla, setCasilla] = useState(false);
@@ -122,41 +162,41 @@ export function PropuestaCard({
 
   return (
     <section
-      className={styles.card}
+      className={c.card}
       data-estado={dudoso ? "dudoso" : estado}
       data-irreversible={irreversible || undefined}
       aria-label={`Propuesta de Sabina: ${propuesta.titulo}`}
     >
-      <header className={styles.head}>
-        <span className={styles.badge} data-tono={etiqueta.tono}>
+      <header className={c.head}>
+        <span className={c.badge} data-tono={etiqueta.tono}>
           <Icono size={12} aria-hidden />
           {etiqueta.texto}
         </span>
         {pendiente && (
-          <span className={styles.timer}>
+          <span className={c.timer}>
             <Clock size={11} aria-hidden />
             {textoCaducidad(propuesta, ahora, desfase)}
           </span>
         )}
       </header>
 
-      <div className={styles.body}>
-        <h3 className={styles.title}>{propuesta.titulo}</h3>
-        <p className={styles.frase}>{propuesta.tarjeta.frase}</p>
+      <div className={c.body}>
+        <h3 className={c.title}>{propuesta.titulo}</h3>
+        <p className={c.frase}>{propuesta.tarjeta.frase}</p>
 
         {propuesta.tarjeta.detalles.length > 0 && (
-          <dl className={styles.detalles}>
+          <dl className={c.detalles}>
             {propuesta.tarjeta.detalles.map((d, i) => (
-              <div key={`${d.etiqueta}-${i}`} className={styles.fila}>
+              <div key={`${d.etiqueta}-${i}`} className={c.fila}>
                 <dt>{d.etiqueta}</dt>
                 <dd>
                   {d.antes && (
                     <>
-                      <s className={styles.antes}>{d.antes}</s>
-                      <ArrowRight size={11} aria-label="cambia a" className={styles.flecha} />
+                      <s className={c.antes}>{d.antes}</s>
+                      <ArrowRight size={11} aria-label="cambia a" className={c.flecha} />
                     </>
                   )}
-                  <span className={styles.valor}>{d.valor}</span>
+                  <span className={c.valor}>{d.valor}</span>
                 </dd>
               </div>
             ))}
@@ -166,8 +206,8 @@ export function PropuestaCard({
         {propuesta.tarjeta.tabla && (
           // Con scroll propio: en 390 px una tabla de cuatro columnas no cabe y
           // lo que no se puede es partir un importe en dos renglones.
-          <div className={styles.tablaCaja}>
-            <table className={styles.tabla}>
+          <div className={c.tablaCaja}>
+            <table className={c.tabla}>
               <thead>
                 <tr>
                   {propuesta.tarjeta.tabla.columnas.map((c, i) => (
@@ -190,7 +230,7 @@ export function PropuestaCard({
               </tbody>
             </table>
             {propuesta.tarjeta.tabla.pie && (
-              <dl className={styles.pie}>
+              <dl className={c.pie}>
                 {propuesta.tarjeta.tabla.pie.map((p, i) => (
                   <div key={`${p.etiqueta}-${i}`} data-fuerte={p.fuerte || undefined}>
                     <dt>{p.etiqueta}</dt>
@@ -203,7 +243,7 @@ export function PropuestaCard({
         )}
 
         {pendiente && propuesta.tarjeta.avisos.length > 0 && (
-          <ul className={styles.avisos}>
+          <ul className={c.avisos}>
             {propuesta.tarjeta.avisos.map((a, i) => (
               <li key={i}>
                 <AlertTriangle size={13} aria-hidden />
@@ -214,7 +254,7 @@ export function PropuestaCard({
         )}
 
         {pendiente && irreversible && (
-          <div className={styles.irreversible} role="note">
+          <div className={c.irreversible} role="note">
             <ShieldAlert size={15} aria-hidden />
             <div>
               <strong>No se puede deshacer.</strong>{" "}
@@ -224,16 +264,16 @@ export function PropuestaCard({
           </div>
         )}
         {pendiente && propuesta.deshacer.reversible && (
-          <p className={styles.deshacer}>Se puede deshacer: {(propuesta.deshacer as { como?: string }).como}</p>
+          <p className={c.deshacer}>Se puede deshacer: {(propuesta.deshacer as { como?: string }).como}</p>
         )}
 
         <div aria-live="polite">
           {propuesta.resultado && !dudoso && (
-            <p className={styles.resultado} data-ok={propuesta.resultado.ok || undefined}>
+            <p className={c.resultado} data-ok={propuesta.resultado.ok || undefined}>
               {propuesta.resultado.frase}
               {propuesta.resultado.enlace && (
                 <a
-                  className={styles.enlace}
+                  className={c.enlace}
                   href={propuesta.resultado.enlace.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -245,23 +285,23 @@ export function PropuestaCard({
             </p>
           )}
           {dudoso && (
-            <p className={styles.resultado}>
+            <p className={c.resultado}>
               No llegó la respuesta del servidor, así que no sé si se hizo. «Consultar» no hace nada: solo te dice en qué quedó.
             </p>
           )}
-          {notaEstado && <p className={styles.nota}>{notaEstado}</p>}
+          {notaEstado && <p className={c.nota}>{notaEstado}</p>}
         </div>
       </div>
 
       {dudoso && (
-        <div className={styles.acciones}>
+        <div className={c.acciones}>
           <button
             type="button"
-            className={styles.confirmar}
+            className={c.confirmar}
             onClick={pulsar(onConsultar)}
             disabled={!!trabajando || ocupado}
           >
-            {trabajando === "consultar" ? <Loader2 size={14} aria-hidden className={styles.spin} /> : <HelpCircle size={14} aria-hidden />}
+            {trabajando === "consultar" ? <Loader2 size={14} aria-hidden className={c.spin} /> : <HelpCircle size={14} aria-hidden />}
             {trabajando === "consultar" ? "Consultando…" : "Consultar qué pasó"}
           </button>
         </div>
@@ -270,7 +310,7 @@ export function PropuestaCard({
       {pendiente && (
         <>
           {pideCasilla(propuesta) && (
-            <label className={styles.casilla}>
+            <label className={c.casilla}>
               <input
                 type="checkbox"
                 checked={casilla}
@@ -280,26 +320,26 @@ export function PropuestaCard({
               <span>Entiendo que no se puede deshacer</span>
             </label>
           )}
-          <div className={styles.acciones}>
+          <div className={c.acciones}>
             <button
               type="button"
-              className={styles.descartar}
+              className={c.descartar}
               onClick={pulsar(onDescartar)}
               disabled={!!trabajando || ocupado}
             >
-              {trabajando === "descartar" && <Loader2 size={14} aria-hidden className={styles.spin} />}
+              {trabajando === "descartar" && <Loader2 size={14} aria-hidden className={c.spin} />}
               Descartar
             </button>
             <button
               type="button"
-              className={styles.confirmar}
+              className={c.confirmar}
               data-peligro={irreversible || undefined}
               onClick={pulsar(onConfirmar)}
               disabled={!habilitado}
             >
               {trabajando === "confirmar" ? (
                 <>
-                  <Loader2 size={14} aria-hidden className={styles.spin} /> Haciéndolo…
+                  <Loader2 size={14} aria-hidden className={c.spin} /> Haciéndolo…
                 </>
               ) : (
                 propuesta.boton

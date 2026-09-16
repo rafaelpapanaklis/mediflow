@@ -13,6 +13,46 @@ import {
 } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patients-list.module.css";
+import piel from "@/components/dashboard/sabina-rx-ia-rediseno/rediseno.module.css";
+import { CLASES_REDISENO_LOTE } from "@/components/dashboard/sabina-rx-ia-rediseno/raiz";
+
+/**
+ * REDISEÑO (interruptor `menu-dos-niveles`) — «dos pieles, un esqueleto», como
+ * en sabina-client.tsx: el JSX es uno y `c` elige las clases de siempre
+ * (`patients-list.module.css`, sin tocar) o las piezas del rediseño que
+ * comparten Sabina, Radiografías y el Asistente IA.
+ */
+const CLASES_REDISENO: Record<string, string> = {
+  page: piel.listaPagina,
+  header: piel.listaCabecera,
+  titleRow: piel.listaTituloFila,
+  titleIcon: `${piel.iniciales} ${piel.inicialesGrandes}`,
+  title: piel.pantallaTitulo,
+  subtitle: piel.pantallaSub,
+  searchWrap: `${piel.buscador} ${piel.buscadorGrande}`,
+  searchIcon: piel.buscadorIcono,
+  searchInput: piel.buscadorEntrada,
+  layout: piel.listaDisposicion,
+  filtersAside: `${piel.tarjeta} ${piel.filtros}`,
+  filtersLabel: `${piel.seccionTitulo} ${piel.filtrosTitulo}`,
+  filterBtn: piel.filtro,
+  filterBtnActive: piel.filtroActivo,
+  filterLabel: piel.filtroTexto,
+  filterCount: `${piel.contador} ${piel.contadorSuave}`,
+  list: piel.filas,
+  emptyState: piel.vacio,
+  row: piel.filaPaciente,
+  avatar: `${piel.iniciales} ${piel.inicialesGrandes}`,
+  rowInfo: piel.filaInfo,
+  rowName: piel.filaNombre,
+  rowMeta: piel.filaMeta,
+  rowMetaId: piel.filaFolio,
+  rowStats: piel.filaDatos,
+  rowCount: piel.filaCuenta,
+  rowCountZero: `${piel.filaCuenta} ${piel.filaCuentaCero}`,
+  rowDate: piel.filaFecha,
+  rowChevron: piel.filaFlecha,
+};
 
 interface PatientRow {
   id: string;
@@ -27,6 +67,8 @@ interface PatientRow {
 
 interface Props {
   patients: PatientRow[];
+  /** Interruptor `menu-dos-niveles` de la clínica: viste la lista con el rediseño. */
+  rediseno?: boolean;
 }
 
 type Filter = "all" | "with" | "without" | "recent";
@@ -65,8 +107,9 @@ function isRecent(iso: string | null): boolean {
   return days <= RECENT_THRESHOLD_DAYS;
 }
 
-export function XraysPatientsList({ patients }: Props) {
+export function XraysPatientsList({ patients, rediseno = false }: Props) {
   const t = useT();
+  const c: Record<string, string> = rediseno ? CLASES_REDISENO : styles;
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -97,22 +140,22 @@ export function XraysPatientsList({ patients }: Props) {
   }, [patients, search, filter]);
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.titleRow}>
-          <span className={styles.titleIcon}><FileImage size={18} aria-hidden /></span>
+    <div className={rediseno ? `${CLASES_REDISENO_LOTE} ${c.page}` : c.page}>
+      <header className={c.header}>
+        <div className={c.titleRow}>
+          <span className={c.titleIcon}><FileImage size={18} aria-hidden /></span>
           <div>
-            <h1 className={styles.title}>{t("pages.xrays.title")}</h1>
-            <p className={styles.subtitle}>
+            <h1 className={c.title}>{t("pages.xrays.title")}</h1>
+            <p className={c.subtitle}>
               {t("pages.xrays.subtitle")}
             </p>
           </div>
         </div>
-        <div className={styles.searchWrap}>
-          <Search size={16} aria-hidden className={styles.searchIcon} />
+        <div className={c.searchWrap}>
+          <Search size={16} aria-hidden className={c.searchIcon} />
           <input
             type="text"
-            className={styles.searchInput}
+            className={c.searchInput}
             placeholder={t("pages.xrays.searchPatientPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -121,10 +164,11 @@ export function XraysPatientsList({ patients }: Props) {
         </div>
       </header>
 
-      <div className={styles.layout}>
-        <aside className={styles.filtersAside}>
-          <div className={styles.filtersLabel}>{t("common.filters")}</div>
+      <div className={c.layout}>
+        <aside className={c.filtersAside}>
+          <div className={c.filtersLabel}>{t("common.filters")}</div>
           <FilterButton
+            c={c}
             active={filter === "all"}
             onClick={() => setFilter("all")}
             icon={Users}
@@ -132,6 +176,7 @@ export function XraysPatientsList({ patients }: Props) {
             count={counts.all}
           />
           <FilterButton
+            c={c}
             active={filter === "with"}
             onClick={() => setFilter("with")}
             icon={FileImage}
@@ -139,6 +184,7 @@ export function XraysPatientsList({ patients }: Props) {
             count={counts.with}
           />
           <FilterButton
+            c={c}
             active={filter === "recent"}
             onClick={() => setFilter("recent")}
             icon={AlarmClock}
@@ -146,6 +192,7 @@ export function XraysPatientsList({ patients }: Props) {
             count={counts.recent}
           />
           <FilterButton
+            c={c}
             active={filter === "without"}
             onClick={() => setFilter("without")}
             icon={CircleSlash}
@@ -154,9 +201,9 @@ export function XraysPatientsList({ patients }: Props) {
           />
         </aside>
 
-        <main className={styles.list}>
+        <main className={c.list}>
           {filtered.length === 0 ? (
-            <div className={styles.emptyState}>
+            <div className={c.emptyState}>
               <FileImage size={42} aria-hidden style={{ opacity: 0.3, marginBottom: 12 }} />
               <h3>{t("common.noResults")}</h3>
               <p>{search ? t("pages.xrays.emptyAdjustSearch") : t("pages.xrays.emptyNoMatch")}</p>
@@ -168,26 +215,26 @@ export function XraysPatientsList({ patients }: Props) {
                 <Link
                   key={p.id}
                   href={`/dashboard/xrays/${p.id}`}
-                  className={styles.row}
+                  className={c.row}
                 >
-                  <span className={styles.avatar}>{getInitials(p)}</span>
-                  <div className={styles.rowInfo}>
-                    <span className={styles.rowName}>
+                  <span className={c.avatar}>{getInitials(p)}</span>
+                  <div className={c.rowInfo}>
+                    <span className={c.rowName}>
                       {p.firstName} {p.lastName}
                     </span>
-                    <span className={styles.rowMeta}>
-                      <code className={styles.rowMetaId}>{p.patientNumber}</code>
+                    <span className={c.rowMeta}>
+                      <code className={c.rowMetaId}>{p.patientNumber}</code>
                       {age !== null && <span>· {t("pages.xrays.yearsOld", { count: age })}</span>}
                       {p.gender && <span>· {p.gender === "MALE" ? "M" : p.gender === "FEMALE" ? "F" : "—"}</span>}
                     </span>
                   </div>
-                  <div className={styles.rowStats}>
-                    <span className={p.xrayCount > 0 ? styles.rowCount : styles.rowCountZero}>
+                  <div className={c.rowStats}>
+                    <span className={p.xrayCount > 0 ? c.rowCount : c.rowCountZero}>
                       <FileImage size={11} aria-hidden /> {p.xrayCount}
                     </span>
-                    <span className={styles.rowDate}>{formatRelative(p.lastXrayAt, t)}</span>
+                    <span className={c.rowDate}>{formatRelative(p.lastXrayAt, t)}</span>
                   </div>
-                  <span className={styles.rowChevron} aria-hidden>
+                  <span className={c.rowChevron} aria-hidden>
                     <ArrowRight size={14} />
                   </span>
                 </Link>
@@ -201,12 +248,14 @@ export function XraysPatientsList({ patients }: Props) {
 }
 
 function FilterButton({
+  c = styles,
   active,
   onClick,
   icon: Icon,
   label,
   count,
 }: {
+  c?: Record<string, string>;
   active: boolean;
   onClick: () => void;
   icon: LucideIcon;
@@ -216,12 +265,12 @@ function FilterButton({
   return (
     <button
       type="button"
-      className={`${styles.filterBtn} ${active ? styles.filterBtnActive : ""}`}
+      className={`${c.filterBtn} ${active ? c.filterBtnActive : ""}`}
       onClick={onClick}
     >
       <Icon size={14} aria-hidden />
-      <span className={styles.filterLabel}>{label}</span>
-      <span className={styles.filterCount}>{count}</span>
+      <span className={c.filterLabel}>{label}</span>
+      <span className={c.filterCount}>{count}</span>
     </button>
   );
 }
