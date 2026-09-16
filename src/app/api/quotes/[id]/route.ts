@@ -49,10 +49,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
  * PATCH /api/quotes/[id] — edita un presupuesto. Solo en estado editable
  * (DRAFT o PRESENTED). Reemplaza ítems y recalcula totales en el servidor.
  *
- * FIN-05 — la factura ligada (quote.invoiceId, la que POST /api/quotes crea
- * en BORRADOR) se regenera en la MISMA transacción con la misma aritmética
- * del alta. Si esa factura ya se confirmó o tiene pagos, el presupuesto ya no
- * se edita: 409 con un mensaje que dice qué factura, por qué y qué hacer.
+ * FIN-05 — la factura ligada (quote.invoiceId) se regenera en la MISMA
+ * transacción con la misma aritmética del alta. Hoy un presupuesto editable no
+ * tiene factura (nace al aceptarlo); esto cubre los presupuestos creados antes
+ * de sep-2026, cuando POST /api/quotes les creaba una en BORRADOR. Si esa
+ * factura ya se confirmó o tiene pagos, el presupuesto ya no se edita: 409 con
+ * un mensaje que dice qué factura, por qué y qué hacer.
  * Devuelve `invoice` (la sincronizada) para que la ficha la refresque al
  * instante, o null si no había.
  */
@@ -212,9 +214,10 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Misma key que el PATCH: borrar el presupuesto es la otra mitad de editarlo,
-  // y su factura ligada NO se borra con él (quote.invoiceId es una columna
-  // suelta, sin FK), así que el borrado deja viva una factura en borrador con
-  // folio ya quemado. Una sola llave para toda la superficie de edición.
+  // y la factura ligada de un presupuesto viejo NO se borra con él
+  // (quote.invoiceId es una columna suelta, sin FK), así que el borrado deja
+  // viva esa factura en borrador con folio ya quemado. Una sola llave para
+  // toda la superficie de edición.
   const deniedPerm = denyIfMissingPermission(ctx, "billing.edit");
   if (deniedPerm) return deniedPerm;
 

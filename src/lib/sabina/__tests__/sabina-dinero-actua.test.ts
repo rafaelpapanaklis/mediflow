@@ -183,7 +183,13 @@ before(async () => {
   process.env.ANTHROPIC_API_KEY = "sk-prueba-no-es-real";
   globalThis.fetch = (async (url: unknown, init?: { body?: string }) => {
     assert.equal(String(url), "https://api.anthropic.com/v1/messages", "nadie más que el motor usa fetch");
-    m.alModelo.push(JSON.parse(String(init?.body ?? "{}")));
+    // Desde que Sabina cachea el prefijo, `system` viaja como bloque de texto y no
+    // como cadena suelta (es la forma equivalente que admite `cache_control`; ver
+    // `engine-cache.ts`). Aquí se aplana: estas pruebas miran lo que DICE el
+    // prompt, no su envoltorio. El envoltorio lo fija `npm run test:sabina-cache`.
+    const textoDelSystem = (s: any) => (Array.isArray(s) ? s.map((b: any) => b?.text ?? "").join("") : String(s ?? ""));
+    const cuerpoAlModelo = JSON.parse(String(init?.body ?? "{}"));
+    m.alModelo.push({ ...cuerpoAlModelo, system: textoDelSystem(cuerpoAlModelo.system) });
     const siguiente = m.guion.shift();
     assert.ok(siguiente, "el modelo se llamó más veces que el guion");
     return new Response(JSON.stringify(siguiente), { status: 200, headers: { "content-type": "application/json" } });
@@ -432,17 +438,17 @@ test("🔴 crear factura: el total de la tarjeta es el que guarda POST /api/invo
   assert.equal(c.json.propuesta.resultado.enlace.texto, "Comprobante MF-0016");
 });
 
-test("facturar el presupuesto P-0001 por POST /api/quotes/[id]/invoice: borrador, mismo total, y ligado", async () => {
+test("facturar el presupuesto P-0001 por POST /api/quotes/[id]/invoice: PENDIENTE, mismo total, y ligado", async () => {
   const t = await tarjetaDe("crear_factura", { presupuesto: "P-0001" });
-  assert.equal(t.deshacer.reversible, true);
-  assert.match(t.tarjeta.frase, /\$2,900\.00, en borrador/);
+  assert.equal(t.deshacer.reversible, false, "una factura pendiente no se borra, solo se anula");
+  assert.match(t.tarjeta.frase, /\$2,900\.00, pendiente de cobro/);
   const c = await confirmar(t.id);
   assert.equal(c.json.propuesta.estado, "hecha", JSON.stringify(c.json.propuesta.resultado));
   const alta = m.escrituras.find((e) => e.op === "invoice.create")!;
-  assert.equal(alta.data.status, "DRAFT");
+  assert.equal(alta.data.status, "PENDING", "como la del botón normal: cobrable sin confirmar");
   assert.equal(alta.data.total, 2900);
   assert.equal(m.filas.quotes.find((q: any) => q.id === "q-juan").invoiceId, m.filas.invoices.at(-1).id);
-  assert.match(c.json.propuesta.resultado.frase, /facturé el presupuesto P-0001 de Juan Pérez en la factura MF-0016 por \$2,900\.00, en borrador/);
+  assert.match(c.json.propuesta.resultado.frase, /facturé el presupuesto P-0001 de Juan Pérez en la factura MF-0016 por \$2,900\.00\. Queda pendiente de cobro/);
 
   // Ya tiene factura: la segunda vez ni tarjeta.
   m.guion = [pide("crear_factura", { presupuesto: "P-0001" }), dice("Ya tiene factura.")];

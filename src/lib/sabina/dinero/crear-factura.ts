@@ -4,9 +4,10 @@
  *   con conceptos     → POST /api/invoices               (el editor «Nueva factura»)
  *   con presupuesto   → POST /api/quotes/[id]/invoice    («Generar factura» de un presupuesto aceptado)
  *
- * Es una sola herramienta porque las dos dan lo mismo —una factura— y cada
- * herramienta se paga en cada llamada al modelo. Lo que cambia (nace pendiente o
- * en borrador, y por tanto cómo se deshace) lo dice la tarjeta de cada propuesta.
+ * Es una sola herramienta porque las dos dan lo mismo —una factura PENDIENTE,
+ * cobrable al instante y que no se borra, solo se anula— y cada herramienta se
+ * paga en cada llamada al modelo. (Hasta sep-2026 la del presupuesto nacía en
+ * borrador; ya no.) Lo que cambia entre las dos es de dónde salen los conceptos.
  *
  * 🔴 LA TARJETA NO MIENTE (regla 5 del contrato; MAPA-dinero §1)
  *  · El total se calcula con `computeInvoiceTotal` sobre LAS LÍNEAS —nunca su
@@ -18,10 +19,10 @@
  *  · En `ejecutar` se compara el total que devolvió el servidor con el de la
  *    tarjeta, y si no coinciden SE DICE.
  *  · Del presupuesto, el total es `invoiceFieldsFromQuote(...).total`, la misma
- *    función que usa el servidor al crear el borrador.
+ *    función que usa el servidor al crear la factura.
  *
- * Lo que la tarjeta avisa: el folio MF que se va a gastar y que una factura
- * pendiente no se borra, solo se anula (F1); o que queda en borrador (F3).
+ * Lo que la tarjeta avisa, en los dos caminos: el folio MF que se va a gastar
+ * y que una factura pendiente no se borra, solo se anula (F1 y F3).
  */
 
 import { randomUUID } from "crypto";
@@ -142,10 +143,6 @@ const esquemaDatos = z.discriminatedUnion("tipo", [
 const DESHACER_PENDIENTE: SabinaDeshacer = {
   reversible: false,
   aviso: "Una factura pendiente no se borra: solo se anula, y su folio queda usado.",
-};
-const DESHACER_BORRADOR: SabinaDeshacer = {
-  reversible: true,
-  como: "Mientras siga en borrador se puede eliminar desde el detalle de la factura.",
 };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -334,8 +331,9 @@ async function leerPresupuesto(ctx: SabinaCtx, where: Record<string, unknown>, t
   const q = filas.find((f: any) => tecleado && String(f.folio).toUpperCase() === tecleado) ?? (filas.length === 1 ? filas[0] : null);
   if (!q) return null;
   const [pacientes, facturas] = await Promise.all([
-    // La ruta del presupuesto NO mira la visibilidad del paciente (N14). Sabina sí:
-    // lo que no puedes ver no se factura desde el chat.
+    // La visibilidad del paciente: la ruta del presupuesto la exige desde sep-2026
+    // (antes no, N14), y Sabina la mira ya al preparar para no ofrecer una
+    // tarjeta que el servidor va a rechazar. Lo que no puedes ver no se factura.
     db.patient.findMany({
       where: { id: q.patientId, clinicId: ctx.clinicId, deletedAt: null, AND: patientVisibilityAnd(visorDe(ctx)) },
       select: { id: true, firstName: true, lastName: true, patientNumber: true },
@@ -401,8 +399,8 @@ async function prepararDesdePresupuesto(ctx: SabinaCtx, p: ParamsCrearFactura): 
 
   const [folio, imp] = await Promise.all([folioPrevisto(ctx), impuestosDeClinica(ctx)]);
   const avisos = [
-    "Queda en BORRADOR: no se puede cobrar hasta confirmarla, y si se edita el presupuesto, la factura cambia con él.",
-    `Usa un folio MF nuevo${folio ? ` (ahora mismo, ${folio})` : ""}. Si después se elimina el borrador, ese folio puede volver a salir en otra factura.`,
+    `Esto usa el folio ${folio ? `${folio} (el siguiente libre ahora mismo)` : "MF siguiente"} y no se puede borrar, solo anular.`,
+    "Nace pendiente de cobro, como una factura normal. No se timbra CFDI ni se le manda nada al paciente.",
   ];
   // N29: la ruta del presupuesto no guarda el IVA de la clínica. El total no cambia; el desglose sí.
   if (imp.exenta) avisos.push("Nace marcada con IVA 16 % incluido aunque la clínica sea exenta: el total no cambia.");
@@ -415,9 +413,9 @@ async function prepararDesdePresupuesto(ctx: SabinaCtx, p: ParamsCrearFactura): 
   return {
     tipo: "propuesta",
     datos: { tipo: "presupuesto", quoteId: q.id, presupuesto: q.folio, patientId: q.patientId, paciente: q.paciente.nombre, total: q.total },
-    deshacer: DESHACER_BORRADOR,
+    deshacer: DESHACER_PENDIENTE,
     tarjeta: {
-      frase: `Facturar el presupuesto ${q.folio} de ${q.paciente.nombre}: ${dinero(q.total)}, en borrador.`,
+      frase: `Facturar el presupuesto ${q.folio} de ${q.paciente.nombre}: ${dinero(q.total)}, pendiente de cobro.`,
       detalles: [
         { etiqueta: "Paciente", valor: pacienteConFolio(q.paciente) },
         { etiqueta: "Presupuesto", valor: `${q.folio} · aceptado` },
@@ -541,10 +539,10 @@ async function ejecutarDesdePresupuesto(llave: LlaveEscritura, ctx: SabinaCtx, d
     const base = `Listo: facturé el presupuesto ${d.presupuesto} de ${d.paciente} en la factura ${folio}`;
     const frase =
       guardado === null
-        ? `${base}, en borrador. No pude releer el total guardado: revísalo antes de confirmarla.`
+        ? `${base}. Queda pendiente de cobro. No pude releer el total guardado: revísalo antes de cobrarla.`
         : IGUALES(guardado, d.total)
-          ? `${base} por ${dinero(d.total)}, en borrador.`
-          : `${base}, pero quedó por ${dinero(guardado)} y en la tarjeta te dije ${dinero(d.total)}. Revísala antes de confirmarla.`;
+          ? `${base} por ${dinero(d.total)}. Queda pendiente de cobro.`
+          : `${base}, pero quedó por ${dinero(guardado)} y en la tarjeta te dije ${dinero(d.total)}. Revísala antes de cobrarla.`;
     return { ok: true, frase, entidad: { tipo: "invoice", id }, enlace: { texto: `Comprobante ${folio}`, url: rutaComprobante(id) } };
   }
   if (RECHAZO_PREVIO.has(r.status) || r.status === 404 || (r.status === 409 && !/folio/i.test(errorDelCuerpo(r)))) {
@@ -562,7 +560,7 @@ async function ejecutarDesdePresupuesto(llave: LlaveEscritura, ctx: SabinaCtx, d
   if (creada) {
     return {
       ok: true,
-      frase: `El sistema contestó con error, pero revisé: la factura ${creada.invoiceNumber} (borrador) del presupuesto ${d.presupuesto} SÍ se creó; puede que no haya quedado ligada al presupuesto. No la repitas.`,
+      frase: `El sistema contestó con error, pero revisé: la factura ${creada.invoiceNumber} del presupuesto ${d.presupuesto} SÍ se creó; puede que no haya quedado ligada al presupuesto. No la repitas.`,
       entidad: { tipo: "invoice", id: creada.id },
       enlace: { texto: `Comprobante ${creada.invoiceNumber}`, url: rutaComprobante(creada.id) },
     };
@@ -590,7 +588,7 @@ export const accionCrearFactura = definirAccion<ParamsCrearFactura, DatosCrearFa
   boton: "Sí, crear la factura",
   queHace: "crear facturas",
   permiso: "billing.create",
-  // El de una factura pendiente. La que nace en borrador (presupuesto) trae el suyo en la propuesta.
+  // Una factura pendiente, por los dos caminos (conceptos y presupuesto).
   deshacer: DESHACER_PENDIENTE,
   parametros,
   datos: esquemaDatos,

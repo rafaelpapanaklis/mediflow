@@ -482,14 +482,18 @@ test("🔴 crear factura → ejecutar: si el total guardado no es el de la tarje
   assert.match((mal as any).frase, /la guardó por \$800\.01 y en la tarjeta te dije \$800\.00/);
 });
 
-test("crear factura desde presupuesto: total de invoiceFieldsFromQuote, en borrador y reversible", async () => {
+test("crear factura desde presupuesto: total de invoiceFieldsFromQuote, pendiente y NO reversible", async () => {
   const db = baseDinero();
   const r = (await accionCrearFactura.preparar(recepcion(db), { presupuesto: "p-1" })) as any;
   assert.equal(r.tipo, "propuesta", JSON.stringify(r));
   assert.equal(r.datos.total, 2900, "Resina 2×250 + Corona 2,500 − 100 de descuento");
   assert.deepEqual(r.tarjeta.tabla.filas.map((f: string[]) => f[0]), ["Resina", "Corona (16)"], "en el orden del presupuesto");
-  assert.deepEqual(r.deshacer, { reversible: true, como: "Mientras siga en borrador se puede eliminar desde el detalle de la factura." });
-  assert.ok(r.tarjeta.avisos.some((a: string) => /BORRADOR/.test(a)));
+  // Nace PENDIENTE como la del botón normal: la tarjeta no puede prometer que se borra.
+  assert.deepEqual(r.deshacer, { reversible: false, aviso: "Una factura pendiente no se borra: solo se anula, y su folio queda usado." });
+  assert.match(r.tarjeta.frase, /pendiente de cobro\.$/);
+  assert.ok(r.tarjeta.avisos.some((a: string) => /Nace pendiente de cobro/.test(a)));
+  assert.ok(r.tarjeta.avisos.some((a: string) => /no se puede borrar, solo anular/.test(a)));
+  assert.ok(!r.tarjeta.avisos.some((a: string) => /borrador/i.test(a)), JSON.stringify(r.tarjeta.avisos));
   assert.ok(r.tarjeta.avisos.some((a: string) => /IVA 16 % incluido aunque la clínica sea exenta/.test(a)));
 
   const conFactura = await accionCrearFactura.preparar(recepcion(db), { presupuesto: "P-0002" });
@@ -509,11 +513,24 @@ test("🔴 presupuesto: si le crean la factura por la pantalla entre la tarjeta 
 
 test("el motor recibe la tabla y el «deshacer» de ESTA propuesta, no el general de la acción", async () => {
   const db = baseDinero();
-  const tool = herramientaDeAccion(accionCrearFactura);
+  // Desde que la factura de un presupuesto nace PENDIENTE, ninguna propuesta de
+  // crear_factura trae un «deshacer» distinto del de la acción. Para seguir
+  // probando que el motor usa el de la PROPUESTA, esta variante se lo cambia.
+  const conDeshacerPropio = definirAccion<any, any>({
+    ...accionCrearFactura,
+    nombre: "crear_factura_deshacer_propio",
+    preparar: async (ctx: any, p: any) => {
+      const base = await accionCrearFactura.preparar(ctx, p);
+      return base.tipo === "propuesta"
+        ? { ...base, deshacer: { reversible: true, como: "Se deshace desde la propia propuesta." } }
+        : base;
+    },
+  });
+  const tool = herramientaDeAccion(conDeshacerPropio);
   const r = await correrHerramienta(tool, recepcion(db), { presupuesto: "P-0001" });
   assert.equal(r.ok, true);
   if (!r.ok) return;
-  assert.equal((r.datos as any).se_puede_deshacer, true);
+  assert.equal((r.datos as any).se_puede_deshacer, true, "el de la propuesta, no el reversible:false de la acción");
   assert.ok((r.datos as any).tabla);
   // Integración #259 + #260: el prompt dice «sin tablas en el chat»; la de la tarjeta
   // la arma el servidor, y al modelo se le dice que no la repita.

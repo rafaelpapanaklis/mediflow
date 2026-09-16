@@ -63,7 +63,12 @@ interface QuotesTabProps {
   onViewInvoice?: (invoiceId: string) => void;
   /** Abre el plan de tratamiento ya generado (lo maneja el contenedor del expediente). */
   onViewPlan?: (planId: string) => void;
-  /** Se dispara al CREAR un presupuesto nuevo cuya factura automática llegó en la respuesta. */
+  /**
+   * Se dispara con la factura que llega en una respuesta: la que nace al pulsar
+   * «Generar factura» en un presupuesto aceptado, o el borrador de un
+   * presupuesto viejo que el PATCH re-sincronizó. El contenedor la inserta o la
+   * reemplaza por id en Facturación.
+   */
   onInvoiceCreated?: (invoice: BillingInvoiceLite) => void;
   /**
    * Interruptor `menu-dos-niveles` de la clínica (WS1-T8). Encendido, se pinta
@@ -115,10 +120,10 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
   function closeEditor() { setEditorOpen(false); setEditing(null); setInitialItems(null); }
 
   async function onSaved(created?: { invoice?: BillingInvoiceLite | null }) {
-    // `created.invoice` llega al CREAR (factura automática) y al EDITAR (el
-    // borrador ligado re-sincronizado con los importes nuevos — FIN-05): el
-    // contenedor la inserta o la reemplaza por id, así Facturación muestra el
-    // total nuevo sin recargar.
+    // `created.invoice` solo llega al EDITAR un presupuesto viejo que aún tiene
+    // su factura BORRADOR (re-sincronizada con los importes nuevos — FIN-05):
+    // el contenedor la reemplaza por id, así Facturación muestra el total nuevo
+    // sin recargar. Al CREAR llega null: crear un presupuesto ya no factura.
     if (created?.invoice && onInvoiceCreated) onInvoiceCreated(created.invoice);
     closeEditor();
     setLoading(true);
@@ -188,7 +193,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
       ) : (
         <div className="space-y-3">
           {quotes.map((q) => (
-            <QuoteCard key={q.id} quote={q} patientId={patientId} onChanged={load} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} />
+            <QuoteCard key={q.id} quote={q} patientId={patientId} onChanged={load} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} onInvoiceCreated={onInvoiceCreated} />
           ))}
         </div>
       )}
@@ -200,7 +205,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
 // Tarjeta de un presupuesto + acciones
 // ---------------------------------------------------------------------------
 
-function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewPlan }: { quote: QuoteDTO; patientId: string; onChanged: () => Promise<void> | void; onEdit: () => void; onViewInvoice?: (invoiceId: string) => void; onViewPlan?: (planId: string) => void }) {
+function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewPlan, onInvoiceCreated }: { quote: QuoteDTO; patientId: string; onChanged: () => Promise<void> | void; onEdit: () => void; onViewInvoice?: (invoiceId: string) => void; onViewPlan?: (planId: string) => void; onInvoiceCreated?: (invoice: BillingInvoiceLite) => void }) {
   const t = useT();
   const confirmDialog = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -368,9 +373,12 @@ function QuoteCard({ quote, patientId, onChanged, onEdit, onViewInvoice, onViewP
             <Btn
               onClick={async () => {
                 // Ya facturado → abre la factura (modal del expediente). Si no,
-                // genérala y, con el id devuelto, ábrela directo.
+                // genérala (nace PENDIENTE, cobrable), métela en Facturación
+                // sin recargar y pide abrirla con el id devuelto (si la lista
+                // del expediente aún no la tiene, el expediente abre Facturación).
                 if (quote.invoiceId) { onViewInvoice?.(quote.invoiceId); return; }
                 const out = await post(`/api/quotes/${quote.id}/invoice`);
+                if (out?.invoice) onInvoiceCreated?.(out.invoice);
                 if (out?.invoiceId) onViewInvoice?.(out.invoiceId);
               }}
               tone="success"
@@ -557,8 +565,8 @@ function QuoteEditor({
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(out.error ?? t("quotes.editor.errorSave"));
-      // Propaga la factura que devuelve el servidor: en creación la automática,
-      // en edición el borrador ligado ya re-sincronizado (null si no había).
+      // Propaga la factura que devuelve el servidor: en edición, el borrador de
+      // un presupuesto viejo ya re-sincronizado; en creación siempre null.
       onSaved({ invoice: out.invoice ?? null });
     } catch (e) {
       setError((e as Error).message);

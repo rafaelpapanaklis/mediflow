@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { sumInvoiceItems, computeInvoiceTotal, round2 } from "@/lib/invoice-totals";
 import { getPatientDeleteBlockers, type PatientDeleteBlocker } from "@/lib/patient-deletion";
+import { expiresForCofeprisGroup, mostRestrictiveCofeprisGroup } from "@/lib/clinical/cofepris";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -743,9 +744,13 @@ export async function POST(req: NextRequest) {
           const issuedAt = r.visitDate;
           const qrCode = `RX-DEMO-${Date.now()}-${rxIdx}-${Math.random().toString(36).slice(2, 8)}`;
           const verifyUrl = `https://www.dalecontrol.com/portal/prescription/${qrCode}/verify`;
-          const primaryGroup = items[0]?.cofeprisGroup ?? null;
-          const expiryDays = primaryGroup && ["I", "II", "III"].includes(primaryGroup) ? 30 : 90;
-          const expiresAt = new Date(issuedAt.getTime() + expiryDays * 86400000);
+          // Mismas reglas que POST /api/prescriptions, no una copia a ojo. Antes
+          // cogía el grupo del PRIMER medicamento (una receta con paracetamol
+          // delante y morfina detrás salía como grupo V) y daba 30 días a un
+          // grupo I, cuyo tope legal son 24 h: datos de demo que la página
+          // pública del QR habría dado por «válidos y vigentes» durante un mes.
+          const grupoReal = mostRestrictiveCofeprisGroup(items.map((i) => i.cofeprisGroup));
+          const expiresAt = expiresForCofeprisGroup(grupoReal, issuedAt);
 
           await prisma.prescription.create({
             data: {
@@ -759,7 +764,7 @@ export async function POST(req: NextRequest) {
               verifyUrl,
               issuedAt,
               expiresAt,
-              cofeprisGroup: primaryGroup,
+              cofeprisGroup: grupoReal,
               items: {
                 create: items.map((i) => ({
                   cumsKey: i.clave,

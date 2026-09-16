@@ -205,10 +205,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     // endpoints piden billing.* desde que se taparon los agujeros del PR #190
     // (y sus continuaciones), y este rol no tenía NINGUNA billing.*.
     //
-    //   · billing.view   — ver la factura BORRADOR que su propio presupuesto
-    //                      acaba de crear. Sin ella creaba facturas que no
-    //                      podía abrir. NO le abre la Caja: eso lo cierra
-    //                      aparte canUseCaja (bandera por usuario, no por rol).
+    //   · billing.view   — ver la factura que nace al pulsar "Generar factura"
+    //                      en su presupuesto aceptado (hasta sep-2026, el
+    //                      borrador que el presupuesto creaba al guardarse).
+    //                      Sin ella creaba facturas que no podía abrir. NO le
+    //                      abre la Caja: eso lo cierra aparte canUseCaja
+    //                      (bandera por usuario, no por rol).
     //   · billing.create — "Crear presupuesto" y "Generar factura".
     //   · billing.edit   — presentar / aceptar / rechazar y corregir el
     //                      presupuesto antes de que el paciente lo firme.

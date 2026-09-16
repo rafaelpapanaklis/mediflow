@@ -57,6 +57,7 @@ import {
   type BaseAgenda,
 } from "./agenda-siembra";
 import { sumarDias } from "../fechas";
+import { scheduleDayOfISO } from "@/lib/agenda/clinic-hours";
 import type { SabinaCtx } from "../../tipos";
 
 /* ── utilidades ───────────────────────────────────────────────────────── */
@@ -446,6 +447,55 @@ test("proponer_horarios avisa si quien pregunta no puede agendar", async () => {
   const db = baseAgenda();
   const d = await datos("proponer_horarios", conKeys(db, ["agenda.view"]), { fecha: DIA, doctor: "Salas" });
   assert.equal(d.puedeAgendar, false);
+});
+
+test("🔴 proponer_horarios con `hasta`: tramo de días, cronológico y con un resumen por día (Rafael: «¿algo esta semana?»)", async () => {
+  const db = baseAgenda();
+  const hasta = sumarDias(DIA, 6);
+  const d = await datos("proponer_horarios", recepcion(db), { fecha: DIA, hasta, doctor: "Salas" });
+  assert.equal(d.estado, "con_huecos");
+  assert.equal(d.fecha, DIA);
+  assert.equal(d.hasta, hasta);
+  assert.equal(d.resumenDias.length, 7, "un renglón por día del tramo");
+
+  // El primer candidato ya es "lo antes posible": mismo día y misma hora que sin tramo.
+  assert.equal(d.huecos[0].fecha, DIA);
+  assert.equal(d.huecos[0].hora, "09:00");
+
+  // Siete días seguidos siempre traen un domingo: ese día sale CERRADO, no "sin huecos".
+  const domingo = d.resumenDias.find((rd: any) => scheduleDayOfISO(rd.fecha, "America/Mexico_City") === 6);
+  assert.ok(domingo, "el tramo de 7 días no trajo ningún domingo");
+  assert.equal(domingo.estado, "dia_cerrado");
+  assert.equal(domingo.totalHuecos, 0);
+
+  // `totalHuecos` suma TODO el tramo, no solo lo que cupo en `huecos` (tope 8).
+  assert.ok(d.totalHuecos > d.huecos.length, `totalHuecos (${d.totalHuecos}) debería superar los ${d.huecos.length} candidatos listados`);
+});
+
+test("proponer_horarios: `hasta` antes que `fecha` no se puede", async () => {
+  const db = baseAgenda();
+  const d = await datos("proponer_horarios", recepcion(db), { fecha: DIA, hasta: sumarDias(DIA, -1), doctor: "Salas" });
+  assert.equal(d.estado, "no_se_puede");
+});
+
+test("proponer_horarios: un tramo de más de dos semanas se recorta y lo dice, no se calla ni se va a buscar cinco años", async () => {
+  const db = baseAgenda();
+  const hasta = sumarDias(DIA, 30);
+  const d = await datos("proponer_horarios", recepcion(db), { fecha: DIA, hasta, doctor: "Salas" });
+  assert.equal(d.hasta, sumarDias(DIA, 13), "se recorta a 14 días desde `fecha`");
+  assert.ok(d.frase && /14 d[ií]as/.test(d.frase), JSON.stringify(d.frase));
+});
+
+test("🔴 proponer_horarios: `desdeHora` acota a una franja del día («por la tarde»), sin tocar el horario de la clínica", async () => {
+  const db = baseAgenda();
+  const d = await datos("proponer_horarios", recepcion(db), { fecha: DIA, doctor: "Salas", desdeHora: "14:00" });
+  assert.equal(d.estado, "con_huecos");
+  for (const h of d.huecos.map((x: any) => x.hora)) {
+    assert.equal(h < "14:00", false, `${h} está antes de la franja pedida`);
+  }
+  assert.equal(d.huecos[0].hora, "14:00");
+  // La ventana de atención real de ese día no cambia por pedir una franja.
+  assert.deepEqual(d.horario, { abre: "09:00", cierra: "18:00" });
 });
 
 /* ══════════════════════════════════════════════════════════════════════

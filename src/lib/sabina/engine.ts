@@ -33,7 +33,7 @@ import type {
   SabinaResultadoFallo,
   SabinaTool,
 } from "./engine-types";
-import { correrHerramienta } from "./tools/base";
+import { correrHerramienta, tienePermiso } from "./tools/base";
 import {
   accionDeHerramienta,
   fraseSinPermisoAccion,
@@ -44,6 +44,7 @@ import {
 import { SABINA_MAX_PROPUESTAS_POR_TURNO } from "./engine-propuestas-core";
 import { CandadoNoDisponible, EscrituraBloqueada, soloLectura } from "./engine-solo-lectura";
 import { FRASE_SABINA_APAGADA, causaSinPermiso, type CausaSinPermiso } from "./permisos-sabina";
+import { payloadAnthropic, tokensCacheDeUsage } from "./engine-cache";
 
 /**
  * Sabina — el bucle.
@@ -73,8 +74,17 @@ export interface BloqueModelo {
 export interface TurnoModelo {
   bloques: BloqueModelo[];
   stopReason: string | null;
+  /** `input_tokens`: SOLO lo que NO salió del caché. Ver los dos de abajo. */
   tokensEntrada: number;
   tokensSalida: number;
+  /**
+   * `cache_read_input_tokens` — entrada servida desde el caché, a 0,1× el
+   * precio. Si no viene (caché apagado, modelo que no cachea, formato nuevo),
+   * es 0 y todo se cobra como antes.
+   */
+  tokensCacheLectura?: number;
+  /** `cache_creation_input_tokens` — entrada escrita al caché, a 1,25×. */
+  tokensCacheEscritura?: number;
   error: string | null;
 }
 
@@ -83,6 +93,12 @@ export interface LlamadaModelo {
   system: string;
   messages: unknown[];
   tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+  /**
+   * Última ronda: que el modelo cierre con palabras. Las herramientas SIGUEN
+   * viajando —así el prefijo cacheado no se rompe— y lo que las apaga es
+   * `tool_choice: none`. Ver `engine-cache.ts`.
+   */
+  sinHerramientas?: boolean;
   signal: AbortSignal;
 }
 
@@ -100,6 +116,8 @@ export const llamarAnthropic: LlamarModelo = async (args) => {
     stopReason: null,
     tokensEntrada: 0,
     tokensSalida: 0,
+    tokensCacheLectura: 0,
+    tokensCacheEscritura: 0,
     error: null,
   };
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -116,9 +134,15 @@ export const llamarAnthropic: LlamarModelo = async (args) => {
       body: JSON.stringify({
         model: args.modelo,
         max_tokens: SABINA_MAX_OUTPUT_TOKENS,
-        system: args.system,
-        messages: args.messages,
-        ...(args.tools.length > 0 ? { tools: args.tools } : {}),
+        // El cuerpo con los dos `cache_control` puestos. Se arma en
+        // `engine-cache.ts` —y no aquí— para que `npm run sabina:costo` mida
+        // EXACTAMENTE lo que se manda en producción.
+        ...payloadAnthropic({
+          system: args.system,
+          messages: args.messages,
+          tools: args.tools,
+          sinHerramientas: args.sinHerramientas,
+        }),
       }),
       signal: args.signal,
     });
@@ -129,11 +153,17 @@ export const llamarAnthropic: LlamarModelo = async (args) => {
     }
 
     const data = await res.json();
+    // ⚠️ `input_tokens` es SOLO la parte que NO salió del caché. Sin estos dos
+    // contadores no hay forma de saber si el caché funciona, y el cobro se
+    // quedaría corto: el total de entrada es la suma de los tres.
+    const cache = tokensCacheDeUsage(data?.usage);
     return {
       bloques: Array.isArray(data?.content) ? (data.content as BloqueModelo[]) : [],
       stopReason: typeof data?.stop_reason === "string" ? data.stop_reason : null,
       tokensEntrada: Number(data?.usage?.input_tokens) || 0,
       tokensSalida: Number(data?.usage?.output_tokens) || 0,
+      tokensCacheLectura: cache.lectura,
+      tokensCacheEscritura: cache.escritura,
       error: null,
     };
   } catch (err) {
@@ -196,6 +226,13 @@ export interface SabinaEjecutarInput {
    * que no existe.
    */
   tarjetaPendiente?: string | null;
+  /**
+   * «Dónde está quien pregunta», YA resuelto y comprobado contra la sesión
+   * (`bloqueDeContexto` de ./contexto). Texto, no objeto: el motor no vuelve a
+   * mirar permisos por aquí, así que lo que llega tiene que venir comprobado.
+   * Ausente = el prompt es el de siempre, sin un carácter de más.
+   */
+  contexto?: string | null;
   /** Seam de pruebas: por defecto la llamada real. */
   llamar?: LlamarModelo;
   /** Seam de pruebas: reloj. */
@@ -221,7 +258,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
     return {
       respuesta: FRASE_SABINA_APAGADA,
       herramientasUsadas: [],
-      tokens: { entrada: 0, salida: 0 },
+      tokens: { entrada: 0, salida: 0, cacheLectura: 0, cacheEscritura: 0 },
       consumo: [],
       modelo: modeloPara(dificultad),
       dificultad,
@@ -237,6 +274,23 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   // México el servidor ya va en el día siguiente, y el modelo pediría las citas
   // de mañana.
   const hoy = hoyParaPrompt(new Date(arranque), input.ctx.timezone);
+
+  // Cómo se llama la clínica y dónde está, para el prompt (ws1-t5). Sale del ctx
+  // —o sea de la sesión—, se arma una vez por turno y no cuesta una consulta:
+  // `getAuthContext()` ya trae la fila de `Clinic`. Sin nombre, no se escribe nada.
+  const identidadClinica = input.ctx.clinicaNombre
+    ? {
+        nombre: input.ctx.clinicaNombre,
+        lugar: input.ctx.clinicaLugar,
+        // Las mismas keys que declaran `procedimientos_y_precios` y
+        // `equipo_clinica`: el prompt no manda usar lo que va a salir con
+        // `sin_permiso`. `ctx.permissionsOverride` ya viene recortado por Sabina.
+        puede: {
+          precios: tienePermiso(input.ctx, "billing.view"),
+          equipo: tienePermiso(input.ctx, "agenda.view"),
+        },
+      }
+    : null;
 
   const esquemas = toolsParaModelo(input.tools, (t) => zodAJsonSchema(t.parametros));
   const queHacen = input.tools
@@ -269,6 +323,8 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   let antesDeCorregir: string | null = null;
   let tokensEntrada = 0;
   let tokensSalida = 0;
+  let tokensCacheLectura = 0;
+  let tokensCacheEscritura = 0;
   const consumo: SabinaConsumo[] = [];
   let rondas = 0;
   let respuesta: string | null = null;
@@ -295,25 +351,53 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       );
       const turno = await llamar({
         modelo,
-        system: construirSystemPrompt({ dificultad, hoy, acciones: queHacen, tarjetaPendiente }),
+        system: construirSystemPrompt({
+          dificultad,
+          hoy,
+          acciones: queHacen,
+          tarjetaPendiente,
+          clinica: identidadClinica,
+          contexto: input.contexto,
+        }),
         messages,
-        // Última vuelta sin herramientas: el modelo tiene que cerrar con
-        // palabras, no pedir otra consulta que ya no cabe.
-        tools: ronda === SABINA_MAX_TOOL_ROUNDS ? [] : esquemas,
+        // Última vuelta: el modelo tiene que cerrar con palabras, no pedir otra
+        // consulta que ya no cabe. Antes eso se conseguía mandando `tools: []`,
+        // y esa lista vacía rompía el prefijo cacheado justo en la llamada que
+        // lleva MÁS historial encima: es la vuelta más cara del turno y era la
+        // única que pagaba el catálogo a precio completo. Ahora el catálogo
+        // viaja igual (mismo prefijo, mismo acierto de caché) y lo que apaga las
+        // herramientas es `tool_choice: none`, la forma documentada de pedir
+        // texto. Lo que el modelo PUEDE hacer es idéntico en los dos casos: no
+        // llamar a nada.
+        //
+        // (El 400 que se temía —«tool_use/tool_result sin tools»— NO se
+        // reproduce: `count_tokens`, que valida el mismo cuerpo, acepta esa
+        // petición. Medido el 15-sep-2026; no era ese el problema.)
+        tools: esquemas,
+        sinHerramientas: ronda === SABINA_MAX_TOOL_ROUNDS,
         signal: controlador.signal,
       });
       clearTimeout(reloj);
 
       rondas += 1;
+      // Los tres contadores de entrada son EXCLUYENTES entre sí y a precios
+      // distintos (normal · 0,1× leído · 1,25× escrito): sumarlos en un solo
+      // saco cobraría mal. `tokensEntrada` es solo lo que NO salió del caché.
+      const cacheLectura = turno.tokensCacheLectura ?? 0;
+      const cacheEscritura = turno.tokensCacheEscritura ?? 0;
       tokensEntrada += turno.tokensEntrada;
       tokensSalida += turno.tokensSalida;
+      tokensCacheLectura += cacheLectura;
+      tokensCacheEscritura += cacheEscritura;
       let delModelo = consumo.find((c) => c.modelo === modelo);
       if (!delModelo) {
-        delModelo = { modelo, entrada: 0, salida: 0 };
+        delModelo = { modelo, entrada: 0, salida: 0, cacheLectura: 0, cacheEscritura: 0 };
         consumo.push(delModelo);
       }
       delModelo.entrada += turno.tokensEntrada;
       delModelo.salida += turno.tokensSalida;
+      delModelo.cacheLectura += cacheLectura;
+      delModelo.cacheEscritura += cacheEscritura;
 
       if (turno.error) {
         // El texto de la pregunta NO viaja al log; sí el motivo y la clínica.
@@ -524,7 +608,12 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   return {
     respuesta: texto,
     herramientasUsadas,
-    tokens: { entrada: tokensEntrada, salida: tokensSalida },
+    tokens: {
+      entrada: tokensEntrada,
+      salida: tokensSalida,
+      cacheLectura: tokensCacheLectura,
+      cacheEscritura: tokensCacheEscritura,
+    },
     consumo,
     modelo,
     dificultad,

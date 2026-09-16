@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
-import { createInvoiceFromQuote } from "@/lib/quotes/create-invoice-from-quote";
 import { normalizarCondiciones } from "@/lib/quotes/condiciones-pago";
 import { guardarCondiciones, leerCondicionesDeVarios } from "@/lib/quotes/condiciones-pago-db";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -69,18 +68,20 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/quotes — crea un presupuesto DRAFT.
+ * POST /api/quotes — crea un presupuesto DRAFT. Solo el presupuesto: NO crea
+ * factura ni gasta folio MF. La factura nace cuando el paciente lo acepta y se
+ * pulsa «Generar factura» (POST /api/quotes/[id]/invoice), ya PENDIENTE.
  * Body: { patientId, title?, items[], discountPct?, discountAmount?, validUntil?, notes? }
  */
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Permiso granular: crear un presupuesto NO se queda en el presupuesto —
-  // abajo llama a createInvoiceFromQuote y nace una factura en BORRADOR que
-  // quema folio de la serie de la clínica (nextInvoiceNumber va por MÁXIMO
-  // emitido y no recicla, ni anulando la factura). El efecto real es facturar,
-  // así que pide la MISMA key que POST /api/invoices: "billing.create".
+  // Permiso granular: "billing.create", la MISMA key que POST /api/invoices.
+  // Se puso cuando esta ruta además creaba una factura BORRADOR y quemaba
+  // folio. Ya no factura, pero la llave se conserva a propósito: quitarla
+  // ensancharía en silencio quién puede crear presupuestos, y eso lo decide
+  // la clínica en sus permisos, no un arreglo.
   const deniedPerm = denyIfMissingPermission(ctx, "billing.create");
   if (deniedPerm) return deniedPerm;
 
@@ -148,21 +149,19 @@ export async function POST(req: NextRequest) {
     changes: { folio: { before: null, after: quote.folio }, total: { before: null, after: Number(quote.total) } },
   });
 
-  // Factura automática (BORRADOR) al CREAR el presupuesto, para que aparezca
-  // de inmediato en la pestaña "Facturación" del expediente. Best-effort: si
-  // falla, NO bloquea la creación del presupuesto. Idempotente por diseño.
-  let invoice = null;
-  try {
-    const res = await createInvoiceFromQuote(quote, ctx);
-    invoice = res.invoice;
-    quote.invoiceId = res.invoice.id; // refleja el vínculo en el DTO devuelto
-  } catch (e) {
-    console.error("[quotes:create] factura automática falló (no bloquea):", e);
-  }
-
+  // 🔴 Aquí NO se crea factura. Hasta sep-2026 se creaba una en BORRADOR para
+  // que saliera ya en «Facturación», y eso convertía cada presupuesto —aceptado
+  // o no— en una factura con folio gastado: inflaba el «Cobrar ahora» y el
+  // filtro «Con deuda» de la ficha, y un presupuesto rechazado dejaba su
+  // factura viva. Pasarla a PENDIENTE habría sido peor: deuda exigible en
+  // Caja, reportes y el portal del paciente por presupuestos que nadie aceptó.
+  // La factura nace al aceptar, en POST /api/quotes/[id]/invoice.
+  //
+  // `invoice: null` se conserva en la respuesta: los editores leen ese campo
+  // para insertar la factura en Facturación, y con null no insertan nada.
   return NextResponse.json({
     ...serializeQuote(quote, guardado.condiciones),
-    invoice,
+    invoice: null,
     // Ver el PATCH: si había un plan que guardar y la base falló, se dice.
     ...(guardado.fallo ? { condicionesPagoFallo: true } : {}),
   }, { status: 201 });
