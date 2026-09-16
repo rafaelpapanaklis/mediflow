@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sparkles, X, Check, RefreshCw } from "lucide-react";
 import type { LiveAppointment } from "@/lib/floor-plan/elements";
 import { useT } from "@/i18n/i18n-provider";
+import { CLASES_REDISENO_CLINICA } from "@/components/dashboard/clinica-visual-rediseno/raiz";
 import styles from "./optimizer-modal.module.css";
 
 interface ChairInfo {
@@ -115,9 +116,10 @@ interface Props {
   appointments: LiveAppointment[];
   chairs: ChairInfo[];
   onClose: () => void;
+  rediseno?: boolean;
 }
 
-export function OptimizerModal({ appointments, chairs, onClose }: Props) {
+export function OptimizerModal({ appointments, chairs, onClose, rediseno = false }: Props) {
   const t = useT();
   const [phase, setPhase] = useState<Phase>("idle");
   const [result, setResult] = useState<OptimizerResult | null>(null);
@@ -181,7 +183,11 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
 
   return (
     <div
-      className={styles.overlay}
+      className={
+        rediseno
+          ? `${styles.overlay} ${CLASES_REDISENO_CLINICA} ${styles.overlayRediseno}`
+          : styles.overlay
+      }
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

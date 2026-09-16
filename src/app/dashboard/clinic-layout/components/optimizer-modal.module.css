@@ -421,3 +421,75 @@
 :global(.dark) .diffRowChanged { background: rgba(16, 185, 129, 0.10); }
 :global(.dark) .diffPatient { color: #E8E8EC; }
 :global(.dark) .diff { border-color: rgba(255, 255, 255, 0.08); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO — activo solo con `rediseno`. Solo LEE `--m2-*`; cero
+   declaraciones propias. Se viste el marco del modal (fondo, tarjeta,
+   cabecera, botones, tipografía); las franjas de la agenda mini (lane*) y
+   los colores semánticos de resultado (verde=ahorro, violeta=IA) se dejan:
+   son datos, no cromo del panel.
+   ═══════════════════════════════════════════════════════════════════════ */
+.overlayRediseno {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.overlayRediseno .modal {
+  background: var(--m2-n2-fondo);
+  box-shadow: var(--m2-sombra), 0 30px 80px rgba(0, 0, 0, 0.28);
+}
+
+.overlayRediseno .header {
+  background: var(--m2-n2-fondo);
+  border-bottom-color: var(--m2-borde);
+}
+
+.overlayRediseno .headerIcon {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  box-shadow: none;
+}
+
+.overlayRediseno .headerTitle { color: var(--m2-texto); }
+.overlayRediseno .headerSubtitle { color: var(--m2-texto-3); }
+
+.overlayRediseno .closeBtn {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-texto-3);
+}
+.overlayRediseno .closeBtn:hover { background: var(--m2-hover); }
+
+.overlayRediseno .sectionTitle { color: var(--m2-texto-3); }
+
+.overlayRediseno .footer {
+  background: var(--m2-n2-fondo);
+  border-top-color: var(--m2-borde);
+}
+
+.overlayRediseno .btnGhost {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-texto-2);
+}
+.overlayRediseno .btnGhost:hover { background: var(--m2-hover); }
+
+.overlayRediseno .btnPrimary {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  box-shadow: none;
+}
+.overlayRediseno .btnPrimary:hover { background: var(--m2-activo); filter: none; }
+
+.overlayRediseno .diff {
+  border-color: var(--m2-tarjeta-borde);
+}
+.overlayRediseno .diffHeader {
+  background: var(--m2-n1-fondo);
+  border-bottom-color: var(--m2-borde);
+  color: var(--m2-texto-3);
+}
+.overlayRediseno .diffRow {
+  background: var(--m2-tarjeta);
+  border-bottom-color: var(--m2-borde);
+}
+.overlayRediseno .diffPatient { color: var(--m2-texto); }

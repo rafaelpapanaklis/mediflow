@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ClinicLayoutClient } from "./layout-client";
 
@@ -18,7 +19,14 @@ export default async function ClinicLayoutPage() {
   }
 
   try {
-    const [clinic, layout, chairs] = await Promise.all([
+    // REDISEÑO DE "MI CLÍNICA VISUAL" — el MISMO interruptor por clínica que
+    // enciende el menú de dos niveles (`clinic_feature_flags`, bandera
+    // `menu-dos-niveles`), no uno propio: Rafael prueba "el diseño nuevo"
+    // como una sola cosa. Falla cerrado (sin tabla, sin fila o con error →
+    // false = el editor de siempre, tal cual). Va en el MISMO Promise.all
+    // que clinic/layout/chairs para no añadir un viaje aparte a la base; la
+    // respuesta además vive 60 s en memoria por clínica (ver interruptor-core.ts).
+    const [clinic, layout, chairs, rediseno] = await Promise.all([
       prisma.clinic.findUnique({
         where: { id: user.clinicId },
         select: {
@@ -38,6 +46,7 @@ export default async function ClinicLayoutPage() {
         select: { id: true, name: true, color: true, orderIndex: true },
         orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
       }),
+      menuDosNivelesEncendido(user.clinicId),
     ]);
 
     // Doble red de seguridad: el try/catch atrapa fallos de carga server-side;
@@ -66,6 +75,7 @@ export default async function ClinicLayoutPage() {
           }>}
           initialMetadata={(layout?.metadata ?? null) as unknown as { zoom?: number; panOffset?: { x: number; y: number } } | null}
           chairs={chairs.map((c) => ({ ...c, color: c.color ?? null }))}
+          rediseno={rediseno}
         />
       </ErrorBoundary>
     );

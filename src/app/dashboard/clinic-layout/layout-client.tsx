@@ -78,6 +78,7 @@ import {
   getNextChairAppointment,
 } from "@/lib/floor-plan/live-mode";
 import { useT } from "@/i18n/i18n-provider";
+import { CLASES_REDISENO_CLINICA } from "@/components/dashboard/clinica-visual-rediseno/raiz";
 // ── La capa visual COMPARTIDA (src/components/floor-plan) ──────────────
 // El dibujo del piso, la paleta y los contadores son los mismos que usa el
 // vertical institucional en /instituto/clinica. Vive fuera de los dos
@@ -121,6 +122,12 @@ interface Props {
   initialElements: LayoutElement[];
   initialMetadata: LayoutMetadata | null;
   chairs: Chair[];
+  /** Mismo interruptor que el menú de dos niveles (`menuDosNivelesEncendido`).
+   *  Viste el MARCO (topbar, sidebar, panel de propiedades, modales, sala de
+   *  espera) con el lenguaje visual del menú. El plano isométrico, el piso 3D
+   *  y el contenido de la paleta compartida (floor-chrome) no cambian nunca:
+   *  son el lienzo, no el marco. */
+  rediseno?: boolean;
 }
 
 /** Origen del grid en pantalla (ajustado por panOffset). */
@@ -163,7 +170,9 @@ export function ClinicLayoutClient({
   initialElements,
   initialMetadata,
   chairs,
+  rediseno = false,
 }: Props) {
+  const clasesRediseno = rediseno ? `${CLASES_REDISENO_CLINICA} ${styles.pageRediseno}` : "";
   const t = useT();
   const askConfirm = useConfirm();
   const catalog = useMemo(() => getCatalogForClinic(clinic.category), [clinic.category]);
@@ -1273,8 +1282,9 @@ export function ClinicLayoutClient({
           <h1>{t("pages.clinicLayout.openOnComputer")}</h1>
           <p>{t("pages.clinicLayout.editorWidthShort")}</p>
         </div>
-        <div className={`${styles.welcomeWrap} ${mc.mcTokens}`}>
+        <div className={`${styles.welcomeWrap} ${mc.mcTokens} ${clasesRediseno}`}>
           <WelcomePrompt
+            rediseno={rediseno}
             onLoaded={(data) => {
               const els = sanitizeElements(data.elements);
               setElements(els);
@@ -1300,7 +1310,7 @@ export function ClinicLayoutClient({
         <p>{t("pages.clinicLayout.editorWidthLong")}</p>
       </div>
 
-      <div className={`${styles.page} ${mc.mcTokens}`}>
+      <div className={`${styles.page} ${mc.mcTokens} ${clasesRediseno}`}>
         {/* ── Topbar ── */}
         <div className={styles.topbar}>
           <div className={styles.brand}>
@@ -1754,6 +1764,7 @@ export function ClinicLayoutClient({
             initial={liveConfig}
             clinicName={clinic.name}
             onClose={() => setShareOpen(false)}
+            rediseno={rediseno}
           />
         )}
 
@@ -1762,6 +1773,7 @@ export function ClinicLayoutClient({
             appointments={appointments}
             chairs={liveChairs.map((c) => ({ id: c.id, name: c.name }))}
             onClose={() => setShowOptimizer(false)}
+            rediseno={rediseno}
           />
         )}
 
@@ -1782,6 +1794,7 @@ export function ClinicLayoutClient({
                   waiting={waitingRoom}
                   appointments={appointments}
                   chairs={liveChairs}
+                  rediseno={rediseno}
                 />
               </div>
             </>
