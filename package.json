@@ -15,6 +15,7 @@
     "smoke:dental": "tsx scripts/smoke-test-dental.ts",
     "test:sabina-pantalla": "tsx --tsconfig tsconfig.test.json --test src/components/sabina/__tests__/sabina-core.test.ts src/components/sabina/__tests__/message-content.test.tsx",
     "test:clinic-logo": "tsx --test src/lib/__tests__/clinic-logo.test.ts",
+    "test:route-cache": "tsx --test src/lib/__tests__/route-cache.test.ts",
     "test:marketplace": "tsx --test src/lib/marketplace/access-control.test.ts",
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
     "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts",
