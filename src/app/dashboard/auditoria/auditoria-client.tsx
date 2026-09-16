@@ -16,6 +16,7 @@ import {
   QUICK_RANGE_KEYS, QUICK_RANGE_LABELS, quickRangeValues, matchQuickRange,
   type QuickRangeKey, type AuditTone, type AuditLogRow, type AuditQueryResult,
 } from "@/lib/admin/audit-core";
+import { AuditoriaRediseno } from "@/components/dashboard/pequenas-rediseno/auditoria";
 
 const PAGE_SIZE = 50;
 
@@ -95,7 +96,9 @@ const RANGE_I18N: Record<QuickRangeKey, string> = {
   "3m": "auditoria.range3m",
 };
 
-export function AuditoriaClient() {
+// `rediseno` lo baja page.tsx desde el interruptor `menu-dos-niveles`. Apagado
+// (el valor por defecto), todo lo de abajo es el marcado de siempre, sin tocar.
+export function AuditoriaClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const tt = useTOptional();
   const tr = (k: string, fb: string) => { const v = tt?.(k); return !v || v === k ? fb : v; };
 
@@ -135,6 +138,31 @@ export function AuditoriaClient() {
   // Rango rápido: rellena Desde/Hasta y dispara la búsqueda al instante (SWR re-fetch por cambio de key).
   const activeRange = matchQuickRange(filters.dateFrom, filters.dateTo);
   function applyQuickRange(k: QuickRangeKey) { patch(quickRangeValues(k)); }
+
+  if (rediseno) {
+    return (
+      <AuditoriaRediseno
+        tr={tr}
+        filters={filters}
+        patch={patch}
+        clearAll={clearAll}
+        qInput={qInput}
+        setQInput={setQInput}
+        rows={rows}
+        total={total}
+        page={page}
+        totalPages={totalPages}
+        setPage={setPage}
+        isLoading={isLoading}
+        error={error}
+        detail={detail}
+        setDetail={setDetail}
+        activeRange={activeRange}
+        applyQuickRange={applyQuickRange}
+        hasActiveFilters={hasActiveFilters}
+      />
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-4">

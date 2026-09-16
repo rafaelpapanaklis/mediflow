@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Copy, ExternalLink, Tv, X, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { TvModesRediseno } from "@/components/dashboard/pequenas-rediseno/tv-modes";
 
 interface TVDisplay {
   id: string;
@@ -47,7 +48,9 @@ const EMPTY_CONFIG: TVDisplayConfig = {
   brandColor: null,
 };
 
-export function TvModesClient() {
+// `rediseno` lo baja page.tsx desde el interruptor `menu-dos-niveles`. Apagado
+// (el valor por defecto), todo lo de abajo es el marcado de siempre, sin tocar.
+export function TvModesClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [displays, setDisplays] = useState<TVDisplay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,6 +102,24 @@ export function TvModesClient() {
   function copyUrl(slug: string) {
     const url = `${window.location.origin}/tv/${slug}`;
     navigator.clipboard.writeText(url).then(() => toast.success(t("pages.tvModes.urlCopied")));
+  }
+
+  if (rediseno) {
+    return (
+      <TvModesRediseno
+        displays={displays}
+        loading={loading}
+        creating={creating}
+        editing={editing}
+        onNueva={() => setCreating(true)}
+        onEditar={setEditing}
+        onCerrar={() => { setCreating(false); setEditing(null); }}
+        onGuardado={() => { setCreating(false); setEditing(null); refetch(); }}
+        onBorrar={handleDelete}
+        onAlternar={toggleActive}
+        onCopiar={copyUrl}
+      />
+    );
   }
 
   return (

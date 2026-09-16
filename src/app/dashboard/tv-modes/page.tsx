@@ -6,6 +6,7 @@ import { TvModesClient } from "./tv-modes-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export const metadata: Metadata = { title: "Pantallas TV — DaleControl" };
 
@@ -15,8 +16,16 @@ export default async function TvModesPage() {
 
   // Gating por PLAN (no solo por rol): si el plan no incluye Pantallas TV,
   // no se puede abrir por URL. Mismo criterio que el sidebar.
-  const activeModules = await getActiveClinicModuleKeys(user.clinicId);
+  // REDISEÑO (ws1-t6) — el MISMO interruptor por clínica que enciende el menú de
+  // dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno
+  // propio. Falla cerrado (→ false = la pantalla de hoy, tal cual). No añade un
+  // viaje a la base: la respuesta vive 60 s en memoria por clínica y el layout
+  // ya la pidió en esta misma carga.
+  const [activeModules, rediseno] = await Promise.all([
+    getActiveClinicModuleKeys(user.clinicId),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
   if (!activeModules.includes("tv-modes")) return <ModuleLocked name="Pantallas TV" />;
 
-  return <TvModesClient key={user.clinicId} />;
+  return <TvModesClient key={user.clinicId} rediseno={rediseno} />;
 }

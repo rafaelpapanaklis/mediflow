@@ -1,0 +1,1050 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Rediseño de las tres pantallas pequeñas (ws1-t6): Reseñas, Pantallas TV
+   y Bitácora. UNA carpeta de piezas comunes para las tres.
+
+   Habla el idioma visual del menú de dos niveles que Rafael aprobó:
+   NO declara tokens propios. La raíz (`raiz.tsx`) monta `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`), que trae los `--m2-*` del menú con su
+   versión oscura y las dos familias tipográficas; aquí solo hay clases que
+   los leen. Lo que el menú no tiene —éxito, alerta, peligro, info— sale de
+   los tokens semánticos de globals.css (`--success-*`, `--danger-*`…), que
+   son los mismos que el propio menú usa como respaldo (`--m2-soporte`).
+   El hex que aparece aquí va SIEMPRE como respaldo dentro de un var().
+
+   Solo se monta con el interruptor `menu-dos-niveles` encendido para la
+   clínica. Apagado, cada pantalla pinta su camino de siempre, que no
+   comparte ni un nodo con esto.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  /* Sin padding lateral: ese lo pone el <main> del layout. */
+  padding: clamp(14px, 2vw, 24px) 0 clamp(24px, 2.8vw, 32px);
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Reseñas se lee como una lista de opiniones: conserva el ancho de lectura
+   de hoy (880 px). Pantallas TV conserva sus 1200 px. */
+.raizEstrecha { max-width: 880px; }
+.raizMedia { max-width: 1200px; }
+
+/* Cifras de ancho fijo en TODO lo que cuelga de aquí (fechas, contadores,
+   páginas, IP). Va sobre los HIJOS y no sobre la raíz a propósito: la raíz
+   lleva `.tokens` del menú, y `tipografia-panel.tsx` le pone a esa clase
+   `font-variant-numeric: normal` con más peso; sus hijos heredan de aquí.
+   Es lo que sustituye a la letra de máquina: Instrument Sans + tabular-nums. */
+.raiz > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Cabecera de pantalla ────────────────────────────────────────── */
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.cabeceraTextos {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cabeceraIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin-top: 1px;
+  border-radius: 11px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(19px, 1.7vw, 23px);
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  color: var(--m2-texto);
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+.acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* ── Botones ─────────────────────────────────────────────────────── */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 15px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+@media (hover: hover) {
+  .boton:hover:not(:disabled) {
+    background: var(--m2-tarjeta-hover);
+    border-color: var(--m2-texto-3);
+  }
+}
+
+.boton:focus-visible,
+.botonIcono:focus-visible,
+.segmentoBoton:focus-visible,
+.chipQuitar:focus-visible,
+.enlace:focus-visible,
+.entrada:focus-visible,
+.filaBoton:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.botonPrincipal,
+.botonPrincipal:hover:not(:disabled) {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+@media (hover: hover) {
+  .botonPrincipal:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+}
+
+.botonSuave {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--m2-texto-2);
+}
+
+@media (hover: hover) {
+  .botonSuave:hover:not(:disabled) {
+    background: var(--m2-hover);
+    border-color: transparent;
+    color: var(--m2-texto);
+  }
+}
+
+.botonPeq {
+  height: 32px;
+  padding: 0 11px;
+  font-size: 12.5px;
+}
+
+/* Texto plano de color (el «Desactivar / Activar» de una pantalla TV). */
+.enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.enlaceActivo { color: var(--m2-activo); }
+.enlaceExito { color: var(--success-strong, #047857); }
+.enlacePeligro { color: var(--danger, #dc2626); }
+
+@media (hover: hover) {
+  .enlace:hover {
+    text-decoration: underline;
+  }
+}
+
+.botonIcono {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .botonIcono:hover {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.botonIconoPeligro,
+.botonIconoPeligro:hover {
+  color: var(--danger, #dc2626);
+}
+
+.botonIconoPeq {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+
+.girando {
+  animation: girar 0.9s linear infinite;
+}
+
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Tarjetas ────────────────────────────────────────────────────── */
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra);
+}
+
+.tarjetaApagada {
+  opacity: 0.65;
+}
+
+.tarjetaCuerpo {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px;
+}
+
+.tarjetaCabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tarjetaQuien {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tarjetaTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.tarjetaTitulo {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  line-height: 1.25;
+  color: var(--m2-texto);
+  /* Sin puntos suspensivos: un nombre largo salta de línea, no se corta. */
+  overflow-wrap: anywhere;
+}
+
+.tarjetaTituloFila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tarjetaSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.tarjetaAcciones {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.parrafo {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--m2-texto-2);
+  overflow-wrap: anywhere;
+}
+
+/* La respuesta de la clínica a una reseña: bloque con borde de acento. */
+.cita {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--m2-activo);
+  border-radius: 10px;
+  background: var(--m2-iniciales-fondo);
+}
+
+.cita .parrafo {
+  margin-top: 6px;
+  color: var(--m2-texto);
+}
+
+.formulario {
+  margin-top: 12px;
+}
+
+.formularioAcciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.margenArriba {
+  margin-top: 12px;
+}
+
+/* La dirección pública de una pantalla TV: se lee, se copia y se abre.
+   Instrument Sans con cifras tabulares, no letra de máquina. */
+.codigo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 10px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 9px;
+  background: var(--m2-buscador-fondo);
+  color: var(--m2-texto-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.codigoTexto {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── KPI ─────────────────────────────────────────────────────────── */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra);
+}
+
+.kpiDestacado {
+  background: linear-gradient(135deg, var(--m2-iniciales-fondo), var(--m2-tarjeta) 62%);
+}
+
+.kpiArriba {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.kpiEtiqueta {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.kpiIcono {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.kpiValor {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  color: var(--m2-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiPie {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+/* ── Etiquetas ───────────────────────────────────────────────────── */
+
+.etiqueta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.etiquetaNeutra { background: var(--m2-hover); color: var(--m2-texto-3); }
+.etiquetaVioleta { background: var(--m2-iniciales-fondo); color: var(--m2-iniciales-texto); }
+.etiquetaExito { background: var(--success-soft, rgba(5, 150, 105, 0.1)); color: var(--success-strong, #047857); }
+.etiquetaAmbar { background: var(--m2-contador-fondo); color: var(--m2-contador-texto); }
+.etiquetaPeligro { background: var(--danger-soft, rgba(220, 38, 38, 0.1)); color: var(--danger-strong, #991b1b); }
+.etiquetaInfo { background: var(--info-soft, rgba(37, 99, 235, 0.1)); color: var(--info-strong, #1d4ed8); }
+
+/* ── Estados: vacío, cargando, error ─────────────────────────────── */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  background: var(--m2-tarjeta-hover);
+  text-align: center;
+}
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.vacioTitulo {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+
+.vacioPista {
+  max-width: 40ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--m2-texto-3);
+}
+
+.vacioAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.cargando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: var(--m2-texto-3);
+  font-size: 13px;
+}
+
+.aviso {
+  padding: 12px 14px;
+  border: 1px solid var(--danger-border-strong, rgba(220, 38, 38, 0.35));
+  border-radius: 10px;
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--danger-strong, #991b1b);
+  font-size: 13px;
+}
+
+.avisoPeq {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--danger, #dc2626);
+}
+
+/* ── Paginador ───────────────────────────────────────────────────── */
+
+.paginador {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra);
+}
+
+.paginadorCentrado {
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding-top: 4px;
+}
+
+.paginadorInfo {
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.paginadorBotones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Filtros y campos ────────────────────────────────────────────── */
+
+.filtros {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px;
+  margin-bottom: 12px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra);
+}
+
+/* El buscador del menú, tal cual. */
+.buscador {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 220px;
+  min-width: 200px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--m2-buscador-fondo);
+  color: var(--m2-texto-3);
+}
+
+.buscador:focus-within {
+  box-shadow: var(--m2-foco);
+}
+
+.buscador input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13px;
+}
+
+.buscador input::placeholder {
+  color: var(--m2-texto-3);
+}
+
+/* Campo de formulario (input, select, textarea). */
+.entrada {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 9px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+
+.entrada::placeholder {
+  color: var(--m2-texto-3);
+}
+
+.entrada:focus {
+  border-color: var(--m2-activo);
+}
+
+.entradaAncha {
+  width: 100%;
+}
+
+textarea.entrada {
+  height: auto;
+  min-height: 88px;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* globals.css pinta TODO input en oscuro con !important; esto va encima. */
+:global(.dark) .buscador input,
+:global(.dark) .entrada {
+  background-color: transparent !important;
+  border-color: var(--m2-tarjeta-borde) !important;
+  color: var(--m2-texto) !important;
+}
+
+:global(.dark) .buscador input {
+  border-color: transparent !important;
+}
+
+:global(.dark) .buscador input::placeholder,
+:global(.dark) .entrada::placeholder {
+  color: var(--m2-texto-3) !important;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.campoEtiqueta {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.campoAyuda {
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.campoFila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.casilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--m2-texto);
+  cursor: pointer;
+}
+
+.casilla input {
+  accent-color: var(--m2-activo);
+}
+
+/* Fila de promoción del formulario de TV: título · descripción · segundos · quitar. */
+.rejillaPromo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 84px auto;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+/* Rango rápido: el segmento. */
+.segmento {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--m2-buscador-fondo);
+}
+
+.segmentoBoton {
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .segmentoBoton:hover {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.segmentoActivo,
+.segmentoActivo:hover {
+  background: var(--m2-tarjeta);
+  color: var(--m2-activo);
+  box-shadow: var(--m2-sombra);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 999px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-texto);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.chipQuitar {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .chipQuitar:hover {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+/* ── Tabla ───────────────────────────────────────────────────────── */
+
+/* Nada se esconde por ancho: si la tabla no cabe, se desliza. Ninguna
+   columna desaparece en pantallas medianas. */
+.tablaEnvoltura {
+  overflow-x: auto;
+  border-radius: 12px;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tabla th {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--m2-borde);
+  color: var(--m2-texto-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tabla td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--m2-borde);
+  color: var(--m2-texto);
+  vertical-align: middle;
+}
+
+.tabla tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (hover: hover) {
+  .tabla tbody tr:hover td {
+    background: var(--m2-tarjeta-hover);
+  }
+}
+
+.tablaArriba td {
+  vertical-align: top;
+}
+
+.derecha { text-align: right; }
+.sinSalto { white-space: nowrap; }
+.discreto { color: var(--m2-texto-3); }
+.secundario { color: var(--m2-texto-2); }
+.negrita { font-weight: 600; }
+.peq { font-size: 11px; }
+.rompe { overflow-wrap: anywhere; }
+.anchoMax { max-width: 240px; }
+
+/* Nombre o entidad clicable dentro de una celda: filtra por ese valor. */
+.filaBoton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .filaBoton:hover .negrita,
+  .filaBoton:hover .secundario {
+    color: var(--m2-activo);
+  }
+}
+
+.celdaTextos {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.identificador {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--m2-texto-3);
+}
+
+.accion {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.accionExito { color: var(--success-strong, #047857); }
+.accionInfo { color: var(--info-strong, #1d4ed8); }
+.accionPeligro { color: var(--danger, #dc2626); }
+.accionAmbar { color: var(--warning-strong, #a85a05); }
+.accionVioleta { color: var(--m2-activo); }
+.accionNeutra { color: var(--m2-texto-3); }
+
+.tablaVacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  color: var(--m2-texto-3);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── Modal ───────────────────────────────────────────────────────── */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 5, 10, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 64px);
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+  color: var(--m2-texto);
+}
+
+.modalAncho {
+  max-width: 760px;
+}
+
+.modalCabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.modalTitulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+  color: var(--m2-texto);
+  overflow-wrap: anywhere;
+}
+
+.modalCuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.modalPie {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-n1-fondo);
+  border-radius: 0 0 14px 14px;
+}
+
+/* Datos de un evento de la bitácora (fecha, usuario, IP, entidad). */
+.metas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.meta {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.meta > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--m2-texto-3);
+}
+
+.metaEtiqueta {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.metaValor {
+  font-size: 13px;
+  color: var(--m2-texto);
+  overflow-wrap: anywhere;
+}
+
+.metaSub {
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.seccionTitulo {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+
+.tablaMarco {
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  overflow-x: auto;
+}

@@ -10,6 +10,7 @@ import {
   type ClinicReviewDTO,
   type ClinicReviewsResponse,
 } from "@/lib/reviews/types";
+import { ResenasRediseno } from "@/components/dashboard/pequenas-rediseno/resenas";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Panel de la clínica: ver sus reseñas verificadas y responder (una respuesta
@@ -17,7 +18,9 @@ import {
 // del design system del dashboard). Responsive.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function ResenasClient() {
+// `rediseno` lo baja page.tsx desde el interruptor `menu-dos-niveles`. Apagado
+// (el valor por defecto), todo lo de abajo es el marcado de siempre, sin tocar.
+export function ResenasClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const [data, setData] = useState<ClinicReviewsResponse | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -44,6 +47,12 @@ export function ResenasClient() {
 
   function patchItem(updated: ClinicReviewDTO) {
     setData((d) => (d ? { ...d, items: d.items.map((i) => (i.id === updated.id ? updated : i)) } : d));
+  }
+
+  if (rediseno) {
+    return (
+      <ResenasRediseno data={data} page={page} loading={loading} error={error} onPage={load} onResponded={patchItem} />
+    );
   }
 
   return (
