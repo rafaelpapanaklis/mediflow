@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { ShieldCheck, Upload, AlertTriangle, Check } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
+import {
+  Archivo, Boton, Campo, Columna, Encabezado, Entrada, Fila, Filas, Insignia, Seccion,
+} from "@/components/dashboard/configuracion-rediseno/piezas";
+import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 
 interface CertInfo {
   id: string;
@@ -19,11 +24,14 @@ interface CertInfo {
 
 interface Props {
   cert: CertInfo | null;
+  /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
+   *  resuelto en el servidor. false = la pantalla de siempre, tal cual. */
+  rediseno?: boolean;
 }
 
 const DAYS_WARN = 30;
 
-export function SignatureClient({ cert }: Props) {
+export function SignatureClient({ cert, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const [cerFile, setCerFile] = useState<File | null>(null);
@@ -77,6 +85,84 @@ export function SignatureClient({ cert }: Props) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // ── REDISEÑO (ws1-t2): mismo estado, mismo envío, mismos textos. ──
+  if (rediseno) {
+    const tono = expired ? "peligro" : expiringSoon ? "alerta" : "exito";
+    const estado = expired
+      ? t("settings.signature.statusExpired")
+      : expiringSoon
+        ? t("settings.signature.statusExpiringSoon", { count: daysToExpiry ?? 0 })
+        : t("settings.signature.statusActive");
+    return (
+      <RaizConfiguracion estrecha>
+        <Encabezado
+          icono={<ShieldCheck size={20} strokeWidth={1.75} aria-hidden />}
+          titulo={t("settings.signature.title")}
+          subtitulo={t("settings.signature.intro")}
+        />
+        <Columna>
+          {cert && (
+            <Seccion
+              icono={expired ? <AlertTriangle size={18} strokeWidth={1.75} aria-hidden /> : <Check size={18} strokeWidth={1.75} aria-hidden />}
+              tonoIcono={tono}
+              titulo={estado}
+              extra={<Insignia tono={tono} punto>{estado}</Insignia>}
+            >
+              <Filas>
+                <Fila etiqueta={t("settings.signature.rowSerial")}>{cert.cerSerial}</Fila>
+                <Fila etiqueta={t("settings.signature.rowIssuer")}>{cert.cerIssuer}</Fila>
+                <Fila etiqueta={t("settings.signature.rowRfc")}>{cert.rfc}</Fila>
+                <Fila etiqueta={t("settings.signature.rowValidFrom")}>{new Date(cert.validFrom).toLocaleDateString("es-MX")}</Fila>
+                <Fila etiqueta={t("settings.signature.rowValidUntil")}>{new Date(cert.validUntil).toLocaleDateString("es-MX")}</Fila>
+              </Filas>
+            </Seccion>
+          )}
+
+          <form onSubmit={submit}>
+            <Seccion
+              titulo={cert ? t("settings.signature.replaceCert") : t("settings.signature.uploadCert")}
+              pie={
+                <Boton
+                  type="submit"
+                  variante="principal"
+                  disabled={submitting || !cerFile || !keyFile || !keyPassword}
+                  style={{ cursor: submitting ? "wait" : undefined }}
+                >
+                  <Upload size={16} strokeWidth={1.75} aria-hidden />
+                  {submitting ? t("settings.signature.uploading") : (cert ? t("settings.signature.replaceCert") : t("settings.signature.uploadCert"))}
+                </Boton>
+              }
+            >
+              <Campo etiqueta={t("settings.signature.cerLabel")} obligatorio>
+                <Archivo
+                  ref={cerInputRef}
+                  accept=".cer,application/x-x509-ca-cert,application/octet-stream"
+                  onChange={(e) => setCerFile(e.target.files?.[0] ?? null)}
+                />
+              </Campo>
+              <Campo etiqueta={t("settings.signature.keyLabel")} obligatorio>
+                <Archivo
+                  ref={keyInputRef}
+                  accept=".key,application/octet-stream"
+                  onChange={(e) => setKeyFile(e.target.files?.[0] ?? null)}
+                />
+              </Campo>
+              <Campo etiqueta={t("settings.signature.passwordLabel")} obligatorio ayuda={t("settings.signature.securityNote")}>
+                <Entrada
+                  type="password"
+                  value={keyPassword}
+                  onChange={(e) => setKeyPassword(e.target.value)}
+                  autoComplete="off"
+                  placeholder={t("settings.signature.passwordPlaceholder")}
+                />
+              </Campo>
+            </Seccion>
+          </form>
+        </Columna>
+      </RaizConfiguracion>
+    );
   }
 
   return (
