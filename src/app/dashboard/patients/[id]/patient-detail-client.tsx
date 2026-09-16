@@ -418,6 +418,14 @@ interface Props {
    * en el server. En false, TODO lo de abajo se queda como está: la barra que
    * mide el ancho, el Resumen de dos columnas, el cuestionario de hoy y el
    * formulario de consulta que vuelve a pedir los antecedentes.
+   *
+   * Y también, desde la integración, los apartados clínicos y de documentos
+   * (Historial de consultas, Recetas, Consentimientos, Referencias, Modelos 3D)
+   * y el encaje del odontograma: llegaron en otra rama con un segundo prop
+   * (`pacientesRediseno`) que salía de este mismo interruptor. Dos nombres para
+   * una sola cosa es la manera de que un día se enciendan a medias, así que se
+   * unificaron en este. Los componentes de esos apartados conservan el suyo:
+   * este valor es el que les llega.
    */
   rediseno?: boolean;
 }
@@ -2548,7 +2556,11 @@ export function PatientDetailClient({
 
           {/* ===== TAB: ODONTOGRAMA ===== */}
           {tab === "odontograma" && (
-            <OdontogramV2 patientId={patient.id} />
+            <OdontogramV2
+              patientId={patient.id}
+              dedupeLegend={rediseno}
+              edgeScrollHint={rediseno}
+            />
           )}
 
           {/* ===== TAB: NUEVA CONSULTA (rediseño) =====
@@ -2642,7 +2654,10 @@ export function PatientDetailClient({
               {records.length === 0 ? (
                 <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
                   {/* Sin emoji con el rediseño: la ficha usa íconos de línea
-                      en todo lo demás y estos se colaban dentro del texto. */}
+                      en todo lo demás y estos se colaban dentro del texto.
+                      Las dos ramas cambiaron este mismo icono; queda el del
+                      rediseño de la ficha, que es el tamaño y el grosor que
+                      llevan los demás vacíos de esa pantalla. */}
                   <div className="mb-2 flex justify-center">
                     {rediseno
                       ? <ClipboardList size={28} strokeWidth={1.5} aria-hidden className="text-[var(--text-3)]" />
@@ -3146,7 +3161,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: RECETAS ===== */}
           {tab === "recetas" && canViewPrescriptions && (
-            <PrescriptionsTab patientId={patient.id} />
+            <PrescriptionsTab patientId={patient.id} pacientesRediseno={rediseno} />
           )}
 
           {/* ===== TAB: SUBIDOS POR EL PACIENTE ===== */}
@@ -3157,7 +3172,7 @@ export function PatientDetailClient({
           {/* ===== TAB: CITAS ===== */}
           {/* ===== TAB: REFERENCIAS ===== */}
           {tab === "referencias" && (
-            <ReferralsTab patientId={patient.id} />
+            <ReferralsTab patientId={patient.id} pacientesRediseno={rediseno} />
           )}
 
           {tab === "agenda" && (
@@ -3441,7 +3456,7 @@ export function PatientDetailClient({
           )}
 
           {tab === "modelos-3d" && (
-            <Models3DTab patientId={patient.id} />
+            <Models3DTab patientId={patient.id} pacientesRediseno={rediseno} />
           )}
 
           {/* Pestaña gateada por "consents.view": sin el permiso el ítem no
@@ -3451,6 +3466,7 @@ export function PatientDetailClient({
           {tab === "consentimientos" && canViewConsents && (
             <ConsentsTab
               patientId={patient.id}
+              pacientesRediseno={rediseno}
               initialConsents={consents}
               doctors={doctors}
               currentUserId={currentUser.id}

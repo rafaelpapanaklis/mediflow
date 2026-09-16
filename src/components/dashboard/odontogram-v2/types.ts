@@ -217,4 +217,17 @@ export interface OdontogramV2Props {
   patientId: string;
   value?: Records;
   onChange?: (records: Records) => void;
+  /**
+   * La paleta ya enseña grupo + color por cada hallazgo (`odo-pal-tabs`): con
+   * esto en `true` no se repite la misma leyenda estática debajo del chart.
+   * Default `false` — ningún caller existente (dental-form.tsx en "Nueva
+   * consulta", instituto) cambia de aspecto si no lo pide.
+   */
+  dedupeLegend?: boolean;
+  /**
+   * En <640px el chart siempre desborda (min-width 620px): esto pinta un
+   * degradado fijo en los bordes para que se note que hay más dientes a los
+   * lados, sin tocar el gesto de scroll que ya existe. Default `false`.
+   */
+  edgeScrollHint?: boolean;
 }

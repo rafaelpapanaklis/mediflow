@@ -210,3 +210,19 @@
   .odo-app .odo-chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .odo-app .odo-chart { min-width: 620px; }
 }
+
+/* ============ SEÑAL DE SCROLL (edgeScrollHint, opt-in) ============
+   Wrapper SIN overflow propio: los degradados van sobre él (no sobre
+   .odo-chart-scroll) para que se queden fijos en el borde de la pantalla en
+   vez de desplazarse con el contenido. Solo pinta algo si el caller pasa
+   `edgeScrollHint` Y estamos por debajo de 640px — a 1440/1280 no hace nada. */
+.odo-app .odo-chart-scroll-wrap { position: relative; }
+@media (max-width: 640px) {
+  .odo-app .odo-edge-hint::before,
+  .odo-app .odo-edge-hint::after {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 24px;
+    pointer-events: none; z-index: 2;
+  }
+  .odo-app .odo-edge-hint::before { left: 0; background: linear-gradient(90deg, var(--card), transparent); }
+  .odo-app .odo-edge-hint::after  { right: 0; background: linear-gradient(270deg, var(--card), transparent); }
+}

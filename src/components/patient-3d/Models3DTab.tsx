@@ -119,7 +119,18 @@ function formatFromName(name: string): Model3DFormat | undefined {
   return undefined;
 }
 
-export function Models3DTab({ patientId }: { patientId: string }) {
+export function Models3DTab({
+  patientId,
+  pacientesRediseno = false,
+}: {
+  patientId: string;
+  /**
+   * WS1-T5 · rediseño de Pacientes, mismo interruptor que patient-detail-client
+   * pasa a todos sus tabs clínicos. Con `false` (default) esta pestaña no
+   * cambia un píxel.
+   */
+  pacientesRediseno?: boolean;
+}) {
   const t = useT();
   const [files, setFiles] = useState<Model3DFile[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -366,10 +377,21 @@ export function Models3DTab({ patientId }: { patientId: string }) {
         </div>
       )}
 
+      {/* Mientras carga: nunca "0 archivos" disfrazado de dato real. */}
+      {pacientesRediseno && !loaded && (
+        <div className="bg-card border border-border rounded-xl p-10 text-center text-sm text-muted-foreground">
+          {t("patients.models3d.loading")}
+        </div>
+      )}
+
       {/* Estado vacío */}
       {loaded && files.length === 0 && !uploading && (
         <div className="bg-card border border-border rounded-xl p-10 text-center">
-          <div className="text-3xl mb-2">🦷</div>
+          {pacientesRediseno ? (
+            <Box className="w-6 h-6 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
+          ) : (
+            <div className="text-3xl mb-2">🦷</div>
+          )}
           <p className="text-sm font-semibold text-muted-foreground">{t("patients.models3d.empty")}</p>
           <p className="text-xs text-muted-foreground mt-1">{t("patients.models3d.emptyHint")}</p>
         </div>
@@ -383,11 +405,14 @@ export function Models3DTab({ patientId }: { patientId: string }) {
               type="button"
               onClick={() => openViewer(f)}
               className="w-16 h-16 rounded-lg flex flex-col items-center justify-center flex-shrink-0 gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-              style={{ background: "rgba(124,58,237,.14)" }}
+              style={{ background: pacientesRediseno ? "var(--brand-soft)" : "rgba(124,58,237,.14)" }}
               aria-label={t("patients.models3d.view")}
             >
-              <Layers className="w-5 h-5" style={{ color: "#a78bfa" }} aria-hidden />
-              <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: "#a78bfa" }}>
+              <Layers className="w-5 h-5" style={{ color: pacientesRediseno ? "var(--violet-700)" : "#a78bfa" }} aria-hidden />
+              <span
+                className="text-[9px] font-bold uppercase tracking-wide"
+                style={{ color: pacientesRediseno ? "var(--violet-700)" : "#a78bfa" }}
+              >
                 CBCT
               </span>
             </button>

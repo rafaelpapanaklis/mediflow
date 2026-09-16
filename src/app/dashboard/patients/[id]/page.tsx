@@ -41,6 +41,7 @@ import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { resolveReminderOutcome } from "@/lib/reminders/promise";
 import { parseNotifPrefs } from "@/lib/patient-notifications/types";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -221,6 +222,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // to_regclass y la fila), así que el lote habría llegado a nueve. No depende
   // de nada de arriba, y su respuesta vive 60 s en memoria por clínica: la
   // inmensa mayoría de las cargas no llegan ni a tocar la base.
+  // Es el ÚNICO interruptor de la ficha: lo miran tanto el rediseño de la
+  // cabecera, el Resumen, la Historia clínica, el Cuestionario y Nueva consulta
+  // (WS1-T4) como los apartados clínicos y de documentos —Historial, Recetas,
+  // Consentimientos, Referencias, Modelos 3D— y el encaje del odontograma
+  // (WS1-T5). Los dos trabajos lo leían por su cuenta; al juntarlos, una sola
+  // lectura y un solo `rediseno` hacia el cliente.
   const rediseno = await menuDosNivelesEncendido(user.clinicId);
   // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
   // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
