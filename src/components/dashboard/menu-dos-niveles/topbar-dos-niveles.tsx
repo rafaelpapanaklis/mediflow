@@ -23,6 +23,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { etiquetaDeRuta } from "./estructura";
 import { CLASES_MENU } from "./clases";
 import { Icono } from "./icono";
+import { TipografiaPanel } from "./tipografia-panel";
 import s from "./menu-dos-niveles.module.css";
 
 type UserRole = "SUPER_ADMIN" | "ADMIN" | "DOCTOR" | "RECEPTIONIST" | "READONLY" | "ACCOUNTANT";
@@ -76,6 +77,20 @@ export function TopbarDosNiveles({ clinicName, userRole }: { clinicName: string;
 
   return (
     <>
+      {/* La tipografía del diseño nuevo para TODO el panel (WS1-T3). Se monta
+          aquí, y no en el layout, por dos razones que se pisaban entre sí:
+          1) El layout tiene que quedar EXACTAMENTE como está. Un hijo más entre
+             los suyos —aunque sea una condición que casi siempre da falso— le
+             cambia a React el número de ranuras de ese nivel, y con él los
+             `useId` de todo lo que cuelga: las clínicas SIN el interruptor
+             dejarían de recibir el HTML de hoy. Medido, no supuesto.
+          2) De las dos piezas del diseño nuevo, esta barra es la única que se
+             pinta SIEMPRE que el interruptor está encendido: en el teléfono el
+             menú vive en un cajón y no se monta hasta que se abre, así que
+             colgar de él la tipografía la dejaría fuera de media pantalla.
+          Da igual que la barra se oculte por CSS en algún ancho: una regla de
+          estilo vale en todo el documento, no solo donde está escrita. */}
+      <TipografiaPanel />
       <div className={`${CLASES_MENU} ${s.barra}`}>
         <button
           type="button"
