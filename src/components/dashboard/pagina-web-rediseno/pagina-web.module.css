@@ -1,0 +1,1034 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Rediseño del EDITOR de página web (ws1-t3) — Configuración y el lienzo
+   de clic-para-editar. NO es el sitio público: eso lo sigue pintando la
+   plantilla de la clínica dentro de un <iframe>, sin tocar.
+
+   Habla el idioma visual del menú de dos niveles que Rafael aprobó: NO
+   declara tokens propios. La raíz (`raiz.tsx`) monta `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`), que trae los `--m2-*` del menú con su
+   versión oscura y las dos familias tipográficas; aquí solo hay clases
+   que los leen. Lo que el menú no tiene —éxito, alerta, peligro, info—
+   sale de los tokens semánticos de globals.css (`--success-*`,
+   `--warning-*`, `--danger-*`), los mismos que usa `hoy-rediseno`.
+
+   Solo se monta con el interruptor `menu-dos-niveles` encendido para la
+   clínica. Apagado, `LandingConfigClient` y `EditorVisual` devuelven el
+   árbol de hoy tal cual — no comparten ni un nodo con esto.
+
+   ANCHOS: el objetivo son computadoras de distintas resoluciones e iPads,
+   nunca "móvil primero". Nada se esconde con `display:none` por ancho:
+   donde la vista previa no cabe al lado del formulario (contenedor
+   angosto, iPad en vertical), se APILA debajo — sigue completa, solo más
+   abajo — en vez de desaparecer.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  max-width: 1320px;
+  margin: 0 auto;
+  width: 100%;
+  padding: clamp(14px, 2vw, 24px) 0 clamp(24px, 2.8vw, 40px);
+  container-type: inline-size;
+  container-name: paginaWeb;
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.raiz > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Estructura: columna del formulario + vista previa ─────────────── */
+
+.shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.columna {
+  flex: 1;
+  min-width: 0;
+  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Contenedor angosto (iPad vertical, sidebar abierto): apila en vez de
+   esconder. El propio <div class="shell"> tiene container-type porque
+   vive dentro de `.raiz`, que ya lo declara. */
+@container paginaWeb (max-width: 900px) {
+  .shell {
+    flex-direction: column;
+  }
+  .previa {
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .previaMarco {
+    height: 70vh !important;
+  }
+}
+
+/* ── Cabecera ────────────────────────────────────────────────────── */
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(19px, 1.7vw, 23px);
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  color: var(--m2-texto);
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+.acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* ── Botones ─────────────────────────────────────────────────────── */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 15px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+@media (hover: hover) {
+  .boton:hover:not(:disabled) {
+    background: var(--m2-tarjeta-hover);
+    border-color: var(--m2-texto-3);
+  }
+}
+
+.boton:focus-visible,
+.botonIcono:focus-visible,
+.segmento:focus-visible,
+.tarjetaEnlace:focus-visible,
+.interruptor:focus-visible,
+.plantillaTarjeta:focus-visible,
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.botonPrincipal,
+.botonPrincipal:hover:not(:disabled) {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+@media (hover: hover) {
+  .botonPrincipal:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+}
+
+.botonSuave {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--m2-texto-2);
+}
+
+@media (hover: hover) {
+  .botonSuave:hover:not(:disabled) {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.botonPeq {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+.botonAncho {
+  width: 100%;
+  height: 42px;
+}
+
+.botonIcono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .botonIcono:hover:not(:disabled) {
+    background: var(--m2-hover);
+    border-color: var(--m2-tarjeta-borde);
+    color: var(--m2-texto);
+  }
+}
+
+.botonIcono:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.botonIconoPeligro:hover:not(:disabled) {
+  color: var(--danger, #dc2626);
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+}
+
+.botonIconoActivo,
+.botonIconoActivo:hover {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+/* ── Tarjetas ────────────────────────────────────────────────────── */
+
+.tarjeta {
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra);
+  padding: 18px;
+}
+
+.tarjetaCabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.tarjetaTitulo {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+  color: var(--m2-texto);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tarjetaTitulo svg { color: var(--m2-activo); flex-shrink: 0; }
+
+.tarjetaSub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  line-height: 1.4;
+}
+
+.tarjetaEnlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--m2-activo);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .tarjetaEnlace:hover { text-decoration: underline; }
+}
+
+/* Fila con separador, para bloques apilados dentro de una tarjeta
+   (pestaña General). */
+.filas > * + * {
+  border-top: 1px solid var(--m2-tarjeta-borde);
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+/* ── Segmentado (tabs) ───────────────────────────────────────────── */
+
+.segmentadoWrap {
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.segmentado {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--m2-buscador-fondo);
+  flex: none;
+  min-width: max-content;
+}
+
+.segmento {
+  height: 34px;
+  padding: 0 14px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .segmento:hover { color: var(--m2-texto); }
+}
+
+.segmentoActivo,
+.segmentoActivo:hover {
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font-weight: 600;
+  box-shadow: var(--m2-sombra);
+}
+
+/* ── Campos de formulario ────────────────────────────────────────── */
+
+.campo + .campo { margin-top: 12px; }
+
+.etiqueta {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-texto-2);
+  margin-bottom: 4px;
+}
+
+.ayuda {
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+  line-height: 1.4;
+  margin: -2px 0 6px;
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  background: var(--m2-buscador-fondo);
+  color: var(--m2-texto);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 9px;
+  padding: 9px 11px;
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.input::placeholder,
+.textarea::placeholder { color: var(--m2-texto-3); }
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--m2-activo);
+  background: var(--m2-tarjeta);
+}
+
+.textarea { resize: none; }
+
+.gridAuto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.gridDos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+/* ── Interruptor (toggle) ───────────────────────────────────────── */
+
+.interruptor {
+  width: 42px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  background: var(--m2-borde);
+  transition: background 0.15s;
+}
+
+.interruptor:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.interruptorActivo { background: var(--m2-activo); }
+
+.interruptorBola {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--m2-sombra);
+  transition: transform 0.15s;
+}
+
+.interruptorActivo .interruptorBola { transform: translateX(20px); }
+
+/* ── Insignias / estado ─────────────────────────────────────────── */
+
+.insignia {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.insigniaExito { background: var(--success-soft, rgba(5, 150, 105, 0.1)); color: var(--success-strong, #047857); }
+.insigniaNeutra { background: var(--m2-hover); color: var(--m2-texto-2); }
+.insigniaAlerta { background: var(--warning-soft, rgba(217, 119, 6, 0.1)); color: var(--warning-strong, #a85a05); border: 1px solid var(--warning-border-strong, rgba(217, 119, 6, 0.35)); }
+
+.puntoAlerta {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warning, #d97706);
+  display: inline-block;
+}
+
+/* ── Franja de enlace público ────────────────────────────────────── */
+
+.franjaEnlace {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--m2-iniciales-fondo);
+  border: 1px solid color-mix(in srgb, var(--m2-activo) 30%, transparent);
+  border-radius: 11px;
+  padding: 12px 16px;
+}
+
+.franjaEnlaceEtiqueta {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--m2-activo);
+  margin-bottom: 2px;
+}
+
+.franjaEnlaceUrl {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--m2-texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Banner "editar haciendo clic encima" ───────────────────────── */
+
+.bannerClic {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--m2-tarjeta);
+  border: 1px solid color-mix(in srgb, var(--m2-activo) 35%, var(--m2-tarjeta-borde));
+  border-radius: 11px;
+  box-shadow: var(--m2-sombra);
+  padding: 13px 16px;
+  text-decoration: none;
+  transition: box-shadow 0.12s;
+}
+
+@media (hover: hover) {
+  .bannerClic:hover { box-shadow: 0 2px 8px rgba(26, 24, 38, 0.1); }
+}
+
+.bannerClicIcono {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-activo);
+}
+
+.bannerClicTitulo {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+
+.bannerClicSub {
+  display: block;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  margin-top: 1px;
+}
+
+/* ── Aviso de solo lectura ───────────────────────────────────────── */
+
+.avisoLectura {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  border: 1px solid var(--warning-border-strong, rgba(217, 119, 6, 0.35));
+  border-radius: 11px;
+  padding: 12px 16px;
+  color: var(--m2-texto-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.avisoLectura svg { color: var(--warning-strong, #a85a05); flex-shrink: 0; margin-top: 1px; }
+
+.avisoLectura b { color: var(--m2-texto); }
+
+/* ── Estados vacíos ──────────────────────────────────────────────── */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 11px;
+  background: var(--m2-tarjeta-hover);
+  text-align: center;
+}
+
+.vacioIcono { color: var(--m2-texto-3); }
+
+.vacioTexto {
+  font-size: 13px;
+  color: var(--m2-texto-3);
+  max-width: 36ch;
+}
+
+/* ── Ítem repetible (servicio / testimonio / FAQ) ───────────────── */
+
+.item {
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 11px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.itemCabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.itemEtiqueta {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--m2-texto-3);
+}
+
+/* ── Selector de plantilla ───────────────────────────────────────── */
+
+.plantillaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.plantillaTarjeta {
+  cursor: pointer;
+  border-radius: 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  padding: 10px;
+  transition: border-color 0.12s, background 0.12s;
+  background: var(--m2-tarjeta);
+}
+
+@media (hover: hover) {
+  .plantillaTarjeta:hover { border-color: var(--m2-activo); }
+}
+
+.plantillaTarjetaActiva {
+  border-color: var(--m2-activo);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--m2-activo) 35%, transparent);
+  background: var(--m2-iniciales-fondo);
+}
+
+.plantillaMarca {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  border-radius: 999px;
+  padding: 2px;
+  box-shadow: var(--m2-sombra);
+}
+
+.plantillaNombre {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+
+.plantillaBadgeActiva {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--success-strong, #047857);
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.plantillaDesc {
+  font-size: 11px;
+  color: var(--m2-texto-3);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.plantillaVer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 6px 0;
+  border: 1px solid color-mix(in srgb, var(--m2-activo) 35%, transparent);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--m2-activo);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .plantillaVer:hover { background: var(--m2-iniciales-fondo); }
+}
+
+/* ── Galería ─────────────────────────────────────────────────────── */
+
+.galeriaSubir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  transition: filter 0.12s, opacity 0.12s;
+}
+
+.galeriaSubirLlena {
+  opacity: 0.45;
+  pointer-events: none;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  color: var(--m2-texto-3);
+}
+
+.galeriaAviso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  background: var(--m2-iniciales-fondo);
+  border: 1px solid color-mix(in srgb, var(--m2-activo) 25%, transparent);
+  border-radius: 9px;
+  padding: 9px 12px;
+  color: var(--m2-texto-2);
+}
+
+.galeriaAviso svg { color: var(--m2-activo); flex-shrink: 0; }
+.galeriaAviso a { color: var(--m2-activo); font-weight: 650; }
+
+.galeriaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.galeriaItem {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--m2-tarjeta-borde);
+}
+
+.galeriaItemPortada { border-color: var(--m2-activo); box-shadow: 0 0 0 2px color-mix(in srgb, var(--m2-activo) 35%, transparent); }
+
+.galeriaBadgePos {
+  position: absolute; top: 6px; left: 6px;
+  background: rgba(0, 0, 0, 0.65); color: #fff;
+  font-size: 10.5px; font-weight: 700;
+  border-radius: 6px; padding: 2px 6px; line-height: 1.3;
+}
+
+.galeriaBadgePortada {
+  position: absolute; top: 6px; right: 6px;
+  display: flex; align-items: center; gap: 3px;
+  background: var(--m2-activo); color: var(--m2-activo-texto);
+  font-size: 10px; font-weight: 700;
+  border-radius: 6px; padding: 2px 6px; line-height: 1.3;
+  box-shadow: var(--m2-sombra);
+}
+
+.galeriaBotonPortada {
+  position: absolute; top: 6px; right: 6px;
+  display: flex; align-items: center; gap: 3px;
+  background: rgba(0, 0, 0, 0.6); color: #fff;
+  font-size: 10px; font-weight: 650;
+  border: 0; border-radius: 6px; padding: 2px 6px; line-height: 1.3;
+  cursor: pointer; transition: background 0.12s;
+}
+
+@media (hover: hover) {
+  .galeriaBotonPortada:hover:not(:disabled) { background: var(--m2-activo); }
+}
+
+.galeriaFlechas {
+  position: absolute; top: 50%; left: 6px; right: 6px;
+  transform: translateY(-50%);
+  display: flex; justify-content: space-between;
+  pointer-events: none;
+}
+
+.galeriaFlecha {
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.55); color: #fff;
+  border: 0; border-radius: 999px; padding: 4px;
+  cursor: pointer; transition: background 0.12s;
+}
+
+.galeriaFlecha:disabled { opacity: 0.3; pointer-events: none; }
+
+@media (hover: hover) {
+  .galeriaFlecha:hover:not(:disabled) { background: rgba(0, 0, 0, 0.8); }
+}
+
+.galeriaAcciones {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.galeriaAccion {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: 10.5px; font-weight: 650; color: #fff;
+  padding: 6px 0; cursor: pointer; border: 0; background: transparent;
+  transition: background 0.12s;
+}
+
+.galeriaAccion + .galeriaAccion { border-left: 1px solid rgba(255, 255, 255, 0.2); }
+
+@media (hover: hover) {
+  .galeriaAccion:hover { background: rgba(255, 255, 255, 0.15); }
+  .galeriaAccionPeligro:hover { background: var(--danger, #dc2626); }
+}
+
+/* ── Subir foto (dropzone) ───────────────────────────────────────── */
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  padding: 26px 16px;
+  cursor: pointer;
+  color: var(--m2-texto-2);
+  transition: border-color 0.12s, background 0.12s;
+}
+
+@media (hover: hover) {
+  .dropzone:hover { border-color: var(--m2-activo); background: var(--m2-iniciales-fondo); }
+}
+
+.dropzone svg { color: var(--m2-activo); }
+
+/* ── Vista previa en vivo ────────────────────────────────────────── */
+
+.previa {
+  width: 420px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 16px;
+}
+
+.previaCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.previaTitulo { font-size: 13px; font-weight: 650; color: var(--m2-texto); }
+
+.previaMarco {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--m2-tarjeta-borde);
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+  transition: box-shadow 0.15s, border-color 0.15s;
+  height: calc(100vh - 130px);
+}
+
+.previaMarcoSinGuardar {
+  border-color: var(--warning, #d97706);
+  box-shadow: 0 0 0 2px var(--warning-soft-strong, rgba(217, 119, 6, 0.15));
+}
+
+.previaPista {
+  font-size: 11px;
+  color: var(--m2-texto-3);
+  line-height: 1.4;
+  margin-top: 6px;
+}
+
+/* ── Diagrama de la plantilla (manifest-editor) ─────────────────── */
+
+.diagrama {
+  display: block;
+  border-radius: 8px;
+  background: var(--m2-buscador-fondo);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   EDITOR VISUAL — la barra de herramientas sobre el lienzo. El lienzo
+   (el <iframe>) es el sitio público y no lleva ni una clase de aquí.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Anula el box-model de `.raiz` (max-width/margin/padding centrados): esta
+   pantalla es un `position:fixed` de borde a borde por encima del panel, no
+   una columna de contenido. Las dos clases conviven en el mismo nodo porque
+   `RaizPaginaWeb` siempre trae `.raiz` (para heredar CLASES_MENU); aquí se
+   descarta su geometría y se queda solo con los tokens y la tipografía. */
+.pantallaEditor {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  background: var(--m2-n1-fondo);
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.barra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--m2-tarjeta-borde);
+  background: var(--m2-tarjeta);
+}
+
+.barraSalir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m2-texto-2);
+  text-decoration: none;
+  transition: background 0.12s;
+}
+
+@media (hover: hover) {
+  .barraSalir:hover { background: var(--m2-hover); }
+}
+
+.barraNombre { font-size: 13px; font-weight: 650; color: var(--m2-texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barraSub { font-size: 11px; color: var(--m2-texto-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.barraColorEtiqueta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--m2-texto-2); }
+
+.barraColor {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  background: transparent;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.barraContraste {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 650;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  color: var(--warning-strong, #a85a05);
+}
+
+.barraGuardar,
+.barraGuardar:hover:not(:disabled) {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+.pista {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+  border-bottom: 1px solid var(--m2-tarjeta-borde);
+  background: var(--m2-n2-fondo);
+}
+
+.lienzo {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--m2-n1-fondo);
+}
+
+/* ── Conflicto (modal) ──────────────────────────────────────────── */
+
+.conflictoOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(13, 10, 23, 0.5);
+  padding: 16px;
+}
+
+.conflictoCaja {
+  max-width: 520px;
+  width: 100%;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(13, 10, 23, 0.25);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.conflictoTitulo { margin: 0; font-size: 15px; font-weight: 650; color: var(--m2-texto); }
+.conflictoTexto { font-size: 13px; color: var(--m2-texto-2); line-height: 1.5; }
+.conflictoLista { font-size: 12.5px; color: var(--m2-texto-3); line-height: 1.5; padding-left: 18px; margin: 0; }
+
+/* ── Aviso (plantilla no editable / pantalla chica) ─────────────── */
+
+.avisoCaja {
+  max-width: 520px;
+  margin: 48px auto;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: var(--m2-sombra);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.avisoCajaIcono { color: var(--m2-texto-3); }
+.avisoCajaTitulo { font-size: 16px; font-weight: 650; color: var(--m2-texto); margin: 0; }
+.avisoCajaCuerpo { font-size: 13.5px; color: var(--m2-texto-2); line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .interruptorBola,
+  .boton,
+  .plantillaTarjeta {
+    transition: none;
+  }
+}
