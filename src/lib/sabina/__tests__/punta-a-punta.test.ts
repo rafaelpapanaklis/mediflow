@@ -270,13 +270,16 @@ const LAS_DE_CAJA = ["caja"];
 /** Las tres de CLÍNICO (ws1-t4): todas de solo lectura. */
 const LAS_DE_CLINICO = ["recetas", "estudios_del_paciente", "analisis_y_notas_de_estudio"];
 
-test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja y las tres de clínico, con su esquema", async () => {
+/** Lo que se escapa (ws1-t8): una sola, con `tipo` para pedir una lista concreta. */
+const LAS_DE_ESCAPE = ["oportunidades_perdidas"];
+
+test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja, las tres de clínico y la de lo que se escapa, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
 
   const tools = estado.peticiones[0]?.tools ?? [];
-  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS, ...LAS_DE_CAJA, ...LAS_DE_CLINICO].sort());
+  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS, ...LAS_DE_CAJA, ...LAS_DE_CLINICO, ...LAS_DE_ESCAPE].sort());
 
   const { SABINA_TOOLS } = await import("../engine-catalog");
   for (const t of tools) {

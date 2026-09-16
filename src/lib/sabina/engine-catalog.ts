@@ -13,6 +13,7 @@ import { caja } from "./tools/caja";
 import { recetas } from "./tools/recetas";
 import { estudiosDelPaciente } from "./tools/estudios-del-paciente";
 import { analisisYNotasDeEstudio } from "./tools/analisis-y-notas-de-estudio";
+import { oportunidadesPerdidas } from "./tools/oportunidades-perdidas";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -35,7 +36,9 @@ import { analisisYNotasDeEstudio } from "./tools/analisis-y-notas-de-estudio";
    `caja` (ws1-t3), con sus pruebas en tools/__tests__/caja.test.ts: solo lee;
    Sabina no abre, no retira y no cierra (MAPA-caja §10); y las tres de CLÍNICO
    (ws1-t4: recetas, estudios_del_paciente, analisis_y_notas_de_estudio), todas
-   de solo lectura. */
+   de solo lectura; y `oportunidades_perdidas` (ws1-t8), que cruza facturas,
+   presupuestos, planes y citas para decir qué dinero se está escapando —solo
+   lee, y los pacientes fríos los delega en `pacientes_inactivos`. */
 const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ...CATALOGO_SABINA,
   proponerHorarios,
@@ -44,6 +47,7 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   recetas,
   estudiosDelPaciente,
   analisisYNotasDeEstudio,
+  oportunidadesPerdidas,
 ];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────

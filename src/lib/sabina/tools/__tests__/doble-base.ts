@@ -47,6 +47,12 @@ export interface Datos {
   cumsItems?: Fila[];
   patientFiles?: Fila[];
   xrayAnalyses?: Fila[];
+  /** ws1-t8 («lo que se escapa»): planes de tratamiento y sus sesiones. */
+  treatmentPlans?: Fila[];
+  treatmentSessions?: Fila[];
+  /** ws1-t8: lo que pidió el paciente y nadie contestó. */
+  bookingRequests?: Fila[];
+  appointmentChangeRequests?: Fila[];
 }
 
 interface Relacion {
@@ -88,6 +94,18 @@ const RELACIONES: Record<string, Record<string, Relacion>> = {
   cashWithdrawal: {
     recordedByUser: { modelo: "users", via: (w, u) => w.recordedBy === u.id, lista: false },
   },
+  treatmentPlan: {
+    patient: { modelo: "patients", via: (t, p) => t.patientId === p.id, lista: false },
+    doctor: { modelo: "users", via: (t, u) => t.doctorId === u.id, lista: false },
+    sessions: { modelo: "treatmentSessions", via: (t, s) => s.treatmentId === t.id, lista: true },
+  },
+  treatmentSession: {
+    treatment: { modelo: "treatmentPlans", via: (s, t) => s.treatmentId === t.id, lista: false },
+  },
+  appointmentChangeRequest: {
+    patient: { modelo: "patients", via: (r, p) => r.patientId === p.id, lista: false },
+    appointment: { modelo: "appointments", via: (r, a) => r.appointmentId === a.id, lista: false },
+  },
 };
 
 const MODELO_DE: Record<string, string> = {
@@ -112,6 +130,10 @@ const MODELO_DE: Record<string, string> = {
   cumsItem: "cumsItems",
   patientFile: "patientFiles",
   xrayAnalysis: "xrayAnalyses",
+  treatmentPlan: "treatmentPlans",
+  treatmentSession: "treatmentSessions",
+  bookingRequest: "bookingRequests",
+  appointmentChangeRequest: "appointmentChangeRequests",
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -144,6 +166,10 @@ export function crearBase(datos: Datos): BaseDoble {
     cumsItems: datos.cumsItems ?? [],
     patientFiles: datos.patientFiles ?? [],
     xrayAnalyses: datos.xrayAnalyses ?? [],
+    treatmentPlans: datos.treatmentPlans ?? [],
+    treatmentSessions: datos.treatmentSessions ?? [],
+    bookingRequests: datos.bookingRequests ?? [],
+    appointmentChangeRequests: datos.appointmentChangeRequests ?? [],
   };
   const contador: Contador = { llamadas: [] };
 
@@ -241,6 +267,10 @@ export function crearBase(datos: Datos): BaseDoble {
     cumsItem: delegado("cumsItem") as any,
     patientFile: delegado("patientFile") as any,
     xrayAnalysis: delegado("xrayAnalysis") as any,
+    treatmentPlan: delegado("treatmentPlan") as any,
+    treatmentSession: delegado("treatmentSession") as any,
+    bookingRequest: delegado("bookingRequest") as any,
+    appointmentChangeRequest: delegado("appointmentChangeRequest") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo
