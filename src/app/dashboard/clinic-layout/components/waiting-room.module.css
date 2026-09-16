@@ -214,3 +214,52 @@
     animation: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO — activo solo con `rediseno` (y solo en el dashboard: el
+   televisor público /live/[slug] nunca pasa esta prop, así que se queda
+   exactamente como está). Solo LEE `--m2-*`; cero declaraciones propias.
+   Las cifras (contador de la cabecera, posición en la fila, minutos de
+   espera) pasan de letra de máquina a Instrument Sans + tabular-nums —
+   la especificidad de `.wrapRediseno …` le gana a la regla vieja sin
+   tocarla, así que el camino viejo no cambia ni un píxel. */
+.wrapRediseno {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+}
+
+.wrapRediseno .header {
+  background: var(--m2-n1-fondo);
+  border-bottom-color: var(--m2-borde);
+}
+.wrapRediseno .headerTitle { color: var(--m2-texto-3); }
+.wrapRediseno .headerCount {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  background: var(--m2-activo);
+}
+.wrapRediseno .soundBtn {
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-texto-3);
+}
+.wrapRediseno .soundBtn:hover,
+.wrapRediseno .soundBtn[aria-pressed="true"] {
+  background: var(--m2-hover);
+  color: var(--m2-activo);
+  border-color: var(--m2-tarjeta-borde);
+}
+
+.wrapRediseno .empty { color: var(--m2-texto-3); }
+.wrapRediseno .item { border-bottom-color: var(--m2-borde); }
+.wrapRediseno .position {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--m2-activo);
+  background: var(--m2-hover);
+}
+.wrapRediseno .itemPatient { color: var(--m2-texto); }
+.wrapRediseno .itemMeta { color: var(--m2-texto-3); }
+.wrapRediseno .itemWait {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}

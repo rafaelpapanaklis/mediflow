@@ -415,3 +415,108 @@
   background: rgba(255, 255, 255, 0.05);
   color: #E8E8EC;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO — activo solo con `rediseno`. Solo LEE `--m2-*`; cero
+   declaraciones propias. La URL pública sigue siendo un identificador que
+   se copia tal cual (como una clave o un token), así que conserva letra de
+   máquina — la especificidad de `.backdropRediseno …` le gana a la regla
+   vieja sin tocarla, y aun así se deja en `inherit` (Instrument Sans) para
+   no dejar la ÚNICA letra de máquina de todo el rediseño en un slug.
+   ═══════════════════════════════════════════════════════════════════════ */
+.backdropRediseno { background: rgba(0, 0, 0, 0.45); }
+
+.backdropRediseno .dialog {
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra), 0 28px 80px -16px rgba(0, 0, 0, 0.28);
+}
+.backdropRediseno .header { border-bottom-color: var(--m2-borde); }
+.backdropRediseno .headerIcon {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+}
+.backdropRediseno .title { color: var(--m2-texto); }
+.backdropRediseno .subtitle { color: var(--m2-texto-3); }
+.backdropRediseno .closeBtn {
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-texto-3);
+}
+.backdropRediseno .closeBtn:hover { background: var(--m2-hover); color: var(--m2-texto); }
+
+.backdropRediseno .toggleLabel { color: var(--m2-texto); }
+.backdropRediseno .toggleHint { color: var(--m2-texto-3); }
+.backdropRediseno .fieldLabel { color: var(--m2-texto-3); }
+.backdropRediseno .fieldHint { color: var(--m2-texto-3); }
+
+.backdropRediseno .slugInputWrap { border-color: var(--m2-tarjeta-borde); }
+.backdropRediseno .slugInputWrap:focus-within {
+  border-color: var(--m2-activo);
+  box-shadow: var(--m2-foco);
+}
+.backdropRediseno .slugPrefix {
+  font-family: inherit;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-3);
+  border-right-color: var(--m2-tarjeta-borde);
+}
+.backdropRediseno .slugInput {
+  font-family: inherit;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+}
+
+.backdropRediseno .passwordInput {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-texto);
+}
+.backdropRediseno .passwordInput:focus {
+  border-color: var(--m2-activo);
+  box-shadow: var(--m2-foco);
+}
+.backdropRediseno .passwordEye { color: var(--m2-texto-3); }
+.backdropRediseno .passwordEye:hover { background: var(--m2-hover); color: var(--m2-texto); }
+
+.backdropRediseno .previewBlock {
+  background: var(--m2-n1-fondo);
+  border-color: var(--m2-tarjeta-borde);
+}
+.backdropRediseno .previewUrl code {
+  font-family: inherit;
+  background: var(--m2-tarjeta);
+  color: var(--m2-activo);
+  border-color: var(--m2-tarjeta-borde);
+}
+.backdropRediseno .previewBtn {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-texto);
+}
+.backdropRediseno .previewBtn:hover {
+  background: var(--m2-hover);
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-activo);
+}
+.backdropRediseno .qrWrap {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+}
+.backdropRediseno .qrLabel { color: var(--m2-texto-3); }
+
+.backdropRediseno .footer {
+  background: var(--m2-n1-fondo);
+  border-top-color: var(--m2-borde);
+}
+.backdropRediseno .cancelBtn {
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-texto-3);
+}
+.backdropRediseno .cancelBtn:hover { background: var(--m2-hover); color: var(--m2-texto); }
+.backdropRediseno .saveBtn {
+  background: var(--m2-cta-fondo);
+  border-color: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  box-shadow: none;
+}
+.backdropRediseno .saveBtn:hover:not(:disabled) { background: var(--m2-activo); border-color: var(--m2-activo); }

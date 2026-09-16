@@ -5,6 +5,7 @@ import { Bell, BellOff, Clock, Users } from "lucide-react";
 import type { LiveAppointment } from "@/lib/floor-plan/elements";
 import { useTOptional } from "@/i18n/i18n-provider";
 import { publicLiveFallbackT } from "./public-live-t";
+import { CLASES_REDISENO_CLINICA } from "@/components/dashboard/clinica-visual-rediseno/raiz";
 import waitingStyles from "./waiting-room.module.css";
 
 export interface WaitingRoomEntry {
@@ -43,11 +44,16 @@ export function WaitingRoom({
   appointments,
   chairs,
   enableSound = false,
+  rediseno = false,
 }: {
   waiting: WaitingRoomEntry[];
   appointments: LiveAppointment[];
   chairs: ChairInfo[];
   enableSound?: boolean;
+  /** Solo lo pasa el dashboard (con el interruptor `menu-dos-niveles`
+   *  encendido). El televisor público /live/[slug] monta este MISMO
+   *  componente sin pasar esta prop, así que nunca cambia para el paciente. */
+  rediseno?: boolean;
 }) {
   // useTOptional: este componente también se monta en /live (público, sin
   // I18nProvider) — ahí cae al fallback ES en vez de lanzar.
@@ -111,7 +117,13 @@ export function WaitingRoom({
   };
 
   return (
-    <div className={waitingStyles.wrap}>
+    <div
+      className={
+        rediseno
+          ? `${waitingStyles.wrap} ${CLASES_REDISENO_CLINICA} ${waitingStyles.wrapRediseno}`
+          : waitingStyles.wrap
+      }
+    >
       {/* Banner de llamado */}
       {announcement && (
         <div className={waitingStyles.callBanner} role="status" aria-live="polite">
