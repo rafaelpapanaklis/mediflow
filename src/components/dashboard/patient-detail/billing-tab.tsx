@@ -47,6 +47,15 @@ interface BillingTabProps {
   onChargeInvoice: (inv: PatientBillingInvoice) => void;
   /** Badge CFDI "Timbrar" — abre el detalle con el formulario SAT desplegado. */
   onStampInvoice: (inv: PatientBillingInvoice) => void;
+  /**
+   * N6 (MAPA-pacientes §9): esta pestaña siempre se monta junto al rail
+   * (SideCards) — mismo `RAIL_TABS` en patient-detail-client.tsx — y el rail
+   * ya trae su propia tarjeta "Estado de cuenta" con estos MISMOS `summary`.
+   * El mini-resumen de abajo los repetía en tres cajas grandes, así que con
+   * la bandera encendida se deja de pintar aquí; `summary` se sigue
+   * recibiendo por compat mientras la bandera no llega a todas las clínicas.
+   */
+  redesignOn?: boolean;
 }
 
 const MONEY_CELL: CSSProperties = {
@@ -62,24 +71,29 @@ export function BillingTab({
   onOpenInvoice,
   onChargeInvoice,
   onStampInvoice,
+  redesignOn = false,
 }: BillingTabProps) {
   const t = useT();
 
   return (
     <div>
-      {/* Mini-resumen — mismos datos que el card "Estado de cuenta" del rail. */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-          gap: 14,
-          marginBottom: 14,
-        }}
-      >
-        <KpiCard label={t("patients.sideCards.treatmentTotal")} value={fmtMXN(summary.total)} icon={Receipt} />
-        <KpiCard label={t("patients.sideCards.paid")} value={fmtMXN(summary.paid)} icon={CheckCircle2} />
-        <KpiCard label={t("patients.sideCards.pendingBalance")} value={fmtMXN(summary.balance)} icon={Clock} />
-      </div>
+      {/* Mini-resumen — mismos datos que el card "Estado de cuenta" del rail.
+          Duplicado (N6): con la bandera encendida no se pinta aquí, solo en
+          el rail. Se deja el bloque para las clínicas sin la bandera. */}
+      {!redesignOn && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 14,
+            marginBottom: 14,
+          }}
+        >
+          <KpiCard label={t("patients.sideCards.treatmentTotal")} value={fmtMXN(summary.total)} icon={Receipt} />
+          <KpiCard label={t("patients.sideCards.paid")} value={fmtMXN(summary.paid)} icon={CheckCircle2} />
+          <KpiCard label={t("patients.sideCards.pendingBalance")} value={fmtMXN(summary.balance)} icon={Clock} />
+        </div>
+      )}
 
       <CardNew
         noPad
