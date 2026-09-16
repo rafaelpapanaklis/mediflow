@@ -146,7 +146,7 @@ test("una alergia SIN bandera se sigue pintando", () => {
   assert.deepEqual(chips.map((c) => c.texto), ["Alergia a penicilina", "Ibuprofeno", "Mariscos"]);
 });
 
-test("los medicamentos NO se callan por parecerse a una bandera", () => {
+test("un medicamento que dice CUÁL y CUÁNTO no se calla", () => {
   // «Anticoagulantes» es la bandera; «Warfarina 5 mg» dice cuál y cuánto.
   const chips = construirAlertas({
     riskFlags: ["ANTICOAGULANTES"],
@@ -155,6 +155,43 @@ test("los medicamentos NO se callan por parecerse a una bandera", () => {
     currentMedications: ["Warfarina 5 mg"],
   });
   assert.deepEqual(chips.map((c) => c.texto), ["Anticoagulantes", "Warfarina 5 mg"]);
+});
+
+test("«Anticoagulantes» NO sale dos veces (bandera + medicamento)", () => {
+  // Al contestar «toma anticoagulantes: sí», el cuestionario escribe esa misma
+  // palabra en la medicación del paciente Y levanta la bandera.
+  const chips = construirAlertas({
+    riskFlags: ["ANTICOAGULANTES", "BIFOSFONATOS"],
+    allergies: [],
+    chronicConditions: [],
+    currentMedications: ["Anticoagulantes", "Bifosfonatos"],
+  });
+  assert.deepEqual(chips.map((c) => c.texto), ["Anticoagulantes", "Bifosfonatos"]);
+});
+
+test("una alergia PARECIDA a una bandera, pero distinta, NO se calla", () => {
+  // Lo peor que puede hacer una alerta de alergia es esconder una alergia.
+  const chips = construirAlertas({
+    riskFlags: ["ALERGIA_PENICILINA", "DIABETES", "ALERGIA_ANESTESIA"],
+    allergies: ["Penicilina", "Antibióticos sulfamidas", "Alergia a antibióticos"],
+    chronicConditions: ["Diabetes insípida"],
+    currentMedications: [],
+  });
+  const textos = chips.map((c) => c.texto);
+  assert.ok(textos.indexOf("Antibióticos sulfamidas") !== -1, "la alergia a sulfas se perdió");
+  assert.ok(textos.indexOf("Alergia a antibióticos") !== -1, "la alergia a antibióticos se perdió");
+  assert.ok(textos.indexOf("Diabetes insípida") !== -1, "la diabetes insípida se perdió");
+  assert.ok(textos.indexOf("Penicilina") === -1, "«Penicilina» sí era un repetido de la bandera");
+});
+
+test("«Alérgico a la penicilina» también se reconoce como el mismo dato", () => {
+  const chips = construirAlertas({
+    riskFlags: ["ALERGIA_PENICILINA"],
+    allergies: ["Alérgico a la penicilina"],
+    chronicConditions: [],
+    currentMedications: [],
+  });
+  assert.deepEqual(chips.map((c) => c.texto), ["Alergia a penicilina"]);
 });
 
 test("dentro de una misma lista tampoco hay repetidos, con o sin acento", () => {
@@ -208,6 +245,26 @@ test("un valor vacío no revienta", () => {
   assert.equal(aFechaLocal("no soy una fecha"), null);
   assert.equal(fechaCorta(null), "—");
   assert.equal(diasHasta(undefined), null);
+});
+
+// ═══ El orden de las citas del Resumen ═══════════════════════════════
+
+test("con dos citas el MISMO día, la próxima es la de más temprano", () => {
+  // El server manda las citas de la más lejana a la más vieja, y ordenarlas
+  // por DÍA las deja empatadas: `sort` es estable, así que el empate conserva
+  // ese orden y la cita de las 17:00 salía como «la próxima».
+  const instante = (c: any): number => {
+    const t = new Date(c.startsAt ?? c.date).getTime();
+    return isNaN(t) ? 0 : t;
+  };
+  const hoy = new Date();
+  const dia = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+  const tarde = { id: "t", date: dia, startsAt: `${dia}T23:00:00.000Z` };
+  const temprano = { id: "m", date: dia, startsAt: `${dia}T13:00:00.000Z` };
+  const comoLlegan = [tarde, temprano]; // desc, como las manda el server
+  const ordenadas = comoLlegan.slice().sort((a, b) => instante(a) - instante(b));
+  assert.equal(ordenadas[0].id, "m", "la próxima tiene que ser la de más temprano");
+  assert.equal(ordenadas.length, 2, "no se puede perder ninguna cita del día");
 });
 
 // ═══ Los antecedentes de «Nueva consulta» ════════════════════════════

@@ -1441,21 +1441,25 @@ function PatientRowComp({
           >
             <Star size={13} strokeWidth={1.75} fill={p.isVip ? "currentColor" : "none"} aria-hidden />
           </button>
-          {/* El atajo «Ver →» desaparece CON EL REDISEÑO, y solo ahí: costaba
-              ~85px de ancho en cada fila —era, junto con los encabezados que no
-              podían partirse, lo que empujaba la columna «Estado» fuera de la
-              pantalla a 1440 con el menú abierto— y no aportaba nada que no
-              hiciera ya el clic en la fila, que es como abre la ficha todo el
-              mundo. Con la bandera apagada sigue exactamente donde estaba. */}
-          {!rediseno && (
-            <Link
-              href={`/dashboard/patients/${p.id}`}
-              className={styles.actionView}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {t("common.view")} <ArrowRight size={11} strokeWidth={1.75} aria-hidden />
-            </Link>
-          )}
+          {/* Con el rediseño el atajo se queda en la FLECHA sola: el texto
+              «Ver →» costaba ~85px de ancho en cada fila y era, junto con los
+              encabezados que no podían partirse, lo que empujaba la columna
+              «Estado» fuera de la pantalla a 1440 con el menú abierto.
+              Sigue siendo un enlace de verdad, y eso importa: la fila entera
+              es un `onClick` sin `href`, así que si esto desapareciera,
+              Ctrl/⌘+clic y el clic central dejarían de abrir el expediente en
+              una pestaña nueva —recepción abre varios a la vez— y un lector de
+              pantalla se quedaría sin nada que anunciar en la fila. */}
+          <Link
+            href={`/dashboard/patients/${p.id}`}
+            className={rediseno ? `${styles.actionBtn} ${styles.actionOpen}` : styles.actionView}
+            title={rediseno ? t("common.view") : undefined}
+            aria-label={rediseno ? t("patients.row.openRecord", { name: `${p.firstName} ${p.lastName}` }) : undefined}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!rediseno && t("common.view")}
+            <ArrowRight size={rediseno ? 14 : 11} strokeWidth={1.75} aria-hidden />
+          </Link>
         </div>
       </td>
     </tr>

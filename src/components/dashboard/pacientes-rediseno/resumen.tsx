@@ -10,6 +10,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { useT } from "@/i18n/i18n-provider";
 import { fechaCorta, fechaConAno, diasHasta } from "./fechas";
 import s from "./rediseno.module.css";
@@ -134,14 +135,38 @@ export function Resumen({
 }: ResumenProps) {
   const t = useT();
 
-  const proxima = useMemo(
+  // La ficha recibe las citas de la MÁS LEJANA a la más vieja (el server las
+  // pide `startsAt: desc`). Buscar «la próxima» sobre esa lista sin ordenarla
+  // devolvía la cita más lejana en el tiempo: con una cita el 20-oct y otra el
+  // 30-nov, la tarjeta marcaba como próxima la de noviembre.
+  //
+  // Se ordena por `startsAt`, que trae la HORA, y no por el día: con dos citas
+  // el mismo día (09:00 y 17:00) ordenar por días las deja empatadas, y como
+  // `sort` es estable el empate conservaba el orden de llegada — o sea, la de
+  // las 17:00 salía como «la próxima» y la de las 09:00 no salía en ninguna
+  // parte. Ese es justo el día que peor puede salir: el que tiene dos citas.
+  const instante = (c: any): number => {
+    const t = new Date(c.startsAt ?? c.date).getTime();
+    return isNaN(t) ? 0 : t;
+  };
+
+  const futuras = useMemo(
     () =>
-      citas.find((c) => {
-        const d = diasHasta(c.date);
-        return d !== null && d >= 0 && CANCELADAS.indexOf(c.status) === -1;
-      }),
+      citas
+        .filter((c) => {
+          const d = diasHasta(c.date);
+          return d !== null && d >= 0 && CANCELADAS.indexOf(c.status) === -1;
+        })
+        .slice()
+        .sort((a, b) => instante(a) - instante(b)),
     [citas],
   );
+
+  const proxima = futuras[0] ?? null;
+
+  // Las demás citas futuras (las de hoy más tarde, la de la semana que viene)
+  // se siguen pintando: antes solo se enseñaba la primera y el resto se perdía.
+  const otrasFuturas = useMemo(() => futuras.slice(1, 3), [futuras]);
 
   const anteriores = useMemo(
     () =>
@@ -150,6 +175,8 @@ export function Resumen({
           const d = diasHasta(c.date);
           return d !== null && d < 0;
         })
+        .slice()
+        .sort((a, b) => instante(b) - instante(a))
         .slice(0, 3),
     [citas],
   );
@@ -168,21 +195,36 @@ export function Resumen({
       total,
       pct: total > 0 ? Math.min(100, Math.round((hechas / total) * 100)) : 0,
       proxima: activo.nextExpectedDate as string | null,
-      costo: typeof activo.cost === "number" ? activo.cost : null,
+      // `totalCost`, que es como se llama la columna. Con `cost` (que no
+      // existe) la fila del costo no se pintaba nunca, y `any[]` hacía que
+      // `tsc` no dijera nada.
+      costo: typeof activo.totalCost === "number" ? activo.totalCost : null,
     };
   }, [tratamientos]);
 
   const cobros = useMemo(
     () =>
       (facturas || [])
+        // Las CANCELADAS fuera, igual que en los totales de la ficha: cancelar
+        // NO pone el saldo a cero, así que una factura anulada de $5,000 se
+        // pintaba «Pendiente» al lado de un «Estado de cuenta» que decía «sin
+        // saldo». Es el mismo defecto que ya costó una vez (MF-0151).
+        .filter((inv: any) => !isVoidedInvoice(inv))
         .slice()
-        .sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt)))
+        // Por TIEMPO, no por texto: `createdAt` llega como Date y compararlo
+        // en cadena ordenaba por el nombre del día de la semana («Fri» antes
+        // que «Mon»), así que los «últimos tres» eran tres cualesquiera.
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 3),
     [facturas],
   );
 
   const pct = finanzas.total > 0 ? Math.round((finanzas.pagado / finanzas.total) * 100) : 0;
-  const emergencia = [patient.emergencyContactName, patient.emergencyContactPhone]
+  const emergencia = [
+    patient.emergencyContactName,
+    patient.emergencyContactPhone,
+    patient.emergencyContactRelation,
+  ]
     .filter(Boolean)
     .join(" · ");
 
@@ -388,7 +430,8 @@ export function Resumen({
           {proxima || anteriores.length > 0 ? (
             <div className={s.lista}>
               {proxima && filaCita(proxima, true)}
-              {anteriores.map((c) => filaCita(c, false))}
+              {otrasFuturas.map((c) => filaCita(c, false))}
+              {anteriores.slice(0, Math.max(1, 3 - otrasFuturas.length)).map((c) => filaCita(c, false))}
             </div>
           ) : (
             <Vacio icono={CalendarDays} titulo={t("pacientesRediseno.resumen.sinCitas")} />

@@ -165,7 +165,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // activas (o todas, si la clínica está en trial vigente) y reusamos esa
   // lista para Pediatría / Periodoncia / prefill endo. Reemplaza tres
   // llamadas previas a canAccessModule() — mismo contrato, una query.
-  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount, portalAccountLink, portalNotifPrefsRow, rediseno] = await Promise.all([
+  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount, portalAccountLink, portalNotifPrefsRow] = await Promise.all([
     getActiveClinicModuleKeys(user.clinicId),
     getPatientActivityCounts({ clinicId: user.clinicId, patientId: patient.id }),
     // Cuestionario de salud vigente (anamnesis WS1-T2). .catch(()=>null) lo
@@ -206,14 +206,22 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       select: { account: { select: { notifPrefs: true } } },
       orderBy: { createdAt: "asc" },
     }).catch(() => null),
-    // REDISEÑO DE PACIENTES — el MISMO interruptor por clínica que enciende el
-    // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`).
-    // A propósito, y no uno propio: Rafael está probando «el diseño nuevo» como
-    // una sola cosa, y dos interruptores serían dos cosas que recordar apagar.
-    // Falla cerrado — sin la tabla, sin fila o con error devuelve false y la
-    // pantalla se pinta exactamente como hoy. El clinicId sale de la sesión.
-    menuDosNivelesEncendido(user.clinicId),
   ]);
+
+  // REDISEÑO DE PACIENTES — el MISMO interruptor por clínica que enciende el
+  // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`).
+  // A propósito, y no uno propio: Rafael está probando «el diseño nuevo» como
+  // una sola cosa, y dos interruptores serían dos cosas que recordar apagar.
+  // Falla cerrado — sin la tabla, sin fila o con error devuelve false y la
+  // pantalla se pinta exactamente como hoy. El clinicId sale de la sesión.
+  //
+  // FUERA del Promise.all de arriba, y no por gusto: ese lote ya iba en siete
+  // consultas y la regla de la casa es «menos de 7 por Promise.all, que el
+  // pooler se satura». Además, en frío este interruptor son DOS viajes (el
+  // to_regclass y la fila), así que el lote habría llegado a nueve. No depende
+  // de nada de arriba, y su respuesta vive 60 s en memoria por clínica: la
+  // inmensa mayoría de las cargas no llegan ni a tocar la base.
+  const rediseno = await menuDosNivelesEncendido(user.clinicId);
   // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
   // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
   const linkedPortalAccount = portalAccountLink?.account ?? null;

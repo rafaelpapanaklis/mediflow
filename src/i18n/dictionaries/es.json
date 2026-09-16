@@ -2333,7 +2333,8 @@
       "call": "Llamar",
       "schedule": "Agendar",
       "removeVip": "Quitar VIP",
-      "markVip": "Marcar VIP"
+      "markVip": "Marcar VIP",
+      "openRecord": "Abrir el expediente de {name}"
     },
     "status": {
       "active": "Activo",

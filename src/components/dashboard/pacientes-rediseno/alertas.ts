@@ -19,27 +19,57 @@ import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
  * de riesgo (es la que viene del cuestionario firmado y la que el doctor
  * reconoce), y se calla el texto libre que dice lo mismo.
  *
- * El emparejado es por PALABRA CLAVE y sobre texto normalizado (sin acentos,
- * en minúsculas), no por igualdad: así «Penicilina», «Alergia a penicilina» y
- * «Alérgico a la penicilina» caen todos bajo la bandera ALERGIA_PENICILINA, e
- * «Hipertensión controlada» bajo HIPERTENSION. Lo que NO se parezca a ninguna
- * bandera se sigue pintando: una alergia al ibuprofeno escrita a mano no se
- * pierde porque no exista una bandera para ella.
+ * El emparejado es sobre el texto ENTERO ya normalizado (sin acentos, en
+ * minúsculas, sin el «alergia a» de delante y sin una coletilla conocida del
+ * final): así «Penicilina», «Alergia a penicilina» y «Alérgico a la
+ * penicilina» caen bajo ALERGIA_PENICILINA, e «Hipertensión controlada» bajo
+ * HIPERTENSION. Lo que no diga exactamente lo mismo se sigue pintando —una
+ * alergia al ibuprofeno, o a «antibióticos sulfamidas», no se pierde.
  */
 
-/** Palabras que delatan a cada bandera dentro de un texto libre. */
-const CLAVES_POR_BANDERA: Record<string, string[]> = {
-  ALERGIA_ANESTESIA: ["anestes"],
-  ALERGIA_PENICILINA: ["penicilina", "antibiotic"],
+/**
+ * El término canónico de cada bandera: lo que el texto libre tiene que DECIR
+ * para considerarse la misma cosa. Se compara ya normalizado.
+ *
+ * Es una lista corta y explícita a propósito. La primera versión de esto
+ * buscaba trozos de palabra dentro del texto (`indexOf`), y eso escondía cosas
+ * que NO eran repetidos: con la bandera de penicilina puesta, una alergia
+ * escrita a mano como «antibióticos sulfamidas» desaparecía de la cabecera
+ * porque contenía «antibiotic». En una alerta de alergia, esconder de más es
+ * el peor error posible: aquí se prefiere un chip repetido a una alergia que
+ * no se ve.
+ */
+const TERMINOS_POR_BANDERA: Record<string, string[]> = {
+  ALERGIA_ANESTESIA: ["anestesicos locales", "anestesicos", "anestesia local"],
+  ALERGIA_PENICILINA: ["penicilina"],
   ALERGIA_LATEX: ["latex"],
-  HIPERTENSION: ["hipertension"],
-  DIABETES: ["diabet"],
-  CARDIOPATIA: ["cardiopat", "marcapaso"],
-  COAGULOPATIA: ["coagulac", "coagulopat"],
-  ANTICOAGULANTES: ["anticoagulante", "warfarina", "acenocumarol"],
-  BIFOSFONATOS: ["bifosfonato"],
-  EMBARAZO: ["embarazo", "gestacion", "lactancia"],
+  HIPERTENSION: ["hipertension", "hipertension arterial"],
+  DIABETES: ["diabetes"],
+  CARDIOPATIA: ["cardiopatia", "marcapasos", "cardiopatia o marcapasos"],
+  COAGULOPATIA: ["trastorno de coagulacion", "trastornos de coagulacion", "coagulopatia"],
+  ANTICOAGULANTES: ["anticoagulantes"],
+  BIFOSFONATOS: ["bifosfonatos"],
+  EMBARAZO: ["embarazo", "lactancia", "embarazo o lactancia"],
 };
+
+/**
+ * Coletillas que no cambian de qué se está hablando: «Hipertensión» e
+ * «Hipertensión controlada» son lo mismo, y la cabecera las pintaba pegadas.
+ * Cualquier otra cosa detrás del término NO es una coletilla —«Diabetes
+ * insípida» no es la diabetes de la bandera— y se sigue pintando.
+ */
+const COLETILLAS = [
+  "controlada", "controlado", "no controlada", "no controlado",
+  "en tratamiento", "tratada", "tratado", "compensada", "compensado",
+  "tipo 1", "tipo 2", "tipo i", "tipo ii",
+];
+
+/** Lo que sobra al quitar «alergia a», «alérgico al», etc. */
+const PREFIJOS_ALERGIA = [
+  "alergia a la ", "alergia al ", "alergia a ", "alergia ",
+  "alergico a la ", "alergico al ", "alergico a ",
+  "alergica a la ", "alergica al ", "alergica a ",
+];
 
 export type TonoAlerta = "peligro" | "alerta" | "violeta" | "exito";
 
@@ -69,14 +99,34 @@ export function normalizar(texto: string): string {
     .trim();
 }
 
-/** ¿Este texto libre ya lo está diciendo una de las banderas presentes? */
+/** Quita el «alergia a…» de delante, si lo trae. */
+function sinPrefijoAlergia(n: string): string {
+  for (let i = 0; i < PREFIJOS_ALERGIA.length; i++) {
+    const p = PREFIJOS_ALERGIA[i];
+    if (n.indexOf(p) === 0) return n.slice(p.length).trim();
+  }
+  return n;
+}
+
+/**
+ * ¿Este texto libre dice EXACTAMENTE lo mismo que una de las banderas
+ * presentes? Solo entonces se calla. Compara el texto entero (sin el «alergia
+ * a» de delante y sin una coletilla del final) contra el término canónico:
+ * nada de buscar trozos de palabra sueltos dentro de la frase.
+ */
 function loCubreUnaBandera(texto: string, banderas: string[]): boolean {
-  const n = normalizar(texto);
+  const n = sinPrefijoAlergia(normalizar(texto));
   if (!n) return true; // vacío: nada que pintar
   return banderas.some((bandera) => {
-    const claves = CLAVES_POR_BANDERA[bandera];
-    if (!claves) return false;
-    return claves.some((clave) => n.indexOf(clave) !== -1);
+    const terminos = TERMINOS_POR_BANDERA[bandera];
+    if (!terminos) return false;
+    return terminos.some((t) => {
+      if (n === t) return true;
+      // «Hipertensión controlada» = «Hipertensión» + coletilla.
+      if (n.indexOf(t + " ") !== 0) return false;
+      const resto = n.slice(t.length + 1).trim();
+      return COLETILLAS.indexOf(resto) !== -1;
+    });
   });
 }
 
@@ -124,9 +174,14 @@ export function construirAlertas(entrada: EntradaAlertas): ChipAlerta[] {
     });
 
   sinRepetidos(entrada.currentMedications)
-    // Los medicamentos NO se comparan contra las banderas: «Anticoagulantes»
-    // (bandera) y «Warfarina 5 mg» (medicamento) son dos datos distintos —
-    // el segundo dice cuál y cuánto, y eso el doctor lo necesita ver.
+    // Un medicamento se calla SOLO si es literalmente el nombre de la bandera.
+    // Al contestar «toma anticoagulantes: sí», el cuestionario escribe la
+    // palabra «Anticoagulantes» en la medicación del paciente Y levanta la
+    // bandera ANTICOAGULANTES, cuyo texto es esa misma palabra: sin esto, la
+    // cabecera pintaba el mismo chip dos veces. Lo que dice CUÁL y CUÁNTO
+    // («Warfarina 5 mg») no es un repetido y se sigue pintando: el doctor lo
+    // necesita ver.
+    .filter((m) => !loCubreUnaBandera(m, banderas))
     .forEach((m) => {
       chips.push({ clave: `medicamento-${normalizar(m)}`, texto: m, tono: "violeta", esRiesgo: false });
     });

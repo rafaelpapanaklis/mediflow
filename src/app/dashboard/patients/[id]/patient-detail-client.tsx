@@ -2708,6 +2708,10 @@ export function PatientDetailClient({
                           <DentalForm
                             patientId={patient.id}
                             isChild={!!patient.isChild}
+                            // También al EDITAR una consulta ya escrita: sin
+                            // esto, la clínica con el diseño nuevo volvía a ver
+                            // los emoji sueltos al abrir una nota vieja.
+                            rediseno={rediseno}
                             initialRecord={{
                               id: record.id,
                               subjective: record.subjective ?? null,

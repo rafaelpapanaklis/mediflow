@@ -2333,7 +2333,8 @@
       "call": "Call",
       "schedule": "Schedule",
       "removeVip": "Remove VIP",
-      "markVip": "Mark VIP"
+      "markVip": "Mark VIP",
+      "openRecord": "Open {name}'s record"
     },
     "status": {
       "active": "Active",

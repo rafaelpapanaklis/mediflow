@@ -28,7 +28,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
 import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
-import { construirAlertas } from "@/components/dashboard/pacientes-rediseno/alertas";
+import { construirAlertas, hayRiesgo } from "@/components/dashboard/pacientes-rediseno/alertas";
 import { fechaCorta } from "@/components/dashboard/pacientes-rediseno/fechas";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
@@ -167,7 +167,7 @@ export function HeroCard({
 
   // Los chips, SIN repetidos: ver `construirAlertas`. Solo con el rediseño —
   // apagado, la cabecera pinta exactamente las mismas listas de siempre.
-  const alertas = rediseno
+  const alertasTodas = rediseno
     ? construirAlertas({
         riskFlags,
         allergies: patient.allergies,
@@ -175,6 +175,15 @@ export function HeroCard({
         currentMedications: patient.currentMedications,
       })
     : [];
+  // Las de riesgo (banderas y alergias) se pintan TODAS: son dato de
+  // seguridad. Padecimientos y medicación se cortan en seis entre las dos,
+  // como la cabecera de siempre cortaba en tres cada una — un paciente con
+  // doce crónicas y diez medicamentos metía veintidós chips y se comía la
+  // pantalla del teléfono entera.
+  const alertas = alertasTodas.filter((c) => c.esRiesgo);
+  const noRiesgo = alertasTodas.filter((c) => !c.esRiesgo);
+  const noRiesgoVisibles = noRiesgo.slice(0, 6);
+  const noRiesgoOcultos = noRiesgo.slice(6);
   const tonoChip: Record<string, string> = {
     peligro: styles.danger,
     alerta: styles.warning,
@@ -452,7 +461,7 @@ export function HeroCard({
 
       <div className={styles.heroAlerts} role="group" aria-label={t("patients.heroCard.alertsAria")}>
         {/* ── Rediseño: una sola lista, ya sin repetidos ─────────────── */}
-        {rediseno && alertas.map((c) => (
+        {rediseno && alertas.concat(noRiesgoVisibles).map((c) => (
           <span key={c.clave} className={`${styles.alertChip} ${tonoChip[c.tono] ?? ""}`}>
             {c.tono === "peligro" ? (
               <AlertTriangle size={11} strokeWidth={1.75} aria-hidden />
@@ -464,7 +473,16 @@ export function HeroCard({
             {c.texto}
           </span>
         ))}
-        {rediseno && alertas.length === 0 && (
+        {rediseno && noRiesgoOcultos.length > 0 && (
+          <span className={styles.alertChip} title={noRiesgoOcultos.map((c) => c.texto).join(", ")}>
+            {t("patients.heroCard.moreCount", { count: noRiesgoOcultos.length })}
+          </span>
+        )}
+        {/* «Sin alergias conocidas» habla de ALERGIAS, no de todo lo demás:
+            un paciente asmático sin ninguna alergia tiene que seguir viendo
+            este chip. El chip existe justo para distinguir «se le preguntó y
+            no tiene» de «no lo sabemos». */}
+        {rediseno && !hayRiesgo(alertas) && (
           <span className={`${styles.alertChip} ${styles.success}`}>
             <Check size={11} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.noAllergies")}
           </span>
