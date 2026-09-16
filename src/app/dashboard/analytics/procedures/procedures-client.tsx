@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, Minus, Sparkles, Database } from "lucide-reac
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
+import { ProceduresRediseno } from "./procedures-rediseno";
 
 interface ProcedureRow {
   type: string;
@@ -16,13 +17,13 @@ interface ProcedureRow {
   slowest: { name: string; avgMin: number; count: number } | null;
 }
 
-interface ApiResponse {
+export interface ApiResponse {
   insufficientData: boolean;
   sampleSize: number;
   procedures: ProcedureRow[];
 }
 
-export function ProceduresClient() {
+export function ProceduresClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +65,12 @@ export function ProceduresClient() {
     } finally {
       setAiLoading(false);
     }
+  }
+
+  if (rediseno) {
+    return (
+      <ProceduresRediseno data={data} loading={loading} aiInsight={aiInsight} aiLoading={aiLoading} requestAiInsight={requestAiInsight} />
+    );
   }
 
   return (

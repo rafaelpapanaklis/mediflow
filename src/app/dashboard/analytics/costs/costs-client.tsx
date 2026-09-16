@@ -5,8 +5,9 @@ import { Pencil, Sparkles, X, Save, DollarSign, TrendingUp, TrendingDown } from 
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
+import { CostsRediseno } from "./costs-rediseno";
 
-interface ResourceRow {
+export interface ResourceRow {
   resourceId: string;
   name: string;
   monthlyRent: number;
@@ -19,13 +20,13 @@ interface ResourceRow {
   configured: boolean;
 }
 
-interface ApiResponse {
+export interface ApiResponse {
   month: string;
   resources: ResourceRow[];
   totals: { revenue: number; cost: number; margin: number };
 }
 
-function fmtMXN(n: number): string {
+export function fmtMXN(n: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n);
 }
 
@@ -34,7 +35,7 @@ function currentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function CostsClient() {
+export function CostsClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -88,6 +89,34 @@ export function CostsClient() {
     } finally {
       setAiLoading(false);
     }
+  }
+
+  if (rediseno) {
+    return (
+      <>
+        <CostsRediseno
+          month={month}
+          setMonth={setMonth}
+          data={data}
+          loading={loading}
+          aiInsight={aiInsight}
+          aiLoading={aiLoading}
+          requestAiInsight={requestAiInsight}
+          onEdit={setEditing}
+        />
+        {/* El diálogo de costos es el de hoy: mismo componente, mismos campos. */}
+        {editing && (
+          <EditCostModal
+            resource={editing}
+            onClose={() => setEditing(null)}
+            onSaved={() => {
+              setEditing(null);
+              refetch();
+            }}
+          />
+        )}
+      </>
+    );
   }
 
   return (

@@ -20,9 +20,10 @@ import {
 } from "recharts";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
+import { CrmRediseno } from "./crm-rediseno";
 
 /* ─── Tipos ─── */
-interface ValueRow {
+export interface ValueRow {
   id: string;
   name: string;
   patientNumber: string;
@@ -34,7 +35,7 @@ interface ValueRow {
   lastVisit: string | null;
   nextAppointment: string | null;
 }
-interface ValueResp {
+export interface ValueResp {
   totals: { invoiced: number; paid: number; balance: number; patients: number; payingPatients: number; avgLtv: number };
   top: ValueRow[];
 }
@@ -47,25 +48,25 @@ interface ChurnRow {
   noShows: number;
   reasons: string[];
 }
-interface ChurnResp { recallMonths: number; count: number; patients: ChurnRow[] }
+export interface ChurnResp { recallMonths: number; count: number; patients: ChurnRow[] }
 interface CohortRow {
   month: string;
   signups: number;
   retention: Array<{ month: number; eligible: number; retained: number; pct: number | null }>;
 }
-interface CohortResp { cohorts: CohortRow[]; milestones: number[] }
+export interface CohortResp { cohorts: CohortRow[]; milestones: number[] }
 
-type SortKey = "paid" | "invoiced" | "balance" | "visits";
+export type SortKey = "paid" | "invoiced" | "balance" | "visits";
 
 /* ─── Helpers ─── */
-function money(n: number): string {
+export function money(n: number): string {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(n || 0);
 }
-function dateShort(iso: string | null): string {
+export function dateShort(iso: string | null): string {
   if (!iso) return "—";
   return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
 }
-function waLink(phone: string | null): string | null {
+export function waLink(phone: string | null): string | null {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, "");
   if (!digits) return null;
@@ -75,7 +76,7 @@ function waLink(phone: string | null): string | null {
 const MILESTONE_COLORS: Record<number, string> = { 1: "#7c3aed", 3: "#2563eb", 6: "#059669", 12: "#d97706" };
 
 /* ─── Componente ─── */
-export function CrmClient() {
+export function CrmClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const [value, setValue] = useState<ValueResp | null>(null);
   const [churn, setChurn] = useState<ChurnResp | null>(null);
   const [cohorts, setCohorts] = useState<CohortResp | null>(null);
@@ -114,6 +115,22 @@ export function CrmClient() {
   }, [cohorts]);
 
   const milestones = cohorts?.milestones ?? [1, 3, 6, 12];
+
+  if (rediseno) {
+    return (
+      <CrmRediseno
+        value={value}
+        churn={churn}
+        cohorts={cohorts}
+        loading={loading}
+        sortKey={sortKey}
+        setSortKey={setSortKey}
+        topSorted={topSorted}
+        chartData={chartData}
+        milestones={milestones}
+      />
+    );
+  }
 
   return (
     <AnalyticsLayout

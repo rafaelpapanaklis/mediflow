@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { OccupancyClient } from "./occupancy-client";
 import { getServerT } from "@/i18n/server";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export const metadata: Metadata = { title: "Ocupación — Analytics" };
 
@@ -16,7 +17,12 @@ export default async function OccupancyPage() {
     return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.occupancyPage.adminOnly")}</div>;
   }
 
-  const [resources, doctors] = await Promise.all([
+  // REDISEÑO DE ANALÍTICA — el MISMO interruptor por clínica que enciende el
+  // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`).
+  // El layout del panel ya lo resolvió en este mismo request y la respuesta
+  // vive 60 s en memoria por clínica: aquí no hay viaje a la base. Falla
+  // cerrado: apagado, la pantalla se pinta exactamente como hoy.
+  const [resources, doctors, rediseno] = await Promise.all([
     prisma.resource.findMany({
       where: { clinicId: user.clinicId, isActive: true, kind: { in: [...TREATMENT_KINDS] } },
       select: { id: true, name: true },
@@ -27,7 +33,8 @@ export default async function OccupancyPage() {
       select: { id: true, firstName: true, lastName: true },
       orderBy: { firstName: "asc" },
     }),
+    menuDosNivelesEncendido(user.clinicId),
   ]);
 
-  return <OccupancyClient key={user.clinicId} resources={resources} doctors={doctors} />;
+  return <OccupancyClient key={user.clinicId} resources={resources} doctors={doctors} rediseno={rediseno} />;
 }
