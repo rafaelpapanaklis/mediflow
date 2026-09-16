@@ -160,6 +160,7 @@
     "test:sabina-conoce-clinica": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/conoce-clinica.test.ts",
     "test:sabina-resumen": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/resumen-clinica.test.ts",
     "//test:sabina-caja": "La consulta de Caja de Sabina (ws1-t3): el candado es la bandera canAccessCaja y no la key (hallazgo 23), NORTE no ve al SUR, los numeros son los de getCajaState de la pantalla, el esperado siempre dice que es un calculo, pacientes restringidos enmascarados y la regla de sin cortar compartida con la pantalla.",
+    "test:sabina-sedes": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/comparar-sedes.test.ts",
     "test:sabina-caja": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/caja.test.ts",
     "test:sabina-numeros": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/numeros-vs-pantalla.test.ts",
     "test:sabina-acciones-agenda": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/agenda-acciones.test.ts",

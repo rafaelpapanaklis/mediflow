@@ -49,6 +49,8 @@ export interface Datos {
   xrayAnalyses?: Fila[];
   /** ws1-t5: el catálogo de precios y duraciones de la clínica. */
   procedureCatalogs?: Fila[];
+  /** ws1-t4 (comparar sedes): el recorte de Sabina por (usuario, clínica). */
+  sabinaUserPermissions?: Fila[];
 }
 
 interface Relacion {
@@ -115,6 +117,7 @@ const MODELO_DE: Record<string, string> = {
   patientFile: "patientFiles",
   xrayAnalysis: "xrayAnalyses",
   procedureCatalog: "procedureCatalogs",
+  sabinaUserPermission: "sabinaUserPermissions",
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -148,6 +151,7 @@ export function crearBase(datos: Datos): BaseDoble {
     patientFiles: datos.patientFiles ?? [],
     xrayAnalyses: datos.xrayAnalyses ?? [],
     procedureCatalogs: datos.procedureCatalogs ?? [],
+    sabinaUserPermissions: datos.sabinaUserPermissions ?? [],
   };
   const contador: Contador = { llamadas: [] };
 
@@ -246,6 +250,10 @@ export function crearBase(datos: Datos): BaseDoble {
     patientFile: delegado("patientFile") as any,
     xrayAnalysis: delegado("xrayAnalysis") as any,
     procedureCatalog: delegado("procedureCatalog") as any,
+    // Sin filas se comporta como «no hay recorte guardado», que es lo mismo
+    // que dice `leerAjustesSabina` ante una tabla vacía: Sabina con todo lo
+    // del usuario. Las pruebas de sedes sí siembran filas aquí.
+    sabinaUserPermission: delegado("sabinaUserPermission") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo

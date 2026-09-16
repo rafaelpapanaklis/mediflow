@@ -10,6 +10,7 @@ import { accionCobrarFactura } from "./dinero/cobrar-factura";
 import { accionCrearFactura } from "./dinero/crear-factura";
 import { facturasDePaciente } from "./dinero/facturas-de-paciente";
 import { caja } from "./tools/caja";
+import { compararSedes } from "./tools/comparar-sedes";
 import { recetas } from "./tools/recetas";
 import { estudiosDelPaciente } from "./tools/estudios-del-paciente";
 import { analisisYNotasDeEstudio } from "./tools/analisis-y-notas-de-estudio";
@@ -46,6 +47,10 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   proponerHorarios,
   facturasDePaciente,
   caja,
+  // comparar_sedes (ws1-t4) — la ÚNICA que mira más de una clínica. Quién puede
+  // ver qué sede se decide en ./sedes.ts, desde la sesión y en un solo sitio;
+  // sus parámetros no nombran ninguna sede. Solo lee.
+  compararSedes,
   recetas,
   estudiosDelPaciente,
   analisisYNotasDeEstudio,

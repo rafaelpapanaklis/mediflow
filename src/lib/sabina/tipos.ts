@@ -133,6 +133,12 @@ export interface SabinaDb {
   clinic: {
     findFirst(args: any): Promise<any>;
     findUnique(args: any): Promise<any>;
+    /**
+     * Los NOMBRES de varias sedes de golpe (comparar sedes, ./sedes.ts). Va con
+     * `id: { in: [...] }` y la lista ya calculada en el servidor — nunca con un
+     * id que venga del modelo.
+     */
+    findMany(args: any): Promise<any[]>;
   };
   /** Caja: la lee `@/lib/caja` con este mismo cliente (ver `CajaDb`). */
   cashRegister: {
@@ -187,6 +193,15 @@ export interface SabinaDb {
   };
   xrayAnalysis: {
     findMany(args: any): Promise<any[]>;
+  };
+  /**
+   * Lo que el Super Admin le deja hacer a Sabina en nombre de cada usuario.
+   * Lo lee `leerAjustesSabina` (./ajustes-sabina), y `./sedes.ts` lo necesita
+   * por SEDE: el recorte de una sede hermana es la fila de SU ficha, no la de
+   * la sede activa.
+   */
+  sabinaUserPermission: {
+    findFirst(args: any): Promise<any>;
   };
   $queryRaw(query: any): Promise<any[]>;
 }
