@@ -24,6 +24,8 @@ import { AgendaNuevaProvider, useAgendaNueva } from "./contexto-agenda-nueva";
 import { PanelCita } from "./panel-cita";
 import { PanelHuecos } from "./panel-huecos";
 import { VistaDia } from "./vista-dia";
+import { VistaSemana } from "./vista-semana";
+import { VistaMes } from "./vista-mes";
 import s from "./agenda-nueva.module.css";
 
 export function AgendaNueva() {
@@ -44,14 +46,12 @@ function Armazon() {
       <div className={s.cuerpo}>
         <div className={s.zonaAgenda}>
           {/* ── Las tres vistas ──
-              Día es de ws1-t1. Semana y Mes las trae ws1-t2 en
-              `feat/agenda-semana-mes`: cuando lleguen, sus dos componentes
-              sustituyen los dos `null` de abajo y no hace falta tocar nada
-              más de este archivo. Consumen la misma `Cuadricula`, la misma
-              `TarjetaCita` y el mismo `useAgendaNueva()`. */}
+              Día es de ws1-t1; Semana y Mes, de ws1-t2. Las tres comparten la
+              misma `Cuadricula`, la misma `TarjetaCita`, los mismos tokens y
+              el mismo `useAgendaNueva()`: no hay una rejilla por vista. */}
           {ag.vista === "dia" && <VistaDia />}
-          {ag.vista === "semana" && null /* ws1-t2: <VistaSemana /> */}
-          {ag.vista === "mes" && null /* ws1-t2: <VistaMes /> */}
+          {ag.vista === "semana" && <VistaSemana />}
+          {ag.vista === "mes" && <VistaMes />}
         </div>
 
         {ag.panel === "cita" && <PanelCita />}
