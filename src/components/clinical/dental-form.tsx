@@ -194,11 +194,14 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
 
   const [treatmentPlans, setTreatmentPlans] = useState<any[]>([]);
   useEffect(() => {
+    // Con el rediseño activo ya no se pinta la línea de tiempo de ortodoncia
+    // (único consumidor de treatmentPlans aquí), así que esta consulta sobra.
+    if (rediseno) return;
     fetch(`/api/treatments?patientId=${patientId}`)
       .then(r => r.ok ? r.json() : [])
       .then(d => setTreatmentPlans(Array.isArray(d) ? d : []))
       .catch(() => {});
-  }, [patientId]);
+  }, [patientId, rediseno]);
 
   const orthoMilestones = useMemo(() => {
     const plan = treatmentPlans.find(p => {
@@ -669,7 +672,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           </button>
         </div>
       )}
-      {orthoMilestones && orthoMilestones.months.length > 0 && (
+      {/* Rafael: la línea de tiempo de ortodoncia no hace falta en Nueva consulta.
+          Solo se quita con el rediseño (menu-dos-niveles); con la bandera apagada
+          sigue exactamente igual que hoy. */}
+      {!rediseno && orthoMilestones && orthoMilestones.months.length > 0 && (
         <CardNew title={`${t("clinical.dentalForm.timelineTitle")} — ${orthoMilestones.plan.name}`} sub={t("clinical.dentalForm.orthoPlanMonthly")}>
           <TreatmentTimeline milestones={orthoMilestones.months} />
         </CardNew>
