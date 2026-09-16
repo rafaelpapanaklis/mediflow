@@ -99,9 +99,14 @@ export async function buildPrescriptionPdf(
   });
   if (!rx) return null;
 
-  // Firma electrónica FIEL (si el doctor firmó la receta al emitirla).
+  // Firma electrónica (si el doctor firmó la receta al emitirla).
+  //
+  // `signerUserId: rx.doctorId` NO es decorativo: sin él, el PDF ponía el sello
+  // en cuanto existiera CUALQUIER firma con ese docId, viniera de quien viniera.
+  // Un colega podía sellar la receta de otro médico con una llamada a
+  // /api/signature/sign y el PDF lo daba por firmado por su autor.
   const signed = await prisma.signedDocument.findFirst({
-    where: { docType: "PRESCRIPTION", docId: rx.id },
+    where: { docType: "PRESCRIPTION", docId: rx.id, signerUserId: rx.doctorId },
     select: { signedAt: true },
     orderBy: { signedAt: "desc" },
   });

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decryptPrivateKey } from "@/lib/signature/envelope";
 import { signDetached, requestTsaTimestamp } from "@/lib/signature/fiel";
+import { canonicalPrescriptionContent } from "@/lib/signature/contenido-receta";
 import { logMutation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ const VALID_DOC_TYPES = new Set(["PRESCRIPTION", "MEDICAL_RECORD", "CONSENT", "O
  *   {
  *     docType: "PRESCRIPTION"|"MEDICAL_RECORD"|"CONSENT"|"OTHER",
  *     docId: string,
- *     content: object | string,   // JSON canónico del doc
+ *     content: object | string,   // JSON canónico del doc — IGNORADO si docType=PRESCRIPTION
  *     keyPassword: string,        // password de la .key SAT
  *   }
  *
@@ -26,6 +27,20 @@ const VALID_DOC_TYPES = new Set(["PRESCRIPTION", "MEDICAL_RECORD", "CONSENT", "O
  *  - clinicId siempre del User (getCurrentUser), nunca del body.
  *  - El doc referenciado (docId) DEBE pertenecer a la misma clinicId
  *    si es PRESCRIPTION o MEDICAL_RECORD; lo validamos antes de firmar.
+ *
+ * ── RECETAS (15-sep-2026) ─────────────────────────────────────────────────
+ * Para docType=PRESCRIPTION esta ruta ya NO firma lo que manda el navegador:
+ *  - relee la receta entera de la base y arma el contenido ahí
+ *    (@/lib/signature/contenido-receta), ignorando `body.content`;
+ *  - exige que quien firma sea EL MÉDICO DE LA RECETA — antes, cualquier
+ *    DOCTOR o ADMIN de la clínica podía sellar la receta de un colega con una
+ *    llamada desde la consola del navegador;
+ *  - no firma recetas anuladas.
+ *
+ * 🔴 LO QUE SIGUE SIN ESTAR: nadie comprueba que el certificado lo emitió el
+ * SAT ni que no está revocado, y el sello de tiempo es un stub que devuelve
+ * null. Un certificado hecho en casa con su propia llave sigue pasando. Ver
+ * REPORTE-ws1-t1.md — es un proyecto aparte, no un cabo suelto olvidado.
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -45,7 +60,9 @@ export async function POST(req: NextRequest) {
   if (!body.docId || typeof body.docId !== "string") {
     return NextResponse.json({ error: "docId_required" }, { status: 400 });
   }
-  if (body.content === undefined || body.content === null) {
+  // En recetas el contenido lo arma el servidor, así que no se exige. En el
+  // resto de documentos sigue siendo el del cliente y sí hace falta.
+  if (docType !== "PRESCRIPTION" && (body.content === undefined || body.content === null)) {
     return NextResponse.json({ error: "content_required" }, { status: 400 });
   }
   if (!body.keyPassword) {
@@ -53,12 +70,33 @@ export async function POST(req: NextRequest) {
   }
 
   // Validación multi-tenant del doc referenciado.
+  //
+  // En recetas, además del tenant: dueño, estado y CONTENIDO. `contenidoServidor`
+  // queda con el texto a firmar armado desde la base; si tiene valor, manda él.
+  let contenidoServidor: string | null = null;
   if (docType === "PRESCRIPTION") {
     const rx = await prisma.prescription.findFirst({
       where: { id: body.docId, clinicId: user.clinicId },
-      select: { id: true },
+      // `orderBy` aunque `canonicalPrescriptionContent` reordene: que la lectura
+      // ya llegue estable ahorra tener que confiar en dos sitios a la vez.
+      include: { items: { orderBy: { createdAt: "asc" } } },
     });
     if (!rx) return NextResponse.json({ error: "prescription_not_found" }, { status: 404 });
+    // Firmar la receta de otro médico es falsificar su firma, aunque sea de la
+    // misma clínica. Ni ADMIN ni SUPER_ADMIN tienen excepción aquí.
+    if (rx.doctorId !== user.id) {
+      return NextResponse.json({
+        error: "not_prescription_doctor",
+        detail: "Solo el médico que emitió la receta puede firmarla.",
+      }, { status: 403 });
+    }
+    if (rx.status === "VOIDED") {
+      return NextResponse.json({
+        error: "prescription_voided",
+        detail: "La receta está anulada; no se puede firmar.",
+      }, { status: 422 });
+    }
+    contenidoServidor = canonicalPrescriptionContent(rx);
   } else if (docType === "MEDICAL_RECORD") {
     const rec = await prisma.medicalRecord.findFirst({
       where: { id: body.docId, clinicId: user.clinicId },
@@ -103,10 +141,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "key_decrypt_failed", detail: String(e) }, { status: 500 });
   }
 
-  // Calcular sha256 del content canónico.
-  const contentStr = typeof body.content === "string"
+  // Calcular sha256 del content canónico. En recetas, el del servidor: lo que
+  // llegue en `body.content` se descarta sin mirarlo.
+  const contentStr = contenidoServidor ?? (typeof body.content === "string"
     ? body.content
-    : JSON.stringify(body.content);
+    : JSON.stringify(body.content));
   const contentBuffer = Buffer.from(contentStr, "utf8");
   const sha256 = createHash("sha256").update(contentBuffer).digest("hex");
 

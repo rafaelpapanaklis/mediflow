@@ -413,7 +413,7 @@ export function PrescriptionDocument(props: PrescriptionDocumentProps) {
             </Text>
             {props.signedElectronically ? (
               <Text style={styles.signedBadge}>
-                Firmada electrónicamente (e.firma){props.signedAt ? ` el ${fmtDate(props.signedAt)}` : ""}
+                Firmada digitalmente por el médico{props.signedAt ? ` el ${fmtDate(props.signedAt)}` : ""}
               </Text>
             ) : null}
           </View>
