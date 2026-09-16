@@ -16,6 +16,9 @@ import {
   type ZonaFoto,
 } from "@/app/[slug]/_shared/template-manifest";
 import type { SectionState } from "@/app/[slug]/_shared/landing-data";
+// REDISEÑO DE PÁGINA WEB (ws1-t3). Ver el comentario largo en
+// landing-config-client.tsx: solo se monta con `rediseno` encendido.
+import rd from "@/components/dashboard/pagina-web-rediseno/pagina-web.module.css";
 
 const CARD = "bg-card border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] shadow-[var(--shadow-1)]";
 const ITEM = "border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] p-4";
@@ -43,6 +46,8 @@ export interface ManifestEditorProps {
   onDraftSections?: (secciones: SectionState[]) => void;
   /** Sube el archivo y devuelve la URL pública. */
   onUpload: (file: File, slotId: string) => Promise<string>;
+  /** Interruptor `menu-dos-niveles` (ws1-t3). Sin él, este editor es el de siempre. */
+  rediseno?: boolean;
 }
 
 /* ============================================================
@@ -52,11 +57,12 @@ export interface ManifestEditorProps {
    antes de subirla.
    ============================================================ */
 function TemplateDiagram({
-  manifest, orden, slot,
+  manifest, orden, slot, rediseno = false,
 }: {
   manifest: TemplateManifest;
   orden: string[];
   slot: ManifestPhotoSlot;
+  rediseno?: boolean;
 }) {
   const bandas = ["hero", ...orden];
   const alto = 8 + bandas.length * 13;
@@ -66,14 +72,20 @@ function TemplateDiagram({
     if (zona === "franja") return { x: 6, w: 88 };
     return { x: 6, w: 88 };
   };
+  // Los mismos huecos de color, leídos del sistema de tokens que corresponda:
+  // el de siempre (--bg-elev, --brand…) o el del menú (--m2-*) tras la bandera.
+  const col = rediseno
+    ? { fondo: "var(--m2-buscador-fondo)", banda: "var(--m2-hover)", activo: "var(--m2-activo)", activoSuave: "var(--m2-iniciales-fondo)", apagado: "var(--m2-texto-3)" }
+    : { fondo: "var(--bg-elev)", banda: "var(--bg-elev-2)", activo: "var(--brand)", activoSuave: "var(--brand-soft)", apagado: "var(--text-4)" };
 
   return (
     <svg viewBox={`0 0 100 ${alto}`} width="100%" height="auto" role="img"
       aria-label={`Dónde sale ${slot.nombre} en la plantilla ${manifest.nombre}`}
-      style={{ display: "block", borderRadius: 8, background: "var(--bg-elev)" }}>
+      className={rediseno ? rd.diagrama : undefined}
+      style={rediseno ? undefined : { display: "block", borderRadius: 8, background: col.fondo }}>
       {/* barra de navegación */}
-      <rect x="0" y="0" width="100" height="6" fill="var(--bg-elev-2)" />
-      <rect x="4" y="2" width="16" height="2" rx="1" fill="var(--text-4)" />
+      <rect x="0" y="0" width="100" height="6" fill={col.banda} />
+      <rect x="4" y="2" width="16" height="2" rx="1" fill={col.apagado} />
 
       {bandas.map((id, i) => {
         const y = 8 + i * 13;
@@ -81,18 +93,18 @@ function TemplateDiagram({
         const { x, w } = zonaRect(slot.zona);
         return (
           <g key={id}>
-            <rect x="0" y={y} width="100" height="11.5" fill={esLaSeccion ? "var(--brand-soft)" : "var(--bg-elev-2)"} />
+            <rect x="0" y={y} width="100" height="11.5" fill={esLaSeccion ? col.activoSuave : col.banda} />
             {esLaSeccion ? (
               <>
-                <rect x={x} y={y + 1.5} width={w} height="8.5" rx="1.5" fill="var(--brand)" opacity="0.85" />
+                <rect x={x} y={y + 1.5} width={w} height="8.5" rx="1.5" fill={col.activo} opacity="0.85" />
                 <text x={x + w / 2} y={y + 7} fontSize="3.6" textAnchor="middle" fill="#fff" fontWeight="600">
                   {slot.nombre}
                 </text>
               </>
             ) : (
               <>
-                <rect x="6" y={y + 3} width="34" height="2" rx="1" fill="var(--text-4)" opacity="0.5" />
-                <rect x="6" y={y + 6.5} width="60" height="1.6" rx="0.8" fill="var(--text-4)" opacity="0.3" />
+                <rect x="6" y={y + 3} width="34" height="2" rx="1" fill={col.apagado} opacity="0.5" />
+                <rect x="6" y={y + 6.5} width="60" height="1.6" rx="0.8" fill={col.apagado} opacity="0.3" />
               </>
             )}
           </g>
@@ -107,7 +119,7 @@ function TemplateDiagram({
    ============================================================ */
 export function ManifestEditor({
   templateId, sections, photos, saving,
-  onSaveSections, onSavePhotos, onDraftSections, onUpload,
+  onSaveSections, onSavePhotos, onDraftSections, onUpload, rediseno = false,
 }: ManifestEditorProps) {
   const manifest = useMemo(() => manifestOf(templateId), [templateId]);
 
@@ -194,6 +206,140 @@ export function ManifestEditor({
     delete nuevas[slotId];
     setFotos(nuevas);
     await onSavePhotos(nuevas);
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // REDISEÑO (ws1-t3) — mismo estado y handlers de arriba, otra piel.
+  // ════════════════════════════════════════════════════════════════════
+  if (rediseno) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* ══════════ SECCIONES ══════════ */}
+        <div className={rd.tarjeta}>
+          <h3 className={rd.tarjetaTitulo}>Secciones de tu sitio</h3>
+          <p className={rd.tarjetaSub}>
+            Enciende y apaga lo que quieres que se vea. El orden lo fija la plantilla. Contacto y
+            reserva no se pueden quitar: sin ellas el paciente no tiene cómo llegar ni cómo agendar.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
+            {secs.map(s => {
+              const meta = metaSeccion(s.id);
+              if (!meta) return null;
+              return (
+                <div key={s.id} className={rd.item} style={{ flexDirection: "row", alignItems: "center" }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 650, color: "var(--m2-texto)", display: "flex", alignItems: "center", gap: 6 }}>
+                      {meta.nombre}
+                      {meta.obligatoria && <Lock size={12} style={{ color: "var(--m2-texto-3)" }} />}
+                    </div>
+                    <div className={rd.ayuda} style={{ margin: 0 }}>
+                      {meta.consume.length === 0 ? "Siempre visible" : `Se pinta si hay: ${meta.consume.join(", ")}`}
+                    </div>
+                  </div>
+                  <button type="button" role="switch" aria-checked={s.visible} aria-label={`Mostrar ${meta.nombre}`}
+                    onClick={() => alternar(s.id)} disabled={!!meta.obligatoria}
+                    className={s.visible ? `${rd.interruptor} ${rd.interruptorActivo}` : rd.interruptor}>
+                    <span className={rd.interruptorBola} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={() => onSaveSections(secs)} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonAncho}`} style={{ marginTop: 14 }}>
+            {saving ? <Loader2 size={15} className="animate-spin" /> : "Guardar secciones"}
+          </button>
+        </div>
+
+        {/* ══════════ TEXTOS ══════════ */}
+        {manifest.textos.length > 0 && (
+          <div className={rd.tarjeta}>
+            <h3 className={rd.tarjetaTitulo}>Textos de la plantilla</h3>
+            <p className={rd.tarjetaSub}>
+              Lo que ves en gris es lo que sale si lo dejas vacío. Escribe encima solo lo que quieras cambiar.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+              {manifest.textos.map(txt => (
+                <div key={`${txt.seccion}.${txt.campo}`}>
+                  <label className={rd.etiqueta}>{txt.etiqueta}</label>
+                  {txt.campo === "subtitulo" ? (
+                    <textarea value={valorTexto(txt.seccion, txt.campo)} onChange={e => setTexto(txt.seccion, txt.campo, e.target.value)}
+                      placeholder={txt.porDefecto} rows={2} className={rd.textarea} />
+                  ) : (
+                    <input value={valorTexto(txt.seccion, txt.campo)} onChange={e => setTexto(txt.seccion, txt.campo, e.target.value)}
+                      placeholder={txt.porDefecto} className={rd.input} />
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => onSaveSections(secs)} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonAncho}`} style={{ marginTop: 14 }}>
+              {saving ? <Loader2 size={15} className="animate-spin" /> : "Guardar textos"}
+            </button>
+          </div>
+        )}
+
+        {/* ══════════ FOTOS POR RANURA ══════════ */}
+        <div className={rd.tarjeta}>
+          <h3 className={rd.tarjetaTitulo}>Fotos de la plantilla</h3>
+          <p className={rd.tarjetaSub}>Cada foto tiene su lugar. El diagrama muestra dónde va a salir antes de que la subas.</p>
+
+          {manifest.sinFotos ? (
+            <div className={rd.vacio} style={{ marginTop: 14 }}>
+              <ImageIcon size={22} className={rd.vacioIcono} />
+              <p style={{ fontSize: 13, fontWeight: 650, color: "var(--m2-texto)" }}>Esta plantilla no usa fotos</p>
+              <p className={rd.vacioTexto} style={{ maxWidth: 360 }}>
+                Y es a propósito: &ldquo;{manifest.nombre}&rdquo; está hecha para la clínica que no tiene
+                material fotográfico. Se sostiene con color, precios y horarios.
+              </p>
+            </div>
+          ) : (
+            <div className={rd.gridDos} style={{ marginTop: 14 }}>
+              {manifest.fotos.map(slot => {
+                const url = fotos[slot.id];
+                return (
+                  <div key={slot.id} className={rd.item}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 650, color: "var(--m2-texto)" }}>{slot.nombre}</div>
+                      <div className={rd.ayuda} style={{ margin: 0 }}>Proporción recomendada: {slot.proporcion}</div>
+                    </div>
+
+                    <TemplateDiagram manifest={manifest} orden={ordenIds} slot={slot} rediseno />
+
+                    {slot.ayuda && <p className={rd.ayuda} style={{ margin: 0 }}>{slot.ayuda}</p>}
+
+                    {url ? (
+                      <div style={{ position: "relative" }}>
+                        <img src={url} alt={slot.nombre} style={{ width: "100%", height: 112, objectFit: "cover", borderRadius: 9 }} />
+                        <button type="button" onClick={() => quitar(slot.id)} aria-label={`Quitar ${slot.nombre}`}
+                          className={rd.botonIcono} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.55)", color: "#fff" }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ height: 112, display: "grid", placeItems: "center", border: "1px dashed var(--m2-tarjeta-borde)", borderRadius: 9, color: "var(--m2-texto-3)" }}>
+                        <ImageIcon size={20} />
+                      </div>
+                    )}
+
+                    <input
+                      ref={el => { inputs.current[slot.id] = el; }}
+                      type="file" accept="image/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) subir(slot, f); e.target.value = ""; }}
+                    />
+                    <button type="button" onClick={() => inputs.current[slot.id]?.click()} disabled={subiendo === slot.id}
+                      className={`${rd.boton} ${rd.botonPeq} ${rd.botonAncho}`}>
+                      {subiendo === slot.id
+                        ? <><Loader2 size={14} className="animate-spin" /> Subiendo…</>
+                        : <><Upload size={14} /> {url ? "Cambiar foto" : "Subir foto"}</>}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
