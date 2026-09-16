@@ -500,3 +500,150 @@
     transition: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO DE PROCEDIMIENTOS (WS1) — el catálogo con precios.
+
+   Todo cuelga de `.pageRediseno`, que solo se pone cuando la clínica tiene
+   encendido el interruptor `menu-dos-niveles`. Es ADITIVO: sin esa clase no
+   se aplica ni una regla de aquí abajo y el catálogo se pinta exactamente
+   como hoy, píxel por píxel — las clases base de arriba (.table, .procName,
+   .priceCell…) siguen existiendo con los tokens del sistema (--text-1,
+   --bg-elev…) para cuando la bandera está apagada.
+
+   Los colores salen de los tokens `--pr-*` que ya declaró el rediseño de
+   Pacientes (`pacientes-rediseno/rediseno.module.css`), heredados por estar
+   dentro de esa raíz (`CLASES_REDISENO`): es el MISMO idioma visual que
+   Rafael aprobó, no uno nuevo. La tipografía es Instrument Sans, la misma
+   del menú nuevo y de Pacientes.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.pageRediseno {
+  font-family: var(--font-menu), system-ui, sans-serif;
+  color: var(--pr-texto);
+}
+
+.pageRediseno .title { color: var(--pr-texto); }
+.pageRediseno .subtitle { color: var(--pr-texto-3); }
+
+.pageRediseno .btnPrimary {
+  background: var(--pr-activo);
+  box-shadow: none;
+  border-radius: var(--pr-radio-s, 10px);
+}
+.pageRediseno .btnPrimary:hover:not(:disabled) {
+  background: var(--pr-activo);
+  filter: brightness(1.08);
+  box-shadow: none;
+}
+
+.pageRediseno .btnGhost { color: var(--pr-texto-2); }
+.pageRediseno .btnGhost:hover:not(:disabled) { background: var(--pr-hover); color: var(--pr-texto); }
+
+.pageRediseno .banner {
+  background: var(--pr-activo-suave);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio, 14px);
+}
+.pageRediseno .bannerIcon { color: var(--pr-activo); }
+.pageRediseno .bannerText { color: var(--pr-texto-2); }
+
+.pageRediseno .searchInput {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  color: var(--pr-texto);
+  box-shadow: none;
+  font-family: inherit;
+}
+.pageRediseno .searchInput::placeholder { color: var(--pr-texto-3); }
+.pageRediseno .searchInput:focus { box-shadow: 0 0 0 3px var(--pr-activo-suave); }
+.pageRediseno .searchIcon { color: var(--pr-texto-3); }
+
+.pageRediseno .emptyCard {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio, 14px);
+  box-shadow: var(--pr-sombra);
+  color: var(--pr-texto-3);
+}
+.pageRediseno .emptyIcon { background: var(--pr-hover); color: var(--pr-texto-3); }
+
+.pageRediseno .groupCard {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio, 14px);
+  box-shadow: var(--pr-sombra);
+}
+.pageRediseno .groupHead {
+  background: var(--pr-tarjeta-2);
+  border-bottom-color: var(--pr-borde-suave);
+}
+.pageRediseno .groupTitle { color: var(--pr-texto-3); font-family: inherit; }
+.pageRediseno .groupCount {
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+  font-family: inherit;
+}
+
+.pageRediseno .table thead th {
+  background: transparent;
+  border-bottom-color: var(--pr-borde);
+  color: var(--pr-texto-3);
+}
+.pageRediseno .table tbody tr { border-bottom-color: var(--pr-borde-suave); }
+.pageRediseno .table tbody tr:hover { background: var(--pr-hover); }
+
+.pageRediseno .procName { color: var(--pr-texto); }
+.pageRediseno .procDesc { color: var(--pr-texto-3); }
+.pageRediseno .codeCell { color: var(--pr-texto-3); }
+.pageRediseno .priceCell { color: var(--pr-texto); }
+.pageRediseno .durationCell,
+.pageRediseno .durationVal { color: var(--pr-texto-3); }
+
+.pageRediseno .statusActive { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.pageRediseno .statusInactive { background: var(--pr-hover); color: var(--pr-texto-3); }
+
+.pageRediseno .actionBtn { color: var(--pr-texto-3); }
+.pageRediseno .actionBtn:hover { background: var(--pr-activo-suave); color: var(--pr-activo); }
+.pageRediseno .actionWarn:hover { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.pageRediseno .actionOk:hover { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.pageRediseno .actionDanger:hover { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+
+/* ── Modal (nuevo/editar procedimiento) ─────────────────────────────── */
+
+.pageRediseno .modalBackdrop { background: rgba(13, 10, 23, 0.4); }
+.pageRediseno .modal {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio, 14px);
+  box-shadow: var(--pr-sombra-2);
+  font-family: inherit;
+}
+.pageRediseno .modalHead,
+.pageRediseno .modalFoot { border-color: var(--pr-borde); }
+.pageRediseno .modalFoot { background: var(--pr-tarjeta-2); }
+.pageRediseno .modalTitle { color: var(--pr-texto); }
+.pageRediseno .modalClose { color: var(--pr-texto-3); }
+.pageRediseno .modalClose:hover { background: var(--pr-hover); color: var(--pr-texto); }
+
+.pageRediseno .fieldLabel { color: var(--pr-texto-3); }
+.pageRediseno .required { color: var(--pr-peligro); }
+
+.pageRediseno .input,
+.pageRediseno .textarea {
+  background: var(--pr-tarjeta-2);
+  border-color: var(--pr-borde);
+  color: var(--pr-texto);
+  font-family: inherit;
+}
+.pageRediseno .input::placeholder,
+.pageRediseno .textarea::placeholder { color: var(--pr-texto-3); }
+.pageRediseno .input:focus,
+.pageRediseno .textarea:focus {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+.pageRediseno .checkboxRow { color: var(--pr-texto-2); }
+.pageRediseno .checkbox { accent-color: var(--pr-activo); }
