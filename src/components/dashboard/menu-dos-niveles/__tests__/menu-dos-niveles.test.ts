@@ -13,8 +13,9 @@
  *    plan Básico 20/20/8/9/14. Si el filtro cambiara al moverlo, esto falla.
  *  - Todo ícono que usa el menú está dentro de la fuente recortada (si no, se
  *    vería la palabra «point_of_sale» en vez del dibujo).
- *  - El interruptor falla cerrado: sin tabla, sin fila, con error o lento → menú
- *    de siempre; sin tabla no toca la fila; guarda la respuesta un minuto.
+ *  - El interruptor falla cerrado: sin tabla, sin fila o con error sin respuesta
+ *    previa → menú de siempre; sin tabla no toca la fila; guarda la respuesta un
+ *    minuto. Con la base lenta ESPERA (sin tope): el menú no cambia al navegar.
  *  - El SQL y el modelo Prisma hablan de la misma tabla, y el modelo Clinic no
  *    la conoce (el login lee la clínica con todas sus columnas).
  */
@@ -241,7 +242,6 @@ test("«Administración» se marca activa solo en pantallas del segundo nivel", 
 function interruptorDePrueba(opts: {
   tabla?: boolean | (() => Promise<boolean>);
   fila?: (id: string) => Promise<{ enabled: boolean } | null>;
-  limiteMs?: number;
 } = {}) {
   const cuenta = { tabla: 0, filas: [] as string[] };
   let reloj = 1_000_000;
@@ -256,7 +256,6 @@ function interruptorDePrueba(opts: {
     },
     ahora: () => reloj,
     ttlMs: 60_000,
-    limiteMs: opts.limiteMs ?? 200,
   });
   return { encendido, cuenta, avanzar: (ms: number) => { reloj += ms; } };
 }
@@ -312,7 +311,7 @@ test("interruptor: una respuesta por clínica por minuto", async () => {
   assert.equal(cuenta.filas.length, 2, "apagarlo en la base se nota en menos de un minuto");
 });
 
-test("interruptor: base caída o lenta → menú de siempre, sin lanzar, y reintenta a los 10 s", async () => {
+test("interruptor: base caída sin respuesta previa → menú de siempre, sin lanzar, y reintenta a los 10 s", async () => {
   await sinAvisos(async (avisos) => {
     let falla = true;
     const caida = interruptorDePrueba({
@@ -330,24 +329,48 @@ test("interruptor: base caída o lenta → menú de siempre, sin lanzar, y reint
     tablaRota.avanzar(10_000);
     await tablaRota.encendido("c1");
     assert.equal(tablaRota.cuenta.tabla, 2, "un fallo al mirar la tabla no se recuerda como «no hay tabla»");
+    assert.equal(avisos.length, 3);
+  });
+});
 
-    const lenta = interruptorDePrueba({
-      limiteMs: 30,
-      fila: () => new Promise((resolve) => setTimeout(() => resolve({ enabled: true }), 300)),
+test("interruptor: un fallo suelto de la base NO cambia el menú de una clínica que ya se sabía encendida", async () => {
+  await sinAvisos(async () => {
+    let falla = false;
+    const { encendido, cuenta, avanzar } = interruptorDePrueba({
+      fila: async () => { if (falla) throw Object.assign(new Error("pool"), { code: "P2024" }); return { enabled: true }; },
     });
-    const t0 = Date.now();
-    assert.equal(await lenta.encendido("c1"), false);
-    assert.ok(Date.now() - t0 < 250, "no espera a la base lenta");
-    await lenta.encendido("c1");
-    assert.equal(lenta.cuenta.filas.length, 1, "con la base lenta no abre otra consulta en cada carga");
-    assert.equal(avisos.length, 4);
+    assert.equal(await encendido("clinica-altabrisa"), true);
+    avanzar(60_000);
+    falla = true;
+    assert.equal(await encendido("clinica-altabrisa"), true, "la base falla: se mantiene la última respuesta buena");
+    assert.equal(await encendido("clinica-altabrisa"), true, "y durante la pausa también");
+    assert.equal(cuenta.filas.length, 2, "durante la pausa no insiste contra la base");
+    avanzar(10_000);
+    falla = false;
+    assert.equal(await encendido("clinica-altabrisa"), true);
+    assert.equal(cuenta.filas.length, 3);
+  });
+});
+
+test("interruptor: apagarlo sí se nota aunque luego la base falle (la última respuesta buena es «apagado»)", async () => {
+  await sinAvisos(async () => {
+    let fila: { enabled: boolean } | "falla" = { enabled: true };
+    const { encendido, avanzar } = interruptorDePrueba({
+      fila: async () => { if (fila === "falla") throw new Error("x"); return fila; },
+    });
+    assert.equal(await encendido("clinica-altabrisa"), true);
+    fila = { enabled: false };
+    avanzar(60_000);
+    assert.equal(await encendido("clinica-altabrisa"), false);
+    fila = "falla";
+    avanzar(60_000);
+    assert.equal(await encendido("clinica-altabrisa"), false);
   });
 });
 
 test("interruptor: cargas simultáneas de la misma clínica comparten una consulta", async () => {
   let soltar: (v: { enabled: boolean }) => void = () => {};
   const { encendido, cuenta } = interruptorDePrueba({
-    limiteMs: 5000,
     fila: () => new Promise((resolve) => { soltar = resolve; }),
   });
   const tres = [encendido("clinica-altabrisa"), encendido("clinica-altabrisa"), encendido("clinica-altabrisa")];

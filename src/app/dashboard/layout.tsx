@@ -174,6 +174,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // varias sedes hacia una activa (y el propio menú reducido lo renderiza).
   //
   // MENÚ DE DOS NIVELES — interruptor POR CLÍNICA (sql/menu-dos-niveles.sql).
+  // Este layout es el ÚNICO sitio que elige menú: toda pantalla de /dashboard
+  // cuelga de aquí (lo vigila menu-en-todas-las-pantallas.test.ts). Sin tope de
+  // tiempo: con la clínica encendida sale el nuevo en TODAS las pantallas.
   // Falla cerrado: sin la tabla, sin fila o con error devuelve false y se pinta
   // el menú de siempre. clinic.id sale de la sesión (getCurrentUser).
   const [allClinics, clinicModuleKeys, onboardingCompleted, menuDosNiveles] = await Promise.all([

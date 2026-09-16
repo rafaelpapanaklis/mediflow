@@ -5,7 +5,8 @@ import { crearInterruptor, FLAG_MENU_DOS_NIVELES } from "./interruptor-core";
 /**
  * ¿La clínica activa ve el menú de dos niveles? El `clinicId` sale SIEMPRE de
  * la sesión (el layout se lo pasa desde getCurrentUser), nunca del cliente.
- * Falla cerrado: sin tabla, sin fila, con error o con la base lenta → `false`
+ * Misma respuesta en todas las pantallas: espera a la base, sin tope de tiempo.
+ * Falla cerrado: sin tabla, sin fila, o con error sin respuesta previa → `false`
  * (menú de siempre). Detalles en interruptor-core.ts.
  */
 export const menuDosNivelesEncendido = crearInterruptor({
