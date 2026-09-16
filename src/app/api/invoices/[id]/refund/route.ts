@@ -45,43 +45,56 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Monto inválido" }, { status: 400 });
   }
 
-  const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
-  if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+  const invoicePeek = await prisma.invoice.findFirst({
+    where: { id: params.id, clinicId },
+    select: { patientId: true },
+  });
+  if (!invoicePeek) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
 
   // Visibilidad por paciente (barrido Ola 3): reembolsar la factura de un
   // paciente restringido exige poder verlo (la lista de facturas ya filtra).
-  if (invoice.patientId) {
-    const visDenied = await assertPatientVisible(invoice.patientId, {
+  // Pre-check FUERA de la tx: dentro solo va el flujo con lock FOR UPDATE.
+  if (invoicePeek.patientId) {
+    const visDenied = await assertPatientVisible(invoicePeek.patientId, {
       userId: ctx.userId,
       role: ctx.role,
       clinicId,
     });
     if (visDenied) return visDenied;
   }
-  if (invoice.status === "CANCELLED") return NextResponse.json({ error: "La factura está cancelada" }, { status: 400 });
-  if (invoice.paid <= 0)              return NextResponse.json({ error: "Esta factura no tiene pagos para reembolsar" }, { status: 400 });
-  // Lo pagado se compara REDONDEADO: una factura legada con paid =
-  // 1000.0099999999999 rechazaba el reembolso completo de $1,000.01.
-  if (amountRaw > round2(invoice.paid)) return NextResponse.json({ error: "El reembolso excede lo pagado" }, { status: 400 });
 
-  // El piso en 0 evita el −0 que deja ese mismo caso legado (1000.0099999999999
-  // − 1000.01) y que se pintaría como "−$0.00".
-  const newPaid    = round2(Math.max(0, invoice.paid - amountRaw));
-  const newBalance = round2(invoice.total - newPaid);
-  const newStatus  =
-    newPaid <= 0 ? "PENDING" :
-    newBalance > 0 ? "PARTIAL" : "PAID";
+  // Lectura + escritura en la MISMA transacción con lock de fila (FOR UPDATE),
+  // igual que el cobro y mark-paid. Leída fuera, dos reembolsos simultáneos por
+  // el total pasaban los dos la comprobación de lo pagado, y un reembolso que
+  // leyó `paid` antes de que entrara un cobro lo pisaba al escribir. Con el
+  // lock, lo que se resta es lo pagado de la fila en este momento.
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${params.id} FOR UPDATE`;
+    const invoice = await tx.invoice.findFirst({ where: { id: params.id, clinicId } });
+    if (!invoice) return { error: "Factura no encontrada", status: 404 };
+    if (invoice.status === "CANCELLED") return { error: "La factura está cancelada", status: 400 };
+    if (invoice.paid <= 0)              return { error: "Esta factura no tiene pagos para reembolsar", status: 400 };
+    // Lo pagado se compara REDONDEADO: una factura legada con paid =
+    // 1000.0099999999999 rechazaba el reembolso completo de $1,000.01.
+    if (amountRaw > round2(invoice.paid)) return { error: "El reembolso excede lo pagado", status: 400 };
 
-  await prisma.$transaction([
-    prisma.payment.create({
+    // El piso en 0 evita el −0 que deja ese mismo caso legado (1000.0099999999999
+    // − 1000.01) y que se pintaría como "−$0.00".
+    const newPaid    = round2(Math.max(0, invoice.paid - amountRaw));
+    const newBalance = round2(invoice.total - newPaid);
+    const newStatus  =
+      newPaid <= 0 ? "PENDING" :
+      newBalance > 0 ? "PARTIAL" : "PAID";
+
+    await tx.payment.create({
       data: {
         invoiceId: params.id,
         amount: amountRaw,
         method: "refund",
         notes: reason || undefined,
       },
-    }),
-    prisma.invoice.updateMany({
+    });
+    await tx.invoice.updateMany({
       where: { id: params.id, clinicId },
       data:  {
         paid: newPaid,
@@ -91,8 +104,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         // que ya no está liquidada.
         ...(newStatus !== "PAID" ? { paidAt: null } : {}),
       },
-    }),
-  ]);
+    });
+    return { invoice, newPaid, newBalance, newStatus };
+  });
+  if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
+  const { invoice, newPaid, newBalance, newStatus } = result;
 
   await logMutation({
     req, clinicId, userId: ctx.userId,
