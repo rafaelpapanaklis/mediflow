@@ -138,6 +138,11 @@ export interface Hueco {
  * Las horas que caben ese día, en pasos del hueco de la clínica. Con
  * `horaPreferida`, las más cercanas a ella primero (a igual distancia, la más
  * temprana); sin ella, en orden. Como mucho `tope`.
+ *
+ * `franja`: acota la búsqueda a una parte del día («por la tarde» → `{ desde:
+ * 840, hasta: null }`). Es un recorte ADICIONAL al horario de la clínica, no
+ * un horario nuevo: si la franja cae fuera de la ventana de atención, no hay
+ * huecos y ya, el día sigue sin estar "cerrado" (`ventana` no cambia).
  */
 export function buscarHuecos(args: {
   fecha: string;
@@ -147,14 +152,18 @@ export function buscarHuecos(args: {
   sillonId: string | null;
   ahora: Date;
   horaPreferida?: string | null;
+  franja?: { desde: number | null; hasta: number | null } | null;
   tope?: number;
 }): { huecos: Hueco[]; total: number; ventana: { abre: string; cierra: string } | null } {
   const ventana = ventanaDeAtencion(args.fecha, args.clinica);
   if (!ventana) return { huecos: [], total: 0, ventana: null };
 
+  const abre = args.franja?.desde != null ? Math.max(ventana.abre, args.franja.desde) : ventana.abre;
+  const cierra = args.franja?.hasta != null ? Math.min(ventana.cierra, args.franja.hasta) : ventana.cierra;
+
   const paso = args.clinica.defaultSlotMinutes > 0 ? args.clinica.defaultSlotMinutes : 30;
   const todos: Hueco[] = [];
-  for (let t = ventana.abre; t + args.duracion <= ventana.cierra; t += paso) {
+  for (let t = abre; t + args.duracion <= cierra; t += paso) {
     const v = evaluarHora({ ...args, hora: hhmm(t) });
     if (!v.ok) continue;
     todos.push({
