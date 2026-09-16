@@ -6,6 +6,7 @@ import { revenuePaymentWhere } from "@/lib/caja";
 import { ReportsClient } from "./reports-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getServerT } from "@/i18n/server";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export const metadata: Metadata = { title: "Reportes — DaleControl" };
 
@@ -57,8 +58,14 @@ export default async function ReportsPage() {
     )),
   ]);
 
-  // Promise.all #2 — agregados de appointments (2 promesas)
-  const [topTypes, byStatus] = await Promise.all([
+  // Promise.all #2 — agregados de appointments (2 promesas) + el interruptor
+  // del rediseño. REDISEÑO DE REPORTES — el MISMO interruptor por clínica que
+  // enciende el menú de dos niveles, Pacientes y Equipo (`clinic_feature_flags`,
+  // bandera `menu-dos-niveles`), no uno propio: Rafael prueba «el diseño
+  // nuevo» como una sola cosa. Falla cerrado (sin tabla, sin fila o con error
+  // → false = la pantalla de hoy, tal cual). Va en este Promise.all (2 → 3
+  // promesas, sigue bajo 7) para no añadir un viaje aparte a la base.
+  const [topTypes, byStatus, rediseno] = await Promise.all([
     safe(prisma.appointment.groupBy({
       by: ["type"], where: { clinicId },
       _count: { id: true }, orderBy: { _count: { id: "desc" } }, take: 6,
@@ -67,6 +74,7 @@ export default async function ReportsPage() {
       by: ["status"], where: { clinicId },
       _count: { id: true },
     }), [] as any[]),
+    menuDosNivelesEncendido(clinicId),
   ]);
 
   // Promise.all #3 — KPIs actuales de pacientes y deuda (5 promesas)
@@ -176,6 +184,7 @@ export default async function ReportsPage() {
       byStatus={serialized.byStatus}
       patientStats={patientStats}
       clinicStats={clinicStats}
+      rediseno={rediseno}
     />
   );
 }
