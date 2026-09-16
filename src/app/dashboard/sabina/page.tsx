@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { ACCIONES_SABINA } from "@/lib/sabina/engine-catalog";
 import { leerAjustesSabina } from "@/lib/sabina/ajustes-sabina";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { SabinaClient } from "./sabina-client";
 
 export const metadata: Metadata = { title: "Sabina — DaleControl" };
@@ -22,12 +23,20 @@ export default async function SabinaPage() {
   // después de escribir. Esto solo AVISA: quien impide es POST /api/sabina (vía
   // `crearSabinaCtx`). Por eso un fallo al leer aquí no tumba la página: se
   // pinta normal y el endpoint decide.
-  let apagada = false;
-  try {
-    apagada = (await leerAjustesSabina(user.clinicId, user.id))?.activa === false;
-  } catch {
-    apagada = false;
-  }
+  //
+  // REDISEÑO — el MISMO interruptor por clínica que enciende el menú de dos
+  // niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno
+  // propio: Rafael prueba «el diseño nuevo» como una sola cosa. Falla cerrado
+  // (sin tabla, sin fila o con error → false = la Sabina de hoy, tal cual). Va
+  // en el mismo Promise.all que los ajustes para no añadir un viaje en fila; la
+  // respuesta además vive 60 s en memoria por clínica, así que aquí cae en la
+  // caché que el layout acaba de llenar.
+  const [apagada, rediseno] = await Promise.all([
+    leerAjustesSabina(user.clinicId, user.id)
+      .then((ajustes) => ajustes?.activa === false)
+      .catch(() => false),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
   return (
     <SabinaClient
       key={user.clinicId}
@@ -35,6 +44,7 @@ export default async function SabinaPage() {
       firstName={user.firstName}
       puedeProponer={ACCIONES_SABINA.length > 0}
       apagada={apagada}
+      rediseno={rediseno}
     />
   );
 }

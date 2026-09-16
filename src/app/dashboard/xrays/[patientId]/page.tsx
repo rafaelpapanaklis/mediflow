@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { patientVisibilityAnd } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { toPublicFileUrl } from "@/lib/storage";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { XraysClient } from "../xrays-client";
 
 export const metadata: Metadata = { title: "Radiografías · paciente — DaleControl" };
@@ -41,7 +42,11 @@ export default async function XraysPatientPage({ params, searchParams }: Props) 
   });
   if (!patient) notFound();
 
-  const [files, clinic] = await Promise.all([
+  // REDISEÑO — el MISMO interruptor por clínica que enciende el menú de dos
+  // niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno
+  // propio. Falla cerrado (→ false = el visor de hoy, tal cual). Va en el
+  // Promise.all que ya existía; su respuesta vive 60 s en memoria por clínica.
+  const [files, clinic, rediseno] = await Promise.all([
     prisma.patientFile.findMany({
       where: { clinicId, patientId: params.patientId, deletedAt: null },
       orderBy: { createdAt: "desc" },
@@ -61,6 +66,7 @@ export default async function XraysPatientPage({ params, searchParams }: Props) 
       where: { id: clinicId },
       select: { aiTokensUsed: true, aiTokensLimit: true },
     }),
+    menuDosNivelesEncendido(clinicId),
   ]);
 
   const aiUsed = clinic?.aiTokensUsed ?? 0;
@@ -84,6 +90,7 @@ export default async function XraysPatientPage({ params, searchParams }: Props) 
       canUpload={hasPermission(permsUser, "xrays.upload")}
       canAnalyze={hasPermission(permsUser, "xrays.analyze")}
       canEditRecords={hasPermission(permsUser, "medicalRecord.edit")}
+      rediseno={rediseno}
     />
   );
 }
