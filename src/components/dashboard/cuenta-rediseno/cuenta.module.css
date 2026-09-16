@@ -1,0 +1,680 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Rediseño de las pantallas de CUENTA Y ESTADO (ws1-t1, lote 3):
+   Cambiar contraseña, 2FA (reto y enrolamiento) y Clínica suspendida
+   (planes + pago, y la vuelta de Stripe en /success).
+
+   Habla el idioma visual del menú de dos niveles que Rafael aprobó y
+   NO declara tokens propios: la raíz (`raiz.tsx`) monta `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`), que trae los `--m2-*` del menú con su
+   versión oscura y la tipografía (Instrument Sans); aquí solo hay clases
+   que los leen. Lo que el menú no tiene —éxito, alerta, peligro— sale de
+   los tokens semánticos de globals.css (`--success`, `--warning-*`,
+   `--danger-*`), con el mismo respaldo que usa el propio menú.
+
+   Solo se monta con el interruptor `menu-dos-niveles` encendido para la
+   clínica. Apagado, las tres pantallas se pintan exactamente como hoy.
+
+   Las cifras (precios, referencia de pago, código de 6 dígitos) van en
+   Instrument Sans con `tabular-nums`, nunca en letra de máquina.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  width: 100%;
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Cifras de ancho fijo en todo lo que cuelga de aquí. Va sobre los HIJOS y
+   no sobre la raíz a propósito: la raíz lleva `.tokens` del menú, y
+   `tipografia-panel.tsx` le pone a esa clase `font-variant-numeric: normal`
+   con más peso; sus hijos heredan de aquí. */
+.raiz > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══ Barreras previas al panel: 2FA y cambio de contraseña ═══════════
+   Aquí NO hay marcado nuevo: se visten los componentes de siempre
+   (`two-factor-challenge`, `two-factor-setup`, `change-password-client`),
+   que son de seguridad y no se tocan. Pintan con las clases globales
+   `.card`, `.btn-new`, `.input-new`, `.field-new`… y con tokens viejos
+   (`--text-1`, `--brand`, `--shadow-2`) que la raíz redirige a los del
+   menú (ver `raiz.tsx`). Lo que queda aquí es lo que esas clases traen
+   escrito a mano en globals.css y no sale por un token. */
+
+.barrera {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.barrera :global(.card) {
+  border-radius: 14px;
+}
+
+/* El botón primario de globals trae su hover en hexadecimal; aquí es el
+   violeta del menú, un pelo más claro. */
+.barrera :global(.btn-new) {
+  border-radius: 10px;
+}
+
+.barrera :global(.btn-new--primary:hover:not(:disabled)) {
+  background: var(--m2-activo);
+  filter: brightness(1.08);
+}
+
+/* Campo del código: Instrument Sans con cifras tabulares, no letra de
+   máquina (el componente le pone `.mono`, que aquí pierde). El secreto
+   manual y los códigos de recuperación se copian tal cual y conservan la
+   suya, como manda tipografia-panel.tsx. */
+.barrera :global(.input-new) {
+  border-radius: 10px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* `.dark input` en globals.css pinta el borde con !important; el foco
+   necesita el mismo peso para que el anillo violeta se vea en oscuro. */
+.barrera :global(.input-new:focus) {
+  border-color: var(--m2-activo) !important;
+  box-shadow: var(--m2-foco);
+}
+
+/* Los campos de contraseña son los del sitio público (inline, sin foco en
+   el panel); el foco del menú se les pone desde fuera. */
+.barrera input[type="password"]:focus,
+.barrera input[type="text"]:focus {
+  border-color: var(--m2-activo) !important;
+  box-shadow: var(--m2-foco);
+}
+
+/* ═══ Clínica suspendida: planes y pago ═══════════════════════════════ */
+
+.pagina {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: clamp(12px, 1.6vw, 24px) 0 56px;
+}
+
+.avisoPendiente {
+  max-width: 680px;
+  margin: 0 auto 20px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  border: 1px solid var(--warning-border-strong, rgba(217, 119, 6, 0.35));
+  color: var(--warning-strong, #a85a05);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.cabecera {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 26px;
+  text-align: center;
+}
+
+.pildora {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  border-radius: 999px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  box-shadow: var(--m2-sombra);
+  color: var(--m2-activo);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pildoraIcono {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(26px, 2.6vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  line-height: 1.15;
+  color: var(--m2-texto);
+}
+
+.subtitulo {
+  margin: 0;
+  max-width: 560px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--m2-texto-2);
+}
+
+/* ── Ciclo: mensual / anual ──────────────────────────────────────── */
+
+.cicloFila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.conmutador {
+  position: relative;
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--m2-buscador-fondo);
+  border: 1px solid var(--m2-borde);
+}
+
+.conmutadorDeslizante {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 999px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  box-shadow: var(--m2-sombra);
+  transition: transform 0.25s;
+}
+
+.conmutadorOpcion {
+  position: relative;
+  z-index: 1;
+  min-width: 112px;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.conmutadorOpcionActiva {
+  color: var(--m2-texto);
+}
+
+.conmutadorOpcion:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.etiquetaExito {
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
+  color: var(--success-strong, #047857);
+}
+
+.etiquetaNeutra {
+  background: var(--m2-hover);
+  color: var(--m2-texto-3);
+}
+
+.etiquetaActivo {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+/* ── Las tres tarjetas de plan (radiogroup) ──────────────────────── */
+
+/* Mismo corte que hoy (`md:grid-cols-3`): tres columnas desde 768 px de
+   ventana y una sola por debajo. Nada se esconde: se apila. */
+.planes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 767.98px) {
+  .planes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 20px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: var(--m2-sombra);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+}
+
+@media (hover: hover) {
+  .plan:hover {
+    background: var(--m2-tarjeta-hover);
+  }
+}
+
+.planRecomendado {
+  background: var(--m2-tarjeta-hover);
+}
+
+.planSeleccionado,
+.planSeleccionado:hover {
+  border-color: var(--m2-activo);
+  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo), var(--m2-sombra);
+}
+
+.plan:focus-visible {
+  box-shadow: var(--m2-foco);
+}
+
+.planCabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.planEtiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.radio {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--m2-borde);
+  display: grid;
+  place-items: center;
+}
+
+.radioActivo {
+  border-color: var(--m2-activo);
+}
+
+.radioPunto {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--m2-activo);
+}
+
+.planNombre {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  color: var(--m2-texto);
+}
+
+.precio {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.precioCifra {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  line-height: 1;
+  color: var(--m2-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.precioUnidad {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m2-texto-3);
+}
+
+.precioNota {
+  margin-top: -4px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mejora {
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.separador {
+  height: 1px;
+  background: var(--m2-borde);
+}
+
+.beneficios {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.beneficio {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--m2-texto-2);
+}
+
+.beneficioIcono {
+  flex-shrink: 0;
+  color: var(--success, #059669);
+}
+
+/* ── Pago: método + CTA + confianza ──────────────────────────────── */
+
+.pago {
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: var(--m2-sombra);
+}
+
+.metodos {
+  position: relative;
+  display: flex;
+  width: 100%;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--m2-buscador-fondo);
+  border: 1px solid var(--m2-borde);
+}
+
+.metodosDeslizante {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 3);
+  border-radius: 9px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  box-shadow: var(--m2-sombra);
+  transition: transform 0.25s;
+}
+
+.metodo {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.metodoActivo {
+  color: var(--m2-texto);
+}
+
+.metodo:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.notaMetodo {
+  margin: -4px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--warning-strong, #a85a05);
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 46px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  box-shadow: var(--m2-sombra);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: filter 0.12s, opacity 0.12s;
+}
+
+.cta:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.cta:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cta:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.confianza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--m2-texto-3);
+}
+
+.confianzaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.confianzaPunto {
+  color: var(--m2-borde);
+}
+
+.volver {
+  margin: 22px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+}
+
+.volver a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.12s;
+}
+
+.volver a:hover {
+  color: var(--m2-texto);
+}
+
+/* ── Vuelta de Stripe: pago confirmado / confirmando ─────────────── */
+
+.resultado {
+  max-width: 560px;
+  min-height: 60vh;
+  margin: 0 auto;
+  padding: 48px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.resultadoIcono {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 20px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.resultadoIconoExito {
+  background: var(--success-soft, rgba(5, 150, 105, 0.1));
+  color: var(--success, #059669);
+}
+
+.resultadoIconoEspera {
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  color: var(--warning, #d97706);
+}
+
+.resultadoTitulo {
+  margin: 0 0 10px;
+  font-size: clamp(24px, 2.4vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  color: var(--m2-texto);
+}
+
+.resultadoTexto {
+  margin: 0 0 26px;
+  max-width: 440px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--m2-texto-2);
+}
+
+.resultadoAcciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, filter 0.12s;
+}
+
+.boton:hover {
+  background: var(--m2-tarjeta-hover);
+}
+
+.boton:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.botonPrincipal,
+.botonPrincipal:hover {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+.botonPrincipal:hover {
+  filter: brightness(1.08);
+}
+
+.referencia {
+  margin-top: 32px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.girando {
+  animation: cuentaGirar 0.9s linear infinite;
+}
+
+@keyframes cuentaGirar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando {
+    animation: none;
+  }
+  .conmutadorDeslizante,
+  .metodosDeslizante {
+    transition: none;
+  }
+}

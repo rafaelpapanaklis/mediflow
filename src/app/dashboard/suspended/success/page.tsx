@@ -3,6 +3,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { isPlanExpired } from "@/lib/plan-status";
 import { ConfirmingPoll } from "./confirming-poll";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
+import {
+  CLASE_BOTON,
+  CLASE_BOTON_PRINCIPAL,
+  ResultadoPago,
+} from "@/components/dashboard/cuenta-rediseno/suspendida";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +39,45 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
   // (isPlanExpired): suscripción viva O periodo por delante. Misma fuente que
   // el layout, sin recalcular la fecha a mano.
   const isActivated = !isPlanExpired(clinic);
+
+  // REDISEÑO — mismo interruptor por clínica que el menú de dos niveles (ver
+  // ../page.tsx): el layout completo ya lo pidió en este request, esto comparte
+  // esa consulta o cae en su caché de 60 s. Falla cerrado → la pantalla de hoy.
+  const rediseno = await menuDosNivelesEncendido(user.clinicId);
+
+  if (rediseno) {
+    // Mismas dos caras, mismos textos y mismos botones que abajo. El enlace al
+    // panel sigue siendo un <a> duro y «Volver a verificar» sigue siendo
+    // <ConfirmingPoll/> (router.refresh, sin polling nuevo): solo cambia la ropa.
+    return (
+      <RaizCuenta>
+        <ResultadoPago
+          activada={isActivated}
+          titulo={isActivated ? t("pages.suspended.paymentConfirmedTitle") : t("pages.suspended.confirmingPaymentTitle")}
+          texto={
+            isActivated
+              ? t("pages.suspended.paymentConfirmedDescription")
+              : t("pages.suspended.confirmingPaymentDescription")
+          }
+          acciones={
+            isActivated ? (
+              <a href="/dashboard" className={CLASE_BOTON_PRINCIPAL}>
+                {t("pages.suspended.goToDashboard")}
+              </a>
+            ) : (
+              <>
+                <ConfirmingPoll label={t("pages.suspended.checkAgain")} className={CLASE_BOTON_PRINCIPAL} />
+                <a href="mailto:soporte@dalecontrol.com" className={CLASE_BOTON}>
+                  {t("pages.suspended.contactSupport")}
+                </a>
+              </>
+            )
+          }
+          referencia={sessionId ? `${t("pages.suspended.reference")} ${sessionId.slice(-12)}` : null}
+        />
+      </RaizCuenta>
+    );
+  }
 
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-4 py-16 text-center">
