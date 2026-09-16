@@ -207,7 +207,13 @@ before(async () => {
   process.env.ANTHROPIC_API_KEY = "sk-prueba-no-es-real";
   globalThis.fetch = (async (url: unknown, init?: { body?: string }) => {
     assert.equal(String(url), "https://api.anthropic.com/v1/messages", "nadie más que el motor usa fetch");
-    m.alModelo.push(JSON.parse(String(init?.body ?? "{}")));
+    // Desde que Sabina cachea el prefijo, `system` viaja como bloque de texto y no
+    // como cadena suelta (es la forma equivalente que admite `cache_control`; ver
+    // `engine-cache.ts`). Aquí se aplana: estas pruebas miran lo que DICE el
+    // prompt, no su envoltorio. El envoltorio lo fija `npm run test:sabina-cache`.
+    const textoDelSystem = (s: any) => (Array.isArray(s) ? s.map((b: any) => b?.text ?? "").join("") : String(s ?? ""));
+    const cuerpoAlModelo = JSON.parse(String(init?.body ?? "{}"));
+    m.alModelo.push({ ...cuerpoAlModelo, system: textoDelSystem(cuerpoAlModelo.system) });
     const siguiente = m.guion.shift();
     assert.ok(siguiente, "el modelo se llamó más veces que el guion");
     return new Response(JSON.stringify(siguiente), { status: 200, headers: { "content-type": "application/json" } });
@@ -381,8 +387,8 @@ test("el motor ve las cinco nuevas y la confirmación ejecuta las cuatro que esc
   assert.equal(new Set(nombres).size, nombres.length, "hay nombres repetidos en el catálogo del motor");
   assert.equal(
     nombres.length,
-    23,
-    "diez de consulta + proponer_horarios + facturas_de_paciente + caja + tres de clínico (recetas, estudios_del_paciente, analisis_y_notas_de_estudio) + siete acciones",
+    28,
+    "diez de consulta + proponer_horarios + facturas_de_paciente + caja + comparar_sedes + oportunidades_perdidas + tres de clínico (recetas, estudios_del_paciente, analisis_y_notas_de_estudio) + odontograma + dos de la clínica (procedimientos_y_precios, equipo_clinica) + siete acciones",
   );
 
   const keys = Object.fromEntries(catalogo.ACCIONES_SABINA.map((a) => [a.nombre, a.permiso]));

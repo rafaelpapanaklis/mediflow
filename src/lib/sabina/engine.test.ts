@@ -56,13 +56,15 @@ function contesta(texto: string): TurnoModelo {
 function guion(turnos: TurnoModelo[]) {
   const modelos: string[] = [];
   const enviados: unknown[][] = [];
+  const apagadas: boolean[] = [];
   let i = 0;
   const llamar: LlamarModelo = async (args) => {
     modelos.push(args.modelo);
     enviados.push(args.tools as unknown[]);
+    apagadas.push(Boolean(args.sinHerramientas));
     return turnos[Math.min(i++, turnos.length - 1)];
   };
-  return { llamar, modelos, enviados, llamadas: () => i };
+  return { llamar, modelos, enviados, apagadas, llamadas: () => i };
 }
 
 /* ── Las herramientas dobles ────────────────────────────────────────── */
@@ -233,7 +235,7 @@ test("un modelo que solo pide herramientas no da vueltas para siempre", async ()
   assert.ok(salida.rondas <= 10, `rondas=${salida.rondas}`);
 });
 
-test("en la última ronda se le retiran las herramientas al modelo", async () => {
+test("en la última ronda se le apagan las herramientas al modelo, pero el catálogo sigue viajando", async () => {
   const reg = { llamadas: [] as unknown[] };
   const g = guion([pide("citas_del_dia", { fecha: "2026-09-10" })]);
 
@@ -244,9 +246,20 @@ test("en la última ronda se le retiran las herramientas al modelo", async () =>
     llamar: g.llamar,
   });
 
-  // La ronda número SABINA_MAX_TOOL_ROUNDS (índice 4) va sin herramientas.
-  assert.equal((g.enviados[SABINA_MAX_TOOL_ROUNDS] ?? []).length, 0);
+  // La ronda número SABINA_MAX_TOOL_ROUNDS (índice 4) tiene que cerrar con
+  // palabras. Antes eso se conseguía mandando la lista de herramientas vacía;
+  // ahora el catálogo viaja igual —si no, se rompe el prefijo cacheado justo en
+  // la llamada con más historial encima— y lo que las apaga es
+  // `tool_choice: none` (ver engine-cache.ts).
+  assert.equal(g.apagadas[SABINA_MAX_TOOL_ROUNDS], true, "la última ronda tiene que pedir las herramientas apagadas");
+  assert.deepEqual(
+    g.enviados[SABINA_MAX_TOOL_ROUNDS],
+    g.enviados[0],
+    "la última ronda cambió el catálogo: perdería el caché del prefijo",
+  );
   assert.ok((g.enviados[0] ?? []).length > 0);
+  // Y las rondas anteriores NO van apagadas: el modelo tiene que poder consultar.
+  assert.deepEqual(g.apagadas.slice(0, SABINA_MAX_TOOL_ROUNDS), [false, false, false, false]);
 });
 
 /* ── La segunda pasada ──────────────────────────────────────────────── */

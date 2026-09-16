@@ -55,10 +55,23 @@ export async function chargeUsage(input: ChargeUsageInput): Promise<ChargeUsageR
   const inputTokens = Math.max(0, Math.floor(input.inputTokens || 0));
   const outputTokens = Math.max(0, Math.floor(input.outputTokens || 0));
   const cacheTokens = Math.max(0, Math.floor(input.cacheTokens || 0));
-  if (inputTokens === 0 && outputTokens === 0 && cacheTokens === 0) return null;
+  const cacheWriteTokens = Math.max(0, Math.floor(input.cacheWriteTokens || 0));
+  if (inputTokens === 0 && outputTokens === 0 && cacheTokens === 0 && cacheWriteTokens === 0) return null;
 
   const cfg = await getPricingConfig();
-  const costUsdMicros = computeCostUsdMicros(input.model, inputTokens, outputTokens, cacheTokens, cfg);
+  // 🔴 Los tokens de caché NO cuestan lo mismo: leer vale 0,1× la entrada y
+  // escribir 1,25×, o sea 12,5 veces más. Meterlos en el mismo saco —como se
+  // hacía antes de que Sabina cacheara— le cobraría de MÁS a la clínica en cada
+  // primera pregunta y de menos en las siguientes. `computeCostUsdMicros` ya
+  // sabía repartirlo (`pricing-core.ts`); lo que faltaba era pasárselo.
+  const costUsdMicros = computeCostUsdMicros(
+    input.model,
+    inputTokens,
+    outputTokens,
+    cacheTokens,
+    cfg,
+    cacheWriteTokens,
+  );
   const billedCents = usdMicrosToBilledCents(costUsdMicros, cfg);
 
   // Asegura el monedero ANTES de la TX (el update atómico exige que exista).
@@ -79,7 +92,10 @@ export async function chargeUsage(input: ChargeUsageInput): Promise<ChargeUsageR
         model: input.model,
         inputTokens,
         outputTokens,
-        cacheTokens,
+        // La columna guarda el TOTAL de tokens de caché (lectura + escritura),
+        // igual que en `record-usage.ts`: el reparto por precio ya quedó dentro
+        // de `costUsdMicros`, y así esto no depende de un SQL sin aplicar.
+        cacheTokens: cacheTokens + cacheWriteTokens,
         costUsdMicros,
         fxRate: cfg.usdToMxnRate,
         feePct: cfg.feePct,

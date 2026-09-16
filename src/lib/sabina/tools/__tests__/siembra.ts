@@ -32,6 +32,8 @@ export const U_DOC_N = "u-doc-n";
 export const U_DOC2_N = "u-doc2-n";
 export const U_RECEP_N = "u-recep-n";
 export const U_ADMIN_S = "u-admin-s";
+/** Doctor de la del norte DADO DE BAJA: no está en el equipo aunque siga en la tabla (ws1-t5). */
+export const U_BAJA_N = "u-baja-n";
 
 /** Hoy en el calendario de cada clínica. */
 export const HOY_N = todayInTz(TZ_NORTE);
@@ -107,12 +109,24 @@ export function datosDePrueba(): Datos {
     { id: "r-s3", clinicId: CL_SUR, isActive: true, kind: "SILLA_DENTAL" },
   ];
 
+  // Las especialidades y los servicios son de ws1-t5 (`equipo_clinica`). Hugo lleva
+  // la suya en `specialty` (el campo de la agenda y de la web pública) y Nadia
+  // solo en `especialidad` (el de NOM-024): la herramienta tiene que encontrar a
+  // las dos. Omar está DE BAJA con la misma especialidad que Hugo, para que una
+  // búsqueda de «ortodoncia» demuestre que `isActive` filtra de verdad.
   const users: Fila[] = [
-    { id: U_ADMIN_N, clinicId: CL_NORTE, role: "ADMIN", firstName: "Rita", lastName: "Admin", isActive: true },
-    { id: U_DOC_N, clinicId: CL_NORTE, role: "DOCTOR", firstName: "Hugo", lastName: "Salas", isActive: true },
-    { id: U_DOC2_N, clinicId: CL_NORTE, role: "DOCTOR", firstName: "Nadia", lastName: "Rojas", isActive: true },
-    { id: U_RECEP_N, clinicId: CL_NORTE, role: "RECEPTIONIST", firstName: "Lupe", lastName: "Mesa", isActive: true },
-    { id: U_ADMIN_S, clinicId: CL_SUR, role: "ADMIN", firstName: "Sara", lastName: "Sur", isActive: true },
+    { id: U_ADMIN_N, clinicId: CL_NORTE, role: "ADMIN", firstName: "Rita", lastName: "Admin", isActive: true,
+      specialty: null, especialidad: null, services: [], agendaActive: false },
+    { id: U_DOC_N, clinicId: CL_NORTE, role: "DOCTOR", firstName: "Hugo", lastName: "Salas", isActive: true,
+      specialty: "Ortodoncia", especialidad: null, services: ["Brackets", "Alineadores"], agendaActive: true },
+    { id: U_DOC2_N, clinicId: CL_NORTE, role: "DOCTOR", firstName: "Nadia", lastName: "Rojas", isActive: true,
+      specialty: null, especialidad: "Endodoncia", services: ["Endodoncia multirradicular"], agendaActive: false },
+    { id: U_RECEP_N, clinicId: CL_NORTE, role: "RECEPTIONIST", firstName: "Lupe", lastName: "Mesa", isActive: true,
+      specialty: null, especialidad: null, services: [], agendaActive: false },
+    { id: U_BAJA_N, clinicId: CL_NORTE, role: "DOCTOR", firstName: "Omar", lastName: "Baja", isActive: false,
+      specialty: "Ortodoncia", especialidad: null, services: ["Brackets"], agendaActive: true },
+    { id: U_ADMIN_S, clinicId: CL_SUR, role: "ADMIN", firstName: "Sara", lastName: "Sur", isActive: true,
+      specialty: "ORTODONCIA SUR", especialidad: null, services: ["Ortodoncia SUR"], agendaActive: true },
   ];
 
   const patients: Fila[] = [
@@ -336,7 +350,25 @@ export function datosDePrueba(): Datos {
     { id: "rec-sur", clinicId: CL_SUR, patientId: "p-sur-1", doctorId: U_ADMIN_S, visitDate: haceDias(3) },
   ];
 
-  return { clinics, clinicSchedules, resources, users, patients, appointments, invoices, payments, records };
+  // ws1-t5 — el catálogo de precios. Tres «resina» a propósito: es el caso de
+  // Rafael («si un procedimiento tiene varios precios, que lo diga en vez de
+  // elegir»). «Extracción» lleva acento para que se pruebe que buscar
+  // "extraccion" la encuentra. El blanqueamiento NO tiene duración: la clínica
+  // no se la puso, y Sabina no puede inventarla. La corona está de BAJA.
+  // Lo del SUR chilla si se cuela: $99,999.
+  const procedureCatalogs: Fila[] = [
+    { id: "pc-n-limpieza", clinicId: CL_NORTE, name: "Profilaxis (limpieza)", category: "dental", basePrice: 800, duration: 40, description: null, isActive: true },
+    { id: "pc-n-res1", clinicId: CL_NORTE, name: "Restauración resina 1 cara", category: "dental", basePrice: 700, duration: 30, description: null, isActive: true },
+    { id: "pc-n-res2", clinicId: CL_NORTE, name: "Restauración resina 2 caras", category: "dental", basePrice: 950, duration: 45, description: null, isActive: true },
+    { id: "pc-n-res3", clinicId: CL_NORTE, name: "Restauración resina 3 caras", category: "dental", basePrice: 1200, duration: 60, description: null, isActive: true },
+    { id: "pc-n-extra", clinicId: CL_NORTE, name: "Extracción simple", category: "dental", basePrice: 850, duration: 30, description: null, isActive: true },
+    { id: "pc-n-endo", clinicId: CL_NORTE, name: "Endodoncia unirradicular", category: "dental", basePrice: 2500, duration: 60, description: null, isActive: true },
+    { id: "pc-n-blanq", clinicId: CL_NORTE, name: "Blanqueamiento", category: "aesthetic", basePrice: 3500, duration: null, description: "Incluye dos sesiones.", isActive: true },
+    { id: "pc-n-corona", clinicId: CL_NORTE, name: "Corona de zirconio", category: "dental", basePrice: 9000, duration: 60, description: null, isActive: false },
+    { id: "pc-s-limpieza", clinicId: CL_SUR, name: "Limpieza SUR", category: "dental", basePrice: 99999, duration: 5, description: "NO DEBE SALIR EN EL NORTE", isActive: true },
+  ];
+
+  return { clinics, clinicSchedules, resources, users, patients, appointments, invoices, payments, records, procedureCatalogs };
 }
 
 export function base(): BaseDoble {
@@ -353,6 +385,8 @@ function ctx(over: Partial<SabinaCtx>, db: BaseDoble): SabinaCtx {
     permissionsOverride: [],
     timezone: TZ_NORTE,
     clinicCategory: "DENTAL",
+    clinicaNombre: "Clínica Norte",
+    clinicaLugar: "Ciudad de México, CDMX",
     db,
     ...over,
   };
@@ -375,7 +409,7 @@ export function recepcionNorte(db: BaseDoble): SabinaCtx {
 
 /** Administradora de la del SUR. Sirve para probar la fuga en las dos direcciones. */
 export function adminSur(db: BaseDoble): SabinaCtx {
-  return ctx({ clinicId: CL_SUR, userId: U_ADMIN_S, timezone: TZ_SUR }, db);
+  return ctx({ clinicId: CL_SUR, userId: U_ADMIN_S, timezone: TZ_SUR, clinicaNombre: "Clínica Sur", clinicaLugar: "Cancún, Quintana Roo" }, db);
 }
 
 /**

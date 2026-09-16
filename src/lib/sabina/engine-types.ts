@@ -48,8 +48,17 @@ export interface SabinaRastro {
   escalado: boolean;
   herramientas: string[];
   rondas: number;
+  /** Entrada a precio normal (lo que NO salió del caché). */
   tokensEntrada: number;
   tokensSalida: number;
+  /**
+   * Entrada leída del caché y escrita al caché. Sin estos dos en el rastro no
+   * hay forma de saber si el caché está funcionando: la petición sale bien
+   * igual y lo único que cambia es la factura. `cacheLectura` en cero llamada
+   * tras llamada = algo rompió el prefijo.
+   */
+  tokensCacheLectura: number;
+  tokensCacheEscritura: number;
   ms: number;
   sinPermiso: string[];
   /** Nombres de las acciones que se PROPUSIERON (no ejecutaron) en el turno. */
@@ -62,15 +71,20 @@ export interface SabinaRastro {
  */
 export interface SabinaConsumo {
   modelo: string;
+  /** `input_tokens`: entrada a precio normal, SIN lo que salió del caché. */
   entrada: number;
   salida: number;
+  /** `cache_read_input_tokens`: entrada leída del caché, a 0,1× el precio. */
+  cacheLectura: number;
+  /** `cache_creation_input_tokens`: entrada escrita al caché, a 1,25×. */
+  cacheEscritura: number;
 }
 
 /** Lo que devuelve el motor. El endpoint lo traduce a JSON. */
 export interface SabinaRespuesta {
   respuesta: string;
   herramientasUsadas: string[];
-  tokens: { entrada: number; salida: number };
+  tokens: { entrada: number; salida: number; cacheLectura: number; cacheEscritura: number };
   /** Desglose de `tokens` por modelo, en el orden en que se usaron. */
   consumo: SabinaConsumo[];
   modelo: string;

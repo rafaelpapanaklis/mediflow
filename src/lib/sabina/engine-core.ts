@@ -714,8 +714,70 @@ export function construirSystemPrompt(opciones: {
    * tarjeta ya se confirmó, caducó o nunca existió.
    */
   tarjetaPendiente?: string | null;
+  /**
+   * La tarjeta de identidad de la clínica (ws1-t5). Es lo ÚNICO suyo que viaja
+   * fijo en cada llamada, y son dos datos que `getAuthContext()` ya tiene en la
+   * mano (`include: { clinic: true }`): ni una consulta más por pregunta.
+   *
+   * 🔴 Aquí NO van precios, ni el catálogo, ni los doctores, y no es por
+   * ahorrar: el bloque de arriba le dice al modelo «no tienes ningún dato de la
+   * clínica en la cabeza». Un precio metido en el prompt volvería falsa esa
+   * frase y le daría permiso para recitar cifras sin consultar — que es justo el
+   * fallo que el contrato persigue. Además el prompt se arma ANTES de mirar
+   * ningún permiso: lo que se mete aquí lo lee todo el mundo.
+   */
+  clinica?: {
+    nombre?: string;
+    lugar?: string;
+    /**
+     * 🔴 Qué de la clínica puede consultar ESTE usuario. No es un adorno: el
+     * prompt se arma antes de mirar ningún permiso, y el catálogo de
+     * herramientas se le ofrece entero al modelo. Si aquí se le manda «busca el
+     * precio antes de agendar» a una recepcionista a la que el SUPER_ADMIN le
+     * quitó `billing.view`, el modelo obedece, recibe `sin_permiso` y la regla
+     * más fuerte del prompt le obliga a soltar «no tienes acceso a facturación»
+     * en mitad de una petición de agenda que sí podía atender.
+     */
+    puede?: { precios?: boolean; equipo?: boolean };
+  } | null;
+  /**
+   * El bloque de «dónde está quien pregunta», ya construido y ya comprobado
+   * contra la sesión (`bloqueDeContexto` de ./contexto). Llega como TEXTO y no
+   * como objeto a propósito: este módulo no sabe de base ni de permisos, y así
+   * no hay forma de que un id sin comprobar entre al prompt por aquí.
+   *
+   * Vacío o ausente = la pregunta cuesta exactamente lo que costaba antes de
+   * que Sabina se abriera en un cajón: el contexto NO es parte fija.
+   */
+  contexto?: string | null;
 }): string {
   const acciones = (opciones.acciones ?? []).filter(Boolean);
+  const nombreClinica = opciones.clinica?.nombre?.trim() ?? "";
+  const lugarClinica = opciones.clinica?.lugar?.trim() ?? "";
+  // Solo se nombra lo que este usuario PUEDE consultar (ver `puede`, arriba).
+  const vePrecios = opciones.clinica?.puede?.precios !== false;
+  const veEquipo = opciones.clinica?.puede?.equipo !== false;
+  const dondeEsta = vePrecios && veEquipo
+    ? " Sus precios, sus duraciones y quién hace qué no te los sabes: salen de procedimientos_y_precios y equipo_clinica."
+    : vePrecios
+      ? " Sus precios y sus duraciones no te los sabes: salen de procedimientos_y_precios."
+      : veEquipo
+        ? " Quién hace qué en la clínica no te lo sabes: sale de equipo_clinica."
+        : "";
+  // La línea de agendar solo tiene sentido si además de poder agendar puede leer
+  // el catálogo del que sale la duración.
+  const duracionAlAgendar =
+    vePrecios && acciones.length > 0
+      ? " Antes de agendar «una limpieza» o «una resina», busca ahí su duración y pásala en duracionMinutos."
+      : "";
+  // Sin nombre no se escribe el bloque: un «Se llama «»» es peor que no decir nada.
+  const bloqueClinica = nombreClinica
+    ? `LA CLÍNICA DESDE LA QUE TE ESCRIBEN
+Se llama «${nombreClinica}»${lugarClinica ? ` y está en «${lugarClinica}»` : ""}.${dondeEsta}${duracionAlAgendar}
+
+`
+    : "";
+  const contexto = typeof opciones.contexto === "string" ? opciones.contexto.trim() : "";
   const pendiente = typeof opciones.tarjetaPendiente === "string" ? opciones.tarjetaPendiente.trim() : "";
   // 🔴 Esta línea era incondicional: «si te escriben "sí", diles que usen el botón
   // de la tarjeta». Agendar casi siempre pasa por una pregunta («¿te la agendo?»),
@@ -725,7 +787,7 @@ export function construirSystemPrompt(opciones: {
     ? `- Ahora mismo el usuario tiene en pantalla UNA propuesta sin confirmar: «${pendiente}». Si te escriben "sí" o "confírmalo" sobre ESA propuesta, diles que usen el botón de su tarjeta.`
     : `- Ahora mismo NO hay ninguna tarjeta en pantalla. Solo hay tarjeta cuando en ESTE turno una herramienta de acción te devuelve "propuesta_sin_confirmar". Si el usuario contesta "sí" a algo que tú le preguntaste («¿te la agendo?», «¿es este paciente?»), eso es su respuesta: llama a la herramienta de acción con los datos de la conversación para preparar la propuesta. NUNCA le pidas que confirme en una tarjeta que no preparaste.`;
   return `Eres Sabina, la asistente de una clínica dental en México. Contestas al doctor y a su equipo sobre SU clínica, en español neutro y de tú. Hoy es ${opciones.hoy}.
-
+${contexto ? `\n${contexto}\n` : ""}
 CÓMO CONSIGUES LOS DATOS
 Los números salen SIEMPRE de tus herramientas. No tienes ningún dato de la clínica en la cabeza.
 - Las fechas que les pases van en formato AAAA-MM-DD.
@@ -734,7 +796,7 @@ Los números salen SIEMPRE de tus herramientas. No tienes ningún dato de la cl�
 - Si no existe una herramienta para lo que te preguntan, dilo: "eso no lo puedo consultar todavía".
 - Nunca inventes un nombre de paciente, una cantidad, una fecha ni un porcentaje. Una sola cifra inventada y el doctor no te vuelve a usar.
 
-CUANDO FALTA UN PERMISO (esto es lo más importante)
+${bloqueClinica}CUANDO FALTA UN PERMISO (esto es lo más importante)
 Si una herramienta vuelve con "sin_permiso", NO puedes omitir esa parte en silencio.
 - MAL: "No tengo datos de facturación." (el doctor entiende que la clínica no facturó nada)
 - BIEN: "No tienes acceso a facturación, eso no te lo puedo contestar."
@@ -801,6 +863,9 @@ export function construirRastro(estado: {
   rondas: number;
   tokensEntrada: number;
   tokensSalida: number;
+  /** Ver `SabinaRastro`: en cero pregunta tras pregunta = el caché no engancha. */
+  tokensCacheLectura?: number;
+  tokensCacheEscritura?: number;
   ms: number;
   sinPermiso: readonly string[];
   propuestas?: readonly string[];
@@ -816,6 +881,8 @@ export function construirRastro(estado: {
     rondas: estado.rondas,
     tokensEntrada: estado.tokensEntrada,
     tokensSalida: estado.tokensSalida,
+    tokensCacheLectura: estado.tokensCacheLectura ?? 0,
+    tokensCacheEscritura: estado.tokensCacheEscritura ?? 0,
     ms: estado.ms,
     sinPermiso: [...estado.sinPermiso],
     propuestas: [...(estado.propuestas ?? [])],

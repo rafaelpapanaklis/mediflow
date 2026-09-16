@@ -34,7 +34,7 @@ interface Sesion {
   clinicId: string;
   role: string;
   permissionsOverride: string[];
-  clinic: { timezone: string; category: string };
+  clinic: { timezone: string; category: string; name?: string; city?: string; state?: string };
   isAdmin: boolean;
 }
 
@@ -60,7 +60,7 @@ function sesionAdminNorte(): Sesion {
     clinicId: CL_NORTE,
     role: "ADMIN",
     permissionsOverride: [],
-    clinic: { timezone: TZ_NORTE, category: "DENTAL" },
+    clinic: { timezone: TZ_NORTE, category: "DENTAL", name: "Clínica Norte", city: "Ciudad de México", state: "CDMX" },
     isAdmin: true,
   };
 }
@@ -98,7 +98,12 @@ before(async () => {
   globalThis.fetch = (async (url: unknown, init?: { body?: string }) => {
     assert.equal(String(url), "https://api.anthropic.com/v1/messages", "el motor solo debe hablar con Anthropic");
     const cuerpo = JSON.parse(init?.body ?? "{}");
-    estado.peticiones.push(cuerpo);
+    // Desde que Sabina cachea el prefijo, `system` viaja como bloque de texto y no
+    // como cadena suelta (es la forma equivalente que admite `cache_control`; ver
+    // `engine-cache.ts`). Aquí se aplana: estas pruebas miran lo que DICE el
+    // prompt, no su envoltorio. El envoltorio lo fija `npm run test:sabina-cache`.
+    const textoDelSystem = (s: any) => (Array.isArray(s) ? s.map((b: any) => b?.text ?? "").join("") : String(s ?? ""));
+    estado.peticiones.push({ ...cuerpo, system: textoDelSystem(cuerpo.system) });
     assert.ok(estado.guion, "una prueba llamó al modelo sin guion");
     const respuesta = estado.guion({ model: cuerpo.model, messages: cuerpo.messages, n: estado.peticiones.length });
     return new Response(JSON.stringify(respuesta), { status: 200, headers: { "content-type": "application/json" } });
@@ -270,13 +275,34 @@ const LAS_DE_CAJA = ["caja"];
 /** Las tres de CLÍNICO (ws1-t4): todas de solo lectura. */
 const LAS_DE_CLINICO = ["recetas", "estudios_del_paciente", "analisis_y_notas_de_estudio"];
 
-test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja y las tres de clínico, con su esquema", async () => {
+/** Las dos de LA CLÍNICA (ws1-t5): el catálogo de precios y el cuadro de profesionales. */
+const LAS_DE_LA_CLINICA = ["procedimientos_y_precios", "equipo_clinica"];
+/** Comparar sedes (ws1-t4): la única que mira más de una clínica. Solo lee. */
+const LAS_DE_SEDES = ["comparar_sedes"];
+/** Lo que se escapa (ws1-t8): una sola, con `tipo` para pedir una lista concreta. */
+const LAS_DE_ESCAPE = ["oportunidades_perdidas"];
+/** El odontograma (ws1-t1): lee los hallazgos que el doctor marcó, y nada más. */
+const LA_DEL_ODONTOGRAMA = ["odontograma"];
+
+test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja, las tres de clínico, las dos de la clínica, la de sedes, la de lo que se escapa y la del odontograma, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
 
   const tools = estado.peticiones[0]?.tools ?? [];
-  assert.deepEqual(tools.map((t: any) => t.name).sort(), [...LAS_DIEZ, ...LAS_NUEVAS, ...LAS_DE_CAJA, ...LAS_DE_CLINICO].sort());
+  assert.deepEqual(
+    tools.map((t: any) => t.name).sort(),
+    [
+      ...LAS_DIEZ,
+      ...LAS_NUEVAS,
+      ...LAS_DE_CAJA,
+      ...LAS_DE_CLINICO,
+      ...LAS_DE_LA_CLINICA,
+      ...LAS_DE_SEDES,
+      ...LAS_DE_ESCAPE,
+      ...LA_DEL_ODONTOGRAMA,
+    ].sort(),
+  );
 
   const { SABINA_TOOLS } = await import("../engine-catalog");
   for (const t of tools) {
@@ -338,8 +364,50 @@ test("«¿cuántas citas tengo hoy?» — de la pregunta al JSON, con el número
   assert.equal(json.respuesta, `Según la agenda: ${resumenDirecto}`);
   assert.deepEqual(json.herramientasUsadas, ["citas_del_dia"]);
   assert.equal(json.modelo, "claude-haiku-4-5");
-  assert.deepEqual(json.tokens, { entrada: 2200, salida: 130 });
+  // `entrada` es lo que NO salió del caché; los dos contadores de caché van
+  // aparte porque cuestan distinto (ver engine-cache.ts). El doble de Anthropic
+  // de esta prueba no manda ninguno, así que quedan en cero.
+  assert.deepEqual(json.tokens, { entrada: 2200, salida: 130, cacheLectura: 0, cacheEscritura: 0 });
   assert.equal(json.conversacionId, "conv-sabina");
+});
+
+test("ws1-t5: el prompt trae el nombre de la clínica, y NINGÚN precio suyo", async () => {
+  estado.guion = () => contesta("Hola.");
+  await preguntar("hola");
+
+  const system = estado.peticiones[0].system;
+  assert.match(system, /Se llama «Clínica Norte» y está en «Ciudad de México, CDMX»/);
+  // 🔴 El catálogo NO viaja en el prompt: se paga en cada pregunta de cada
+  // clínica, y volvería mentira el «no tienes ningún dato de la clínica en la
+  // cabeza» que está tres párrafos más arriba en el mismo prompt.
+  for (const del of ["Profilaxis", "800", "Restauración resina", "Hugo Salas", "Ortodoncia"]) {
+    assert.ok(!system.includes(del), `el prompt lleva «${del}»: eso se paga en cada pregunta`);
+  }
+});
+
+test("ws1-t5: «¿cuánto cobramos por una limpieza?» sale de la base, con su precio y su duración", async () => {
+  const { procedimientosYPrecios } = await import("../tools/procedimientos-y-precios");
+  const { correrHerramienta } = await import("../tools/base");
+  const directo = await correrHerramienta(procedimientosYPrecios, adminNorte(estado.db!), { busqueda: "limpieza" });
+  assert.equal(directo.ok, true, JSON.stringify(directo));
+
+  estado.guion = ({ n, messages }) => {
+    if (n === 1) return pideHerramienta("procedimientos_y_precios", { busqueda: "limpieza" });
+    const r = ultimoToolResult(messages);
+    assert.equal(r?.ok, true, JSON.stringify(r));
+    assert.match(r.resumen, /\$800/);
+    assert.match(r.resumen, /40 min/);
+    // El modelo contesta SIN el matiz: la red del motor tiene que ponerlo.
+    return contesta("La limpieza son $800 y dura 40 minutos.");
+  };
+
+  const res = await preguntar("¿cuánto cobramos por una limpieza?");
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.deepEqual(json.herramientasUsadas, ["procedimientos_y_precios"]);
+  assert.match(json.respuesta, /\$800/);
+  // El motor añade el aviso obligatorio si el modelo se lo come.
+  assert.match(json.respuesta, /precio de lista/);
 });
 
 test("sin permiso de facturación, lo DICE — con la herramienta real y el permiso real", async () => {
@@ -420,7 +488,9 @@ test("cobra del monedero con chargeUsage (feature sabina), no como IA incluida e
   // Y no se cobra dos veces: lo que paga el monedero no se descuenta además del cupo del plan.
   assert.deepEqual(estado.cupo, [], "Sabina gastó el cupo del plan además de cobrar al monedero");
   assert.deepEqual(estado.cobros, [
-    { clinicId: CL_NORTE, feature: "sabina", model: "claude-haiku-4-5", inputTokens: 2200, outputTokens: 130 },
+    // Los tokens de caché viajan SEPARADOS al cobro: leído se cobra a 0,1× y
+    // escrito a 1,25×, y meterlos en `inputTokens` le cobraría de más a la clínica.
+    { clinicId: CL_NORTE, feature: "sabina", model: "claude-haiku-4-5", inputTokens: 2200, outputTokens: 130, cacheTokens: 0, cacheWriteTokens: 0 },
   ]);
 });
 
@@ -557,4 +627,73 @@ test("GET /api/sabina/conversations/:id — turnos con la forma de la pantalla, 
     params: { id: "conv-sabina" },
   });
   assert.equal(sinSesion.status, 401);
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 9 · El contexto de pantalla (ws1-t1) — «la pista no es una llave»
+ *
+ * Esto es lo que prueba que el cajón lateral de Sabina no abre ninguna
+ * puerta: la petición entra por el handler REAL con un `contexto` puesto a
+ * mano, y se mira lo que acabó viajando al modelo.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+test("el contexto de pantalla llega al prompt cuando el paciente SÍ es de su clínica", async () => {
+  estado.guion = () => contesta("Listo.");
+  const res = await preguntar("¿qué le receté la última vez?", {
+    contexto: { pantalla: "ficha-paciente", pacienteId: "p-ana" },
+  });
+  assert.equal(res.status, 200);
+
+  const system = estado.peticiones[0].system;
+  assert.match(system, /DÓNDE ESTÁ QUIEN PREGUNTA/);
+  assert.match(system, /la ficha de «Ana Perez»/);
+  assert.match(system, /patientId "p-ana"/);
+});
+
+test("🔴 manipular el pacienteId a uno de OTRA clínica no lee nada ni llega al modelo", async () => {
+  estado.guion = () => contesta("Listo.");
+  // La sesión es del NORTE. El cuerpo manda el id de una paciente del SUR,
+  // como si alguien lo hubiera cambiado a mano en la petición.
+  const res = await preguntar("¿qué problemas dentales tiene?", {
+    contexto: { pantalla: "ficha-paciente", pacienteId: "p-sur-1" },
+  });
+  assert.equal(res.status, 200);
+
+  const system = estado.peticiones[0].system;
+  assert.ok(!system.includes("p-sur-1"), "el id manipulado llegó al prompt del sistema");
+  assert.ok(!system.includes("Sofia"), "el nombre de una paciente de otra clínica llegó al prompt");
+  assert.ok(!system.includes("SUR"), "algo de la clínica de al lado llegó al prompt");
+  // La pantalla sí se reconoce, pero sin paciente no hay regla de pronombre:
+  // Sabina no tiene a quién referirse y tendrá que preguntar o buscar. (Se
+  // busca «usa patientId», que solo escribe el bloque de contexto: «este
+  // paciente» a secas ya sale en el prompt de siempre, hablando de otra cosa.)
+  assert.ok(!system.includes("usa patientId"), "se dio por bueno un paciente que no es suyo");
+
+  // Y la respuesta sale igual: el contexto es un extra, no una puerta.
+  const json = await res.json();
+  assert.equal(json.respuesta, "Listo.");
+});
+
+test("sin contexto, el prompt no crece: lo que no se manda no se paga", async () => {
+  estado.guion = () => contesta("Listo.");
+  await preguntar("¿cuántas citas tengo hoy?");
+  const sinContexto = estado.peticiones[0].system;
+  assert.ok(!sinContexto.includes("DÓNDE ESTÁ QUIEN PREGUNTA"));
+
+  estado.peticiones = [];
+  await preguntar("¿cuántas citas tengo hoy?", { contexto: { pantalla: "agenda", fecha: "2026-09-16" } });
+  const conContexto = estado.peticiones[0].system;
+  const anadido = conContexto.length - sinContexto.length;
+  // Medido el 15-sep-2026: 84 caracteres (el bloque + su línea en blanco).
+  assert.ok(anadido > 0 && anadido < 160, `la agenda añadió ${anadido} caracteres al prompt`);
+});
+
+test("un contexto basura no tumba la pregunta", async () => {
+  estado.guion = () => contesta("Listo.");
+  for (const basura of ["no-soy-un-objeto", 42, { pantalla: 1, pacienteId: [] }]) {
+    estado.peticiones = [];
+    const res = await preguntar("hola", { contexto: basura });
+    assert.equal(res.status, 200, JSON.stringify(basura));
+    assert.ok(!estado.peticiones[0].system.includes("DÓNDE ESTÁ QUIEN PREGUNTA"));
+  }
 });

@@ -47,6 +47,24 @@ export interface Datos {
   cumsItems?: Fila[];
   patientFiles?: Fila[];
   xrayAnalyses?: Fila[];
+  /** ws1-t5: el catálogo de precios y duraciones de la clínica. */
+  procedureCatalogs?: Fila[];
+  /** ws1-t4 (comparar sedes): el recorte de Sabina por (usuario, clínica). */
+  sabinaUserPermissions?: Fila[];
+  /** ws1-t8 («lo que se escapa»): planes de tratamiento y sus sesiones. */
+  treatmentPlans?: Fila[];
+  treatmentSessions?: Fila[];
+  /** ws1-t8: lo que pidió el paciente y nadie contestó. */
+  bookingRequests?: Fila[];
+  appointmentChangeRequests?: Fila[];
+  /**
+   * ws1-t1: el odontograma. OJO — estas filas NO llevan `clinicId` (la tabla
+   * real tampoco): cuelgan del paciente. Es a propósito, y es lo que hace que
+   * la prueba de aislamiento valga: si `odontograma` se saltara el
+   * `pacienteVisibleYActivo`, este doble le devolvería los hallazgos del
+   * paciente de la otra clínica igual que Prisma.
+   */
+  odontogramEntries?: Fila[];
 }
 
 interface Relacion {
@@ -88,6 +106,18 @@ const RELACIONES: Record<string, Record<string, Relacion>> = {
   cashWithdrawal: {
     recordedByUser: { modelo: "users", via: (w, u) => w.recordedBy === u.id, lista: false },
   },
+  treatmentPlan: {
+    patient: { modelo: "patients", via: (t, p) => t.patientId === p.id, lista: false },
+    doctor: { modelo: "users", via: (t, u) => t.doctorId === u.id, lista: false },
+    sessions: { modelo: "treatmentSessions", via: (t, s) => s.treatmentId === t.id, lista: true },
+  },
+  treatmentSession: {
+    treatment: { modelo: "treatmentPlans", via: (s, t) => s.treatmentId === t.id, lista: false },
+  },
+  appointmentChangeRequest: {
+    patient: { modelo: "patients", via: (r, p) => r.patientId === p.id, lista: false },
+    appointment: { modelo: "appointments", via: (r, a) => r.appointmentId === a.id, lista: false },
+  },
 };
 
 const MODELO_DE: Record<string, string> = {
@@ -112,6 +142,13 @@ const MODELO_DE: Record<string, string> = {
   cumsItem: "cumsItems",
   patientFile: "patientFiles",
   xrayAnalysis: "xrayAnalyses",
+  procedureCatalog: "procedureCatalogs",
+  sabinaUserPermission: "sabinaUserPermissions",
+  treatmentPlan: "treatmentPlans",
+  treatmentSession: "treatmentSessions",
+  bookingRequest: "bookingRequests",
+  appointmentChangeRequest: "appointmentChangeRequests",
+  odontogramEntry: "odontogramEntries",
 };
 
 /** Cuántas consultas se han hecho, por modelo y operación. Para vigilar el pooler. */
@@ -144,6 +181,13 @@ export function crearBase(datos: Datos): BaseDoble {
     cumsItems: datos.cumsItems ?? [],
     patientFiles: datos.patientFiles ?? [],
     xrayAnalyses: datos.xrayAnalyses ?? [],
+    procedureCatalogs: datos.procedureCatalogs ?? [],
+    sabinaUserPermissions: datos.sabinaUserPermissions ?? [],
+    treatmentPlans: datos.treatmentPlans ?? [],
+    treatmentSessions: datos.treatmentSessions ?? [],
+    bookingRequests: datos.bookingRequests ?? [],
+    appointmentChangeRequests: datos.appointmentChangeRequests ?? [],
+    odontogramEntries: datos.odontogramEntries ?? [],
   };
   const contador: Contador = { llamadas: [] };
 
@@ -241,6 +285,16 @@ export function crearBase(datos: Datos): BaseDoble {
     cumsItem: delegado("cumsItem") as any,
     patientFile: delegado("patientFile") as any,
     xrayAnalysis: delegado("xrayAnalysis") as any,
+    procedureCatalog: delegado("procedureCatalog") as any,
+    // Sin filas se comporta como «no hay recorte guardado», que es lo mismo
+    // que dice `leerAjustesSabina` ante una tabla vacía: Sabina con todo lo
+    // del usuario. Las pruebas de sedes sí siembran filas aquí.
+    sabinaUserPermission: delegado("sabinaUserPermission") as any,
+    treatmentPlan: delegado("treatmentPlan") as any,
+    treatmentSession: delegado("treatmentSession") as any,
+    bookingRequest: delegado("bookingRequest") as any,
+    appointmentChangeRequest: delegado("appointmentChangeRequest") as any,
+    odontogramEntry: delegado("odontogramEntry") as any,
     /**
      * A propósito LANZA. El doble no habla SQL, y eso ejercita el camino
      * DEGRADADO del buscador —el `contains` de siempre— que es el que el repo

@@ -3544,7 +3544,7 @@
     },
     "signature": {
       "title": "FIEL/SAT electronic signature",
-      "intro": "Upload your SAT e.firma (.cer + .key + password) to digitally sign prescriptions and clinical notes with legal validity under the LFEA.",
+      "intro": "Upload your SAT e.firma (.cer + .key + password) to digitally sign prescriptions and clinical notes. DaleControl stores your signature and checks that the key matches the certificate, but it does not yet validate the certificate with the SAT: documents are printed saying exactly that.",
       "statusExpired": "Expired certificate",
       "statusExpiringSoon": {
         "one": "Expires in {count} day — renew soon",
@@ -7265,7 +7265,10 @@
       "actionVerify": "View verification",
       "sent": "Sent",
       "sendFailed": "Could not send: {error}",
-      "done": "Done"
+      "done": "Done",
+      "errorNoFolio": "COFEPRIS group {group}: the official prescription-pad folio is required by law.",
+      "validityCapHint": "COFEPRIS group {group}: legal validity is {eta}, at most until {date}. Leave it empty and it is calculated for you.",
+      "cofeprisFolioRequiredHint": "Required for group {group}."
     },
     "prescriptionQr": {
       "title": "Digital medical prescription",
