@@ -6,6 +6,7 @@ import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layo
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { AnalyticsHeatmap } from "@/components/dashboard/analytics/analytics-heatmap";
 import { useT } from "@/i18n/i18n-provider";
+import { WaitingRoomRediseno } from "./waiting-room-rediseno";
 
 interface HourStat { hour: number; avgMin: number; count: number; longWaits: number }
 interface LongWait {
@@ -15,7 +16,7 @@ interface LongWait {
   patient: string;
   doctor: string;
 }
-interface ApiResponse {
+export interface ApiResponse {
   threshold: number;
   overallAvg: number;
   overallMedian: number;
@@ -26,7 +27,7 @@ interface ApiResponse {
   longWaits: LongWait[];
 }
 
-export function WaitingRoomClient() {
+export function WaitingRoomClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,6 +49,8 @@ export function WaitingRoomClient() {
     const id = setInterval(load, 60_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
+
+  if (rediseno) return <WaitingRoomRediseno data={data} loading={loading} />;
 
   return (
     <AnalyticsLayout

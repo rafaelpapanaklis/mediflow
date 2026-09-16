@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { useT } from "@/i18n/i18n-provider";
+import { NoShowsRediseno } from "./no-shows-rediseno";
 
 interface DayStat { dayIdx: number; count: number; total: number; rate: number }
 interface HourStat { hour: number; count: number; total: number; rate: number }
@@ -19,7 +20,7 @@ interface UpcomingRisk {
   patient: string;
   doctor: string;
 }
-interface ApiResponse {
+export interface ApiResponse {
   total: number;
   noShowCount: number;
   rate: number;
@@ -29,7 +30,7 @@ interface ApiResponse {
   upcomingHighRisk: UpcomingRisk[];
 }
 
-const DAY_KEYS = [
+export const DAY_KEYS = [
   "analytics.noShows.dayMon",
   "analytics.noShows.dayTue",
   "analytics.noShows.dayWed",
@@ -39,7 +40,7 @@ const DAY_KEYS = [
   "analytics.noShows.daySun",
 ];
 
-export function NoShowsClient() {
+export function NoShowsClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,6 +104,20 @@ export function NoShowsClient() {
     } finally {
       setRefreshingPredId(null);
     }
+  }
+
+  if (rediseno) {
+    return (
+      <NoShowsRediseno
+        data={data}
+        loading={loading}
+        aiInsight={aiInsight}
+        aiLoading={aiLoading}
+        requestAiInsight={requestAiInsight}
+        refreshingPredId={refreshingPredId}
+        refreshPrediction={refreshPrediction}
+      />
+    );
   }
 
   return (
