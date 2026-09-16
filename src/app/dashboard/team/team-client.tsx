@@ -105,6 +105,11 @@ function MemberForm({
 }) {
   const t = useT();
   const [svcInput, setSvcInput] = useState("");
+  // Con el rediseño, el acento y los bordes se leen del menú de dos niveles
+  // (los `--m2-*` que monta la raíz); apagado, los tokens de siempre.
+  const acento = rediseno ? "var(--m2-activo)" : "var(--brand)";
+  const acentoSuave = rediseno ? "var(--m2-iniciales-fondo)" : "var(--brand-soft)";
+  const bordeSuave = rediseno ? "var(--m2-tarjeta-borde)" : "var(--border-soft)";
 
   function set(k: keyof FormState, v: any) {
     setForm(prev => ({ ...prev, [k]: v }));
@@ -169,11 +174,11 @@ function MemberForm({
               className="flex flex-col items-center p-3 text-center"
               style={{
                 borderRadius: "var(--radius)",
-                border: `2px solid ${form.role === r.value ? "var(--brand)" : "var(--border-soft)"}`,
-                background: form.role === r.value ? "var(--brand-soft)" : "transparent",
+                border: `2px solid ${form.role === r.value ? acento : bordeSuave}`,
+                background: form.role === r.value ? acentoSuave : "transparent",
                 transition: "border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease)",
               }}>
-              <r.icon size={18} strokeWidth={1.75} aria-hidden style={{ color: form.role === r.value ? "var(--brand)" : "var(--text-3)", marginBottom: 6 }} />
+              <r.icon size={18} strokeWidth={1.75} aria-hidden style={{ color: form.role === r.value ? acento : "var(--text-3)", marginBottom: 6 }} />
               <span className="text-sm font-bold">{t(r.labelKey)}</span>
               <span className="text-xs text-muted-foreground mt-0.5 leading-tight">{t(r.descKey)}</span>
             </button>
@@ -303,7 +308,7 @@ function MemberForm({
        *  + el POST a TeamClient, que también maneja la visualización del
        *  tempPassword en el banner de arriba. */}
       {isEdit && onResetPassword && (
-        <div className="pt-4 mt-2" style={{ borderTop: "1px solid var(--border-soft)" }}>
+        <div className="pt-4 mt-2" style={{ borderTop: `1px solid ${bordeSuave}` }}>
           <div className="form-section__title" style={{ marginBottom: 0 }}>{t("settings.team.userAccessLabel")}<span className="form-section__rule" aria-hidden /></div>
           <p className="text-xs text-muted-foreground mt-1 mb-3">
             {t("settings.team.resetPasswordHint")}
@@ -363,13 +368,16 @@ function readableOn(hex: string): string {
 }
 
 function MemberPhoto({
-  member, onChange,
+  member, onChange, rediseno,
 }: {
   member: TeamMember;
   onChange: (avatarUrl: string | null) => void;
+  rediseno: boolean;
 }) {
   const t = useT();
   const [uploading, setUploading] = useState(false);
+  // Acento del menú de dos niveles con el rediseño; el de siempre, apagado.
+  const acento = rediseno ? "var(--m2-activo)" : "var(--brand)";
   const inputRef = useRef<HTMLInputElement>(null);
   const fullName = `${member.firstName} ${member.lastName}`;
 
@@ -442,7 +450,7 @@ function MemberPhoto({
           style={{
             width: 64, height: 64, borderRadius: "50%", overflow: "hidden",
             display: "flex", alignItems: "center", justifyContent: "center",
-            background: member.color || "var(--brand)",
+            background: member.color || acento,
             color: readableOn(member.color || "#7c3aed"), fontSize: 20, fontWeight: 700, letterSpacing: "0.02em",
           }}
         >
@@ -479,7 +487,7 @@ function MemberPhoto({
           style={{
             position: "absolute", right: -4, bottom: -4,
             width: 28, height: 28, borderRadius: "50%",
-            background: "var(--brand)", color: "#fff",
+            background: acento, color: "#fff",
             border: "2px solid var(--bg-elev)",
             display: "flex", alignItems: "center", justifyContent: "center",
             cursor: uploading ? "default" : "pointer",
@@ -877,6 +885,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
                   <MemberPhoto
                     member={m}
+                    rediseno={rediseno}
                     onChange={url =>
                       setTeam(prev => prev.map(mem => (mem.id === m.id ? { ...mem, avatarUrl: url } : mem)))
                     }
@@ -916,7 +925,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                     gap: 10,
                     marginTop: 16,
                     paddingTop: 16,
-                    borderTop: "1px solid var(--border-soft)",
+                    borderTop: `1px solid ${rediseno ? "var(--m2-tarjeta-borde)" : "var(--border-soft)"}`,
                     width: "100%",
                   }}>
                     <div>

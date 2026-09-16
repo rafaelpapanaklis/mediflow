@@ -123,6 +123,7 @@
     "test:nota-cabecera": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/pdf/__tests__/nota-clinica-cabecera.test.tsx",
     "test:botones-prometidos": "tsx --test src/app/dashboard/__tests__/botones-prometidos.test.ts",
     "test:caja-dinero": "tsx --test src/lib/__tests__/caja-dinero.test.ts",
+    "test:equipo-rediseno": "tsx --test src/components/dashboard/equipo-rediseno/__tests__/equipo-rediseno.test.ts",
     "test:paid-at": "TZ=America/Mexico_City tsx --test src/lib/billing/__tests__/paid-at.test.ts",
     "test:editor-iva": "tsx --test src/lib/billing/__tests__/invoice-editor-iva.test.ts",
     "test:quote-invoice": "tsx --test src/lib/quotes/__tests__/invoice-from-quote-core.test.ts",
