@@ -22,9 +22,15 @@ interface Props {
   intervalMs?: number;
   /** Tope de consultas automáticas; después queda solo el botón manual. */
   maxAttempts?: number;
+  /**
+   * Rediseño: clase del botón en el lenguaje del menú. Con ella, el botón
+   * deja las clases y el estilo en línea de siempre; sin ella (por defecto),
+   * se pinta exactamente como hoy. La espera al webhook no cambia.
+   */
+  className?: string;
 }
 
-export function ConfirmingPoll({ label, intervalMs = 3000, maxAttempts = 20 }: Props) {
+export function ConfirmingPoll({ label, intervalMs = 3000, maxAttempts = 20, className }: Props) {
   const router = useRouter();
   const [attempts, setAttempts] = useState(0);
 
@@ -41,11 +47,18 @@ export function ConfirmingPoll({ label, intervalMs = 3000, maxAttempts = 20 }: P
     <button
       type="button"
       onClick={() => router.refresh()}
-      className="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-base font-bold text-white shadow-lg transition hover:opacity-90"
-      style={{
-        background: "var(--brand)",
-        boxShadow: "0 10px 30px -8px rgba(124, 58, 237, 0.4)",
-      }}
+      className={
+        className ??
+        "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-base font-bold text-white shadow-lg transition hover:opacity-90"
+      }
+      style={
+        className
+          ? undefined
+          : {
+              background: "var(--brand)",
+              boxShadow: "0 10px 30px -8px rgba(124, 58, 237, 0.4)",
+            }
+      }
     >
       <RefreshCw size={16} aria-hidden />
       {label}

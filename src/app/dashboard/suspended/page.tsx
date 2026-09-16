@@ -6,6 +6,13 @@ import { isFirstContract } from "@/lib/billing/first-month-promo";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
+import {
+  CabeceraSuspendida,
+  PaginaSuspendida,
+  VolverAlLogin,
+} from "@/components/dashboard/cuenta-rediseno/suspendida";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +69,44 @@ export default async function SuspendedPage({
   const subcopy = isReactivation
     ? "Tu acceso se pausó por un pago pendiente. Reactívalo para continuar."
     : "Elige cómo pagar tu plan y empieza a usar DaleControl. Pago seguro con tarjeta, SPEI u OXXO.";
+
+  // REDISEÑO — el MISMO interruptor por clínica que enciende el menú de dos
+  // niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno propio.
+  // Esta pantalla cuelga del layout completo, que ya lo pidió para esta misma
+  // clínica en este mismo request: la lectura de aquí comparte esa consulta en
+  // vuelo o cae en la caché de 60 s del interruptor. No es un viaje más a la
+  // base. Falla cerrado: apagado, sin tabla o con error → la pantalla de hoy.
+  const rediseno = await menuDosNivelesEncendido(user.clinicId);
+
+  if (rediseno) {
+    // Mismos textos, mismo orden y mismos elementos que abajo: aviso de pago
+    // pendiente, píldora + título + texto, las tres tarjetas con su pago
+    // (misma lógica: SuspendedPlanCards con `rediseno`), y la vuelta al login.
+    return (
+      <RaizCuenta>
+        <PaginaSuspendida>
+          <CabeceraSuspendida
+            avisoPendiente={
+              showPending
+                ? t("pages.suspended.pendingPaymentBanner", { method: (pending ?? "").toUpperCase() })
+                : null
+            }
+            reactivacion={isReactivation}
+            pildora={pillText}
+            titulo={heading}
+            texto={subcopy}
+          />
+          <SuspendedPlanCards
+            plans={planCards}
+            currentPlan={currentPlan}
+            firstMonthEligible={firstMonthEligible}
+            rediseno
+          />
+          <VolverAlLogin texto={t("pages.suspended.backToLogin")} />
+        </PaginaSuspendida>
+      </RaizCuenta>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
