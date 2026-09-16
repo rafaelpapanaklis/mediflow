@@ -5,18 +5,19 @@
  * Mes. La hace ws1-t1; ws1-t2 no la toca.
  *
  * Lleva, en este orden: el control Día/Semana/Mes, la navegación de fecha, el
- * título del periodo, el espaciador, el filtro de doctores y unidades, y el
- * botón «Buscar hueco».
+ * título del periodo, el espaciador, «N por validar» (solo si hay), el filtro
+ * de doctores y unidades, y el botón «Buscar hueco».
  *
  * La fecha NO vive aquí: se navega con `setDay` del provider de siempre, que
  * cambia el `?date=` de la URL. Así un enlace a un día concreto sigue
  * funcionando y el botón «atrás» del navegador hace lo que se espera.
  */
 
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, ShieldAlert } from "lucide-react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { todayInTz } from "@/lib/agenda/time-utils";
 import { esHoy, moverPeriodo, tituloDePeriodo } from "@/lib/agenda-nueva/fechas";
+import { esSinConfirmar } from "@/lib/agenda-nueva/estados";
 import { useAgendaNueva, type VistaAgenda } from "./contexto-agenda-nueva";
 import { FiltroDoctoresUnidades } from "./filtro-doctores-unidades";
 import s from "./agenda-nueva.module.css";
@@ -28,11 +29,18 @@ const VISTAS: { clave: VistaAgenda; etiqueta: string }[] = [
 ];
 
 export function BarraHerramientas() {
-  const { state, setDay } = useAgenda();
+  const { state, setDay, togglePendingPanel } = useAgenda();
   const ag = useAgendaNueva();
 
   const hoy = esHoy(state.dayISO, state.timezone);
   const titulo = tituloDePeriodo(ag.vista, state.dayISO);
+
+  // La misma cuenta que la sub-barra de la agenda de siempre: las que manda el
+  // servidor o las del rango cargado, la mayor.
+  const porValidar = Math.max(
+    state.pendingValidation.length,
+    state.appointments.filter((a) => a.requiresValidation && esSinConfirmar(a.status)).length,
+  );
 
   return (
     <div className={s.barra}>
@@ -87,6 +95,19 @@ export function BarraHerramientas() {
       </div>
 
       <div className={s.espaciador} />
+
+      {/* ── Por validar ── abre la cola de la agenda de siempre, arriba. */}
+      {porValidar > 0 && (
+        <button
+          type="button"
+          className={`${s.botonValidar} ${state.pendingSectionOpen ? s.botonValidarAbierto : ""}`}
+          aria-expanded={state.pendingSectionOpen}
+          onClick={() => togglePendingPanel()}
+        >
+          <ShieldAlert size={18} strokeWidth={2.2} />
+          {porValidar} por validar
+        </button>
+      )}
 
       <FiltroDoctoresUnidades />
 

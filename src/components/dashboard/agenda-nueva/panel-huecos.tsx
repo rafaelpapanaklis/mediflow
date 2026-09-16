@@ -86,6 +86,10 @@ export function PanelHuecos() {
     if (idsBuscados.length === 0) {
       setHuecos([]);
       setFallo(null);
+      // La búsqueda anterior pudo quedar abortada a medias, y su `finally` no
+      // apaga `cargando` cuando la abortan: sin esto el panel se quedaba en
+      // «Buscando…» y nunca decía que no hay nadie seleccionado.
+      setCargando(false);
       return;
     }
     const abortar = new AbortController();

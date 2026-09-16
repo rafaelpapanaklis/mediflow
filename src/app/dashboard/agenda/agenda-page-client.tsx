@@ -97,7 +97,11 @@ export function AgendaPageClient(props: Props) {
           pinta. Con la bandera apagada esto es, literalmente, el árbol de
           antes. */}
       {props.agendaNueva ? (
-        <AgendaNueva clinicTaxMode={props.clinicTaxMode} userRole={props.userRole} />
+        <AgendaNueva
+          clinicTaxMode={props.clinicTaxMode}
+          userRole={props.userRole}
+          highlightId={props.highlightId}
+        />
       ) : (
         <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />
       )}

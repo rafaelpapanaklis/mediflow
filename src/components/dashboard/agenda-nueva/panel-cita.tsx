@@ -8,7 +8,9 @@
  *   · cambiar de estado → `patchAppointmentStatus` (PATCH /api/appointments/:id/status)
  *   · qué estados caben → `possibleTransitions` (la máquina de estados real)
  *   · cancelar          → el mismo PATCH con motivo, tras `confirmWithReason`
+ *   · editar            → `AgendaEditAppointmentModal`, el MISMO del panel de siempre
  *   · reagendar         → `useNewAppointmentDialog()`, igual que el panel de siempre
+ *                         (y como allí, solo en canceladas y no asistidas)
  *   · WhatsApp          → POST /api/whatsapp/send
  *   · cobrar            → GET /api/invoices/by-appointment/:id + `InvoiceDetailModal`
  * El servidor revalida permisos y transiciones en todos los casos; los
@@ -30,6 +32,7 @@ import {
   ExternalLink,
   FileText,
   MessageCircle,
+  Pencil,
   Receipt,
   RotateCcw,
   SkipForward,
@@ -41,13 +44,14 @@ import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
+import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import type { Role } from "@prisma/client";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import { aCitaVista, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
-import { citaContada, estadoNormalizado } from "@/lib/agenda-nueva/estados";
+import { citaContada, ESTADO_LEGACY_PENDIENTE, estadoNormalizado } from "@/lib/agenda-nueva/estados";
 import { fechaCorta } from "@/lib/agenda-nueva/fechas";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
@@ -60,9 +64,14 @@ import s from "./agenda-nueva.module.css";
    no: «cobrada» vive en la factura, no en la cita, y saberlo costaría una
    consulta por cita. Se sustituye por «Salió» (CHECKED_OUT), que sí es un
    estado real y es el final del pipeline. Queda anotado en el reporte.
+
+   Los pasos llevan el NOMBRE del estado, el mismo del chip de arriba y el de
+   la ficha del paciente («Registrado», «Completada»), no el del prototipo
+   («Llegó», «Atendida»): en el mismo panel, el chip diciendo «Completada» y
+   el paso resaltado diciendo «Atendida» se leen como dos cosas distintas.
    ═══════════════════════════════════════════════════════════════════════ */
 
-const PASOS = ["Confirmada", "Llegó", "En consulta", "Atendida", "Salió"] as const;
+const PASOS = ["Confirmada", "Registrado", "En consulta", "Completada", "Salió"] as const;
 
 /**
  * Dónde cae cada estado en el recorrido de cinco pasos.
@@ -79,7 +88,7 @@ const PASOS = ["Confirmada", "Llegó", "En consulta", "Atendida", "Salió"] as c
 const RECORRIDO: Record<AppointmentStatus, { hechos: number; actual: number }> = {
   SCHEDULED: { hechos: 0, actual: -1 },
   CONFIRMED: { hechos: 1, actual: -1 },
-  // Llegó y está esperando: «Llegó» es el paso en el que está, no uno pasado.
+  // Llegó y está esperando: «Registrado» es el paso en el que está, no uno pasado.
   CHECKED_IN: { hechos: 1, actual: 1 },
   // Ya está dentro, pero la consulta no ha empezado.
   IN_CHAIR: { hechos: 2, actual: -1 },
@@ -172,6 +181,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
     null,
   );
   const [buscandoFactura, setBuscandoFactura] = useState(false);
+  const [editando, setEditando] = useState(false);
 
   const dto = useMemo(
     () => state.appointments.find((a) => a.id === ag.citaAbiertaId) ?? null,
@@ -212,12 +222,17 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
 
   const transiciones = useMemo(
     () =>
-      dto
+      // 🔴 Una fila legacy en `PENDING` NO ofrece ninguna transición: se PINTA
+      // como agendada, pero `PATCH /api/appointments/:id/status` la rechaza con
+      // 409 `legacy_status`, así que cada botón acababa en un cambio optimista
+      // revertido y un «[409] Status PENDING ya no soportado». La agenda de
+      // siempre tampoco le pinta botones (pasa el PENDING tal cual a la
+      // máquina de estados). Lo encontró el revisor de la integración.
+      // (`String()`: el TIPO no conoce PENDING, la base sí — ver estados.ts.)
+      dto && String(dto.status) !== ESTADO_LEGACY_PENDIENTE
         ? // 🔴 CON `role`: sin él este filtro es solo estructural y da por
           // buenas transiciones que el rol tiene prohibidas — el botón se
           // pintaba y el servidor devolvía 403.
-          // El estado NORMALIZADO: una fila legacy en `PENDING` no está en la
-          // máquina de estados y se quedaría sin ninguna transición posible.
           possibleTransitions(estadoNormalizado(dto.status), {
             role: userRole,
             now: ahora,
@@ -267,6 +282,13 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         // El caché SWR de rangos guarda la respuesta anterior: sin invalidarlo,
         // volver al día tras un refresh repone la cita con el estado viejo.
         invalidateRangeCache();
+        // Empezar la consulta lleva a la ficha con la consulta en curso, igual
+        // que la agenda de siempre: `?appointment=` es esa intención, y qué
+        // pantalla abre lo decide la ficha según la clínica. Solo si el
+        // servidor aceptó el cambio.
+        if (destino === "IN_PROGRESS" && original.patient?.id) {
+          router.push(`/dashboard/patients/${original.patient.id}?appointment=${original.id}`);
+        }
         return true;
       } catch (err) {
         dispatch({ type: "ROLLBACK_STATUS", original });
@@ -278,7 +300,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         setEnVuelo(null);
       }
     },
-    [dto, permissions, confirmarConMotivo, dispatch, invalidateRangeCache],
+    [dto, permissions, confirmarConMotivo, dispatch, invalidateRangeCache, router],
   );
 
   const enviarWhatsapp = useCallback(async () => {
@@ -329,14 +351,15 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
     const a = ACCIONES[destino];
     return a ? { ...a, destino } : null;
   };
+  const esCobro = cita.estado === "COMPLETED" || cita.estado === "CHECKED_OUT";
   const candidatos = (SIGUIENTES[cita.estado] ?? []).filter(permitida);
   const principal = candidatos[0] ? aAccion(candidatos[0]) : null;
-  const otrosPasos = candidatos
-    .slice(1)
+  // Con la cita terminada el botón grande es «Cobrar», así que el paso
+  // principal («Marcar salida») baja con los secundarios. Antes se quedaba
+  // fuera de los dos sitios y el paso «Salió» era inalcanzable desde aquí.
+  const otrosPasos = (esCobro ? candidatos : candidatos.slice(1))
     .map(aAccion)
     .filter((a): a is AccionEstado => a !== null);
-
-  const esCobro = cita.estado === "COMPLETED" || cita.estado === "CHECKED_OUT";
   // `cita.estado` y no `dto.status`: ya viene normalizado, así que una fila
   // legacy en `PENDING` no deja esto en `undefined` (que tumbaba el render).
   const recorrido = RECORRIDO[cita.estado];
@@ -356,7 +379,10 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           {hrefExpediente && (
             <Link
               className={s.panelIconoBoton}
-              href={`${hrefExpediente}?appointment=${dto.id}`}
+              // SIN `?appointment=`: en la ficha ese parámetro significa «consulta
+              // en curso» y abre Nueva consulta. Mirar una cita de mañana no es
+              // empezarla; para eso está «Pasar a consulta».
+              href={hrefExpediente}
               aria-label="Abrir la cita completa"
               title="Abrir la cita completa"
             >
@@ -544,25 +570,37 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           ) : null}
 
           <div className={s.accionesSecundarias}>
-            <button
-              type="button"
-              className={s.accionSecundaria}
-              disabled={!permissions.canCreate}
-              onClick={() =>
-                abrirNuevaCita({
-                  initialPatient: cita.pacienteId
-                    ? { id: cita.pacienteId, name: cita.nombrePaciente }
-                    : undefined,
-                  initialDoctorId: dto.doctor?.id,
-                  initialReason: dto.reason ?? undefined,
-                  initialSlot: { doctorId: dto.doctor?.id, resourceId: dto.resourceId },
-                  openAgendaAfter: false,
-                })
-              }
-            >
-              <CalendarClock size={18} strokeWidth={2} />
-              Reagendar
-            </button>
+            {/* Mover una cita VIVA es editarla, no crear otra: «Reagendar» abría
+                Nueva cita sin tocar la original, así que quedaban dos citas
+                vivas y el paciente recibía los recordatorios de las dos. Igual
+                que la agenda de siempre: «Editar» en las vivas, «Reagendar»
+                solo en canceladas y no asistidas. */}
+            {!terminal && permissions.canEdit && (
+              <button type="button" className={s.accionSecundaria} onClick={() => setEditando(true)}>
+                <Pencil size={18} strokeWidth={2} />
+                Editar
+              </button>
+            )}
+            {terminal && permissions.canCreate && (
+              <button
+                type="button"
+                className={s.accionSecundaria}
+                onClick={() =>
+                  abrirNuevaCita({
+                    initialPatient: cita.pacienteId
+                      ? { id: cita.pacienteId, name: cita.nombrePaciente }
+                      : undefined,
+                    initialDoctorId: dto.doctor?.id,
+                    initialReason: dto.reason ?? undefined,
+                    initialSlot: { doctorId: dto.doctor?.id, resourceId: dto.resourceId },
+                    openAgendaAfter: false,
+                  })
+                }
+              >
+                <CalendarClock size={18} strokeWidth={2} />
+                Reagendar
+              </button>
+            )}
 
             {permitida("CANCELLED") && permissions.canCancel && (
               <button
@@ -619,6 +657,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           )}
         </div>
       </aside>
+
+      <AgendaEditAppointmentModal appt={editando ? dto : null} isOpen={editando} onClose={() => setEditando(false)} />
 
       {factura && (
         <InvoiceDetailModal

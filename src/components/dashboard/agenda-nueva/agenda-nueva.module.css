@@ -425,6 +425,40 @@
   color: #fff;
 }
 
+/* «N por validar»: las citas del portal que esperan a la clínica. No es del
+   diseño; es la puerta a la cola de validación de la agenda de siempre, que
+   sin esto se perdía con la bandera encendida. Ámbar, la familia de «espera». */
+.botonValidar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-ambar-claro);
+  color: var(--ag-ambar-texto);
+  border: 1px solid var(--ag-ambar-borde);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+  white-space: nowrap;
+}
+
+.botonValidarAbierto {
+  background: var(--ag-ambar-fondo);
+}
+
+/* Las dos colas del portal (validar y solicitudes de cambio) van arriba de la
+   vista y no le quitan su alto: la cuadrícula sigue desplazándose sola. */
+.colasPortal {
+  flex: none;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
 /* ═══ Cuerpo: agenda + panel lateral ════════════════════════════════════ */
 
 .cuerpo {
