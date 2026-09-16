@@ -18,6 +18,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
+import { clinicInvoiceTaxDefaults } from "@/lib/invoice-totals";
 import {
   InvoiceNumberExhaustedError,
   nextInvoiceNumber,
@@ -151,6 +152,17 @@ export async function createInvoiceFromQuote(
   // conceptos.
   const { items, subtotal, discount, total } = invoiceFieldsFromQuote(quote);
 
+  // Impuestos con los que NACE la factura, según la preferencia fiscal de la
+  // clínica, igual que la del editor (POST /api/invoices) y la de una cita
+  // (from-appointment). Sin esto caía al default de la columna (16 %, incluido)
+  // también en una clínica exenta. El total no cambia: los dos modos llevan el
+  // IVA incluido. Solo la columna que se necesita: la fila de Clinic lleva secretos.
+  const clinicTax = await prisma.clinic.findUnique({
+    where: { id: ctx.clinicId },
+    select: { cfdiTaxMode: true },
+  });
+  const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(clinicTax?.cfdiTaxMode);
+
   // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). El loop
   // anterior hacía count+1+attempt: con 8 o más huecos por debajo del máximo
   // (esta ruta los fabricaba mientras sus facturas nacían DRAFT y se borraban
@@ -201,6 +213,8 @@ export async function createInvoiceFromQuote(
             // antes de cobrar y se puede borrar (su folio se reutiliza).
             status: "PENDING",
             notes: `Generada desde presupuesto ${quote.folio}`,
+            taxRate,
+            taxIncluded,
           },
         });
         // Vincula la factura al presupuesto (cierra la idempotencia aguas abajo).

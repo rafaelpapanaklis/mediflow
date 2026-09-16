@@ -397,13 +397,11 @@ async function prepararDesdePresupuesto(ctx: SabinaCtx, p: ParamsCrearFactura): 
     };
   }
 
-  const [folio, imp] = await Promise.all([folioPrevisto(ctx), impuestosDeClinica(ctx)]);
+  const folio = await folioPrevisto(ctx);
   const avisos = [
     `Esto usa el folio ${folio ? `${folio} (el siguiente libre ahora mismo)` : "MF siguiente"} y no se puede borrar, solo anular.`,
     "Nace pendiente de cobro, como una factura normal. No se timbra CFDI ni se le manda nada al paciente.",
   ];
-  // N29: la ruta del presupuesto no guarda el IVA de la clínica. El total no cambia; el desglose sí.
-  if (imp.exenta) avisos.push("Nace marcada con IVA 16 % incluido aunque la clínica sea exenta: el total no cambia.");
 
   const subtotal = round2(q.items.reduce((s, i) => s + i.total, 0));
   const pie: SabinaTabla["pie"] = [
