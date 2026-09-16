@@ -70,7 +70,7 @@ const GATES: Array<{
     firstEffect: "legacyHandler(", porque: "el padrón entero con teléfono, email y saldo" },
   // Hallazgo 22 — presupuestos: el efecto real es facturar
   { rel: "app/api/quotes/route.ts", method: "POST", key: "billing.create",
-    firstEffect: "prisma.", porque: "crea la factura en borrador y quema folio" },
+    firstEffect: "prisma.", porque: "crea el presupuesto; la llave viene de cuando además facturaba y se conserva para no ensanchar quién crea presupuestos" },
   { rel: "app/api/quotes/[id]/route.ts", method: "PATCH", key: "billing.edit",
     firstEffect: "prisma.", porque: "reescribe total, descuento, ítems y saldo de la factura ligada" },
   { rel: "app/api/quotes/[id]/route.ts", method: "DELETE", key: "billing.edit",
