@@ -16,6 +16,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { BillingClient } from "../billing/billing-client";
 import type { CajaState, CajaHistoryRow } from "@/lib/caja";
 import { dayKeyIn, staleShiftOf } from "@/lib/caja-turno";
+import { CLASES_CAJA_REDISENO, clasesCaja } from "@/components/dashboard/caja-rediseno/raiz";
 
 interface BillingProps {
   invoices:      any[];
@@ -40,6 +41,14 @@ interface Props {
   timezone: string;
   hasPin:   boolean;
   billing:  BillingProps;
+  /**
+   * REDISEÑO DE CAJA — el mismo interruptor por clínica que enciende el menú
+   * de dos niveles (`menu-dos-niveles` en `clinic_feature_flags`). Con `true`
+   * la raíz lleva los tokens y las clases del diseño nuevo; con `false` (el
+   * valor por defecto) no se añade ni una clase y Caja se pinta como hoy.
+   * Ropa nueva, no motor nuevo: apertura, corte, retiro y PIN no cambian.
+   */
+  rediseno?: boolean;
 }
 
 interface CloseSummary {
@@ -69,7 +78,7 @@ const isRefundRow = (r: { method: string }) => r.method === REFUND;
 /** Importe con signo para mostrar: los reembolsos se guardan en POSITIVO y se pintan en negativo. */
 const signedAmount = (r: { method: string; amount: number }) => (isRefundRow(r) ? `−${fmtMXNdec(r.amount)}` : fmtMXNdec(r.amount));
 
-export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, billing }: Props) {
+export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, billing, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -413,15 +422,27 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
   const varianceTone = (v: number) => (Math.abs(v) < 0.005 ? "success" : v > 0 ? "info" : "danger");
 
   return (
-    <div style={{ maxWidth: 1400, margin: "0 auto", width: "100%" }}>
+    // Con el interruptor encendido la raíz lleva los tokens y las clases del
+    // rediseño (caja-rediseno/); apagado, ni una clase: el árbol es el de hoy.
+    <div className={rediseno ? CLASES_CAJA_REDISENO : undefined} style={{ maxWidth: 1400, margin: "0 auto", width: "100%" }}>
       {/* Header + tabs */}
       <div style={{ padding: "clamp(14px, 1.6vw, 28px) clamp(14px, 1.6vw, 28px) 0" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 16 }}>
           <div>
-            <h1 style={{ fontSize: "clamp(20px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 700, margin: 0 }}>
+            {/* El título y el subtítulo llevan su tamaño en línea, y un estilo en
+                línea no se pisa desde una hoja: con el rediseño van por clase. */}
+            <h1
+              className={rediseno ? clasesCaja.titulo : undefined}
+              style={rediseno ? undefined : { fontSize: "clamp(20px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 700, margin: 0 }}
+            >
               {t("cashRegister.title")}
             </h1>
-            <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>{t("cashRegister.subtitle")}</p>
+            <p
+              className={rediseno ? clasesCaja.subtitulo : undefined}
+              style={rediseno ? undefined : { color: "var(--text-3)", fontSize: 13, marginTop: 4 }}
+            >
+              {t("cashRegister.subtitle")}
+            </p>
           </div>
         </div>
         <div className="segment-new" role="tablist" style={{ marginBottom: 4 }}>
@@ -541,7 +562,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
               {totals.otherIncome > 0 && (
                 <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 18px" }}>
                   Otros métodos (transferencia / cheque / otro):{" "}
-                  <span style={{ fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(totals.otherIncome)}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(totals.otherIncome)}</span>
                 </p>
               )}
 
@@ -556,7 +577,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                             recorta con overflow:hidden. Cede el motivo (…), nunca
                             la cifra. El title deja leer el motivo completo. */}
                         <span title={`${w.reason} · ${fmtTime(w.recordedAt)} · ${w.recordedByName}`} style={{ color: "var(--text-2)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.reason} <span style={{ color: "var(--text-3)" }}>· {fmtTime(w.recordedAt)} · {w.recordedByName}</span></span>
-                        <span style={{ color: "var(--danger)", fontWeight: 600, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>−{fmtMXNdec(w.amount)}</span>
+                        <span style={{ color: "var(--danger)", fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>−{fmtMXNdec(w.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -632,8 +653,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                                   <td style={{ color: "var(--text-1)" }}>{r.patientName}</td>
                                   <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
                                   <td><BadgeNew tone={isRefundRow(r) ? "danger" : r.method === "cash" ? "success" : "info"}>{methodLabel(r.method)}</BadgeNew></td>
-                                  <td style={{ textAlign: "right", fontWeight: 600, color: isRefundRow(r) ? "var(--danger)" : "var(--text-1)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
-                                  <td style={{ textAlign: "right", color: r.discount > 0 ? "var(--danger)" : "var(--text-3)", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: r.discount > 0 ? 600 : 400 }}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
+                                  <td style={{ textAlign: "right", fontWeight: 600, color: isRefundRow(r) ? "var(--danger)" : "var(--text-1)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
+                                  <td style={{ textAlign: "right", color: r.discount > 0 ? "var(--danger)" : "var(--text-3)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: r.discount > 0 ? 600 : 400 }}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
                                   <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
                                 </tr>
                               </React.Fragment>
@@ -681,9 +702,9 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                             <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{fmtDateTime(h.openedAt)}</td>
                             <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{h.closedAt ? fmtDateTime(h.closedAt) : "—"}</td>
                             <td style={{ color: "var(--text-2)" }}>{h.operatorName}</td>
-                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(h.openingBalance)}</td>
-                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{h.expectedCash == null ? "—" : fmtMXNdec(h.expectedCash)}</td>
-                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{h.countedClosingBalance == null ? "—" : fmtMXNdec(h.countedClosingBalance)}</td>
+                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(h.openingBalance)}</td>
+                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{h.expectedCash == null ? "—" : fmtMXNdec(h.expectedCash)}</td>
+                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{h.countedClosingBalance == null ? "—" : fmtMXNdec(h.countedClosingBalance)}</td>
                             <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                               {h.variance == null ? "—" : <BadgeNew tone={varianceTone(h.variance)}>{fmtMXNdec(h.variance)}</BadgeNew>}
                             </td>
@@ -721,7 +742,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 <div className="field-new" style={{ marginBottom: 14 }}>
                   <label className="field-new__label">PIN <span className="req">*</span></label>
                   <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new" autoFocus
-                    style={{ fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                    style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                     placeholder="••••••" value={openPin}
                     onChange={e => setOpenPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
@@ -729,7 +750,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   <div className="field-new" style={{ marginBottom: 14 }}>
                     <label className="field-new__label">Confirma tu PIN <span className="req">*</span></label>
                     <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
-                      style={{ fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                      style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                       placeholder="••••••" value={openPinConfirm}
                       onChange={e => setOpenPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                   </div>
@@ -741,7 +762,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                     value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} />
                   <span style={{ color: "var(--text-3)", fontSize: 12, marginTop: 4 }}>
                     Sugerido por el efectivo de hoy aún no cuadrado:{" "}
-                    <span style={{ fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(caja.suggestedOpening)}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(caja.suggestedOpening)}</span>
                   </span>
                 </div>
 
@@ -793,7 +814,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 <div className="field-new">
                   <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> PIN de Caja <span className="req">*</span></label>
                   <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
-                    style={{ fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                    style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                     placeholder="••••••" value={wPin}
                     onChange={e => setWPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
@@ -832,7 +853,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--brand-softer)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", marginBottom: 14 }}>
                   <span style={{ color: "var(--text-2)", fontSize: 13, fontWeight: 600 }}>{t("cashRegister.expectedCashLabel")}</span>
-                  <span style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 16, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(totals.expectedCash)}</span>
+                  <span style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(totals.expectedCash)}</span>
                 </div>
                 <div className="field-new" style={{ marginBottom: 14 }}>
                   <label className="field-new__label">{t("cashRegister.countedLabel")} <span className="req">*</span></label>
@@ -854,7 +875,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 <div className="field-new">
                   <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> PIN de Caja <span className="req">*</span></label>
                   <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
-                    style={{ fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                    style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                     placeholder="••••••" value={closePin}
                     onChange={e => setClosePin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
@@ -918,7 +939,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                           </td>
                           <td>{r.patientName}</td>
                           <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
-                          <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", color: isRefundRow(r) ? "var(--danger)" : undefined, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
+                          <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", color: isRefundRow(r) ? "var(--danger)" : undefined, fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
                           <td>{methodLabel(r.method)}</td>
                           <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
                         </tr>
@@ -947,7 +968,7 @@ function SumRow({ label, value, strong }: { label: string; value: string; strong
       {/* La celda del grid puede quedar en 160px: si algo cede es la etiqueta,
           nunca el importe (de ahi el flexShrink:0 del segundo span). */}
       <span title={label} style={{ color: "var(--text-3)", fontSize: 12.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14.5 : 13, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
+      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14.5 : 13, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
     </div>
   );
 }
@@ -956,7 +977,7 @@ function CloseLine({ label, value, strong }: { label: string; value: string; str
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: strong ? "7px 0 5px" : "5px 0", borderTop: strong ? "1px solid var(--border-soft)" : "none", marginTop: strong ? 4 : 0 }}>
       <span title={label} style={{ color: "var(--text-2)", fontSize: 12.5, fontWeight: strong ? 600 : 400, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14 : 13, fontFamily: "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
+      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14 : 13, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
     </div>
   );
 }
