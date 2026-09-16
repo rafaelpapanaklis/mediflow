@@ -1,59 +1,68 @@
 /* ═══════════════════════════════════════════════════════════════════
    Rediseño de Reportes (WS1-T5) — KPIs, gráficas (recharts) y tablas.
-   Es ADITIVO: sin `.tokens` puesto (la clínica sin el interruptor
+   Es ADITIVO: sin `.raiz` puesto (la clínica sin el interruptor
    `menu-dos-niveles`) no se aplica ni una regla de aquí abajo y la
    pantalla se pinta exactamente como hoy, píxel por píxel.
 
-   No se crea un sistema visual nuevo ni se toca `globals.css`: Reportes ya
-   usa el sistema de diseño compartido (KpiCard, CardNew, .table-new) y las
-   gráficas de recharts ya leen ese mismo sistema por variable
-   (`var(--brand)`, `var(--success)`…, nunca un hex a mano). Aquí solo se
-   REDECLARAN esas variables, dentro de este subárbol, con los valores del
-   lenguaje visual que Rafael ya aprobó para el menú de dos niveles y para
-   Pacientes/Equipo (violeta #4d3fc6, bordes suaves, sombra casi plana):
-   así la gráfica cambia de acento con la pantalla en vez de quedarse en el
-   morado de siempre. El resto de clínicas, sin este archivo, no cambia.
+   Habla el idioma visual del menú de dos niveles que Rafael aprobó y
+   NO declara tokens propios (igual que `hoy-rediseno/hoy.module.css`).
+   La raíz (`raiz.tsx`) monta `CLASES_MENU` (`menu-dos-niveles/clases.ts`),
+   que trae los `--m2-*` del menú con su versión oscura y las dos familias
+   tipográficas; aquí solo hay reglas que los LEEN.
+
+   Reportes usa el sistema de diseño compartido de globals.css (KpiCard,
+   CardNew, .table-new), que pinta el acento con los tokens de siempre
+   (--brand, --border-soft, --shadow-1) y, en el chip del ícono del KPI,
+   con un hex a mano. No se toca globals.css ni se redeclara nada: cada
+   clase compartida que enseña acento, borde o sombra se sobreescribe
+   DENTRO de este subárbol leyendo el token del menú equivalente
+   (`--m2-activo`, `--m2-tarjeta-borde`, `--m2-sombra`…). Las gráficas de
+   recharts reciben su color desde `reports-client.tsx`, que con el
+   rediseño encendido pasa `var(--m2-activo)` en vez de `var(--brand)`.
+   Así, si el menú cambia de color, Reportes cambia con él, y no hay una
+   segunda paleta que mantener.
+
+   Las reglas que en globals.css llevan `:root:not(.dark)` delante se
+   ganan por especificidad (`:root .raiz.raiz …`), no por orden de carga:
+   es el mismo truco que usa `caja-rediseno`.
    ═══════════════════════════════════════════════════════════════════ */
 
-.tokens {
-  --brand: #4d3fc6;
-  --brand-soft: #e6e9ff;
-  --brand-softer: rgba(77, 63, 198, 0.05);
-  --brand-grad: #4d3fc6;
-  --border-soft: #eae8f0;
-  --shadow-1: 0 1px 2px rgba(26, 24, 38, 0.05);
-  /* Rampa de marca fija (ver --violet-400 en globals.css): aquí se realinea
-     el único paso de la rampa que usa esta pantalla, como 6ª serie de las
-     gráficas, para que no se quede en el violeta claro de siempre. */
-  --violet-400: #8b82da;
-
-  font-family: var(--font-menu), system-ui, sans-serif;
+.raiz {
+  color: var(--m2-texto);
 }
 
-:global(.dark) .tokens {
-  --brand: #6252e2;
-  --brand-soft: rgba(98, 82, 226, 0.18);
-  --brand-softer: rgba(98, 82, 226, 0.08);
-  --brand-grad: #6252e2;
-  --border-soft: rgba(255, 255, 255, 0.08);
-  --shadow-1: none;
+/* ── Tarjetas y tablas: borde suave y sombra casi plana del menú ──── */
+
+:root .raiz.raiz :global(.card),
+:root .raiz.raiz :global(.kpi) {
+  border-color: var(--m2-tarjeta-borde);
+  box-shadow: var(--m2-sombra);
 }
 
-/* Los dos sitios donde `.kpi` (globals.css) pinta el chip del ícono con un
-   hex suelto en vez de con `var(--brand)` (medido igual que en Equipo):
-   el color del ícono en los KPI normales y la sombra del chip en el KPI
-   "hero". Sin esto, esos dos puntos seguirían en el morado de siempre
-   mientras el resto de la tarjeta ya cambió. */
-.tokens :global(.kpi__icon) {
-  color: var(--violet-400);
+.raiz :global(.card__header) {
+  border-bottom-color: var(--m2-tarjeta-borde);
 }
 
-.tokens :global(.kpi--hero .kpi__icon) {
-  box-shadow: 0 3px 8px rgba(77, 63, 198, 0.3);
+.raiz :global(.table-new th),
+.raiz :global(.table-new td) {
+  border-bottom-color: var(--m2-tarjeta-borde);
 }
 
-:global(.dark) .tokens :global(.kpi--hero .kpi__icon) {
-  box-shadow: 0 3px 8px rgba(98, 82, 226, 0.35);
+/* ── Chip del ícono del KPI ───────────────────────────────────────────
+   `.kpi__icon` (globals.css) pinta el ícono con un hex suelto en vez de
+   con el token de marca, y el KPI "hero" lleva el degradado de siempre.
+   Aquí el chip normal lee el par «iniciales» del menú (violeta suave con
+   texto violeta) y el hero el acento sólido, como en «Hoy». */
+:root .raiz.raiz :global(.kpi__icon) {
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  border-color: transparent;
+}
+
+:root .raiz.raiz :global(.kpi--hero .kpi__icon) {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--m2-activo) 30%, transparent);
 }
 
 /* ═══ Estado vacío de una gráfica/lista — mismo patrón que la tarjeta de
@@ -75,19 +84,19 @@
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: var(--brand-soft);
-  color: var(--brand);
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
 }
 
 .vacioTitulo {
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--text-2);
+  color: var(--m2-texto-2);
 }
 
 .vacioPista {
   font-size: 11.5px;
-  color: var(--text-3);
+  color: var(--m2-texto-3);
   max-width: 32ch;
 }
 

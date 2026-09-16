@@ -48,7 +48,11 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   IN_PROGRESS: "analytics.reports.statusInProgress",
 };
 
+// Paleta de las series. Con el rediseño encendido la primera serie es el
+// acento del menú de dos niveles (`--m2-activo`, que monta la raíz); apagado,
+// el de siempre. Las demás son los tokens semánticos de globals.css.
 const DS_COLORS = ["var(--brand)", "var(--success)", "var(--warning)", "var(--info)", "var(--danger)", "var(--violet-400)"];
+const DS_COLORS_REDISENO = ["var(--m2-activo)", ...DS_COLORS.slice(1)];
 const TOOLTIP_STYLE: React.CSSProperties = {
   background: "var(--bg-elev)",
   border: "1px solid var(--border-strong)",
@@ -74,6 +78,12 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
   }));
 
   const Raiz = rediseno ? RaizRediseno : "div";
+  // Acento, rejilla y cursor de las gráficas: tokens del menú con el rediseño,
+  // los de siempre apagado (así la pantalla vieja no cambia ni un byte).
+  const colores = rediseno ? DS_COLORS_REDISENO : DS_COLORS;
+  const acento = rediseno ? "var(--m2-activo)" : "var(--brand)";
+  const rejilla = rediseno ? "var(--m2-tarjeta-borde)" : "var(--border-soft)";
+  const cursor = rediseno ? "var(--m2-hover)" : "var(--brand-softer)";
 
   return (
     <Raiz style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
@@ -90,7 +100,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
       {/* Resumen actual de la clínica */}
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
-          <BarChart3 size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} aria-hidden />
+          <BarChart3 size={16} strokeWidth={1.75} style={{ color: acento }} aria-hidden />
           {t("analytics.reports.currentSummary")}
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 14 }}>
@@ -159,7 +169,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
 
       {/* Separator visual */}
       <h2 style={{ marginBottom: 20, marginTop: 24, fontSize: 15, fontWeight: 600, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 8 }}>
-        <TrendingUp size={16} strokeWidth={1.75} style={{ color: "var(--brand)" }} aria-hidden />
+        <TrendingUp size={16} strokeWidth={1.75} style={{ color: acento }} aria-hidden />
         {t("analytics.reports.last6Months")}
       </h2>
 
@@ -182,18 +192,18 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} barSize={28} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" />
+                <CartesianGrid strokeDasharray="3 3" stroke={rejilla} />
                 <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} stroke="var(--text-4)" />
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} stroke="var(--text-4)"
                   tickFormatter={(v: number) => v === 0 ? "" : v < 1000 ? `$${v}` : `$${Math.round(v / 1000)}k`} />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  cursor={{ fill: "var(--brand-softer)" }}
+                  cursor={{ fill: cursor }}
                   formatter={(v: number) => [fmtMXN(v), t("analytics.reports.legendRevenue")]}
                 />
                 <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
                   {monthlyData.map((_, i) => (
-                    <Cell key={i} fill="var(--brand)" fillOpacity={i === monthlyData.length - 1 ? 1 : 0.35} />
+                    <Cell key={i} fill={acento} fillOpacity={i === monthlyData.length - 1 ? 1 : 0.35} />
                   ))}
                 </Bar>
               </BarChart>
@@ -205,13 +215,13 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyData} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" />
+                <CartesianGrid strokeDasharray="3 3" stroke={rejilla} />
                 <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} stroke="var(--text-4)" />
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} stroke="var(--text-4)" />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <Legend wrapperStyle={{ fontSize: 11, color: "var(--text-2)" }} />
                 <Line type="monotone" dataKey="patients"     name={t("analytics.reports.legendNewPatients")} stroke="var(--success)" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="appointments" name={t("analytics.reports.legendAppts")}       stroke="var(--brand)" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="appointments" name={t("analytics.reports.legendAppts")}       stroke={acento} strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -248,7 +258,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
                     <div style={{ height: 4, background: "var(--bg-elev-2)", borderRadius: 2, overflow: "hidden" }}>
                       <div style={{
                         height: "100%", width: `${pct}%`,
-                        background: DS_COLORS[i % DS_COLORS.length],
+                        background: colores[i % colores.length],
                         borderRadius: 2, transition: "width .3s",
                       }} />
                     </div>
@@ -273,7 +283,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value" paddingAngle={3}>
-                    {pieData.map((_, i) => <Cell key={i} fill={DS_COLORS[i % DS_COLORS.length]} />)}
+                    {pieData.map((_, i) => <Cell key={i} fill={colores[i % colores.length]} />)}
                   </Pie>
                   <Tooltip contentStyle={TOOLTIP_STYLE} />
                   <Legend wrapperStyle={{ fontSize: 11, color: "var(--text-2)" }} />
@@ -360,7 +370,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
                     <div style={{ height: 4, background: "var(--bg-elev-2)", borderRadius: 2, overflow: "hidden" }}>
                       <div style={{
                         height: "100%", width: `${pct}%`,
-                        background: DS_COLORS[i % DS_COLORS.length],
+                        background: colores[i % colores.length],
                         borderRadius: 2, transition: "width .3s",
                       }} />
                     </div>
