@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { PatientsClient } from "./patients-client";
 
 export const metadata: Metadata = { title: "Pacientes — DaleControl" };
@@ -34,15 +35,24 @@ export default async function PatientsPage() {
   const canImportPatients =
     canCreatePatients && ["ADMIN", "RECEPTIONIST", "SUPER_ADMIN"].includes(user.role);
 
-  const doctors = await prisma.user.findMany({
-    where: {
-      clinicId: user.clinicId,
-      isActive: true,
-      role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] },
-    },
-    select: { id: true, firstName: true, lastName: true, color: true },
-    orderBy: { firstName: "asc" },
-  });
+  // REDISEÑO DE PACIENTES — el MISMO interruptor por clínica que enciende el
+  // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no
+  // uno propio: Rafael prueba «el diseño nuevo» como una sola cosa. Falla
+  // cerrado (sin tabla, sin fila o con error → false = la lista de hoy, tal
+  // cual). Va en el mismo Promise.all que los doctores para no añadir un viaje
+  // a la base: la respuesta además vive 60 s en memoria por clínica.
+  const [doctors, rediseno] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        clinicId: user.clinicId,
+        isActive: true,
+        role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] },
+      },
+      select: { id: true, firstName: true, lastName: true, color: true },
+      orderBy: { firstName: "asc" },
+    }),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
 
   return (
     // key por clínica: al cambiar de sucursal el switcher hace router.refresh()
@@ -56,6 +66,7 @@ export default async function PatientsPage() {
       canCreatePatients={canCreatePatients}
       canDeletePatients={canDeletePatients}
       canImportPatients={canImportPatients}
+      rediseno={rediseno}
     />
   );
 }

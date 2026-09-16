@@ -4,7 +4,7 @@ import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Check, Plus, Printer, Edit, Download, Pill, Play, Trash2, X as XIcon, XCircle, ClipboardList, Stethoscope, Lock, CreditCard, FileImage } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
@@ -32,6 +32,15 @@ import type { ConsentDTO } from "@/lib/consent/types";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import { PatientAuditHistory } from "@/components/dashboard/patient-detail/patient-audit-history";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
+// REDISEÑO DE PACIENTES (WS1-T4) — se monta SOLO con el interruptor
+// `menu-dos-niveles` encendido para la clínica. Con la bandera apagada no se
+// evalúa ninguna de estas ramas y la ficha se pinta exactamente como hoy.
+import { CLASES_REDISENO } from "@/components/dashboard/pacientes-rediseno/raiz";
+import { FichaMenu } from "@/components/dashboard/pacientes-rediseno/ficha-menu";
+import { Resumen as ResumenRediseno } from "@/components/dashboard/pacientes-rediseno/resumen";
+import { Historia as HistoriaRediseno } from "@/components/dashboard/pacientes-rediseno/historia";
+import { Cuestionario as CuestionarioRediseno } from "@/components/dashboard/pacientes-rediseno/cuestionario";
+import { NuevaConsulta as NuevaConsultaRediseno } from "@/components/dashboard/pacientes-rediseno/nueva-consulta";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
@@ -403,6 +412,14 @@ interface Props {
   /** Veredicto de recordatorios de ESTE paciente (ver SideCards). Solo el
    *  resultado derivado —nunca la fila Clinic ni la plantilla del mensaje. */
   reminderOutcome?: ReminderOutcome | null;
+  /**
+   * ¿La clínica tiene encendido el diseño nuevo? Es el MISMO interruptor del
+   * menú de dos niveles (`clinic_feature_flags` → `menu-dos-niveles`), resuelto
+   * en el server. En false, TODO lo de abajo se queda como está: la barra que
+   * mide el ancho, el Resumen de dos columnas, el cuestionario de hoy y el
+   * formulario de consulta que vuelve a pedir los antecedentes.
+   */
+  rediseno?: boolean;
 }
 
 export function PatientDetailClient({
@@ -441,6 +458,7 @@ export function PatientDetailClient({
   canEditTreatments = false,
   facturApiEnabled = false,
   reminderOutcome = null,
+  rediseno = false,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -1308,7 +1326,11 @@ export function PatientDetailClient({
   // `layoutWide`, así el contenido usa el ancho completo sin dejar el hueco de
   // 320px+gap del tercer track.
   const RAIL_TABS = ["resumen", "agenda", "presupuestos", "facturacion"];
-  const showRail = RAIL_TABS.includes(tab);
+  // Con el rediseño, RESUMEN se queda sin rail: «Estado de cuenta» es una de
+  // las cinco tarjetas que pidió Rafael, y tenerlo además en la columna de la
+  // derecha era la misma cifra dos veces en el mismo alto de pantalla. Los
+  // otros tres tabs con rail lo conservan igual.
+  const showRail = RAIL_TABS.includes(tab) && !(rediseno && tab === "resumen");
 
   // El contenedor de abajo fija el margen lateral de la ficha ENTERA (hero,
   // barra de secciones y contenido), así que es el único sitio donde hay que
@@ -1317,6 +1339,11 @@ export function PatientDetailClient({
   // borde del hero quedaban debajo. Sin recorte, env(...) vale 0 y manda el 28.
   return (
     <div
+      // Con el rediseño encendido, este contenedor es la RAÍZ: de aquí cuelgan
+      // la tipografía (Instrument Sans, la misma instancia que el menú nuevo) y
+      // los tokens `--pr-*`, que se heredan hacia las reglas del rediseño que
+      // viven en otros módulos CSS. Apagado, `undefined`: ni una clase de más.
+      className={rediseno ? CLASES_REDISENO : undefined}
       style={{
         padding: "20px 28px 28px",
         paddingLeft: "max(28px, env(safe-area-inset-left))",
@@ -1398,6 +1425,7 @@ export function PatientDetailClient({
           canEdit={canEditPatient}
           canDelete={canDeletePatient}
           onDelete={() => setShowDelete(true)}
+          rediseno={rediseno}
         />
       )}
 
@@ -1437,6 +1465,32 @@ export function PatientDetailClient({
           ficha su sticky vive hasta el final del scroll (dentro del grid,
           Chrome lo clampea al contenedor y se despegaba). Se oculta ≤1024px,
           donde manda la tab bar móvil de más abajo. */}
+      {rediseno ? (
+        <FichaMenu
+          activeTab={tab}
+          onSelect={setTab}
+          counts={{
+            historia: records.length,
+            historialConsultas: records.length,
+            radiografias: filesLoaded ? files.length : undefined,
+            fotos: fotosCount,
+            tratamiento: treatments.length,
+            agenda: appointments.length,
+            facturacion: invoices.length,
+            implantes: implants?.length ?? 0,
+          }}
+          hasBalance={totalBalance > 0}
+          pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
+          showPeriodontics={showPeriodontics}
+          showEndodontics={showEndodontics}
+          showImplants={showImplants}
+          showOrthodontics={showOrthodontics}
+          showBilling={canViewBilling}
+          showConsents={canViewConsents}
+          showXrays={canViewXrays}
+          showPrescriptions={canViewPrescriptions}
+        />
+      ) : (
       <PatientNavBar
         activeTab={tab}
         onSelect={setTab}
@@ -1467,6 +1521,7 @@ export function PatientDetailClient({
         showPrescriptions={canViewPrescriptions}
         activityCounts={activityCounts}
       />
+      )}
 
       {/* Layout 2 columnas — contenido + rail derecho.
           El grid colapsa a 1 columna (layoutWide) en todo tab SIN rail
@@ -1527,6 +1582,11 @@ export function PatientDetailClient({
             className={patientDetailStyles.mobileTabBar}
             role="tablist"
             aria-label={t("patients.tabs.sectionsAria")}
+            // Con el rediseño el menú de arriba es el MISMO en todas las
+            // pantallas —seis fijos y tres grupos, también en el teléfono—, así
+            // que esta tira plana de pastillas sobraría: serían dos menús con
+            // el mismo contenido, uno encima del otro.
+            hidden={rediseno || undefined}
           >
             {tabs.map((tabItem) => {
               const isActive = tab === tabItem.id;
@@ -1559,8 +1619,61 @@ export function PatientDetailClient({
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
+          {/* ===== TAB: RESUMEN (rediseño) =====
+              Las cinco tarjetas que pidió Rafael por su nombre: información
+              del paciente, cobros, citas, estado de cuenta y tratamiento
+              activo. La línea de tiempo pasa DEBAJO — sigue estando, pero ya
+              no es lo primero y lo más grande de la portada. */}
+          {tab === "resumen" && rediseno && (
+            <ResumenRediseno
+              patient={patient}
+              finanzas={{
+                total: totalPlan,
+                pagado: totalPaid,
+                saldo: totalBalance,
+                credito: creditBalance,
+              }}
+              citas={appointments}
+              facturas={invoices}
+              tratamientos={treatments}
+              canViewBilling={canViewBilling}
+              canEditPatient={canEditPatient}
+              onCobrar={openChargeShortcut}
+              onAgendar={openNewAppointmentForPatient}
+              onEditar={() => setShowEdit(true)}
+              onIrA={setTab}
+              movimientos={
+                <>
+                  {showQuestionnaireWarning && (
+                    <div style={{ marginBottom: 12 }}>{questionnaireBanner}</div>
+                  )}
+                  <HistoriaTimeline
+                    patientId={patient.id}
+                    compact
+                    limit={8}
+                    onOpenSoap={(recordId) => {
+                      const record = records.find((r) => r.id === recordId);
+                      if (record) setNoteDetailOpen(record as ClinicalNote);
+                    }}
+                    onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
+                    onOpenAppointment={() => setTab("agenda")}
+                    onOpenTreatment={() => setTab("tratamiento")}
+                    onOpenReferral={() => setTab("referencias")}
+                  />
+                  <div style={{ marginTop: 14 }}>
+                    <RecentPhotosStrip
+                      patientId={patient.id}
+                      count={fotosCount}
+                      onOpenTab={() => setTab("fotos")}
+                    />
+                  </div>
+                </>
+              }
+            />
+          )}
+
           {/* ===== TAB: RESUMEN ===== */}
-          {tab === "resumen" && (
+          {tab === "resumen" && !rediseno && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {showQuestionnaireWarning && <div className="md:col-span-2">{questionnaireBanner}</div>}
               <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-4 transition-all duration-200 hover:shadow-[var(--shadow-2)] hover:border-[var(--border-brand)] motion-safe:hover:-translate-y-0.5">
@@ -1703,13 +1816,43 @@ export function PatientDetailClient({
             </div>
           )}
 
-          {/* ===== TAB: CUESTIONARIO DE SALUD ===== */}
+          {/* ===== TAB: CUESTIONARIO DE SALUD =====
+              Las MISMAS preguntas y el mismo endpoint; cambia cómo se ven y
+              cómo se guardan (un «Sí» pinta la pregunta, el botón de guardar
+              deja de vivir al fondo de cuatro pantallas de scroll). */}
           {tab === "cuestionario" && (
-            <HealthQuestionnaireTab patientId={patient.id} onSaved={() => router.refresh()} />
+            rediseno ? (
+              <CuestionarioRediseno patientId={patient.id} onSaved={() => router.refresh()} />
+            ) : (
+              <HealthQuestionnaireTab patientId={patient.id} onSaved={() => router.refresh()} />
+            )
+          )}
+
+          {/* ===== TAB: HISTORIA CLINICA (rediseño) =====
+              El mismo contenido: la línea de tiempo entera y la bitácora de
+              accesos que exige la NOM-024. La bitácora pasa a estar PLEGADA:
+              es un requisito legal, no lectura diaria. */}
+          {tab === "historia" && rediseno && (
+            <HistoriaRediseno
+              timeline={
+                <HistoriaTimeline
+                  patientId={patient.id}
+                  onOpenSoap={(recordId) => {
+                    const record = records.find((r) => r.id === recordId);
+                    if (record) setNoteDetailOpen(record as ClinicalNote);
+                  }}
+                  onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
+                  onOpenAppointment={() => setTab("agenda")}
+                  onOpenTreatment={() => setTab("tratamiento")}
+                  onOpenReferral={() => setTab("referencias")}
+                />
+              }
+              bitacora={<PatientAuditHistory patientId={patient.id} />}
+            />
           )}
 
           {/* ===== TAB: HISTORIA CLINICA ===== */}
-          {tab === "historia" && (
+          {tab === "historia" && !rediseno && (
             <div className="space-y-4">
             <div className="bg-card border border-border rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-5">
               <div className="flex items-baseline justify-between mb-4">
@@ -2408,8 +2551,41 @@ export function PatientDetailClient({
             <OdontogramV2 patientId={patient.id} />
           )}
 
+          {/* ===== TAB: NUEVA CONSULTA (rediseño) =====
+              Los antecedentes del paciente se ENSEÑAN arriba en vez de
+              volverse a pedir en un cuadro vacío. El formulario de
+              especialidad es exactamente el mismo de siempre. */}
+          {tab === "expediente" && rediseno && (
+            <NuevaConsultaRediseno
+              especialidad={currentSpecialty}
+              onCambiarEspecialidad={setOverrideSpecialty}
+              onRestablecerEspecialidad={
+                overrideSpecialty && overrideSpecialty !== detectedSpecialty
+                  ? () => setOverrideSpecialty(null)
+                  : undefined
+              }
+              antecedentes={{
+                riskFlags: questionnaireRiskFlags,
+                allergies: patient.allergies ?? [],
+                chronicConditions: patient.chronicConditions ?? [],
+                currentMedications: patient.currentMedications ?? [],
+                bloodType: patient.bloodType ?? null,
+              }}
+              aviso={showQuestionnaireWarning ? questionnaireBanner : undefined}
+              onIrACuestionario={() => setTab("cuestionario")}
+              formulario={
+                <>
+                  {currentSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} rediseno />}
+                  {currentSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
+                  {currentSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
+                  {currentSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
+                </>
+              }
+            />
+          )}
+
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}
-          {tab === "expediente" && (
+          {tab === "expediente" && !rediseno && (
             <div className="bg-card border border-border rounded-xl p-5 shadow-[var(--shadow-1)]">
               <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                 <h2 className="text-[15px] font-semibold tracking-[-0.01em]">
@@ -2465,7 +2641,13 @@ export function PatientDetailClient({
 
               {records.length === 0 ? (
                 <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
-                  <div className="text-3xl mb-2">📋</div>
+                  {/* Sin emoji con el rediseño: la ficha usa íconos de línea
+                      en todo lo demás y estos se colaban dentro del texto. */}
+                  <div className="mb-2 flex justify-center">
+                    {rediseno
+                      ? <ClipboardList size={28} strokeWidth={1.5} aria-hidden className="text-[var(--text-3)]" />
+                      : <span className="text-3xl">📋</span>}
+                  </div>
                   <div className="text-sm font-semibold">{t("patients.consultHistory.empty")}</div>
                   <button
                     onClick={() => setTab("expediente")}
@@ -2695,8 +2877,16 @@ export function PatientDetailClient({
                         </span>
                       </div>
                       <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
-                        <span className="tabular-nums">💰 {formatCurrency(plan.totalCost)}</span>
-                        <span>📅 {t("patients.treatment.everyDays", { days: plan.sessionIntervalDays })}</span>
+                        <span className="tabular-nums inline-flex items-center gap-1">
+                          {rediseno
+                            ? <CreditCard size={12} strokeWidth={1.75} aria-hidden />
+                            : "💰"} {formatCurrency(plan.totalCost)}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          {rediseno
+                            ? <Calendar size={12} strokeWidth={1.75} aria-hidden />
+                            : "📅"} {t("patients.treatment.everyDays", { days: plan.sessionIntervalDays })}
+                        </span>
                         {pendingThis > 0 && plan.status === "ACTIVE" && (
                           <span className="text-[var(--brand)] font-semibold">⏳ {t("patients.treatment.pendingCount", { count: pendingThis })}</span>
                         )}
@@ -3033,7 +3223,15 @@ export function PatientDetailClient({
                 <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap shadow-[var(--shadow-1)]">
                   <div>
                     <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.xrays.title")}</h2>
-                    <p className="text-xs text-muted-foreground tabular-nums">{t("patients.xrays.fileCount", { count: files.length })}</p>
+                    {/* «0 archivos» mientras carga hacía creer que el paciente
+                        no tiene placas: los archivos tardan entre cuatro y ocho
+                        segundos en llegar. Hasta que llegan, se dice que se
+                        están cargando. */}
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {rediseno && !filesLoaded
+                        ? t("pacientesRediseno.archivos.cargando")
+                        : t("patients.xrays.fileCount", { count: files.length })}
+                    </p>
                   </div>
                   {canUploadXrays && (
                     <label className="flex items-center gap-1.5 text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg cursor-pointer hover:bg-[var(--violet-700)] transition-colors shadow-[var(--shadow-1)]">
@@ -3046,7 +3244,11 @@ export function PatientDetailClient({
 
                 {files.length === 0 && filesLoaded && (
                   <div className="bg-card border border-border rounded-xl p-10 text-center">
-                    <div className="text-3xl mb-2">🩻</div>
+                    <div className="mb-2 flex justify-center">
+                      {rediseno
+                        ? <FileImage size={28} strokeWidth={1.5} aria-hidden className="text-[var(--text-3)]" />
+                        : <span className="text-3xl">🩻</span>}
+                    </div>
                     <p className="text-sm font-semibold text-muted-foreground">{t("patients.xrays.empty")}</p>
                     <p className="text-xs text-muted-foreground mt-1">{t("patients.xrays.emptyHint")}</p>
                   </div>

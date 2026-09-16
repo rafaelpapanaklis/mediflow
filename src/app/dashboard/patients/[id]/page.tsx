@@ -36,6 +36,7 @@ import {
   type PatientActivityCounts,
 } from "@/lib/clinical-shared/get-patient-activity-counts";
 import { questionnaireFreshness } from "@/lib/health-questionnaire";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { resolveReminderOutcome } from "@/lib/reminders/promise";
@@ -164,7 +165,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // activas (o todas, si la clínica está en trial vigente) y reusamos esa
   // lista para Pediatría / Periodoncia / prefill endo. Reemplaza tres
   // llamadas previas a canAccessModule() — mismo contrato, una query.
-  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount, portalAccountLink, portalNotifPrefsRow] = await Promise.all([
+  const [clinicModuleKeys, activityCounts, latestQuestionnaire, creditBalance, fotosCount, portalAccountLink, portalNotifPrefsRow, rediseno] = await Promise.all([
     getActiveClinicModuleKeys(user.clinicId),
     getPatientActivityCounts({ clinicId: user.clinicId, patientId: patient.id }),
     // Cuestionario de salud vigente (anamnesis WS1-T2). .catch(()=>null) lo
@@ -205,6 +206,13 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       select: { account: { select: { notifPrefs: true } } },
       orderBy: { createdAt: "asc" },
     }).catch(() => null),
+    // REDISEÑO DE PACIENTES — el MISMO interruptor por clínica que enciende el
+    // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`).
+    // A propósito, y no uno propio: Rafael está probando «el diseño nuevo» como
+    // una sola cosa, y dos interruptores serían dos cosas que recordar apagar.
+    // Falla cerrado — sin la tabla, sin fila o con error devuelve false y la
+    // pantalla se pinta exactamente como hoy. El clinicId sale de la sesión.
+    menuDosNivelesEncendido(user.clinicId),
   ]);
   // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
   // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
@@ -516,6 +524,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           questionnaireRiskFlags={questionnaireRiskFlags}
           creditBalance={creditBalance}
           fotosCount={fotosCount}
+          rediseno={rediseno}
         />
       </ErrorBoundary>
     </div>
