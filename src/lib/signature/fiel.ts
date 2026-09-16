@@ -60,6 +60,45 @@ export function parseCer(cerDer: Buffer): ParsedCert {
 }
 
 /**
+ * Abre una .key del SAT (PKCS#8 EncryptedPrivateKeyInfo en DER) con su
+ * contraseña. Lanza `invalid_key_password` si la contraseña no es la buena, y
+ * `invalid_key_file` si el archivo no es una llave, que son cosas distintas y
+ * el médico merece que se le digan distintas.
+ *
+ * ── POR QUÉ NO BASTA CON MIRAR SI DEVUELVE `null` ─────────────────────────
+ * node-forge decide si la contraseña sirve mirando el relleno PKCS#5 del texto
+ * descifrado. Con una contraseña equivocada ese relleno cuadra por casualidad
+ * más o menos una vez de cada 256, y entonces forge sigue adelante y parsea la
+ * basura como ASN.1 ahí dentro (`pbe.js:378-380`): revienta con cosas como
+ * «Only 8, 16, 24, or 32 bits supported: 424» en lugar de devolver `null`.
+ * Sin este `try`, una de cada 256 veces el médico que teclea mal su contraseña
+ * recibía «no se pudo leer el archivo», o un 500. Es el tipo de fallo que
+ * aparece de higos a brevas y nadie consigue reproducir.
+ *
+ * Una vez aplicada la contraseña, cualquier tropiezo ya solo tiene una
+ * explicación: la contraseña estaba mal.
+ */
+function abrirLlave(keyDer: Buffer, keyPassword: string): forge.pki.rsa.PrivateKey {
+  let keyAsn1;
+  try {
+    keyAsn1 = forge.asn1.fromDer(forge.util.createBuffer(keyDer.toString("binary")));
+  } catch {
+    // Esto no es ni ASN.1: el archivo no es una .key. La contraseña no tiene la culpa.
+    throw new Error("invalid_key_file");
+  }
+
+  try {
+    const decrypted = forge.pki.decryptPrivateKeyInfo(keyAsn1, keyPassword);
+    if (!decrypted) throw new Error("invalid_key_password");
+    return forge.pki.privateKeyFromAsn1(decrypted) as forge.pki.rsa.PrivateKey;
+  } catch (e) {
+    // Es ASN.1 válido pero no una llave cifrada: tampoco es culpa de la contraseña.
+    if (String(e).includes("EncryptedPrivateKeyInfo")) throw new Error("invalid_key_file");
+    throw new Error("invalid_key_password");
+  }
+}
+
+/**
  * Firma un buffer con la .key privada SAT (PKCS#8 DER o PEM) y devuelve
  * PKCS#7 detached signature en base64.
  */
@@ -70,12 +109,7 @@ export function signDetached(opts: {
   keyPassword: string;
 }): string {
   // SAT keys son PKCS#8 EncryptedPrivateKeyInfo en DER. Descifrar primero.
-  const keyAsn1 = forge.asn1.fromDer(forge.util.createBuffer(opts.keyDer.toString("binary")));
-  const decrypted = forge.pki.decryptPrivateKeyInfo(keyAsn1, opts.keyPassword);
-  if (!decrypted) {
-    throw new Error("invalid_key_password");
-  }
-  const privateKey = forge.pki.privateKeyFromAsn1(decrypted);
+  const privateKey = abrirLlave(opts.keyDer, opts.keyPassword);
 
   const cerAsn1 = forge.asn1.fromDer(forge.util.createBuffer(opts.cerDer.toString("binary")));
   const cert = forge.pki.certificateFromAsn1(cerAsn1);
@@ -128,12 +162,7 @@ export function keyMatchesCert(opts: {
   keyDer: Buffer;
   keyPassword: string;
 }): boolean {
-  const keyAsn1 = forge.asn1.fromDer(forge.util.createBuffer(opts.keyDer.toString("binary")));
-  const decrypted = forge.pki.decryptPrivateKeyInfo(keyAsn1, opts.keyPassword);
-  if (!decrypted) {
-    throw new Error("invalid_key_password");
-  }
-  const privateKey = forge.pki.privateKeyFromAsn1(decrypted);
+  const privateKey = abrirLlave(opts.keyDer, opts.keyPassword);
 
   const cerAsn1 = forge.asn1.fromDer(forge.util.createBuffer(opts.cerDer.toString("binary")));
   const cert = forge.pki.certificateFromAsn1(cerAsn1);

@@ -90,9 +90,10 @@ interface PrescriptionItemBody {
  * La receta puede emitirse standalone (sin consulta asociada) o
  * vinculada a un MedicalRecord existente (flujo "Iniciar consulta").
  *
- * Compat: si llega `medications` (legacy JSON), lo guardamos también para
- * datos históricos. Si no llegan items nuevos pero sí medications, NO
- * permitimos crear: se requiere migrar al formato items con CUMS.
+ * Compat: `medications` (JSON legacy) se sigue guardando para datos históricos,
+ * pero SIEMPRE armado desde `items`. Lo que mande el cliente en ese campo se
+ * ignora: la verificación pública lo publica sin auth, así que era una segunda
+ * puerta para decir en el QR algo distinto de lo recetado.
  */
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -105,7 +106,14 @@ export async function POST(req: NextRequest) {
   // OJO: `body.cofeprisGroup` NO se lee. El grupo sale del catálogo CUMS más
   // abajo; leerlo del cuerpo era el fallo de seguridad que este bloque tapa.
   const { medicalRecordId, patientId, items, indications, diagnosis, cofeprisFolio, expiresAt: expiresAtOverride } = body;
-  const medicationsLegacy = body.medications;
+  // `body.medications` NO se lee. Era el último campo de medicamentos que
+  // controlaba el cliente, y `GET /api/prescriptions/[id]/verify` —público, sin
+  // auth, el que consumiría una farmacia— lo publica tal cual. Se podía recetar
+  // paracetamol en `items` (grupo V, sin tope) y mandar fentanilo en
+  // `medications`: la verificación pública decía fentanilo vigente hasta 2028.
+  // Es el mismo agujero que tapa este bloque, por otra puerta. El snapshot
+  // legacy se guarda igual, pero armado desde `items`, que es lo que ya pasaba
+  // en el flujo real (el modal nunca ha mandado `medications`).
 
   // Evidencia opcional del chequeo IA de contraindicaciones. Se guarda tal cual
   // en Prescription.aiCheck (nunca se expone en la verificación pública — el
@@ -208,6 +216,12 @@ export async function POST(req: NextRequest) {
         detail: "La fecha de vigencia no es una fecha válida.",
       }, { status: 400 });
     }
+    if (pedida.getTime() <= issuedAt.getTime()) {
+      return NextResponse.json({
+        error: "expiresAt_in_the_past",
+        detail: "La vigencia no puede ser anterior a la emisión de la receta.",
+      }, { status: 400 });
+    }
     // Tope duro solo para I, II y III. Para IV-VI y sin grupo se respeta lo que
     // pida el médico: los 180 días son un default prudente, no una obligación
     // legal, y apretarlos rompería las recetas comunes sin ganar nada.
@@ -240,6 +254,17 @@ export async function POST(req: NextRequest) {
     }, { status: 422 });
   }
 
+  // Snapshot legacy de medicamentos, armado desde los items ya validados. Campos
+  // explícitos y `null` en vez de `undefined`: esto va a una columna JSON, y
+  // `undefined` no es un valor JSON (el typecheck lo canta).
+  const medicationsSnapshot = itemsArray.map((it) => ({
+    cumsKey: it.cumsKey!,
+    dosage: it.dosage!,
+    duration: it.duration ?? null,
+    quantity: it.quantity ?? null,
+    notes: it.notes ?? null,
+  }));
+
   const qrCode = randomBytes(16).toString("hex");
 
   // Transacción atómica: receta + items.
@@ -250,7 +275,7 @@ export async function POST(req: NextRequest) {
         patientId,
         doctorId: ctx.userId,
         clinicId: ctx.clinicId,
-        medications: medicationsLegacy ?? itemsArray, // legacy JSON snapshot
+        medications: medicationsSnapshot, // snapshot legacy, SIEMPRE desde items
         indications: indications ?? null,
         diagnosis: (typeof diagnosis === "string" && diagnosis.trim()) ? diagnosis.trim().slice(0, 2000) : null,
         qrCode,

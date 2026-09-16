@@ -77,7 +77,9 @@ export async function POST(req: NextRequest) {
   if (docType === "PRESCRIPTION") {
     const rx = await prisma.prescription.findFirst({
       where: { id: body.docId, clinicId: user.clinicId },
-      include: { items: true },
+      // `orderBy` aunque `canonicalPrescriptionContent` reordene: que la lectura
+      // ya llegue estable ahorra tener que confiar en dos sitios a la vez.
+      include: { items: { orderBy: { createdAt: "asc" } } },
     });
     if (!rx) return NextResponse.json({ error: "prescription_not_found" }, { status: 404 });
     // Firmar la receta de otro médico es falsificar su firma, aunque sea de la

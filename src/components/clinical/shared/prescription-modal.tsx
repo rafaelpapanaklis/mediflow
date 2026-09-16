@@ -90,15 +90,25 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
   const [confirmContra, setConfirmContra] = useState(false);
   // Lo dicta el servidor (RECETAS_FOLIO_OBLIGATORIO). Ver /api/prescriptions/reglas.
   const [folioObligatorio, setFolioObligatorio] = useState(true);
+  // Cuánto se separa el reloj de este dispositivo del reloj del servidor, en ms.
+  // El tope legal de un controlado se cuenta desde la hora DEL SERVIDOR: una
+  // tablet adelantada correría el día del tope y la pantalla daría por buena una
+  // fecha que el servidor rechaza. 0 mientras no se sepa (y si la consulta falla).
+  const [desfaseReloj, setDesfaseReloj] = useState(0);
 
   useEffect(() => {
     if (!open) return;
     setItems([]); setIndications(""); setDiagnosis(""); setValidUntil(""); setCofeprisFolio(""); setSignCheck(false); setKeyPassword("");
     setCreatedRx(null); setSendingVia(null);
     setAiChecking(false); setAiResult(null); setExpandedMed(null); setConfirmContra(false);
+    setDesfaseReloj(0);
     fetch("/api/prescriptions/reglas")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setFolioObligatorio(d?.folioObligatorio !== false))
+      .then((d) => {
+        setFolioObligatorio(d?.folioObligatorio !== false);
+        const ahoraServidor = d?.ahora ? Date.parse(d.ahora) : NaN;
+        setDesfaseReloj(Number.isNaN(ahoraServidor) ? 0 : ahoraServidor - Date.now());
+      })
       .catch(() => setFolioObligatorio(true));
     fetch("/api/signature/cert")
       .then((r) => (r.ok ? r.json() : null))
@@ -122,7 +132,9 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
   // fecha que el servidor va a rechazar. Una pantalla que deja intentarlo y un
   // servidor que rechaza es una pantalla que frustra.
   const conTopeLegal = hasLegalExpiryCap(cofeprisGroup);
-  const topeLegalFecha = conTopeLegal ? expiresForCofeprisGroup(cofeprisGroup) : null;
+  const topeLegalFecha = conTopeLegal
+    ? expiresForCofeprisGroup(cofeprisGroup, new Date(Date.now() + desfaseReloj))
+    : null;
   // "YYYY-MM-DD" en hora local, que es lo que entiende <input type="date">.
   const maxValidUntil = topeLegalFecha
     ? new Date(topeLegalFecha.getTime() - topeLegalFecha.getTimezoneOffset() * 60000)

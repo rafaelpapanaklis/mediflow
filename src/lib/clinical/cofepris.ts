@@ -104,10 +104,17 @@ export function requiresCofeprisFolio(group?: string | null): boolean {
  *
  * Exigir folio es lo correcto, pero tiene consecuencia: los doctores que hoy
  * recetan diazepam, clonazepam o codeína sin folio quedan bloqueados el día
- * que esto entre. Por eso la exigencia se puede apagar sin desplegar:
+ * que esto entre. Por eso la exigencia se puede apagar SIN TOCAR EL CÓDIGO:
  *
  *     RECETAS_FOLIO_OBLIGATORIO=off     (o 0, false, no)  → no se exige
  *     cualquier otro valor, o sin variable                → se exige
+ *
+ * ⚠️ «Sin tocar el código» no es «al instante»: en Vercel, cambiar una variable
+ * de entorno exige un redeploy para que la función la tome. Es un clic en el
+ * panel y esperar el despliegue, no un cambio de código ni una migración — pero
+ * conviene saberlo antes de necesitarlo con prisa. Por eso el número del
+ * impacto (sql/recetas-folio-obligatorio-impacto.sql) se mira ANTES de integrar
+ * y la variable se deja puesta en el mismo despliegue si hace falta.
  *
  * El default es EXIGIR: si alguien borra la variable por accidente, el sistema
  * se queda en el lado seguro, no en el permisivo.

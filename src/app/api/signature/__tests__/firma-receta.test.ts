@@ -322,6 +322,30 @@ test("lo firmado incluye lo que importa: paciente, vigencia, grupo, folio y méd
   assert.equal(texto, canonicalPrescriptionContent(receta({ cofeprisFolio: "F-778899" }) as any));
 });
 
+test("dos items iguales salvo en la nota dan el MISMO texto venga como venga de la base", async () => {
+  const { canonicalPrescriptionContent } = await import("@/lib/signature/contenido-receta");
+  // El mismo medicamento, la misma dosis, distinta indicación. `PrescriptionItem`
+  // no tiene columna de orden y el SELECT no puede prometer uno estable: si el
+  // desempate no mirara `notes`, Postgres decidiría el sha256 de la receta.
+  const manana = { cumsKey: "MX-0030", dosage: "1 tableta", duration: "7 días", quantity: "7", notes: "por la mañana" };
+  const noche  = { cumsKey: "MX-0030", dosage: "1 tableta", duration: "7 días", quantity: "7", notes: "por la noche" };
+
+  const unOrden  = canonicalPrescriptionContent(receta({ items: [manana, noche] }) as any);
+  const elOtro   = canonicalPrescriptionContent(receta({ items: [noche, manana] }) as any);
+  assert.equal(unOrden, elOtro, "el orden de las filas no puede cambiar lo firmado");
+  // Y las dos notas siguen dentro: ordenar no es descartar.
+  assert.ok(unOrden.includes("por la mañana") && unOrden.includes("por la noche"));
+});
+
+test("cambiar una nota SÍ cambia lo firmado (la firma cubre la receta entera)", async () => {
+  const { canonicalPrescriptionContent } = await import("@/lib/signature/contenido-receta");
+  const a = canonicalPrescriptionContent(
+    receta({ items: [{ cumsKey: "MX-0030", dosage: "1 tableta", duration: null, quantity: null, notes: "con alimentos" }] }) as any);
+  const b = canonicalPrescriptionContent(
+    receta({ items: [{ cumsKey: "MX-0030", dosage: "1 tableta", duration: null, quantity: null, notes: "en ayunas" }] }) as any);
+  assert.notEqual(a, b);
+});
+
 // ── 3. El sello del PDF ────────────────────────────────────────────────────
 
 test("el PDF NO pone el sello por una firma de otro doctor", async () => {
@@ -361,11 +385,30 @@ test("subir un certificado con la llave de OTRO: rechazado", async () => {
   assert.equal(Object.keys(certs).length, 0, "no se guardó nada");
 });
 
-test("subir un certificado con la contraseña equivocada: rechazado", async () => {
+test("subir un certificado con la contraseña equivocada: rechazado, SIEMPRE", async () => {
+  // Veinte contraseñas malas, no una: `decryptPrivateKeyInfo` decide por el
+  // relleno PKCS#5 y con una contraseña equivocada ese relleno cuadra por
+  // casualidad ~1 de cada 256 veces. Con una sola prueba, el fallo aparecía de
+  // higos a brevas y contestaba `key_parse_failed` a quien solo había tecleado
+  // mal. Con veinte, si vuelve la grieta, sale en rojo.
+  for (let i = 0; i < 20; i++) {
+    certs = {};
+    const { status, body } = await registrarCert(DRA_RUIZ, `no-es-la-contraseña-${i}`);
+    assert.equal(status, 400);
+    assert.equal(body.error, "invalid_key_password", `intento ${i}: ${body.error} / ${body.detail}`);
+    assert.equal(Object.keys(certs).length, 0);
+  }
+});
+
+test("un archivo que no es una .key se distingue de una contraseña mala", async () => {
   certs = {};
-  const { status, body } = await registrarCert(DRA_RUIZ, "no-es-la-contraseña");
+  const { status, body } = await registrarCert({
+    cerDer: DRA_RUIZ.cerDer,
+    keyDerCifrada: Buffer.from("esto no es DER, es texto"),
+    password: "da igual",
+  });
   assert.equal(status, 400);
-  assert.equal(body.error, "invalid_key_password");
+  assert.equal(body.error, "invalid_key_file", "no se le echa la culpa a la contraseña");
   assert.equal(Object.keys(certs).length, 0);
 });
 

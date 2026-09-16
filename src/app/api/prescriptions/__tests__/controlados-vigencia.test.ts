@@ -180,6 +180,41 @@ test("una fecha que no es fecha da 400, no una receta con vigencia inválida", a
   assert.equal(creada, null);
 });
 
+test("una vigencia anterior a la emisión da 400", async () => {
+  const { status, body } = await crear("MX-0030", { expiresAt: "2020-01-01T00:00:00.000Z" });
+  assert.equal(status, 400);
+  assert.equal(body.error, "expiresAt_in_the_past");
+  assert.equal(creada, null, "una receta que nace vencida no es una receta");
+});
+
+test("`expiresAt: 0` se rechaza en vez de colarse como 1970", async () => {
+  // Antes el 0 era falsy y ni se miraba: caía en el default de 180 días, con lo
+  // que un cliente con un bug se llevaba una receta que no había pedido así.
+  // Mandar 0 es pedir el 1-ene-1970: una fecha real, anterior a la emisión.
+  const { status, body } = await crear("MX-0030", { expiresAt: 0 });
+  assert.equal(status, 400);
+  assert.equal(body.error, "expiresAt_in_the_past");
+  assert.equal(creada, null);
+});
+
+// ── La OTRA puerta: `medications`, que publica la verificación pública ──────
+
+test("el `medications` del cliente se ignora: el snapshot sale de los items", async () => {
+  // GET /api/prescriptions/[id]/verify es público, sin auth, y devuelve
+  // `medications` tal cual. Se podía recetar paracetamol (grupo V, sin tope) y
+  // mandar fentanilo en `medications`: la verificación pública decía fentanilo
+  // vigente hasta 2028, mientras el PDF y la pantalla pintaban paracetamol.
+  const { status } = await crear("MX-0001", {
+    medications: [{ nombre: "Fentanilo parche 25 mcg/h", cantidad: "5 cajas" }],
+    expiresAt: "2028-12-31T23:59:59.000Z",
+  });
+  assert.equal(status, 201, "grupo V no tiene tope duro: la receta se crea");
+
+  const guardado = JSON.stringify(creada.medications);
+  assert.ok(!/entanilo/.test(guardado), `se coló lo del cliente: ${guardado}`);
+  assert.ok(/MX-0001/.test(guardado), "el snapshot es el de los items de verdad");
+});
+
 // ── Lo que NO se rompe: las recetas comunes ────────────────────────────────
 
 test("un antibiótico (grupo IV) sigue aceptando la fecha que pida el médico", async () => {
@@ -233,7 +268,7 @@ test("un folio en blanco no cuenta como folio", async () => {
   assert.equal(body.error, "cofeprisFolio_required");
 });
 
-test("RECETAS_FOLIO_OBLIGATORIO=off apaga la exigencia sin desplegar", async () => {
+test("RECETAS_FOLIO_OBLIGATORIO=off apaga la exigencia sin tocar el código", async () => {
   process.env.RECETAS_FOLIO_OBLIGATORIO = "off";
   const { status } = await crear("MX-0022");
   assert.equal(status, 201, "apagado, el grupo I pasa sin folio");
@@ -250,4 +285,30 @@ test("el default es EXIGIR: una variable con basura no apaga nada", async () => 
   const { status, body } = await crear("MX-0022");
   assert.equal(status, 422);
   assert.equal(body.error, "cofeprisFolio_required");
+});
+
+// ── El interruptor, visto desde la pantalla ────────────────────────────────
+
+test("/api/prescriptions/reglas dice lo mismo que aplica el servidor", async () => {
+  const { GET } = await import("@/app/api/prescriptions/reglas/route");
+
+  const encendido = await (await GET()).json();
+  assert.equal(encendido.folioObligatorio, true);
+
+  process.env.RECETAS_FOLIO_OBLIGATORIO = "off";
+  const apagado = await (await GET()).json();
+  assert.equal(apagado.folioObligatorio, false,
+    "si la pantalla no se entera, bloquea recetas que el servidor ya acepta");
+});
+
+test("/api/prescriptions/reglas devuelve la hora DEL SERVIDOR", async () => {
+  // El modal calcula el tope de un controlado desde esta hora, no desde el
+  // reloj del dispositivo: una tablet adelantada correría el día del tope y la
+  // pantalla daría por buena una fecha que el servidor rechaza con un 422.
+  const { GET } = await import("@/app/api/prescriptions/reglas/route");
+  const antes = Date.now();
+  const body = await (await GET()).json();
+  const ahora = Date.parse(body.ahora);
+  assert.ok(!Number.isNaN(ahora), "`ahora` tiene que ser una fecha ISO legible");
+  assert.ok(ahora >= antes - 1000 && ahora <= Date.now() + 1000);
 });

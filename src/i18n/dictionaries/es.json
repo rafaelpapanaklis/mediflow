@@ -3544,7 +3544,7 @@
     },
     "signature": {
       "title": "Firma electrónica FIEL/SAT",
-      "intro": "Carga tu e.firma del SAT (.cer + .key + contraseña) para firmar digitalmente recetas y notas clínicas con validez legal según LFEA.",
+      "intro": "Carga tu e.firma del SAT (.cer + .key + contraseña) para firmar digitalmente recetas y notas clínicas. DaleControl guarda tu firma y comprueba que la llave corresponda al certificado, pero todavía no valida el certificado ante el SAT: los documentos se imprimen diciendo exactamente eso.",
       "statusExpired": "Certificado vencido",
       "statusExpiringSoon": {
         "one": "Vence en {count} día — renovar pronto",

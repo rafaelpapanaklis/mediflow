@@ -82,6 +82,12 @@ export async function POST(req: NextRequest) {
         detail: "La contraseña no abre la llave privada.",
       }, { status: 400 });
     }
+    if (msg.includes("invalid_key_file")) {
+      return NextResponse.json({
+        error: "invalid_key_file",
+        detail: "Ese archivo no es una llave privada del SAT (.key).",
+      }, { status: 400 });
+    }
     return NextResponse.json({ error: "key_parse_failed", detail: msg }, { status: 400 });
   }
 

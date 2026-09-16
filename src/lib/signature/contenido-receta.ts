@@ -50,13 +50,29 @@ function iso(d: Date | string | null | undefined): string | null {
   return d instanceof Date ? d.toISOString() : new Date(d).toISOString();
 }
 
-/** Orden determinista de los items: por clave, luego dosis, duración y cantidad. */
+/**
+ * Orden determinista de los items: por TODOS sus campos, `notes` incluido.
+ *
+ * `notes` no es decorativo aquí. `PrescriptionItem` no tiene columna de orden
+ * (a diferencia de `EduPrescriptionItem.orden`, que existe justo por esto) y el
+ * `SELECT` que los trae no puede prometer un orden estable sin `ORDER BY`. Dos
+ * items del mismo medicamento con la misma dosis y distinta nota —«por la
+ * mañana» y «por la noche»— quedaban desempatados por el orden que devolviera
+ * Postgres. El mismo documento podía dar dos sha256 distintos, que es
+ * exactamente lo que este archivo promete que no pasa.
+ */
+function clave(it: RecetaFirmableItem): string {
+  return [it.cumsKey, it.dosage, it.duration ?? "", it.quantity ?? "", it.notes ?? ""].join("\u0000");
+}
+
 function ordenar(items: RecetaFirmableItem[]): RecetaFirmableItem[] {
-  return [...items].sort((a, b) =>
-    `${a.cumsKey}|${a.dosage}|${a.duration ?? ""}|${a.quantity ?? ""}`.localeCompare(
-      `${b.cumsKey}|${b.dosage}|${b.duration ?? ""}|${b.quantity ?? ""}`,
-    ),
-  );
+  return [...items].sort((a, b) => {
+    const ka = clave(a);
+    const kb = clave(b);
+    // Comparación por code point, no `localeCompare`: el resultado no puede
+    // depender del idioma del servidor que firme.
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
 }
 
 export function canonicalPrescriptionContent(rx: RecetaFirmable): string {
