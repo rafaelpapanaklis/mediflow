@@ -6,6 +6,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
+import { copiarCondiciones } from "@/lib/quotes/condiciones-pago-db";
 import type { QuoteItemInput } from "@/lib/quotes/types";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,15 @@ export async function POST(_req: NextRequest, { params }: Params) {
     notes: src.notes ?? null,
   });
 
+  // Duplicar copia también las formas de pago: si el original se negoció a 6
+  // mensualidades, la copia nace con las mismas. Sin el SQL aplicado devuelve
+  // null y el duplicado sale sin condiciones, igual que el original.
+  const condiciones = await copiarCondiciones(prisma, {
+    origenId: src.id,
+    destinoId: quote.id,
+    clinicId: ctx.clinicId,
+  });
+
   await logAudit({
     clinicId: ctx.clinicId,
     userId: ctx.userId,
@@ -74,5 +84,5 @@ export async function POST(_req: NextRequest, { params }: Params) {
     changes: { duplicatedFrom: { before: null, after: src.folio } },
   });
 
-  return NextResponse.json(serializeQuote(quote), { status: 201 });
+  return NextResponse.json(serializeQuote(quote, condiciones), { status: 201 });
 }

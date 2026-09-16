@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrl, BUCKETS } from "@/lib/storage";
 import { QuoteDocument, type QuotePdfItem } from "@/lib/pdf/quote-document";
+import { planParaDocumento } from "@/lib/quotes/condiciones-pago";
+import { leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
 
 /**
  * buildQuotePdf — query + logo + firma + render del PDF de un presupuesto.
@@ -72,6 +74,13 @@ export async function buildQuotePdf(
     notes: it.notes ?? null,
   }));
 
+  // Formas de pago. `null` si el presupuesto no tiene o si el SQL todavía no
+  // está aplicado: el PDF sale igual que siempre, sin la sección.
+  const plan = planParaDocumento(
+    Number(quote.total) || 0,
+    (await leerCondiciones(prisma, quote.id)).condiciones,
+  );
+
   const element = createElement(QuoteDocument, {
     clinicName: quote.clinic.name,
     clinicAddress: quote.clinic.address ?? null,
@@ -92,6 +101,7 @@ export async function buildQuotePdf(
     notes: quote.notes ?? null,
     acceptedAt: quote.acceptedAt ? quote.acceptedAt.toISOString() : null,
     signatureDataUrl,
+    plan,
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

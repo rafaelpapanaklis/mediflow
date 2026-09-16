@@ -18,6 +18,25 @@ export interface QuotePdfItem {
   notes: string | null;
 }
 
+/**
+ * Plan de pagos ya calculado (lib/quotes/condiciones-pago). Llega RESUELTO —
+ * cuotas, fechas e importes— porque el PDF no puede tener su propia aritmética:
+ * el papel que firma el paciente y la pantalla en la que se negoció tienen que
+ * decir el mismo número. `null` = este presupuesto no tiene formas de pago
+ * (o falta el SQL): el PDF sale exactamente como antes.
+ */
+export interface QuotePdfPlan {
+  /** «6 pagos mensuales de $5,000.00, el primero el 1 de octubre de 2026». */
+  frase: string;
+  /** Nombre del método: «Efectivo», «Tarjeta crédito»… o null. */
+  metodo: string | null;
+  cuotas: Array<{ etiqueta: string; fecha: string; monto: number }>;
+  /** Suma de las cuotas. Se imprime para que el papel cuadre solo. */
+  suma: number;
+  /** Nota del paciente que difiere el cargo con SU banco, o null. */
+  leyendaDifiere: string | null;
+}
+
 export interface QuoteDocumentProps {
   clinicName: string;
   clinicAddress: string | null;
@@ -38,6 +57,8 @@ export interface QuoteDocumentProps {
   notes: string | null;
   acceptedAt: string | null;
   signatureDataUrl: string | null;
+  /** Formas de pago propuestas. Opcional: sin ellas el PDF es el de siempre. */
+  plan?: QuotePdfPlan | null;
 }
 
 const styles = StyleSheet.create({
@@ -104,6 +125,18 @@ const styles = StyleSheet.create({
   totalsValue: { fontSize: 10, color: "#14101f", fontFamily: "Helvetica-Bold", textAlign: "right", width: 90 },
   grandLabel: { fontSize: 12, color: "#7c3aed", fontFamily: "Helvetica-Bold", textAlign: "right", width: 120 },
   grandValue: { fontSize: 12, color: "#7c3aed", fontFamily: "Helvetica-Bold", textAlign: "right", width: 90 },
+  // Plan de pagos
+  planFrase: { fontSize: 10.5, color: "#14101f", fontFamily: "Helvetica-Bold" },
+  planMeta: { fontSize: 8.5, color: "#6b6b78", marginTop: 1 },
+  planRow: {
+    flexDirection: "row", justifyContent: "space-between",
+    borderBottomWidth: 0.5, borderBottomColor: "#e5e5ed", paddingVertical: 3,
+  },
+  planCuota: { fontSize: 9.5, color: "#14101f", fontFamily: "Helvetica-Bold", width: 90 },
+  planFecha: { fontSize: 9.5, color: "#6b6b78", flex: 1 },
+  planMonto: { fontSize: 9.5, color: "#14101f", fontFamily: "Helvetica-Bold", textAlign: "right", width: 90 },
+  planSuma: { fontSize: 8.5, color: "#6b6b78", textAlign: "right", marginTop: 4 },
+  planNota: { fontSize: 8.5, color: "#6b6b78", marginTop: 6 },
   bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 30 },
   legendBox: { maxWidth: 280 },
   legend: { fontSize: 8, color: "#6b6b78" },
@@ -262,6 +295,38 @@ export function QuoteDocument(props: QuoteDocumentProps) {
             <Text style={styles.grandValue}>{fmtMoney(props.total)}</Text>
           </View>
         </View>
+
+        {/* Formas de pago — el plan ya dividido, que es lo que el paciente se
+            lleva a su casa. No dice «meses sin intereses» en ninguna parte: eso
+            lo da el banco emisor, no la clínica (ver condiciones-pago.ts). */}
+        {props.plan ? (
+          <View style={[styles.block, { marginTop: 14 }]} wrap={false}>
+            <Text style={styles.label}>Forma de pago</Text>
+            <Text style={styles.planFrase}>{props.plan.frase}</Text>
+            {props.plan.metodo ? (
+              <Text style={styles.planMeta}>Método: {props.plan.metodo}</Text>
+            ) : null}
+
+            {props.plan.cuotas.length > 1 ? (
+              <View style={{ marginTop: 8 }}>
+                {props.plan.cuotas.map((c, i) => (
+                  <View key={i} style={styles.planRow}>
+                    <Text style={styles.planCuota}>{c.etiqueta}</Text>
+                    <Text style={styles.planFecha}>{c.fecha}</Text>
+                    <Text style={styles.planMonto}>{fmtMoney(c.monto)}</Text>
+                  </View>
+                ))}
+                <Text style={styles.planSuma}>
+                  Los pagos suman {fmtMoney(props.plan.suma)}.
+                </Text>
+              </View>
+            ) : null}
+
+            {props.plan.leyendaDifiere ? (
+              <Text style={styles.planNota}>{props.plan.leyendaDifiere}</Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Vigencia + notas */}
         <View style={[styles.block, { marginTop: 14 }]}>

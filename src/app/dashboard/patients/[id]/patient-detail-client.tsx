@@ -3508,6 +3508,10 @@ export function PatientDetailClient({
           {tab === "presupuestos" && (
             <QuotesTab
               patientId={patient.id}
+              // Interruptor `menu-dos-niveles`: encendido, Presupuestos usa el
+              // rediseño de WS1-T8 (formas de pago incluidas); apagado, el de
+              // siempre, sin un píxel de diferencia.
+              rediseno={rediseno}
               onViewInvoice={(invoiceId) => {
                 const inv = (invoices as any[]).find((i) => i.id === invoiceId);
                 if (inv) setInvoiceDetailOpen(inv);

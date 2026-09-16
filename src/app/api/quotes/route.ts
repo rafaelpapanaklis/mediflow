@@ -5,6 +5,8 @@ import { logAudit } from "@/lib/audit";
 import { createQuoteWithFolio, parseValidUntil } from "@/lib/quotes/service";
 import { serializeQuote } from "@/lib/quotes/serialize";
 import { createInvoiceFromQuote } from "@/lib/quotes/create-invoice-from-quote";
+import { normalizarCondiciones } from "@/lib/quotes/condiciones-pago";
+import { guardarCondiciones, leerCondicionesDeVarios } from "@/lib/quotes/condiciones-pago-db";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
@@ -52,7 +54,18 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(quotes.map(serializeQuote));
+  // Formas de pago de TODAS en UNA consulta (la regla de la casa: nunca una
+  // consulta por fila). Sin el SQL aplicado devuelve un mapa vacío y cada
+  // presupuesto sale con `condicionesPago: null`, como antes.
+  const { porQuote, fallo } = await leerCondicionesDeVarios(prisma, quotes.map((q) => q.id));
+
+  // `fallo` marca TODOS los presupuestos de la respuesta como «no se pudo leer
+  // su forma de pago». Es de esta lista de donde el editor saca el presupuesto
+  // que abre, así que es aquí donde la mentira «no tiene plan» se convertiría
+  // en un borrado al guardar.
+  return NextResponse.json(
+    quotes.map((q) => serializeQuote(q, porQuote.get(q.id) ?? null, fallo)),
+  );
 }
 
 /**
@@ -116,6 +129,16 @@ export async function POST(req: NextRequest) {
     notes,
   });
 
+  // Formas de pago. Se normalizan contra el TOTAL que acaba de calcular el
+  // servidor, no contra el que mandó el cliente: así un enganche no puede
+  // pasarse del presupuesto. Si la tabla no existe todavía, devuelve null y el
+  // presupuesto queda igual de válido.
+  const guardado = await guardarCondiciones(prisma, {
+    quoteId: quote.id,
+    clinicId: ctx.clinicId,
+    condiciones: normalizarCondiciones(body.condicionesPago, Number(quote.total)),
+  });
+
   await logAudit({
     clinicId: ctx.clinicId,
     userId: ctx.userId,
@@ -137,5 +160,10 @@ export async function POST(req: NextRequest) {
     console.error("[quotes:create] factura automática falló (no bloquea):", e);
   }
 
-  return NextResponse.json({ ...serializeQuote(quote), invoice }, { status: 201 });
+  return NextResponse.json({
+    ...serializeQuote(quote, guardado.condiciones),
+    invoice,
+    // Ver el PATCH: si había un plan que guardar y la base falló, se dice.
+    ...(guardado.fallo ? { condicionesPagoFallo: true } : {}),
+  }, { status: 201 });
 }
