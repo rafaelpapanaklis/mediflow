@@ -15,6 +15,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { aiBillingFeatureLabel } from "@/lib/ai-billing/types";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
+import { SaldoRediseno } from "@/components/dashboard/whatsapp-rediseno/saldo";
 
 // ── Tipos de la API (GET /api/ai-wallet) ──────────────────────────────────────
 type UsageRow = {
@@ -37,7 +38,8 @@ type TransactionRow = {
   createdAt: string;
 };
 
-type WalletData = {
+// (Exportado solo como TIPO: lo usa la vista del rediseño, whatsapp-rediseno/saldo.tsx.)
+export type WalletData = {
   balanceCents: number;
   status: "ACTIVE" | "PAUSED";
   autoRecharge: boolean;
@@ -121,7 +123,13 @@ const rootStyle = {
   margin: "0 auto",
 } as const;
 
-export function SaldoClient() {
+export function SaldoClient({
+  // Rediseño (ws1-t5): el MISMO interruptor por clínica que enciende el menú
+  // de dos niveles. Apagado, esta pantalla se pinta tal cual.
+  rediseno = false,
+}: {
+  rediseno?: boolean;
+} = {}) {
   const [data, setData] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -281,6 +289,31 @@ export function SaldoClient() {
     } finally {
       setSavingAuto(false);
     }
+  }
+
+  // REDISEÑO (ws1-t5): con el interruptor encendido se pinta la vista nueva
+  // con ESTE mismo estado, ESTOS mismos manejadores y ESTOS mismos textos; el
+  // JSX de siempre, de aquí para abajo, no cambia ni un nodo.
+  if (rediseno) {
+    return (
+      <SaldoRediseno
+        vm={{
+          data, loading, loadError, amountCents, setAmountCents, customPesos, setCustomPesos, payBusy,
+          startCheckout, speiOpen, setSpeiOpen, speiPesos, setSpeiPesos, setSpeiFile, speiBusy, openSpei,
+          submitSpei, autoOn, setAutoOn, thresholdPesos, setThresholdPesos, autoAmountPesos,
+          setAutoAmountPesos, savingAuto, saveAuto,
+          textos: {
+            presetAmountsCents: PRESET_AMOUNTS_CENTS,
+            rechargeAnchor: RECHARGE_ANCHOR,
+            spendScopeNote: SPEND_SCOPE_NOTE,
+            idleConsequenceNote: IDLE_CONSEQUENCE_NOTE,
+            idleTitle,
+            txTypeLabel,
+            txSourceLabel,
+          },
+        }}
+      />
+    );
   }
 
   // ── Estados de carga / error ─────────────────────────────────────────────────────
