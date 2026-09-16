@@ -438,17 +438,17 @@ test("🔴 crear factura: el total de la tarjeta es el que guarda POST /api/invo
   assert.equal(c.json.propuesta.resultado.enlace.texto, "Comprobante MF-0016");
 });
 
-test("facturar el presupuesto P-0001 por POST /api/quotes/[id]/invoice: borrador, mismo total, y ligado", async () => {
+test("facturar el presupuesto P-0001 por POST /api/quotes/[id]/invoice: PENDIENTE, mismo total, y ligado", async () => {
   const t = await tarjetaDe("crear_factura", { presupuesto: "P-0001" });
-  assert.equal(t.deshacer.reversible, true);
-  assert.match(t.tarjeta.frase, /\$2,900\.00, en borrador/);
+  assert.equal(t.deshacer.reversible, false, "una factura pendiente no se borra, solo se anula");
+  assert.match(t.tarjeta.frase, /\$2,900\.00, pendiente de cobro/);
   const c = await confirmar(t.id);
   assert.equal(c.json.propuesta.estado, "hecha", JSON.stringify(c.json.propuesta.resultado));
   const alta = m.escrituras.find((e) => e.op === "invoice.create")!;
-  assert.equal(alta.data.status, "DRAFT");
+  assert.equal(alta.data.status, "PENDING", "como la del botón normal: cobrable sin confirmar");
   assert.equal(alta.data.total, 2900);
   assert.equal(m.filas.quotes.find((q: any) => q.id === "q-juan").invoiceId, m.filas.invoices.at(-1).id);
-  assert.match(c.json.propuesta.resultado.frase, /facturé el presupuesto P-0001 de Juan Pérez en la factura MF-0016 por \$2,900\.00, en borrador/);
+  assert.match(c.json.propuesta.resultado.frase, /facturé el presupuesto P-0001 de Juan Pérez en la factura MF-0016 por \$2,900\.00\. Queda pendiente de cobro/);
 
   // Ya tiene factura: la segunda vez ni tarjeta.
   m.guion = [pide("crear_factura", { presupuesto: "P-0001" }), dice("Ya tiene factura.")];

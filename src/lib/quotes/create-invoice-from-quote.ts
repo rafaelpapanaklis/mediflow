@@ -1,13 +1,19 @@
-// Generación de la factura BORRADOR de un presupuesto. Lógica única y
-// reutilizable: la usan tanto POST /api/quotes/[id]/invoice (presupuesto
-// ACEPTADO) como POST /api/quotes (factura automática al crear). IDEMPOTENTE:
-// un presupuesto = una factura. clinicId SIEMPRE del ctx de sesión.
+// Generación de la factura de un presupuesto ACEPTADO (POST
+// /api/quotes/[id]/invoice, botón «Generar factura»). IDEMPOTENTE: un
+// presupuesto = una factura. clinicId SIEMPRE del ctx de sesión.
 //
-// Y su espejo: syncDraftInvoiceFromQuote re-sincroniza esa factura BORRADOR
-// cuando se EDITA el presupuesto (PATCH /api/quotes/[id]) con la MISMA
-// aritmética (invoice-from-quote-core). Antes el PATCH no tocaba la factura:
-// presupuesto de $10,000 subido a $18,000 → el paciente firmaba $18,000 y se
-// cobraba y timbraba la factura de $10,000.
+// Nace PENDIENTE, igual que la del botón normal (POST /api/invoices): el
+// paciente ya aceptó y un presupuesto aceptado ya no se edita, así que no hay
+// nada que ajustar antes de emitirla. Hasta sep-2026 nacía en BORRADOR y
+// además POST /api/quotes creaba una al CREAR el presupuesto — un presupuesto
+// que el paciente aún no aceptaba ya tenía factura y folio gastado. Eso se
+// quitó; los borradores de entonces siguen en la base tal cual.
+//
+// Y su espejo: syncDraftInvoiceFromQuote re-sincroniza la factura BORRADOR de
+// esos presupuestos viejos cuando se EDITA el presupuesto (PATCH
+// /api/quotes/[id]) con la MISMA aritmética (invoice-from-quote-core). Antes
+// el PATCH no tocaba la factura: presupuesto de $10,000 subido a $18,000 → el
+// paciente firmaba $18,000 y se cobraba y timbraba la factura de $10,000.
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -117,11 +123,11 @@ function serializeInvoice(inv: any): BillingInvoiceLite {
 }
 
 /**
- * Crea (o devuelve, si ya existe) la factura BORRADOR de un presupuesto.
- * IDEMPOTENTE: si el presupuesto ya tiene factura viva, la regresa sin duplicar.
- * Aísla SIEMPRE por ctx.clinicId. No valida el status del presupuesto: eso es
- * decisión de cada ruta (el endpoint [id]/invoice exige ACCEPTED; la creación
- * automática no).
+ * Crea (o devuelve, si ya existe) la factura PENDIENTE de un presupuesto.
+ * IDEMPOTENTE: si el presupuesto ya tiene factura viva, la regresa sin duplicar
+ * y sin tocar su estado (un BORRADOR viejo sigue siendo borrador).
+ * Aísla SIEMPRE por ctx.clinicId. No valida el status del presupuesto: eso lo
+ * hace la ruta (POST /api/quotes/[id]/invoice exige ACCEPTED).
  */
 export async function createInvoiceFromQuote(
   quote: QuoteLike,
@@ -147,25 +153,62 @@ export async function createInvoiceFromQuote(
 
   // Folio por MÁXIMO emitido con reintento ante carrera (P0-2). El loop
   // anterior hacía count+1+attempt: con 8 o más huecos por debajo del máximo
-  // (justo esta ruta los fabrica, porque sus DRAFT se borran en duro) los 8
-  // intentos caían todos en folios ya emitidos y la clínica quedaba bloqueada.
-  let created: any;
+  // (esta ruta los fabricaba mientras sus facturas nacían DRAFT y se borraban
+  // en duro) los 8 intentos caían todos en folios ya emitidos y la clínica
+  // quedaba bloqueada.
+  //
+  // Crear la factura y ligarla al presupuesto van en UNA transacción, con el
+  // presupuesto bloqueado (FOR UPDATE). Antes eran tres pasos sueltos: dos
+  // «Generar factura» a la vez (Sabina y la pantalla, dos pestañas) leían los
+  // dos `invoiceId` vacío y nacían dos facturas; y si la función moría entre
+  // crear y ligar, el botón seguía diciendo «Generar factura» y el segundo clic
+  // creaba otra. Con un borrador eso se borraba; con una PENDIENTE es deuda
+  // cobrable que solo se anula. Ahora el segundo espera al primero, relee el
+  // vínculo y devuelve la misma factura.
+  //
+  // La transacción se abre DENTRO de withInvoiceNumberRetry (ver su docstring):
+  // un P2002 de folio aborta la tx y el reintento necesita una nueva.
+  let result: { row: any; already: boolean };
   try {
-    created = await withInvoiceNumberRetry(async () =>
-      prisma.invoice.create({
-        data: {
-          clinicId: ctx.clinicId,
-          patientId: quote.patientId,
-          invoiceNumber: await nextInvoiceNumber(ctx.clinicId),
-          items: items as unknown as Prisma.InputJsonValue,
-          subtotal,
-          discount,
-          total,
-          paid: 0,
-          balance: total,
-          status: "DRAFT",
-          notes: `Generada desde presupuesto ${quote.folio}`,
-        },
+    result = await withInvoiceNumberRetry(() =>
+      prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "quotes" WHERE id = ${quote.id} AND "clinicId" = ${ctx.clinicId} FOR UPDATE`;
+        const fresh = await tx.quote.findFirst({
+          where: { id: quote.id, clinicId: ctx.clinicId },
+          select: { invoiceId: true },
+        });
+        if (!fresh) throw new Error("Presupuesto no encontrado al facturar");
+        if (fresh.invoiceId) {
+          const existing = await tx.invoice.findFirst({
+            where: { id: fresh.invoiceId, clinicId: ctx.clinicId },
+            include: { payments: true },
+          });
+          if (existing) return { row: existing, already: true };
+        }
+        const created = await tx.invoice.create({
+          data: {
+            clinicId: ctx.clinicId,
+            patientId: quote.patientId,
+            invoiceNumber: await nextInvoiceNumber(ctx.clinicId, tx),
+            items: items as unknown as Prisma.InputJsonValue,
+            subtotal,
+            discount,
+            total,
+            paid: 0,
+            balance: total,
+            // Emitida y cobrable desde ya, como POST /api/invoices. NO volver a
+            // DRAFT: el paciente ya aceptó, y un borrador obliga a «confirmar»
+            // antes de cobrar y se puede borrar (su folio se reutiliza).
+            status: "PENDING",
+            notes: `Generada desde presupuesto ${quote.folio}`,
+          },
+        });
+        // Vincula la factura al presupuesto (cierra la idempotencia aguas abajo).
+        await tx.quote.updateMany({
+          where: { id: quote.id, clinicId: ctx.clinicId },
+          data: { invoiceId: created.id },
+        });
+        return { row: { ...created, payments: [] }, already: false };
       }),
     );
   } catch (e) {
@@ -174,9 +217,8 @@ export async function createInvoiceFromQuote(
     if (e instanceof InvoiceNumberExhaustedError) throw new InvoiceFolioError();
     throw e;
   }
-
-  // Vincula la factura al presupuesto (cierra la idempotencia aguas abajo).
-  await prisma.quote.update({ where: { id: quote.id }, data: { invoiceId: created.id } });
+  if (result.already) return { invoice: serializeInvoice(result.row), already: true };
+  const created = result.row;
 
   await logAudit({
     clinicId: ctx.clinicId,
@@ -187,7 +229,7 @@ export async function createInvoiceFromQuote(
     changes: { fromQuote: { before: null, after: quote.folio } },
   });
 
-  return { invoice: serializeInvoice({ ...created, payments: [] }), already: false };
+  return { invoice: serializeInvoice(created), already: false };
 }
 
 // ── Re-sincronización al EDITAR el presupuesto (FIN-05) ───────────────
