@@ -5,6 +5,7 @@ import { Star, FileDown, Stethoscope } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { useT } from "@/i18n/i18n-provider";
+import { DoctorsRediseno } from "./doctors-rediseno";
 
 interface DoctorRow {
   id: string;
@@ -22,13 +23,13 @@ interface DoctorRow {
   avgConsultMin: number | null;
 }
 
-interface ApiResponse {
+export interface ApiResponse {
   from: string;
   to: string;
   doctors: DoctorRow[];
 }
 
-const PRESETS = [
+export const PRESETS = [
   { id: "month",   labelKey: "analytics.doctors.presetMonth",   compute: () => {
     const now = new Date();
     const from = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -44,7 +45,7 @@ const PRESETS = [
   }},
 ];
 
-export function DoctorsClient() {
+export function DoctorsClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [preset, setPreset] = useState("month");
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -97,6 +98,19 @@ export function DoctorsClient() {
     } finally {
       setGeneratingPayroll(false);
     }
+  }
+
+  if (rediseno) {
+    return (
+      <DoctorsRediseno
+        preset={preset}
+        setPreset={setPreset}
+        data={data}
+        loading={loading}
+        generatingPayroll={generatingPayroll}
+        generatePayroll={generatePayroll}
+      />
+    );
   }
 
   return (
