@@ -1,0 +1,383 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Rediseño de Caja (ws1-t4) — apertura, cortes, retiros, PIN.
+
+   Todo cuelga de `.pagina`, que SOLO se pone cuando la clínica tiene
+   encendido el interruptor `menu-dos-niveles`. Es ADITIVO: sin esa clase no
+   se aplica ni una regla de aquí abajo y Caja se pinta exactamente como hoy.
+
+   Habla el idioma visual que Rafael ya aprobó: los tokens `--pr-*` de la
+   raíz del rediseño (`pacientes-rediseno/rediseno.module.css`, heredados
+   por estar dentro de `CLASES_REDISENO`) y las medidas del menú de dos
+   niveles y de Pacientes. Aquí NO se declara ningún token nuevo y no hay
+   hex: solo `var(--pr-*)`.
+
+   Cómo se viste la pantalla sin reescribirla: Caja ya está hecha con las
+   clases del sistema de diseño (`.kpi`, `.card`, `.btn-new`, `.badge-new`,
+   `.table-new`, `.modal`, `.input-new`, `.segment-new`) y con estilos en
+   línea que leen variables globales (`--text-1`, `--border-soft`,
+   `--bg-elev-2`, `--danger`…). Un estilo en línea no se puede pisar desde
+   una hoja, pero una VARIABLE sí: dentro de `.pagina` esas variables
+   globales se redirigen a los tokens aprobados, y así cada color de la
+   pantalla —en línea o en clase— sale del mismo sitio que el menú nuevo.
+   Debajo van las medidas (radios, tamaños de letra, alturas) clase por
+   clase. Ningún elemento cambia de sitio, ninguna cifra de significado.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.pagina {
+  /* Texto */
+  --text-1: var(--pr-texto);
+  --text-2: var(--pr-texto-2);
+  --text-3: var(--pr-texto-3);
+  --text-4: var(--pr-texto-3);
+  /* Superficies y bordes */
+  --bg-elev: var(--pr-tarjeta);
+  --bg-elev-2: var(--pr-tarjeta-2);
+  --bg-hover: var(--pr-hover);
+  --border-soft: var(--pr-borde);
+  --border-strong: var(--pr-borde);
+  /* Radios y sombras */
+  --radius-lg: var(--pr-radio);
+  --radius: var(--pr-radio-s);
+  --shadow-1: var(--pr-sombra);
+  --shadow-2: var(--pr-sombra-2);
+  /* Acento y semánticos */
+  --brand: var(--pr-activo);
+  --brand-soft: var(--pr-activo-suave);
+  --brand-softer: var(--pr-activo-suave);
+  --success: var(--pr-exito);
+  --success-soft: var(--pr-exito-suave);
+  --warning: var(--pr-alerta);
+  --warning-strong: var(--pr-alerta);
+  --warning-soft: var(--pr-alerta-suave);
+  --warning-border-strong: var(--pr-alerta);
+  --danger: var(--pr-peligro);
+  --danger-soft: var(--pr-peligro-suave);
+  /* El tope del importe de un KPI: el número mide 26 px como `.importeGrande`
+     de Pacientes, y sigue encogiendo solo si no cabe en la tarjeta. */
+  --kpi-value-max: 26px;
+
+  /* Instrument Sans (la pone `.tokens` de la raíz) con cifras del mismo
+     ancho: es lo que cuadra las columnas de importes sin monoespaciada. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Encabezado de pantalla (como `.pantallaTitulo` / `.pantallaSub`) ──── */
+
+.titulo {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  color: var(--pr-texto);
+}
+
+.subtitulo {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+/* ── Pestañas Caja / Facturas ───────────────────────────────────────────
+   Mismo segmentado que el conmutador de vista de Pacientes: tarjeta blanca,
+   la activa en violeta. */
+
+.pagina :global(.segment-new) {
+  padding: 3px;
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  box-shadow: var(--pr-sombra);
+}
+
+.pagina :global(.segment-new__btn) {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pr-texto-3);
+}
+
+.pagina :global(.segment-new__btn:hover) {
+  color: var(--pr-texto);
+}
+
+/* `:root .pagina.pagina` gana a `:root:not(.dark) .segment-new__btn--active`
+   de globals.css por especificidad, no por orden de carga. */
+:root .pagina.pagina :global(.segment-new__btn--active) {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.pagina :global(.segment-new__btn:focus-visible) {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+/* ── KPI (Facturación del día, KPIs del turno) ──────────────────────────
+   Tarjeta blanca de borde suave, sin levantarse al pasar el ratón; la
+   etiqueta como los títulos de grupo del menú; el importe como
+   `.importeGrande`; el chip del ícono como `.tarjetaIcono`. */
+
+.pagina :global(.kpi) {
+  padding: 16px 18px 18px;
+  border-radius: var(--pr-radio);
+  transition: none;
+}
+
+:root .pagina.pagina :global(.kpi:hover) {
+  transform: none;
+  box-shadow: var(--pr-sombra);
+}
+
+.pagina :global(.kpi__top) {
+  margin-bottom: 12px;
+}
+
+.pagina :global(.kpi__label) {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--pr-texto-3);
+}
+
+.pagina :global(.kpi__icon) {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+:root .pagina.pagina :global(.kpi--hero .kpi__icon) {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  box-shadow: none;
+}
+
+.pagina :global(.kpi__value) {
+  font-family: inherit;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.7px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tarjetas (Retiros, Ventas del turno, Historial, Caja cerrada) ─────── */
+
+.pagina :global(.card) {
+  border-radius: var(--pr-radio);
+}
+
+.pagina :global(.card__header) {
+  padding: 14px 18px;
+}
+
+.pagina :global(.card__title) {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  color: var(--pr-texto);
+}
+
+/* ── Etiquetas (método de pago, diferencia del corte, «Caja abierta») ─── */
+
+.pagina :global(.badge-new) {
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border-color: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagina :global(.badge-new--success) { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.pagina :global(.badge-new--warning) { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.pagina :global(.badge-new--danger) { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+/* El lenguaje aprobado no tiene un azul «info»: lo que hoy es info (tarjeta,
+   diferencia a favor) va en el violeta suave, como `.etiquetaVioleta`. */
+.pagina :global(.badge-new--info),
+.pagina :global(.badge-new--brand) { background: var(--pr-activo-suave); color: var(--pr-activo); }
+.pagina :global(.badge-new--neutral) { background: var(--pr-hover); color: var(--pr-texto-3); }
+
+/* ── Botones (como `.boton` / `.botonPrincipal` de Pacientes) ─────────── */
+
+.pagina :global(.btn-new) {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--pr-radio-s);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+.pagina :global(.btn-new:active:not(:disabled)) {
+  transform: none;
+}
+
+.pagina :global(.btn-new--secondary) {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  color: var(--pr-texto);
+  box-shadow: none;
+}
+
+.pagina :global(.btn-new--secondary:hover:not(:disabled)) {
+  background: var(--pr-tarjeta-2);
+  border-color: var(--pr-texto-3);
+  color: var(--pr-texto);
+}
+
+.pagina :global(.btn-new--primary) {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  box-shadow: none;
+}
+
+.pagina :global(.btn-new--primary:hover:not(:disabled)) {
+  background: var(--pr-activo);
+  box-shadow: none;
+  filter: brightness(1.08);
+}
+
+.pagina :global(.btn-new--ghost) {
+  color: var(--pr-texto-2);
+}
+
+.pagina :global(.btn-new--ghost:hover:not(:disabled)) {
+  background: var(--pr-hover);
+  color: var(--pr-texto);
+}
+
+.pagina :global(.btn-new--sm) {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.pagina :global(.btn-new:focus-visible),
+.pagina :global(.btn-new--primary:focus-visible) {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+/* ── Tablas (ventas del turno, historial de cortes, resumen del corte) ─── */
+
+.pagina :global(.table-new) {
+  font-size: 13px;
+}
+
+.pagina :global(.table-new th) {
+  padding: 11px 12px;
+  background: transparent;
+  border-bottom-color: var(--pr-borde);
+  color: var(--pr-texto-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.pagina :global(.table-new td) {
+  padding: 10px 12px;
+  border-bottom-color: var(--pr-borde-suave);
+}
+
+:root .pagina.pagina :global(.table-new tbody tr:hover) {
+  background: var(--pr-hover);
+}
+
+/* ── Modales (abrir, retiro, corte, resumen) ────────────────────────────
+   El velo es el del cajón del menú; la caja, una tarjeta del rediseño. */
+
+.pagina :global(.modal-overlay) {
+  background: rgba(5, 5, 10, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.pagina :global(.modal) {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio);
+}
+
+.pagina :global(.modal__header) {
+  padding: 16px 20px;
+  border-bottom-color: var(--pr-borde);
+}
+
+.pagina :global(.modal__title) {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+}
+
+.pagina :global(.modal__body) {
+  padding: 20px;
+}
+
+.pagina :global(.modal__footer) {
+  padding: 14px 20px;
+  background: var(--pr-tarjeta-2);
+  border-top-color: var(--pr-borde);
+}
+
+/* ── Campos (como `.campoEtiqueta` / `.campoEntrada` de Pacientes) ──────── */
+
+.pagina :global(.field-new__label) {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--pr-texto-3);
+}
+
+.pagina :global(.field-new__label .req) {
+  color: var(--pr-activo);
+}
+
+.pagina :global(.input-new) {
+  height: 38px;
+  padding: 9px 11px;
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.pagina :global(.input-new:hover) {
+  border-color: var(--pr-texto-3);
+}
+
+.pagina :global(.input-new:focus),
+.pagina :global(.input-new:focus-visible) {
+  outline: none;
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+:root .pagina.pagina :global(.input-new::placeholder) {
+  color: var(--pr-texto-3);
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pagina :global(.modal-overlay),
+  .pagina :global(.modal) {
+    animation: none;
+  }
+}
