@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import toast from "react-hot-toast";
 import { AgendaProvider, type AgendaPermissions } from "@/components/dashboard/agenda/agenda-provider";
+import { AgendaNueva } from "@/components/dashboard/agenda-nueva/agenda-nueva";
 import { AgendaTopbar } from "@/components/dashboard/agenda/agenda-topbar";
 import { AgendaSubToolbar } from "@/components/dashboard/agenda/agenda-sub-toolbar";
 import { AgendaHoverGuide } from "@/components/dashboard/agenda/agenda-hover-guide";
@@ -66,6 +67,13 @@ interface Props {
   clinicTaxMode: string | null;
   /** Permisos granulares de agenda (P1-3), calculados server-side. */
   permissions: AgendaPermissions;
+  /**
+   * ¿Esta clínica ve la agenda nueva de Claude Design? Sale del interruptor
+   * por clínica `menu-dos-niveles` (`clinic_feature_flags`), resuelto en el
+   * server component. Apagado (el caso de todas las clínicas menos Altabrisa),
+   * abajo se monta el `AgendaShell` de SIEMPRE y no se toca ni un píxel.
+   */
+  agendaNueva?: boolean;
 }
 
 export function AgendaPageClient(props: Props) {
@@ -76,7 +84,16 @@ export function AgendaPageClient(props: Props) {
       clinicCategory={props.clinicCategory}
       permissions={props.permissions}
     >
-      <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />
+      {/* El interruptor elige UN armazón u otro, y los dos cuelgan del MISMO
+          proveedor de datos: las citas, los doctores, las unidades, el refetch
+          y las mutaciones son idénticos. Lo único que cambia es quién las
+          pinta. Con la bandera apagada esto es, literalmente, el árbol de
+          antes. */}
+      {props.agendaNueva ? (
+        <AgendaNueva />
+      ) : (
+        <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />
+      )}
     </AgendaProvider>
   );
 }
