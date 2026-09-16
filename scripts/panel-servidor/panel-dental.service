@@ -1,0 +1,15 @@
+[Unit]
+Description=Panel dental temporal (next dev) para https://panel.108-181-149-130.sslip.io
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.config/panel-dental/panel.sh arrancar
+Restart=always
+RestartSec=10
+# next dev deja hijos (workers de compilación): que caigan todos juntos.
+KillMode=control-group
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target
