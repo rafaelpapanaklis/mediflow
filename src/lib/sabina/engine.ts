@@ -33,7 +33,7 @@ import type {
   SabinaResultadoFallo,
   SabinaTool,
 } from "./engine-types";
-import { correrHerramienta } from "./tools/base";
+import { correrHerramienta, tienePermiso } from "./tools/base";
 import {
   accionDeHerramienta,
   fraseSinPermisoAccion,
@@ -268,6 +268,23 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
   // de mañana.
   const hoy = hoyParaPrompt(new Date(arranque), input.ctx.timezone);
 
+  // Cómo se llama la clínica y dónde está, para el prompt (ws1-t5). Sale del ctx
+  // —o sea de la sesión—, se arma una vez por turno y no cuesta una consulta:
+  // `getAuthContext()` ya trae la fila de `Clinic`. Sin nombre, no se escribe nada.
+  const identidadClinica = input.ctx.clinicaNombre
+    ? {
+        nombre: input.ctx.clinicaNombre,
+        lugar: input.ctx.clinicaLugar,
+        // Las mismas keys que declaran `procedimientos_y_precios` y
+        // `equipo_clinica`: el prompt no manda usar lo que va a salir con
+        // `sin_permiso`. `ctx.permissionsOverride` ya viene recortado por Sabina.
+        puede: {
+          precios: tienePermiso(input.ctx, "billing.view"),
+          equipo: tienePermiso(input.ctx, "agenda.view"),
+        },
+      }
+    : null;
+
   const esquemas = toolsParaModelo(input.tools, (t) => zodAJsonSchema(t.parametros));
   const queHacen = input.tools
     .map((t) => accionDeHerramienta(t)?.queHace)
@@ -327,7 +344,7 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       );
       const turno = await llamar({
         modelo,
-        system: construirSystemPrompt({ dificultad, hoy, acciones: queHacen, tarjetaPendiente }),
+        system: construirSystemPrompt({ dificultad, hoy, acciones: queHacen, tarjetaPendiente, clinica: identidadClinica }),
         messages,
         // Última vuelta: el modelo tiene que cerrar con palabras, no pedir otra
         // consulta que ya no cabe. Antes eso se conseguía mandando `tools: []`,

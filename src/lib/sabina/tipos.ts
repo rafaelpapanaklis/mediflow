@@ -78,6 +78,21 @@ export interface SabinaCtx {
   /** Categoría de la clínica (ClinicCategory). Decide si el profesional se llama "Dr.". */
   clinicCategory?: string;
   /**
+   * Cómo se llama la clínica y dónde está (ws1-t5). Es lo ÚNICO de la clínica que
+   * viaja en el prompt de cada pregunta, y viaja porque no cuesta una consulta:
+   * `getAuthContext()` ya trae la fila entera de `Clinic` (`include: { clinic: true }`).
+   *
+   * 🔴 Lo que NO va aquí, a propósito: precios, tratamientos y doctores. Eso se
+   * paga en CADA pregunta de CADA clínica aunque nadie pregunte por ello, y
+   * además rompería la regla del prompt («no tienes ningún dato de la clínica en
+   * la cabeza»): un precio en el contexto es un precio que el modelo puede
+   * recitar sin haber consultado. Va por herramienta — `procedimientos_y_precios`
+   * y `equipo_clinica` —, que además es lo único que sabe comprobar el permiso.
+   */
+  clinicaNombre?: string;
+  /** Ciudad y estado de la clínica, ya unidos ("Guadalajara, Jalisco"). Vacío si no los capturó. */
+  clinicaLugar?: string;
+  /**
    * Cliente de base. Se omite en producción (se usa el `prisma` del repo); las
    * pruebas inyectan aquí un doble con dos clínicas sembradas para demostrar
    * que ninguna herramienta cruza el tenant. Ver `dbDe` en ./tools/base.
@@ -124,12 +139,29 @@ export interface SabinaDb {
     findFirst(args: any): Promise<any>;
     findMany(args: any): Promise<any[]>;
   };
-  /** La bandera `canAccessCaja` de quien pregunta y los nombres de operador/doctor de Caja. */
+  /**
+   * La bandera `canAccessCaja` de quien pregunta, los nombres de operador/doctor
+   * de Caja y el cuadro de profesionales (ws1-t5). `count` va aparte de
+   * `findMany` a propósito: un total contado sobre las filas ya recortadas por
+   * el `take` miente sobre el tamaño real (la razón de ser de `recortar`).
+   */
   user: {
     findFirst(args: any): Promise<any>;
     findMany(args: any): Promise<any[]>;
+    count(args: any): Promise<number>;
   };
   resource: {
+    count(args: any): Promise<number>;
+  };
+  /**
+   * El catálogo de precios y duraciones de la clínica (ws1-t5) — SOLO LECTURA.
+   * Ojo con el `create` que NO está: `GET /api/procedures` siembra 26
+   * procedimientos dentales la primera vez que alguien abre la pantalla, y
+   * Sabina no puede hacer eso ni por accidente. Si el catálogo está vacío, lo
+   * dice; no lo llena.
+   */
+  procedureCatalog: {
+    findMany(args: any): Promise<any[]>;
     count(args: any): Promise<number>;
   };
   clinicSchedule: {
@@ -252,7 +284,13 @@ export async function crearSabinaCtx(
         userId?: string | null;
         role?: string | null;
         permissionsOverride?: string[] | null;
-        clinic?: { timezone?: string | null; category?: string | null } | null;
+        clinic?: {
+          timezone?: string | null;
+          category?: string | null;
+          name?: string | null;
+          city?: string | null;
+          state?: string | null;
+        } | null;
       }
     | null
     | undefined,
@@ -279,5 +317,23 @@ export async function crearSabinaCtx(
     // las 18:00.
     timezone: tz && tz.length > 0 ? tz : DEFAULT_TZ,
     clinicCategory: auth?.clinic?.category ?? undefined,
+    clinicaNombre: textoCorto(auth?.clinic?.name, 80),
+    clinicaLugar: [textoCorto(auth?.clinic?.city, 60), textoCorto(auth?.clinic?.state, 60)]
+      .filter(Boolean)
+      .join(", ") || undefined,
   };
+}
+
+/**
+ * Texto de la clínica listo para pegar en el prompt: recortado, en una sola
+ * línea y sin comillas que puedan cerrar la frase antes de tiempo.
+ *
+ * El tope no es cosmético: el nombre lo teclea la clínica y va en el prompt de
+ * CADA pregunta. Un nombre de 4 000 caracteres se cobraría para siempre, en
+ * todas las llamadas de esa clínica.
+ */
+function textoCorto(valor: unknown, tope: number): string | undefined {
+  if (typeof valor !== "string") return undefined;
+  const limpio = valor.replace(/[«»"\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, tope);
+  return limpio.length > 0 ? limpio : undefined;
 }
