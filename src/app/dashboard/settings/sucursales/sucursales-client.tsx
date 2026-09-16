@@ -11,11 +11,19 @@ import {
   type ClinicPatientLinkRow,
   type OwnedBranchRow,
 } from "@/lib/branches-shared";
+import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
+import {
+  Aviso, BloqueFila, CasillaEtiqueta, Columna, Encabezado, Insignia, Seccion, Vacio,
+} from "@/components/dashboard/configuracion-rediseno/piezas";
+import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 
 interface Props {
   branches: OwnedBranchRow[];
   initialLinks: ClinicPatientLinkRow[];
   activeClinicId: string;
+  /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
+   *  resuelto en el servidor. false = la pantalla de siempre, tal cual. */
+  rediseno?: boolean;
 }
 
 /** Un par de sedes con su estado de vínculo. */
@@ -34,7 +42,7 @@ interface PairRow {
  * refleja y se muta vía /api/clinics/links, que revalida la pertenencia de
  * ambas sedes contra la sesión antes de escribir.
  */
-export function SucursalesClient({ branches, initialLinks, activeClinicId }: Props) {
+export function SucursalesClient({ branches, initialLinks, activeClinicId, rediseno = false }: Props) {
   const t = useT();
   const [links, setLinks] = useState<ClinicPatientLinkRow[]>(initialLinks);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -87,6 +95,69 @@ export function SucursalesClient({ branches, initialLinks, activeClinicId }: Pro
     } finally {
       setBusyKey(null);
     }
+  }
+
+  // ── REDISEÑO (ws1-t2): mismo estado, mismas llamadas, mismos textos. ──
+  if (rediseno) {
+    return (
+      <RaizConfiguracion estrecha>
+        <Encabezado
+          volver={{ href: "/dashboard/settings", texto: t("settings.branches.back") }}
+          titulo={t("settings.branches.title")}
+          subtitulo={t("settings.branches.subtitle")}
+        />
+        <Columna>
+          {!PATIENT_SHARING_ENABLED && (
+            <Aviso punteado icono={<AlertTriangle size={15} strokeWidth={1.75} aria-hidden />}>
+              {t("settings.branches.disabledNotice")}
+            </Aviso>
+          )}
+
+          {/* Lista de sedes — contexto para el dueño antes de la matriz. */}
+          <Seccion titulo={t("settings.branches.myBranches")}>
+            <div className={cr.columna} style={{ gap: 6 }}>
+              {branches.map((b) => (
+                <BloqueFila
+                  key={b.clinicId}
+                  icono={<Building2 size={14} strokeWidth={1.75} style={{ color: "var(--m2-texto-3)", flexShrink: 0 }} aria-hidden />}
+                  titulo={b.clinicName}
+                  derecha={b.clinicId === activeClinicId ? <Insignia>{t("sidebar.current")}</Insignia> : undefined}
+                />
+              ))}
+            </div>
+          </Seccion>
+
+          {/* Matriz de pares */}
+          <Seccion titulo={t("settings.branches.sharingTitle")}>
+            {pairs.length === 0 ? (
+              <Vacio>{t("settings.branches.needTwo")}</Vacio>
+            ) : (
+              <div className={cr.columna} style={{ gap: 8 }}>
+                {pairs.map((pair) => {
+                  const on = pair.linkId !== null;
+                  const busy = busyKey === pair.key;
+                  return (
+                    <BloqueFila
+                      key={pair.key}
+                      activo={on}
+                      icono={<Users size={15} strokeWidth={1.75} style={{ color: "var(--m2-texto-3)", flexShrink: 0 }} aria-hidden />}
+                      titulo={<>{pair.a.clinicName} <span style={{ color: "var(--m2-texto-3)", margin: "0 6px" }}>↔</span> {pair.b.clinicName}</>}
+                      sub={on ? t("settings.branches.stateShared") : t("settings.branches.stateIsolated")}
+                      derecha={
+                        <CasillaEtiqueta checked={on} disabled={busy} onChange={() => togglePair(pair)}>
+                          {t("settings.branches.sharePatients")}
+                        </CasillaEtiqueta>
+                      }
+                    />
+                  );
+                })}
+              </div>
+            )}
+            <p className={cr.campoAyuda}>{t("settings.branches.footnote")}</p>
+          </Seccion>
+        </Columna>
+      </RaizConfiguracion>
+    );
   }
 
   return (
