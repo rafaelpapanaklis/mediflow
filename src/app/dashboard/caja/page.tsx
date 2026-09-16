@@ -11,6 +11,7 @@ import type { Prisma } from "@prisma/client";
 import { canUseCaja } from "@/lib/caja-pin";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
 import { isFacturapiLive } from "@/lib/facturapi-env";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { CajaClient } from "./caja-client";
 
 // Caja = corte de caja diario. Reemplaza la página general /dashboard/billing.
@@ -69,12 +70,20 @@ export default async function CajaPage() {
   const todayStart = periodRangeUtc("day", tz).from;
   const monthStart = periodRangeUtc("month", tz).from;
   const issued: Prisma.InvoiceWhereInput = { clinicId: user.clinicId, status: { notIn: ["DRAFT", "CANCELLED"] } };
-  const [paidAgg, pendingAgg, overdueAgg, totalInvoices, monthInvoices] = await Promise.all([
+  // REDISEÑO DE CAJA — el MISMO interruptor por clínica que enciende el menú
+  // de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no
+  // uno propio. Falla cerrado (sin tabla, sin fila o con error → false = la
+  // Caja de hoy, tal cual). No añade un viaje a la base: el layout ya la
+  // preguntó en esta misma carga y la respuesta vive 60 s en memoria por
+  // clínica. Va en este Promise.all (6) y no en el de arriba (ya con 6): menos
+  // de 7 consultas por tanda.
+  const [paidAgg, pendingAgg, overdueAgg, totalInvoices, monthInvoices, rediseno] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { paid: true },    where: issued }),
     prisma.invoice.aggregate({ _sum: { balance: true }, where: receivableInvoiceWhere(user.clinicId) }),
     prisma.invoice.aggregate({ _sum: { balance: true }, where: overdueInvoiceWhere(user.clinicId, todayStart) }),
     prisma.invoice.count({ where: { clinicId: user.clinicId } }),
     prisma.invoice.count({ where: { clinicId: user.clinicId, createdAt: { gte: monthStart } } }),
+    menuDosNivelesEncendido(user.clinicId),
   ]);
   const totalPaid    = money(paidAgg._sum.paid ?? 0);
   const totalPending = money(pendingAgg._sum.balance ?? 0);
@@ -86,6 +95,7 @@ export default async function CajaPage() {
       history={history}
       timezone={clinic?.timezone ?? "America/Mexico_City"}
       hasPin={!!user.cajaPinHash}
+      rediseno={rediseno}
       billing={{
         invoices: visibleInvoices as any,
         patients,
