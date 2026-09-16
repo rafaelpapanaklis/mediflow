@@ -801,6 +801,9 @@ export function construirRastro(estado: {
   rondas: number;
   tokensEntrada: number;
   tokensSalida: number;
+  /** Ver `SabinaRastro`: en cero pregunta tras pregunta = el caché no engancha. */
+  tokensCacheLectura?: number;
+  tokensCacheEscritura?: number;
   ms: number;
   sinPermiso: readonly string[];
   propuestas?: readonly string[];
@@ -816,6 +819,8 @@ export function construirRastro(estado: {
     rondas: estado.rondas,
     tokensEntrada: estado.tokensEntrada,
     tokensSalida: estado.tokensSalida,
+    tokensCacheLectura: estado.tokensCacheLectura ?? 0,
+    tokensCacheEscritura: estado.tokensCacheEscritura ?? 0,
     ms: estado.ms,
     sinPermiso: [...estado.sinPermiso],
     propuestas: [...(estado.propuestas ?? [])],

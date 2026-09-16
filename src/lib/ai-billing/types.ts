@@ -93,7 +93,14 @@ export interface ChargeUsageInput {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** `cache_read_input_tokens`: se cobra a 0,1× la entrada. */
   cacheTokens?: number;
+  /**
+   * `cache_creation_input_tokens`: se cobra a 1,25× la entrada, o sea 12,5
+   * veces lo que cuesta leerlo. Opcional para no tocar a quien ya llamaba
+   * (`chatMetered`): sin él, el cobro es exactamente el de antes.
+   */
+  cacheWriteTokens?: number;
   threadId?: string;
 }
 

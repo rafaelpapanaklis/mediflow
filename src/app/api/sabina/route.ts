@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
     // cargo se cobra al precio de SU modelo (`pricing-core.ts`, #242); lo fija
     // `npm run test:sabina-cobro` con el monedero de verdad.
     for (const uso of salida.consumo) {
-      if (uso.entrada + uso.salida <= 0) continue;
+      if (uso.entrada + uso.salida + uso.cacheLectura + uso.cacheEscritura <= 0) continue;
       try {
         await chargeUsage({
           clinicId: ctx.clinicId,
@@ -161,6 +161,11 @@ export async function POST(req: NextRequest) {
           model: uso.modelo,
           inputTokens: uso.entrada,
           outputTokens: uso.salida,
+          // Los dos del caché van SEPARADOS porque cuestan distinto: leído a
+          // 0,1× y escrito a 1,25×. Sumarlos a `inputTokens` le cobraría a la
+          // clínica diez veces lo que de verdad costó leer el catálogo.
+          cacheTokens: uso.cacheLectura,
+          cacheWriteTokens: uso.cacheEscritura,
         });
       } catch (e) {
         console.error("[sabina] no se pudo cobrar el consumo al monedero", {
@@ -251,6 +256,10 @@ export async function POST(req: NextRequest) {
         rondas: salida.rondas,
         tokensEntrada: salida.tokens.entrada,
         tokensSalida: salida.tokens.salida,
+        // Con esto se ve en los logs si el caché enganchó: `cacheLectura` en
+        // cero pregunta tras pregunta significa que algo rompió el prefijo.
+        tokensCacheLectura: salida.tokens.cacheLectura,
+        tokensCacheEscritura: salida.tokens.cacheEscritura,
         ms: Date.now() - arranque,
         sinPermiso: salida.sinPermiso,
         propuestas: salida.propuestas.map((p) => p.accion),
