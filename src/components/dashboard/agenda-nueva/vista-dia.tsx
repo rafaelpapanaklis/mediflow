@@ -28,12 +28,14 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { assignLanes } from "@/lib/agenda/lane-layout";
-import { scheduleDayOfISO } from "@/lib/agenda/clinic-hours";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { citaArrastrable } from "@/lib/agenda-nueva/interacciones";
+import { horarioDelDia as horarioDeAjustes } from "@/lib/agenda-nueva/ocupacion";
 import {
   altoDeCita,
   carrilDeCita,
-  deHora,
   diaEnTz,
   minutosDeAhora,
   topDeCita,
@@ -43,12 +45,16 @@ import { ALTO_ENCABEZADO_DIA } from "@/lib/agenda-nueva/tokens";
 import { aCitaVista, resumenDeColumna, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { Cuadricula, type ColumnaCuadricula } from "./cuadricula";
 import { TarjetaCita } from "./tarjeta-cita";
+import { FantasmaCita } from "./fantasma-cita";
+import { useArrastreCitas } from "./arrastre-citas";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useMinuto } from "./usar-minuto";
 import s from "./agenda-nueva.module.css";
 
 export function VistaDia() {
-  const { state } = useAgenda();
+  const { state, permissions } = useAgenda();
+  const { open: abrirNuevaCita } = useNewAppointmentDialog();
+  const { destino } = useArrastreCitas();
   // Se saca del contexto SOLO lo que se usa. Depender del objeto `ag` entero
   // recalcularía todas las citas del día cada vez que se abre o se cierra un
   // panel, porque su identidad cambia con el estado de la pantalla.
@@ -62,14 +68,19 @@ export function VistaDia() {
   );
 
   // El horario REAL de este día, de Ajustes. De aquí salen la franja de cierre
-  // y el «Cerrado» — no de un 18:00 escrito a mano.
+  // y el «Cerrado» — no de un 18:00 escrito a mano. Y de aquí sale también
+  // dónde se acepta un clic para agendar, así que se lee con la MISMA función
+  // que Semana y Mes (`horarioDelDia` de ocupacion.ts): un día sin fila en
+  // Ajustes no podía salir «Cerrado» en Semana y abierto en Día.
   const horarioDelDia = useMemo(() => {
-    const dow = scheduleDayOfISO(state.dayISO, state.timezone);
-    const fila = state.schedules?.find((d) => d.dayOfWeek === dow);
-    if (!fila) return { abre: null, cierra: null, cerrado: false };
-    if (!fila.enabled) return { abre: null, cierra: null, cerrado: true };
-    return { abre: deHora(fila.openTime), cierra: deHora(fila.closeTime), cerrado: false };
-  }, [state.schedules, state.dayISO, state.timezone]);
+    const h = horarioDeAjustes(state.dayISO, state.schedules, state.timezone);
+    // Sin ningún horario utilizable en Ajustes: la ventana de la clínica, la
+    // misma que dibuja la agenda de siempre (fuera de ella no hay dónde hacer
+    // clic). La cuadrícula nueva se pinta de 8 a 20 igualmente.
+    if (h === null) return { abre: state.dayStart * 60, cierra: state.dayEnd * 60, cerrado: false };
+    if (!h.abierto) return { abre: null, cierra: null, cerrado: true };
+    return { abre: h.aperturaMin, cierra: h.cierreMin, cerrado: false };
+  }, [state.schedules, state.dayISO, state.timezone, state.dayStart, state.dayEnd]);
 
   // Solo las citas de ESTE día calendario en la zona de la clínica. El payload
   // de un rango puede traer vecinas; sin este filtro se colarían arriba.
@@ -111,8 +122,36 @@ export function VistaDia() {
 
       const paraResumen = suyas.map((a) => aCitaVista(a, ctx));
 
+      // Soltar aquí cambia el DOCTOR: el mismo `doctor-col` que usan las
+      // columnas de la agenda de siempre.
+      const columnKey = `doctor:${r.id}`;
+
       return {
         clave: r.id,
+        soltable: {
+          id: `col:${columnKey}`,
+          data: { kind: "doctor-col" as const, columnKey, doctorId: r.id, resourceId: null },
+        },
+        // Clic en un hueco libre → la ventana de «Nueva cita» de siempre, con
+        // el día, la hora del hueco y el doctor de esta columna. Exactamente
+        // lo que abre `AgendaColumn`. Sin permiso de crear, la columna no
+        // acepta clics (P1-3).
+        alPulsarHueco: permissions.canCreate
+          ? ({ inicioMin }: { inicioMin: number }) =>
+              abrirNuevaCita({
+                initialSlot: {
+                  startsAt: tzLocalToUtc(
+                    state.dayISO,
+                    Math.floor(inicioMin / 60),
+                    inicioMin % 60,
+                    state.timezone,
+                  ).toISOString(),
+                  doctorId: r.id,
+                  resourceId: null,
+                },
+                openAgendaAfter: true,
+              })
+          : undefined,
         fondo: undefined,
         cierreDesdeMin: horarioDelDia.cierra,
         aperturaHastaMin: horarioDelDia.abre,
@@ -136,6 +175,7 @@ export function VistaDia() {
             variante="dia"
             seleccionada={citaAbiertaId === cita.id}
             onAbrir={abrirCita}
+            arrastrable={citaArrastrable(cita.dto, permissions.canEdit)}
             geometria={{
               top: topDeCita(cita.inicioMin, ventana.minutoInicio),
               alto: altoDeCita(cita.duracionMin),
@@ -154,14 +194,42 @@ export function VistaDia() {
     citaVisible,
     citaAbiertaId,
     abrirCita,
+    abrirNuevaCita,
+    permissions.canCreate,
+    permissions.canEdit,
     ahora,
     citasDelDia,
     horarioDelDia,
+    state.dayISO,
     state.doctors,
     state.resources,
     state.timezone,
     ventana.minutoInicio,
   ]);
+
+  // La sombra de la cita que se arrastra, en la columna del doctor de destino.
+  // Va aparte de `columnas` a propósito: cambia en cada hueco que cruza el
+  // puntero, y así no se vuelven a construir todas las tarjetas del día.
+  const columnasConSombra = useMemo(() => {
+    if (!destino || destino.target.kind !== "doctor-col") return columnas;
+    const doctorId = destino.target.doctorId;
+    return columnas.map((c) =>
+      c.clave === doctorId
+        ? {
+            ...c,
+            superpuesto: (
+              <FantasmaCita
+                plan={destino.plan}
+                timezone={state.timezone}
+                minutoInicio={ventana.minutoInicio}
+                left="8px"
+                width="calc(100% - 16px)"
+              />
+            ),
+          }
+        : c,
+    );
+  }, [columnas, destino, state.timezone, ventana.minutoInicio]);
 
   const ahoraMin = minutosDeAhora({
     dayISO: state.dayISO,
@@ -173,7 +241,8 @@ export function VistaDia() {
   return (
     <Cuadricula
       ventana={ventana}
-      columnas={columnas}
+      columnas={columnasConSombra}
+      slotMinutes={state.slotMinutes}
       altoEncabezado={ALTO_ENCABEZADO_DIA}
       ahoraMin={ahoraMin}
       columnaAhora={null}

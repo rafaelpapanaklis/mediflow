@@ -1,0 +1,1075 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   «Nueva cita» con la ropa del diseño nuevo (Claude Design, agenda).
+
+   SOLO se usa con la apariencia "nueva", que el layout del panel enciende con
+   el interruptor `menu-dos-niveles`. Con la apariencia clásica ninguna pieza
+   de la ventana lleva una clase de aquí: siguen con sus `style` de siempre.
+
+   El idioma es el de la agenda nueva (README del paquete de diseño):
+   Instrument Sans; tinta #1a1826 y gris #6e6b82; bordes rgba(26,24,38,.12);
+   rótulos de 11 px en mayúsculas; controles de 40 px y radio 8; chips de
+   30 px y radio 15 con el activo en tinta; botón principal de 40 px, radio 10
+   y tinta; morado oklch(0.47 0.2 280) para lo que se señala.
+
+   La ventana y el calendario de la fecha se abren en portales, así que los
+   dos llevan `.tokens` puesto: de ahí sale cada color. Fuera de este archivo
+   no hay hex.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.tokens {
+  --nc-tinta: #1a1826;
+  --nc-texto-2: #6e6b82;
+  --nc-texto-3: #3d3a4d;
+  --nc-atenuado: #a7a4b6;
+  --nc-superficie: #ffffff;
+  --nc-fondo-app: #f4f3f8;
+  --nc-fondo-apagado: #faf9fc;
+  --nc-borde-divisor: rgba(26, 24, 38, 0.09);
+  --nc-borde-control: rgba(26, 24, 38, 0.12);
+  --nc-borde-fuerte: rgba(26, 24, 38, 0.24);
+  --nc-borde-desplegable: rgba(26, 24, 38, 0.1);
+  --nc-morado: oklch(0.47 0.2 280);
+  --nc-morado-texto: oklch(0.4 0.19 280);
+  --nc-morado-tinte: oklch(0.94 0.035 280);
+  --nc-morado-borde: oklch(0.8 0.08 280);
+  --nc-verde: oklch(0.6 0.16 150);
+  --nc-ambar-texto: oklch(0.45 0.13 70);
+  --nc-rojo: oklch(0.55 0.19 25);
+  --nc-rojo-texto: oklch(0.45 0.16 25);
+  --nc-accion: #1a1826;
+  --nc-accion-hover: #2b2840;
+  --nc-accion-texto: #ffffff;
+  --nc-velo: rgba(26, 24, 38, 0.38);
+  --nc-sombra: 0 24px 64px rgba(26, 24, 38, 0.22);
+  --nc-sombra-desplegable: 0 16px 40px rgba(26, 24, 38, 0.16);
+  --nc-foco: 0 0 0 3px oklch(0.94 0.035 280);
+
+  color: var(--nc-tinta);
+  font-family: var(--font-menu, var(--font-sans)), system-ui, sans-serif;
+}
+
+/* El panel en modo oscuro: los mismos papeles, con los tonos del menú nuevo. */
+:global(.dark) .tokens {
+  --nc-tinta: #edecf3;
+  --nc-texto-2: #a9a6b8;
+  --nc-texto-3: #cfcdd9;
+  --nc-atenuado: #6f6c80;
+  --nc-superficie: #19162a;
+  --nc-fondo-app: rgba(255, 255, 255, 0.06);
+  --nc-fondo-apagado: rgba(255, 255, 255, 0.03);
+  --nc-borde-divisor: rgba(255, 255, 255, 0.07);
+  --nc-borde-control: rgba(255, 255, 255, 0.12);
+  --nc-borde-fuerte: rgba(255, 255, 255, 0.24);
+  --nc-borde-desplegable: rgba(255, 255, 255, 0.1);
+  --nc-morado: oklch(0.66 0.16 280);
+  --nc-morado-texto: oklch(0.82 0.09 280);
+  --nc-morado-tinte: rgba(122, 104, 240, 0.2);
+  --nc-morado-borde: rgba(122, 104, 240, 0.45);
+  --nc-verde: oklch(0.72 0.15 150);
+  --nc-ambar-texto: oklch(0.82 0.12 80);
+  --nc-rojo: oklch(0.68 0.17 25);
+  --nc-rojo-texto: oklch(0.78 0.12 25);
+  --nc-accion: #edecf3;
+  --nc-accion-hover: #d9d7e3;
+  --nc-accion-texto: #14101f;
+  --nc-velo: rgba(0, 0, 0, 0.6);
+  --nc-sombra: 0 24px 64px rgba(0, 0, 0, 0.5);
+  --nc-sombra-desplegable: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --nc-foco: 0 0 0 3px rgba(122, 104, 240, 0.3);
+}
+
+.tokens *,
+.tokens *::before,
+.tokens *::after {
+  box-sizing: border-box;
+}
+
+/* ═══ La ventana ═════════════════════════════════════════════════════════ */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--nc-velo);
+  backdrop-filter: blur(2px);
+}
+
+.dialogo {
+  position: fixed;
+  z-index: 71;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(calc(100vw - 32px), 760px);
+  max-height: min(calc(100vh - 32px), 940px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--nc-superficie);
+  border: 1px solid var(--nc-borde-desplegable);
+  border-radius: 14px;
+  box-shadow: var(--nc-sombra);
+  font-size: 13px;
+  outline: none;
+}
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--nc-borde-divisor);
+  flex: none;
+}
+
+.cabeceraIcono {
+  color: var(--nc-morado);
+  flex: none;
+}
+
+.titulo {
+  flex: 1;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 22px;
+  color: var(--nc-tinta);
+}
+
+.cerrar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--nc-fondo-app);
+  color: var(--nc-tinta);
+  cursor: pointer;
+}
+
+.cerrar:hover {
+  background: var(--nc-borde-control);
+}
+
+.cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px 20px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.cargando {
+  padding: 48px;
+  text-align: center;
+  color: var(--nc-texto-2);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rotulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nc-texto-2);
+}
+
+.dosColumnas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.fechaDuracion {
+  display: grid;
+  grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 639.98px) {
+  .dosColumnas,
+  .fechaDuracion {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Controles: selector, texto, fecha ── */
+
+.control {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--nc-borde-control);
+  border-radius: 8px;
+  background: var(--nc-superficie);
+  color: var(--nc-tinta);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+.control:hover {
+  border-color: var(--nc-borde-fuerte);
+}
+
+.control:focus,
+.control:focus-within {
+  outline: none;
+  border-color: var(--nc-morado);
+  box-shadow: var(--nc-foco);
+}
+
+select.control {
+  appearance: none;
+  padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--nc-texto-2) 50%),
+    linear-gradient(135deg, var(--nc-texto-2) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 17px, calc(100% - 12px) 17px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.controlError,
+.controlError:hover {
+  border-color: var(--nc-rojo);
+}
+
+.controlConIcono {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.controlIcono {
+  color: var(--nc-texto-2);
+  flex: none;
+}
+
+.controlInput {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--nc-tinta);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.controlInput::placeholder {
+  color: var(--nc-atenuado);
+}
+
+/* ── Paciente ── */
+
+.campoPaciente {
+  display: flex;
+  flex-direction: column;
+}
+
+.campoPaciente[data-error] .control {
+  border-color: var(--nc-rojo);
+}
+
+.combo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.pacienteElegido {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 8px 0 12px;
+  border-radius: 8px;
+  background: var(--nc-fondo-app);
+}
+
+.pacienteCheck {
+  color: var(--nc-verde);
+  flex: none;
+}
+
+.pacienteNombre {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.enlace {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--nc-morado-texto);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.enlace:hover {
+  background: var(--nc-morado-tinte);
+}
+
+.crearPaciente {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin-top: 8px;
+  padding: 0 12px 0 10px;
+  border: 1px dashed var(--nc-borde-fuerte);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--nc-morado-texto);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.crearPaciente:hover {
+  border-style: solid;
+  border-color: var(--nc-morado-borde);
+  background: var(--nc-morado-tinte);
+}
+
+.desplegable {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--nc-superficie);
+  border: 1px solid var(--nc-borde-desplegable);
+  border-radius: 12px;
+  box-shadow: var(--nc-sombra-desplegable);
+}
+
+.desplegableVacio {
+  padding: 10px 10px 8px;
+  font-size: 12.5px;
+  color: var(--nc-texto-2);
+}
+
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nc-tinta);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.opcion[data-activa] {
+  background: var(--nc-fondo-app);
+}
+
+.opcionTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.opcionNombre {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.opcionTelefono {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--nc-texto-2);
+}
+
+.opcionCrear {
+  margin-top: 4px;
+  color: var(--nc-morado-texto);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 -1px 0 var(--nc-borde-divisor);
+  border-radius: 0 0 8px 8px;
+}
+
+/* ── Chips: motivo, duración, avisos ── (los del panel «Buscar hueco») */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip {
+  height: 30px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--nc-borde-control);
+  border-radius: 15px;
+  background: var(--nc-superficie);
+  color: var(--nc-tinta);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease-out;
+}
+
+.chip:hover {
+  background: var(--nc-fondo-app);
+}
+
+.chipActivo,
+.chipActivo:hover {
+  background: var(--nc-accion);
+  border-color: var(--nc-accion);
+  color: var(--nc-accion-texto);
+}
+
+.duraciones {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chipDuracion {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 40px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chipUnidad {
+  font-weight: 500;
+  opacity: 0.6;
+  margin-left: -4px;
+}
+
+.duracionLibre {
+  flex: 1.3 1 0;
+  min-width: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  border: 1px solid var(--nc-borde-control);
+  border-radius: 8px;
+  background: var(--nc-superficie);
+  cursor: text;
+}
+
+.duracionLibre:focus-within {
+  border-color: var(--nc-morado);
+  box-shadow: var(--nc-foco);
+}
+
+.duracionLibreActiva {
+  border-color: var(--nc-accion);
+}
+
+.duracionLibreInput {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--nc-tinta);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.duracionLibreInput::placeholder {
+  color: var(--nc-atenuado);
+  font-weight: 500;
+}
+
+.duracionLibreUnidad {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--nc-texto-2);
+}
+
+/* ── Fecha ── */
+
+.fechaBoton {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fechaBoton[data-abierto] {
+  border-color: var(--nc-morado);
+  box-shadow: var(--nc-foco);
+}
+
+.fechaIcono {
+  color: var(--nc-morado);
+  flex: none;
+}
+
+.fechaTextos {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.fechaLarga {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--nc-tinta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fechaRelativa {
+  font-size: 11.5px;
+  color: var(--nc-texto-2);
+}
+
+.fechaChevron {
+  color: var(--nc-texto-2);
+  flex: none;
+  transition: transform 120ms ease-out;
+}
+
+.fechaBoton[data-abierto] .fechaChevron {
+  transform: rotate(180deg);
+}
+
+/* El calendario (en portal, con sus propias variables). */
+.calendario {
+  z-index: 80;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  padding: 12px;
+  background: var(--nc-superficie);
+  border: 1px solid var(--nc-borde-desplegable);
+  border-radius: 12px;
+  box-shadow: var(--nc-sombra-desplegable);
+  font-size: 13px;
+}
+
+.calCabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.calNav {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--nc-borde-control);
+  border-radius: 8px;
+  background: var(--nc-superficie);
+  color: var(--nc-tinta);
+  cursor: pointer;
+}
+
+.calNav:hover,
+.calMes:hover {
+  background: var(--nc-fondo-app);
+}
+
+.calMes {
+  flex: 1;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nc-tinta);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.calAnios {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 4px 0 6px;
+}
+
+.calAnios .chip {
+  height: 36px;
+  border-radius: 8px;
+}
+
+.calSemana,
+.calDias {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calSemana {
+  margin-bottom: 4px;
+}
+
+.calDiaSemana {
+  padding: 4px 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--nc-texto-2);
+}
+
+.calDiaSemana[data-finde] {
+  color: var(--nc-atenuado);
+}
+
+.calDia {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nc-tinta);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.calDia:hover:not(:disabled) {
+  background: var(--nc-fondo-app);
+}
+
+.calDia[data-fuera] {
+  color: var(--nc-atenuado);
+}
+
+.calDia[data-hoy] {
+  color: var(--nc-morado-texto);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1.5px var(--nc-morado-borde);
+}
+
+.calDia[data-seleccionado],
+.calDia[data-seleccionado]:hover {
+  background: var(--nc-accion);
+  color: var(--nc-accion-texto);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.calDia:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.calPie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--nc-borde-divisor);
+}
+
+.calHoy {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--nc-borde-control);
+  border-radius: 8px;
+  background: var(--nc-superficie);
+  color: var(--nc-tinta);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.calHoy:hover {
+  background: var(--nc-fondo-app);
+}
+
+.calFecha {
+  font-size: 12px;
+  color: var(--nc-texto-2);
+}
+
+/* ── Horarios disponibles ── */
+
+.huecosCabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.huecosInfo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--nc-texto-2);
+}
+
+.saltoPrimerHueco {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--nc-morado-tinte);
+  border-radius: 15px;
+  background: var(--nc-morado-tinte);
+  color: var(--nc-morado-texto);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.saltoPrimerHueco:hover {
+  border-color: var(--nc-morado-borde);
+}
+
+.huecosCaja {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 12px 12px 4px;
+  border: 1px solid var(--nc-borde-divisor);
+  border-radius: 10px;
+  background: var(--nc-superficie);
+}
+
+.huecosRejillaPlana {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--nc-borde-divisor);
+  border-radius: 10px;
+}
+
+.huecosGrupo {
+  margin-bottom: 12px;
+}
+
+.huecosGrupoCabecera {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nc-texto-2);
+}
+
+.huecosCuenta {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--nc-atenuado);
+}
+
+.huecosRejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  gap: 6px;
+}
+
+.hueco {
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--nc-borde-control);
+  border-radius: 8px;
+  background: var(--nc-superficie);
+  color: var(--nc-tinta);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 120ms ease-out, border-color 120ms ease-out;
+}
+
+.hueco:hover:not(:disabled) {
+  background: var(--nc-fondo-app);
+  border-color: var(--nc-borde-fuerte);
+}
+
+.hueco[data-seleccionado],
+.hueco[data-seleccionado]:hover {
+  background: var(--nc-accion);
+  border-color: var(--nc-accion);
+  color: var(--nc-accion-texto);
+}
+
+.hueco:disabled {
+  background: var(--nc-fondo-apagado);
+  border-color: var(--nc-borde-divisor);
+  color: var(--nc-atenuado);
+  font-weight: 500;
+  cursor: not-allowed;
+}
+
+/* Un hueco ocupado que llegó marcado (clic en la agenda sobre una hora que el
+   horario de la unidad no ofrece): sigue viéndose elegido, pero apagado. */
+.hueco[data-seleccionado]:disabled {
+  background: var(--nc-texto-2);
+  border-color: var(--nc-texto-2);
+  color: var(--nc-accion-texto);
+  opacity: 0.7;
+}
+
+.huecosVacio {
+  padding: 22px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--nc-texto-2);
+  background: var(--nc-fondo-apagado);
+  border: 1px dashed var(--nc-borde-control);
+  border-radius: 10px;
+}
+
+.error {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--nc-rojo-texto);
+}
+
+/* ── Avisos: pediatría y WhatsApp ── */
+
+.pediatria {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--nc-morado-tinte);
+}
+
+.pediatriaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 12px;
+  background: var(--nc-superficie);
+  color: var(--nc-morado-texto);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pediatriaTexto {
+  font-size: 12.5px;
+  color: var(--nc-texto-3);
+}
+
+.pediatriaAviso {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--nc-ambar-texto);
+}
+
+.opciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ── Pie: resumen y botones ── */
+
+.pie {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--nc-borde-divisor);
+  background: var(--nc-superficie);
+  flex: none;
+}
+
+.resumen {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resumenIcono {
+  color: var(--nc-morado);
+  flex: none;
+}
+
+.resumenTexto {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--nc-texto-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.resumenFuerte {
+  color: var(--nc-tinta);
+  font-weight: 600;
+}
+
+.botonSecundario,
+.botonPrincipal {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.botonSecundario {
+  padding: 0 16px;
+  border: 1px solid var(--nc-borde-control);
+  background: var(--nc-superficie);
+  color: var(--nc-tinta);
+}
+
+.botonSecundario:hover:not(:disabled) {
+  background: var(--nc-fondo-app);
+}
+
+.botonPrincipal {
+  padding: 0 20px;
+  border: 0;
+  background: var(--nc-accion);
+  color: var(--nc-accion-texto);
+}
+
+.botonPrincipal:hover:not(:disabled) {
+  background: var(--nc-accion-hover);
+}
+
+.botonSecundario:disabled,
+.botonPrincipal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.botonSecundario:focus-visible,
+.botonPrincipal:focus-visible,
+.chip:focus-visible,
+.hueco:focus-visible,
+.calDia:focus-visible,
+.cerrar:focus-visible,
+.enlace:focus-visible,
+.crearPaciente:focus-visible {
+  outline: 2px solid var(--nc-morado);
+  outline-offset: 2px;
+}
+
+@media (max-width: 559.98px) {
+  .pie {
+    flex-wrap: wrap;
+  }
+
+  .resumen {
+    flex-basis: 100%;
+  }
+
+  .botonSecundario,
+  .botonPrincipal {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .control,
+  .chip,
+  .hueco,
+  .fechaChevron {
+    transition: none;
+  }
+}

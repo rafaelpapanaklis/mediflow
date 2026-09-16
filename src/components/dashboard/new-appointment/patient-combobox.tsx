@@ -5,6 +5,8 @@ import { Search, UserPlus, Check, Loader2 } from "lucide-react";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import type { PatientSearchHit } from "@/lib/new-appointment/types";
 import { useT } from "@/i18n/i18n-provider";
+import { useAparienciaNueva } from "./apariencia";
+import nc from "./nueva-cita.module.css";
 
 interface Props {
   value: { id: string; name: string } | null;
@@ -22,6 +24,7 @@ export function PatientCombobox({ value, onChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { open: openNewPatient } = useNewPatientDialog();
+  const nueva = useAparienciaNueva();
 
   useEffect(() => {
     if (value) return;
@@ -88,9 +91,9 @@ export function PatientCombobox({ value, onChange }: Props) {
 
   if (value) {
     return (
-      <div style={pickedRowStyle}>
-        <Check size={14} style={{ color: "var(--success)" }} aria-hidden />
-        <span style={{ flex: 1, fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
+      <div {...(nueva ? { className: nc.pacienteElegido } : { style: pickedRowStyle })}>
+        <Check size={nueva ? 16 : 14} {...(nueva ? { className: nc.pacienteCheck } : { style: { color: "var(--success)" } })} aria-hidden />
+        <span {...(nueva ? { className: nc.pacienteNombre } : { style: { flex: 1, fontSize: 13, color: "var(--text-1)", fontWeight: 500 } })}>
           {value.name}
         </span>
         <button
@@ -100,7 +103,7 @@ export function PatientCombobox({ value, onChange }: Props) {
             setQuery("");
             window.setTimeout(() => inputRef.current?.focus(), 0);
           }}
-          style={changeBtnStyle}
+          {...(nueva ? { className: nc.enlace } : { style: changeBtnStyle })}
         >
           {t("appointments.patientCombobox.change")}
         </button>
@@ -109,11 +112,12 @@ export function PatientCombobox({ value, onChange }: Props) {
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative", display: "flex", flexDirection: "column" }}>
-      <div className="search-field" style={{ width: "100%" }}>
-        <Search size={14} aria-hidden />
+    <div ref={containerRef} {...(nueva ? { className: nc.combo } : { style: { position: "relative", display: "flex", flexDirection: "column" } })}>
+      <div {...(nueva ? { className: `${nc.control} ${nc.controlConIcono}` } : { className: "search-field", style: { width: "100%" } })}>
+        <Search size={nueva ? 16 : 14} aria-hidden {...(nueva ? { className: nc.controlIcono } : {})} />
         <input
           ref={inputRef}
+          {...(nueva ? { className: nc.controlInput } : {})}
           type="text"
           placeholder={t("appointments.patientCombobox.searchPlaceholder")}
           value={query}
@@ -146,9 +150,9 @@ export function PatientCombobox({ value, onChange }: Props) {
       <button
         type="button"
         onClick={triggerCreate}
-        style={inlineCreateBtnStyle}
+        {...(nueva ? { className: nc.crearPaciente } : { style: inlineCreateBtnStyle })}
       >
-        <UserPlus size={12} aria-hidden />
+        <UserPlus size={nueva ? 14 : 12} aria-hidden />
         <span>{t("appointments.patientCombobox.createNewPatient")}</span>
       </button>
 
@@ -156,10 +160,10 @@ export function PatientCombobox({ value, onChange }: Props) {
         <div
           id="patient-combobox-list"
           role="listbox"
-          style={dropdownStyle}
+          {...(nueva ? { className: nc.desplegable } : { style: dropdownStyle })}
         >
           {hits.length === 0 && !loading && (
-            <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-3)" }}>
+            <div {...(nueva ? { className: nc.desplegableVacio } : { style: { padding: "12px 14px", fontSize: 12, color: "var(--text-3)" } })}>
               {t("appointments.patientCombobox.noPatientFound", { query })}
             </div>
           )}
@@ -176,23 +180,31 @@ export function PatientCombobox({ value, onChange }: Props) {
                 setOpen(false);
               }}
               onMouseEnter={() => setActiveIndex(i)}
-              style={{
-                ...itemStyle,
-                background: activeIndex === i ? "var(--bg-hover)" : "transparent",
-              }}
+              {...(nueva
+                ? { className: nc.opcion, "data-activa": activeIndex === i ? "" : undefined }
+                : {
+                    style: {
+                      ...itemStyle,
+                      background: activeIndex === i ? "var(--bg-hover)" : "transparent",
+                    },
+                  })}
             >
-              <div style={{ flex: 1, textAlign: "left" }}>
-                <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
+              <div {...(nueva ? { className: nc.opcionTextos } : { style: { flex: 1, textAlign: "left" } })}>
+                <div {...(nueva ? { className: nc.opcionNombre } : { style: { fontSize: 13, color: "var(--text-1)", fontWeight: 500 } })}>
                   {hit.name}
                 </div>
                 {hit.phone && (
                   <div
-                    style={{
-                      fontSize: 11,
-                      color: "var(--text-3)",
-                      fontFamily: "var(--font-mono, monospace)",
-                      marginTop: 2,
-                    }}
+                    {...(nueva
+                      ? { className: nc.opcionTelefono }
+                      : {
+                          style: {
+                            fontSize: 11,
+                            color: "var(--text-3)",
+                            fontFamily: "var(--font-mono, monospace)",
+                            marginTop: 2,
+                          },
+                        })}
                   >
                     {hit.phone}
                   </div>
@@ -205,16 +217,23 @@ export function PatientCombobox({ value, onChange }: Props) {
             type="button"
             onClick={triggerCreate}
             onMouseEnter={() => setActiveIndex(hits.length)}
-            style={{
-              ...itemStyle,
-              borderTop: "1px solid var(--border-soft)",
-              background: activeIndex === hits.length ? "var(--bg-hover)" : "transparent",
-              color: "var(--brand)",
-              fontWeight: 500,
-            }}
+            {...(nueva
+              ? {
+                  className: `${nc.opcion} ${nc.opcionCrear}`,
+                  "data-activa": activeIndex === hits.length ? "" : undefined,
+                }
+              : {
+                  style: {
+                    ...itemStyle,
+                    borderTop: "1px solid var(--border-soft)",
+                    background: activeIndex === hits.length ? "var(--bg-hover)" : "transparent",
+                    color: "var(--brand)",
+                    fontWeight: 500,
+                  },
+                })}
           >
             <UserPlus size={14} aria-hidden />
-            <span style={{ flex: 1, textAlign: "left", fontSize: 13 }}>
+            <span {...(nueva ? {} : { style: { flex: 1, textAlign: "left", fontSize: 13 } })}>
               {query
                 ? t("appointments.patientCombobox.createNewPatientWithQuery", { query })
                 : t("appointments.patientCombobox.createNewPatient")}

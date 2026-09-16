@@ -19,6 +19,10 @@
  * solicitudes) y el resaltado abre el panel de esa cita. La lista de espera
  * (la barra lateral con arrastrar a la cuadrícula) todavía no está.
  *
+ * Crear y mover citas también son los de siempre: el botón «Nueva cita» y el
+ * clic en un hueco abren la MISMA ventana (`NewAppointmentDialog`), y arrastrar
+ * una cita usa la MISMA lógica que `AgendaShell` (`reschedule-flow.ts`).
+ *
  * Los DATOS son los de siempre: este armazón vive DENTRO del `AgendaProvider`
  * que ya existe, así que las citas, los doctores, las unidades, el refetch con
  * caché, las actualizaciones optimistas y el rollback son los mismos que usa
@@ -32,6 +36,7 @@ import { instrumentSans } from "@/fonts/menu";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { AgendaValidateBanner } from "@/components/dashboard/agenda/agenda-validate-banner";
 import { ChangeRequestsPanel } from "@/components/dashboard/change-requests-panel";
+import { ArrastreCitas } from "./arrastre-citas";
 import { BarraHerramientas } from "./barra-herramientas";
 import { AgendaNuevaProvider, useAgendaNueva } from "./contexto-agenda-nueva";
 import { PanelCita } from "./panel-cita";
@@ -106,8 +111,12 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
               Día es de ws1-t1; Semana y Mes, de ws1-t2. Las tres comparten la
               misma `Cuadricula`, la misma `TarjetaCita`, los mismos tokens y
               el mismo `useAgendaNueva()`: no hay una rejilla por vista. */}
-          {ag.vista === "dia" && <VistaDia />}
-          {ag.vista === "semana" && <VistaSemana />}
+          {/* Día y Semana se agendan con un clic en un hueco y se reordenan
+              arrastrando las citas; Mes no (igual que la agenda de siempre). */}
+          <ArrastreCitas>
+            {ag.vista === "dia" && <VistaDia />}
+            {ag.vista === "semana" && <VistaSemana />}
+          </ArrastreCitas>
           {ag.vista === "mes" && <VistaMes />}
         </div>
 

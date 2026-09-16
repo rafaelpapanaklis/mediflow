@@ -242,7 +242,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <I18nProvider locale={locale} dict={dict}>
     <ActiveConsultProvider>
     <NewPatientProvider>
-    <NewAppointmentProvider>
+    {/* La ventana «Nueva cita» se viste con el diseño nuevo solo con el
+        interruptor encendido. Es una prop, no un hijo más: el árbol del layout
+        no cambia, y apagado recibe "clasica", la de siempre. */}
+    <NewAppointmentProvider apariencia={menuDosNiveles ? "nueva" : "clasica"}>
     {/* Skip link — WCAG 2.4.1 Bypass Blocks. Oculto por defecto, visible
         al recibir focus por teclado para que usuarios de teclado/lectores
         salten la sidebar y la topbar. */}

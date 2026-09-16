@@ -18,6 +18,8 @@
  */
 
 import { Armchair, Ban, Check, Circle, Clock, UserX } from "lucide-react";
+import { useDraggable } from "@dnd-kit/core";
+import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { IconoEstado } from "@/lib/agenda-nueva/estados";
 import type { CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { AGENDA_SOMBRAS } from "@/lib/agenda-nueva/tokens";
@@ -47,6 +49,12 @@ export interface TarjetaCitaProps {
   geometria: GeometriaTarjeta;
   seleccionada?: boolean;
   onAbrir?: (id: string) => void;
+  /**
+   * ¿Se puede mover arrastrándola? Lo decide quien la coloca con
+   * `citaArrastrable` (permiso de editar + los estados que el servidor deja
+   * mover). En `false` la tarjeta no escucha el arrastre: un clic la abre y ya.
+   */
+  arrastrable?: boolean;
 }
 
 export function TarjetaCita({
@@ -55,8 +63,21 @@ export function TarjetaCita({
   geometria,
   seleccionada = false,
   onAbrir,
+  arrastrable = false,
 }: TarjetaCitaProps) {
   const { pinta } = cita;
+
+  // El arrastre es el de la agenda de siempre: dnd-kit, con el mismo umbral de
+  // distancia antes de empezar (un clic sigue siendo un clic) y los mismos
+  // datos que entiende `planReschedule`. La tarjeta NO se va detrás del
+  // puntero: se queda en su sitio, atenuada, y la sombra con la hora de destino
+  // la pinta la columna sobre la que está (`FantasmaCita`).
+  const dragData: AppointmentDragData = { kind: "appt", appointmentId: cita.id };
+  const { setNodeRef, listeners, isDragging } = useDraggable({
+    id: `cita:${cita.id}`,
+    data: dragData,
+    disabled: !arrastrable,
+  });
 
   // El borde de 3 px del responsable es un `inset box-shadow`, como el diseño;
   // el anillo de selección se le SUMA (no lo sustituye) para que una cita
@@ -78,6 +99,8 @@ export function TarjetaCita({
     variante === "semana" ? s.tarjetaSemana : "",
     corta && variante === "dia" ? s.tarjetaCorta : "",
     corta || (variante === "dia" && estrecha) ? s.tarjetaSinFila2 : "",
+    arrastrable ? s.tarjetaArrastrable : "",
+    isDragging ? s.tarjetaArrastrada : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -86,14 +109,21 @@ export function TarjetaCita({
 
   return (
     <button
+      ref={setNodeRef}
       type="button"
+      {...(arrastrable ? listeners : undefined)}
       className={clases}
       onClick={(e) => {
         e.stopPropagation();
         onAbrir?.(cita.id);
       }}
+      data-cita={cita.id}
       aria-pressed={seleccionada}
-      title={`${cita.nombrePaciente} · ${cita.rango} · ${cita.chip}`}
+      title={
+        arrastrable
+          ? `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip} · Arrastra para moverla`
+          : `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip}`
+      }
       style={{
         top: geometria.top,
         height: geometria.alto,

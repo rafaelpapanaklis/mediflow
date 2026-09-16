@@ -1,6 +1,8 @@
 "use client";
 
 import { PatientCombobox } from "./patient-combobox";
+import { useAparienciaNueva } from "./apariencia";
+import nc from "./nueva-cita.module.css";
 
 interface Props {
   value: { id: string; name: string } | null;
@@ -14,6 +16,15 @@ interface Props {
  * combobox; solo añade el borde de error de la validación obligatoria.
  */
 export function PatientSearchField({ value, onChange, error }: Props) {
+  const nueva = useAparienciaNueva();
+  if (nueva) {
+    // Con la ropa nueva el error va en el borde del propio buscador.
+    return (
+      <div className={nc.campoPaciente} data-error={error ? "" : undefined}>
+        <PatientCombobox value={value} onChange={onChange} />
+      </div>
+    );
+  }
   return (
     <div
       style={{
