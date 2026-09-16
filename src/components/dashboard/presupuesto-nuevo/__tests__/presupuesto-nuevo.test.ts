@@ -414,3 +414,31 @@ test("copiar las condiciones comprueba la clínica del ORIGEN, no solo del desti
   assert.ok(copiar, "no se encontró copiarCondiciones");
   assert.match(copiar, /WHERE "id" = \$\{args\.origenId\} AND "clinicId" = \$\{args\.clinicId\}/);
 });
+
+// ═══ 8 · «Generar factura» pinta la lista sin recargar (ws1-t2) ══════
+
+test("«Generar factura» avisa a Facturación con la factura ya creada, sin inventarla", () => {
+  const lista = leer("src/components/dashboard/presupuesto-nuevo/lista.tsx");
+  // El tipo de la factura viaja desde el mismo sitio que consume Facturación.
+  assert.match(lista, /import type \{[^}]*BillingInvoiceLite[^}]*\} from "@\/lib\/quotes\/types";/);
+  // PresupuestoLista recibe el prop y lo reenvía a cada Ficha.
+  assert.match(lista, /export function PresupuestoLista\(\{[\s\S]*?onFacturaCreada,[\s\S]*?\}: \{/);
+  assert.match(lista, /onFacturaCreada\?: \(invoice: BillingInvoiceLite\) => void;/);
+  assert.match(lista, /<Ficha[\s\S]*?onFacturaCreada=\{onFacturaCreada\}[\s\S]*?\/>/);
+  // Ficha también lo declara.
+  assert.match(lista, /function Ficha\(\{[\s\S]*?onFacturaCreada,[\s\S]*?\}: \{/);
+  // Y lo llama tras «Generar factura», sin fabricar el total a mano: lee la
+  // factura que el propio servidor acaba de crear (GET, no un segundo POST
+  // ni una suma local — eso sería inventar dinero).
+  const bloqueGenerar = /quote\.status === "ACCEPTED" &&[\s\S]*?<\/>\s*\)\}/.exec(lista)?.[0] ?? "";
+  assert.ok(bloqueGenerar, "no se encontró el bloque de ACCEPTED en Ficha");
+  assert.match(bloqueGenerar, /fetch\(`\/api\/invoices\/\$\{salida\.invoiceId\}`\)/);
+  assert.match(bloqueGenerar, /onFacturaCreada\?\.\(/);
+
+  const tab = leer("src/components/quotes/quotes-tab.tsx");
+  // Y quotes-tab la conecta al mismo callback que ya usa el editor de siempre
+  // para insertar la factura automática sin recargar.
+  const bloqueLista = /if \(rediseno\) \{\s*return \(\s*<PresupuestoLista[\s\S]*?\/>\s*\);\s*\}/.exec(tab)?.[0] ?? "";
+  assert.ok(bloqueLista, "no se encontró el <PresupuestoLista> del rediseño");
+  assert.match(bloqueLista, /onFacturaCreada=\{onInvoiceCreated\}/);
+});

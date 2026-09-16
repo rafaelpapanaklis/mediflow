@@ -18,7 +18,7 @@ import {
   MessageCircle, Pencil, ReceiptText, Send, Trash2, XCircle,
 } from "lucide-react";
 import { dinero, fechaCorta, frasePlan, hayCondiciones } from "@/lib/quotes/condiciones-pago";
-import type { QuoteDTO, QuoteStatus } from "@/lib/quotes/types";
+import type { BillingInvoiceLite, QuoteDTO, QuoteStatus } from "@/lib/quotes/types";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -35,7 +35,7 @@ const ESTADO: Record<QuoteStatus, { clave: string; tono: string }> = {
 };
 
 export function PresupuestoLista({
-  presupuestos, patientId, cargando, onNuevo, onEditar, onRecargar, onVerFactura, onVerPlan,
+  presupuestos, patientId, cargando, onNuevo, onEditar, onRecargar, onVerFactura, onVerPlan, onFacturaCreada,
 }: {
   presupuestos: QuoteDTO[];
   patientId: string;
@@ -45,6 +45,7 @@ export function PresupuestoLista({
   onRecargar: () => Promise<void> | void;
   onVerFactura?: (invoiceId: string) => void;
   onVerPlan?: (planId: string) => void;
+  onFacturaCreada?: (invoice: BillingInvoiceLite) => void;
 }) {
   const t = useT();
 
@@ -83,6 +84,7 @@ export function PresupuestoLista({
               onRecargar={onRecargar}
               onVerFactura={onVerFactura}
               onVerPlan={onVerPlan}
+              onFacturaCreada={onFacturaCreada}
             />
           ))}
         </div>
@@ -92,7 +94,7 @@ export function PresupuestoLista({
 }
 
 function Ficha({
-  quote, patientId, t, onEditar, onRecargar, onVerFactura, onVerPlan,
+  quote, patientId, t, onEditar, onRecargar, onVerFactura, onVerPlan, onFacturaCreada,
 }: {
   quote: QuoteDTO;
   patientId: string;
@@ -101,6 +103,7 @@ function Ficha({
   onRecargar: () => Promise<void> | void;
   onVerFactura?: (invoiceId: string) => void;
   onVerPlan?: (planId: string) => void;
+  onFacturaCreada?: (invoice: BillingInvoiceLite) => void;
 }) {
   const confirmar = useConfirm();
   const [ocupado, setOcupado] = useState(false);
@@ -307,7 +310,18 @@ function Ficha({
               onClick={async () => {
                 if (quote.invoiceId) { onVerFactura?.(quote.invoiceId); return; }
                 const salida = await post(`/api/quotes/${quote.id}/invoice`);
-                if (salida?.invoiceId) onVerFactura?.(salida.invoiceId);
+                if (!salida?.invoiceId) return;
+                onVerFactura?.(salida.invoiceId);
+                // POST /invoice no devuelve la factura completa, solo el id: se
+                // lee con GET (nada se crea de más) para que Facturación la
+                // pinte sin recargar. Si falla, la navegación de arriba ya
+                // ocurrió; solo se pierde el pintado en caliente de la lista.
+                try {
+                  const res = await fetch(`/api/invoices/${salida.invoiceId}`);
+                  if (res.ok) onFacturaCreada?.(await res.json());
+                } catch {
+                  // best-effort: ver comentario de arriba
+                }
               }}
             >
               <ReceiptText size={13} />

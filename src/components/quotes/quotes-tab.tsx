@@ -156,6 +156,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
         onRecargar={load}
         onVerFactura={onViewInvoice}
         onVerPlan={onViewPlan}
+        onFacturaCreada={onInvoiceCreated}
       />
     );
   }
