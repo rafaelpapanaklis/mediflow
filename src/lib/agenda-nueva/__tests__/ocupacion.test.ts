@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import type { ScheduleDay } from "@/lib/agenda/clinic-hours";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 import {
+  carrilesConHuerfanos,
   horarioDelDia,
   minutosEnTz,
   notaDelDia,
@@ -302,4 +303,39 @@ test("modo sillón reparte por resourceId en vez de por doctor", () => {
     modo: "resource",
   });
   assert.equal(o.segmentos[0]!.minutos, 60);
+});
+
+/* ── 7. Carriles: nadie se queda sin columna ─────────────────────────────── */
+
+test("un doctor con citas pero sin columna recupera la suya al final", () => {
+  // El caso real: doctor dado de baja que conserva citas futuras. Sin esta
+  // unión sus citas no se pintan y la agenda «sale vacía» con el contador a 18.
+  const citas = [cita("09:00", 60, "d1"), cita("10:00", 60, "borrado")];
+  const carriles = carrilesConHuerfanos([DIAZ], citas, (id) => ({
+    id, nombre: "Profesional", color: "#999999",
+  }));
+  assert.deepEqual(carriles.map((c) => c.id), ["d1", "borrado"]);
+});
+
+test("el orden de los huérfanos es estable y no se repiten", () => {
+  const citas = [
+    cita("09:00", 60, "z"), cita("10:00", 60, "a"), cita("11:00", 60, "z"),
+  ];
+  const carriles = carrilesConHuerfanos([], citas, (id) => ({ id, nombre: id, color: "#000" }));
+  assert.deepEqual(carriles.map((c) => c.id), ["z", "a"]);
+});
+
+test("una cancelada no le abre columna a nadie", () => {
+  const citas = [cita("09:00", 60, "fantasma", "CANCELLED")];
+  const carriles = carrilesConHuerfanos([DIAZ], citas, (id) => ({ id, nombre: id, color: "#000" }));
+  assert.deepEqual(carriles.map((c) => c.id), ["d1"]);
+});
+
+test("sin huérfanos devuelve la lista base tal cual (copia, no la misma)", () => {
+  const base = [DIAZ, JORGE];
+  const carriles = carrilesConHuerfanos(base, [cita("09:00", 60, "d1")], (id) => ({
+    id, nombre: id, color: "#000",
+  }));
+  assert.deepEqual(carriles, base);
+  assert.notEqual(carriles, base);
 });

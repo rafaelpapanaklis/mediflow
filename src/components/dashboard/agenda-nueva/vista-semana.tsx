@@ -38,6 +38,23 @@ import { todayInTz } from "@/lib/agenda/time-utils";
 import { doctorColorFor } from "@/lib/agenda/doctor-color";
 import css from "./vista-semana-mes.module.css";
 
+/**
+ * Ancho mínimo de un carril de responsable, en px. Por debajo de esto la
+ * tarjeta compacta deja de decir nada: el nombre del paciente se queda en «|».
+ *
+ * El número sale del PROPIO diseño. El lienzo de referencia del paquete es
+ * 1920: menos los 248 px del menú y los 64 del eje quedan 1608 para siete
+ * días, o sea 230 px por día, que con tres responsables son 76 px por carril
+ * —y ahí el prototipo ya recorta «Valeria Sánchez» a «Val…»—. Así que 76 es
+ * la densidad que Rafael aprobó, no una cifra elegida por mí.
+ *
+ * Con esto, a 1920 la semana entra sin desplazarse (idéntica al diseño) y en
+ * pantallas más estrechas la cuadrícula se DESPLAZA en horizontal en vez de
+ * seguir encogiendo, que es justo lo que manda el README: «En pantallas
+ * pequeñas la cuadrícula se desplaza».
+ */
+const ANCHO_MINIMO_CARRIL = 76;
+
 export interface PropsVistaSemana {
   /** El reloj. Se inyecta para poder probar la línea de «ahora». */
   ahora?: Date;
@@ -84,6 +101,12 @@ export function VistaSemana(props: PropsVistaSemana) {
     return mapa;
   }, [citas, state.timezone]);
 
+  // Cuántos carriles llega a tener el día más poblado de la semana: el ancho
+  // mínimo de columna se calcula con ése, para que ninguna columna quede más
+  // apretada que el resto. Sobre los responsables VISIBLES, no los totales —
+  // con seis doctores y cinco desmarcados, arrastraríamos scroll para nada.
+  let maxCarriles = Math.max(1, responsables.length);
+
   const columnas: ColumnaCuadricula[] = dias.map((dia) => {
     const delDia = porDia.get(dia.iso) ?? [];
     const horario = horarioDelDia(dia.iso, state.schedules, state.timezone);
@@ -112,6 +135,8 @@ export function VistaSemana(props: PropsVistaSemana) {
         };
       },
     );
+
+    if (carriles.length > maxCarriles) maxCarriles = carriles.length;
 
     return {
       clave: dia.iso,
@@ -166,6 +191,7 @@ export function VistaSemana(props: PropsVistaSemana) {
       // La línea de «ahora» va SOLO en la columna de hoy. Cruzada a lo ancho
       // de la semana diría que son las 11:20 del lunes y del domingo a la vez.
       columnaAhora={hoyISO}
+      anchoMinimoColumna={maxCarriles * ANCHO_MINIMO_CARRIL}
     />
   );
 }

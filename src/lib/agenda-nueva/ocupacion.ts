@@ -278,3 +278,41 @@ export function notaDelDia(ocupacion: OcupacionDia): NotaDia {
   }
   return null;
 }
+
+/**
+ * Los carriles que hay que pintar de verdad: los visibles MÁS los
+ * responsables que tienen citas en el rango pero no salen en la lista.
+ *
+ * No es una rareza teórica: la vista Día de siempre ya hace esta unión y
+ * documenta por qué (`computeColumns` en agenda-page-client.tsx). Un doctor
+ * dado de baja, o marcado como «no activo en agenda», conserva sus citas
+ * futuras. Si la Semana solo pinta carriles de la lista de doctores activos,
+ * esas citas **desaparecen de la pantalla** aunque el contador del día las
+ * siga sumando — que es exactamente la causa raíz de «la agenda sale vacía
+ * pero dice que hay 18 citas».
+ *
+ * Los huérfanos van SIEMPRE al final y en orden estable (el de aparición en la
+ * lista de citas, que ya viene ordenada por hora), para que un carril no salte
+ * de sitio entre dos renders.
+ *
+ * ⚠️ No confundir con el FILTRO. Si el usuario apagó a un doctor en el filtro,
+ * sus citas no llegan aquí: se quitan antes, al filtrar las citas. Esto solo
+ * rescata a quien nadie apagó y aun así no tiene columna.
+ */
+export function carrilesConHuerfanos(
+  base: readonly Carril[],
+  citas: readonly CitaOcupacion[],
+  construir: (id: string) => Carril,
+  modo: "doctor" | "resource" = "doctor",
+): Carril[] {
+  const conocidos = new Set(base.map((c) => c.id));
+  const huerfanos: Carril[] = [];
+  for (const cita of citas) {
+    if (cita.status === "CANCELLED") continue;
+    const id = modo === "resource" ? cita.resourceId : cita.doctorId;
+    if (!id || conocidos.has(id)) continue;
+    conocidos.add(id);
+    huerfanos.push(construir(id));
+  }
+  return huerfanos.length === 0 ? [...base] : [...base, ...huerfanos];
+}
