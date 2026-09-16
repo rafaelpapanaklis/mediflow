@@ -281,8 +281,10 @@ const LAS_DE_LA_CLINICA = ["procedimientos_y_precios", "equipo_clinica"];
 const LAS_DE_SEDES = ["comparar_sedes"];
 /** Lo que se escapa (ws1-t8): una sola, con `tipo` para pedir una lista concreta. */
 const LAS_DE_ESCAPE = ["oportunidades_perdidas"];
+/** El odontograma (ws1-t1): lee los hallazgos que el doctor marcó, y nada más. */
+const LA_DEL_ODONTOGRAMA = ["odontograma"];
 
-test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja, las tres de clínico, las dos de la clínica, la de sedes y la de lo que se escapa, con su esquema", async () => {
+test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja, las tres de clínico, las dos de la clínica, la de sedes, la de lo que se escapa y la del odontograma, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
@@ -298,6 +300,7 @@ test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, 
       ...LAS_DE_LA_CLINICA,
       ...LAS_DE_SEDES,
       ...LAS_DE_ESCAPE,
+      ...LA_DEL_ODONTOGRAMA,
     ].sort(),
   );
 
@@ -624,4 +627,73 @@ test("GET /api/sabina/conversations/:id — turnos con la forma de la pantalla, 
     params: { id: "conv-sabina" },
   });
   assert.equal(sinSesion.status, 401);
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 9 · El contexto de pantalla (ws1-t1) — «la pista no es una llave»
+ *
+ * Esto es lo que prueba que el cajón lateral de Sabina no abre ninguna
+ * puerta: la petición entra por el handler REAL con un `contexto` puesto a
+ * mano, y se mira lo que acabó viajando al modelo.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+test("el contexto de pantalla llega al prompt cuando el paciente SÍ es de su clínica", async () => {
+  estado.guion = () => contesta("Listo.");
+  const res = await preguntar("¿qué le receté la última vez?", {
+    contexto: { pantalla: "ficha-paciente", pacienteId: "p-ana" },
+  });
+  assert.equal(res.status, 200);
+
+  const system = estado.peticiones[0].system;
+  assert.match(system, /DÓNDE ESTÁ QUIEN PREGUNTA/);
+  assert.match(system, /la ficha de «Ana Perez»/);
+  assert.match(system, /patientId "p-ana"/);
+});
+
+test("🔴 manipular el pacienteId a uno de OTRA clínica no lee nada ni llega al modelo", async () => {
+  estado.guion = () => contesta("Listo.");
+  // La sesión es del NORTE. El cuerpo manda el id de una paciente del SUR,
+  // como si alguien lo hubiera cambiado a mano en la petición.
+  const res = await preguntar("¿qué problemas dentales tiene?", {
+    contexto: { pantalla: "ficha-paciente", pacienteId: "p-sur-1" },
+  });
+  assert.equal(res.status, 200);
+
+  const system = estado.peticiones[0].system;
+  assert.ok(!system.includes("p-sur-1"), "el id manipulado llegó al prompt del sistema");
+  assert.ok(!system.includes("Sofia"), "el nombre de una paciente de otra clínica llegó al prompt");
+  assert.ok(!system.includes("SUR"), "algo de la clínica de al lado llegó al prompt");
+  // La pantalla sí se reconoce, pero sin paciente no hay regla de pronombre:
+  // Sabina no tiene a quién referirse y tendrá que preguntar o buscar. (Se
+  // busca «usa patientId», que solo escribe el bloque de contexto: «este
+  // paciente» a secas ya sale en el prompt de siempre, hablando de otra cosa.)
+  assert.ok(!system.includes("usa patientId"), "se dio por bueno un paciente que no es suyo");
+
+  // Y la respuesta sale igual: el contexto es un extra, no una puerta.
+  const json = await res.json();
+  assert.equal(json.respuesta, "Listo.");
+});
+
+test("sin contexto, el prompt no crece: lo que no se manda no se paga", async () => {
+  estado.guion = () => contesta("Listo.");
+  await preguntar("¿cuántas citas tengo hoy?");
+  const sinContexto = estado.peticiones[0].system;
+  assert.ok(!sinContexto.includes("DÓNDE ESTÁ QUIEN PREGUNTA"));
+
+  estado.peticiones = [];
+  await preguntar("¿cuántas citas tengo hoy?", { contexto: { pantalla: "agenda", fecha: "2026-09-16" } });
+  const conContexto = estado.peticiones[0].system;
+  const anadido = conContexto.length - sinContexto.length;
+  // Medido el 15-sep-2026: 84 caracteres (el bloque + su línea en blanco).
+  assert.ok(anadido > 0 && anadido < 160, `la agenda añadió ${anadido} caracteres al prompt`);
+});
+
+test("un contexto basura no tumba la pregunta", async () => {
+  estado.guion = () => contesta("Listo.");
+  for (const basura of ["no-soy-un-objeto", 42, { pantalla: 1, pacienteId: [] }]) {
+    estado.peticiones = [];
+    const res = await preguntar("hola", { contexto: basura });
+    assert.equal(res.status, 200, JSON.stringify(basura));
+    assert.ok(!estado.peticiones[0].system.includes("DÓNDE ESTÁ QUIEN PREGUNTA"));
+  }
 });

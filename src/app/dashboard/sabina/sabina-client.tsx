@@ -1,68 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+/**
+ * LA PANTALLA DE SABINA — una de sus dos puertas.
+ *
+ * Desde ws1-t1 («Sabina en todas partes») esta pantalla ya NO es la dueña de la
+ * conversación: la conversación vive en `@/components/sabina/almacen`, fuera de
+ * React, y la comparten esta pantalla y el cajón lateral que se abre sobre
+ * cualquier otra pantalla del panel. Por eso aquí solo queda el MARCO de la
+ * pantalla —el cajón de historial, la cabecera— y el hilo lo pinta
+ * `<SabinaConversacion>`, que es el mismo componente que usa el cajón.
+ *
+ * Si preguntas algo en el cajón y luego entras aquí, encuentras lo que
+ * preguntaste. Es literalmente el mismo objeto en memoria.
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { Sparkles, Plus, History, X, Loader2, CloudOff } from "lucide-react";
+import { SabinaConversacion } from "@/components/sabina/sabina-conversacion";
 import {
-  Sparkles,
-  Send,
-  Plus,
-  History,
-  X,
-  Loader2,
-  CloudOff,
-  RotateCcw,
-} from "lucide-react";
-import {
-  sanitizeQuestion,
-  titleFromQuestion,
-  classifySabinaError,
-  SABINA_SUGGESTIONS,
-  SABINA_THINKING_HINTS,
-  SABINA_SLOW_HINT_MS,
-  SABINA_QUESTION_MAX_CHARS,
-  type SabinaErrorKind,
-} from "@/components/sabina/sabina-core";
-import { SabinaMessageContent } from "@/components/sabina/message-content";
-import { ToolTrace } from "@/components/sabina/tool-trace";
-import { SabinaErrorNotice } from "@/components/sabina/error-notice";
-import { PropuestaCard } from "./propuesta-card";
-import {
-  actualizarPropuesta,
-  desfaseReloj,
-  leerPropuestas,
-  leerRespuestaPropuesta,
-  marcarReemplazadas,
-  repartirPropuestas,
-  type SabinaPropuestaVista,
-} from "./propuesta-core";
+  abrirConversacion,
+  apagar,
+  cargarHistorialUnaVez,
+  hidratar,
+  nuevaConversacion,
+  usarClinica,
+  type HistoryRow,
+} from "@/components/sabina/almacen";
+import { useSabinaEstado } from "@/components/sabina/use-sabina-chat";
 import styles from "./sabina.module.css";
-
-interface SabinaMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: number;
-  pending?: boolean;
-  herramientasUsadas?: string[];
-  modelo?: string;
-  /** Solo cuando role === "system": por qué falló ESTA pantalla al preguntar. */
-  errorKind?: SabinaErrorKind;
-  /** Lo que Sabina propuso hacer en este turno (tarjetas de confirmación). */
-  propuestas?: SabinaPropuestaVista[];
-}
-
-interface HistoryRow {
-  id: string;
-  title: string;
-  updatedAt: number;
-}
-
-function makeId() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-function formatTime(ts: number): string {
-  return new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
-}
 
 function formatRelative(ts: number): string {
   const diff = Date.now() - ts;
@@ -76,120 +41,38 @@ function formatRelative(ts: number): string {
   return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" }).format(new Date(ts));
 }
 
-/** Fila cruda de /api/sabina/conversations → fila de la barra de historial. */
-function toHistoryRow(raw: unknown): HistoryRow | null {
-  const row = raw as { id?: unknown; title?: unknown; updatedAt?: unknown };
-  if (typeof row?.id !== "string" || !row.id) return null;
-  return {
-    id: row.id,
-    title: typeof row.title === "string" && row.title ? row.title : "Consulta a Sabina",
-    updatedAt: typeof row.updatedAt === "number" && isFinite(row.updatedAt) ? row.updatedAt : Date.now(),
-  };
-}
-
-/** Turno crudo de /api/sabina/conversations/:id → mensaje pintable. */
-function toSabinaMessage(raw: unknown): SabinaMessage | null {
-  const row = raw as {
-    id?: unknown;
-    role?: unknown;
-    content?: unknown;
-    timestamp?: unknown;
-    herramientasUsadas?: unknown;
-    modelo?: unknown;
-  };
-  if (typeof row?.content !== "string") return null;
-  return {
-    id: typeof row.id === "string" && row.id ? row.id : makeId(),
-    role: row.role === "assistant" ? "assistant" : "user",
-    content: row.content,
-    timestamp: typeof row.timestamp === "number" && isFinite(row.timestamp) ? row.timestamp : Date.now(),
-    herramientasUsadas: Array.isArray(row.herramientasUsadas)
-      ? row.herramientasUsadas.filter((t): t is string => typeof t === "string")
-      : undefined,
-    modelo: typeof row.modelo === "string" ? row.modelo : undefined,
-  };
-}
-
-/**
- * "Sabina está pensando…" con pistas que rotan y, pasado un rato, el aviso
- * de que las preguntas abiertas tardan más. NO afirma qué herramienta está
- * llamando de verdad — el contrato no manda ese dato hasta que la respuesta
- * llega entera (ver sabina-core.ts, comentario de SABINA_THINKING_HINTS).
- */
-function ThinkingIndicator({ startedAt }: { startedAt: number }) {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 900);
-    return () => clearInterval(id);
-  }, []);
-  const hint = SABINA_THINKING_HINTS[Math.floor(tick / 2) % SABINA_THINKING_HINTS.length];
-  const slow = Date.now() - startedAt > SABINA_SLOW_HINT_MS;
-  return (
-    <div className={styles.thinking}>
-      <span className={styles.thinkingDots} aria-hidden>
-        <i /><i /><i />
-      </span>
-      <span>{hint}</span>
-      {slow && <span className={styles.thinkingSlow}>Las preguntas abiertas tardan un poco más.</span>}
-    </div>
-  );
-}
-
 export function SabinaClient({
+  clinicId,
   firstName,
   puedeProponer = false,
   apagada: apagadaAlEntrar = false,
 }: {
+  /** La clínica de la sesión: si cambia (switcher de sedes), la conversación se reinicia. */
+  clinicId: string;
   firstName: string;
   puedeProponer?: boolean;
   /** El Super Admin apagó a Sabina para este usuario. Solo avisa; el endpoint impide. */
   apagada?: boolean;
 }) {
-  // Arranca con lo que leyó la página y se enciende también si el endpoint
-  // contesta que está apagada (se la apagaron con la pantalla abierta).
-  const [apagada, setApagada] = useState(apagadaAlEntrar);
-  const [messages, setMessages] = useState<SabinaMessage[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
-
-  // Conversación abierta desde el historial que no se pudo cargar: se
-  // bloquea el composer (igual que en /dashboard/ai-assistant) para no
-  // mandar una pregunta sin contexto a un hilo que en pantalla parece vacío.
-  const [activeFailed, setActiveFailed] = useState(false);
-  const [openingConv, setOpeningConv] = useState(false);
-
-  // ── Historial (drawer) ──────────────────────────────────────────────
+  const estado = useSabinaEstado();
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyList, setHistoryList] = useState<HistoryRow[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyNotice, setHistoryNotice] = useState<string | null>(null);
-  const historyLoadedRef = useRef(false);
+  // Con una pregunta en vuelo no se cambia de hilo: la respuesta ya se está
+  // pagando y llegaría a un mensaje que ya no existe (ver `cambiandoDeHilo`).
+  const ocupado = estado.sending || estado.openingConv;
 
-  // ── Propuestas (tarjetas de confirmación) ───────────────────────────
-  const [desfase, setDesfase] = useState(0);
-  const [trabajando, setTrabajando] = useState<{ id: string; tipo: "confirmar" | "descartar" | "consultar" } | null>(null);
-  const [dudosas, setDudosas] = useState<string[]>([]);
-
-  const messagesRef = useRef<SabinaMessage[]>([]);
-  messagesRef.current = messages;
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
+  // La clínica manda: el almacén se reinicia solo si cambió. Y lo que leyó el
+  // servidor sobre «Sabina apagada» se baja al almacén, que es lo que mira el
+  // cajón (él no tiene forma de saberlo hasta que el endpoint conteste 403).
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    usarClinica(clinicId, apagadaAlEntrar);
+    if (apagadaAlEntrar) apagar(true);
+  }, [clinicId, apagadaAlEntrar]);
 
+  // Recupera la conversación de esta clínica tras una recarga dura. Es un GET
+  // de solo lectura: entrar a la pantalla NO llama al modelo ni cobra nada.
   useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(160, el.scrollHeight)}px`;
-  }, [input]);
+    void hidratar();
+  }, []);
 
   useEffect(() => {
     if (!historyOpen) return;
@@ -200,317 +83,20 @@ export function SabinaClient({
     return () => window.removeEventListener("keydown", onKey);
   }, [historyOpen]);
 
-  /**
-   * GET /api/sabina/conversations — NO está en "El contrato del endpoint"
-   * de CONTRATO.md (ese solo cubre el POST). Se asume por analogía con
-   * /api/ai-assistant/conversations porque el trabajo pide que el historial
-   * "se guarde y se recupere por usuario, como el Asistente IA" — está
-   * anotado en el reporte para que ws1-t2 lo confirme o lo ajuste. Si el
-   * endpoint no existe todavía, esto falla en silencio (fail-open, igual
-   * que el aviso de persistencia del Asistente IA): el chat sigue
-   * funcionando, lo que no hay es historial que mostrar.
-   */
-  const loadHistory = useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const res = await fetch("/api/sabina/conversations");
-      if (!res.ok) {
-        setHistoryNotice("No se pudo cargar tu historial.");
-        return;
-      }
-      const data = await res.json().catch(() => null);
-      const rows = (Array.isArray(data?.conversations) ? data.conversations : [])
-        .map(toHistoryRow)
-        .filter((r: HistoryRow | null): r is HistoryRow => r !== null);
-      setHistoryList(rows);
-      setHistoryNotice(null);
-    } catch {
-      setHistoryNotice("No se pudo cargar tu historial.");
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
-
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
-    if (!historyLoadedRef.current) {
-      historyLoadedRef.current = true;
-      void loadHistory();
-    }
-  }, [loadHistory]);
+    cargarHistorialUnaVez();
+  }, []);
 
   const startNew = useCallback(() => {
-    setConversationId(null);
-    setConversationTitle(null);
-    setMessages([]);
-    setActiveFailed(false);
-    setLastQuestion(null);
+    nuevaConversacion();
     setHistoryOpen(false);
-    setTimeout(() => textareaRef.current?.focus(), 50);
   }, []);
 
-  /**
-   * GET /api/sabina/conversations/:id — mismo supuesto que `loadHistory`,
-   * documentado ahí.
-   */
-  const openConversation = useCallback(async (row: HistoryRow) => {
+  const openConversation = useCallback((row: HistoryRow) => {
     setHistoryOpen(false);
-    setConversationId(row.id);
-    setConversationTitle(row.title);
-    setActiveFailed(false);
-    setOpeningConv(true);
-    setMessages([]);
-    try {
-      const res = await fetch(`/api/sabina/conversations/${encodeURIComponent(row.id)}`);
-      if (!res.ok) {
-        setActiveFailed(true);
-        return;
-      }
-      const data = await res.json().catch(() => null);
-      const msgs = (Array.isArray(data?.messages) ? data.messages : [])
-        .map(toSabinaMessage)
-        .filter((m: SabinaMessage | null): m is SabinaMessage => m !== null);
-      setDesfase(desfaseReloj(data?.ahora, Date.now()));
-      setMessages(repartirPropuestas(msgs, leerPropuestas(data?.propuestas)));
-      const meta = toHistoryRow(data?.conversation);
-      if (meta) setConversationTitle(meta.title);
-    } catch {
-      setActiveFailed(true);
-    } finally {
-      setOpeningConv(false);
-    }
+    void abrirConversacion(row);
   }, []);
-
-  /**
-   * En qué quedó una propuesta, por GET (solo lectura). `silencioso`: refresco de
-   * fondo de tarjetas cuya copia local puede estar vieja, sin bloquear la pantalla.
-   */
-  const consultar = useCallback(async (id: string, silencioso = false) => {
-    if (!silencioso) setTrabajando({ id, tipo: "consultar" });
-    try {
-      const res = await fetch(`/api/sabina/propuestas/${encodeURIComponent(id)}`);
-      const lectura = leerRespuestaPropuesta(res.status, await res.json().catch(() => null), Date.now());
-      if (lectura.tipo === "propuesta") {
-        setDesfase(lectura.desfase);
-        setMessages((prev) => actualizarPropuesta(prev, lectura.propuesta));
-        setDudosas((prev) => prev.filter((d) => d !== id));
-      }
-    } catch {
-      /* sin red: la tarjeta sigue como estaba (dudosa, si lo era) */
-    } finally {
-      if (!silencioso) setTrabajando(null);
-    }
-  }, []);
-
-  /** Manda la pregunta y actualiza EL MISMO mensaje (placeholder o reintento). */
-  const runRequest = useCallback(
-    async (question: string, targetId: string, isNewTurn: boolean) => {
-      setSending(true);
-      try {
-        const res = await fetch("/api/sabina", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pregunta: question, conversacionId: conversationId ?? undefined }),
-        });
-        let data: {
-          respuesta?: unknown;
-          herramientasUsadas?: unknown;
-          conversacionId?: unknown;
-          modelo?: unknown;
-          propuestas?: unknown;
-          ahora?: unknown;
-        } | null = null;
-        try {
-          data = await res.json();
-        } catch {
-          data = null;
-        }
-
-        if (!res.ok) {
-          const kind = classifySabinaError(res.status, data);
-          if (kind === "apagada") setApagada(true);
-          setMessages((prev) =>
-            prev.map((m) => (m.id === targetId ? { ...m, role: "system", content: "", pending: false, errorKind: kind } : m)),
-          );
-          return;
-        }
-
-        const respuesta = typeof data?.respuesta === "string" ? data.respuesta : "";
-        const herramientasUsadas = Array.isArray(data?.herramientasUsadas)
-          ? data.herramientasUsadas.filter((t): t is string => typeof t === "string")
-          : [];
-        const modelo = typeof data?.modelo === "string" ? data.modelo : undefined;
-        const convId = typeof data?.conversacionId === "string" ? data.conversacionId : null;
-        const propuestas = leerPropuestas(data?.propuestas);
-        if (propuestas.length > 0) setDesfase(desfaseReloj(data?.ahora, Date.now()));
-
-        if (convId && convId !== conversationId) {
-          setConversationId(convId);
-          const title = titleFromQuestion(question);
-          setConversationTitle((cur) => cur ?? title);
-          setHistoryList((prev) => {
-            const already = prev.find((r) => r.id === convId);
-            const entry: HistoryRow = { id: convId, title: already?.title ?? title, updatedAt: Date.now() };
-            return [entry, ...prev.filter((r) => r.id !== convId)];
-          });
-        } else if (convId) {
-          setHistoryList((prev) => {
-            const idx = prev.findIndex((r) => r.id === convId);
-            if (idx === -1) return prev;
-            const next = [...prev];
-            next[idx] = { ...next[idx], updatedAt: Date.now() };
-            return next;
-          });
-        }
-
-        if (propuestas.length > 0) {
-          // Las que la pantalla va a dar por sustituidas: que el servidor confirme
-          // en qué quedaron (pudieron confirmarse desde otra pestaña).
-          const nuevos = propuestas.map((p) => p.id);
-          messagesRef.current
-            .flatMap((m) => m.propuestas ?? [])
-            .filter((p) => p.estado === "pendiente" && !nuevos.includes(p.id))
-            .forEach((p) => void consultar(p.id, true));
-        }
-        setMessages((prev) =>
-          marcarReemplazadas(
-            prev.map((m) =>
-              m.id === targetId
-                ? {
-                    ...m,
-                    role: "assistant",
-                    content: respuesta,
-                    pending: false,
-                    herramientasUsadas,
-                    modelo,
-                    errorKind: undefined,
-                    propuestas: propuestas.length > 0 ? propuestas : undefined,
-                  }
-                : m,
-            ),
-            propuestas.map((p) => p.id),
-          ),
-        );
-      } catch {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === targetId ? { ...m, role: "system", content: "", pending: false, errorKind: "network" } : m)),
-        );
-      } finally {
-        setSending(false);
-        setRetryingId(null);
-      }
-      void isNewTurn; // solo documenta la intención en el sitio de llamada
-    },
-    [conversationId, consultar],
-  );
-
-  /**
-   * Confirmar o descartar UNA propuesta. Es la fase 2: la única forma de que lo
-   * que Sabina propuso se haga es este botón. El servidor decide; la tarjeta
-   * enseña lo que conteste.
-   */
-  const actuar = useCallback(
-    async (id: string, tipo: "confirmar" | "descartar") => {
-      if (trabajando || sending) return;
-      setTrabajando({ id, tipo });
-      let status: number | null = null;
-      let cuerpo: unknown = null;
-      try {
-        const res = await fetch(`/api/sabina/propuestas/${encodeURIComponent(id)}/${tipo}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        });
-        status = res.status;
-        cuerpo = await res.json().catch(() => null);
-      } catch {
-        status = null;
-      }
-      const lectura = leerRespuestaPropuesta(status, cuerpo, Date.now());
-      if (lectura.tipo === "propuesta") {
-        setDesfase(lectura.desfase);
-        setMessages((prev) => actualizarPropuesta(prev, lectura.propuesta));
-        setDudosas((prev) => prev.filter((d) => d !== id));
-      } else if (lectura.tipo === "sin_propuesta") {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.propuestas?.some((p) => p.id === id)
-              ? {
-                  ...m,
-                  propuestas: m.propuestas.map((p) =>
-                    p.id === id
-                      ? {
-                          ...p,
-                          // Sin propuesta en la respuesta no se sabe su estado: si
-                          // era descartar o una 404, ya no se puede usar; si fue un
-                          // corte al confirmar, se dice tal cual.
-                          estado: lectura.resultado.tipo === "no_encontrada" ? "caducada" : p.estado,
-                          resultado: lectura.resultado,
-                        }
-                      : p,
-                  ),
-                }
-              : m,
-          ),
-        );
-        if (tipo === "confirmar" && lectura.resultado.tipo === "error") {
-          setDudosas((prev) => (prev.includes(id) ? prev : [...prev, id]));
-        }
-      } else if (tipo === "confirmar") {
-        setDudosas((prev) => (prev.includes(id) ? prev : [...prev, id]));
-      }
-      setTrabajando(null);
-    },
-    [trabajando, sending],
-  );
-
-  const ask = useCallback(
-    (raw: string) => {
-      const clean = sanitizeQuestion(raw);
-      if (!clean || sending || activeFailed || apagada) return;
-
-      setInput("");
-      setLastQuestion(clean);
-
-      const now = Date.now();
-      const userMsg: SabinaMessage = { id: makeId(), role: "user", content: clean, timestamp: now };
-      const placeholderId = makeId();
-      setMessages((prev) => [
-        ...prev,
-        userMsg,
-        { id: placeholderId, role: "assistant", content: "", timestamp: now, pending: true },
-      ]);
-
-      void runRequest(clean, placeholderId, true);
-    },
-    [sending, activeFailed, apagada, runRequest],
-  );
-
-  const retry = useCallback(
-    (failedId: string) => {
-      if (!lastQuestion || sending) return;
-      setRetryingId(failedId);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === failedId ? { ...m, role: "assistant", content: "", pending: true, timestamp: Date.now(), errorKind: undefined } : m,
-        ),
-      );
-      void runRequest(lastQuestion, failedId, false);
-    },
-    [lastQuestion, sending, runRequest],
-  );
-
-  const handleKey = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        ask(input);
-      }
-    },
-    [ask, input],
-  );
-
-  const empty = messages.length === 0 && !openingConv && !activeFailed;
 
   return (
     <div className={styles.page} data-history-open={historyOpen || undefined}>
@@ -526,27 +112,28 @@ export function SabinaClient({
             <X size={15} aria-hidden />
           </button>
         </div>
-        <button type="button" className={styles.newConvBtn} onClick={startNew}>
+        <button type="button" className={styles.newConvBtn} onClick={startNew} disabled={ocupado}>
           <Plus size={13} aria-hidden /> Nueva conversación
         </button>
         <div className={styles.drawerList}>
-          {historyLoading ? (
+          {estado.historyLoading ? (
             <div className={styles.drawerLoading}>
               <Loader2 size={14} aria-hidden className={styles.spin} /> Cargando…
             </div>
-          ) : historyNotice ? (
+          ) : estado.historyNotice ? (
             <div className={styles.drawerNotice}>
-              <CloudOff size={13} aria-hidden /> {historyNotice}
+              <CloudOff size={13} aria-hidden /> {estado.historyNotice}
             </div>
-          ) : historyList.length === 0 ? (
+          ) : estado.historyList.length === 0 ? (
             <div className={styles.drawerEmpty}>Aquí van a aparecer tus conversaciones con Sabina.</div>
           ) : (
-            historyList.map((row) => (
+            estado.historyList.map((row) => (
               <button
                 key={row.id}
                 type="button"
-                className={`${styles.drawerItem} ${row.id === conversationId ? styles.drawerItemActive : ""}`}
-                onClick={() => void openConversation(row)}
+                className={`${styles.drawerItem} ${row.id === estado.conversationId ? styles.drawerItemActive : ""}`}
+                onClick={() => openConversation(row)}
+                disabled={ocupado}
               >
                 <span className={styles.drawerItemTitle}>{row.title}</span>
                 <span className={styles.drawerItemTime}>{formatRelative(row.updatedAt)}</span>
@@ -567,137 +154,25 @@ export function SabinaClient({
               <span className={styles.brandDot}><Sparkles size={12} aria-hidden /></span>
               Sabina
             </div>
-            <div className={styles.headerSubtitle}>{conversationTitle ?? `Hola, ${firstName || "doctor"}`}</div>
+            <div className={styles.headerSubtitle}>{estado.conversationTitle ?? `Hola, ${firstName || "doctor"}`}</div>
           </div>
-          <button type="button" className={styles.iconBtn} onClick={startNew} aria-label="Nueva conversación" title="Nueva conversación">
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={startNew}
+            disabled={ocupado}
+            aria-label="Nueva conversación"
+            title={ocupado ? "Espera a que Sabina conteste" : "Nueva conversación"}
+          >
             <Plus size={17} aria-hidden />
           </button>
         </header>
 
-        <div className={styles.scroll}>
-          <div className={styles.scrollInner}>
-            {openingConv ? (
-              <div className={styles.centerNotice}>
-                <Loader2 size={16} aria-hidden className={styles.spin} /> Abriendo conversación…
-              </div>
-            ) : activeFailed ? (
-              <div className={styles.centerNotice}>
-                <CloudOff size={20} strokeWidth={1.75} aria-hidden />
-                <span>No se pudo abrir esta conversación.</span>
-                <button type="button" className={styles.retryLink} onClick={startNew}>
-                  <RotateCcw size={12} aria-hidden /> Empezar una nueva
-                </button>
-              </div>
-            ) : empty && apagada ? (
-              <div className={styles.systemRow}>
-                <SabinaErrorNotice kind="apagada" />
-              </div>
-            ) : empty ? (
-              <div className={styles.welcome}>
-                <div className={styles.welcomeIcon}><Sparkles size={24} aria-hidden /></div>
-                <h1 className={styles.welcomeTitle}>Pregúntale a Sabina</h1>
-                <p className={styles.welcomeText}>
-                  Sabina lee los datos de tu clínica y contesta con lo que encuentra — nunca inventa un número.
-                  Pregunta en lenguaje normal, como si le hablaras a tu recepcionista.
-                </p>
-                <div className={styles.suggestions}>
-                  {SABINA_SUGGESTIONS.map((s) => (
-                    <button
-                      key={s.text}
-                      type="button"
-                      className={styles.suggestion}
-                      onClick={() => {
-                        setInput(s.text);
-                        setTimeout(() => textareaRef.current?.focus(), 30);
-                      }}
-                    >
-                      <span className={styles.suggestionText}>{s.text}</span>
-                      <span className={styles.suggestionHint}>{s.hint}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              messages.map((m) =>
-                m.role === "system" ? (
-                  <div key={m.id} className={styles.systemRow}>
-                    <SabinaErrorNotice kind={m.errorKind ?? "unknown"} retrying={retryingId === m.id} onRetry={() => retry(m.id)} />
-                  </div>
-                ) : (
-                  <div key={m.id} className={`${styles.message} ${m.role === "user" ? styles.messageUser : ""}`}>
-                    <div className={m.role === "user" ? styles.avatarUser : styles.avatarSabina}>
-                      {m.role === "user" ? (firstName ? firstName[0]?.toUpperCase() : "D") : <Sparkles size={13} aria-hidden />}
-                    </div>
-                    <div className={`${styles.bubbleCol} ${m.propuestas?.length ? styles.bubbleColWide : ""}`}>
-                      <div className={styles.bubble}>
-                        {m.pending ? (
-                          <ThinkingIndicator startedAt={m.timestamp} />
-                        ) : m.role === "assistant" ? (
-                          <SabinaMessageContent content={m.content || "—"} />
-                        ) : (
-                          <p className={styles.userText}>{m.content}</p>
-                        )}
-                      </div>
-                      {!m.pending &&
-                        m.role === "assistant" &&
-                        m.propuestas?.map((p) => (
-                          <PropuestaCard
-                            key={p.id}
-                            propuesta={p}
-                            desfase={desfase}
-                            ocupado={sending || (trabajando !== null && trabajando.id !== p.id)}
-                            trabajando={trabajando?.id === p.id ? trabajando.tipo : null}
-                            dudoso={dudosas.includes(p.id)}
-                            onConfirmar={() => void actuar(p.id, "confirmar")}
-                            onDescartar={() => void actuar(p.id, "descartar")}
-                            onConsultar={() => void consultar(p.id)}
-                            onCaducar={() => void consultar(p.id, true)}
-                          />
-                        ))}
-                      {!m.pending && m.role === "assistant" && <ToolTrace tools={m.herramientasUsadas} />}
-                      <span className={styles.timestamp}>{formatTime(m.timestamp)}</span>
-                    </div>
-                  </div>
-                ),
-              )
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-
-        <div className={styles.composerWrap}>
-          <div className={styles.composerInner}>
-            <div className={styles.composerBox}>
-              <textarea
-                ref={textareaRef}
-                className={styles.textarea}
-                placeholder="Pregúntale algo a Sabina…"
-                value={input}
-                maxLength={SABINA_QUESTION_MAX_CHARS}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKey}
-                disabled={activeFailed || apagada}
-                rows={1}
-              />
-              <button
-                type="button"
-                className={styles.sendBtn}
-                onClick={() => ask(input)}
-                disabled={!input.trim() || sending || activeFailed || apagada}
-                aria-label="Preguntar"
-              >
-                <Send size={15} aria-hidden />
-              </button>
-            </div>
-            <div className={styles.composerHint}>
-              {apagada
-                ? "Sabina está apagada para tu usuario."
-                : puedeProponer
-                ? "Sabina propone; nada se hace hasta que tú lo confirmas en la tarjeta."
-                : "Sabina solo lee datos — no agenda, no cobra, no edita nada."}
-            </div>
-          </div>
-        </div>
+        <SabinaConversacion
+          firstName={firstName}
+          apagada={apagadaAlEntrar}
+          puedeProponer={puedeProponer}
+        />
       </div>
     </div>
   );

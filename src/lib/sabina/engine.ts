@@ -226,6 +226,13 @@ export interface SabinaEjecutarInput {
    * que no existe.
    */
   tarjetaPendiente?: string | null;
+  /**
+   * «Dónde está quien pregunta», YA resuelto y comprobado contra la sesión
+   * (`bloqueDeContexto` de ./contexto). Texto, no objeto: el motor no vuelve a
+   * mirar permisos por aquí, así que lo que llega tiene que venir comprobado.
+   * Ausente = el prompt es el de siempre, sin un carácter de más.
+   */
+  contexto?: string | null;
   /** Seam de pruebas: por defecto la llamada real. */
   llamar?: LlamarModelo;
   /** Seam de pruebas: reloj. */
@@ -344,7 +351,14 @@ export async function ejecutarSabina(input: SabinaEjecutarInput): Promise<Sabina
       );
       const turno = await llamar({
         modelo,
-        system: construirSystemPrompt({ dificultad, hoy, acciones: queHacen, tarjetaPendiente, clinica: identidadClinica }),
+        system: construirSystemPrompt({
+          dificultad,
+          hoy,
+          acciones: queHacen,
+          tarjetaPendiente,
+          clinica: identidadClinica,
+          contexto: input.contexto,
+        }),
         messages,
         // Última vuelta: el modelo tiene que cerrar con palabras, no pedir otra
         // consulta que ya no cabe. Antes eso se conseguía mandando `tools: []`,

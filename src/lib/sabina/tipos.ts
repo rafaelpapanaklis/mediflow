@@ -186,6 +186,18 @@ export interface SabinaDb {
     findMany(args: any): Promise<any[]>;
     count(args: any): Promise<number>;
   };
+  /**
+   * Odontograma (ws1-t1, «Sabina en todas partes») — solo lectura.
+   *
+   * 🔴 `odontogram_entries` NO tiene `clinicId`: cuelga del PACIENTE. Así que
+   * aquí el aislamiento de tenant NO puede salir del `where` de esta tabla;
+   * sale de haber comprobado ANTES el paciente con `pacienteVisibleYActivo`
+   * (clinicId de la sesión + visibilidad + `deletedAt: null`). Quien lea esta
+   * tabla sin ese paso previo abre una fuga entre clínicas.
+   */
+  odontogramEntry: {
+    findMany(args: any): Promise<any[]>;
+  };
   /** Estudios/archivos del paciente (área CLÍNICO, ws1-t4) — solo lectura. */
   patientFile: {
     findMany(args: any): Promise<any[]>;

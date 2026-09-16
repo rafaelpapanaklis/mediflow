@@ -31,6 +31,7 @@ export default async function SabinaPage() {
   return (
     <SabinaClient
       key={user.clinicId}
+      clinicId={user.clinicId}
       firstName={user.firstName}
       puedeProponer={ACCIONES_SABINA.length > 0}
       apagada={apagada}

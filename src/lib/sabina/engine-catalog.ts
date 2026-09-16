@@ -17,6 +17,7 @@ import { analisisYNotasDeEstudio } from "./tools/analisis-y-notas-de-estudio";
 import { procedimientosYPrecios } from "./tools/procedimientos-y-precios";
 import { equipoClinica } from "./tools/equipo-clinica";
 import { oportunidadesPerdidas } from "./tools/oportunidades-perdidas";
+import { odontograma } from "./tools/odontograma";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -37,15 +38,17 @@ import { oportunidadesPerdidas } from "./tools/oportunidades-perdidas";
    pruebas de contrato de ese catálogo fijan las diez de consulta; lo mismo
    `facturas_de_paciente` (dinero, ws1-t2), con sus pruebas en dinero/__tests__;
    `caja` (ws1-t3), con sus pruebas en tools/__tests__/caja.test.ts: solo lee;
-   Sabina no abre, no retira y no cierra (MAPA-caja §10); y las tres de CLÍNICO
+   Sabina no abre, no retira y no cierra (MAPA-caja §10); las tres de CLÍNICO
    (ws1-t4: recetas, estudios_del_paciente, analisis_y_notas_de_estudio), todas
    de solo lectura; las dos de LA CLÍNICA (ws1-t5: procedimientos_y_precios y
    equipo_clinica), que leen el catálogo de precios y el cuadro de profesionales
    —ninguna escribe: `procedimientos_y_precios` ni siquiera siembra el catálogo,
-   que es lo que sí hace `GET /api/procedures` la primera vez—; y
+   que es lo que sí hace `GET /api/procedures` la primera vez—;
    `oportunidades_perdidas` (ws1-t8), que cruza facturas, presupuestos, planes y
    citas para decir qué dinero se está escapando —solo lee, y los pacientes
-   fríos los delega en `pacientes_inactivos`. */
+   fríos los delega en `pacientes_inactivos`—; y `odontograma` (ws1-t1, «Sabina
+   en todas partes»), que lee los hallazgos que el doctor ya marcó y NO
+   diagnostica. */
 const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ...CATALOGO_SABINA,
   proponerHorarios,
@@ -61,6 +64,7 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   procedimientosYPrecios,
   equipoClinica,
   oportunidadesPerdidas,
+  odontograma,
 ];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────
