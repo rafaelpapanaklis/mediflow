@@ -48,6 +48,7 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { instrumentSans } from "@/fonts/menu";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
 import { parseSystemKind } from "@/lib/whatsapp/system-message";
@@ -344,7 +345,7 @@ const AT_BOTTOM_SLACK = 48;
 /** Margen que se le da a la animación suave antes de rematar el salto a mano. */
 const SMOOTH_SETTLE_MS = 400;
 
-export function InboxClient({ viewer }: { viewer: Viewer }) {
+export function InboxClient({ viewer, pulido = false }: { viewer: Viewer; pulido?: boolean }) {
   const t = useT();
   const router = useRouter();
   const sp = useSearchParams();
@@ -1618,10 +1619,11 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
   return (
     <div
       ref={pageRef}
-      className={styles.page}
+      className={pulido ? `${styles.page} ${instrumentSans.variable}` : styles.page}
       data-narrow={narrowPanel ? "true" : undefined}
       data-mobile-sidebar-open={mobileSidebarOpen || undefined}
       data-mobile-detail-open={activeThreadId ? "true" : undefined}
+      data-pulido={pulido ? "true" : undefined}
     >
       {mobileSidebarOpen && (
         <button
@@ -1747,11 +1749,17 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
             </button>
             <div className={styles.listTitleBox}>
               <span className={styles.listTitle}>{folderTitle}</span>
-              <span className={styles.listSub}>
-                {t("inbox.client.conversationsCount", { count: visibleThreads.length })}
-                {" · "}
-                {t("inbox.client.unreadCount", { count: unreadVisible })}
-              </span>
+              {/* Mientras loadingList sigue en pie, visibleThreads.length y
+                  unreadVisible valen 0 porque la lista todavía está vacía, no
+                  porque no haya conversaciones: enseñar "0 · 0" ahí es enseñar
+                  un cero que no es un dato. Se calla hasta tener respuesta. */}
+              {!(pulido && loadingList) && (
+                <span className={styles.listSub}>
+                  {t("inbox.client.conversationsCount", { count: visibleThreads.length })}
+                  {" · "}
+                  {t("inbox.client.unreadCount", { count: unreadVisible })}
+                </span>
+              )}
             </div>
             <button
               type="button"
@@ -1846,21 +1854,21 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
               className={`${styles.segment} ${segment === "all" ? styles.segmentActive : ""}`}
               onClick={() => handleSegmentClick("all")}
             >
-              {t("inbox.client.segmentAll")} · {threads.length}
+              {t("inbox.client.segmentAll")}{!(pulido && loadingList) && ` · ${threads.length}`}
             </button>
             <button
               type="button"
               className={`${styles.segment} ${segment === "mine" ? styles.segmentActive : ""}`}
               onClick={() => handleSegmentClick("mine")}
             >
-              {t("inbox.client.segmentMine")} · {mineCount}
+              {t("inbox.client.segmentMine")}{!(pulido && loadingList) && ` · ${mineCount}`}
             </button>
             <button
               type="button"
               className={`${styles.segment} ${segment === "unassigned" ? styles.segmentActive : ""}`}
               onClick={() => handleSegmentClick("unassigned")}
             >
-              {t("inbox.client.segmentUnassigned")} · {unassignedCount}
+              {t("inbox.client.segmentUnassigned")}{!(pulido && loadingList) && ` · ${unassignedCount}`}
             </button>
           </div>
 
@@ -1886,7 +1894,12 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
             esperar un WhatsApp que nunca podrá existir es tiempo perdido. */}
         <div className={styles.threadList}>
           {loadingList ? (
-            <div className={styles.emptyList}>{t("common.loading")}</div>
+            <div className={styles.emptyList}>
+              {pulido && (
+                <InboxIcon size={28} strokeWidth={1.75} aria-hidden style={{ opacity: 0.25, marginBottom: 8 }} />
+              )}
+              {t("common.loading")}
+            </div>
           ) : error ? (
             <div className={styles.emptyList} style={{ color: "var(--ib-red)" }}>{error}</div>
           ) : visibleThreads.length === 0 && patientIdFilter ? (
@@ -2071,6 +2084,18 @@ export function InboxClient({ viewer }: { viewer: Viewer }) {
         {!activeThread ? (
           loadingDetail ? (
             <div className={styles.emptyLoading}>{t("common.loading")}</div>
+          ) : pulido && !stats ? (
+            // `stats` todavía no llegó: sin conteos que enseñar, el saludo a
+            // pantalla completa se veía como una pantalla rota, no como una
+            // pantalla vacía. Mientras no hay nada útil que decir, se queda
+            // chico y arriba — el contenido completo (abajo) vuelve en cuanto
+            // stats resuelve, aunque sea con ceros reales.
+            <div className={styles.emptyPanelCompact}>
+              <div className={styles.emptyInnerCompact}>
+                <div className={styles.greetTitleCompact}>{greeting}</div>
+                <div className={styles.greetSub}>{emptyDateLine}</div>
+              </div>
+            </div>
           ) : (
             <div className={styles.emptyPanel}>
               <div className={styles.emptyInner}>

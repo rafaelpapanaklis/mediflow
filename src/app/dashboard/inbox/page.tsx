@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/auth/permissions";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { InboxClient } from "./inbox-client";
 
 export const metadata: Metadata = { title: "Inbox — DaleControl" };
@@ -12,9 +13,13 @@ export default async function InboxPage() {
   // polling /api/inbox/since) que NO se re-disparan al cambiar de sede; sin
   // re-montar mostraría/mezclaría hilos y PHI de la clínica anterior.
   const user = await getCurrentUser();
+  // Pulido WS1-T8, detrás del MISMO interruptor por clínica que el menú de dos
+  // niveles (sql/menu-dos-niveles.sql): apagado, esta pantalla no cambia nada.
+  const pulido = await menuDosNivelesEncendido(user.clinicId);
   return (
     <InboxClient
       key={user.clinicId}
+      pulido={pulido}
       viewer={{
         id: user.id,
         firstName: user.firstName,
