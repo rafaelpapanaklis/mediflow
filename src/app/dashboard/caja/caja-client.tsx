@@ -562,7 +562,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
               {totals.otherIncome > 0 && (
                 <p style={{ color: "var(--text-3)", fontSize: 12, margin: "0 0 18px" }}>
                   Otros métodos (transferencia / cheque / otro):{" "}
-                  <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(totals.otherIncome)}</span>
+                  <span style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(totals.otherIncome)}</span>
                 </p>
               )}
 
@@ -577,7 +577,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                             recorta con overflow:hidden. Cede el motivo (…), nunca
                             la cifra. El title deja leer el motivo completo. */}
                         <span title={`${w.reason} · ${fmtTime(w.recordedAt)} · ${w.recordedByName}`} style={{ color: "var(--text-2)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.reason} <span style={{ color: "var(--text-3)" }}>· {fmtTime(w.recordedAt)} · {w.recordedByName}</span></span>
-                        <span style={{ color: "var(--danger)", fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>−{fmtMXNdec(w.amount)}</span>
+                        <span style={{ color: "var(--danger)", fontWeight: 600, fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>−{fmtMXNdec(w.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -653,8 +653,8 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                                   <td style={{ color: "var(--text-1)" }}>{r.patientName}</td>
                                   <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
                                   <td><BadgeNew tone={isRefundRow(r) ? "danger" : r.method === "cash" ? "success" : "info"}>{methodLabel(r.method)}</BadgeNew></td>
-                                  <td style={{ textAlign: "right", fontWeight: 600, color: isRefundRow(r) ? "var(--danger)" : "var(--text-1)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
-                                  <td style={{ textAlign: "right", color: r.discount > 0 ? "var(--danger)" : "var(--text-3)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: r.discount > 0 ? 600 : 400 }}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
+                                  <td style={{ textAlign: "right", fontWeight: 600, color: isRefundRow(r) ? "var(--danger)" : "var(--text-1)", whiteSpace: "nowrap", fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
+                                  <td style={{ textAlign: "right", color: r.discount > 0 ? "var(--danger)" : "var(--text-3)", whiteSpace: "nowrap", fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: r.discount > 0 ? 600 : 400 }}>{r.discount > 0 ? `−${fmtMXNdec(r.discount)}` : "—"}</td>
                                   <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
                                 </tr>
                               </React.Fragment>
@@ -702,9 +702,9 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                             <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{fmtDateTime(h.openedAt)}</td>
                             <td style={{ whiteSpace: "nowrap", color: "var(--text-3)" }}>{h.closedAt ? fmtDateTime(h.closedAt) : "—"}</td>
                             <td style={{ color: "var(--text-2)" }}>{h.operatorName}</td>
-                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(h.openingBalance)}</td>
-                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{h.expectedCash == null ? "—" : fmtMXNdec(h.expectedCash)}</td>
-                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{h.countedClosingBalance == null ? "—" : fmtMXNdec(h.countedClosingBalance)}</td>
+                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(h.openingBalance)}</td>
+                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{h.expectedCash == null ? "—" : fmtMXNdec(h.expectedCash)}</td>
+                            <td style={{ textAlign: "right", whiteSpace: "nowrap", fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{h.countedClosingBalance == null ? "—" : fmtMXNdec(h.countedClosingBalance)}</td>
                             <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                               {h.variance == null ? "—" : <BadgeNew tone={varianceTone(h.variance)}>{fmtMXNdec(h.variance)}</BadgeNew>}
                             </td>
@@ -742,7 +742,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 <div className="field-new" style={{ marginBottom: 14 }}>
                   <label className="field-new__label">PIN <span className="req">*</span></label>
                   <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new" autoFocus
-                    style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                    style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                     placeholder="••••••" value={openPin}
                     onChange={e => setOpenPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
@@ -750,7 +750,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                   <div className="field-new" style={{ marginBottom: 14 }}>
                     <label className="field-new__label">Confirma tu PIN <span className="req">*</span></label>
                     <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
-                      style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                      style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                       placeholder="••••••" value={openPinConfirm}
                       onChange={e => setOpenPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                   </div>
@@ -762,7 +762,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                     value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} />
                   <span style={{ color: "var(--text-3)", fontSize: 12, marginTop: 4 }}>
                     Sugerido por el efectivo de hoy aún no cuadrado:{" "}
-                    <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(caja.suggestedOpening)}</span>
+                    <span style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--text-2)" }}>{fmtMXNdec(caja.suggestedOpening)}</span>
                   </span>
                 </div>
 
@@ -814,7 +814,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 <div className="field-new">
                   <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> PIN de Caja <span className="req">*</span></label>
                   <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
-                    style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                    style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                     placeholder="••••••" value={wPin}
                     onChange={e => setWPin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
@@ -840,20 +840,20 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
               <div className="modal__body">
                 {/* Desglose del corte */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: "8px 12px", marginBottom: 14 }}>
-                  <CloseLine label={t("cashRegister.kpiOpening")}   value={fmtMXNdec(totals.openingBalance)} />
-                  <CloseLine label={t("cashRegister.methodCash")}   value={fmtMXNdec(totals.cashIncome)} />
-                  <CloseLine label={t("cashRegister.methodDebit")}  value={fmtMXNdec(totals.cardDebitIncome)} />
-                  <CloseLine label={t("cashRegister.methodCredit")} value={fmtMXNdec(totals.cardCreditIncome)} />
+                  <CloseLine label={t("cashRegister.kpiOpening")}   value={fmtMXNdec(totals.openingBalance)} rediseno={rediseno} />
+                  <CloseLine label={t("cashRegister.methodCash")}   value={fmtMXNdec(totals.cashIncome)} rediseno={rediseno} />
+                  <CloseLine label={t("cashRegister.methodDebit")}  value={fmtMXNdec(totals.cardDebitIncome)} rediseno={rediseno} />
+                  <CloseLine label={t("cashRegister.methodCredit")} value={fmtMXNdec(totals.cardCreditIncome)} rediseno={rediseno} />
                   {totals.refunds > 0 && (
-                    <CloseLine label={t("cashRegister.kpiRefunds")} value={`−${fmtMXNdec(totals.refunds)}`} />
+                    <CloseLine label={t("cashRegister.kpiRefunds")} value={`−${fmtMXNdec(totals.refunds)}`} rediseno={rediseno} />
                   )}
-                  <CloseLine label={t("cashRegister.kpiTax")}       value={fmtMXNdec(totals.tax)} />
-                  <CloseLine label={t("cashRegister.kpiWithdrawals")} value={`−${fmtMXNdec(totals.withdrawals)}`} />
-                  <CloseLine label={t("cashRegister.kpiIncome")}    value={fmtMXNdec(totals.totalIncome)} strong />
+                  <CloseLine label={t("cashRegister.kpiTax")}       value={fmtMXNdec(totals.tax)} rediseno={rediseno} />
+                  <CloseLine label={t("cashRegister.kpiWithdrawals")} value={`−${fmtMXNdec(totals.withdrawals)}`} rediseno={rediseno} />
+                  <CloseLine label={t("cashRegister.kpiIncome")}    value={fmtMXNdec(totals.totalIncome)} strong rediseno={rediseno} />
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--brand-softer)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", marginBottom: 14 }}>
                   <span style={{ color: "var(--text-2)", fontSize: 13, fontWeight: 600 }}>{t("cashRegister.expectedCashLabel")}</span>
-                  <span style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(totals.expectedCash)}</span>
+                  <span style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 16, fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{fmtMXNdec(totals.expectedCash)}</span>
                 </div>
                 <div className="field-new" style={{ marginBottom: 14 }}>
                   <label className="field-new__label">{t("cashRegister.countedLabel")} <span className="req">*</span></label>
@@ -875,7 +875,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 <div className="field-new">
                   <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 6 }}><KeyRound size={13} strokeWidth={1.75} /> PIN de Caja <span className="req">*</span></label>
                   <input type="password" inputMode="numeric" pattern="\d{6}" maxLength={6} className="input-new"
-                    style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
+                    style={{ fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.25em", textAlign: "center", fontSize: 14 }}
                     placeholder="••••••" value={closePin}
                     onChange={e => setClosePin(e.target.value.replace(/\D/g, "").slice(0, 6))} />
                 </div>
@@ -902,20 +902,20 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                 {fmtDateTime(summary.openedAt)} → {fmtDateTime(summary.closedAt)}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 18 }}>
-                <SumRow label={t("cashRegister.kpiOpening")}      value={fmtMXNdec(summary.openingBalance)} />
-                <SumRow label={t("cashRegister.kpiIncome")}       value={fmtMXNdec(summary.totalIncome)} />
-                <SumRow label={t("cashRegister.methodCash")}      value={fmtMXNdec(summary.cashIncome)} />
-                <SumRow label={t("cashRegister.methodDebit")}     value={fmtMXNdec(summary.cardDebitIncome)} />
-                <SumRow label={t("cashRegister.methodCredit")}    value={fmtMXNdec(summary.cardCreditIncome)} />
+                <SumRow label={t("cashRegister.kpiOpening")}      value={fmtMXNdec(summary.openingBalance)} rediseno={rediseno} />
+                <SumRow label={t("cashRegister.kpiIncome")}       value={fmtMXNdec(summary.totalIncome)} rediseno={rediseno} />
+                <SumRow label={t("cashRegister.methodCash")}      value={fmtMXNdec(summary.cashIncome)} rediseno={rediseno} />
+                <SumRow label={t("cashRegister.methodDebit")}     value={fmtMXNdec(summary.cardDebitIncome)} rediseno={rediseno} />
+                <SumRow label={t("cashRegister.methodCredit")}    value={fmtMXNdec(summary.cardCreditIncome)} rediseno={rediseno} />
                 {summary.refunds > 0 && (
-                  <SumRow label={t("cashRegister.kpiRefunds")}    value={`−${fmtMXNdec(summary.refunds)}`} />
+                  <SumRow label={t("cashRegister.kpiRefunds")}    value={`−${fmtMXNdec(summary.refunds)}`} rediseno={rediseno} />
                 )}
-                <SumRow label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(summary.discounts)} />
-                <SumRow label={t("cashRegister.kpiTax")}          value={fmtMXNdec(summary.tax)} />
-                <SumRow label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(summary.withdrawals)} />
-                <SumRow label={t("cashRegister.expectedCashLabel")} value={fmtMXNdec(summary.expectedCash)} strong />
-                <SumRow label={t("cashRegister.countedLabel")}    value={fmtMXNdec(summary.counted)} strong />
-                <SumRow label={t("cashRegister.varianceLabel")}   value={fmtMXNdec(summary.variance)} strong />
+                <SumRow label={t("cashRegister.kpiDiscounts")}    value={fmtMXNdec(summary.discounts)} rediseno={rediseno} />
+                <SumRow label={t("cashRegister.kpiTax")}          value={fmtMXNdec(summary.tax)} rediseno={rediseno} />
+                <SumRow label={t("cashRegister.kpiWithdrawals")}  value={fmtMXNdec(summary.withdrawals)} rediseno={rediseno} />
+                <SumRow label={t("cashRegister.expectedCashLabel")} value={fmtMXNdec(summary.expectedCash)} strong rediseno={rediseno} />
+                <SumRow label={t("cashRegister.countedLabel")}    value={fmtMXNdec(summary.counted)} strong rediseno={rediseno} />
+                <SumRow label={t("cashRegister.varianceLabel")}   value={fmtMXNdec(summary.variance)} strong rediseno={rediseno} />
               </div>
               {summary.list.length > 0 && (
                 <div style={{ overflowX: "auto" }}>
@@ -939,7 +939,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
                           </td>
                           <td>{r.patientName}</td>
                           <td style={{ color: "var(--text-2)" }}>{r.concept}</td>
-                          <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", color: isRefundRow(r) ? "var(--danger)" : undefined, fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
+                          <td style={{ textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", color: isRefundRow(r) ? "var(--danger)" : undefined, fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums" }}>{signedAmount(r)}</td>
                           <td>{methodLabel(r.method)}</td>
                           <td style={{ color: "var(--text-2)" }}>{r.doctorName}</td>
                         </tr>
@@ -962,22 +962,22 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
   );
 }
 
-function SumRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function SumRow({ label, value, strong, rediseno }: { label: string; value: string; strong?: boolean; rediseno: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-sm)" }}>
       {/* La celda del grid puede quedar en 160px: si algo cede es la etiqueta,
           nunca el importe (de ahi el flexShrink:0 del segundo span). */}
       <span title={label} style={{ color: "var(--text-3)", fontSize: 12.5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14.5 : 13, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
+      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14.5 : 13, fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
     </div>
   );
 }
 
-function CloseLine({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function CloseLine({ label, value, strong, rediseno }: { label: string; value: string; strong?: boolean; rediseno: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: strong ? "7px 0 5px" : "5px 0", borderTop: strong ? "1px solid var(--border-soft)" : "none", marginTop: strong ? 4 : 0 }}>
       <span title={label} style={{ color: "var(--text-2)", fontSize: 12.5, fontWeight: strong ? 600 : 400, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14 : 13, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
+      <span style={{ color: "var(--text-1)", fontWeight: strong ? 700 : 600, fontSize: strong ? 14 : 13, fontFamily: rediseno ? undefined : "var(--font-mono, monospace)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", flexShrink: 0 }}>{value}</span>
     </div>
   );
 }
