@@ -10,6 +10,8 @@ import {
   syncDraftInvoiceFromQuote,
 } from "@/lib/quotes/create-invoice-from-quote";
 import type { BillingInvoiceLite } from "@/lib/quotes/types";
+import { normalizarCondiciones } from "@/lib/quotes/condiciones-pago";
+import { guardarCondiciones, leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
@@ -39,7 +41,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (denied) return denied;
   }
 
-  return NextResponse.json(serializeQuote(quote));
+  const leidas = await leerCondiciones(prisma, quote.id);
+  return NextResponse.json(serializeQuote(quote, leidas.condiciones, leidas.fallo));
 }
 
 /**
@@ -150,6 +153,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     throw e;
   }
 
+  // Formas de pago. FUERA de la transacción del presupuesto, a propósito: van
+  // en una tabla que puede no existir todavía y su escritura es best-effort —
+  // no puede tumbar ni revertir el guardado del presupuesto ni la
+  // re-sincronización de la factura, que es lo que de verdad mueve dinero.
+  //
+  // 🔴 SOLO si el cuerpo TRAE el campo. Un PATCH que no lo menciona no las
+  // toca. Antes se llamaba siempre, y como `normalizarCondiciones(undefined)`
+  // devuelve las condiciones vacías, la escritura BORRABA la fila: el editor de
+  // siempre (que nunca manda este campo) le arrancaba el plan de pagos, en
+  // silencio y sin rastro, a un presupuesto que el paciente ya había firmado a
+  // 12 mensualidades. Ausente = «no lo cambies»; presente = lo que diga, y unas
+  // condiciones vacías sí borran, que es como se quitan a propósito.
+  const tocaCondiciones = Object.prototype.hasOwnProperty.call(body, "condicionesPago");
+  const guardado = tocaCondiciones
+    ? await guardarCondiciones(prisma, {
+        quoteId: quote.id,
+        clinicId: ctx.clinicId,
+        condiciones: normalizarCondiciones(body.condicionesPago, Number(quote.total)),
+      })
+    : { ...(await leerCondiciones(prisma, quote.id)), fallo: false };
+
   await logAudit({
     clinicId: ctx.clinicId,
     userId: ctx.userId,
@@ -173,7 +197,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
   }
 
-  return NextResponse.json({ ...serializeQuote(quote), invoice });
+  return NextResponse.json({
+    ...serializeQuote(quote, guardado.condiciones),
+    invoice,
+    // Solo cuando había un plan que guardar y la base falló: el editor lo dice
+    // en vez de cerrarse como si se hubiera guardado.
+    ...(guardado.fallo ? { condicionesPagoFallo: true } : {}),
+  });
 }
 
 /** DELETE /api/quotes/[id] — borra un presupuesto (solo DRAFT). */

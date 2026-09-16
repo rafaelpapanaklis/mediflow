@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { serializeQuote } from "@/lib/quotes/serialize";
+import { leerCondiciones } from "@/lib/quotes/condiciones-pago-db";
 import { presentQuote } from "@/lib/quotes/present";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         { status: presented.httpStatus ?? 409 },
       );
     }
-    return NextResponse.json(serializeQuote(presented.quote));
+    return NextResponse.json(serializeQuote(presented.quote, (await leerCondiciones(prisma, quote.id)).condiciones));
   }
 
   const data: any = {};
@@ -115,5 +116,5 @@ export async function POST(req: NextRequest, { params }: Params) {
     changes: { status: { before: quote.status, after: updated.status } },
   });
 
-  return NextResponse.json(serializeQuote(updated));
+  return NextResponse.json(serializeQuote(updated, (await leerCondiciones(prisma, quote.id)).condiciones));
 }

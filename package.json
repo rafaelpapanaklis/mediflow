@@ -177,7 +177,9 @@
     "//sabina:agendar-real": "GASTA DINERO: cuatro pedidos de agenda a Sabina contra la API REAL de Anthropic (motor, catalogo y adaptadores reales; base de prueba en memoria; nadie confirma, no se escribe nada). Sin SABINA_LLAMADA_REAL=1 y ANTHROPIC_API_KEY se salta entero. Solo lo corre Rafael.",
     "sabina:agendar-real": "tsx --test --experimental-test-module-mocks src/lib/sabina/__tests__/agendar-real.ts",
     "//seed:edu-demo": "Siembra UN instituto de DEMO (slug demo-volumen) con el volumen del cliente que viene: 3 sedes, 32 sillones, 120 estudiantes, ~600 pacientes y ~16 000 citas. Se niega a correr contra una base que no sea local salvo que se declare el host, y NO crea WhatsApp ni cuentas de Supabase. `-- --medir` recorre el panel con cronometro; `-- --sql-borrado` imprime el DELETE.",
-    "seed:edu-demo": "tsx scripts/edu-seed-demo.ts"
+    "seed:edu-demo": "tsx scripts/edu-seed-demo.ts",
+    "test:presupuesto-pagos": "tsx --test src/lib/quotes/__tests__/condiciones-pago.test.ts",
+    "test:presupuesto-nuevo": "tsx --test src/components/dashboard/presupuesto-nuevo/__tests__/presupuesto-nuevo.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

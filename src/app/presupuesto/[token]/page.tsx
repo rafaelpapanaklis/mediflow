@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
-import { CheckCircle, AlertCircle, Loader2, Clock } from "lucide-react";
+import { CheckCircle, AlertCircle, Loader2, Clock, CalendarDays } from "lucide-react";
+import { planParaDocumento } from "@/lib/quotes/condiciones-pago";
+import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 
 interface PublicItem {
   name: string;
@@ -30,6 +32,8 @@ interface PublicView {
   patientFirstName: string;
   signatureUrl: string | null;
   items: PublicItem[];
+  /** Formas de pago propuestas. null = no hay (o falta el SQL): no se pinta. */
+  condicionesPago: CondicionesPago | null;
 }
 
 function money(n: number): string {
@@ -252,6 +256,46 @@ export default function PresupuestoPublicPage() {
             </div>
           </div>
         </div>
+
+        {/* Forma de pago: el plan YA dividido, con las mismas cifras que vio
+            la clínica al armarlo (planParaDocumento sobre el mismo cálculo).
+            Es lo que el paciente quiere saber antes de firmar. */}
+        {(() => {
+          const plan = planParaDocumento(data?.total ?? 0, data?.condicionesPago);
+          if (!plan) return null;
+          return (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200">
+                <CalendarDays size={15} className="text-violet-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-800">{plan.frase}</p>
+                  {plan.metodo && (
+                    <p className="text-xs text-slate-500 mt-0.5">Método: {plan.metodo}</p>
+                  )}
+                </div>
+              </div>
+              {plan.cuotas.length > 1 && (
+                <div className="divide-y divide-slate-100">
+                  {plan.cuotas.map((c, i) => (
+                    <div key={i} className="flex items-baseline gap-3 px-4 py-2 text-xs">
+                      <span className="font-semibold text-slate-700 w-20 shrink-0">{c.etiqueta}</span>
+                      <span className="flex-1 text-slate-500 min-w-0">{c.fecha}</span>
+                      <span className="font-bold text-slate-800 tabular-nums shrink-0">{money(c.monto)}</span>
+                    </div>
+                  ))}
+                  <p className="px-4 py-2 text-[11px] text-slate-400 text-right">
+                    Los pagos suman {money(plan.suma)}.
+                  </p>
+                </div>
+              )}
+              {plan.leyendaDifiere && (
+                <div className="px-4 py-3 border-t border-slate-200">
+                  <p className="text-[11px] text-slate-500">{plan.leyendaDifiere}</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {data?.notes && (
           <div className="bg-white border border-slate-200 rounded-xl p-4 text-xs text-slate-600 whitespace-pre-wrap">

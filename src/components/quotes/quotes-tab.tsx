@@ -10,6 +10,8 @@ import { computeTotals } from "@/lib/quotes/compute";
 import type { QuoteDTO, QuoteStatus, QuoteItemInput, BillingInvoiceLite } from "@/lib/quotes/types";
 import { useT } from "@/i18n/i18n-provider";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { PresupuestoEditor } from "@/components/dashboard/presupuesto-nuevo/editor";
+import { PresupuestoLista } from "@/components/dashboard/presupuesto-nuevo/lista";
 
 function money(n: number): string {
   const v = isFinite(Number(n)) ? Number(n) : 0;
@@ -63,9 +65,18 @@ interface QuotesTabProps {
   onViewPlan?: (planId: string) => void;
   /** Se dispara al CREAR un presupuesto nuevo cuya factura automática llegó en la respuesta. */
   onInvoiceCreated?: (invoice: BillingInvoiceLite) => void;
+  /**
+   * Interruptor `menu-dos-niveles` de la clínica (WS1-T8). Encendido, se pinta
+   * el Presupuestos rediseñado (`components/dashboard/presupuesto-nuevo/`):
+   * conceptos en tabla, descuentos en $ o %, formas de pago y el calendario de
+   * mensualidades. APAGADO —el caso de todas las clínicas menos Altabrisa— se
+   * pinta exactamente lo de siempre, que es todo lo que hay debajo de esta
+   * línea y no se tocó.
+   */
+  rediseno?: boolean;
 }
 
-export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInvoiceCreated }: QuotesTabProps) {
+export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInvoiceCreated, rediseno = false }: QuotesTabProps) {
   const t = useT();
   const [quotes, setQuotes] = useState<QuoteDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,13 +126,36 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, onInv
   }
 
   if (editorOpen) {
-    return (
+    return rediseno ? (
+      <PresupuestoEditor
+        patientId={patientId}
+        editando={editing}
+        prefill={initialItems}
+        onCancelar={closeEditor}
+        onGuardado={onSaved}
+      />
+    ) : (
       <QuoteEditor
         patientId={patientId}
         editing={editing}
         prefill={initialItems}
         onCancel={closeEditor}
         onSaved={onSaved}
+      />
+    );
+  }
+
+  if (rediseno) {
+    return (
+      <PresupuestoLista
+        presupuestos={quotes}
+        patientId={patientId}
+        cargando={loading}
+        onNuevo={openNew}
+        onEditar={openEdit}
+        onRecargar={load}
+        onVerFactura={onViewInvoice}
+        onVerPlan={onViewPlan}
       />
     );
   }

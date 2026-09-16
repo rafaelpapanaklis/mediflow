@@ -1,0 +1,752 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Presupuestos rediseñados (WS1-T8).
+
+   Habla el MISMO idioma que el rediseño de Pacientes que fijó ws1-t4
+   (`pacientes-rediseno/rediseno.module.css`): Instrument Sans, tarjetas
+   blancas de borde suave, violeta de acento, cifras con tabular-nums.
+
+   Los tokens `--pr-*` NO se redeclaran aquí: se HEREDAN de
+   `<RaizRediseno>`, que ya monta la ficha del paciente. Fuera de esa
+   raíz este archivo no pinta bien, y es a propósito — así no hay dos
+   paletas que mantener. Lo que vive aquí son solo las piezas que el
+   presupuesto necesita y Pacientes no tenía: la tabla de conceptos, el
+   selector de forma de pago, el calendario de mensualidades y la barra
+   de totales pegada abajo.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.pantalla {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Hueco para que la barra de totales pegajosa no tape la última tarjeta. */
+  padding-bottom: 4px;
+}
+
+/* ═══ Cabecera ═══════════════════════════════════════════════════════ */
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cabeceraTexto { min-width: 0; }
+
+.titulo {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  color: var(--pr-texto);
+}
+
+.subtitulo {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+.cabeceraAcciones {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ═══ Tabla de conceptos ═════════════════════════════════════════════
+   Scroll horizontal DENTRO de su contenedor, nunca la página entera
+   (regla del patrón). A 1024 con el menú lateral abierto las siete
+   columnas caben justas; por debajo se desliza la tabla, no la pantalla. */
+
+.tablaCaja {
+  overflow-x: auto;
+  margin: 0 -18px;
+  padding: 0 18px;
+}
+
+.tabla {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.tabla th {
+  padding: 0 8px 7px;
+  border-bottom: 1px solid var(--pr-borde);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  color: var(--pr-texto-3);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tabla td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  vertical-align: middle;
+  font-size: 13px;
+}
+
+.tabla tr:last-child td { border-bottom: 0; }
+
+.thNum, .tdNum { text-align: right; }
+.thCentro, .tdCentro { text-align: center; }
+
+.tdNum {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+}
+
+/* Anchos: el concepto se lleva lo que sobra, el resto es fijo para que
+   las cifras queden alineadas de una fila a otra. */
+.colConcepto { width: auto; min-width: 200px; }
+.colDiente   { width: 92px; }
+.colCant     { width: 74px; }
+.colPrecio   { width: 116px; }
+.colDesc     { width: 148px; }
+.colImporte  { width: 104px; }
+.colQuitar   { width: 36px; }
+
+.importeLinea {
+  display: inline-block;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--pr-texto);
+}
+
+.importeTachado {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--pr-texto-3);
+  text-decoration: line-through;
+}
+
+/* Entradas dentro de la tabla: sin caja, para que la tabla se lea como
+   una tabla y no como un formulario de 40 recuadros. La caja aparece al
+   enfocar. */
+.celdaEntrada {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+
+.celdaEntrada::placeholder { color: var(--pr-texto-3); opacity: 0.7; }
+.celdaEntrada:hover:not(:focus) { border-color: var(--pr-borde); }
+
+.celdaEntrada:focus {
+  outline: none;
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+.celdaNum {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Quita las flechitas del input number: en una columna de dinero estorban
+   y hacen que un scroll accidental cambie un precio. */
+.celdaNum::-webkit-outer-spin-button,
+.celdaNum::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.celdaNum { -moz-appearance: textfield; }
+
+.nombreConcepto { font-weight: 600; }
+
+.notaLinea {
+  width: 100%;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--pr-texto-3);
+  font-family: inherit;
+  font-size: 11.5px;
+}
+
+.notaLinea::placeholder { color: var(--pr-texto-3); opacity: 0.6; }
+.notaLinea:focus { outline: none; border-bottom-color: var(--pr-activo); }
+
+.quitar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pr-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.quitar:hover { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+.quitar:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+/* ═══ Descuento: monto o porcentaje ══════════════════════════════════ */
+
+/* Grupo entrada + interruptor $/%, pegados como un solo control. */
+.grupoDescuento {
+  display: inline-flex;
+  align-items: stretch;
+  width: 100%;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  overflow: hidden;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.grupoDescuento:focus-within {
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+.grupoDescuento .celdaEntrada {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.grupoDescuento .celdaEntrada:focus { box-shadow: none; background: transparent; }
+
+.unidad {
+  display: flex;
+  flex-shrink: 0;
+  border-left: 1px solid var(--pr-borde);
+}
+
+.unidadBoton {
+  width: 27px;
+  border: 0;
+  background: transparent;
+  color: var(--pr-texto-3);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.unidadBoton:hover { background: var(--pr-hover); color: var(--pr-texto); }
+.unidadBoton:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.unidadActiva,
+.unidadActiva:hover {
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+.descuentoEnDinero {
+  margin-top: 5px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-exito);
+}
+
+.descuentoCero { color: var(--pr-texto-3); }
+
+/* ═══ Forma de pago ══════════════════════════════════════════════════ */
+
+.opciones {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  margin-bottom: 14px;
+}
+
+.opcionPago {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+
+.opcionPago:hover { border-color: var(--pr-texto-3); }
+.opcionPago:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.opcionPagoActiva {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo-suave);
+}
+
+.opcionIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--pr-hover);
+  color: var(--pr-texto-3);
+}
+
+.opcionPagoActiva .opcionIcono {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+.opcionCuerpo { min-width: 0; }
+
+.opcionCuerpo,
+.opcionTitulo,
+.opcionPista { display: block; }
+
+.opcionTitulo {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--pr-texto);
+}
+
+.opcionPagoActiva .opcionTitulo { color: var(--pr-activo); }
+
+.opcionPista {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--pr-texto-3);
+}
+
+/* Métodos de pago: pastillas, los seis del selector de cobros. */
+.metodos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.metodo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 999px;
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.metodo:hover { border-color: var(--pr-texto-3); color: var(--pr-texto); }
+.metodo:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.metodoActivo,
+.metodoActivo:hover {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+.camposPlan {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin-top: 14px;
+}
+
+.separador {
+  height: 1px;
+  margin: 14px 0;
+  background: var(--pr-borde-suave);
+}
+
+/* ═══ Calendario de mensualidades ════════════════════════════════════ */
+
+.calendario {
+  margin-top: 14px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  overflow: hidden;
+}
+
+.calendarioCabeza {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--pr-borde);
+  background: var(--pr-tarjeta);
+}
+
+.calendarioFrase {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--pr-texto);
+}
+
+.calendarioCuadra {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-exito);
+}
+
+.calendarioLista {
+  max-height: 268px;
+  overflow-y: auto;
+}
+
+.cuota {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  font-size: 13px;
+}
+
+.cuota:last-child { border-bottom: 0; }
+
+.cuotaNombre {
+  flex-shrink: 0;
+  width: 92px;
+  font-weight: 600;
+  color: var(--pr-texto);
+}
+
+.cuotaFecha {
+  flex: 1;
+  min-width: 0;
+  color: var(--pr-texto-3);
+}
+
+.cuotaMonto {
+  flex-shrink: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-texto);
+}
+
+.cuotaEnganche { background: var(--pr-activo-suave); }
+.cuotaEnganche .cuotaNombre,
+.cuotaEnganche .cuotaMonto { color: var(--pr-activo); }
+
+/* ═══ El aviso de «meses sin intereses» ══════════════════════════════
+   Ámbar, no rojo: no es un error, es una precisión. Y no se esconde
+   detrás de un clic — es justo lo que alguien va a venir a buscar. */
+
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-alerta-suave);
+}
+
+.avisoIcono { flex-shrink: 0; color: var(--pr-alerta); margin-top: 1px; }
+
+.avisoTexto {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-2);
+}
+
+.avisoTitulo {
+  display: block;
+  font-weight: 650;
+  color: var(--pr-alerta);
+}
+
+/* Casilla «lo difiere con su banco» */
+.casilla {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--pr-texto-2);
+  cursor: pointer;
+}
+
+.casilla input {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  accent-color: var(--pr-activo);
+}
+
+/* ═══ Barra de totales, pegada abajo ═════════════════════════════════
+   El total y las mensualidades se ven MIENTRAS se arma, no al final:
+   un presupuesto se negocia con el paciente delante. */
+
+.barra {
+  position: sticky;
+  bottom: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 13px 18px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  background: var(--pr-tarjeta);
+  box-shadow: var(--pr-sombra-2);
+}
+
+.barraCifras {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.cifra {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cifraEtiqueta {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  color: var(--pr-texto-3);
+}
+
+.cifraValor {
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+  color: var(--pr-texto);
+}
+
+.cifraDescuento .cifraValor { color: var(--pr-exito); }
+
+.cifraTotal .cifraValor {
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.7px;
+  color: var(--pr-activo);
+}
+
+.barraPlan {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--pr-texto-2);
+}
+
+.barraPlanFuerte { font-weight: 650; color: var(--pr-texto); }
+
+.barraAcciones {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.barraError {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--pr-peligro);
+}
+
+/* ═══ Buscador del tarifario ═════════════════════════════════════════ */
+
+.buscador {
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+}
+
+.buscadorLista {
+  max-height: 232px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+
+.buscadorItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.buscadorItem:hover { background: var(--pr-hover); }
+.buscadorItem:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.buscadorNombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.buscadorPrecio {
+  flex-shrink: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-texto-3);
+}
+
+/* ═══ Lista de presupuestos ══════════════════════════════════════════ */
+
+.fichas { display: flex; flex-direction: column; gap: 10px; }
+
+.ficha {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  background: var(--pr-tarjeta);
+  box-shadow: var(--pr-sombra);
+}
+
+.fichaCuerpo { flex: 1; min-width: 220px; }
+
+.fichaLinea1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fichaFolio {
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-texto-3);
+}
+
+.fichaTitulo {
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  color: var(--pr-texto);
+}
+
+.fichaSub {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--pr-texto-3);
+}
+
+.fichaPlan {
+  margin-top: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--pr-activo);
+}
+
+.fichaDinero {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.fichaTotal {
+  font-size: 21px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  color: var(--pr-texto);
+}
+
+.fichaDescuento {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-exito);
+}
+
+.fichaAcciones {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 11px;
+  border-top: 1px solid var(--pr-borde-suave);
+}
+
+.accion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 8px;
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.accion:hover:not(:disabled) { background: var(--pr-hover); color: var(--pr-texto); }
+.accion:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+.accion:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.accionPrincipal { border-color: var(--pr-activo); color: var(--pr-activo); }
+.accionPrincipal:hover:not(:disabled) { background: var(--pr-activo-suave); color: var(--pr-activo); }
+.accionExito { border-color: var(--pr-exito); color: var(--pr-exito); }
+.accionExito:hover:not(:disabled) { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.accionPeligro { border-color: var(--pr-peligro); color: var(--pr-peligro); }
+.accionPeligro:hover:not(:disabled) { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+
+.fichaMensaje {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--pr-peligro);
+}
+
+.fichaAviso {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--pr-exito);
+}
+
+.fichaAviso a { color: inherit; font-weight: 650; }
