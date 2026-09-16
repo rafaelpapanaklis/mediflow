@@ -45,6 +45,10 @@ import {
   type BorradorLanding, type ColumnaDeTexto,
 } from "@/lib/landing-address";
 import { prepararImagen } from "@/lib/image-client";
+// REDISEÑO DE PÁGINA WEB (ws1-t3). El lienzo (el <iframe>) es el sitio
+// público y no lleva ni una clase de aquí — solo se viste la BARRA.
+import { RaizPaginaWeb } from "@/components/dashboard/pagina-web-rediseno/raiz";
+import rd from "@/components/dashboard/pagina-web-rediseno/pagina-web.module.css";
 
 /** Ancho de referencia del lienzo. El escalado es solo por ancho. */
 const ANCHO_LIENZO = 1280;
@@ -127,7 +131,7 @@ function contrasteConBlanco(hex: string): number {
 
 /* ============================================================ */
 
-export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
+export function EditorVisual({ inicial, rediseno = false }: { inicial: ClinicaDelEditor; rediseno?: boolean }) {
   const tpl = inicial.landingTemplate ?? "classic";
   const manifiesto = manifestOf(tpl);
   const editable = plantillaInstrumentada(tpl);
@@ -417,6 +421,7 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
   if (!editable) {
     return (
       <Aviso
+        rediseno={rediseno}
         titulo={`«${manifiesto.nombre}» todavía no se edita desde el lienzo`}
         cuerpo={
           "Esta plantilla aún no está preparada para editarse haciendo clic encima. " +
@@ -430,6 +435,7 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
   if (ventanaChica) {
     return (
       <Aviso
+        rediseno={rediseno}
         titulo="El editor visual necesita una pantalla grande"
         cuerpo={
           `Tu sitio se edita a tamaño real, y para eso hacen falta al menos ${MINIMO_ESCRITORIO} px de ancho. ` +
@@ -440,8 +446,112 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
   }
 
   /* ══════════════════════════════════════════════════════════
-     El lienzo
+     El lienzo — REDISEÑO (ws1-t3): misma lógica de arriba, otra barra.
+     El <iframe> del lienzo es el sitio público y no lleva ni una clase
+     de aquí, en ninguno de los dos caminos.
      ══════════════════════════════════════════════════════════ */
+
+  if (rediseno) {
+    return (
+      <RaizPaginaWeb className={rd.pantallaEditor}>
+        <header className={rd.barra}>
+          <Link href="/dashboard/landing" className={rd.barraSalir}>
+            <ArrowLeft size={15} /> Salir
+          </Link>
+
+          <div style={{ minWidth: 0 }}>
+            <div className={rd.barraNombre}>{borrador.name}</div>
+            <div className={rd.barraSub}>
+              Plantilla «{manifiesto.nombre}»
+              {!borrador.landingActive && " · sin publicar"}
+            </div>
+          </div>
+
+          {sinGuardar && (
+            <span className={`${rd.insignia} ${rd.insigniaAlerta}`}>
+              <span className={rd.puntoAlerta} /> Sin publicar
+            </span>
+          )}
+
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            <label className={rd.barraColorEtiqueta}>
+              <span className="hidden xl:inline">Color de acento</span>
+              <input type="color" value={acento} onChange={e => escribir("landingThemeColor", e.target.value)}
+                aria-label="Color de acento" className={rd.barraColor} />
+            </label>
+
+            {ratio < 4.5 && (
+              <span title={`El texto blanco sobre este color queda en ${ratio.toFixed(1)}:1. Por debajo de 4.5:1 cuesta leerlo.`}
+                className={rd.barraContraste}>
+                <AlertTriangle size={13} /> {ratio.toFixed(1)}:1
+              </span>
+            )}
+
+            <button type="button" onClick={deshacer} disabled={historial.length === 0} title="Deshacer el último cambio" className={rd.botonIcono}>
+              <Undo2 size={15} />
+            </button>
+            <button type="button" onClick={descartar} disabled={!sinGuardar} title="Volver a lo que está publicado" className={rd.botonIcono}>
+              <RotateCcw size={15} />
+            </button>
+            <a href={`/${borrador.slug}`} target="_blank" rel="noopener noreferrer" title="Abrir el sitio público en otra pestaña" className={rd.botonIcono}>
+              <ExternalLink size={15} />
+            </a>
+            <button type="button" onClick={() => void guardar()} disabled={!sinGuardar || guardando} className={`${rd.boton} ${rd.barraGuardar}`}>
+              {guardando ? "Publicando…" : "Publicar cambios"}
+            </button>
+          </div>
+        </header>
+
+        <div className={rd.pista}>
+          Haz clic sobre cualquier texto para cambiarlo. Suelta una foto encima de su hueco para
+          sustituirla. El fondo lo define la plantilla: si quieres otro fondo, cambia de plantilla.
+        </div>
+
+        <div ref={lienzoRef} className={rd.lienzo}>
+          <iframe
+            ref={iframeRef}
+            key={`${tpl}-${nonce}`}
+            src={`/landing-preview/${borrador.slug}?preview=${tpl}&edit=1`}
+            title="Tu sitio, editable"
+            className="border-0 bg-white origin-top-left block"
+            style={{ width: ANCHO_LIENZO, height: `${100 / escala}%`, transform: `scale(${escala})` }}
+          />
+        </div>
+
+        {conflicto && (
+          <div className={rd.conflictoOverlay}>
+            <div className={rd.conflictoCaja}>
+              <h2 className={rd.conflictoTitulo}>
+                Alguien más publicó {enumerar(conflicto.campos.map(c => NOMBRE_DE_COLUMNA[c] ?? c))}
+              </h2>
+              <p className={rd.conflictoTexto}>
+                Después de que abrieras este editor, se publicó otra versión de eso mismo —tú en otra
+                ventana, o alguien más de la clínica— y no la pisamos por tu cuenta. Lo que escribiste
+                aquí sigue en pantalla: decide tú cuál se queda.
+              </p>
+              <ul className={rd.conflictoLista}>
+                <li><b>Publicar lo mío</b>: se queda lo que ves en el lienzo y se sustituye lo otro.</li>
+                <li><b>Traer lo de la otra pestaña</b>: gana lo que ya está publicado. Lo que escribiste
+                    en {enumerar(conflicto.campos.map(c => NOMBRE_DE_COLUMNA[c] ?? c))} se pierde; lo demás
+                    se queda aquí sin publicar.</li>
+              </ul>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", paddingTop: 4 }}>
+                <button type="button" onClick={() => setConflicto(null)} className={`${rd.boton} ${rd.botonSuave}`}>
+                  Seguir aquí sin decidir
+                </button>
+                <button type="button" onClick={traerLoDeLaOtraPestana} className={rd.boton}>
+                  Traer lo de la otra pestaña
+                </button>
+                <button type="button" onClick={publicarDeTodosModos} className={`${rd.boton} ${rd.botonPrincipal}`}>
+                  Publicar lo mío
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </RaizPaginaWeb>
+    );
+  }
 
   return (
     /* fixed y no absolute: el editor ocupa la pantalla entera por encima del
@@ -607,7 +717,21 @@ export function EditorVisual({ inicial }: { inicial: ClinicaDelEditor }) {
 
 /* ------------------------------------------------------------------ */
 
-function Aviso({ titulo, cuerpo }: { titulo: string; cuerpo: string }) {
+function Aviso({ titulo, cuerpo, rediseno = false }: { titulo: string; cuerpo: string; rediseno?: boolean }) {
+  if (rediseno) {
+    return (
+      <RaizPaginaWeb>
+        <div className={rd.avisoCaja}>
+          <div className={rd.avisoCajaIcono}><Monitor size={16} /></div>
+          <h1 className={rd.avisoCajaTitulo}>{titulo}</h1>
+          <p className={rd.avisoCajaCuerpo}>{cuerpo}</p>
+          <Link href="/dashboard/landing" className={`${rd.boton} ${rd.botonPrincipal}`} style={{ alignSelf: "flex-start" }}>
+            <ArrowLeft size={15} /> Ir al editor de siempre
+          </Link>
+        </div>
+      </RaizPaginaWeb>
+    );
+  }
   return (
     <div className="max-w-lg mx-auto mt-10 bg-card border border-[color:var(--border-soft)] rounded-[var(--radius-lg)] shadow-[var(--shadow-1)] p-6 space-y-3">
       <div className="flex items-center gap-2 text-[color:var(--text-3)]"><Monitor size={16} /></div>

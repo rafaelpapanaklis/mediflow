@@ -7,14 +7,26 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { getAccountManagerForClinic } from "@/lib/account-manager/get-for-clinic";
 import { localeFromClinic } from "@/i18n/server";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export default async function LandingConfigPage() {
   const user   = await getCurrentUser();
   requirePermissionOrRedirect(user, "landing.view");
-  const clinic = await prisma.clinic.findUnique({
-    where:   { id: user.clinicId },
-    include: { schedules: { orderBy: { dayOfWeek: "asc" } } },
-  });
+  // REDISEÑO DE PÁGINA WEB — el MISMO interruptor por clínica que enciende el
+  // menú de dos niveles (no uno propio: Rafael prueba «el diseño nuevo» como
+  // una sola cosa). Va en el mismo Promise.all que la consulta de la clínica
+  // para no añadir un viaje a la base aparte, y su respuesta vive 60 s en
+  // memoria por clínica (ver src/lib/menu-dos-niveles/interruptor-core.ts):
+  // no es una consulta nueva por carga, es la misma que ya pagan Pacientes,
+  // Agenda y Hoy. Falla cerrado (sin tabla, sin fila o con error → false =
+  // la pantalla de hoy, tal cual).
+  const [clinic, rediseno] = await Promise.all([
+    prisma.clinic.findUnique({
+      where:   { id: user.clinicId },
+      include: { schedules: { orderBy: { dayOfWeek: "asc" } } },
+    }),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
   // Manager de cuenta para el banner del pie ("¿necesitas una página más
   // avanzada?"). Mismo helper y mismo patrón que /dashboard/soporte: el
   // clinicId sale de la SESIÓN, la disponibilidad se evalúa en la timezone del
@@ -34,5 +46,5 @@ export default async function LandingConfigPage() {
   // La fila COMPLETA viaja a un componente cliente: se filtran las credenciales
   // (Live Secret Key de Facturapi, tokens de WhatsApp/Twilio/Google…) para que no
   // terminen en el payload RSC. "landing.view" no es un permiso solo de admin.
-  return <LandingConfigClient key={user.clinicId} clinic={stripClinicSecrets(clinic) as any} appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""} puedeEditar={puedeEditar} accountManager={accountManager} clinicName={clinic?.name ?? ""} />;
+  return <LandingConfigClient key={user.clinicId} clinic={stripClinicSecrets(clinic) as any} appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""} puedeEditar={puedeEditar} accountManager={accountManager} clinicName={clinic?.name ?? ""} rediseno={rediseno} />;
 }
