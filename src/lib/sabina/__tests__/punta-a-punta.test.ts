@@ -98,7 +98,12 @@ before(async () => {
   globalThis.fetch = (async (url: unknown, init?: { body?: string }) => {
     assert.equal(String(url), "https://api.anthropic.com/v1/messages", "el motor solo debe hablar con Anthropic");
     const cuerpo = JSON.parse(init?.body ?? "{}");
-    estado.peticiones.push(cuerpo);
+    // Desde que Sabina cachea el prefijo, `system` viaja como bloque de texto y no
+    // como cadena suelta (es la forma equivalente que admite `cache_control`; ver
+    // `engine-cache.ts`). Aquí se aplana: estas pruebas miran lo que DICE el
+    // prompt, no su envoltorio. El envoltorio lo fija `npm run test:sabina-cache`.
+    const textoDelSystem = (s: any) => (Array.isArray(s) ? s.map((b: any) => b?.text ?? "").join("") : String(s ?? ""));
+    estado.peticiones.push({ ...cuerpo, system: textoDelSystem(cuerpo.system) });
     assert.ok(estado.guion, "una prueba llamó al modelo sin guion");
     const respuesta = estado.guion({ model: cuerpo.model, messages: cuerpo.messages, n: estado.peticiones.length });
     return new Response(JSON.stringify(respuesta), { status: 200, headers: { "content-type": "application/json" } });
@@ -338,7 +343,10 @@ test("«¿cuántas citas tengo hoy?» — de la pregunta al JSON, con el número
   assert.equal(json.respuesta, `Según la agenda: ${resumenDirecto}`);
   assert.deepEqual(json.herramientasUsadas, ["citas_del_dia"]);
   assert.equal(json.modelo, "claude-haiku-4-5");
-  assert.deepEqual(json.tokens, { entrada: 2200, salida: 130 });
+  // `entrada` es lo que NO salió del caché; los dos contadores de caché van
+  // aparte porque cuestan distinto (ver engine-cache.ts). El doble de Anthropic
+  // de esta prueba no manda ninguno, así que quedan en cero.
+  assert.deepEqual(json.tokens, { entrada: 2200, salida: 130, cacheLectura: 0, cacheEscritura: 0 });
   assert.equal(json.conversacionId, "conv-sabina");
 });
 
@@ -420,7 +428,9 @@ test("cobra del monedero con chargeUsage (feature sabina), no como IA incluida e
   // Y no se cobra dos veces: lo que paga el monedero no se descuenta además del cupo del plan.
   assert.deepEqual(estado.cupo, [], "Sabina gastó el cupo del plan además de cobrar al monedero");
   assert.deepEqual(estado.cobros, [
-    { clinicId: CL_NORTE, feature: "sabina", model: "claude-haiku-4-5", inputTokens: 2200, outputTokens: 130 },
+    // Los tokens de caché viajan SEPARADOS al cobro: leído se cobra a 0,1× y
+    // escrito a 1,25×, y meterlos en `inputTokens` le cobraría de más a la clínica.
+    { clinicId: CL_NORTE, feature: "sabina", model: "claude-haiku-4-5", inputTokens: 2200, outputTokens: 130, cacheTokens: 0, cacheWriteTokens: 0 },
   ]);
 });
 

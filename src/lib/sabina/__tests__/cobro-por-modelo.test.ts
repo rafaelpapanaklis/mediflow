@@ -33,7 +33,15 @@ const estado = {
   saldoCents: 100_000,
   eventos: [] as Array<Record<string, any>>,
   movimientos: [] as Array<Record<string, any>>,
-  peticiones: [] as Array<{ model: string }>,
+  // El cuerpo COMPLETO de cada petición a Anthropic: desde el caché de prompt
+  // las pruebas también miran `tools`, `system` y `tool_choice`.
+  peticiones: [] as Array<{
+    model: string;
+    system?: any[];
+    tools?: any[];
+    tool_choice?: { type: string };
+    messages?: any[];
+  }>,
   guion: null as null | ((p: { model: string; n: number }) => Record<string, unknown>),
 };
 
@@ -227,4 +235,156 @@ test("en «Saldo de IA» el cargo dice «Sabina», no el slug crudo", async () =
   const { aiBillingFeatureLabel } = await import("@/lib/ai-billing/types");
   const { AI_FEATURE_SABINA } = await import("../engine-catalog");
   assert.equal(aiBillingFeatureLabel(AI_FEATURE_SABINA), "Sabina");
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   EL CACHÉ DE PROMPT (ws1-t2)
+
+   El catálogo y el prompt viajan en cada llamada y son iguales para todas
+   las clínicas, así que van marcados con `cache_control`. Eso parte la
+   entrada en TRES contadores a tres precios distintos, y cobrarlos como si
+   fueran uno solo le cobraría de MÁS a la clínica en cada caché frío —que
+   es peor que no haber hecho nada—. Estas pruebas fijan el reparto.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** Una respuesta con los contadores de caché que devuelve Anthropic de verdad. */
+function contestaConCache(
+  texto: string,
+  uso: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number },
+) {
+  return { content: [{ type: "text", text: texto }], stop_reason: "end_turn", usage: uso };
+}
+
+test("un token leído del caché cuesta 0,1× y uno escrito 1,25× — no se cobran como entrada normal", async () => {
+  estado.guion = () =>
+    contestaConCache("Tienes 3 citas hoy.", {
+      input_tokens: 1_000,
+      output_tokens: 20_000,
+      cache_creation_input_tokens: 100_000,
+      cache_read_input_tokens: 300_000,
+    });
+
+  assert.equal((await preguntar("¿Cuántas citas tengo hoy?")).status, 200);
+
+  const ev = estado.eventos[0];
+  // Haiku 4.5: entrada 1, salida 5, escritura 1.25, lectura 0.1 (USD/Mtok).
+  const correcto = 1_000 * 1 + 20_000 * 5 + 300_000 * 0.1 + 100_000 * 1.25;
+  assert.equal(ev.costUsdMicros, correcto, "el caché no se está cobrando a su precio");
+
+  // Lo que pasaría metiéndolo todo en el saco de la entrada: se le cobra de más.
+  const todoComoEntrada = (1_000 + 100_000 + 300_000) * 1 + 20_000 * 5;
+  assert.ok(
+    correcto < todoComoEntrada,
+    `cobrar el caché como entrada normal costaría ${todoComoEntrada} en vez de ${correcto}`,
+  );
+  assert.equal(ev.billedCents, centavos(correcto));
+  assert.equal(estado.saldoCents, 100_000 - centavos(correcto));
+
+  // La columna `cacheTokens` guarda el TOTAL (lectura + escritura), como en
+  // `record-usage.ts`: el reparto por precio ya está dentro de costUsdMicros,
+  // así que esto no necesita ninguna columna nueva ni ningún SQL.
+  assert.equal(ev.cacheTokens, 400_000);
+  assert.equal(ev.inputTokens, 1_000, "inputTokens es SOLO lo que no salió del caché");
+});
+
+test("si Anthropic no manda los contadores de caché, se cobra exactamente como antes", async () => {
+  // Formato nuevo, campos renombrados, caché apagado: Sabina contesta y cobra
+  // bien igual, al precio de siempre. Nunca de más.
+  estado.guion = () => contesta("Tienes 3 citas hoy.", { input_tokens: 400_000, output_tokens: 20_000 });
+
+  assert.equal((await preguntar("¿Cuántas citas tengo hoy?")).status, 200);
+
+  const ev = estado.eventos[0];
+  assert.equal(ev.costUsdMicros, 400_000 * 1 + 20_000 * 5);
+  assert.equal(ev.cacheTokens, 0);
+});
+
+test("contadores de caché con basura dentro no rompen ni inflan el cobro", async () => {
+  estado.guion = () =>
+    contestaConCache("Tienes 3 citas hoy.", {
+      input_tokens: 400_000,
+      output_tokens: 20_000,
+      // Lo que podría llegar si la API cambiara: texto, negativo, ausente.
+      cache_read_input_tokens: "muchos" as unknown as number,
+      cache_creation_input_tokens: -5 as unknown as number,
+    });
+
+  assert.equal((await preguntar("¿Cuántas citas tengo hoy?")).status, 200);
+
+  const ev = estado.eventos[0];
+  assert.equal(ev.costUsdMicros, 400_000 * 1 + 20_000 * 5, "un contador ilegible tiene que caer a 0, no colarse en el cobro");
+  assert.equal(ev.cacheTokens, 0);
+});
+
+test("cada llamada lleva el catálogo marcado, y la última lo conserva con tool_choice: none", async () => {
+  // La barata agota las rondas sin contestar para llegar a la última vuelta.
+  estado.guion = ({ model, n }) =>
+    model === "claude-haiku-4-5" && n <= 4
+      ? pideHerramienta("citas_del_dia", { input_tokens: 1_000, output_tokens: 100 })
+      : contesta("Con lo que vi: tienes citas.", { input_tokens: 1_000, output_tokens: 100 });
+
+  assert.equal((await preguntar("¿Cuántas citas tengo hoy?")).status, 200);
+  assert.ok(estado.peticiones.length >= 5, `hicieron falta 5 llamadas y hubo ${estado.peticiones.length}`);
+
+  for (const [i, p] of estado.peticiones.entries()) {
+    // El corte 1: en la ÚLTIMA herramienta, y SOLO ahí. Es el prefijo que
+    // comparten todas las clínicas.
+    assert.ok(Array.isArray(p.tools) && p.tools.length > 0, `la llamada ${i + 1} viajó sin catálogo: rompe el prefijo`);
+    const marcadas = p.tools.filter((t: any) => t.cache_control);
+    assert.equal(marcadas.length, 1, `la llamada ${i + 1} tiene ${marcadas.length} herramientas marcadas`);
+    assert.equal(marcadas[0].name, p.tools[p.tools.length - 1].name, "el marcador no está en la última herramienta");
+    // El corte 2: al final del system, que ahora es un bloque de texto.
+    assert.equal(p.system[0].type, "text");
+    assert.deepEqual(p.system[0].cache_control, { type: "ephemeral" });
+  }
+
+  // El catálogo es el MISMO en todas: un solo nombre distinto rompería el caché.
+  const catalogos = estado.peticiones.map((p: any) => p.tools.map((t: any) => t.name).join("|"));
+  assert.equal(new Set(catalogos).size, 1, "el catálogo cambia entre llamadas: el prefijo no se reaprovecharía");
+  // Y el prompt del sistema también, dentro de la misma pregunta.
+  assert.equal(new Set(estado.peticiones.map((p: any) => p.system[0].text)).size, 1);
+
+  // La última vuelta: herramientas puestas (prefijo intacto) y apagadas con
+  // tool_choice, no con una lista vacía.
+  const ultima = estado.peticiones[4];
+  assert.deepEqual(ultima.tool_choice, { type: "none" }, "la última ronda tiene que apagar las herramientas con tool_choice");
+  assert.equal(ultima.tools.length, estado.peticiones[0].tools.length, "la última ronda se quedó sin catálogo y perdió el caché");
+  // Y las anteriores NO lo llevan: el modelo tiene que poder consultar.
+  for (const p of estado.peticiones.slice(0, 4)) assert.equal(p.tool_choice, undefined);
+});
+
+test("SABINA_CACHE=0 es el freno de mano: ni un marcador sale, y Sabina contesta igual", async (t) => {
+  process.env.SABINA_CACHE = "0";
+  t.after(() => { delete process.env.SABINA_CACHE; });
+
+  estado.guion = () => contesta("Tienes 3 citas hoy.", { input_tokens: 400_000, output_tokens: 20_000 });
+  const res = await preguntar("¿Cuántas citas tengo hoy?");
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).respuesta, "Tienes 3 citas hoy.");
+
+  const p = estado.peticiones[0];
+  assert.equal(p.tools.filter((t: any) => t.cache_control).length, 0);
+  assert.equal(p.system[0].cache_control, undefined);
+  // El catálogo y el prompt siguen viajando enteros: apagar el caché no le
+  // quita al modelo ni una herramienta.
+  assert.ok(p.tools.length > 0 && typeof p.system[0].text === "string" && p.system[0].text.length > 0);
+});
+
+test("el catálogo sale byte a byte igual en preguntas distintas: es lo que permite compartir el caché", async () => {
+  // El invariante del que depende TODO el ahorro. `zodAJsonSchema` se ejecuta en
+  // cada pregunta, y si algún día generara las claves en otro orden —un Set, un
+  // Object.keys sin ordenar— el prefijo cambiaría en cada petición: Anthropic
+  // escribiría una entrada nueva cada vez y no leería ninguna. Nada fallaría;
+  // solo subiría la factura. Por eso se compara el JSON crudo y no los nombres.
+  estado.guion = () => contesta("Tienes 3 citas hoy.", { input_tokens: 1_000, output_tokens: 100 });
+
+  assert.equal((await preguntar("¿Cuántas citas tengo hoy?")).status, 200);
+  assert.equal((await preguntar("¿quién me debe dinero?")).status, 200);
+  assert.equal(estado.peticiones.length, 2);
+
+  assert.equal(
+    JSON.stringify(estado.peticiones[0].tools),
+    JSON.stringify(estado.peticiones[1].tools),
+    "el catálogo cambia entre preguntas: el caché no se reaprovecharía ni dentro de una clínica",
+  );
 });
