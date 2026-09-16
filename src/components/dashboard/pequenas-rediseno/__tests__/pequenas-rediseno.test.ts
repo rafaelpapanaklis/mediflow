@@ -64,9 +64,11 @@ test("todo hex de la hoja es un respaldo dentro de un var(), nunca un color a ma
   const sueltas = lineasConHex.filter((l) => !/var\(--/.test(l));
   assert.deepEqual(sueltas, [], `colores escritos a mano: ${sueltas.join(" | ")}`);
   for (const a of archivosNuevos.filter((x) => /\.tsx?$/.test(x.nombre))) {
-    // En los .tsx el único hex permitido es el placeholder del campo «color de
-    // marca» de Pantallas TV, que ya está así en la pantalla de siempre.
-    const hex = (a.texto.match(/#[0-9a-f]{6}/gi) ?? ([] as string[])).filter((h) => h.toLowerCase() !== "#7c3aed");
+    // En los .tsx el único hex permitido es el texto de ejemplo del campo
+    // «color de marca» de Pantallas TV (`placeholder=`), que ya está así en la
+    // pantalla de siempre: no es un color que se pinte, es una pista al usuario.
+    const sinPlaceholder = a.texto.replace(/placeholder="#[0-9a-f]{6}"/gi, "");
+    const hex = sinPlaceholder.match(/#[0-9a-f]{6}/gi) ?? ([] as string[]);
     assert.deepEqual(hex, [], `${a.nombre} trae colores a mano: ${hex.join(", ")}`);
   }
 });
