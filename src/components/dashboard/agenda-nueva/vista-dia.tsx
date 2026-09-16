@@ -26,7 +26,7 @@
  *     comportamiento — es funcionalidad existente, no diseño.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { assignLanes } from "@/lib/agenda/lane-layout";
 import { scheduleDayOfISO } from "@/lib/agenda/clinic-hours";
@@ -44,34 +44,16 @@ import { aCitaVista, resumenDeColumna, type CitaVista } from "@/lib/agenda-nueva
 import { Cuadricula, type ColumnaCuadricula } from "./cuadricula";
 import { TarjetaCita } from "./tarjeta-cita";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
+import { useMinuto } from "./usar-minuto";
 import s from "./agenda-nueva.module.css";
-
-/**
- * Un reloj que solo cambia cuando cambia el minuto. La línea de «ahora», los
- * minutos de espera y los de consulta se mueven con él; re-renderizar por
- * segundo sería tirar trabajo a la basura.
- */
-function useMinuto(): Date {
-  const [ahora, setAhora] = useState(() => new Date());
-  useEffect(() => {
-    // Primer salto al cambio de minuto exacto, y de ahí cada 60 s.
-    const alSiguienteMinuto = 60_000 - (Date.now() % 60_000);
-    let intervalo: ReturnType<typeof setInterval> | undefined;
-    const arranque = setTimeout(() => {
-      setAhora(new Date());
-      intervalo = setInterval(() => setAhora(new Date()), 60_000);
-    }, alSiguienteMinuto);
-    return () => {
-      clearTimeout(arranque);
-      if (intervalo) clearInterval(intervalo);
-    };
-  }, []);
-  return ahora;
-}
 
 export function VistaDia() {
   const { state } = useAgenda();
-  const ag = useAgendaNueva();
+  // Se saca del contexto SOLO lo que se usa. Depender del objeto `ag` entero
+  // recalcularía todas las citas del día cada vez que se abre o se cierra un
+  // panel, porque su identidad cambia con el estado de la pantalla.
+  const { responsablesVisibles, responsablesTodos, citaVisible, citaAbiertaId, abrirCita } =
+    useAgendaNueva();
   const ahora = useMinuto();
 
   const ventana = useMemo(
@@ -107,14 +89,18 @@ export function VistaDia() {
       ahora,
     };
 
-    return ag.responsablesVisibles.map((r) => {
+    return responsablesVisibles.map((r) => {
       const suyas = citasDelDia.filter(
-        (a) => a.doctor?.id === r.id && ag.citaVisible(a.doctor?.id ?? null, a.resourceId),
+        (a) => a.doctor?.id === r.id && citaVisible(a.doctor?.id ?? null, a.resourceId),
       );
 
       // Carriles primero (sobre el DTO, que es lo que assignLanes entiende),
       // y luego el modelo de vista. Así el reparto es idéntico al de siempre.
-      const carriles = assignLanes(suyas, state.slotMinutes);
+      // El 30 es la duración que se le supone a una cita SIN `endsAt`, NO el
+      // paso de la rejilla: tiene que ser el mismo que usa `aCitaVista`, o el
+      // carril y la tarjeta discreparían el día que `endsAt` deje de ser
+      // obligatorio.
+      const carriles = assignLanes(suyas, 30);
       const vistas: Array<{ cita: CitaVista; lane: number; laneCount: number }> = carriles.map(
         (c) => ({
           cita: aCitaVista(c.appt, ctx),
@@ -148,8 +134,8 @@ export function VistaDia() {
             key={cita.id}
             cita={cita}
             variante="dia"
-            seleccionada={ag.citaAbiertaId === cita.id}
-            onAbrir={ag.abrirCita}
+            seleccionada={citaAbiertaId === cita.id}
+            onAbrir={abrirCita}
             geometria={{
               top: topDeCita(cita.inicioMin, ventana.minutoInicio),
               alto: altoDeCita(cita.duracionMin),
@@ -160,14 +146,19 @@ export function VistaDia() {
         )),
       };
     });
+    // Campos sueltos y no el objeto `ag` entero: su identidad cambia al abrir
+    // o cerrar un panel, y con él de dependencia se recalculaban todas las
+    // citas del día cada vez que se pulsaba una.
   }, [
-    ag,
+    responsablesVisibles,
+    citaVisible,
+    citaAbiertaId,
+    abrirCita,
     ahora,
     citasDelDia,
     horarioDelDia,
     state.doctors,
     state.resources,
-    state.slotMinutes,
     state.timezone,
     ventana.minutoInicio,
   ]);
@@ -187,7 +178,7 @@ export function VistaDia() {
       ahoraMin={ahoraMin}
       columnaAhora={null}
       sinColumnas={
-        ag.responsablesTodos.length === 0
+        responsablesTodos.length === 0
           ? "No hay doctores activos en la agenda. Actívalos en Equipo."
           : "Ningún doctor ni unidad seleccionada"
       }

@@ -8,10 +8,12 @@
  * │ y pintarse mal — es exactamente el fallo que se arregló en la tabla de  │
  * │ citas de la ficha del paciente.                                         │
  * │                                                                         │
- * │ Por eso el mapa es un `Record<AppointmentStatus, …>` EXHAUSTIVO y no    │
- * │ hay ni un `default`, ni un `??`, ni un `as`. Si mañana alguien añade un │
- * │ décimo estado al enum, TypeScript rompe este archivo antes de que la    │
- * │ agenda lo pinte de gris por accidente.                                  │
+ * │ Por eso el mapa es un `Record<AppointmentStatus, …>` EXHAUSTIVO: si     │
+ * │ mañana alguien añade un estado al TIPO, TypeScript rompe este archivo   │
+ * │ antes de que la agenda lo pinte de gris por accidente.                  │
+ * │                                                                         │
+ * │ ⚠️ Pero el tipo es más estrecho que el enum de la base (ver `PENDING`,  │
+ * │ más abajo), así que NO indexes el mapa a pelo: usa `pintaDeEstado`.     │
  * └─────────────────────────────────────────────────────────────────────────┘
  *
  * El reparto, y por qué (va también en el reporte para Rafael):
@@ -197,6 +199,46 @@ export const PINTA_POR_ESTADO: Record<AppointmentStatus, PintaEstado> = {
 };
 
 /**
+ * 🔴 `PENDING`: el estado que el tipo de TypeScript NO tiene y la base SÍ.
+ *
+ * `AppointmentStatus` (la unión de `src/lib/home/types.ts`) declara nueve
+ * valores, pero el enum de Postgres tiene DIEZ: `PENDING` sigue ahí, marcado
+ * como legacy, y encima es el `@default` de la columna. Nadie lo normaliza por
+ * el camino: `appointmentToDTO` hace `a.status as AppointmentStatus` y se lo
+ * cree.
+ *
+ * Sin esto, UNA sola fila con `PENDING` dejaba `pinta` en `undefined` y la
+ * primera lectura de `pinta.chipTexto` lanzaba dentro del render de la vista
+ * Día: no es que esa cita se pintara mal, es que se caía la pantalla entera.
+ * Lo encontró el revisor.
+ *
+ * `PENDING` es «agendada sin confirmar», que es exactamente `SCHEDULED` —
+ * `STATUS_LABELS.SCHEDULED` ya se llama «Pendiente» y el panel de detalle de
+ * siempre contempla la cadena "PENDING" a mano. Así que se normaliza a
+ * `SCHEDULED` y se pinta como tal.
+ */
+export const ESTADO_LEGACY_PENDIENTE = "PENDING";
+
+/**
+ * La pinta de un estado, tolerando el `PENDING` legacy y cualquier valor que
+ * llegue de la base sin estar en el tipo.
+ *
+ * ⚠️ Úsala SIEMPRE en vez de indexar `PINTA_POR_ESTADO` a pelo: el mapa es
+ * exhaustivo sobre el TIPO, y el tipo es más estrecho que el enum.
+ */
+export function pintaDeEstado(status: AppointmentStatus | string): PintaEstado {
+  return PINTA_POR_ESTADO[status as AppointmentStatus] ?? PINTA_POR_ESTADO.SCHEDULED;
+}
+
+/**
+ * El estado, normalizado al conjunto de nueve que entiende la aplicación.
+ * `PENDING` (y cualquier otro valor inesperado) se trata como `SCHEDULED`.
+ */
+export function estadoNormalizado(status: AppointmentStatus | string): AppointmentStatus {
+  return status in PINTA_POR_ESTADO ? (status as AppointmentStatus) : "SCHEDULED";
+}
+
+/**
  * Los estados que NO cuentan como cita viva. Se deriva del mapa de arriba
  * para que no haya dos listas que se puedan desincronizar.
  */
@@ -204,7 +246,36 @@ export const ESTADOS_MUERTOS: readonly AppointmentStatus[] = (
   Object.keys(PINTA_POR_ESTADO) as AppointmentStatus[]
 ).filter((e) => PINTA_POR_ESTADO[e].muerta);
 
+/**
+ * ¿Esta cita está SIN CONFIRMAR?
+ *
+ * Existe para que nadie tenga que escribir `status === "SCHEDULED"` a mano: el
+ * `PENDING` legacy también es una cita sin confirmar —es literalmente lo que
+ * significa— y compararlo con una cadena suelta lo deja fuera de la cuenta.
+ *
+ * Lo encontró ws1-t2 en la nota ámbar del Mes («N sin confirmar»): con el
+ * literal, un día con veinte citas y cinco en `PENDING` decía «20 citas» y
+ * ninguna nota. Para un aviso cuya única razón de ser es «llama a estos
+ * pacientes», el número mal es tan malo como no tenerlo.
+ */
+export function esSinConfirmar(status: AppointmentStatus | string): boolean {
+  return estadoNormalizado(status) === "SCHEDULED";
+}
+
+/**
+ * ¿Esta cita CUENTA en el «N citas» del día?
+ *
+ * Todo lo que no esté cancelado, incluidos los plantones: la agenda dibuja esas
+ * tarjetas, así que el número tiene que cuadrar con lo que se ve, y para el
+ * dueño «18 citas» que acaban en 15 atendidas es justo el dato. Los MINUTOS
+ * ocupados son otra cuenta y ésa usa `citaViva` (un plantón no ocupa el sillón).
+ * Criterio acordado con ws1-t2 para que Día, Semana y Mes no se contradigan.
+ */
+export function citaContada(status: AppointmentStatus | string): boolean {
+  return estadoNormalizado(status) !== "CANCELLED";
+}
+
 /** ¿Esta cita sigue viva (ocupa sillón, cuenta para la ocupación)? */
-export function citaViva(status: AppointmentStatus): boolean {
-  return !PINTA_POR_ESTADO[status].muerta;
+export function citaViva(status: AppointmentStatus | string): boolean {
+  return !pintaDeEstado(status).muerta;
 }

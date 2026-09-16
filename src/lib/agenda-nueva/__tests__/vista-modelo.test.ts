@@ -267,3 +267,22 @@ test("ningún detalle sale con un «0 min» pegado", () => {
     assert.ok(!/\b0 min\b/.test(v.chip), `${status}: chip «${v.chip}»`);
   }
 });
+
+test("una cita legacy en «PENDING» se pinta, no tumba la pantalla", () => {
+  // Reproduce el fallo que encontró el revisor: `PENDING` es el `@default` de
+  // la columna `status` y no está en el tipo de TypeScript. Antes, esto
+  // lanzaba un TypeError dentro del render y se caía la vista Día entera.
+  const v = aCitaVista(cita({ status: "PENDING" as AppointmentStatus }), CTX);
+  assert.equal(v.estado, "SCHEDULED", "PENDING se normaliza a agendada");
+  assert.equal(v.chip, "Sin confirmar");
+  assert.ok(v.detalle.length > 0);
+  assert.equal(v.pinta.estiloBorde, "dashed");
+});
+
+test("una cita PENDING que espera validación la sigue marcando", () => {
+  const v = aCitaVista(
+    cita({ status: "PENDING" as AppointmentStatus, requiresValidation: true }),
+    CTX,
+  );
+  assert.equal(v.esperaValidacion, true, "se normaliza antes de comparar con SCHEDULED");
+});
