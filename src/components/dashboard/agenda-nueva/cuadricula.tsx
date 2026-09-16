@@ -21,8 +21,11 @@
  *    100% / 112 px las dibuja gratis. Va en el CSS (`.columna`).
  */
 
-import type { ReactNode, Ref } from "react";
+import { useCallback, useRef, useState, type ReactNode, type Ref } from "react";
+import { useDroppable } from "@dnd-kit/core";
+import type { DroppableData } from "@/lib/agenda/drag-utils";
 import { comoHora, topDeHora, topDeLinea, type VentanaRejilla } from "@/lib/agenda-nueva/geometria";
+import { aceptaClic, altoDeHueco, carrilDeClic, inicioDeClic } from "@/lib/agenda-nueva/interacciones";
 import { ANCHO_EJE } from "@/lib/agenda-nueva/tokens";
 import s from "./agenda-nueva.module.css";
 
@@ -43,6 +46,22 @@ export interface ColumnaCuadricula {
   cerrada?: boolean;
   /** Texto centrado cuando la columna no tiene ni una cita. */
   vacia?: string | null;
+  /**
+   * Soltar citas aquí. El `data` es el MISMO que usan las columnas de la
+   * agenda de siempre y dice qué cambia al soltar: el doctor (Día) o el día
+   * (Semana). Sin esto la columna no recibe citas.
+   */
+  soltable?: { id: string; data: DroppableData };
+  /**
+   * Agendar con un clic en un hueco libre. Llega la hora ya redondeada al paso
+   * de la clínica y la fracción horizontal del clic (Semana la usa para saber
+   * de qué responsable es el carril). Sin esto la columna no acepta clics.
+   */
+  alPulsarHueco?: (hueco: { inicioMin: number; fraccionX: number }) => void;
+  /** En cuántos carriles se reparte la columna (Semana), para marcar el del cursor. */
+  carriles?: number;
+  /** Encima de las tarjetas: la sombra de la cita que se está arrastrando. */
+  superpuesto?: ReactNode;
 }
 
 export interface CuadriculaProps {
@@ -75,6 +94,11 @@ export interface CuadriculaProps {
    */
   anchoMinimoColumna?: number;
   refDesplazamiento?: Ref<HTMLDivElement>;
+  /**
+   * El paso de la clínica en minutos (`Clinic.defaultSlotMinutes`): a él se
+   * redondea la hora de un clic y mide el hueco que se marca bajo el cursor.
+   */
+  slotMinutes?: number;
 }
 
 export function Cuadricula({
@@ -86,8 +110,25 @@ export function Cuadricula({
   sinColumnas = "Ningún doctor ni unidad seleccionada",
   anchoMinimoColumna,
   refDesplazamiento,
+  slotMinutes = 30,
 }: CuadriculaProps) {
   const { minutoInicio, horaFin, alto } = ventana;
+
+  // La cabecera sigue al cuerpo en horizontal. El cuerpo es el ÚNICO scroller
+  // (los dos ejes) y la cabecera vive en un marco sin barras cuyo
+  // `scrollLeft` se copia del cuerpo. Antes eran dos scrollers anidados (el de
+  // fuera horizontal, el de dentro vertical) y el de dentro medía solo lo
+  // visible: al desplazar la Semana en horizontal, la cabecera avanzaba y el
+  // cuerpo se quedaba EN BLANCO (medido a 1024 y a 1440 con tres doctores, ya
+  // en la base). Y al arrastrar una cita hacia el borde, dnd-kit desplazaba el
+  // de dentro y descuadraba cabecera y cuerpo.
+  const refCabecera = useRef<HTMLDivElement | null>(null);
+  const alDesplazarCuerpo = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const marco = refCabecera.current;
+    if (marco && marco.scrollLeft !== e.currentTarget.scrollLeft) {
+      marco.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  }, []);
 
   // Índice de la columna de «ahora», para poder acotar la línea a su tramo.
   const idxAhora =
@@ -116,15 +157,14 @@ export function Cuadricula({
 
   return (
     <div className={s.rejilla}>
-      {/* Dos scrollers anidados, y el orden importa:
-          · el de FUERA da el desplazamiento HORIZONTAL y envuelve al
-            encabezado y al cuerpo, para que la cabecera de una columna viaje
-            pegada a su columna al desplazar (con `anchoMinimoColumna`);
-          · el de DENTRO da solo el VERTICAL, y deja el encabezado fijo arriba.
-          El encabezado no puede ir con `position: sticky` dentro del scroller
-          vertical: Chrome lo clampea al área de la rejilla. Misma lección que
-          ya estaba aprendida en la agenda de siempre. */}
+      {/* Un solo scroller, el cuerpo, en los dos ejes; la cabecera fuera de
+          él, en un marco que copia su desplazamiento horizontal
+          (`alDesplazarCuerpo`). El encabezado no puede ir con
+          `position: sticky` dentro del scroller: Chrome lo clampea al área de
+          la rejilla. Misma lección que ya estaba aprendida en la agenda de
+          siempre. */}
       <div className={s.rejillaScrollH}>
+      <div className={s.rejillaEncabezadoMarco} ref={refCabecera}>
       <div className={s.rejillaEncabezado} style={{ height: altoEncabezado, ...estiloMinimo }}>
         <div className={s.rejillaEsquina} />
         {columnas.map((c) => (
@@ -137,8 +177,9 @@ export function Cuadricula({
           </div>
         ))}
       </div>
+      </div>
 
-      <div className={s.rejillaScroll} ref={refDesplazamiento}>
+      <div className={s.rejillaScroll} ref={refDesplazamiento} onScroll={alDesplazarCuerpo}>
         <div className={s.rejillaLienzo} style={{ height: alto, ...estiloMinimo }}>
           {/* ── Eje de horas ── */}
           <div className={s.eje}>
@@ -159,38 +200,7 @@ export function Cuadricula({
 
           {/* ── Columnas ── */}
           {columnas.map((c) => (
-            <div
-              key={c.clave}
-              className={`${s.columna} ${c.cerrada ? s.columnaCerrada : ""}`}
-              style={c.fondo && !c.cerrada ? { backgroundColor: c.fondo } : undefined}
-              data-columna={c.clave}
-            >
-              {/* Antes de abrir */}
-              {!c.cerrada && typeof c.aperturaHastaMin === "number" && c.aperturaHastaMin > minutoInicio && (
-                <div
-                  className={s.franjaCierre}
-                  style={{ top: 0, height: topDeLinea(c.aperturaHastaMin, minutoInicio) }}
-                />
-              )}
-              {/* Después de cerrar */}
-              {!c.cerrada && typeof c.cierreDesdeMin === "number" && c.cierreDesdeMin < horaFin * 60 && (
-                <div
-                  className={s.franjaCierre}
-                  style={{ top: topDeLinea(c.cierreDesdeMin, minutoInicio), bottom: 0 }}
-                />
-              )}
-              {/* Día cerrado entero */}
-              {c.cerrada && (
-                <>
-                  <div className={s.franjaCierre} style={{ top: 0, bottom: 0 }} />
-                  <div className={s.rotuloCerrada}>Cerrado</div>
-                </>
-              )}
-
-              {c.contenido}
-
-              {!c.cerrada && c.vacia && <div className={s.columnaVacia}>{c.vacia}</div>}
-            </div>
+            <ColumnaRejilla key={c.clave} columna={c} ventana={ventana} slotMinutes={slotMinutes} />
           ))}
 
           {columnas.length === 0 && <div className={s.sinColumnas}>{sinColumnas}</div>}
@@ -216,6 +226,177 @@ export function Cuadricula({
         </div>
       </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Una columna del lienzo: sus franjas rayadas, sus tarjetas, y las dos cosas
+ * que se hacen con el ratón sobre ella — agendar con un clic en un hueco libre
+ * y soltar una cita que se viene arrastrando.
+ *
+ * El clic sigue el criterio de la agenda de siempre (`AgendaColumn`): la hora
+ * del hueco en el que cae, redondeada hacia abajo al paso de la clínica, y
+ * nada si cae sobre una cita (la tarjeta abre su panel). Además, lo que el
+ * diseño pinta a rayas —antes de abrir, desde el cierre, el día cerrado— no
+ * acepta clics.
+ *
+ * Mientras el cursor recorre la columna se marca el hueco que crearía el clic,
+ * con su hora: la misma cuenta que el clic, para que la marca nunca prometa
+ * una hora distinta de la que se abre (la lección de `hover-slot.ts`). El
+ * estado de esa marca vive aquí, por columna: moverse no vuelve a pintar las
+ * tarjetas, que llegan ya hechas en `columna.contenido`.
+ */
+function ColumnaRejilla({
+  columna: c,
+  ventana,
+  slotMinutes,
+}: {
+  columna: ColumnaCuadricula;
+  ventana: VentanaRejilla;
+  slotMinutes: number;
+}) {
+  const { minutoInicio, horaFin } = ventana;
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [guia, setGuia] = useState<{ inicioMin: number; carril: number } | null>(null);
+  // Un clic que EMPIEZA sobre una cita y termina en el hueco (se escurrió el
+  // ratón, o se soltó tarde tras cancelar un arrastre con Esc) no crea otra: el
+  // navegador le manda ese clic a la columna, que es el antepasado común.
+  const empezoEnCita = useRef(false);
+
+  const { setNodeRef } = useDroppable({
+    id: c.soltable?.id ?? `sin-soltar:${c.clave}`,
+    data: c.soltable?.data,
+    disabled: !c.soltable,
+  });
+  const refs = useCallback(
+    (el: HTMLDivElement | null) => {
+      ref.current = el;
+      setNodeRef(el);
+    },
+    [setNodeRef],
+  );
+
+  const alPulsar = c.alPulsarHueco;
+  const carriles = Math.max(1, c.carriles ?? 1);
+
+  /** El hueco bajo el puntero, o `null` si ahí no se agenda. */
+  const huecoBajo = useCallback(
+    (e: React.MouseEvent): { inicioMin: number; fraccionX: number } | null => {
+      if (!alPulsar || c.cerrada) return null;
+      // Sobre una tarjeta el clic abre ESA cita, no crea otra.
+      if ((e.target as HTMLElement).closest("[data-cita]")) return null;
+      const el = ref.current;
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
+      const inicioMin = inicioDeClic({ y, altoLienzo: rect.height, slotMinutes, minutoInicio });
+      // El colchón bajo la última hora no es un hueco de agenda.
+      if (inicioMin >= horaFin * 60) return null;
+      if (!aceptaClic(inicioMin, c)) return null;
+      return { inicioMin, fraccionX: rect.width > 0 ? x / rect.width : 0 };
+    },
+    [alPulsar, c, slotMinutes, minutoInicio, horaFin],
+  );
+
+  const alMover = useCallback(
+    (e: React.MouseEvent) => {
+      // Con un botón apretado se está arrastrando una cita: manda el soltar.
+      const h = e.buttons === 0 ? huecoBajo(e) : null;
+      const carril = h ? carrilDeClic(h.fraccionX, carriles) : 0;
+      setGuia((prev) => {
+        if (!h) return prev === null ? prev : null;
+        if (prev && prev.inicioMin === h.inicioMin && prev.carril === carril) return prev;
+        return { inicioMin: h.inicioMin, carril };
+      });
+    },
+    [huecoBajo, carriles],
+  );
+
+  const alSalir = useCallback(() => setGuia(null), []);
+
+  const alApretar = useCallback((e: React.PointerEvent) => {
+    empezoEnCita.current = !!(e.target as HTMLElement).closest("[data-cita]");
+  }, []);
+
+  const alHacerClic = useCallback(
+    (e: React.MouseEvent) => {
+      if (empezoEnCita.current) {
+        empezoEnCita.current = false;
+        return;
+      }
+      const h = huecoBajo(e);
+      if (!h || !alPulsar) return;
+      setGuia(null);
+      alPulsar(h);
+    },
+    [huecoBajo, alPulsar],
+  );
+
+  const clases = [
+    s.columna,
+    c.cerrada ? s.columnaCerrada : "",
+    guia ? s.columnaConGuia : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div
+      ref={refs}
+      className={clases}
+      style={c.fondo && !c.cerrada ? { backgroundColor: c.fondo } : undefined}
+      data-columna={c.clave}
+      onMouseMove={alPulsar ? alMover : undefined}
+      onMouseLeave={alPulsar ? alSalir : undefined}
+      onPointerDown={alPulsar ? alApretar : undefined}
+      onClick={alPulsar ? alHacerClic : undefined}
+    >
+      {/* Antes de abrir */}
+      {!c.cerrada && typeof c.aperturaHastaMin === "number" && c.aperturaHastaMin > minutoInicio && (
+        <div
+          className={s.franjaCierre}
+          style={{ top: 0, height: topDeLinea(c.aperturaHastaMin, minutoInicio) }}
+        />
+      )}
+      {/* Después de cerrar */}
+      {!c.cerrada && typeof c.cierreDesdeMin === "number" && c.cierreDesdeMin < horaFin * 60 && (
+        <div
+          className={s.franjaCierre}
+          style={{ top: topDeLinea(c.cierreDesdeMin, minutoInicio), bottom: 0 }}
+        />
+      )}
+      {/* Día cerrado entero */}
+      {c.cerrada && (
+        <>
+          <div className={s.franjaCierre} style={{ top: 0, bottom: 0 }} />
+          <div className={s.rotuloCerrada}>Cerrado</div>
+        </>
+      )}
+
+      {/* El hueco que crearía el clic, con su hora. Debajo de las tarjetas. */}
+      {guia && (
+        <div
+          className={s.guiaHueco}
+          style={{
+            top: topDeLinea(guia.inicioMin, minutoInicio),
+            height: altoDeHueco(slotMinutes),
+            left: `calc(${(guia.carril / carriles) * 100}% + ${carriles > 1 ? 2 : 8}px)`,
+            width: `calc(${100 / carriles}% - ${carriles > 1 ? 4 : 16}px)`,
+          }}
+          aria-hidden
+        >
+          <span className={s.guiaHuecoHora}>{comoHora(guia.inicioMin)}</span>
+        </div>
+      )}
+
+      {c.contenido}
+
+      {!c.cerrada && c.vacia && !guia && <div className={s.columnaVacia}>{c.vacia}</div>}
+
+      {c.superpuesto}
     </div>
   );
 }

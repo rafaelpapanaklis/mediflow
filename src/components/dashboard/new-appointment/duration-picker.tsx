@@ -1,6 +1,8 @@
 "use client";
 
 import { useT } from "@/i18n/i18n-provider";
+import { useAparienciaNueva } from "./apariencia";
+import nc from "./nueva-cita.module.css";
 
 interface Props {
   presets: readonly number[];
@@ -18,6 +20,42 @@ interface Props {
 export function DurationPicker({ presets, duration, customInput, onSelectPreset, onCustomChange }: Props) {
   const t = useT();
   const hasCustom = customInput.length > 0;
+  const nueva = useAparienciaNueva();
+  if (nueva) {
+    return (
+      <div className={nc.duraciones}>
+        {presets.map((min) => {
+          const active = duration === min;
+          return (
+            <button
+              key={min}
+              type="button"
+              onClick={() => onSelectPreset(min)}
+              className={`${nc.chip} ${nc.chipDuracion} ${active ? nc.chipActivo : ""}`}
+              aria-pressed={active}
+            >
+              {min}
+              <span className={nc.chipUnidad}>m</span>
+            </button>
+          );
+        })}
+        <label className={`${nc.duracionLibre} ${hasCustom ? nc.duracionLibreActiva : ""}`}>
+          <input
+            type="number"
+            min={5}
+            max={480}
+            step={5}
+            value={customInput}
+            onChange={(e) => onCustomChange(e.target.value)}
+            placeholder={t("appointments.durationPicker.customPlaceholder")}
+            aria-label={t("appointments.durationPicker.customAriaLabel")}
+            className={nc.duracionLibreInput}
+          />
+          <span className={nc.duracionLibreUnidad}>min</span>
+        </label>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", gap: 6 }}>
       {presets.map((min) => {

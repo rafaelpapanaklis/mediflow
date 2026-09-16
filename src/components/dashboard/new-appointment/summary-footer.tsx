@@ -3,6 +3,8 @@
 import { Info, Loader2 } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useT } from "@/i18n/i18n-provider";
+import { useAparienciaNueva } from "./apariencia";
+import nc from "./nueva-cita.module.css";
 
 interface Props {
   summary: React.ReactNode;
@@ -19,6 +21,32 @@ interface Props {
  */
 export function SummaryFooter({ summary, submitting, disabled, onCancel, onSubmit }: Props) {
   const t = useT();
+  const nueva = useAparienciaNueva();
+  if (nueva) {
+    // Los botones del pie del panel de cita: secundario con borde y principal
+    // en tinta. Mismos `disabled`, mismos manejadores.
+    return (
+      <footer className={nc.pie}>
+        <div className={nc.resumen}>
+          <Info size={15} aria-hidden className={nc.resumenIcono} />
+          <span className={nc.resumenTexto}>{summary}</span>
+        </div>
+        <button type="button" className={nc.botonSecundario} onClick={onCancel} disabled={submitting}>
+          {t("common.cancel")}
+        </button>
+        <button type="button" className={nc.botonPrincipal} onClick={onSubmit} disabled={disabled}>
+          {submitting ? (
+            <>
+              <Loader2 size={15} className="animate-spin" />
+              {t("appointments.summaryFooter.creating")}
+            </>
+          ) : (
+            t("appointments.summaryFooter.createAppointment")
+          )}
+        </button>
+      </footer>
+    );
+  }
   return (
     <footer style={footerStyle}>
       <div style={summaryWrapStyle}>

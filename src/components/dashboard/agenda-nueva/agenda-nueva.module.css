@@ -15,7 +15,11 @@
    clases en `vista-semana-mes.module.css`.
    ═══════════════════════════════════════════════════════════════════════ */
 
-.raiz {
+/* Las variables van en `.raiz` y también en `.tokensAgenda`: la confirmación
+   de mover una cita se abre en un portal, fuera de la raíz, y sin su propia
+   copia se quedaría sin colores. */
+.raiz,
+.tokensAgenda {
   /* ── Color ── */
   --ag-tinta: #1a1826;
   --ag-texto-2: #6e6b82;
@@ -60,6 +64,18 @@
   --ag-r-10: 10px;
   --ag-r-12: 12px;
 
+  /* ── Rojo (no es del README; ver `tokens.ts`) ── */
+  --ag-rojo-texto: oklch(0.45 0.16 25);
+  --ag-rojo-fondo: oklch(0.96 0.03 25);
+  --ag-rojo-borde: oklch(0.62 0.16 25);
+}
+
+.tokensAgenda {
+  color: var(--ag-tinta);
+  font-family: var(--font-menu), system-ui, sans-serif;
+}
+
+.raiz {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -190,6 +206,10 @@
   gap: 10px;
   margin-left: 4px;
   min-width: 0;
+  /* El día que se mira manda: cuando la barra no cabe, se encoge antes el
+     filtro (su etiqueta tiene puntos suspensivos). Por debajo de 1280 sí
+     cede, ver «Pantallas estrechas». */
+  flex-shrink: 0;
 }
 
 .tituloTexto {
@@ -216,7 +236,8 @@
 
 .filtroCaja {
   position: relative;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .filtroBoton {
@@ -234,7 +255,7 @@
   font-weight: 500;
   cursor: pointer;
   user-select: none;
-  max-width: 320px;
+  max-width: min(320px, 100%);
 }
 
 .filtroBotonActivo {
@@ -425,6 +446,42 @@
   color: #fff;
 }
 
+/* ── Botón «Nueva cita» ── La acción principal de la pantalla: tinta, como el
+   «Nueva cita» del menú del diseño, a la altura de los demás controles (34). */
+.botonNuevaCita {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px 0 10px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-tinta);
+  color: #fff;
+  border: 1px solid var(--ag-tinta);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+  white-space: nowrap;
+  transition: background 120ms ease-out;
+}
+
+.botonNuevaCita:hover {
+  background: #2b2840;
+}
+
+.botonNuevaCita:focus-visible,
+.botonHuecos:focus-visible {
+  outline: 2px solid var(--ag-morado);
+  outline-offset: 2px;
+}
+
+.etiquetaBoton {
+  display: inline;
+}
+
 /* «N por validar»: las citas del portal que esperan a la clínica. No es del
    diseño; es la puerta a la cola de validación de la agenda de siempre, que
    sin esto se perdía con la bandera encendida. Ámbar, la familia de «espera». */
@@ -486,17 +543,25 @@
   flex-direction: column;
 }
 
-/* Scroller HORIZONTAL: envuelve al encabezado y al cuerpo, para que al
-   desplazar (cuando hay `anchoMinimoColumna` y las columnas no caben) la
-   cabecera de cada columna viaje pegada a su columna. Sin ancho mínimo no
-   desplaza nada: el contenido cabe y `auto` no pinta barra. */
+/* Caja de la cabecera y el cuerpo. No desplaza nada: el único scroller es el
+   cuerpo (`.rejillaScroll`), en los dos ejes, y la cabecera copia su
+   desplazamiento horizontal desde JS. */
 .rejillaScrollH {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
+}
+
+/* El marco de la cabecera: sin barras, se desplaza en horizontal a la par del
+   cuerpo. Reserva el mismo hueco de barra vertical que el cuerpo
+   (`scrollbar-gutter`), para que con barras clásicas (Windows) cada cabecera
+   quede exactamente sobre su columna. */
+.rejillaEncabezadoMarco {
+  flex: none;
+  overflow: hidden;
+  scrollbar-gutter: stable;
 }
 
 .rejillaEncabezado {
@@ -516,13 +581,14 @@
   border-left: 1px solid var(--ag-borde-divisor);
 }
 
-/* Scroller VERTICAL: solo el cuerpo. El horizontal lo da su padre, así que
-   aquí va `hidden` — dos barras horizontales anidadas serían un enredo. */
+/* El cuerpo: el ÚNICO scroller, vertical y horizontal. Cuando las columnas no
+   caben (Semana con varios doctores en pantallas estrechas) se desplaza en
+   horizontal y la cabecera lo sigue. */
 .rejillaScroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: auto;
+  scrollbar-gutter: stable;
   position: relative;
 }
 
@@ -599,6 +665,95 @@
 
 .columnaCerrada {
   background-color: var(--ag-fondo-cerrado);
+}
+
+/* ── Agendar con un clic: el hueco bajo el cursor ──
+   Marca el hueco que crearía el clic, con su hora, del alto de un hueco de la
+   clínica. Va debajo de las tarjetas y no captura el ratón. */
+.columnaConGuia {
+  cursor: pointer;
+}
+
+.guiaHueco {
+  position: absolute;
+  z-index: 0;
+  border-radius: var(--ag-r-7);
+  background: var(--ag-morado-tinte);
+  box-shadow: inset 0 0 0 1px var(--ag-borde-consulta);
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  padding: 3px 8px;
+  overflow: hidden;
+}
+
+.guiaHuecoHora {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--ag-morado-texto);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.guiaHuecoHora::before {
+  content: "+ ";
+}
+
+/* ── Mover arrastrando: la sombra de destino ──
+   Dónde caería la cita, con la hora escrita. Por encima de las tarjetas y sin
+   capturar el ratón: el soltar lo recibe la columna. */
+.fantasma {
+  position: absolute;
+  z-index: 4;
+  border-radius: var(--ag-r-8);
+  border: 2px dashed var(--ag-morado);
+  background: color-mix(in oklch, var(--ag-morado-tinte) 88%, transparent);
+  box-shadow: 0 8px 24px rgba(26, 24, 38, 0.14);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 10px;
+  overflow: hidden;
+}
+
+.fantasmaChoca {
+  border-color: var(--ag-rojo-borde);
+  background: color-mix(in oklch, var(--ag-rojo-fondo) 92%, transparent);
+}
+
+.fantasmaCompacta {
+  padding: 3px 6px;
+}
+
+.fantasmaHora {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 17px;
+  color: var(--ag-morado-texto);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fantasmaCompacta .fantasmaHora {
+  font-size: 11.5px;
+  line-height: 15px;
+}
+
+.fantasmaChoca .fantasmaHora,
+.fantasmaChoca .fantasmaTexto {
+  color: var(--ag-rojo-texto);
+}
+
+.fantasmaTexto {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ag-texto-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rotuloCerrada {
@@ -716,6 +871,20 @@
 .tarjeta:focus-visible {
   outline: 2px solid var(--ag-morado);
   outline-offset: 1px;
+}
+
+/* Una cita que se puede mover: al arrastrarla no se selecciona su texto, y en
+   una tableta el dedo la arrastra en vez de desplazar la cuadrícula — igual
+   que la tarjeta de la agenda de siempre (`touchAction: "none"`). */
+.tarjetaArrastrable {
+  user-select: none;
+  touch-action: none;
+}
+
+/* La cita que se está arrastrando se queda en su sitio, atenuada: de ahí sale. */
+.tarjetaArrastrada {
+  opacity: 0.4 !important;
+  box-shadow: none !important;
 }
 
 /* Variante compacta: la cita dura menos de 30 min. */
@@ -1368,6 +1537,138 @@ a.panelNombre:hover {
   }
 }
 
+/* ═══ Confirmar el movimiento de una cita ════════════════════════════════
+   El mismo paso que la agenda de siempre, con la ropa del diseño: cabecera
+   como la del panel de cita, botones como los de su pie. */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(26, 24, 38, 0.38);
+  backdrop-filter: blur(2px);
+}
+
+.modalMover {
+  position: fixed;
+  z-index: 81;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(calc(100vw - 32px), 460px);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--ag-superficie);
+  border: 1px solid rgba(26, 24, 38, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(26, 24, 38, 0.22);
+  padding: 0 0 16px;
+  outline: none;
+}
+
+.modalMover *,
+.modalMover *::before,
+.modalMover *::after {
+  box-sizing: border-box;
+}
+
+.modalCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px 0;
+}
+
+.modalTitulo {
+  margin: 6px 20px 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 22px;
+  color: var(--ag-tinta);
+}
+
+.moverFilas {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: 10px;
+  margin: 16px 20px 0;
+}
+
+.moverFila {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: var(--ag-r-10);
+  min-width: 0;
+}
+
+.moverFilaAntes {
+  background: var(--ag-fondo-app);
+}
+
+.moverFilaAntes .moverHora {
+  color: var(--ag-texto-2);
+  text-decoration: line-through;
+}
+
+.moverFilaDespues {
+  background: var(--ag-morado-tinte);
+  box-shadow: inset 0 0 0 1px var(--ag-borde-consulta);
+}
+
+.moverFilaDespues .moverHora {
+  color: var(--ag-morado-texto);
+}
+
+.moverHora {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.moverDetalle {
+  font-size: 12.5px;
+  color: var(--ag-texto-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moverFlecha {
+  align-self: center;
+  color: var(--ag-texto-2);
+}
+
+.modalPie {
+  display: flex;
+  gap: 8px;
+  padding: 18px 20px 0;
+}
+
+.modalPie .accionSecundaria {
+  height: 40px;
+  border-radius: var(--ag-r-10);
+}
+
+.modalPie .accionPrincipal {
+  flex: 1;
+}
+
+@media (max-width: 479.98px) {
+  .moverFilas {
+    grid-template-columns: 1fr;
+  }
+
+  .moverFlecha {
+    transform: rotate(90deg);
+  }
+}
+
 /* ═══ Pantallas estrechas ═══════════════════════════════════════════════
    El README lo deja dicho: «en pantallas pequeñas la cuadrícula se desplaza;
    los paneles laterales pueden convertirse en hoja deslizable por debajo de
@@ -1412,12 +1713,45 @@ a.panelNombre:hover {
   }
 }
 
+/* La barra y el botón «Nueva cita». Medido con el menú del panel a la
+   izquierda (228–250 px): la barra entera, con todas las etiquetas, pide
+   ~1 200 px; sin las de los botones, ~1 020; sin la del filtro, ~830.
+     · ≥ 1380: todo con su etiqueta (el filtro recorta la suya si le falta).
+     · < 1380: «Buscar hueco» y «Nueva cita» se quedan en su ícono, con su
+       nombre en `aria-label`.
+     · < 1280: el filtro también, y el título del día ya puede recortarse.
+   Sin esto, a 1024 el título del día desaparecía. */
+@media (max-width: 1379.98px) {
+  .botonHuecos .etiquetaBoton,
+  .botonNuevaCita .etiquetaBoton {
+    display: none;
+  }
+
+  .botonHuecos,
+  .botonNuevaCita {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1279.98px) {
+  .filtroEtiqueta {
+    display: none;
+  }
+
+  .titulo {
+    flex-shrink: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .zonaAgenda,
   .tarjeta,
   .segmento,
   .navBoton,
-  .navHoy {
+  .navHoy,
+  .botonNuevaCita {
     transition: none;
   }
 
