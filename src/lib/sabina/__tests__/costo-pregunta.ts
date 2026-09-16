@@ -12,7 +12,7 @@
  *
  * ── QUÉ MIDE, Y QUÉ SUPONE ────────────────────────────────────────────────
  * MEDIDO con count_tokens (cifras reales de la API):
- *  · el prefijo fijo = los 23 esquemas de herramienta + el prompt del sistema,
+ *  · el prefijo fijo = los 28 esquemas de herramienta + el prompt del sistema,
  *    que es lo que el caché convierte en barato;
  *  · el tamaño real de cada llamada de una pregunta, con los `tool_result` de
  *    las herramientas DE VERDAD corriendo contra la base sembrada de pruebas;

@@ -7,10 +7,11 @@
  * manda producción (si midiera otro cuerpo, la cifra del reporte sería falsa).
  *
  * ── EL PROBLEMA ──────────────────────────────────────────────────────────
- * En CADA llamada al modelo viaja el manual entero: los esquemas de las 23
- * herramientas más el prompt del sistema. Una pregunta son dos o tres
- * llamadas, así que ese bloque se paga dos o tres veces por pregunta, en cada
- * pregunta, de cada clínica. Y es idéntico en todas ellas.
+ * En CADA llamada al modelo viaja el manual entero: los esquemas de las 28
+ * herramientas del catálogo (23 cuando se escribió esto; las seis ramas de
+ * Sabina de esta ola lo dejaron en 28) más el prompt del sistema. Una pregunta
+ * son dos o tres llamadas, así que ese bloque se paga dos o tres veces por
+ * pregunta, en cada pregunta, de cada clínica. Y es idéntico en todas ellas.
  *
  * ── DÓNDE SE CORTA, Y POR QUÉ AHÍ ────────────────────────────────────────
  * Anthropic pinta el prompt en este orden: `tools` → `system` → `messages`.
