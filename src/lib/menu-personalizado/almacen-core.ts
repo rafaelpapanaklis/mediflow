@@ -43,8 +43,6 @@ export interface DependenciasAlmacen {
   ahora?: () => number;
   /** Cuánto se recuerda que la tabla NO existe antes de volver a preguntar. */
   ttlTablaMs?: number;
-  /** Tope de espera de la lectura. Pasado: menú de fábrica en esa carga. */
-  limiteMs?: number;
 }
 
 export interface LecturaMenu {
@@ -60,7 +58,6 @@ export type ResultadoGuardado =
   | { ok: false; motivo: "no-disponible" }
   | { ok: false; motivo: "error" };
 
-const AGOTADO = Symbol("agotado");
 const SIN_MENU: LecturaMenu = { disponible: false, diseno: null, revision: null };
 
 function revisionPorDefecto(): string {
@@ -75,7 +72,6 @@ function idsValidos(userId: unknown, clinicId: unknown): boolean {
 export function crearAlmacen(dep: DependenciasAlmacen) {
   const ahora = dep.ahora ?? Date.now;
   const ttlTablaMs = dep.ttlTablaMs ?? 60_000;
-  const limiteMs = dep.limiteMs ?? 1500;
   const nuevaRevision = dep.nuevaRevision ?? revisionPorDefecto;
   let tabla: { existe: boolean; at: number } | null = null;
 
@@ -97,27 +93,30 @@ export function crearAlmacen(dep: DependenciasAlmacen) {
     return { disponible: true, diseno: normalizarDiseno(fila.layout), revision: fila.revision };
   }
 
+  // ⛔ SIN TOPE DE TIEMPO, por lo MISMO que el interruptor del menú
+  // (interruptor-core.ts). Esta rama nació cuando aquel todavía tenía un tope de
+  // 1,5 s, y copió la idea; la tarea hermana lo quitó de allí después de medir
+  // que el reloj no medía la base sino la cola: con `connection_limit=1` todas
+  // las consultas de una carga van en fila por UNA conexión, así que en las
+  // pantallas pesadas (la ficha del paciente, Configuración) el tope saltaba y
+  // en las ligeras no. Al juntar las dos ramas el tope sobrevivía aquí y volvía
+  // a producir el mismo defecto un piso más abajo: a quien se hubiera armado su
+  // menú le salía el de fábrica —y sin «Personalizar»— en las pantallas pesadas,
+  // y le volvía el suyo al navegar a una ligera. Peor todavía justo después de
+  // guardar, porque el `router.refresh()` del editor vuelve a leer: se veía
+  // «guardé y se deshizo».
+  //
+  // No se pierde la red de seguridad: si la base se cuelga de verdad, Prisma
+  // corta solo (pool_timeout) y cae en el `catch` de abajo, que es el que
+  // devuelve el menú de fábrica. Lo que se va es el reloj arbitrario.
   async function leer(userId: string, clinicId: string): Promise<LecturaMenu> {
     if (!idsValidos(userId, clinicId)) return SIN_MENU;
-    let temporizador: ReturnType<typeof setTimeout> | undefined;
     try {
-      const resultado = await Promise.race([
-        leerCrudo(userId, clinicId),
-        new Promise<typeof AGOTADO>((resolve) => {
-          temporizador = setTimeout(() => resolve(AGOTADO), limiteMs);
-        }),
-      ]);
-      if (resultado === AGOTADO) {
-        console.warn(`[menu-personalizado] la lectura tardó más de ${limiteMs} ms; menú de fábrica`);
-        return SIN_MENU;
-      }
-      return resultado;
+      return await leerCrudo(userId, clinicId);
     } catch (err) {
       const code = (err as { code?: string } | null)?.code;
       console.warn("[menu-personalizado] no se pudo leer el menú personal; menú de fábrica", code ?? err);
       return SIN_MENU;
-    } finally {
-      if (temporizador) clearTimeout(temporizador);
     }
   }
 

@@ -41,7 +41,6 @@ import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { resolveReminderOutcome } from "@/lib/reminders/promise";
 import { parseNotifPrefs } from "@/lib/patient-notifications/types";
-import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();

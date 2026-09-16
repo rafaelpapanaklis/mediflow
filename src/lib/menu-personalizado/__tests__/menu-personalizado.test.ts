@@ -17,7 +17,9 @@
  *    borran VACÍOS, y la última sección de un submenú no se borra.
  *  - La regla de soltar (arrastre) cae donde debe, incluida la de meter una
  *    opción dentro de un submenú.
- *  - El almacén falla cerrado (sin tabla, base lenta, error) y dos pestañas no
+ *  - El almacén falla cerrado (sin tabla, error de base) pero NO por reloj: a la
+ *    base lenta se la espera, porque un tope devolvía el menú de fábrica en las
+ *    pantallas pesadas y el menú cambiaba de forma al navegar. Y dos pestañas no
  *    se pisan: la segunda recibe «conflicto», no pisa a la primera.
  *  - El SQL y el modelo Prisma hablan de la misma tabla, sin bloques DO, y el
  *    modelo User no la conoce (el login lee al usuario con todas sus columnas).
@@ -628,14 +630,40 @@ test("sin los dos ids no se consulta (un clinicId vacío en Prisma no filtraría
   assert.equal(consultas, 0);
 });
 
-test("la base lenta no cuelga el panel: sale el menú de fábrica", async () => {
+test("la base lenta NO devuelve el menú de fábrica: se la espera, tarde lo que tarde", async (t) => {
+  // Esto era justo al revés (un tope de 1,5 s → menú de fábrica) y se cambió al
+  // integrar con `fix/menu-en-todas-las-pantallas`, que ya había quitado ese
+  // mismo tope del interruptor por haber medido que el reloj mide la COLA, no la
+  // base: con `connection_limit=1` las consultas de una carga van en fila por una
+  // sola conexión, así que en las pantallas pesadas el tope saltaba y en las
+  // ligeras no — y a quien tuviera su menú armado le cambiaba de forma al
+  // navegar, que es el defecto que aquella tarea existía para matar.
+  //
+  // Reloj simulado: si alguien vuelve a meter un tope con setTimeout, esto falla.
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const { almacen } = almacenDePrueba({
-    limiteMs: 20,
-    leerFila: () => new Promise((r) => setTimeout(() => r(null), 200)),
+    leerFila: () => new Promise((r) => setTimeout(() => r({ layout: DISENO, revision: "r9" }), 30_000)),
   });
-  const antes = Date.now();
-  assert.equal((await almacen.leer("u1", "c1")).disponible, false);
-  assert.ok(Date.now() - antes < 150, "no esperó a la base");
+  let resuelta = false;
+  const carga = almacen.leer("u1", "c1").then((v) => { resuelta = true; return v; });
+  // Avanza el reloj de segundo en segundo. Cualquier tope interno de hasta 60 s
+  // hecho con setTimeout saltaría ANTES que la base y devolvería el de fábrica.
+  for (let seg = 0; seg < 60 && !resuelta; seg++) {
+    await new Promise((r) => setImmediate(r));
+    t.mock.timers.tick(1_000);
+  }
+  const respuesta = await carga;
+  assert.equal(respuesta.disponible, true, "el menú personal no puede depender de cuánto tarda la base");
+  assert.equal(respuesta.revision, "r9");
+});
+
+test("si la base se cae de verdad, ahí sí: menú de fábrica y sin «Personalizar»", async () => {
+  // La red de seguridad que sustituye al tope. Prisma corta solo (pool_timeout)
+  // y el error cae aquí; lo que se quitó fue el reloj arbitrario, no el cierre.
+  const { almacen } = almacenDePrueba({
+    leerFila: async () => { throw Object.assign(new Error("pool timeout"), { code: "P2024" }); },
+  });
+  assert.deepEqual(await almacen.leer("u1", "c1"), { disponible: false, diseno: null, revision: null });
 });
 
 test("la base rota no rompe el menú", async () => {

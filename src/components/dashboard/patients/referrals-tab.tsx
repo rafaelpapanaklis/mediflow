@@ -103,7 +103,13 @@ export function ReferralsTab({ patientId, pacientesRediseno = false }: Props) {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground p-4">
+        // El gateo llegaba a medias: la ruedita sí miraba el interruptor, pero
+        // el `flex items-center gap-2` que la acompaña NO, así que el «Cargando…»
+        // de las clínicas SIN el diseño nuevo pasaba de bloque a caja flex. Las
+        // clases van con la ruedita o no van.
+        <div className={pacientesRediseno
+          ? "flex items-center gap-2 text-xs text-muted-foreground p-4"
+          : "text-xs text-muted-foreground p-4"}>
           {pacientesRediseno && <Loader2 size={13} className="animate-spin" aria-hidden />}
           {t("common.loading")}
         </div>
