@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { encryptPrivateKey } from "@/lib/signature/envelope";
-import { parseCer } from "@/lib/signature/fiel";
+import { keyMatchesCert, parseCer } from "@/lib/signature/fiel";
 import { logMutation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,11 @@ export const maxDuration = 60;
  *   }
  *
  * Operaciones:
- *  1. Parsea .cer → extrae serial, issuer, validFrom, validUntil, RFC.
+ *  1. Parsea .cer → extrae serial, issuer, validFrom, validUntil, RFC, y
+ *     comprueba que la .key abra con esa contraseña y sea su pareja.
+ *     🔴 NO comprueba que el .cer lo haya emitido el SAT ni que siga vigente
+ *     en la lista de revocación: un certificado casero con su propia llave
+ *     pasa. Ver REPORTE-ws1-t1.md.
  *  2. Cifra la .key (raw DER bytes) con AES-256-GCM usando
  *     SIGNATURE_MASTER_KEY del env.
  *  3. Persiste cer y key cifrada como base64 en cerFileUrl/keyFileUrl
@@ -58,6 +62,27 @@ export async function POST(req: NextRequest) {
     parsed = parseCer(cerBuf);
   } catch (e) {
     return NextResponse.json({ error: "cer_parse_failed", detail: String(e) }, { status: 400 });
+  }
+
+  // La contraseña que llega SE USA: tiene que abrir la llave, y la llave tiene
+  // que ser la pareja del certificado. Antes se pedía y se tiraba, así que se
+  // podía registrar el .cer de uno con el .key de otro.
+  try {
+    if (!keyMatchesCert({ cerDer: cerBuf, keyDer: keyBuf, keyPassword: body.keyPassword })) {
+      return NextResponse.json({
+        error: "key_does_not_match_cert",
+        detail: "La llave privada no corresponde a ese certificado.",
+      }, { status: 400 });
+    }
+  } catch (e) {
+    const msg = String(e);
+    if (msg.includes("invalid_key_password")) {
+      return NextResponse.json({
+        error: "invalid_key_password",
+        detail: "La contraseña no abre la llave privada.",
+      }, { status: 400 });
+    }
+    return NextResponse.json({ error: "key_parse_failed", detail: msg }, { status: 400 });
   }
 
   // Cifrar la .key con master key (env). NUNCA persistas en claro.

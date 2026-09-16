@@ -411,10 +411,23 @@ export function PrescriptionDocument(props: PrescriptionDocumentProps) {
             <Text style={styles.sub}>
               {props.doctorCedula ? `Cédula profesional ${props.doctorCedula}` : "Médico tratante"}
             </Text>
+            {/*
+              Decía «Firmada electrónicamente (e.firma)». No era cierto: nadie
+              comprueba que el certificado lo haya emitido el SAT, así que el
+              sello no prueba que sea una e.firma. El texto dice ahora lo que sí
+              se sabe — que el médico firmó con el certificado que registró — y
+              lo que no. Cambiar esta frase es decisión de Rafael: ver
+              REPORTE-ws1-t1.md, «qué NO queda tapado».
+            */}
             {props.signedElectronically ? (
-              <Text style={styles.signedBadge}>
-                Firmada electrónicamente (e.firma){props.signedAt ? ` el ${fmtDate(props.signedAt)}` : ""}
-              </Text>
+              <>
+                <Text style={styles.signedBadge}>
+                  Firmada digitalmente por el médico{props.signedAt ? ` el ${fmtDate(props.signedAt)}` : ""}
+                </Text>
+                <Text style={styles.signedBadge}>
+                  Certificado no validado ante el SAT
+                </Text>
+              </>
             ) : null}
           </View>
         </View>

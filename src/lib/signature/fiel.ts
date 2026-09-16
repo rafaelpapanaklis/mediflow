@@ -105,6 +105,45 @@ export function signDetached(opts: {
 }
 
 /**
+ * ¿La llave privada abre con esa contraseña Y es la pareja del certificado?
+ *
+ * Hasta el 15-sep-2026 `POST /api/signature/cert` pedía la contraseña de la
+ * llave y NO la usaba: guardaba el .cer y el .key sin comprobar que abrieran,
+ * ni que fueran pareja. Se podía subir el certificado de alguien y la llave de
+ * otro, y el sistema no se enteraba nunca — porque tampoco hay nadie que
+ * verifique una firma después (ver la ruta /api/signature/verify).
+ *
+ * Para RSA (que es lo que emite el SAT), ser pareja es que el módulo y el
+ * exponente público de la llave privada coincidan con los del certificado.
+ *
+ * Lanza `invalid_key_password` si la contraseña no abre la llave.
+ * Devuelve `false` si abre pero no es la pareja del certificado.
+ *
+ * 🔴 ESTO NO DICE que el certificado sea del SAT. Un certificado hecho en casa
+ * con su propia llave pasa esta comprobación. Validar la cadena del SAT y la
+ * revocación es otro trabajo.
+ */
+export function keyMatchesCert(opts: {
+  cerDer: Buffer;
+  keyDer: Buffer;
+  keyPassword: string;
+}): boolean {
+  const keyAsn1 = forge.asn1.fromDer(forge.util.createBuffer(opts.keyDer.toString("binary")));
+  const decrypted = forge.pki.decryptPrivateKeyInfo(keyAsn1, opts.keyPassword);
+  if (!decrypted) {
+    throw new Error("invalid_key_password");
+  }
+  const privateKey = forge.pki.privateKeyFromAsn1(decrypted);
+
+  const cerAsn1 = forge.asn1.fromDer(forge.util.createBuffer(opts.cerDer.toString("binary")));
+  const cert = forge.pki.certificateFromAsn1(cerAsn1);
+  const publicKey = cert.publicKey as forge.pki.rsa.PublicKey;
+
+  if (!publicKey?.n || !publicKey?.e) return false;
+  return privateKey.n.compareTo(publicKey.n) === 0 && privateKey.e.compareTo(publicKey.e) === 0;
+}
+
+/**
  * Solicita un timestamp RFC 3161 a una TSA. Best effort — si falla,
  * devuelve null y el doc queda firmado sin TSA.
  *

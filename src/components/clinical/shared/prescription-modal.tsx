@@ -5,6 +5,7 @@ import { X, ShieldCheck, Save, Loader2, CheckCircle2, Sparkles, AlertTriangle, S
 import toast from "react-hot-toast";
 import { CumsSelector, type PrescriptionItemDraft } from "@/components/dashboard/clinical/cums-selector";
 import { INDICATION_TEMPLATES } from "@/lib/clinical/indication-templates";
+import { expiresForCofeprisGroup, hasLegalExpiryCap, mostRestrictiveCofeprisGroup, requiresCofeprisFolio } from "@/lib/clinical/cofepris";
 import { useT } from "@/i18n/i18n-provider";
 
 const COFEPRIS_ETA_KEY: Record<string, string> = {
@@ -87,12 +88,18 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
   const [aiResult, setAiResult] = useState<AiCheckResult | null>(null);
   const [expandedMed, setExpandedMed] = useState<number | null>(null);
   const [confirmContra, setConfirmContra] = useState(false);
+  // Lo dicta el servidor (RECETAS_FOLIO_OBLIGATORIO). Ver /api/prescriptions/reglas.
+  const [folioObligatorio, setFolioObligatorio] = useState(true);
 
   useEffect(() => {
     if (!open) return;
     setItems([]); setIndications(""); setDiagnosis(""); setValidUntil(""); setCofeprisFolio(""); setSignCheck(false); setKeyPassword("");
     setCreatedRx(null); setSendingVia(null);
     setAiChecking(false); setAiResult(null); setExpandedMed(null); setConfirmContra(false);
+    fetch("/api/prescriptions/reglas")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setFolioObligatorio(d?.folioObligatorio !== false))
+      .catch(() => setFolioObligatorio(true));
     fetch("/api/signature/cert")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -105,11 +112,31 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
       .catch(() => setCert(null));
   }, [open]);
 
-  // Auto-detect grupo COFEPRIS más restrictivo en los items seleccionados
-  const cofeprisGroup = items
-    .map((it) => it.cums?.cofeprisGroup)
-    .filter((g): g is string => !!g)
-    .sort()[0] ?? null; // I < II < III < ... → primero alfabéticamente
+  // Grupo COFEPRIS más restrictivo de los items, con el MISMO orden explícito
+  // que aplica el servidor (I < II < … < VI). Antes se resolvía con un
+  // `.sort()` alfabético: acertaba de casualidad con los romanos del I al VI.
+  // Esto es una ayuda para la pantalla; la regla la impone el servidor.
+  const cofeprisGroup = mostRestrictiveCofeprisGroup(items.map((it) => it.cums?.cofeprisGroup));
+
+  // Tope legal de vigencia, calculado aquí solo para no dejar escribir una
+  // fecha que el servidor va a rechazar. Una pantalla que deja intentarlo y un
+  // servidor que rechaza es una pantalla que frustra.
+  const conTopeLegal = hasLegalExpiryCap(cofeprisGroup);
+  const topeLegalFecha = conTopeLegal ? expiresForCofeprisGroup(cofeprisGroup) : null;
+  // "YYYY-MM-DD" en hora local, que es lo que entiende <input type="date">.
+  const maxValidUntil = topeLegalFecha
+    ? new Date(topeLegalFecha.getTime() - topeLegalFecha.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 10)
+    : null;
+  const folioRequerido = folioObligatorio && requiresCofeprisFolio(cofeprisGroup);
+
+  // Si el médico escribió una fecha y DESPUÉS añadió un controlado, la fecha se
+  // recorta sola al tope. Sin esto el campo se queda con una fecha imposible y
+  // el error solo aparece al pulsar Crear.
+  useEffect(() => {
+    if (maxValidUntil && validUntil && validUntil > maxValidUntil) setValidUntil(maxValidUntil);
+  }, [maxValidUntil, validUntil]);
 
   // Firma de la lista actual: si cambia tras una revisión IA, los chips quedan
   // "stale" (la decisión de contraindicado deja de aplicar hasta re-revisar).
@@ -175,6 +202,10 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
       toast.error(t("clinical.prescriptionModal.errorNoKeyPassword"));
       return;
     }
+    if (folioRequerido && !cofeprisFolio.trim()) {
+      toast.error(t("clinical.prescriptionModal.errorNoFolio", { group: cofeprisGroup ?? "" }));
+      return;
+    }
     if (hasContra) {
       setConfirmContra(true);
       return;
@@ -201,8 +232,15 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
           })),
           indications: indications || undefined,
           diagnosis: diagnosis.trim() || undefined,
-          expiresAt: validUntil ? new Date(validUntil + "T23:59:59").toISOString() : undefined,
-          cofeprisGroup: cofeprisGroup || undefined,
+          // Si la fecha elegida cae EN el día del tope, no se manda nada: el
+          // servidor pone la hora exacta del tope legal. Mandar "ese día a las
+          // 23:59" se pasaría del tope por unas horas y saldría un 422 que el
+          // médico no entendería.
+          expiresAt: validUntil && !(maxValidUntil && validUntil >= maxValidUntil)
+            ? new Date(validUntil + "T23:59:59").toISOString()
+            : undefined,
+          // El grupo lo recalcula el servidor desde el catálogo; va solo como
+          // dato informativo y el servidor lo ignora.
           cofeprisFolio: cofeprisFolio || undefined,
           // Evidencia del chequeo IA (solo si está vigente para la lista actual).
           aiCheck: aiResult && !aiStale
@@ -523,18 +561,29 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
                   className="input-new"
                   style={{ width: "100%" }}
                   min={new Date().toISOString().slice(0, 10)}
+                  // Controlados I-III: el calendario no deja pasar del tope legal.
+                  max={maxValidUntil ?? undefined}
                   value={validUntil}
                   onChange={(e) => setValidUntil(e.target.value)}
                   disabled={submitting}
                 />
                 <span style={{ display: "block", fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
-                  {t("clinical.prescriptionModal.validityHint")}
+                  {maxValidUntil && cofeprisGroup
+                    ? t("clinical.prescriptionModal.validityCapHint", {
+                        group: cofeprisGroup,
+                        eta: t(COFEPRIS_ETA_KEY[cofeprisGroup] ?? "clinical.prescriptionModal.eta180d"),
+                        date: new Date(maxValidUntil + "T00:00:00").toLocaleDateString("es-MX"),
+                      })
+                    : t("clinical.prescriptionModal.validityHint")}
                 </span>
               </div>
 
-              {cofeprisGroup && (cofeprisGroup === "I" || cofeprisGroup === "II") && (
+              {requiresCofeprisFolio(cofeprisGroup) && (
                 <div>
-                  <label style={labelStyle}>{t("clinical.prescriptionModal.cofeprisFolioLabel", { group: cofeprisGroup })}</label>
+                  <label style={labelStyle}>
+                    {t("clinical.prescriptionModal.cofeprisFolioLabel", { group: cofeprisGroup ?? "" })}
+                    {folioRequerido ? " *" : ""}
+                  </label>
                   <input
                     className="input-new"
                     style={{ width: "100%" }}
@@ -543,6 +592,11 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
                     onChange={(e) => setCofeprisFolio(e.target.value.trim())}
                     disabled={submitting}
                   />
+                  {folioRequerido && (
+                    <span style={{ display: "block", fontSize: 11, color: "#b91c1c", marginTop: 4 }}>
+                      {t("clinical.prescriptionModal.cofeprisFolioRequiredHint", { group: cofeprisGroup ?? "" })}
+                    </span>
+                  )}
                 </div>
               )}
 

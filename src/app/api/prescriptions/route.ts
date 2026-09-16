@@ -6,6 +6,14 @@ import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import {
+  expiresForCofeprisGroup,
+  folioObligatorioActivo,
+  hasLegalExpiryCap,
+  mostRestrictiveCofeprisGroup,
+  plazoLegalTexto,
+  requiresCofeprisFolio,
+} from "@/lib/clinical/cofepris";
 
 export const dynamic = "force-dynamic";
 
@@ -15,22 +23,13 @@ function buildVerifyUrl(req: NextRequest, id: string) {
   return `${proto}://${host}/portal/prescription/${id}/verify`;
 }
 
-/**
- * NOM-024: vigencia legal de la receta según grupo COFEPRIS.
- * - Grupo I (estupefacientes):  24 horas
- * - Grupo II (psicotrópicos):   30 días
- * - Grupo III (algunos opioides débiles, antidepresivos): 90 días
- * - Grupo IV-VI / sin grupo:    180 días (default seguro)
- */
-function expiresForCofeprisGroup(group?: string | null, base: Date = new Date()): Date {
-  const out = new Date(base);
-  switch ((group ?? "").toUpperCase()) {
-    case "I":   out.setHours(out.getHours() + 24); break;
-    case "II":  out.setDate(out.getDate() + 30);   break;
-    case "III": out.setDate(out.getDate() + 90);   break;
-    default:    out.setDate(out.getDate() + 180);  break;
-  }
-  return out;
+/** Fecha corta para los mensajes de error que ve el médico. */
+function fechaHumana(d: Date): string {
+  return d.toLocaleString("es-MX", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "America/Mexico_City",
+  });
 }
 
 export async function GET(req: NextRequest) {
@@ -82,8 +81,11 @@ interface PrescriptionItemBody {
  *   patientId,                   // requerido
  *   medicalRecordId?,            // opcional — receta standalone si se omite
  *   items: [{ cumsKey, dosage, duration?, quantity?, notes? }],
- *   indications?, cofeprisGroup?, cofeprisFolio?, expiresAt? (override)
+ *   indications?, cofeprisFolio?, expiresAt? (sugerencia, nunca por encima del tope legal)
  * }
+ *
+ * `cofeprisGroup` se IGNORA si llega: el grupo real lo decide el servidor a
+ * partir del catálogo CUMS, y con él el tope de vigencia y si hace falta folio.
  *
  * La receta puede emitirse standalone (sin consulta asociada) o
  * vinculada a un MedicalRecord existente (flujo "Iniciar consulta").
@@ -100,7 +102,9 @@ export async function POST(req: NextRequest) {
   if (deniedPerm) return deniedPerm;
 
   const body = await req.json();
-  const { medicalRecordId, patientId, items, indications, diagnosis, cofeprisGroup, cofeprisFolio, expiresAt: expiresAtOverride } = body;
+  // OJO: `body.cofeprisGroup` NO se lee. El grupo sale del catálogo CUMS más
+  // abajo; leerlo del cuerpo era el fallo de seguridad que este bloque tapa.
+  const { medicalRecordId, patientId, items, indications, diagnosis, cofeprisFolio, expiresAt: expiresAtOverride } = body;
   const medicationsLegacy = body.medications;
 
   // Evidencia opcional del chequeo IA de contraindicaciones. Se guarda tal cual
@@ -172,11 +176,12 @@ export async function POST(req: NextRequest) {
     }, { status: 422 });
   }
 
-  // Validar que todas las claves CUMS existan en el catálogo.
+  // Validar que todas las claves CUMS existan en el catálogo. Se pide también
+  // `cofeprisGroup`: es el único dato de grupo en el que se puede confiar.
   const cumsKeys = itemsArray.map((it) => it.cumsKey!).filter(Boolean);
   const foundCums = await prisma.cumsItem.findMany({
     where: { clave: { in: cumsKeys } },
-    select: { clave: true },
+    select: { clave: true, cofeprisGroup: true },
   });
   const foundSet = new Set(foundCums.map((c) => c.clave));
   const missing = cumsKeys.filter((k) => !foundSet.has(k));
@@ -184,10 +189,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "cums_not_found", missing }, { status: 404 });
   }
 
+  // ── NOM-024 · controlados: la regla legal la aplica el SERVIDOR ───────────
+  // El `cofeprisGroup` del body es un dato del cliente y se DESCARTA. El grupo
+  // real de la receta es el más restrictivo (I < II < … < VI) de sus
+  // medicamentos según el catálogo CUMS, que nadie puede mandar por API. Sobre
+  // ese grupo —y solo ese— se calcula el tope legal de vigencia.
+  const grupoReal = mostRestrictiveCofeprisGroup(foundCums.map((c) => c.cofeprisGroup));
+
   const issuedAt = new Date();
-  const expiresAt = expiresAtOverride
-    ? new Date(expiresAtOverride)
-    : expiresForCofeprisGroup(cofeprisGroup, issuedAt);
+  const topeLegal = expiresForCofeprisGroup(grupoReal, issuedAt);
+
+  let expiresAt = topeLegal;
+  if (expiresAtOverride !== undefined && expiresAtOverride !== null && expiresAtOverride !== "") {
+    const pedida = new Date(expiresAtOverride);
+    if (Number.isNaN(pedida.getTime())) {
+      return NextResponse.json({
+        error: "expiresAt_invalid",
+        detail: "La fecha de vigencia no es una fecha válida.",
+      }, { status: 400 });
+    }
+    // Tope duro solo para I, II y III. Para IV-VI y sin grupo se respeta lo que
+    // pida el médico: los 180 días son un default prudente, no una obligación
+    // legal, y apretarlos rompería las recetas comunes sin ganar nada.
+    if (hasLegalExpiryCap(grupoReal) && pedida.getTime() > topeLegal.getTime()) {
+      return NextResponse.json({
+        error: "expiresAt_over_legal_cap",
+        detail:
+          `La receta incluye un medicamento controlado del grupo COFEPRIS ${grupoReal}, ` +
+          `cuya vigencia legal es de ${plazoLegalTexto(grupoReal)}. ` +
+          `El máximo para esta receta es el ${fechaHumana(topeLegal)}. ` +
+          `Deja el campo Vigencia vacío para que se calcule solo.`,
+        cofeprisGroup: grupoReal,
+        maxExpiresAt: topeLegal.toISOString(),
+      }, { status: 422 });
+    }
+    expiresAt = pedida;
+  }
+
+  // Folio del recetario oficial: obligatorio para grupos I y II. Detrás del
+  // interruptor RECETAS_FOLIO_OBLIGATORIO (ver @/lib/clinical/cofepris) porque
+  // bloquea a quien hoy receta clonazepam o codeína sin folio.
+  const folio = typeof cofeprisFolio === "string" ? cofeprisFolio.trim() : "";
+  if (folioObligatorioActivo() && requiresCofeprisFolio(grupoReal) && !folio) {
+    return NextResponse.json({
+      error: "cofeprisFolio_required",
+      detail:
+        `La receta incluye un medicamento controlado del grupo COFEPRIS ${grupoReal}. ` +
+        `La ley exige el folio del recetario oficial para emitirla.`,
+      cofeprisGroup: grupoReal,
+    }, { status: 422 });
+  }
 
   const qrCode = randomBytes(16).toString("hex");
 
@@ -204,8 +255,10 @@ export async function POST(req: NextRequest) {
         diagnosis: (typeof diagnosis === "string" && diagnosis.trim()) ? diagnosis.trim().slice(0, 2000) : null,
         qrCode,
         verifyUrl: "",
-        cofeprisGroup: cofeprisGroup ?? null,
-        cofeprisFolio: cofeprisFolio ?? null,
+        // El grupo que se guarda es el del catálogo, no el que mandó el cliente:
+        // es el que acaba impreso en el PDF y en la página pública del QR.
+        cofeprisGroup: grupoReal,
+        cofeprisFolio: folio || null,
         issuedAt,
         expiresAt,
         aiCheck: safeAiCheck,

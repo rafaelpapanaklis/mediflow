@@ -7265,7 +7265,10 @@
       "actionVerify": "Ver verificación",
       "sent": "Enviada",
       "sendFailed": "No se pudo enviar: {error}",
-      "done": "Listo"
+      "done": "Listo",
+      "errorNoFolio": "Grupo COFEPRIS {group}: la ley exige el folio del recetario oficial.",
+      "validityCapHint": "Grupo COFEPRIS {group}: la vigencia legal es de {eta}, como máximo hasta el {date}. Si la dejas vacía, se calcula sola.",
+      "cofeprisFolioRequiredHint": "Obligatorio para el grupo {group}."
     },
     "prescriptionQr": {
       "title": "Receta médica digital",
