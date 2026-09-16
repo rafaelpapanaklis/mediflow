@@ -101,7 +101,7 @@ test("el chip de «esperando» lleva los minutos; los demás no", () => {
     CTX,
   );
   assert.equal(esperando.minutosEsperando, 24);
-  assert.equal(esperando.chip, "Esperando · 24 min");
+  assert.equal(esperando.chip, "Registrado · 24 min");
   assert.equal(esperando.detalle, "llegó 10:56 · espera 24 min");
 
   const confirmada = aCitaVista(cita({ status: "CONFIRMED" }), CTX);
@@ -230,7 +230,7 @@ test("con cero minutos no se dice «0 min»: el paciente acaba de llegar", () =>
   );
   assert.equal(reciente.minutosEsperando, 0);
   assert.equal(reciente.detalle, "llegó 11:20");
-  assert.equal(reciente.chip, "Esperando", "el chip tampoco lleva el «· 0 min»");
+  assert.equal(reciente.chip, "Registrado", "el chip tampoco lleva el «· 0 min»");
 
   const enSillon = aCitaVista(
     cita({ status: "IN_CHAIR", checkedInAt: "2026-09-02T17:20:00.000Z" }),
@@ -250,7 +250,7 @@ test("con cero minutos no se dice «0 min»: el paciente acaba de llegar", () =>
     CTX,
   );
   assert.equal(unMinuto.detalle, "llegó 11:19 · espera 1 min");
-  assert.equal(unMinuto.chip, "Esperando · 1 min");
+  assert.equal(unMinuto.chip, "Registrado · 1 min");
 });
 
 test("ningún detalle sale con un «0 min» pegado", () => {
@@ -274,7 +274,8 @@ test("una cita legacy en «PENDING» se pinta, no tumba la pantalla", () => {
   // lanzaba un TypeError dentro del render y se caía la vista Día entera.
   const v = aCitaVista(cita({ status: "PENDING" as AppointmentStatus }), CTX);
   assert.equal(v.estado, "SCHEDULED", "PENDING se normaliza a agendada");
-  assert.equal(v.chip, "Sin confirmar");
+  assert.equal(v.chip, "Agendada", "el mismo nombre que le da la ficha del paciente");
+  assert.equal(v.detalle, "Sin confirmar");
   assert.ok(v.detalle.length > 0);
   assert.equal(v.pinta.estiloBorde, "dashed");
 });

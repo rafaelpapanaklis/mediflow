@@ -249,18 +249,22 @@ const APPT_STATUS: Record<string, { labelKey: string; cls: string }> = {
    que una sin confirmar. Mismas claves de i18n y mismos tonos que
    `pacientesRediseno.cita.*` en resumen.tsx (WS1-T4): Resumen y Citas tienen
    que decir lo mismo con el mismo color. Solo se usa con la bandera
-   encendida: apagada, la tabla de siempre (APPT_STATUS, con Tailwind). */
+   encendida: apagada, la tabla de siempre (APPT_STATUS, con Tailwind).
+   Y la agenda nueva también: mismo nombre por estado y mismo color donde la
+   agenda lo tiene (ámbar = en la sala, rojo = no vino). PENDING se llama
+   «Agendada» porque el servidor lo trata como SCHEDULED. Lo vigila un candado
+   en src/lib/agenda-nueva/__tests__/estados.test.ts. */
 const APPT_STATUS_FULL: Record<string, { labelKey: string; tono: string }> = {
-  PENDING:     { labelKey: "pacientesRediseno.cita.pendiente",  tono: "etiquetaAlerta" },
+  PENDING:     { labelKey: "pacientesRediseno.cita.agendada",   tono: "etiquetaVioleta" },
   SCHEDULED:   { labelKey: "pacientesRediseno.cita.agendada",   tono: "etiquetaVioleta" },
   CONFIRMED:   { labelKey: "pacientesRediseno.cita.confirmada", tono: "etiquetaExito" },
-  CHECKED_IN:  { labelKey: "pacientesRediseno.cita.registrado", tono: "etiquetaVioleta" },
+  CHECKED_IN:  { labelKey: "pacientesRediseno.cita.registrado", tono: "etiquetaAlerta" },
   IN_CHAIR:    { labelKey: "pacientesRediseno.cita.enSillon",   tono: "etiquetaVioleta" },
   IN_PROGRESS: { labelKey: "pacientesRediseno.cita.enConsulta", tono: "etiquetaVioleta" },
   COMPLETED:   { labelKey: "pacientesRediseno.cita.completada", tono: "etiquetaNeutra" },
   CHECKED_OUT: { labelKey: "pacientesRediseno.cita.salio",      tono: "etiquetaNeutra" },
-  CANCELLED:   { labelKey: "pacientesRediseno.cita.cancelada",  tono: "etiquetaPeligro" },
-  NO_SHOW:     { labelKey: "pacientesRediseno.cita.noAsistio",  tono: "etiquetaNeutra" },
+  CANCELLED:   { labelKey: "pacientesRediseno.cita.cancelada",  tono: "etiquetaNeutra" },
+  NO_SHOW:     { labelKey: "pacientesRediseno.cita.noAsistio",  tono: "etiquetaPeligro" },
 };
 
 /* El mapa de estados de factura (badge + label) y el helper isVoidedInvoice

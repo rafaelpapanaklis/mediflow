@@ -12,6 +12,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 import {
   citaContada,
@@ -147,7 +149,7 @@ test("«PENDING» no deja la pinta en undefined — tumbaba la vista entera", ()
   // `pinta.chipTexto` lanzaba DENTRO del render de la vista Día.
   const pinta = pintaDeEstado("PENDING");
   assert.ok(pinta, "PENDING tiene que tener pinta");
-  assert.equal(pinta.chipTexto, "Sin confirmar", "PENDING es una cita agendada sin confirmar");
+  assert.equal(pinta.chipTexto, "Agendada", "PENDING es una cita agendada sin confirmar");
   assert.deepEqual(pinta, PINTA_POR_ESTADO.SCHEDULED);
 });
 
@@ -199,4 +201,83 @@ test("las dos cuentas son distintas a propósito: un plantón cuenta pero no ocu
   // Y una cancelada no cuenta para ninguna de las dos.
   assert.equal(citaContada("CANCELLED"), false);
   assert.equal(citaViva("CANCELLED"), false);
+});
+
+/* ── La agenda y la ficha del paciente dicen lo MISMO de cada estado ───── */
+
+// Se integraron por separado: la ficha (#277) arregló su tabla de citas con
+// sus nombres y la agenda (#284) decidió los suyos a mano. Al juntarlas, la
+// misma cita salía «Agendada» en la ficha y «Sin confirmar» en la agenda, y
+// el rojo significaba «cancelada» en una pantalla y «no asistió» en la otra.
+// Estos candados comparan los TRES mapas (Resumen, Citas y agenda) leyendo el
+// código de la ficha tal cual, sin copiarlo aquí.
+
+const RAIZ = process.cwd();
+const FICHA_RESUMEN = "src/components/dashboard/pacientes-rediseno/resumen.tsx";
+const FICHA_CITAS = "src/app/dashboard/patients/[id]/patient-detail-client.tsx";
+
+/** Los diez del enum de Postgres: los nueve del tipo más el PENDING legacy. */
+const LOS_DIEZ = ["PENDING", ...LOS_NUEVE];
+
+/** `ESTADO: { key|labelKey: "…", tono: "…" }` del mapa de la ficha, por estado. */
+function mapaDeLaFicha(ruta: string, nombreMapa: string): Map<string, { clave: string; tono: string }> {
+  const src = readFileSync(join(RAIZ, ruta), "utf8");
+  const inicio = src.indexOf(`const ${nombreMapa}`);
+  assert.ok(inicio >= 0, `${ruta}: no encuentro ${nombreMapa}`);
+  const cuerpo = src.slice(inicio, src.indexOf("};", inicio));
+  const mapa = new Map<string, { clave: string; tono: string }>();
+  const fila = /^\s*([A-Z_]+):\s*\{\s*(?:key|labelKey):\s*"([^"]+)",\s*tono:\s*"([^"]+)"\s*\}/gm;
+  for (const m of cuerpo.matchAll(fila)) mapa.set(m[1], { clave: m[2], tono: m[3] });
+  return mapa;
+}
+
+function textoEs(clave: string): string {
+  const dic = JSON.parse(readFileSync(join(RAIZ, "src/i18n/dictionaries/es.json"), "utf8"));
+  const valor = clave.split(".").reduce((o: any, k) => (o == null ? undefined : o[k]), dic);
+  assert.equal(typeof valor, "string", `es.json no tiene «${clave}»`);
+  return valor as string;
+}
+
+const RESUMEN = mapaDeLaFicha(FICHA_RESUMEN, "ESTADO_CITA");
+const CITAS = mapaDeLaFicha(FICHA_CITAS, "APPT_STATUS_FULL");
+
+test("la ficha conoce los diez estados, en Resumen y en Citas por igual", () => {
+  assert.deepEqual([...RESUMEN.keys()].sort(), [...LOS_DIEZ].sort());
+  assert.deepEqual([...CITAS.keys()].sort(), [...LOS_DIEZ].sort());
+  for (const e of LOS_DIEZ) {
+    assert.deepEqual(CITAS.get(e), RESUMEN.get(e), `${e}: Resumen y Citas no coinciden`);
+  }
+});
+
+test("la agenda llama a cada estado igual que la ficha — «Agendada» es «Agendada»", () => {
+  for (const e of LOS_DIEZ) {
+    const enLaFicha = textoEs(RESUMEN.get(e)!.clave);
+    assert.equal(pintaDeEstado(e).chipTexto, enLaFicha, `${e}: la agenda dice «${pintaDeEstado(e).chipTexto}» y la ficha «${enLaFicha}»`);
+  }
+});
+
+test("el ámbar y el rojo significan lo mismo en las dos pantallas", () => {
+  // Ámbar = el paciente espera en la sala. Rojo = el paciente no vino.
+  const ambarEnFicha = LOS_DIEZ.filter((e) => RESUMEN.get(e)!.tono === "etiquetaAlerta");
+  const ambarEnAgenda = LOS_NUEVE.filter((e) => PINTA_POR_ESTADO[e].fondo === AGENDA_TOKENS.ambarClaro);
+  assert.deepEqual(ambarEnFicha, ["CHECKED_IN"]);
+  assert.deepEqual(ambarEnFicha, ambarEnAgenda);
+
+  const rojoEnFicha = LOS_DIEZ.filter((e) => RESUMEN.get(e)!.tono === "etiquetaPeligro");
+  const rojoEnAgenda = LOS_NUEVE.filter((e) => PINTA_POR_ESTADO[e].fondo === AGENDA_TOKENS.rojoFondo);
+  assert.deepEqual(rojoEnFicha, ["NO_SHOW"]);
+  assert.deepEqual(rojoEnFicha, rojoEnAgenda);
+
+  // Y el verde de «Confirmada», y el morado de sillón y consulta.
+  assert.equal(RESUMEN.get("CONFIRMED")!.tono, "etiquetaExito");
+  assert.equal(PINTA_POR_ESTADO.CONFIRMED.chipFondo, AGENDA_TOKENS.chipVerdeFondo);
+  for (const e of ["IN_CHAIR", "IN_PROGRESS"] as const) {
+    assert.equal(RESUMEN.get(e)!.tono, "etiquetaVioleta", `${e} en la ficha`);
+    assert.equal(PINTA_POR_ESTADO[e].fondo, AGENDA_TOKENS.moradoTinte, `${e} en la agenda`);
+  }
+});
+
+test("PENDING es «Agendada» en las dos, como lo trata el servidor", () => {
+  assert.deepEqual(RESUMEN.get("PENDING"), RESUMEN.get("SCHEDULED"));
+  assert.deepEqual(pintaDeEstado("PENDING"), PINTA_POR_ESTADO.SCHEDULED);
 });

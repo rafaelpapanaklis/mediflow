@@ -57,7 +57,7 @@ export interface CitaVista {
   detalle: string;
   estado: AppointmentStatus;
   pinta: PintaEstado;
-  /** El chip ya con sus minutos: «Esperando · 24 min». */
+  /** El chip ya con sus minutos: «Registrado · 24 min». */
   chip: string;
   responsableId: string | null;
   responsableNombre: string;
@@ -125,8 +125,12 @@ function detalleDe(args: {
 }): string {
   const { estado, timezone } = args;
   switch (estado) {
+    // «Sin confirmar» y no «Pendiente…»: el chip ya dice «Agendada» (el nombre
+    // de la ficha), y «Pendiente» es justo lo que la ficha dejó de decir de una
+    // cita agendada. Aquí va lo que le FALTA, que es lo mismo que cuenta la
+    // nota «N sin confirmar» del Mes.
     case "SCHEDULED":
-      return "Pendiente de confirmar";
+      return "Sin confirmar";
     case "CONFIRMED":
       return "Confirmada";
     // Los minutos solo se dicen cuando hay minutos: «espera 0 min» y «0 min en

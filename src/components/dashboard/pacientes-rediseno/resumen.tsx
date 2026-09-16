@@ -60,18 +60,27 @@ export interface ResumenProps {
 }
 
 /** Estados de cita, los NUEVE que existen (la ficha vieja conoce cinco y
- *  pinta los otros cuatro como «Pendiente», en amarillo). */
+ *  pinta los otros cuatro como «Pendiente», en amarillo).
+ *
+ *  La agenda nueva dice lo MISMO de cada estado (`src/lib/agenda-nueva/estados.ts`):
+ *  el mismo nombre, y el mismo color allí donde la agenda tiene ese color —
+ *  ámbar solo para el paciente que espera en la sala, rojo solo para el que no
+ *  vino—. La única diferencia es «Agendada»: aquí violeta, allí la tarjeta
+ *  blanca de borde punteado del diseño. `PENDING` es legacy y el servidor lo
+ *  trata como SCHEDULED, así que se llama «Agendada» igual que en la agenda.
+ *  Un candado en `src/lib/agenda-nueva/__tests__/estados.test.ts` compara este
+ *  mapa con el de Citas (patient-detail-client.tsx) y con el de la agenda. */
 const ESTADO_CITA: Record<string, { key: string; tono: string }> = {
-  PENDING: { key: "pacientesRediseno.cita.pendiente", tono: "etiquetaAlerta" },
+  PENDING: { key: "pacientesRediseno.cita.agendada", tono: "etiquetaVioleta" },
   SCHEDULED: { key: "pacientesRediseno.cita.agendada", tono: "etiquetaVioleta" },
   CONFIRMED: { key: "pacientesRediseno.cita.confirmada", tono: "etiquetaExito" },
-  CHECKED_IN: { key: "pacientesRediseno.cita.registrado", tono: "etiquetaVioleta" },
+  CHECKED_IN: { key: "pacientesRediseno.cita.registrado", tono: "etiquetaAlerta" },
   IN_CHAIR: { key: "pacientesRediseno.cita.enSillon", tono: "etiquetaVioleta" },
   IN_PROGRESS: { key: "pacientesRediseno.cita.enConsulta", tono: "etiquetaVioleta" },
   COMPLETED: { key: "pacientesRediseno.cita.completada", tono: "etiquetaNeutra" },
   CHECKED_OUT: { key: "pacientesRediseno.cita.salio", tono: "etiquetaNeutra" },
-  CANCELLED: { key: "pacientesRediseno.cita.cancelada", tono: "etiquetaPeligro" },
-  NO_SHOW: { key: "pacientesRediseno.cita.noAsistio", tono: "etiquetaNeutra" },
+  CANCELLED: { key: "pacientesRediseno.cita.cancelada", tono: "etiquetaNeutra" },
+  NO_SHOW: { key: "pacientesRediseno.cita.noAsistio", tono: "etiquetaPeligro" },
 };
 
 const CANCELADAS = ["CANCELLED", "NO_SHOW"];

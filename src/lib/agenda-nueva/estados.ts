@@ -18,10 +18,20 @@
  *
  * El reparto, y por qué (va también en el reporte para Rafael):
  *
- *  · SCHEDULED    → «Sin confirmar». Es la cita agendada que todavía no
- *                   confirmó nadie: el borde PUNTEADO del diseño es justo eso.
+ * 🔴 LOS NOMBRES son los de la ficha del paciente (`pacientesRediseno.cita.*`
+ * en es.json, los que usan Resumen y Citas), NO los del prototipo. Rafael lo
+ * pidió así al integrar las dos: «si la ficha llama a algo "Agendada" y la
+ * agenda lo llama otra cosa, está mal». El prototipo decía «Sin confirmar»,
+ * «Esperando» y «Atendida»; aquí son «Agendada», «Registrado» y «Completada».
+ * Un candado en `__tests__/estados.test.ts` compara, estado por estado, este
+ * mapa con los dos de la ficha y con el diccionario: si alguien renombra uno
+ * de los dos lados, la prueba se pone roja.
+ *
+ *  · SCHEDULED    → «Agendada». El borde PUNTEADO del diseño sigue diciendo
+ *                   que nadie la ha confirmado todavía (la segunda línea de la
+ *                   tarjeta lo dice con palabras: «Sin confirmar»).
  *  · CONFIRMED    → «Confirmada». Literal.
- *  · CHECKED_IN   → «Esperando» (ámbar). El paciente llegó y está en la sala
+ *  · CHECKED_IN   → «Registrado» (ámbar). El paciente llegó y está en la sala
  *                   de espera; el ámbar del diseño significa «lleva esperando»
  *                   y el chip lleva los minutos.
  *  · IN_CHAIR     → familia MORADA, chip «En sillón». Ya no está en la sala de
@@ -31,18 +41,19 @@
  *                   por el chip y por el ícono (`chair`, no `circle`).
  *                   [Acordado con ws1-t2 para que Día, Semana y Mes coincidan.]
  *  · IN_PROGRESS  → «En consulta». Literal.
- *  · COMPLETED    → «Atendida». Literal (opacidad 0.6 del diseño).
- *  · CHECKED_OUT  → «Atendida» con chip «Salió». El paciente ya se fue; misma
- *                   pinta apagada, distinto rótulo, porque para recepción son
- *                   dos cosas distintas («terminó» vs «ya no está aquí»).
+ *  · COMPLETED    → «Completada» (opacidad 0.6 del diseño).
+ *  · CHECKED_OUT  → la misma pinta apagada con chip «Salió». El paciente ya se
+ *                   fue; para recepción son dos cosas distintas («terminó» vs
+ *                   «ya no está aquí»).
  *  · CANCELLED    → PINTA NUEVA. El diseño no la tiene. Gris apagado, borde
  *                   punteado y el nombre tachado. Ojo: hoy las canceladas NO
  *                   se dibujan en la cuadrícula de Día (`assignLanes` las
  *                   descarta) — esta pinta la usan Semana, Mes y el panel.
  *  · NO_SHOW      → PINTA NUEVA. El diseño no la tiene y NO puede caer en
- *                   «atendida»: una cita a la que el paciente no vino no es
+ *                   «completada»: una cita a la que el paciente no vino no es
  *                   una cita atendida. Rojo suave, en la misma familia `oklch`
- *                   que el resto para que no desentone.
+ *                   que el resto para que no desentone. El rojo es SOLO suyo,
+ *                   también en la ficha.
  */
 
 import type { AppointmentStatus } from "@/lib/agenda/types";
@@ -83,7 +94,7 @@ export const PINTA_POR_ESTADO: Record<AppointmentStatus, PintaEstado> = {
     borde: T.bordeControl,
     estiloBorde: "dashed",
     opacidad: 1,
-    chipTexto: "Sin confirmar",
+    chipTexto: "Agendada",
     chipFondo: T.fondoApp,
     chipTinta: T.texto2,
     icono: null,
@@ -109,7 +120,7 @@ export const PINTA_POR_ESTADO: Record<AppointmentStatus, PintaEstado> = {
     borde: T.ambarBorde,
     estiloBorde: "solid",
     opacidad: 1,
-    chipTexto: "Esperando",
+    chipTexto: "Registrado",
     chipFondo: T.ambarFondo,
     chipTinta: T.ambarTexto,
     icono: "schedule",
@@ -148,7 +159,7 @@ export const PINTA_POR_ESTADO: Record<AppointmentStatus, PintaEstado> = {
     borde: T.bordeControl,
     estiloBorde: "solid",
     opacidad: 0.6,
-    chipTexto: "Atendida",
+    chipTexto: "Completada",
     chipFondo: T.fondoApp,
     chipTinta: T.texto2,
     icono: "check",
@@ -212,10 +223,11 @@ export const PINTA_POR_ESTADO: Record<AppointmentStatus, PintaEstado> = {
  * Día: no es que esa cita se pintara mal, es que se caía la pantalla entera.
  * Lo encontró el revisor.
  *
- * `PENDING` es «agendada sin confirmar», que es exactamente `SCHEDULED` —
- * `STATUS_LABELS.SCHEDULED` ya se llama «Pendiente» y el panel de detalle de
- * siempre contempla la cadena "PENDING" a mano. Así que se normaliza a
- * `SCHEDULED` y se pinta como tal.
+ * `PENDING` es «agendada sin confirmar», que es exactamente `SCHEDULED` — el
+ * servidor lo dice igual: `DELETE /api/appointments/:id` lo evalúa como
+ * SCHEDULED («que es a lo que migró») y la confirmación pública acepta los dos
+ * por igual. Así que se normaliza a `SCHEDULED` y se pinta como tal, con el
+ * nombre «Agendada». La ficha del paciente hace lo mismo con su PENDING.
  */
 export const ESTADO_LEGACY_PENDIENTE = "PENDING";
 
