@@ -32,6 +32,7 @@ import type { ConsentDTO } from "@/lib/consent/types";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import { PatientAuditHistory } from "@/components/dashboard/patient-detail/patient-audit-history";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
+import redisenoStyles from "@/components/dashboard/pacientes-rediseno/rediseno.module.css";
 // REDISEÑO DE PACIENTES (WS1-T4) — se monta SOLO con el interruptor
 // `menu-dos-niveles` encendido para la clínica. Con la bandera apagada no se
 // evalúa ninguna de estas ramas y la ficha se pinta exactamente como hoy.
@@ -239,6 +240,27 @@ const APPT_STATUS: Record<string, { labelKey: string; cls: string }> = {
   COMPLETED: { labelKey: "patients.apptStatus.completed", cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
   CANCELLED: { labelKey: "patients.apptStatus.cancelled", cls: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
   NO_SHOW:   { labelKey: "patients.apptStatus.noShow",    cls: "bg-[var(--bg-elev-2)] text-[var(--text-2)]" },
+};
+
+/* N9 (MAPA-pacientes §9): AppointmentStatus tiene 9 valores vivos (PENDING es
+   legacy, ver schema.prisma); esta tabla solo conocía 5, así que SCHEDULED,
+   CHECKED_IN, IN_CHAIR, IN_PROGRESS y CHECKED_OUT caían en el `?? PENDING` de
+   abajo y se pintaban "Pendiente" en ámbar — una cita Agendada no es lo mismo
+   que una sin confirmar. Mismas claves de i18n y mismos tonos que
+   `pacientesRediseno.cita.*` en resumen.tsx (WS1-T4): Resumen y Citas tienen
+   que decir lo mismo con el mismo color. Solo se usa con la bandera
+   encendida: apagada, la tabla de siempre (APPT_STATUS, con Tailwind). */
+const APPT_STATUS_FULL: Record<string, { labelKey: string; tono: string }> = {
+  PENDING:     { labelKey: "pacientesRediseno.cita.pendiente",  tono: "etiquetaAlerta" },
+  SCHEDULED:   { labelKey: "pacientesRediseno.cita.agendada",   tono: "etiquetaVioleta" },
+  CONFIRMED:   { labelKey: "pacientesRediseno.cita.confirmada", tono: "etiquetaExito" },
+  CHECKED_IN:  { labelKey: "pacientesRediseno.cita.registrado", tono: "etiquetaVioleta" },
+  IN_CHAIR:    { labelKey: "pacientesRediseno.cita.enSillon",   tono: "etiquetaVioleta" },
+  IN_PROGRESS: { labelKey: "pacientesRediseno.cita.enConsulta", tono: "etiquetaVioleta" },
+  COMPLETED:   { labelKey: "pacientesRediseno.cita.completada", tono: "etiquetaNeutra" },
+  CHECKED_OUT: { labelKey: "pacientesRediseno.cita.salio",      tono: "etiquetaNeutra" },
+  CANCELLED:   { labelKey: "pacientesRediseno.cita.cancelada",  tono: "etiquetaPeligro" },
+  NO_SHOW:     { labelKey: "pacientesRediseno.cita.noAsistio",  tono: "etiquetaNeutra" },
 };
 
 /* El mapa de estados de factura (badge + label) y el helper isVoidedInvoice
@@ -2772,9 +2794,17 @@ export function PatientDetailClient({
 
           {/* ===== TAB: PLAN DE TRATAMIENTO ===== */}
           {tab === "tratamiento" && (() => {
+            // N8 (MAPA-pacientes §9): las sesiones vienen TODAS las creadas —
+            // completedAt null = agendada, no hecha. Contar sessions.length a
+            // secas cuenta las creadas, no las hechas: un plan de 18 sesiones
+            // creadas de una vez con 4 hechas decía "18/18" y "0 pendientes".
+            // Detrás de la bandera para que una clínica sin el rediseño siga
+            // viendo el número de siempre hasta que Rafael lo encienda.
+            const sessionsDone = (s: any[] | undefined) =>
+              rediseno ? (s ?? []).filter((x: any) => x.completedAt).length : (s?.length ?? 0);
             const pendingSessionsTotal = treatments
               .filter((t: any) => t.status === "ACTIVE")
-              .reduce((acc: number, t: any) => acc + Math.max(0, (t.totalSessions || 0) - (t.sessions?.length || 0)), 0);
+              .reduce((acc: number, t: any) => acc + Math.max(0, (t.totalSessions || 0) - sessionsDone(t.sessions)), 0);
             const activeCount = treatments.filter((t: any) => t.status === "ACTIVE").length;
             const completedCount = treatments.filter((t: any) => t.status === "COMPLETED").length;
 
@@ -2836,7 +2866,7 @@ export function PatientDetailClient({
                     )}
                   </div>
                 ) : treatments.map((plan: any) => {
-                  const completed = plan.sessions?.length ?? 0;
+                  const completed = sessionsDone(plan.sessions);
                   const pct = plan.totalSessions > 0 ? Math.round((completed / plan.totalSessions) * 100) : 0;
                   const pendingThis = Math.max(0, (plan.totalSessions || 0) - completed);
                   const STATUS_CFG: Record<string,{labelKey:string;cls:string}> = {
@@ -3043,7 +3073,7 @@ export function PatientDetailClient({
 
                 {viewPlan && (() => {
                   const vp = viewPlan;
-                  const vCompleted = vp.sessions?.length ?? 0;
+                  const vCompleted = sessionsDone(vp.sessions);
                   const vPct = vp.totalSessions > 0 ? Math.round((vCompleted / vp.totalSessions) * 100) : 0;
                   const vCls: Record<string,string> = {
                     ACTIVE:"bg-[var(--success-soft)] text-[var(--success-strong)] border-transparent",
@@ -3202,14 +3232,25 @@ export function PatientDetailClient({
                   {appointments.length === 0 ? (
                     <tr><td colSpan={6} className={patientDetailStyles.tdEmptyB}>{t("patients.agenda.empty")}</td></tr>
                   ) : appointments.map(a => {
-                    const s = APPT_STATUS[a.status] ?? APPT_STATUS.PENDING;
                     return (
                       <tr key={a.id}>
                         <td className="font-medium">{formatDate(a.date)}</td>
                         <td className="text-muted-foreground font-mono tabular-nums">{a.startTime}</td>
                         <td>{a.type}</td>
                         <td className="text-muted-foreground">{a.doctor?.firstName} {a.doctor?.lastName}</td>
-                        <td><span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>{t(s.labelKey)}</span></td>
+                        <td>
+                          {rediseno ? (() => {
+                            const full = APPT_STATUS_FULL[a.status] ?? APPT_STATUS_FULL.PENDING;
+                            return (
+                              <span className={[redisenoStyles.etiqueta, (redisenoStyles as any)[full.tono]].filter(Boolean).join(" ")}>
+                                {t(full.labelKey)}
+                              </span>
+                            );
+                          })() : (() => {
+                            const s = APPT_STATUS[a.status] ?? APPT_STATUS.PENDING;
+                            return <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${s.cls}`}>{t(s.labelKey)}</span>;
+                          })()}
+                        </td>
                         <td className="text-right">
                           {a.status !== "CANCELLED" && a.status !== "COMPLETED" && (
                             <button
@@ -3516,6 +3557,7 @@ export function PatientDetailClient({
               onOpenInvoice={(inv) => setInvoiceDetailOpen(inv)}
               onChargeInvoice={(inv) => { void openDirectPayment(inv); }}
               onStampInvoice={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+              redesignOn={rediseno}
             />
           )}
 
