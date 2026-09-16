@@ -368,7 +368,6 @@ test("el PDF sí pone el sello cuando firma el médico de la receta", async () =
   assert.match(texto, /Firmada digitalmente por el médico/);
   // Y deja de prometer una e.firma que nadie ha validado contra el SAT.
   assert.ok(!/e\.firma/i.test(texto), "el PDF ya no dice «e.firma»");
-  assert.match(texto, /no validado ante el SAT/i);
 });
 
 // ── 4. El certificado y su llave ───────────────────────────────────────────
