@@ -7,9 +7,9 @@
 // (estructura.ts), que usa el mismo shouldShowItem que el menú de siempre.
 // Aquí solo se decide dónde se pinta cada una.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import toast from "react-hot-toast";
@@ -25,28 +25,47 @@ import {
   cerrarSesionPanel,
   type SidebarProps,
 } from "@/components/dashboard/sidebar";
-import { instrumentSans, materialSymbols } from "@/fonts/menu";
+import {
+  aplicarDiseno,
+  esSeccionDeFabrica,
+  esSubmenuDeFabrica,
+  filtrarSecciones,
+  submenuActivo,
+  type DisenoMenu,
+  type EntradaArmada,
+  type SeccionArmada,
+} from "@/lib/menu-personalizado/diseno";
 import {
   ICONO_DE,
-  armarMenu,
-  filtrarGrupos,
   opcionesSuspendida,
   opcionesVisibles,
-  segundoNivelActivo,
-  type GrupoArmado,
 } from "./estructura";
 import { Icono } from "./icono";
+import { CLASES_MENU } from "./clases";
+import { escucharCambioDeMenu } from "@/lib/menu-personalizado/avisos";
+import { EditorMenu } from "./personalizar/editor-menu";
 import s from "./menu-dos-niveles.module.css";
+
+/** El menú que esta persona se armó a mano, leído en el servidor. */
+export interface MenuPersonal {
+  /** false = la tabla del SQL aún no existe: ni se ofrece «Personalizar». */
+  disponible: boolean;
+  diseno: DisenoMenu | null;
+  revision: string | null;
+}
 
 export interface MenuDosNivelesProps extends SidebarProps {
   /** canUseCaja(user), resuelto en el servidor (caja-pin importa bcrypt). */
   puedeUsarCaja: boolean;
   /** Nombre del plan tal como está en plan_configs («Profesional»). */
   planEtiqueta: string | null;
+  /** Lo que haya guardado en «Personalizar». Sin esto, menú de fábrica. */
+  menuPersonal?: MenuPersonal;
 }
 
-/** Clases que tiene que llevar todo lo que pinta el menú, portales incluidos. */
-export const CLASES_MENU = [s.tokens, instrumentSans.variable, materialSymbols.variable].join(" ");
+const SIN_PERSONALIZAR: MenuPersonal = { disponible: false, diseno: null, revision: null };
+
+export { CLASES_MENU };
 
 const LS_ENCOGIDO = "menu-dos-niveles-encogido";
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -89,12 +108,14 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   const consultaActiva = useActiveConsult().consult;
   const { open: abrirNuevaCita } = useNewAppointmentDialog();
 
+  const router = useRouter();
   const [encogido, setEncogido] = useEncogido();
   const esMovil = useMedia("(max-width: 1023.98px)");
   const esSuperpuesto = useMedia("(max-width: 1279.98px)");
-  const [adminAbierto, setAdminAbierto] = useState(false);
+  /** Id del submenú abierto en el segundo nivel («admin» o uno de la persona). */
+  const [submenuAbierto, setSubmenuAbierto] = useState<string | null>(null);
+  const [editorAbierto, setEditorAbierto] = useState(false);
   const [cajonAbierto, setCajonAbierto] = useState(false);
-  const [vistaCajon, setVistaCajon] = useState<"principal" | "admin">("principal");
   const [consulta, setConsulta] = useState("");
   const raizRef = useRef<HTMLDivElement>(null);
   const cajonRef = useRef<HTMLElement>(null);
@@ -103,9 +124,29 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   const clinicModuleKeys = useMemo(() => props.clinicModuleKeys ?? [], [props.clinicModuleKeys]);
 
   // Quién ve qué: el filtro del menú de siempre, sin tocar.
-  const menu = useMemo(
-    () => armarMenu(opcionesVisibles(props.user, props.clinicCategory, clinicModuleKeys)),
+  const visibles = useMemo(
+    () => opcionesVisibles(props.user, props.clinicCategory, clinicModuleKeys),
     [props.user, props.clinicCategory, clinicModuleKeys],
+  );
+
+  // El menú personal solo cambia de SITIO lo de arriba; nunca añade nada. Se
+  // guarda en estado para que, al guardar en «Personalizar», el menú cambie sin
+  // esperar a que el servidor vuelva a pintar el layout.
+  const [personal, setPersonal] = useState<MenuPersonal>(props.menuPersonal ?? SIN_PERSONALIZAR);
+  useEffect(() => {
+    setPersonal(props.menuPersonal ?? SIN_PERSONALIZAR);
+  }, [props.menuPersonal]);
+
+  // Otra pestaña del mismo navegador guardó su menú: se vuelve a pedir el layout.
+  useEffect(() => {
+    if (!personal.disponible) return;
+    return escucharCambioDeMenu(() => router.refresh());
+  }, [personal.disponible, router]);
+
+  const menu = useMemo(() => aplicarDiseno(personal.diseno, visibles), [personal.diseno, visibles]);
+  const submenus = useMemo(
+    () => menu.entradas.filter((e): e is Extract<EntradaArmada, { tipo: "submenu" }> => e.tipo === "submenu"),
+    [menu.entradas],
   );
   const suspendidas = useMemo(() => opcionesSuspendida(), []);
 
@@ -127,22 +168,52 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   const puedeVerPerfil = !isExpired && puede("settings.view");
 
   const etiqueta = useCallback((id: string) => t(`menuDosNiveles.nav.${id}`), [t]);
-  const gruposFiltrados = useMemo(
-    () => filtrarGrupos(menu.grupos, consulta, etiqueta),
-    [menu.grupos, consulta, etiqueta],
+  /** Nombre de un submenú: el de la persona si lo renombró, si no el de fábrica. */
+  const nombreSubmenu = useCallback(
+    (entrada: Extract<EntradaArmada, { tipo: "submenu" }>) =>
+      entrada.nombre ??
+      (esSubmenuDeFabrica(entrada.id) ? t("menuDosNiveles.admin.titulo") : t("menuPersonalizado.submenuSinNombre")),
+    [t],
   );
-  const hayAdmin = !isExpired && menu.grupos.length > 0;
-  const adminActivo = segundoNivelActivo(pathname, menu.grupos);
+  /** Nombre de una sección del segundo nivel (grupo de fábrica o de la persona). */
+  const nombreSeccion = useCallback(
+    (seccion: SeccionArmada) =>
+      seccion.nombre ??
+      (esSeccionDeFabrica(seccion.id)
+        ? t(`menuDosNiveles.grupo.${seccion.id}`)
+        : t("menuPersonalizado.seccionSinNombre")),
+    [t],
+  );
+  /** Abrir un submenú, o cerrarlo si ya estaba abierto. */
+  const alternarSubmenu = useCallback((id: string) => {
+    setSubmenuAbierto((abierto) => (abierto === id ? null : id));
+    setConsulta("");
+  }, []);
+  const submenuEnPantalla = useMemo(
+    () => submenus.find((sm) => sm.id === submenuAbierto) ?? null,
+    [submenus, submenuAbierto],
+  );
+  const seccionesFiltradas = useMemo(
+    () => (submenuEnPantalla ? filtrarSecciones(submenuEnPantalla.secciones, consulta, etiqueta) : []),
+    [submenuEnPantalla, consulta, etiqueta],
+  );
+  // «Personalizar» solo existe con la tabla del SQL aplicada y con la clínica
+  // activa: en una suspendida el menú se reduce a Facturación + Soporte.
+  const puedePersonalizar = !isExpired && personal.disponible;
 
   // ── Cierres ──────────────────────────────────────────────────────
   const cerrarAdmin = useCallback((devolverFoco = false) => {
-    setAdminAbierto(false);
+    setSubmenuAbierto((abierto) => {
+      // Si el foco estaba dentro del segundo nivel, al desmontarse caería al
+      // <body>: se devuelve a la fila del submenú que lo abrió.
+      if (devolverFoco && abierto) {
+        requestAnimationFrame(() =>
+          raizRef.current?.querySelector<HTMLElement>(`[data-fila-submenu="${abierto}"]`)?.focus(),
+        );
+      }
+      return null;
+    });
     setConsulta("");
-    // Si el foco estaba dentro del segundo nivel, al desmontarse caería al
-    // <body>: se devuelve a la fila «Administración».
-    if (devolverFoco) {
-      requestAnimationFrame(() => raizRef.current?.querySelector<HTMLElement>("[data-fila-admin]")?.focus());
-    }
   }, []);
 
   // Cambiar de pantalla: el cajón del teléfono se cierra; el segundo nivel solo
@@ -164,7 +235,8 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   useEffect(() => {
     const abrir = () => {
       if (!window.matchMedia("(max-width: 1023.98px)").matches) return;
-      setVistaCajon("principal");
+      setSubmenuAbierto(null);
+      setConsulta("");
       setCajonAbierto(true);
     };
     window.addEventListener("mf:open-mobile-sidebar", abrir);
@@ -172,7 +244,7 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   }, []);
 
   useEffect(() => {
-    if (!adminAbierto && !cajonAbierto) return;
+    if (submenuAbierto === null && !cajonAbierto) return;
     // Escape solo cierra el menú si el foco está en el menú. Con un diálogo
     // abierto encima (Nueva cita, Ctrl+K…) el Escape es de ese diálogo.
     const onKey = (e: KeyboardEvent) => {
@@ -186,21 +258,26 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [adminAbierto, cajonAbierto, cerrarAdmin]);
+  }, [submenuAbierto, cajonAbierto, cerrarAdmin]);
 
   // En el cajón, al pasar de una vista a otra se desmonta el botón que tenía el
   // foco: se lleva al primer control de la vista nueva.
-  const vistaAnterior = useRef(vistaCajon);
+  const vistaAnterior = useRef(submenuAbierto);
   useEffect(() => {
-    if (vistaAnterior.current === vistaCajon) return;
-    vistaAnterior.current = vistaCajon;
+    if (vistaAnterior.current === submenuAbierto) return;
+    const anterior = vistaAnterior.current;
+    vistaAnterior.current = submenuAbierto;
     if (!cajonAbierto) return;
-    cajonRef.current?.querySelector<HTMLElement>(vistaCajon === "admin" ? "[data-foco-cajon]" : "[data-fila-admin]")?.focus();
-  }, [vistaCajon, cajonAbierto]);
+    cajonRef.current
+      ?.querySelector<HTMLElement>(
+        submenuAbierto ? "[data-foco-cajon]" : `[data-fila-submenu="${anterior ?? ""}"]`,
+      )
+      ?.focus();
+  }, [submenuAbierto, cajonAbierto]);
 
   // Encima de la pantalla, un clic fuera del menú cierra el segundo nivel.
   useEffect(() => {
-    if (!adminAbierto || !esSuperpuesto || esMovil) return;
+    if (submenuAbierto === null || !esSuperpuesto || esMovil) return;
     const onDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
       if (target && raizRef.current?.contains(target)) return;
@@ -211,7 +288,7 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
     };
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
-  }, [adminAbierto, esSuperpuesto, esMovil, cerrarAdmin]);
+  }, [submenuAbierto, esSuperpuesto, esMovil, cerrarAdmin]);
 
   // ── Opciones ─────────────────────────────────────────────────────
   const renderOpcion = (item: NavItemDef, opts: { segundo?: boolean; compacto?: boolean }) => {
@@ -370,23 +447,33 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
     return compacto ? conTooltip("nueva-cita", boton, t("menuDosNiveles.nuevaCita")) : boton;
   };
 
-  const filaAdmin = (compacto: boolean, abierto: boolean, alPulsar: () => void) => {
-    if (!hayAdmin) return null;
+  /**
+   * Fila que abre un segundo nivel. Con el menú de fábrica es «Administración»;
+   * quien personalizó puede tener varias, con el nombre que les haya puesto.
+   */
+  const filaSubmenu = (
+    entrada: Extract<EntradaArmada, { tipo: "submenu" }>,
+    compacto: boolean,
+    abierto: boolean,
+    alPulsar: () => void,
+  ) => {
+    const texto = nombreSubmenu(entrada);
+    const activo = submenuActivo(pathname, entrada.secciones);
     const boton = (
       <button
         type="button"
-        className={cx(s.filaAdmin, adminActivo && s.filaAdminActiva)}
+        className={cx(s.filaAdmin, activo && s.filaAdminActiva)}
         aria-expanded={abierto}
         aria-controls="menu-dos-niveles-admin"
-        data-fila-admin=""
+        data-fila-submenu={entrada.id}
         onClick={alPulsar}
       >
-        <Icono nombre="apps" />
-        {!compacto && <span className={s.itemTexto}>{t("menuDosNiveles.admin.titulo")}</span>}
+        <Icono nombre={esSubmenuDeFabrica(entrada.id) ? "apps" : "folder"} />
+        {!compacto && <span className={s.itemTexto}>{texto}</span>}
         {!compacto && <Icono nombre="chevron_right" className={s.tarjetaFlecha} />}
       </button>
     );
-    return compacto ? conTooltip("admin", boton, t("menuDosNiveles.admin.titulo")) : boton;
+    return compacto ? conTooltip(`submenu-${entrada.id}`, boton, texto) : boton;
   };
 
   const tarjetaUsuario = (compacto: boolean) => (
@@ -394,62 +481,123 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
       compacto={compacto}
       user={props.user}
       puedeVerPerfil={puedeVerPerfil}
+      puedePersonalizar={puedePersonalizar}
+      alPersonalizar={() => {
+        setCajonAbierto(false);
+        setEditorAbierto(true);
+      }}
       alElegir={() => setCajonAbierto(false)}
     />
   );
 
-  const opcionesNivel1 = (compacto: boolean) => (
+  // El primer nivel es UNA lista: opciones y submenús en el orden en que estén.
+  // Con el diseño de fábrica salen los seis de siempre, la raya y «Administración».
+  const opcionesNivel1 = (compacto: boolean, alAbrirSubmenu: (id: string) => void) => (
     <nav aria-label={t("sidebar.navAria")} className={s.navegacion}>
-      {(isExpired ? suspendidas : menu.nivel1).map((it) => renderOpcion(it, { compacto }))}
+      {isExpired
+        ? suspendidas.map((it) => renderOpcion(it, { compacto }))
+        : menu.entradas.map((e, i) => {
+            const anterior = menu.entradas[i - 1];
+            // Una raya donde cambia el tipo de fila (opciones sueltas ↔ submenús).
+            const raya = Boolean(anterior) && anterior.tipo !== e.tipo;
+            return (
+              <Fragment key={e.tipo === "opcion" ? e.item.id : e.id}>
+                {raya && <div className={s.separador} />}
+                {e.tipo === "opcion"
+                  ? renderOpcion(e.item, { compacto })
+                  : filaSubmenu(e, compacto, submenuAbierto === e.id, () => alAbrirSubmenu(e.id))}
+              </Fragment>
+            );
+          })}
     </nav>
   );
 
   // ── Segundo nivel ────────────────────────────────────────────────
-  const contenidoAdmin = (cabeceraAccion: ReactNode, cabeceraInicio?: ReactNode) => (
-    <>
-      <div className={s.n2Cabecera}>
-        {cabeceraInicio}
-        <h2 className={s.n2Titulo} style={{ flex: 1 }}>{t("menuDosNiveles.admin.titulo")}</h2>
-        {cabeceraAccion}
-      </div>
-      <label className={s.buscador}>
-        <Icono nombre="search" />
-        <input
-          type="search"
-          value={consulta}
-          onChange={(e) => setConsulta(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && consulta) {
-              e.stopPropagation();
-              e.nativeEvent.stopImmediatePropagation();
-              setConsulta("");
-            }
-          }}
-          placeholder={t("menuDosNiveles.admin.buscar")}
-          aria-label={t("menuDosNiveles.admin.buscar")}
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </label>
-      <nav aria-label={t("menuDosNiveles.admin.titulo")} className={s.n2Nav}>
-        {gruposFiltrados.map((g: GrupoArmado) => (
-          <section key={g.id} className={s.grupo} aria-labelledby={`menu2-grupo-${g.id}`}>
-            <h3 id={`menu2-grupo-${g.id}`} className={s.grupoTitulo}>{t(`menuDosNiveles.grupo.${g.id}`)}</h3>
-            {g.items.map((it) => renderOpcion(it, { segundo: true }))}
-          </section>
-        ))}
-        {gruposFiltrados.length === 0 && (
-          <p className={s.sinResultados}>{t("menuDosNiveles.admin.sinResultados", { query: consulta.trim() })}</p>
-        )}
-      </nav>
-    </>
-  );
+  const contenidoSubmenu = (
+    entrada: Extract<EntradaArmada, { tipo: "submenu" }>,
+    secciones: SeccionArmada[],
+    cabeceraAccion: ReactNode,
+    cabeceraInicio?: ReactNode,
+  ) => {
+    const titulo = nombreSubmenu(entrada);
+    const deFabrica = esSubmenuDeFabrica(entrada.id);
+    const textoBuscar = deFabrica
+      ? t("menuDosNiveles.admin.buscar")
+      : t("menuPersonalizado.buscarEn", { nombre: titulo });
+    // Los grupos de fábrica (DINERO, CLÍNICA…) llevan SIEMPRE su encabezado,
+    // aunque queden solos: quitarlo cambiaría el menú de quien no personalizó
+    // nada. El que no lo lleva es el grupo sin nombre de un submenú propio, que
+    // pintaría un título vacío encima de la lista.
+    const conEncabezado = (g: SeccionArmada) => Boolean(g.nombre) || esSeccionDeFabrica(g.id);
+    return (
+      <>
+        <div className={s.n2Cabecera}>
+          {cabeceraInicio}
+          <h2 className={s.n2Titulo} style={{ flex: 1 }}>{titulo}</h2>
+          {cabeceraAccion}
+        </div>
+        <label className={s.buscador}>
+          <Icono nombre="search" />
+          <input
+            type="search"
+            value={consulta}
+            onChange={(e) => setConsulta(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && consulta) {
+                e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
+                setConsulta("");
+              }
+            }}
+            placeholder={textoBuscar}
+            aria-label={textoBuscar}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+        <nav aria-label={titulo} className={s.n2Nav}>
+          {secciones.map((g: SeccionArmada) => (
+            <section key={g.id} className={s.grupo} aria-labelledby={conEncabezado(g) ? `menu2-grupo-${g.id}` : undefined}>
+              {conEncabezado(g) && (
+                <h3 id={`menu2-grupo-${g.id}`} className={s.grupoTitulo}>{nombreSeccion(g)}</h3>
+              )}
+              {g.items.map((it) => renderOpcion(it, { segundo: true }))}
+            </section>
+          ))}
+          {secciones.length === 0 && (
+            <p className={s.sinResultados}>{t("menuDosNiveles.admin.sinResultados", { query: consulta.trim() })}</p>
+          )}
+        </nav>
+      </>
+    );
+  };
+
+  // «Personalizar» se abre desde la tarjeta de la persona y vive fuera del menú
+  // (en un portal), así que sigue en pantalla aunque el cajón del teléfono se
+  // cierre al abrirlo.
+  const editor = puedePersonalizar ? (
+    <EditorMenu
+      abierto={editorAbierto}
+      alCerrar={() => setEditorAbierto(false)}
+      diseno={personal.diseno}
+      revision={personal.revision}
+      visibles={visibles}
+      alAplicar={(diseno, revision) => {
+        setPersonal({ disponible: true, diseno, revision });
+        cerrarAdmin();
+      }}
+    />
+  ) : null;
 
   // ── Teléfono y tableta (< 1024 px): cajón ────────────────────────
   if (esMovil) {
-    if (!cajonAbierto) return null;
+    // El mismo envoltorio que en escritorio a propósito: si el elemento raíz
+    // cambiara de tipo al cruzar los 1024 px (girar la tableta), React
+    // desmontaría el editor y se perdería lo que se estuviera acomodando.
+    if (!cajonAbierto) return <Tooltip.Provider>{editor}</Tooltip.Provider>;
     return (
       <Tooltip.Provider>
+        {editor}
         <div aria-hidden className={s.velo} onClick={() => setCajonAbierto(false)} />
         <aside
           role="dialog"
@@ -457,15 +605,17 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
           aria-label={t("sidebar.mobileNav")}
           ref={cajonRef}
           className={cx(CLASES_MENU, s.cajon)}
-          data-vista={vistaCajon}
+          data-vista={submenuEnPantalla ? "admin" : "principal"}
         >
-          {vistaCajon === "admin" ? (
+          {submenuEnPantalla ? (
             <div id="menu-dos-niveles-admin" style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
-              {contenidoAdmin(
+              {contenidoSubmenu(
+                submenuEnPantalla,
+                seccionesFiltradas,
                 <button type="button" className={s.botonIcono} onClick={() => setCajonAbierto(false)} aria-label={t("sidebar.closeNav")}>
                   <Icono nombre="close" />
                 </button>,
-                <button type="button" data-foco-cajon="" className={s.botonIcono} onClick={() => { setVistaCajon("principal"); setConsulta(""); }} aria-label={t("menuDosNiveles.volver")}>
+                <button type="button" data-foco-cajon="" className={s.botonIcono} onClick={() => cerrarAdmin()} aria-label={t("menuDosNiveles.volver")}>
                   <Icono nombre="arrow_back" />
                 </button>,
               )}
@@ -480,9 +630,7 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
               )}
               {tarjetaClinica(false)}
               {botonNuevaCita(false)}
-              {opcionesNivel1(false)}
-              {hayAdmin && <div className={s.separador} />}
-              {filaAdmin(false, false, () => setVistaCajon("admin"))}
+              {opcionesNivel1(false, alternarSubmenu)}
               <div className={s.pie}>{tarjetaUsuario(false)}</div>
             </>
           )}
@@ -494,6 +642,7 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
   // ── Escritorio ───────────────────────────────────────────────────
   return (
     <Tooltip.Provider>
+      {editor}
       <div ref={raizRef} className={cx(CLASES_MENU, s.raiz)}>
         <aside aria-label={t("sidebar.asideAria")} className={s.nivel1} data-encogido={encogido ? "true" : "false"}>
           {marca(
@@ -511,15 +660,15 @@ export function MenuDosNiveles(props: MenuDosNivelesProps) {
           )}
           {tarjetaClinica(encogido)}
           {botonNuevaCita(encogido)}
-          {opcionesNivel1(encogido)}
-          {hayAdmin && <div className={s.separador} />}
-          {filaAdmin(encogido, adminAbierto, () => (adminAbierto ? cerrarAdmin() : setAdminAbierto(true)))}
+          {opcionesNivel1(encogido, alternarSubmenu)}
           <div className={s.pie}>{tarjetaUsuario(encogido)}</div>
         </aside>
 
-        {hayAdmin && adminAbierto && (
-          <aside id="menu-dos-niveles-admin" aria-label={t("menuDosNiveles.admin.titulo")} className={s.nivel2}>
-            {contenidoAdmin(
+        {submenuEnPantalla && (
+          <aside id="menu-dos-niveles-admin" aria-label={nombreSubmenu(submenuEnPantalla)} className={s.nivel2}>
+            {contenidoSubmenu(
+              submenuEnPantalla,
+              seccionesFiltradas,
               <button type="button" className={s.botonIcono} onClick={() => cerrarAdmin(true)} aria-label={t("menuDosNiveles.admin.cerrar")}>
                 <Icono nombre="close" />
               </button>,
@@ -548,11 +697,16 @@ function TarjetaUsuario({
   compacto,
   user,
   puedeVerPerfil,
+  puedePersonalizar,
+  alPersonalizar,
   alElegir,
 }: {
   compacto: boolean;
   user: SidebarProps["user"];
   puedeVerPerfil: boolean;
+  /** false mientras falte el SQL de «Personalizar» o la clínica esté suspendida. */
+  puedePersonalizar: boolean;
+  alPersonalizar: () => void;
   alElegir: () => void;
 }) {
   const t = useT();
@@ -611,6 +765,12 @@ function TarjetaUsuario({
                   {t("menuDosNiveles.miPerfil")}
                 </Link>
               )}
+            </DropdownMenu.Item>
+          )}
+          {puedePersonalizar && (
+            <DropdownMenu.Item className={s.desplegableItem} onSelect={alPersonalizar}>
+              <Icono nombre="dashboard_customize" />
+              {t("menuPersonalizado.entrada")}
             </DropdownMenu.Item>
           )}
           <DropdownMenu.Item

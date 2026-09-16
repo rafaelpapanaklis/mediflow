@@ -465,6 +465,53 @@
     "volver": "Back",
     "migasAria": "You are here"
   },
+  "menuPersonalizado": {
+    "entrada": "Customize",
+    "titulo": "Customize my menu",
+    "explicacion": "Move around what you already see. Customizing never adds or removes options: your permissions and plan still decide that.",
+    "cerrar": "Close",
+    "menuPrincipal": "Main menu",
+    "nuevoSubmenu": "New submenu",
+    "nuevaSeccion": "New group",
+    "submenuNuevo": "My submenu",
+    "seccionNueva": "My group",
+    "submenuSinNombre": "Submenu",
+    "seccionSinNombre": "Group",
+    "vacio": "Empty. Drag options here, or use “Move to…” on the option you want.",
+    "soloVacio": "It can only be deleted once nothing is left inside.",
+    "ultimoGrupo": "It is the submenu’s only group: to remove it, delete the whole submenu.",
+    "confirmarCierre": "Leave without saving? You lose what you arranged.",
+    "seguirEditando": "Stay here",
+    "salirSinGuardar": "Leave without saving",
+    "subir": "Move {nombre} up",
+    "bajar": "Move {nombre} down",
+    "renombrar": "Rename {nombre}",
+    "borrar": "Delete {nombre}",
+    "moverA": "Move {nombre} somewhere else",
+    "moverAQue": "Move to",
+    "nombreDe": "Name of {nombre}",
+    "aceptarNombre": "Save name",
+    "buscarEn": "Search in {nombre}…",
+    "instruccionesArrastre": "Drag the row to move it. You can also use the up, down and “Move to…” buttons, which work with the keyboard.",
+    "cancelar": "Cancel",
+    "guardar": "Save",
+    "guardando": "Saving…",
+    "restablecer": "Back to the original menu",
+    "confirmarReset": "Are you sure? Your layout is lost and the usual menu comes back.",
+    "siRestablecer": "Yes, go back",
+    "no": "No",
+    "conflicto": {
+      "texto": "Your menu changed in another tab or device while you were arranging it here. Nothing has been saved yet.",
+      "verElOtro": "See the latest one",
+      "encima": "Save mine over it"
+    },
+    "errores": {
+      "guardar": "It could not be saved. Your menu stayed as it was; please try again.",
+      "restablecer": "The original menu could not be restored. Please try again.",
+      "sinTabla": "This can’t be saved yet: it still has to be switched on in the database.",
+      "tope": "No room for more. Delete one before creating another."
+    }
+  },
   "shell": {
     "topbar": {
       "routeHoy": "Today",

@@ -1,0 +1,431 @@
+/* «Personalizar» — el diálogo donde se acomoda el menú.
+   Usa los tokens --m2-* del menú (los trae CLASES_MENU), así que el modo oscuro
+   sale gratis. */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 18, 32, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.panel {
+  position: fixed;
+  z-index: 61;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 48px));
+  border: 1px solid var(--m2-borde);
+  border-radius: 16px;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  font-family: var(--font-menu), system-ui, sans-serif;
+  box-shadow: 0 24px 60px rgba(20, 18, 32, 0.22);
+  overflow: hidden;
+}
+
+/* Teléfono: hoja a pantalla completa. Arrastrar en una ventanita de 300 px no
+   es arrastrar nada. */
+@media (max-width: 640px) {
+  .panel {
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.titulo {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--m2-texto-3);
+}
+
+.lista {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 18px;
+}
+
+.tituloGrupo {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.zona {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 10px;
+  min-height: 8px;
+  transition: background-color 0.12s ease;
+}
+
+.zonaEncima {
+  background: rgba(77, 63, 198, 0.07);
+  outline: 1px dashed var(--m2-activo);
+  outline-offset: 2px;
+}
+
+.vacio {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+  font-style: italic;
+}
+
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 2px 6px 2px 2px;
+  border-radius: 9px;
+  background: var(--m2-n2-fondo);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--m2-texto-2);
+}
+
+@media (hover: hover) {
+  .fila:hover {
+    background: var(--m2-hover);
+  }
+}
+
+.filaArrastrando {
+  opacity: 0.35;
+}
+
+.filaContenedor {
+  font-weight: 600;
+  color: var(--m2-texto);
+}
+
+.filaSubmenu {
+  margin-top: 6px;
+  background: var(--m2-n1-fondo);
+}
+
+.filaSeccion {
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+  min-height: 34px;
+}
+
+.submenu {
+  border-radius: 11px;
+}
+
+.dentro {
+  margin: 2px 0 8px 14px;
+  padding-left: 10px;
+  border-left: 2px solid var(--m2-borde);
+}
+
+.seccion {
+  margin-bottom: 2px;
+}
+
+.agarradera {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 34px;
+  flex: none;
+  cursor: grab;
+  color: var(--m2-texto-3);
+  /* Sin esto, arrastrar con el dedo desplazaría la lista en vez de mover la fila. */
+  touch-action: none;
+}
+
+.agarradera:active {
+  cursor: grabbing;
+}
+
+.huecoAgarradera {
+  width: 30px;
+  flex: none;
+}
+
+.iconoFila {
+  flex: none;
+  font-size: 19px;
+  color: var(--m2-texto-3);
+}
+
+.textoFila {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.botonIcono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-2);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .botonIcono:hover:not(:disabled) {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.botonIcono:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.botonBorrar:not(:disabled) {
+  color: var(--danger, #dc2626);
+}
+
+.botonIcono:focus-visible,
+.botonTexto:focus-visible,
+.botonTextoPie:focus-visible,
+.botonPrimario:focus-visible,
+.botonSecundario:focus-visible,
+.botonPeligro:focus-visible,
+.entradaNombre:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.entradaNombre {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--m2-activo);
+  border-radius: 8px;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.botonTexto,
+.botonTextoPie {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--m2-activo);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.botonTextoPie {
+  margin: 0;
+  color: var(--m2-texto-2);
+}
+
+@media (hover: hover) {
+  .botonTexto:hover,
+  .botonTextoPie:hover:not(:disabled) {
+    background: var(--m2-hover);
+  }
+}
+
+.pie {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-n1-fondo);
+}
+
+.pieDerecha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.botonPrimario,
+.botonSecundario,
+.botonPeligro {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.botonPrimario {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+}
+
+.botonSecundario {
+  background: var(--m2-n2-fondo);
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-texto-2);
+}
+
+.botonPeligro {
+  background: var(--danger, #dc2626);
+  color: #fff;
+}
+
+.botonPrimario:disabled,
+.botonSecundario:disabled,
+.botonPeligro:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.confirmar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--m2-texto-2);
+}
+
+.conflicto,
+.aviso {
+  margin: 12px 14px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--m2-texto-2);
+}
+
+.conflicto p {
+  margin: 0 0 8px;
+}
+
+.conflictoBotones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.avisoError {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--danger, #dc2626);
+}
+
+.desplegable {
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 6px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  background: var(--m2-n2-fondo);
+  box-shadow: 0 12px 32px rgba(20, 18, 32, 0.18);
+  font-family: var(--font-menu), system-ui, sans-serif;
+  z-index: 62;
+}
+
+.desplegableTitulo {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.desplegableItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--m2-texto-2);
+  cursor: pointer;
+  outline: none;
+}
+
+.desplegableItem[data-highlighted] {
+  background: var(--m2-hover);
+  color: var(--m2-texto);
+}
+
+.desplegableItem[data-disabled] {
+  color: var(--m2-texto-3);
+  cursor: default;
+}
+
+.huecoIcono {
+  width: 20px;
+  flex: none;
+}
+
+.fantasma {
+  padding: 8px 14px;
+  border: 1px solid var(--m2-activo);
+  border-radius: 9px;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  font-family: var(--font-menu), system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(20, 18, 32, 0.2);
+}
