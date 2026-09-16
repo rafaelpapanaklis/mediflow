@@ -10,15 +10,17 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { BotConfigDTO, BotFaqDTO, BotBusinessHours } from "@/lib/whatsapp/bot/types";
 import { PERSONA_TEMPLATES } from "./persona-templates";
+import { BotRediseno } from "@/components/dashboard/whatsapp-rediseno/bot";
 
 // Índice 0 = Lunes … 6 = Domingo (igual que ClinicSchedule / settings horarios).
 const DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
 // Estado editable del horario: claves "0".."6".
-type ScheduleState = Record<string, { enabled: boolean; open: string; close: string }>;
+// (Exportado solo como TIPO: lo usa la vista del rediseño, whatsapp-rediseno/bot.tsx.)
+export type ScheduleState = Record<string, { enabled: boolean; open: string; close: string }>;
 
 // Parte de la config que es editable desde el formulario (todo menos id/clinicId).
-type EditableConfig = {
+export type EditableConfig = {
   enabled: boolean;
   botName: string;
   persona: string;
@@ -146,7 +148,15 @@ async function textoDeError(res: Response): Promise<string> {
   }
 }
 
-export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
+export function BotClient({
+  canEdit = true,
+  // Rediseño (ws1-t5): el MISMO interruptor por clínica que enciende el menú
+  // de dos niveles. Apagado, esta pantalla se pinta tal cual.
+  rediseno = false,
+}: {
+  canEdit?: boolean;
+  rediseno?: boolean;
+}) {
   const askConfirm = useConfirm();
   // Sin permiso de escritura la pantalla es de solo lectura: las mutaciones se
   // frenan aquí además del 403 del servidor (que es el gate de verdad).
@@ -378,6 +388,23 @@ export function BotClient({ canEdit = true }: { canEdit?: boolean }) {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  // REDISEÑO (ws1-t5): con el interruptor encendido se pinta la vista nueva
+  // con ESTE mismo estado y ESTOS mismos manejadores (misma API del bot, los
+  // mismos PATCH/POST/DELETE); el JSX de siempre, de aquí para abajo, no
+  // cambia ni un nodo.
+  if (rediseno) {
+    return (
+      <BotRediseno
+        vm={{
+          canEdit, loading, loadError, config, form, setForm, schedule, setSchedule, faqs, setFaqs,
+          newQuestion, setNewQuestion, newAnswer, setNewAnswer, addingFaq, saving, savingEnabled,
+          saveConfig, toggleEnabled, addFaq, patchFaq, deleteFaq,
+        }}
+      />
+    );
+  }
+
   const rootStyle = { padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1100, margin: "0 auto" } as const;
 
   if (loading) {

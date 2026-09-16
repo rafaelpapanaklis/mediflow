@@ -28,6 +28,7 @@ import {
   type WaTemplateMap,
 } from "@/lib/whatsapp/template-config";
 import { templateUiState, type WaTemplateUiState } from "@/lib/whatsapp/templates-catalog";
+import { PlantillasRediseno } from "@/components/dashboard/whatsapp-rediseno/plantillas";
 import s from "../whatsapp.module.css";
 import p from "./plantillas.module.css";
 
@@ -41,6 +42,9 @@ interface Props {
   hasWaba: boolean;
   templates: WaTemplateMap;
   billingOk: boolean;
+  /** Rediseño (ws1-t5): el MISMO interruptor por clínica que enciende el
+   *  menú de dos niveles. Apagado, esta pantalla se pinta tal cual. */
+  rediseno?: boolean;
 }
 
 type FormState = Record<string, { name: string; lang: string }>;
@@ -75,7 +79,7 @@ const STATE_LABEL: Record<WaTemplateUiState, string> = {
   missing: "inbox.whatsapp.tplStateMissing",
 };
 
-export function TemplatesClient({ canEdit, connected, hasWaba, templates, billingOk }: Props) {
+export function TemplatesClient({ canEdit, connected, hasWaba, templates, billingOk, rediseno = false }: Props) {
   const t = useT();
   // `templates` es el estado que sirvió el servidor; tras crear o guardar se
   // sustituye por lo que devuelve la API para no exigir un recargado a mano.
@@ -174,6 +178,20 @@ export function TemplatesClient({ canEdit, connected, hasWaba, templates, billin
     } finally {
       setSaving(false);
     }
+  }
+
+  // REDISEÑO (ws1-t5): con el interruptor encendido se pinta la vista nueva
+  // con ESTE mismo estado y ESTOS mismos manejadores; el JSX de siempre, de
+  // aquí para abajo, no cambia ni un nodo.
+  if (rediseno) {
+    return (
+      <PlantillasRediseno
+        vm={{
+          t, canEdit, connected, hasWaba, billingOk, current, form, saving, creating, blocked, copied,
+          advanced, setAdvanced, fieldErrors, marketingOn, missingUtility, setField, copyBody, provision, save,
+        }}
+      />
+    );
   }
 
   /** Una fila: tipo de mensaje, estado y el texto que recibe el paciente. */

@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { getRecentReminders } from "@/lib/whatsapp/recent-reminders";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { WhatsAppClient } from "./whatsapp-client";
 
 export const metadata: Metadata = { title: "WhatsApp — DaleControl" };
@@ -25,9 +26,19 @@ export default async function WhatsAppPage() {
 
   // Estado real de la cola. Solo se consulta si hay WhatsApp conectado: es la
   // única vista donde se muestra el panel.
-  const recent = connected
-    ? await getRecentReminders(user.clinicId, user.clinic.timezone)
-    : { rows: [], failed: false };
+  //
+  // REDISEÑO (ws1-t5): el MISMO interruptor por clínica que enciende el menú
+  // de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno
+  // propio. Va en el mismo Promise.all que la cola para no añadir un viaje: la
+  // respuesta vive 60 s en memoria por clínica y el layout acaba de pedirla en
+  // esta misma petición, así que aquí se resuelve de la caché (o se une a la
+  // consulta en vuelo), sin consulta nueva. Falla cerrado (→ pantalla de hoy).
+  const [recent, rediseno] = await Promise.all([
+    connected
+      ? getRecentReminders(user.clinicId, user.clinic.timezone)
+      : Promise.resolve({ rows: [], failed: false }),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
 
   return (
     <WhatsAppClient
@@ -43,6 +54,7 @@ export default async function WhatsAppPage() {
       recentReminders={recent.rows}
       recentRemindersFailed={recent.failed}
       clinicName={user.clinic.name}
+      rediseno={rediseno}
     />
   );
 }
