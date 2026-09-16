@@ -98,6 +98,15 @@ interface AgendaContextValue {
    * posterior no restaure datos pre-mutacion desde el cache.
    */
   invalidateRangeCache: () => void;
+  /**
+   * Vuelve a pedir al servidor las citas de la vista que se está mirando (el
+   * mismo rango y el mismo `/api/agenda/range` del cargador de arriba), sin
+   * navegar. Para cuando no se sabe qué quedó en la base —p. ej. se cortó la
+   * red a mitad de mover una cita— y `router.refresh()` no sirve: rehidrata
+   * con la SSR de UN día y en Semana o Mes dejaría la vista recortada. Si la
+   * petición falla, no toca lo que hay en pantalla.
+   */
+  refetchView: () => void;
 }
 
 interface CacheEntry {
@@ -436,6 +445,11 @@ export function AgendaProvider({
     cacheRef.current.clear();
   }, []);
 
+  const refetchView = useCallback(() => {
+    cacheRef.current.clear();
+    void fetchRangeData(state.viewMode, state.dayISO, state.filters);
+  }, [fetchRangeData, state.viewMode, state.dayISO, state.filters]);
+
   const ctx = useMemo<AgendaContextValue>(
     () => ({
       state, dispatch, permissions,
@@ -444,9 +458,9 @@ export function AgendaProvider({
       setSearchQuery, selectAppointment,
       openModal, closeModal, toggleWaitlist, togglePendingPanel,
       setFilters, clearFilters, prefetchView,
-      invalidateRangeCache,
+      invalidateRangeCache, refetchView,
     }),
-    [state, permissions, setDay, setViewMode, setColumnMode, setDensity, slotHpx, viewportRef, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView, invalidateRangeCache],
+    [state, permissions, setDay, setViewMode, setColumnMode, setDensity, slotHpx, viewportRef, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView, invalidateRangeCache, refetchView],
   );
 
   return <AgendaContext.Provider value={ctx}>{children}</AgendaContext.Provider>;

@@ -46,6 +46,10 @@ export function FiltroDoctoresUnidades() {
           className={`${s.filtroBoton} ${ag.todoMarcado ? "" : s.filtroBotonActivo}`}
           aria-expanded={abierto}
           aria-haspopup="true"
+          // En pantallas estrechas la etiqueta se esconde (CSS) y el botón se
+          // queda en su ícono: el nombre accesible y el globo no se pierden.
+          aria-label={etiqueta}
+          title={etiqueta}
           onClick={() => setAbierto((v) => !v)}
         >
           <span className={s.filtroIcono}>

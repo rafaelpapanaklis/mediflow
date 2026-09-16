@@ -19,9 +19,13 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { Cuadricula, type ColumnaCuadricula } from "./cuadricula";
 import { TarjetaCita } from "./tarjeta-cita";
+import { FantasmaCita } from "./fantasma-cita";
+import { useArrastreCitas } from "./arrastre-citas";
+import { carrilDeClic, citaArrastrable } from "@/lib/agenda-nueva/interacciones";
 import { ALTO_ENCABEZADO_SEMANA } from "@/lib/agenda-nueva/tokens";
 import {
   altoDeCita,
@@ -35,7 +39,7 @@ import { carrilesConHuerfanos, horarioDelDia } from "@/lib/agenda-nueva/ocupacio
 import { citaContada } from "@/lib/agenda-nueva/estados";
 import { diasDeLaSemana, type DiaSemana } from "@/lib/agenda-nueva/calendario";
 import { assignLanes } from "@/lib/agenda/lane-layout";
-import { todayInTz } from "@/lib/agenda/time-utils";
+import { todayInTz, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { doctorColorFor } from "@/lib/agenda/doctor-color";
 import css from "./vista-semana-mes.module.css";
 
@@ -62,7 +66,9 @@ export interface PropsVistaSemana {
 }
 
 export function VistaSemana(props: PropsVistaSemana) {
-  const { state, setDay } = useAgenda();
+  const { state, setDay, permissions } = useAgenda();
+  const { open: abrirNuevaCita } = useNewAppointmentDialog();
+  const { destino } = useArrastreCitas();
   // El filtro de doctores y unidades y la cita abierta viven en el contexto de
   // la agenda nueva (WS1-T1), no en `state.filters`: Día, Semana, Mes y el
   // buscador de huecos filtran todos de la MISMA fuente, que es lo que impide
@@ -139,8 +145,52 @@ export function VistaSemana(props: PropsVistaSemana) {
 
     if (carriles.length > maxCarriles) maxCarriles = carriles.length;
 
+    // La sombra de la cita que se arrastra, si el puntero está sobre ESTE día.
+    // Va en el carril de su doctor: en la semana, soltar cambia el día y la
+    // hora, nunca el doctor (igual que la semana de siempre).
+    let sombra: React.ReactNode = null;
+    if (destino && destino.target.kind === "day-col" && destino.target.dayISO === dia.iso) {
+      const total = Math.max(1, carriles.length);
+      const i = carriles.findIndex((c) => c.id === destino.plan.newDoctorId);
+      const ancho = 100 / total;
+      sombra = (
+        <FantasmaCita
+          plan={destino.plan}
+          timezone={state.timezone}
+          minutoInicio={ventana.minutoInicio}
+          left={i >= 0 ? `calc(${i * ancho}% + 2px)` : "2px"}
+          width={i >= 0 ? `calc(${ancho}% - 4px)` : "calc(100% - 4px)"}
+          compacta
+        />
+      );
+    }
+
     return {
       clave: dia.iso,
+      // Soltar aquí cambia el DÍA: el mismo `day-col` de la semana de siempre.
+      soltable: { id: `dia:${dia.iso}`, data: { kind: "day-col" as const, dayISO: dia.iso } },
+      // Clic en un hueco libre → «Nueva cita» con ese día, esa hora y el
+      // responsable del carril donde cayó el clic.
+      alPulsarHueco: permissions.canCreate
+        ? ({ inicioMin, fraccionX }: { inicioMin: number; fraccionX: number }) => {
+            const carril = carriles.length > 0 ? carriles[carrilDeClic(fraccionX, carriles.length)] : undefined;
+            abrirNuevaCita({
+              initialSlot: {
+                startsAt: tzLocalToUtc(
+                  dia.iso,
+                  Math.floor(inicioMin / 60),
+                  inicioMin % 60,
+                  state.timezone,
+                ).toISOString(),
+                doctorId: carril?.id,
+                resourceId: null,
+              },
+              openAgendaAfter: true,
+            });
+          }
+        : undefined,
+      carriles: carriles.length,
+      superpuesto: sombra,
       encabezado: (
         <CabeceraDia
           dia={dia}
@@ -158,6 +208,7 @@ export function VistaSemana(props: PropsVistaSemana) {
           slotMinutes={state.slotMinutes}
           citaAbiertaId={nueva.citaAbiertaId}
           onAbrirCita={nueva.abrirCita}
+          puedeEditar={permissions.canEdit}
         />
       ),
       fondo: esHoy
@@ -170,9 +221,13 @@ export function VistaSemana(props: PropsVistaSemana) {
       // casi siempre cierra antes que el resto de la semana, y con un solo
       // valor para las siete columnas o el sábado queda sin rayar o el resto
       // queda rayado de más.
-      cierreDesdeMin: horario?.cierreMin ?? null,
+      // Sin ningún horario en Ajustes (`horario === null`), la ventana de la
+      // clínica: fuera de ella tampoco se agenda con un clic (igual que Día).
+      cierreDesdeMin: horario === null ? state.dayEnd * 60 : horario.cierreMin ?? null,
       aperturaHastaMin:
-        horario?.aperturaMin != null && horario.aperturaMin > ventana.minutoInicio
+        horario === null
+          ? state.dayStart * 60
+          : horario.aperturaMin != null && horario.aperturaMin > ventana.minutoInicio
           ? horario.aperturaMin
           : null,
     };
@@ -193,6 +248,7 @@ export function VistaSemana(props: PropsVistaSemana) {
       // de la semana diría que son las 11:20 del lunes y del domingo a la vez.
       columnaAhora={hoyISO}
       anchoMinimoColumna={maxCarriles * ANCHO_MINIMO_CARRIL}
+      slotMinutes={state.slotMinutes}
     />
   );
 }
@@ -245,6 +301,7 @@ function ColumnaDeDia(props: {
   slotMinutes: number;
   citaAbiertaId: string | null;
   onAbrirCita: (id: string) => void;
+  puedeEditar: boolean;
 }) {
   const { citas, carriles, minutoInicio, slotMinutes } = props;
 
@@ -296,6 +353,7 @@ function ColumnaDeDia(props: {
           }}
           seleccionada={cita.id === props.citaAbiertaId}
           onAbrir={props.onAbrirCita}
+          arrastrable={citaArrastrable(cita.dto, props.puedeEditar)}
         />
       ))}
     </>

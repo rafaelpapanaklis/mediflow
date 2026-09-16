@@ -4,6 +4,9 @@ import { useMemo, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { instrumentSans } from "@/fonts/menu";
+import { useAparienciaNueva } from "./apariencia";
+import nc from "./nueva-cita.module.css";
 
 interface Props {
   value: string; // YYYY-MM-DD
@@ -110,11 +113,43 @@ export function DateDropdown({ value, onChange, todayISO }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const safeValue = value || todayISO;
+  const nueva = useAparienciaNueva();
 
   const select = (iso: string) => {
     onChange(iso);
     setOpen(false);
   };
+
+  if (nueva) {
+    return (
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={`${nc.control} ${nc.fechaBoton}`}
+            data-abierto={open ? "" : undefined}
+          >
+            <Calendar size={16} aria-hidden className={nc.fechaIcono} />
+            <span className={nc.fechaTextos}>
+              <span className={nc.fechaLarga}>{formatLong(safeValue, t)}</span>
+              <span className={nc.fechaRelativa}>{relativeLabel(safeValue, todayISO, t)}</span>
+            </span>
+            <ChevronDown size={16} aria-hidden className={nc.fechaChevron} />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          {/* En portal: fuera de la ventana, así que lleva sus variables y su letra. */}
+          <Popover.Content
+            align="start"
+            sideOffset={6}
+            className={`${nc.tokens} ${instrumentSans.variable} ${nc.calendario}`}
+          >
+            <CalendarPopover value={safeValue} todayISO={todayISO} onSelect={select} />
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    );
+  }
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -182,6 +217,91 @@ function CalendarPopover({
 
   const years: number[] = [];
   for (let y = today.getFullYear() - 1; y <= today.getFullYear() + 5; y++) years.push(y);
+
+  const nueva = useAparienciaNueva();
+  if (nueva) {
+    // El MISMO calendario —mismas 42 celdas, mismo bloqueo del pasado, mismo
+    // selector de año—, con la ropa del diseño: día elegido en tinta, hoy con
+    // anillo morado, sin estilos puestos a mano al pasar el ratón.
+    return (
+      <div>
+        <div className={nc.calCabecera}>
+          <button type="button" onClick={prevMonth} aria-label={t("appointments.dateDropdown.prevMonth")} className={nc.calNav}>
+            <ChevronLeft size={18} aria-hidden />
+          </button>
+          <button type="button" onClick={() => setYearOpen((o) => !o)} className={nc.calMes} aria-expanded={yearOpen}>
+            {t(MONTHS_LONG_KEYS[view.getMonth()])} {view.getFullYear()}
+            <ChevronDown size={14} aria-hidden style={{ transform: yearOpen ? "rotate(180deg)" : "none" }} />
+          </button>
+          <button type="button" onClick={nextMonth} aria-label={t("appointments.dateDropdown.nextMonth")} className={nc.calNav}>
+            <ChevronRight size={18} aria-hidden />
+          </button>
+        </div>
+
+        {yearOpen ? (
+          <div className={nc.calAnios}>
+            {years.map((y) => {
+              const isCur = y === view.getFullYear();
+              return (
+                <button
+                  key={y}
+                  type="button"
+                  onClick={() => { setView(new Date(y, view.getMonth(), 1)); setYearOpen(false); }}
+                  className={`${nc.chip} ${isCur ? nc.chipActivo : ""}`}
+                  aria-pressed={isCur}
+                >
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            <div className={nc.calSemana}>
+              {WEEKDAY_KEYS.map((wKey, i) => (
+                <div key={wKey + i} className={nc.calDiaSemana} data-finde={i >= 5 ? "" : undefined}>
+                  {t(wKey)}
+                </div>
+              ))}
+            </div>
+            <div className={nc.calDias}>
+              {cells.map((d, i) => {
+                const cellISO = toISOLocal(d);
+                const inMonth = d.getMonth() === view.getMonth();
+                const isToday = cellISO === todayISO;
+                const isSel = cellISO === value;
+                const past = cellISO < todayISO;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={past}
+                    aria-label={cellISO}
+                    aria-current={isToday ? "date" : undefined}
+                    aria-pressed={isSel}
+                    onClick={() => { if (!past) onSelect(cellISO); }}
+                    className={nc.calDia}
+                    data-seleccionado={isSel ? "" : undefined}
+                    data-hoy={isToday ? "" : undefined}
+                    data-fuera={!inMonth ? "" : undefined}
+                  >
+                    {d.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <div className={nc.calPie}>
+          <button type="button" onClick={goToday} className={nc.calHoy}>
+            {t("appointments.dateDropdown.today")}
+          </button>
+          <div className={nc.calFecha}>{formatLong(value, t)}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

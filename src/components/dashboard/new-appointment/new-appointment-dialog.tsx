@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, Loader2, MessageCircle, AlertTriangle, Baby } from "lucide-react";
+import { X, Loader2, MessageCircle, AlertTriangle, Baby, CalendarPlus } from "lucide-react";
 import toast from "react-hot-toast";
 import { SlotGridPicker } from "./slot-grid-picker";
 import { PatientSearchField } from "./patient-search-field";
@@ -30,6 +30,14 @@ import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type {
   OpenNewAppointmentParams,
 } from "@/lib/new-appointment/types";
+import { instrumentSans } from "@/fonts/menu";
+import {
+  AparienciaNuevaCitaProvider,
+  useAparienciaNueva,
+  useVestir,
+  type AparienciaNuevaCita,
+} from "./apariencia";
+import nc from "./nueva-cita.module.css";
 
 const REASON_PRESET_KEYS = [
   "appointments.newApptDialog.presetGeneralConsult",
@@ -44,6 +52,11 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   params: OpenNewAppointmentParams | null;
+  /**
+   * Solo la ropa (ver `apariencia.tsx`). Todo lo de abajo —estado, efectos,
+   * validación, POST— es idéntico con las dos.
+   */
+  apariencia?: AparienciaNuevaCita;
 }
 
 interface BootData {
@@ -56,7 +69,7 @@ interface BootData {
   waConnected: boolean;
 }
 
-export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
+export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "clasica" }: Props) {
   const t = useT();
   const router = useRouter();
   const reasonPresets = REASON_PRESET_KEYS.map((key) => t(key));
@@ -357,27 +370,35 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
       }
     : null;
 
+  const nueva = apariencia === "nueva";
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay style={overlayStyle} />
+        <Dialog.Overlay
+          style={nueva ? undefined : overlayStyle}
+          className={nueva ? `${nc.tokens} ${nc.velo}` : undefined}
+        />
         <Dialog.Content
-          style={dialogStyle}
+          style={nueva ? undefined : dialogStyle}
+          className={nueva ? `${nc.tokens} ${instrumentSans.variable} ${nc.dialogo}` : undefined}
           onEscapeKeyDown={onClose}
           aria-describedby={undefined}
         >
-          <header style={headerStyle}>
-            <Dialog.Title style={titleStyle}>{t("appointments.newApptDialog.title")}</Dialog.Title>
+          <AparienciaNuevaCitaProvider value={apariencia}>
+          <header {...(nueva ? { className: nc.cabecera } : { style: headerStyle })}>
+            {nueva && <CalendarPlus size={22} strokeWidth={2} className={nc.cabeceraIcono} aria-hidden />}
+            <Dialog.Title {...(nueva ? { className: nc.titulo } : { style: titleStyle })}>{t("appointments.newApptDialog.title")}</Dialog.Title>
             <Dialog.Close asChild>
-              <button type="button" aria-label={t("common.close")} style={closeBtnStyle}>
+              <button type="button" aria-label={t("common.close")} {...(nueva ? { className: nc.cerrar } : { style: closeBtnStyle })}>
                 <X size={18} />
               </button>
             </Dialog.Close>
           </header>
 
-          <div style={bodyStyle}>
+          <div {...(nueva ? { className: nc.cuerpo } : { style: bodyStyle })}>
             {bootLoading || !boot ? (
-              <div style={{ padding: 48, textAlign: "center", color: "var(--text-3)" }}>
+              <div {...(nueva ? { className: nc.cargando } : { style: { padding: 48, textAlign: "center", color: "var(--text-3)" } })}>
                 <Loader2 size={22} className="animate-spin" style={{ display: "inline-block" }} />
               </div>
             ) : (
@@ -390,13 +411,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                   />
                 </Field>
 
-                <div style={gridTwo}>
+                <div {...(nueva ? { className: nc.dosColumnas } : { style: gridTwo })}>
                   <Field label={t("appointments.newApptDialog.fieldProfessional")}>
                     <select
-                      className="input-new"
+                      className={nueva ? `${nc.control} ${errors.doctorId ? nc.controlError : ""}` : "input-new"}
                       value={doctorId}
                       onChange={(e) => { setDoctorId(e.target.value); if (errors.doctorId) setErrors((er) => ({ ...er, doctorId: undefined })); }}
-                      style={{ borderColor: errors.doctorId ? "var(--danger)" : undefined }}
+                      style={nueva ? undefined : { borderColor: errors.doctorId ? "var(--danger)" : undefined }}
                     >
                       {boot.doctors.length === 0 && <option value="">{t("appointments.newApptDialog.optionNoActiveProfessionals")}</option>}
                       {boot.doctors.map((d) => (
@@ -409,10 +430,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                   {boot.resources.length > 0 && (
                     <Field label={t("appointments.newApptDialog.fieldRoom")}>
                       <select
-                        className="input-new"
+                        className={nueva ? `${nc.control} ${errors.resourceId ? nc.controlError : ""}` : "input-new"}
                         value={resourceId}
                         onChange={(e) => { setResourceId(e.target.value); if (errors.resourceId) setErrors((er) => ({ ...er, resourceId: undefined })); }}
-                        style={{ borderColor: errors.resourceId ? "var(--danger)" : undefined }}
+                        style={nueva ? undefined : { borderColor: errors.resourceId ? "var(--danger)" : undefined }}
                       >
                         <option value="">—</option>
                         {boot.resources.map((r) => (
@@ -426,19 +447,19 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                 </div>
 
                 {pediatricContext ? (
-                  <div style={pediatricBannerStyle} role="note" aria-label={t("appointments.newApptDialog.pediatricAriaLabel")}>
-                    <span style={pediatricChipStyle}>
+                  <div {...(nueva ? { className: nc.pediatria } : { style: pediatricBannerStyle })} role="note" aria-label={t("appointments.newApptDialog.pediatricAriaLabel")}>
+                    <span {...(nueva ? { className: nc.pediatriaChip } : { style: pediatricChipStyle })}>
                       <Baby size={12} aria-hidden /> {t("appointments.newApptDialog.pediatricPatient")}
                       {pediatricContext.ageFormatted ? ` · ${pediatricContext.ageFormatted}` : ""}
                     </span>
-                    <span style={pediatricHintStyle}>
+                    <span {...(nueva ? { className: nc.pediatriaTexto } : { style: pediatricHintStyle })}>
                       {t("appointments.newApptDialog.pediatricSuggestedDuration", {
                         min: pediatricContext.suggestedDurationMin,
                         max: pediatricContext.suggestedDurationMaxMin,
                       })}
                     </span>
                     {pediatricContext.recentFranklLow && pediatricContext.longerBlockSuggestion ? (
-                      <span style={pediatricWarningStyle}>
+                      <span {...(nueva ? { className: nc.pediatriaAviso } : { style: pediatricWarningStyle })}>
                         <AlertTriangle size={12} aria-hidden /> {t("appointments.newApptDialog.pediatricFranklWarning", {
                           min: pediatricContext.longerBlockSuggestion.minMin,
                           max: pediatricContext.longerBlockSuggestion.maxMin,
@@ -457,7 +478,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                   />
                 </Field>
 
-                <div style={gridDateDur}>
+                <div {...(nueva ? { className: nc.fechaDuracion } : { style: gridDateDur })}>
                   <Field label={t("common.date")}>
                     <DateDropdown
                       value={dateISO}
@@ -498,7 +519,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                       grouped
                     />
                     {errors.slot && (
-                      <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 4 }}>
+                      <div {...(nueva ? { className: nc.error } : { style: { fontSize: 11, color: "var(--danger)", marginTop: 4 } })}>
                         {t("appointments.newApptDialog.errorSelectTime")}
                       </div>
                     )}
@@ -506,7 +527,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                 )}
 
                 {boot.waConnected && (
-                  <div style={togglesRowStyle}>
+                  <div {...(nueva ? { className: nc.opciones } : { style: togglesRowStyle })}>
                     <ToggleChip
                       active={notifyPatient}
                       icon={<MessageCircle size={12} />}
@@ -527,12 +548,14 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
               doctorName: boot?.doctors.find((d) => d.id === doctorId)?.shortName ?? null,
               timezone: boot?.timezone ?? null,
               t,
+              nueva,
             })}
             submitting={submitting}
             disabled={submitting || !boot}
             onCancel={onClose}
             onSubmit={submit}
           />
+          </AparienciaNuevaCitaProvider>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -540,16 +563,20 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const vestir = useVestir();
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div {...vestir({ display: "flex", flexDirection: "column", gap: 6 }, nc.campo)}>
       <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-          color: "var(--text-3)",
-        }}
+        {...vestir(
+          {
+            fontSize: 11,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "var(--text-3)",
+          },
+          nc.rotulo,
+        )}
       >
         {label}
       </span>
@@ -565,6 +592,7 @@ function summaryNode({
   doctorName,
   timezone,
   t,
+  nueva = false,
 }: {
   slotIso: string | null;
   duration: number;
@@ -572,27 +600,33 @@ function summaryNode({
   doctorName: string | null;
   timezone: string | null;
   t: TFunction;
+  nueva?: boolean;
 }): React.ReactNode {
   if (!slotIso || !timezone) {
-    return <span style={{ color: "var(--text-3)" }}>{t("appointments.newApptDialog.summaryPrompt")}</span>;
+    return nueva ? (
+      <span>{t("appointments.newApptDialog.summaryPrompt")}</span>
+    ) : (
+      <span style={{ color: "var(--text-3)" }}>{t("appointments.newApptDialog.summaryPrompt")}</span>
+    );
   }
   const time = formatSlotTime(slotIso, timezone);
   const firstName = patientName ? patientName.split(" ")[0] : null;
   const bold: React.CSSProperties = { color: "var(--text-1)", fontWeight: 600 };
+  const fuerte = nueva ? { className: nc.resumenFuerte } : { style: bold };
   return (
     <>
-      <b style={bold}>{time}</b>
+      <b {...fuerte}>{time}</b>
       {` · ${t("appointments.newApptDialog.summaryMinutes", { count: duration })}`}
       {firstName ? (
         <>
           {" · "}
-          <b style={bold}>{firstName}</b>
+          <b {...fuerte}>{firstName}</b>
         </>
       ) : null}
       {doctorName ? (
         <>
           {` ${t("appointments.newApptDialog.summaryWith")} `}
-          <b style={bold}>{doctorName}</b>
+          <b {...fuerte}>{doctorName}</b>
         </>
       ) : null}
     </>
@@ -610,6 +644,20 @@ function ToggleChip({
   label: string;
   onClick: () => void;
 }) {
+  const nueva = useAparienciaNueva();
+  if (nueva) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`${nc.chip} ${active ? nc.chipActivo : ""}`}
+        aria-pressed={active}
+      >
+        {icon}
+        {label}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
