@@ -8,6 +8,7 @@ import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
 import { getServerT } from "@/i18n/server";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export const metadata: Metadata = { title: "Analytics — DaleControl" };
 
@@ -36,7 +37,15 @@ export default async function AnalyticsOverviewPage() {
   }
 
   // Conteo de citas históricas para detectar "Recolectando datos…".
-  const totalAppts = await prisma.appointment.count({ where: { clinicId } });
+  // REDISEÑO DE ANALÍTICA — el MISMO interruptor por clínica que enciende el
+  // menú de dos niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`).
+  // El layout del panel ya lo resolvió en este mismo request y la respuesta
+  // vive 60 s en memoria por clínica: aquí no hay viaje a la base. Falla
+  // cerrado: apagado, la pantalla se pinta exactamente como hoy.
+  const [totalAppts, rediseno] = await Promise.all([
+    prisma.appointment.count({ where: { clinicId } }),
+    menuDosNivelesEncendido(clinicId),
+  ]);
   const insufficientData = totalAppts < MIN_APPTS_FOR_INSIGHTS;
   const dataProgress = Math.min(100, Math.round((totalAppts / MIN_APPTS_FOR_INSIGHTS) * 100));
 
@@ -94,6 +103,7 @@ export default async function AnalyticsOverviewPage() {
         dataProgress,
         totalAppts,
       }}
+      rediseno={rediseno}
     />
   );
 }
