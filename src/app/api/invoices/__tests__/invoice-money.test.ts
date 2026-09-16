@@ -13,6 +13,8 @@
  *   · H16 — el pago en línea derivaba el saldo de `balance − amount` en vez de
  *           `total − paid`, y un sobrepago no dejaba rastro.
  *   · H17 — efectivo cobrado sin caja abierta no aparecía en ningún arqueo.
+ *   · N1  — el reembolso leía la factura sin candado: dos reembolsos a la vez
+ *           pasaban los dos, y uno que cruzaba con un cobro lo borraba.
  *
  * Cómo prueba: ejercita los HANDLERS REALES (no una copia de su aritmética)
  * con `mock.module` sobre prisma/auth/caché — de ahí el flag
@@ -21,14 +23,84 @@
  */
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { round2 } from "@/lib/invoice-totals";
 
 // ── Estado del doble de Prisma ──────────────────────────────────────────────
-const db: { invoice: any; payments: any[]; register: { openedAt: Date } | null } = {
+const db: {
+  invoice: any;
+  payments: any[];
+  register: { openedAt: Date } | null;
+  /** Solo pruebas de concurrencia: retiene las escrituras de una petición. */
+  gate: { tag: string; open: Promise<void>; reached: () => void } | null;
+  /** Solo pruebas de concurrencia: avisa cuando una petición espera el candado. */
+  onLockWait: ((tag: string | undefined) => void) | null;
+} = {
   invoice: null,
   payments: [],
   register: null,
+  gate: null,
+  onLockWait: null,
 };
+
+// ── Concurrencia ────────────────────────────────────────────────────────────
+// Cada petición concurrente corre con una etiqueta ("A" o "B") para que el
+// doble sepa de quién es cada escritura y quién espera el candado.
+const peticion = new AsyncLocalStorage<string>();
+
+/**
+ * Candado de fila: `SELECT … FOR UPDATE` dentro de una transacción espera a que
+ * la transacción que ya lo tiene termine, igual que Postgres. Sin esto el doble
+ * no distingue un handler que serializa de uno que no.
+ */
+const rowLock = { held: false, queue: [] as Array<() => void> };
+async function acquireRowLock() {
+  if (rowLock.held) {
+    db.onLockWait?.(peticion.getStore());
+    await new Promise<void>((resolve) => rowLock.queue.push(resolve));
+    return; // quien lo suelta nos lo pasa ya tomado
+  }
+  rowLock.held = true;
+}
+function releaseRowLock() {
+  const next = rowLock.queue.shift();
+  if (next) next();
+  else rowLock.held = false;
+}
+
+/** Las escrituras de la petición retenida esperan a `gate.open`. */
+async function writeGate() {
+  if (db.gate && peticion.getStore() === db.gate.tag) {
+    db.gate.reached();
+    await db.gate.open;
+  }
+}
+
+/**
+ * Corre dos peticiones en el PEOR orden, sin relojes: A lee la factura y, justo
+ * antes de su primera escritura, se queda quieta; entonces arranca B. A sigue
+ * cuando B termina o cuando B se queda esperando el candado de fila, lo que
+ * pase antes. Si el handler de A no toma el candado, B escribe primero y A
+ * escribe después con lo que había leído antes: justo la carrera de N1.
+ */
+async function enElPeorOrden<TA, TB>(a: () => Promise<TA>, b: () => Promise<TB>): Promise<[TA, TB]> {
+  let open!: () => void;
+  let reached!: () => void;
+  const atGate = new Promise<void>((resolve) => { reached = resolve; });
+  db.gate = { tag: "A", open: new Promise<void>((resolve) => { open = resolve; }), reached };
+  db.onLockWait = (who) => { if (who === "B") open(); };
+  try {
+    const pa = peticion.run("A", a);
+    await Promise.race([atGate, pa]);
+    const pb = peticion.run("B", b);
+    pb.then(open, open);
+    return await Promise.all([pa, pb]);
+  } finally {
+    open();
+    db.gate = null;
+    db.onLockWait = null;
+  }
+}
 
 /** Reinicia la "base" con UNA factura y sin pagos. */
 function setInvoice(inv: Record<string, any>): any {
@@ -41,6 +113,8 @@ function setInvoice(inv: Record<string, any>): any {
   };
   db.payments = [];
   db.register = null;
+  db.gate = null;
+  db.onLockWait = null;
   return db.invoice;
 }
 
@@ -69,11 +143,13 @@ const invoiceDelegate = {
   findFirst:  async ({ where }: any = {}) => (matches(where) ? { ...db.invoice } : null),
   findUnique: async ({ where }: any = {}) => (matches(where) ? { ...db.invoice } : null),
   updateMany: async ({ where, data }: any) => {
+    await writeGate();
     if (!matches(where)) return { count: 0 };
     applyData(db.invoice, data);
     return { count: 1 };
   },
   update:     async ({ where, data }: any) => {
+    await writeGate();
     if (!matches(where)) throw new Error("update sobre una fila que el where no alcanza");
     applyData(db.invoice, data);
     return { ...db.invoice };
@@ -82,6 +158,7 @@ const invoiceDelegate = {
 
 const paymentDelegate = {
   create: async ({ data }: any) => {
+    await writeGate();
     const row = { id: `pay${db.payments.length + 1}`, paidAt: data.paidAt ?? new Date(), ...data };
     db.payments.push(row);
     return row;
@@ -97,10 +174,28 @@ const txStub: any = {
 };
 
 const prismaStub: any = {
-  // Forma callback (POST de pago, mark-paid, online-payment) y forma arreglo
-  // (refund) — Prisma acepta las dos.
-  $transaction: async (arg: any) =>
-    typeof arg === "function" ? arg(txStub) : Promise.all(arg),
+  // Forma callback (POST de pago, mark-paid, online-payment, refund) y forma
+  // arreglo — Prisma acepta las dos. En la de callback, el candado de fila que
+  // tome la transacción se suelta al terminar, como el commit.
+  $transaction: async (arg: any) => {
+    if (typeof arg !== "function") return Promise.all(arg);
+    let locked = false;
+    const tx = {
+      ...txStub,
+      $queryRaw: async (sql: TemplateStringsArray) => {
+        if (!locked && /FOR UPDATE/i.test(sql.join("?"))) {
+          await acquireRowLock();
+          locked = true;
+        }
+        return [];
+      },
+    };
+    try {
+      return await arg(tx);
+    } finally {
+      if (locked) releaseRowLock();
+    }
+  },
   $queryRaw: async () => [],
   invoice: invoiceDelegate,
   payment: paymentDelegate,
@@ -588,4 +683,83 @@ test("H17 · mark-paid en efectivo sin caja abierta también marca", async () =>
   assert.equal(db.payments.length, 1);
   assert.match(db.payments[0].notes ?? "", /sin caja abierta/i);
   assert.ok(res.body.warning);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// N1 — el reembolso lee y escribe la factura bajo candado de fila
+// ═══════════════════════════════════════════════════════════════════════════
+test("N1 · dos reembolsos simultáneos por el total: pasa uno y el otro se rechaza", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/refund/route");
+  setInvoice({ total: 1000, paid: 1000, balance: 0, status: "PAID", paidAt: new Date() });
+
+  const [a, b] = await enElPeorOrden(
+    () => POST(req({ amount: 1000, reason: "devolución" }), P),
+    () => POST(req({ amount: 1000, reason: "devolución" }), P),
+  );
+
+  const reembolsos = db.payments.filter((p) => p.method === "refund");
+  assert.equal(reembolsos.length, 1, `quedaron ${reembolsos.length} reembolsos de $1,000: la Caja reportaría $${reembolsos.length * 1000} devueltos`);
+  assert.deepEqual([a.status, b.status].sort((x, y) => x - y), [200, 400], "uno pasa y el otro se rechaza, nunca los dos");
+  const rechazo = await readJson(a.status === 400 ? a : b);
+  assert.equal(rechazo.body.error, "Esta factura no tiene pagos para reembolsar");
+  assert.equal(db.invoice.paid, 0);
+  assert.equal(db.invoice.balance, 1000);
+  assert.equal(db.invoice.status, "PENDING");
+});
+
+test("N1 · un reembolso que cruza con un cobro no lo borra", async () => {
+  const { POST: reembolsar } = await import("@/app/api/invoices/[id]/refund/route");
+  const { POST: cobrar } = await import("@/app/api/invoices/[id]/route");
+
+  // Total $1,000 con $500 ya cobrados. El reembolso de $200 lee lo pagado y,
+  // antes de escribir, entra un cobro de $500.
+  setInvoice({ total: 1000, paid: 500, balance: 500, status: "PARTIAL", subtotal: 1000 });
+  db.payments.push({ id: "pay0", amount: 500, method: "transfer", paidAt: new Date() });
+
+  const [r, c] = await enElPeorOrden(
+    () => reembolsar(req({ amount: 200, reason: "ajuste" }), P),
+    () => cobrar(req({ amount: 500, method: "transfer" }), P),
+  );
+  assert.equal(r.status, 200, "el reembolso es legítimo");
+  assert.equal(c.status, 200, "el cobro es legítimo");
+
+  const suma = (xs: any[]) => round2(xs.reduce((s, p) => s + p.amount, 0));
+  const movimientos = round2(
+    suma(db.payments.filter((p) => p.method !== "refund")) - suma(db.payments.filter((p) => p.method === "refund")),
+  );
+  assert.equal(movimientos, 800, "movimientos: 500 + 500 − 200");
+  assert.equal(db.invoice.paid, 800, "la factura tiene que decir lo mismo que los movimientos");
+  assert.equal(db.invoice.balance, 200, "recepción no puede volver a cobrar lo que el paciente ya pagó");
+  assert.equal(db.invoice.status, "PARTIAL");
+});
+
+test("N1 · un reembolso solo sigue rechazando lo mismo que antes", async () => {
+  const { POST } = await import("@/app/api/invoices/[id]/refund/route");
+
+  setInvoice({ total: 1000, paid: 400, balance: 600, status: "PARTIAL" });
+  const excede = await readJson(await POST(req({ amount: 400.01 }), P));
+  assert.equal(excede.status, 400);
+  assert.equal(excede.body.error, "El reembolso excede lo pagado");
+
+  setInvoice({ total: 1000, paid: 0, balance: 1000, status: "PENDING" });
+  const sinPagos = await readJson(await POST(req({ amount: 100 }), P));
+  assert.equal(sinPagos.status, 400);
+  assert.equal(sinPagos.body.error, "Esta factura no tiene pagos para reembolsar");
+
+  setInvoice({ total: 1000, paid: 1000, balance: 0, status: "CANCELLED" });
+  const cancelada = await readJson(await POST(req({ amount: 100 }), P));
+  assert.equal(cancelada.status, 400);
+  assert.equal(cancelada.body.error, "La factura está cancelada");
+
+  setInvoice({ total: 1000, paid: 1000, balance: 0, status: "PAID" });
+  const invalido = await readJson(await POST(req({ amount: 0 }), P));
+  assert.equal(invalido.status, 400);
+  assert.equal(invalido.body.error, "Monto inválido");
+
+  setInvoice({ clinicId: "c2", total: 1000, paid: 1000, balance: 0, status: "PAID" });
+  const otraClinica = await readJson(await POST(req({ amount: 100 }), P));
+  assert.equal(otraClinica.status, 404, "la sesión es de c1: esa factura no existe para ella");
+
+  assert.equal(db.payments.length, 0, "ningún rechazo escribe un movimiento");
+  assert.equal(db.invoice.paid, 1000, "ningún rechazo toca la factura");
 });
