@@ -6,6 +6,8 @@ import {
 import { DollarSign, Users, Calendar as CalendarIcon, Percent, TrendingUp, TrendingDown, AlertCircle, Stethoscope, Activity, Building2, BarChart3 } from "lucide-react";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { CardNew } from "@/components/ui/design-system/card-new";
+import { RaizRediseno } from "@/components/dashboard/reportes-rediseno/raiz";
+import { Vacio } from "@/components/dashboard/reportes-rediseno/piezas";
 import { fmtMXN } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -28,6 +30,12 @@ interface Props {
     resourcesByKind: { kind: string; _count: { id: number } }[];
     topResources: { resourceId: string; name: string; kind: string; count: number }[];
   };
+  /**
+   * El mismo interruptor por clínica del menú de dos niveles, Pacientes y
+   * Equipo (`clinic_feature_flags`, bandera `menu-dos-niveles`). false por
+   * defecto: sin la prop la pantalla se pinta exactamente igual que hoy.
+   */
+  rediseno?: boolean;
 }
 
 // id -> translation key; resolved via t() at render time (never at module scope)
@@ -50,7 +58,7 @@ const TOOLTIP_STYLE: React.CSSProperties = {
 };
 const AXIS_TICK = { fontSize: 11, fill: "var(--text-3)" } as any;
 
-export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, clinicStats }: Props) {
+export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, clinicStats, rediseno = false }: Props) {
   const t = useT();
   const totalRevenue  = monthlyData.reduce((s, d) => s + d.revenue, 0);
   const totalPatients = monthlyData.reduce((s, d) => s + d.patients, 0);
@@ -65,8 +73,10 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
     value: s._count.id,
   }));
 
+  const Raiz = rediseno ? RaizRediseno : "div";
+
   return (
-    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+    <Raiz style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: 22 }}>
         <h1 style={{ fontSize: "clamp(18px, 1.5vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 700, margin: 0 }}>
@@ -212,9 +222,13 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 14, marginBottom: 14 }}>
         <CardNew title={t("analytics.reports.consultTypesTitle")} sub={t("analytics.reports.consultTypesSub")} noPad>
           {topTypes.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
-              {t("analytics.reports.noDataYet")}
-            </div>
+            rediseno ? (
+              <Vacio icono={BarChart3} titulo={t("analytics.reports.noDataYet")} />
+            ) : (
+              <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
+                {t("analytics.reports.noDataYet")}
+              </div>
+            )
           ) : (
             <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
               {topTypes.map((item, i) => {
@@ -224,7 +238,12 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
                   <div key={item.type}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
                       <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{item.type}</span>
-                      <span className="mono" style={{ color: "var(--text-2)", fontWeight: 600 }}>{item._count.id}</span>
+                      <span
+                        className={rediseno ? undefined : "mono"}
+                        style={{ color: "var(--text-2)", fontWeight: 600, ...(rediseno ? { fontVariantNumeric: "tabular-nums" as const } : {}) }}
+                      >
+                        {item._count.id}
+                      </span>
                     </div>
                     <div style={{ height: 4, background: "var(--bg-elev-2)", borderRadius: 2, overflow: "hidden" }}>
                       <div style={{
@@ -242,9 +261,13 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
 
         <CardNew title={t("analytics.reports.apptStatusTitle")} sub={t("analytics.reports.apptStatusSub")}>
           {pieData.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
-              {t("analytics.reports.noDataYet")}
-            </div>
+            rediseno ? (
+              <Vacio icono={CalendarIcon} titulo={t("analytics.reports.noDataYet")} />
+            ) : (
+              <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
+                {t("analytics.reports.noDataYet")}
+              </div>
+            )
           ) : (
             <div style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -277,11 +300,24 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
             {[...monthlyData].reverse().map(row => (
               <tr key={row.label}>
                 <td style={{ textTransform: "capitalize", color: "var(--text-1)", fontWeight: 500 }}>{row.label}</td>
-                <td className="mono" style={{ textAlign: "right", color: "var(--success)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                <td
+                  className={rediseno ? undefined : "mono"}
+                  style={{ textAlign: "right", color: "var(--success)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}
+                >
                   {fmtMXN(row.revenue)}
                 </td>
-                <td className="mono" style={{ textAlign: "right", color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}>{row.patients}</td>
-                <td className="mono" style={{ textAlign: "right", color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}>{row.appointments}</td>
+                <td
+                  className={rediseno ? undefined : "mono"}
+                  style={{ textAlign: "right", color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}
+                >
+                  {row.patients}
+                </td>
+                <td
+                  className={rediseno ? undefined : "mono"}
+                  style={{ textAlign: "right", color: "var(--text-2)", fontVariantNumeric: "tabular-nums" }}
+                >
+                  {row.appointments}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -293,9 +329,13 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
       <div style={{ marginTop: 14 }}>
         <CardNew title={t("analytics.reports.resourceUsageTitle")} sub={t("analytics.reports.resourceUsageSub")} noPad>
           {clinicStats.topResources.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
-              {t("analytics.reports.resourceUsageEmpty")}
-            </div>
+            rediseno ? (
+              <Vacio icono={Activity} titulo={t("analytics.reports.resourceUsageEmpty")} />
+            ) : (
+              <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
+                {t("analytics.reports.resourceUsageEmpty")}
+              </div>
+            )
           ) : (
             <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
               {clinicStats.topResources.map((r, i) => {
@@ -310,7 +350,10 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
                           {r.kind}
                         </span>
                       </span>
-                      <span className="mono" style={{ color: "var(--text-2)", fontWeight: 600 }}>
+                      <span
+                        className={rediseno ? undefined : "mono"}
+                        style={{ color: "var(--text-2)", fontWeight: 600, ...(rediseno ? { fontVariantNumeric: "tabular-nums" as const } : {}) }}
+                      >
                         {t("analytics.reports.resourceApptCount", { count: r.count })}
                       </span>
                     </div>
@@ -328,6 +371,6 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
           )}
         </CardNew>
       </div>
-    </div>
+    </Raiz>
   );
 }
