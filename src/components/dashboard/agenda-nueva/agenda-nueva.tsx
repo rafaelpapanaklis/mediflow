@@ -25,6 +25,8 @@ import { AgendaNuevaProvider, useAgendaNueva } from "./contexto-agenda-nueva";
 import { PanelCita } from "./panel-cita";
 import { PanelHuecos } from "./panel-huecos";
 import { VistaDia } from "./vista-dia";
+import { VistaSemana } from "./vista-semana";
+import { VistaMes } from "./vista-mes";
 import s from "./agenda-nueva.module.css";
 
 export interface AgendaNuevaProps {
@@ -56,43 +58,17 @@ function Armazon({ clinicTaxMode, userRole }: AgendaNuevaProps) {
       <div className={s.cuerpo}>
         <div className={s.zonaAgenda}>
           {/* ── Las tres vistas ──
-              Día es de ws1-t1. Semana y Mes las trae ws1-t2 en
-              `feat/agenda-semana-mes`: cuando lleguen, sus dos componentes
-              sustituyen los dos `null` de abajo y no hace falta tocar nada
-              más de este archivo. Consumen la misma `Cuadricula`, la misma
-              `TarjetaCita` y el mismo `useAgendaNueva()`. */}
+              Día es de ws1-t1; Semana y Mes, de ws1-t2. Las tres comparten la
+              misma `Cuadricula`, la misma `TarjetaCita`, los mismos tokens y
+              el mismo `useAgendaNueva()`: no hay una rejilla por vista. */}
           {ag.vista === "dia" && <VistaDia />}
-          {/* ws1-t2 sustituye estos dos por <VistaSemana /> y <VistaMes />. */}
-          {ag.vista === "semana" && <EnConstruccion vista="Semana" />}
-          {ag.vista === "mes" && <EnConstruccion vista="Mes" />}
+          {ag.vista === "semana" && <VistaSemana />}
+          {ag.vista === "mes" && <VistaMes />}
         </div>
 
         {ag.panel === "cita" && <PanelCita clinicTaxMode={clinicTaxMode} userRole={userRole} />}
         {ag.panel === "huecos" && <PanelHuecos />}
       </div>
-    </div>
-  );
-}
-
-/**
- * Lo que se ve mientras Semana y Mes no estén enchufadas.
- *
- * Existe para que, si esta rama se integra antes que la de ws1-t2, pulsar
- * «Semana» no deje la pantalla en blanco sin explicación: una pantalla vacía
- * y muda parece una avería.
- */
-function EnConstruccion({ vista }: { vista: string }) {
-  const ag = useAgendaNueva();
-  return (
-    <div className={s.enConstruccion}>
-      <p className={s.enConstruccionTitulo}>{vista} todavía no está lista</p>
-      <p className={s.enConstruccionTexto}>
-        La vista {vista.toLowerCase()} del diseño nuevo llega en la siguiente entrega.
-        Mientras tanto puedes seguir trabajando en la vista Día.
-      </p>
-      <button type="button" className={s.navHoy} onClick={() => ag.irAVista("dia")}>
-        Volver a Día
-      </button>
     </div>
   );
 }
