@@ -1,0 +1,179 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Rediseño de Inventario (WS1-T_INVENTARIO).
+
+   Mismo idioma visual que el menú de dos niveles y las pantallas ya
+   aprobadas (Pacientes, Agenda): Instrument Sans, fondo lila clarísimo,
+   tarjetas blancas de borde suave, violeta #4d3fc6 de acento. Los colores
+   viven aquí como tokens `--inv-*` con su versión oscura — los MISMOS
+   valores que `--pr-*` (pacientes-rediseno) y `--m2-*` (el menú): no se
+   inventa paleta nueva, se copia la ya aprobada, igual que hizo Pacientes.
+
+   Todo cuelga de `.pageRediseno`, que solo se pone cuando la clínica tiene
+   encendido el interruptor `menu-dos-niveles`. Es ADITIVO sobre las clases
+   globales que ya usa Inventario (`.card`, `.kpi`, `.btn-new`, `.table-new`,
+   `.search-field`, `.segment-new`, `.modal`, `.input-new`, `.mono`): sin esa
+   clase no se aplica ni una regla de aquí abajo y la pantalla se pinta
+   exactamente como hoy, píxel por píxel.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.tokens {
+  --inv-fondo: #f7f6fb;
+  --inv-tarjeta: #ffffff;
+  --inv-tarjeta-2: #fbfaff;
+  --inv-borde: #eae8f0;
+  --inv-borde-suave: #f1eff7;
+  --inv-texto: #1a1826;
+  --inv-texto-2: #464357;
+  --inv-texto-3: #858295;
+  --inv-hover: rgba(26, 24, 38, 0.045);
+  --inv-activo: #4d3fc6;
+  --inv-activo-suave: #eeecff;
+  --inv-activo-texto: #ffffff;
+  --inv-sombra: 0 1px 2px rgba(26, 24, 38, 0.05);
+  --inv-sombra-2: 0 4px 16px rgba(26, 24, 38, 0.08);
+  --inv-radio: 14px;
+  --inv-radio-s: 10px;
+
+  font-family: var(--font-menu), system-ui, sans-serif;
+  color: var(--inv-texto);
+}
+
+:global(.dark) .tokens {
+  --inv-fondo: #0d0a17;
+  --inv-tarjeta: #19162a;
+  --inv-tarjeta-2: #1f1b33;
+  --inv-borde: rgba(255, 255, 255, 0.08);
+  --inv-borde-suave: rgba(255, 255, 255, 0.05);
+  --inv-texto: #edecf3;
+  --inv-texto-2: #b6b3c4;
+  --inv-texto-3: #7f7c90;
+  --inv-hover: rgba(255, 255, 255, 0.05);
+  --inv-activo: #6252e2;
+  --inv-activo-suave: rgba(98, 82, 226, 0.2);
+  --inv-sombra: none;
+  --inv-sombra-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ── La página ─────────────────────────────────────────────────────── */
+
+.pageRediseno {
+  font-family: inherit;
+  color: var(--inv-texto);
+}
+
+/* ── Tarjetas (KPIs y la tarjeta que envuelve la tabla) ───────────────
+   `.card` es la misma clase que usa CardNew en TODO el panel (~290 usos);
+   el ámbito de `.pageRediseno` la deja intacta en cualquier otra pantalla. */
+
+.pageRediseno :global(.card),
+.pageRediseno :global(.kpi) {
+  background: var(--inv-tarjeta);
+  border-color: var(--inv-borde);
+  border-radius: var(--inv-radio);
+  box-shadow: var(--inv-sombra);
+}
+
+.pageRediseno :global(.kpi):hover {
+  border-color: var(--inv-activo);
+  box-shadow: var(--inv-sombra-2);
+}
+
+.pageRediseno :global(.kpi__label) { color: var(--inv-texto-3); }
+.pageRediseno :global(.kpi__value) { color: var(--inv-texto); }
+.pageRediseno :global(.kpi__icon) { background: var(--inv-activo-suave); color: var(--inv-activo); }
+
+/* ── Barra de búsqueda y segmentado ──────────────────────────────────── */
+
+.pageRediseno :global(.search-field) {
+  background: var(--inv-tarjeta);
+  border-color: var(--inv-borde);
+  border-radius: var(--inv-radio-s);
+  color: var(--inv-texto);
+  box-shadow: none;
+}
+
+.pageRediseno :global(.search-field) :global(svg) { color: var(--inv-texto-3); }
+
+.pageRediseno :global(.search-field):focus-within {
+  border-color: var(--inv-activo);
+  box-shadow: 0 0 0 3px var(--inv-activo-suave);
+}
+
+.pageRediseno :global(.segment-new) {
+  background: var(--inv-tarjeta-2);
+  border-color: var(--inv-borde);
+  border-radius: var(--inv-radio-s);
+}
+
+.pageRediseno :global(.segment-new__btn) { color: var(--inv-texto-3); }
+.pageRediseno :global(.segment-new__btn):hover { color: var(--inv-texto); }
+.pageRediseno :global(.segment-new__btn--active) {
+  background: var(--inv-activo);
+  color: var(--inv-activo-texto);
+  font-weight: 600;
+}
+
+/* ── Botones ──────────────────────────────────────────────────────────── */
+
+.pageRediseno :global(.btn-new) {
+  font-family: inherit;
+  border-radius: var(--inv-radio-s);
+}
+
+.pageRediseno :global(.btn-new--primary) {
+  background: var(--inv-activo);
+  box-shadow: none;
+}
+
+.pageRediseno :global(.btn-new--primary):hover {
+  filter: brightness(1.08);
+  background: var(--inv-activo);
+}
+
+.pageRediseno :global(.btn-new--ghost) { color: var(--inv-texto-3); }
+.pageRediseno :global(.btn-new--ghost):hover { background: var(--inv-hover); color: var(--inv-texto); }
+
+/* ── La tabla ─────────────────────────────────────────────────────────── */
+
+.pageRediseno :global(.table-new) { font-family: inherit; }
+
+.pageRediseno :global(.table-new) th {
+  background: transparent;
+  border-bottom-color: var(--inv-borde);
+  color: var(--inv-texto-3);
+}
+
+.pageRediseno :global(.table-new) td {
+  border-bottom-color: var(--inv-borde-suave);
+  color: var(--inv-texto);
+}
+
+.pageRediseno :global(.table-new) tbody tr:hover { background: var(--inv-hover); }
+
+/* ── Formularios (modal «Nuevo artículo») ────────────────────────────── */
+
+.pageRediseno :global(.input-new) {
+  font-family: inherit;
+  background: var(--inv-tarjeta-2);
+  border-color: var(--inv-borde);
+  color: var(--inv-texto);
+  border-radius: 8px;
+}
+
+.pageRediseno :global(.input-new):focus {
+  border-color: var(--inv-activo);
+  box-shadow: 0 0 0 3px var(--inv-activo-suave);
+}
+
+.pageRediseno :global(.form-section__title) { color: var(--inv-texto-2); }
+
+/* ── Las cantidades: tabular-nums sobre Instrument Sans, nunca
+   monoespaciada. `.mono` (globals.css) es `font-family: var(--font-mono)`,
+   que YA cae en Instrument Sans cuando el interruptor está encendido
+   (`TipografiaPanel` redeclara esa variable panel-wide), pero se fija aquí
+   de forma explícita y local — sin depender de ese efecto a distancia — y
+   sin tocar `.mono` para las pantallas que no llevan este envoltorio. */
+.pageRediseno :global(.mono) {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
