@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
 import { SabinaPermissionsModal } from "@/components/dashboard/team/sabina-permissions-modal";
+import { RaizRediseno } from "@/components/dashboard/equipo-rediseno/raiz";
 import { useT } from "@/i18n/i18n-provider";
 import { prepararImagen } from "@/lib/image-client";
 
@@ -84,7 +85,7 @@ interface TeamMember {
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword,
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword, rediseno,
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -97,6 +98,10 @@ function MemberForm({
   // current user es SUPER_ADMIN editando a un non-SUPER_ADMIN. La logica
   // de confirm + POST + display del tempPassword vive en TeamClient.
   onResetPassword?: () => void;
+  // Con la bandera apagada, la cédula sigue en `font-mono` tal cual hoy —
+  // "byte por byte igual" manda incluso sobre la regla de tipografía, que
+  // solo aplica dentro del rediseño (WS1-T5).
+  rediseno: boolean;
 }) {
   const t = useT();
   const [svcInput, setSvcInput] = useState("");
@@ -238,7 +243,8 @@ function MemberForm({
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">{t("settings.team.cedulaProfLabel")}</Label>
             <input
-              className="input-new font-mono" style={{ height: 42, fontSize: 13.5 }}
+              className={rediseno ? "input-new" : "input-new font-mono"}
+              style={{ height: 42, fontSize: 13.5, ...(rediseno ? { fontVariantNumeric: "tabular-nums" as const } : {}) }}
               placeholder="1234567"
               maxLength={15}
               value={form.cedulaProfesional}
@@ -248,7 +254,8 @@ function MemberForm({
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">{t("settings.team.cedulaEspLabel")}</Label>
             <input
-              className="input-new font-mono" style={{ height: 42, fontSize: 13.5 }}
+              className={rediseno ? "input-new" : "input-new font-mono"}
+              style={{ height: 42, fontSize: 13.5, ...(rediseno ? { fontVariantNumeric: "tabular-nums" as const } : {}) }}
               placeholder={t("settings.team.cedulaEspPlaceholder")}
               maxLength={15}
               value={form.cedulaEspecialidad}
@@ -510,9 +517,15 @@ function MemberPhoto({
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-interface Props { team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string }
+interface Props {
+  team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string;
+  // El mismo interruptor por clínica del menú de dos niveles y de Pacientes.
+  // false por defecto: sin la prop (o con la clínica apagada) la pantalla se
+  // pinta exactamente igual que hoy.
+  rediseno?: boolean;
+}
 
-export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false }: Props) {
   const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
@@ -708,8 +721,10 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
     setTimeout(() => setCopied(false), 2000);
   }
 
+  const Raiz = rediseno ? RaizRediseno : "div";
+
   return (
-    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+    <Raiz style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
@@ -993,7 +1008,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             <MemberForm
               form={form} setForm={setForm}
               onSubmit={createDoctor} onCancel={() => setShowNew(false)}
-              loading={loading} isEdit={false}
+              loading={loading} isEdit={false} rediseno={rediseno}
             />
           </div>
         </div>
@@ -1013,7 +1028,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             <MemberForm
               form={form} setForm={setForm}
               onSubmit={updateDoctor} onCancel={() => setEditMember(null)}
-              loading={loading} isEdit={true}
+              loading={loading} isEdit={true} rediseno={rediseno}
               // Reset password solo aparece cuando el actor es SUPER_ADMIN
               // y el target NO es SUPER_ADMIN. El backend valida lo mismo.
               onResetPassword={
@@ -1046,6 +1061,6 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         member={sabinaMember}
         onClose={() => setSabinaMember(null)}
       />
-    </div>
+    </Raiz>
   );
 }
