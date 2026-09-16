@@ -3,21 +3,21 @@ import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import s from "./rediseno.module.css";
 
 /**
- * La raíz del rediseño de Equipo: la lista de miembros y su detalle,
+ * La raíz del rediseño de Reportes (WS1-T5): KPIs, gráficas y tablas,
  * vestidos con el mismo lenguaje visual que el menú de dos niveles y «Hoy».
  *
  * NO declara tokens propios: monta `CLASES_MENU` (`menu-dos-niveles/clases.ts`),
  * que trae los `--m2-*` del menú —con su versión oscura— y las dos familias
  * tipográficas (Instrument Sans y los íconos). Las reglas de
  * `rediseno.module.css` sobreescriben, solo dentro de este subárbol, las
- * clases compartidas de globals.css (`.card`, `.btn-new--primary`,
- * `.badge-new--brand`, `.input-new`…) leyendo esos tokens por herencia. Así,
- * si el menú cambia de color, Equipo cambia con él, y no hay una segunda
- * paleta que mantener.
+ * clases compartidas de globals.css (`.card`, `.kpi`, `.table-new`…) leyendo
+ * esos tokens por herencia, y las gráficas de recharts reciben
+ * `var(--m2-activo)` desde `reports-client.tsx`. Así, si el menú cambia de
+ * color, Reportes cambia con él, y no hay una segunda paleta que mantener.
  *
  * Solo se monta con el interruptor `menu-dos-niveles` encendido para la
- * clínica (`team-client.tsx`). Apagado, la pantalla se pinta exactamente
- * como hoy: no se monta ni un nodo de aquí.
+ * clínica. Apagado, la pantalla se pinta exactamente como hoy: no se monta
+ * ni un nodo de aquí.
  */
 export function RaizRediseno({
   children,

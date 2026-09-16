@@ -5,16 +5,19 @@ import { Grid3x3, Lightbulb } from "lucide-react";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsHeatmap, type HeatmapCell } from "@/components/dashboard/analytics/analytics-heatmap";
 import { useT } from "@/i18n/i18n-provider";
+import { OccupancyRediseno } from "./occupancy-rediseno";
 
-interface Resource { id: string; name: string }
-interface Doctor { id: string; firstName: string; lastName: string }
+export interface Resource { id: string; name: string }
+export interface Doctor { id: string; firstName: string; lastName: string }
 
 interface Props {
   resources: Resource[];
   doctors: Doctor[];
+  /** Interruptor `menu-dos-niveles` de la clínica: enciende el diseño nuevo. */
+  rediseno?: boolean;
 }
 
-interface OccupancyData {
+export interface OccupancyData {
   heatmap: HeatmapCell[][];
   hours: number[];
   weeks: number;
@@ -25,13 +28,13 @@ interface OccupancyData {
   };
 }
 
-const PRESETS = [
+export const PRESETS = [
   { id: "7d",  labelKey: "analytics.occupancy.preset7d",  days: 7  },
   { id: "30d", labelKey: "analytics.occupancy.preset30d", days: 30 },
   { id: "90d", labelKey: "analytics.occupancy.preset90d", days: 90 },
 ];
 
-export function OccupancyClient({ resources, doctors }: Props) {
+export function OccupancyClient({ resources, doctors, rediseno = false }: Props) {
   const t = useT();
   const [preset, setPreset] = useState("30d");
   const [resourceId, setResourceId] = useState<string>("");
@@ -57,6 +60,23 @@ export function OccupancyClient({ resources, doctors }: Props) {
       .catch(() => setLoading(false));
     return () => ctrl.abort();
   }, [preset, resourceId, doctorId]);
+
+  if (rediseno) {
+    return (
+      <OccupancyRediseno
+        resources={resources}
+        doctors={doctors}
+        preset={preset}
+        setPreset={setPreset}
+        resourceId={resourceId}
+        setResourceId={setResourceId}
+        doctorId={doctorId}
+        setDoctorId={setDoctorId}
+        data={data}
+        loading={loading}
+      />
+    );
+  }
 
   return (
     <AnalyticsLayout

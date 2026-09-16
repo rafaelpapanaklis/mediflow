@@ -6,8 +6,9 @@ import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layo
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { EfficiencyGauge } from "@/components/dashboard/analytics/efficiency-gauge";
 import { useT } from "@/i18n/i18n-provider";
+import { OverviewRediseno } from "./overview-rediseno";
 
-interface OverviewData {
+export interface OverviewData {
   monthAppts: number;
   prevAppts: number;
   apptsDeltaPct: number;
@@ -26,9 +27,11 @@ interface OverviewData {
 
 interface Props {
   data: OverviewData;
+  /** Interruptor `menu-dos-niveles` de la clínica: enciende el diseño nuevo. */
+  rediseno?: boolean;
 }
 
-export function OverviewClient({ data }: Props) {
+export function OverviewClient({ data, rediseno = false }: Props) {
   const t = useT();
   // Efficiency score se calcula client-side via API porque depende del
   // día actual (real-time) y de joins con users + agenda config. El
@@ -48,6 +51,10 @@ export function OverviewClient({ data }: Props) {
       .catch(() => setScoreLoading(false));
     return () => ctrl.abort();
   }, []);
+
+  // REDISEÑO — mismos datos y mismos hooks; solo cambia la ropa. Apagado, el
+  // JSX de abajo se pinta exactamente como hoy.
+  if (rediseno) return <OverviewRediseno data={data} score={score} scoreLoading={scoreLoading} />;
 
   return (
     <AnalyticsLayout
