@@ -7,6 +7,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { round2 } from "@/lib/invoice-totals";
+import { denyIfCfdiVigente } from "@/lib/invoices/cfdi-vigente";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -73,6 +74,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const invoice = await tx.invoice.findFirst({ where: { id: params.id, clinicId } });
     if (!invoice) return { error: "Factura no encontrada", status: 404 };
     if (invoice.status === "CANCELLED") return { error: "La factura está cancelada", status: 400 };
+    // Con CFDI, reembolsar aquí lo dejaría vigente ante el SAT por el total (N3).
+    // Va DENTRO del candado y sobre la fila recién leída: el apartado del
+    // timbrado (UPDATE … WHERE "cfdiUuid" IS NULL) espera a que esta transacción
+    // suelte la fila, así que no se cuela un timbrado entre la comprobación y el
+    // reembolso.
+    const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "reembolsar");
+    if (cfdiDenied) return { denied: cfdiDenied };
     if (invoice.paid <= 0)              return { error: "Esta factura no tiene pagos para reembolsar", status: 400 };
     // Lo pagado se compara REDONDEADO: una factura legada con paid =
     // 1000.0099999999999 rechazaba el reembolso completo de $1,000.01.
@@ -108,6 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return { invoice, newPaid, newBalance, newStatus };
   });
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
+  if ("denied" in result) return result.denied;
   const { invoice, newPaid, newBalance, newStatus } = result;
 
   await logMutation({

@@ -8,7 +8,9 @@ import { logMutation } from "@/lib/audit";
 import {
   createInvoice, createOrUpdateCustomer, getOrgApiKey, getOrganizationStatus,
   validateRfc, CLAVES_SAT_MEDICOS, UNIDAD_SAT, FORMAS_PAGO_SAT,
+  type InvoiceResult,
 } from "@/lib/facturapi";
+import { cfdiClaimFor, isCfdiClaim, CFDI_EN_CURSO_ERROR } from "@/lib/invoices/cfdi-vigente";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { isUsableWhereId } from "@/lib/validations";
 import { getResolvedPlan } from "@/lib/plans";
@@ -142,6 +144,9 @@ export async function POST(req: NextRequest) {
     },
   });
   if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+  if (isCfdiClaim(invoice.cfdiUuid)) {
+    return NextResponse.json({ error: CFDI_EN_CURSO_ERROR, code: "CFDI_EN_CURSO" }, { status: 409 });
+  }
   if (invoice.cfdiUuid) return NextResponse.json({ error: "Esta factura ya tiene CFDI timbrado" }, { status: 400 });
   if (invoice.status === "DRAFT") {
     return NextResponse.json({ error: "La factura está en borrador; confírmala antes de timbrar." }, { status: 400 });
@@ -224,6 +229,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Forma de pago SAT inválida: ${payForm}` }, { status: 400 });
   }
 
+  const claim = cfdiClaimFor(invoiceId);
+  let apartada = false;
+  let timbrado: InvoiceResult | null = null;
+
   try {
     const orgApiKey = await getOrgApiKey(clinic.facturApiOrgId);
 
@@ -274,6 +283,30 @@ export async function POST(req: NextRequest) {
       };
     });
 
+    // ── Candado contra el doble timbrado (N2) ───────────────────────────────
+    // Justo antes de pedir el timbre se APARTA la factura en `cfdiUuid`. El
+    // UPDATE solo alcanza la fila si sigue sin CFDI, sin cancelar y con el total
+    // que se validó arriba; en Postgres ese UPDATE … WHERE es atómico, así que de
+    // dos pestañas a la vez solo una lo consigue, y una cancelación o un cambio
+    // de precio que entró desde la lectura no se timbra con el dato viejo. No
+    // depende de ningún índice. Va aquí y no antes para que una función cortada
+    // en las llamadas previas a Facturapi no deje la factura apartada sin timbre.
+    // Detalle en lib/invoices/cfdi-vigente.ts.
+    const { count } = await prisma.invoice.updateMany({
+      where: {
+        id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: null,
+        status: { notIn: ["DRAFT", "CANCELLED"] }, total: invoice.total,
+      },
+      data: { cfdiUuid: claim },
+    });
+    if (count === 0) {
+      return NextResponse.json({
+        error: "No se timbró: la factura cambió mientras tanto o ya se está timbrando en otra pestaña. Cierra y vuelve a abrir la factura para ver cómo quedó.",
+        code:  "CFDI_EN_CURSO",
+      }, { status: 409 });
+    }
+    apartada = true;
+
     const result = await createInvoice({
       orgApiKey,
       customerId,
@@ -281,6 +314,7 @@ export async function POST(req: NextRequest) {
       paymentForm: payForm,
       items,
     });
+    timbrado = result;
 
     // ── El importe REAL del SAT ───────────────────────────────────────────────
     // `result.total` es lo que Facturapi timbró DE VERDAD. Se guardaba en
@@ -395,7 +429,36 @@ export async function POST(req: NextRequest) {
 
   } catch (err: any) {
     console.error("CFDI error:", err);
-    return NextResponse.json({ error: err.message ?? "Error al timbrar CFDI" }, { status: 500 });
+    if (!timbrado) {
+      // Facturapi no devolvió timbre: se suelta el apartado, solo si sigue siendo
+      // el de esta petición, para que la factura se pueda corregir y reintentar.
+      if (apartada) {
+        await prisma.invoice.updateMany({
+          where: { id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: claim },
+          data:  { cfdiUuid: null },
+        }).catch((e) => console.error("CFDI: no se pudo soltar el apartado", { invoiceId, e }));
+      }
+      return NextResponse.json({ error: err.message ?? "Error al timbrar CFDI" }, { status: 500 });
+    }
+    // El CFDI YA existe ante el SAT y algo falló después (la transacción, el
+    // plan…). El UUID no se puede perder: se deja en la factura en lugar del
+    // apartado; si ni eso entra, el apartado se queda y bloquea el reintento.
+    // El log lleva con qué rehacer el CfdiRecord a mano: el resto (receptor,
+    // XML, PDF) se recupera de Facturapi con `facturapiId`, sin datos fiscales
+    // del paciente en los logs.
+    const hecho = timbrado;
+    console.error("CFDI timbrado ante el SAT pero no guardado completo:", {
+      clinicId: ctx!.clinicId, invoiceId, uuid: hecho.uuid, facturapiId: hecho.id, total: hecho.total,
+    });
+    await prisma.invoice.updateMany({
+      where: { id: invoiceId, clinicId: ctx!.clinicId, cfdiUuid: claim },
+      data:  { cfdiUuid: hecho.uuid },
+    }).catch((e) => console.error("CFDI: tampoco se pudo guardar el UUID en la factura", { invoiceId, uuid: hecho.uuid, e }));
+    return NextResponse.json({
+      error: `El CFDI SÍ se timbró (UUID ${hecho.uuid}), pero algo falló después. No lo vuelvas a timbrar: si la factura no muestra su CFDI, escríbenos a soporte con este UUID.`,
+      code:  "CFDI_TIMBRADO_SIN_GUARDAR",
+      uuid:  hecho.uuid,
+    }, { status: 500 });
   }
 }
 
