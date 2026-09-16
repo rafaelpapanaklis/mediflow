@@ -339,3 +339,35 @@ test("sin huérfanos devuelve la lista base tal cual (copia, no la misma)", () =
   assert.deepEqual(carriles, base);
   assert.notEqual(carriles, base);
 });
+
+/* ── 8. PENDING: el décimo estado que el tipo de TypeScript no declara ───── */
+
+test("una cita en PENDING cuenta como «sin confirmar», no se pierde en la nota", () => {
+  // El enum de Postgres tiene DIEZ estados: `PENDING` sigue existiendo y encima
+  // es el valor por defecto de la columna. El tipo de TypeScript solo declara
+  // nueve, así que comparar `status === "SCHEDULED"` a mano se las comía: un día
+  // con veinte citas y cinco en PENDING decía «20 citas» y ninguna nota ámbar.
+  const o = ocupacion([
+    cita("09:00", 60, "d1", "PENDING" as AppointmentStatus),
+    cita("10:00", 60, "d1", "SCHEDULED"),
+    cita("11:00", 60, "d1", "CONFIRMED"),
+  ]);
+  assert.equal(o.totalCitas, 3);
+  assert.equal(o.sinConfirmar, 2);
+  assert.deepEqual(notaDelDia(o), { tipo: "sin-confirmar", texto: "2 sin confirmar" });
+});
+
+test("una cita en PENDING ocupa sillón: sus minutos cuentan", () => {
+  const o = ocupacion([cita("09:00", 60, "d1", "PENDING" as AppointmentStatus)]);
+  assert.equal(o.minutosOcupados, 60);
+  assert.equal(o.segmentos[0]!.minutos, 60);
+});
+
+test("PENDING abre carril como cualquier otra cita viva", () => {
+  const carriles = carrilesConHuerfanos(
+    [DIAZ],
+    [cita("09:00", 60, "nuevo", "PENDING" as AppointmentStatus)],
+    (id) => ({ id, nombre: id, color: "#000" }),
+  );
+  assert.deepEqual(carriles.map((c) => c.id), ["d1", "nuevo"]);
+});

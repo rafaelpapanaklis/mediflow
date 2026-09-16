@@ -57,6 +57,10 @@ export function PanelHuecos() {
   const [cuando, setCuando] = useState<Cuando>("asap");
 
   const [huecos, setHuecos] = useState<Hueco[]>([]);
+  // Sube en uno tras agendar, para repetir la búsqueda: si no, el hueco que
+  // se acaba de ocupar seguía en la lista hasta cambiar de chip, y ofrecía una
+  // hora que ya no existe.
+  const [repetir, setRepetir] = useState(0);
   const [cargando, setCargando] = useState(false);
   const [fallo, setFallo] = useState<string | null>(null);
 
@@ -76,7 +80,7 @@ export function PanelHuecos() {
     [doctorSel, ag.responsablesVisibles],
   );
 
-  const clave = `${cuando}|${duracion}|${idsBuscados.join(",")}`;
+  const clave = `${cuando}|${duracion}|${idsBuscados.join(",")}|${repetir}`;
 
   useEffect(() => {
     if (idsBuscados.length === 0) {
@@ -131,6 +135,9 @@ export function PanelHuecos() {
           resourceId: h.unidadId,
         },
         openAgendaAfter: true,
+        // Al crearse la cita, el hueco deja de existir: se vuelve a buscar
+        // para no seguir ofreciéndolo.
+        onCreated: () => setRepetir((n) => n + 1),
       });
     },
     [abrirNuevaCita, permissions.canCreate, state.timezone],

@@ -22,7 +22,7 @@ import type {
   DoctorColumnDTO,
   ResourceDTO,
 } from "@/lib/agenda/types";
-import { PINTA_POR_ESTADO, type PintaEstado } from "./estados";
+import { citaContada, estadoNormalizado, pintaDeEstado, type PintaEstado } from "./estados";
 import { minutosEnTz } from "./geometria";
 import { AGENDA_TOKENS } from "./tokens";
 
@@ -182,13 +182,17 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
   const duracionCruda = (finMs - new Date(dto.startsAt).getTime()) / 60_000;
   const duracionMin = Math.max(5, Number.isFinite(duracionCruda) ? duracionCruda : 30);
 
-  const pinta = PINTA_POR_ESTADO[dto.status];
+  // `estadoNormalizado` convierte el `PENDING` legacy de la base —que el tipo
+  // de TypeScript no tiene pero la columna sí, y encima es su valor por
+  // defecto— en `SCHEDULED`. Sin esto, una sola fila así tumbaba la vista.
+  const estado = estadoNormalizado(dto.status);
+  const pinta = pintaDeEstado(estado);
 
   // Los minutos de espera solo tienen sentido mientras se espera: una vez
   // terminada la cita, «espera 240 min» sería ruido (y crecería solo).
-  const enEspera = dto.status === "CHECKED_IN" || dto.status === "IN_CHAIR";
+  const enEspera = estado === "CHECKED_IN" || estado === "IN_CHAIR";
   const minutosEsperando = enEspera ? minutosDesde(dto.checkedInAt, ctx.ahora) : null;
-  const minutosEnConsulta = dto.status === "IN_PROGRESS" ? minutosDesde(dto.startedAt, ctx.ahora) : null;
+  const minutosEnConsulta = estado === "IN_PROGRESS" ? minutosDesde(dto.startedAt, ctx.ahora) : null;
 
   const responsableId = dto.doctor?.id ?? null;
   const responsable = responsableId ? ctx.doctores.find((d) => d.id === responsableId) : undefined;
@@ -208,7 +212,7 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
     pacienteId: dto.patient.id ? dto.patient.id : null,
     tratamiento: dto.reason ?? "",
     detalle: detalleDe({
-      estado: dto.status,
+      estado,
       timezone,
       checkedInAt: dto.checkedInAt,
       startedAt: dto.startedAt,
@@ -216,9 +220,9 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
       minutosEsperando,
       minutosEnConsulta,
     }),
-    estado: dto.status,
+    estado,
     pinta,
-    chip: chipDe(dto.status, pinta, minutosEsperando),
+    chip: chipDe(estado, pinta, minutosEsperando),
     responsableId,
     responsableNombre: responsable?.displayName ?? dto.doctor?.shortName ?? "Sin responsable",
     colorResponsable: responsableId
@@ -227,7 +231,7 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
     unidadId: dto.resourceId,
     unidadNombre: unidad?.name ?? null,
     esTeleconsulta: dto.isTeleconsult === true,
-    esperaValidacion: dto.requiresValidation === true && dto.status === "SCHEDULED",
+    esperaValidacion: dto.requiresValidation === true && estado === "SCHEDULED",
     minutosEsperando,
     minutosEnConsulta,
     motivoCancelacion: dto.cancelReason ?? null,
@@ -251,7 +255,7 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
  * vistas no se contradigan en la misma pantalla.
  */
 export function resumenDeColumna(citas: readonly CitaVista[]): string {
-  const contadas = citas.filter((c) => c.estado !== "CANCELLED");
+  const contadas = citas.filter((c) => citaContada(c.estado));
   const nCitas = contadas.length;
   const texto = nCitas === 1 ? "1 cita" : `${nCitas} citas`;
 

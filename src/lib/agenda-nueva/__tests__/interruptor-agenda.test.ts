@@ -81,7 +81,7 @@ test("con la bandera apagada se monta el AgendaShell de SIEMPRE", () => {
   // El ternario tiene que tener a AgendaShell en la rama del `else`.
   assert.match(
     client,
-    /props\.agendaNueva\s*\?[\s\S]{0,200}<AgendaNueva\s*\/>[\s\S]{0,200}:\s*[\s\S]{0,200}<AgendaShell/,
+    /props\.agendaNueva\s*\?[\s\S]{0,300}<AgendaNueva[\s\S]{0,200}:\s*[\s\S]{0,200}<AgendaShell/,
     "el ternario del interruptor cambió de forma: revisa que apagado siga dando AgendaShell",
   );
   assert.match(client, /function AgendaShell\(/, "AgendaShell sigue existiendo");
@@ -168,12 +168,120 @@ test("el mapa de pintas cubre los nueve estados del enum de Prisma", () => {
   const estados = leer("src/lib/agenda-nueva/estados.ts");
   const sinPinta = delSchema.filter((e) => !new RegExp(`^\\s{2}${e}:`, "m").test(estados));
 
-  // `PENDING` es legacy y el tipo de la app ya no lo expone; si apareciera
-  // cualquier OTRO estado sin pinta, es justo el fallo que hay que evitar.
+  // `PENDING` es legacy y el TIPO de la app no lo expone, así que no puede
+  // estar en el `Record`. Pero existe en la base y es el valor por defecto de
+  // la columna, así que tiene que estar cubierto por el normalizador — si no,
+  // una sola fila así tumba la vista (lo encontró el revisor).
   const reales = sinPinta.filter((e) => e !== "PENDING");
   assert.deepEqual(
     reales,
     [],
     `estados del enum sin pinta decidida en estados.ts: ${reales.join(", ")}`,
+  );
+
+  if (delSchema.includes("PENDING")) {
+    assert.match(
+      estados,
+      /export function estadoNormalizado/,
+      "PENDING está en el enum: hace falta el normalizador que lo lleve a SCHEDULED",
+    );
+    assert.match(
+      estados,
+      /export function pintaDeEstado/,
+      "PENDING está en el enum: hace falta pintaDeEstado para no indexar el mapa a pelo",
+    );
+  }
+});
+
+/**
+ * Todos los archivos del rediseño, SIN la lista a mano.
+ *
+ * Se recorren las dos carpetas enteras a propósito: así las vistas Semana y
+ * Mes de ws1-t2 quedan cubiertas por estas redes en cuanto se integren, sin
+ * que nadie tenga que acordarse de añadirlas aquí. Una red que hay que
+ * actualizar a mano es una red que un día se queda corta.
+ */
+function archivosDelRediseno(): string[] {
+  return [
+    ...archivosFuenteBajo("src/lib/agenda-nueva"),
+    ...archivosFuenteBajo("src/components/dashboard/agenda-nueva"),
+  ].filter((r) => !r.includes("/__tests__/") && !r.endsWith("/estados.ts"));
+}
+
+test("nadie indexa PINTA_POR_ESTADO a pelo: para eso está pintaDeEstado", () => {
+  // Indexar el mapa directamente con un estado que venga de la base es
+  // exactamente lo que hacía que una fila `PENDING` dejara la pinta en
+  // `undefined` y tumbara el render entero.
+  const infractores = archivosDelRediseno().filter((r) => /PINTA_POR_ESTADO\s*\[/.test(leer(r)));
+  assert.deepEqual(
+    infractores,
+    [],
+    `usa pintaDeEstado(...) en vez de PINTA_POR_ESTADO[...] en:\n  ${infractores.join("\n  ")}`,
+  );
+});
+
+test("nadie compara estados de cita con cadenas sueltas", () => {
+  // `status === "SCHEDULED"` deja fuera al `PENDING` legacy, que es
+  // exactamente una cita sin confirmar: la nota «N sin confirmar» del Mes
+  // decía cero con cinco dentro. Para eso están `esSinConfirmar`,
+  // `citaContada` y `citaViva`, que normalizan primero.
+  const literales = /\.\s*status\s*[!=]==\s*["'](SCHEDULED|CANCELLED|NO_SHOW|PENDING)["']/;
+  const infractores = archivosDelRediseno().filter((r) => literales.test(leer(r)));
+  assert.deepEqual(
+    infractores,
+    [],
+    `compara .status con una cadena; usa los predicados de estados.ts en:\n  ${infractores.join("\n  ")}`,
+  );
+});
+
+/* ── 5. La bandera no puede cambiar el resultado FISCAL ────────────────── */
+
+test("el régimen fiscal de la clínica llega hasta el cobro de la agenda nueva", () => {
+  // El fallo que encontró el revisor: el panel nuevo cableaba
+  // `clinicTaxMode={null}`, y con `null` el cobro resuelve «exento». Una
+  // clínica con IVA timbraba su CFDI sin desglose SOLO por tener la bandera
+  // encendida — una diferencia fiscal producida por un interruptor de diseño.
+  const client = leer(CLIENT);
+  assert.match(
+    client,
+    /<AgendaNueva[^>]*clinicTaxMode=\{props\.clinicTaxMode\}/,
+    "AgendaNueva tiene que recibir el clinicTaxMode que ya calcula el servidor",
+  );
+
+  const panel = leer("src/components/dashboard/agenda-nueva/panel-cita.tsx");
+  assert.ok(
+    !/clinicTaxMode=\{null\}/.test(panel),
+    "el panel no puede cablear clinicTaxMode a null: timbraría exento",
+  );
+  assert.match(
+    panel,
+    /clinicTaxMode=\{clinicTaxMode\}/,
+    "el modal de cobro tiene que recibir el régimen de la clínica",
+  );
+  // Y sin valor por defecto: un `= null` lo devolvería al mismo sitio.
+  assert.ok(
+    !/clinicTaxMode\s*=\s*null/.test(panel),
+    "clinicTaxMode no puede tener null por defecto",
+  );
+});
+
+test("las dos agendas reciben el MISMO régimen fiscal", () => {
+  // Las dos ramas del interruptor salen del mismo `props.clinicTaxMode`, así
+  // que el CFDI no puede depender de qué agenda esté encendida.
+  const client = leer(CLIENT);
+  const usos = client.match(/clinicTaxMode=\{props\.clinicTaxMode\}/g) ?? [];
+  assert.equal(usos.length, 2, "una por rama del interruptor: agenda nueva y AgendaShell");
+});
+
+test("el rol de quien mira baja hasta el panel", () => {
+  // Sin rol, `possibleTransitions` solo filtra por la forma de la máquina de
+  // estados y ofrece botones que el servidor rechaza con 403.
+  const page = leer(PAGE);
+  assert.match(page, /userRole=\{user\.role\}/, "el rol sale de la sesión");
+  const panel = leer("src/components/dashboard/agenda-nueva/panel-cita.tsx");
+  assert.match(
+    panel,
+    /possibleTransitions\(\s*estadoNormalizado\(dto\.status\),\s*\{\s*role: userRole/,
+    "possibleTransitions tiene que recibir el rol",
   );
 });

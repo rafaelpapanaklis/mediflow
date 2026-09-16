@@ -32,6 +32,7 @@ import {
 } from "@/lib/agenda-nueva/geometria";
 import { aCitaVista, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { carrilesConHuerfanos, horarioDelDia } from "@/lib/agenda-nueva/ocupacion";
+import { citaContada } from "@/lib/agenda-nueva/estados";
 import { diasDeLaSemana, type DiaSemana } from "@/lib/agenda-nueva/calendario";
 import { assignLanes } from "@/lib/agenda/lane-layout";
 import { todayInTz } from "@/lib/agenda/time-utils";
@@ -325,7 +326,7 @@ function useCitasDeLaSemana(ahora: Date): CitaVista[] {
         ahora,
       };
       return state.appointments
-        .filter((a) => a.status !== "CANCELLED")
+        .filter((a) => citaContada(a.status))
         .filter((a) => citaVisible(a.doctor?.id ?? null, a.resourceId))
         .map((a) => aCitaVista(a, ctx));
     },

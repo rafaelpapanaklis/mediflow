@@ -20,12 +20,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
-import { TREATMENT_KINDS, type ResourceDTO } from "@/lib/agenda/types";
+import type { AgendaViewMode } from "@/lib/agenda/types";
+import { TREATMENT_KINDS, type DoctorColumnDTO, type ResourceDTO } from "@/lib/agenda/types";
 import {
   aResponsablesVista,
   type ResponsableVista,
@@ -81,10 +83,18 @@ export function useAgendaNueva(): AgendaNuevaValor {
   return v;
 }
 
+/** La vista de la agenda nueva → la del proveedor de datos de siempre. */
+const VISTA_A_PROVEEDOR: Record<VistaAgenda, AgendaViewMode> = {
+  dia: "day",
+  semana: "week",
+  mes: "month",
+};
+
 export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
-  const { state } = useAgenda();
+  const { state, setViewMode } = useAgenda();
 
   const [vista, setVista] = useState<VistaAgenda>("dia");
+
   const [panel, setPanel] = useState<PanelAbierto>(null);
   const [citaAbiertaId, setCitaAbiertaId] = useState<string | null>(null);
 
@@ -93,6 +103,24 @@ export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
   // mañana aparece solo, sin que nadie tenga que volver a marcarlo.
   const [docsOcultos, setDocsOcultos] = useState<ReadonlySet<string>>(new Set());
   const [unidadesOcultas, setUnidadesOcultas] = useState<ReadonlySet<string>>(new Set());
+
+  /**
+   * La vista nueva y la del proveedor tienen que ir a la par.
+   *
+   * El proveedor recuerda su `viewMode` en `localStorage`, así que alguien que
+   * dejó la agenda vieja en «Semana» abría la nueva en «Día» pero con el
+   * proveedor pidiendo el rango de la SEMANA — y con el eje calculado sobre
+   * los siete días en vez del que se está mirando. Al revés es peor: cuando
+   * ws1-t2 enchufe Semana, sin esto pintaría siete columnas con las citas de
+   * un solo día.
+   *
+   * Se sincroniza en el montaje y en cada cambio de vista, y de paso es lo que
+   * hace que el rango que se pide a la base sea el que la vista necesita.
+   */
+  useEffect(() => {
+    const destino = VISTA_A_PROVEEDOR[vista];
+    if (state.viewMode !== destino) setViewMode(destino);
+  }, [vista, state.viewMode, setViewMode]);
 
   /**
    * Los responsables que la agenda enseña, y solo ésos.
@@ -122,7 +150,7 @@ export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
     const enAgenda = state.doctors.filter((d) => d.activeInAgenda);
     const yaEstan = new Set(enAgenda.map((d) => d.id));
 
-    const huerfanos: typeof state.doctors = [];
+    const huerfanos: DoctorColumnDTO[] = [];
     const vistos = new Set<string>();
     for (const cita of state.appointments) {
       const id = cita.doctor?.id;

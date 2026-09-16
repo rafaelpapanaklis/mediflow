@@ -44,11 +44,14 @@ import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detai
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
+import type { Role } from "@prisma/client";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import { aCitaVista, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
+import { citaContada, estadoNormalizado } from "@/lib/agenda-nueva/estados";
 import { fechaCorta } from "@/lib/agenda-nueva/fechas";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
+import { useMinuto } from "./usar-minuto";
 import s from "./agenda-nueva.module.css";
 
 /* ═══ Flujo de la cita ══════════════════════════════════════════════════
@@ -59,21 +62,34 @@ import s from "./agenda-nueva.module.css";
    estado real y es el final del pipeline. Queda anotado en el reporte.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/** Escalón del flujo al que llega cada estado. */
-const PELDANO: Record<AppointmentStatus, number> = {
-  SCHEDULED: 0,
-  CONFIRMED: 1,
-  CHECKED_IN: 2,
-  IN_CHAIR: 2,
-  IN_PROGRESS: 3,
-  COMPLETED: 4,
-  CHECKED_OUT: 5,
-  // Las dos terminales se salen del carril: el panel enseña un aviso, no pasos.
-  CANCELLED: -1,
-  NO_SHOW: -1,
-};
-
 const PASOS = ["Confirmada", "Llegó", "En consulta", "Atendida", "Salió"] as const;
+
+/**
+ * Dónde cae cada estado en el recorrido de cinco pasos.
+ *
+ *  · `hechos` — cuántos pasos están COMPLETADOS (se pintan en verde).
+ *  · `actual` — el paso que describe el estado de AHORA, resaltado en morado;
+ *    `-1` si el estado no «está» en ningún paso, solo los ha dejado atrás.
+ *
+ * Son dos números y no uno porque no es lo mismo «ya llegó» que «está
+ * esperando»: con un solo número, un paciente en la sala de espera resaltaba
+ * el paso «En consulta» con el subtítulo «llegó 11:04 · espera 24 min» debajo,
+ * que se contradice consigo mismo. Es el mismo reparto que hace el prototipo.
+ */
+const RECORRIDO: Record<AppointmentStatus, { hechos: number; actual: number }> = {
+  SCHEDULED: { hechos: 0, actual: -1 },
+  CONFIRMED: { hechos: 1, actual: -1 },
+  // Llegó y está esperando: «Llegó» es el paso en el que está, no uno pasado.
+  CHECKED_IN: { hechos: 1, actual: 1 },
+  // Ya está dentro, pero la consulta no ha empezado.
+  IN_CHAIR: { hechos: 2, actual: -1 },
+  IN_PROGRESS: { hechos: 2, actual: 2 },
+  COMPLETED: { hechos: 4, actual: -1 },
+  CHECKED_OUT: { hechos: 5, actual: -1 },
+  // Las dos terminales se salen del carril: el panel enseña un aviso, no pasos.
+  CANCELLED: { hechos: -1, actual: -1 },
+  NO_SHOW: { hechos: -1, actual: -1 },
+};
 
 interface AccionEstado {
   etiqueta: string;
@@ -81,38 +97,70 @@ interface AccionEstado {
   destino: AppointmentStatus;
 }
 
-/**
- * La acción principal del pie, por estado. Es la que el diseño pone en el
- * botón negro de 40 px. Solo se pinta si la transición está PERMITIDA por
- * `possibleTransitions` para este usuario y este momento.
- */
-const ACCION_PRINCIPAL: Partial<Record<AppointmentStatus, AccionEstado>> = {
+/** Cómo se llama y con qué ícono se pinta cada destino posible. */
+const ACCIONES: Partial<Record<AppointmentStatus, Omit<AccionEstado, "destino">>> = {
   // El diseño dice «Confirmar por WhatsApp». Aquí es solo «Confirmar»: en el
   // sistema, confirmar es que el paciente confirmó, y mandarle el mensaje es
   // otra acción (el botón de WhatsApp de arriba, que además marca el
   // recordatorio como enviado). Juntarlas mentiría en el expediente.
-  SCHEDULED: { etiqueta: "Confirmar cita", icono: Check, destino: "CONFIRMED" },
-  CONFIRMED: { etiqueta: "Marcar llegada", icono: DoorOpen, destino: "CHECKED_IN" },
-  CHECKED_IN: { etiqueta: "Pasar a consulta", icono: ArrowRight, destino: "IN_PROGRESS" },
-  IN_CHAIR: { etiqueta: "Iniciar consulta", icono: ArrowRight, destino: "IN_PROGRESS" },
-  IN_PROGRESS: { etiqueta: "Terminar consulta", icono: Check, destino: "COMPLETED" },
-  CANCELLED: { etiqueta: "Reabrir cita", icono: RotateCcw, destino: "SCHEDULED" },
-  NO_SHOW: { etiqueta: "Reabrir cita", icono: RotateCcw, destino: "SCHEDULED" },
+  CONFIRMED: { etiqueta: "Confirmar cita", icono: Check },
+  CHECKED_IN: { etiqueta: "Marcar llegada", icono: DoorOpen },
+  IN_CHAIR: { etiqueta: "Pasar al sillón", icono: ArrowRight },
+  IN_PROGRESS: { etiqueta: "Pasar a consulta", icono: ArrowRight },
+  COMPLETED: { etiqueta: "Terminar consulta", icono: Check },
+  CHECKED_OUT: { etiqueta: "Marcar salida", icono: DoorOpen },
+  SCHEDULED: { etiqueta: "Reabrir cita", icono: RotateCcw },
 };
 
 /**
- * Plan B cuando la acción principal no está permitida para este rol. Ejemplo
- * real: recepción no puede pasar a consulta (es CLINICAL), pero sí sentar al
- * paciente en el sillón. Sin esto, el botón desaparecería y recepción se
- * quedaría sin siguiente paso.
+ * Qué destinos son «el siguiente paso» desde cada estado, EN ORDEN DE
+ * PREFERENCIA. Se coge el primero que la máquina de estados permita **a este
+ * rol**; los demás que también permita salen como botón secundario.
+ *
+ * 🔴 Tiene que ser una LISTA y no un solo destino, porque el camino depende
+ * del rol y elegir a ciegas dejaba a media clínica sin botón:
+ *
+ *  · Un DOCTOR con una cita agendada no puede confirmarla (confirmar es de
+ *    recepción) pero sí empezar la consulta. Con un solo destino se le pintaba
+ *    «Confirmar cita», el servidor devolvía 403, y no le quedaba NINGÚN camino
+ *    para pasar su cita a «en consulta» desde la agenda.
+ *  · RECEPCIÓN con un paciente en sala no puede pasarlo a consulta (es
+ *    clínico) pero sí sentarlo en el sillón.
+ *
+ * La causa de fondo era preguntar a `possibleTransitions` sin `role`: ese
+ * filtro es solo estructural y daba por buenas transiciones prohibidas para el
+ * rol. Lo encontró el revisor.
  */
-const ALTERNATIVA: Partial<Record<AppointmentStatus, AccionEstado>> = {
-  CHECKED_IN: { etiqueta: "Pasar al sillón", icono: ArrowRight, destino: "IN_CHAIR" },
-  IN_CHAIR: { etiqueta: "Terminar consulta", icono: Check, destino: "COMPLETED" },
+const SIGUIENTES: Partial<Record<AppointmentStatus, AppointmentStatus[]>> = {
+  SCHEDULED: ["CONFIRMED", "CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"],
+  CONFIRMED: ["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"],
+  CHECKED_IN: ["IN_PROGRESS", "IN_CHAIR"],
+  IN_CHAIR: ["IN_PROGRESS", "COMPLETED"],
+  IN_PROGRESS: ["COMPLETED"],
+  COMPLETED: ["CHECKED_OUT"],
+  // Reabrir es cosa de administradores; a los demás ni se les pinta el botón.
+  CANCELLED: ["SCHEDULED"],
+  NO_SHOW: ["SCHEDULED"],
 };
 
-export function PanelCita() {
+export interface PanelCitaProps {
+  /**
+   * `Clinic.cfdiTaxMode` ("exempt" | "iva16"). 🔴 Obligatorio y sin valor por
+   * defecto a propósito: con `null`, el cobro resuelve «exento» y una clínica
+   * con IVA timbraría su CFDI sin desglose. Sería una diferencia FISCAL
+   * causada solo por tener la bandera encendida. Lo encontró el revisor.
+   */
+  clinicTaxMode: string | null;
+  /** El rol de quien mira; sin él no se sabe qué transiciones le tocan. */
+  userRole?: Role;
+}
+
+export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   const { state, dispatch, permissions, invalidateRangeCache } = useAgenda();
+  // El MISMO reloj por minuto que la cuadrícula: sin él, los minutos de espera
+  // se congelaban al abrir el panel y «No asistió» no aparecía al cumplirse la
+  // gracia de 15 min hasta cerrar y volver a abrir.
+  const ahora = useMinuto();
   const ag = useAgendaNueva();
   const router = useRouter();
   const { open: abrirNuevaCita } = useNewAppointmentDialog();
@@ -137,10 +185,10 @@ export function PanelCita() {
             timezone: state.timezone,
             doctores: state.doctors,
             unidades: state.resources,
-            ahora: new Date(),
+            ahora,
           })
         : null,
-    [dto, state.timezone, state.doctors, state.resources],
+    [dto, state.timezone, state.doctors, state.resources, ahora],
   );
 
   /** La siguiente cita del mismo responsable ese día — la tarjeta gris del pie. */
@@ -153,7 +201,7 @@ export function PanelCita() {
           a.id !== dto.id &&
           a.doctor?.id === dto.doctor?.id &&
           diaEnTz(a.startsAt, state.timezone) === diaEnTz(dto.startsAt, state.timezone) &&
-          a.status !== "CANCELLED" &&
+          citaContada(a.status) &&
           new Date(a.startsAt).getTime() >= finMs,
       )
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
@@ -165,12 +213,18 @@ export function PanelCita() {
   const transiciones = useMemo(
     () =>
       dto
-        ? possibleTransitions(dto.status, {
-            now: new Date(),
+        ? // 🔴 CON `role`: sin él este filtro es solo estructural y da por
+          // buenas transiciones que el rol tiene prohibidas — el botón se
+          // pintaba y el servidor devolvía 403.
+          // El estado NORMALIZADO: una fila legacy en `PENDING` no está en la
+          // máquina de estados y se quedaría sin ninguna transición posible.
+          possibleTransitions(estadoNormalizado(dto.status), {
+            role: userRole,
+            now: ahora,
             appointmentStart: new Date(dto.startsAt),
           })
         : [],
-    [dto],
+    [dto, userRole, ahora],
   );
 
   const cambiarEstado = useCallback(
@@ -269,21 +323,30 @@ export function PanelCita() {
 
   const permitida = (e: AppointmentStatus) => transiciones.includes(e);
 
-  // La principal: la del estado, o su alternativa si el rol no puede con ella.
-  const preferida = ACCION_PRINCIPAL[dto.status];
-  const alterna = ALTERNATIVA[dto.status];
-  const principal =
-    preferida && permitida(preferida.destino)
-      ? preferida
-      : alterna && permitida(alterna.destino)
-        ? alterna
-        : null;
+  // El siguiente paso: el primero de la lista de preferencia que ESTE rol
+  // pueda dar. Los demás que también pueda, abajo como secundarios.
+  const aAccion = (destino: AppointmentStatus): AccionEstado | null => {
+    const a = ACCIONES[destino];
+    return a ? { ...a, destino } : null;
+  };
+  const candidatos = (SIGUIENTES[cita.estado] ?? []).filter(permitida);
+  const principal = candidatos[0] ? aAccion(candidatos[0]) : null;
+  const otrosPasos = candidatos
+    .slice(1)
+    .map(aAccion)
+    .filter((a): a is AccionEstado => a !== null);
 
-  const esCobro = dto.status === "COMPLETED" || dto.status === "CHECKED_OUT";
-  const peldano = PELDANO[dto.status];
-  const terminal = peldano === -1;
+  const esCobro = cita.estado === "COMPLETED" || cita.estado === "CHECKED_OUT";
+  // `cita.estado` y no `dto.status`: ya viene normalizado, así que una fila
+  // legacy en `PENDING` no deja esto en `undefined` (que tumbaba el render).
+  const recorrido = RECORRIDO[cita.estado];
+  const terminal = recorrido.hechos === -1;
+  // El detalle del estado va debajo del paso resaltado; si no hay ninguno
+  // resaltado, debajo del último completado, que es donde el ojo lo busca.
+  const pasoConDetalle = recorrido.actual >= 0 ? recorrido.actual : recorrido.hechos - 1;
 
   const hrefExpediente = cita.pacienteId ? `/dashboard/patients/${cita.pacienteId}` : null;
+  const esAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
 
   return (
     <>
@@ -335,15 +398,21 @@ export function PanelCita() {
               clic o a mandar el teléfono de todos los pacientes del día al
               navegador. Se queda fuera y va anotado en el reporte. */}
           <div className={s.panelAcciones3}>
-            <button
-              type="button"
-              className={s.panelAccion3}
-              onClick={enviarWhatsapp}
-              disabled={enviandoWa}
-            >
-              <MessageCircle size={18} strokeWidth={2} color="var(--ag-verde)" />
-              {enviandoWa ? "Enviando…" : "WhatsApp"}
-            </button>
+            {/* `POST /api/whatsapp/send` es admin-only. Sin este filtro, a
+                recepción y a los doctores les salía el botón y el servidor les
+                devolvía «Solo administradores»: un botón que nunca funciona es
+                peor que no tenerlo. */}
+            {esAdmin && (
+              <button
+                type="button"
+                className={s.panelAccion3}
+                onClick={enviarWhatsapp}
+                disabled={enviandoWa}
+              >
+                <MessageCircle size={18} strokeWidth={2} color="var(--ag-verde)" />
+                {enviandoWa ? "Enviando…" : "WhatsApp"}
+              </button>
+            )}
             <button
               type="button"
               className={s.panelAccion3}
@@ -375,7 +444,7 @@ export function PanelCita() {
             {terminal ? (
               <div className={s.nota} style={{ marginTop: 10 }}>
                 <span className={s.notaIcono}>
-                  {dto.status === "CANCELLED" ? (
+                  {cita.estado === "CANCELLED" ? (
                     <Ban size={18} strokeWidth={2} />
                   ) : (
                     <UserX size={18} strokeWidth={2} />
@@ -386,8 +455,8 @@ export function PanelCita() {
             ) : (
               <div className={s.flujo}>
                 {PASOS.map((etiqueta, k) => {
-                  const hecho = k < peldano;
-                  const actual = k === peldano;
+                  const hecho = k < recorrido.hechos;
+                  const actual = k === recorrido.actual;
                   return (
                     <div key={etiqueta} className={s.flujoPaso}>
                       <div className={s.flujoCarril}>
@@ -411,7 +480,7 @@ export function PanelCita() {
                         >
                           {etiqueta}
                         </div>
-                        {actual && <div className={s.flujoSub}>{cita.detalle}</div>}
+                        {k === pasoConDetalle && <div className={s.flujoSub}>{cita.detalle}</div>}
                       </div>
                     </div>
                   );
@@ -425,7 +494,7 @@ export function PanelCita() {
               La agenda no la carga —vive en el expediente y traerla por cita
               sería una consulta más por tarjeta—, así que este bloque ámbar se
               reserva para lo que la agenda SÍ sabe y recepción necesita ver.  */}
-          {dto.requiresValidation && dto.status === "SCHEDULED" && (
+          {dto.requiresValidation && cita.estado === "SCHEDULED" && (
             <div className={s.panelSeccion}>
               <div className={s.rotuloSeccion}>Atención</div>
               <div className={s.nota}>
@@ -451,14 +520,14 @@ export function PanelCita() {
               onClick={abrirCobro}
               disabled={buscandoFactura}
             >
-              {dto.status === "CHECKED_OUT" ? (
+              {cita.estado === "CHECKED_OUT" ? (
                 <Receipt size={20} strokeWidth={2} />
               ) : (
                 <CreditCard size={20} strokeWidth={2} />
               )}
               {buscandoFactura
                 ? "Abriendo…"
-                : dto.status === "CHECKED_OUT"
+                : cita.estado === "CHECKED_OUT"
                   ? "Ver recibo"
                   : "Cobrar"}
             </button>
@@ -507,6 +576,23 @@ export function PanelCita() {
               </button>
             )}
 
+            {/* Los OTROS pasos que este rol también puede dar. Recepción, con
+                un paciente en sala, tiene «Pasar al sillón» de principal y
+                nada más; un doctor tiene «Pasar a consulta» y, además,
+                «Pasar al sillón» aquí. Nadie se queda sin camino. */}
+            {otrosPasos.map((a) => (
+              <button
+                key={a.destino}
+                type="button"
+                className={s.accionSecundaria}
+                onClick={() => cambiarEstado(a.destino)}
+                disabled={enVuelo !== null || !permissions.canEdit}
+              >
+                <a.icono size={18} strokeWidth={2} />
+                {a.etiqueta}
+              </button>
+            ))}
+
             {/* Contextual: no asistió (antes de empezar) o marcar salida
                 (después de terminar). El diseño solo tiene dos botones aquí,
                 pero dejarlos fuera sería QUITAR funcionalidad de la agenda. */}
@@ -519,17 +605,6 @@ export function PanelCita() {
               >
                 <UserX size={18} strokeWidth={2} />
                 No asistió
-              </button>
-            )}
-            {permitida("CHECKED_OUT") && permissions.canEdit && dto.status === "COMPLETED" && (
-              <button
-                type="button"
-                className={s.accionSecundaria}
-                onClick={() => cambiarEstado("CHECKED_OUT")}
-                disabled={enVuelo !== null}
-              >
-                <DoorOpen size={18} strokeWidth={2} />
-                Marcar salida
               </button>
             )}
           </div>
@@ -550,7 +625,7 @@ export function PanelCita() {
           open
           invoice={factura}
           patientName={cita.nombrePaciente}
-          clinicTaxMode={null}
+          clinicTaxMode={clinicTaxMode}
           onClose={() => setFactura(null)}
           onMutated={() => {
             invalidateRangeCache();

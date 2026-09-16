@@ -30,6 +30,11 @@
  * barra. Lo mismo si el filtro deja cero carriles.
  *
  * ─── Qué cuenta y qué no ──────────────────────────────────────────────────
+ * Los tres criterios viven en `estados.ts` (`citaContada`, `citaViva`,
+ * `esSinConfirmar`) y NO se repiten aquí con literales. La razón tiene nombre:
+ * el enum de la base tiene DIEZ estados, no nueve — `PENDING` sigue existiendo
+ * y encima es el valor por defecto de la columna—, así que comparar
+ * `status === "SCHEDULED"` a mano se come las citas en `PENDING` sin avisar.
  *  - CANCELLED no cuenta para nada: ni en «N citas», ni en los minutos, ni en
  *    los segmentos. Una cita cancelada liberó su hueco.
  *  - NO_SHOW cuenta en «N citas» (se agendó y ocupó un renglón de la agenda)
@@ -47,6 +52,7 @@ import { getTzParts } from "@/lib/agenda/time-utils";
 import type { ScheduleDay } from "@/lib/agenda/clinic-hours";
 import { scheduleDayOfISO } from "@/lib/agenda/clinic-hours";
 import type { AppointmentStatus } from "@/lib/agenda/types";
+import { citaContada, citaViva, esSinConfirmar } from "./estados";
 
 /** Lo mínimo que la ocupación necesita saber de una cita. */
 export interface CitaOcupacion {
@@ -185,9 +191,9 @@ export function ocupacionDelDia(entrada: EntradaOcupacion): OcupacionDia {
   const { dayISO, citas, schedules, timezone, carriles } = entrada;
   const modo = entrada.modo ?? "doctor";
 
-  const vivas = citas.filter((c) => c.status !== "CANCELLED");
-  const totalCitas = vivas.length;
-  const sinConfirmar = vivas.filter((c) => c.status === "SCHEDULED").length;
+  const contadas = citas.filter((c) => citaContada(c.status));
+  const totalCitas = contadas.length;
+  const sinConfirmar = contadas.filter((c) => esSinConfirmar(c.status)).length;
 
   const horario = horarioDelDia(dayISO, schedules, timezone);
   const horarioDesconocido = horario === null;
@@ -204,8 +210,8 @@ export function ocupacionDelDia(entrada: EntradaOcupacion): OcupacionDia {
   // segmento: si le inventáramos un carril, la barra mentiría sobre QUIÉN.
   const porCarril = new Map<string, number>();
   let minutosOcupados = 0;
-  for (const c of vivas) {
-    if (c.status === "NO_SHOW") continue;
+  for (const c of contadas) {
+    if (!citaViva(c.status)) continue;
     const dur = duracionMin(c);
     if (dur === null) continue;
     minutosOcupados += dur;
@@ -308,7 +314,7 @@ export function carrilesConHuerfanos(
   const conocidos = new Set(base.map((c) => c.id));
   const huerfanos: Carril[] = [];
   for (const cita of citas) {
-    if (cita.status === "CANCELLED") continue;
+    if (!citaContada(cita.status)) continue;
     const id = modo === "resource" ? cita.resourceId : cita.doctorId;
     if (!id || conocidos.has(id)) continue;
     conocidos.add(id);

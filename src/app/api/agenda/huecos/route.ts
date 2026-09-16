@@ -3,6 +3,7 @@ import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { fetchActiveDoctors } from "@/lib/agenda/server";
 import { isValidDateISO, todayInTz } from "@/lib/agenda/time-utils";
+import { sumarDias } from "@/lib/agenda-nueva/fechas";
 import {
   buscarHuecosDelRango,
   rangoDeCuando,
@@ -64,8 +65,14 @@ export async function GET(req: Request) {
   // tampoco se barren días que no pueden dar nada.
   const desdeParam = url.searchParams.get("desde");
   const base = rangoDeCuando(cuando, hoy);
+  // Con techo: `?desde=9999-01-01` no filtra nada indebido, pero haría barrer
+  // catorce días del año 9999 para no encontrar nada. Más allá de un año, la
+  // pregunta no es «¿hay hueco?» sino un error o un juguete.
+  const tope = sumarDias(hoy, 365);
   const desde =
-    desdeParam && isValidDateISO(desdeParam) && desdeParam > base.desde ? desdeParam : base.desde;
+    desdeParam && isValidDateISO(desdeParam) && desdeParam > base.desde && desdeParam <= tope
+      ? desdeParam
+      : base.desde;
   const dias = Math.max(1, Math.min(MAX_DIAS, base.dias));
 
   // Los responsables entre los que buscar. Se cruzan con los activos de la

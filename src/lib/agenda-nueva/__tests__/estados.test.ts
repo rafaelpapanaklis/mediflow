@@ -13,7 +13,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AppointmentStatus } from "@/lib/agenda/types";
-import { citaViva, ESTADOS_MUERTOS, PINTA_POR_ESTADO } from "../estados";
+import {
+  citaContada,
+  citaViva,
+  esSinConfirmar,
+  estadoNormalizado,
+  ESTADOS_MUERTOS,
+  pintaDeEstado,
+  PINTA_POR_ESTADO,
+} from "../estados";
 import { AGENDA_TOKENS } from "../tokens";
 
 /** Los nueve del enum, escritos a mano para que el test no dependa del mapa. */
@@ -128,4 +136,67 @@ test("ESTADOS_MUERTOS se deriva del mapa, no de una lista aparte", () => {
   // sola: es lo que evita que las dos se desincronicen.
   const desdeElMapa = LOS_NUEVE.filter((e) => PINTA_POR_ESTADO[e].muerta);
   assert.deepEqual([...ESTADOS_MUERTOS], desdeElMapa);
+});
+
+/* ── El PENDING legacy: el estado que el tipo no tiene y la base sí ────── */
+
+test("«PENDING» no deja la pinta en undefined — tumbaba la vista entera", () => {
+  // El enum de Postgres tiene DIEZ valores y el tipo de TS solo NUEVE:
+  // `PENDING` sigue existiendo y además es el `@default` de la columna. Una
+  // sola fila así dejaba `pinta` en `undefined` y la primera lectura de
+  // `pinta.chipTexto` lanzaba DENTRO del render de la vista Día.
+  const pinta = pintaDeEstado("PENDING");
+  assert.ok(pinta, "PENDING tiene que tener pinta");
+  assert.equal(pinta.chipTexto, "Sin confirmar", "PENDING es una cita agendada sin confirmar");
+  assert.deepEqual(pinta, PINTA_POR_ESTADO.SCHEDULED);
+});
+
+test("estadoNormalizado lleva PENDING a SCHEDULED y deja en paz a los nueve", () => {
+  assert.equal(estadoNormalizado("PENDING"), "SCHEDULED");
+  for (const e of LOS_NUEVE) assert.equal(estadoNormalizado(e), e);
+});
+
+test("ningún valor inesperado de la base puede dejar la pinta en undefined", () => {
+  // Defensa en profundidad: si mañana alguien añade un estado al enum de
+  // Postgres y se olvida del tipo, la agenda lo pinta como «sin confirmar» en
+  // vez de caerse.
+  for (const basura of ["PENDING", "LO_QUE_SEA", "", "scheduled"]) {
+    const pinta = pintaDeEstado(basura);
+    assert.ok(pinta && typeof pinta.chipTexto === "string", `«${basura}» sin pinta`);
+  }
+  assert.equal(citaViva("PENDING"), true);
+  assert.equal(citaViva("LO_QUE_SEA"), true);
+});
+
+/* ── Los predicados que comparten las tres vistas ──────────────────────── */
+
+test("«sin confirmar» incluye el PENDING legacy", () => {
+  // El fallo que encontró ws1-t2 en la nota ámbar del Mes: con
+  // `status === "SCHEDULED"` a pelo, un día con cinco citas en PENDING decía
+  // «0 sin confirmar». Y esa nota existe para decir «llama a estos pacientes».
+  assert.equal(esSinConfirmar("SCHEDULED"), true);
+  assert.equal(esSinConfirmar("PENDING"), true);
+  for (const e of LOS_NUEVE) {
+    if (e === "SCHEDULED") continue;
+    assert.equal(esSinConfirmar(e), false, `${e} no está «sin confirmar»`);
+  }
+});
+
+test("«N citas» cuenta todo menos las canceladas, plantones incluidos", () => {
+  assert.equal(citaContada("CANCELLED"), false);
+  assert.equal(citaContada("NO_SHOW"), true, "el plantón se dibuja, así que cuenta");
+  assert.equal(citaContada("PENDING"), true);
+  for (const e of LOS_NUEVE) {
+    assert.equal(citaContada(e), e !== "CANCELLED", `citaContada(${e})`);
+  }
+});
+
+test("las dos cuentas son distintas a propósito: un plantón cuenta pero no ocupa", () => {
+  // «N citas» y «minutos ocupados» no pueden usar el mismo criterio: un
+  // plantón ocupó un renglón del libro pero no ocupó el sillón.
+  assert.equal(citaContada("NO_SHOW"), true);
+  assert.equal(citaViva("NO_SHOW"), false);
+  // Y una cancelada no cuenta para ninguna de las dos.
+  assert.equal(citaContada("CANCELLED"), false);
+  assert.equal(citaViva("CANCELLED"), false);
 });

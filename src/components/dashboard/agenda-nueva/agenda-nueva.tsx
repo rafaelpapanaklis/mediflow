@@ -18,6 +18,7 @@
  * la agenda actual. Aquí no hay ni un `useReducer` nuevo.
  */
 
+import type { Role } from "@prisma/client";
 import { instrumentSans } from "@/fonts/menu";
 import { BarraHerramientas } from "./barra-herramientas";
 import { AgendaNuevaProvider, useAgendaNueva } from "./contexto-agenda-nueva";
@@ -28,15 +29,26 @@ import { VistaSemana } from "./vista-semana";
 import { VistaMes } from "./vista-mes";
 import s from "./agenda-nueva.module.css";
 
-export function AgendaNueva() {
+export interface AgendaNuevaProps {
+  /**
+   * `Clinic.cfdiTaxMode` ("exempt" | "iva16"), ya resuelto en el servidor.
+   * Baja hasta el cobro del panel: sin él, el CFDI se timbraría EXENTO en una
+   * clínica con IVA, y eso sería una diferencia FISCAL causada por la bandera.
+   */
+  clinicTaxMode: string | null;
+  /** El rol de quien mira, para no ofrecer transiciones que su rol no permite. */
+  userRole?: Role;
+}
+
+export function AgendaNueva(props: AgendaNuevaProps) {
   return (
     <AgendaNuevaProvider>
-      <Armazon />
+      <Armazon {...props} />
     </AgendaNuevaProvider>
   );
 }
 
-function Armazon() {
+function Armazon({ clinicTaxMode, userRole }: AgendaNuevaProps) {
   const ag = useAgendaNueva();
 
   return (
@@ -54,7 +66,7 @@ function Armazon() {
           {ag.vista === "mes" && <VistaMes />}
         </div>
 
-        {ag.panel === "cita" && <PanelCita />}
+        {ag.panel === "cita" && <PanelCita clinicTaxMode={clinicTaxMode} userRole={userRole} />}
         {ag.panel === "huecos" && <PanelHuecos />}
       </div>
     </div>

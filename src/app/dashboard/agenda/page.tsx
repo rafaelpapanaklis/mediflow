@@ -158,6 +158,11 @@ export default async function AgendaPage({ searchParams }: PageProps) {
       clinicTaxMode={clinic.cfdiTaxMode ?? "exempt"}
       permissions={agendaPermissions}
       agendaNueva={agendaNueva}
+      // El ROL, no solo los permisos: la máquina de estados de las citas
+      // decide por rol (confirmar es de recepción, iniciar consulta es
+      // clínico), y sin él el panel de la agenda nueva ofrecería botones que
+      // el servidor va a rechazar con un 403.
+      userRole={user.role}
     />
   );
 }
