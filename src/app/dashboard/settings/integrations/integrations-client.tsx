@@ -18,6 +18,11 @@ import {
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./integrations.module.css";
+import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
+import {
+  Bloque, BotonGuardar, Campo, Encabezado, Entrada, Insignia, Rejilla, Seccion, SubtituloGrupo,
+} from "@/components/dashboard/configuracion-rediseno/piezas";
+import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 
 type Status = "ok" | "warn" | "off";
 
@@ -41,9 +46,13 @@ interface ServerStatus {
 export function IntegrationsClient({
   clinic,
   serverStatus,
+  rediseno = false,
 }: {
   clinic: ClinicCreds;
   serverStatus: ServerStatus;
+  /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
+   *  resuelto en el servidor. false = la pantalla de siempre, tal cual. */
+  rediseno?: boolean;
 }) {
   const t = useT();
   const [twilioSid, setTwilioSid] = useState(clinic.twilioAccountSid ?? "");
@@ -125,6 +134,164 @@ export function IntegrationsClient({
       setSavingEmail(false);
     }
   }, [postmarkEmail, t]);
+
+  // ── REDISEÑO (ws1-t2): mismo estado, mismo guardado, mismos textos. ──
+  // Las claves, los webhooks y los nombres de variable conservan la letra de
+  // máquina (`.mono-tecnico`, globals.css): es la ÚNICA excepción que fija
+  // tipografia-panel.tsx, para identificadores que alguien copia tal cual.
+  if (rediseno) {
+    return (
+      <RaizConfiguracion>
+        <Encabezado
+          volver={{ href: "/dashboard/settings", texto: t("settings.integrations.backToSettings") }}
+          titulo={t("settings.integrations.title")}
+          subtitulo={t("settings.integrations.subtitle")}
+        />
+        <Rejilla>
+          {/* ─── WhatsApp / Twilio ─── */}
+          <Seccion
+            icono={<MessageCircle size={18} strokeWidth={1.75} aria-hidden />}
+            tonoIcono="exito"
+            titulo="WhatsApp Business"
+            subtitulo={t("settings.integrations.twilioDesc")}
+            extra={<InsigniaEstado status={twilioStatus} />}
+            pie={
+              <BotonGuardar
+                onClick={saveTwilio}
+                guardando={savingTwilio}
+                texto={<><Save size={14} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.saveCredentials")}</>}
+                textoGuardando={t("common.saving")}
+              />
+            }
+          >
+            <Campo etiqueta="Twilio Account SID" ayuda={t("settings.integrations.twilioSidHint")}>
+              <Entrada
+                className="mono-tecnico"
+                value={twilioSid}
+                onChange={(e) => setTwilioSid(e.target.value)}
+                placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Campo>
+            <Campo etiqueta="Twilio Auth Token" ayuda={t("settings.integrations.twilioTokenHint")}>
+              <div className={cr.conSufijo}>
+                <Entrada
+                  className="mono-tecnico"
+                  type={showToken ? "text" : "password"}
+                  value={twilioToken}
+                  onChange={(e) => setTwilioToken(e.target.value)}
+                  placeholder={twilioConnected && twilioMasked ? twilioMasked : "••••••••••••••••••••••••••••••••"}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  className={cr.sufijo}
+                  onClick={() => setShowToken((v) => !v)}
+                  aria-label={showToken ? t("settings.integrations.hideToken") : t("settings.integrations.showToken")}
+                >
+                  {showToken ? <EyeOff size={14} strokeWidth={1.75} aria-hidden /> : <Eye size={14} strokeWidth={1.75} aria-hidden />}
+                </button>
+              </div>
+            </Campo>
+            <Campo etiqueta={t("settings.integrations.whatsappNumberLabel")} ayuda={t("settings.integrations.whatsappNumberHint")}>
+              <Entrada
+                value={twilioNumber}
+                onChange={(e) => setTwilioNumber(e.target.value)}
+                placeholder="+5215512345678"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Campo>
+            <Bloque>
+              <SubtituloGrupo>{t("settings.integrations.webhookTwilio")}</SubtituloGrupo>
+              <code className={`${cr.codigo} mono-tecnico`}>https://&lt;tu-dominio&gt;/api/webhooks/twilio/whatsapp</code>
+            </Bloque>
+          </Seccion>
+
+          {/* ─── Email / Postmark ─── */}
+          <Seccion
+            icono={<Mail size={18} strokeWidth={1.75} aria-hidden />}
+            tonoIcono="info"
+            titulo={t("settings.integrations.emailTitle")}
+            subtitulo={t("settings.integrations.emailDesc")}
+            extra={<InsigniaEstado status={emailStatus} />}
+            pie={
+              <BotonGuardar
+                onClick={saveEmail}
+                guardando={savingEmail}
+                texto={<><Save size={14} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.saveAddress")}</>}
+                textoGuardando={t("common.saving")}
+              />
+            }
+          >
+            <Campo etiqueta={t("settings.integrations.inboundAddressLabel")} ayuda={t("settings.integrations.inboundAddressHint")}>
+              <Entrada
+                value={postmarkEmail}
+                onChange={(e) => setPostmarkEmail(e.target.value)}
+                placeholder="clinica-xxx@inbox.dalecontrol.com"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Campo>
+            <Bloque>
+              <SubtituloGrupo>{t("settings.integrations.webhookPostmark")}</SubtituloGrupo>
+              <code className={`${cr.codigo} mono-tecnico`}>https://&lt;tu-dominio&gt;/api/webhooks/postmark/inbound</code>
+            </Bloque>
+            <div className={cr.estadoFila}>
+              <strong className="mono-tecnico">POSTMARK_INBOUND_SECRET</strong>
+              {serverStatus.postmarkInbound ? (
+                <span className={cr.estadoOk}><CheckCircle2 size={12} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configured")}</span>
+              ) : (
+                <span className={cr.estadoNo}><XCircle size={12} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.notConfigured")}</span>
+              )}
+            </div>
+          </Seccion>
+
+          {/* ─── Anthropic Claude ─── */}
+          <Seccion
+            icono={<Sparkles size={18} strokeWidth={1.75} aria-hidden />}
+            titulo={t("settings.integrations.aiTitle")}
+            subtitulo={t("settings.integrations.aiDesc")}
+            extra={<InsigniaEstado status={aiStatus} />}
+          >
+            <div className={cr.estadoFila}>
+              <strong className="mono-tecnico">ANTHROPIC_API_KEY</strong>
+              {serverStatus.anthropic ? (
+                <span className={cr.estadoOk}><CheckCircle2 size={12} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configuredOnServer")}</span>
+              ) : (
+                <span className={cr.estadoNo}><XCircle size={12} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.missingConfigureVercel")}</span>
+              )}
+            </div>
+            <p className={cr.campoAyuda}>
+              {t("settings.integrations.aiNotePrefix")}{" "}
+              <code className="mono-tecnico">ANTHROPIC_API_KEY</code> {t("settings.integrations.aiNoteSuffix")}
+            </p>
+          </Seccion>
+
+          {/* ─── OpenAI Whisper ─── */}
+          <Seccion
+            icono={<Mic size={18} strokeWidth={1.75} aria-hidden />}
+            tonoIcono="alerta"
+            titulo={t("settings.integrations.sttTitle")}
+            subtitulo={t("settings.integrations.sttDesc")}
+            extra={<InsigniaEstado status={sttStatus} />}
+          >
+            <div className={cr.estadoFila}>
+              <strong className="mono-tecnico">OPENAI_API_KEY</strong>
+              {serverStatus.openai ? (
+                <span className={cr.estadoOk}><CheckCircle2 size={12} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.configuredOnServer")}</span>
+              ) : (
+                <span className={cr.estadoNo}><XCircle size={12} strokeWidth={1.75} aria-hidden /> {t("settings.integrations.missingConfigureVercel")}</span>
+              )}
+            </div>
+            <p className={cr.campoAyuda}>{t("settings.integrations.sttNote")}</p>
+          </Seccion>
+        </Rejilla>
+      </RaizConfiguracion>
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -335,6 +502,18 @@ export function IntegrationsClient({
       </div>
     </div>
   );
+}
+
+/** La insignia de estado del rediseño: mismos tres estados y mismos textos. */
+function InsigniaEstado({ status }: { status: Status }) {
+  const t = useT();
+  if (status === "ok") {
+    return <Insignia tono="exito" punto>{t("settings.integrations.statusActive")}</Insignia>;
+  }
+  if (status === "warn") {
+    return <Insignia tono="alerta" punto>{t("settings.integrations.statusIncomplete")}</Insignia>;
+  }
+  return <Insignia punto>{t("settings.integrations.statusDisabled")}</Insignia>;
 }
 
 function StatusBadge({ status }: { status: Status }) {

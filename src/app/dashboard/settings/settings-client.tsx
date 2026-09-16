@@ -13,6 +13,14 @@ import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
+import { RaizConfiguracion } from "@/components/dashboard/configuracion-rediseno/raiz";
+import {
+  Acciones, Archivo, Area, Aviso, Barra, Bloque, BloqueFila, Boton, BotonGuardar, Campo, Campos2,
+  Casilla, Chip, Chips, Columna, Contenido, Cuerpo, Encabezado, Enlace, EnlaceBoton, Entrada,
+  Estadistica, Estadisticas, Fila, FilaInterruptor, Filas, Insignia, Navegacion, Opcion, Opciones,
+  Persona, Seccion, Selector, SubtituloGrupo, Vacio,
+} from "@/components/dashboard/configuracion-rediseno/piezas";
+import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 
 const ClinicLocationPicker = dynamic(
   () => import("@/components/dashboard/ClinicLocationPicker").then((m) => m.ClinicLocationPicker),
@@ -89,9 +97,12 @@ interface Props {
    *  se puede tocar, en vez de dejar los controles activos para que el PATCH
    *  responda 403 sin explicación. */
   puedeEditarClinica?: boolean;
+  /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
+   *  resuelto en el servidor. false = la pantalla de siempre, tal cual. */
+  rediseno?: boolean;
 }
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false }: Props) {
   const t = useT();
   const [tab,      setTab]      = useState(() => {
     const requested = initialTab || "clinica";
@@ -520,6 +531,640 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     { id:"horarios",     label:t("settings.client.tabHours"),        icon:Clock,         show:isAdminUser },
     { id:"seguridad",    label:t("settings.client.tabSecurity"),     icon:Shield,        show:true        },
   ].filter(item => item.show);
+
+  // ── REDISEÑO (ws1-t2) ──────────────────────────────────────────────────
+  // Mismo estado, mismas funciones de guardado, mismos apartados y mismos
+  // textos que el camino de siempre (abajo): aquí solo cambia la ropa. Se
+  // entra ÚNICAMENTE con el interruptor `menu-dos-niveles` encendido para la
+  // clínica; apagado, este bloque ni se evalúa y la pantalla es la de hoy.
+  if (rediseno) {
+    const navItems = TABS.map((item) => ({
+      id: item.id,
+      label: item.label,
+      icono: <item.icon size={16} strokeWidth={1.75} aria-hidden />,
+    }));
+    const cityOk = Boolean((clinic.city ?? "").trim());
+    const catOk = Boolean(clinic.category) && clinic.category !== "OTHER";
+    const alternarPublica = () => {
+      if (!isPublic && !(cityOk && catOk)) {
+        toast.error("Completa ciudad y categoría para aparecer en el directorio.");
+        return;
+      }
+      setIsPublic((p: boolean) => !p);
+    };
+    const rolDe = (m: TeamMember) =>
+      m.role === "SUPER_ADMIN" ? t("settings.client.roleSuperAdmin")
+      : m.role === "ADMIN" ? t("settings.client.roleAdmin")
+      : m.role === "RECEPTIONIST" ? t("settings.client.roleReceptionist")
+      : t("settings.client.roleDoctor");
+
+    return (
+      <RaizConfiguracion>
+        <Encabezado titulo={t("settings.client.pageTitle")} subtitulo={t("settings.client.pageSubtitle")} />
+        <Cuerpo>
+          <Navegacion items={navItems} activo={tab} onCambiar={setTab} />
+          <Contenido>
+
+            {/* ── SUSCRIPCIÓN ── */}
+            {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} />}
+
+            {/* ── CLÍNICA ── */}
+            {tab === "clinica" && (
+              <Columna>
+                <Seccion
+                  titulo={t("settings.client.clinicDataTitle")}
+                  nota={!puedeEditarClinica ? (
+                    <Aviso icono={<Lock size={14} strokeWidth={1.75} aria-hidden />}>
+                      Puedes ver estos datos, pero no editarlos. Pídele a un administrador que haga el cambio.
+                    </Aviso>
+                  ) : undefined}
+                  apagada={!puedeEditarClinica}
+                  pieIzquierda={
+                    <Insignia tono={clinic.plan === "CLINIC" || clinic.plan === "PRO" ? "violeta" : "neutro"}>
+                      {t("settings.client.planBadge", { plan: clinic.plan })}
+                    </Insignia>
+                  }
+                  pie={
+                    <BotonGuardar
+                      onClick={saveClinic}
+                      guardando={saving}
+                      disabled={!puedeEditarClinica}
+                      texto={t("common.saveChanges")}
+                      textoGuardando={t("common.saving")}
+                    />
+                  }
+                >
+                  <Campo etiqueta={t("settings.client.clinicNameLabel")}>
+                    <Entrada value={clinic.name ?? ""} onChange={e => setClinic((c: any) => ({ ...c, name: e.target.value }))} />
+                  </Campo>
+
+                  {/* Logo — el MISMO Clinic.logoUrl que usa la mini-web pública. */}
+                  <Campo
+                    etiqueta="Logo de la clínica"
+                    ayuda="Aparece en tu página pública y en la cabecera de tus facturas, recetas, órdenes de laboratorio y cartas de referencia. Usa PNG o JPG — son los únicos formatos que también se ven bien en tus documentos."
+                  >
+                    {clinic.logoUrl ? (
+                      <Acciones>
+                        {/* eslint-disable-next-line @next/next/no-img-element -- logo subido por la clínica, mismo patrón que el camino de siempre */}
+                        <img src={clinic.logoUrl} alt="Logo de la clínica" className={cr.logo} />
+                        <div className={cr.columna} style={{ gap: 6 }}>
+                          <label className={`${cr.boton} ${cr.botonCorto}`}>
+                            {uploadingLogo ? "Subiendo…" : "Cambiar logo"}
+                            <input type="file" accept="image/png,image/jpeg" className={cr.oculto} disabled={uploadingLogo}
+                              onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ""; }} />
+                          </label>
+                          <Enlace peligro onClick={removeLogo} disabled={uploadingLogo}>
+                            <Trash2 size={13} strokeWidth={1.75} aria-hidden /> Quitar logo
+                          </Enlace>
+                        </div>
+                      </Acciones>
+                    ) : (
+                      <>
+                        <Aviso tono="alerta">
+                          Aún no tienes logo. Tus facturas, recetas y demás documentos van a salir solo con
+                          el nombre de la clínica hasta que subas uno.
+                        </Aviso>
+                        <label className={cr.subirZona}>
+                          <ImagePlus size={20} strokeWidth={1.75} aria-hidden />
+                          <span>{uploadingLogo ? "Subiendo…" : "Subir logo"}</span>
+                          <input type="file" accept="image/png,image/jpeg" className={cr.oculto} disabled={uploadingLogo}
+                            onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ""; }} />
+                        </label>
+                      </>
+                    )}
+                  </Campo>
+
+                  <Campos2>
+                    <Campo etiqueta={t("settings.client.categoryLabel")}>
+                      <Selector value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
+                        {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                      </Selector>
+                    </Campo>
+                    <Campo etiqueta={t("settings.client.timezoneLabel")} ayuda={t("settings.client.timezoneHelp")}>
+                      <Selector value={clinic.timezone ?? "America/Mexico_City"} onChange={e => setClinic((c: any) => ({ ...c, timezone: e.target.value }))}>
+                        {TIMEZONES.map(tz => <option key={tz.id} value={tz.id}>{tz.label}</option>)}
+                      </Selector>
+                    </Campo>
+                  </Campos2>
+
+                  <Campo
+                    etiqueta="Idioma del panel · Panel language"
+                    ayuda="Cambia el idioma de todo el panel para tu clínica. Al guardar, la página se recargará."
+                  >
+                    <Selector value={clinic.locale ?? "es"} onChange={e => saveLocale(e.target.value)}>
+                      <option value="es">Español</option>
+                      <option value="en">English</option>
+                    </Selector>
+                  </Campo>
+
+                  <Campos2>
+                    <Campo etiqueta={t("settings.client.cityLabel")}>
+                      <Entrada value={clinic.city ?? ""} onChange={e => setClinic((c: any) => ({ ...c, city: e.target.value }))} />
+                    </Campo>
+                    <Campo etiqueta={t("settings.client.addressLabel")}>
+                      <Entrada value={clinic.address ?? ""} onChange={e => setClinic((c: any) => ({ ...c, address: e.target.value }))} />
+                    </Campo>
+                  </Campos2>
+
+                  <Campo etiqueta={t("settings.client.mapsLinkLabel")} ayuda={t("settings.client.mapsLinkHelp")}>
+                    <Entrada
+                      placeholder="https://maps.app.goo.gl/…"
+                      value={clinic.mapsUrl ?? ""}
+                      onChange={e => setClinic((c: any) => ({ ...c, mapsUrl: e.target.value }))}
+                    />
+                  </Campo>
+
+                  <ClinicLocationPicker
+                    address={clinic.address}
+                    city={clinic.city}
+                    state={clinic.state}
+                    initialLat={clinic.latitude ?? null}
+                    initialLng={clinic.longitude ?? null}
+                    onChange={(coords) =>
+                      setClinic((c: any) => ({ ...c, latitude: coords?.lat ?? null, longitude: coords?.lng ?? null }))
+                    }
+                  />
+
+                  <Campos2>
+                    <Campo etiqueta={t("settings.client.phoneLabel")}>
+                      <Entrada value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} />
+                    </Campo>
+                    <Campo etiqueta={t("settings.client.contactEmailLabel")}>
+                      <Entrada type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} />
+                    </Campo>
+                  </Campos2>
+
+                  {/* NOM-024 — CLUES Sector Salud */}
+                  <Campo etiqueta={t("settings.client.cluesLabel")} ayuda={t("settings.client.cluesHelp")}>
+                    <Entrada
+                      maxLength={11}
+                      placeholder={t("settings.client.cluesPlaceholder")}
+                      value={clinic.clues ?? ""}
+                      onChange={e => setClinic((c: any) => ({ ...c, clues: e.target.value.toUpperCase().trim() }))}
+                    />
+                  </Campo>
+
+                  <Campo etiqueta={t("settings.client.descriptionLabel")}>
+                    <Area
+                      rows={2}
+                      placeholder={t("settings.client.descriptionPlaceholder")}
+                      value={clinic.description ?? ""}
+                      onChange={e => setClinic((c: any) => ({ ...c, description: e.target.value }))}
+                    />
+                  </Campo>
+
+                  <div>
+                    {/* Gate: solo se ACTIVA con ciudad + categoría real (≠ OTHER). */}
+                    <FilaInterruptor
+                      titulo={isPublic ? t("settings.client.publicClinicLabel") : t("settings.client.privateClinicLabel")}
+                      descripcion={isPublic ? t("settings.client.publicClinicDesc") : t("settings.client.privateClinicDesc")}
+                      activo={isPublic}
+                      onCambiar={alternarPublica}
+                    />
+                    {!(cityOk && catOk) && (
+                      <p className={cr.campoAyuda} style={{ marginTop: 8, color: isPublic ? "var(--warning-strong)" : undefined }}>
+                        {isPublic ? "Completa " : "Agrega "}
+                        {!cityOk && !catOk ? "tu ciudad y categoría" : !cityOk ? "tu ciudad" : "tu categoría"}
+                        {isPublic
+                          ? " (campos de arriba) para que tu clínica aparezca en el directorio."
+                          : " (campos de arriba) para poder publicar tu clínica en el directorio."}
+                      </p>
+                    )}
+                  </div>
+                </Seccion>
+
+                {/* Portal del paciente — cambios de cita. Solo admins: guardan al instante. */}
+                {isAdminUser && (
+                  <Seccion
+                    titulo="Portal del paciente — cambios de cita"
+                    subtitulo="Controla cómo se manejan las solicitudes de reagendar o cancelar que tus pacientes envían desde su portal."
+                  >
+                    <FilaInterruptor
+                      titulo="Auto-aprobar cambios de pacientes"
+                      descripcion="Si está apagado, las solicitudes llegan a tu agenda para aprobarlas."
+                      activo={Boolean(clinic.patientChangesAutoApprove)}
+                      onCambiar={() => savePortalAutoApprove(!(clinic.patientChangesAutoApprove ?? false))}
+                    />
+                    <Campo etiqueta="Ventana mínima (horas)" ayuda="Los pacientes no pueden pedir cambios a menos de estas horas de su cita.">
+                      <Entrada
+                        type="number"
+                        min={0}
+                        max={720}
+                        step={1}
+                        corta
+                        value={minHoursDraft}
+                        onChange={e => setMinHoursDraft(e.target.value)}
+                        onBlur={savePortalMinHours}
+                        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      />
+                    </Campo>
+                  </Seccion>
+                )}
+
+                {/* Programa de afiliados — sin gate de plan ni de rol, a propósito. */}
+                <Seccion
+                  icono={<Handshake size={18} strokeWidth={1.75} aria-hidden />}
+                  titulo="Programa de afiliados"
+                  subtitulo="Recomienda DaleControl a otras clínicas y gana una comisión recurrente por cada una que se suscriba."
+                >
+                  <Acciones>
+                    <EnlaceBoton href="/afiliados" externo>Conocer el programa →</EnlaceBoton>
+                    <EnlaceBoton href="/afiliados/registro" externo>Activar mi cuenta de afiliado →</EnlaceBoton>
+                  </Acciones>
+                </Seccion>
+              </Columna>
+            )}
+
+            {/* ── SERVICIOS POR DOCTOR ── */}
+            {tab === "servicios" && (
+              <Seccion titulo={t("settings.client.servicesTitle")} subtitulo={t("settings.client.servicesSubtitle")}>
+                {team.length === 0 ? (
+                  <Vacio>{t("settings.client.noActiveProfessionals")}</Vacio>
+                ) : (
+                  team.map(member => (
+                    <Bloque key={member.id}>
+                      <Persona iniciales={`${member.firstName[0]}${member.lastName[0]}`} nombre={`${member.firstName} ${member.lastName}`} sub={rolDe(member)} />
+                      <Chips>
+                        {member.services.length === 0 && (
+                          <span className={cr.campoAyuda}>{t("settings.client.noServicesAssigned")}</span>
+                        )}
+                        {member.services.map(svc => (
+                          <Chip key={svc} onQuitar={() => removeServiceFromMember(member.id, svc)} tituloQuitar={t("settings.client.removeServiceTitle")}>
+                            {svc}
+                          </Chip>
+                        ))}
+                      </Chips>
+                      <Acciones>
+                        <Entrada
+                          style={{ flex: 1, minWidth: 200 }}
+                          placeholder={t("settings.client.servicePlaceholder")}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") {
+                              addServiceToMember(member.id, (e.target as HTMLInputElement).value);
+                              (e.target as HTMLInputElement).value = "";
+                            }
+                          }}
+                        />
+                        <Boton
+                          variante="principal"
+                          disabled={savingServices === member.id}
+                          onClick={e => {
+                            const input = (e.currentTarget.previousElementSibling as HTMLInputElement);
+                            addServiceToMember(member.id, input.value);
+                            input.value = "";
+                          }}>
+                          {savingServices === member.id ? "…" : t("settings.client.addServiceBtn")}
+                        </Boton>
+                      </Acciones>
+                    </Bloque>
+                  ))
+                )}
+              </Seccion>
+            )}
+
+            {/* ── PERFIL ── */}
+            {tab === "perfil" && (
+              <Seccion
+                titulo={t("settings.client.profileTitle")}
+                pie={<BotonGuardar onClick={saveUser} guardando={saving} texto={t("settings.client.saveProfileBtn")} textoGuardando={t("common.saving")} />}
+              >
+                <Campos2>
+                  <Campo etiqueta={t("settings.client.firstNameLabel")}>
+                    <Entrada value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} />
+                  </Campo>
+                  <Campo etiqueta={t("settings.client.lastNameLabel")}>
+                    <Entrada value={user.lastName ?? ""} onChange={e => setUser((u: any) => ({ ...u, lastName: e.target.value }))} />
+                  </Campo>
+                </Campos2>
+                <Campos2>
+                  <Campo etiqueta={t("settings.client.emailLabel")}>
+                    <Entrada value={user.email ?? ""} disabled />
+                  </Campo>
+                  <Campo etiqueta={t("settings.client.phoneLabel")}>
+                    <Entrada value={user.phone ?? ""} onChange={e => setUser((u: any) => ({ ...u, phone: e.target.value }))} />
+                  </Campo>
+                </Campos2>
+              </Seccion>
+            )}
+
+            {/* ── FACTURACIÓN CFDI ── (isAdminUser explícito: ?tab=facturacion se escribe a mano) */}
+            {tab === "facturacion" && isAdminUser && (
+              <Columna>
+                <Seccion
+                  titulo={t("settings.client.cfdiTitle")}
+                  subtitulo={t("settings.client.cfdiSubtitle")}
+                  extra={clinic.facturApiEnabled ? <Insignia tono="exito" punto>{t("settings.client.cfdiActiveBadge")}</Insignia> : undefined}
+                  pieIzquierda={
+                    <EnlaceBoton href="https://www.facturapi.io" externo>
+                      <ExternalLink size={16} strokeWidth={1.75} aria-hidden /> Facturapi
+                    </EnlaceBoton>
+                  }
+                  pie={<BotonGuardar onClick={saveCfdi} guardando={saving} texto={t("settings.client.cfdiSaveBtn")} textoGuardando={t("settings.client.cfdiSavingBtn")} />}
+                >
+                  <Aviso tono="info">
+                    <strong>{t("settings.client.cfdiPoweredByTitle")}</strong>{t("settings.client.cfdiPoweredByBody")}
+                  </Aviso>
+                  <Campos2>
+                    <Campo etiqueta={t("settings.client.rfcLabel")} ayuda={t("settings.client.rfcHelp")}>
+                      <Entrada
+                        placeholder="Ej: XAXX010101000"
+                        value={cfdiForm.rfcEmisor}
+                        onChange={e => setCfdiForm(f => ({ ...f, rfcEmisor: e.target.value.toUpperCase() }))}
+                        mayusculas
+                        maxLength={13}
+                      />
+                    </Campo>
+                    <Campo etiqueta={t("settings.client.cpFiscalLabel")}>
+                      <Entrada
+                        placeholder="Ej: 97000"
+                        value={cfdiForm.cpEmisor}
+                        onChange={e => setCfdiForm(f => ({ ...f, cpEmisor: e.target.value.replace(/\D/g,"") }))}
+                        maxLength={5}
+                      />
+                    </Campo>
+                  </Campos2>
+                  <Campo etiqueta={t("settings.client.razonSocialLabel")} ayuda={t("settings.client.razonSocialHelp")}>
+                    <Entrada
+                      placeholder={t("settings.client.razonSocialPlaceholder")}
+                      value={cfdiForm.razonSocial}
+                      onChange={e => setCfdiForm(f => ({ ...f, razonSocial: e.target.value.toUpperCase() }))}
+                      mayusculas
+                    />
+                  </Campo>
+                  <Campo etiqueta={t("settings.client.regimenLabel")}>
+                    <Selector value={cfdiForm.regimenFiscal} onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
+                      {REGIMENES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.desc}</option>)}
+                    </Selector>
+                  </Campo>
+                  {/* Impuestos por default del timbrado (exento art. 15 LIVA es el caso común). */}
+                  <Campo etiqueta={t("settings.client.taxModeLabel")} ayuda={t("settings.client.taxModeHelp")}>
+                    <Opciones>
+                      {[
+                        { value: "exempt", label: t("settings.client.taxModeExempt") },
+                        { value: "iva16",  label: t("settings.client.taxModeIva16")  },
+                      ].map(opt => (
+                        <Opcion
+                          key={opt.value}
+                          type="radio"
+                          name="cfdiTaxMode"
+                          value={opt.value}
+                          checked={cfdiForm.cfdiTaxMode === opt.value}
+                          onChange={() => setCfdiForm(f => ({ ...f, cfdiTaxMode: opt.value }))}
+                        >
+                          {opt.label}
+                        </Opcion>
+                      ))}
+                    </Opciones>
+                  </Campo>
+                  <Aviso>
+                    <strong>{t("settings.client.cfdiNoteLabel")}</strong>
+                    {cfdiLive ? t("settings.client.cfdiNoteBodyLive") : t("settings.client.cfdiNoteBody")}
+                  </Aviso>
+                </Seccion>
+
+                {/* Checklist real de Facturapi, entre la captura fiscal y el CSD. */}
+                <CfdiReadinessCard refreshKey={cfdiStatusKey} />
+
+                <Seccion
+                  titulo={t("settings.client.csdTitle")}
+                  subtitulo={t("settings.client.csdSubtitle")}
+                  extra={clinic.csdUploaded ? <Insignia tono="exito" punto>{t("settings.client.csdActiveBadge")}</Insignia> : undefined}
+                  pie={<BotonGuardar onClick={uploadCsd} guardando={csdUploading} texto={t("settings.client.csdUploadBtn")} textoGuardando={t("settings.client.csdUploadingBtn")} />}
+                >
+                  <Aviso>
+                    {clinic.csdUploaded
+                      ? (clinic.csdValidUntil
+                          ? t("settings.client.csdValidUntilLabel", { date: new Date(clinic.csdValidUntil).toLocaleDateString() })
+                          : t("settings.client.csdActiveBadge"))
+                      : t("settings.client.csdNoneYet")}
+                  </Aviso>
+                  <Campos2>
+                    <Campo etiqueta={t("settings.client.csdCerLabel")}>
+                      <Archivo accept=".cer,application/x-x509-ca-cert,application/octet-stream" onChange={e => setCerFile(e.target.files?.[0] ?? null)} />
+                    </Campo>
+                    <Campo etiqueta={t("settings.client.csdKeyLabel")}>
+                      <Archivo accept=".key,application/octet-stream" onChange={e => setKeyFile(e.target.files?.[0] ?? null)} />
+                    </Campo>
+                  </Campos2>
+                  <Campo etiqueta={t("settings.client.csdPasswordLabel")}>
+                    <Entrada type="password" value={csdPassword} onChange={e => setCsdPassword(e.target.value)}
+                      placeholder={t("settings.client.csdPasswordPlaceholder")} autoComplete="off" />
+                  </Campo>
+                  <Aviso tono="info">{cfdiLive ? t("settings.client.csdLiveNote") : t("settings.client.csdTestNote")}</Aviso>
+                </Seccion>
+              </Columna>
+            )}
+
+            {/* ── ASISTENTE IA ── */}
+            {tab === "ia" && (
+              <Seccion
+                icono={<Bot size={18} strokeWidth={1.75} aria-hidden />}
+                titulo={t("settings.client.aiTitle")}
+                subtitulo={t("settings.client.aiSubtitle")}
+              >
+                {/* Un plan sin IA (BÁSICO) tiene límite 0: se explica en vez de medir 0/0. */}
+                {aiLimit > 0 ? (
+                  <>
+                    <div>
+                      <div className={cr.medidorCabeza}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <Zap size={15} strokeWidth={1.75} aria-hidden style={{ color: "var(--m2-activo)" }} /> {t("settings.client.aiTokensUsedThisMonth")}
+                        </span>
+                        <strong>{aiUsed.toLocaleString()} / {aiLimit.toLocaleString()}</strong>
+                      </div>
+                      <Barra porcentaje={aiPercent} nivel={aiPercent > 80 ? "critico" : aiPercent > 60 ? "alto" : undefined} />
+                      <div className={cr.medidorPie}>
+                        <span>{t("settings.client.aiPercentUsed", { percent: aiPercent })}</span>
+                        <strong>{t("settings.client.aiTokensRemaining", { count: aiRemaining.toLocaleString() })}</strong>
+                      </div>
+                    </div>
+                    <Estadisticas>
+                      <Estadistica valor={aiRemaining.toLocaleString()} etiqueta={t("settings.client.aiStatTokensRemaining")} tono="violeta" />
+                      <Estadistica valor={Math.floor(aiRemaining/AVG_CONSULT_TOKENS).toString()} etiqueta={t("settings.client.aiStatConsultations")} />
+                      <Estadistica valor={`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`} etiqueta={t("settings.client.aiStatEstimatedCost")} tono="exito" />
+                    </Estadisticas>
+                    <div>
+                      <SubtituloGrupo>{t("settings.client.aiBreakdownTitle")}</SubtituloGrupo>
+                      {aiBreakdownRows.length === 0 ? (
+                        <p className={cr.campoAyuda}>{t("settings.client.aiBreakdownEmpty")}</p>
+                      ) : (
+                        <div className={cr.columna} style={{ gap: 10 }}>
+                          {aiBreakdownRows.map(row => (
+                            <div key={row.key}>
+                              <div className={cr.desgloseFila}>
+                                <span className={cr.desgloseNombre}>{row.label}</span>
+                                <span className={cr.desgloseDato}>{t("settings.client.aiBreakdownTokens", { count: row.tokens.toLocaleString() })}</span>
+                                <span className={cr.desglosePorcentaje}>{row.percent}%</span>
+                              </div>
+                              <Barra porcentaje={row.percent} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <Aviso tono="alerta">{t("settings.client.aiNoPlanNotice")}</Aviso>
+                )}
+                <Aviso tono="violeta">
+                  <strong>{t("settings.client.aiHowItWorksTitle")}</strong>{t("settings.client.aiHowItWorksBody")}
+                </Aviso>
+              </Seccion>
+            )}
+
+            {/* ── INTEGRACIONES ── */}
+            {tab === "integraciones" && (
+              <Columna>
+                <Seccion
+                  icono={<CalendarCheck size={18} strokeWidth={1.75} aria-hidden />}
+                  titulo="Google Calendar"
+                  subtitulo={t("settings.client.gcalSubtitle")}
+                  extra={gcalConnected
+                    ? <Insignia tono="exito" punto>{t("settings.client.gcalConnectedBadge")}</Insignia>
+                    : <Insignia>{t("settings.client.gcalNotConnectedBadge")}</Insignia>}
+                >
+                  {gcalConnected ? (
+                    <>
+                      <Aviso tono="exito" icono={<CalendarCheck size={16} strokeWidth={1.75} aria-hidden />}>
+                        <strong>{t("settings.client.gcalAccountConnected")}</strong>
+                        <div>{user.googleCalendarEmail}</div>
+                      </Aviso>
+                      <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalConnectedDesc")}</p>
+                      <Acciones>
+                        <Boton variante="peligro" onClick={disconnectGcal}>{t("settings.client.gcalDisconnectBtn")}</Boton>
+                      </Acciones>
+                    </>
+                  ) : (
+                    <>
+                      <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalConnectDesc")}</p>
+                      <Acciones>
+                        <EnlaceBoton href="/api/google">
+                          <span style={{ fontSize: 17, fontWeight: 700 }}>G</span> {t("settings.client.gcalConnectBtn")}
+                        </EnlaceBoton>
+                      </Acciones>
+                    </>
+                  )}
+                </Seccion>
+
+                {/* WhatsApp (admin only) */}
+                {isAdminUser && (
+                  <Seccion
+                    icono={<MessageCircle size={18} strokeWidth={1.75} aria-hidden />}
+                    titulo="WhatsApp Business"
+                    subtitulo={t("settings.client.whatsappSubtitle")}
+                  >
+                    <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.whatsappDesc")}</p>
+                    <Acciones>
+                      <Enlace href="/dashboard/whatsapp">{t("settings.client.whatsappLink")}</Enlace>
+                    </Acciones>
+                  </Seccion>
+                )}
+
+                {/* Automatizaciones CRM (admin only) — gated, default OFF */}
+                {isAdminUser && (
+                  <Seccion
+                    icono={<Bot size={18} strokeWidth={1.75} aria-hidden />}
+                    titulo="Automatizaciones (CRM)"
+                    subtitulo="Mensajes y tareas automáticas para retener pacientes."
+                  >
+                    <p className={cr.campoAyuda}>
+                      Los mensajes por WhatsApp solo se envían si tu clínica tiene WhatsApp conectado. Todo está apagado por defecto.
+                    </p>
+                    {([
+                      { key: "birthdayMsgActive",      label: "Mensaje de cumpleaños",        desc: "Felicita por WhatsApp a tus pacientes el día de su cumpleaños." },
+                      { key: "postApptFollowupActive", label: "Seguimiento post-cita",        desc: "Pregunta cómo estuvo la visita ~24 h después de una cita completada." },
+                      { key: "noShowTaskActive",       label: "Tarea por riesgo de no-show",  desc: "Crea una tarea al equipo para confirmar citas próximas de alto riesgo." },
+                    ] as const).map((row) => {
+                      const active = Boolean(clinic[row.key]);
+                      return (
+                        <FilaInterruptor
+                          key={row.key}
+                          titulo={row.label}
+                          descripcion={row.desc}
+                          activo={active}
+                          onCambiar={() => saveAutomation({ [row.key]: !active })}
+                        />
+                      );
+                    })}
+                  </Seccion>
+                )}
+              </Columna>
+            )}
+
+            {/* ── RECORDATORIOS ── */}
+            {tab === "recordatorios" && <RemindersSection clinic={clinic} rediseno />}
+
+            {/* ── HORARIOS ── */}
+            {tab === "horarios" && (
+              <Seccion
+                titulo={t("settings.client.hoursTitle")}
+                pie={<BotonGuardar onClick={saveSchedule} guardando={savingSchedule} texto={t("settings.client.hoursSaveBtn")} textoGuardando={t("common.saving")} />}
+              >
+                <div className={cr.columna} style={{ gap: 8 }}>
+                  {DAYS.map((day, i) => {
+                    const sd = schedule[i] ?? { enabled:false, open:"09:00", close:"18:00" };
+                    return (
+                      <BloqueFila key={day} activo={sd.enabled}>
+                        <div className={cr.horaFila}>
+                          <Casilla checked={sd.enabled}
+                            onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...(sc[i] ?? { enabled:false, open:"09:00", close:"18:00" }), enabled:e.target.checked } }))} />
+                          <span className={cr.horaDia}>{t(day)}</span>
+                          {sd.enabled ? (
+                            <>
+                              <Entrada type="time" corta value={sd.open}
+                                onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], open:e.target.value } }))} />
+                              <span className={cr.horaHasta}>{t("settings.client.hoursTo")}</span>
+                              <Entrada type="time" corta value={sd.close}
+                                onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], close:e.target.value } }))} />
+                            </>
+                          ) : (
+                            <span className={cr.horaHasta}>{t("settings.client.hoursClosed")}</span>
+                          )}
+                        </div>
+                      </BloqueFila>
+                    );
+                  })}
+                </div>
+              </Seccion>
+            )}
+
+            {/* ── SEGURIDAD ── */}
+            {tab === "seguridad" && (
+              <Columna>
+                <Seccion
+                  titulo={t("settings.client.changePasswordTitle")}
+                  pie={<BotonGuardar onClick={changePassword} guardando={saving} disabled={!pwForm.next} texto={t("settings.client.changePasswordBtn")} textoGuardando={t("settings.client.changingPasswordBtn")} />}
+                >
+                  <Campos2>
+                    <Campo etiqueta={t("settings.client.newPasswordLabel")}>
+                      <Entrada type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
+                    </Campo>
+                    <Campo etiqueta={t("settings.client.confirmPasswordLabel")}>
+                      <Entrada type="password" autoComplete="new-password" placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm:e.target.value }))} />
+                    </Campo>
+                  </Campos2>
+                </Seccion>
+                <TwoFactorCard
+                  initialEnabled={!!(user as any).totpEnabled}
+                  initialRequire2fa={!!(clinic as any)?.require2fa}
+                  isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
+                />
+                <Seccion titulo={t("settings.client.accountInfoTitle")}>
+                  <Filas>
+                    <Fila etiqueta={t("settings.client.accountEmailLabel")}>{initUser.email}</Fila>
+                    <Fila etiqueta={t("settings.client.accountRoleLabel")}>{initUser.role}</Fila>
+                    <Fila etiqueta={t("settings.client.accountMemberSinceLabel")}>
+                      {new Date(initUser.createdAt).toLocaleDateString("es-MX",{day:"numeric",month:"long",year:"numeric"})}
+                    </Fila>
+                  </Filas>
+                </Seccion>
+              </Columna>
+            )}
+          </Contenido>
+        </Cuerpo>
+      </RaizConfiguracion>
+    );
+  }
 
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>

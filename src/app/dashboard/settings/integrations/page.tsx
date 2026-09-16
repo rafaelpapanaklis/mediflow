@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { IntegrationsClient } from "./integrations-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export const metadata: Metadata = { title: "Integraciones — DaleControl" };
 
@@ -17,17 +18,23 @@ export default async function IntegrationsPage() {
   // permiso que ya exige su hermana /dashboard/settings, no uno nuevo.
   requirePermissionOrRedirect(user, "settings.view");
 
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: user.clinicId },
-    select: {
-      id: true,
-      name: true,
-      twilioAccountSid: true,
-      twilioAuthToken: true,
-      twilioWhatsappNumber: true,
-      postmarkInboundEmail: true,
-    },
-  });
+  // REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
+  // en el mismo Promise.all que la clínica (ni una consulta más; falla
+  // cerrado → false = la pantalla de siempre).
+  const [clinic, rediseno] = await Promise.all([
+    prisma.clinic.findUnique({
+      where: { id: user.clinicId },
+      select: {
+        id: true,
+        name: true,
+        twilioAccountSid: true,
+        twilioAuthToken: true,
+        twilioWhatsappNumber: true,
+        postmarkInboundEmail: true,
+      },
+    }),
+    menuDosNivelesEncendido(user.clinicId),
+  ]);
 
   // Status del lado servidor: detectamos qué env vars tenemos.
   const serverStatus = {
@@ -53,6 +60,7 @@ export default async function IntegrationsPage() {
         postmarkInboundEmail: clinic?.postmarkInboundEmail ?? null,
       }}
       serverStatus={serverStatus}
+      rediseno={rediseno}
     />
   );
 }

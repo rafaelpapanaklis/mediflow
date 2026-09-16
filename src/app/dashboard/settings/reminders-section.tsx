@@ -16,6 +16,10 @@ import {
   type ReminderSettings,
 } from "@/lib/reminders/config";
 import { RecallSection } from "./recall-section";
+import {
+  Area, Aviso, BotonGuardar, Campo, Chip, Chips, Columna, Enlace, FilaInterruptor, Seccion, Selector,
+  SubtituloGrupo, Bloque, Burbuja,
+} from "@/components/dashboard/configuracion-rediseno/piezas";
 
 // Etiqueta i18n de cada momento permitido (minutos antes de la cita).
 const OFFSET_LABEL_KEYS: Record<number, string> = {
@@ -33,7 +37,9 @@ const MAX_OFFSETS = 4;
 // Link de ejemplo para el preview (el real lo genera el cron por cita).
 const SAMPLE_LINK = "https://…/cita/abc/confirmar";
 
-export function RemindersSection({ clinic }: { clinic: any }) {
+/** `rediseno`: el MISMO interruptor `menu-dos-niveles` que baja SettingsClient
+ *  (ws1-t2). Apagado, la sección es la de siempre, tal cual. */
+export function RemindersSection({ clinic, rediseno = false }: { clinic: any; rediseno?: boolean }) {
   const t = useT();
   const [form, setForm] = useState<ReminderSettings>(() =>
     getEffectiveReminderSettings(clinic ?? {}),
@@ -92,6 +98,79 @@ export function RemindersSection({ clinic }: { clinic: any }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  // ── REDISEÑO (ws1-t2): mismo estado, mismo guardado, mismos textos. ──
+  if (rediseno) {
+    return (
+      <Columna>
+        <Seccion
+          titulo={t("settings.reminders.title")}
+          subtitulo={t("settings.reminders.subtitle")}
+          pie={<BotonGuardar onClick={save} guardando={saving} texto={t("common.saveChanges")} textoGuardando={t("common.saving")} />}
+        >
+          <FilaInterruptor
+            titulo={t("settings.reminders.enabledLabel")}
+            descripcion={t("settings.reminders.enabledDesc")}
+            activo={form.enabled}
+            onCambiar={() => setForm(f => ({ ...f, enabled: !f.enabled }))}
+          />
+
+          <Campo etiqueta={t("settings.reminders.offsetsLabel")} ayuda={t("settings.reminders.offsetsHint")}>
+            <Chips>
+              {ALLOWED_REMINDER_OFFSETS.map(min => {
+                const active = form.offsets.includes(min);
+                const blocked = !active && form.offsets.length >= MAX_OFFSETS;
+                return (
+                  <Chip key={min} activo={active} disabled={blocked} onClick={() => toggleOffset(min)}>
+                    {t(OFFSET_LABEL_KEYS[min])}
+                  </Chip>
+                );
+              })}
+            </Chips>
+            {form.offsets.length === 0 && (
+              <Aviso tono="alerta">{t("settings.reminders.noOffsetsWarning")}</Aviso>
+            )}
+          </Campo>
+
+          <Campo etiqueta={t("settings.reminders.channelLabel")} ayuda={includesEmail ? t("settings.reminders.emailOnlyNote") : undefined}>
+            <Selector value={form.channel} onChange={e => setForm(f => ({ ...f, channel: e.target.value as ReminderChannel }))}>
+              <option value="whatsapp">{t("settings.reminders.channelWhatsapp")}</option>
+              <option value="email">{t("settings.reminders.channelEmail")}</option>
+              <option value="both">{t("settings.reminders.channelBoth")}</option>
+            </Selector>
+            {includesWhatsApp && !waConnected && (
+              <Aviso tono="alerta">
+                {t("settings.reminders.waNotConnectedWarning")}{" "}
+                <a href="/dashboard/whatsapp">{t("settings.reminders.waConnectLink")}</a>
+              </Aviso>
+            )}
+          </Campo>
+
+          <Campo
+            etiqueta={t("settings.reminders.templateLabel")}
+            ayuda={t("settings.reminders.templateVarsHint")}
+            derecha={
+              <Enlace suave onClick={() => setForm(f => ({ ...f, template: DEFAULT_REMINDER_TEMPLATE }))}>
+                {t("settings.reminders.restoreDefaultBtn")}
+              </Enlace>
+            }
+          >
+            <Area rows={5} value={form.template} onChange={e => setForm(f => ({ ...f, template: e.target.value }))} />
+          </Campo>
+
+          {/* Vista previa, burbuja de WhatsApp */}
+          <Bloque>
+            <SubtituloGrupo>{t("settings.reminders.previewLabel")}</SubtituloGrupo>
+            <Burbuja>{preview}</Burbuja>
+          </Bloque>
+
+          <Aviso tono="info">{t("settings.reminders.confirmLinkNote")}</Aviso>
+        </Seccion>
+
+        <RecallSection clinic={clinic} rediseno />
+      </Columna>
+    );
   }
 
   return (
