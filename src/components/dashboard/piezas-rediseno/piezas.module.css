@@ -1,0 +1,1142 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Piezas comunes del rediseño (ws1-t4) — Reserva de recursos, Fila de
+   espera (walk-in) y Tratamientos.
+
+   Habla el idioma visual del menú de dos niveles que Rafael aprobó:
+   NO declara tokens propios. La raíz (`raiz.tsx`) monta `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`), que trae los `--m2-*` del menú con su
+   versión oscura y las dos familias tipográficas; aquí solo hay clases
+   que los leen. Lo que el menú no tiene —éxito, alerta, peligro, info—
+   sale de los tokens semánticos de globals.css (`--success-*`,
+   `--danger-*`…), los mismos que el propio menú usa como respaldo en
+   `--m2-soporte`. Un respaldo dentro de `var()` es lo único que lleva
+   un color escrito.
+
+   Las tres pantallas comparten ESTA hoja para que salgan en un solo
+   dialecto: una tarjeta, una fila, un botón, un diálogo, un campo.
+
+   Solo se monta con el interruptor `menu-dos-niveles` encendido para la
+   clínica. Apagado, el cliente de siempre de cada pantalla pinta su
+   árbol de siempre y no llega a importar ni una clase de aquí.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+  container-type: inline-size;
+  container-name: piezas;
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Cifras de ancho fijo en TODO lo que cuelga de aquí (horas, importes,
+   contadores). Va sobre los HIJOS y no sobre la raíz a propósito: la raíz
+   lleva `.tokens` del menú, y `tipografia-panel.tsx` le pone a esa clase
+   `font-variant-numeric: normal` con más peso; sus hijos heredan de aquí. */
+.raiz > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Cabecera de pantalla ─────────────────────────────────────────── */
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.titulo {
+  margin: 0;
+  font-size: clamp(19px, 1.7vw, 23px);
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  color: var(--m2-texto);
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+.acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* ── Botones ─────────────────────────────────────────────────────── */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 15px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+@media (hover: hover) {
+  .boton:hover:not(:disabled) {
+    background: var(--m2-tarjeta-hover);
+    border-color: var(--m2-texto-3);
+  }
+}
+
+.boton:focus-visible,
+.botonIcono:focus-visible,
+.segmento:focus-visible,
+.filaBoton:focus-visible,
+.enlace:focus-visible,
+.chip:focus-visible,
+.selectorItem:focus-visible,
+.cantidadBoton:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.botonPrincipal,
+.botonPrincipal:hover:not(:disabled) {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+@media (hover: hover) {
+  .botonPrincipal:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+}
+
+.botonSuave {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--m2-texto-2);
+}
+
+@media (hover: hover) {
+  .botonSuave:hover:not(:disabled) {
+    background: var(--m2-hover);
+    border-color: transparent;
+    color: var(--m2-texto);
+  }
+}
+
+.botonPeligro {
+  color: var(--danger, #dc2626);
+  border-color: var(--danger-border-strong, rgba(220, 38, 38, 0.35));
+}
+
+@media (hover: hover) {
+  .botonPeligro:hover:not(:disabled) {
+    background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+    border-color: var(--danger, #dc2626);
+  }
+}
+
+.botonExito,
+.botonExito:hover:not(:disabled) {
+  background: var(--success-strong, #047857);
+  border-color: var(--success-strong, #047857);
+  color: var(--m2-activo-texto);
+}
+
+.botonPeq {
+  height: 32px;
+  padding: 0 11px;
+  font-size: 12.5px;
+}
+
+.botonAncho {
+  width: 100%;
+}
+
+.botonIcono {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .botonIcono:hover {
+    background: var(--m2-hover);
+    border-color: var(--m2-tarjeta-borde);
+    color: var(--m2-texto);
+  }
+  .botonIconoPeligro:hover {
+    background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+    border-color: var(--danger-border-strong, rgba(220, 38, 38, 0.35));
+    color: var(--danger, #dc2626);
+  }
+}
+
+/* ── Tarjetas ────────────────────────────────────────────────────── */
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra);
+}
+
+.tarjetaCabeza {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px 12px;
+}
+
+.tarjetaIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.tarjetaTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.tarjetaTitulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  line-height: 1.25;
+  color: var(--m2-texto);
+  overflow-wrap: anywhere;
+}
+
+.tarjetaSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.tarjetaAccion {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tarjetaCuerpo {
+  flex: 1;
+  min-width: 0;
+  padding: 0 18px 18px;
+}
+
+/* Cuerpo que es una lista de filas: menos aire lateral, las filas ya
+   llevan el suyo. */
+.tarjetaLista {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+/* ── Rejillas ────────────────────────────────────────────────────── */
+
+/* Tarjetas de recurso: cada una es un «sillón», como en Recursos. Se
+   reparten por columnas mientras quepan a 300 px y se apilan después;
+   nada se esconde por ancho. */
+.rejilla {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.rejillaKpi {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+/* Por debajo de 720 px de CONTENEDOR (iPad con el menú abierto) los cuatro
+   KPI pasan a dos filas de dos: los cuatro siguen a la vista. */
+@container piezas (max-width: 720px) {
+  .rejillaKpi {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.apilado {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── KPI ─────────────────────────────────────────────────────────── */
+
+.kpi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: var(--m2-sombra);
+}
+
+.kpiTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.kpiEtiqueta {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.kpiValor {
+  margin-top: 2px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  line-height: 1.1;
+  color: var(--m2-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Segmentos (filtros) ─────────────────────────────────────────── */
+
+.segmentos {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: 16px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+}
+
+.segmento {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .segmento:hover {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.segmentoActivo,
+.segmentoActivo:hover {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  font-weight: 600;
+}
+
+/* ── Filas ───────────────────────────────────────────────────────── */
+
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta-hover);
+  transition: background 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .fila:hover {
+    border-color: var(--m2-tarjeta-borde);
+    background: var(--m2-hover);
+  }
+}
+
+/* Fila blanca sobre fondo de pantalla (lista principal, sin tarjeta). */
+.filaSuelta {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+  box-shadow: var(--m2-sombra);
+}
+
+@media (hover: hover) {
+  .filaSuelta:hover {
+    background: var(--m2-tarjeta-hover);
+    border-color: var(--m2-texto-3);
+  }
+}
+
+.filaAtrasada {
+  border-color: var(--warning-border-strong, rgba(217, 119, 6, 0.35));
+}
+
+/* Fila entera clicable. */
+.filaBoton {
+  width: 100%;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.filaApagada {
+  opacity: 0.7;
+}
+
+.filaCuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.filaArriba {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.nombre {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--m2-texto);
+  /* Sin puntos suspensivos: un nombre largo salta de línea en vez de
+     cortarse. Nada se esconde por ancho. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.nombreGrande {
+  font-size: 15px;
+}
+
+.detalle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.detalle > svg {
+  flex-shrink: 0;
+}
+
+.filaAcciones {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.derecha {
+  flex-shrink: 0;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.derechaValor {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m2-texto);
+  white-space: nowrap;
+}
+
+.hora {
+  flex: none;
+  min-width: 66px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.horaAncha {
+  min-width: 118px;
+}
+
+/* Barra de color del doctor a la izquierda de la fila. */
+.barraColor {
+  flex-shrink: 0;
+  width: 3px;
+  height: 40px;
+  border-radius: 2px;
+  background: var(--m2-activo);
+}
+
+.numero {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.iniciales {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.enlace {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--m2-activo);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .enlace:hover {
+    text-decoration: underline;
+  }
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--m2-texto-3);
+}
+
+/* ── Etiquetas de estado y contadores ────────────────────────────── */
+
+.etiqueta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.etiqueta::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.etiquetaNeutra { background: var(--m2-hover); color: var(--m2-texto-3); }
+.etiquetaVioleta { background: var(--m2-iniciales-fondo); color: var(--m2-iniciales-texto); }
+.etiquetaExito { background: var(--success-soft, rgba(5, 150, 105, 0.1)); color: var(--success-strong, #047857); }
+.etiquetaAmbar { background: var(--m2-contador-fondo); color: var(--m2-contador-texto); }
+.etiquetaPeligro { background: var(--danger-soft, rgba(220, 38, 38, 0.1)); color: var(--danger-strong, #991b1b); }
+.etiquetaInfo { background: var(--info-soft, rgba(37, 99, 235, 0.1)); color: var(--info-strong, #1d4ed8); }
+
+.contador {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 99px;
+  background: var(--m2-contador-fondo);
+  color: var(--m2-contador-texto);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Minutos esperando. */
+.espera {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--m2-contador-fondo);
+  color: var(--m2-contador-texto);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Progreso ────────────────────────────────────────────────────── */
+
+.progreso {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--m2-hover);
+  overflow: hidden;
+}
+
+.progresoRelleno {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--m2-activo);
+  transition: width 0.25s ease;
+}
+
+.progresoExito {
+  background: var(--success-strong, #047857);
+}
+
+.progresoCorto {
+  width: 100px;
+  margin-left: auto;
+  margin-top: 5px;
+}
+
+/* ── Estados vacíos ──────────────────────────────────────────────── */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 16px;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta-hover);
+  text-align: center;
+}
+
+.vacioAlto {
+  min-height: 220px;
+  justify-content: center;
+}
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.vacioTitulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m2-texto-2);
+}
+
+.vacioPista {
+  max-width: 36ch;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--m2-texto-3);
+}
+
+/* ── Diálogo ─────────────────────────────────────────────────────── */
+
+/* Mismo velo y misma sombra que los desplegables del menú. */
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(5, 5, 10, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.dialogo {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 32px);
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+  color: var(--m2-texto);
+  overflow: hidden;
+}
+
+.dialogoAncho {
+  max-width: 720px;
+}
+
+.dialogoCabeza {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.dialogoTitulo {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  color: var(--m2-texto);
+  overflow-wrap: anywhere;
+}
+
+.dialogoSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.dialogoCuerpo {
+  flex: 1;
+  min-height: 0;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.dialogoPie {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-tarjeta-hover);
+}
+
+.dialogoPie > * {
+  flex: 1;
+}
+
+/* ── Campos ──────────────────────────────────────────────────────── */
+
+.campos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.campoEtiqueta {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--m2-texto-3);
+}
+
+.campoEntrada {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.campoEntrada::placeholder {
+  color: var(--m2-texto-3);
+  opacity: 0.8;
+}
+
+.campoEntrada:focus {
+  outline: none;
+  border-color: var(--m2-activo);
+  box-shadow: var(--m2-foco);
+}
+
+/* globals.css pinta TODO input en oscuro con !important; este va sobre su caja. */
+:global(.dark) .campoEntrada {
+  background-color: var(--m2-tarjeta) !important;
+  border-color: var(--m2-tarjeta-borde) !important;
+  color: var(--m2-texto) !important;
+}
+
+.campoArea {
+  resize: vertical;
+  min-height: 66px;
+  line-height: 1.5;
+}
+
+.campoDoble {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Formulario en línea (fila de espera): nombre + servicio + botón en una
+   sola fila; si no cabe, salta de línea sin esconder nada. */
+.campoFila {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.campoFila > .campo {
+  flex: 1 1 220px;
+}
+
+.seccionTitulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.seccionTitulo::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--m2-borde);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 20px;
+  background: var(--m2-tarjeta-hover);
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .chip:hover {
+    background: var(--m2-iniciales-fondo);
+    border-color: transparent;
+    color: var(--m2-iniciales-texto);
+  }
+}
+
+/* ── Datos pequeños (ficha del tratamiento) ──────────────────────── */
+
+.datos {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin-bottom: 16px;
+}
+
+.dato {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta-hover);
+}
+
+.datoEtiqueta {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.datoValor {
+  margin-top: 3px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--m2-texto);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.puntoDoctor {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+/* ── Cronología de sesiones ──────────────────────────────────────── */
+
+.cronologia {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 30px;
+  margin-bottom: 16px;
+}
+
+.cronologia::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--m2-borde);
+}
+
+.cronoItem {
+  position: relative;
+}
+
+.cronoPunto {
+  position: absolute;
+  left: -30px;
+  top: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--m2-borde);
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-3);
+}
+
+.cronoPuntoHecho {
+  border-color: var(--success-strong, #047857);
+  background: var(--success-strong, #047857);
+  color: var(--m2-activo-texto);
+}
+
+.cronoCaja {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta-hover);
+  font-size: 12.5px;
+}
+
+.cronoPendiente {
+  opacity: 0.6;
+}
+
+.cronoNota {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+/* ── Selector de insumos ─────────────────────────────────────────── */
+
+.selector {
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  overflow: hidden;
+}
+
+.selectorBuscar {
+  padding: 8px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.selectorLista {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.selectorItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--m2-texto);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .selectorItem:hover:not(:disabled) {
+    background: var(--m2-hover);
+  }
+}
+
+.selectorItem:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.selectorNota {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  text-align: center;
+}
+
+.cantidad {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cantidadBoton {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 6px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cantidadValor {
+  width: 28px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.separador {
+  height: 1px;
+  margin: 14px 0;
+  background: var(--m2-borde);
+}
+
+.girando {
+  animation: piezasGirar 0.9s linear infinite;
+}
+
+@keyframes piezasGirar {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando { animation: none; }
+  .progresoRelleno { transition: none; }
+}
