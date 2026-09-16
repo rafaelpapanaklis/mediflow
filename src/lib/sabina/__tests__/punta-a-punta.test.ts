@@ -279,8 +279,10 @@ const LAS_DE_CLINICO = ["recetas", "estudios_del_paciente", "analisis_y_notas_de
 const LAS_DE_LA_CLINICA = ["procedimientos_y_precios", "equipo_clinica"];
 /** Comparar sedes (ws1-t4): la única que mira más de una clínica. Solo lee. */
 const LAS_DE_SEDES = ["comparar_sedes"];
+/** Lo que se escapa (ws1-t8): una sola, con `tipo` para pedir una lista concreta. */
+const LAS_DE_ESCAPE = ["oportunidades_perdidas"];
 
-test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja y las tres de clínico, con su esquema", async () => {
+test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, la de caja, las tres de clínico, las dos de la clínica, la de sedes y la de lo que se escapa, con su esquema", async () => {
   estado.guion = () => contesta("Hola.");
   const res = await preguntar("hola");
   assert.equal(res.status, 200);
@@ -288,7 +290,15 @@ test("el modelo recibe las diez de consulta, las de agenda, pacientes y dinero, 
   const tools = estado.peticiones[0]?.tools ?? [];
   assert.deepEqual(
     tools.map((t: any) => t.name).sort(),
-    [...LAS_DIEZ, ...LAS_NUEVAS, ...LAS_DE_CAJA, ...LAS_DE_CLINICO, ...LAS_DE_LA_CLINICA, ...LAS_DE_SEDES].sort(),
+    [
+      ...LAS_DIEZ,
+      ...LAS_NUEVAS,
+      ...LAS_DE_CAJA,
+      ...LAS_DE_CLINICO,
+      ...LAS_DE_LA_CLINICA,
+      ...LAS_DE_SEDES,
+      ...LAS_DE_ESCAPE,
+    ].sort(),
   );
 
   const { SABINA_TOOLS } = await import("../engine-catalog");

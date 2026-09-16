@@ -101,6 +101,8 @@ const LAS_NUEVAS = [
   "equipo_clinica",
   // comparar sedes (ws1-t4)
   "comparar_sedes",
+  // lo que se escapa (ws1-t8)
+  "oportunidades_perdidas",
 ];
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -110,7 +112,7 @@ const LAS_NUEVAS = [
 test("el catálogo del motor trae las herramientas de las cuatro ramas", () => {
   const nombres = SABINA_TOOLS.map((t) => t.nombre);
   for (const n of LAS_NUEVAS) assert.ok(nombres.includes(n), `falta ${n}`);
-  assert.equal(nombres.length, 26);
+  assert.equal(nombres.length, 27);
 });
 
 test("🔴 cada herramienta del motor: el usuario tiene la key, el Super Admin se la quita a Sabina → sin_permiso «sabina», sin tocar la base", async () => {

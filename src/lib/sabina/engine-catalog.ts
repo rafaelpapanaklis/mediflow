@@ -16,6 +16,7 @@ import { estudiosDelPaciente } from "./tools/estudios-del-paciente";
 import { analisisYNotasDeEstudio } from "./tools/analisis-y-notas-de-estudio";
 import { procedimientosYPrecios } from "./tools/procedimientos-y-precios";
 import { equipoClinica } from "./tools/equipo-clinica";
+import { oportunidadesPerdidas } from "./tools/oportunidades-perdidas";
 
 /**
  * El catálogo de Sabina: lo que el modelo puede CONSULTAR y lo que puede
@@ -38,10 +39,13 @@ import { equipoClinica } from "./tools/equipo-clinica";
    `caja` (ws1-t3), con sus pruebas en tools/__tests__/caja.test.ts: solo lee;
    Sabina no abre, no retira y no cierra (MAPA-caja §10); y las tres de CLÍNICO
    (ws1-t4: recetas, estudios_del_paciente, analisis_y_notas_de_estudio), todas
-   de solo lectura; y las dos de LA CLÍNICA (ws1-t5: procedimientos_y_precios y
-   equipo_clinica), que leen el catálogo de precios y el cuadro de profesionales.
-   Ninguna escribe: `procedimientos_y_precios` ni siquiera siembra el catálogo,
-   que es lo que sí hace `GET /api/procedures` la primera vez. */
+   de solo lectura; las dos de LA CLÍNICA (ws1-t5: procedimientos_y_precios y
+   equipo_clinica), que leen el catálogo de precios y el cuadro de profesionales
+   —ninguna escribe: `procedimientos_y_precios` ni siquiera siembra el catálogo,
+   que es lo que sí hace `GET /api/procedures` la primera vez—; y
+   `oportunidades_perdidas` (ws1-t8), que cruza facturas, presupuestos, planes y
+   citas para decir qué dinero se está escapando —solo lee, y los pacientes
+   fríos los delega en `pacientes_inactivos`. */
 const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   ...CATALOGO_SABINA,
   proponerHorarios,
@@ -56,6 +60,7 @@ const CONSULTAS: ReadonlyArray<SabinaTool<any, any>> = [
   analisisYNotasDeEstudio,
   procedimientosYPrecios,
   equipoClinica,
+  oportunidadesPerdidas,
 ];
 
 /* ── ACCIONES ──────────────────────────────────────────────────────────────

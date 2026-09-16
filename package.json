@@ -159,6 +159,8 @@
     "//test:sabina-conoce-clinica": "Las dos de ws1-t5 (procedimientos_y_precios y equipo_clinica): el precio sale de basePrice tal cual, tres resinas son tres precios y no se elige uno, el catalogo vacio se DICE en vez de sembrarse (eso lo hace GET /api/procedures, Sabina no), el equipo se recorta a los doctores sin team.view y se avisa, y ninguna cruza de clinica ni lee una fila sin permiso.",
     "test:sabina-conoce-clinica": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/conoce-clinica.test.ts",
     "test:sabina-resumen": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/resumen-clinica.test.ts",
+    "//test:sabina-escapa": "Lo que se le escapa a la clinica (ws1-t8): que el dinero no se cuente dos veces, que el archivado por ARCO no salga en ninguna lista, que el orden sea el del encargo ($30,000 de hace una semana por delante de $800 de hace seis meses) y que sin permiso se diga en vez de omitir.",
+    "test:sabina-escapa": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/escapa.test.ts",
     "//test:sabina-caja": "La consulta de Caja de Sabina (ws1-t3): el candado es la bandera canAccessCaja y no la key (hallazgo 23), NORTE no ve al SUR, los numeros son los de getCajaState de la pantalla, el esperado siempre dice que es un calculo, pacientes restringidos enmascarados y la regla de sin cortar compartida con la pantalla.",
     "test:sabina-sedes": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/comparar-sedes.test.ts",
     "test:sabina-caja": "tsx --test --experimental-test-module-mocks src/lib/sabina/tools/__tests__/caja.test.ts",
