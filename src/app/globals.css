@@ -1142,6 +1142,12 @@
 /* mono utility ---------------------------------------------------- */
 .mono { font-family: var(--font-mono, monospace); }
 
+/* Identificadores técnicos de verdad (claves de API, secretos de webhook,
+   contraseñas temporales, tokens de portal) — la letra de máquina que
+   sobrevive incluso con Instrument Sans en el resto del panel (WS1-T6). Ver
+   el comentario de `--font-mono-tecnico` en tipografia-panel.tsx. */
+.mono-tecnico { font-family: var(--font-mono-tecnico, var(--font-mono, monospace)); }
+
 /* Switch --------------------------------------------------------- */
 .switch {
   position: relative;

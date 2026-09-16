@@ -116,7 +116,9 @@ export function DrawerSignAtHome(props: DrawerSignAtHomeProps) {
             <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1 dark:text-slate-400">
               Token portal paciente · M3
             </div>
-            <div className="font-mono text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 truncate dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
+            {/* Token de portal, se copia-pega tal cual: letra de máquina real
+                incluso con Instrument Sans en el resto del panel (WS1-T6). */}
+            <div className="mono-tecnico text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 truncate dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
               /share/p/{tokenPreview}
             </div>
             <div className="text-[10px] text-slate-400 mt-1 dark:text-slate-500">
