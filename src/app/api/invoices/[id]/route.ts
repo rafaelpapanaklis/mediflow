@@ -10,6 +10,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { stripNestedPatientSecrets } from "@/lib/patient-secrets";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { CASH_METHOD } from "@/lib/caja";
+import { denyIfCfdiVigente, cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
 
 // Contexto vía el helper CENTRAL: misma resolución cookie→clínica que la
 // copia local que había aquí, pero aplicando el gate de plan vencido
@@ -279,9 +280,14 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const denied = await assertPatientVisible(invoice.patientId, { userId: ctx.userId, role: ctx.role, clinicId });
     if (denied) return denied;
   }
+  // Con CFDI, anular aquí lo dejaría vigente ante el SAT (N3).
+  const cfdiDenied = denyIfCfdiVigente(invoice.cfdiUuid, "anular");
+  if (cfdiDenied) return cfdiDenied;
   if (invoice.status !== "DRAFT" && invoice.paid === 0) {
     // Non-draft without payments — mark cancelled instead of delete
-    await prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: { status: "CANCELLED" } });
+    // `cfdiUuid` igual al leído: si alguien la timbró desde la lectura, no se anula.
+    const { count } = await prisma.invoice.updateMany({ where: { id: params.id, clinicId, cfdiUuid: invoice.cfdiUuid }, data: { status: "CANCELLED" } });
+    if (count === 0) return cfdiVigenteResponse(null, "anular");
     await logMutation({
       req, clinicId, userId: ctx.userId,
       entityType: "invoice", entityId: params.id, action: "delete",
