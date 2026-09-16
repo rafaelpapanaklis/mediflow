@@ -1,5 +1,6 @@
 /**
- * Tipografía del panel (Instrument Sans en todo /dashboard) — candados.
+ * Tipografía del panel (Instrument Sans en el 100% de /dashboard, WS1-T6) —
+ * candados.
  *
  * Run: npm run test:tipografia-panel
  *
@@ -11,10 +12,17 @@
  *  - Reusa el archivo de fuente que ya está en el repo (`src/fonts/menu.ts`,
  *    `instrument-sans-latin-var.woff2`): ni una segunda copia, ni Google, y sin
  *    precarga para que las demás clínicas no lo descarguen.
- *  - No toca `--font-mono` (importes, horas y folios) ni `--font-logo` (wordmark).
- *  - Los números siguen saliendo de ancho fijo: IBM Plex Sans lo hacía solo,
- *    Instrument Sans necesita `tabular-nums`, también en botones y campos, donde
- *    el navegador borra la herencia. Dentro del menú, los numerales del diseño.
+ *  - `--font-mono` (importes, horas, folios) TAMBIÉN pasa a Instrument Sans —
+ *    ver WS1-T6: dejarlo en IBM Plex Mono sacaba el mismo número con dos
+ *    letras en la misma pantalla. `--font-logo` (wordmark) no se toca.
+ *  - `--font-mono-tecnico` sigue siendo IBM Plex Mono: es la letra de máquina
+ *    real para los pocos sitios con un identificador técnico de verdad (clave
+ *    de API, secreto de webhook, contraseña temporal, token de portal, IP de
+ *    una bitácora) — nunca para datos que la clínica solo lee.
+ *  - Los números siguen saliendo de ancho fijo: IBM Plex Sans/Mono lo hacían
+ *    solos (son de ancho fijo o monoespaciados), Instrument Sans necesita
+ *    `tabular-nums`, también en botones y campos, donde el navegador borra la
+ *    herencia. Dentro del menú, los numerales del diseño.
  *  - Los PDF y los correos se quedan como están: ni una referencia a la fuente
  *    nueva ni a `--font-sans`.
  */
@@ -92,15 +100,38 @@ function reglas(): string {
   return m![1];
 }
 
-test("redefine --font-sans sobre el <body>, y nada más", () => {
+test("redefine --font-sans Y --font-mono sobre el <body> (WS1-T6: el 100% del panel)", () => {
   const css = reglas();
   assert.match(css, /:root body\{--font-sans:\$\{instrumentSans\.style\.fontFamily\}/);
-  // La monoespaciada, la del wordmark y la de los íconos no se tocan.
-  assert.doesNotMatch(css, /--font-mono\s*:/);
+  // 🔴 El candado que muerde: si alguien borra esta redeclaración, los
+  // importes/horas/folios vuelven a IBM Plex Mono mientras el resto del panel
+  // sigue en Instrument Sans — exactamente el bug que Rafael fotografió en
+  // Facturación (mismo número, dos letras).
+  assert.match(css, /--font-mono:\$\{instrumentSans\.style\.fontFamily\}/);
+  // La letra de máquina real para identificadores técnicos de verdad sigue
+  // siendo IBM Plex Mono, bajo otro nombre de variable.
+  assert.match(css, /--font-mono-tecnico:\$\{mono\.style\.fontFamily\}/);
+  // El wordmark y los íconos del menú no se tocan.
   assert.doesNotMatch(css, /--font-logo\s*:/);
   assert.doesNotMatch(css, /--font-iconos-menu\s*:/);
   // Sin !important: el peso lo da `:root` delante de `body`.
   assert.doesNotMatch(css, /!important/);
+});
+
+test("--font-mono-tecnico usa la fuente monoespaciada del repo, no una nueva", () => {
+  const componente = leer(COMPONENTE);
+  assert.match(componente, /import \{ mono \} from "@\/fonts\/root"/);
+});
+
+test("fuera del interruptor, --font-mono-tecnico cae en IBM Plex Mono (cero cambio con el menú apagado)", () => {
+  // .mono-tecnico (globals.css) y las reglas de Integraciones tienen que
+  // encadenar el respaldo a --font-mono, no a "monospace" a secas: sin
+  // TipografiaPanel montado, --font-mono-tecnico no existe, y sin ese
+  // segundo escalón la clínica sin el interruptor perdería IBM Plex Mono en
+  // sus identificadores técnicos (una regresión fuera del alcance de esta
+  // tarea, que es SOLO detrás de la bandera).
+  const globals = leer("src/app/globals.css");
+  assert.match(globals, /\.mono-tecnico\s*\{\s*font-family:\s*var\(--font-mono-tecnico,\s*var\(--font-mono,\s*monospace\)\)/);
 });
 
 test("los números siguen siendo de ancho fijo, incluso en botones y campos", () => {
@@ -124,6 +155,34 @@ test("la clase con la que se excluye al menú sigue existiendo", () => {
   // portal suyo (cajón, tooltips, desplegables, el diálogo de Personalizar).
   assert.match(leer("src/components/dashboard/menu-dos-niveles/clases.ts"), /s\.tokens/);
   assert.match(leer("src/components/dashboard/menu-dos-niveles/menu-dos-niveles.tsx"), /CLASES_MENU/);
+});
+
+test("las claves de API, secretos, contraseñas y tokens del panel siguen en letra de máquina real", () => {
+  // Los pocos sitios con un identificador técnico de verdad que alguien
+  // copia-pega tal cual (nunca dato que la clínica solo lee): si alguien
+  // los vuelve a apuntar a `--font-mono`/`.mono`/`font-mono` a secas, pasarían
+  // a Instrument Sans junto con el resto del panel.
+  const sitios: [string, RegExp][] = [
+    [
+      "src/app/dashboard/settings/integrations/integrations.module.css",
+      /font-family:\s*var\(--font-mono-tecnico,\s*var\(--font-mono,\s*monospace\)\)/g,
+    ],
+    ["src/app/dashboard/team/team-client.tsx", /<code className="mono-tecnico"/],
+    [
+      "src/components/specialties/orthodontics/redesign/drawers/DrawerSignAtHome.tsx",
+      /className="mono-tecnico /,
+    ],
+    ["src/app/dashboard/whatsapp/whatsapp-client.tsx", /<span className="mono-tecnico">\{form\.phoneNumberId/],
+    ["src/app/dashboard/auditoria/auditoria-client.tsx", /mono \? "mono-tecnico" : ""/],
+  ];
+  for (const [archivo, patron] of sitios) {
+    const texto = leer(archivo);
+    if (patron.global) {
+      assert.ok((texto.match(patron) ?? []).length >= 4, `${archivo}: esperaba al menos 4 usos de --font-mono-tecnico`);
+    } else {
+      assert.match(texto, patron, `${archivo} debe seguir usando --font-mono-tecnico`);
+    }
+  }
 });
 
 test("los PDF y los correos se quedan fuera", () => {

@@ -572,7 +572,10 @@ export function WhatsAppClient({
                 <div className={s.statusRow}>
                   <CheckCircle size={14} className={s.statusIcon} />
                   <span className={s.statusValue}>
-                    Phone Number ID: <span className="mono">{form.phoneNumberId || "—"}</span>
+                    {/* Identificador técnico de la integración con la API de Meta —
+                        letra de máquina real incluso con Instrument Sans en el resto
+                        del panel (WS1-T6), igual que Integraciones. */}
+                    Phone Number ID: <span className="mono-tecnico">{form.phoneNumberId || "—"}</span>
                   </span>
                 </div>
                 {connChip && (

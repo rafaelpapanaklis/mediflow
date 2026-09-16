@@ -750,7 +750,9 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                   : t("settings.team.bannerCreateDesc")}
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <code className="mono" style={{
+                {/* Contraseña temporal, se copia-pega tal cual: letra de máquina real
+                    incluso con Instrument Sans en el resto del panel (WS1-T6). */}
+                <code className="mono-tecnico" style={{
                   fontSize: 13, fontWeight: 700,
                   background: "var(--warning-soft-strong)",
                   color: "var(--warning-strong)",

@@ -385,7 +385,10 @@ function Meta({ icon: Icon, label, value, sub, mono }: {
       <Icon size={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: "var(--text-3)" }} aria-hidden />
       <div className="min-w-0">
         <div className="text-[10px] uppercase tracking-wide" style={{ color: "var(--text-3)" }}>{label}</div>
-        <div className={`text-[13px] break-words ${mono ? "mono" : ""}`} style={{ color: "var(--text-1)" }}>{value}</div>
+        {/* IP y entityId de la bitácora: el "log" que Rafael puso como ejemplo de
+            letra de máquina legítima — letra real incluso con Instrument Sans en
+            el resto del panel (WS1-T6). */}
+        <div className={`text-[13px] break-words ${mono ? "mono-tecnico" : ""}`} style={{ color: "var(--text-1)" }}>{value}</div>
         {sub && <div className="text-[11px] break-words" style={{ color: "var(--text-3)" }}>{sub}</div>}
       </div>
     </div>
