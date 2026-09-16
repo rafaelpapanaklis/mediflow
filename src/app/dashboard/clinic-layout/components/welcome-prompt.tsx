@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Building2, FileWarning, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { CLASES_REDISENO_CLINICA } from "@/components/dashboard/clinica-visual-rediseno/raiz";
 import promptStyles from "./welcome-prompt.module.css";
 
 interface ChairResource {
@@ -15,8 +16,10 @@ interface ChairResource {
 
 export function WelcomePrompt({
   onLoaded,
+  rediseno = false,
 }: {
   onLoaded: (data: { elements: unknown[]; chairs: ChairResource[]; chairsCreated: number }) => void;
+  rediseno?: boolean;
 }) {
   const t = useT();
   const [loading, setLoading] = useState<"demo" | "empty" | null>(null);
@@ -58,7 +61,13 @@ export function WelcomePrompt({
   };
 
   return (
-    <div className={promptStyles.wrap}>
+    <div
+      className={
+        rediseno
+          ? `${promptStyles.wrap} ${CLASES_REDISENO_CLINICA} ${promptStyles.wrapRediseno}`
+          : promptStyles.wrap
+      }
+    >
       <div className={promptStyles.card}>
         <div className={promptStyles.icon}>
           <Building2 size={32} aria-hidden />

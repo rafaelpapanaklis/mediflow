@@ -15,6 +15,7 @@ import toast from "react-hot-toast";
 import shareStyles from "./share-panel.module.css";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import { CLASES_REDISENO_CLINICA } from "@/components/dashboard/clinica-visual-rediseno/raiz";
 
 interface ShareConfig {
   enabled: boolean;
@@ -27,10 +28,12 @@ export function SharePanel({
   initial,
   clinicName,
   onClose,
+  rediseno = false,
 }: {
   initial: ShareConfig;
   clinicName: string;
   onClose: () => void;
+  rediseno?: boolean;
 }) {
   const t = useT();
   const askConfirm = useConfirm();
@@ -140,7 +143,16 @@ export function SharePanel({
   };
 
   return (
-    <div className={shareStyles.backdrop} role="dialog" aria-modal="true" onClick={onClose}>
+    <div
+      className={
+        rediseno
+          ? `${shareStyles.backdrop} ${CLASES_REDISENO_CLINICA} ${shareStyles.backdropRediseno}`
+          : shareStyles.backdrop
+      }
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
       <div className={shareStyles.dialog} onClick={(e) => e.stopPropagation()}>
         <header className={shareStyles.header}>
           <div className={shareStyles.headerInfo}>
