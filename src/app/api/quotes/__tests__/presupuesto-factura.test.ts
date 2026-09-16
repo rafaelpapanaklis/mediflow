@@ -32,6 +32,7 @@ import { test, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { NextResponse } from "next/server";
 import { invoiceFieldsFromQuote } from "@/lib/quotes/invoice-from-quote-core";
+import { clinicInvoiceTaxDefaults } from "@/lib/invoice-totals";
 
 // ── Estado del doble de Prisma ──────────────────────────────────────────────
 type Row = Record<string, any>;
@@ -39,6 +40,8 @@ const db = {
   quotes: [] as Row[],
   invoices: [] as Row[],
   payments: [] as Row[],
+  /** Clinic.cfdiTaxMode por clínica ("exempt" es el default de la columna). */
+  clinics: {} as Record<string, string>,
   seq: 0,
 };
 const revalidados: string[] = [];
@@ -49,6 +52,7 @@ beforeEach(() => {
   db.quotes = [];
   db.invoices = [];
   db.payments = [];
+  db.clinics = { c1: "exempt", c2: "exempt" };
   db.seq = 0;
   revalidados.length = 0;
   ocultos.clear();
@@ -197,6 +201,12 @@ const prismaStub: any = {
     },
   },
   invoice: invoiceDelegate,
+  clinic: {
+    findUnique: async ({ where }: any = {}) =>
+      where?.id in db.clinics ? { id: where.id, cfdiTaxMode: db.clinics[where.id] } : null,
+    findFirst: async ({ where }: any = {}) =>
+      where?.id in db.clinics ? { id: where.id, cfdiTaxMode: db.clinics[where.id] } : null,
+  },
   payment: {
     create: async ({ data }: any) => {
       const fila = { id: nuevoId("pay"), paidAt: new Date(), ...data };
@@ -481,4 +491,92 @@ test("presupuestos viejos: su factura BORRADOR sigue igual, se re-sincroniza al 
   assert.equal(res.body.invoiceNumber, "MF-0007");
   assert.equal(db.invoices.length, 1);
   assert.equal(db.invoices[0].status, "DRAFT", "no se migra nada en silencio");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4 · El IVA con el que nace: el de la clínica, como la factura normal
+// ═══════════════════════════════════════════════════════════════════════════
+// La factura normal (editor de Facturación, POST /api/invoices) y la de una
+// cita (from-appointment) nacen con clinicInvoiceTaxDefaults(Clinic.cfdiTaxMode).
+// La del presupuesto no mandaba nada y caía al default de la COLUMNA: 16 %
+// incluido, también en una clínica exenta. Con IVA incluido el total cobrado es
+// el mismo en los dos modos; lo que cambia es el desglose que guarda la factura.
+
+test("🔴 clínica EXENTA: la factura del presupuesto nace SIN IVA y con el mismo total", async () => {
+  const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
+  db.clinics.c1 = "exempt";
+  const q = sembrarPresupuesto();
+
+  const res = await leer(await POST(req(), { params: { id: q.id } }));
+
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  const inv = db.invoices[0];
+  assert.equal(inv.taxRate, 0, `una clínica exenta no factura IVA; nació con taxRate ${inv.taxRate}`);
+  assert.equal(inv.taxIncluded, true);
+  assert.deepEqual(
+    { taxRate: inv.taxRate, taxIncluded: inv.taxIncluded },
+    clinicInvoiceTaxDefaults("exempt"),
+    "lo mismo con lo que nace una factura normal en esa clínica",
+  );
+  assert.equal(inv.total, 6800, "el total que se le cobra al paciente no cambia");
+  assert.equal(inv.balance, 6800);
+});
+
+test("🔴 clínica CON IVA (iva16): igual que hoy, 16 % incluido y el mismo total", async () => {
+  const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
+  db.clinics.c1 = "iva16";
+  const q = sembrarPresupuesto();
+
+  const res = await leer(await POST(req(), { params: { id: q.id } }));
+
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  const inv = db.invoices[0];
+  assert.equal(inv.taxRate, 16, `a una clínica que causa IVA no se le quita; nació con taxRate ${inv.taxRate}`);
+  assert.equal(inv.taxIncluded, true, "incluido en el precio, no agregado encima");
+  assert.deepEqual(
+    { taxRate: inv.taxRate, taxIncluded: inv.taxIncluded },
+    clinicInvoiceTaxDefaults("iva16"),
+    "lo mismo con lo que nace una factura normal en esa clínica",
+  );
+  assert.equal(inv.total, 6800, "el total no sube ni baja: el IVA ya va dentro del precio");
+  assert.equal(inv.balance, 6800);
+});
+
+test("el IVA sale de la clínica de la SESIÓN, no de otra", async () => {
+  const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
+  db.clinics = { c1: "exempt", c2: "iva16" };
+  sembrarPresupuesto({ id: "q-c1", clinicId: "c1", folio: "P-0001" });
+  sembrarPresupuesto({ id: "q-c2", clinicId: "c2", folio: "P-0001" });
+
+  authCtx.clinicId = "c2";
+  const enC2 = await leer(await POST(req(), { params: { id: "q-c2" } }));
+  authCtx.clinicId = "c1";
+  const enC1 = await leer(await POST(req(), { params: { id: "q-c1" } }));
+
+  assert.equal(enC2.status, 201, JSON.stringify(enC2.body));
+  assert.equal(enC1.status, 201, JSON.stringify(enC1.body));
+  const deC2 = db.invoices.find((i) => i.clinicId === "c2")!;
+  const deC1 = db.invoices.find((i) => i.clinicId === "c1")!;
+  assert.equal(deC2.taxRate, 16, "c2 causa IVA");
+  assert.equal(deC1.taxRate, 0, "c1 es exenta");
+});
+
+test("una factura YA CREADA con 16 % en una clínica exenta no se toca al volver a pulsar «Generar factura»", async () => {
+  const { POST } = await import("@/app/api/quotes/[id]/invoice/route");
+  db.clinics.c1 = "exempt";
+  db.invoices.push({
+    id: "inv-de-antes", clinicId: "c1", patientId: "p1", invoiceNumber: "MF-0009",
+    items: [], subtotal: 7000, discount: 200, total: 6800, paid: 0, balance: 6800,
+    status: "PENDING", taxRate: 16, taxIncluded: true, notes: "Generada desde presupuesto P-0003",
+    createdAt: new Date(), updatedAt: new Date(),
+  });
+  const q = sembrarPresupuesto({ invoiceId: "inv-de-antes" });
+
+  const res = await leer(await POST(req(), { params: { id: q.id } }));
+
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.already, true);
+  assert.equal(db.invoices.length, 1);
+  assert.equal(db.invoices[0].taxRate, 16, "no se migra nada: la factura vieja conserva su desglose");
+  assert.equal(db.invoices[0].total, 6800);
 });
