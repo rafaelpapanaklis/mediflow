@@ -14,13 +14,14 @@
 // (pedida con un User-Agent de Chrome, que es el que recibe woff2).
 
 export const ICONOS_EN_FUENTE = [
-  "add", "add_business", "anchor", "apps", "arrow_back", "assignment", "auto_awesome",
-  "bolt", "calendar_month", "chair", "chat", "chevron_right", "child_care", "close",
-  "compare", "credit_card", "dark_mode", "dentistry", "fitness_center", "footprint",
-  "forum", "group", "groups", "history", "home", "inventory_2", "language",
-  "left_panel_close", "left_panel_open", "light_mode", "local_shipping", "lock", "logout",
-  "map", "menu", "monitor_heart", "monitoring", "person", "point_of_sale", "redeem",
-  "reviews", "savings", "science", "search", "sentiment_satisfied", "settings",
-  "shopping_cart", "smart_toy", "storefront", "summarize", "support_agent", "tv",
-  "unfold_more",
+  "add", "add_business", "anchor", "apps", "arrow_back", "arrow_downward", "arrow_upward",
+  "assignment", "auto_awesome", "bolt", "calendar_month", "chair", "chat", "check",
+  "chevron_right", "child_care", "close", "compare", "create_new_folder", "credit_card",
+  "dark_mode", "dashboard_customize", "delete", "dentistry", "drag_indicator", "edit",
+  "fitness_center", "folder", "footprint", "forum", "group", "groups", "history", "home",
+  "inventory_2", "language", "left_panel_close", "left_panel_open", "light_mode",
+  "local_shipping", "lock", "logout", "map", "menu", "monitor_heart", "monitoring",
+  "more_vert", "person", "point_of_sale", "redeem", "restart_alt", "reviews", "savings",
+  "science", "search", "sentiment_satisfied", "settings", "shopping_cart", "smart_toy",
+  "storefront", "summarize", "support_agent", "tv", "unfold_more"
 ] as const;

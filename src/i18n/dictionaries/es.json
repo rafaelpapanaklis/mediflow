@@ -465,6 +465,53 @@
     "volver": "Volver",
     "migasAria": "Estás en"
   },
+  "menuPersonalizado": {
+    "entrada": "Personalizar",
+    "titulo": "Personalizar mi menú",
+    "explicacion": "Cambia de sitio lo que ya ves. Personalizar no añade ni quita opciones: eso lo siguen decidiendo tus permisos y tu plan.",
+    "cerrar": "Cerrar",
+    "menuPrincipal": "Menú principal",
+    "nuevoSubmenu": "Nuevo submenú",
+    "nuevaSeccion": "Nuevo grupo",
+    "submenuNuevo": "Mi submenú",
+    "seccionNueva": "Mi grupo",
+    "submenuSinNombre": "Submenú",
+    "seccionSinNombre": "Grupo",
+    "vacio": "Vacío. Arrastra opciones aquí, o usa «Mover a…» en la opción que quieras.",
+    "soloVacio": "Solo se puede borrar cuando no queda nada dentro.",
+    "ultimoGrupo": "Es el único grupo del submenú: para quitarlo, borra el submenú entero.",
+    "confirmarCierre": "¿Salir sin guardar? Se pierde lo que acomodaste.",
+    "seguirEditando": "Seguir aquí",
+    "salirSinGuardar": "Salir sin guardar",
+    "subir": "Subir {nombre}",
+    "bajar": "Bajar {nombre}",
+    "renombrar": "Cambiar el nombre de {nombre}",
+    "borrar": "Borrar {nombre}",
+    "moverA": "Mover {nombre} a otro sitio",
+    "moverAQue": "Mover a",
+    "nombreDe": "Nombre de {nombre}",
+    "aceptarNombre": "Guardar el nombre",
+    "buscarEn": "Buscar en {nombre}…",
+    "instruccionesArrastre": "Arrastra la fila para cambiarla de sitio. También puedes usar los botones de subir, bajar y «Mover a…», que funcionan con el teclado.",
+    "cancelar": "Cancelar",
+    "guardar": "Guardar",
+    "guardando": "Guardando…",
+    "restablecer": "Volver al menú original",
+    "confirmarReset": "¿Seguro? Se pierde tu orden y vuelve el menú de siempre.",
+    "siRestablecer": "Sí, volver al original",
+    "no": "No",
+    "conflicto": {
+      "texto": "Tu menú cambió en otra pestaña o en otro dispositivo mientras lo acomodabas aquí. No se guardó nada todavía.",
+      "verElOtro": "Ver el más reciente",
+      "encima": "Guardar el mío encima"
+    },
+    "errores": {
+      "guardar": "No se pudo guardar. Tu menú se quedó como estaba; vuelve a intentarlo.",
+      "restablecer": "No se pudo volver al menú original. Vuelve a intentarlo.",
+      "sinTabla": "Todavía no se puede guardar: falta encender esto en la base de datos.",
+      "tope": "No caben más. Borra alguno antes de crear otro."
+    }
+  },
   "shell": {
     "topbar": {
       "routeHoy": "Hoy",

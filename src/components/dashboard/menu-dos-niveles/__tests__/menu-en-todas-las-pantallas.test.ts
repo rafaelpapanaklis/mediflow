@@ -73,8 +73,23 @@ const COMPONENTES_MENU: Record<string, string[]> = {
   "src/components/dashboard/sidebar": ["Sidebar"],
   "src/components/dashboard/topbar": ["Topbar"],
   "src/components/dashboard/menu-dos-niveles/menu-dos-niveles": ["MenuDosNiveles"],
+  "src/components/dashboard/menu-dos-niveles/menu-servidor": ["MenuDosNivelesServidor"],
   "src/components/dashboard/menu-dos-niveles/topbar-dos-niveles": ["TopbarDosNiveles"],
 };
+
+/**
+ * El layout ya no monta <MenuDosNiveles> a pelo: monta el envoltorio de servidor
+ * de «Personalizar», que resuelve el menú guardado de quien entra y luego pinta
+ * el menú de dos niveles. Es un eslabón de la MISMA cadena que arranca el layout
+ * —no una pantalla— así que se le permite importar el menú, y solo a él.
+ * Lo que la regla persigue (una pantalla que se monte su propio menú y se salte
+ * el interruptor) lo sigue cazando: el envoltorio entra en COMPONENTES_MENU, de
+ * modo que quien lo importe fuera del layout también falla.
+ */
+const CADENA_DEL_LAYOUT = new Set([
+  LAYOUT,
+  "src/components/dashboard/menu-dos-niveles/menu-servidor.tsx",
+]);
 
 function archivosFuente(dir: string, out: string[] = []): string[] {
   for (const nombre of readdirSync(dir)) {
@@ -108,7 +123,7 @@ test("solo el layout de /dashboard monta un menú del panel (ninguna pantalla pi
   const infractores: string[] = [];
   for (const archivo of archivosFuente(join(RAIZ, "src"))) {
     const rel = aPosix(relative(RAIZ, archivo));
-    if (rel === LAYOUT) continue;
+    if (CADENA_DEL_LAYOUT.has(rel)) continue;
     const fuente = parsear(archivo);
     const visitar = (nodo: ts.Node) => {
       // import { Sidebar } from "@/components/dashboard/sidebar"  (los `import type` no pintan nada)
@@ -205,6 +220,8 @@ test("el layout: las únicas pantallas sin menú son las barreras de 2FA y de ca
   );
 });
 
+const ETIQUETAS_MENU = ["Sidebar", "Topbar", "MenuDosNivelesServidor", "TopbarDosNiveles"];
+
 test("el layout: menú y barra superior eligen con la MISMA variable, y esa variable es el interruptor de la clínica de la sesión", () => {
   const { fn } = funcionDelLayout();
 
@@ -215,20 +232,20 @@ test("el layout: menú y barra superior eligen con la MISMA variable, y esa vari
     if (ts.isConditionalExpression(n)) {
       const si = nombreEtiqueta(quitarParentesis(n.whenTrue));
       const no = nombreEtiqueta(quitarParentesis(n.whenFalse));
-      if ([si, no].some((x) => x && ["Sidebar", "Topbar", "MenuDosNiveles", "TopbarDosNiveles"].includes(x))) {
+      if ([si, no].some((x) => x && ETIQUETAS_MENU.includes(x))) {
         elecciones.push({ condicion: n.condition.getText(), si, no });
       }
     }
     const etiqueta = nombreEtiqueta(n);
-    if (etiqueta && ["Sidebar", "Topbar", "MenuDosNiveles", "TopbarDosNiveles"].includes(etiqueta)) sueltos.push(etiqueta);
+    if (etiqueta && ETIQUETAS_MENU.includes(etiqueta)) sueltos.push(etiqueta);
   });
 
   assert.deepEqual(
     elecciones.map(({ si, no }) => [si, no]),
-    [["MenuDosNiveles", "Sidebar"], ["TopbarDosNiveles", "Topbar"]],
+    [["MenuDosNivelesServidor", "Sidebar"], ["TopbarDosNiveles", "Topbar"]],
     "el layout pinta el menú y la barra superior con un único «encendido ? nuevo : de siempre» cada uno",
   );
-  assert.deepEqual(sueltos.sort(), ["MenuDosNiveles", "Sidebar", "Topbar", "TopbarDosNiveles"], "cada componente, una sola vez");
+  assert.deepEqual(sueltos.sort(), ["MenuDosNivelesServidor", "Sidebar", "Topbar", "TopbarDosNiveles"], "cada componente, una sola vez");
   const variable = elecciones[0].condicion;
   assert.equal(elecciones[1].condicion, variable, "la barra superior y el menú no pueden elegir por separado");
   assert.match(variable, /^[A-Za-z_$][\w$]*$/, "la elección es una variable, no una expresión (nada de rutas)");

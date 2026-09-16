@@ -21,7 +21,7 @@ import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-pati
 import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
 import { useT } from "@/i18n/i18n-provider";
 import { etiquetaDeRuta } from "./estructura";
-import { CLASES_MENU } from "./menu-dos-niveles";
+import { CLASES_MENU } from "./clases";
 import { Icono } from "./icono";
 import s from "./menu-dos-niveles.module.css";
 

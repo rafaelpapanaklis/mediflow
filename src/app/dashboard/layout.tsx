@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar, type SidebarProps } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
-import { MenuDosNiveles } from "@/components/dashboard/menu-dos-niveles/menu-dos-niveles";
+import { MenuDosNivelesServidor } from "@/components/dashboard/menu-dos-niveles/menu-servidor";
 import { TopbarDosNiveles } from "@/components/dashboard/menu-dos-niveles/topbar-dos-niveles";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { canUseCaja } from "@/lib/caja-pin";
@@ -253,7 +253,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         comparten labs/proveedores/afiliados, que no entran en el piloto. */}
     <div className="dashboard-shell flex min-h-screen font-sans" style={{ background: "var(--bg)" }}>
       {menuDosNiveles ? (
-        <MenuDosNiveles
+        <MenuDosNivelesServidor
           {...sidebarProps}
           puedeUsarCaja={canUseCaja(user)}
           planEtiqueta={planEtiqueta}
