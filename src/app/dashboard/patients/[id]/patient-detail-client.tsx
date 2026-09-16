@@ -403,6 +403,14 @@ interface Props {
   /** Veredicto de recordatorios de ESTE paciente (ver SideCards). Solo el
    *  resultado derivado —nunca la fila Clinic ni la plantilla del mensaje. */
   reminderOutcome?: ReminderOutcome | null;
+  /**
+   * WS1-T5 · rediseño de Pacientes — mismo interruptor por clínica que el
+   * menú de dos niveles (`clinic_feature_flags`, ver page.tsx). Gatea SOLO
+   * los apartados clínicos y de documentos (Historial de consultas, Recetas,
+   * Consentimientos, Referencias, Modelos 3D) y el encaje del odontograma;
+   * con `false` (default) ninguno de esos cinco cambia un píxel.
+   */
+  pacientesRediseno?: boolean;
 }
 
 export function PatientDetailClient({
@@ -424,6 +432,7 @@ export function PatientDetailClient({
   creditBalance = 0,
   fotosCount: initialFotosCount = 0,
   originClinicName = null,
+  pacientesRediseno = false,
   canDeletePatient = false,
   canEditPatient = false,
   canViewBilling = false,
@@ -2405,7 +2414,11 @@ export function PatientDetailClient({
 
           {/* ===== TAB: ODONTOGRAMA ===== */}
           {tab === "odontograma" && (
-            <OdontogramV2 patientId={patient.id} />
+            <OdontogramV2
+              patientId={patient.id}
+              dedupeLegend={pacientesRediseno}
+              edgeScrollHint={pacientesRediseno}
+            />
           )}
 
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}
@@ -2465,7 +2478,11 @@ export function PatientDetailClient({
 
               {records.length === 0 ? (
                 <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
-                  <div className="text-3xl mb-2">📋</div>
+                  {pacientesRediseno ? (
+                    <ClipboardList className="w-6 h-6 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
+                  ) : (
+                    <div className="text-3xl mb-2">📋</div>
+                  )}
                   <div className="text-sm font-semibold">{t("patients.consultHistory.empty")}</div>
                   <button
                     onClick={() => setTab("expediente")}
@@ -2952,7 +2969,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: RECETAS ===== */}
           {tab === "recetas" && canViewPrescriptions && (
-            <PrescriptionsTab patientId={patient.id} />
+            <PrescriptionsTab patientId={patient.id} pacientesRediseno={pacientesRediseno} />
           )}
 
           {/* ===== TAB: SUBIDOS POR EL PACIENTE ===== */}
@@ -2963,7 +2980,7 @@ export function PatientDetailClient({
           {/* ===== TAB: CITAS ===== */}
           {/* ===== TAB: REFERENCIAS ===== */}
           {tab === "referencias" && (
-            <ReferralsTab patientId={patient.id} />
+            <ReferralsTab patientId={patient.id} pacientesRediseno={pacientesRediseno} />
           )}
 
           {tab === "agenda" && (
@@ -3235,7 +3252,7 @@ export function PatientDetailClient({
           )}
 
           {tab === "modelos-3d" && (
-            <Models3DTab patientId={patient.id} />
+            <Models3DTab patientId={patient.id} pacientesRediseno={pacientesRediseno} />
           )}
 
           {/* Pestaña gateada por "consents.view": sin el permiso el ítem no
@@ -3245,6 +3262,7 @@ export function PatientDetailClient({
           {tab === "consentimientos" && canViewConsents && (
             <ConsentsTab
               patientId={patient.id}
+              pacientesRediseno={pacientesRediseno}
               initialConsents={consents}
               doctors={doctors}
               currentUserId={currentUser.id}

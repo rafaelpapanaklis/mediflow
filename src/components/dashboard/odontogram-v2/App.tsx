@@ -58,7 +58,7 @@ function Seg({ value, set, options }: { value: string; set: (v: string) => void;
   );
 }
 
-export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) {
+export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange, dedupeLegend, edgeScrollHint }: OdontogramV2Props) {
   // Modo CONTROLADO (foto por consulta): si llegan value+onChange, el estado lo
   // maneja el padre y NO se toca el servidor. Si no, modo VIVO (como la pestaña).
   const controlled = value !== undefined && !!onChange;
@@ -278,20 +278,22 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
               <button type="button" className="odo-clearall" onClick={clearAll}>{t.clearAll}</button>
             </div>
           </div>
-          <div className="odo-chart-scroll" aria-busy={loading}>
-            <Odontogram
-              dentition={dentition}
-              lang={lang}
-              numbering={numbering}
-              records={records}
-              brush={brush}
-              eraser={eraser}
-              selected={selected}
-              onApply={apply}
-              onSelect={handleSelect}
-            />
+          <div className={"odo-chart-scroll-wrap" + (edgeScrollHint ? " odo-edge-hint" : "")}>
+            <div className="odo-chart-scroll" aria-busy={loading}>
+              <Odontogram
+                dentition={dentition}
+                lang={lang}
+                numbering={numbering}
+                records={records}
+                brush={brush}
+                eraser={eraser}
+                selected={selected}
+                onApply={apply}
+                onSelect={handleSelect}
+              />
+            </div>
           </div>
-          <Legend lang={lang} />
+          {!dedupeLegend && <Legend lang={lang} />}
         </div>
 
         {/* ===== Palette ===== */}

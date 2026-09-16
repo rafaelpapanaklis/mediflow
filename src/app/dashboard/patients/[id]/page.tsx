@@ -40,6 +40,7 @@ import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { resolveReminderOutcome } from "@/lib/reminders/promise";
 import { parseNotifPrefs } from "@/lib/patient-notifications/types";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -57,7 +58,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // query de abajo queda exactamente como estaba.
   const visibility = await getPatientVisibility(user.clinicId);
 
-  const [patient, doctors, consentRows] = await Promise.all([
+  const [patient, doctors, consentRows, pacientesRediseno] = await Promise.all([
     prisma.patient.findFirst({
       // MULTI-CLÍNICA: clinicScopeFilter permite el expediente de una sede vinculada
       // (con el flag apagado = user.clinicId pelado). Visibilidad por paciente: esta
@@ -129,6 +130,10 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           select:  CONSENT_DTO_SELECT,
         }).catch(() => [])
       : Promise.resolve([]),
+    // WS1-T5 · rediseño de Pacientes (apartados clínicos y de documentos) —
+    // MISMO interruptor por clínica que ya usa el menú de dos niveles
+    // (sql/menu-dos-niveles.sql). Falla cerrado igual que layout.tsx.
+    menuDosNivelesEncendido(user.clinicId),
   ]);
 
   if (!patient) notFound();
@@ -445,6 +450,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       <ErrorBoundary fallbackTitle={t("patients.page.loadError")}>
         <PatientDetailClient
           key={user.clinicId}
+          pacientesRediseno={pacientesRediseno}
           originClinicName={
             patient.clinicId === user.clinicId
               ? null

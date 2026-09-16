@@ -65,9 +65,28 @@ export interface ConsentsTabProps {
   canSendWhatsApp: boolean;
   /** Solo el doctor responsable estampa su firma (la API revalida el rol). */
   canCountersign: boolean;
+  /**
+   * WS1-T5 · rediseño de Pacientes, mismo interruptor que patient-detail-client
+   * pasa a todos sus tabs clínicos. Aquí solo corrige el contraste de las
+   * pastillas de estado: `.badge-new--*` trae colores de texto fijos para
+   * fondo oscuro (ver globals.css) y este panel corre en claro, así que hoy
+   * salen casi ilegibles. Con `false` (default) el texto sigue exactamente
+   * como está — el bug de contraste no se toca sin la bandera.
+   */
+  pacientesRediseno?: boolean;
 }
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
+
+/** Texto theme-aware (`--*-strong`) para pisar el color fijo de `.badge-new--*`. */
+const BADGE_TEXT_FIX: Record<BadgeTone, string> = {
+  success: "var(--success-strong)",
+  warning: "var(--warning-strong)",
+  danger: "var(--danger-strong)",
+  info: "var(--info-strong)",
+  brand: "var(--violet-700)",
+  neutral: "var(--text-2)",
+};
 
 const STATUS_TONE: Record<ConsentStatus, { labelKey: string; tone: BadgeTone }> = {
   PENDING: { labelKey: "patients.consents.statusPending", tone: "warning" },
@@ -88,6 +107,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
   const {
     patientId, initialConsents, doctors, currentUserId,
     canCreate, canRevoke, canSendWhatsApp, canCountersign,
+    pacientesRediseno = false,
   } = props;
   const t = useT();
   const confirm = useConfirm();
@@ -265,6 +285,7 @@ export function ConsentsTab(props: ConsentsTabProps) {
                 consent={c}
                 busy={busy}
                 copied={copiedId === c.id}
+                pacientesRediseno={pacientesRediseno}
                 canCreate={canCreate}
                 canRevoke={canRevoke}
                 canSendWhatsApp={canSendWhatsApp}
@@ -393,13 +414,14 @@ function ConsentsEmptyState({ canCreate, onNew }: { canCreate: boolean; onNew: (
 // ---------------------------------------------------------------------------
 
 function ConsentRow({
-  consent: c, busy, copied,
+  consent: c, busy, copied, pacientesRediseno,
   canCreate, canRevoke, canSendWhatsApp, canCountersign,
   onCopyLink, onSendWhatsApp, onRenew, onRevoke, onDelete, onCountersign,
 }: {
   consent: ConsentDTO;
   busy: string | null;
   copied: boolean;
+  pacientesRediseno: boolean;
   canCreate: boolean;
   canRevoke: boolean;
   canSendWhatsApp: boolean;
@@ -443,9 +465,13 @@ function ConsentRow({
       <div style={{ minWidth: 220, flex: "1 1 320px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>{c.procedure}</span>
-          <BadgeNew tone={style.tone} dot>{t(style.labelKey)}</BadgeNew>
+          <BadgeNew tone={style.tone} dot style={pacientesRediseno ? { color: BADGE_TEXT_FIX[style.tone] } : undefined}>
+            {t(style.labelKey)}
+          </BadgeNew>
           {c.signerName ? (
-            <BadgeNew tone="neutral">{t("patients.consents.byRepresentative")}</BadgeNew>
+            <BadgeNew tone="neutral" style={pacientesRediseno ? { color: BADGE_TEXT_FIX.neutral } : undefined}>
+              {t("patients.consents.byRepresentative")}
+            </BadgeNew>
           ) : null}
         </div>
 
