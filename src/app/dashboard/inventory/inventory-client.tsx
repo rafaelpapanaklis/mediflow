@@ -16,6 +16,11 @@ import { fmtMXN }    from "@/lib/format";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
 import type { TFunction } from "@/i18n/t";
+// REDISEÑO DE INVENTARIO — la raíz que trae Instrument Sans y los tokens
+// `--inv-*`. Solo se monta con el interruptor `menu-dos-niveles` encendido
+// para la clínica; apagado, ni una clase de más.
+import { CLASES_REDISENO_INVENTARIO } from "@/components/dashboard/inventario-rediseno/raiz";
+import invStyles from "@/components/dashboard/inventario-rediseno/inventario-rediseno.module.css";
 
 const DENTAL_ICONS = [
   { id: "implante-plateado",  src: "/icons/dental/implante-plateado.png",  labelKey: "procurement.inventoryClient.iconImplantePlateado"  },
@@ -181,7 +186,20 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
   );
 }
 
-export function InventoryClient({ initialItems }: { initialItems: Item[]; specialty?: string }) {
+export function InventoryClient({
+  initialItems,
+  rediseno = false,
+}: {
+  initialItems: Item[];
+  specialty?: string;
+  /**
+   * ¿La clínica tiene encendido el diseño nuevo? Es el MISMO interruptor del
+   * menú de dos niveles (`clinic_feature_flags` → `menu-dos-niveles`). En
+   * false la pantalla se pinta exactamente como hoy: las clases del
+   * rediseño no se ponen y ninguna regla nueva llega a aplicarse.
+   */
+  rediseno?: boolean;
+}) {
   const t = useT();
   const askConfirm = useConfirm();
   const [items, setItems]       = useState<Item[]>(initialItems);
@@ -306,7 +324,10 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
   }
 
   return (
-    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+    <div
+      className={rediseno ? `${CLASES_REDISENO_INVENTARIO} ${invStyles.pageRediseno}` : undefined}
+      style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}
+    >
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 24, flexWrap: "wrap" }}>
         <div>
