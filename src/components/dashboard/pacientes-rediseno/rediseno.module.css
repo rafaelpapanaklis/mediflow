@@ -1,0 +1,859 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Rediseño de Pacientes (WS1-T4) — lista, menú de la ficha y las cuatro
+   pantallas (Resumen, Historia clínica, Cuestionario, Nueva consulta).
+
+   Habla el MISMO idioma visual que el menú de dos niveles que Rafael
+   aprobó (`menu-dos-niveles.module.css`): Instrument Sans, fondo lila
+   clarísimo, tarjetas blancas de borde suave, violeta #4d3fc6 de acento
+   y mucho aire. Los colores viven aquí como tokens `--pr-*` con su
+   versión oscura; fuera de este archivo no hay hex.
+
+   Los tokens se declaran en `.tokens`, que monta `<RaizRediseno>`. Las
+   variables CSS se HEREDAN, así que las reglas que viven en otros
+   módulos (la lista en `patients.module.css`, la cabecera en
+   `patient-detail.module.css`) pueden leer `var(--pr-*)` sin importar
+   nada: les basta con estar dentro de esa raíz.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.tokens {
+  --pr-fondo: #f7f6fb;
+  --pr-tarjeta: #ffffff;
+  --pr-tarjeta-2: #fbfaff;
+  --pr-borde: #eae8f0;
+  --pr-borde-suave: #f1eff7;
+  --pr-texto: #1a1826;
+  --pr-texto-2: #464357;
+  --pr-texto-3: #858295;
+  --pr-hover: rgba(26, 24, 38, 0.045);
+  --pr-activo: #4d3fc6;
+  --pr-activo-suave: #eeecff;
+  --pr-activo-texto: #ffffff;
+  --pr-sombra: 0 1px 2px rgba(26, 24, 38, 0.05);
+  --pr-sombra-2: 0 4px 16px rgba(26, 24, 38, 0.08);
+  --pr-foco: 0 0 0 2px var(--pr-activo);
+  --pr-exito: #059669;
+  --pr-exito-suave: #e7f6f0;
+  --pr-alerta: #b45309;
+  --pr-alerta-suave: #fdf2e0;
+  --pr-peligro: #dc2626;
+  --pr-peligro-suave: #fdeded;
+  --pr-radio: 14px;
+  --pr-radio-s: 10px;
+
+  font-family: var(--font-menu), system-ui, sans-serif;
+  color: var(--pr-texto);
+}
+
+:global(.dark) .tokens {
+  --pr-fondo: #0d0a17;
+  --pr-tarjeta: #19162a;
+  --pr-tarjeta-2: #1f1b33;
+  --pr-borde: rgba(255, 255, 255, 0.08);
+  --pr-borde-suave: rgba(255, 255, 255, 0.05);
+  --pr-texto: #edecf3;
+  --pr-texto-2: #b6b3c4;
+  --pr-texto-3: #7f7c90;
+  --pr-hover: rgba(255, 255, 255, 0.05);
+  --pr-activo: #6252e2;
+  --pr-activo-suave: rgba(98, 82, 226, 0.2);
+  --pr-sombra: none;
+  --pr-sombra-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --pr-exito: #34d399;
+  --pr-exito-suave: rgba(52, 211, 153, 0.14);
+  --pr-alerta: #fbbf24;
+  --pr-alerta-suave: rgba(251, 191, 36, 0.14);
+  --pr-peligro: #f87171;
+  --pr-peligro-suave: rgba(248, 113, 113, 0.14);
+}
+
+/* ═══ Menú de la ficha — seis fijos + tres desplegables ═══════════════
+   SIN medición de ancho, a propósito. El menú de hoy mide el espacio que
+   le sobra y decide qué enseñar, así que el mismo doctor veía un menú
+   distinto según su pantalla o según tuviera el menú lateral abierto.
+   Aquí la forma es la misma a 1440, a 1280 y en iPad: seis botones
+   siempre a la vista y tres grupos cerrados. Si la fila no cabe (móvil),
+   se desliza; no se reorganiza. */
+
+.menuPegajoso {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 14px 0 16px;
+  padding: 6px 0;
+  background: var(--pr-fondo);
+}
+
+.menu {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+}
+
+.menuFijos,
+.menuGrupos {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.menuSeparador {
+  flex-shrink: 0;
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: var(--pr-borde);
+}
+
+/* Por debajo de ~1200px los nueve botones no caben en UNA fila con los nombres
+   de verdad de los módulos, y ninguna de las salidas fáciles vale: esconder
+   apartados es el defecto que se viene a matar, y acortarles el nombre es
+   renombrarlos. Así que la fila se parte en DOS: los seis fijos arriba y los
+   tres grupos abajo, en el mismo orden y sin que se caiga nada.
+   La forma sigue siendo la misma en las tres pantallas —seis a la vista y tres
+   desplegables—, solo que en dos renglones. Medido en iPad (1024px con el menú
+   lateral abierto): los seis ocupan ~650px de los ~700 disponibles. */
+@media (max-width: 1199.98px) {
+  .menu { flex-wrap: wrap; row-gap: 4px; }
+  .menuFijos,
+  .menuGrupos { flex: 1 0 100%; flex-wrap: wrap; }
+  .menuSeparador { display: none; }
+}
+
+/* Los seis fijos van SIN ícono, y es una decisión de espacio medida, no de
+   gusto: con ícono los nueve botones ocupan ~1090px y a 1440 con el menú
+   lateral abierto solo hay ~1111px de fila. En cuanto entras a un grupo, su
+   botón crece («Clínico» → «Clínico · Historia clínica», +125px) y el menú
+   volvería a esconder «Más» — que es EXACTAMENTE el defecto que se venía a
+   matar. Sin los seis íconos sobran ~155px, que cubren el caso peor
+   («Archivos · Subidos por el paciente»).
+   Los tres botones de grupo SÍ conservan el suyo: es lo que los distingue de
+   un apartado, junto con el galón. Y dentro de los desplegables cada apartado
+   vuelve a tener su ícono, donde el ancho no es el recurso escaso. */
+.menu .item:not(.grupoTrigger) .itemIcono { display: none; }
+
+.item {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--pr-radio-s);
+  background: transparent;
+  color: var(--pr-texto-2);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .item:hover:not(:disabled) {
+    background: var(--pr-hover);
+    color: var(--pr-texto);
+  }
+}
+
+.item:focus-visible {
+  outline: none;
+  box-shadow: var(--pr-foco);
+}
+
+.itemActivo,
+.itemActivo:hover {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  font-weight: 600;
+}
+
+.itemApagado {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.itemIcono {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.itemActivo .itemIcono {
+  opacity: 1;
+}
+
+/* El grupo abierto NO se pinta como el activo: lleva el nombre de dónde
+   estás («Clínico · Recetas») y un borde, para que se distinga de los
+   seis fijos sin robarle el violeta al apartado abierto. */
+.grupoDentro {
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+  font-weight: 600;
+}
+
+/* Marca los tres botones de grupo: conservan su ícono también en pantallas
+   estrechas (es lo que los distingue de los seis fijos). */
+.grupoTrigger {
+  font-weight: 600;
+  max-width: 260px;
+}
+
+.grupoTrigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex-shrink: 0;
+  margin-left: 1px;
+  opacity: 0.6;
+}
+
+.punto {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pr-activo);
+}
+
+.contador {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--pr-hover);
+  color: var(--pr-texto-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.itemActivo .contador {
+  background: rgba(255, 255, 255, 0.24);
+  color: var(--pr-activo-texto);
+}
+
+.contadorDeuda {
+  background: var(--pr-peligro-suave);
+  color: var(--pr-peligro);
+}
+
+.nuevo {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.itemActivo .nuevo {
+  background: rgba(255, 255, 255, 0.24);
+  color: var(--pr-activo-texto);
+}
+
+/* Desplegables */
+.desplegable {
+  z-index: 60;
+  min-width: 228px;
+  padding: 6px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: 12px;
+  box-shadow: var(--pr-sombra-2);
+  font-family: var(--font-menu), system-ui, sans-serif;
+}
+
+.desplegableTitulo {
+  padding: 6px 9px 7px;
+  color: var(--pr-texto-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 34px;
+  padding: 0 9px;
+  border-radius: 8px;
+  color: var(--pr-texto-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+
+.opcion[data-highlighted] {
+  background: var(--pr-hover);
+  color: var(--pr-texto);
+}
+
+.opcionActiva {
+  color: var(--pr-activo);
+  font-weight: 600;
+}
+
+.opcionEtiqueta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═══ Tarjetas ═══════════════════════════════════════════════════════ */
+
+.rejilla {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.rejilla3 {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rejilla2 {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .rejilla3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .rejilla3,
+  .rejilla2 { grid-template-columns: minmax(0, 1fr); }
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 18px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra);
+  min-width: 0;
+}
+
+.tarjetaCabeza {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.tarjetaIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+.tarjetaIconoExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.tarjetaIconoAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.tarjetaIconoPeligro { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+
+.tarjetaTitulo {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  color: var(--pr-texto);
+}
+
+.tarjetaEnlace {
+  flex-shrink: 0;
+  border: 0;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pr-activo);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tarjetaEnlace:hover { text-decoration: underline; }
+.tarjetaEnlace:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+
+.tarjetaCuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Filas etiqueta / valor */
+.filas {
+  display: flex;
+  flex-direction: column;
+}
+
+.fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--pr-borde-suave);
+  font-size: 13px;
+}
+
+.fila:last-child { border-bottom: 0; padding-bottom: 0; }
+.fila:first-child { padding-top: 0; }
+
+.filaEtiqueta {
+  flex-shrink: 0;
+  color: var(--pr-texto-3);
+}
+
+.filaValor {
+  min-width: 0;
+  text-align: right;
+  font-weight: 600;
+  color: var(--pr-texto);
+  overflow-wrap: anywhere;
+}
+
+.filaValorApagado { font-weight: 500; color: var(--pr-texto-3); }
+
+/* Importes */
+.importe {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+}
+
+.importeGrande {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.7px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pr-texto);
+}
+
+.importeDeuda { color: var(--pr-peligro); }
+.importePagado { color: var(--pr-exito); }
+
+.barra {
+  height: 6px;
+  margin: 12px 0 7px;
+  border-radius: 999px;
+  background: var(--pr-hover);
+  overflow: hidden;
+}
+
+.barraRelleno {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--pr-activo);
+  transition: width 0.25s ease;
+}
+
+.barraRellenoExito { background: var(--pr-exito); }
+
+.pie {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--pr-texto-3);
+}
+
+/* Botones */
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+.boton:hover:not(:disabled) { background: var(--pr-tarjeta-2); border-color: var(--pr-texto-3); }
+.boton:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+.boton:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.botonPrincipal {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+.botonPrincipal:hover:not(:disabled) {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  filter: brightness(1.08);
+}
+
+.botonExito {
+  background: var(--pr-exito);
+  border-color: var(--pr-exito);
+  color: #fff;
+}
+
+.botonExito:hover:not(:disabled) {
+  background: var(--pr-exito);
+  border-color: var(--pr-exito);
+  filter: brightness(1.06);
+}
+
+.botonAncho { width: 100%; }
+
+/* Estados vacíos — sin emoji, con un ícono de línea como el resto */
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 16px;
+  border: 1px dashed var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  text-align: center;
+}
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--pr-activo-suave);
+  color: var(--pr-activo);
+}
+
+.vacioTitulo { font-size: 13px; font-weight: 600; color: var(--pr-texto-2); }
+.vacioPista { font-size: 12px; color: var(--pr-texto-3); max-width: 34ch; }
+
+/* Listas cortas (citas, cobros) */
+.lista { display: flex; flex-direction: column; gap: 8px; }
+
+.listaFila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.listaFilaProxima {
+  border-color: var(--pr-activo);
+  background: var(--pr-activo-suave);
+}
+
+.listaPunto {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pr-texto-3);
+}
+
+.listaPuntoProxima { background: var(--pr-activo); }
+.listaPuntoExito { background: var(--pr-exito); }
+.listaPuntoDeuda { background: var(--pr-peligro); }
+
+.listaCuerpo { flex: 1; min-width: 0; }
+
+.listaTitulo {
+  display: block;
+  font-weight: 600;
+  color: var(--pr-texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.listaSub {
+  display: block;
+  margin-top: 1px;
+  color: var(--pr-texto-3);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.listaDerecha {
+  flex-shrink: 0;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Etiquetas de estado */
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.etiquetaNeutra { background: var(--pr-hover); color: var(--pr-texto-3); }
+.etiquetaExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.etiquetaAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.etiquetaPeligro { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+.etiquetaVioleta { background: var(--pr-activo-suave); color: var(--pr-activo); }
+
+/* ═══ Encabezado de pantalla (Historia, Cuestionario, Nueva consulta) ═ */
+
+.pantallaCabeza {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.pantallaTitulo {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  color: var(--pr-texto);
+}
+
+.pantallaSub {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--pr-texto-3);
+}
+
+.pantallaAcciones {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.columna { display: flex; flex-direction: column; gap: 14px; }
+
+/* ═══ Cuestionario ═══════════════════════════════════════════════════ */
+
+.preguntas {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.pregunta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--pr-borde-suave);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta-2);
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.preguntaSi {
+  border-color: var(--pr-peligro);
+  background: var(--pr-peligro-suave);
+}
+
+.preguntaFila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.preguntaTexto {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pr-texto);
+}
+
+.siNo {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--pr-borde);
+  border-radius: 9px;
+  background: var(--pr-tarjeta);
+}
+
+.siNoBoton {
+  min-width: 38px;
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--pr-texto-3);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.siNoBoton:hover { background: var(--pr-hover); color: var(--pr-texto); }
+.siNoBoton:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+.siNoSiActivo { background: var(--pr-peligro); color: #fff; }
+.siNoSiActivo:hover { background: var(--pr-peligro); color: #fff; }
+.siNoNoActivo { background: var(--pr-exito); color: #fff; }
+.siNoNoActivo:hover { background: var(--pr-exito); color: #fff; }
+
+.campo { display: flex; flex-direction: column; gap: 5px; }
+
+.campoEtiqueta {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--pr-texto-3);
+}
+
+.campoEntrada {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 11px;
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio-s);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.campoEntrada::placeholder { color: var(--pr-texto-3); opacity: 0.75; }
+
+.campoEntrada:focus {
+  outline: none;
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+.campoArea { resize: vertical; min-height: 66px; line-height: 1.5; }
+
+.campoDoble {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.deslizador {
+  width: 100%;
+  accent-color: var(--pr-activo);
+}
+
+.guardarBarra {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  padding: 12px 16px;
+  background: var(--pr-tarjeta);
+  border: 1px solid var(--pr-borde);
+  border-radius: var(--pr-radio);
+  box-shadow: var(--pr-sombra-2);
+}
+
+.guardarNota {
+  flex: 1;
+  min-width: 220px;
+  font-size: 12px;
+  color: var(--pr-texto-3);
+}
+
+/* ═══ Historia clínica ═══════════════════════════════════════════════ */
+
+.bitacoraCaja { padding: 0; overflow: hidden; }
+
+.bitacoraCabeza {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bitacoraCabeza:hover { background: var(--pr-hover); }
+.bitacoraCabeza:focus-visible { outline: none; box-shadow: var(--pr-foco); }
+.bitacoraCuerpo { padding: 0 18px 18px; }
+
+/* ═══ Cargando ═══════════════════════════════════════════════════════ */
+
+.cargando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 30px;
+  color: var(--pr-texto-3);
+  font-size: 13px;
+}
+
+.girando { animation: prGirar 0.9s linear infinite; }
+
+@keyframes prGirar {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando { animation: none; }
+  .barraRelleno { transition: none; }
+}

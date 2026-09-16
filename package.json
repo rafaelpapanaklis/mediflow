@@ -27,6 +27,7 @@
     "test:menu-en-todas-las-pantallas": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/menu-en-todas-las-pantallas.test.ts",
     "test:menu-personalizado": "tsx --test src/lib/menu-personalizado/__tests__/menu-personalizado.test.ts",
     "test:tipografia-panel": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/tipografia-panel.test.ts",
+    "test:pacientes-rediseno": "tsx --test src/components/dashboard/pacientes-rediseno/__tests__/pacientes-rediseno.test.ts",
     "test:sabina-core": "tsx --test src/lib/sabina/engine-core.test.ts",
     "test:sabina-motor": "tsx --test src/lib/sabina/engine.test.ts",
     "//test:sabina-confirmacion": "El motor NO puede escribir sin confirmacion: herramientas tramposas intentan escribir desde el bucle (Prisma real contra un puerto cerrado, fetch POST, https.request) y ninguna escritura sale; las acciones solo proponen. test:sabina-propuestas: la fase 2 (una vez, a tiempo, por quien la pidio, con la huella intacta). test:sabina-confirmacion-rutas: lo mismo por los handlers de verdad (pregunta -> tarjeta -> confirmar). test:sabina-tarjeta: la tarjeta no deja confirmar por error.",

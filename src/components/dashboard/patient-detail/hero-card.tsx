@@ -28,6 +28,8 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
 import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
+import { construirAlertas, hayRiesgo } from "@/components/dashboard/pacientes-rediseno/alertas";
+import { fechaCorta } from "@/components/dashboard/pacientes-rediseno/fechas";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
@@ -88,12 +90,41 @@ export interface HeroCardProps {
   emergencyContact?: { name?: string | null; phone?: string | null; relation?: string | null } | null;
   /** Sede de origen cuando el paciente viene prestado de otra sucursal (Fase 2). null = paciente propio. */
   originClinicName?: string | null;
+  /**
+   * ¿Diseño nuevo? (interruptor `menu-dos-niveles` de la clínica). Cambia dos
+   * cosas y ninguna más:
+   *  · la pintura — la cabecera respira y «Iniciar consulta» manda de verdad;
+   *  · los chips de alerta dejan de salir DOS VECES («Alergia a penicilina» +
+   *    «Penicilina»), que es el defecto fotografiado.
+   * Los tres botones, su orden y el sitio de los chips no se mueven: es lo que
+   * la gente encuentra sin leer.
+   */
+  rediseno?: boolean;
 }
 
 function fmtShortDate(iso: string): string {
   return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" })
     .format(new Date(iso))
     .replace(/\./g, "");
+}
+
+/**
+ * La fecha de una cita, en el día que es.
+ *
+ * `fmtShortDate` recibe un día suelto («2026-09-24») y `new Date()` lo lee
+ * como medianoche EN GREENWICH; pintado en la hora de México sale el día
+ * anterior. Está fotografiado: la cabecera dice «8 oct» y la línea de tiempo
+ * de Historia clínica, «9 oct», de la misma cita y en la misma pantalla.
+ *
+ * Con el rediseño encendido ese defecto se vería aún peor, porque la tarjeta
+ * «Tratamiento activo» del Resumen nuevo SÍ pinta el día correcto y quedaría
+ * contradiciendo a la cabecera dos centímetros más arriba. Así que con la
+ * bandera se pinta bien; sin ella, exactamente lo de hoy — arreglarlo para
+ * todo el mundo toca `formatDate` de `src/lib/utils.ts`, que usa medio panel,
+ * y eso es otra tarea.
+ */
+function fechaCabecera(iso: string, rediseno: boolean): string {
+  return rediseno ? fechaCorta(iso) : fmtShortDate(iso);
 }
 
 function patientInitials(first: string, last: string): string {
@@ -121,6 +152,7 @@ export function HeroCard({
   riskFlags = [],
   emergencyContact,
   originClinicName = null,
+  rediseno = false,
 }: HeroCardProps) {
   const t = useT();
   const router = useRouter();
@@ -133,8 +165,37 @@ export function HeroCard({
   const hasBalance = pendingBalance > 0;
   const hasNextAppt = nextAppointment !== null;
 
+  // Los chips, SIN repetidos: ver `construirAlertas`. Solo con el rediseño —
+  // apagado, la cabecera pinta exactamente las mismas listas de siempre.
+  const alertasTodas = rediseno
+    ? construirAlertas({
+        riskFlags,
+        allergies: patient.allergies,
+        chronicConditions: patient.chronicConditions,
+        currentMedications: patient.currentMedications,
+      })
+    : [];
+  // Las de riesgo (banderas y alergias) se pintan TODAS: son dato de
+  // seguridad. Padecimientos y medicación se cortan en seis entre las dos,
+  // como la cabecera de siempre cortaba en tres cada una — un paciente con
+  // doce crónicas y diez medicamentos metía veintidós chips y se comía la
+  // pantalla del teléfono entera.
+  const alertas = alertasTodas.filter((c) => c.esRiesgo);
+  const noRiesgo = alertasTodas.filter((c) => !c.esRiesgo);
+  const noRiesgoVisibles = noRiesgo.slice(0, 6);
+  const noRiesgoOcultos = noRiesgo.slice(6);
+  const tonoChip: Record<string, string> = {
+    peligro: styles.danger,
+    alerta: styles.warning,
+    violeta: styles.brand,
+    exito: styles.success,
+  };
+
   return (
-    <section className={styles.hero} aria-label={t("patients.heroCard.summaryAria")}>
+    <section
+      className={[styles.hero, rediseno ? styles.heroRediseno : ""].filter(Boolean).join(" ")}
+      aria-label={t("patients.heroCard.summaryAria")}
+    >
       <div className={styles.heroMain}>
         <div className={styles.heroAvatarRing} aria-hidden>
           <div className={styles.heroAvatar}>{initials}</div>
@@ -197,7 +258,7 @@ export function HeroCard({
               {hasNextAppt ? (
                 <>
                   <div className={`${styles.metricValue} ${styles.brand}`}>
-                    {fmtShortDate(nextAppointment!.date)}
+                    {fechaCabecera(nextAppointment!.date, rediseno)}
                   </div>
                   {nextAppointment!.startTime && (
                     <div className={styles.metricSub}>
@@ -230,7 +291,7 @@ export function HeroCard({
             </span>
             <div className={styles.metricBody}>
               <div className={styles.metricLabel}>{t("patients.heroCard.lastVisit")}</div>
-              <div className={styles.metricValue}>{lastVisitDate ? fmtShortDate(lastVisitDate) : "—"}</div>
+              <div className={styles.metricValue}>{lastVisitDate ? fechaCabecera(lastVisitDate, rediseno) : "—"}</div>
               <div className={styles.metricSub}>{lastVisitDate ? "" : t("patients.heroCard.noVisits")}</div>
             </div>
           </div>
@@ -399,27 +460,56 @@ export function HeroCard({
       </div>
 
       <div className={styles.heroAlerts} role="group" aria-label={t("patients.heroCard.alertsAria")}>
-        {riskFlags.map((f) => (
-          <span key={`r-${f}`} className={`${styles.alertChip} ${styles.danger}`}>
-            <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {RISK_FLAG_LABELS[f] ?? f}
+        {/* ── Rediseño: una sola lista, ya sin repetidos ─────────────── */}
+        {rediseno && alertas.concat(noRiesgoVisibles).map((c) => (
+          <span key={c.clave} className={`${styles.alertChip} ${tonoChip[c.tono] ?? ""}`}>
+            {c.tono === "peligro" ? (
+              <AlertTriangle size={11} strokeWidth={1.75} aria-hidden />
+            ) : c.tono === "alerta" ? (
+              <HeartPulse size={11} strokeWidth={1.75} aria-hidden />
+            ) : (
+              <Pill size={11} strokeWidth={1.75} aria-hidden />
+            )}{" "}
+            {c.texto}
           </span>
         ))}
-        {patient.allergies.map((a) => (
-          <span key={`a-${a}`} className={`${styles.alertChip} ${styles.danger}`}>
-            <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {a}
+        {rediseno && noRiesgoOcultos.length > 0 && (
+          <span className={styles.alertChip} title={noRiesgoOcultos.map((c) => c.texto).join(", ")}>
+            {t("patients.heroCard.moreCount", { count: noRiesgoOcultos.length })}
           </span>
-        ))}
-        {riskFlags.length === 0 && patient.allergies.length === 0 && (
+        )}
+        {/* «Sin alergias conocidas» habla de ALERGIAS, no de todo lo demás:
+            un paciente asmático sin ninguna alergia tiene que seguir viendo
+            este chip. El chip existe justo para distinguir «se le preguntó y
+            no tiene» de «no lo sabemos». */}
+        {rediseno && !hayRiesgo(alertas) && (
           <span className={`${styles.alertChip} ${styles.success}`}>
             <Check size={11} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.noAllergies")}
           </span>
         )}
-        {patient.chronicConditions.slice(0, 3).map((c) => (
+
+        {/* ── Lo de siempre, intacto ─────────────────────────────────── */}
+        {!rediseno && riskFlags.map((f) => (
+          <span key={`r-${f}`} className={`${styles.alertChip} ${styles.danger}`}>
+            <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {RISK_FLAG_LABELS[f] ?? f}
+          </span>
+        ))}
+        {!rediseno && patient.allergies.map((a) => (
+          <span key={`a-${a}`} className={`${styles.alertChip} ${styles.danger}`}>
+            <AlertTriangle size={11} strokeWidth={1.75} aria-hidden /> {a}
+          </span>
+        ))}
+        {!rediseno && riskFlags.length === 0 && patient.allergies.length === 0 && (
+          <span className={`${styles.alertChip} ${styles.success}`}>
+            <Check size={11} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.noAllergies")}
+          </span>
+        )}
+        {!rediseno && patient.chronicConditions.slice(0, 3).map((c) => (
           <span key={`c-${c}`} className={`${styles.alertChip} ${styles.warning}`}>
             <HeartPulse size={11} strokeWidth={1.75} aria-hidden /> {c}
           </span>
         ))}
-        {patient.chronicConditions.length > 3 && (
+        {!rediseno && patient.chronicConditions.length > 3 && (
           <span
             className={styles.alertChip}
             title={patient.chronicConditions.slice(3).join(", ")}
@@ -427,12 +517,12 @@ export function HeroCard({
             {t("patients.heroCard.moreCount", { count: patient.chronicConditions.length - 3 })}
           </span>
         )}
-        {patient.currentMedications.slice(0, 3).map((m) => (
+        {!rediseno && patient.currentMedications.slice(0, 3).map((m) => (
           <span key={`m-${m}`} className={`${styles.alertChip} ${styles.brand}`}>
             <Pill size={11} strokeWidth={1.75} aria-hidden /> {m}
           </span>
         ))}
-        {patient.currentMedications.length > 3 && (
+        {!rediseno && patient.currentMedications.length > 3 && (
           <span
             className={styles.alertChip}
             title={patient.currentMedications.slice(3).join(", ")}

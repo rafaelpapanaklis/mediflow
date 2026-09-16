@@ -1092,3 +1092,246 @@
     transition: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO DE PACIENTES (WS1-T4) — la lista.
+
+   Todo cuelga de `.pageRediseno`, que solo se pone cuando la clínica tiene
+   encendido el interruptor `menu-dos-niveles`. Es ADITIVO: sin esa clase no
+   se aplica ni una regla de aquí abajo y la lista se pinta exactamente como
+   hoy, píxel por píxel.
+
+   Los colores salen de los tokens `--pr-*` de la raíz del rediseño
+   (`pacientes-rediseno/rediseno.module.css`), heredados; la tipografía es
+   Instrument Sans, la misma del menú nuevo.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.pageRediseno {
+  font-family: var(--font-menu), system-ui, sans-serif;
+  color: var(--pr-texto);
+}
+
+/* ── Pastillas de filtro ────────────────────────────────────────────────
+   Se quedan donde están, arriba y visibles, con su número: se leen de un
+   golpe y meterlas en un desplegable sería empeorarlo. Solo cambian de
+   pintura. */
+
+.pageRediseno .pill {
+  height: 32px;
+  padding: 0 13px;
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: 999px;
+  box-shadow: none;
+  color: var(--pr-texto-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pageRediseno .pill:hover { background: var(--pr-tarjeta-2); color: var(--pr-texto); }
+
+.pageRediseno .pillActive {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  font-weight: 600;
+}
+
+.pageRediseno .pillCount { color: var(--pr-texto-3); font-weight: 600; }
+.pageRediseno .pillActive .pillCount { color: var(--pr-activo-texto); opacity: 0.8; }
+.pageRediseno .pillDivider { background: var(--pr-borde); }
+
+/* ── Barra de herramientas ───────────────────────────────────────────── */
+
+.pageRediseno .searchInput,
+.pageRediseno .btn,
+.pageRediseno .viewToggle,
+.pageRediseno .quotaChip {
+  border-color: var(--pr-borde);
+  background: var(--pr-tarjeta);
+  color: var(--pr-texto);
+  box-shadow: none;
+  font-family: inherit;
+}
+
+.pageRediseno .searchInput { height: 38px; font-size: 13px; }
+.pageRediseno .searchInput::placeholder { color: var(--pr-texto-3); }
+
+.pageRediseno .searchInput:focus {
+  border-color: var(--pr-activo);
+  box-shadow: 0 0 0 3px var(--pr-activo-suave);
+}
+
+.pageRediseno .searchIcon { color: var(--pr-texto-3); }
+.pageRediseno .searchKbd { background: var(--pr-hover); border-color: var(--pr-borde); color: var(--pr-texto-3); }
+
+.pageRediseno .btn {
+  height: 38px;
+  border-radius: var(--pr-radio-s, 10px);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pageRediseno .btn:hover:not(:disabled) {
+  background: var(--pr-tarjeta-2);
+  border-color: var(--pr-texto-3);
+  color: var(--pr-texto);
+}
+
+.pageRediseno .btnPrimary,
+.pageRediseno .btnPrimary:hover:not(:disabled) {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+.pageRediseno .btnPrimary:hover:not(:disabled) { filter: brightness(1.08); }
+
+.pageRediseno .viewToggle { border-radius: var(--pr-radio-s, 10px); padding: 3px; }
+.pageRediseno .viewToggleBtn { border-radius: 8px; color: var(--pr-texto-3); font-family: inherit; }
+.pageRediseno .viewToggleBtn:hover:not(:disabled) { color: var(--pr-texto); }
+
+.pageRediseno .viewToggleBtnActive {
+  background: var(--pr-activo);
+  color: var(--pr-activo-texto);
+  box-shadow: none;
+}
+
+.pageRediseno .viewToggleBtn kbd { background: var(--pr-hover); color: var(--pr-texto-3); border-color: transparent; }
+.pageRediseno .viewToggleBtnActive kbd { background: rgba(255, 255, 255, 0.24); color: var(--pr-activo-texto); }
+
+.pageRediseno .dropdown,
+.pageRediseno .drawer {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: 12px;
+  box-shadow: var(--pr-sombra-2);
+  font-family: inherit;
+}
+
+.pageRediseno .bulkBar {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio, 14px);
+  box-shadow: var(--pr-sombra);
+}
+
+/* ── La tabla ────────────────────────────────────────────────────────── */
+
+.pageRediseno .tableWrap {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio, 14px);
+  box-shadow: var(--pr-sombra);
+}
+
+.pageRediseno .table thead th {
+  background: transparent;
+  border-bottom-color: var(--pr-borde);
+  color: var(--pr-texto-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 11px 12px;
+}
+
+.pageRediseno .thSorted { color: var(--pr-activo); }
+.pageRediseno .table tbody tr { border-bottom-color: var(--pr-borde-suave); }
+.pageRediseno .table tbody tr:hover { background: var(--pr-hover); }
+.pageRediseno .table tbody tr.rowSelected { background: var(--pr-activo-suave); }
+.pageRediseno .table tbody tr.rowFocused { box-shadow: inset 3px 0 0 var(--pr-activo); }
+.pageRediseno .table tbody td { padding: 9px 12px; }
+
+.pageRediseno .avatar { border-radius: 10px; font-weight: 700; }
+.pageRediseno .patientName { color: var(--pr-texto); font-size: 13.5px; }
+.pageRediseno .patientMeta { color: var(--pr-texto-3); }
+.pageRediseno .contactPhone { color: var(--pr-texto-2); }
+.pageRediseno .contactEmail { color: var(--pr-texto-3); }
+.pageRediseno .visitNever { color: var(--pr-texto-3); }
+.pageRediseno .doctorName { color: var(--pr-texto-2); }
+.pageRediseno .tag { border-radius: 7px; }
+
+.pageRediseno .statusPill { height: 22px; font-size: 11px; font-weight: 600; }
+
+.pageRediseno .pagination,
+.pageRediseno .pageInfo { color: var(--pr-texto-3); }
+
+.pageRediseno .pageBtn {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  color: var(--pr-texto-2);
+  font-family: inherit;
+}
+
+.pageRediseno .pageBtnActive,
+.pageRediseno .pageBtnActive:hover:not(:disabled) {
+  background: var(--pr-activo);
+  border-color: var(--pr-activo);
+  color: var(--pr-activo-texto);
+}
+
+.pageRediseno .empty { color: var(--pr-texto-3); }
+.pageRediseno .gridCard {
+  background: var(--pr-tarjeta);
+  border-color: var(--pr-borde);
+  border-radius: var(--pr-radio, 14px);
+  box-shadow: var(--pr-sombra);
+}
+.pageRediseno .gridName { color: var(--pr-texto); }
+.pageRediseno .gridMeta, .pageRediseno .gridInfoLabel { color: var(--pr-texto-3); }
+
+/* ── La columna que se cortaba ────────────────────────────────────────
+   Fotografiado a 1440px con el menú lateral abierto: la columna «Estado»
+   quedaba partida («Activ…», «Archi…») y la de acciones, entera fuera de
+   la pantalla. No era un fallo de la celda: la tabla mide ~1273px de
+   contenido mínimo y ahí sólo hay ~1166px de sitio.
+
+   Se recortan esos ~110px donde sobran, no donde duelen:
+     · el atajo «Ver →» de cada fila se queda en la flecha (−55px);
+     · la columna de acciones baja de 220/180px a 150px;
+     · el correo se corta con puntos suspensivos en vez de estirar la
+       columna de contacto;
+     · la tabla deja de tener `min-width`, así que puede repartir lo que
+       quede en vez de desbordar.
+   El scroll horizontal de `.tableWrap` sigue ahí de red de seguridad para
+   pantallas de verdad estrechas. */
+
+.pageRediseno .table { min-width: 0; }
+
+/* Los encabezados pueden partirse en dos líneas. «ÚLTIMA VISITA» y «PRÓXIMA
+   CITA» en mayúsculas con letter-spacing miden ~100px cada uno y, al ser
+   `nowrap`, fijaban el ancho MÍNIMO de sus columnas aunque el dato de dentro
+   («Hace 28d») mida la mitad. */
+.pageRediseno .table thead th { white-space: normal; line-height: 1.25; }
+
+@media (min-width: 1025px) and (max-width: 1639.98px) {
+  .pageRediseno .tableWrap .table thead th,
+  .pageRediseno .tableWrap .table tbody td { padding: 8px 10px; }
+}
+
+.pageRediseno .actionBtn { color: var(--pr-texto-3); border-radius: 8px; }
+.pageRediseno .actionBtn:hover { background: var(--pr-activo-suave); color: var(--pr-activo); }
+
+.pageRediseno .contactCell { max-width: 180px; }
+
+.pageRediseno .contactPhone,
+.pageRediseno .contactEmail {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pageRediseno .tagsCell { max-width: 150px; overflow: hidden; }
+.pageRediseno .statusPill { white-space: nowrap; }
+
+/* ── Los atajos de teclado, solo donde hay teclado ────────────────────
+   El pie de la lista anunciaba «/ buscar · J/K navegar · Espacio
+   seleccionar» también en el teléfono, donde no hay ninguna tecla que
+   pulsar. En computadora siguen exactamente igual. */
+
+.pageRediseno .kbdHints { color: var(--pr-texto-3); }
+.pageRediseno .kbdHints kbd { background: var(--pr-hover); border-color: var(--pr-borde); color: var(--pr-texto-3); }
+
+@media (max-width: 1023.98px) {
+  .kbdHintsSoloTeclado { display: none; }
+}
