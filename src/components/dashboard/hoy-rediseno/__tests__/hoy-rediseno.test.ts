@@ -54,6 +54,11 @@ test("hoy.module.css no declara ninguna variable CSS propia", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // Mismos destinos que la home de siempre: ni un botón que lleve a otro sitio
 // ═══════════════════════════════════════════════════════════════════════════
+// Con UNA excepción, a propósito: la agenda. La home de siempre manda a
+// `/dashboard/appointments` (la agenda de siempre) y ahí se queda, porque esa
+// pantalla solo la ven las clínicas sin bandera. La de aquí solo se monta con
+// la bandera encendida, y con ella la agenda es `/dashboard/agenda`. Se vigila
+// abajo, en su propio candado.
 test("la pantalla nueva manda a los mismos sitios que la de siempre", () => {
   const todo = archivosNuevos.map((a) => a.texto).join("\n");
   const viejo = [
@@ -72,7 +77,6 @@ test("la pantalla nueva manda a los mismos sitios que la de siempre", () => {
     "/dashboard/whatsapp?appt=${id}",
     "/dashboard/agenda?highlight=${id}",
     "/dashboard/agenda?highlight=${appt.id}",
-    "/dashboard/appointments",
     "/dashboard/reports",
     "/dashboard/xrays?filter=unanalyzed",
     "/dashboard/ai-assistant?patient=${appt.patient.id}",
@@ -85,9 +89,55 @@ test("la pantalla nueva manda a los mismos sitios que la de siempre", () => {
     assert.ok(viejo.includes(d), `la home de siempre ya no usa ${d}: actualiza este candado`);
     assert.ok(todo.includes(d), `el rediseño perdió el destino ${d}`);
   }
-  // Los dos botones del vacío de «Agenda de hoy» (EmptyAppointmentsToday).
-  assert.ok(todo.includes("/dashboard/appointments?new=1"), "falta «Nueva cita» del vacío");
-  assert.ok(todo.includes("/dashboard/appointments?view=week"), "falta «Ver agenda semanal» del vacío");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Hoy con la bandera manda a la agenda NUEVA; la home de siempre, a la de siempre
+// ═══════════════════════════════════════════════════════════════════════════
+// Hallazgo 2 de la auditoría del rediseño (ws1-t8): «Ver agenda completa»,
+// «Ver agenda» y los dos botones del vacío de «Agenda de hoy» mandaban a
+// `/dashboard/appointments`, la agenda vieja entera con su formulario viejo, y
+// su `?view=week` ni siquiera funcionaba. Con la bandera, todo va a
+// `/dashboard/agenda`.
+test("con la bandera, ningún enlace de Hoy lleva a la agenda de siempre", () => {
+  // Un literal de ruta (entre comillas o acento grave) que empiece por la
+  // agenda vieja. Los comentarios que la nombran sin comillas no cuentan.
+  const AGENDA_VIEJA = /["'`]\/dashboard\/appointments/;
+  for (const a of archivosNuevos) {
+    assert.ok(!AGENDA_VIEJA.test(a.texto), `${a.nombre} manda a la agenda de siempre; con la bandera es /dashboard/agenda`);
+  }
+
+  const recepcion = leer("components/dashboard/hoy-rediseno/hoy-recepcion.tsx");
+  const doctor = leer("components/dashboard/hoy-rediseno/hoy-doctor.tsx");
+  // «Ver agenda completa» (recepción) y «Ver agenda» (doctor): la agenda nueva.
+  assert.match(recepcion, /href="\/dashboard\/agenda"[\s\S]*home\.recep\.viewFullAgenda/, "«Ver agenda completa» no va a /dashboard/agenda");
+  assert.match(doctor, /href="\/dashboard\/agenda"[\s\S]*home\.doctor\.viewAgenda/, "«Ver agenda» no va a /dashboard/agenda");
+  // «Ver agenda semanal» del vacío: la agenda nueva ya en Semana.
+  assert.ok(recepcion.includes('href="/dashboard/agenda?view=week"'), "«Ver agenda semanal» no abre la agenda nueva en Semana");
+  // «Nueva cita» del vacío: la MISMA ventana nueva que la cabecera y el pie,
+  // sin pasar por ninguna agenda (un clic menos que el ?new=1 de siempre).
+  const vacio = recepcion.slice(recepcion.indexOf("export function VacioCitasHoy"), recepcion.indexOf("const PUNTO"));
+  assert.match(vacio, /useNewAppointmentDialog\(\)/, "el vacío no usa la ventana nueva de cita");
+  assert.match(vacio, /abrirCita\(\{ openAgendaAfter: true \}\)/, "«Nueva cita» del vacío no abre la ventana nueva");
+  assert.ok(!vacio.includes("?new=1"), "«Nueva cita» del vacío sigue navegando con ?new=1");
+
+  // Y la home de siempre NO cambia: sigue mandando a la agenda de siempre,
+  // igual que su vacío compartido (`EmptyAppointmentsToday`).
+  const homeVieja = [
+    "components/dashboard/home/home-receptionist.tsx",
+    "components/dashboard/home/home-doctor.tsx",
+  ].map(leer).join("\n");
+  assert.equal((homeVieja.match(/router\.push\("\/dashboard\/appointments"\)/g) ?? []).length, 2, "la home de siempre dejó de mandar a /dashboard/appointments");
+  const vacioViejo = leer("components/dashboard/empty-states/index.tsx");
+  assert.ok(vacioViejo.includes('"/dashboard/appointments?new=1"'), "el vacío de siempre perdió ?new=1");
+  assert.ok(vacioViejo.includes('"/dashboard/appointments?view=week"'), "el vacío de siempre perdió ?view=week");
+
+  // La agenda nueva entiende `?view=week`: arranca en Semana en vez de en Día.
+  const contexto = leer("components/dashboard/agenda-nueva/contexto-agenda-nueva.tsx");
+  assert.match(contexto, /searchParams\.get\("view"\)/, "la agenda nueva no lee ?view=");
+  assert.match(contexto, /if \(view === "week"\) return "semana"/, "?view=week no abre Semana");
+  assert.match(contexto, /if \(view === "month"\) return "mes"/, "?view=month no abre Mes");
+  assert.match(contexto, /return "dia";\n\}/, "sin ?view= la agenda nueva ya no arranca en Día");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
