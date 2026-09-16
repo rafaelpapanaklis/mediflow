@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import { ReservasRecursos } from "@/components/dashboard/piezas-rediseno/reservas-recursos";
 
 interface Booking {
   id: string;
@@ -15,7 +16,13 @@ interface Booking {
   endTime: string;
 }
 
-export function ResourceBookingsClient({ initialBookings }: { initialBookings: Booking[] }) {
+export function ResourceBookingsClient({ initialBookings, rediseno = false }: {
+  initialBookings: Booking[];
+  /** Interruptor `menu-dos-niveles` de la clínica (lo resuelve page.tsx):
+   *  encendido pinta las reservas vestidas con el lenguaje del menú nuevo;
+   *  apagado, todo lo de abajo, tal cual. La lógica es la misma en los dos. */
+  rediseno?: boolean;
+}) {
   const t = useT();
   const askConfirm = useConfirm();
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
@@ -78,6 +85,24 @@ export function ResourceBookingsClient({ initialBookings }: { initialBookings: B
 
   function formatTime(dt: string) {
     return new Date(dt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // REDISEÑO — mismo estado, mismos handlers, otra piel. Con la bandera
+  // apagada no se llega aquí y lo de abajo se pinta exactamente como hoy.
+  if (rediseno) {
+    return (
+      <ReservasRecursos
+        bookings={bookings}
+        grouped={grouped}
+        showAdd={showAdd}
+        setShowAdd={setShowAdd}
+        form={form}
+        setForm={setForm}
+        handleAdd={handleAdd}
+        handleDelete={handleDelete}
+        formatTime={formatTime}
+      />
+    );
   }
 
   return (
