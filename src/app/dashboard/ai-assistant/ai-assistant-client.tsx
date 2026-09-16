@@ -51,6 +51,113 @@ import {
   type AiConversationGroup,
 } from "@/lib/ai-assistant/conversation-core";
 import styles from "./ai-assistant.module.css";
+import piel from "@/components/dashboard/sabina-rx-ia-rediseno/rediseno.module.css";
+import { CLASES_REDISENO_LOTE } from "@/components/dashboard/sabina-rx-ia-rediseno/raiz";
+
+/**
+ * REDISEÑO (interruptor `menu-dos-niveles`) — «dos pieles, un esqueleto», como
+ * en sabina-client.tsx: el JSX es uno y `c` elige las clases de siempre
+ * (`ai-assistant.module.css`, sin tocar) o las piezas del rediseño que
+ * comparten Sabina, Radiografías y el Asistente IA. Los dos chats se visten
+ * con las MISMAS piezas (cabecera, burbujas, redactor, historial), que es lo
+ * que hace que se parezcan entre sí.
+ */
+const CLASES_REDISENO: Record<string, string> = {
+  page: `${piel.pantalla} ${piel.chat}`,
+  mobileBackdrop: piel.velo,
+  sidebar: piel.lateral,
+  sidebarHeader: piel.lateralCabecera,
+  brandTitle: piel.lateralTitulo,
+  brandIcon: piel.marcaIcono,
+  newConvBtn: `${piel.boton} ${piel.botonPrincipal}`,
+  searchWrap: piel.buscador,
+  searchIcon: piel.buscadorIcono,
+  searchInput: piel.buscadorEntrada,
+  convList: piel.lateralLista,
+  convGroupLabel: piel.lateralGrupo,
+  convRow: piel.filaConversacion,
+  convRename: piel.renombrar,
+  convRenameInput: `${piel.entrada} ${piel.renombrarEntrada}`,
+  convAction: piel.accionFila,
+  convActionDanger: piel.accionFilaPeligro,
+  convActions: piel.accionesFila,
+  convItem: piel.conversacion,
+  convItemActive: piel.conversacionActiva,
+  convItemTitle: piel.conversacionTitulo,
+  convItemTime: piel.conversacionHora,
+  convListLoading: piel.lateralNota,
+  spin: piel.girar,
+  emptyStartBtn: `${piel.boton} ${piel.botonPrincipal} ${piel.botonChico}`,
+  userBlock: piel.lateralPie,
+  userAvatar: piel.avatarUsuario,
+  userName: piel.lateralPieNombre,
+  userRole: piel.lateralPieRol,
+  main: piel.principal,
+  chatHeader: piel.cabecera,
+  mobileMenuBtn: `${piel.botonIcono} ${piel.botonIconoMarco} ${piel.hamburguesa}`,
+  chatHeaderInfo: piel.cabeceraTextos,
+  chatTitle: piel.cabeceraTitulo,
+  chatMeta: piel.cabeceraSub,
+  chatHeaderActions: piel.cabeceraAcciones,
+  iconBtn: piel.botonIcono,
+  historyNotice: piel.aviso,
+  quotaStrip: piel.cupo,
+  quotaInner: piel.cupoInterior,
+  quotaHead: piel.cupoCabeza,
+  quotaLabel: piel.cupoEtiqueta,
+  quotaLabelText: piel.cupoEtiquetaTexto,
+  quotaNumbers: piel.cupoNumeros,
+  quotaSubRow: piel.cupoSubFila,
+  quotaSub: piel.cupoSub,
+  quotaSubStrong: piel.cupoSubFuerte,
+  quotaNoPlan: piel.cupoSinPlan,
+  messagesScroll: piel.hilo,
+  messagesInner: piel.hiloInterior,
+  loadFailed: piel.notaCentro,
+  welcome: piel.bienvenida,
+  welcomeIcon: piel.bienvenidaIcono,
+  welcomeTitle: piel.bienvenidaTitulo,
+  welcomeText: piel.bienvenidaTexto,
+  suggestionsGrid: piel.sugerencias,
+  suggestion: piel.sugerencia,
+  suggestionIcon: piel.sugerenciaIcono,
+  suggestionTitle: piel.sugerenciaTitulo,
+  suggestionDesc: piel.sugerenciaTexto,
+  message: piel.mensaje,
+  avatarUser: piel.avatarUsuario,
+  avatarAssistant: piel.avatarAsistente,
+  streaming: piel.avatarAsistenteEscribiendo,
+  messageRow: piel.mensajeFila,
+  messageMeta: piel.mensajeMeta,
+  messageName: piel.mensajeNombre,
+  messageTimestamp: piel.hora,
+  modelBadge: piel.modeloEtiqueta,
+  messageContent: `${piel.burbuja} ${piel.textoPre}`,
+  streamingCursor: piel.cursorEscribiendo,
+  errorBubble: piel.errorBurbuja,
+  composerWrap: piel.redactor,
+  composerInner: piel.redactorInterior,
+  quickActions: piel.atajos,
+  quickAction: piel.atajo,
+  composerBox: `${piel.redactorCaja} ${piel.redactorCajaColumna}`,
+  slashPopover: piel.slashDesplegable,
+  slashItem: piel.slashItem,
+  slashItemActive: piel.slashItemActivo,
+  slashItemIcon: piel.slashIcono,
+  slashItemBody: piel.slashCuerpo,
+  slashItemCmd: piel.slashComando,
+  slashItemName: piel.slashNombre,
+  slashItemDesc: piel.slashTexto,
+  composerTextarea: piel.redactorTexto,
+  composerBar: piel.redactorBarra,
+  composerActionBtn: piel.accionRedactor,
+  recording: piel.grabando,
+  contextPill: piel.pildoraContexto,
+  contextPillRemove: piel.pildoraContextoQuitar,
+  composerBarSpacer: piel.redactorEspacio,
+  sendBtn: piel.enviar,
+  composerHint: `${piel.redactorPista} ${piel.pista}`,
+};
 
 interface Message {
   id: string;
@@ -286,8 +393,12 @@ function archiveLegacyStorage() {
   }
 }
 
-export function AiAssistantClient() {
+export function AiAssistantClient({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
+  // Un solo juego de clases por render: el de siempre o el del rediseño. Lo
+  // mismo con los tokens en línea: el viejo (`viejo`) o el del menú (`nuevo`).
+  const c: Record<string, string> = rediseno ? CLASES_REDISENO : styles;
+  const tk = (viejo: string, nuevo: string) => (rediseno ? nuevo : viejo);
 
   // ── Historial (servidor) ────────────────────────────────────────────
   // `metaById` es un caché que solo CRECE: el título de la conversación abierta
@@ -1171,38 +1282,38 @@ export function AiAssistantClient() {
 
   return (
     <div
-      className={styles.page}
+      className={rediseno ? `${CLASES_REDISENO_LOTE} ${c.page}` : c.page}
       data-mobile-sidebar-open={mobileSidebarOpen || undefined}
     >
       {mobileSidebarOpen && (
         <button
           type="button"
           aria-label={t("pages.aiAssistant.closeHistory")}
-          className={styles.mobileBackdrop}
+          className={c.mobileBackdrop}
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
       {/* ── Sidebar (drawer en mobile) ── */}
       <aside
-        className={styles.sidebar}
+        className={rediseno && mobileSidebarOpen ? `${c.sidebar} ${piel.lateralAbierto}` : c.sidebar}
         role={mobileSidebarOpen ? "dialog" : undefined}
         aria-modal={mobileSidebarOpen ? "true" : undefined}
         aria-label={t("pages.aiAssistant.conversationsHistory")}
       >
-        <div className={styles.sidebarHeader}>
-          <div className={styles.brandTitle}>
-            <span className={styles.brandIcon}><Sparkles size={14} aria-hidden /></span>
+        <div className={c.sidebarHeader}>
+          <div className={c.brandTitle}>
+            <span className={c.brandIcon}><Sparkles size={14} aria-hidden /></span>
             {t("pages.aiAssistant.brandTitle")}
           </div>
-          <button type="button" className={styles.newConvBtn} onClick={startNew}>
+          <button type="button" className={c.newConvBtn} onClick={startNew}>
             <Plus size={13} aria-hidden /> {t("pages.aiAssistant.newConversation")}
             <kbd>⌘K</kbd>
           </button>
-          <div className={styles.searchWrap}>
-            <Search size={13} aria-hidden className={styles.searchIcon} />
+          <div className={c.searchWrap}>
+            <Search size={13} aria-hidden className={c.searchIcon} />
             <input
               type="text"
-              className={styles.searchInput}
+              className={c.searchInput}
               placeholder={t("pages.aiAssistant.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -1210,7 +1321,7 @@ export function AiAssistantClient() {
           </div>
         </div>
 
-        <div className={styles.convList}>
+        <div className={c.convList}>
           {(["clinico", "admin", "pacientes"] as const).map((g) => {
             const items = grouped[g];
             if (items.length === 0) return null;
@@ -1218,30 +1329,30 @@ export function AiAssistantClient() {
             const label = g === "clinico" ? t("pages.aiAssistant.groupClinical") : g === "admin" ? t("pages.aiAssistant.groupAdmin") : t("pages.aiAssistant.groupPatients");
             return (
               <div key={g}>
-                <div className={styles.convGroupLabel}>
+                <div className={c.convGroupLabel}>
                   <Icon size={11} aria-hidden /> {label}
                 </div>
-                {items.map((c) => (
-                  <div key={c.id} className={styles.convRow}>
-                    {renamingId === c.id ? (
-                      <div className={styles.convRename}>
+                {items.map((conv) => (
+                  <div key={conv.id} className={c.convRow}>
+                    {renamingId === conv.id ? (
+                      <div className={c.convRename}>
                         <input
                           type="text"
-                          className={styles.convRenameInput}
+                          className={c.convRenameInput}
                           value={renameDraft}
                           maxLength={AI_TITLE_MAX}
                           autoFocus
                           onChange={(e) => setRenameDraft(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter") { e.preventDefault(); void commitRename(c.id); }
+                            if (e.key === "Enter") { e.preventDefault(); void commitRename(conv.id); }
                             if (e.key === "Escape") { e.preventDefault(); setRenamingId(null); }
                           }}
                           aria-label={t("common.edit")}
                         />
                         <button
                           type="button"
-                          className={styles.convAction}
-                          onClick={() => void commitRename(c.id)}
+                          className={c.convAction}
+                          onClick={() => void commitRename(conv.id)}
                           title={t("common.save")}
                           aria-label={t("common.save")}
                         >
@@ -1249,7 +1360,7 @@ export function AiAssistantClient() {
                         </button>
                         <button
                           type="button"
-                          className={styles.convAction}
+                          className={c.convAction}
                           onClick={() => setRenamingId(null)}
                           title={t("common.cancel")}
                           aria-label={t("common.cancel")}
@@ -1261,13 +1372,13 @@ export function AiAssistantClient() {
                       <>
                         <button
                           type="button"
-                          className={`${styles.convItem} ${c.id === activeId ? styles.convItemActive : ""}`}
-                          onClick={() => void openConversation(c.id)}
+                          className={`${c.convItem} ${conv.id === activeId ? c.convItemActive : ""}`}
+                          onClick={() => void openConversation(conv.id)}
                         >
-                          <span className={styles.convItemTitle}>{c.title}</span>
-                          <span className={styles.convItemTime}>
-                            {formatRelative(c.updatedAt, t)}
-                            {isLocalId(c.id) && (
+                          <span className={c.convItemTitle}>{conv.title}</span>
+                          <span className={c.convItemTime}>
+                            {formatRelative(conv.updatedAt, t)}
+                            {isLocalId(conv.id) && (
                               <>
                                 {" · "}
                                 <CloudOff size={9} aria-hidden style={{ display: "inline", verticalAlign: "-1px" }} />
@@ -1275,13 +1386,13 @@ export function AiAssistantClient() {
                             )}
                           </span>
                         </button>
-                        <div className={styles.convActions}>
-                          {confirmDeleteId === c.id ? (
+                        <div className={c.convActions}>
+                          {confirmDeleteId === conv.id ? (
                             <>
                               <button
                                 type="button"
-                                className={`${styles.convAction} ${styles.convActionDanger}`}
-                                onClick={() => void removeConversation(c.id)}
+                                className={`${c.convAction} ${c.convActionDanger}`}
+                                onClick={() => void removeConversation(conv.id)}
                                 title={t("common.delete")}
                                 aria-label={t("common.delete")}
                               >
@@ -1289,7 +1400,7 @@ export function AiAssistantClient() {
                               </button>
                               <button
                                 type="button"
-                                className={styles.convAction}
+                                className={c.convAction}
                                 onClick={() => setConfirmDeleteId(null)}
                                 title={t("common.cancel")}
                                 aria-label={t("common.cancel")}
@@ -1301,8 +1412,8 @@ export function AiAssistantClient() {
                             <>
                               <button
                                 type="button"
-                                className={styles.convAction}
-                                onClick={() => startRename(c)}
+                                className={c.convAction}
+                                onClick={() => startRename(conv)}
                                 title={t("common.edit")}
                                 aria-label={t("common.edit")}
                               >
@@ -1310,8 +1421,8 @@ export function AiAssistantClient() {
                               </button>
                               <button
                                 type="button"
-                                className={`${styles.convAction} ${styles.convActionDanger}`}
-                                onClick={() => { setRenamingId(null); setConfirmDeleteId(c.id); }}
+                                className={`${c.convAction} ${c.convActionDanger}`}
+                                onClick={() => { setRenamingId(null); setConfirmDeleteId(conv.id); }}
                                 title={t("common.delete")}
                                 aria-label={t("common.delete")}
                               >
@@ -1330,29 +1441,29 @@ export function AiAssistantClient() {
           {listedConvs.length === 0 && (
             <div style={{ padding: "20px 12px" }}>
               {historyLoading ? (
-                <div className={styles.convListLoading}>
-                  <Loader2 size={14} aria-hidden className={styles.spin} />
+                <div className={c.convListLoading}>
+                  <Loader2 size={14} aria-hidden className={c.spin} />
                   {t("common.loading")}
                 </div>
               ) : search ? (
-                <div style={{ fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
+                <div style={{ fontSize: 12, color: tk("var(--text-3)", "var(--m2-texto-3)"), textAlign: "center" }}>
                   {t("pages.aiAssistant.noResultsFor", { search })}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center", padding: "16px 8px" }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "var(--brand-softer)", border: "1px solid var(--border-brand)", display: "grid", placeItems: "center", color: "var(--brand)" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: tk("var(--brand-softer)", "var(--m2-iniciales-fondo)"), border: `1px solid ${tk("var(--border-brand)", "var(--m2-tarjeta-borde)")}`, display: "grid", placeItems: "center", color: tk("var(--brand)", "var(--m2-iniciales-texto)") }}>
                     <Sparkles size={20} strokeWidth={1.75} aria-hidden />
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: tk("var(--text-1)", "var(--m2-texto)") }}>
                     {t("pages.aiAssistant.noConversationsYet")}
                   </div>
-                  <div style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.5, maxWidth: 220 }}>
+                  <div style={{ fontSize: 11.5, color: tk("var(--text-3)", "var(--m2-texto-3)"), lineHeight: 1.5, maxWidth: 220 }}>
                     {t("pages.aiAssistant.emptyHint")}
                   </div>
                   <button
                     type="button"
                     onClick={startNew}
-                    className={styles.emptyStartBtn}
+                    className={c.emptyStartBtn}
                   >
                     <Plus size={11} strokeWidth={1.75} aria-hidden /> {t("pages.aiAssistant.start")}
                   </button>
@@ -1362,44 +1473,44 @@ export function AiAssistantClient() {
           )}
         </div>
 
-        <div className={styles.userBlock}>
-          <div className={styles.userAvatar}>DR</div>
+        <div className={c.userBlock}>
+          <div className={c.userAvatar}>DR</div>
           <div style={{ minWidth: 0 }}>
-            <div className={styles.userName}>{t("pages.aiAssistant.doctor")}</div>
-            <div className={styles.userRole}>{t("pages.aiAssistant.activeSession")}</div>
+            <div className={c.userName}>{t("pages.aiAssistant.doctor")}</div>
+            <div className={c.userRole}>{t("pages.aiAssistant.activeSession")}</div>
           </div>
         </div>
       </aside>
 
       {/* ── Main chat ── */}
-      <main className={styles.main}>
-        <header className={styles.chatHeader}>
+      <main className={c.main}>
+        <header className={c.chatHeader}>
           {/* Hamburger sólo visible en mobile. */}
           <button
             type="button"
-            className={styles.mobileMenuBtn}
+            className={c.mobileMenuBtn}
             onClick={() => setMobileSidebarOpen(true)}
             aria-label={t("pages.aiAssistant.openHistory")}
           >
             <Menu size={16} aria-hidden />
           </button>
-          <div className={styles.chatHeaderInfo}>
-            <h1 className={styles.chatTitle}>
-              <Sparkles size={14} aria-hidden style={{ color: "var(--brand)" }} />
+          <div className={c.chatHeaderInfo}>
+            <h1 className={c.chatTitle}>
+              <Sparkles size={14} aria-hidden style={{ color: tk("var(--brand)", "var(--m2-activo)") }} />
               {activeConv?.title ?? t("pages.aiAssistant.clinicalAssistant")}
             </h1>
-            <div className={styles.chatMeta}>
+            <div className={c.chatMeta}>
               {AI_CHAT_MODEL} · {t("pages.aiAssistant.messageCount", { count: messages.length })}
             </div>
           </div>
-          <div className={styles.chatHeaderActions}>
+          <div className={c.chatHeaderActions}>
             {/* "Compartir" se quitó (hallazgo 43): prometía un enlace público a
                 una conversación clínica —permisos, caducidad, PHI fuera de la
                 clínica— y detrás no había nada. Un botón que promete y no
                 cumple es peor que no tenerlo. */}
             <button
               type="button"
-              className={styles.iconBtn}
+              className={c.iconBtn}
               title={t("common.export")}
               aria-label={t("pages.aiAssistant.exportConversation")}
               onClick={exportConversation}
@@ -1409,7 +1520,7 @@ export function AiAssistantClient() {
             </button>
             <button
               type="button"
-              className={styles.iconBtn}
+              className={c.iconBtn}
               title={t("pages.aiAssistant.newConversation")}
               aria-label={t("pages.aiAssistant.startNewConversation")}
               onClick={startNew}
@@ -1426,7 +1537,7 @@ export function AiAssistantClient() {
             sigue funcionando, lo que falla es guardar o leer el historial
             (típicamente, el .sql todavía sin aplicar en Supabase). */}
         {historyNotice && (
-          <div className={styles.historyNotice} role="status">
+          <div className={c.historyNotice} role="status">
             <CloudOff size={13} aria-hidden style={{ flexShrink: 0 }} />
             <span>{historyNotice.text ?? t("common.genericError")}</span>
           </div>
@@ -1437,23 +1548,23 @@ export function AiAssistantClient() {
             drawer oculto) para que se vea igual en desktop y en teléfono.
             Sin snapshot no se pinta nada: ni banda vacía ni medidor a medias. */}
         {quota && (
-          <div className={styles.quotaStrip}>
-            <div className={styles.quotaInner}>
+          <div className={c.quotaStrip}>
+            <div className={c.quotaInner}>
               <AiQuotaBanner usage={quota} />
               {meter.limit > 0 ? (
                 <div>
-                  <div className={styles.quotaHead}>
-                    <span className={styles.quotaLabel}>
-                      <Zap size={12} strokeWidth={2} aria-hidden style={{ color: "var(--brand)", flexShrink: 0 }} />
-                      <span className={styles.quotaLabelText}>{t("pages.aiAssistant.quotaTitle")}</span>
+                  <div className={c.quotaHead}>
+                    <span className={c.quotaLabel}>
+                      <Zap size={12} strokeWidth={2} aria-hidden style={{ color: tk("var(--brand)", "var(--m2-activo)"), flexShrink: 0 }} />
+                      <span className={c.quotaLabelText}>{t("pages.aiAssistant.quotaTitle")}</span>
                     </span>
-                    <span className={styles.quotaNumbers} style={{ fontVariantNumeric: "tabular-nums" }}>
+                    <span className={c.quotaNumbers} style={{ fontVariantNumeric: "tabular-nums" }}>
                       {meter.used.toLocaleString()} / {meter.limit.toLocaleString()}
                     </span>
                   </div>
                   <div
-                    className="h-2 rounded-full overflow-hidden"
-                    style={{ background: "var(--bg-elev-2)" }}
+                    className={rediseno ? piel.cupoBarra : "h-2 rounded-full overflow-hidden"}
+                    style={rediseno ? undefined : { background: "var(--bg-elev-2)" }}
                     role="progressbar"
                     aria-label={t("pages.aiAssistant.quotaTitle")}
                     aria-valuenow={meter.percent}
@@ -1461,25 +1572,25 @@ export function AiAssistantClient() {
                     aria-valuemax={100}
                   >
                     <div
-                      className="h-full rounded-full"
+                      className={rediseno ? piel.cupoRelleno : "h-full rounded-full"}
                       style={{
                         width: `${meter.percent}%`,
-                        background: meter.percent > 80 ? "var(--danger)" : meter.percent > 60 ? "var(--warning)" : "var(--brand)",
+                        background: meter.percent > 80 ? "var(--danger)" : meter.percent > 60 ? "var(--warning)" : tk("var(--brand)", "var(--m2-activo)"),
                         transition: "width var(--dur-2) var(--ease)",
                       }}
                     />
                   </div>
-                  <div className={styles.quotaSubRow}>
-                    <span className={styles.quotaSub} style={{ fontVariantNumeric: "tabular-nums" }}>
+                  <div className={c.quotaSubRow}>
+                    <span className={c.quotaSub} style={{ fontVariantNumeric: "tabular-nums" }}>
                       {t("pages.aiAssistant.quotaPercent", { percent: meter.percent })}
                     </span>
-                    <span className={styles.quotaSubStrong} style={{ fontVariantNumeric: "tabular-nums" }}>
+                    <span className={c.quotaSubStrong} style={{ fontVariantNumeric: "tabular-nums" }}>
                       {t("pages.aiAssistant.quotaRemaining", { count: meter.remaining.toLocaleString() })}
                     </span>
                   </div>
                 </div>
               ) : (
-                <div className={styles.quotaNoPlan}>
+                <div className={c.quotaNoPlan}>
                   <Zap size={12} strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
                   {t("pages.aiAssistant.quotaNoPlan")}
                 </div>
@@ -1488,71 +1599,71 @@ export function AiAssistantClient() {
           </div>
         )}
 
-        <div className={styles.messagesScroll}>
-          <div className={styles.messagesInner}>
+        <div className={c.messagesScroll}>
+          <div className={c.messagesInner}>
             {openingId && openingId === activeId && messages.length === 0 ? (
-              <div className={styles.convListLoading} style={{ padding: "40px 0" }}>
-                <Loader2 size={16} aria-hidden className={styles.spin} />
+              <div className={c.convListLoading} style={{ padding: "40px 0" }}>
+                <Loader2 size={16} aria-hidden className={c.spin} />
                 {t("common.loading")}
               </div>
             ) : activeFailed ? (
               /* No se pudo cargar esta conversación. NO se pinta la bienvenida:
                  parecería vacía, y escribir aquí mandaría la pregunta sin nada
                  de contexto mientras el turno sí se anexa a la de verdad. */
-              <div className={styles.loadFailed}>
+              <div className={c.loadFailed}>
                 <CloudOff size={20} strokeWidth={1.75} aria-hidden />
                 <span>{historyNotice?.text ?? t("common.genericError")}</span>
                 <button
                   type="button"
-                  className={styles.emptyStartBtn}
+                  className={c.emptyStartBtn}
                   onClick={() => void openConversation(activeId)}
                 >
                   <RotateCcw size={11} strokeWidth={1.75} aria-hidden /> {t("common.retry")}
                 </button>
               </div>
             ) : messages.length === 0 ? (
-              <div className={styles.welcome}>
-                <div className={styles.welcomeIcon}><Sparkles size={26} aria-hidden /></div>
-                <h2 className={styles.welcomeTitle}>{t("pages.aiAssistant.clinicalAssistant")}</h2>
-                <p className={styles.welcomeText}>
+              <div className={c.welcome}>
+                <div className={c.welcomeIcon}><Sparkles size={26} aria-hidden /></div>
+                <h2 className={c.welcomeTitle}>{t("pages.aiAssistant.clinicalAssistant")}</h2>
+                <p className={c.welcomeText}>
                   {t("pages.aiAssistant.welcomeText")}
                 </p>
-                <div className={styles.suggestionsGrid}>
+                <div className={c.suggestionsGrid}>
                   {SUGGESTIONS.map((s) => (
                     <button
                       key={s.titleKey}
                       type="button"
-                      className={styles.suggestion}
+                      className={c.suggestion}
                       onClick={() => setInput(t(s.textKey))}
                     >
-                      <span className={styles.suggestionIcon}><s.icon size={14} aria-hidden /></span>
-                      <span className={styles.suggestionTitle}>{t(s.titleKey)}</span>
-                      <span className={styles.suggestionDesc}>{t(s.descKey)}</span>
+                      <span className={c.suggestionIcon}><s.icon size={14} aria-hidden /></span>
+                      <span className={c.suggestionTitle}>{t(s.titleKey)}</span>
+                      <span className={c.suggestionDesc}>{t(s.descKey)}</span>
                     </button>
                   ))}
                 </div>
               </div>
             ) : (
               messages.map((m) => (
-                <div key={m.id} className={styles.message}>
+                <div key={m.id} className={c.message}>
                   {m.role === "user" ? (
-                    <div className={styles.avatarUser}>DR</div>
+                    <div className={c.avatarUser}>DR</div>
                   ) : (
-                    <div className={`${styles.avatarAssistant} ${m.streaming ? styles.streaming : ""}`}>
+                    <div className={`${c.avatarAssistant} ${m.streaming ? c.streaming : ""}`}>
                       <Sparkles size={14} aria-hidden />
                     </div>
                   )}
-                  <div className={styles.messageRow}>
-                    <div className={styles.messageMeta}>
-                      <span className={styles.messageName}>
+                  <div className={c.messageRow}>
+                    <div className={c.messageMeta}>
+                      <span className={c.messageName}>
                         {m.role === "user" ? t("pages.aiAssistant.doctor") : t("pages.aiAssistant.aiAssistant")}
                       </span>
-                      <span className={styles.messageTimestamp}>{formatTime(m.timestamp)}</span>
+                      <span className={c.messageTimestamp}>{formatTime(m.timestamp)}</span>
                       {m.role === "assistant" && (
-                        <span className={styles.modelBadge}>{AI_CHAT_MODEL}</span>
+                        <span className={c.modelBadge}>{AI_CHAT_MODEL}</span>
                       )}
                     </div>
-                    <div className={`${styles.messageContent} ${m.streaming ? styles.streamingCursor : ""}`}>
+                    <div className={`${c.messageContent} ${m.streaming ? c.streamingCursor : ""}${rediseno && m.role === "user" ? ` ${piel.burbujaUsuario}` : ""}`}>
                       {m.content || (m.streaming ? "" : "—")}
                     </div>
                   </div>
@@ -1561,7 +1672,7 @@ export function AiAssistantClient() {
             )}
 
             {error && (
-              <div className={styles.errorBubble}>
+              <div className={c.errorBubble}>
                 <AlertCircle size={14} aria-hidden style={{ marginTop: 1, flexShrink: 0 }} />
                 <span>{error}</span>
               </div>
@@ -1572,14 +1683,14 @@ export function AiAssistantClient() {
         </div>
 
         {/* ── Composer ── */}
-        <div className={styles.composerWrap}>
-          <div className={styles.composerInner}>
-            <div className={styles.quickActions}>
+        <div className={c.composerWrap}>
+          <div className={c.composerInner}>
+            <div className={c.quickActions}>
               {QUICK_ACTIONS.map((qa) => (
                 <button
                   key={qa.label}
                   type="button"
-                  className={styles.quickAction}
+                  className={c.quickAction}
                   onClick={() => {
                     if (qa.label.startsWith("/")) insertCommand(qa.label);
                     else setInput((prev) => (prev ? `${prev} ${qa.label}` : qa.label));
@@ -1591,22 +1702,22 @@ export function AiAssistantClient() {
               ))}
             </div>
 
-            <div className={styles.composerBox}>
+            <div className={c.composerBox}>
               {/* Slash popover */}
-              <div className={styles.slashPopover} data-open={slashOpen}>
-                {SLASH_COMMANDS.map((c, i) => (
+              <div className={c.slashPopover} data-open={slashOpen}>
+                {SLASH_COMMANDS.map((sc, i) => (
                   <button
-                    key={c.cmd}
+                    key={sc.cmd}
                     type="button"
-                    className={`${styles.slashItem} ${i === slashIndex ? styles.slashItemActive : ""}`}
+                    className={`${c.slashItem} ${i === slashIndex ? c.slashItemActive : ""}`}
                     onMouseEnter={() => setSlashIndex(i)}
-                    onClick={() => insertCommand(c.cmd)}
+                    onClick={() => insertCommand(sc.cmd)}
                   >
-                    <span className={styles.slashItemIcon}><c.icon size={13} aria-hidden /></span>
-                    <span className={styles.slashItemBody}>
-                      <span className={styles.slashItemCmd}>{c.cmd}</span>
-                      <span className={styles.slashItemName}>{t(c.nameKey)}</span>
-                      <span className={styles.slashItemDesc}>{t(c.descKey)}</span>
+                    <span className={c.slashItemIcon}><sc.icon size={13} aria-hidden /></span>
+                    <span className={c.slashItemBody}>
+                      <span className={c.slashItemCmd}>{sc.cmd}</span>
+                      <span className={c.slashItemName}>{t(sc.nameKey)}</span>
+                      <span className={c.slashItemDesc}>{t(sc.descKey)}</span>
                     </span>
                   </button>
                 ))}
@@ -1614,7 +1725,7 @@ export function AiAssistantClient() {
 
               <textarea
                 ref={textareaRef}
-                className={styles.composerTextarea}
+                className={c.composerTextarea}
                 placeholder={t("pages.aiAssistant.composerPlaceholder")}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -1622,14 +1733,14 @@ export function AiAssistantClient() {
                 disabled={loading || activeFailed}
                 rows={1}
               />
-              <div className={styles.composerBar}>
+              <div className={c.composerBar}>
                 {/* "Adjuntar archivo" se quitó (hallazgo 43): promete un flujo
                     entero que no existe —subida, almacenamiento y envío del
                     archivo al modelo—. Cuando ese flujo se construya, el botón
                     vuelve con su handler. */}
                 <button
                   type="button"
-                  className={`${styles.composerActionBtn} ${recording ? styles.recording : ""}`}
+                  className={`${c.composerActionBtn} ${recording ? c.recording : ""}`}
                   onClick={toggleVoice}
                   title={recording ? t("pages.aiAssistant.stopRecording") : t("pages.aiAssistant.voice")}
                   aria-label={recording ? t("pages.aiAssistant.stopVoiceRecording") : t("pages.aiAssistant.recordVoiceMessage")}
@@ -1638,11 +1749,11 @@ export function AiAssistantClient() {
                   <Mic size={15} aria-hidden />
                 </button>
                 {input && (
-                  <span className={styles.contextPill}>
+                  <span className={c.contextPill}>
                     {input.slice(0, 24)}{input.length > 24 ? "…" : ""}
                     <button
                       type="button"
-                      className={styles.contextPillRemove}
+                      className={c.contextPillRemove}
                       onClick={() => setInput("")}
                       aria-label={t("pages.aiAssistant.clearText")}
                     >
@@ -1650,10 +1761,10 @@ export function AiAssistantClient() {
                     </button>
                   </span>
                 )}
-                <span className={styles.composerBarSpacer} />
+                <span className={c.composerBarSpacer} />
                 <button
                   type="button"
-                  className={styles.sendBtn}
+                  className={c.sendBtn}
                   onClick={() => sendMessage()}
                   disabled={!input.trim() || loading || activeFailed}
                   title={t("common.send")}
@@ -1664,7 +1775,7 @@ export function AiAssistantClient() {
               </div>
             </div>
 
-            <div className={styles.composerHint}>
+            <div className={c.composerHint}>
               <kbd>↵</kbd> {t("pages.aiAssistant.hintSend")} · <kbd>⇧↵</kbd> {t("pages.aiAssistant.hintNewLine")} · <kbd>/</kbd> {t("pages.aiAssistant.hintCommands")} · <kbd>⌘K</kbd> {t("pages.aiAssistant.hintNewChat")}
             </div>
           </div>
