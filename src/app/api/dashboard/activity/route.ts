@@ -6,8 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { dateISOInTz } from "@/lib/agenda/legacy-helpers";
+import { cachedByKey } from "@/lib/route-cache";
 
 export const dynamic = "force-dynamic";
+
+// La campana de actividad pollea esto cada 60s en todas las pantallas (ver
+// ~/gerentes/salidas/MAPA-conexiones.md §6.1), mismo patrón que sidebar-counts
+// e insights. 30s = la mitad del intervalo de polling.
+const CACHE_TTL_MS = 30_000;
 
 interface ActivityEvent {
   id: string;
@@ -38,25 +44,33 @@ export async function GET(req: NextRequest) {
   // no hay visibilidad por paciente que aplicar — pero sí hay una persona
   // esperando respuesta. Si el SQL de landing-v2 aún no se aplicó, la tabla no
   // existe (P2021/42P01) y la campana sigue funcionando sin ellas.
-  const solicitudes = await prisma.bookingRequest
-    .findMany({
-      // requestedAt futuro: una solicitud cuyo horario ya pasó está vencida
-      // (la bandeja de la agenda la marca EXPIRADA al abrirse) y no debe seguir
-      // sonando en la campana como si alguien pudiera contestarla.
-      where: { clinicId: ctx.clinicId, status: "PENDIENTE", requestedAt: { gte: new Date() } },
-      select: {
-        id: true, patientName: true, requestedAt: true, serviceName: true, createdAt: true,
-        // La hora pedida se muestra en la zona de la CLÍNICA: el servidor corre
-        // en UTC y sin esto una solicitud de las 9:00 salía como las 15:00.
-        clinic: { select: { timezone: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    })
-    .catch((err: { code?: string }) => {
-      if (err?.code === "P2021" || err?.code === "42P01") return [];
-      throw err;
-    });
+  // Solo depende de clinicId (sin visibilidad por paciente: no hay expediente
+  // todavía), así que el TTL puede compartirse entre todos los usuarios de la
+  // clínica sin riesgo de fuga.
+  const solicitudes = await cachedByKey(
+    `activity-solicitudes:${ctx.clinicId}`,
+    CACHE_TTL_MS,
+    () =>
+      prisma.bookingRequest
+        .findMany({
+          // requestedAt futuro: una solicitud cuyo horario ya pasó está vencida
+          // (la bandeja de la agenda la marca EXPIRADA al abrirse) y no debe seguir
+          // sonando en la campana como si alguien pudiera contestarla.
+          where: { clinicId: ctx.clinicId, status: "PENDIENTE", requestedAt: { gte: new Date() } },
+          select: {
+            id: true, patientName: true, requestedAt: true, serviceName: true, createdAt: true,
+            // La hora pedida se muestra en la zona de la CLÍNICA: el servidor corre
+            // en UTC y sin esto una solicitud de las 9:00 salía como las 15:00.
+            clinic: { select: { timezone: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        })
+        .catch((err: { code?: string }) => {
+          if (err?.code === "P2021" || err?.code === "42P01") return [];
+          throw err;
+        }),
+  );
 
   // A dónde mandan los avisos de cita. Con el interruptor por clínica
   // `menu-dos-niveles` la clínica ve la agenda NUEVA (/dashboard/agenda), así
@@ -66,27 +80,40 @@ export async function GET(req: NextRequest) {
   // monta. Sin el interruptor, los mismos enlaces de siempre, byte por byte.
   // La respuesta del interruptor vive 60 s en memoria por clínica: no es una
   // consulta más por cada sondeo de la campana.
-  const [paidInvoices, newPatients, doneAppointments, agendaNueva] = await Promise.all([
-    prisma.invoice.findMany({
-      where: { clinicId: ctx.clinicId, status: { in: ["PAID", "PARTIAL"] }, ...(relatedVis.length ? { AND: relatedVis } : {}) },
-      select: { id: true, paid: true, paymentMethod: true, paidAt: true, updatedAt: true,
-        patient: { select: { firstName: true, lastName: true } } },
-      orderBy: { paidAt: "desc" },
-      take: 10,
-    }),
-    prisma.patient.findMany({
-      where: { clinicId: ctx.clinicId, ...(patientVis.length ? { AND: patientVis } : {}) },
-      select: { id: true, firstName: true, lastName: true, createdAt: true },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    }),
-    prisma.appointment.findMany({
-      where: { clinicId: ctx.clinicId, status: "COMPLETED", ...(relatedVis.length ? { AND: relatedVis } : {}) },
-      select: { id: true, updatedAt: true, startsAt: true,
-        patient: { select: { firstName: true, lastName: true } } },
-      orderBy: { updatedAt: "desc" },
-      take: 10,
-    }),
+  //
+  // 🔴 patientVis/relatedVis dependen de ctx.userId (visibilidad por
+  // paciente: un doctor sin acceso a un paciente no debe ver su pago/alta/cita
+  // aquí). Por eso esta clave lleva clinicId Y userId — cachear solo por
+  // clínica haría que un doctor viera lo que ve otro doctor de la misma
+  // clínica (o al revés, que un admin viera la lista recortada de un doctor).
+  const [[paidInvoices, newPatients, doneAppointments], agendaNueva] = await Promise.all([
+    cachedByKey(
+      `activity-recent:${ctx.clinicId}:${ctx.userId}`,
+      CACHE_TTL_MS,
+      () =>
+        Promise.all([
+          prisma.invoice.findMany({
+            where: { clinicId: ctx.clinicId, status: { in: ["PAID", "PARTIAL"] }, ...(relatedVis.length ? { AND: relatedVis } : {}) },
+            select: { id: true, paid: true, paymentMethod: true, paidAt: true, updatedAt: true,
+              patient: { select: { firstName: true, lastName: true } } },
+            orderBy: { paidAt: "desc" },
+            take: 10,
+          }),
+          prisma.patient.findMany({
+            where: { clinicId: ctx.clinicId, ...(patientVis.length ? { AND: patientVis } : {}) },
+            select: { id: true, firstName: true, lastName: true, createdAt: true },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          }),
+          prisma.appointment.findMany({
+            where: { clinicId: ctx.clinicId, status: "COMPLETED", ...(relatedVis.length ? { AND: relatedVis } : {}) },
+            select: { id: true, updatedAt: true, startsAt: true,
+              patient: { select: { firstName: true, lastName: true } } },
+            orderBy: { updatedAt: "desc" },
+            take: 10,
+          }),
+        ]),
+    ),
     menuDosNivelesEncendido(ctx.clinicId),
   ]);
 

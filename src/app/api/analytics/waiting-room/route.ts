@@ -2,8 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { patientVisibilityFilter } from "@/lib/patient-visibility";
+import { cachedByKey } from "@/lib/route-cache";
 
 export const dynamic = "force-dynamic";
+
+// WaitingRoomAlert (la pastilla del topbar) pollea esto sin parámetros cada
+// 60s en todas las pantallas de recepción/admin (ver
+// ~/gerentes/salidas/MAPA-conexiones.md §6.1), mismo patrón que sidebar-counts
+// e insights. 30s = la mitad del intervalo de polling.
+const CACHE_TTL_MS = 30_000;
 
 /**
  * GET /api/analytics/waiting-room?from=&to=&threshold=20
@@ -47,18 +54,29 @@ export async function GET(req: NextRequest) {
   const hours: number[] = [];
   for (let h = dayStart; h < dayEnd; h++) hours.push(h);
 
-  // Histórico — appointment_timelines join appointment con clinicId.
-  const timelines = await prisma.appointmentTimeline.findMany({
-    where: {
-      appointment: { clinicId, startsAt: { gte: from, lte: to } },
-      totalWaitMin: { not: null },
-    },
-    select: {
-      totalWaitMin: true,
-      arrivedAt: true,
-      appointment: { select: { startsAt: true } },
-    },
-  });
+  // Histórico — appointment_timelines join appointment con clinicId. Solo
+  // depende de clinicId + rango de fechas (nada de userId: la agregación por
+  // hora no expone pacientes), así que el TTL puede compartirse entre todos
+  // los usuarios de la clínica. La clave usa los parámetros CRUDOS (antes del
+  // default a `new Date()`): WaitingRoomAlert pollea sin parámetros, y si la
+  // clave llevara el `to` ya resuelto nunca repetiría (cambia cada milisegundo)
+  // y el TTL nunca acertaría.
+  const timelines = await cachedByKey(
+    `waiting-room-timelines:${clinicId}:${fromParam ?? "-"}:${toParam ?? "-"}`,
+    CACHE_TTL_MS,
+    () =>
+      prisma.appointmentTimeline.findMany({
+        where: {
+          appointment: { clinicId, startsAt: { gte: from, lte: to } },
+          totalWaitMin: { not: null },
+        },
+        select: {
+          totalWaitMin: true,
+          arrivedAt: true,
+          appointment: { select: { startsAt: true } },
+        },
+      }),
+  );
 
   // Por hora.
   const byHourAcc = new Map<number, { sum: number; count: number; long: number }>();
@@ -127,28 +145,39 @@ export async function GET(req: NextRequest) {
   // patient directo). null = admin, no filtra.
   const vis = patientVisibilityFilter({ userId: user.id, role: user.role, clinicId });
 
-  const longWaits = await prisma.appointmentTimeline.findMany({
-    where: {
-      appointment: { clinicId, ...(vis ? { patient: vis } : {}) },
-      arrivedAt: { lte: thresholdAgo, not: null },
-      inChairAt: null,
-      consultStartAt: null,
-    },
-    select: {
-      appointmentId: true,
-      arrivedAt: true,
-      appointment: {
-        select: {
-          id: true,
-          type: true,
-          patient: { select: { firstName: true, lastName: true } },
-          doctor: { select: { firstName: true, lastName: true } },
+  // 🔴 `vis` depende de user.id (visibilidad por paciente): un doctor sin
+  // acceso a un paciente no debe ver su nombre en la alerta de sala de espera.
+  // La clave lleva clinicId Y userId — cachear solo por clínica haría que un
+  // doctor viera la lista (con nombres) que ve otro doctor de la misma
+  // clínica. No depende de from/to (longWaits usa `now`, no el rango del
+  // reporte histórico), así que esos parámetros no entran en la clave.
+  const longWaits = await cachedByKey(
+    `waiting-room-longwaits:${clinicId}:${user.id}:${threshold}`,
+    CACHE_TTL_MS,
+    () =>
+      prisma.appointmentTimeline.findMany({
+        where: {
+          appointment: { clinicId, ...(vis ? { patient: vis } : {}) },
+          arrivedAt: { lte: thresholdAgo, not: null },
+          inChairAt: null,
+          consultStartAt: null,
         },
-      },
-    },
-    orderBy: { arrivedAt: "asc" },
-    take: 20,
-  });
+        select: {
+          appointmentId: true,
+          arrivedAt: true,
+          appointment: {
+            select: {
+              id: true,
+              type: true,
+              patient: { select: { firstName: true, lastName: true } },
+              doctor: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+        orderBy: { arrivedAt: "asc" },
+        take: 20,
+      }),
+  );
 
   return NextResponse.json({
     from: from.toISOString(),
