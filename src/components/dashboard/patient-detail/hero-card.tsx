@@ -97,7 +97,8 @@ export interface HeroCardProps {
    *  · la pintura — la cabecera respira y «Iniciar consulta» manda de verdad;
    *  · los chips de alerta dejan de salir DOS VECES («Alergia a penicilina» +
    *    «Penicilina»), que es el defecto fotografiado;
-   *  · de las tres píldoras solo queda «Próxima cita», y solo si HAY próxima
+   *  · de las tres píldoras solo queda «Próxima cita» —ya no como píldora sino
+   *    como una línea bajo los datos del paciente—, y solo si HAY próxima
    *    cita: «Última visita» y «Visitas totales» sobraban (lo pidió Rafael), y
    *    sin cita no se pinta ni un hueco ni un «—». Agendar sigue a un clic, en
    *    el botón «Agendar próxima» de al lado, que llama al mismo `onReschedule`.
@@ -212,16 +213,32 @@ export function HeroCard({
       )}
     </>
   );
-  // La píldora entera, para el rediseño (que solo la pinta si hay cita).
-  const pildoraCita = (
-    <div className={styles.metric}>
-      <span className={`${styles.metricIcon} ${styles.brand}`}>
-        <CalendarClock size={15} strokeWidth={1.75} aria-hidden />
+  // «Próxima cita» con el rediseño: UNA línea de texto, la tercera de la columna
+  // del nombre (nombre → datos → cita). Antes era una píldora de cuatro
+  // renglones al lado de botones de uno, y no había forma de alinearlos: los
+  // botones flotaban a media altura y el icono, centrado contra cuatro
+  // renglones, no quedaba junto a ninguno. En línea, el icono va pegado a su
+  // rótulo y las tres líneas miden lo que el avatar. Mismos datos, mismo orden.
+  const lineaCita = rediseno && hasNextAppt && (
+    <div className={styles.heroCita}>
+      <span className={styles.heroCitaRotulo}>
+        <CalendarClock size={13} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.nextAppointment")}
       </span>
-      <div className={styles.metricBody}>
-        <div className={styles.metricLabel}>{t("patients.heroCard.nextAppointment")}</div>
-        {citaAgendada}
-      </div>
+      <span className={styles.heroCitaFecha}>{fechaCabecera(nextAppointment!.date, rediseno)}</span>
+      {nextAppointment!.startTime && (
+        <>
+          <span className={styles.heroMetaSep}>·</span>
+          <span className={styles.heroCitaDato}>
+            {t("patients.heroCard.timeSuffix", { time: nextAppointment!.startTime })}{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
+          </span>
+        </>
+      )}
+      {nextAppointment!.type && (
+        <>
+          <span className={styles.heroMetaSep}>·</span>
+          <span className={styles.heroCitaDato}>{nextAppointment!.type}</span>
+        </>
+      )}
     </div>
   );
 
@@ -443,10 +460,11 @@ export function HeroCard({
               </>
             )}
           </div>
+          {lineaCita}
         </div>
 
         {/* Stats como píldoras con icono (pasada estética v3). Con el rediseño
-            no van: solo queda «Próxima cita», más abajo, junto a los botones. */}
+            no van: solo queda «Próxima cita», en línea bajo los datos (`lineaCita`). */}
         {rediseno ? null : (
         <div className={styles.heroMetrics}>
           <div className={styles.metric}>
@@ -496,18 +514,9 @@ export function HeroCard({
         </div>
         )}
 
-        {/* Con el rediseño, «Próxima cita» y los botones van juntos en una caja
-            que baja ENTERA de renglón cuando no cabe: la cita se queda siempre
-            pegada a «Iniciar consulta», que es la consulta que ese botón abre.
-            Apagado, los botones van sueltos donde siempre. */}
-        {rediseno ? (
-          <div className={styles.heroLado}>
-            {hasNextAppt && <div className={styles.heroMetrics}>{pildoraCita}</div>}
-            {acciones}
-          </div>
-        ) : (
-          acciones
-        )}
+        {/* Los botones, los mismos en los dos caminos. Con el rediseño van a la
+            derecha del nombre si caben y, si no, bajan a una fila propia. */}
+        {acciones}
       </div>
 
       <div className={styles.heroAlerts} role="group" aria-label={t("patients.heroCard.alertsAria")}>

@@ -1,5 +1,6 @@
 /**
- * CANDADOS DE LA CABECERA DEL PACIENTE CON EL REDISEÑO (ws1-t4, segunda ola).
+ * CANDADOS DE LA CABECERA DEL PACIENTE CON EL REDISEÑO (ws1-t4, segunda ola;
+ * ws1-t1, segunda vuelta: «no desborda» no es «se ve bien»).
  *
  * Run: npx tsx --tsconfig tsconfig.test.json --test src/components/dashboard/patient-detail/__tests__/hero-card-rediseno.test.tsx
  *
@@ -7,7 +8,8 @@
  *  · leyendo el código — que la pintura nueva no invente colores ni letra de
  *    máquina, y que «Iniciar consulta» siga cableado igual;
  *  · PINTANDO la cabecera con React, con y sin la bandera — que con ella solo
- *    quede «Próxima cita» (y solo si hay cita), y que sin ella salgan las tres
+ *    quede «Próxima cita» (y solo si hay cita, y EN LÍNEA bajo el nombre, no
+ *    como píldora de cuatro renglones), y que sin ella salgan las tres
  *    píldoras de siempre, con su «—» y su «Agendar →».
  */
 import Module from "node:module";
@@ -28,7 +30,8 @@ const ROTULO = "REDISEÑO DE PACIENTES (WS1-T4) — la cabecera del paciente";
 const cssRediseno = css.slice(css.indexOf(ROTULO));
 // Y lo de esta tarea, de su propio rótulo al final.
 const ROTULO_ANCHOS = "La cabecera de 1600 a 1024 px";
-const cssAnchos = css.slice(css.indexOf(ROTULO_ANCHOS));
+// (Desde el «/*» que abre su comentario: si no, al quitar comentarios ese primero se queda.)
+const cssAnchos = css.slice(css.lastIndexOf("/*", css.indexOf(ROTULO_ANCHOS)));
 
 test("los dos bloques del rediseño existen y van al final de la hoja", () => {
   assert.ok(css.includes(ROTULO), "falta el bloque del rediseño de la cabecera");
@@ -68,15 +71,27 @@ test("el bloque de los anchos no declara tokens ni escribe colores a mano", () =
   assert.ok(!/\brgba?\(/.test(sinComentarios), "hay un rgb() escrito a mano");
 });
 
-test("nada se esconde por ancho: ni display:none, ni puntos suspensivos, ni umbrales", () => {
+test("nada se esconde por ancho: ni display:none, ni puntos suspensivos", () => {
   const sinComentarios = cssAnchos.replace(/\/\*[\s\S]*?\*\//g, "");
   assert.ok(!/display:\s*none/.test(sinComentarios), "algo se esconde");
   assert.ok(!/text-overflow|overflow:\s*hidden/.test(sinComentarios), "algo se corta");
-  // La maquetación la decide el contenido (flex-wrap), no un número de píxeles
-  // calibrado a mano: justo lo que se rompía con el umbral de 1380px.
-  assert.ok(!/@media|@container/.test(sinComentarios), "volvió un umbral por ancho");
+  // El corte se mide contra la PROPIA cabecera, nunca contra la pantalla: el
+  // mismo monitor da dos anchos útiles según el menú esté abierto o encogido.
+  assert.ok(!/@media/.test(sinComentarios), "volvió un umbral por ancho de pantalla");
   assert.match(sinComentarios, /\.heroRediseno \.heroMain \{[^}]*flex-wrap:\s*wrap/, "la cabecera ya no envuelve");
-  assert.match(sinComentarios, /\.heroRediseno \.heroLado \{[^}]*flex-wrap:\s*wrap/, "la caja de cita + botones ya no envuelve");
+});
+
+test("apilar bien antes que compartir fila mal: por defecto los botones van en fila PROPIA y la llenan", () => {
+  const sinComentarios = cssAnchos.replace(/\/\*[\s\S]*?\*\//g, "");
+  const [base, ancha = ""] = sinComentarios.split("@container");
+  assert.match(base, /\.heroRediseno \.heroActions \{[^}]*flex:\s*1 1 100%/, "los botones ya no bajan a su propia fila");
+  assert.match(base, /\.heroRediseno \.heroActions \.btn:not\(\.btnIcon\) \{[^}]*flex:\s*1 1 auto/, "queda hueco a la derecha de los botones");
+  // Un solo corte, y solo para subir los botones junto al nombre cuando caben.
+  assert.equal((sinComentarios.match(/@container/g) ?? []).length, 1, "tiene que haber un único corte");
+  assert.match(ancha, /^ patientHero \(min-width:/, "el corte mide la propia cabecera, hacia arriba");
+  assert.match(ancha, /\.heroRediseno \.heroMain \{[^}]*flex-wrap:\s*nowrap/, "en ancho, los botones comparten fila con el nombre");
+  // La píldora de cuatro renglones y su caja no vuelven.
+  assert.ok(!/heroLado|\.metric\b/.test(sinComentarios), "volvió la píldora junto a los botones");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -143,22 +158,33 @@ const PROXIMA = t("patients.heroCard.nextAppointment");
 const ULTIMA = t("patients.heroCard.lastVisit");
 const TOTALES = t("patients.heroCard.totalVisits");
 
-test("con bandera y CON cita: solo «Próxima cita», pegada a los botones", () => {
+test("con bandera y CON cita: solo «Próxima cita», en línea bajo el nombre y con su icono", () => {
   const html = pintar({ rediseno: true, nextAppointment: cita });
   assert.ok(html.includes(PROXIMA), "no pinta «Próxima cita»");
   assert.ok(html.includes("Dra. Villanueva") && html.includes("Limpieza") && html.includes("16:30"), "la cita perdió hora, doctor o tipo");
   assert.ok(!html.includes(ULTIMA), "sigue «Última visita»");
   assert.ok(!html.includes(TOTALES), "sigue «Visitas totales»");
-  assert.equal((html.match(/class="metric"/g) ?? []).length, 1, "tiene que quedar una sola píldora");
-  // Cita y botones, dentro de la misma caja y en ese orden.
-  const lado = html.slice(html.indexOf('class="heroLado"'));
-  assert.ok(lado.indexOf('class="heroMetrics"') !== -1 && lado.indexOf('class="heroMetrics"') < lado.indexOf('class="heroActions"'), "la cita va antes que los botones, en la misma caja");
+  // Ni píldora ni caja compartida con los botones: eso era lo que se veía mal.
+  assert.ok(!html.includes('class="metric') && !html.includes("heroMetrics") && !html.includes("heroLado"), "volvió la píldora");
+  assert.equal((html.match(/class="heroCita"/g) ?? []).length, 1, "tiene que haber una sola línea de cita");
+  // La línea va DENTRO de la columna del nombre, después de los datos…
+  const info = html.slice(html.indexOf('class="heroInfo"'), html.indexOf('class="heroActions"'));
+  assert.ok(info.indexOf('class="heroMeta"') !== -1 && info.indexOf('class="heroMeta"') < info.indexOf('class="heroCita"'), "la cita no va bajo los datos del paciente");
+  // …y el icono va pegado a su rótulo, en el mismo <span>.
+  const rotulo = info.slice(info.indexOf('class="heroCitaRotulo"'));
+  const finRotulo = rotulo.indexOf("</span>");
+  assert.ok(rotulo.indexOf("<svg") !== -1 && rotulo.indexOf("<svg") < finRotulo && rotulo.indexOf(PROXIMA) < finRotulo, "el icono se separó de su texto");
+  // Sin hora ni tipo no quedan separadores colgando.
+  const pelada = pintar({ rediseno: true, nextAppointment: { id: "a2", date: "2026-09-24", startTime: "" } });
+  const linea = pelada.slice(pelada.indexOf('class="heroCita"'), pelada.indexOf('class="heroActions"'));
+  assert.ok(!linea.includes("heroMetaSep"), "queda un «·» sin nada detrás");
 });
 
 test("con bandera y SIN cita: no se pinta nada — ni hueco, ni «—», ni «Sin cita»", () => {
   const html = pintar({ rediseno: true, nextAppointment: null });
   assert.ok(!html.includes(PROXIMA), "pinta «Próxima cita» sin haber cita");
   assert.ok(!html.includes("heroMetrics"), "queda el hueco de las métricas");
+  assert.ok(!html.includes("heroCita"), "queda la línea de la cita, vacía");
   assert.ok(!html.includes('class="metric'), "queda una píldora");
   assert.ok(!html.includes("—"), "queda una raya de relleno");
   assert.ok(!html.includes(t("patients.heroCard.noAppointment")), "dice «Sin cita»");
@@ -176,7 +202,7 @@ test("SIN bandera: las tres píldoras de siempre, sin caja nueva", () => {
     const html = pintar({ rediseno: false, nextAppointment });
     for (const rotulo of [PROXIMA, ULTIMA, TOTALES]) assert.ok(html.includes(rotulo), `la cabecera de siempre perdió «${rotulo}»`);
     assert.equal((html.match(/class="metric"/g) ?? []).length, 3, "tienen que seguir las tres píldoras");
-    assert.ok(!html.includes("heroLado"), "la caja nueva se coló en el camino de siempre");
+    assert.ok(!html.includes("heroLado") && !html.includes("heroCita"), "la cita en línea se coló en el camino de siempre");
     assert.ok(!html.includes("heroRediseno"), "la clase del rediseño se coló en el camino de siempre");
   }
   const sinCita = pintar({ rediseno: false, nextAppointment: null });
@@ -184,17 +210,15 @@ test("SIN bandera: las tres píldoras de siempre, sin caja nueva", () => {
 });
 
 test("los botones son los mismos con y sin bandera", () => {
-  // El id que Radix le da al menú «…» sale de la POSICIÓN en el árbol de React,
-  // y con la bandera los botones cuelgan de la caja nueva: se iguala antes de
-  // comparar. (Sin bandera ese id es el de siempre: el árbol no cambió.)
+  // Mismo JSX, mismo sitio en el árbol: ni siquiera cambia el id que Radix le
+  // da al menú «…» (se iguala por si algún día vuelve a depender de la posición).
   const botones = (html: string) =>
     html.slice(html.indexOf('class="heroActions"'), html.indexOf('class="heroAlerts"')).replace(/radix-:[^"]*:/g, "radix-id");
   for (const nextAppointment of [cita, null]) {
     for (const pendingBalance of [0, 1200]) {
       const con = botones(pintar({ rediseno: true, nextAppointment, pendingBalance }));
       const sin = botones(pintar({ rediseno: false, nextAppointment, pendingBalance }));
-      // Con bandera la caja `heroLado` añade un </div> de cierre; el resto, idéntico.
-      assert.equal(con.replace("</div></div></div>", "</div></div>"), sin, "los botones cambian con la bandera");
+      assert.equal(con, sin, "los botones cambian con la bandera");
     }
   }
 });
