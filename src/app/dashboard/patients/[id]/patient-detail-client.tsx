@@ -47,6 +47,9 @@ import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashb
 import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
+// Hallazgo 21 (ws1-t5): el umbral hacia el módulo de Ortodoncia, que NO se
+// rediseña; solo la salida hacia él habla el idioma nuevo.
+import { SalidaOrtodoncia } from "@/components/dashboard/bloques-rediseno/salidas";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
@@ -1355,7 +1358,10 @@ export function PatientDetailClient({
   // Otros tabs usan 1760 para aprovechar monitores grandes sin estirar laptops
   // (que no llegan a ese ancho, así que ahí no cambia nada).
   const isOrthoTab = tab === "ortodoncia" && Boolean(orthoRedesignVM);
-  const outerMaxWidth = isOrthoTab ? 1920 : 1760;
+  // Con el rediseño, la ficha entera (menú pegajoso, migas) mide lo mismo en
+  // todas las pestañas: el salto a 1920 al entrar en Ortodoncia movía el menú
+  // de sitio. El módulo se acomoda por contenedor, así que nada se esconde.
+  const outerMaxWidth = isOrthoTab && !rediseno ? 1920 : 1760;
 
   // El rail derecho (Estado de cuenta + reglas automáticas + WhatsApp) solo
   // aporta en las vistas administrativas/financieras. En el resto (imagen,
@@ -1948,6 +1954,12 @@ export function PatientDetailClient({
           )}
 
           {/* ===== TAB: ORTODONCIA ===== */}
+          {/* Hallazgo 21: con el rediseño, una banda en el idioma nuevo
+              presenta el módulo (que conserva su cabecera y su ropa). Con la
+              bandera apagada no se pinta nada aquí. */}
+          {tab === "ortodoncia" && orthoRedesignVM && rediseno && (
+            <SalidaOrtodoncia titulo={t("patients.tabs.ortodoncia")} paciente={fullName} />
+          )}
           {tab === "ortodoncia" && orthoRedesignVM && (
             <OrthodonticsRedesignClient
               vm={orthoRedesignVM}
