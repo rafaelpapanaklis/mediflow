@@ -257,7 +257,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
     return url;
   }
 
-  // ── Plantilla: previsualizar (sin publicar) y aplicar (publica)
+  // ── Plantilla: previsualizar y aplicar. NINGUNA de las dos publica.
   function previewTemplate(id: string = templateSel) {
     // /landing-preview es la ruta DINÁMICA de vista previa; /[slug] es ISR y
     // no puede leer ?preview= (DYNAMIC_SERVER_USAGE al regenerar).
@@ -270,10 +270,11 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
   async function applyTemplate() {
     const tpl = TEMPLATES.find(item => item.id === templateSel);
     const name = tpl ? t(tpl.nameKey) : templateSel;
-    const previo = { landingTemplate: clinic.landingTemplate, landingActive: clinic.landingActive };
+    const previo = { landingTemplate: clinic.landingTemplate };
     updateLocal("landingTemplate", templateSel);
-    if (!clinic.landingActive) updateLocal("landingActive", true);
-    await save({ landingTemplate: templateSel, landingActive: true }, t("pages.landing.templateApplied", { name }), previo);
+    // Aplicar NO publica: `landingActive` solo lo cambia el interruptor de
+    // arriba. Si el sitio está oculto, se dice que sigue oculto y cómo publicarlo.
+    await save({ landingTemplate: templateSel }, t(clinic.landingActive ? "pages.landing.templateApplied" : "pages.landing.templateAppliedHidden", { name }), previo);
   }
 
   // ── Secciones y fotos guardadas (landing v2) — el editor por manifiesto
@@ -650,7 +651,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                     <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
                   </button>
                 </fieldset>
-                {!clinic.landingActive && <span className={rd.insignia} style={{ color: "var(--warning-strong, #a85a05)" }}>{t("pages.landing.applyWillPublish")}</span>}
+                {!clinic.landingActive && <span className={rd.insignia} style={{ color: "var(--warning-strong, #a85a05)" }}>{t("pages.landing.applyKeepsHidden")}</span>}
               </div>
             </div>
           )}
@@ -1364,7 +1365,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
               </button>
             </fieldset>
             {!clinic.landingActive && (
-              <span className="text-xs text-[color:var(--warning-strong)]">{t("pages.landing.applyWillPublish")}</span>
+              <span className="text-xs text-[color:var(--warning-strong)]">{t("pages.landing.applyKeepsHidden")}</span>
             )}
           </div>
         </div>
@@ -2045,7 +2046,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <iframe
               ref={iframeRef}
               key={`${templateSel}-${previewNonce}`}
-              src={`/landing-preview/${clinic.slug}?preview=${templateSel}`}
+              src={`/landing-preview/${clinic.slug}?preview=${templateSel}&borrador=1`}
               title="Vista previa de tu sitio"
               className="border-0 bg-white origin-top-left"
               style={previewAncho === "movil"

@@ -115,6 +115,7 @@
     "//test:campo-edicion": "Mismo motivo que test:landing para no usar --test: los corchetes de [slug] se leen como patrón. Necesita el tsconfig de pruebas porque importa edit-runtime.tsx, que trae JSX.",
     "test:campo-edicion": "tsx --tsconfig tsconfig.test.json \"src/app/[slug]/_shared/__tests__/campo-edicion.test.ts\"",
     "landing:golden": "tsx --tsconfig tsconfig.test.json scripts/landing-golden.ts",
+    "test:landing-aplicar-no-publica": "tsx --test src/app/dashboard/landing/__tests__/aplicar-no-publica.test.ts",
     "test:landing-address": "tsx --test src/lib/__tests__/landing-address.test.ts",
     "test:landing-concurrency": "tsx --test src/lib/__tests__/landing-concurrency.test.ts",
     "test:ua": "tsx --test src/lib/analytics/ua.test.ts",

@@ -8216,6 +8216,8 @@
       "applying": "Aplicando…",
       "applyTemplate": "Aplicar / Usar esta plantilla",
       "applyWillPublish": "Aplicar también publicará tu sitio.",
+      "applyKeepsHidden": "Tu sitio seguirá oculto. Para publicarlo, usa el interruptor de arriba.",
+      "templateAppliedHidden": "✨ Plantilla {name} aplicada. Tu sitio sigue oculto: publícalo con el interruptor de arriba.",
       "primaryColor": "Color principal",
       "taglineLabel": "Slogan / Tagline",
       "taglineHelp": "Frase corta que aparece debajo del nombre en el hero",
