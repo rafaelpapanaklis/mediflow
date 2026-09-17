@@ -3,6 +3,7 @@
 import { Calendar, CheckCircle2, Clock, CreditCard, Edit, Hourglass, ListChecks, Pill, Plus, Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
+import { esDescripcionDePlan, MARCA_PLAN } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { RaizExpediente } from "./raiz";
 import s from "./expediente.module.css";
 
@@ -35,6 +36,15 @@ const ESTADO_PLAN: Record<string, { labelKey: string; tono: string }> = {
   PAUSED:    { labelKey: "patients.treatmentStatus.paused",    tono: "etiquetaAlerta" },
 };
 
+/**
+ * La ventana nueva escribe en `description` el plan clínico entero (varias
+ * líneas que empiezan con «▸ »). En la tarjeta cabe su primer renglón —el
+ * diagnóstico—; el plan completo se lee al abrirlo, como siempre. Una
+ * descripción de las de antes (una frase) se pinta tal cual.
+ */
+const resumenDescripcion = (descripcion: string) =>
+  esDescripcionDePlan(descripcion) ? descripcion.split("\n")[0].slice(MARCA_PLAN.length) : descripcion;
+
 const sesionesHechas = (sesiones: any[] | undefined) =>
   (sesiones ?? []).filter((x: any) => x.completedAt).length;
 
@@ -55,12 +65,12 @@ export function PlanTratamiento({ tratamientos, puedeEditar, onNuevo, onVer, onE
           <span className={s.cabeceraIcono}>
             <ListChecks size={16} strokeWidth={1.75} aria-hidden />
           </span>
-          <h2 className={s.titulo}>{t("patients.treatment.title")}</h2>
+          <h2 className={s.titulo}>{t("planTratamiento.lista.titulo")}</h2>
           {puedeEditar && (
             <div className={s.acciones}>
               <button type="button" className={`${s.boton} ${s.botonPrincipal}`} onClick={onNuevo}>
                 <Plus size={14} strokeWidth={2} aria-hidden />
-                {t("patients.treatment.newTreatment")}
+                {t("planTratamiento.lista.nuevo")}
               </button>
             </div>
           )}
@@ -96,10 +106,10 @@ export function PlanTratamiento({ tratamientos, puedeEditar, onNuevo, onVer, onE
           <section className={s.tarjeta}>
             <div className={s.vacio}>
               <span className={s.vacioIcono}><Pill size={17} strokeWidth={1.75} aria-hidden /></span>
-              <div className={s.vacioTitulo}>{t("patients.treatment.empty")}</div>
+              <div className={s.vacioTitulo}>{t("planTratamiento.lista.vacio")}</div>
               {puedeEditar && (
                 <button type="button" className={s.enlace} onClick={onNuevo}>
-                  {t("patients.treatment.createFirst")}
+                  {t("planTratamiento.lista.crearPrimero")}
                 </button>
               )}
             </div>
@@ -124,7 +134,7 @@ export function PlanTratamiento({ tratamientos, puedeEditar, onNuevo, onVer, onE
                   <div className={s.planSub}>
                     {t("patients.doctorPrefix")} {plan.doctor?.firstName} {plan.doctor?.lastName}
                   </div>
-                  {plan.description && <div className={s.planDescripcion}>{plan.description}</div>}
+                  {plan.description && <div className={s.planDescripcion}>{resumenDescripcion(plan.description)}</div>}
                 </div>
                 <div className={s.planLado}>
                   <span className={`${s.etiqueta} ${(s as Record<string, string>)[estado.tono]}`}>{t(estado.labelKey)}</span>

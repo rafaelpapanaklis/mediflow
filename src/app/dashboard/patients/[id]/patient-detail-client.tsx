@@ -45,6 +45,8 @@ import { NuevaConsulta as NuevaConsultaRediseno } from "@/components/dashboard/p
 // Segunda ola del rediseño (ws1-t4): los cuatro apartados que faltaban.
 import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashboard/expediente-rediseno/odontograma";
 import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
+import { VentanaNuevoPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
+import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
 // Hallazgo 21 (ws1-t5): el umbral hacia el módulo de Ortodoncia, que NO se
@@ -2850,7 +2852,9 @@ export function PatientDetailClient({
             return (
               <div className="space-y-4">
                 {/* Rediseño: la misma lista con la ropa nueva. Las ventanas de
-                    Nuevo/Ver/Editar plan de abajo son comunes a los dos caminos. */}
+                    Nuevo/Ver/Editar plan de abajo tienen también las dos ropas:
+                    con la bandera, las de `plan-tratamiento-rediseno`; sin ella,
+                    las de siempre, tal cual. Mismo estado y mismos handlers. */}
                 {rediseno && (
                   <PlanTratamientoRediseno
                     tratamientos={treatments}
@@ -2991,7 +2995,18 @@ export function PatientDetailClient({
                   </>
                 )}
 
-                {showNewTreatment && (
+                {showNewTreatment && (rediseno ? (
+                  <VentanaNuevoPlan
+                    paciente={{ id: patient.id, nombre: `${patient.firstName} ${patient.lastName}`, esNino: !!patient.isChild }}
+                    doctores={doctors ?? []}
+                    form={treatmentForm}
+                    setForm={setTreatmentForm}
+                    sugerencias={COMMON_TREATMENTS.slice(0, 5)}
+                    guardando={savingTreatment}
+                    onCerrar={() => setShowNewTreatment(false)}
+                    onCrear={handleCreateTreatment}
+                  />
+                ) : (
                   <div
                     style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }}
                     onClick={() => !savingTreatment && setShowNewTreatment(false)}
@@ -3113,9 +3128,19 @@ export function PatientDetailClient({
                       </div>
                     </div>
                   </div>
-                )}
+                ))}
 
                 {viewPlan && (() => {
+                  if (rediseno) {
+                    return (
+                      <VentanaVerPlan
+                        plan={viewPlan}
+                        puedeEditar={canEditTreatments}
+                        onCerrar={() => setViewPlan(null)}
+                        onEditar={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }}
+                      />
+                    );
+                  }
                   const vp = viewPlan;
                   const vCompleted = sessionsDone(vp.sessions);
                   const vPct = vp.totalSessions > 0 ? Math.round((vCompleted / vp.totalSessions) * 100) : 0;
@@ -3182,7 +3207,15 @@ export function PatientDetailClient({
                   );
                 })()}
 
-                {editPlan && (
+                {editPlan && (rediseno ? (
+                  <VentanaEditarPlan
+                    form={editPlanForm}
+                    setForm={setEditPlanForm}
+                    guardando={savingEditPlan}
+                    onCerrar={() => setEditPlan(null)}
+                    onGuardar={handleUpdatePlan}
+                  />
+                ) : (
                   <div style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }} onClick={() => !savingEditPlan && setEditPlan(null)}>
                     <div onClick={(e)=>e.stopPropagation()} className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto">
                       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -3228,7 +3261,7 @@ export function PatientDetailClient({
                       </div>
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             );
           })()}
