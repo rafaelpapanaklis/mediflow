@@ -26,6 +26,7 @@
     "test:agenda-nueva-interruptor": "tsx --test src/lib/agenda-nueva/__tests__/interruptor-agenda.test.ts",
     "test:agenda-nueva-siguiente-paso": "tsx --test src/lib/agenda-nueva/__tests__/siguiente-paso.test.ts",
     "test:agenda-nueva-interacciones": "tsx --test src/lib/agenda-nueva/__tests__/interacciones.test.ts",
+    "test:agenda-nueva-ventanas-oscuro": "tsx --test src/components/dashboard/agenda-nueva/__tests__/agenda-ventanas-y-oscuro.test.ts",
     "test:reschedule-flow": "tsx --test src/lib/agenda/__tests__/reschedule-flow.test.ts",
     "test:home-revenue": "tsx --test src/lib/home/__tests__/revenue-buckets.test.ts",
     "test:agenda-metrics": "tsx --test src/lib/agenda/__tests__/slot-metrics.test.ts",

@@ -142,9 +142,21 @@ test("el rediseño no toca el CSS de la agenda de siempre", () => {
   const cssNuevo = leer("src/components/dashboard/agenda-nueva/agenda-nueva.module.css");
   // Es un módulo CSS propio: sus clases van con hash y no pueden alcanzar a
   // las del módulo antiguo. Lo único que sí escaparía es un selector global.
-  assert.ok(
-    !/:global\s*\(/.test(cssNuevo),
-    "un :global() en el CSS del rediseño puede pintar fuera de la agenda nueva",
+  //
+  // La ÚNICA forma permitida es `:global(.dark) .clase`: la clase que pone
+  // theme-toggle.tsx en <html> para el modo oscuro, y SIEMPRE seguida de una
+  // clase local (con hash) de este módulo, que es lo que la ancla a la agenda
+  // nueva. Es lo mismo que hace el menú (`:global(.dark) .tokens`). Un
+  // `:global(.dark)` suelto, o un `:global(otra-cosa)`, sigue prohibido.
+  const sinComentarios = cssNuevo.replace(/\/\*[\s\S]*?\*\//g, "");
+  const globales = [...sinComentarios.matchAll(/:global\s*\(([^)]*)\)\s*([^\s,{]*)/g)];
+  const fueraDeLugar = globales
+    .filter((m) => m[1].trim() !== ".dark" || !/^\.[a-zA-Z]/.test(m[2]))
+    .map((m) => m[0]);
+  assert.deepEqual(
+    fueraDeLugar,
+    [],
+    "un :global() en el CSS del rediseño puede pintar fuera de la agenda nueva; solo vale `:global(.dark) .claseLocal`",
   );
   // Ni reglas sobre elementos desnudos a nivel raíz del archivo.
   assert.ok(
