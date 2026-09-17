@@ -1,0 +1,239 @@
+/* ═══════════════════════════════════════════════════════════════════
+   LA BARRA DE CONSULTA ACTIVA con la ropa del rediseño (ws1-t2,
+   hallazgo 12): «EN CONSULTA · Ana Ruiz · 32a · alergias · 12:34 ·
+   acciones», pegada bajo la barra superior mientras hay un paciente en
+   el sillón.
+
+   Es la piel nueva de los `style` en línea de `patient-context-bar.tsx`,
+   elemento por elemento (`vestidor()` de `topbar-rediseno/apariencia.ts`:
+   con la apariencia clásica cada elemento recibe EXACTAMENTE su `style`
+   de siempre; con la nueva, su clase de aquí y ningún `style`).
+
+   NO declara tokens propios. La barra monta `CLASES_MENU` ella misma
+   —está fuera de la raíz de cualquier pantalla— y con eso trae los
+   `--m2-*` del menú, con su versión oscura, y las dos familias
+   tipográficas. Lo que el menú no tiene (peligro, éxito) sale de los
+   tokens semánticos de globals.css. Las cifras (edad, cronómetro) van con
+   tabular-nums sobre Instrument Sans: ni una letra de máquina.
+
+   El `top` del sticky NO está aquí: sale de la altura REAL de la barra
+   superior, medida en el navegador (ver el componente), no de un número
+   escrito a mano. La barra vieja medía 52 px y la nueva 56: con el número
+   a mano la barra se metía 4 px por debajo.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.barra {
+  position: sticky;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 clamp(12px, 1.6vw, 24px);
+  background: var(--m2-n2-fondo);
+  border-bottom: 1px solid var(--m2-borde);
+  border-left: 3px solid var(--m2-activo);
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Cifras de ancho fijo en TODO lo que cuelga de la barra. Va sobre los
+   HIJOS y no sobre la barra a propósito: la barra lleva `.tokens` del menú,
+   y `tipografia-panel.tsx` le pone a esa clase `font-variant-numeric: normal`
+   con más peso; sus hijos heredan de aquí. */
+.barra > * {
+  font-variant-numeric: tabular-nums;
+}
+
+.barra *,
+.barra *::before,
+.barra *::after {
+  box-sizing: border-box;
+}
+
+/* ── Izquierda: punto, estado, nombre, edad, alergia ─────────────── */
+.izquierda {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.punto {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+.estado {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  color: var(--m2-activo);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.separador {
+  width: 1px;
+  height: 16px;
+  background: var(--m2-borde);
+  flex-shrink: 0;
+}
+.nombreGrupo {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.nombre {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--m2-texto);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: clamp(120px, 25vw, 240px);
+  text-align: left;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+.nombre:hover { color: var(--m2-activo); }
+.nombre:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.meta {
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.alergia { flex-shrink: 0; }
+.alergiaBoton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 20px;
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border-strong);
+  color: var(--danger);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: clamp(140px, 20vw, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alergiaBoton:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.alergiaIcono { flex-shrink: 0; }
+.alergiaTexto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Cronómetro ──────────────────────────────────────────────────── */
+.reloj {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m2-texto);
+  padding: 4px 10px;
+  background: var(--m2-n1-fondo);
+  border: 1px solid var(--m2-borde);
+  border-radius: 8px;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Acciones (escritorio e iPad) ────────────────────────────────── */
+.accionesEscritorio {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.accionesSeparador {
+  width: 1px;
+  height: 20px;
+  background: var(--m2-borde);
+  margin: 0 6px;
+}
+.accion {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.accion:hover { background: var(--m2-hover); color: var(--m2-texto); border-color: var(--m2-borde); }
+.accion:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.accionMarca { color: var(--m2-activo); }
+.accionMarca:hover { color: var(--m2-activo); background: var(--m2-iniciales-fondo); border-color: transparent; }
+.accionPeligro { color: var(--danger); }
+.accionPeligro:hover { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-border-strong); }
+
+/* ── Acciones en el teléfono (mismo corte que hoy: < 640 px) ───────
+   Lo enseña y lo esconde globals.css (`.mf-ctx-bar__actions-mobile` /
+   `__actions-desktop`), igual que en la barra de siempre. */
+.accionesMovil {
+  display: none;
+  flex-shrink: 0;
+}
+.menuBoton {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--m2-borde);
+  color: var(--m2-texto);
+  font-family: inherit;
+  cursor: pointer;
+}
+.menuBoton:hover { background: var(--m2-hover); }
+.menuBoton:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+/* El desplegable va en un PORTAL a <body>: monta CLASES_MENU él mismo. */
+.menu {
+  z-index: 50;
+  min-width: 200px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 20px 50px -10px color-mix(in srgb, var(--m2-texto) 22%, transparent);
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.menu > * {
+  font-variant-numeric: tabular-nums;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--m2-texto);
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+.menuItem[data-highlighted] { background: var(--m2-hover); }
+.menuItemPeligro { color: var(--danger); }
+.menuIcono { color: var(--m2-texto-3); }
+.menuItemPeligro .menuIcono { color: var(--danger); }

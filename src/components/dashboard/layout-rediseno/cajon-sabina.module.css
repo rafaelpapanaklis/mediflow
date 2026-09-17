@@ -1,0 +1,175 @@
+/* ═══════════════════════════════════════════════════════════════════
+   EL CAJÓN DE SABINA con la ropa del rediseño (ws1-t2, hallazgo 10).
+
+   Es la piel nueva de `sabina/panel.module.css`: el botón flotante, el
+   velo, el cajón y su cabecera. El hilo y la caja de texto los pinta
+   <SabinaConversacion> con la hoja del lote «Sabina · Radiografías ·
+   Asistente IA», que ya habla este idioma; aquí solo está el MARCO.
+
+   NO declara tokens propios. El cajón y el botón montan `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`) ellos mismos —van en `position: fixed`,
+   fuera de la raíz de cualquier pantalla, así que nadie les presta sus
+   colores— y con eso traen los `--m2-*` del menú, con su versión oscura,
+   y las dos familias tipográficas. Lo que el menú no tiene sale de los
+   tokens semánticos de globals.css.
+
+   Es ADITIVO: solo se aplica con el interruptor `menu-dos-niveles`
+   encendido para la clínica. Apagado, el cajón usa su módulo de siempre y
+   de aquí no se aplica ni una clase.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.fab {
+  position: fixed;
+  right: 20px;
+  z-index: 58;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  border: 1px solid var(--m2-activo);
+  cursor: pointer;
+  box-shadow: 0 12px 28px -10px color-mix(in srgb, var(--m2-activo) 65%, transparent);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s ease, opacity 0.16s ease;
+}
+.fab:hover { transform: translateY(-2px); }
+.fab:active { transform: scale(0.96); }
+.fab:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+/* Con el cajón abierto el botón sobra y además queda debajo: se esconde. */
+.fabOculto { opacity: 0; pointer-events: none; transform: scale(0.9); }
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 69;
+  background: color-mix(in srgb, var(--m2-texto) 40%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border: none;
+  cursor: pointer;
+  /* En escritorio no hay velo: se sigue trabajando con el cajón abierto. */
+  display: none;
+}
+
+.panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  width: min(440px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  border-left: 1px solid var(--m2-borde);
+  box-shadow: -18px 0 48px -18px color-mix(in srgb, var(--m2-texto) 28%, transparent);
+  font-size: 13px;
+  line-height: 1.4;
+  transform: translateX(100%);
+  /* `visibility` hace el trabajo que en React haría `inert`: con el cajón
+     cerrado sus botones y su caja de texto SALEN del orden de tabulación. El
+     retardo deja que la transición de salida se vea entera. */
+  visibility: hidden;
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.24s;
+}
+.panelAbierto {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0s;
+}
+
+/* Cifras de ancho fijo (horas, importes) en TODO lo que cuelga del cajón. Va
+   sobre los HIJOS y no sobre el cajón a propósito: el cajón lleva `.tokens`
+   del menú, y `tipografia-panel.tsx` le pone a esa clase
+   `font-variant-numeric: normal` con más peso; sus hijos heredan de aquí. */
+.panel > * {
+  font-variant-numeric: tabular-nums;
+}
+
+.panel *,
+.panel *::before,
+.panel *::after {
+  box-sizing: border-box;
+}
+
+/* Misma altura y borde que la barra superior del menú nuevo (56 px). */
+.cabecera {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--m2-borde);
+  background: var(--m2-n2-fondo);
+}
+.marca {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  flex-shrink: 0;
+}
+.titulos { flex: 1; min-width: 0; }
+.titulo {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+  color: var(--m2-texto);
+}
+.subtitulo {
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.boton {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--m2-texto-3);
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.boton:hover { background: var(--m2-hover); color: var(--m2-texto); }
+.boton:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.boton:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* El cartelito de honestidad: qué está viendo Sabina ahora mismo. */
+.contexto {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  font-size: 11.5px;
+  color: var(--m2-texto-2);
+  background: var(--m2-n1-fondo);
+  border-bottom: 1px solid var(--m2-borde);
+}
+.contexto strong { font-weight: 600; color: var(--m2-texto); }
+
+@media (max-width: 768px) {
+  .velo { display: block; }
+  .fab { right: 16px; width: 48px; height: 48px; border-radius: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab, .panel { transition: none !important; }
+}

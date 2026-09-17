@@ -41,6 +41,21 @@ import { useContextoSabina, useSabinaEstado } from "@/components/sabina/use-sabi
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import { HIDE_SUPPLY_MODULES } from "@/lib/hidden-modules";
 import styles from "./panel.module.css";
+import { CLASES_CAJON } from "@/components/dashboard/layout-rediseno/sabina";
+import { CLASES_REDISENO } from "@/app/dashboard/sabina/sabina-client";
+
+/**
+ * REDISEÑO (interruptor `menu-dos-niveles`, ws1-t2 hallazgo 10) — «dos pieles,
+ * un esqueleto», como la pantalla de Sabina. El JSX es UNO. Con la bandera
+ * apagada pinta las clases de siempre (`panel.module.css`, sin tocar);
+ * encendida, cada clase vieja se traduce a su pieza de
+ * `layout-rediseno/cajon-sabina.module.css` (`CLASES_CAJON`), y el hilo
+ * recibe el MISMO juego de clases que la pantalla (`CLASES_REDISENO`, de
+ * `sabina-client.tsx`): la conversación se ve igual en las dos puertas. La
+ * elección se hace UNA vez, en `c`, así que el camino viejo no cambia ni un
+ * byte. El test de `layout-rediseno` comprueba que ninguna clase usada aquí
+ * se queda sin traducir.
+ */
 
 /** Su propia pantalla: ahí el cajón sobra. */
 const RUTA_SABINA = "/dashboard/sabina";
@@ -60,6 +75,7 @@ export function SabinaPanel({
   firstName,
   puedeProponer,
   oculto = false,
+  rediseno = false,
 }: {
   clinicId: string;
   firstName: string;
@@ -67,7 +83,11 @@ export function SabinaPanel({
   puedeProponer: boolean;
   /** Clínica suspendida: ni botón ni atajo. Lo decide el layout. */
   oculto?: boolean;
+  /** Interruptor `menu-dos-niveles` de la clínica: viste el cajón con el rediseño. */
+  rediseno?: boolean;
 }) {
+  // Un solo juego de clases por render: el de siempre o el del rediseño.
+  const c: Record<string, string> = rediseno ? CLASES_CAJON : styles;
   const pathname = usePathname();
   const estado = useSabinaEstado();
   const contextoDe = useContextoSabina();
@@ -183,7 +203,7 @@ export function SabinaPanel({
       <button
         type="button"
         ref={fabRef}
-        className={`${styles.fab} ${abierto ? styles.fabOculto : ""}`}
+        className={`${c.fab} ${abierto ? c.fabOculto : ""}`}
         style={{ bottom: ALTURA_FAB }}
         onClick={abrir}
         aria-label="Pregúntale a Sabina (Alt + S)"
@@ -195,11 +215,11 @@ export function SabinaPanel({
       </button>
 
       {abierto && (
-        <button type="button" className={styles.velo} aria-label="Cerrar Sabina" onClick={cerrar} />
+        <button type="button" className={c.velo} aria-label="Cerrar Sabina" onClick={cerrar} />
       )}
 
       <aside
-        className={`${styles.panel} ${abierto ? styles.panelAbierto : ""}`}
+        className={`${c.panel} ${abierto ? c.panelAbierto : ""}`}
         role="dialog"
         aria-label="Sabina"
         // Sin `aria-modal`: en escritorio el cajón NO bloquea la pantalla, y
@@ -209,17 +229,17 @@ export function SabinaPanel({
         // es el `visibility: hidden` de `.panel` (ver panel.module.css).
         aria-hidden={!abierto}
       >
-        <header className={styles.cabecera}>
-          <span className={styles.marca}><Sparkles size={13} aria-hidden /></span>
-          <div className={styles.titulos}>
-            <div className={styles.titulo}>Sabina</div>
-            <div className={styles.subtitulo}>
+        <header className={c.cabecera}>
+          <span className={c.marca}><Sparkles size={13} aria-hidden /></span>
+          <div className={c.titulos}>
+            <div className={c.titulo}>Sabina</div>
+            <div className={c.subtitulo}>
               {estado.conversationTitle ?? `Hola, ${firstName || "doctor"}`}
             </div>
           </div>
           <button
             type="button"
-            className={styles.boton}
+            className={c.boton}
             onClick={nuevaConversacion}
             // Con una pregunta en vuelo, cambiar de hilo tiraría la respuesta
             // que ya se está pagando (ver `cambiandoDeHilo` en ./almacen).
@@ -231,20 +251,20 @@ export function SabinaPanel({
           </button>
           <Link
             href={RUTA_SABINA}
-            className={styles.boton}
+            className={c.boton}
             aria-label="Abrir Sabina a pantalla completa"
             title="Abrir a pantalla completa"
             onClick={() => setAbierto(false)}
           >
             <Maximize2 size={15} aria-hidden />
           </Link>
-          <button type="button" className={styles.boton} onClick={cerrar} aria-label="Cerrar Sabina" title="Cerrar (Esc)">
+          <button type="button" className={c.boton} onClick={cerrar} aria-label="Cerrar Sabina" title="Cerrar (Esc)">
             <X size={16} aria-hidden />
           </button>
         </header>
 
         {dondeEstoy && (
-          <div className={styles.contexto}>
+          <div className={c.contexto}>
             <MapPin size={12} aria-hidden />
             <span>
               Sabe que estás en <strong>{dondeEstoy}</strong>
@@ -258,6 +278,8 @@ export function SabinaPanel({
             puedeProponer={puedeProponer}
             compacto
             autoFocus={abierto}
+            clases={rediseno ? CLASES_REDISENO : undefined}
+            rediseno={rediseno}
           />
         )}
       </aside>
