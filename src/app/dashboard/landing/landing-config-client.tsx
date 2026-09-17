@@ -16,6 +16,9 @@ import styles from "./landing.module.css";
 // apagado, esta pantalla no importa ni una clase de ahí y se pinta como hoy.
 import { RaizPaginaWeb } from "@/components/dashboard/pagina-web-rediseno/raiz";
 import rd from "@/components/dashboard/pagina-web-rediseno/pagina-web.module.css";
+// AUTOCOMPLETAR (ws1-t6) — propone, no publica. Solo se monta en la rama
+// `if (rediseno)`; el camino de siempre no lo conoce.
+import { PanelAutocompletar } from "@/components/dashboard/pagina-web-autocompletar/panel-autocompletar";
 
 /** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
     puñado de mensajes, no uno por tecla. */
@@ -199,7 +202,8 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
         return next;
       });
       toast.success(successMsg);
-    } catch(e: any) { toast.error(e.message); }
+      return true;
+    } catch(e: any) { toast.error(e.message); return false; }
     finally { setSaving(false); }
   }
 
@@ -452,6 +456,28 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
               <ChevronRight size={18} className="ml-auto shrink-0" style={{ color: "var(--m2-texto-3)" }} />
             </a>
           )}
+
+          {/* ── Autocompletar con lo que la clínica ya tiene (ws1-t6) ──
+              Cada «Aprobar y guardar» pasa por el save() de arriba: el mismo
+              PATCH, los mismos validadores. El panel no escribe por su cuenta. */}
+          <PanelAutocompletar
+            puedeEditar={puedeEditar}
+            publicada={!!clinic.landingActive}
+            guardando={saving}
+            actual={{
+              eslogan: clinic.landingTagline ?? "",
+              presentacion: clinic.description ?? "",
+              preguntas: Array.isArray(clinic.landingFaqs) ? clinic.landingFaqs : [],
+            }}
+            onAprobar={async (data, mensaje) => {
+              const ok = await save(data, mensaje);
+              // Las pestañas Servicios y Preguntas llevan su propia copia en
+              // estado: sin esto, su «Guardar» pisaría lo recién aprobado.
+              if (ok && Array.isArray(data.landingServices)) setServices(data.landingServices);
+              if (ok && Array.isArray(data.landingFaqs)) setFaqs(data.landingFaqs);
+              return ok;
+            }}
+          />
 
           {/* ── Enlace público ── */}
           <div className={rd.franjaEnlace}>
