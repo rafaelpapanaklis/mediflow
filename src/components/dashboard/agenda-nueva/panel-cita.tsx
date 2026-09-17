@@ -662,6 +662,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
 
       {factura && (
         <InvoiceDetailModal
+          rediseno
           open
           invoice={factura}
           patientName={cita.nombrePaciente}

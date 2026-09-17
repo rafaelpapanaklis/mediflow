@@ -120,6 +120,13 @@ function ensurePopoverStyles() {
 
 type DateFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & {
   placeholder?: string;
+  /**
+   * Clases extra para el POPOVER del calendario. Vive en un portal a <body>,
+   * fuera del árbol de quien lo abre, así que no hereda los tokens de color de
+   * un rediseño; con esto quien lo monta se los pasa. Sin ella, `df-pop` a
+   * secas, como siempre.
+   */
+  popoverClassName?: string;
 };
 
 /**
@@ -137,7 +144,7 @@ type DateFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> 
 export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function DateField(
   {
     className, style, value, placeholder = "dd/mm/aaaa", disabled,
-    min, max, required, name, id,
+    min, max, required, name, id, popoverClassName,
     onChange, onClick, onFocus, onBlur, onKeyDown,
     ...rest
   },
@@ -404,7 +411,7 @@ export const DateField = forwardRef<HTMLInputElement, DateFieldProps>(function D
   const popover = open && mounted ? createPortal(
     <div
       ref={popoverRef}
-      className="df-pop"
+      className={popoverClassName ? `df-pop ${popoverClassName}` : "df-pop"}
       data-datefield-popover=""
       role="dialog"
       aria-modal="false"
