@@ -4,9 +4,9 @@
  * Run: npx tsx --test src/components/dashboard/analitica-rediseno/__tests__/analitica-rediseno.test.ts
  *
  * Lo que fija:
- *  - Las pestañas del marco nuevo son EXACTAMENTE las del marco de hoy
- *    (`analytics-layout.tsx`): mismos ids, rutas, llaves y orden. Ni una
- *    sección inventada ni una perdida.
+ *  - Las pestañas del marco nuevo son las del marco de hoy
+ *    (`analytics-layout.tsx`): mismos ids, rutas, llaves y orden, ni una
+ *    perdida; y al final Reportes, la única que el marco nuevo añade.
  *  - Cada una de las nueve páginas lee el interruptor `menu-dos-niveles` y se
  *    lo pasa a su cliente; cada cliente lo respeta con un `if (rediseno)`.
  *    Apagado, el JSX de siempre se pinta tal cual.
@@ -43,7 +43,12 @@ test("las pestañas del marco nuevo son las del marco de hoy, en el mismo orden"
   const hoy: Array<{ id: string; labelKey: string; href: string }> = [];
   for (const m of bloque.matchAll(re)) hoy.push({ id: m[1]!, labelKey: m[2]!, href: m[3]! });
   assert.equal(hoy.length, 9, "el marco de hoy tiene nueve pestañas");
-  assert.deepEqual([...PESTANAS], hoy);
+  // Las nueve de hoy, intactas y en su sitio; Reportes (ws1-t3) es la única
+  // que añade el marco nuevo, y va la última para no mover a ninguna.
+  assert.deepEqual(PESTANAS.slice(0, 9), hoy);
+  assert.deepEqual(PESTANAS.slice(9), [
+    { id: "reports", labelKey: "analytics.layout.tabReports", href: "/dashboard/analytics/reports" },
+  ]);
 });
 
 test("solo Resumen exige la ruta exacta; el resto acepta sus subrutas", () => {
