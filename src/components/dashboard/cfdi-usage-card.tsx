@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Receipt, Loader2 } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { CfdiRediseno } from "./bloques-rediseno/cfdi";
 
 /**
  * Card "Facturación CFDI" del panel (Configuración → Suscripción).
@@ -43,7 +44,13 @@ function monthLabel(period: string): string {
 const RING_R = 34;
 const RING_C = 2 * Math.PI * RING_R;
 
-export function CfdiUsageCard() {
+/**
+ * `rediseno`: la pestaña Suscripción lo baja SOLO desde su camino nuevo
+ * (interruptor `menu-dos-niveles`). Encendido, la tarjeta se pinta con la
+ * ropa nueva (`bloques-rediseno/cfdi.tsx`) con los MISMOS datos y textos;
+ * sin la prop, o en false, es exactamente la de siempre.
+ */
+export function CfdiUsageCard({ rediseno = false }: { rediseno?: boolean } = {}) {
   const t = useT();
   const [data, setData] = useState<CfdiUsage | null>(null);
   const [failed, setFailed] = useState(false);
@@ -67,6 +74,10 @@ export function CfdiUsageCard() {
   }, []);
 
   if (failed) return null;
+
+  if (rediseno) {
+    return <CfdiRediseno m={data ? modeloCfdi(data, t) : null} />;
+  }
 
   return (
     <section
@@ -97,6 +108,41 @@ export function CfdiUsageCard() {
       )}
     </section>
   );
+}
+
+/**
+ * El modelo para la ropa nueva: el MISMO cálculo y las MISMAS claves que
+ * `CfdiBody` (anillo, pastilla de restantes/excedente, nota de cobro y
+ * adeudo), resueltos a texto para que la vista no decida nada.
+ */
+function modeloCfdi(data: CfdiUsage, t: ReturnType<typeof useT>) {
+  const ratio = data.included > 0 ? data.used / data.included : data.used > 0 ? 1 : 0;
+  const pct = Math.min(100, Math.round(ratio * 100));
+  const exceeded = data.overage > 0;
+  const nearLimit = !exceeded && data.included > 0 && ratio >= 0.8;
+  const collectKey =
+    data.billingMode === "monthly_sub"
+      ? "cfdiCollectMonthly"
+      : data.billingMode === "annual_card"
+        ? "cfdiCollectAnnual"
+        : "cfdiCollectManual";
+  return {
+    mes: monthLabel(data.period),
+    usadas: data.used,
+    incluidas: data.included,
+    porcentaje: pct,
+    nivel: exceeded ? ("critico" as const) : nearLimit ? ("alto" as const) : undefined,
+    estado: exceeded
+      ? data.overage === 1
+        ? t("shell.subscriptionTab.cfdiOverOne", { price: money(data.overagePriceCents), total: money(data.overageProjectionCents) })
+        : t("shell.subscriptionTab.cfdiOverLine", { overage: data.overage, price: money(data.overagePriceCents), total: money(data.overageProjectionCents) })
+      : data.remaining === 1
+        ? t("shell.subscriptionTab.cfdiRemainingOne")
+        : t("shell.subscriptionTab.cfdiRemaining", { n: data.remaining }),
+    notaCobro: exceeded ? t(`shell.subscriptionTab.${collectKey}`) : null,
+    deuda: data.debtCents > 0 ? t("shell.subscriptionTab.cfdiDebt", { amount: money(data.debtCents) }) : null,
+    etiquetaAnillo: t("shell.subscriptionTab.cfdiUsedOf", { used: data.used, included: data.included }),
+  };
 }
 
 function CfdiBody({ data, t }: { data: CfdiUsage; t: ReturnType<typeof useT> }) {

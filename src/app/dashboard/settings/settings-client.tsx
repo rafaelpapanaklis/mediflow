@@ -566,7 +566,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <Contenido>
 
             {/* ── SUSCRIPCIÓN ── */}
-            {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} />}
+            {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} rediseno />}
 
             {/* ── CLÍNICA ── */}
             {tab === "clinica" && (

@@ -120,10 +120,10 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
         {/* Aviso de cupo de IA — se pinta solo si la clínica pasó el 80% del
             cupo mensual. Se auto-gatea (admin + límite > 0) y se descarta por
             sesión; en planes sin IA (límite 0) no aparece nunca. */}
-        <AiQuotaBanner />
+        <AiQuotaBanner rediseno={rediseno} />
         {/* Checklist de primeros pasos — solo admins; se auto-oculta al 100%
             o si el usuario lo descartó (localStorage por clinicId). */}
-        <OnboardingChecklist completed={onboardingCompleted} clinicId={clinic.id} />
+        <OnboardingChecklist completed={onboardingCompleted} clinicId={clinic.id} rediseno={rediseno} />
         <HomeClientSwitch
           user={homeUser}
           clinic={homeClinic}

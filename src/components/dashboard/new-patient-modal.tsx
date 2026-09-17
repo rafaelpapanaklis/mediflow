@@ -1,13 +1,26 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, UserPlus, X } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { ROPA_ALTA_PACIENTE } from "@/components/dashboard/dialogos-rediseno/vestir-dialogos";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { DateField } from "@/components/ui/date-field";
 import { PatientVisibilityPicker } from "@/components/dashboard/patient-visibility-picker";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+
+/**
+ * La ROPA de la ventana: la de siempre o la del diseño nuevo (ws1-t5,
+ * hallazgo 6). La elige quien la monta con el MISMO interruptor por clínica
+ * que el menú de dos niveles (`menu-dos-niveles`): el layout del panel para
+ * el NewPatientProvider y la lista de Pacientes para su copia. Apagado llega
+ * "clasica", el valor por defecto, y cada pieza recibe exactamente los
+ * mismos `className` y `style` de antes: ni un píxel distinto. Encendido, la
+ * caja monta los tokens del menú y las clases de `dialogos-rediseno`.
+ * ⛔ No toca ni una regla: mismos campos, misma validación, mismo POST.
+ */
+export type AparienciaNuevoPaciente = "clasica" | "nueva";
 
 interface Props {
   open: boolean;
@@ -17,6 +30,7 @@ interface Props {
   initialName?: string;
   initialPhone?: string;
   initialEmail?: string;
+  apariencia?: AparienciaNuevoPaciente;
 }
 
 const emptyForm = {
@@ -52,8 +66,9 @@ function splitName(full: string): { firstName: string; lastName: string } {
   };
 }
 
-export function NewPatientModal({ open, onClose, onCreated, initialName, initialPhone, initialEmail }: Props) {
+export function NewPatientModal({ open, onClose, onCreated, initialName, initialPhone, initialEmail, apariencia = "clasica" }: Props) {
   const t = useT();
+  const nueva = apariencia === "nueva";
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
@@ -196,7 +211,8 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay
-          style={{
+          className={nueva ? ROPA_ALTA_PACIENTE.velo : undefined}
+          style={nueva ? undefined : {
             position: "fixed",
             inset: 0,
             background: "rgba(15,10,30,0.55)",
@@ -205,7 +221,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
           }}
         />
         <Dialog.Content
-          className="modal"
+          className={nueva ? ROPA_ALTA_PACIENTE.caja : "modal"}
           onEscapeKeyDown={onClose}
           // El popover del DateField vive en un portal a <body> → Radix lo vería como
           // "afuera" y cerraría el modal al clic en mes/año/día. Lo excluimos.
@@ -216,7 +232,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             if (((e.detail?.originalEvent?.target ?? e.target) as HTMLElement | null)?.closest?.("[data-datefield-popover]")) e.preventDefault();
           }}
           aria-describedby={undefined}
-          style={{
+          style={nueva ? undefined : {
             position: "fixed",
             top: "50%",
             left: "50%",
@@ -230,7 +246,10 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
         >
           <Dialog.Title className="modal__title" style={{ display: "none" }}>{t("shell.newPatient.title")}</Dialog.Title>
           <div className="modal__header" style={{ flexShrink: 0 }}>
-            <div className="modal__title">{t("shell.newPatient.title")}</div>
+            <div className="modal__title">
+              {nueva && <UserPlus size={22} strokeWidth={2} className={ROPA_ALTA_PACIENTE.tituloIcono} aria-hidden />}
+              {t("shell.newPatient.title")}
+            </div>
             <Dialog.Close asChild>
               <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                 <X size={14} />
@@ -301,7 +320,11 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                   </label>
                   <input
                     className="input-new"
-                    style={{ fontFamily: "var(--font-mono, monospace)", textTransform: "uppercase", letterSpacing: "0.04em" }}
+                    // Con la ropa nueva la CURP va en la letra del panel, como
+                    // el resto de datos administrativos (ver tipografia-panel).
+                    style={nueva
+                      ? { textTransform: "uppercase", letterSpacing: "0.04em" }
+                      : { fontFamily: "var(--font-mono, monospace)", textTransform: "uppercase", letterSpacing: "0.04em" }}
                     placeholder="GOPA850623HDFRRR03"
                     maxLength={18}
                     value={form.curp}
@@ -322,7 +345,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 </div>
               )}
               {form.curpStatus === "PENDING" && (
-                <div style={{ fontSize: 11, color: "var(--text-3)", padding: "6px 4px" }}>
+                <div {...(nueva ? { className: ROPA_ALTA_PACIENTE.pista } : { style: { fontSize: 11, color: "var(--text-3)", padding: "6px 4px" } })}>
                   {t("shell.newPatient.curpPendingHint")}
                 </div>
               )}
@@ -421,7 +444,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                       else { set("allergies", ""); }
                     }}
                   />
-                  <label htmlFor="no-allergies" style={{ fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
+                  <label htmlFor="no-allergies" {...(nueva ? { className: ROPA_ALTA_PACIENTE.rotuloSuave } : { style: { fontSize: 12, color: "var(--text-2)", cursor: "pointer" } })}>
                     {t("shell.newPatient.noAllergies")}
                   </label>
                 </div>
@@ -438,7 +461,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 <label className="field-new__label">{t("common.notes")}</label>
                 <textarea
                   className="input-new"
-                  style={{ height: 64, paddingTop: 8, resize: "vertical" }}
+                  style={nueva ? { resize: "vertical" } : { height: 64, paddingTop: 8, resize: "vertical" }}
                   placeholder={t("shell.newPatient.notesPlaceholder")}
                   value={form.notes}
                   onChange={e => set("notes", e.target.value)}
@@ -479,7 +502,9 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                     // en el layout del dashboard y sobrevive al cambio de ruta, así
                     // que sin esto el modal quedaría encima de Configuración.
                     onClick={onClose}
-                    className="text-xs font-bold px-3.5 py-2.5 rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150 flex-shrink-0 no-underline"
+                    className={nueva
+                      ? ROPA_ALTA_PACIENTE.limiteCta
+                      : "text-xs font-bold px-3.5 py-2.5 rounded-lg bg-[var(--brand)] text-white hover:bg-[var(--violet-700)] focus-visible:outline-none focus-visible:[box-shadow:var(--ring)] active:scale-[.98] transition duration-150 flex-shrink-0 no-underline"}
                   >
                     {t("shell.newPatient.limitCta")}
                   </Link>

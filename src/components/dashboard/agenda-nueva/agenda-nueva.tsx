@@ -13,11 +13,13 @@
  * árbol, así que la de siempre no puede cambiar ni un píxel por culpa de ésta.
  *
  * Lo que la agenda de siempre hace y el diseño no dibuja NO se pierde: la cola
- * de citas del portal por validar, las solicitudes de cambio del paciente y el
- * `?highlight=` con el que el inicio, la paleta de comandos y Nueva cita
- * mandan a una cita concreta. Se montan los MISMOS componentes (validar,
- * solicitudes) y el resaltado abre el panel de esa cita. La lista de espera
- * (la barra lateral con arrastrar a la cuadrícula) todavía no está.
+ * de citas del portal por validar, las solicitudes de cambio del paciente, las
+ * solicitudes de cita de la mini-web (`?solicitudes=1`, a donde manda la
+ * campana) y el `?highlight=` con el que el inicio, la paleta de comandos y
+ * Nueva cita mandan a una cita concreta. Se montan los MISMOS componentes
+ * (validar, solicitudes de cambio, solicitudes de la mini-web) y el resaltado
+ * abre el panel de esa cita. La lista de espera (la barra lateral con
+ * arrastrar a la cuadrícula) todavía no está.
  *
  * Crear y mover citas también son los de siempre: el botón «Nueva cita» y el
  * clic en un hueco abren la MISMA ventana (`NewAppointmentDialog`), y arrastrar
@@ -27,15 +29,23 @@
  * que ya existe, así que las citas, los doctores, las unidades, el refetch con
  * caché, las actualizaciones optimistas y el rollback son los mismos que usa
  * la agenda actual. Aquí no hay ni un `useReducer` nuevo.
+ *
+ * COLORES: la raíz monta `CLASES_MENU` (`menu-dos-niveles/clases.ts`), los
+ * `--m2-*` del menú con su versión oscura, y `agenda-nueva.module.css` los
+ * lee para vestir la agenda en claro y en oscuro (hallazgo 18). Las ventanas
+ * compartidas con la agenda de siempre («Editar cita», el calendario,
+ * «Pendientes de validar») reciben su ropa desde `ropa.ts` (hallazgo 9).
  */
 
 import { useCallback, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { instrumentSans } from "@/fonts/menu";
+import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { AgendaValidateBanner } from "@/components/dashboard/agenda/agenda-validate-banner";
 import { ChangeRequestsPanel } from "@/components/dashboard/change-requests-panel";
+import { BookingRequestsPanel } from "@/app/dashboard/appointments/booking-requests-panel";
 import { ArrastreCitas } from "./arrastre-citas";
 import { BarraHerramientas } from "./barra-herramientas";
 import { AgendaNuevaProvider, useAgendaNueva } from "./contexto-agenda-nueva";
@@ -44,6 +54,7 @@ import { PanelHuecos } from "./panel-huecos";
 import { VistaDia } from "./vista-dia";
 import { VistaSemana } from "./vista-semana";
 import { VistaMes } from "./vista-mes";
+import { ROPA_VALIDAR } from "./ropa";
 import s from "./agenda-nueva.module.css";
 
 export interface AgendaNuevaProps {
@@ -98,13 +109,20 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
   }, [highlightId, state.appointments, abrirCita, searchParams, pathname, router]);
 
   return (
-    <div className={`${s.raiz} ${instrumentSans.variable}`}>
+    <div className={`${CLASES_MENU} ${s.raiz} ${instrumentSans.variable}`}>
       <BarraHerramientas />
 
       <div className={s.cuerpo}>
         <div className={s.zonaAgenda}>
           <div className={s.colasPortal}>
-            <AgendaValidateBanner />
+            {/* Reservas de la mini-web sin cuenta: aceptar crea expediente y
+                cita. Solo se montaba en la agenda de siempre (ws1-t8, hallazgo
+                3); el MISMO componente, con `?solicitudes=1` abierto de entrada.
+                Va primero, como allí (arriba del panel lateral): esta caja mide
+                como mucho el 40 % y hace scroll, y a donde manda la campana
+                tiene que verse sin buscarlo. */}
+            <BookingRequestsPanel initialOpen={searchParams.get("solicitudes") === "1"} />
+            <AgendaValidateBanner ropa={ROPA_VALIDAR} />
             <ChangeRequestsPanel onResolved={alResolverSolicitud} />
           </div>
           {/* ── Las tres vistas ──

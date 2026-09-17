@@ -1011,6 +1011,7 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
       {canCreatePatients && (
         <NewPatientModal
           open={newPatientOpen}
+          apariencia={rediseno ? "nueva" : "clasica"}
           onClose={() => setNewPatientOpen(false)}
           onCreated={() => {
             setNewPatientOpen(false);
@@ -1024,6 +1025,7 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
       {canImportPatients && (
         <ImportWizard
           open={importOpen}
+          apariencia={rediseno ? "nueva" : "clasica"}
           startInAssisted={importAssisted}
           onClose={() => setImportOpen(false)}
           onImported={() => {

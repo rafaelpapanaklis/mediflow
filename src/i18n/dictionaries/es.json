@@ -461,6 +461,9 @@
     "proximamente": "Próximamente",
     "cajaSinAcceso": "Caja se activa persona por persona y tu usuario no la tiene activada. Pídesela al dueño de la clínica.",
     "cajaSinAccesoCorto": "Sin acceso",
+    "cajaSinPermisoTitulo": "No tienes acceso a Caja",
+    "cajaSinPermisoVolver": "Volver a Hoy",
+    "cajaSinPermisoEquipo": "Activarlo en Equipo",
     "miPerfil": "Mi perfil",
     "volver": "Volver",
     "migasAria": "Estás en"
