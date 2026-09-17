@@ -37,6 +37,7 @@
     "test:menu-personalizado": "tsx --test src/lib/menu-personalizado/__tests__/menu-personalizado.test.ts",
     "test:tipografia-panel": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/tipografia-panel.test.ts",
     "test:pacientes-rediseno": "tsx --test src/components/dashboard/pacientes-rediseno/__tests__/pacientes-rediseno.test.ts",
+    "test:expediente-rediseno": "tsx --test src/components/dashboard/expediente-rediseno/__tests__/expediente-rediseno.test.ts",
     "test:clinica-visual-rediseno": "tsx --test src/components/dashboard/clinica-visual-rediseno/__tests__/clinica-visual-rediseno.test.ts",
     "test:cuenta-rediseno": "tsx --test src/components/dashboard/cuenta-rediseno/__tests__/cuenta-rediseno.test.ts",
     "test:sabina-core": "tsx --test src/lib/sabina/engine-core.test.ts",
