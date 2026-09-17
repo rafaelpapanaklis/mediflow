@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, FileText } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { PeriodonticsClient } from "@/components/specialties/periodontics/PeriodonticsClient";
 import { NewPerioRecordButton } from "@/components/specialties/periodontics/NewPerioRecordButton";
@@ -21,7 +22,7 @@ export default async function PeriodonticsPatientDetailPage({
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, PERIODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${PERIODONTICS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, PERIODONTICS_MODULE_KEY));
   }
 
   const data = await loadPerioData({

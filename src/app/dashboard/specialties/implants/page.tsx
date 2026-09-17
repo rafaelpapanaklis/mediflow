@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { patientVisibilityFilter } from "@/lib/patient-visibility";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { destinoModuloVencido } from "@/components/dashboard/marketplace-oculto/servidor";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import { loadImplantPatients } from "@/lib/implants/load-patients";
 import { ImplantsSpecialtyClient } from "@/components/specialties/implants/ImplantsSpecialtyClient";
@@ -27,7 +28,7 @@ export default async function ImplantsIndexPage() {
   if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, IMPLANTS_MODULE_KEY);
   if (!access.hasAccess) {
-    redirect(`/dashboard/marketplace?expired=${IMPLANTS_MODULE_KEY}`);
+    redirect(await destinoModuloVencido(user.clinicId, IMPLANTS_MODULE_KEY));
   }
 
   const now = new Date();
