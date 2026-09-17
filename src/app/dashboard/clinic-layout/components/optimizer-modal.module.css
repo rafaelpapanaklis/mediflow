@@ -493,3 +493,45 @@
   border-bottom-color: var(--m2-borde);
 }
 .overlayRediseno .diffPatient { color: var(--m2-texto); }
+
+/* ── Cajas de estado: en oscuro se quedaban en pastel claro ──
+   «Pensando», el razonamiento de la IA, «Regenerar» y el error llevaban su
+   fondo claro escrito a mano y ninguna regla oscura: sobre el modal ya
+   oscuro salían como parches encendidos. Leen el par violeta suave del menú
+   (`--m2-iniciales-*`, que ya trae su versión oscura) y los `--danger-*` del
+   sistema. Las franjas (lane*) y las cifras de resultado siguen sin tocarse. */
+.overlayRediseno .thinking,
+.overlayRediseno .reasoning {
+  background: var(--m2-iniciales-fondo);
+  border-color: var(--m2-tarjeta-borde);
+}
+.overlayRediseno .thinkingTitle,
+.overlayRediseno .reasoning,
+.overlayRediseno .reasoning strong { color: var(--m2-iniciales-texto); }
+.overlayRediseno .thinkingSub,
+.overlayRediseno .statLabel,
+.overlayRediseno .hoursInner,
+.overlayRediseno .laneLabel,
+.overlayRediseno .empty,
+.overlayRediseno .diffBefore { color: var(--m2-texto-3); }
+.overlayRediseno .dots span { background: var(--m2-iniciales-texto); }
+
+.overlayRediseno .btnRegen {
+  background: var(--m2-iniciales-fondo);
+  border-color: var(--m2-tarjeta-borde);
+  color: var(--m2-iniciales-texto);
+}
+.overlayRediseno .btnRegen:hover { background: var(--m2-hover); }
+
+.overlayRediseno .error {
+  background: var(--danger-soft);
+  border-color: var(--danger-border-strong);
+  color: var(--danger);
+}
+
+/* Las marcas de hora eran negro al 6 % (invisibles en oscuro) y el aro de la
+   cita movida era blanco fijo: leen el borde y la tarjeta del tema. */
+.overlayRediseno .laneTick { background: var(--m2-borde); }
+.overlayRediseno .laneBlockChanged {
+  box-shadow: 0 0 0 2px var(--m2-tarjeta), 0 0 0 3px var(--success, #10b981);
+}

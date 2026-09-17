@@ -159,6 +159,36 @@ test("la vista previa del rediseño se apila en angosto, nunca desaparece", () =
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Nada se esconde por ancho: las PESTAÑAS se parten en otro renglón (el patrón
+// de Analítica), nunca una sola línea con scroll sin pista (ws1-t2). A 1440 px
+// «Redes y contacto» salía partida y a 1024 solo se veían tres pestañas y media.
+// ═══════════════════════════════════════════════════════════════════════════
+const regla = (hoja: string, selector: string) => {
+  const i = hoja.indexOf(`${selector} {`);
+  assert.ok(i >= 0, `falta la regla ${selector}`);
+  return hoja.slice(i, hoja.indexOf("}", i));
+};
+
+test("las pestañas del editor se envuelven: ni scroll horizontal ni ancho forzado a una línea", () => {
+  const fila = regla(css, "\n.segmentado");
+  assert.match(fila, /flex-wrap:\s*wrap/, ".segmentado tiene que envolver, como .pestanas de Analítica");
+  assert.ok(!/min-width:\s*max-content/.test(fila), ".segmentado vuelve a forzar una sola línea");
+  assert.ok(!/overflow-x:\s*(auto|scroll|hidden)/.test(regla(css, "\n.segmentadoWrap")), "la fila de pestañas vuelve a recortar o a hacer scroll");
+  assert.match(regla(css, "\n.acciones"), /max-width:\s*100%/, "sin tope, los botones de la cabecera se salen de la columna a 1024 px");
+});
+
+test("los chips de canal de Mensajes se envuelven con el rediseño, y la regla de siempre no se toca", () => {
+  const inbox = leer("app/dashboard/inbox/inbox.module.css");
+  const nueva = regla(inbox, ".page[data-pulido] .chipsRow");
+  assert.match(nueva, /flex-wrap:\s*wrap/);
+  assert.match(nueva, /overflow-x:\s*visible/);
+  // Bandera apagada: la fila de siempre sigue con su scroll, tal cual.
+  const vieja = regla(inbox, "\n.chipsRow");
+  assert.match(vieja, /overflow-x:\s*auto/);
+  assert.ok(!/flex-wrap/.test(vieja), "la regla base de .chipsRow cambió: eso lo ve una clínica con la bandera apagada");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // La vista previa enseña la PLANTILLA aunque el sitio no esté publicado
 // (ws1-t5). Salía el cartel de «disponible pronto»: /landing-preview cortaba
 // por landingActive antes de elegir plantilla y el iframe no tenía cómo decir
