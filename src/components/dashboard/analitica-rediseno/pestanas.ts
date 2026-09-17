@@ -1,9 +1,10 @@
 /**
- * Las NUEVE pestañas de Analítica, en el mismo orden, con las mismas etiquetas
- * y rutas que `analytics-layout.tsx` (el marco de hoy). Ni una más ni una
- * menos: lo que hay en la pantalla hoy es la lista completa de lo que puede
- * haber mañana. Sin JSX ni íconos a propósito: así el test la compara contra el
- * marco viejo sin montar React.
+ * Las pestañas de Analítica: las NUEVE de `analytics-layout.tsx` (el marco de
+ * hoy), en el mismo orden y con las mismas etiquetas y rutas, y al final
+ * Reportes, que solo existe en el marco nuevo (Rafael: «agrega una pestaña de
+ * Reportes en analytics»). Va la última para que las nueve de siempre no se
+ * muevan de sitio. Sin JSX ni íconos a propósito: así el test la compara
+ * contra el marco viejo sin montar React.
  */
 export const PESTANAS: ReadonlyArray<{ id: string; labelKey: string; href: string }> = [
   { id: "overview",   labelKey: "analytics.layout.tabOverview",   href: "/dashboard/analytics" },
@@ -17,6 +18,9 @@ export const PESTANAS: ReadonlyArray<{ id: string; labelKey: string; href: strin
   // "CRM" no existe como llave en el diccionario a propósito (igual que hoy):
   // el motor i18n devuelve la propia llave y "CRM" es idéntico en es/en.
   { id: "crm",        labelKey: "CRM",                            href: "/dashboard/analytics/crm" },
+  // Reportes: la pantalla `/dashboard/reports` entera, como pestaña. El marco
+  // de hoy (bandera apagada) no la lleva: allí Reportes sigue en el menú.
+  { id: "reports",    labelKey: "analytics.layout.tabReports",    href: "/dashboard/analytics/reports" },
 ];
 
 /** ¿Es esta la pestaña de la ruta actual? Misma regla que el marco de hoy. */

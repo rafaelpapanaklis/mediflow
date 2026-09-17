@@ -100,10 +100,12 @@ test("la llave «marketplace» solo la declara la opción Marketplace", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 test("el layout solo le quita la llave al menú NUEVO; el <Sidebar> recibe las de siempre", () => {
   const layout = leer("app/dashboard/layout.tsx");
+  // ws1-t3: Reportes también sale del menú nuevo (pestaña de Analítica), así que
+  // las llaves ya filtradas pasan además por `modulosSinReportes(…)`.
   assert.equal((layout.match(/modulosParaMenuNuevo\(/g) ?? []).length, 1, "la llave se filtra en más de un sitio");
   assert.match(
     layout,
-    /\{menuDosNiveles \? \(\s*<MenuDosNivelesServidor\s*\{\.\.\.sidebarProps\}[\s\S]*?clinicModuleKeys=\{modulosParaMenuNuevo\(clinicModuleKeys\)\}[\s\S]*?\/>\s*\) : \(\s*<Sidebar \{\.\.\.sidebarProps\} \/>\s*\)\}/,
+    /\{menuDosNiveles \? \(\s*<MenuDosNivelesServidor\s*\{\.\.\.sidebarProps\}[\s\S]*?clinicModuleKeys=\{(?:modulosSinReportes\(\s*)?modulosParaMenuNuevo\(clinicModuleKeys\)[\s\S]*?\/>\s*\) : \(\s*<Sidebar \{\.\.\.sidebarProps\} \/>\s*\)\}/,
     "el filtro no está en la rama de la bandera, o el <Sidebar> de siempre cambió",
   );
   // `sidebarProps` sigue armándose con las llaves enteras.

@@ -36,6 +36,13 @@ interface Props {
    * defecto: sin la prop la pantalla se pinta exactamente igual que hoy.
    */
   rediseno?: boolean;
+  /**
+   * La pestaña Reportes de Analítica (`/dashboard/analytics/reports`, solo con
+   * el rediseño encendido): el marco de Analítica ya pone el título, el
+   * subtítulo, el ancho y el margen, así que aquí no se repiten. Todo lo demás
+   * —cifras, gráficas y tabla— es esta misma pantalla. false por defecto.
+   */
+  enAnalitica?: boolean;
 }
 
 // id -> translation key; resolved via t() at render time (never at module scope)
@@ -62,7 +69,7 @@ const TOOLTIP_STYLE: React.CSSProperties = {
 };
 const AXIS_TICK = { fontSize: 11, fill: "var(--text-3)" } as any;
 
-export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, clinicStats, rediseno = false }: Props) {
+export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, clinicStats, rediseno = false, enAnalitica = false }: Props) {
   const t = useT();
   const totalRevenue  = monthlyData.reduce((s, d) => s + d.revenue, 0);
   const totalPatients = monthlyData.reduce((s, d) => s + d.patients, 0);
@@ -86,16 +93,16 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
   const cursor = rediseno ? "var(--m2-hover)" : "var(--brand-softer)";
 
   return (
-    <Raiz style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+    <Raiz style={enAnalitica ? undefined : { padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
-      <div style={{ marginBottom: 22 }}>
+      {!enAnalitica && <div style={{ marginBottom: 22 }}>
         <h1 style={{ fontSize: "clamp(18px, 1.5vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 700, margin: 0 }}>
           {t("analytics.reports.pageTitle")}
         </h1>
         <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
           {t("analytics.reports.pageSubtitle")}
         </p>
-      </div>
+      </div>}
 
       {/* Resumen actual de la clínica */}
       <div style={{ marginBottom: 16 }}>
