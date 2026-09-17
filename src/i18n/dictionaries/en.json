@@ -8205,6 +8205,8 @@
       "applying": "Applying…",
       "applyTemplate": "Apply / Use this template",
       "applyWillPublish": "Applying will also publish your site.",
+      "applyKeepsHidden": "Your site will stay hidden. To publish it, use the switch above.",
+      "templateAppliedHidden": "✨ {name} template applied. Your site is still hidden: publish it with the switch above.",
       "primaryColor": "Primary color",
       "taglineLabel": "Slogan / Tagline",
       "taglineHelp": "Short phrase shown below the name in the hero",
