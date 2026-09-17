@@ -4,8 +4,10 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -23,9 +25,56 @@ import { AlertTriangle, AlertCircle, Info, X } from "lucide-react";
  * Soporta opción `withReason` para mostrar un textarea opcional
  * (ej. "Cancelar cita con motivo"); en ese caso resuelve a un
  * objeto `{ confirmed, reason }` en vez de boolean.
+ *
+ * ROPA (ws1-t5, hallazgo 7). El provider vive en el layout raíz, que no
+ * sabe qué clínica tiene el rediseño encendido; por eso la apariencia no
+ * es una prop suya sino algo que un DESCENDIENTE le monta con
+ * `useVestirConfirm(ropa)` (lo hace el layout de /dashboard, solo con el
+ * interruptor `menu-dos-niveles`). Sin ropa montada —/admin, /proveedores,
+ * las clínicas sin interruptor— cada pieza recibe exactamente los mismos
+ * `style` de siempre: ni un píxel distinto. Con ropa, cada pieza cambia esos
+ * `style` por la clase que le toca y ningún estilo en línea le gana.
+ * ⛔ La ropa es solo ropa: textos, variantes y lo que pasa al aceptar no
+ * dependen de ella.
  */
 
 export type ConfirmVariant = "default" | "danger" | "warning";
+
+/** Una clase por pieza del diálogo. El tono (`data-tono`) lo pone la caja. */
+export interface ConfirmRopa {
+  velo: string;
+  caja: string;
+  cabecera: string;
+  icono: string;
+  textos: string;
+  titulo: string;
+  descripcion: string;
+  cerrar: string;
+  motivo: string;
+  motivoRotulo: string;
+  motivoCampo: string;
+  pie: string;
+  cancelar: string;
+  confirmar: string;
+}
+
+const RopaContext = createContext<((ropa: ConfirmRopa | null) => void) | null>(null);
+
+/**
+ * Monta la ropa en el ConfirmProvider más cercano mientras quien lo llama
+ * esté montado y pase una ropa; al desmontarse (o al pasar null) la quita.
+ * Es un hook y no un componente a propósito: no añade ni un nodo al árbol de
+ * quien lo usa. `ropa` tiene que ser una constante de módulo (misma
+ * identidad en cada render) para no re-montarla en balde.
+ */
+export function useVestirConfirm(ropa: ConfirmRopa | null): void {
+  const vestir = useContext(RopaContext);
+  useEffect(() => {
+    if (!vestir || !ropa) return;
+    vestir(ropa);
+    return () => vestir(null);
+  }, [vestir, ropa]);
+}
 
 export interface ConfirmOptions {
   title?: string;
@@ -63,6 +112,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
   const [reason, setReason] = useState("");
   const resolverRef = useRef<((r: ConfirmResultWithReason) => void) | null>(null);
+  // La ropa del rediseño, si un descendiente la montó (ver useVestirConfirm).
+  // null = los estilos de siempre.
+  const [ropa, setRopa] = useState<ConfirmRopa | null>(null);
 
   const open = useCallback((options: ConfirmOptions) => {
     return new Promise<ConfirmResultWithReason>((resolve) => {
@@ -112,13 +164,20 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const variant: ConfirmVariant = opts.variant ?? "default";
   const tone = resolveTone(variant);
 
+  // `vestir(estiloDeSiempre, pieza)`: sin ropa devuelve `{ style }` y nada
+  // más, así que la pieza recibe EXACTAMENTE lo mismo que antes. Con ropa
+  // devuelve `{ className }` y ningún `style`.
+  const vestir = (clasico: CSSProperties, pieza: keyof ConfirmRopa) =>
+    ropa ? { className: ropa[pieza] } : { style: clasico };
+
   return (
+    <RopaContext.Provider value={setRopa}>
     <ConfirmContext.Provider value={{ confirm, confirmWithReason }}>
       {children}
       <Dialog.Root open={pending !== null} onOpenChange={handleOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay
-            style={{
+            {...vestir({
               position: "fixed",
               inset: 0,
               background: "rgba(5,5,10,0.72)",
@@ -126,13 +185,14 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               backdropFilter: "blur(6px)",
               zIndex: 200,
               animation: "mfConfirmFade 0.18s ease-out",
-            }}
+            }, "velo")}
           />
           <Dialog.Content
             role="alertdialog"
             aria-labelledby="mf-confirm-title"
             aria-describedby={opts.description ? "mf-confirm-desc" : undefined}
-            style={{
+            {...(ropa ? { "data-tono": variant } : {})}
+            {...vestir({
               position: "fixed",
               top: "50%",
               left: "50%",
@@ -146,19 +206,19 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               zIndex: 201,
               fontFamily: "var(--font-sans, system-ui, sans-serif)",
               animation: "mfConfirmSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-            }}
+            }, "caja")}
           >
             <div
-              style={{
+              {...vestir({
                 display: "flex",
                 alignItems: "flex-start",
                 gap: 14,
                 padding: "20px 22px 14px",
-              }}
+              }, "cabecera")}
             >
               <div
                 aria-hidden
-                style={{
+                {...vestir({
                   width: 40,
                   height: 40,
                   borderRadius: 10,
@@ -168,32 +228,32 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                   placeItems: "center",
                   color: tone.iconColor,
                   flexShrink: 0,
-                }}
+                }, "icono")}
               >
                 <tone.Icon size={20} aria-hidden />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div {...vestir({ flex: 1, minWidth: 0 }, "textos")}>
                 <Dialog.Title
                   id="mf-confirm-title"
-                  style={{
+                  {...vestir({
                     fontSize: 15,
                     fontWeight: 700,
                     color: "var(--text-1)",
                     margin: "2px 0 6px",
                     lineHeight: 1.35,
-                  }}
+                  }, "titulo")}
                 >
                   {opts.title ?? "¿Estás seguro?"}
                 </Dialog.Title>
                 {opts.description && (
                   <Dialog.Description
                     id="mf-confirm-desc"
-                    style={{
+                    {...vestir({
                       fontSize: 13,
                       color: "var(--text-2)",
                       lineHeight: 1.55,
                       margin: 0,
-                    }}
+                    }, "descripcion")}
                   >
                     {opts.description}
                   </Dialog.Description>
@@ -203,7 +263,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   aria-label="Cerrar"
-                  style={{
+                  {...vestir({
                     width: 28,
                     height: 28,
                     display: "grid",
@@ -214,7 +274,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                     color: "var(--text-3)",
                     cursor: "pointer",
                     flexShrink: 0,
-                  }}
+                  }, "cerrar")}
                 >
                   <X size={13} aria-hidden />
                 </button>
@@ -222,10 +282,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             </div>
 
             {opts.withReason && (
-              <div style={{ padding: "0 22px 8px" }}>
+              <div {...vestir({ padding: "0 22px 8px" }, "motivo")}>
                 <label
                   htmlFor="mf-confirm-reason"
-                  style={{
+                  {...vestir({
                     display: "block",
                     fontSize: 11,
                     fontWeight: 700,
@@ -233,24 +293,24 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                     marginBottom: 6,
-                  }}
+                  }, "motivoRotulo")}
                 >
                   {opts.reasonLabel ?? "Motivo (opcional)"}
                 </label>
                 <textarea
                   id="mf-confirm-reason"
-                  className="input-new"
+                  className={ropa ? ropa.motivoCampo : "input-new"}
                   placeholder={opts.reasonPlaceholder ?? "Agrega una nota…"}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   rows={3}
-                  style={{ width: "100%", resize: "vertical", minHeight: 64 }}
+                  style={ropa ? undefined : { width: "100%", resize: "vertical", minHeight: 64 }}
                 />
               </div>
             )}
 
             <div
-              style={{
+              {...vestir({
                 display: "flex",
                 justifyContent: "flex-end",
                 gap: 8,
@@ -259,12 +319,12 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 marginTop: opts.withReason ? 6 : 8,
                 background: "var(--bg-elev-2)",
                 borderRadius: "0 0 14px 14px",
-              }}
+              }, "pie")}
             >
               <button
                 type="button"
                 onClick={() => handleResult(false)}
-                style={{
+                {...vestir({
                   padding: "8px 14px",
                   background: "transparent",
                   color: "var(--text-2)",
@@ -274,7 +334,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                   fontWeight: 600,
                   cursor: "pointer",
                   fontFamily: "inherit",
-                }}
+                }, "cancelar")}
               >
                 {opts.cancelText ?? "Cancelar"}
               </button>
@@ -282,7 +342,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => handleResult(true)}
                 autoFocus
-                style={{
+                {...vestir({
                   padding: "8px 16px",
                   background: tone.confirmBg,
                   color: "#fff",
@@ -293,7 +353,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                   cursor: "pointer",
                   fontFamily: "inherit",
                   boxShadow: `0 6px 16px -6px ${tone.confirmShadow}`,
-                }}
+                }, "confirmar")}
               >
                 {opts.confirmText ?? defaultConfirmText(variant)}
               </button>
@@ -313,6 +373,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         }
       `}</style>
     </ConfirmContext.Provider>
+    </RopaContext.Provider>
   );
 }
 

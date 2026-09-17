@@ -1011,6 +1011,7 @@ export function PatientsClient({ doctors, canCreatePatients, canDeletePatients, 
       {canCreatePatients && (
         <NewPatientModal
           open={newPatientOpen}
+          apariencia={rediseno ? "nueva" : "clasica"}
           onClose={() => setNewPatientOpen(false)}
           onCreated={() => {
             setNewPatientOpen(false);
