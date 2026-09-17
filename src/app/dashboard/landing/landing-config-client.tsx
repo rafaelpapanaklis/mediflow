@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2, Monitor, Smartphone, Zap, Lock, Layers, type LucideIcon } from "lucide-react";
+import { ExternalLink, Copy, Eye, Plus, Trash2, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star, HelpCircle, Stethoscope, Share2, Monitor, Smartphone, Zap, Lock, Layers, Info, type LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { ManifestEditor } from "./manifest-editor";
 import type { SectionState } from "@/app/[slug]/_shared/landing-data";
@@ -16,6 +16,9 @@ import styles from "./landing.module.css";
 // apagado, esta pantalla no importa ni una clase de ahí y se pinta como hoy.
 import { RaizPaginaWeb } from "@/components/dashboard/pagina-web-rediseno/raiz";
 import rd from "@/components/dashboard/pagina-web-rediseno/pagina-web.module.css";
+// AUTOCOMPLETAR (ws1-t6) — propone, no publica. Solo se monta en la rama
+// `if (rediseno)`; el camino de siempre no lo conoce.
+import { PanelAutocompletar } from "@/components/dashboard/pagina-web-autocompletar/panel-autocompletar";
 
 /** Cuánto se espera antes de mandar al iframe. Escribir un párrafo manda un
     puñado de mensajes, no uno por tecla. */
@@ -37,6 +40,9 @@ interface Clinic {
      tiene en null y el manifiesto rellena los valores por defecto. */
   landingSections?: unknown; landingPhotos?: unknown;
   landingUrgentText?: string|null; landingMsiPlazos?: number[];
+  /** Marca de la fila al cargar. Viaja en cada PATCH como `esperadoUpdatedAt`
+      para que el servidor detecte si otra pestaña guardó antes (ver save()). */
+  updatedAt: string;
 }
 
 /**
@@ -173,19 +179,44 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
     return "No pudimos guardar. Vuelve a intentarlo.";
   }
 
-  async function save(data: Record<string, any>, successMsg = t("pages.landing.saved")) {
+  /* ── Control de concurrencia (ver @/lib/landing-concurrency) ──────────
+     `updatedAtRef` es la marca con la que cargó esta pantalla; se manda como
+     `esperadoUpdatedAt` en cada PATCH y se refresca con lo que devuelve el
+     servidor tras cada guardado. `clinicConfirmadoRef` es lo último que ESTA
+     pantalla sabe que está publicado, campo por campo — no `clinic` (que
+     lleva el borrador optimista de `updateLocal`, ver más abajo), sino lo que
+     confirmó el servidor. Es la `base` que deja al servidor distinguir "otra
+     pestaña me pisó" de "la fila se movió por Stripe/tokens/etc". Sin esto
+     dos personas editando a la vez se pisan sin que nadie se entere. */
+  const updatedAtRef = useRef(initial.updatedAt);
+  const clinicConfirmadoRef = useRef<Record<string, any>>(initial);
+
+  /**
+   * `revertirSiFalla`: los campos que este guardado tocó de forma OPTIMISTA
+   * (un interruptor, "Aplicar", una foto) con su valor ANTERIOR. Si el PATCH
+   * falla (403/409/500), se restauran: sin esto la insignia se queda
+   * anunciando "Publicada" aunque el servidor nunca guardó el cambio. Los
+   * formularios con botón "Guardar" propio no lo mandan: ahí el campo ya era
+   * un borrador local desde antes de pulsar, y perderlo en un fallo de red
+   * sería peor que dejarlo con el aviso de "sin guardar".
+   */
+  async function save(data: Record<string, any>, successMsg = t("pages.landing.saved"), revertirSiFalla?: Record<string, any>) {
     setSaving(true);
+    const base: Record<string, unknown> = {};
+    for (const campo of Object.keys(data)) base[campo] = campo in clinicConfirmadoRef.current ? clinicConfirmadoRef.current[campo] : null;
     try {
       const res = await fetch("/api/clinic-landing", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, esperadoUpdatedAt: updatedAtRef.current, base }),
       });
       if (!res.ok) throw new Error(await motivoDelFallo(res));
-      await res.json();
+      const json = await res.json();
+      if (typeof json?.updatedAt === "string") updatedAtRef.current = json.updatedAt;
       // El servidor ya no devuelve la fila de la clínica (traía RFC, ids de
       // Stripe y el SID de Twilio): lo que se acaba de guardar es exactamente
       // lo que se mandó, y de ahí sale el estado local.
+      clinicConfirmadoRef.current = { ...clinicConfirmadoRef.current, ...data };
       setClinic(c => ({ ...c, ...data }));
       // El sitio público ya se revalidó en el servidor; aquí se refresca la
       // vista previa para que la clínica vea el cambio sin recargar nada.
@@ -199,7 +230,12 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
         return next;
       });
       toast.success(successMsg);
-    } catch(e: any) { toast.error(e.message); }
+      return true;
+    } catch(e: any) {
+      toast.error(e.message);
+      if (revertirSiFalla) setClinic(c => ({ ...c, ...revertirSiFalla }));
+      return false;
+    }
     finally { setSaving(false); }
   }
 
@@ -221,19 +257,24 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
     return url;
   }
 
-  // ── Plantilla: previsualizar (sin publicar) y aplicar (publica)
+  // ── Plantilla: previsualizar y aplicar. NINGUNA de las dos publica.
   function previewTemplate(id: string = templateSel) {
     // /landing-preview es la ruta DINÁMICA de vista previa; /[slug] es ISR y
     // no puede leer ?preview= (DYNAMIC_SERVER_USAGE al regenerar).
-    window.open(`/landing-preview/${clinic.slug}?preview=${id}`, "_blank", "noopener");
+    // ?borrador=1 (solo camino NUEVO): sin publicar, /landing-preview enseñaba
+    // el cartel de «disponible pronto» en vez de la plantilla. El servidor lo
+    // comprueba contra la sesión; solo deja VER, no publica nada.
+    window.open(`/landing-preview/${clinic.slug}?preview=${id}${rediseno ? "&borrador=1" : ""}`, "_blank", "noopener");
   }
 
   async function applyTemplate() {
     const tpl = TEMPLATES.find(item => item.id === templateSel);
     const name = tpl ? t(tpl.nameKey) : templateSel;
+    const previo = { landingTemplate: clinic.landingTemplate };
     updateLocal("landingTemplate", templateSel);
-    if (!clinic.landingActive) updateLocal("landingActive", true);
-    await save({ landingTemplate: templateSel, landingActive: true }, t("pages.landing.templateApplied", { name }));
+    // Aplicar NO publica: `landingActive` solo lo cambia el interruptor de
+    // arriba. Si el sitio está oculto, se dice que sigue oculto y cómo publicarlo.
+    await save({ landingTemplate: templateSel }, t(clinic.landingActive ? "pages.landing.templateApplied" : "pages.landing.templateAppliedHidden", { name }), previo);
   }
 
   // ── Secciones y fotos guardadas (landing v2) — el editor por manifiesto
@@ -383,18 +424,61 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
     return () => window.removeEventListener("message", onMessage);
   }, [clinic.slug]);
 
-  // ── Galería: reordenar (intercambia i con su vecino) y elegir portada
+  /* ── Galería: alta, reemplazo, borrado y reordenar ──────────────────
+     Las cuatro mandan el arreglo ENTERO de fotos. Dos que se solapen (dos
+     altas casi juntas, o una alta mientras se reordena) partían las dos de
+     `clinic.landingGallery` del render en que se dispararon: la que
+     ATERRIZA último manda y la otra desaparece sin aviso — se pierde una
+     foto en silencio. `galeriaRef` guarda el último arreglo conocido
+     (actualizado ANTES de llamar a save(), no cuando React vuelve a
+     renderizar) y `galeriaColaRef` encola las mutaciones para que cada una
+     parta de la anterior, nunca de un `clinic` que puede haber quedado
+     atrás. */
+  const galeriaRef = useRef<string[]>(clinic.landingGallery);
+  useEffect(() => { galeriaRef.current = clinic.landingGallery; }, [clinic.landingGallery]);
+  const galeriaColaRef = useRef<Promise<void>>(Promise.resolve());
+  function encolarGaleria(construir: (actual: string[]) => string[], successMsg?: string) {
+    const correr = async () => {
+      const anterior = galeriaRef.current;
+      const nuevo = construir(anterior);
+      if (nuevo === anterior) return;
+      galeriaRef.current = nuevo;
+      updateLocal("landingGallery", nuevo);
+      await save({ landingGallery: nuevo }, successMsg, { landingGallery: anterior });
+    };
+    const siguiente = galeriaColaRef.current.then(correr, correr);
+    galeriaColaRef.current = siguiente;
+    return siguiente;
+  }
   async function moveGalleryPhoto(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= clinic.landingGallery.length) return;
-    const nuevo = [...clinic.landingGallery];
-    [nuevo[i], nuevo[j]] = [nuevo[j], nuevo[i]];
-    updateLocal("landingGallery", nuevo);
-    await save({ landingGallery: nuevo }, t("pages.landing.orderUpdated"));
+    await encolarGaleria(actual => {
+      const j = i + dir;
+      if (j < 0 || j >= actual.length) return actual;
+      const nuevo = [...actual];
+      [nuevo[i], nuevo[j]] = [nuevo[j], nuevo[i]];
+      return nuevo;
+    }, t("pages.landing.orderUpdated"));
   }
   async function setGalleryCover(url: string) {
+    const previo = clinic.landingCoverUrl;
     updateLocal("landingCoverUrl", url);
-    await save({ landingCoverUrl: url }, t("pages.landing.coverUpdated"));
+    await save({ landingCoverUrl: url }, t("pages.landing.coverUpdated"), { landingCoverUrl: previo });
+  }
+  async function addGalleryPhoto(file: File) {
+    if (galeriaRef.current.length >= 12) { toast.error(t("pages.landing.maxPhotos")); return; }
+    try {
+      const url = await uploadImage(file, "gallery");
+      await encolarGaleria(actual => actual.length >= 12 ? actual : [...actual, url]);
+    } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+  }
+  async function replaceGalleryPhoto(i: number, file: File) {
+    try {
+      const newUrl = await uploadImage(file, "gallery");
+      await encolarGaleria(actual => actual.map((u, j) => (j === i ? newUrl : u)));
+    } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+  }
+  async function deleteGalleryPhoto(i: number) {
+    await encolarGaleria(actual => actual.filter((_, j) => j !== i));
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -403,11 +487,17 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
   // ════════════════════════════════════════════════════════════════════
   if (rediseno) {
     const TABS_ICON: Record<string, LucideIcon> = {
-      plantilla: Sparkles, diseno: Layers, general: Stethoscope, servicios: Stethoscope,
+      plantilla: Sparkles, diseno: Layers, general: Info, servicios: Stethoscope,
       testimonios: Star, faqs: HelpCircle, galeria: ImagePlus, redes: Share2,
     };
     return (
-      <RaizPaginaWeb className={rd.shell}>
+      /* `.shell` va en un <div> DESCENDIENTE de `.raiz` (el que pone
+         RaizPaginaWeb), no en el propio nodo de `.raiz`: un `@container`
+         nunca estila a su propio contenedor, así que `.shell{flex-direction:
+         column}` no se aplicaba nunca en angosto y la vista previa aplastaba
+         el formulario a ~100 px en un iPad horizontal. */
+      <RaizPaginaWeb>
+        <div className={rd.shell}>
         <div className={rd.columna}>
 
           {/* ── Cabecera ── */}
@@ -424,9 +514,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                 <button role="switch" aria-checked={clinic.landingActive} disabled={!puedeEditar || saving}
                   aria-label={clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
                   onClick={async () => {
-                    const newVal = !clinic.landingActive;
+                    const previo = clinic.landingActive;
+                    const newVal = !previo;
                     updateLocal("landingActive", newVal);
-                    await save({ landingActive: newVal });
+                    await save({ landingActive: newVal }, undefined, { landingActive: previo });
                   }}
                   className={clinic.landingActive ? `${rd.interruptor} ${rd.interruptorActivo}` : rd.interruptor}>
                   <span className={rd.interruptorBola} />
@@ -452,6 +543,28 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
               <ChevronRight size={18} className="ml-auto shrink-0" style={{ color: "var(--m2-texto-3)" }} />
             </a>
           )}
+
+          {/* ── Autocompletar con lo que la clínica ya tiene (ws1-t6) ──
+              Cada «Aprobar y guardar» pasa por el save() de arriba: el mismo
+              PATCH, los mismos validadores. El panel no escribe por su cuenta. */}
+          <PanelAutocompletar
+            puedeEditar={puedeEditar}
+            publicada={!!clinic.landingActive}
+            guardando={saving}
+            actual={{
+              eslogan: clinic.landingTagline ?? "",
+              presentacion: clinic.description ?? "",
+              preguntas: Array.isArray(clinic.landingFaqs) ? clinic.landingFaqs : [],
+            }}
+            onAprobar={async (data, mensaje) => {
+              const ok = await save(data, mensaje);
+              // Las pestañas Servicios y Preguntas llevan su propia copia en
+              // estado: sin esto, su «Guardar» pisaría lo recién aprobado.
+              if (ok && Array.isArray(data.landingServices)) setServices(data.landingServices);
+              if (ok && Array.isArray(data.landingFaqs)) setFaqs(data.landingFaqs);
+              return ok;
+            }}
+          />
 
           {/* ── Enlace público ── */}
           <div className={rd.franjaEnlace}>
@@ -488,14 +601,17 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
               <div>
                 <b>Estás viendo tu sitio en solo lectura.</b>{" "}
                 Puedes recorrerlo y copiar el enlace, pero para cambiarlo o publicarlo hace falta el
-                permiso <code>landing.edit</code>, que da el dueño de la clínica desde Equipo.
+                permiso <b>landing.edit</b>, que da el dueño de la clínica desde Equipo.
               </div>
             </div>
           )}
 
-          <fieldset disabled={!puedeEditar} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
-
-          {/* ── PLANTILLA ── */}
+          {/* ── PLANTILLA ── vive FUERA del <fieldset>: "Ver" y "Previsualizar"
+              solo miran, nunca deben quedar deshabilitados sin permiso — un
+              <fieldset disabled> apaga TODO lo que hay dentro, sin excepción,
+              así que la única forma de dejarlos activos es no meterlos ahí.
+              Solo "Aplicar" (que sí publica) se encierra en su propio
+              fieldset, con `display:contents` para no mover ni un píxel. */}
           {tab === "plantilla" && (
             <div className={rd.tarjeta}>
               <div className={rd.tarjetaCabeza} style={{ display: "block" }}>
@@ -530,20 +646,29 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                 <button type="button" onClick={() => previewTemplate()} className={rd.boton}>
                   <Eye size={16} strokeWidth={1.75}/> {t("pages.landing.previewSelection")}
                 </button>
-                <button type="button" onClick={applyTemplate} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal}`}>
-                  <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
-                </button>
-                {!clinic.landingActive && <span className={rd.insignia} style={{ color: "var(--warning-strong, #a85a05)" }}>{t("pages.landing.applyWillPublish")}</span>}
+                <fieldset disabled={!puedeEditar} style={{ display: "contents", border: 0, padding: 0, margin: 0 }}>
+                  <button type="button" onClick={applyTemplate} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal}`}>
+                    <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
+                  </button>
+                </fieldset>
+                {!clinic.landingActive && <span className={rd.insignia} style={{ color: "var(--warning-strong, #a85a05)" }}>{t("pages.landing.applyKeepsHidden")}</span>}
               </div>
             </div>
           )}
 
-          {/* ── DISEÑO ── */}
-          {tab === "diseno" && !plantillaLeeManifiesto(clinic.landingTemplate) && (
+          <fieldset disabled={!puedeEditar} className={rd.fieldsetSoloLectura} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* ── DISEÑO ──
+              Lee `templateSel` (la que pinta el iframe de al lado), no
+              `clinic.landingTemplate` (la ACTIVA/publicada): tras elegir una
+              tarjeta en Plantilla sin pulsar «Aplicar», Diseño editaba el
+              manifiesto de la plantilla vieja mientras la vista previa ya
+              enseñaba la nueva — dos plantillas distintas a la vez. */}
+          {tab === "diseno" && !plantillaLeeManifiesto(templateSel) && (
             <div className={rd.tarjeta}>
               <h3 className={rd.tarjetaTitulo}><Layers size={16} strokeWidth={1.75}/> Esta plantilla no se arma por secciones</h3>
               <p style={{ fontSize: 13, color: "var(--m2-texto-2)", lineHeight: 1.5, marginTop: 8 }}>
-                &ldquo;{manifestOf(clinic.landingTemplate).nombre}&rdquo; trae su estructura fija: el orden de los bloques y sus títulos vienen de fábrica y
+                &ldquo;{manifestOf(templateSel).nombre}&rdquo; trae su estructura fija: el orden de los bloques y sus títulos vienen de fábrica y
                 se llenan solos con lo que escribes en las demás pestañas. Aquí no hay interruptores porque no habría nada que encender.
               </p>
               <p className={rd.ayuda} style={{ marginTop: 6 }}>
@@ -556,10 +681,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             </div>
           )}
 
-          {tab === "diseno" && plantillaLeeManifiesto(clinic.landingTemplate) && (
+          {tab === "diseno" && plantillaLeeManifiesto(templateSel) && (
             <ManifestEditor
               rediseno
-              templateId={clinic.landingTemplate ?? "classic"}
+              templateId={templateSel}
               sections={draftSections ?? savedSections}
               photos={savedPhotos}
               saving={saving}
@@ -611,7 +736,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                     aria-label={t("pages.landing.primaryColor")}
                     style={{ height: 38, width: 60, borderRadius: 9, cursor: "pointer", border: "1px solid var(--m2-tarjeta-borde)", background: "transparent", padding: 3 }} />
                   <span style={{ fontSize: 13, color: "var(--m2-texto-3)" }}>{clinic.landingThemeColor ?? "#2563eb"}</span>
-                  <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`}>
+                  <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`}>
                     <Check size={16} strokeWidth={1.75}/> {t("common.save")}
                   </button>
                 </div>
@@ -621,7 +746,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                 <label className={rd.etiqueta}>{t("pages.landing.taglineLabel")}</label>
                 <p className={rd.ayuda}>{t("pages.landing.taglineHelp")}</p>
                 <input value={clinic.landingTagline ?? ""} onChange={e => updateLocal("landingTagline", e.target.value)} placeholder={t("pages.landing.taglinePlaceholder")} className={rd.input} />
-                <button onClick={() => save({ landingTagline: clinic.landingTagline })} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 8 }}>
+                <button onClick={() => save({ landingTagline: clinic.landingTagline })} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 8 }}>
                   <Check size={16} strokeWidth={1.75}/> {t("common.save")}
                 </button>
               </div>
@@ -661,13 +786,19 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                       </p>
                     )}
                   </div>
-                  <button role="switch" aria-checked={!!clinic.landingUrgentText} aria-label="Mostrar el aviso de urgencias"
+                  {/* El interruptor sigue si el bloque está ENCENDIDO (texto !== null),
+                      no si tiene contenido: si solo mirara `!!texto`, borrar el texto a ""
+                      (el bloque sigue visible para poder volver a escribir) apagaba el
+                      interruptor solo, y volver a pulsarlo lo reencendía con el texto por
+                      defecto en vez de simplemente apagar el bloque. */}
+                  <button role="switch" aria-checked={clinic.landingUrgentText != null} aria-label="Mostrar el aviso de urgencias"
                     onClick={() => {
-                      const nuevo = clinic.landingUrgentText ? null : "Guardamos espacios al día para urgencias. Llámanos y te acomodamos hoy.";
+                      const previo = clinic.landingUrgentText;
+                      const nuevo = previo != null ? null : "Guardamos espacios al día para urgencias. Llámanos y te acomodamos hoy.";
                       updateLocal("landingUrgentText", nuevo);
-                      save({ landingUrgentText: nuevo });
+                      save({ landingUrgentText: nuevo }, undefined, { landingUrgentText: previo });
                     }}
-                    className={clinic.landingUrgentText ? `${rd.interruptor} ${rd.interruptorActivo}` : rd.interruptor}>
+                    className={clinic.landingUrgentText != null ? `${rd.interruptor} ${rd.interruptorActivo}` : rd.interruptor}>
                     <span className={rd.interruptorBola} />
                   </button>
                 </div>
@@ -719,8 +850,8 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                 {clinic.landingCoverUrl && (
                   <div style={{ position: "relative", marginBottom: 10 }}>
                     <img src={clinic.landingCoverUrl} alt={t("pages.landing.coverAlt")} style={{ width: "100%", height: 128, objectFit: "cover", borderRadius: 10, border: "1px solid var(--m2-tarjeta-borde)" }} />
-                    <button aria-label={t("common.delete")} onClick={() => { updateLocal("landingCoverUrl", null); save({ landingCoverUrl: null }); }}
-                      className={rd.botonIcono} style={{ position: "absolute", top: 8, right: 8, background: "var(--danger, #dc2626)", color: "#fff" }}>
+                    <button aria-label={t("common.delete")} onClick={() => { const previo = clinic.landingCoverUrl; updateLocal("landingCoverUrl", null); save({ landingCoverUrl: null }, undefined, { landingCoverUrl: previo }); }}
+                      className={rd.botonIcono} style={{ position: "absolute", top: 8, right: 8, background: "var(--danger, #dc2626)", color: "var(--m2-activo-texto, #fff)" }}>
                       <Trash2 size={16} strokeWidth={1.75}/>
                     </button>
                   </div>
@@ -743,7 +874,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                 <label className={rd.etiqueta}>{t("pages.landing.mapEmbedLabel")}</label>
                 <p className={rd.ayuda}>{t("pages.landing.mapEmbedHelp")}</p>
                 <input value={clinic.landingMapEmbed ?? ""} onChange={e => updateLocal("landingMapEmbed", e.target.value)} placeholder="https://www.google.com/maps/embed?pb=..." className={rd.input} />
-                <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 8 }}>
+                <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })} disabled={saving} className={`${rd.boton} ${rd.botonPrincipal} ${rd.botonPeq}`} style={{ marginTop: 8 }}>
                   <Check size={16} strokeWidth={1.75}/> {t("common.save")}
                 </button>
               </div>
@@ -785,8 +916,16 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                     </div>
                     <div>
                       <label className={rd.etiqueta}>Duración (min)</label>
+                      {/* El rango (5-600, hueco real en la agenda) se aplica al SALIR del
+                          campo, no en cada tecla: aplicarlo en el onChange convertía «30»
+                          en «50» al escribir el primer «3» (max(5,min(600,3)) = 5). */}
                       <input type="number" min={5} max={600} step={5} value={svc.durationMin ?? ""}
-                        onChange={e => updateService(i,"durationMin", e.target.value === "" ? "" : String(Math.max(5, Math.min(600, Number(e.target.value)))))}
+                        onChange={e => updateService(i,"durationMin", e.target.value)}
+                        onBlur={e => {
+                          if (e.target.value === "") return;
+                          const acotado = String(Math.max(5, Math.min(600, Number(e.target.value))));
+                          if (acotado !== e.target.value) updateService(i,"durationMin", acotado);
+                        }}
                         placeholder="30" className={rd.input} />
                     </div>
                   </div>
@@ -920,13 +1059,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                       const file = e.target.files?.[0];
                       e.target.value = "";
                       if (!file) return;
-                      if (clinic.landingGallery.length >= 12) { toast.error(t("pages.landing.maxPhotos")); return; }
-                      try {
-                        const url = await uploadImage(file, "gallery");
-                        const newGallery = [...clinic.landingGallery, url];
-                        updateLocal("landingGallery", newGallery);
-                        await save({ landingGallery: newGallery });
-                      } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+                      await addGalleryPhoto(file);
                     }} />
                 </label>
               </div>
@@ -968,27 +1101,18 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                         </div>
                         <div className={rd.galeriaAcciones}>
                           <label aria-label={t("pages.landing.replacePhotoAria")} title={t("pages.landing.replace")} className={rd.galeriaAccion}>
-                            <RefreshCw size={14} strokeWidth={1.75}/> <span className="hidden sm:inline">{t("pages.landing.replace")}</span>
+                            <RefreshCw size={14} strokeWidth={1.75}/> <span>{t("pages.landing.replace")}</span>
                             <input type="file" accept="image/*" className="hidden" onChange={async e => {
                               const file = e.target.files?.[0];
                               e.target.value = "";
                               if (!file) return;
-                              try {
-                                const newUrl = await uploadImage(file, "gallery");
-                                const newGallery = clinic.landingGallery.map((u,j) => j===i ? newUrl : u);
-                                updateLocal("landingGallery", newGallery);
-                                await save({ landingGallery: newGallery });
-                              } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+                              await replaceGalleryPhoto(i, file);
                             }} />
                           </label>
                           <button type="button" aria-label={t("pages.landing.deletePhotoAria")} title={t("common.delete")}
-                            onClick={async () => {
-                              const newGallery = clinic.landingGallery.filter((_,j) => j !== i);
-                              updateLocal("landingGallery", newGallery);
-                              await save({ landingGallery: newGallery });
-                            }}
+                            onClick={() => deleteGalleryPhoto(i)}
                             className={`${rd.galeriaAccion} ${rd.galeriaAccionPeligro}`}>
-                            <Trash2 size={14} strokeWidth={1.75}/> <span className="hidden sm:inline">{t("common.delete")}</span>
+                            <Trash2 size={14} strokeWidth={1.75}/> <span>{t("common.delete")}</span>
                           </button>
                         </div>
                       </div>
@@ -1056,24 +1180,29 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
           </div>
 
           <div className={sinGuardar ? `${rd.previaMarco} ${rd.previaMarcoSinGuardar}` : rd.previaMarco}>
+            {/* El alto y el `transform:scale` viven en CSS (previaIframeEscritorio/
+                Movil), leyendo `--previa-alto` de .previaMarco por herencia: en
+                angosto ese token baja a 70vh (ver el @container de arriba) y antes
+                el iframe seguía pidiendo el alto de escritorio completo, así que el
+                marco apilado lo recortaba de más. */}
             <iframe
               ref={iframeRef}
               key={`${templateSel}-${previewNonce}`}
-              src={`/landing-preview/${clinic.slug}?preview=${templateSel}`}
+              src={`/landing-preview/${clinic.slug}?preview=${templateSel}&borrador=1`}
               title="Vista previa de tu sitio"
-              className="border-0 bg-white origin-top-left"
-              style={previewAncho === "movil"
-                ? { width: 390, height: "calc((100vh - 130px) / 0.94)", transform: "scale(0.94)", margin: "0 auto", display: "block" }
-                : { width: "285.7%", height: "calc((100vh - 130px) / 0.35)", transform: "scale(0.35)" }}
+              className={`border-0 bg-white origin-top-left ${previewAncho === "movil" ? rd.previaIframeMovil : rd.previaIframeEscritorio}`}
             />
           </div>
 
           <p className={rd.previaPista}>
             {sinGuardar
               ? "Esto es un borrador: se ve aquí, pero tu sitio público sigue como estaba. Guarda para publicarlo."
-              : "Lo que ves aquí es tu sitio público, tal cual. Al escribir se actualiza al momento."}
+              : templateSel !== (clinic.landingTemplate ?? "classic")
+                ? "Estás viendo la plantilla que elegiste, sin aplicar. Tu sitio público sigue en la de antes: pulsa «Aplicar» para publicarla."
+                : "Lo que ves aquí es tu sitio público, tal cual. Al escribir se actualiza al momento."}
           </p>
         </aside>
+        </div>
       </RaizPaginaWeb>
     );
   }
@@ -1101,9 +1230,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <button role="switch" aria-checked={clinic.landingActive} disabled={!puedeEditar || saving}
               aria-label={clinic.landingActive ? t("pages.landing.statusPublished") : t("pages.landing.statusHidden")}
               onClick={async () => {
-              const newVal = !clinic.landingActive;
+              const previo = clinic.landingActive;
+              const newVal = !previo;
               updateLocal("landingActive", newVal);
-              await save({ landingActive: newVal });
+              await save({ landingActive: newVal }, undefined, { landingActive: previo });
             }} className={`w-10 h-5 rounded-full relative transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${clinic.landingActive ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingActive ? "left-[22px]" : "left-0.5"}`} />
             </button>
@@ -1182,14 +1312,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
         </div>
       )}
 
-      {/* Todo lo editable vive dentro del <fieldset>: deshabilitarlo apaga de
-          una vez inputs, botones y selectores de archivo, sin depender de que
-          cada control nuevo se acuerde de preguntar por el permiso. `min-w-0`
-          es obligatorio: un fieldset trae min-width:min-content y sin eso
-          rompe el flex de la columna. */}
-      <fieldset disabled={!puedeEditar} className="min-w-0 border-0 p-0 m-0 space-y-5 disabled:opacity-70">
-
-      {/* ── PLANTILLA ── */}
+      {/* ── PLANTILLA ── vive FUERA del <fieldset> de abajo: "Ver" y
+          "Previsualizar" solo miran, nunca deben quedar deshabilitados sin
+          permiso — ver el comentario gemelo en el camino nuevo. Solo
+          "Aplicar" se encierra en su propio fieldset con `display:contents`. */}
       {tab === "plantilla" && (
         <div className={`${CARD_CLS} p-5 space-y-4`}>
           <div>
@@ -1233,15 +1359,24 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <button type="button" onClick={() => previewTemplate()} className={BTN_SECONDARY}>
               <Eye size={16} strokeWidth={1.75}/> {t("pages.landing.previewSelection")}
             </button>
-            <button type="button" onClick={applyTemplate} disabled={saving} className={BTN_PRIMARY}>
-              <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
-            </button>
+            <fieldset disabled={!puedeEditar} style={{ display: "contents" }}>
+              <button type="button" onClick={applyTemplate} disabled={saving} className={BTN_PRIMARY}>
+                <Check size={16} strokeWidth={1.75}/> {saving ? t("pages.landing.applying") : t("pages.landing.applyTemplate")}
+              </button>
+            </fieldset>
             {!clinic.landingActive && (
-              <span className="text-xs text-[color:var(--warning-strong)]">{t("pages.landing.applyWillPublish")}</span>
+              <span className="text-xs text-[color:var(--warning-strong)]">{t("pages.landing.applyKeepsHidden")}</span>
             )}
           </div>
         </div>
       )}
+
+      {/* Todo lo editable vive dentro del <fieldset>: deshabilitarlo apaga de
+          una vez inputs, botones y selectores de archivo, sin depender de que
+          cada control nuevo se acuerde de preguntar por el permiso. `min-w-0`
+          es obligatorio: un fieldset trae min-width:min-content y sin eso
+          rompe el flex de la columna. */}
+      <fieldset disabled={!puedeEditar} className="min-w-0 border-0 p-0 m-0 space-y-5 disabled:opacity-70">
 
       {/* ── DISEÑO: se dibuja solo desde el manifiesto de la plantilla ──
           Solo si la plantilla activa LEE el manifiesto. Las cuatro primeras
@@ -1249,13 +1384,16 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
           lista de secciones escrita en el JSX: enseñarles estos interruptores
           era prometer algo que no pasaba. Quién sí y quién no sale del propio
           manifiesto, no de una lista escrita aquí. */}
-      {tab === "diseno" && !plantillaLeeManifiesto(clinic.landingTemplate) && (
+      {/* Lee `templateSel` (la que pinta el iframe de al lado), no
+          `clinic.landingTemplate` (la ACTIVA/publicada): ver el comentario
+          gemelo en el camino nuevo. */}
+      {tab === "diseno" && !plantillaLeeManifiesto(templateSel) && (
         <div className={`${CARD_CLS} p-5 space-y-3`}>
           <h3 className={`${H_SECTION} flex items-center gap-1.5`}>
             <Layers size={16} strokeWidth={1.75} className="text-[color:var(--brand)]"/> Esta plantilla no se arma por secciones
           </h3>
           <p className="text-sm text-[color:var(--text-2)] leading-relaxed">
-            “{manifestOf(clinic.landingTemplate).nombre}”
+            “{manifestOf(templateSel).nombre}”
             {" "}trae su estructura fija: el orden de los bloques y sus títulos vienen de fábrica y
             se llenan solos con lo que escribes en las demás pestañas. Aquí no hay interruptores
             porque no habría nada que encender.
@@ -1272,9 +1410,9 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
         </div>
       )}
 
-      {tab === "diseno" && plantillaLeeManifiesto(clinic.landingTemplate) && (
+      {tab === "diseno" && plantillaLeeManifiesto(templateSel) && (
         <ManifestEditor
-          templateId={clinic.landingTemplate ?? "classic"}
+          templateId={templateSel}
           /* El borrador manda: así cambiar de pestaña y volver no pierde lo
              que la clínica llevaba escrito (ni descuadra la vista previa). */
           sections={draftSections ?? savedSections}
@@ -1352,7 +1490,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                 aria-label={t("pages.landing.primaryColor")}
                 className="h-10 w-16 rounded-[var(--radius)] cursor-pointer border border-[color:var(--border-soft)] bg-transparent p-1" />
               <span className="text-sm font-mono text-[color:var(--text-3)]">{clinic.landingThemeColor ?? "#2563eb"}</span>
-              <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })} className={BTN_PRIMARY_SM}>
+              <button onClick={() => save({ landingThemeColor: clinic.landingThemeColor })} disabled={saving} className={BTN_PRIMARY_SM}>
                 <Check size={16} strokeWidth={1.75}/> {t("common.save")}
               </button>
             </div>
@@ -1366,7 +1504,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
               onChange={e => updateLocal("landingTagline", e.target.value)}
               placeholder={t("pages.landing.taglinePlaceholder")}
               className={INPUT_CLS} />
-            <button onClick={() => save({ landingTagline: clinic.landingTagline })} className={`${BTN_PRIMARY_SM} mt-2`}>
+            <button onClick={() => save({ landingTagline: clinic.landingTagline })} disabled={saving} className={`${BTN_PRIMARY_SM} mt-2`}>
               <Check size={16} strokeWidth={1.75}/> {t("common.save")}
             </button>
           </div>
@@ -1424,15 +1562,18 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                   </p>
                 )}
               </div>
-              <button role="switch" aria-checked={!!clinic.landingUrgentText}
+              {/* El interruptor sigue si el bloque está ENCENDIDO (texto !== null), no
+                  si tiene contenido: ver el comentario gemelo en el camino nuevo. */}
+              <button role="switch" aria-checked={clinic.landingUrgentText != null}
                 aria-label="Mostrar el aviso de urgencias"
                 onClick={() => {
-                  const nuevo = clinic.landingUrgentText ? null : "Guardamos espacios al día para urgencias. Llámanos y te acomodamos hoy.";
+                  const previo = clinic.landingUrgentText;
+                  const nuevo = previo != null ? null : "Guardamos espacios al día para urgencias. Llámanos y te acomodamos hoy.";
                   updateLocal("landingUrgentText", nuevo);
-                  save({ landingUrgentText: nuevo });
+                  save({ landingUrgentText: nuevo }, undefined, { landingUrgentText: previo });
                 }}
-                className={`w-10 h-5 rounded-full relative transition-colors duration-150 shrink-0 ${clinic.landingUrgentText ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingUrgentText ? "left-[22px]" : "left-0.5"}`} />
+                className={`w-10 h-5 rounded-full relative transition-colors duration-150 shrink-0 ${clinic.landingUrgentText != null ? "bg-brand-600" : "bg-[color:var(--border-strong)]"}`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-[var(--shadow-1)] transition-all duration-150 ${clinic.landingUrgentText != null ? "left-[22px]" : "left-0.5"}`} />
               </button>
             </div>
             {clinic.landingUrgentText != null && (
@@ -1519,7 +1660,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
               onChange={e => updateLocal("landingMapEmbed", e.target.value)}
               placeholder="https://www.google.com/maps/embed?pb=..."
               className={INPUT_CLS} />
-            <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })} className={`${BTN_PRIMARY_SM} mt-2`}>
+            <button onClick={() => save({ landingMapEmbed: clinic.landingMapEmbed })} disabled={saving} className={`${BTN_PRIMARY_SM} mt-2`}>
               <Check size={16} strokeWidth={1.75}/> {t("common.save")}
             </button>
           </div>
@@ -1565,9 +1706,17 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                   {/* La duración manda en la reserva: es el hueco que se aparta
                       en la agenda cuando el paciente elige este procedimiento. */}
                   <label className={LABEL_CLS}>Duración (min)</label>
+                  {/* El rango (5-600) se aplica al SALIR del campo, no en cada tecla:
+                      aplicarlo en el onChange convertía «30» en «50» al escribir el
+                      primer «3» (max(5,min(600,3)) = 5). */}
                   <input type="number" min={5} max={600} step={5}
                     value={svc.durationMin ?? ""}
-                    onChange={e => updateService(i,"durationMin", e.target.value === "" ? "" : String(Math.max(5, Math.min(600, Number(e.target.value)))))}
+                    onChange={e => updateService(i,"durationMin", e.target.value)}
+                    onBlur={e => {
+                      if (e.target.value === "") return;
+                      const acotado = String(Math.max(5, Math.min(600, Number(e.target.value))));
+                      if (acotado !== e.target.value) updateService(i,"durationMin", acotado);
+                    }}
                     placeholder="30" className={INPUT_CLS} />
                 </div>
               </div>
@@ -1718,13 +1867,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                   const file = e.target.files?.[0];
                   e.target.value = "";
                   if (!file) return;
-                  if (clinic.landingGallery.length >= 12) { toast.error(t("pages.landing.maxPhotos")); return; }
-                  try {
-                    const url = await uploadImage(file, "gallery");
-                    const newGallery = [...clinic.landingGallery, url];
-                    updateLocal("landingGallery", newGallery);
-                    await save({ landingGallery: newGallery });
-                  } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+                  await addGalleryPhoto(file);
                 }} />
             </label>
           </div>
@@ -1797,20 +1940,11 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
                           const file = e.target.files?.[0];
                           e.target.value = "";
                           if (!file) return;
-                          try {
-                            const newUrl = await uploadImage(file, "gallery");
-                            const newGallery = clinic.landingGallery.map((u,j) => j===i ? newUrl : u);
-                            updateLocal("landingGallery", newGallery);
-                            await save({ landingGallery: newGallery });
-                          } catch (err: any) { toast.error(err?.message ?? t("pages.landing.uploadError")); }
+                          await replaceGalleryPhoto(i, file);
                         }} />
                       </label>
                       <button type="button" aria-label={t("pages.landing.deletePhotoAria")} title={t("common.delete")}
-                        onClick={async () => {
-                          const newGallery = clinic.landingGallery.filter((_,j) => j !== i);
-                          updateLocal("landingGallery", newGallery);
-                          await save({ landingGallery: newGallery });
-                        }}
+                        onClick={() => deleteGalleryPhoto(i)}
                         className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 hover:bg-[color:var(--danger)] transition-colors">
                         <Trash2 size={14} strokeWidth={1.75}/> <span className="hidden sm:inline">{t("common.delete")}</span>
                       </button>
@@ -1912,7 +2046,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <iframe
               ref={iframeRef}
               key={`${templateSel}-${previewNonce}`}
-              src={`/landing-preview/${clinic.slug}?preview=${templateSel}`}
+              src={`/landing-preview/${clinic.slug}?preview=${templateSel}&borrador=1`}
               title="Vista previa de tu sitio"
               className="border-0 bg-white origin-top-left"
               style={previewAncho === "movil"
@@ -1924,7 +2058,9 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
           <p className="text-[11px] text-[color:var(--text-3)] leading-snug">
             {sinGuardar
               ? "Esto es un borrador: se ve aquí, pero tu sitio público sigue como estaba. Guarda para publicarlo."
-              : "Lo que ves aquí es tu sitio público, tal cual. Al escribir se actualiza al momento."}
+              : templateSel !== (clinic.landingTemplate ?? "classic")
+                ? "Estás viendo la plantilla que elegiste, sin aplicar. Tu sitio público sigue en la de antes: pulsa «Aplicar» para publicarla."
+                : "Lo que ves aquí es tu sitio público, tal cual. Al escribir se actualiza al momento."}
           </p>
         </div>
       </aside>

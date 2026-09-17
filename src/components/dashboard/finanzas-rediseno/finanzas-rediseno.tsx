@@ -9,6 +9,12 @@
  * está arriba, a un clic desde que carga la pantalla (hoy son dos: la pestaña
  * y luego el botón).
  *
+ * Además, cada cifra dice de dónde sale (una línea bajo el número), la
+ * cabecera nombra las fechas exactas del periodo, los gastos se reparten por
+ * categoría y «Por doctor» aclara que es lo FACTURADO, no lo cobrado. Todo eso
+ * se pinta con lo que YA llega en las dos peticiones de siempre: ni una
+ * consulta nueva, ni una cifra de las de antes calculada de otra forma.
+ *
  * Las cifras, las fórmulas y los periodos son los mismos de siempre: salen
  * de `usar-finanzas.ts`, que copia la lógica de `finanzas-client.tsx`. La ropa
  * la ponen `finanzas.module.css` (tokens `--m2-*` del menú) y `grafica.tsx`.
@@ -16,14 +22,14 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BarChart3, CalendarCheck,
   PiggyBank, Plus, Receipt, RefreshCw, Trash2, TrendingDown, TrendingUp, Users,
   Wallet, X, type LucideIcon,
 } from "lucide-react";
 import { fmtMXN, fmtMXNdec } from "@/lib/format";
-import { CATEGORIAS, PERIODOS, useFinanzas, type Gasto } from "./usar-finanzas";
+import { CATEGORIAS, PERIODOS, useFinanzas, type Gasto, type PeriodKey } from "./usar-finanzas";
 import s from "./finanzas.module.css";
 
 // recharts pesa ~95 kB: fuera del bundle inicial, como en «Hoy».
@@ -37,6 +43,29 @@ const GraficaFinanzas = dynamic(
 const fmtMXNSigned = (n: number) => (n < 0 ? "−" : "") + fmtMXN(Math.abs(n ?? 0));
 const asLocalDay = (v: string) => new Date(v.slice(0, 10) + "T12:00:00");
 const fmtDayShort = (v: string) => asLocalDay(v).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+const fmtDayYear = (v: string) => asLocalDay(v).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
+
+// Las fechas exactas del periodo que se está viendo. Salen de la propia serie
+// (un punto por día, el primero y el último son los bordes del periodo): no se
+// vuelve a calcular ninguna ventana en el navegador.
+function rangoDe(serie: { fecha: string }[]): string | null {
+  if (serie.length === 0) return null;
+  const desde = serie[0].fecha;
+  const hasta = serie[serie.length - 1].fecha;
+  if (desde.slice(0, 10) === hasta.slice(0, 10)) return fmtDayYear(desde);
+  const mismoAnio = desde.slice(0, 4) === hasta.slice(0, 4);
+  return `${mismoAnio ? fmtDayShort(desde) : fmtDayYear(desde)} – ${fmtDayYear(hasta)}`;
+}
+
+// Parte de un total, en porcentaje entero. Solo para leer proporciones.
+const porcentaje = (parte: number, total: number) => (total > 0 ? Math.round((parte / total) * 100) : 0);
+
+const GASTOS_VACIO: Record<PeriodKey, string> = {
+  hoy:          "Hoy no has registrado gastos",
+  mes:          "Aún no registras gastos este mes",
+  mes_anterior: "No registraste gastos el mes anterior",
+  custom:       "Sin gastos registrados en estas fechas",
+};
 
 // ── Piezas ─────────────────────────────────────────────────────────
 
@@ -44,9 +73,11 @@ type Tono = "normal" | "exito" | "peligro";
 const ICONO_TONO: Record<Tono, string> = { normal: "", exito: s.kpiIconoExito, peligro: s.kpiIconoPeligro };
 const VALOR_TONO: Record<Tono, string> = { normal: "", exito: s.kpiValorExito, peligro: s.kpiValorPeligro };
 
-function Kpi({ etiqueta, valor, icono: Icono, tono = "normal", tonoValor = "normal", hero }: {
+function Kpi({ etiqueta, valor, pista, icono: Icono, tono = "normal", tonoValor = "normal", hero }: {
   etiqueta: string;
   valor: string;
+  /** De dónde sale la cifra, en una línea: el dueño no tiene que confiar. */
+  pista?: ReactNode;
   icono: LucideIcon;
   tono?: Tono;
   tonoValor?: Tono;
@@ -62,6 +93,7 @@ function Kpi({ etiqueta, valor, icono: Icono, tono = "normal", tonoValor = "norm
         </span>
       </div>
       <div className={`${s.kpiValor} ${VALOR_TONO[tonoValor]}`}>{valor}</div>
+      {pista && <p className={s.kpiPista}>{pista}</p>}
     </div>
   );
 }
@@ -144,13 +176,32 @@ export function FinanzasRediseno() {
   // antes se queda atenuado con un aviso encima hasta que llega lo nuevo.
   const actualizando = f.loading && data !== null && !f.error;
 
+  const rango = useMemo(() => rangoDe(f.serie), [f.serie]);
+  // En qué se va el dinero: los MISMOS gastos de la tabla, sumados por
+  // categoría. No es otra consulta ni otra cifra: la suma de estas filas es el
+  // total que ya enseña la cabecera de la tarjeta.
+  const porCategoria = useMemo(() => {
+    const suma = new Map<string, number>();
+    for (const g of gastos) suma.set(g.category, (suma.get(g.category) ?? 0) + (g.amount || 0));
+    return Array.from(suma, ([categoria, total]) => ({ categoria, total })).sort((a, b) => b.total - a.total);
+  }, [gastos]);
+  const totalFacturado = useMemo(
+    () => (data?.porDoctor ?? []).reduce((t, d) => t + (d.ingresos || 0), 0),
+    [data],
+  );
+  const reembolsos = data?.reembolsos ?? 0;
+  const vencido = data?.saldos?.vencido ?? 0;
+
   return (
     <>
       {/* Cabecera: título, periodo y la única acción de escritura */}
       <div className={s.cabecera}>
         <div>
           <h1 className={s.titulo}>Finanzas</h1>
-          <p className={s.subtitulo}>El pulso financiero de tu clínica</p>
+          <p className={s.subtitulo}>
+            El pulso financiero de tu clínica
+            {rango && !f.error && <span className={s.rangoFechas}> · {rango}</span>}
+          </p>
         </div>
         <div className={s.acciones}>
           <div role="tablist" aria-label="Periodo" className={s.segmentado}>
@@ -243,8 +294,21 @@ export function FinanzasRediseno() {
 
           {/* Indicadores */}
           <div className={s.kpis}>
-            <Kpi etiqueta="Ingresos" valor={fmtMXN(data.ingresos)} icono={TrendingUp} />
-            <Kpi etiqueta="Gastos" valor={fmtMXN(data.gastos)} icono={TrendingDown} tono="peligro" />
+            <Kpi
+              etiqueta="Ingresos"
+              valor={fmtMXN(data.ingresos)}
+              icono={TrendingUp}
+              pista={reembolsos > 0
+                ? `Lo cobrado, ya restados ${fmtMXN(reembolsos)} de reembolsos`
+                : "Lo cobrado en el periodo, menos reembolsos"}
+            />
+            <Kpi
+              etiqueta="Gastos"
+              valor={fmtMXN(data.gastos)}
+              icono={TrendingDown}
+              tono="peligro"
+              pista="Los gastos que registraste aquí"
+            />
             <Kpi
               etiqueta="Utilidad"
               valor={fmtMXNSigned(data.utilidad)}
@@ -252,10 +316,29 @@ export function FinanzasRediseno() {
               tono={f.utilidadPos ? "exito" : "peligro"}
               tonoValor={f.utilidadPos ? "exito" : "peligro"}
               hero
+              pista={data.ingresos > 0
+                ? `Ingresos − gastos · te queda el ${porcentaje(data.utilidad, data.ingresos)} %`
+                : "Ingresos − gastos"}
             />
-            <Kpi etiqueta="Ventas" valor={(data.ventas ?? 0).toLocaleString("es-MX")} icono={Receipt} />
-            <Kpi etiqueta="Citas" valor={(data.citas ?? 0).toLocaleString("es-MX")} icono={CalendarCheck} />
-            <Kpi etiqueta="Efectivo recibido" valor={fmtMXN(data.efectivo)} icono={Banknote} tono="exito" />
+            <Kpi
+              etiqueta="Ventas"
+              valor={(data.ventas ?? 0).toLocaleString("es-MX")}
+              icono={Receipt}
+              pista="Facturas creadas, sin las canceladas"
+            />
+            <Kpi
+              etiqueta="Citas"
+              valor={(data.citas ?? 0).toLocaleString("es-MX")}
+              icono={CalendarCheck}
+              pista="Agendadas, sin las canceladas"
+            />
+            <Kpi
+              etiqueta="Efectivo recibido"
+              valor={fmtMXN(data.efectivo)}
+              icono={Banknote}
+              tono="exito"
+              pista="Cobros en efectivo, sin restar reembolsos"
+            />
           </div>
 
           {/* Ingresos vs Gastos */}
@@ -295,10 +378,28 @@ export function FinanzasRediseno() {
               {gastos.length === 0 ? (
                 <Vacio
                   icono={Wallet}
-                  titulo="Aún no registras gastos este mes"
+                  titulo={GASTOS_VACIO[f.period]}
                   pista="Agrégalos para ver tu utilidad real."
                 />
               ) : (
+                <>
+                {porCategoria.length > 1 && (
+                  <div className={s.categorias} aria-label="Gastos por categoría">
+                    {porCategoria.map((c) => (
+                      <div key={c.categoria} className={s.categoria}>
+                        <span className={s.categoriaNombre}>{c.categoria}</span>
+                        <div className={s.barra} aria-hidden>
+                          <div
+                            className={`${s.barraRelleno} ${s.barraRellenoGastos}`}
+                            style={{ width: `${Math.max(2, porcentaje(c.total, porCategoria[0].total))}%` }}
+                          />
+                        </div>
+                        <span className={s.num}>{fmtMXN(c.total)}</span>
+                        <span className={s.categoriaParte}>{porcentaje(c.total, f.totalGastos)} %</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className={s.tablaCaja}>
                   <table className={s.tabla}>
                     <thead>
@@ -336,25 +437,33 @@ export function FinanzasRediseno() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </Tarjeta>
 
             <div className={s.apilado}>
               {/* Por doctor */}
-              <Tarjeta icono={Users} titulo="Por doctor">
+              <Tarjeta
+                icono={Users}
+                titulo="Por doctor"
+                sub="Lo facturado en el periodo, no lo cobrado: por eso no suma lo mismo que Ingresos."
+              >
                 {(data.porDoctor ?? []).length === 0 ? (
                   <Vacio icono={Users} titulo="Sin facturas con doctor asignado en este periodo" />
                 ) : (
                   <div>
                     <div className={s.doctorCabecera}>
                       <span>Doctor</span>
-                      <span>Ingresos generados</span>
+                      <span>Facturado</span>
                     </div>
                     {data.porDoctor.map((d) => (
                       <div key={d.doctorId} className={s.doctorFila}>
                         <div className={s.doctorArriba}>
                           <span className={s.doctorNombre}>{d.doctor}</span>
-                          <span className={s.num}>{fmtMXN(d.ingresos)}</span>
+                          <span className={s.num}>
+                            {fmtMXN(d.ingresos)}
+                            <span className={s.doctorParte}>{porcentaje(d.ingresos || 0, totalFacturado)} %</span>
+                          </span>
                         </div>
                         <div className={s.barra} aria-hidden>
                           <div
@@ -373,7 +482,7 @@ export function FinanzasRediseno() {
               {/* Saldos */}
               <Tarjeta icono={Wallet} titulo="Saldos" sub="Saldos totales de la clínica — no dependen del periodo.">
                 <div className={s.saldos}>
-                  <div className={s.saldo}>
+                  <Link href="/dashboard/caja?tab=facturas" className={`${s.saldo} ${s.saldoEnlace}`}>
                     <div className={s.kpiArriba}>
                       <span className={s.kpiEtiqueta}>Por cobrar</span>
                       <span className={s.kpiIcono}>
@@ -381,16 +490,19 @@ export function FinanzasRediseno() {
                       </span>
                     </div>
                     <div className={s.kpiValor}>{fmtMXN(data.saldos?.porCobrar ?? 0)}</div>
-                  </div>
-                  <div className={s.saldo}>
+                    <p className={s.kpiPista}>Saldo de todas las facturas abiertas</p>
+                  </Link>
+                  <Link href="/dashboard/caja?tab=facturas" className={`${s.saldo} ${s.saldoEnlace}`}>
                     <div className={s.kpiArriba}>
                       <span className={s.kpiEtiqueta}>Vencido</span>
-                      <span className={`${s.kpiIcono} ${s.kpiIconoPeligro}`}>
+                      <span className={`${s.kpiIcono} ${vencido > 0 ? s.kpiIconoPeligro : ""}`}>
                         <AlertTriangle size={16} strokeWidth={1.75} aria-hidden />
                       </span>
                     </div>
-                    <div className={`${s.kpiValor} ${s.kpiValorPeligro}`}>{fmtMXN(data.saldos?.vencido ?? 0)}</div>
-                  </div>
+                    {/* En rojo solo si hay algo vencido: un $0 en rojo asusta sin motivo. */}
+                    <div className={`${s.kpiValor} ${vencido > 0 ? s.kpiValorPeligro : ""}`}>{fmtMXN(vencido)}</div>
+                    <p className={s.kpiPista}>De eso, lo que ya pasó su fecha de pago</p>
+                  </Link>
                 </div>
                 <Link href="/dashboard/caja?tab=facturas" className={s.enlaceInterno}>
                   Ver facturas en Caja <ArrowRight size={14} strokeWidth={2} aria-hidden />

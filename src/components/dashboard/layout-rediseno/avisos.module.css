@@ -1,0 +1,30 @@
+/* ═══════════════════════════════════════════════════════════════════
+   LOS AVISOS (toasts) con la ropa del rediseño (ws1-t2, hallazgo 20).
+
+   El <Toaster> de react-hot-toast vive en el layout RAÍZ, por encima de
+   /dashboard y sin saber de clínicas, y pinta cada aviso con `style` en
+   línea. La caja del aviso lleva sus colores en `toastOptions.style`
+   (`avisos.tsx`, leyendo `--m2-*`); aquí solo va lo que un `style` en
+   línea no alcanza: el contenedor (que monta CLASES_MENU para que los
+   avisos —que cuelgan del <body>— tengan los tokens del menú) y el texto.
+
+   NO declara tokens propios. Solo se aplica con el interruptor
+   `menu-dos-niveles` encendido para la clínica de la sesión; apagado, el
+   <Toaster> de siempre se pinta con sus props de siempre, byte por byte.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* El contenedor fijo de react-hot-toast: solo hereda tokens y letra. */
+.contenedor {
+  color: var(--m2-texto);
+}
+
+/* Cada aviso. Las cifras («3 citas movidas», «$1,250») con ancho fijo. */
+.aviso {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.aviso > div[role="status"] {
+  margin: 4px 8px;
+}

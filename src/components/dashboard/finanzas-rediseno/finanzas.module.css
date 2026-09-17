@@ -66,6 +66,12 @@
   color: var(--m2-texto-3);
 }
 
+.rangoFechas {
+  color: var(--m2-texto-2);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .acciones {
   display: flex;
   align-items: center;
@@ -342,9 +348,11 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--m2-texto-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Nunca con puntos suspensivos: con seis indicadores en fila «Efectivo
+     recibido» salía «EFECTIVO RECI…». Si no cabe, baja a una segunda línea. */
+  min-width: 0;
+  line-height: 1.25;
+  overflow-wrap: break-word;
 }
 
 .kpiIcono {
@@ -392,6 +400,16 @@
   color: var(--m2-texto);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* De dónde sale la cifra. Se ve siempre (nada de tooltip: un iPad no tiene
+   hover) y empuja hacia abajo para que las seis queden a la misma altura. */
+.kpiPista {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--m2-texto-3);
+  text-wrap: pretty;
 }
 
 .kpiValorExito { color: var(--success-strong, #047857); }
@@ -459,6 +477,15 @@
   flex: 1;
   min-width: 0;
   padding: 0 18px 18px;
+  /* En columna para que un estado vacío llene la tarjeta cuando su vecina es
+     más alta (Gastos vacío junto a Por doctor + Saldos dejaba medio hueco). */
+  display: flex;
+  flex-direction: column;
+}
+
+.tarjetaCuerpo > .vacio {
+  flex: 1;
+  justify-content: center;
 }
 
 /* Cuerpo que es una tabla: sin aire lateral, las celdas ya llevan el suyo. */
@@ -794,6 +821,49 @@
   transition: width 0.3s;
 }
 
+.doctorParte {
+  display: inline-block;
+  min-width: 4.5ch;
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--m2-texto-3);
+  text-align: right;
+}
+
+/* ── Gastos por categoría ────────────────────────────────────────── */
+
+.categorias {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(40px, 1fr) max-content max-content;
+  align-items: center;
+  gap: 9px 12px;
+  padding: 2px 18px 16px;
+}
+
+.categoria {
+  display: contents;
+}
+
+.categoriaNombre {
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--m2-texto-2);
+  overflow-wrap: anywhere;
+}
+
+.categoriaParte {
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  text-align: right;
+}
+
+.barraRellenoGastos {
+  background: var(--danger, #dc2626);
+  opacity: 0.75;
+}
+
 /* ── Saldos ──────────────────────────────────────────────────────── */
 
 .saldos {
@@ -815,6 +885,25 @@
   background: var(--m2-tarjeta-hover);
   min-width: 0;
   container-type: inline-size;
+}
+
+/* Los dos saldos llevan a las facturas de Caja, igual que el enlace de abajo. */
+.saldoEnlace {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.saldoEnlace:focus-visible {
+  outline: 2px solid var(--m2-activo);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .saldoEnlace:hover {
+    border-color: var(--m2-activo);
+  }
 }
 
 .enlaceInterno {

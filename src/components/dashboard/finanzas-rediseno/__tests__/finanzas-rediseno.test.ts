@@ -86,3 +86,28 @@ test("el camino viejo no depende del rediseño", () => {
   assert.doesNotMatch(viejo, /finanzas-rediseno/);
   assert.doesNotMatch(viejo, /menu-dos-niveles/);
 });
+
+test("las mejoras no añaden ni una petición: siguen siendo /api/finanzas y /api/gastos", () => {
+  const pantalla = readFileSync(join(CARPETA, "finanzas-rediseno.tsx"), "utf8");
+  assert.doesNotMatch(pantalla, /\bfetch\(/, "la pantalla no pide datos: eso es de usar-finanzas.ts");
+  const datos = readFileSync(join(CARPETA, "usar-finanzas.ts"), "utf8");
+  const rutas = Array.from(datos.matchAll(/fetch\(\s*[`"']([^?`"'$]+)/g), (m) => m[1]).sort();
+  assert.deepEqual(rutas, ["/api/finanzas", "/api/gastos", "/api/gastos", "/api/gastos"]);
+});
+
+test("cada indicador dice de dónde sale su cifra, y ninguna etiqueta se corta con puntos suspensivos", () => {
+  const pantalla = readFileSync(join(CARPETA, "finanzas-rediseno.tsx"), "utf8");
+  const indicadores = pantalla.match(/<Kpi\b[\s\S]*?\/>/g) ?? [];
+  assert.equal(indicadores.length, 6, "siguen siendo los seis indicadores de siempre");
+  for (const kpi of indicadores) assert.match(kpi, /\bpista=/, kpi.slice(0, 60));
+  const css = readFileSync(join(CARPETA, "finanzas.module.css"), "utf8");
+  const etiqueta = css.match(/\.kpiEtiqueta \{[^}]*\}/)?.[0] ?? "";
+  assert.ok(etiqueta, "existe .kpiEtiqueta");
+  assert.doesNotMatch(etiqueta, /text-overflow:\s*ellipsis/);
+});
+
+test("«Por doctor» avisa de que es lo facturado, no lo cobrado", () => {
+  const pantalla = readFileSync(join(CARPETA, "finanzas-rediseno.tsx"), "utf8");
+  assert.match(pantalla, /Lo facturado en el periodo, no lo cobrado/);
+  assert.doesNotMatch(pantalla, /Ingresos generados/);
+});

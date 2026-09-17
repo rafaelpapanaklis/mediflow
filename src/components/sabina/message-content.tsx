@@ -3,6 +3,8 @@ import { parseSabinaMarkdown, tokenizeInline, type SabinaBlock, type SabinaParag
 import { columnasNumericas, filasConMonto } from "./sabina-listas";
 import styles from "./sabina-widgets.module.css";
 
+type Clases = Record<string, string>;
+
 /**
  * Pinta la respuesta de Sabina con el markdown ligero de `sabina-core`.
  *
@@ -12,26 +14,31 @@ import styles from "./sabina-widgets.module.css";
  * arranca citando un dato medido, con otro. Todo lo demás es un párrafo
  * normal — la pantalla nunca INVENTA qué es hecho y qué es opinión, solo
  * responde al vocabulario que ya trae el texto.
+ *
+ * `clases` (REDISEÑO, interruptor `menu-dos-niveles`): el juego de clases del
+ * rediseño (`layout-rediseno/sabina.ts`). Sin él, las de siempre, tal cual:
+ * el HTML que sale es el mismo, clase por clase.
  */
-export function SabinaMessageContent({ content }: { content: string }) {
+export function SabinaMessageContent({ content, clases }: { content: string; clases?: Clases }) {
+  const c: Clases = clases ?? styles;
   const blocks = parseSabinaMarkdown(content);
   if (!blocks.length) return null;
 
   return (
-    <div className={styles.content}>
+    <div className={c.content}>
       {blocks.map((block, i) => (
-        <Block key={i} block={block} />
+        <Block key={i} block={block} c={c} />
       ))}
     </div>
   );
 }
 
-function Block({ block }: { block: SabinaBlock }) {
+function Block({ block, c }: { block: SabinaBlock; c: Clases }) {
   if (block.kind === "heading") {
     const Tag = block.level === 2 ? "h3" : "h4";
-    return <Tag className={styles.heading}>{renderInline(block.text)}</Tag>;
+    return <Tag className={c.heading}>{renderInline(block.text)}</Tag>;
   }
-  if (block.kind === "table") return <Table header={block.header} rows={block.rows} />;
+  if (block.kind === "table") return <Table header={block.header} rows={block.rows} c={c} />;
   if (block.kind === "bullets") {
     const List = block.ordered ? "ol" : "ul";
     const filas = filasConMonto(block.items);
@@ -41,29 +48,29 @@ function Block({ block }: { block: SabinaBlock }) {
       // renglón cabe igual a 360 px que en el escritorio (el nombre se parte, la
       // cantidad no).
       return (
-        <List className={`${styles.rows} ${toneClass(block.tone)}`}>
+        <List className={`${c.rows} ${toneClass(block.tone, c)}`}>
           {filas.map((f, i) => (
-            <li key={i} className={styles.row}>
-              <span className={styles.rowLabel}>
-                {block.ordered && <span className={styles.rowIndex}>{i + 1}.</span>}
+            <li key={i} className={c.row}>
+              <span className={c.rowLabel}>
+                {block.ordered && <span className={c.rowIndex}>{i + 1}.</span>}
                 {renderInline(f.etiqueta)}
-                {f.detalle && <span className={styles.rowDetail}> {renderInline(f.detalle)}</span>}
+                {f.detalle && <span className={c.rowDetail}> {renderInline(f.detalle)}</span>}
               </span>
-              <span className={styles.rowAmount}>{f.monto}</span>
+              <span className={c.rowAmount}>{f.monto}</span>
             </li>
           ))}
         </List>
       );
     }
     return (
-      <List className={`${styles.bullets} ${toneClass(block.tone)}`}>
+      <List className={`${c.bullets} ${toneClass(block.tone, c)}`}>
         {block.items.map((item, i) => (
           <li key={i}>{renderInline(item)}</li>
         ))}
       </List>
     );
   }
-  return <p className={`${styles.paragraph} ${toneClass(block.tone)}`}>{renderInline(block.text)}</p>;
+  return <p className={`${c.paragraph} ${toneClass(block.tone, c)}`}>{renderInline(block.text)}</p>;
 }
 
 /**
@@ -72,16 +79,16 @@ function Block({ block }: { block: SabinaBlock }) {
  * (≤ 480 px, ver el CSS) cada fila se vuelve una ficha con «columna: valor»,
  * porque una tabla de cinco columnas en una burbuja de 300 px no se lee.
  */
-function Table({ header, rows }: { header: string[]; rows: string[][] }) {
+function Table({ header, rows, c }: { header: string[]; rows: string[][]; c: Clases }) {
   const numericas = columnasNumericas(rows, header.length);
   const etiqueta = (h: string) => h.replace(/[*`]/g, "");
   return (
-    <div className={styles.tableWrap}>
-      <table className={styles.table}>
+    <div className={c.tableWrap}>
+      <table className={c.table}>
         <thead>
           <tr>
             {header.map((h, j) => (
-              <th key={j} className={numericas[j] ? styles.num : undefined}>
+              <th key={j} className={numericas[j] ? c.num : undefined}>
                 {renderInline(h)}
               </th>
             ))}
@@ -91,7 +98,7 @@ function Table({ header, rows }: { header: string[]; rows: string[][] }) {
           {rows.map((r, i) => (
             <tr key={i}>
               {header.map((h, j) => (
-                <td key={j} data-label={etiqueta(h)} className={numericas[j] ? styles.num : undefined}>
+                <td key={j} data-label={etiqueta(h)} className={numericas[j] ? c.num : undefined}>
                   {/* Un solo hijo: en el teléfono la celda es flex, y «**Ana** López» suelto se repartiría a lo ancho. */}
                   <span>{renderInline(r[j] ?? "")}</span>
                 </td>
@@ -104,9 +111,9 @@ function Table({ header, rows }: { header: string[]; rows: string[][] }) {
   );
 }
 
-function toneClass(tone: SabinaParagraphTone): string {
-  if (tone === "opinion") return styles.toneOpinion;
-  if (tone === "fact") return styles.toneFact;
+function toneClass(tone: SabinaParagraphTone, c: Clases): string {
+  if (tone === "opinion") return c.toneOpinion;
+  if (tone === "fact") return c.toneFact;
   return "";
 }
 

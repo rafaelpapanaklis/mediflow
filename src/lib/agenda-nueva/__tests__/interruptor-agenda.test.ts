@@ -115,6 +115,8 @@ function archivosFuenteBajo(dir: string): string[] {
   return salida;
 }
 
+const VENTANA_DEL_EXPEDIENTE = "src/components/dashboard/citas-expediente/ventana-cita.tsx";
+
 test("solo agenda-page-client importa la agenda nueva", () => {
   const permitidos = new Set([CLIENT]);
   const infractores: string[] = [];
@@ -126,7 +128,16 @@ test("solo agenda-page-client importa la agenda nueva", () => {
     if (permitidos.has(ruta)) continue;
 
     const src = readFileSync(join(RAIZ, ruta), "utf8");
-    if (/from ["']@\/components\/dashboard\/agenda-nueva\//.test(src)) {
+    // UNA excepción, y estrecha (ws1-t3): «Editar cita» abierta desde el
+    // expediente toma PRESTADA la ropa de la ventana (`agenda-nueva/ropa`), y
+    // nada más. No monta la agenda nueva; y la ficha solo la monta con la
+    // misma bandera (candado en `citas-expediente/__tests__`). Cualquier otro
+    // import de `agenda-nueva/` desde ese archivo sigue siendo infracción.
+    const importa =
+      ruta === VENTANA_DEL_EXPEDIENTE
+        ? src.replace(/from ["']@\/components\/dashboard\/agenda-nueva\/ropa["']/g, "")
+        : src;
+    if (/from ["']@\/components\/dashboard\/agenda-nueva\//.test(importa)) {
       infractores.push(ruta);
     }
   }
@@ -142,9 +153,21 @@ test("el rediseño no toca el CSS de la agenda de siempre", () => {
   const cssNuevo = leer("src/components/dashboard/agenda-nueva/agenda-nueva.module.css");
   // Es un módulo CSS propio: sus clases van con hash y no pueden alcanzar a
   // las del módulo antiguo. Lo único que sí escaparía es un selector global.
-  assert.ok(
-    !/:global\s*\(/.test(cssNuevo),
-    "un :global() en el CSS del rediseño puede pintar fuera de la agenda nueva",
+  //
+  // La ÚNICA forma permitida es `:global(.dark) .clase`: la clase que pone
+  // theme-toggle.tsx en <html> para el modo oscuro, y SIEMPRE seguida de una
+  // clase local (con hash) de este módulo, que es lo que la ancla a la agenda
+  // nueva. Es lo mismo que hace el menú (`:global(.dark) .tokens`). Un
+  // `:global(.dark)` suelto, o un `:global(otra-cosa)`, sigue prohibido.
+  const sinComentarios = cssNuevo.replace(/\/\*[\s\S]*?\*\//g, "");
+  const globales = [...sinComentarios.matchAll(/:global\s*\(([^)]*)\)\s*([^\s,{]*)/g)];
+  const fueraDeLugar = globales
+    .filter((m) => m[1].trim() !== ".dark" || !/^\.[a-zA-Z]/.test(m[2]))
+    .map((m) => m[0]);
+  assert.deepEqual(
+    fueraDeLugar,
+    [],
+    "un :global() en el CSS del rediseño puede pintar fuera de la agenda nueva; solo vale `:global(.dark) .claseLocal`",
   );
   // Ni reglas sobre elementos desnudos a nivel raíz del archivo.
   assert.ok(

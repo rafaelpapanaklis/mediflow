@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import type { AparienciaTopbar } from "@/components/dashboard/topbar-rediseno/apariencia";
+import c from "@/components/dashboard/topbar-rediseno/piezas-topbar.module.css";
 
 /**
  * WaitingRoomAlert — pill que el dashboard layout/topbar puede renderizar
@@ -15,8 +17,12 @@ import { useT } from "@/i18n/i18n-provider";
  * cliente solo recibe data de su propia clínica.
  *
  * Renderizado condicional: si longWaits.length === 0, devuelve null.
+ *
+ * `apariencia`: la ropa (topbar-rediseno/apariencia.ts). Sin ella —la barra
+ * de siempre— la pastilla es EXACTAMENTE la de antes; con "nueva" —la barra
+ * del menú de dos niveles— se pinta con las clases del rediseño.
  */
-export function WaitingRoomAlert() {
+export function WaitingRoomAlert({ apariencia }: { apariencia?: AparienciaTopbar }) {
   const t = useT();
   const [count, setCount] = useState(0);
   const [threshold, setThreshold] = useState(20);
@@ -59,6 +65,19 @@ export function WaitingRoomAlert() {
   }, []);
 
   if (count === 0) return null;
+
+  if (apariencia === "nueva") {
+    return (
+      <Link
+        href="/dashboard/analytics/waiting-room"
+        className={c.alerta}
+        title={t("shell.waitingRoomAlert.tooltip", { count, threshold })}
+      >
+        <AlertTriangle size={13} aria-hidden />
+        {t("shell.waitingRoomAlert.pill", { count, threshold })}
+      </Link>
+    );
+  }
 
   return (
     <Link

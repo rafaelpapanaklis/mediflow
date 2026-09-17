@@ -63,6 +63,16 @@ test("pagina-web.module.css: sin letra de máquina", () => {
   assert.ok(!LETRA_DE_MAQUINA.test(css), "pagina-web.module.css usa letra de máquina");
 });
 
+// El candado de arriba busca la CLASE "font-mono" por su nombre, pero el
+// preflight de Tailwind pinta <code>/<kbd>/<pre>/<samp> en letra de máquina
+// SIN que ninguna clase lo diga — se coló un `<code>landing.edit</code>` en
+// el bloque nuevo y esta prueba no lo vio. Candado aparte, por texto.
+const ETIQUETA_DE_MAQUINA = /<(code|kbd|pre|samp)[\s>]/i;
+
+test("sin <code>/<kbd>/<pre>/<samp> en el bloque nuevo: el preflight de Tailwind los pinta en letra de máquina sin decir \"font-mono\"", () => {
+  assert.ok(!ETIQUETA_DE_MAQUINA.test(nuevoTotal), "el bloque `if (rediseno)` usa una etiqueta que el preflight de Tailwind pinta en letra de máquina");
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Sin tokens nuevos: la hoja solo LEE los del menú (--m2-*) y los semánticos
 // ═══════════════════════════════════════════════════════════════════════════
@@ -146,4 +156,36 @@ test("la vista previa del rediseño se apila en angosto, nunca desaparece", () =
   assert.match(css, /@container paginaWeb \(max-width: 900px\)/, "falta el punto de corte que apila en vez de esconder");
   const bloqueApilado = css.slice(css.indexOf("@container paginaWeb"), css.indexOf("@container paginaWeb") + 400);
   assert.ok(!/display:\s*none/.test(bloqueApilado), "el punto de corte usa display:none en vez de apilar");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// La vista previa enseña la PLANTILLA aunque el sitio no esté publicado
+// (ws1-t5). Salía el cartel de «disponible pronto»: /landing-preview cortaba
+// por landingActive antes de elegir plantilla y el iframe no tenía cómo decir
+// «soy de la clínica».
+// ═══════════════════════════════════════════════════════════════════════════
+const previewPage = leer("app/landing-preview/[slug]/page.tsx");
+const landingServer = leer("app/[slug]/clinic-landing-server.tsx");
+const paginaPublica = leer("app/[slug]/page.tsx");
+
+test("el iframe del rediseño pide el borrador; el de siempre queda como estaba", () => {
+  assert.match(nuevoConfig, /\/landing-preview\/\$\{clinic\.slug\}\?preview=\$\{templateSel\}&borrador=1`/, "el iframe nuevo no pide ?borrador=1");
+  const viejoConfig = config.slice(config.indexOf(nuevoConfig) + nuevoConfig.length);
+  assert.match(viejoConfig, /\/landing-preview\/\$\{clinic\.slug\}\?preview=\$\{templateSel\}`/, "el iframe del camino viejo cambió");
+  assert.ok(!viejoConfig.includes("borrador=1"), "el camino viejo pide ?borrador=1: con la bandera apagada tiene que ser el de hoy");
+  assert.match(config, /\$\{rediseno \? "&borrador=1" : ""\}/, "«Previsualizar» dejó de depender de `rediseno`");
+});
+
+test("?borrador=1 se comprueba contra la sesión y solo deja VER: ni edita ni publica", () => {
+  assert.match(previewPage, /searchParams\?\.borrador === "1" \? await permitirBorrador\(params\.slug\) : false/, "borrador sale de la URL sin pasar por la sesión");
+  assert.match(previewPage, /clinica\.id !== ctx\.clinicId/, "falta el check de que la sesión es de ESTA clínica");
+  assert.match(previewPage, /sesionDeEstaClinicaCon\(slug, "landing\.view"\)/);
+  assert.match(landingServer, /if \(!c\.landingActive && !edit && !borrador\)/);
+  // `edit` (el lienzo) sigue colgando solo de landing.edit.
+  assert.match(landingServer, /<LivePreviewBridge slug=\{c\.slug\} tpl=\{tpl\} edit=\{edit\}>/);
+  assert.ok(!/update|landingActive:\s*true/.test(previewPage), "/landing-preview escribe en la base: previsualizar nunca publica");
+});
+
+test("la página PÚBLICA /[slug] nunca pasa `borrador`: el visitante sigue viendo el cartel", () => {
+  assert.ok(!paginaPublica.includes("borrador"), "/[slug] conoce `borrador`");
 });

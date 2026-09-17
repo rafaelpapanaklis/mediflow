@@ -1,3 +1,6 @@
+import { EsqueletoSegunBandera } from "@/components/dashboard/esqueletos-rediseno/segun-bandera";
+import { EsqueletoInbox } from "@/components/dashboard/esqueletos-rediseno/esqueleto-inbox";
+
 import styles from "./inbox.module.css";
 
 /**
@@ -7,7 +10,7 @@ import styles from "./inbox.module.css";
  * bandeja real mientras el server component resuelve su query inicial.
  * Shimmer: clase global .skel-new (light + dark ya resueltos en globals.css).
  */
-export default function Loading() {
+function EsqueletoViejo() {
   return (
     <div className={styles.page} aria-busy="true">
       {/* ─── Col 1: Sidebar ─── */}
@@ -107,4 +110,8 @@ export default function Loading() {
       </section>
     </div>
   );
+}
+
+export default function Loading() {
+  return <EsqueletoSegunBandera viejo={<EsqueletoViejo />} nuevo={<EsqueletoInbox />} />;
 }

@@ -4,13 +4,22 @@ import { CheckCircle, Circle, ChevronDown, ChevronUp, X } from "lucide-react";
 import Link from "next/link";
 import { STEPS } from "./onboarding-steps";
 import { useT } from "@/i18n/i18n-provider";
+import { ChecklistRediseno } from "./bloques-rediseno/checklist";
 
 interface Props {
   completed: string[]; // IDs of completed steps from server
   clinicId:  string;
+  /**
+   * ¿La clínica ve el rediseño de «Hoy»? Lo decide `app/dashboard/page.tsx`
+   * con el interruptor `menu-dos-niveles`. Encendido, el checklist se pinta
+   * con la ropa nueva (`bloques-rediseno/checklist.tsx`); el estado, el
+   * descarte por clínica y los pasos son los mismos. Sin la prop, o en
+   * false, se pinta exactamente como siempre.
+   */
+  rediseno?: boolean;
 }
 
-export function OnboardingChecklist({ completed: initial, clinicId }: Props) {
+export function OnboardingChecklist({ completed: initial, clinicId, rediseno = false }: Props) {
   const t = useT();
   const [completed, setCompleted] = useState<Set<string>>(new Set(initial));
   const [collapsed, setCollapsed]  = useState(false);
@@ -31,6 +40,18 @@ export function OnboardingChecklist({ completed: initial, clinicId }: Props) {
   const done = completed.size >= STEPS.length;
 
   if (dismissed || done) return null;
+
+  if (rediseno) {
+    return (
+      <ChecklistRediseno
+        completados={completed}
+        porcentaje={pct}
+        plegado={collapsed}
+        onPlegar={() => setCollapsed(!collapsed)}
+        onDescartar={dismiss}
+      />
+    );
+  }
 
   return (
     <div className="mb-6 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">

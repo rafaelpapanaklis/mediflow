@@ -1,0 +1,373 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   La FICHA de una factura y la «forma de pago» del popup Nueva factura
+   (ws1-t1): lo bueno de Presupuestos, llevado a Facturación.
+
+   El dibujo es el de la ficha de presupuesto (`presupuesto-nuevo/
+   presupuesto.module.css`, `.ficha*` y `.accion*`): folio y chips arriba,
+   importe grande a la derecha, la frase del trato en violeta y la fila de
+   acciones debajo de una raya. Lo que cambia es de dónde sale el color:
+   aquella hoja hereda los `--pr-*` de la ficha del paciente, y esta tiene que
+   pintar también en Caja y dentro de un modal (portal a <body>), así que LEE
+   los `--m2-*` del menú (`menu-dos-niveles/clases.ts`), que `.raiz` monta.
+
+   No se declara ningún token y no hay ningún hex suelto: lo que el menú no
+   tiene —éxito, alerta, peligro— sale de los semánticos de globals.css, con
+   respaldo. Las cifras, en Instrument Sans con `tabular-nums`.
+
+   Nada se esconde por ancho: la ficha ENVUELVE (flex-wrap). En un iPad en
+   vertical el importe baja debajo del cuerpo y las acciones ocupan dos
+   renglones; no desaparece nada.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  /* La familia (Instrument Sans) la pone `.tokens` del menú, que va en el
+     mismo nodo (CLASES_MENU). */
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Sobre los HIJOS, no sobre la raíz: `tipografia-panel.tsx` le pone a
+   `.tokens` `font-variant-numeric: normal` con más peso (ver hoy.module.css). */
+.raiz > * { font-variant-numeric: tabular-nums; }
+
+.dentroDeTarjeta { padding: 14px 18px 16px; }
+
+/* ═══ Lista de fichas ═══════════════════════════════════════════════════ */
+
+.fichas { display: flex; flex-direction: column; gap: 10px; }
+
+.ficha {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.ficha:hover { background: var(--m2-tarjeta-hover); }
+
+.fichaAnulada .fichaTotal,
+.fichaAnulada .fichaTitulo { color: var(--m2-texto-3); }
+
+.fichaCuerpo { flex: 1; min-width: 220px; }
+
+.fichaLinea1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fichaFolio {
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--m2-texto-3);
+}
+
+.fichaTitulo {
+  margin: 3px 0 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  color: var(--m2-texto);
+}
+
+.fichaSub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+}
+
+/* La línea que más le gusta a Rafael: el trato entero, sin abrir nada. */
+.fichaPlan {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-activo);
+}
+
+.fichaDinero {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.fichaTotal {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  color: var(--m2-texto);
+}
+
+.fichaCuenta {
+  margin: 1px 0 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--m2-texto-3);
+}
+
+.tonoExito { color: var(--success-strong, #047857); }
+.tonoAlerta { color: var(--warning-strong, #b45309); }
+
+.fichaAcciones {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 11px;
+  border-top: 1px solid var(--m2-borde);
+  cursor: default;
+}
+
+.accion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.accion:hover:not(:disabled) { background: var(--m2-hover); color: var(--m2-texto); }
+.accion:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.accion:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.accionPrincipal { border-color: var(--m2-activo); color: var(--m2-activo); }
+.accionPrincipal:hover:not(:disabled) { background: var(--m2-iniciales-fondo); color: var(--m2-iniciales-texto); }
+.accionExito { border-color: var(--success, #059669); color: var(--success-strong, #047857); }
+.accionExito:hover:not(:disabled) { background: var(--success-soft, rgba(5, 150, 105, 0.1)); color: var(--success-strong, #047857); }
+
+/* El MOTIVO de un botón deshabilitado, escrito: en un iPad no hay hover que
+   enseñe un `title`. */
+.motivo {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.fichaMensaje {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--danger, #dc2626);
+}
+
+.fichaAviso {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--success-strong, #047857);
+}
+
+.fichaAviso a { color: inherit; font-weight: 650; }
+
+/* ═══ Etiquetas (chips de estado) ═══════════════════════════════════════ */
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.etiquetaNeutra { background: var(--m2-hover); color: var(--m2-texto-3); }
+.etiquetaVioleta { background: var(--m2-iniciales-fondo); color: var(--m2-iniciales-texto); }
+.etiquetaExito { background: var(--success-soft, rgba(5, 150, 105, 0.1)); color: var(--success-strong, #047857); }
+.etiquetaAlerta { background: var(--m2-contador-fondo); color: var(--m2-contador-texto); }
+.etiquetaPeligro { background: var(--danger-soft, rgba(220, 38, 38, 0.1)); color: var(--danger-strong, #991b1b); }
+
+.apagado { font-size: 11.5px; color: var(--m2-texto-3); }
+
+.vacio {
+  padding: 40px 24px;
+  border: 1px dashed var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+/* ═══ Forma de pago, dentro del popup Nueva factura ═════════════════════ */
+
+.opciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.opcion {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.opcion:hover:not(:disabled) { background: var(--m2-tarjeta-hover); }
+.opcion:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.opcion:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.opcionActiva {
+  border-color: var(--m2-activo);
+  background: var(--m2-iniciales-fondo);
+}
+
+.opcionIcono {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--m2-hover);
+  color: var(--m2-texto-2);
+}
+
+.opcionActiva .opcionIcono { background: var(--m2-activo); color: var(--m2-activo-texto); }
+
+.opcionTitulo { display: block; font-size: 13px; font-weight: 650; }
+.opcionPista { display: block; margin-top: 1px; font-size: 11.5px; color: var(--m2-texto-3); }
+
+.metodos { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.metodo {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 999px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.metodo:hover { background: var(--m2-hover); color: var(--m2-texto); }
+.metodo:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.metodoActivo,
+.metodoActivo:hover { border-color: var(--m2-activo); background: var(--m2-activo); color: var(--m2-activo-texto); }
+
+.camposPlan {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+/* Una celda de rejilla no encoge por debajo de su contenido si no se le dice. */
+.camposPlan > * { min-width: 0; }
+
+.rotulo {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--m2-texto-2);
+}
+
+.casilla {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--m2-texto-2);
+  cursor: pointer;
+}
+
+/* La frase del trato, en el popup: la MISMA que luego sale en la ficha. */
+.frase {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.fraseTenue {
+  background: var(--m2-hover);
+  color: var(--m2-texto-3);
+  font-weight: 500;
+}
+
+.cuotas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cuota {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 10px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.cuotaMonto {
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--m2-texto);
+}
+
+.cuotaEnganche { border-color: var(--m2-activo); }
+
+.aviso {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--m2-texto-3);
+}
+
+.avisoFuerte { font-weight: 650; color: var(--m2-texto-2); }
+
+.motivoEnvio {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--m2-texto-3);
+}

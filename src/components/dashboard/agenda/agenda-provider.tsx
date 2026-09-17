@@ -471,3 +471,13 @@ export function useAgenda(): AgendaContextValue {
   if (!ctx) throw new Error("useAgenda must be used inside <AgendaProvider>");
   return ctx;
 }
+
+/**
+ * Lo mismo que `useAgenda`, pero devuelve `null` fuera del provider en vez de
+ * lanzar. Es para las piezas de la agenda que también se abren desde fuera de
+ * ella —«Editar cita» desde el expediente del paciente—, donde quien las monta
+ * les presta por prop lo poco que leían del contexto.
+ */
+export function useAgendaOpcional(): AgendaContextValue | null {
+  return useContext(AgendaContext);
+}

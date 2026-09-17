@@ -15,6 +15,8 @@ import { fmtMXNdec } from "@/lib/format";
 // El porqué —y el desfase de 6 h que arreglan— está en el propio archivo.
 import { todayLocalISO, paidAtInstant } from "@/lib/billing/paid-at";
 import { useT } from "@/i18n/i18n-provider";
+// Ropa del diseño nuevo (solo con `rediseno`). Ver factura-rediseno/.
+import { CLASES_FACTURA_REDISENO, CLASES_CALENDARIO_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
 
@@ -43,9 +45,15 @@ interface PaymentModalProps {
   invoice: PaymentInvoice | null;
   onClose: () => void;
   onSuccess: () => void;
+  /**
+   * Interruptor `menu-dos-niveles` (lo pasa quien monta el modal). `true` =
+   * vestido con el diseño nuevo, calendario incluido; `false` (por defecto)
+   * = las clases de siempre, byte por byte. La lógica del cobro no cambia.
+   */
+  rediseno?: boolean;
 }
 
-export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModalProps) {
+export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = false }: PaymentModalProps) {
   const t = useT();
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<PaymentMethod>("cash");
@@ -53,6 +61,10 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
   const [reference, setReference] = useState("");
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
+  // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de siempre sin él.
+  // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
+  // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
+  const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
 
   // Reset whenever the modal opens for a new invoice.
   useEffect(() => {
@@ -100,38 +112,38 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md bg-card text-foreground border border-border">
-        <DialogHeader>
-          <DialogTitle className="text-foreground font-bold">{t("clinical.paymentModal.title")}</DialogTitle>
+      <DialogContent className={cx("max-w-md bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${c.modalEstrecho}`)}>
+        <DialogHeader className={rediseno ? c.cabecera : undefined}>
+          <DialogTitle className={cx("text-foreground font-bold", c.titulo)}>{t("clinical.paymentModal.title")}</DialogTitle>
         </DialogHeader>
 
-        <div className="px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0">
-          <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">{t("clinical.paymentModal.invoice")}</span>
-              <span className="font-mono font-bold">{invoice.invoiceNumber}</span>
+        <div className={cx("px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
+          <div className={cx("bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1", c.resumen)}>
+            <div className={cx("flex justify-between", c.resumenFila)}>
+              <span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.paymentModal.invoice")}</span>
+              <span className={cx("font-mono font-bold", `${c.cifra} ${c.folio}`)}>{invoice.invoiceNumber}</span>
             </div>
             {invoice.patientName && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t("clinical.paymentModal.patient")}</span>
-                <span className="font-medium">{invoice.patientName}</span>
+              <div className={cx("flex justify-between", c.resumenFila)}>
+                <span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.paymentModal.patient")}</span>
+                <span className={cx("font-medium", c.valor)}>{invoice.patientName}</span>
               </div>
             )}
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">{t("common.total")}</span>
-              <span className="font-bold">{fmtMXNdec(invoice.total)}</span>
+            <div className={cx("flex justify-between", c.resumenFila)}>
+              <span className={cx("text-muted-foreground", c.rotulo)}>{t("common.total")}</span>
+              <span className={cx("font-bold", c.cifra)}>{fmtMXNdec(invoice.total)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">{t("clinical.paymentModal.paid")}</span>
-              <span className="font-bold" style={{ color: "var(--success)" }}>{fmtMXNdec(invoice.paid)}</span>
+            <div className={cx("flex justify-between", c.resumenFila)}>
+              <span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.paymentModal.paid")}</span>
+              <span className={cx("font-bold", `${c.cifra} ${c.cifraExito}`)} style={rediseno ? undefined : { color: "var(--success)" }}>{fmtMXNdec(invoice.paid)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">{t("clinical.paymentModal.pendingBalance")}</span>
-              <span className="font-bold" style={{ color: "var(--danger)" }}>{fmtMXNdec(invoice.balance)}</span>
+            <div className={cx("flex justify-between", c.resumenFila)}>
+              <span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.paymentModal.pendingBalance")}</span>
+              <span className={cx("font-bold", `${c.cifra} ${c.cifraTotal} ${c.cifraPeligro}`)} style={rediseno ? undefined : { color: "var(--danger)" }}>{fmtMXNdec(invoice.balance)}</span>
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          <div className={cx("space-y-1.5", c.campo)}>
             <Label>{t("clinical.paymentModal.amountToCharge")}</Label>
             <Input
               type="number"
@@ -143,15 +155,15 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
               autoFocus
             />
             {isOverpay && (
-              <p className="text-[11px]" style={{ color: "var(--danger)" }}>
+              <p className={cx("text-[11px]", `${c.ayuda} ${c.cifraPeligro}`)} style={rediseno ? undefined : { color: "var(--danger)" }}>
                 {t("clinical.paymentModal.overpayWarning", { balance: fmtMXNdec(invoice.balance) })}
               </p>
             )}
           </div>
 
-          <div className="space-y-1.5">
+          <div className={cx("space-y-1.5", c.campo)}>
             <Label>{t("clinical.paymentModal.paymentMethod")}</Label>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className={cx("grid grid-cols-3 gap-1.5", c.metodos)}>
               {METHODS.map((m) => {
                 const Icon = m.icon;
                 const active = m.value === method;
@@ -160,12 +172,14 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
                     key={m.value}
                     type="button"
                     onClick={() => setMethod(m.value)}
-                    className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[11px] font-semibold transition-colors ${
+                    className={rediseno
+                      ? `${c.metodo} ${active ? c.metodoActivo : ""}`
+                      : `flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[11px] font-semibold transition-colors ${
                       active
                         ? ""
                         : "bg-[var(--bg-elev)] text-[var(--text-1)] border-[var(--border-soft)] hover:bg-muted/50"
                     }`}
-                    style={active ? { background: "var(--brand)", color: "#fff", borderColor: "var(--brand)" } : undefined}
+                    style={active && !rediseno ? { background: "var(--brand)", color: "#fff", borderColor: "var(--brand)" } : undefined}
                   >
                     <Icon size={14} aria-hidden />
                     {t(m.labelKey)}
@@ -175,16 +189,16 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+          <div className={cx("grid grid-cols-2 gap-3", c.rejilla2)}>
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("common.date")}</Label>
               {/* max = hoy: el pago se registra cuando OCURRE. Sin este tope se
                   podía capturar una fecha futura, que el servidor ahora rechaza
                   con 400. Misma expresión que el valor por defecto de arriba
                   para que el valor inicial nunca quede por encima del tope. */}
-              <DateField max={todayLocalISO()} className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+              <DateField max={todayLocalISO()} className={cx("flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors", c.campoFecha)} popoverClassName={rediseno ? CLASES_CALENDARIO_REDISENO : undefined} value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
             </div>
-            <div className="space-y-1.5">
+            <div className={cx("space-y-1.5", c.campo)}>
               <Label>{t("clinical.paymentModal.reference")}</Label>
               <Input
                 placeholder={method === "transfer" ? t("clinical.paymentModal.refTransfer") : method === "check" ? t("clinical.paymentModal.refCheck") : t("clinical.paymentModal.refAuthorization")}
@@ -194,7 +208,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          <div className={cx("space-y-1.5", c.campo)}>
             <Label>{t("common.notes")}</Label>
             <textarea
               className="input-new"
@@ -206,7 +220,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className={rediseno ? c.pie : undefined}>
           <ButtonNew variant="ghost" onClick={onClose} disabled={saving}>{t("common.cancel")}</ButtonNew>
           <ButtonNew variant="primary" onClick={submit} disabled={isInvalid || saving}>
             {saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: amountNum ? " · " + fmtMXNdec(amountNum) : "" })}

@@ -30,6 +30,7 @@ import { ageFromDob } from "@/lib/format";
 import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
 import { construirAlertas, hayRiesgo } from "@/components/dashboard/pacientes-rediseno/alertas";
 import { fechaCorta } from "@/components/dashboard/pacientes-rediseno/fechas";
+import { ROPA_MENU_FICHA } from "@/components/dashboard/portales-rediseno/ropa";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
@@ -91,11 +92,15 @@ export interface HeroCardProps {
   /** Sede de origen cuando el paciente viene prestado de otra sucursal (Fase 2). null = paciente propio. */
   originClinicName?: string | null;
   /**
-   * ¿Diseño nuevo? (interruptor `menu-dos-niveles` de la clínica). Cambia dos
+   * ¿Diseño nuevo? (interruptor `menu-dos-niveles` de la clínica). Cambia tres
    * cosas y ninguna más:
    *  · la pintura — la cabecera respira y «Iniciar consulta» manda de verdad;
    *  · los chips de alerta dejan de salir DOS VECES («Alergia a penicilina» +
-   *    «Penicilina»), que es el defecto fotografiado.
+   *    «Penicilina»), que es el defecto fotografiado;
+   *  · de las tres píldoras solo queda «Próxima cita», y solo si HAY próxima
+   *    cita: «Última visita» y «Visitas totales» sobraban (lo pidió Rafael), y
+   *    sin cita no se pinta ni un hueco ni un «—». Agendar sigue a un clic, en
+   *    el botón «Agendar próxima» de al lado, que llama al mismo `onReschedule`.
    * Los tres botones, su orden y el sitio de los chips no se mueven: es lo que
    * la gente encuentra sin leer.
    */
@@ -191,6 +196,199 @@ export function HeroCard({
     exito: styles.success,
   };
 
+  // Fecha, hora, doctor y tipo de la próxima cita. Solo se usa si la hay.
+  const citaAgendada = hasNextAppt && (
+    <>
+      <div className={`${styles.metricValue} ${styles.brand}`}>
+        {fechaCabecera(nextAppointment!.date, rediseno)}
+      </div>
+      {nextAppointment!.startTime && (
+        <div className={styles.metricSub}>
+          {t("patients.heroCard.timeSuffix", { time: nextAppointment!.startTime })}{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
+        </div>
+      )}
+      {nextAppointment!.type && (
+        <div className={styles.metricSub}>{nextAppointment!.type}</div>
+      )}
+    </>
+  );
+  // La píldora entera, para el rediseño (que solo la pinta si hay cita).
+  const pildoraCita = (
+    <div className={styles.metric}>
+      <span className={`${styles.metricIcon} ${styles.brand}`}>
+        <CalendarClock size={15} strokeWidth={1.75} aria-hidden />
+      </span>
+      <div className={styles.metricBody}>
+        <div className={styles.metricLabel}>{t("patients.heroCard.nextAppointment")}</div>
+        {citaAgendada}
+      </div>
+    </div>
+  );
+
+  // Los botones. Una sola definición para los dos caminos: «Iniciar consulta»
+  // hace lo mismo con la bandera que sin ella porque ES el mismo botón.
+  const acciones = (
+    <div className={styles.heroActions}>
+      <button
+        type="button"
+        className={`${styles.btn} ${styles.btnPrimary}`}
+        onClick={onStartConsult}
+        disabled={!hasNextAppt}
+        title={hasNextAppt ? t("patients.heroCard.startConsultTitle") : t("patients.heroCard.startConsultDisabledTitle")}
+      >
+        <Play size={13} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.startConsult")}
+      </button>
+      <button
+        type="button"
+        className={styles.btn}
+        onClick={onReschedule}
+        title={hasNextAppt ? t("patients.heroCard.rescheduleTitle") : t("patients.heroCard.scheduleNextTitle")}
+      >
+        <CalendarClock size={13} strokeWidth={1.75} aria-hidden /> {hasNextAppt ? t("patients.heroCard.rescheduleNext") : t("patients.heroCard.scheduleNext")}
+      </button>
+      <button
+        type="button"
+        className={`${styles.btn} ${hasBalance ? styles.btnSuccess : ""}`}
+        onClick={onCharge}
+        disabled={!hasBalance}
+      >
+        <CreditCard size={13} strokeWidth={1.75} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
+      </button>
+
+      <Popover.Root open={moreOpen} onOpenChange={setMoreOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnIcon}`}
+            aria-label={t("patients.heroCard.moreActionsAria")}
+            title={t("patients.heroCard.moreActions")}
+          >
+            <MoreHorizontal size={14} strokeWidth={1.75} aria-hidden />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          {/* Sale por un portal, fuera de la ficha: con el rediseño lleva
+              los tokens del menú puestos a mano (ROPA_MENU_FICHA), como
+              todo lo que el menú pinta en portales. Apagado, la clase de
+              siempre y nada más. */}
+          <Popover.Content
+            align="end"
+            sideOffset={6}
+            className={rediseno ? `${styles.heroMenuPopover} ${ROPA_MENU_FICHA.caja}` : styles.heroMenuPopover}
+          >
+            {canEdit && (
+              <button
+                type="button"
+                className={styles.heroMenuItem}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onEdit();
+                }}
+              >
+                <Edit size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.editPatient")}
+              </button>
+            )}
+            {/* Acceso al portal con CUENTA REAL: el paciente define su
+                propia contraseña desde un correo (la clínica nunca la ve). */}
+            {portalAccountStatus === "active" ? (
+              <div
+                className={styles.heroMenuItem}
+                aria-disabled
+                style={{ opacity: 0.65, cursor: "default", pointerEvents: "none" }}
+              >
+                <UserCheck size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.portalActive")}
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={styles.heroMenuItem}
+                disabled={invitingPortal}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onInvitePortal?.();
+                }}
+              >
+                <Send size={12} strokeWidth={1.75} aria-hidden />{" "}
+                {portalAccountStatus === "invited"
+                  ? t("patients.heroCard.portalResend")
+                  : t("patients.heroCard.portalInvite")}
+              </button>
+            )}
+            {portalAccountStatus === "invited" && (
+              <div className={styles.heroMenuHint} {...(rediseno ? { "data-nota": "" } : {})}>{t("patients.heroCard.portalInvitedHint")}</div>
+            )}
+
+            {/* Link LEGACY de SOLO LECTURA (portalToken) — opción aparte,
+                sin cuenta ni contraseña. */}
+            {portalUrl ? (
+              <button
+                type="button"
+                className={styles.heroMenuItem}
+                onClick={() => {
+                  setMoreOpen(false);
+                  navigator.clipboard.writeText(portalUrl);
+                }}
+              >
+                <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.copyReadonlyLink")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.heroMenuItem}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onGeneratePortal?.();
+                }}
+              >
+                <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.generateReadonlyLink")}
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.heroMenuItem}
+              onClick={() => {
+                setMoreOpen(false);
+                window.print();
+              }}
+            >
+              <Printer size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.printSummary")}
+            </button>
+            <button
+              type="button"
+              className={styles.heroMenuItem}
+              onClick={() => {
+                setMoreOpen(false);
+                router.push(
+                  hasNextAppt
+                    ? `/dashboard/agenda?highlight=${nextAppointment!.id}`
+                    : "/dashboard/agenda",
+                );
+              }}
+            >
+              <Calendar size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.viewInAgenda")}
+            </button>
+            {canDelete && onDelete && (
+              <>
+                <div className={styles.heroMenuDivider} role="separator" />
+                <button
+                  type="button"
+                  className={`${styles.heroMenuItem} ${styles.heroMenuItemDanger}`}
+                  {...(rediseno ? { "data-tono": "peligro" } : {})}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onDelete();
+                  }}
+                >
+                  <Trash2 size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.deletePatient")}
+                </button>
+              </>
+            )}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    </div>
+  );
+
   return (
     <section
       className={[styles.hero, rediseno ? styles.heroRediseno : ""].filter(Boolean).join(" ")}
@@ -247,7 +445,9 @@ export function HeroCard({
           </div>
         </div>
 
-        {/* Stats como píldoras con icono (pasada estética v3). */}
+        {/* Stats como píldoras con icono (pasada estética v3). Con el rediseño
+            no van: solo queda «Próxima cita», más abajo, junto a los botones. */}
+        {rediseno ? null : (
         <div className={styles.heroMetrics}>
           <div className={styles.metric}>
             <span className={`${styles.metricIcon} ${styles.brand}`}>
@@ -256,19 +456,7 @@ export function HeroCard({
             <div className={styles.metricBody}>
               <div className={styles.metricLabel}>{t("patients.heroCard.nextAppointment")}</div>
               {hasNextAppt ? (
-                <>
-                  <div className={`${styles.metricValue} ${styles.brand}`}>
-                    {fechaCabecera(nextAppointment!.date, rediseno)}
-                  </div>
-                  {nextAppointment!.startTime && (
-                    <div className={styles.metricSub}>
-                      {t("patients.heroCard.timeSuffix", { time: nextAppointment!.startTime })}{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
-                    </div>
-                  )}
-                  {nextAppointment!.type && (
-                    <div className={styles.metricSub}>{nextAppointment!.type}</div>
-                  )}
-                </>
+                citaAgendada
               ) : (
                 <>
                   <div className={styles.metricValue}>—</div>
@@ -306,157 +494,20 @@ export function HeroCard({
             </div>
           </div>
         </div>
+        )}
 
-        <div className={styles.heroActions}>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={onStartConsult}
-            disabled={!hasNextAppt}
-            title={hasNextAppt ? t("patients.heroCard.startConsultTitle") : t("patients.heroCard.startConsultDisabledTitle")}
-          >
-            <Play size={13} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.startConsult")}
-          </button>
-          <button
-            type="button"
-            className={styles.btn}
-            onClick={onReschedule}
-            title={hasNextAppt ? t("patients.heroCard.rescheduleTitle") : t("patients.heroCard.scheduleNextTitle")}
-          >
-            <CalendarClock size={13} strokeWidth={1.75} aria-hidden /> {hasNextAppt ? t("patients.heroCard.rescheduleNext") : t("patients.heroCard.scheduleNext")}
-          </button>
-          <button
-            type="button"
-            className={`${styles.btn} ${hasBalance ? styles.btnSuccess : ""}`}
-            onClick={onCharge}
-            disabled={!hasBalance}
-          >
-            <CreditCard size={13} strokeWidth={1.75} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
-          </button>
-
-          <Popover.Root open={moreOpen} onOpenChange={setMoreOpen}>
-            <Popover.Trigger asChild>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnIcon}`}
-                aria-label={t("patients.heroCard.moreActionsAria")}
-                title={t("patients.heroCard.moreActions")}
-              >
-                <MoreHorizontal size={14} strokeWidth={1.75} aria-hidden />
-              </button>
-            </Popover.Trigger>
-            <Popover.Portal>
-              <Popover.Content align="end" sideOffset={6} className={styles.heroMenuPopover}>
-                {canEdit && (
-                  <button
-                    type="button"
-                    className={styles.heroMenuItem}
-                    onClick={() => {
-                      setMoreOpen(false);
-                      onEdit();
-                    }}
-                  >
-                    <Edit size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.editPatient")}
-                  </button>
-                )}
-                {/* Acceso al portal con CUENTA REAL: el paciente define su
-                    propia contraseña desde un correo (la clínica nunca la ve). */}
-                {portalAccountStatus === "active" ? (
-                  <div
-                    className={styles.heroMenuItem}
-                    aria-disabled
-                    style={{ opacity: 0.65, cursor: "default", pointerEvents: "none" }}
-                  >
-                    <UserCheck size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.portalActive")}
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.heroMenuItem}
-                    disabled={invitingPortal}
-                    onClick={() => {
-                      setMoreOpen(false);
-                      onInvitePortal?.();
-                    }}
-                  >
-                    <Send size={12} strokeWidth={1.75} aria-hidden />{" "}
-                    {portalAccountStatus === "invited"
-                      ? t("patients.heroCard.portalResend")
-                      : t("patients.heroCard.portalInvite")}
-                  </button>
-                )}
-                {portalAccountStatus === "invited" && (
-                  <div className={styles.heroMenuHint}>{t("patients.heroCard.portalInvitedHint")}</div>
-                )}
-
-                {/* Link LEGACY de SOLO LECTURA (portalToken) — opción aparte,
-                    sin cuenta ni contraseña. */}
-                {portalUrl ? (
-                  <button
-                    type="button"
-                    className={styles.heroMenuItem}
-                    onClick={() => {
-                      setMoreOpen(false);
-                      navigator.clipboard.writeText(portalUrl);
-                    }}
-                  >
-                    <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.copyReadonlyLink")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.heroMenuItem}
-                    onClick={() => {
-                      setMoreOpen(false);
-                      onGeneratePortal?.();
-                    }}
-                  >
-                    <ExternalLink size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.generateReadonlyLink")}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className={styles.heroMenuItem}
-                  onClick={() => {
-                    setMoreOpen(false);
-                    window.print();
-                  }}
-                >
-                  <Printer size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.printSummary")}
-                </button>
-                <button
-                  type="button"
-                  className={styles.heroMenuItem}
-                  onClick={() => {
-                    setMoreOpen(false);
-                    router.push(
-                      hasNextAppt
-                        ? `/dashboard/agenda?highlight=${nextAppointment!.id}`
-                        : "/dashboard/agenda",
-                    );
-                  }}
-                >
-                  <Calendar size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.viewInAgenda")}
-                </button>
-                {canDelete && onDelete && (
-                  <>
-                    <div className={styles.heroMenuDivider} role="separator" />
-                    <button
-                      type="button"
-                      className={`${styles.heroMenuItem} ${styles.heroMenuItemDanger}`}
-                      onClick={() => {
-                        setMoreOpen(false);
-                        onDelete();
-                      }}
-                    >
-                      <Trash2 size={12} strokeWidth={1.75} aria-hidden /> {t("patients.heroCard.deletePatient")}
-                    </button>
-                  </>
-                )}
-              </Popover.Content>
-            </Popover.Portal>
-          </Popover.Root>
-        </div>
+        {/* Con el rediseño, «Próxima cita» y los botones van juntos en una caja
+            que baja ENTERA de renglón cuando no cabe: la cita se queda siempre
+            pegada a «Iniciar consulta», que es la consulta que ese botón abre.
+            Apagado, los botones van sueltos donde siempre. */}
+        {rediseno ? (
+          <div className={styles.heroLado}>
+            {hasNextAppt && <div className={styles.heroMetrics}>{pildoraCita}</div>}
+            {acciones}
+          </div>
+        ) : (
+          acciones
+        )}
       </div>
 
       <div className={styles.heroAlerts} role="group" aria-label={t("patients.heroCard.alertsAria")}>

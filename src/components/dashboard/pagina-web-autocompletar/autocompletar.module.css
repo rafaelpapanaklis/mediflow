@@ -1,0 +1,314 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Autocompletar la página web (ws1-t6) — el panel de propuestas.
+
+   Vive DENTRO de `RaizPaginaWeb` (pagina-web-rediseno/raiz.tsx), que ya
+   monta `CLASES_MENU`: aquí no se declara ni un token, solo se LEEN los
+   `--m2-*` del menú por herencia y los semánticos de globals.css
+   (`--success-*`, `--warning-*`, `--danger-*`) con su respaldo. Botones,
+   tarjetas, insignias e inputs son los de `pagina-web.module.css`; esta
+   hoja solo trae lo que aquella no tiene: la tabla de propuestas y la
+   comparación «hoy en tu página» / «propuesta».
+
+   ANCHOS: computadoras e iPads. Nada se esconde por ancho: en contenedor
+   angosto la fila de un servicio se APILA (nombre arriba, cifras abajo),
+   completa.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bannerBoton {
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.regla {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--m2-iniciales-fondo);
+  border: 1px solid color-mix(in srgb, var(--m2-activo) 30%, transparent);
+  border-radius: 11px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--m2-texto-2);
+}
+
+.regla svg { color: var(--m2-activo); flex-shrink: 0; margin-top: 1px; }
+.regla b { color: var(--m2-texto); }
+
+/* ── De dónde salió el dato ─────────────────────────────────────── */
+
+.origen {
+  margin: 2px 0 0;
+  line-height: 1.45;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.origen a {
+  color: var(--m2-activo);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .origen a:hover { text-decoration: underline; }
+}
+
+/* ── Lo que falta: se dice ──────────────────────────────────────── */
+
+.faltantes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.faltante {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  border: 1px solid var(--warning-border-strong, rgba(217, 119, 6, 0.35));
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--m2-texto-2);
+}
+
+.faltante svg { color: var(--warning-strong, var(--m2-texto-2)); flex-shrink: 0; margin-top: 1px; }
+
+.faltante a {
+  color: var(--m2-texto);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* ── Tabla de servicios propuestos ──────────────────────────────── */
+
+.barraServicios {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.barraServiciosLado {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.conmutador {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-texto-2);
+  cursor: pointer;
+}
+
+.casilla {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  accent-color: var(--m2-activo);
+  cursor: pointer;
+}
+
+.casilla:disabled { cursor: not-allowed; }
+
+.servicios {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.servicio {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 12px;
+  padding: 11px 14px;
+  background: var(--m2-tarjeta);
+}
+
+.servicio + .servicio { border-top: 1px solid var(--m2-tarjeta-borde); }
+
+.servicioQuieto { background: var(--m2-hover); }
+
+.servicioNombre {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--m2-texto);
+  min-width: 0;
+}
+
+.servicioDetalle {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  line-height: 1.4;
+}
+
+.servicioCifras {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.precio {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--m2-texto);
+}
+
+.precioAntes {
+  display: block;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  text-decoration: line-through;
+}
+
+.precioNota {
+  display: block;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.servicioDesc {
+  grid-column: 2 / -1;
+  margin-top: 6px;
+}
+
+@container paginaWeb (max-width: 560px) {
+  .servicio { grid-template-columns: 17px minmax(0, 1fr); }
+  .servicioCifras { grid-column: 2; text-align: left; }
+  .precioAntes, .precioNota { display: inline; margin-left: 8px; }
+}
+
+/* ── Comparación «hoy» / «propuesta» ────────────────────────────── */
+
+.propuesta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.propuesta + .propuesta {
+  border-top: 1px solid var(--m2-tarjeta-borde);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+
+.propuestaCabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.propuestaTitulo {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+
+.hoy {
+  border-left: 3px solid var(--m2-tarjeta-borde);
+  padding: 2px 0 2px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--m2-texto-3);
+}
+
+.hoy b { color: var(--m2-texto-2); font-weight: 650; }
+
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--warning-strong, var(--m2-texto-2));
+}
+
+.aviso svg { flex-shrink: 0; margin-top: 1px; }
+
+.pie {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.costo {
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+}
+
+.costo b { color: var(--m2-texto); font-weight: 650; }
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  border: 1px solid color-mix(in srgb, var(--danger, currentColor) 35%, transparent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--m2-texto);
+}
+
+.error svg { color: var(--danger, currentColor); flex-shrink: 0; margin-top: 1px; }
+.error a { color: var(--m2-texto); font-weight: 650; }
+
+.personas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--m2-texto-2);
+}
+
+.personas b { color: var(--m2-texto); font-weight: 650; }
+
+.girando { animation: autocompletarGiro 0.9s linear infinite; }
+
+@keyframes autocompletarGiro {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando { animation: none; }
+}

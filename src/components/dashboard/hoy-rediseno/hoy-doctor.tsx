@@ -5,6 +5,10 @@
  * y con los mismos clics: el siguiente paciente con sus tres botones y sus
  * alertas, el resto del día, las tareas pendientes, los pacientes recientes y
  * los atajos del pie.
+ *
+ * «Ver agenda» manda a `/dashboard/agenda` (la nueva), no a la de siempre:
+ * esta pantalla solo existe con la bandera `menu-dos-niveles` encendida, y con
+ * ella la agenda es ésa. Ver `hoy-recepcion.tsx`.
  */
 
 import Link from "next/link";
@@ -68,7 +72,7 @@ export function HoyDoctor({ user, data }: Props) {
               : t("home.doctor.appointmentsCount", { count: restoDelDia.length })
           }
           accion={
-            <Link href="/dashboard/appointments" className={s.tarjetaEnlace}>
+            <Link href="/dashboard/agenda" className={s.tarjetaEnlace}>
               {t("home.doctor.viewAgenda")}
               <ChevronRight size={13} strokeWidth={1.75} aria-hidden />
             </Link>
@@ -192,6 +196,7 @@ function SiguientePaciente({ appt }: { appt: SiguienteCita }) {
             <div className={s.heroeChips}>
               {primeraAlergia && (
                 <AlergiesPopover
+                  apariencia="nueva"
                   alerts={appt.patientAlerts ?? {}}
                   trigger={
                     <button
@@ -208,6 +213,7 @@ function SiguientePaciente({ appt }: { appt: SiguienteCita }) {
               )}
               {primerMedicamento && !primeraAlergia && (
                 <AlergiesPopover
+                  apariencia="nueva"
                   alerts={appt.patientAlerts ?? {}}
                   trigger={
                     <button type="button" className={`${s.chip} ${s.chipAlerta}`}>

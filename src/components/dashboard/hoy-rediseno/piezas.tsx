@@ -13,7 +13,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { CalendarPlus, Search, UserPlus, type LucideIcon } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
-import { useCommandPalette } from "@/hooks/use-command-palette";
+import { pedirAbrirPaleta } from "@/hooks/use-command-palette";
 import { useT } from "@/i18n/i18n-provider";
 import { timeGreeting, formatLongDate, firstName } from "@/lib/home/greet";
 import type { AppointmentStatus } from "@/lib/home/types";
@@ -84,7 +84,6 @@ export function AccionesRapidas() {
 
 export function BarraAtajos() {
   const t = useT();
-  const { openPalette } = useCommandPalette();
   const { open: abrirCita } = useNewAppointmentDialog();
   const { open: abrirPaciente } = useNewPatientDialog();
 
@@ -102,7 +101,10 @@ export function BarraAtajos() {
         <UserPlus size={16} strokeWidth={1.75} aria-hidden />
         {t("home.shortcutBar.newPatient")}
       </button>
-      <button type="button" className={`${s.boton} ${s.botonSuave}`} onClick={openPalette}>
+      {/* Hallazgo 17 (ws1-t8): antes esto abría un `useCommandPalette()` PROPIO,
+          un estado que nadie pintaba, y el clic no hacía nada. La paleta que
+          existe es la del topbar; se le pide por evento de ventana. */}
+      <button type="button" className={`${s.boton} ${s.botonSuave}`} onClick={pedirAbrirPaleta}>
         <Search size={16} strokeWidth={1.75} aria-hidden />
         {t("home.shortcutBar.searchPatient")}
       </button>

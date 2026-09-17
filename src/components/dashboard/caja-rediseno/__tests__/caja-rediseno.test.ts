@@ -4,9 +4,16 @@
  * Run: npx tsx --test src/components/dashboard/caja-rediseno/__tests__/caja-rediseno.test.ts
  *
  * Lo que fija:
- *  - Caja no vuelve a la monoespaciada a mano: Rafael pidió Instrument Sans
- *    en el 100 % del panel, importes, horas y folios incluidos, y las
- *    columnas se cuadran con `tabular-nums`, no con otra letra.
+ *  - Caja tiene DOS caminos en el mismo archivo, y la letra de los importes
+ *    se vigila por separado en cada uno:
+ *     · camino NUEVO (interruptor encendido): cero monoespaciada. Rafael pidió
+ *       Instrument Sans en el 100 % del panel, importes, horas y folios
+ *       incluidos, y las columnas se cuadran con `tabular-nums`.
+ *     · camino VIEJO (interruptor apagado, las clínicas que pagan): la Caja de
+ *       `main`, byte a byte. Las 16 monoespaciadas de siempre siguen ahí, cada
+ *       una condicionada al interruptor. Un candado anterior prohibía la
+ *       monoespaciada en todo `caja-client.tsx`, sin distinguir caminos, y eso
+ *       cambió la letra del dinero a todas las clínicas sin la bandera.
  *  - El rediseño solo se viste con el interruptor: la raíz de `CajaClient`
  *    recibe `CLASES_CAJA_REDISENO` únicamente cuando `rediseno` es true, y
  *    `page.tsx` lo saca del MISMO interruptor que el menú de dos niveles.
@@ -34,10 +41,85 @@ const ARCHIVOS_CAJA = [
 // nombrar lo que prohíbe.
 const LETRA_DE_MAQUINA = new RegExp(["font-", "mono"].join("") + "|" + ["mono", "space"].join(""), "i");
 
-test("Caja no usa monoespaciada a mano: cero letra de máquina", () => {
+// Cómo distingue el candado los dos caminos leyendo el archivo: la ÚNICA forma
+// admitida de pedir la letra de máquina en `caja-client.tsx` es esta, literal,
+// y siempre delante de `tabular-nums` (así estaban las 16 en main). Con el
+// interruptor encendido vale `undefined` —React no escribe la propiedad— y con
+// él apagado es la misma cadena, en la misma posición del objeto, que en main.
+// `rediseno` es la prop de `CajaClient` o la de `SumRow`/`CloseLine` (lo fija
+// el test de abajo); en cualquier otra función, tsc no la encontraría.
+const LETRA_DE_SIEMPRE = ["var(--font-", "mono, ", "mono", "space)"].join("");
+const SOLO_CAMINO_VIEJO = `fontFamily: rediseno ? undefined : "${LETRA_DE_SIEMPRE}", fontVariantNumeric: "tabular-nums"`;
+
+/** Lo que cada monoespaciada de main viste, en el orden del archivo. */
+const IMPORTES_DE_SIEMPRE: Array<[string, RegExp]> = [
+  ["otros métodos del turno", /\{fmtMXNdec\(totals\.otherIncome\)\}/],
+  ["importe de cada retiro", /−\{fmtMXNdec\(w\.amount\)\}/],
+  ["movimientos del turno: importe", /\{signedAmount\(r\)\}/],
+  ["movimientos del turno: descuento", /fmtMXNdec\(r\.discount\)/],
+  ["historial de cortes: apertura", /fmtMXNdec\(h\.openingBalance\)/],
+  ["historial de cortes: esperado", /fmtMXNdec\(h\.expectedCash\)/],
+  ["historial de cortes: contado", /fmtMXNdec\(h\.countedClosingBalance\)/],
+  ["abrir caja: PIN", /value=\{openPin\}/],
+  ["abrir caja: confirmar PIN", /value=\{openPinConfirm\}/],
+  ["abrir caja: apertura sugerida", /fmtMXNdec\(caja\.suggestedOpening\)/],
+  ["retiro: PIN", /value=\{wPin\}/],
+  ["cerrar caja: efectivo esperado", /fmtMXNdec\(totals\.expectedCash\)/],
+  ["cerrar caja: PIN", /value=\{closePin\}/],
+  ["resumen del corte: importe", /\{signedAmount\(r\)\}/],
+  ["resumen del corte: SumRow", /strong \? 14\.5 : 13, .*\{value\}/],
+  ["cerrar caja: CloseLine", /strong \? 14 : 13, .*\{value\}/],
+];
+
+test("camino nuevo: ni una letra de máquina que no dependa del interruptor", () => {
   for (const rel of ARCHIVOS_CAJA) {
-    const texto = leer(rel);
-    assert.doesNotMatch(texto, LETRA_DE_MAQUINA, `${rel} vuelve a pedir una letra de máquina`);
+    // Quitada la forma condicionada, que con el interruptor encendido no pinta
+    // nada, no puede quedar ni una: eso sería monoespaciada en el rediseño.
+    const texto = leer(rel).split(SOLO_CAMINO_VIEJO).join("");
+    assert.doesNotMatch(texto, LETRA_DE_MAQUINA, `${rel} pide una letra de máquina que también sale con el rediseño`);
+  }
+  // Y fuera de caja-client.tsx no hay camino viejo que proteger: ahí, cero.
+  for (const rel of ARCHIVOS_CAJA.filter(r => !r.endsWith("caja-client.tsx"))) {
+    assert.ok(!leer(rel).includes(SOLO_CAMINO_VIEJO), `${rel} no tiene camino viejo`);
+  }
+});
+
+test("camino viejo: las 16 monoespaciadas de main siguen ahí, cada una detrás del interruptor", () => {
+  const cliente = leer("src/app/dashboard/caja/caja-client.tsx");
+  const lineas = cliente.split("\n");
+  const usos: number[] = [];
+  for (let i = 0; i < lineas.length; i++) {
+    const veces = lineas[i].split(SOLO_CAMINO_VIEJO).length - 1;
+    assert.ok(veces <= 1, `línea ${i + 1}: más de una monoespaciada en la misma línea`);
+    if (veces === 1) usos.push(i);
+  }
+  assert.equal(
+    usos.length,
+    IMPORTES_DE_SIEMPRE.length,
+    `con el interruptor apagado Caja lleva ${IMPORTES_DE_SIEMPRE.length} importes en monoespaciada, como main; hay ${usos.length}`,
+  );
+  usos.forEach((i, n) => {
+    const [que, ancla] = IMPORTES_DE_SIEMPRE[n];
+    // El PIN lleva el estilo en una línea y el valor en la siguiente.
+    const contexto = `${lineas[i]}\n${lineas[i + 1] ?? ""}`;
+    assert.match(contexto, ancla, `la monoespaciada nº ${n + 1} (línea ${i + 1}) debería vestir «${que}»`);
+  });
+});
+
+test("SumRow y CloseLine reciben el interruptor, obligatorio, en todas sus llamadas", () => {
+  const cliente = leer("src/app/dashboard/caja/caja-client.tsx");
+  for (const nombre of ["SumRow", "CloseLine"]) {
+    // Obligatorio (sin `?`): una llamada que lo olvide no compila.
+    assert.match(
+      cliente,
+      new RegExp(`function ${nombre}\\(\\{[^}]*\\brediseno\\b[^}]*\\}: \\{[^}]*\\brediseno: boolean[^}]*\\}\\)`),
+      `${nombre} tiene que recibir \`rediseno: boolean\``,
+    );
+    const llamadas = cliente.match(new RegExp(`<${nombre}\\b[^>]*/>`, "g")) ?? [];
+    assert.ok(llamadas.length > 0, `${nombre} se usa`);
+    for (const llamada of llamadas) {
+      assert.match(llamada, /\brediseno=\{rediseno\}/, `${nombre} sin el interruptor de la pantalla: ${llamada.trim()}`);
+    }
   }
 });
 
