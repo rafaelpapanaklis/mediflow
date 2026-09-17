@@ -27,6 +27,12 @@ export const AI_FEATURE_CONSULT_ANALYSIS = "consult_analysis";
 export const AI_FEATURE_XRAY_ANALYSIS = "xray_analysis";
 export const AI_FEATURE_PRESCRIPTION_CHECK = "prescription_check";
 
+/**
+ * Redacción de la página web (autocompletar). PREPAGO como Sabina: se cobra al
+ * monedero con `chargeUsage` y NO pasa por el cupo del plan.
+ */
+export const AI_FEATURE_LANDING_COPY = "landing_copy";
+
 /** Las 4 features que el plan absorbe (nunca se cobran al monedero). */
 export const AI_INCLUDED_FEATURES = [
   AI_FEATURE_CHAT_ASSISTANT,
@@ -50,6 +56,7 @@ export const AI_BILLING_FEATURE_LABEL_ES: Record<string, string> = {
   // AI_FEATURE_SABINA vive en src/lib/sabina/engine-catalog.ts (server-only);
   // test:sabina-cobro comprueba que el slug y esta clave coinciden.
   sabina: "Sabina",
+  [AI_FEATURE_LANDING_COPY]: "Redacción de la página web",
 };
 
 /**
