@@ -29,12 +29,19 @@
  * que ya existe, así que las citas, los doctores, las unidades, el refetch con
  * caché, las actualizaciones optimistas y el rollback son los mismos que usa
  * la agenda actual. Aquí no hay ni un `useReducer` nuevo.
+ *
+ * COLORES: la raíz monta `CLASES_MENU` (`menu-dos-niveles/clases.ts`), los
+ * `--m2-*` del menú con su versión oscura, y `agenda-nueva.module.css` los
+ * lee para vestir la agenda en claro y en oscuro (hallazgo 18). Las ventanas
+ * compartidas con la agenda de siempre («Editar cita», el calendario,
+ * «Pendientes de validar») reciben su ropa desde `ropa.ts` (hallazgo 9).
  */
 
 import { useCallback, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { instrumentSans } from "@/fonts/menu";
+import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { AgendaValidateBanner } from "@/components/dashboard/agenda/agenda-validate-banner";
 import { ChangeRequestsPanel } from "@/components/dashboard/change-requests-panel";
@@ -47,6 +54,7 @@ import { PanelHuecos } from "./panel-huecos";
 import { VistaDia } from "./vista-dia";
 import { VistaSemana } from "./vista-semana";
 import { VistaMes } from "./vista-mes";
+import { ROPA_VALIDAR } from "./ropa";
 import s from "./agenda-nueva.module.css";
 
 export interface AgendaNuevaProps {
@@ -101,7 +109,7 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
   }, [highlightId, state.appointments, abrirCita, searchParams, pathname, router]);
 
   return (
-    <div className={`${s.raiz} ${instrumentSans.variable}`}>
+    <div className={`${CLASES_MENU} ${s.raiz} ${instrumentSans.variable}`}>
       <BarraHerramientas />
 
       <div className={s.cuerpo}>
@@ -114,7 +122,7 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
                 como mucho el 40 % y hace scroll, y a donde manda la campana
                 tiene que verse sin buscarlo. */}
             <BookingRequestsPanel initialOpen={searchParams.get("solicitudes") === "1"} />
-            <AgendaValidateBanner />
+            <AgendaValidateBanner ropa={ROPA_VALIDAR} />
             <ChangeRequestsPanel onResolved={alResolverSolicitud} />
           </div>
           {/* ── Las tres vistas ──
