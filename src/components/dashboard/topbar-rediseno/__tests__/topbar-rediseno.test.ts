@@ -96,16 +96,36 @@ test("las cinco piezas aceptan la ropa como prop opcional y la barra de siempre 
   }
 });
 
-test("la barra del menú de dos niveles viste las cinco piezas con apariencia=\"nueva\"", () => {
+// El aviso de sala de espera («X pacientes esperan >20 min») es la única pieza
+// que la barra nueva NO monta: Rafael lo quitó. Y como el sondeo de 60 s a
+// /api/analytics/waiting-room vive DENTRO del componente, no montarlo es lo
+// que apaga la consulta. La barra de siempre lo sigue montando (test de arriba).
+const SIN_MONTAR_EN_LA_NUEVA = "WaitingRoomAlert";
+
+test("la barra del menú de dos niveles viste sus cuatro piezas con apariencia=\"nueva\"", () => {
   const nueva = leer(BARRA_NUEVA);
-  for (const { componente } of PIEZAS) {
+  const montadas = PIEZAS.filter((p) => p.componente !== SIN_MONTAR_EN_LA_NUEVA);
+  for (const { componente } of montadas) {
     assert.match(
       nueva,
       new RegExp(`<${componente}\\b[^>]*apariencia="nueva"`),
       `${componente} va con la ropa nueva en la barra nueva`,
     );
   }
-  assert.equal((nueva.match(/<[A-Z]\w*\b[^>]*apariencia="nueva"/g) ?? []).length, PIEZAS.length, "ni una pieza más ni una menos");
+  assert.equal((nueva.match(/<[A-Z]\w*\b[^>]*apariencia="nueva"/g) ?? []).length, montadas.length, "ni una pieza más ni una menos");
+});
+
+test("la barra nueva no monta el aviso de sala de espera, y por eso tampoco sondea", () => {
+  const nueva = leer(BARRA_NUEVA);
+  assert.doesNotMatch(nueva, /<WaitingRoomAlert\b/, "la barra nueva no pinta el aviso");
+  assert.doesNotMatch(nueva, /from "[^"]*waiting-room-alert"/, "ni lo importa");
+  assert.doesNotMatch(nueva, /api\/analytics\/waiting-room"/, "ni pregunta por su cuenta");
+  // El sondeo sigue viviendo solo dentro del componente: si alguien lo saca a
+  // un hook compartido, este test obliga a volver a mirar la barra nueva.
+  const aviso = leer("components/dashboard/waiting-room-alert.tsx");
+  assert.match(aviso, /fetch\("\/api\/analytics\/waiting-room"/, "el sondeo vive dentro del componente");
+  // Y la barra de siempre no pierde nada.
+  assert.match(leer(BARRA_VIEJA), /<WaitingRoomAlert \/>/, "la barra de siempre lo monta igual que hoy");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
