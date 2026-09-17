@@ -24,9 +24,15 @@ function isTypingContext(): boolean {
 
 interface UseGoToShortcutsOptions {
   enabled: boolean;
+  /**
+   * A dónde manda «G A». La barra del menú de dos niveles pasa la agenda
+   * nueva (`/dashboard/agenda`); sin esto —la barra de siempre— «G A» sigue
+   * mandando a la agenda de siempre, como hasta hoy.
+   */
+  rutaAgenda?: string;
 }
 
-export function useGoToShortcuts({ enabled }: UseGoToShortcutsOptions) {
+export function useGoToShortcuts({ enabled, rutaAgenda }: UseGoToShortcutsOptions) {
   const router = useRouter();
   const awaitingG = useRef(false);
   const timeoutRef = useRef<number | null>(null);
@@ -48,9 +54,10 @@ export function useGoToShortcuts({ enabled }: UseGoToShortcutsOptions) {
 
       if (awaitingG.current) {
         const key = e.key.toLowerCase();
-        if (GO_TO_MAP[key]) {
+        const destino = key === "a" && rutaAgenda ? rutaAgenda : GO_TO_MAP[key];
+        if (destino) {
           e.preventDefault();
-          router.push(GO_TO_MAP[key]);
+          router.push(destino);
         }
         clearPending();
         return;
@@ -67,7 +74,7 @@ export function useGoToShortcuts({ enabled }: UseGoToShortcutsOptions) {
       window.removeEventListener("keydown", handler);
       clearPending();
     };
-  }, [enabled, router]);
+  }, [enabled, router, rutaAgenda]);
 }
 
 interface UseCreateShortcutsOptions {

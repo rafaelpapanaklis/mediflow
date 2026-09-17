@@ -1,0 +1,911 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Piezas de la barra superior del rediseño (ws1-t6): la paleta de
+   comandos (Ctrl+K), el panel de atajos (?), la campana de avisos, los
+   insights semanales y la alerta de sala de espera.
+
+   Habla el idioma visual del menú de dos niveles que Rafael aprobó:
+   NO declara tokens propios. Cada capa flotante (los dos desplegables,
+   las tres ventanas) monta `CLASES_MENU` (`menu-dos-niveles/clases.ts`),
+   que trae los `--m2-*` del menú con su versión oscura y las dos
+   familias tipográficas; aquí solo hay clases que los leen. Lo que el
+   menú no tiene —éxito, alerta, peligro, info— sale de los tokens
+   semánticos de globals.css (`--success-*`, `--danger-*`…), los mismos
+   que el propio menú usa como respaldo en `--m2-soporte`. Un respaldo
+   dentro de `var()` es lo único que lleva un color escrito.
+
+   Las cifras (contadores, importes, horas) van con `tabular-nums` sobre
+   Instrument Sans: ni una letra de máquina.
+
+   Solo se aplica con la apariencia "nueva", que únicamente pasa la barra
+   del menú de dos niveles (`topbar-dos-niveles.tsx`). La barra de siempre
+   no pasa nada y cada pieza se pinta con sus `style` de siempre: no puede
+   cambiar ni un píxel por culpa de esto (`apariencia.ts`).
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Raíz de cada capa flotante ──────────────────────────────────── */
+
+.piel {
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Cifras de ancho fijo en TODO lo que cuelga de aquí. Va sobre los HIJOS
+   y no sobre la raíz a propósito: la raíz lleva `.tokens` del menú, y
+   `tipografia-panel.tsx` le pone a esa clase `font-variant-numeric: normal`
+   con más peso; sus hijos heredan de aquí. */
+.piel > * {
+  font-variant-numeric: tabular-nums;
+}
+
+.piel *,
+.piel *::before,
+.piel *::after {
+  box-sizing: border-box;
+}
+
+/* ── Disparadores en la barra (campana, insights) ─────────────────── */
+
+.ancla {
+  position: relative;
+}
+
+.botonIcono {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--m2-texto-2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .botonIcono:hover {
+    background: var(--m2-hover);
+    border-color: var(--m2-tarjeta-borde);
+    color: var(--m2-texto);
+  }
+}
+
+.botonIcono:focus-visible,
+.alerta:focus-visible,
+.cerrar:focus-visible,
+.enlace:focus-visible,
+.paletaEsc:focus-visible,
+.paletaAyuda:focus-visible,
+.filaBoton:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* Punto de «hay algo sin leer» (campana). */
+.punto {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--m2-activo);
+  box-shadow: 0 0 0 2px var(--m2-n2-fondo);
+}
+
+/* Contador de insights sin leer: el mismo ámbar que los contadores del menú. */
+.contador {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--m2-contador-fondo);
+  color: var(--m2-contador-texto);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--m2-n2-fondo);
+}
+
+/* ── Alerta de sala de espera (pastilla) ─────────────────────────── */
+
+.alerta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--danger-border-strong);
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger, #dc2626);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-decoration: none;
+  animation: latido 1.6s ease-in-out infinite;
+}
+
+@media (hover: hover) {
+  .alerta:hover {
+    background: var(--danger-soft-strong);
+  }
+}
+
+@keyframes latido {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--danger-soft-strong);
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+/* ── Desplegables (campana, insights): la misma caja que los del menú ─ */
+
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  max-height: 480px;
+  overflow: hidden;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+}
+
+.panelAncho {
+  width: 380px;
+  max-height: 500px;
+}
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--m2-borde);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+  color: var(--m2-texto);
+}
+
+.cabeceraTitulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cabeceraIcono {
+  color: var(--m2-activo);
+}
+
+.enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--m2-activo);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .enlace:hover {
+    text-decoration: underline;
+  }
+}
+
+.lista {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.vacio {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+}
+
+/* Una fila de aviso (enlace) o de insight (botón). */
+.fila {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--m2-borde);
+  color: var(--m2-texto);
+  text-decoration: none;
+  transition: background 0.12s;
+}
+
+.fila:last-child {
+  border-bottom: 0;
+}
+
+@media (hover: hover) {
+  .fila:hover {
+    background: var(--m2-hover);
+  }
+}
+
+.filaBoton {
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filaNoLeida {
+  background: var(--m2-tarjeta-hover);
+}
+
+.filaEncabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.filaTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Sin puntos suspensivos: un título largo salta de línea en vez de
+   cortarse. Nada se esconde por ancho. */
+.filaTitulo {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--m2-texto);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.filaSub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.filaResumen {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--m2-texto-2);
+  overflow-wrap: anywhere;
+}
+
+.filaCuando {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--m2-texto-3);
+}
+
+.puntoNoLeido {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--m2-activo);
+}
+
+/* La cajita del ícono de cada aviso, teñida por tipo. */
+.icono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+/* ── Tonos: el menú no tiene semáforo, así que salen de globals ──── */
+
+.tonoExito {
+  color: var(--success-strong, #047857);
+  background: var(--success-soft);
+}
+
+.tonoAlerta {
+  color: var(--warning-strong, #a85a05);
+  background: var(--warning-soft);
+}
+
+.tonoPeligro {
+  color: var(--danger, #dc2626);
+  background: var(--danger-soft);
+}
+
+.tonoInfo {
+  color: var(--info-strong, #1d4ed8);
+  background: var(--info-soft);
+}
+
+.tonoMarca {
+  color: var(--m2-iniciales-texto);
+  background: var(--m2-iniciales-fondo);
+}
+
+.tonoNeutro {
+  color: var(--m2-texto-2);
+  background: var(--m2-hover);
+}
+
+/* Tarjeta de un punto del insight (dentro de su ventana). */
+.tarjetaTono {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+.tarjetaTono.tonoAlerta {
+  border-color: var(--warning-border-strong);
+}
+
+.tarjetaTono.tonoPeligro {
+  border-color: var(--danger-border-strong);
+}
+
+.tarjetaTono.tonoNeutro {
+  border-color: var(--m2-borde);
+}
+
+.tarjetaTonoTitulo {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tarjetaTonoDetalle {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--m2-texto-2);
+}
+
+.tarjetas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Ventanas (paleta, atajos, detalle de insight) ───────────────── */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(5, 5, 10, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  animation: aparece 0.15s ease-out;
+}
+
+/* El velo del detalle de insight centra él mismo la ventana (no es un
+   portal de Radix: es un div fijo dentro del disparador). */
+.veloCentrado {
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.dialogo {
+  position: fixed;
+  z-index: 50;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 92vw);
+  max-height: 85vh;
+  overflow: hidden;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+  animation: entraDialogo 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dialogoEstatico {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100vh - 64px);
+  overflow: hidden;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+}
+
+.paleta {
+  position: fixed;
+  z-index: 50;
+  top: 15vh;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 90vw);
+  max-height: 70vh;
+  overflow: hidden;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px -10px rgba(15, 10, 30, 0.25), 0 8px 20px -8px rgba(15, 10, 30, 0.15);
+  animation: entraPaleta 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes aparece {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Cada ventana declara su `transform` de reposo también en el `to`: un `to`
+   sin transform terminaría en el de la clase, y para la paleta (que solo
+   lleva translateX) eso era caer casi medio alto. */
+@keyframes entraDialogo {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes entraPaleta {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .velo,
+  .dialogo,
+  .paleta,
+  .alerta {
+    animation: none;
+  }
+}
+
+.dialogoCabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.dialogoTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.dialogoTitulo {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  color: var(--m2-texto);
+  overflow-wrap: anywhere;
+}
+
+.dialogoTituloIcono {
+  display: inline;
+  margin-right: 6px;
+  vertical-align: -0.1em;
+  color: var(--m2-activo);
+}
+
+.dialogoSub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.cerrar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .cerrar:hover {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.cuerpo {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 22px 20px;
+}
+
+.cuerpoInsight {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+.resumen {
+  margin-bottom: 18px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--m2-texto);
+}
+
+/* ── Panel de atajos ─────────────────────────────────────────────── */
+
+.seccion {
+  margin-top: 16px;
+}
+
+.seccionTitulo {
+  margin: 0 0 8px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.listaAtajos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.atajo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.atajo:last-child {
+  border-bottom: 0;
+}
+
+.atajoTexto {
+  font-size: 13px;
+  color: var(--m2-texto);
+}
+
+.teclas {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+/* La tecla dibujada: la misma cajita que el «Ctrl K» de la barra, en la
+   letra del panel. */
+.kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 7px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 6px;
+  background: var(--m2-buscador-fondo);
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.kbdChica {
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.notaPie {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--m2-borde);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--m2-texto-3);
+}
+
+/* ── Paleta de comandos ──────────────────────────────────────────── */
+
+.paletaBusqueda {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.paletaLupa {
+  flex-shrink: 0;
+  color: var(--m2-texto-3);
+}
+
+.paletaInput {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--m2-texto);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.paletaInput::placeholder {
+  color: var(--m2-texto-3);
+}
+
+/* La ventana entera es el buscador: sin el anillo violeta de siempre
+   (globals.css, `input:focus-visible`) alrededor del campo. */
+.paletaInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: transparent;
+}
+
+.paletaEsc {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 6px;
+  background: var(--m2-buscador-fondo);
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.paletaPista {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--m2-borde);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--m2-texto-3);
+}
+
+.paletaLista {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.vacioPaleta {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--m2-texto-2);
+}
+
+.vacioPaletaSub {
+  margin-top: 6px;
+  color: var(--m2-texto-3);
+}
+
+.grupoTitulo {
+  padding: 10px 16px 6px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  color: var(--m2-texto-3);
+}
+
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  color: var(--m2-texto);
+  cursor: pointer;
+  transition: background 0.08s;
+}
+
+.opcion[aria-selected="true"] {
+  background: var(--m2-hover);
+}
+
+.opcionIcono {
+  flex-shrink: 0;
+  color: var(--m2-texto-3);
+}
+
+.opcion[aria-selected="true"] .opcionIcono,
+.opcionEnter {
+  flex-shrink: 0;
+  color: var(--m2-activo);
+}
+
+.opcionTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Sin puntos suspensivos: un nombre largo salta de línea en vez de
+   cortarse. Nada se esconde por ancho. */
+.opcionTitulo {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--m2-texto);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.opcionSub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.opcion[aria-selected="true"] .kbd {
+  border-color: var(--m2-activo);
+  color: var(--m2-activo);
+}
+
+/* Folio + nombre en una fila de factura, e importe a la derecha. */
+.folio {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.folioNumero {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--m2-texto);
+}
+
+.folioNombre {
+  color: var(--m2-texto-2);
+  overflow-wrap: anywhere;
+}
+
+.opcionCola {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.importe {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--m2-texto);
+}
+
+/* Estado de una factura en la paleta (pagada, vencida…). */
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.paletaPie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-tarjeta);
+  font-size: 10.5px;
+  color: var(--m2-texto-3);
+}
+
+.paletaPistas {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pista {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.paletaPistaTexto {
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--m2-texto-3);
+}
+
+.paletaAyuda {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 10.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
