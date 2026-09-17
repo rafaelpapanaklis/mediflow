@@ -6,7 +6,7 @@ import type {
   NewPatientContextValue,
   OpenNewPatientParams,
 } from "@/lib/new-patient/types";
-import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
+import { NewPatientModal, type AparienciaNuevoPaciente } from "@/components/dashboard/new-patient-modal";
 
 /**
  * Single source of truth para el modal "Nuevo paciente".
@@ -22,7 +22,18 @@ interface DialogState extends OpenNewPatientParams {
   isOpen: boolean;
 }
 
-export function NewPatientProvider({ children }: { children: ReactNode }) {
+export function NewPatientProvider({
+  children,
+  apariencia = "clasica",
+}: {
+  children: ReactNode;
+  /**
+   * La ropa de la ventana. La pone el layout con el interruptor
+   * `menu-dos-niveles`, igual que en NewAppointmentProvider; sin él es la de
+   * siempre. No cambia ninguna regla.
+   */
+  apariencia?: AparienciaNuevoPaciente;
+}) {
   const [state, setState] = useState<DialogState>({ isOpen: false });
   const router = useRouter();
 
@@ -63,6 +74,7 @@ export function NewPatientProvider({ children }: { children: ReactNode }) {
         initialName={state.initialName}
         initialPhone={state.initialPhone}
         initialEmail={state.initialEmail}
+        apariencia={apariencia}
       />
     </NewPatientContext.Provider>
   );
