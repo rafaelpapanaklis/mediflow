@@ -50,6 +50,7 @@ import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-t
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
 import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
+import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dashboard/presupuestos-en-facturacion/aviso";
 // Hallazgo 21 (ws1-t5): el umbral hacia el módulo de Ortodoncia, que NO se
 // rediseña; solo la salida hacia él habla el idioma nuevo.
 import { SalidaOrtodoncia } from "@/components/dashboard/bloques-rediseno/salidas";
@@ -3644,6 +3645,14 @@ export function PatientDetailClient({
             />
           )}
 
+          {/* Presupuestos ya no está en el menú NUEVO de la ficha (se unió con
+              Facturación), pero la pestaña sigue viva: se llega por
+              `?tab=presupuestos` y por el enlace de Facturación. Este aviso
+              dice dónde se hace ahora lo que se hacía aquí. Solo con la bandera. */}
+          {tab === "presupuestos" && rediseno && (
+            <AvisoPresupuestosMovidos onIrAFacturacion={canViewBilling ? openBillingTab : undefined} />
+          )}
+
           {tab === "presupuestos" && (
             <QuotesTab
               patientId={patient.id}
@@ -3668,6 +3677,13 @@ export function PatientDetailClient({
                 )
               }
             />
+          )}
+
+          {/* El camino de vuelta a los presupuestos que el paciente YA tenía:
+              solo sale si tiene alguno, y solo con la bandera (con ella,
+              Presupuestos no está en el menú). */}
+          {tab === "facturacion" && canViewBilling && rediseno && (
+            <EnlaceAPresupuestos patientId={patient.id} onVerPresupuestos={() => setTab("presupuestos")} />
           )}
 
           {/* Pestaña gateada por "billing.view" (mismo permiso que Caja). El

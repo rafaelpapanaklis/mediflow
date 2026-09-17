@@ -7,6 +7,7 @@ import { Sidebar, type SidebarProps } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { MenuDosNivelesServidor } from "@/components/dashboard/menu-dos-niveles/menu-servidor";
 import { TopbarDosNiveles } from "@/components/dashboard/menu-dos-niveles/topbar-dos-niveles";
+import { modulosParaMenuNuevo } from "@/components/dashboard/presupuestos-en-facturacion/menu";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { canUseCaja } from "@/lib/caja-pin";
 import { getResolvedPlan } from "@/lib/plans";
@@ -267,6 +268,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {menuDosNiveles ? (
         <MenuDosNivelesServidor
           {...sidebarProps}
+          // Marketplace fuera del menú NUEVO (decisión de Rafael). Va después
+          // del spread para pisar solo esta prop; el <Sidebar> de abajo sigue
+          // recibiendo las llaves tal cual. Ver presupuestos-en-facturacion/menu.ts.
+          clinicModuleKeys={modulosParaMenuNuevo(clinicModuleKeys)}
           puedeUsarCaja={canUseCaja(user)}
           planEtiqueta={planEtiqueta}
         />

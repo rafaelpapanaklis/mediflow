@@ -1,0 +1,77 @@
+/* Aviso de «Presupuestos ahora vive en Facturación» y su enlace de vuelta
+   (ws1-t1). Solo LEE tokens: los `--m2-*` del menú, que `.raiz` monta con
+   CLASES_MENU. Ni un token propio, ni un hex suelto. Nada se esconde por
+   ancho: las dos piezas envuelven. */
+
+.raiz {
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Sobre los HIJOS: `tipografia-panel.tsx` le pone a `.tokens`
+   `font-variant-numeric: normal` con más peso (ver hoy.module.css). */
+.raiz > * { font-variant-numeric: tabular-nums; }
+
+.aviso {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  background: var(--m2-iniciales-fondo);
+}
+
+.avisoIcono {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+.avisoTexto { flex: 1; min-width: 240px; margin: 0; color: var(--m2-texto-2); }
+.avisoTitulo { display: block; font-weight: 650; color: var(--m2-texto); }
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--m2-activo);
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-activo);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.boton:hover { background: var(--m2-tarjeta-hover); }
+.boton:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+/* La fila de Facturación que lleva a los presupuestos guardados. */
+.enlace {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+}
+
+.enlaceTexto { flex: 1; min-width: 220px; margin: 0; color: var(--m2-texto-2); }
+.enlaceCifra { font-weight: 650; font-variant-numeric: tabular-nums; color: var(--m2-texto); }
