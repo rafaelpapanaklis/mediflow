@@ -21,7 +21,7 @@ import { CLASES_FACTURA_REDISENO, CLASES_CALENDARIO_REDISENO, clasesFactura as c
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
 
 // labelKey resolved via t() at render time.
-const METHODS: { value: PaymentMethod; labelKey: string; icon: typeof CreditCard }[] = [
+export const METHODS: { value: PaymentMethod; labelKey: string; icon: typeof CreditCard }[] = [
   { value: "cash",     labelKey: "clinical.paymentModal.methodCash",      icon: Banknote },
   { value: "debit",    labelKey: "clinical.paymentModal.methodDebit",     icon: CreditCard },
   { value: "credit",   labelKey: "clinical.paymentModal.methodCredit",    icon: CreditCard },

@@ -7640,6 +7640,7 @@
       "currentSubtotalLabel": "Current subtotal:",
       "discountMxnLabel": "Discount (MXN) *",
       "discountHelper": "The total is recalculated as subtotal − discount.",
+      "applyDiscountFirst": "Apply the discount before charging, or leave it as it was.",
       "applying": "Applying…",
       "cancelInvoiceTitle": "Cancel invoice {number}",
       "cancelWarning": "You will not be able to record payments afterward. The reason will be kept in the audit log and the invoice notes.",
