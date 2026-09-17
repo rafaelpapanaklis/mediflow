@@ -15,6 +15,7 @@ import { ActiveConsultProvider } from "@/components/dashboard/active-consult-pro
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
 import { VestirDialogos } from "@/components/dashboard/dialogos-rediseno/vestir-dialogos";
+import { VestirAvisos } from "@/components/dashboard/layout-rediseno/avisos";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { TwoFactorFetchGuard } from "@/components/dashboard/two-factor-fetch-guard";
@@ -248,7 +249,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         clínicas), se visten con el diseño nuevo solo con el interruptor
         encendido. Es una prop, no un hijo más —y VestirDialogos es un
         envoltorio de hijo único, no una ranura nueva—: el árbol del layout no
-        cambia, y apagado reciben "clasica", la de siempre. */}
+        cambia, y apagado reciben "clasica", la de siempre. Los avisos (toasts)
+        del layout raíz, igual: VestirAvisos es otro envoltorio de hijo único. */}
+    <VestirAvisos activo={menuDosNiveles}>
     <VestirDialogos activo={menuDosNiveles}>
     <NewPatientProvider apariencia={menuDosNiveles ? "nueva" : "clasica"}>
     <NewAppointmentProvider apariencia={menuDosNiveles ? "nueva" : "clasica"}>
@@ -288,7 +291,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
             userRole={user.role}
           />
         )}
-        <PatientContextBar />
+        {/* La barra de consulta activa, con la ropa del interruptor (prop, no
+            hijo). Con la nueva, su `sticky top` sale de la altura REAL de la
+            barra superior, medida; con la clásica, de su `top: 52` de siempre. */}
+        <PatientContextBar apariencia={menuDosNiveles ? "nueva" : "clasica"} />
         <main
           id="main-content"
           tabIndex={-1}
@@ -312,11 +318,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     {!HIDE_SUPPLY_MODULES && <ChatLauncher />}
     {/* Sabina, en TODAS las pantallas del panel: botón fijo abajo a la derecha
         y Alt+S. No consulta nada al montarse y abrirla no llama al modelo —
-        solo preguntar cobra. En /dashboard/sabina se apaga sola. */}
-    <SabinaLanzador clinicId={clinic.id} firstName={user.firstName} oculto={isExpired} />
+        solo preguntar cobra. En /dashboard/sabina se apaga sola. Con el
+        interruptor, el cajón se viste con la ropa del menú nuevo (prop). */}
+    <SabinaLanzador clinicId={clinic.id} firstName={user.firstName} oculto={isExpired} rediseno={menuDosNiveles} />
     </NewAppointmentProvider>
     </NewPatientProvider>
     </VestirDialogos>
+    </VestirAvisos>
     </ActiveConsultProvider>
     </I18nProvider>
   );

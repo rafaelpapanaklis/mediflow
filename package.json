@@ -41,6 +41,7 @@
     "test:expediente-rediseno": "tsx --test src/components/dashboard/expediente-rediseno/__tests__/expediente-rediseno.test.ts",
     "test:clinica-visual-rediseno": "tsx --test src/components/dashboard/clinica-visual-rediseno/__tests__/clinica-visual-rediseno.test.ts",
     "test:cuenta-rediseno": "tsx --test src/components/dashboard/cuenta-rediseno/__tests__/cuenta-rediseno.test.ts",
+    "test:layout-rediseno": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/layout-rediseno/__tests__/layout-rediseno.test.tsx",
     "test:sabina-core": "tsx --test src/lib/sabina/engine-core.test.ts",
     "test:sabina-motor": "tsx --test src/lib/sabina/engine.test.ts",
     "//test:sabina-confirmacion": "El motor NO puede escribir sin confirmacion: herramientas tramposas intentan escribir desde el bucle (Prisma real contra un puerto cerrado, fetch POST, https.request) y ninguna escritura sale; las acciones solo proponen. test:sabina-propuestas: la fase 2 (una vez, a tiempo, por quien la pidio, con la huella intacta). test:sabina-confirmacion-rutas: lo mismo por los handlers de verdad (pregunta -> tarjeta -> confirmar). test:sabina-tarjeta: la tarjeta no deja confirmar por error.",
