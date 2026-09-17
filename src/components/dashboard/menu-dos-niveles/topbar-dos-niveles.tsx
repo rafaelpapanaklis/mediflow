@@ -1,7 +1,8 @@
 "use client";
 // Barra superior del menú de dos niveles: migas + buscador global (Ctrl+K).
-// Hace lo mismo que <Topbar> (paleta de comandos, atajos, avisos de sala de
-// espera, insights, notificaciones) con el aspecto del diseño nuevo. El
+// Hace lo mismo que <Topbar> (paleta de comandos, atajos, insights,
+// notificaciones) con el aspecto del diseño nuevo; el aviso de sala de
+// espera es lo único que esta barra NO monta (ver más abajo). El
 // cableado de atajos está copiado de topbar.tsx a propósito: cuando Rafael
 // apruebe el menú nuevo, la barra vieja se borra y este queda como el único.
 
@@ -12,7 +13,6 @@ import { CommandPalette } from "@/components/dashboard/command-palette";
 import { KeyboardShortcutsPanel } from "@/components/dashboard/keyboard-shortcuts-panel";
 import { NotificationsPopover } from "@/components/dashboard/notifications-popover";
 import { InsightsPopover } from "@/components/dashboard/insights-popover";
-import { WaitingRoomAlert } from "@/components/dashboard/waiting-room-alert";
 import { ROUTE_LABELS } from "@/components/dashboard/topbar";
 import { useCommandPalette } from "@/hooks/use-command-palette";
 import { useActiveConsult } from "@/hooks/use-active-consult";
@@ -129,7 +129,10 @@ export function TopbarDosNiveles({ clinicName, userRole }: { clinicName: string;
           {/* Las mismas piezas que topbar.tsx, con la ropa del diseño nuevo
               (`apariencia="nueva"`, ver topbar-rediseno/apariencia.ts). La
               barra de siempre no pasa nada y las pinta como hasta hoy. */}
-          {(userRole === "RECEPTIONIST" || userRole === "ADMIN" || userRole === "SUPER_ADMIN") && <WaitingRoomAlert apariencia="nueva" />}
+          {/* El aviso de sala de espera («X pacientes esperan >20 min») NO se
+              monta aquí: Rafael lo quitó de la barra nueva. Al no montarse
+              tampoco sondea /api/analytics/waiting-room cada 60 s. La barra
+              de siempre (topbar.tsx) lo sigue montando igual que hoy. */}
           {(userRole === "ADMIN" || userRole === "SUPER_ADMIN") && <InsightsPopover apariencia="nueva" />}
           <NotificationsPopover apariencia="nueva" />
         </div>
