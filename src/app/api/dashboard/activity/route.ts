@@ -4,6 +4,8 @@ import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
+import { dateISOInTz } from "@/lib/agenda/legacy-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +58,15 @@ export async function GET(req: NextRequest) {
       throw err;
     });
 
-  const [paidInvoices, newPatients, doneAppointments] = await Promise.all([
+  // A dónde mandan los avisos de cita. Con el interruptor por clínica
+  // `menu-dos-niveles` la clínica ve la agenda NUEVA (/dashboard/agenda), así
+  // que la campana manda ahí: «Cita completada» abre el panel de esa cita
+  // (`?date=&highlight=`, lo mismo que hace la paleta) y «Solicitud de cita»
+  // abre la bandeja de la mini-web (`?solicitudes=1`), que la agenda nueva ya
+  // monta. Sin el interruptor, los mismos enlaces de siempre, byte por byte.
+  // La respuesta del interruptor vive 60 s en memoria por clínica: no es una
+  // consulta más por cada sondeo de la campana.
+  const [paidInvoices, newPatients, doneAppointments, agendaNueva] = await Promise.all([
     prisma.invoice.findMany({
       where: { clinicId: ctx.clinicId, status: { in: ["PAID", "PARTIAL"] }, ...(relatedVis.length ? { AND: relatedVis } : {}) },
       select: { id: true, paid: true, paymentMethod: true, paidAt: true, updatedAt: true,
@@ -72,12 +82,24 @@ export async function GET(req: NextRequest) {
     }),
     prisma.appointment.findMany({
       where: { clinicId: ctx.clinicId, status: "COMPLETED", ...(relatedVis.length ? { AND: relatedVis } : {}) },
-      select: { id: true, updatedAt: true,
+      select: { id: true, updatedAt: true, startsAt: true,
         patient: { select: { firstName: true, lastName: true } } },
       orderBy: { updatedAt: "desc" },
       take: 10,
     }),
+    menuDosNivelesEncendido(ctx.clinicId),
   ]);
+
+  // La fecha de la cita en la zona de la CLÍNICA (como la hora de las
+  // solicitudes): el servidor corre en UTC y sin esto una cita de la noche
+  // abriría la agenda del día siguiente.
+  const zona: string = ctx.clinic?.timezone || "America/Mexico_City";
+  const hrefCita = (a: { id: string; startsAt: Date }) => agendaNueva
+    ? `/dashboard/agenda?date=${dateISOInTz(a.startsAt, zona)}&highlight=${a.id}`
+    : `/dashboard/appointments?focus=${a.id}`;
+  const hrefSolicitudes = agendaNueva
+    ? `/dashboard/agenda?solicitudes=1`
+    : `/dashboard/appointments?solicitudes=1`;
 
   // El feed es de actividad OCURRIDA. Un evento con fecha futura (p. ej. una
   // factura cuyo paidAt se capturó a futuro) encabeza la lista y se lee como si
@@ -110,7 +132,7 @@ export async function GET(req: NextRequest) {
       id: `app-${a.id}`,
       type: "appointment_completed" as const,
       title: `Cita completada — ${a.patient.firstName} ${a.patient.lastName}`,
-      href: `/dashboard/appointments?focus=${a.id}`,
+      href: hrefCita(a),
       at: a.updatedAt,
     })),
     ...solicitudes.map(s => ({
@@ -121,7 +143,7 @@ export async function GET(req: NextRequest) {
         day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
         timeZone: s.clinic?.timezone || "America/Mexico_City",
       })}${s.serviceName ? ` · ${s.serviceName}` : ""}`,
-      href: `/dashboard/appointments?solicitudes=1`,
+      href: hrefSolicitudes,
       at: s.createdAt,
     })),
   ]

@@ -42,8 +42,8 @@ export function NewAppointmentProvider({
   }, []);
 
   const ctx = useMemo<NewAppointmentContextValue>(
-    () => ({ open, close }),
-    [open, close],
+    () => ({ open, close, apariencia }),
+    [open, close, apariencia],
   );
 
   return (

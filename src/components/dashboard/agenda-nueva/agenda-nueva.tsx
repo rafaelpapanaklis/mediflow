@@ -13,11 +13,13 @@
  * árbol, así que la de siempre no puede cambiar ni un píxel por culpa de ésta.
  *
  * Lo que la agenda de siempre hace y el diseño no dibuja NO se pierde: la cola
- * de citas del portal por validar, las solicitudes de cambio del paciente y el
- * `?highlight=` con el que el inicio, la paleta de comandos y Nueva cita
- * mandan a una cita concreta. Se montan los MISMOS componentes (validar,
- * solicitudes) y el resaltado abre el panel de esa cita. La lista de espera
- * (la barra lateral con arrastrar a la cuadrícula) todavía no está.
+ * de citas del portal por validar, las solicitudes de cambio del paciente, las
+ * solicitudes de cita de la mini-web (`?solicitudes=1`, a donde manda la
+ * campana) y el `?highlight=` con el que el inicio, la paleta de comandos y
+ * Nueva cita mandan a una cita concreta. Se montan los MISMOS componentes
+ * (validar, solicitudes de cambio, solicitudes de la mini-web) y el resaltado
+ * abre el panel de esa cita. La lista de espera (la barra lateral con
+ * arrastrar a la cuadrícula) todavía no está.
  *
  * Crear y mover citas también son los de siempre: el botón «Nueva cita» y el
  * clic en un hueco abren la MISMA ventana (`NewAppointmentDialog`), y arrastrar
@@ -36,6 +38,7 @@ import { instrumentSans } from "@/fonts/menu";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { AgendaValidateBanner } from "@/components/dashboard/agenda/agenda-validate-banner";
 import { ChangeRequestsPanel } from "@/components/dashboard/change-requests-panel";
+import { BookingRequestsPanel } from "@/app/dashboard/appointments/booking-requests-panel";
 import { ArrastreCitas } from "./arrastre-citas";
 import { BarraHerramientas } from "./barra-herramientas";
 import { AgendaNuevaProvider, useAgendaNueva } from "./contexto-agenda-nueva";
@@ -104,6 +107,13 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
       <div className={s.cuerpo}>
         <div className={s.zonaAgenda}>
           <div className={s.colasPortal}>
+            {/* Reservas de la mini-web sin cuenta: aceptar crea expediente y
+                cita. Solo se montaba en la agenda de siempre (ws1-t8, hallazgo
+                3); el MISMO componente, con `?solicitudes=1` abierto de entrada.
+                Va primero, como allí (arriba del panel lateral): esta caja mide
+                como mucho el 40 % y hace scroll, y a donde manda la campana
+                tiene que verse sin buscarlo. */}
+            <BookingRequestsPanel initialOpen={searchParams.get("solicitudes") === "1"} />
             <AgendaValidateBanner />
             <ChangeRequestsPanel onResolved={alResolverSolicitud} />
           </div>

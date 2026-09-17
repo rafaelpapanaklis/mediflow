@@ -6,6 +6,9 @@ import { Sparkles, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { useT } from "@/i18n/i18n-provider";
+import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
+import { vestidor, type AparienciaTopbar } from "@/components/dashboard/topbar-rediseno/apariencia";
+import c from "@/components/dashboard/topbar-rediseno/piezas-topbar.module.css";
 
 interface InsightItem {
   id: string;
@@ -30,15 +33,31 @@ const TONE_COLORS: Record<string, { bg: string; border: string; fg: string }> = 
   neutral: { bg: "var(--bg-elev-2)",          border: "var(--border-soft)",       fg: "var(--text-2)" },
 };
 
+/** El mismo tono con la ropa nueva: semáforo de globals + marca del menú. */
+const TONO_NUEVO: Record<string, string> = {
+  success: c.tonoExito,
+  warning: c.tonoAlerta,
+  danger: c.tonoPeligro,
+  info: c.tonoInfo,
+  neutral: c.tonoNeutro,
+};
+
 /**
  * InsightsPopover — campanita Sparkles con badge unread + dropdown.
  * Pollea /api/notifications/insights cada 60s con visibility pause.
  * Multi-tenant: el endpoint usa clinicId desde getCurrentUser.
  *
  * Pensado para ir junto a NotificationsPopover en el topbar (reusable).
+ *
+ * `apariencia`: la ropa (topbar-rediseno/apariencia.ts). Sin ella —la barra
+ * de siempre— cada elemento recibe EXACTAMENTE los `style` de antes; con
+ * "nueva" —la barra del menú de dos niveles— se pinta con las clases del
+ * rediseño. La lógica (sondeo, marcar leído, abrir el detalle) es una.
  */
-export function InsightsPopover() {
+export function InsightsPopover({ apariencia }: { apariencia?: AparienciaTopbar }) {
   const t = useT();
+  const nueva = apariencia === "nueva";
+  const vestir = vestidor(apariencia);
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [selected, setSelected] = useState<InsightItem | null>(null);
@@ -120,20 +139,20 @@ export function InsightsPopover() {
   const insights = data?.insights ?? [];
 
   return (
-    <div ref={wrapperRef} style={{ position: "relative" }}>
+    <div ref={wrapperRef} {...vestir({ position: "relative" }, c.ancla)}>
       <button
         type="button"
         onClick={handleToggleOpen}
-        className="icon-btn-new"
+        className={nueva ? c.botonIcono : "icon-btn-new"}
         title={t("shell.insights.title")}
         aria-label={unreadCount > 0 ? t("shell.insights.ariaUnread", { count: unreadCount }) : t("shell.insights.title")}
-        style={{ position: "relative" }}
+        style={nueva ? undefined : { position: "relative" }}
       >
-        <Sparkles size={14} />
+        <Sparkles size={nueva ? 17 : 14} />
         {unreadCount > 0 && (
           <span
             aria-hidden
-            style={{
+            {...vestir({
               position: "absolute",
               top: 4,
               right: 4,
@@ -149,7 +168,7 @@ export function InsightsPopover() {
               placeItems: "center",
               fontFamily: "var(--font-mono, monospace)",
               border: "1px solid var(--bg-elev)",
-            }}
+            }, c.contador)}
           >
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
@@ -158,7 +177,7 @@ export function InsightsPopover() {
 
       {open && (
         <div
-          style={{
+          {...vestir({
             position: "absolute",
             top: "calc(100% + 8px)",
             right: 0,
@@ -173,10 +192,10 @@ export function InsightsPopover() {
             display: "flex",
             flexDirection: "column",
             fontFamily: "var(--font-sans, system-ui, sans-serif)",
-          }}
+          }, `${CLASES_MENU} ${c.piel} ${c.panel} ${c.panelAncho}`)}
         >
           <div
-            style={{
+            {...vestir({
               padding: "12px 14px",
               borderBottom: "1px solid var(--border-soft)",
               display: "flex",
@@ -185,24 +204,24 @@ export function InsightsPopover() {
               fontSize: 12,
               fontWeight: 700,
               color: "var(--text-1)",
-            }}
+            }, c.cabecera)}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Sparkles size={13} style={{ color: "var(--brand)" }} aria-hidden /> {t("shell.insights.title")}
+            <span {...vestir({ display: "inline-flex", alignItems: "center", gap: 6 }, c.cabeceraTitulo)}>
+              <Sparkles size={13} {...vestir({ color: "var(--brand)" }, c.cabeceraIcono)} aria-hidden /> {t("shell.insights.title")}
             </span>
             {insights.length > 0 && (
               <Link
                 href="/dashboard/analytics"
                 onClick={() => setOpen(false)}
-                style={{ fontSize: 11, color: "var(--brand)", textDecoration: "none", fontWeight: 600 }}
+                {...vestir({ fontSize: 11, color: "var(--brand)", textDecoration: "none", fontWeight: 600 }, c.enlace)}
               >
                 {t("shell.insights.viewAnalytics")} →
               </Link>
             )}
           </div>
-          <div style={{ overflowY: "auto", flex: 1 }}>
+          <div {...vestir({ overflowY: "auto", flex: 1 }, c.lista)}>
             {insights.length === 0 ? (
-              <div style={{ padding: 32, textAlign: "center", fontSize: 12, color: "var(--text-3)" }}>
+              <div {...vestir({ padding: 32, textAlign: "center", fontSize: 12, color: "var(--text-3)" }, c.vacio)}>
                 {t("shell.insights.empty")}
               </div>
             ) : (
@@ -211,7 +230,7 @@ export function InsightsPopover() {
                   key={ins.id}
                   type="button"
                   onClick={() => { setSelected(ins); setOpen(false); }}
-                  style={{
+                  {...vestir({
                     display: "flex",
                     flexDirection: "column",
                     gap: 4,
@@ -224,20 +243,20 @@ export function InsightsPopover() {
                     cursor: "pointer",
                     fontFamily: "inherit",
                     transition: "background 0.12s",
-                  }}
+                  }, `${c.fila} ${c.filaBoton}${ins.read ? "" : ` ${c.filaNoLeida}`}`)}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <strong style={{ fontSize: 12, color: "var(--text-1)", fontWeight: 600 }}>
+                  <div {...vestir({ display: "flex", justifyContent: "space-between", alignItems: "center" }, c.filaEncabezado)}>
+                    <strong {...vestir({ fontSize: 12, color: "var(--text-1)", fontWeight: 600 }, c.filaTitulo)}>
                       {t("shell.insights.weekOf", { date: new Date(ins.weekStart).toLocaleDateString("es-MX", { day: "numeric", month: "short" }) })}
                     </strong>
                     {!ins.read && (
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }} aria-hidden />
+                      <span {...vestir({ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }, c.puntoNoLeido)} aria-hidden />
                     )}
                   </div>
-                  <div style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+                  <div {...vestir({ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5 }, c.filaResumen)}>
                     {ins.summary}
                   </div>
-                  <div style={{ fontSize: 10, color: "var(--text-3)" }}>
+                  <div {...vestir({ fontSize: 10, color: "var(--text-3)" }, c.filaCuando)}>
                     {formatDistanceToNow(new Date(ins.createdAt), { addSuffix: true, locale: es })} · {t("shell.insights.bullets", { count: ins.insights.length })}
                   </div>
                 </button>
@@ -249,21 +268,23 @@ export function InsightsPopover() {
 
       {/* Modal con detalle del insight */}
       {selected && (
-        <InsightDetailModal insight={selected} onClose={() => setSelected(null)} />
+        <InsightDetailModal insight={selected} onClose={() => setSelected(null)} apariencia={apariencia} />
       )}
     </div>
   );
 }
 
-function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClose: () => void }) {
+function InsightDetailModal({ insight, onClose, apariencia }: { insight: InsightItem; onClose: () => void; apariencia?: AparienciaTopbar }) {
   const t = useT();
+  const nueva = apariencia === "nueva";
+  const vestir = vestidor(apariencia);
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="insight-modal-title"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
+      {...vestir({
         position: "fixed",
         inset: 0,
         background: "rgba(5, 5, 10, 0.72)",
@@ -273,10 +294,10 @@ function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClos
         placeItems: "center",
         zIndex: 200,
         padding: 24,
-      }}
+      }, `${c.velo} ${c.veloCentrado}`)}
     >
       <div
-        style={{
+        {...vestir({
           background: "var(--bg-elev)",
           border: "1px solid var(--border-strong)",
           borderRadius: 14,
@@ -286,24 +307,24 @@ function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClos
           display: "flex",
           flexDirection: "column",
           fontFamily: "var(--font-sans, system-ui, sans-serif)",
-        }}
+        }, `${CLASES_MENU} ${c.piel} ${c.dialogoEstatico}`)}
       >
         <div
-          style={{
+          {...vestir({
             padding: "16px 20px",
             borderBottom: "1px solid var(--border-soft)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
             gap: 12,
-          }}
+          }, c.dialogoCabeza)}
         >
-          <div>
-            <h3 id="insight-modal-title" style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)", margin: 0 }}>
-              <Sparkles size={14} style={{ color: "var(--brand)", display: "inline", marginRight: 6 }} aria-hidden />
+          <div {...vestir(undefined, c.dialogoTextos)}>
+            <h3 id="insight-modal-title" {...vestir({ fontSize: 15, fontWeight: 700, color: "var(--text-1)", margin: 0 }, c.dialogoTitulo)}>
+              <Sparkles size={14} {...vestir({ color: "var(--brand)", display: "inline", marginRight: 6 }, c.dialogoTituloIcono)} aria-hidden />
               {t("shell.insights.modalTitle")}
             </h3>
-            <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+            <div {...vestir({ fontSize: 11, color: "var(--text-3)", marginTop: 4 }, c.dialogoSub)}>
               {new Date(insight.weekStart).toLocaleDateString("es-MX", { day: "numeric", month: "long" })}
               {" → "}
               {new Date(insight.weekEnd).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
@@ -313,35 +334,35 @@ function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClos
             type="button"
             onClick={onClose}
             aria-label={t("common.close")}
-            style={{
+            {...vestir({
               width: 28, height: 28, display: "grid", placeItems: "center",
               background: "transparent", border: "1px solid var(--border-soft)",
               borderRadius: 7, color: "var(--text-3)", cursor: "pointer",
               flexShrink: 0,
-            }}
+            }, c.cerrar)}
           >
             <X size={13} aria-hidden />
           </button>
         </div>
-        <div style={{ padding: "18px 20px", overflowY: "auto", flex: 1 }}>
+        <div {...vestir({ padding: "18px 20px", overflowY: "auto", flex: 1 }, c.cuerpoInsight)}>
           <div
-            style={{
+            {...vestir({
               fontSize: 14,
               color: "var(--text-1)",
               lineHeight: 1.6,
               marginBottom: 18,
               fontWeight: 500,
-            }}
+            }, c.resumen)}
           >
             {insight.summary}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div {...vestir({ display: "flex", flexDirection: "column", gap: 10 }, c.tarjetas)}>
             {insight.insights.map((b, i) => {
               const tone = TONE_COLORS[b.tone] ?? TONE_COLORS.neutral;
               return (
                 <div
                   key={i}
-                  style={{
+                  {...vestir({
                     padding: 12,
                     background: tone.bg,
                     border: `1px solid ${tone.border}`,
@@ -349,10 +370,10 @@ function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClos
                     display: "flex",
                     flexDirection: "column",
                     gap: 4,
-                  }}
+                  }, `${c.tarjetaTono} ${TONO_NUEVO[b.tone] ?? c.tonoNeutro}`)}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 700, color: tone.fg }}>{b.title}</div>
-                  <div style={{ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }}>{b.detail}</div>
+                  <div {...vestir({ fontSize: 13, fontWeight: 700, color: tone.fg }, c.tarjetaTonoTitulo)}>{b.title}</div>
+                  <div {...vestir({ fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.5 }, c.tarjetaTonoDetalle)}>{b.detail}</div>
                 </div>
               );
             })}
