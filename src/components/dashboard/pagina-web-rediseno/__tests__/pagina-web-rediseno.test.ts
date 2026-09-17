@@ -63,6 +63,16 @@ test("pagina-web.module.css: sin letra de máquina", () => {
   assert.ok(!LETRA_DE_MAQUINA.test(css), "pagina-web.module.css usa letra de máquina");
 });
 
+// El candado de arriba busca la CLASE "font-mono" por su nombre, pero el
+// preflight de Tailwind pinta <code>/<kbd>/<pre>/<samp> en letra de máquina
+// SIN que ninguna clase lo diga — se coló un `<code>landing.edit</code>` en
+// el bloque nuevo y esta prueba no lo vio. Candado aparte, por texto.
+const ETIQUETA_DE_MAQUINA = /<(code|kbd|pre|samp)[\s>]/i;
+
+test("sin <code>/<kbd>/<pre>/<samp> en el bloque nuevo: el preflight de Tailwind los pinta en letra de máquina sin decir \"font-mono\"", () => {
+  assert.ok(!ETIQUETA_DE_MAQUINA.test(nuevoTotal), "el bloque `if (rediseno)` usa una etiqueta que el preflight de Tailwind pinta en letra de máquina");
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Sin tokens nuevos: la hoja solo LEE los del menú (--m2-*) y los semánticos
 // ═══════════════════════════════════════════════════════════════════════════

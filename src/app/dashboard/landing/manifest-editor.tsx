@@ -97,7 +97,7 @@ function TemplateDiagram({
             {esLaSeccion ? (
               <>
                 <rect x={x} y={y + 1.5} width={w} height="8.5" rx="1.5" fill={col.activo} opacity="0.85" />
-                <text x={x + w / 2} y={y + 7} fontSize="3.6" textAnchor="middle" fill="#fff" fontWeight="600">
+                <text x={x + w / 2} y={y + 7} fontSize="3.6" textAnchor="middle" fill="var(--m2-activo-texto, #fff)" fontWeight="600">
                   {slot.nombre}
                 </text>
               </>
@@ -311,7 +311,7 @@ export function ManifestEditor({
                       <div style={{ position: "relative" }}>
                         <img src={url} alt={slot.nombre} style={{ width: "100%", height: 112, objectFit: "cover", borderRadius: 9 }} />
                         <button type="button" onClick={() => quitar(slot.id)} aria-label={`Quitar ${slot.nombre}`}
-                          className={rd.botonIcono} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.55)", color: "#fff" }}>
+                          className={rd.botonIcono} style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.55)", color: "var(--m2-activo-texto, #fff)" }}>
                           <Trash2 size={14} />
                         </button>
                       </div>
