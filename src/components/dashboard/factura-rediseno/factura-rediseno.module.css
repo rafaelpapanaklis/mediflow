@@ -1,0 +1,1139 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Rediseño del detalle de factura y su familia (ws1-t3):
+   detalle, Reembolsar, Editar precio, Descuento, Cancelar, Timbrar CFDI,
+   «¿Marcar pagada?», «¿Eliminar borrador?», Registrar pago (y su calendario)
+   y Nueva factura.
+
+   Todo cuelga de `.raiz` (o de `.calendario`, el popover del calendario, que
+   el DateField saca a <body> en un portal y por eso necesita su propia raíz).
+   Las dos clases SOLO se ponen cuando la clínica tiene encendido el
+   interruptor `menu-dos-niveles`; sin él, ni una regla de aquí se aplica y
+   los modales se pintan exactamente como hoy.
+
+   Habla el idioma visual del menú de dos niveles: la raíz monta `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`), que trae los tokens `--m2-*` con su versión
+   oscura y las dos familias tipográficas; aquí solo hay clases que los LEEN.
+   Lo que el menú no tiene —éxito, alerta, peligro, info— sale de los tokens
+   semánticos de globals.css (`--success-*`, `--danger-*`…), los mismos que el
+   propio menú usa como respaldo. No se declara ningún token nuevo y no hay
+   ningún hex.
+
+   Cómo se viste sin reescribir el modal: dentro hay piezas del sistema de
+   diseño (`.btn-new`, `.badge-new`, `.input-new`, el calendario `.df-*`) y
+   estilos en línea que leen variables globales (`--brand`, `--text-3`,
+   `--bg-elev`…). Un estilo en línea no se pisa desde una hoja, pero una
+   VARIABLE sí: dentro de `.raiz` esas variables globales se redirigen a los
+   tokens del menú, y así cada color —en línea o en clase— sale del mismo
+   sitio que el menú nuevo. Lo que en el modal es Tailwind de tema
+   (`bg-card`, `text-foreground`…) no se puede redirigir (son tripletas HSL),
+   así que esos nodos reciben una clase de aquí cuando el interruptor está
+   encendido, y la cadena de siempre cuando no.
+
+   LAS CIFRAS son lo más importante de esta pantalla: van en Instrument Sans
+   con `tabular-nums` (mismo ancho por dígito) y alineadas a la derecha en
+   una columna, que es lo que cuadra importes sin monoespaciada.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.raiz,
+.calendario {
+  /* Texto */
+  --text-1: var(--m2-texto);
+  --text-2: var(--m2-texto-2);
+  --text-3: var(--m2-texto-3);
+  --text-4: var(--m2-texto-3);
+  /* Superficies y bordes */
+  --bg-elev: var(--m2-tarjeta);
+  --bg-elev-2: var(--m2-n1-fondo);
+  --bg-hover: var(--m2-hover);
+  --border-soft: var(--m2-tarjeta-borde);
+  --border-strong: var(--m2-borde);
+  /* Radios, sombras y foco */
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-1: var(--m2-sombra);
+  --shadow-2: var(--m2-sombra);
+  --ring: var(--m2-foco);
+  /* Acento */
+  --brand: var(--m2-activo);
+  --brand-soft: var(--m2-iniciales-fondo);
+  --brand-softer: var(--m2-iniciales-fondo);
+
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+  /* Cifras del mismo ancho en TODO lo que cuelga de aquí. `tipografia-panel`
+     pone `normal` sobre `.tokens` (la clase del menú que también lleva esta
+     raíz) con más peso; por eso va también en los hijos, más abajo. */
+  font-variant-numeric: tabular-nums;
+}
+
+.raiz > *,
+.calendario > * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── El modal (DialogContent) ─────────────────────────────────────────── */
+
+.raiz.modal {
+  width: min(calc(100vw - 32px), 600px);
+  max-width: none;
+  max-height: calc(100vh - 32px);
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--m2-texto) 22%, transparent);
+  outline: none;
+}
+
+.raiz.modalEstrecho {
+  width: min(calc(100vw - 32px), 520px);
+}
+
+.raiz.modalAncho {
+  width: min(calc(100vw - 32px), 760px);
+}
+
+/* La X de cerrar que pone el DialogContent (último hijo). */
+.raiz.modal > button:last-child {
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--m2-texto-2);
+  background: transparent;
+}
+
+@media (hover: hover) {
+  .raiz.modal > button:last-child:hover {
+    background: var(--m2-hover);
+    color: var(--m2-texto);
+  }
+}
+
+.raiz.modal > button:last-child:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* ── Cabecera, cuerpo y pie ───────────────────────────────────────────── */
+
+.raiz .cabecera {
+  padding: 18px 52px 0 20px;
+}
+
+.raiz .titulo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 22px;
+  color: var(--m2-texto);
+}
+
+.raiz .folio {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.raiz .cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.raiz .pie {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-n1-fondo);
+  border-radius: 0 0 14px 14px;
+}
+
+.raiz .pieApilado {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+/* ── Resumen (paciente, fecha, total, pagado, saldo…) ─────────────────── */
+
+.raiz .resumen {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  font-size: 12.5px;
+}
+
+/* Rótulo a la izquierda, cifra a la derecha: todas las cifras del resumen
+   caen en la misma columna y, con tabular-nums, dígito sobre dígito. */
+.raiz .resumenFila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+  align-items: center;
+}
+
+.raiz .resumenFila > * {
+  min-width: 0;
+}
+
+.raiz .rotulo {
+  color: var(--m2-texto-3);
+}
+
+.raiz .valor {
+  text-align: right;
+  font-weight: 500;
+  color: var(--m2-texto);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Las cifras: tabular, a la derecha, en columna. */
+.raiz .cifra {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--m2-texto);
+}
+
+.raiz .cifraTotal {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+
+.raiz .cifraExito { color: var(--success-strong, #047857); }
+.raiz .cifraPeligro { color: var(--danger, #dc2626); }
+.raiz .cifraAlerta { color: var(--warning-strong, #a85a05); }
+.raiz .cifraApagada { color: var(--m2-texto-3); }
+
+.raiz .resumenNotas {
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--m2-borde);
+}
+
+.raiz .notasTexto {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-2);
+  white-space: pre-line;
+}
+
+.raiz .uuid {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.raiz .uuidTexto {
+  font-size: 11px;
+  color: var(--m2-texto-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raiz .enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--m2-activo);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .raiz .enlace:hover:not(:disabled) {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+.raiz .enlace:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.raiz .enlace:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+  border-radius: 4px;
+}
+
+/* ── Secciones (Conceptos, Movimientos) ───────────────────────────────── */
+
+.raiz .seccionTitulo {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.raiz .lista {
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+  overflow: hidden;
+}
+
+.raiz .fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+}
+
+.raiz .fila + .fila {
+  border-top: 1px solid var(--m2-borde);
+}
+
+.raiz .filaTextos {
+  min-width: 0;
+}
+
+.raiz .filaTitulo {
+  font-weight: 500;
+  color: var(--m2-texto);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raiz .filaDetalle {
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+}
+
+/* ── Texto suelto y ayudas ────────────────────────────────────────────── */
+
+.raiz .texto {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--m2-texto-2);
+}
+
+.raiz .ayuda {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+}
+
+.raiz .contador {
+  font-size: 11.5px;
+  white-space: nowrap;
+  color: var(--m2-texto-3);
+}
+
+.raiz .entreDos {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ── Campos ───────────────────────────────────────────────────────────── */
+
+.raiz .campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.raiz .campo > label,
+.raiz .campoRotulo {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--m2-texto-2);
+}
+
+.raiz .enLinea {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* `.enLinea.enLinea` (0,3,1): gana a `.raiz input:not(…)` / `.raiz select` (0,2,1). */
+.raiz .enLinea.enLinea > select {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.raiz .enLinea.enLinea > input {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.raiz .rejilla2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.raiz .rejilla3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.raiz input:not([type="checkbox"]),
+.raiz select,
+.raiz textarea,
+.raiz :global(.input-new) {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  box-shadow: none;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.raiz textarea,
+.raiz textarea:global(.input-new) {
+  height: auto;
+  min-height: 64px;
+  padding: 9px 12px;
+  resize: none;
+}
+
+.raiz input::placeholder,
+.raiz textarea::placeholder {
+  color: var(--m2-texto-3);
+}
+
+@media (hover: hover) {
+  .raiz input:not([type="checkbox"]):hover,
+  .raiz select:hover,
+  .raiz textarea:hover {
+    border-color: var(--m2-texto-3);
+  }
+}
+
+.raiz input:not([type="checkbox"]):focus,
+.raiz select:focus,
+.raiz textarea:focus,
+.raiz :global(.input-new):focus {
+  border-color: var(--m2-activo);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--m2-activo) 18%, transparent);
+}
+
+.raiz input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--m2-activo);
+  flex-shrink: 0;
+}
+
+.raiz .casilla {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.raiz .casilla input[type="checkbox"] {
+  margin-top: 2px;
+}
+
+/* El campo de fecha (DateField): su contenedor va con la misma piel que un
+   campo; el popover que saca a <body> lleva `.calendario`, más abajo. */
+.raiz .campoFecha {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 38px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  font-size: 13px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.raiz .campoFecha:focus-within {
+  border-color: var(--m2-activo);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--m2-activo) 18%, transparent);
+}
+
+.raiz .campoFecha input {
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.raiz .campoFecha input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+/* globals.css pinta TODO input/select/textarea en oscuro con `!important`
+   (`.dark input {…}`), y eso gana a cualquier especificidad. Aquí se le gana
+   con la misma arma, leyendo los tokens; es lo mismo que hace el buscador
+   del menú (`menu-dos-niveles.module.css`, `.buscador input`). */
+:global(.dark) .raiz input:not([type="checkbox"]),
+:global(.dark) .raiz select,
+:global(.dark) .raiz textarea {
+  background-color: var(--m2-n2-fondo) !important;
+  color: var(--m2-texto) !important;
+  border-color: var(--m2-tarjeta-borde) !important;
+}
+
+:global(.dark) .raiz input::placeholder,
+:global(.dark) .raiz textarea::placeholder {
+  color: var(--m2-texto-3) !important;
+}
+
+@media (hover: hover) {
+  :global(.dark) .raiz input:not([type="checkbox"]):hover,
+  :global(.dark) .raiz select:hover,
+  :global(.dark) .raiz textarea:hover {
+    border-color: var(--m2-texto-3) !important;
+  }
+}
+
+:global(.dark) .raiz input:not([type="checkbox"]):focus,
+:global(.dark) .raiz select:focus,
+:global(.dark) .raiz textarea:focus {
+  border-color: var(--m2-activo) !important;
+}
+
+/* El input interno del campo de fecha va sin caja: la caja es el contenedor. */
+:global(.dark) .raiz .campoFecha input {
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+/* El nombre del concepto (Nueva factura) solo lleva subrayado. */
+:global(.dark) .raiz .conceptoNombre.conceptoNombre {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  border-bottom-color: var(--m2-borde) !important;
+}
+
+:global(.dark) .raiz .conceptoNombre.conceptoNombre:focus {
+  border-bottom-color: var(--m2-activo) !important;
+}
+
+/* ── Avisos ───────────────────────────────────────────────────────────── */
+
+.raiz .aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.raiz .aviso p {
+  margin: 0;
+}
+
+.raiz .avisoPeligro {
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  border: 1px solid var(--danger-border-strong, rgba(220, 38, 38, 0.35));
+  color: var(--danger-strong, #991b1b);
+}
+
+.raiz .avisoAlerta {
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  border: 1px solid var(--warning-border-strong, rgba(217, 119, 6, 0.35));
+  color: var(--warning-strong, #a85a05);
+}
+
+.raiz .aviso :global(.btn-new) {
+  align-self: flex-start;
+}
+
+/* ── Métodos de pago (Registrar pago) ─────────────────────────────────── */
+
+.raiz .metodos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.raiz .metodo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 6px 8px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+@media (hover: hover) {
+  .raiz .metodo:hover {
+    background: var(--m2-tarjeta-hover);
+    border-color: var(--m2-texto-3);
+    color: var(--m2-texto);
+  }
+}
+
+.raiz .metodo:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.raiz .metodoActivo,
+.raiz .metodoActivo:hover {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+/* ── Botones del sistema de diseño (`.btn-new`) dentro del modal ──────── */
+
+.raiz :global(.btn-new) {
+  height: 36px;
+  padding: 0 14px;
+  gap: 7px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
+}
+
+.raiz :global(.btn-new--sm) {
+  height: 32px;
+  padding: 0 11px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+
+/* `:root .raiz.raiz` (0,4,0): le gana al halo de globals
+   `:root:not(.dark) .btn-new--primary` (0,3,0) por especificidad. */
+:root .raiz.raiz :global(.btn-new--primary),
+:root .raiz.raiz :global(.btn-new--primary):hover {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  box-shadow: none;
+}
+
+:root .raiz.raiz :global(.btn-new--danger),
+:root .raiz.raiz :global(.btn-new--danger):hover {
+  background: var(--danger, #dc2626);
+  border-color: var(--danger, #dc2626);
+  color: var(--m2-n2-fondo);
+  box-shadow: none;
+}
+
+.raiz :global(.btn-new--ghost) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--m2-texto-2);
+}
+
+@media (hover: hover) {
+  .raiz :global(.btn-new--secondary):hover:not(:disabled) {
+    background: var(--m2-tarjeta-hover);
+    border-color: var(--m2-texto-3);
+    color: var(--m2-texto);
+  }
+  .raiz :global(.btn-new--ghost):hover:not(:disabled) {
+    background: var(--m2-hover);
+    border-color: transparent;
+    color: var(--m2-texto);
+  }
+  .raiz :global(.btn-new--primary):hover:not(:disabled),
+  .raiz :global(.btn-new--danger):hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+}
+
+.raiz :global(.btn-new):focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.raiz :global(.btn-new):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Botones propios (el editor de Nueva factura no usa `.btn-new`). */
+.raiz .boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  box-shadow: var(--m2-sombra);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+.raiz .botonPrincipal,
+.raiz .botonPrincipal:hover {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .raiz .boton:hover:not(:disabled) {
+    background: var(--m2-tarjeta-hover);
+    border-color: var(--m2-texto-3);
+  }
+  .raiz .botonPrincipal:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+}
+
+.raiz .boton:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.raiz .boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.raiz .botonIcono {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+@media (hover: hover) {
+  .raiz .botonIcono:hover {
+    background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+    border-color: transparent;
+    color: var(--danger, #dc2626);
+  }
+}
+
+.raiz .botonIcono:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* ── Etiquetas (`.badge-new`) como las pastillas de «Hoy» ─────────────── */
+
+.raiz :global(.badge-new) {
+  height: 21px;
+  padding: 0 9px;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.raiz :global(.badge-new__dot) {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+}
+
+:root .raiz.raiz :global(.badge-new--success) { background: var(--success-soft, rgba(5, 150, 105, 0.1)); color: var(--success-strong, #047857); }
+:root .raiz.raiz :global(.badge-new--warning) { background: var(--m2-contador-fondo); color: var(--m2-contador-texto); }
+:root .raiz.raiz :global(.badge-new--danger) { background: var(--danger-soft, rgba(220, 38, 38, 0.1)); color: var(--danger-strong, #991b1b); }
+:root .raiz.raiz :global(.badge-new--info) { background: var(--info-soft, rgba(37, 99, 235, 0.1)); color: var(--info-strong, #1d4ed8); }
+:root .raiz.raiz :global(.badge-new--brand) { background: var(--m2-iniciales-fondo); color: var(--m2-iniciales-texto); }
+:root .raiz.raiz :global(.badge-new--neutral) { background: var(--m2-hover); color: var(--m2-texto-3); }
+
+:root .raiz.raiz :global(.badge-new--success) :global(.badge-new__dot),
+:root .raiz.raiz :global(.badge-new--warning) :global(.badge-new__dot),
+:root .raiz.raiz :global(.badge-new--danger) :global(.badge-new__dot),
+:root .raiz.raiz :global(.badge-new--info) :global(.badge-new__dot),
+:root .raiz.raiz :global(.badge-new--brand) :global(.badge-new__dot),
+:root .raiz.raiz :global(.badge-new--neutral) :global(.badge-new__dot) {
+  background: currentColor;
+}
+
+/* ── Nueva factura (editor) ───────────────────────────────────────────── */
+
+.raiz .bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+}
+
+.raiz .bloqueCabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.raiz .bloqueTitulo {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--m2-texto);
+}
+
+.raiz .bloqueAcciones {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.raiz .enlaceSuave {
+  color: var(--m2-texto-2);
+}
+
+@media (hover: hover) {
+  .raiz .enlaceSuave:hover:not(:disabled) {
+    color: var(--m2-texto);
+    text-decoration: none;
+  }
+}
+
+.raiz .elegido {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  font-weight: 500;
+  color: var(--m2-texto);
+}
+
+.raiz .elegido > svg {
+  color: var(--m2-texto-3);
+  flex-shrink: 0;
+}
+
+.raiz .elegido > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raiz .buscador {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+}
+
+.raiz .opciones {
+  max-height: 224px;
+  overflow-y: auto;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+}
+
+.raiz .opcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.raiz .opcion + .opcion {
+  border-top: 1px solid var(--m2-borde);
+}
+
+@media (hover: hover) {
+  .raiz .opcion:hover {
+    background: var(--m2-tarjeta-hover);
+  }
+}
+
+.raiz .opcion:focus-visible {
+  outline: none;
+  box-shadow: inset var(--m2-foco);
+}
+
+.raiz .opcion > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raiz .vacio {
+  margin: 0;
+  padding: 14px 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+}
+
+.raiz .conceptos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.raiz .concepto {
+  padding: 10px 12px 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+}
+
+.raiz .conceptoCabeza {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* `.conceptoNombre.conceptoNombre` (0,3,0): gana a `.raiz input:not(…)` (0,2,1). */
+.raiz .conceptoNombre.conceptoNombre {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 1px solid var(--m2-borde);
+  border-radius: 0;
+  background: transparent;
+  font-weight: 500;
+}
+
+.raiz .conceptoNombre.conceptoNombre:focus {
+  border-color: var(--m2-activo);
+  box-shadow: none;
+}
+
+.raiz .conceptoTotal {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.raiz .totales {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 320px;
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+}
+
+.raiz .totalFila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 24px;
+  align-items: baseline;
+}
+
+.raiz .totalFila > span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--m2-texto);
+}
+
+.raiz .totalFinal {
+  padding-top: 6px;
+  margin-top: 2px;
+  border-top: 1px solid var(--m2-borde);
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+
+.raiz .totalFinal > span:last-child {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+
+.raiz .pieBotones {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Confirmación («¿Marcar pagada?», «¿Eliminar borrador?») ──────────── */
+
+.raiz .confirmacion {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 52px 16px 20px;
+}
+
+.raiz .confirmacionIcono {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.raiz .confirmacionIconoPeligro {
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--danger, #dc2626);
+}
+
+.raiz .confirmacionTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.raiz .confirmacionTitulo {
+  margin: 2px 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.2px;
+  color: var(--m2-texto);
+}
+
+.raiz .confirmacionTexto {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--m2-texto-2);
+}
+
+/* ── El calendario del DateField (portal a <body>) ────────────────────── */
+
+.calendario :global(.df-nav),
+.calendario :global(.df-sel) {
+  border-radius: 8px;
+  border-color: var(--m2-tarjeta-borde);
+  font-family: inherit;
+}
+
+.calendario :global(.df-day) {
+  border-radius: 8px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendario :global(.df-opt) {
+  font-family: inherit;
+}
+
+.calendario :global(.df-list) {
+  border-radius: 10px;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--m2-texto) 16%, transparent);
+}
+
+/* ── Anchos pequeños (iPad en vertical, ventanas estrechas) ───────────── */
+
+@media (max-width: 599.98px) {
+  .raiz .rejilla2,
+  .raiz .rejilla3 {
+    grid-template-columns: 1fr;
+  }
+}

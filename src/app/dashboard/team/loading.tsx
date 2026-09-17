@@ -1,7 +1,10 @@
+import { EsqueletoSegunBandera } from "@/components/dashboard/esqueletos-rediseno/segun-bandera";
+import { EsqueletoEquipo } from "@/components/dashboard/esqueletos-rediseno/esqueletos";
+
 // Skeleton de la pagina de Equipo (sistema Variante A). Usa .skel-new y las
 // clases de contenedor del sistema (.kpi/.card) para reflejar el layout real
 // mientras carga: header, fila de KPIs, filtro segmentado y grid de tarjetas.
-export default function Loading() {
+function EsqueletoViejo() {
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
@@ -51,4 +54,8 @@ export default function Loading() {
       </div>
     </div>
   );
+}
+
+export default function Loading() {
+  return <EsqueletoSegunBandera viejo={<EsqueletoViejo />} nuevo={<EsqueletoEquipo />} />;
 }

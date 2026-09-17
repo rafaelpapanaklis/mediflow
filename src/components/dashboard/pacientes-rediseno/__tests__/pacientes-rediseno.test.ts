@@ -20,6 +20,7 @@
  *    en inglés.
  */
 import { test } from "node:test";
+import { APARTADOS_FUERA_DEL_MENU } from "@/components/dashboard/presupuestos-en-facturacion/menu";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -70,7 +71,9 @@ test("los tres grupos son Clínico, Archivos y Más, con su contenido", () => {
   ]);
   assert.deepEqual(porId.archivos, ["radiografias", "fotos", "subidos", "modelos-3d"]);
   // Implantes no está en ninguna lista: cae en «Más», detrás de los suyos.
-  assert.deepEqual(porId.mas, ["presupuestos", "referencias", "implantes"]);
+  // «Presupuestos» salió del menú en ws1-t1 (se unió con Facturación): ver
+  // `presupuestos-en-facturacion/`. No está ni en «Más» ni en ningún otro sitio.
+  assert.deepEqual(porId.mas, ["referencias", "implantes"]);
 });
 
 test("ningún apartado se pierde ni se repite, para ningún juego de permisos", () => {
@@ -87,9 +90,11 @@ test("ningún apartado se pierde ni se repite, para ningún juego de permisos", 
     const pintados = menu.fijos
       .map((i) => i.id)
       .concat(...menu.grupos.map((g) => g.items.map((i) => i.id)));
+    // Todos, menos los que se sacaron del menú A PROPÓSITO y con nombre
+    // (`APARTADOS_FUERA_DEL_MENU`): hoy, solo «presupuestos».
     assert.deepEqual(
       pintados.slice().sort(),
-      items.map((i) => i.id).sort(),
+      items.map((i) => i.id).filter((id) => APARTADOS_FUERA_DEL_MENU.indexOf(id) === -1).sort(),
       `faltan o sobran apartados con ${JSON.stringify(opts)}`,
     );
     assert.equal(new Set(pintados).size, pintados.length, "hay un apartado repetido");

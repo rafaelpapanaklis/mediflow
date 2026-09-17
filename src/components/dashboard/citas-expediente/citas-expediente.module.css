@@ -1,0 +1,67 @@
+/* Lo que el expediente añade a «Editar cita» y a la tabla de Citas.
+   No declara ni un token: dentro de la ventana lee los de la agenda nueva
+   (`--ag-*`, que su velo monta junto a los `--m2-*` del menú) y en la tabla
+   los del menú. */
+
+/* ── Dentro de la ventana ── */
+
+.nota {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ag-texto-2, var(--m2-texto-2));
+}
+
+/* «Eliminar cita»: a la izquierda del pie, lejos de «Guardar cambios». */
+.eliminar {
+  margin-right: auto;
+  flex: none;
+  height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--ag-r-10, 10px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ag-rojo-texto, var(--danger));
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.eliminar:hover:not(:disabled) {
+  background: var(--ag-rojo-fondo, transparent);
+  border-color: var(--ag-rojo-borde, currentColor);
+}
+
+.eliminar:focus-visible {
+  outline: 2px solid var(--ag-rojo-borde, currentColor);
+  outline-offset: 2px;
+}
+
+.eliminar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── La tabla de Citas: la fila entera abre la ventana ──
+   El cursor y el realce de la fila ya los pone `expediente.module.css`
+   (`.filaClic` y el hover de `.tabla`). */
+
+/* La fecha es el botón de verdad (teclado y lectores); se ve como el texto
+   fuerte de siempre. */
+.abrir {
+  all: unset;
+  cursor: pointer;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+  border-radius: 4px;
+}
+
+.abrir:focus-visible {
+  outline: 2px solid var(--m2-foco);
+  outline-offset: 2px;
+}
