@@ -160,6 +160,7 @@
     "test:cfdi-dinero": "tsx --test src/lib/__tests__/cfdi-dinero.test.ts",
     "test:cfdi-timbrado-alerta": "tsx --test src/lib/__tests__/cfdi-timbrado-alerta.test.ts",
     "test:cfdi-candado": "tsx --test --experimental-test-module-mocks src/app/api/cfdi/__tests__/timbrado-y-sat.test.ts",
+    "test:cfdi-timbre-incierto": "tsx --test --experimental-test-module-mocks src/lib/invoices/__tests__/cfdi-timbre-incierto.test.ts",
     "test:iva-sat": "tsx --test src/lib/__tests__/invoice-iva-sat.test.ts",
     "//test:cbct-geometry": "Necesita el tsconfig de pruebas: el test importa GeometryWarning.tsx (JSX) y el tsconfig de la app deja jsx en 'preserve' para que lo resuelva Next.",
     "//test:cda-adendas": "La tercera mitad del hallazgo 25: que las adendas de una nota firmada viajen en el CDA del expediente. Necesita --experimental-test-module-mocks (ejecuta el route handler de verdad con Prisma, la auth, la visibilidad y la auditoria sustituidos) y TZ=UTC porque el test compara byte a byte contra la salida literal de hoy, y los titulos de seccion se formatean con el huso del proceso.",

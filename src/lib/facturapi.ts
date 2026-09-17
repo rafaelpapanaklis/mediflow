@@ -11,6 +11,7 @@
 import { prisma } from "./prisma";
 import { encryptField, decryptField } from "./crypto/envelope";
 import { facturapiEnv } from "./facturapi-env";
+import { marcarTimbre } from "./invoices/cfdi-timbre-incierto";
 
 const FACTURAPI_BASE = "https://www.facturapi.io/v2";
 
@@ -128,6 +129,21 @@ export interface CreateInvoiceParams {
    * quien pase PPD tiene que pasar también ese payment_form.
    */
   paymentMethod?: "PUE" | "PPD";
+  /**
+   * `true` = un 200 sin `uuid` legible se trata como error INCIERTO en vez de
+   * devolverse tal cual.
+   *
+   * Es opcional a propósito, y por dos motivos opuestos que no se pueden
+   * atender con un solo comportamiento:
+   *   · El DENTAL lo exige: su factura queda apartada justo antes de timbrar y
+   *     necesita enterarse para conservar ese apartado. Sin esto seguiría con
+   *     `uuid` undefined y acabaría guardando un CFDI que no puede identificar.
+   *   · El INSTITUTO no lo pasa: lleva desde siempre recibiendo «lo que vino» y
+   *     tiene su propia forma de reaccionar (src/lib/edu/facturacion.ts).
+   *     Cambiárselo desde aquí, que es un archivo compartido, le movería el
+   *     suelo a otro vertical sin que nadie lo pidiera.
+   */
+  exigirUuid?: boolean;
 }
 
 export interface InvoiceResult {
@@ -138,35 +154,126 @@ export interface InvoiceResult {
   xml_url?: string;
 }
 
+/**
+ * Por encima de lo que tarda un timbrado normal (1-3 s): esto no está para
+ * cortar a Facturapi, sino para que un socket colgado termine en un error
+ * CLASIFICABLE en vez de en un cuelgue hasta que la plataforma mate la función.
+ *
+ * ⚠️ Abortar no deshace nada: si Facturapi ya estaba timbrando, el CFDI sale
+ * igual. Por eso el aborto se marca como INCIERTO y la factura se queda
+ * apartada — ver lib/invoices/cfdi-timbre-incierto.ts. Un valor mucho más bajo
+ * convertiría timbrados lentos pero buenos en facturas atascadas, así que se
+ * deja holgado a propósito.
+ */
+const TIMBRADO_TIMEOUT_MS = 25_000;
+
 export async function createInvoice(params: CreateInvoiceParams): Promise<InvoiceResult> {
-  const res = await fetch(`${FACTURAPI_BASE}/invoices`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${params.orgApiKey}`,
-      "Content-Type": "application/json",
-    },
-    // OJO: el payload de POST /invoices NO acepta "notes" — Facturapi lo
-    // rechaza con 400 "El campo notes no está permitido".
-    body: JSON.stringify({
-      type: "I", // Ingreso
-      customer: params.customerId,
-      use: params.usoCfdi,
-      payment_form: params.paymentForm ?? "03", // Transferencia por defecto
-      // PUE (pago en una sola exhibición) por defecto: es lo que este
-      // archivo mandaba fijo. Quien sepa que el cobro tiene saldo abierto
-      // manda "PPD" — ver CreateInvoiceParams.paymentMethod.
-      payment_method: params.paymentMethod ?? "PUE",
-      items: params.items,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Error timbrado CFDI");
+  // ── Qué pasó con el timbre: «rechazado» y «no contestó» NO son lo mismo ────
+  // Esta función es la ÚNICA que ve la respuesta (o su ausencia), así que es
+  // la única que puede decirlo sin adivinar. Marca cada error con
+  // `marcarTimbre(err, incierto)` y quien la llama decide si suelta el apartado
+  // de la factura. Sin esta distinción, un 504 del gateway se trataba igual que
+  // un «El RFC no es válido» y el reintento emitía un segundo CFDI (H-8).
+  let res: Response;
+  try {
+    res = await fetch(`${FACTURAPI_BASE}/invoices`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${params.orgApiKey}`,
+        "Content-Type": "application/json",
+      },
+      // OJO: el payload de POST /invoices NO acepta "notes" — Facturapi lo
+      // rechaza con 400 "El campo notes no está permitido".
+      body: JSON.stringify({
+        type: "I", // Ingreso
+        customer: params.customerId,
+        use: params.usoCfdi,
+        payment_form: params.paymentForm ?? "03", // Transferencia por defecto
+        // PUE (pago en una sola exhibición) por defecto: es lo que este
+        // archivo mandaba fijo. Quien sepa que el cobro tiene saldo abierto
+        // manda "PPD" — ver CreateInvoiceParams.paymentMethod.
+        payment_method: params.paymentMethod ?? "PUE",
+        items: params.items,
+      }),
+      signal: AbortSignal.timeout(TIMBRADO_TIMEOUT_MS),
+    });
+  } catch (err) {
+    // No hubo respuesta: corte de red, DNS, timeout, socket cerrado. La
+    // petición PUDO llegar y el timbre PUDO salir.
+    throw marcarTimbre(
+      err instanceof Error ? err : new Error(`Error de red al timbrar: ${String(err)}`),
+      true,
+    );
+  }
+
+  // Cuerpo a la defensiva, PERO sin perder el error original.
+  //
+  // 🔴 Por qué no un `.catch(() => null)` a secas: si la lectura del cuerpo
+  // falla en un 200 es porque el socket se cortó a media respuesta, y ese
+  // TypeError es la señal que OTRAS capas saben leer — el vertical educativo
+  // (src/lib/edu/facturacion.ts:665) clasifica por `err.name === "TypeError"`.
+  // Tragárselo y lanzar un Error nuevo le quitaba su única pista y le hacía dar
+  // por rechazado un timbre que pudo salir: exactamente H-8, pero en el
+  // instituto. Se guarda y se relanza el de verdad.
+  let data: any = null;
+  let cuerpoRoto: unknown = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    cuerpoRoto = e;
+  }
+
+  if (!res.ok) {
+    // ¿PUDO haberse emitido el CFDI? Solo si la petición llegó al motor de
+    // timbrado y se torció después.
+    //   · 4xx = la puerta: validación, credenciales, ruta. Ahí NO se timbra,
+    //     así que la factura se suelta y se puede corregir y reintentar. Se
+    //     decide por el STATUS y no por si el cuerpo se lee: si no, una API key
+    //     caducada que conteste sin JSON dejaría la factura atascada para
+    //     siempre por un problema de configuración que se repite en cada intento.
+    //   · 5xx / 408 / 429 = la infraestructura diciendo «no sé». Aquí sí pudo
+    //     salir, y por eso la factura se queda apartada.
+    const incierto = res.status >= 500 || res.status === 408 || res.status === 429;
+    const deFacturapi = typeof data?.message === "string" && data.message.length > 0
+      ? data.message
+      : `Facturapi respondió ${res.status} sin un motivo legible.`;
+    throw marcarTimbre(
+      new Error(incierto
+        ? `${deFacturapi} No se sabe si el CFDI llegó a emitirse.`
+        : deFacturapi),
+      incierto,
+    );
+  }
+
+  // 200 y el cuerpo se cortó a media lectura: el timbre PUDO salir. Se relanza
+  // el error ORIGINAL —marcado—, no uno nuevo, para no borrarle la pista a
+  // quien clasifique por el tipo de error.
+  if (cuerpoRoto) {
+    throw marcarTimbre(
+      cuerpoRoto instanceof Error
+        ? cuerpoRoto
+        : new Error(`Respuesta ilegible al timbrar: ${String(cuerpoRoto)}`),
+      true,
+    );
+  }
+
+  // Un 200 con JSON bien formado pero sin `uuid`: lo más probable es que el
+  // timbre SÍ salió y lo que se perdió fue poder leerlo. Solo lanza si quien
+  // llama lo pidió (ver `exigirUuid`); si no, se devuelve tal cual, como
+  // siempre.
+  if (params.exigirUuid && !data?.uuid) {
+    throw marcarTimbre(
+      new Error("Facturapi aceptó el timbrado pero la respuesta llegó sin UUID."),
+      true,
+    );
+  }
+
   return {
-    id:      data.id,
-    uuid:    data.uuid,
-    total:   data.total,
-    pdf_url: data.pdf_url,
-    xml_url: data.xml_url,
+    id:      data?.id,
+    uuid:    data?.uuid,
+    total:   data?.total,
+    pdf_url: data?.pdf_url,
+    xml_url: data?.xml_url,
   };
 }
 
