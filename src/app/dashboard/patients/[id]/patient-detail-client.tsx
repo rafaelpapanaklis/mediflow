@@ -42,6 +42,11 @@ import { Resumen as ResumenRediseno } from "@/components/dashboard/pacientes-red
 import { Historia as HistoriaRediseno } from "@/components/dashboard/pacientes-rediseno/historia";
 import { Cuestionario as CuestionarioRediseno } from "@/components/dashboard/pacientes-rediseno/cuestionario";
 import { NuevaConsulta as NuevaConsultaRediseno } from "@/components/dashboard/pacientes-rediseno/nueva-consulta";
+// Segunda ola del rediseño (ws1-t4): los cuatro apartados que faltaban.
+import { OdontogramaExpediente as OdontogramaRediseno } from "@/components/dashboard/expediente-rediseno/odontograma";
+import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
+import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
+import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
@@ -2580,8 +2585,15 @@ export function PatientDetailClient({
             />
           )}
 
+          {/* ===== TAB: ODONTOGRAMA (rediseño) =====
+              El mismo OdontogramV2, con el MARCO vestido (cabecera, controles,
+              leyenda, paleta, panel del diente). El dibujo no se toca. */}
+          {tab === "odontograma" && rediseno && (
+            <OdontogramaRediseno patientId={patient.id} />
+          )}
+
           {/* ===== TAB: ODONTOGRAMA ===== */}
-          {tab === "odontograma" && (
+          {tab === "odontograma" && !rediseno && (
             <OdontogramV2
               patientId={patient.id}
               dedupeLegend={rediseno}
@@ -2825,131 +2837,147 @@ export function PatientDetailClient({
 
             return (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.treatment.title")}</h2>
-                  {canEditTreatments && (
-                    <button
-                      type="button"
-                      onClick={() => setShowNewTreatment(true)}
-                      className="inline-flex items-center text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg hover:bg-[var(--violet-700)] shadow-[var(--shadow-1)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
-                    >
-                      {t("patients.treatment.newTreatment")}
-                    </button>
-                  )}
-                </div>
-
-                {treatments.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-[var(--brand-softer)] border border-[var(--border-brand)] rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold tabular-nums text-[var(--brand)]">{pendingSessionsTotal}</div>
-                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.pendingSessions")}</div>
-                    </div>
-                    <div className="bg-[var(--success-soft)] border border-[var(--border-soft)] rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold tabular-nums text-[var(--success-strong)]">{activeCount}</div>
-                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.active")}</div>
-                    </div>
-                    <div className="bg-muted border border-border rounded-xl p-3 text-center">
-                      <div className="text-xl font-bold tabular-nums text-muted-foreground">{completedCount}</div>
-                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.completed")}</div>
-                    </div>
-                  </div>
+                {/* Rediseño: la misma lista con la ropa nueva. Las ventanas de
+                    Nuevo/Ver/Editar plan de abajo son comunes a los dos caminos. */}
+                {rediseno && (
+                  <PlanTratamientoRediseno
+                    tratamientos={treatments}
+                    puedeEditar={canEditTreatments}
+                    onNuevo={() => setShowNewTreatment(true)}
+                    onVer={(plan) => setViewPlan(plan)}
+                    onEditar={(plan) => setEditPlan(plan)}
+                    onEliminar={(plan) => handleDeleteTreatment(plan)}
+                  />
                 )}
-
-                {treatments.length === 0 ? (
-                  <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
-                    <Pill className="w-5 h-5 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
-                    <div className="text-sm font-semibold">{t("patients.treatment.empty")}</div>
-                    {canEditTreatments && (
-                      <button
-                        type="button"
-                        onClick={() => setShowNewTreatment(true)}
-                        className="text-xs text-[var(--brand)] hover:underline mt-2 inline-block rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                      >
-                        {t("patients.treatment.createFirst")}
-                      </button>
-                    )}
-                  </div>
-                ) : treatments.map((plan: any) => {
-                  const completed = sessionsDone(plan.sessions);
-                  const pct = plan.totalSessions > 0 ? Math.round((completed / plan.totalSessions) * 100) : 0;
-                  const pendingThis = Math.max(0, (plan.totalSessions || 0) - completed);
-                  const STATUS_CFG: Record<string,{labelKey:string;cls:string}> = {
-                    ACTIVE:    { labelKey:"patients.treatmentStatus.active",    cls:"bg-[var(--success-soft)] text-[var(--success-strong)] border-transparent" },
-                    COMPLETED: { labelKey:"patients.treatmentStatus.completed", cls:"bg-muted text-muted-foreground border-transparent" },
-                    ABANDONED: { labelKey:"patients.treatmentStatus.abandoned", cls:"bg-[var(--danger-soft)] text-[var(--danger-strong)] border-transparent" },
-                    PAUSED:    { labelKey:"patients.treatmentStatus.paused",    cls:"bg-[var(--warning-soft)] text-[var(--warning-strong)] border-transparent" },
-                  };
-                  const cfg = STATUS_CFG[plan.status] ?? STATUS_CFG.ACTIVE;
-                  return (
-                    <div
-                      key={plan.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setViewPlan(plan)}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewPlan(plan); } }}
-                      className="bg-card border border-border rounded-xl p-4 cursor-pointer shadow-[var(--shadow-1)] hover:border-[var(--border-brand)] hover:shadow-[var(--shadow-2)] transition-all w-full text-left focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                    >
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                          <div className="font-bold text-sm">{plan.name}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {t("patients.doctorPrefix")} {plan.doctor?.firstName} {plan.doctor?.lastName}
-                          </div>
-                          {plan.description && (
-                            <div className="text-xs text-muted-foreground mt-1">{plan.description}</div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${cfg.cls}`}>
-                            {t(cfg.labelKey)}
-                          </span>
-                          {canEditTreatments && (
-                            <>
-                              <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
-                                <Edit className="w-4 h-4" strokeWidth={1.75} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleDeleteTreatment(plan); }}
-                                className="p-1.5 rounded-lg text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
-                                aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
-                                title={t("patients.treatment.deletePlanTitle")}
-                              >
-                                <Trash2 className="w-4 h-4" strokeWidth={1.75} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className="text-xs font-bold text-muted-foreground tabular-nums">
-                          {completed}/{plan.totalSessions}
-                        </span>
-                      </div>
-                      <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
-                        <span className="tabular-nums inline-flex items-center gap-1">
-                          {rediseno
-                            ? <CreditCard size={12} strokeWidth={1.75} aria-hidden />
-                            : "💰"} {formatCurrency(plan.totalCost)}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          {rediseno
-                            ? <Calendar size={12} strokeWidth={1.75} aria-hidden />
-                            : "📅"} {t("patients.treatment.everyDays", { days: plan.sessionIntervalDays })}
-                        </span>
-                        {pendingThis > 0 && plan.status === "ACTIVE" && (
-                          <span className="text-[var(--brand)] font-semibold">⏳ {t("patients.treatment.pendingCount", { count: pendingThis })}</span>
-                        )}
-                        {plan.nextExpectedDate && (
-                          <span>⏰ {t("patients.treatment.next", { date: new Date(plan.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"}) })}</span>
-                        )}
-                      </div>
+                {!rediseno && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.treatment.title")}</h2>
+                      {canEditTreatments && (
+                        <button
+                          type="button"
+                          onClick={() => setShowNewTreatment(true)}
+                          className="inline-flex items-center text-xs font-semibold bg-[var(--brand)] text-white px-3 h-9 rounded-lg hover:bg-[var(--violet-700)] shadow-[var(--shadow-1)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] active:scale-[0.98]"
+                        >
+                          {t("patients.treatment.newTreatment")}
+                        </button>
+                      )}
                     </div>
-                  );
-                })}
+    
+                    {treatments.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-[var(--brand-softer)] border border-[var(--border-brand)] rounded-xl p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums text-[var(--brand)]">{pendingSessionsTotal}</div>
+                          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.pendingSessions")}</div>
+                        </div>
+                        <div className="bg-[var(--success-soft)] border border-[var(--border-soft)] rounded-xl p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums text-[var(--success-strong)]">{activeCount}</div>
+                          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.active")}</div>
+                        </div>
+                        <div className="bg-muted border border-border rounded-xl p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums text-muted-foreground">{completedCount}</div>
+                          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.completed")}</div>
+                        </div>
+                      </div>
+                    )}
+    
+                    {treatments.length === 0 ? (
+                      <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
+                        <Pill className="w-5 h-5 mx-auto mb-2 text-[var(--text-3)]" strokeWidth={1.75} aria-hidden="true" />
+                        <div className="text-sm font-semibold">{t("patients.treatment.empty")}</div>
+                        {canEditTreatments && (
+                          <button
+                            type="button"
+                            onClick={() => setShowNewTreatment(true)}
+                            className="text-xs text-[var(--brand)] hover:underline mt-2 inline-block rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                          >
+                            {t("patients.treatment.createFirst")}
+                          </button>
+                        )}
+                      </div>
+                    ) : treatments.map((plan: any) => {
+                      const completed = sessionsDone(plan.sessions);
+                      const pct = plan.totalSessions > 0 ? Math.round((completed / plan.totalSessions) * 100) : 0;
+                      const pendingThis = Math.max(0, (plan.totalSessions || 0) - completed);
+                      const STATUS_CFG: Record<string,{labelKey:string;cls:string}> = {
+                        ACTIVE:    { labelKey:"patients.treatmentStatus.active",    cls:"bg-[var(--success-soft)] text-[var(--success-strong)] border-transparent" },
+                        COMPLETED: { labelKey:"patients.treatmentStatus.completed", cls:"bg-muted text-muted-foreground border-transparent" },
+                        ABANDONED: { labelKey:"patients.treatmentStatus.abandoned", cls:"bg-[var(--danger-soft)] text-[var(--danger-strong)] border-transparent" },
+                        PAUSED:    { labelKey:"patients.treatmentStatus.paused",    cls:"bg-[var(--warning-soft)] text-[var(--warning-strong)] border-transparent" },
+                      };
+                      const cfg = STATUS_CFG[plan.status] ?? STATUS_CFG.ACTIVE;
+                      return (
+                        <div
+                          key={plan.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setViewPlan(plan)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewPlan(plan); } }}
+                          className="bg-card border border-border rounded-xl p-4 cursor-pointer shadow-[var(--shadow-1)] hover:border-[var(--border-brand)] hover:shadow-[var(--shadow-2)] transition-all w-full text-left focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div>
+                              <div className="font-bold text-sm">{plan.name}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {t("patients.doctorPrefix")} {plan.doctor?.firstName} {plan.doctor?.lastName}
+                              </div>
+                              {plan.description && (
+                                <div className="text-xs text-muted-foreground mt-1">{plan.description}</div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${cfg.cls}`}>
+                                {t(cfg.labelKey)}
+                              </span>
+                              {canEditTreatments && (
+                                <>
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
+                                    <Edit className="w-4 h-4" strokeWidth={1.75} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteTreatment(plan); }}
+                                    className="p-1.5 rounded-lg text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)]"
+                                    aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
+                                    title={t("patients.treatment.deletePlanTitle")}
+                                  >
+                                    <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                              <div className="h-full bg-[var(--brand)] rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-muted-foreground tabular-nums">
+                              {completed}/{plan.totalSessions}
+                            </span>
+                          </div>
+                          <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
+                            <span className="tabular-nums inline-flex items-center gap-1">
+                              {rediseno
+                                ? <CreditCard size={12} strokeWidth={1.75} aria-hidden />
+                                : "💰"} {formatCurrency(plan.totalCost)}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              {rediseno
+                                ? <Calendar size={12} strokeWidth={1.75} aria-hidden />
+                                : "📅"} {t("patients.treatment.everyDays", { days: plan.sessionIntervalDays })}
+                            </span>
+                            {pendingThis > 0 && plan.status === "ACTIVE" && (
+                              <span className="text-[var(--brand)] font-semibold">⏳ {t("patients.treatment.pendingCount", { count: pendingThis })}</span>
+                            )}
+                            {plan.nextExpectedDate && (
+                              <span>⏰ {t("patients.treatment.next", { date: new Date(plan.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"}) })}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
 
                 {showNewTreatment && (
                   <div
@@ -3209,7 +3237,21 @@ export function PatientDetailClient({
             <ReferralsTab patientId={patient.id} pacientesRediseno={rediseno} />
           )}
 
-          {tab === "agenda" && (
+          {/* Citas (rediseño): la misma tabla y los mismos botones, con la
+              ropa nueva. El estado sale del mismo APPT_STATUS_FULL de arriba. */}
+          {tab === "agenda" && rediseno && (
+            <CitasRediseno
+              citas={appointments}
+              estado={(st) => {
+                const full = APPT_STATUS_FULL[st] ?? APPT_STATUS_FULL.PENDING;
+                return { texto: t(full.labelKey), tono: full.tono };
+              }}
+              onAgendar={openNewAppointmentForPatient}
+              onCancelar={(a) => handleCancelAppointment(a)}
+            />
+          )}
+
+          {tab === "agenda" && !rediseno && (
             <div className="bg-card border border-border rounded-xl overflow-hidden shadow-[var(--shadow-1)]">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                 <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t("patients.agenda.title", { count: appointments.length })}</h2>
@@ -3556,7 +3598,21 @@ export function PatientDetailClient({
               — y el server ni siquiera manda las facturas. El tab vive en
               billing-tab.tsx (design system, mismo molde que Caja); el resumen
               reusa los totales que ya alimentan el rail. */}
-          {tab === "facturacion" && canViewBilling && (
+          {/* Facturación (rediseño): la PESTAÑA con la ropa nueva, mismas
+              columnas y mismos callbacks. Los diálogos que abre (detalle,
+              pago, nueva factura) son de abajo y los viste otra pantalla. */}
+          {tab === "facturacion" && canViewBilling && rediseno && (
+            <FacturacionRediseno
+              facturas={invoices}
+              facturApiEnabled={facturApiEnabled}
+              onNueva={() => setShowNewInvoice(true)}
+              onAbrir={(inv) => setInvoiceDetailOpen(inv)}
+              onCobrar={(inv) => { void openDirectPayment(inv); }}
+              onTimbrar={(inv) => { setInvoiceDetailAction("cfdi"); setInvoiceDetailOpen(inv); }}
+            />
+          )}
+
+          {tab === "facturacion" && canViewBilling && !rediseno && (
             <BillingTab
               invoices={invoices}
               summary={{ total: totalPlan, paid: totalPaid, balance: totalBalance }}
