@@ -119,6 +119,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   const [busy, setBusy] = useState(false);
   // `cx(vieja, nueva)`: con el interruptor encendido, la clase del diseño
   // nuevo; apagado, la cadena de siempre tal cual.
+  // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
+  // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
   const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
   // «¿Marcar pagada?» y «¿Eliminar borrador?» del diseño nuevo
   // (factura-rediseno/confirmacion.tsx). Con el interruptor apagado nunca

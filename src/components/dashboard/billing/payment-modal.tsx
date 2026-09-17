@@ -62,6 +62,8 @@ export function PaymentModal({ open, invoice, onClose, onSuccess, rediseno = fal
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de siempre sin él.
+  // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
+  // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
   const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
 
   // Reset whenever the modal opens for a new invoice.

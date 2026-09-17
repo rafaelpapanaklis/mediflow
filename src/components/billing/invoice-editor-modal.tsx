@@ -120,6 +120,8 @@ function InvoiceEditorBody({
   // `cx(vieja, nueva)`: la clase del diseño nuevo con el interruptor, la de
   // siempre sin él. Sin `nueva`, el nodo queda sin clase en el diseño nuevo
   // (lo viste la hoja por elemento: inputs, selects…).
+  // ELIGE una de las dos, nunca las junta: con el interruptor la cadena vieja
+  // (y su `font-mono`) no llega al DOM. Lo vigila factura-rediseno.test.ts.
   const cx = (vieja: string, nueva?: string) => (rediseno ? nueva : vieja);
   const [items, setItems] = useState<EditorItem[]>([]);
   const [discountMode, setDiscountMode] = useState<"none" | "pct" | "amount">("none");

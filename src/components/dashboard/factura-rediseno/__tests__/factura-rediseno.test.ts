@@ -64,18 +64,49 @@ test("sin letra de máquina en la carpeta del rediseño", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // En los modales, toda letra de máquina vive SOLO en la rama vieja de cx()
 // ═══════════════════════════════════════════════════════════════════════════
-test("los modales solo piden letra de máquina en la rama vieja de cx(\"…\")", () => {
+// Lo que el navegador recibe en `className` con el interruptor encendido y con
+// él apagado: se evalúan a mano los tres patrones de ropa de los modales
+// (`cx("vieja", nueva)`, `rediseno ? nueva : "vieja"`, `rediseno ? undefined :
+// "vieja"`) y se devuelven las cadenas de cada camino.
+function ropaDeCadaCamino(texto: string): { nuevo: string[]; viejo: string[] } {
+  const nuevo: string[] = [];
+  const viejo: string[] = [];
+  for (const m of texto.matchAll(/cx\(\s*"([^"]*)"(?:\s*,\s*(`[^`]*`|c\.[a-zA-Z0-9]+|"[^"]*"))?\s*\)/g)) {
+    viejo.push(m[1]);
+    nuevo.push(m[2] ?? "");
+  }
+  for (const m of texto.matchAll(/rediseno \? (`[^`]*`|c\.[a-zA-Z0-9]+|undefined) : (`[^`]*`|"[^"]*"|undefined)/g)) {
+    nuevo.push(m[1] === "undefined" ? "" : m[1]);
+    viejo.push(m[2] === "undefined" ? "" : m[2]);
+  }
+  return { nuevo, viejo };
+}
+
+test("cx() ELIGE una cadena, no junta las dos", () => {
   for (const rel of MODALES) {
     const texto = leer(rel);
-    const total = (texto.match(LETRA_DE_MAQUINA) ? texto.match(new RegExp(LETRA_DE_MAQUINA.source, "g")) ?? [] : []).length;
-    // Cada una está en el PRIMER argumento (la cadena de siempre) de cx(…), o
-    // en la rama `rediseno ? undefined : "…"` (también la de siempre).
-    const enRamaVieja = [
-      ...texto.matchAll(/cx\(\s*"[^"]*"/g),
-      ...texto.matchAll(/rediseno \? undefined : "[^"]*"/g),
-    ].filter((m) => LETRA_DE_MAQUINA.test(m[0])).length;
-    assert.equal(total, enRamaVieja, `${rel}: hay letra de máquina fuera de la rama vieja de cx()`);
+    assert.match(texto, /const cx = \(vieja: string, nueva\??: string\) => \(rediseno \? nueva : vieja\);/, `${rel}: cx tiene que ser el ternario`);
   }
+});
+
+test("camino NUEVO sin letra de máquina; camino VIEJO con toda la de siempre", () => {
+  for (const rel of MODALES) {
+    const texto = leer(rel);
+    const { nuevo, viejo } = ropaDeCadaCamino(texto);
+    assert.ok(nuevo.length > 10, `${rel}: se esperaban decenas de nodos vestidos`);
+    const enElNuevo = nuevo.filter((s) => LETRA_DE_MAQUINA.test(s));
+    assert.deepEqual(enElNuevo, [], `${rel}: con el interruptor encendido llega letra de máquina al DOM: ${enElNuevo.join(" | ")}`);
+    // Todas las apariciones del archivo (menos comentarios) tienen que caer en
+    // el camino viejo: ni una se perdió, ni una se quedó fuera de un patrón.
+    const sinComentarios = texto.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    const total = (sinComentarios.match(new RegExp(LETRA_DE_MAQUINA.source, "g")) ?? []).length;
+    const enElViejo = viejo.filter((s) => LETRA_DE_MAQUINA.test(s)).length;
+    assert.equal(enElViejo, total, `${rel}: hay letra de máquina fuera de la rama vieja de un patrón`);
+  }
+  // Y el camino viejo la EXIGE donde hoy la tiene: el folio y las cifras del detalle.
+  const detalle = leer(MODALES[0]);
+  assert.ok(ropaDeCadaCamino(detalle).viejo.filter((s) => LETRA_DE_MAQUINA.test(s)).length >= 9, "el detalle perdió la letra de máquina del camino viejo");
+  assert.ok(ropaDeCadaCamino(leer(MODALES[1])).viejo.some((s) => LETRA_DE_MAQUINA.test(s)), "Registrar pago perdió la letra de máquina del camino viejo");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
