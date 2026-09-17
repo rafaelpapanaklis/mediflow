@@ -2980,6 +2980,17 @@
       "createdToast": "Invoice created: {number}"
     }
   },
+  "presupuestosEnFacturacion": {
+    "avisoTitulo": "New charges are now created from Billing. ",
+    "avisoTexto": "There you can already choose one payment or installments, how the patient pays, and send it by email or WhatsApp. The quotes you already had are still here, complete.",
+    "irAFacturacion": "Go to Billing",
+    "guardados": {
+      "one": "{count} saved quote",
+      "other": "{count} saved quotes"
+    },
+    "guardadosPista": "for this patient, from before Quotes was merged into Billing.",
+    "verPresupuestos": "View quotes"
+  },
   "quotes": {
     "title": "Quotes",
     "newQuote": "New quote",

@@ -2980,6 +2980,17 @@
       "createdToast": "Factura creada: {number}"
     }
   },
+  "presupuestosEnFacturacion": {
+    "avisoTitulo": "Los cobros nuevos ahora se hacen desde Facturación. ",
+    "avisoTexto": "Ahí ya puedes elegir un pago o a plazos, con qué paga el paciente y enviárselo por correo o WhatsApp. Los presupuestos que ya tenías siguen aquí, completos.",
+    "irAFacturacion": "Ir a Facturación",
+    "guardados": {
+      "one": "{count} presupuesto guardado",
+      "other": "{count} presupuestos guardados"
+    },
+    "guardadosPista": "de este paciente, de antes de unir Presupuestos con Facturación.",
+    "verPresupuestos": "Ver presupuestos"
+  },
   "quotes": {
     "title": "Presupuestos",
     "newQuote": "Nuevo presupuesto",
