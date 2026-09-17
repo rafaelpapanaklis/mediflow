@@ -579,15 +579,18 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
             <Pencil size={12} aria-hidden /> {t("common.edit")}
           </button>
         )}
-        <button
-          type="button"
-          className={styles.detailAction}
-          onClick={sendWhatsapp}
-          disabled={waSending}
-        >
-          <MessageCircle size={12} aria-hidden />
-          {waSending ? t("agenda.detailPanel.sending") : "WhatsApp"}
-        </button>
+        {/* Solo a quien la API se lo va a aceptar: a los demás les daba un 403. */}
+        {permissions.canSendReminder !== false && (
+          <button
+            type="button"
+            className={styles.detailAction}
+            onClick={sendWhatsapp}
+            disabled={waSending}
+          >
+            <MessageCircle size={12} aria-hidden />
+            {waSending ? t("agenda.detailPanel.sending") : "WhatsApp"}
+          </button>
+        )}
         {(appt.status === "COMPLETED" || appt.status === "CHECKED_OUT") && (
           <button
             type="button"

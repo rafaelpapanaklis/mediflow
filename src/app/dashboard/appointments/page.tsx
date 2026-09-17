@@ -8,6 +8,7 @@ import { AppointmentsClient } from "./appointments-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 import { getServerT } from "@/i18n/server";
+import { canSendManualReminder } from "@/lib/whatsapp/manual-reminder-access";
 
 export const metadata: Metadata = { title: "Agenda — DaleControl" };
 
@@ -82,6 +83,7 @@ export default async function AppointmentsPage() {
         currentUserId={user.id}
         clinicId={user.clinicId}
         waConnected={user.clinic.waConnected ?? false}
+        canSendReminder={canSendManualReminder(user.role)}
       />
     </ErrorBoundary>
   );
