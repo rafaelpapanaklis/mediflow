@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { X } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
-import { useAgenda } from "./agenda-provider";
+import { useAgendaOpcional } from "./agenda-provider";
 import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import { DateField } from "@/components/ui/date-field";
-import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
+import type { AgendaAppointmentDTO, DoctorColumnDTO, ResourceDTO } from "@/lib/agenda/types";
 
 /**
  * La ROPA del rediseño (ws1-t1, hallazgo 9): clases para cada pieza de la
@@ -44,11 +44,34 @@ export interface EditarCitaRopa {
   guardar: string;
 }
 
+/**
+ * Lo que la ventana leía de `useAgenda()`, PRESTADO por quien la abre desde
+ * fuera de la agenda (el expediente del paciente, que no monta
+ * `AgendaProvider`). Dentro de la agenda no se pasa y todo sale del contexto,
+ * como siempre.
+ *
+ * ⛔ Solo cambia de dónde salen las listas y a quién se avisa al guardar. La
+ * cita se guarda con el MISMO `rescheduleAppointment`, y los solapes, el
+ * horario y las vacaciones los valida el MISMO servidor.
+ */
+export interface EditarCitaPrestado {
+  timezone: string;
+  doctors: DoctorColumnDTO[];
+  resources: ResourceDTO[];
+  /** Sustituye al `REPLACE_APPOINTMENT` del store de la agenda. */
+  onGuardada: (appointment: AgendaAppointmentDTO) => void;
+}
+
 interface Props {
   appt: AgendaAppointmentDTO | null;
   isOpen: boolean;
   onClose: () => void;
   ropa?: EditarCitaRopa;
+  prestado?: EditarCitaPrestado;
+  /** Hueco opcional al principio del cuerpo (el expediente pone ahí el estado). */
+  extra?: React.ReactNode;
+  /** Hueco opcional al principio del pie (el expediente pone ahí «Eliminar»). */
+  pieExtra?: React.ReactNode;
 }
 
 interface FormState {
@@ -100,9 +123,11 @@ function localToIso(date: string, time: string, timezone: string): string | null
   return new Date(naive.getTime() + offsetMs).toISOString();
 }
 
-export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa }: Props) {
+export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, prestado, extra, pieExtra }: Props) {
   const t = useT();
-  const { state, dispatch } = useAgenda();
+  const agenda = useAgendaOpcional();
+  if (!agenda && !prestado) throw new Error("useAgenda must be used inside <AgendaProvider>");
+  const state = prestado ?? agenda!.state;
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [conflict, setConflict] = useState<string | null>(null);
@@ -167,7 +192,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa }: Prop
         ...(form.overrideReason ? { overrideReason: form.overrideReason } : {}),
         ...(form.reason !== (appt.reason ?? "") ? { reason: form.reason } : {}),
       });
-      dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
+      if (prestado) prestado.onGuardada(updated);
+      else agenda!.dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       toast.success(t("agenda.editApptModal.apptUpdated"));
       // P1-13: fuera-de-horario/día cerrado ya no bloquea — se avisa.
       if (scheduleWarning?.message) toast(scheduleWarning.message, { duration: 6000 });
@@ -268,6 +294,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa }: Prop
 
         <form onSubmit={submit} className={ropa?.formulario} style={ropa ? undefined : { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div className={ropa?.cuerpo} style={ropa ? undefined : { flex: 1, overflowY: "auto", minHeight: 0, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+          {extra}
           <Field label={t("common.date")} ropa={campo}>
             <DateField
               required
@@ -371,6 +398,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa }: Prop
             display: "flex", justifyContent: "flex-end", gap: 8,
             padding: "12px 18px", borderTop: "1px solid var(--border-soft)", flexShrink: 0,
           }}>
+            {pieExtra}
             <button
               type="button"
               onClick={onClose}
