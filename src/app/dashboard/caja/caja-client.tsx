@@ -470,6 +470,7 @@ export function CajaClient({ caja, history, timezone, hasPin: hasPinInitial, bil
           creditTotal={billing.creditTotal}
           clinic={billing.clinic}
           cfdiLive={billing.cfdiLive}
+          rediseno={rediseno}
         />
       ) : (
         <div style={{ padding: "clamp(14px, 1.6vw, 28px)" }}>

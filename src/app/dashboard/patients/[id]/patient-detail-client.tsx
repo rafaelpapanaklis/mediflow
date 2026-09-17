@@ -3760,6 +3760,7 @@ export function PatientDetailClient({
 
       {/* Nueva factura para este paciente — editor completo (paridad con presupuestos) */}
       <InvoiceEditorModal
+        rediseno={rediseno}
         open={showNewInvoice}
         patientId={patient.id}
         patientName={fullName}
@@ -3790,6 +3791,7 @@ export function PatientDetailClient({
        *  reembolsar. Tras una mutación, router.refresh() re-fetchea las
        *  facturas desde el servidor. */}
       <InvoiceDetailModal
+        rediseno={rediseno}
         open={invoiceDetailOpen !== null}
         invoice={invoiceDetailOpen}
         patientName={fullName}
@@ -3805,6 +3807,7 @@ export function PatientDetailClient({
        *  router.refresh() re-fetchea las facturas del server y el useEffect
        *  de sync propaga el estado fresco (mismo circuito que el detalle). */}
       <PaymentModal
+        rediseno={rediseno}
         open={directPayInvoice !== null}
         invoice={directPayInvoice ? {
           id: directPayInvoice.id,
