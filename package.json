@@ -34,6 +34,7 @@
     "test:agenda-legend": "tsx --test src/lib/agenda/__tests__/doctor-legend.test.ts",
     "test:permissions": "tsx --test src/lib/auth/__tests__/permissions-matrix.test.ts",
     "test:menu-dos-niveles": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/menu-dos-niveles.test.ts",
+    "test:rediseno-por-defecto": "tsx --test src/lib/menu-dos-niveles/__tests__/rediseno-por-defecto.test.ts",
     "test:menu-en-todas-las-pantallas": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/menu-en-todas-las-pantallas.test.ts",
     "test:menu-personalizado": "tsx --test src/lib/menu-personalizado/__tests__/menu-personalizado.test.ts",
     "test:tipografia-panel": "tsx --test src/components/dashboard/menu-dos-niveles/__tests__/tipografia-panel.test.ts",
