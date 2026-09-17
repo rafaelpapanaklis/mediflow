@@ -1,0 +1,256 @@
+/* ═══════════════════════════════════════════════════════════════════
+   LAS PIEZAS DEL HILO DE SABINA con la ropa del rediseño (ws1-t2,
+   hallazgo 10): el contenido de cada respuesta (párrafos, listas, tablas,
+   hecho vs. sugerencia), el rastro de herramientas («Miré: …») y los
+   avisos de error y de «apagada».
+
+   Es la piel nueva de `components/sabina/sabina-widgets.module.css`, clase
+   por clase. Se usa en las DOS puertas de Sabina —la pantalla y el cajón—
+   con el interruptor `menu-dos-niveles` encendido; apagado, las piezas
+   usan su hoja de siempre y de aquí no se aplica ni una clase.
+
+   NO declara tokens propios: lee los `--m2-*` del menú (que le llegan por
+   herencia de la raíz de la pantalla o del cajón, que montan CLASES_MENU) y
+   los semánticos de globals.css (`--warning-*`, `--danger-*`). Las cifras
+   van con tabular-nums sobre Instrument Sans: ni una letra de máquina, ni
+   siquiera en el `code`.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Contenido (message-content.tsx) ──────────────────────────── */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.heading {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--m2-texto);
+}
+.paragraph {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--m2-texto);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.bullets {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--m2-texto);
+}
+.paragraph code,
+.bullets code {
+  font-family: inherit;
+  background: var(--m2-hover);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lista «etiqueta — $cantidad»: la cantidad en su columna, a la derecha y
+   con cifras de ancho fijo, para que se lea en diagonal. */
+.rows {
+  max-width: 30em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--m2-texto);
+}
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--m2-borde);
+}
+.row:last-child { border-bottom: 0; }
+.rowLabel { min-width: 0; overflow-wrap: anywhere; }
+.rowIndex {
+  display: inline-block;
+  min-width: 1.6em;
+  color: var(--m2-texto-3);
+  font-variant-numeric: tabular-nums;
+}
+.rowDetail { color: var(--m2-texto-3); }
+.rowAmount {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabla: en el escritorio es tabla (con desplazamiento si no cabe) y en el
+   teléfono una ficha por fila. */
+.tableWrap { overflow-x: auto; max-width: 100%; }
+.table {
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--m2-texto);
+}
+.table th,
+.table td {
+  padding: 5px 10px 5px 0;
+  text-align: left;
+  vertical-align: baseline;
+  border-bottom: 1px solid var(--m2-borde);
+}
+.table th { font-weight: 600; color: var(--m2-texto-2); white-space: nowrap; }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) {
+  .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table, .table tbody, .table tr, .table td { display: block; }
+  .table tr { padding: 6px 0; border-bottom: 1px solid var(--m2-borde); }
+  .table tbody tr:last-child { border-bottom: 0; }
+  .table td { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; border: 0; text-align: right; }
+  .table td::before { content: attr(data-label); color: var(--m2-texto-3); text-align: left; }
+  .table td:first-child { font-weight: 600; text-align: left; }
+  .table td:first-child::before { content: none; }
+}
+
+/* Hecho medido: tratamiento neutro, apenas se distingue de un párrafo
+   normal — es un DATO, no debe competir visualmente con la sugerencia. */
+.toneFact {
+  padding: 8px 10px;
+  background: var(--m2-n1-fondo);
+  border-left: 3px solid var(--m2-tarjeta-borde);
+  border-radius: 0 8px 8px 0;
+}
+
+/* Sugerencia/opinión: color de marca, para que salte a la vista que es UN
+   CONSEJO y no una medición. */
+.toneOpinion {
+  padding: 8px 10px 8px 30px;
+  background: var(--m2-iniciales-fondo);
+  border-left: 3px solid var(--m2-activo);
+  border-radius: 0 8px 8px 0;
+  position: relative;
+}
+.toneOpinion::before {
+  content: "💡";
+  position: absolute;
+  left: 9px;
+  top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ─── Rastro de herramientas (tool-trace.tsx) ──────────────────── */
+.toolTrace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 3px 9px;
+  background: var(--m2-n1-fondo);
+  border: 1px solid var(--m2-borde);
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--m2-texto-3);
+  width: fit-content;
+  max-width: 100%;
+}
+.toolTrace span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Avisos de error (error-notice.tsx) ───────────────────────── */
+.errorNotice {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  box-shadow: var(--m2-sombra);
+}
+/* sin saldo / auth / apagada: tono de advertencia. rate limit / model down
+   / red: tono neutro — no es culpa del doctor ni de la clínica. */
+.errorNotice[data-kind="no_balance"],
+.errorNotice[data-kind="auth"],
+.errorNotice[data-kind="apagada"] {
+  background: var(--warning-soft);
+  border-color: var(--warning-border-strong);
+}
+.errorIcon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-2);
+}
+.errorNotice[data-kind="no_balance"] .errorIcon,
+.errorNotice[data-kind="auth"] .errorIcon,
+.errorNotice[data-kind="apagada"] .errorIcon {
+  background: var(--warning-soft-strong);
+  color: var(--warning-strong);
+}
+.errorBody { flex: 1; min-width: 0; }
+.errorTitle { font-size: 12.5px; font-weight: 650; color: var(--m2-texto); margin-bottom: 2px; }
+.errorMessage { font-size: 12px; line-height: 1.5; color: var(--m2-texto-2); }
+.errorActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.errorLink,
+.errorRetryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.errorLink {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+  border: 1px solid var(--m2-activo);
+  text-decoration: none;
+}
+.errorLink:hover { opacity: 0.92; }
+.errorRetryBtn {
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  border: 1px solid var(--m2-tarjeta-borde);
+}
+.errorRetryBtn:hover:not(:disabled) { background: var(--m2-hover); color: var(--m2-texto); }
+.errorRetryBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.errorLink:focus-visible,
+.errorRetryBtn:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.spin { animation: piezasSabinaGirar 900ms linear infinite; }
+@keyframes piezasSabinaGirar {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation: none; }
+}

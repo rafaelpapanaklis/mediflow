@@ -19,6 +19,8 @@ export interface SeriePoint { fecha: string; ingresos: number; gastos: number }
 export interface DoctorRow  { doctorId: string; doctor: string; ingresos: number }
 export interface FinanzasResumen {
   ingresos: number;
+  /** Lo devuelto en el periodo, YA restado de `ingresos` (clave aditiva de /api/finanzas). */
+  reembolsos?: number;
   gastos:   number;
   utilidad: number;
   ventas:   number;

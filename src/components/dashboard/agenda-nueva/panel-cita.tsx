@@ -9,6 +9,7 @@
  *   · qué estados caben → `possibleTransitions` (la máquina de estados real)
  *   · cancelar          → el mismo PATCH con motivo, tras `confirmWithReason`
  *   · editar            → `AgendaEditAppointmentModal`, el MISMO del panel de siempre
+ *                         (con la ropa del diseño nuevo, `ropa.ts`; misma lógica)
  *   · reagendar         → `useNewAppointmentDialog()`, igual que el panel de siempre
  *                         (y como allí, solo en canceladas y no asistidas)
  *   · WhatsApp          → POST /api/whatsapp/send
@@ -56,6 +57,7 @@ import { fechaCorta } from "@/lib/agenda-nueva/fechas";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useMinuto } from "./usar-minuto";
+import { ROPA_EDITAR_CITA } from "./ropa";
 import s from "./agenda-nueva.module.css";
 
 /* ═══ Flujo de la cita ══════════════════════════════════════════════════
@@ -658,10 +660,16 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         </div>
       </aside>
 
-      <AgendaEditAppointmentModal appt={editando ? dto : null} isOpen={editando} onClose={() => setEditando(false)} />
+      <AgendaEditAppointmentModal
+        appt={editando ? dto : null}
+        isOpen={editando}
+        onClose={() => setEditando(false)}
+        ropa={ROPA_EDITAR_CITA}
+      />
 
       {factura && (
         <InvoiceDetailModal
+          rediseno
           open
           invoice={factura}
           patientName={cita.nombrePaciente}

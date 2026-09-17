@@ -46,5 +46,12 @@ export default async function LandingConfigPage() {
   // La fila COMPLETA viaja a un componente cliente: se filtran las credenciales
   // (Live Secret Key de Facturapi, tokens de WhatsApp/Twilio/Google…) para que no
   // terminen en el payload RSC. "landing.view" no es un permiso solo de admin.
-  return <LandingConfigClient key={user.clinicId} clinic={stripClinicSecrets(clinic) as any} appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""} puedeEditar={puedeEditar} accountManager={accountManager} clinicName={clinic?.name ?? ""} rediseno={rediseno} />;
+  // `updatedAt` como ISO string (mismo patrón que /dashboard/landing/editor/page.tsx):
+  // es la marca con la que carga esta pantalla, y save() la manda de vuelta como
+  // `esperadoUpdatedAt` para que el servidor detecte si otra pestaña guardó antes.
+  const clinicPayload = {
+    ...stripClinicSecrets(clinic),
+    updatedAt: clinic?.updatedAt ? clinic.updatedAt.toISOString() : new Date().toISOString(),
+  };
+  return <LandingConfigClient key={user.clinicId} clinic={clinicPayload as any} appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""} puedeEditar={puedeEditar} accountManager={accountManager} clinicName={clinic?.name ?? ""} rediseno={rediseno} />;
 }

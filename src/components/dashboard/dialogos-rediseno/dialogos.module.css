@@ -1,0 +1,514 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Diálogos del rediseño (ws1-t5, hallazgos 6 y 7): la ventana «Nuevo
+   paciente» y las confirmaciones «¿seguro?» del ConfirmProvider.
+
+   Los dos se abren en un PORTAL a <body>, fuera de la raíz de cualquier
+   pantalla: por eso les llegaba la letra nueva (va sobre <body>) pero no
+   los colores, que cuelgan del <div> raíz de cada pantalla. Aquí cada
+   caja monta `CLASES_MENU` (`menu-dos-niveles/clases.ts`) ella misma, y
+   con eso trae los `--m2-*` del menú —con su versión oscura— y las dos
+   familias tipográficas. Esta hoja NO declara tokens propios: solo LEE
+   los del menú y los semánticos de globals.css (`--danger`, `--warning`),
+   con el mismo respaldo que usa el propio menú (`--m2-soporte`).
+
+   Es ADITIVO: sin estas clases puestas —la clínica sin el interruptor
+   `menu-dos-niveles`— no se aplica ni una regla, y los dos diálogos se
+   pintan con sus `style` de siempre, píxel por píxel.
+
+   La ventana de paciente usa el sistema compartido de globals.css
+   (.modal__header, .field-new, .input-new, .btn-new…). No se toca
+   globals.css: cada clase compartida se sobreescribe DENTRO de la caja
+   leyendo el token del menú equivalente, igual que hace `equipo-rediseno`.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Velo y caja: lo común a los dos diálogos ────────────────────── */
+
+.veloAlta,
+.veloConfirmar {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--m2-texto) 40%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: dialogosFundido 180ms ease-out;
+}
+
+/* Mismos planos que hoy: paciente 90/91, confirmación 200/201 (encima de
+   cualquier ventana, incluida la de paciente y la Nueva cita). */
+.veloAlta { z-index: 90; }
+.veloConfirmar { z-index: 200; }
+
+.caja {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--m2-texto) 22%, transparent);
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+  animation: dialogosAparece 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.caja *,
+.caja *::before,
+.caja *::after {
+  box-sizing: border-box;
+}
+
+/* Cifras de ancho fijo (fechas, teléfonos, CURP). Va sobre los HIJOS y no
+   sobre la caja a propósito: la caja lleva `.tokens` del menú, y
+   `tipografia-panel.tsx` le pone a esa clase `font-variant-numeric: normal`
+   con más peso; sus hijos heredan de aquí. */
+.caja > * {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes dialogosFundido {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialogosAparece {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veloAlta,
+  .veloConfirmar,
+  .caja {
+    animation: none;
+  }
+}
+
+/* ── Botón de cerrar (la X), igual en los dos ────────────────────── */
+
+.cerrar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+  cursor: pointer;
+}
+
+.cerrar:hover {
+  background: var(--m2-borde);
+}
+
+.cerrar:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* ═══ Confirmación «¿seguro?» ═════════════════════════════════════════ */
+
+.confirmar {
+  z-index: 201;
+  width: calc(100vw - 32px);
+  max-width: 440px;
+}
+
+.confirmarCabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 20px 14px;
+}
+
+.confirmarIcono {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.confirmar[data-tono="danger"] .confirmarIcono {
+  background: var(--danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--danger, #dc2626);
+}
+
+.confirmar[data-tono="warning"] .confirmarIcono {
+  background: var(--warning-soft, rgba(217, 119, 6, 0.1));
+  color: var(--warning-strong, #a85a05);
+}
+
+.confirmarTextos {
+  flex: 1;
+  min-width: 0;
+}
+
+.confirmarTitulo {
+  margin: 2px 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 1.35;
+  color: var(--m2-texto);
+}
+
+.confirmarDescripcion {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--m2-texto-2);
+}
+
+.motivo {
+  padding: 0 20px 8px;
+}
+
+.motivoRotulo {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m2-texto-2);
+}
+
+.motivoCampo {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13.5px;
+  resize: vertical;
+}
+
+.motivoCampo::placeholder {
+  color: var(--m2-texto-3);
+}
+
+.motivoCampo:focus {
+  outline: none;
+  border-color: var(--m2-activo);
+  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo);
+}
+
+.confirmarPie {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--m2-borde);
+}
+
+.accionSecundaria,
+.accionPrincipal {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.accionSecundaria {
+  padding: 0 16px;
+  border: 1px solid var(--m2-borde);
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+}
+
+.accionSecundaria:hover {
+  background: var(--m2-hover);
+}
+
+.accionPrincipal {
+  padding: 0 18px;
+  border: 0;
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+}
+
+.accionPrincipal:hover {
+  opacity: 0.88;
+}
+
+.confirmar[data-tono="danger"] .accionPrincipal {
+  background: var(--danger, #dc2626);
+  color: var(--m2-activo-texto);
+}
+
+.confirmar[data-tono="warning"] .accionPrincipal {
+  background: var(--warning, #d97706);
+  color: var(--m2-activo-texto);
+}
+
+.accionSecundaria:focus-visible,
+.accionPrincipal:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* ═══ «Nuevo paciente» ═════════════════════════════════════════════════
+   La caja conserva su esqueleto de siempre (cabecera, cuerpo con scroll,
+   pie con la visibilidad a la izquierda y las acciones a la derecha):
+   ni un campo se mueve ni se esconde. Cambia la ropa. */
+
+.alta {
+  z-index: 91;
+  width: min(calc(100vw - 32px), 640px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.alta :global(.modal__header) {
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.alta :global(.modal__title) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 22px;
+  color: var(--m2-texto);
+}
+
+.tituloIcono {
+  color: var(--m2-activo);
+  flex: none;
+}
+
+/* La X de la cabecera es un .btn-new fantasma: aquí es el mismo cuadrado
+   que el de la confirmación. */
+.alta :global(.modal__header .btn-new--ghost) {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+}
+
+.alta :global(.modal__header .btn-new--ghost:hover) {
+  background: var(--m2-borde);
+  color: var(--m2-texto);
+}
+
+.alta :global(.modal__body) {
+  padding: 18px 20px 20px;
+}
+
+.alta :global(.modal__footer) {
+  padding: 14px 20px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-tarjeta);
+}
+
+/* Secciones y rótulos: 11 px en mayúsculas, como en la Nueva cita. */
+.alta :global(.form-section__title) {
+  color: var(--m2-texto-2);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.alta :global(.form-section__rule) {
+  background: var(--m2-borde);
+}
+
+.alta :global(.field-new) {
+  gap: 8px;
+}
+
+.alta :global(.field-new__label) {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--m2-texto-2);
+}
+
+.alta :global(.field-new__label .req) {
+  color: var(--m2-activo);
+}
+
+/* Controles de 40 px y radio 8. */
+.alta :global(.input-new) {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 8px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+.alta :global(textarea.input-new) {
+  height: auto;
+  min-height: 72px;
+  padding: 10px 12px;
+}
+
+.alta :global(.input-new:hover) {
+  border-color: var(--m2-texto-3);
+}
+
+.alta :global(.input-new:focus),
+.alta :global(.input-new:focus-within) {
+  border-color: var(--m2-activo);
+  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo);
+}
+
+.alta :global(.input-new::placeholder),
+.alta :global(.df-input::placeholder) {
+  color: var(--m2-texto-3);
+}
+
+.alta :global(.input-new:disabled) {
+  opacity: 0.6;
+}
+
+.alta :global(select.input-new) {
+  appearance: none;
+  padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--m2-texto-2) 50%),
+    linear-gradient(135deg, var(--m2-texto-2) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 17px, calc(100% - 12px) 17px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+/* El borde rojo de un campo obligatorio vacío sigue viniendo en línea desde
+   el modal, igual que hoy: gana a estas reglas solo cuando hay error. */
+
+/* El icono del calendario dentro del campo de fecha. */
+.alta :global(.df-cal) {
+  color: var(--m2-texto-2);
+}
+
+.alta :global(.df-cal:hover:not(:disabled)) {
+  color: var(--m2-activo);
+}
+
+.alta input[type="checkbox"] {
+  accent-color: var(--m2-activo);
+}
+
+/* Botones: 40 px, radio 10; el principal en tinta, como la Nueva cita. */
+.alta :global(.btn-new) {
+  height: 40px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.alta :global(.btn-new--sm) {
+  height: 32px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+:root .alta.alta :global(.btn-new--primary) {
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root .alta.alta :global(.btn-new--primary:hover:not(:disabled)) {
+  background: var(--m2-cta-fondo);
+  opacity: 0.88;
+}
+
+.alta :global(.btn-new--secondary) {
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  border-color: var(--m2-borde);
+  box-shadow: none;
+}
+
+.alta :global(.btn-new--secondary:hover:not(:disabled)) {
+  background: var(--m2-hover);
+  color: var(--m2-texto);
+}
+
+.alta :global(.modal__footer .btn-new--ghost) {
+  color: var(--m2-texto-2);
+}
+
+.alta :global(.modal__footer .btn-new--ghost:hover:not(:disabled)) {
+  background: var(--m2-hover);
+  color: var(--m2-texto);
+}
+
+.alta :global(.btn-new:focus-visible) {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+/* Textos sueltos que antes llevaban `var(--text-2)` / `var(--text-3)`. */
+.pista {
+  padding: 6px 4px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.rotuloSuave {
+  font-size: 12.5px;
+  color: var(--m2-texto-2);
+  cursor: pointer;
+}
+
+/* «Ver planes» cuando el cupo de pacientes se agotó. */
+.limiteCta {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.limiteCta:hover {
+  opacity: 0.88;
+}
+
+.limiteCta:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}

@@ -3,11 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { crearInterruptor, FLAG_MENU_DOS_NIVELES } from "./interruptor-core";
 
 /**
- * ¿La clínica activa ve el menú de dos niveles? El `clinicId` sale SIEMPRE de
- * la sesión (el layout se lo pasa desde getCurrentUser), nunca del cliente.
- * Misma respuesta en todas las pantallas: espera a la base, sin tope de tiempo.
- * Falla cerrado: sin tabla, sin fila, o con error sin respuesta previa → `false`
- * (menú de siempre). Detalles en interruptor-core.ts.
+ * ¿La clínica activa ve el rediseño (menú de dos niveles)? El `clinicId` sale
+ * SIEMPRE de la sesión (el layout se lo pasa desde getCurrentUser), nunca del
+ * cliente. Misma respuesta en todas las pantallas: espera a la base, sin tope
+ * de tiempo.
+ *
+ * ENCENDIDO POR DEFECTO: sin tabla, sin fila, o con error sin respuesta previa
+ * → `true`, el rediseño. Se apaga a propósito y de dos maneras: la fila de esa
+ * clínica con `enabled = false` (solo ella, sin desplegar), o la variable de
+ * entorno `REDISENO_APAGADO` (todas, sin mirar la base). Detalles y el porqué
+ * de cada caso, en interruptor-core.ts.
  */
 export const menuDosNivelesEncendido = crearInterruptor({
   // to_regclass devuelve NULL si la tabla no existe: no lanza ni ensucia el log.

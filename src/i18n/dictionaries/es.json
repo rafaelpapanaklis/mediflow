@@ -461,6 +461,9 @@
     "proximamente": "Próximamente",
     "cajaSinAcceso": "Caja se activa persona por persona y tu usuario no la tiene activada. Pídesela al dueño de la clínica.",
     "cajaSinAccesoCorto": "Sin acceso",
+    "cajaSinPermisoTitulo": "No tienes acceso a Caja",
+    "cajaSinPermisoVolver": "Volver a Hoy",
+    "cajaSinPermisoEquipo": "Activarlo en Equipo",
     "miPerfil": "Mi perfil",
     "volver": "Volver",
     "migasAria": "Estás en"
@@ -2977,6 +2980,17 @@
       "createdToast": "Factura creada: {number}"
     }
   },
+  "presupuestosEnFacturacion": {
+    "avisoTitulo": "Los cobros nuevos ahora se hacen desde Facturación. ",
+    "avisoTexto": "Ahí ya puedes elegir un pago o a plazos, con qué paga el paciente y enviárselo por correo o WhatsApp. Los presupuestos que ya tenías siguen aquí, completos.",
+    "irAFacturacion": "Ir a Facturación",
+    "guardados": {
+      "one": "{count} presupuesto guardado",
+      "other": "{count} presupuestos guardados"
+    },
+    "guardadosPista": "de este paciente, de antes de unir Presupuestos con Facturación.",
+    "verPresupuestos": "Ver presupuestos"
+  },
   "quotes": {
     "title": "Presupuestos",
     "newQuote": "Nuevo presupuesto",
@@ -4626,6 +4640,7 @@
       "tabWaiting": "Sala de espera",
       "tabCosts": "Costos & Margen",
       "tabJourney": "Patient Journey",
+      "tabReports": "Reportes",
       "heading": "Analytics",
       "sectionsAria": "Secciones de Analytics"
     },
@@ -7626,6 +7641,7 @@
       "currentSubtotalLabel": "Subtotal actual:",
       "discountMxnLabel": "Descuento (MXN) *",
       "discountHelper": "El total se recalcula como subtotal − descuento.",
+      "applyDiscountFirst": "Aplica el descuento antes de cobrar, o déjalo como estaba.",
       "applying": "Aplicando…",
       "cancelInvoiceTitle": "Cancelar factura {number}",
       "cancelWarning": "No podrá registrar pagos después. La razón quedará en el audit log y en las notas de la factura.",
@@ -8202,6 +8218,8 @@
       "applying": "Aplicando…",
       "applyTemplate": "Aplicar / Usar esta plantilla",
       "applyWillPublish": "Aplicar también publicará tu sitio.",
+      "applyKeepsHidden": "Tu sitio seguirá oculto. Para publicarlo, usa el interruptor de arriba.",
+      "templateAppliedHidden": "✨ Plantilla {name} aplicada. Tu sitio sigue oculto: publícalo con el interruptor de arriba.",
       "primaryColor": "Color principal",
       "taglineLabel": "Slogan / Tagline",
       "taglineHelp": "Frase corta que aparece debajo del nombre en el hero",
@@ -9000,6 +9018,29 @@
       "cargando": "Cargando archivos…"
     }
   },
+  "facturaFicha": {
+    "extrasFallo": "No se pudieron leer las formas de pago de estas facturas: la base no respondió. Recarga para verlas.",
+    "enviando": "Enviando…",
+    "enviarCorreo": "Enviar por correo",
+    "correoEnviado": "Correo enviado al paciente.",
+    "whatsAppEnviado": "WhatsApp enviado al paciente.",
+    "sinCorreo": "El paciente no tiene correo registrado: agrégalo en su expediente para poder enviarle la factura por correo.",
+    "sinTelefono": "El paciente no tiene teléfono registrado: agrégalo en su expediente para poder enviarle la factura por WhatsApp.",
+    "tratoTitulo": "Esto anota el trato, no cobra. ",
+    "tratoTexto": "La forma de pago queda escrita en la factura para que se entienda de un vistazo. Los pagos se siguen registrando como siempre, con «Registrar pago».",
+    "envioTitulo": "Enviar la factura al paciente",
+    "envioNo": "No enviar",
+    "envioNoPista": "Solo se crea la factura. Puedes enviarla después desde su ficha.",
+    "envioCorreo": "Por correo",
+    "envioCorreoPista": "Al correo registrado del paciente, al crear la factura.",
+    "envioWhatsApp": "Por WhatsApp",
+    "envioWhatsAppPista": "Al WhatsApp registrado del paciente, al crear la factura.",
+    "envioSinPaciente": "Elige primero al paciente para saber a dónde se le puede enviar.",
+    "errorCondiciones": "La factura se creó, pero la forma de pago no se guardó.",
+    "creadaSinEnviar": "La factura se creó, pero NO se le envió al paciente.",
+    "envioSinConfirmar": "No se pudo confirmar el envío: la conexión se cortó antes de recibir respuesta. Antes de reenviar, comprueba con el paciente o en el Inbox si ya le llegó.",
+    "creadaEnvioSinConfirmar": "La factura se creó, pero no se pudo confirmar si se le envió al paciente. Compruébalo antes de reenviarla desde su ficha."
+  },
   "presupuestoNuevo": {
     "listaTitulo": "Presupuestos",
     "listaSubtitulo": "Lo que se le cotizó al paciente y cómo lo va a pagar.",
@@ -9082,5 +9123,88 @@
     "errorFormaDePago": "El presupuesto se guardó, pero la forma de pago no: la base no respondió. Vuelve a pulsar «Guardar» para intentarlo otra vez.",
     "ilegibleTitulo": "No se pudo leer la forma de pago. ",
     "ilegibleTexto": "La base de datos no respondió al abrir este presupuesto, así que esta pantalla no sabe qué forma de pago tiene y no la va a tocar: puedes editar los conceptos y guardar con tranquilidad. Para cambiar la forma de pago, recarga la página y vuelve a entrar."
+  },
+  "planTratamiento": {
+    "lista": {
+      "titulo": "Planes de tratamiento",
+      "nuevo": "Nuevo plan de tratamiento",
+      "vacio": "Sin planes de tratamiento",
+      "crearPrimero": "Crear el primer plan de tratamiento →"
+    },
+    "nuevo": {
+      "titulo": "Nuevo plan de tratamiento",
+      "nombre": "Nombre del plan *",
+      "nombrePista": "Este nombre es el que lee el paciente en su WhatsApp de seguimiento: corto y sin tecnicismos.",
+      "diagnostico": "Diagnóstico",
+      "diagnosticoRotulo": "Diagnóstico y motivo del plan",
+      "diagnosticoEjemplo": "Ej: Caries múltiple en sector posterior, gingivitis generalizada",
+      "hallazgos": "Hallazgos del odontograma por tratar — toca uno para agregarlo al plan",
+      "hallazgoAgregar": "Agregar al plan",
+      "procedimientos": "Procedimientos",
+      "procedimientosPista": "Qué se hace, en qué diente y en qué cara. El precio sale del tarifario.",
+      "colFase": "Fase",
+      "colProcedimiento": "Procedimiento",
+      "colDientes": "Dientes",
+      "colCaras": "Caras",
+      "colCantidad": "Cant.",
+      "colPrecio": "Precio",
+      "colImporte": "Importe",
+      "procedimientoEjemplo": "Ej: Restauración resina 2 caras",
+      "procedimientoPara": "Procedimiento para: {motivo}",
+      "elegirDientes": "Elegir dientes",
+      "dienteInvalido": "No es un diente FDI: {dientes}",
+      "quitar": "Quitar procedimiento",
+      "agregar": "Agregar procedimiento",
+      "nProcedimientos": {
+        "one": "{count} procedimiento",
+        "other": "{count} procedimientos"
+      },
+      "seguimiento": "Sesiones, seguimiento y costo",
+      "seguimientoPista": "Con las sesiones y los días entre ellas se calcula cuándo debe volver el paciente; si no vuelve, se le escribe por WhatsApp.",
+      "calculado": "Calculado de los procedimientos",
+      "usarSesiones": {
+        "one": "Usar {count} sesión (según los procedimientos)",
+        "other": "Usar {count} sesiones (según los procedimientos)"
+      },
+      "usarCosto": "Usar {total} (suma de los procedimientos)",
+      "alternativa": "Alternativa ofrecida al paciente",
+      "alternativaEjemplo": "Ej: Puente fijo en lugar de implante; el paciente eligió implante",
+      "firmaPista": "La aceptación firmada por el paciente se recoge hoy en Presupuestos; el plan clínico queda guardado en la descripción del plan, que el paciente no ve.",
+      "crear": "Crear plan de tratamiento"
+    },
+    "fase": {
+      "urgencia": "Urgencia",
+      "sistemica": "Fase sistémica",
+      "higienica": "Fase I · Higiénica",
+      "correctiva": "Fase II · Correctiva",
+      "restauradora": "Fase III · Restauradora",
+      "mantenimiento": "Fase IV · Mantenimiento"
+    },
+    "pronostico": {
+      "sinDefinir": "Sin definir",
+      "bueno": "Bueno",
+      "reservado": "Reservado",
+      "malo": "Malo"
+    },
+    "cara": {
+      "M": "Mesial",
+      "O": "Oclusal",
+      "I": "Incisal",
+      "D": "Distal",
+      "V": "Vestibular",
+      "L": "Palatino / Lingual"
+    },
+    "aviso": {
+      "endoAntesDeCorona": "Diente {diente}: la endodoncia va antes que el poste o la corona. Revisa las fases.",
+      "cicatrizacionAntesDeImplante": "Diente {diente}: entre la extracción y el implante hay cicatrización. Si no es implante inmediato, ponlos en fases distintas."
+    },
+    "texto": {
+      "diagnostico": "Diagnóstico",
+      "pronostico": "Pronóstico",
+      "total": "Total de procedimientos",
+      "alternativa": "Alternativa ofrecida",
+      "notas": "Notas",
+      "por": "por:"
+    }
   }
 }

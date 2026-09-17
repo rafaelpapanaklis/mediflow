@@ -25,6 +25,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import type { AgendaViewMode } from "@/lib/agenda/types";
 import { TREATMENT_KINDS, type DoctorColumnDTO, type ResourceDTO } from "@/lib/agenda/types";
@@ -90,10 +91,31 @@ const VISTA_A_PROVEEDOR: Record<VistaAgenda, AgendaViewMode> = {
   mes: "month",
 };
 
+/**
+ * `?view=day|week|month` → la vista con la que ARRANCA la agenda nueva.
+ *
+ * Son los mismos nombres que ya usa el proveedor de datos (`AgendaViewMode`) y
+ * el `?view=week` con el que «Ver agenda semanal» de Hoy manda a la agenda.
+ * Cualquier otra cosa, o nada, es Día, como siempre. Solo se lee al montar:
+ * después manda el control segmentado de la barra, como hasta ahora.
+ *
+ * Con la bandera apagada este proveedor no se monta (`agenda-page-client.tsx`
+ * elige `AgendaShell`), así que la agenda de siempre sigue ignorando `?view=`
+ * exactamente igual que hoy.
+ */
+export function vistaInicialDesdeParametro(view: string | null | undefined): VistaAgenda {
+  if (view === "week") return "semana";
+  if (view === "month") return "mes";
+  return "dia";
+}
+
 export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
   const { state, setViewMode } = useAgenda();
+  const searchParams = useSearchParams();
 
-  const [vista, setVista] = useState<VistaAgenda>("dia");
+  const [vista, setVista] = useState<VistaAgenda>(() =>
+    vistaInicialDesdeParametro(searchParams.get("view")),
+  );
 
   const [panel, setPanel] = useState<PanelAbierto>(null);
   const [citaAbiertaId, setCitaAbiertaId] = useState<string | null>(null);

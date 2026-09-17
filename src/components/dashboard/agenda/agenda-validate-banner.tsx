@@ -13,12 +13,48 @@ import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
 /**
+ * La ROPA del rediseño (ws1-t1, hallazgo 9): una clase por cada pieza del
+ * banner, con los MISMOS nombres que usa `agenda.module.css`, para que el
+ * componente elija entre las dos hojas con un solo `??`. Es OPCIONAL y
+ * aditiva: sin ella se usan las clases de siempre y no cambia ni un nodo.
+ * Solo la agenda nueva la pasa (`agenda-nueva/ropa.ts`).
+ *
+ * ⛔ No cambia ni una regla: la cola, el aprobar uno a uno o todos, el
+ * aviso de WhatsApp y el rollback son los mismos.
+ */
+export type ValidarRopa = Readonly<Record<
+  | "validateBanner"
+  | "validateBannerHead"
+  | "validateBannerTitle"
+  | "validateBannerActions"
+  | "validateNotifyToggle"
+  | "validateBulkBtn"
+  | "validateBannerClose"
+  | "validateRowList"
+  | "validateBannerRow"
+  | "validateBannerRowMain"
+  | "validateBannerRowTime"
+  | "validateBannerRowName"
+  | "validateBannerRowDoctor"
+  | "validateRowDoctorDot"
+  | "validateBannerRowResource"
+  | "validateBannerRowReason"
+  | "validateBannerRowOverride"
+  | "validateBannerRowActions"
+  | "validateBannerActionBtn"
+  | "primary",
+  string
+>>;
+
+/**
  * Audit ajuste 8: pending validation como sección expandible inline (no modal).
  * El stat "X pendientes validar" en sub-toolbar dispara togglePendingPanel.
  * Cuando state.pendingSectionOpen es true, este banner aparece arriba del body.
  */
-export function AgendaValidateBanner() {
+export function AgendaValidateBanner({ ropa }: { ropa?: ValidarRopa } = {}) {
   const t = useT();
+  // Sin ropa, `c` ES el módulo de siempre: las mismas clases, nodo por nodo.
+  const c: ValidarRopa = ropa ?? (styles as ValidarRopa);
   const { state, dispatch, togglePendingPanel } = useAgenda();
   const router = useRouter();
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -91,17 +127,17 @@ export function AgendaValidateBanner() {
   }
 
   return (
-    <section className={styles.validateBanner} aria-label={t("agenda.validateBanner.sectionLabel")}>
-      <div className={styles.validateBannerHead}>
-        <div className={styles.validateBannerTitle}>
+    <section className={c.validateBanner} aria-label={t("agenda.validateBanner.sectionLabel")}>
+      <div className={c.validateBannerHead}>
+        <div className={c.validateBannerTitle}>
           <ShieldAlert size={14} aria-hidden />
           <span>
             <strong>{pending.length}</strong>{" "}
             {t("agenda.validateBanner.pendingCount", { count: pending.length })}
           </span>
         </div>
-        <div className={styles.validateBannerActions}>
-          <label className={styles.validateNotifyToggle}>
+        <div className={c.validateBannerActions}>
+          <label className={c.validateNotifyToggle}>
             <input
               type="checkbox"
               checked={notifyWA}
@@ -111,7 +147,7 @@ export function AgendaValidateBanner() {
           </label>
           <button
             type="button"
-            className={styles.validateBulkBtn}
+            className={c.validateBulkBtn}
             onClick={() => void confirmAll()}
             disabled={bulkRunning}
           >
@@ -121,7 +157,7 @@ export function AgendaValidateBanner() {
           </button>
           <button
             type="button"
-            className={styles.validateBannerClose}
+            className={c.validateBannerClose}
             onClick={() => togglePendingPanel(false)}
             aria-label={t("agenda.validateBanner.collapse")}
             title={t("agenda.validateBanner.collapse")}
@@ -130,10 +166,11 @@ export function AgendaValidateBanner() {
           </button>
         </div>
       </div>
-      <ul className={styles.validateRowList} role="list">
+      <ul className={c.validateRowList} role="list">
         {pending.map((a) => (
           <ValidateRow
             key={a.id}
+            c={c}
             appointment={a}
             doctorColor={doctorColorForAppt(state.doctors, a)}
             resourceName={state.resources.find((r) => r.id === a.resourceId)?.name ?? null}
@@ -149,6 +186,7 @@ export function AgendaValidateBanner() {
 }
 
 interface ValidateRowProps {
+  c: ValidarRopa;
   appointment: AgendaAppointmentDTO;
   doctorColor: string;
   resourceName: string | null;
@@ -159,20 +197,20 @@ interface ValidateRowProps {
 }
 
 function ValidateRow({
-  appointment, doctorColor, resourceName, timezone, busy, onConfirm, onReject,
+  c, appointment, doctorColor, resourceName, timezone, busy, onConfirm, onReject,
 }: ValidateRowProps) {
   const t = useT();
   return (
-    <li className={styles.validateBannerRow}>
-      <div className={styles.validateBannerRowMain}>
-        <span className={styles.validateBannerRowTime}>
+    <li className={c.validateBannerRow}>
+      <div className={c.validateBannerRowMain}>
+        <span className={c.validateBannerRowTime}>
           {formatSlotTime(appointment.startsAt, timezone)}
         </span>
-        <span className={styles.validateBannerRowName}>{appointment.patient.name}</span>
+        <span className={c.validateBannerRowName}>{appointment.patient.name}</span>
         {appointment.doctor && (
-          <span className={styles.validateBannerRowDoctor}>
+          <span className={c.validateBannerRowDoctor}>
             <span
-              className={styles.validateRowDoctorDot}
+              className={c.validateRowDoctorDot}
               style={{ background: doctorColor }}
               aria-hidden
             >
@@ -181,18 +219,18 @@ function ValidateRow({
             {appointment.doctor.shortName}
           </span>
         )}
-        {resourceName && <span className={styles.validateBannerRowResource}>· {resourceName}</span>}
-        <span className={styles.validateBannerRowReason}>{appointment.reason ?? t("agenda.validateBanner.consultationDefault")}</span>
+        {resourceName && <span className={c.validateBannerRowResource}>· {resourceName}</span>}
+        <span className={c.validateBannerRowReason}>{appointment.reason ?? t("agenda.validateBanner.consultationDefault")}</span>
         {appointment.overrideReason && (
-          <span className={styles.validateBannerRowOverride}>
+          <span className={c.validateBannerRowOverride}>
             «{appointment.overrideReason}»
           </span>
         )}
       </div>
-      <div className={styles.validateBannerRowActions}>
+      <div className={c.validateBannerRowActions}>
         <button
           type="button"
-          className={styles.validateBannerActionBtn}
+          className={c.validateBannerActionBtn}
           onClick={onReject}
           disabled={busy}
           aria-label={t("agenda.validateBanner.reject")}
@@ -202,7 +240,7 @@ function ValidateRow({
         </button>
         <button
           type="button"
-          className={`${styles.validateBannerActionBtn} ${styles.primary}`}
+          className={`${c.validateBannerActionBtn} ${c.primary}`}
           onClick={onConfirm}
           disabled={busy}
         >

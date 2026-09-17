@@ -12,6 +12,7 @@ import {
   DollarSign,
   Route,
   Gem,
+  FileBarChart,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -20,7 +21,7 @@ import { CLASES_ANALITICA } from "./raiz";
 import { PESTANAS, pestanaActiva } from "./pestanas";
 import s from "./analitica.module.css";
 
-/** Ícono de cada pestaña (los mismos de `analytics-layout.tsx`). */
+/** Ícono de cada pestaña (los mismos de `analytics-layout.tsx`, más el de Reportes). */
 const ICONO: Readonly<Record<string, LucideIcon>> = {
   overview: BarChart3,
   occupancy: Grid3x3,
@@ -31,6 +32,7 @@ const ICONO: Readonly<Record<string, LucideIcon>> = {
   costs: DollarSign,
   journey: Route,
   crm: Gem,
+  reports: FileBarChart,
 };
 
 interface Props {
@@ -41,7 +43,7 @@ interface Props {
 }
 
 /**
- * El marco del rediseño: raíz con tokens, la fila de nueve pestañas siempre a
+ * El marco del rediseño: raíz con tokens, la fila de pestañas siempre a
  * la vista (se parte en dos renglones si no cabe; nunca esconde una), y la
  * cabecera de sección con título, subtítulo y acciones a la derecha.
  *

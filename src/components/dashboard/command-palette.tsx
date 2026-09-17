@@ -19,10 +19,21 @@ import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import { useDebouncedValue } from "@/hooks/use-command-palette";
 import { isAbortError } from "@/lib/fetch-safe";
+import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
+import { RUTA_AGENDA, vestidor, type AparienciaTopbar } from "@/components/dashboard/topbar-rediseno/apariencia";
+import c from "@/components/dashboard/topbar-rediseno/piezas-topbar.module.css";
 
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * La ropa (topbar-rediseno/apariencia.ts). Sin ella —la barra de siempre—
+   * cada elemento recibe EXACTAMENTE los `style` de antes y «Agenda» manda a
+   * la agenda de siempre; con "nueva" —la barra del menú de dos niveles— el
+   * portal monta CLASES_MENU, se pinta con las clases del rediseño y «Agenda»
+   * manda a la agenda nueva. La búsqueda, los atajos y las acciones son unos.
+   */
+  apariencia?: AparienciaTopbar;
 }
 
 // Map group id -> translation-key; the visible label is resolved via t() at render time.
@@ -49,6 +60,16 @@ const INVOICE_STATUS: Record<
   CANCELLED: { tone: "neutral", labelKey: "billing.billingClient.statusCancelled" },
 };
 
+/** El mismo tono de estado con la ropa nueva: semáforo de globals + marca del menú. */
+const TONO_NUEVO: Record<string, string> = {
+  success: c.tonoExito,
+  warning: c.tonoAlerta,
+  danger: c.tonoPeligro,
+  info: c.tonoInfo,
+  brand: c.tonoMarca,
+  neutral: c.tonoNeutro,
+};
+
 /** "YYYY-MM-DD" → "31 jul". Se arma y se formatea en UTC a propósito: la fecha
  *  ya viene resuelta en la zona de la clínica, y pasarla por la zona local del
  *  navegador la correría un día en offsets negativos. */
@@ -71,10 +92,14 @@ const GROUP_ORDER: CommandGroup[] = [
   "ir-a",
 ];
 
-export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+export function CommandPalette({ open, onOpenChange, apariencia }: CommandPaletteProps) {
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
+  const nueva = apariencia === "nueva";
+  // Memoizado: `items` lo lleva en sus deps y su identidad tiene que ser
+  // estable entre renders, como lo son `t` y `locale`.
+  const vestir = useMemo(() => vestidor(apariencia), [apariencia]);
   const { consult: activeConsult } = useActiveConsult();
   const { open: openAppt } = useNewAppointmentDialog();
   const { open: openPatient } = useNewPatientDialog();
@@ -194,24 +219,24 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           // Texto plano para lector de pantalla; el render va en labelNode.
           label: `${inv.folio} · ${inv.patientName}`,
           labelNode: (
-            <span style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+            <span {...vestir({ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }, c.folio)}>
               <span
-                style={{
+                {...vestir({
                   fontFamily: "var(--font-mono, monospace)",
                   fontVariantNumeric: "tabular-nums",
                   color: "var(--text-1)",
                   flexShrink: 0,
-                }}
+                }, c.folioNumero)}
               >
                 {inv.folio}
               </span>
               <span
-                style={{
+                {...vestir({
                   color: "var(--text-2)",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
-                }}
+                }, c.folioNombre)}
               >
                 {inv.patientName}
               </span>
@@ -219,18 +244,20 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           ),
           sub: fmtDayMonth(inv.date, locale),
           trailing: (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <span {...vestir({ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0 }, c.opcionCola)}>
               <span
-                style={{
+                {...vestir({
                   fontSize: 12,
                   fontWeight: 600,
                   color: "var(--text-1)",
                   fontVariantNumeric: "tabular-nums",
-                }}
+                }, c.importe)}
               >
                 {fmtMXN(inv.amount)}
               </span>
-              {badge && <BadgeNew tone={badge.tone}>{t(badge.labelKey)}</BadgeNew>}
+              {badge && (nueva
+                ? <span className={`${c.etiqueta} ${TONO_NUEVO[badge.tone] ?? c.tonoNeutro}`}>{t(badge.labelKey)}</span>
+                : <BadgeNew tone={badge.tone}>{t(badge.labelKey)}</BadgeNew>)}
             </span>
           ),
           icon: FileTextIcon,
@@ -239,7 +266,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       });
     }
 
-    const globals = buildGlobalActions();
+    const globals = buildGlobalActions(nueva ? { rutaAgenda: RUTA_AGENDA.nueva } : undefined);
     if (!q) {
       all.push(...globals);
       return all;
@@ -251,7 +278,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     all.push(...filteredGlobals);
 
     return all;
-  }, [activeConsult, remoteResults, query, locale, t]);
+  }, [activeConsult, remoteResults, query, locale, t, nueva, vestir]);
 
   useEffect(() => {
     setHighlightedIndex(0);
@@ -345,9 +372,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay
-          className="fixed inset-0 z-50"
+          className={nueva ? `fixed inset-0 z-50 ${c.velo}` : "fixed inset-0 z-50"}
           data-cmd-palette-overlay
-          style={{
+          style={nueva ? undefined : {
             background: "rgba(5,5,10,0.72)",
             backdropFilter: "blur(6px)",
             WebkitBackdropFilter: "blur(6px)",
@@ -357,9 +384,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         <Dialog.Content
           onKeyDown={handleKeyDown}
           aria-label={t("shell.commandPalette.dialogLabel")}
-          className="fixed z-50"
+          className={nueva ? `fixed z-50 ${CLASES_MENU} ${c.piel} ${c.paleta}` : "fixed z-50"}
           data-cmd-palette-content
-          style={{
+          style={nueva ? undefined : {
             top: "15vh",
             left: "50%",
             transform: "translateX(-50%)",
@@ -382,16 +409,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           </Dialog.Description>
 
           <div
-            style={{
+            {...vestir({
               display: "flex",
               alignItems: "center",
               gap: 10,
               padding: "14px 16px",
               borderBottom: "1px solid var(--border-soft)",
               flexShrink: 0,
-            }}
+            }, c.paletaBusqueda)}
           >
-            <Search size={16} style={{ color: "var(--text-3)", flexShrink: 0 }} aria-hidden />
+            <Search size={16} {...vestir({ color: "var(--text-3)", flexShrink: 0 }, c.paletaLupa)} aria-hidden />
             <input
               ref={inputRef}
               type="text"
@@ -406,7 +433,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               aria-expanded={true}
               aria-autocomplete="list"
               aria-activedescendant={total > 0 ? `cmd-item-${highlightedIndex}` : undefined}
-              style={{
+              {...vestir({
                 flex: 1,
                 background: "transparent",
                 border: "none",
@@ -415,12 +442,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 fontSize: 14,
                 fontFamily: "inherit",
                 height: 24,
-              }}
+              }, c.paletaInput)}
             />
             <button
               onClick={() => onOpenChange(false)}
               aria-label={t("common.close")}
-              style={{
+              {...vestir({
                 display: "inline-flex",
                 alignItems: "center",
                 padding: "3px 8px",
@@ -433,7 +460,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 fontFamily: "var(--font-mono, monospace)",
                 fontWeight: 500,
                 flexShrink: 0,
-              }}
+              }, c.paletaEsc)}
             >
               esc
             </button>
@@ -445,14 +472,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               los role="option" ensucia el árbol de accesibilidad. */}
           {query.trim() === "" && (
             <div
-              style={{
+              {...vestir({
                 padding: "10px 16px",
                 fontSize: 11,
                 lineHeight: 1.5,
                 color: "var(--text-3)",
                 borderBottom: "1px solid var(--border-soft)",
                 flexShrink: 0,
-              }}
+              }, c.paletaPista)}
             >
               {t("shell.commandPalette.scopeHint")}
             </div>
@@ -463,16 +490,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             id="cmd-list"
             role="listbox"
             aria-label={t("shell.commandPalette.resultsLabel")}
-            style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}
-            className="scrollbar-thin"
+            style={nueva ? undefined : { flex: 1, overflowY: "auto", padding: "8px 0" }}
+            className={nueva ? `scrollbar-thin ${c.paletaLista}` : "scrollbar-thin"}
           >
-            {loading && total === 0 && <EmptyMessage>{t("shell.commandPalette.searching")}</EmptyMessage>}
+            {loading && total === 0 && <EmptyMessage nueva={nueva}>{t("shell.commandPalette.searching")}</EmptyMessage>}
             {!loading && total === 0 && (
-              <EmptyMessage>
+              <EmptyMessage nueva={nueva}>
                 {query ? (
                   <>
                     <div>{t("shell.commandPalette.noResultsFor", { query })}</div>
-                    <div style={{ marginTop: 6, color: "var(--text-3)" }}>
+                    <div {...vestir({ marginTop: 6, color: "var(--text-3)" }, c.vacioPaletaSub)}>
                       {t("shell.commandPalette.noResultsHint")}
                     </div>
                   </>
@@ -486,14 +513,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             {grouped.ordered.map(({ group, entries }) => (
               <div key={group} role="group" aria-label={t(GROUP_LABEL_KEYS[group])}>
                 <div
-                  style={{
+                  {...vestir({
                     padding: "10px 16px 6px",
                     fontSize: 10,
                     fontWeight: 600,
                     letterSpacing: "0.08em",
                     color: "var(--text-2)",
                     fontFamily: "var(--font-sans, system-ui, sans-serif)",
-                  }}
+                  }, c.grupoTitulo)}
                 >
                   {t(GROUP_LABEL_KEYS[group])}
                 </div>
@@ -505,6 +532,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     isActive={idx === highlightedIndex}
                     onHover={() => setHighlightedIndex(idx)}
                     onSelect={() => item.run(ctx)}
+                    apariencia={apariencia}
                   />
                 ))}
               </div>
@@ -512,7 +540,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           </div>
 
           <div
-            style={{
+            {...vestir({
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -524,18 +552,18 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               flexShrink: 0,
               background: "var(--bg-elev)",
               flexWrap: "wrap",
-            }}
+            }, c.paletaPie)}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <FooterHint keys={["↑", "↓"]} label={t("shell.commandPalette.hintNavigate")} />
-              <FooterHint keys={["↵"]} label={t("shell.commandPalette.hintOpen")} />
-              <FooterHint keys={["esc"]} label={t("shell.commandPalette.hintClose")} />
+            <div {...vestir({ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, c.paletaPistas)}>
+              <FooterHint keys={["↑", "↓"]} label={t("shell.commandPalette.hintNavigate")} nueva={nueva} />
+              <FooterHint keys={["↵"]} label={t("shell.commandPalette.hintOpen")} nueva={nueva} />
+              <FooterHint keys={["esc"]} label={t("shell.commandPalette.hintClose")} nueva={nueva} />
               {query.trim() === "" && (
-                <span style={{
+                <span {...vestir({
                   color: "var(--text-3)",
                   fontSize: 10,
                   fontStyle: "italic",
-                }}>
+                }, c.paletaPistaTexto)}>
                   {t("shell.commandPalette.pressShortcuts")}
                 </span>
               )}
@@ -545,7 +573,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 onOpenChange(false);
                 window.dispatchEvent(new CustomEvent("mf:open-shortcuts-panel"));
               }}
-              style={{
+              {...vestir({
                 background: "transparent",
                 border: "none",
                 color: "var(--text-2)",
@@ -555,7 +583,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 fontFamily: "inherit",
                 textDecoration: "underline",
                 textUnderlineOffset: 2,
-              }}
+              }, c.paletaAyuda)}
             >
               {t("shell.commandPalette.whatIsThis")}
             </button>
@@ -567,15 +595,17 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 }
 
 function CommandRow({
-  item, idx, isActive, onHover, onSelect,
+  item, idx, isActive, onHover, onSelect, apariencia,
 }: {
   item: CommandItem;
   idx: number;
   isActive: boolean;
   onHover: () => void;
   onSelect: () => void;
+  apariencia?: AparienciaTopbar;
 }) {
   const Icon = item.icon;
+  const vestir = vestidor(apariencia);
   return (
     <div
       id={`cmd-item-${idx}`}
@@ -584,7 +614,7 @@ function CommandRow({
       aria-selected={isActive}
       onClick={onSelect}
       onMouseMove={onHover}
-      style={{
+      {...vestir({
         display: "flex",
         alignItems: "center",
         gap: 10,
@@ -593,47 +623,48 @@ function CommandRow({
         background: isActive ? "var(--brand-soft)" : "transparent",
         color: "var(--text-1)",
         transition: "background 0.08s",
-      }}
+      }, c.opcion)}
     >
       {Icon && (
         <Icon
           size={16}
-          style={{ color: isActive ? "var(--brand)" : "var(--text-3)", flexShrink: 0 }}
+          {...vestir({ color: isActive ? "var(--brand)" : "var(--text-3)", flexShrink: 0 }, c.opcionIcono)}
           aria-hidden
         />
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
+      <div {...vestir({ flex: 1, minWidth: 0 }, c.opcionTextos)}>
+        <div {...vestir({
           fontSize: 13, fontWeight: 500, color: "var(--text-1)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>{item.labelNode ?? item.label}</div>
+        }, c.opcionTitulo)}>{item.labelNode ?? item.label}</div>
         {item.sub && (
-          <div style={{
+          <div {...vestir({
             fontSize: 11, color: "var(--text-2)",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
             marginTop: 2,
-          }}>{item.sub}</div>
+          }, c.opcionSub)}>{item.sub}</div>
         )}
       </div>
       {item.trailing}
       {item.shortcut && (
-        <kbd style={{
+        <kbd {...vestir({
           fontSize: 10, padding: "2px 6px", borderRadius: 4,
           background: isActive ? "rgba(124,58,237,0.20)" : "var(--bg-hover)",
           color: isActive ? "var(--brand)" : "var(--text-2)",
           fontFamily: "var(--font-mono, monospace)",
           fontWeight: 500, border: "1px solid var(--border-soft)",
           flexShrink: 0, whiteSpace: "nowrap",
-        }}>{item.shortcut}</kbd>
+        }, `${c.kbd} ${c.kbdChica}`)}>{item.shortcut}</kbd>
       )}
       {isActive && (
-        <CornerDownLeft size={12} style={{ color: "var(--brand)", flexShrink: 0 }} aria-hidden />
+        <CornerDownLeft size={12} {...vestir({ color: "var(--brand)", flexShrink: 0 }, c.opcionEnter)} aria-hidden />
       )}
     </div>
   );
 }
 
-function EmptyMessage({ children }: { children: React.ReactNode }) {
+function EmptyMessage({ children, nueva }: { children: React.ReactNode; nueva?: boolean }) {
+  if (nueva) return <div className={c.vacioPaleta}>{children}</div>;
   return (
     <div style={{
       padding: "32px 16px", textAlign: "center",
@@ -642,17 +673,18 @@ function EmptyMessage({ children }: { children: React.ReactNode }) {
   );
 }
 
-function FooterHint({ keys, label }: { keys: string[]; label: string }) {
+function FooterHint({ keys, label, nueva }: { keys: string[]; label: string; nueva?: boolean }) {
+  const vestir = vestidor(nueva ? "nueva" : undefined);
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+    <span {...vestir({ display: "inline-flex", alignItems: "center", gap: 4 }, c.pista)}>
       {keys.map((k, i) => (
-        <kbd key={i} style={{
+        <kbd key={i} {...vestir({
           fontSize: 10, padding: "1px 5px", minWidth: 16,
           textAlign: "center", borderRadius: 4,
           background: "var(--bg-hover)", border: "1px solid var(--border-soft)",
           color: "var(--text-2)", fontFamily: "var(--font-mono, monospace)",
           fontWeight: 500, display: "inline-block",
-        }}>{k}</kbd>
+        }, `${c.kbd} ${c.kbdChica}`)}>{k}</kbd>
       ))}
       <span>{label}</span>
     </span>

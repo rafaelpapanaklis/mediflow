@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, CreditCard, CalendarPlus, LogOut, type LucideIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useConsultElapsedSeconds } from "./active-consult-provider";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -18,6 +19,7 @@ export function PatientContextEndModal({
   const router = useRouter();
   const t = useT();
   const { consult, endConsult } = useActiveConsult();
+  const { open: openAppt, apariencia } = useNewAppointmentDialog();
   const elapsedSeconds = useConsultElapsedSeconds();
 
   if (!consult) return null;
@@ -35,8 +37,19 @@ export function PatientContextEndModal({
 
   const handleScheduleNext = async () => {
     const patientId = consult.patientId;
+    const patientName = consult.patientName;
     await endConsult();
     onOpenChange(false);
+    if (apariencia === "nueva") {
+      // Con el diseño nuevo no hay que salir a la agenda vieja: se abre la
+      // Nueva cita nueva con el paciente ya puesto y, al guardar, la agenda
+      // nueva resalta la cita (`openAgendaAfter`). Menos clics que hoy.
+      openAppt({
+        initialPatient: patientName ? { id: patientId, name: patientName } : undefined,
+        openAgendaAfter: true,
+      });
+      return;
+    }
     router.push(`/dashboard/appointments?new=1&patient=${patientId}`);
   };
 

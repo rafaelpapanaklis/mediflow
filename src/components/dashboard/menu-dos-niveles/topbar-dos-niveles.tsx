@@ -1,7 +1,8 @@
 "use client";
 // Barra superior del menú de dos niveles: migas + buscador global (Ctrl+K).
-// Hace lo mismo que <Topbar> (paleta de comandos, atajos, avisos de sala de
-// espera, insights, notificaciones) con el aspecto del diseño nuevo. El
+// Hace lo mismo que <Topbar> (paleta de comandos, atajos, insights,
+// notificaciones) con el aspecto del diseño nuevo; el aviso de sala de
+// espera es lo único que esta barra NO monta (ver más abajo). El
 // cableado de atajos está copiado de topbar.tsx a propósito: cuando Rafael
 // apruebe el menú nuevo, la barra vieja se borra y este queda como el único.
 
@@ -12,13 +13,13 @@ import { CommandPalette } from "@/components/dashboard/command-palette";
 import { KeyboardShortcutsPanel } from "@/components/dashboard/keyboard-shortcuts-panel";
 import { NotificationsPopover } from "@/components/dashboard/notifications-popover";
 import { InsightsPopover } from "@/components/dashboard/insights-popover";
-import { WaitingRoomAlert } from "@/components/dashboard/waiting-room-alert";
 import { ROUTE_LABELS } from "@/components/dashboard/topbar";
 import { useCommandPalette } from "@/hooks/use-command-palette";
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
+import { RUTA_AGENDA } from "@/components/dashboard/topbar-rediseno/apariencia";
 import { useT } from "@/i18n/i18n-provider";
 import { etiquetaDeRuta } from "./estructura";
 import { CLASES_MENU } from "./clases";
@@ -45,8 +46,8 @@ export function TopbarDosNiveles({ clinicName, userRole }: { clinicName: string;
     setIsMac(/mac|iphone|ipad|ipod/i.test(navigator.platform));
   }, []);
 
-  // ── Igual que topbar.tsx ─────────────────────────────────────────
-  useGoToShortcuts({ enabled: modalsClosed });
+  // ── Igual que topbar.tsx, salvo «G A»: aquí manda a la agenda nueva ──
+  useGoToShortcuts({ enabled: modalsClosed, rutaAgenda: RUTA_AGENDA.nueva });
   useCreateShortcuts({
     enabled: modalsClosed,
     onCreateAppointment: () => openAppt({ openAgendaAfter: true }),
@@ -125,13 +126,19 @@ export function TopbarDosNiveles({ clinicName, userRole }: { clinicName: string;
         </button>
 
         <div className={s.derecha}>
-          {(userRole === "RECEPTIONIST" || userRole === "ADMIN" || userRole === "SUPER_ADMIN") && <WaitingRoomAlert />}
-          {(userRole === "ADMIN" || userRole === "SUPER_ADMIN") && <InsightsPopover />}
-          <NotificationsPopover />
+          {/* Las mismas piezas que topbar.tsx, con la ropa del diseño nuevo
+              (`apariencia="nueva"`, ver topbar-rediseno/apariencia.ts). La
+              barra de siempre no pasa nada y las pinta como hasta hoy. */}
+          {/* El aviso de sala de espera («X pacientes esperan >20 min») NO se
+              monta aquí: Rafael lo quitó de la barra nueva. Al no montarse
+              tampoco sondea /api/analytics/waiting-room cada 60 s. La barra
+              de siempre (topbar.tsx) lo sigue montando igual que hoy. */}
+          {(userRole === "ADMIN" || userRole === "SUPER_ADMIN") && <InsightsPopover apariencia="nueva" />}
+          <NotificationsPopover apariencia="nueva" />
         </div>
       </div>
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-      <KeyboardShortcutsPanel open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} apariencia="nueva" />
+      <KeyboardShortcutsPanel open={shortcutsOpen} onOpenChange={setShortcutsOpen} apariencia="nueva" />
     </>
   );
 }
