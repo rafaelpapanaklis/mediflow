@@ -13,6 +13,19 @@
 
    ws1-t2 (Semana y Mes) hereda estos `--ag-*` desde `.raiz` y pinta sus
    clases en `vista-semana-mes.module.css`.
+
+   MODO OSCURO (ws1-t1, hallazgo 18 de la auditoría del rediseño): el panel
+   se oscurece con la clase `.dark` en <html> (theme-toggle.tsx), y esta hoja
+   no tenía variante. Ahora `.raiz` y `.tokensAgenda` llevan además
+   `CLASES_MENU` (`menu-dos-niveles/clases.ts`), que trae los `--m2-*` del
+   menú con su versión oscura, y el bloque `:global(.dark)` de abajo vuelve a
+   declarar cada `--ag-*` LEYENDO esos `--m2-*` para los neutros (tinta,
+   superficies, bordes, botón principal). Los acentos del diseño (morado,
+   verde, ámbar, rojo) no tienen pareja en el menú y llevan su tono oscuro
+   propio en `oklch`, la misma familia que la ventana «Nueva cita»
+   (`new-appointment/nueva-cita.module.css`). Con el interruptor apagado no
+   se monta ni un nodo de aquí, así que nada de esto alcanza a la agenda de
+   siempre.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* Las variables van en `.raiz` y también en `.tokensAgenda`: la confirmación
@@ -68,6 +81,88 @@
   --ag-rojo-texto: oklch(0.45 0.16 25);
   --ag-rojo-fondo: oklch(0.96 0.03 25);
   --ag-rojo-borde: oklch(0.62 0.16 25);
+
+  /* ── Lo que antes iba escrito a mano en las reglas (hallazgo 18) ──
+     Mismos valores que tenían, ahora con nombre para que el bloque oscuro
+     los pueda cambiar. */
+  --ag-borde-suave: rgba(26, 24, 38, 0.1);
+  --ag-borde-casilla: rgba(26, 24, 38, 0.3);
+  --ag-borde-punto: rgba(26, 24, 38, 0.18);
+  --ag-raya-cierre: rgba(26, 24, 38, 0.05);
+  --ag-sombra-fantasma: 0 8px 24px rgba(26, 24, 38, 0.14);
+  --ag-sombra-modal: 0 24px 64px rgba(26, 24, 38, 0.22);
+  --ag-velo: rgba(26, 24, 38, 0.38);
+  /* El botón principal (Nueva cita, la acción del panel, el chip activo):
+     tinta con letra blanca. Se LEE del menú (`--m2-cta-*`), que en claro es
+     exactamente la tinta y el blanco de aquí; en oscuro el menú lo invierte. */
+  --ag-cta-fondo: var(--m2-cta-fondo, var(--ag-tinta));
+  --ag-cta-texto: var(--m2-cta-texto, white);
+  --ag-cta-hover: rgb(43 40 64); /* el 2b2840 del README */
+
+  /* ── Las pintas que calcula el JS (`tokens.ts` → `estados.ts`) ──
+     La tarjeta de cita recibe su fondo, su borde y su chip como `style`
+     inline desde `AGENDA_TOKENS`; esas constantes ahora son `var(--ag-…)`
+     y caen aquí, para que también se oscurezcan. */
+  --ag-chip-verde-fondo: oklch(0.95 0.05 150);
+  --ag-chip-verde-tinta: oklch(0.4 0.13 150);
+  --ag-ambar-texto-2: oklch(0.4 0.12 70);
+  --ag-ambar-badge: oklch(0.86 0.13 80);
+  --ag-tarjeta-rojo-borde: oklch(0.86 0.08 25);
+  --ag-chip-rojo-fondo: oklch(0.94 0.055 25);
+}
+
+/* ═══ Oscuro ════════════════════════════════════════════════════════════
+   `:global(.dark)` es la clase que pone theme-toggle.tsx en <html>; la
+   regla sigue anclada a `.raiz`/`.tokensAgenda` (clases con hash de este
+   módulo), así que no puede pintar nada fuera de la agenda nueva. */
+:global(.dark) .raiz,
+:global(.dark) .tokensAgenda {
+  --ag-tinta: var(--m2-texto);
+  --ag-texto-2: var(--m2-texto-2);
+  --ag-texto-3: color-mix(in srgb, var(--m2-texto) 80%, var(--m2-texto-2));
+  --ag-superficie: var(--m2-n2-fondo);
+  --ag-fondo-app: var(--m2-hover);
+  --ag-fondo-cerrado: rgba(255, 255, 255, 0.025);
+  --ag-borde-divisor: var(--m2-borde);
+  --ag-borde-control: rgba(255, 255, 255, 0.12);
+  --ag-borde-media: rgba(255, 255, 255, 0.04);
+  --ag-borde-suave: rgba(255, 255, 255, 0.1);
+  --ag-borde-casilla: rgba(255, 255, 255, 0.3);
+  --ag-borde-punto: rgba(255, 255, 255, 0.18);
+  --ag-raya-cierre: rgba(255, 255, 255, 0.04);
+
+  --ag-morado: oklch(0.66 0.16 280);
+  --ag-morado-texto: oklch(0.82 0.09 280);
+  --ag-morado-tinte: oklch(0.66 0.16 280 / 0.2);
+  --ag-hoy: oklch(0.66 0.16 280 / 0.08);
+  --ag-borde-consulta: oklch(0.66 0.16 280 / 0.45);
+
+  --ag-verde: oklch(0.72 0.15 150);
+  --ag-verde-vivo: oklch(0.8 0.17 150);
+  --ag-chip-verde-fondo: oklch(0.72 0.15 150 / 0.18);
+  --ag-chip-verde-tinta: oklch(0.85 0.1 150);
+
+  --ag-ambar-icono: oklch(0.8 0.13 80);
+  --ag-ambar-texto: oklch(0.82 0.12 80);
+  --ag-ambar-texto-2: oklch(0.88 0.1 80);
+  --ag-ambar-fondo: oklch(0.8 0.13 80 / 0.18);
+  --ag-ambar-claro: oklch(0.8 0.13 80 / 0.1);
+  --ag-ambar-borde: oklch(0.8 0.13 80 / 0.45);
+  --ag-ambar-badge: oklch(0.8 0.13 80 / 0.5);
+
+  --ag-rojo-texto: oklch(0.78 0.12 25);
+  --ag-rojo-fondo: oklch(0.68 0.17 25 / 0.14);
+  --ag-rojo-borde: oklch(0.68 0.17 25);
+  --ag-tarjeta-rojo-borde: oklch(0.68 0.17 25 / 0.45);
+  --ag-chip-rojo-fondo: oklch(0.68 0.17 25 / 0.22);
+
+  --ag-sombra-desplegable: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --ag-sombra-segmento: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ag-sombra-seleccion: 0 0 0 2px oklch(0.66 0.16 280);
+  --ag-sombra-fantasma: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --ag-sombra-modal: 0 24px 64px rgba(0, 0, 0, 0.5);
+  --ag-velo: rgba(0, 0, 0, 0.6);
+  --ag-cta-hover: color-mix(in srgb, var(--m2-cta-fondo) 90%, var(--m2-n1-fondo));
 }
 
 .tokensAgenda {
@@ -90,6 +185,15 @@
 .raiz *::before,
 .raiz *::after {
   box-sizing: border-box;
+}
+
+/* Cifras de ancho fijo en TODO lo que cuelga de aquí. Va sobre los HIJOS y
+   no sobre la raíz a propósito: la raíz lleva ahora `.tokens` del menú, y
+   `tipografia-panel.tsx` le pone a esa clase `font-variant-numeric: normal`
+   con más peso; sus hijos heredan de aquí (igual que hoy-rediseno). */
+.raiz > *,
+.tokensAgenda > * {
+  font-variant-numeric: tabular-nums;
 }
 
 /* ═══ Barra de herramientas (64 px, común a las tres vistas) ════════════ */
@@ -282,8 +386,8 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: var(--ag-tinta);
-  color: #fff;
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
   font-size: 11px;
   font-weight: 700;
   display: grid;
@@ -297,7 +401,7 @@
   right: 0;
   width: 300px;
   background: var(--ag-superficie);
-  border: 1px solid rgba(26, 24, 38, 0.1);
+  border: 1px solid var(--ag-borde-suave);
   border-radius: var(--ag-r-12);
   box-shadow: var(--ag-sombra-desplegable);
   padding: 8px;
@@ -366,7 +470,7 @@
   height: 18px;
   flex: none;
   border-radius: var(--ag-r-5);
-  border: 1.5px solid rgba(26, 24, 38, 0.3);
+  border: 1.5px solid var(--ag-borde-casilla);
   background: var(--ag-superficie);
   display: grid;
   place-items: center;
@@ -441,9 +545,9 @@
 }
 
 .botonHuecosAbierto {
-  background: var(--ag-tinta);
-  border-color: var(--ag-tinta);
-  color: #fff;
+  background: var(--ag-cta-fondo);
+  border-color: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
 }
 
 /* ── Botón «Nueva cita» ── La acción principal de la pantalla: tinta, como el
@@ -455,9 +559,9 @@
   height: 34px;
   padding: 0 14px 0 10px;
   border-radius: var(--ag-r-8);
-  background: var(--ag-tinta);
-  color: #fff;
-  border: 1px solid var(--ag-tinta);
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+  border: 1px solid var(--ag-cta-fondo);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -469,7 +573,7 @@
 }
 
 .botonNuevaCita:hover {
-  background: #2b2840;
+  background: var(--ag-cta-hover);
 }
 
 .botonNuevaCita:focus-visible,
@@ -657,7 +761,7 @@
   right: 0;
   background: repeating-linear-gradient(
     -45deg,
-    rgba(26, 24, 38, 0.05) 0 6px,
+    var(--ag-raya-cierre) 0 6px,
     transparent 6px 14px
   );
   pointer-events: none;
@@ -709,7 +813,7 @@
   border-radius: var(--ag-r-8);
   border: 2px dashed var(--ag-morado);
   background: color-mix(in oklch, var(--ag-morado-tinte) 88%, transparent);
-  box-shadow: 0 8px 24px rgba(26, 24, 38, 0.14);
+  box-shadow: var(--ag-sombra-fantasma);
   pointer-events: none;
   display: flex;
   flex-direction: column;
@@ -1169,7 +1273,7 @@ a.panelNombre:hover {
   height: 20px;
   flex: none;
   border-radius: 50%;
-  border: 2px solid rgba(26, 24, 38, 0.18);
+  border: 2px solid var(--ag-borde-punto);
   background: transparent;
   display: grid;
   place-items: center;
@@ -1262,8 +1366,8 @@ a.panelNombre:hover {
 .accionPrincipal {
   height: 40px;
   border-radius: var(--ag-r-10);
-  background: var(--ag-tinta);
-  color: #fff;
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
   border: 0;
   display: flex;
   align-items: center;
@@ -1276,7 +1380,7 @@ a.panelNombre:hover {
 }
 
 .accionPrincipal:hover:not(:disabled) {
-  background: #2b2840;
+  background: var(--ag-cta-hover);
 }
 
 .accionPrincipal:disabled {
@@ -1391,9 +1495,9 @@ a.panelNombre:hover {
 
 .chipActivo,
 .chipActivo:hover {
-  background: var(--ag-tinta);
-  color: #fff;
-  border-color: var(--ag-tinta);
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+  border-color: var(--ag-cta-fondo);
 }
 
 .huecosSeparador {
@@ -1417,7 +1521,7 @@ a.panelNombre:hover {
   gap: 12px;
   padding: 10px 12px;
   border-radius: var(--ag-r-10);
-  border: 1px solid rgba(26, 24, 38, 0.1);
+  border: 1px solid var(--ag-borde-suave);
   background: var(--ag-superficie);
   flex: none;
   text-align: left;
@@ -1493,9 +1597,9 @@ a.panelNombre:hover {
 }
 
 .huecoAgendarPrimero {
-  background: var(--ag-tinta);
-  color: #fff;
-  border-color: var(--ag-tinta);
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+  border-color: var(--ag-cta-fondo);
 }
 
 .huecoAgendar:disabled {
@@ -1545,7 +1649,7 @@ a.panelNombre:hover {
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(26, 24, 38, 0.38);
+  background: var(--ag-velo);
   backdrop-filter: blur(2px);
 }
 
@@ -1559,9 +1663,9 @@ a.panelNombre:hover {
   max-height: calc(100vh - 32px);
   overflow: auto;
   background: var(--ag-superficie);
-  border: 1px solid rgba(26, 24, 38, 0.1);
+  border: 1px solid var(--ag-borde-suave);
   border-radius: 14px;
-  box-shadow: 0 24px 64px rgba(26, 24, 38, 0.22);
+  box-shadow: var(--ag-sombra-modal);
   padding: 0 0 16px;
   outline: none;
 }
@@ -1758,4 +1862,430 @@ a.panelNombre:hover {
   .girando {
     animation: none;
   }
+}
+
+/* ═══ Las ventanas secundarias (ws1-t1, hallazgo 9) ═════════════════════
+   «Editar cita» (`agenda/agenda-edit-appointment-modal.tsx`), el calendario
+   de su fecha (`ui/date-field.tsx`) y «Pendientes de validar»
+   (`agenda/agenda-validate-banner.tsx`) son componentes COMPARTIDOS con la
+   agenda de siempre. No se tocan sus reglas ni sus `style`: reciben una
+   `ropa` opcional con estas clases (ver `ropa.ts`) y solo la agenda nueva
+   se la pasa. Sin ropa se pintan exactamente como hoy. */
+
+/* ── «Editar cita»: velo + caja, misma pareja que «Mover cita» ── */
+
+.veloEditar {
+  position: fixed;
+  inset: 0;
+  z-index: 200; /* el plano que ya usaba la ventana de siempre */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--ag-velo);
+  backdrop-filter: blur(2px);
+}
+
+.modalEditar {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  border: 1px solid var(--ag-borde-suave);
+  border-radius: 14px;
+  box-shadow: var(--ag-sombra-modal);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.modalEditar *,
+.modalEditar *::before,
+.modalEditar *::after {
+  box-sizing: border-box;
+}
+
+.editarCabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--ag-borde-divisor);
+  flex: none;
+}
+
+.editarTitulos {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editarTitulo {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 22px;
+  color: var(--ag-tinta);
+}
+
+.editarFormulario {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editarCuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dosColumnas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.campoRotulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ag-texto-2);
+}
+
+/* El control (texto, hora, selector y el contenedor del `DateField`): 40 px,
+   radio 8, como en «Nueva cita». `DateField` pinta su interior con los
+   tokens del panel de siempre (`--text-*`, `--brand`…): aquí se redeclaran
+   leyendo los de la agenda, y su `style` inline los recoge por herencia. */
+.control {
+  --text-1: var(--ag-tinta);
+  --text-2: var(--ag-texto-2);
+  --text-3: var(--ag-texto-2);
+  --text-4: var(--ag-texto-2);
+  --brand: var(--ag-morado);
+  --bg-hover: var(--ag-fondo-app);
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--ag-borde-control);
+  border-radius: 8px;
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+.control:hover {
+  border-color: color-mix(in srgb, var(--ag-tinta) 24%, transparent);
+}
+
+.control:focus,
+.control:focus-within {
+  outline: none;
+  border-color: var(--ag-morado);
+  box-shadow: 0 0 0 3px var(--ag-morado-tinte);
+}
+
+select.control {
+  appearance: none;
+  padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ag-texto-2) 50%),
+    linear-gradient(135deg, var(--ag-texto-2) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 17px, calc(100% - 12px) 17px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.control::placeholder {
+  color: var(--ag-texto-2);
+}
+
+/* El aviso de choque (doctor o unidad ocupados) con su motivo para forzar. */
+.conflicto {
+  padding: 12px 14px;
+  border-radius: var(--ag-r-10);
+  background: var(--ag-ambar-claro);
+  border: 1px solid var(--ag-ambar-borde);
+  color: var(--ag-tinta);
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.conflictoRotulo {
+  color: var(--ag-ambar-texto);
+  font-weight: 700;
+}
+
+.editarPie {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--ag-borde-divisor);
+  flex: none;
+}
+
+.editarPie .accionSecundaria {
+  flex: none;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--ag-r-10);
+}
+
+.editarPie .accionPrincipal {
+  padding: 0 18px;
+}
+
+/* ── El calendario del `DateField` ──
+   Sale a <body> en su propio portal, fuera de la ventana: lleva CLASES_MENU +
+   `.tokensAgenda` + esto. Su interior lee los tokens del panel de siempre;
+   aquí se redeclaran con los de la agenda. */
+.calendario {
+  --text-1: var(--ag-tinta);
+  --text-2: var(--ag-texto-2);
+  --text-3: var(--ag-texto-2);
+  --text-4: var(--ag-texto-2);
+  --bg-elev: var(--ag-superficie);
+  --bg-elev-2: var(--ag-fondo-app);
+  --bg-hover: var(--ag-fondo-app);
+  --border-soft: var(--ag-borde-control);
+  --border-strong: var(--ag-borde-suave);
+  --brand: var(--ag-morado);
+  font-size: 13px;
+}
+
+/* ── «Pendientes de validar»: la cola de citas del portal ──
+   Mismo componente y mismos botones que en la agenda de siempre; aquí en
+   ámbar del diseño (es una espera), con cifras en tabular-nums y sin letra
+   de máquina. */
+
+.validar {
+  margin: 0;
+  padding: 12px 24px 14px;
+  background: var(--ag-ambar-claro);
+  border-bottom: 1px solid var(--ag-ambar-borde);
+  flex: none;
+  font-size: 13px;
+}
+
+.validarCabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.validarTitulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ag-ambar-texto);
+}
+
+.validarTitulo strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.validarAcciones {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.validarAvisar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.validarAvisar input {
+  accent-color: var(--ag-verde);
+}
+
+.validarTodo {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-verde);
+  color: white;
+  border: 1px solid var(--ag-verde);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.validarTodo:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--ag-verde) 90%, black);
+}
+
+.validarTodo:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.validarPlegar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ag-r-8);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-texto-2);
+  cursor: pointer;
+  padding: 0;
+}
+
+.validarPlegar:hover {
+  color: var(--ag-tinta);
+}
+
+.validarLista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.validarFila {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--ag-superficie);
+  border: 1px solid var(--ag-borde-control);
+  border-radius: var(--ag-r-9);
+}
+
+.validarFilaPrincipal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.validarHora {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ag-texto-2);
+}
+
+.validarNombre {
+  font-weight: 600;
+  color: var(--ag-tinta);
+}
+
+.validarDoctor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ag-texto-2);
+  font-size: 12px;
+}
+
+.validarPunto {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: 8px;
+  font-weight: 700;
+  flex: none;
+}
+
+.validarUnidad,
+.validarMotivo {
+  color: var(--ag-texto-2);
+  font-size: 12px;
+}
+
+.validarNota {
+  color: var(--ag-ambar-texto);
+  font-size: 12px;
+  font-style: italic;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.validarFilaAcciones {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.validarAccion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--ag-r-8);
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-texto-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.validarAccion:hover:not(:disabled) {
+  border-color: var(--ag-borde-casilla);
+  color: var(--ag-tinta);
+}
+
+.validarAccionPrimaria,
+.validarAccionPrimaria:hover:not(:disabled) {
+  background: var(--ag-verde);
+  border-color: var(--ag-verde);
+  color: white;
+}
+
+.validarAccion:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
