@@ -225,7 +225,10 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
   function previewTemplate(id: string = templateSel) {
     // /landing-preview es la ruta DINÁMICA de vista previa; /[slug] es ISR y
     // no puede leer ?preview= (DYNAMIC_SERVER_USAGE al regenerar).
-    window.open(`/landing-preview/${clinic.slug}?preview=${id}`, "_blank", "noopener");
+    // ?borrador=1 (solo camino NUEVO): sin publicar, /landing-preview enseñaba
+    // el cartel de «disponible pronto» en vez de la plantilla. El servidor lo
+    // comprueba contra la sesión; solo deja VER, no publica nada.
+    window.open(`/landing-preview/${clinic.slug}?preview=${id}${rediseno ? "&borrador=1" : ""}`, "_blank", "noopener");
   }
 
   async function applyTemplate() {
@@ -1059,7 +1062,7 @@ export function LandingConfigClient({ clinic: initial, appUrl, puedeEditar, acco
             <iframe
               ref={iframeRef}
               key={`${templateSel}-${previewNonce}`}
-              src={`/landing-preview/${clinic.slug}?preview=${templateSel}`}
+              src={`/landing-preview/${clinic.slug}?preview=${templateSel}&borrador=1`}
               title="Vista previa de tu sitio"
               className="border-0 bg-white origin-top-left"
               style={previewAncho === "movil"
