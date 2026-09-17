@@ -128,6 +128,7 @@
     "test:botones-prometidos": "tsx --test src/app/dashboard/__tests__/botones-prometidos.test.ts",
     "test:caja-dinero": "tsx --test src/lib/__tests__/caja-dinero.test.ts",
     "test:equipo-rediseno": "tsx --test src/components/dashboard/equipo-rediseno/__tests__/equipo-rediseno.test.ts",
+    "test:sin-permiso-rediseno": "tsx --test src/components/dashboard/sin-permiso-rediseno/__tests__/sin-permiso-rediseno.test.ts",
     "test:reportes-rediseno": "tsx --test src/components/dashboard/reportes-rediseno/__tests__/reportes-rediseno.test.ts",
     "test:paid-at": "TZ=America/Mexico_City tsx --test src/lib/billing/__tests__/paid-at.test.ts",
     "test:editor-iva": "tsx --test src/lib/billing/__tests__/invoice-editor-iva.test.ts",
