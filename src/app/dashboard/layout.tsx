@@ -14,6 +14,7 @@ import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announce
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
+import { VestirDialogos } from "@/components/dashboard/dialogos-rediseno/vestir-dialogos";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { TwoFactorFetchGuard } from "@/components/dashboard/two-factor-fetch-guard";
@@ -242,10 +243,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <I18nProvider locale={locale} dict={dict}>
     <ActiveConsultProvider>
-    <NewPatientProvider>
-    {/* La ventana «Nueva cita» se viste con el diseño nuevo solo con el
-        interruptor encendido. Es una prop, no un hijo más: el árbol del layout
-        no cambia, y apagado recibe "clasica", la de siempre. */}
+    {/* Las ventanas «Nuevo paciente» y «Nueva cita», y las confirmaciones
+        «¿seguro?» del ConfirmProvider (que vive en el layout raíz y no sabe de
+        clínicas), se visten con el diseño nuevo solo con el interruptor
+        encendido. Es una prop, no un hijo más —y VestirDialogos es un
+        envoltorio de hijo único, no una ranura nueva—: el árbol del layout no
+        cambia, y apagado reciben "clasica", la de siempre. */}
+    <VestirDialogos activo={menuDosNiveles}>
+    <NewPatientProvider apariencia={menuDosNiveles ? "nueva" : "clasica"}>
     <NewAppointmentProvider apariencia={menuDosNiveles ? "nueva" : "clasica"}>
     {/* Skip link — WCAG 2.4.1 Bypass Blocks. Oculto por defecto, visible
         al recibir focus por teclado para que usuarios de teclado/lectores
@@ -311,6 +316,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <SabinaLanzador clinicId={clinic.id} firstName={user.firstName} oculto={isExpired} />
     </NewAppointmentProvider>
     </NewPatientProvider>
+    </VestirDialogos>
     </ActiveConsultProvider>
     </I18nProvider>
   );
