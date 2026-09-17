@@ -13,6 +13,7 @@ import { logAudit } from "@/lib/audit";
 import { PatientDetailClient } from "./patient-detail-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
+import { fetchActiveDoctors, fetchResources } from "@/lib/agenda/server";
 import { hasPermission } from "@/lib/auth/permissions";
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
@@ -228,6 +229,27 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // (WS1-T5). Los dos trabajos lo leían por su cuenta; al juntarlos, una sola
   // lectura y un solo `rediseno` hacia el cliente.
   const rediseno = await menuDosNivelesEncendido(user.clinicId);
+
+  // CITAS EDITABLES DESDE EL EXPEDIENTE (ws1-t3) — solo con la bandera. La
+  // pestaña Citas abre «Editar cita», la MISMA ventana de la agenda, y esa
+  // ventana necesita lo que en /dashboard/agenda baja el servidor: doctores,
+  // unidades, zona horaria y los mismos dos permisos. Se cargan con las mismas
+  // funciones que usa la agenda. Con la bandera apagada no hay ni consulta ni
+  // prop: la página queda como estaba.
+  const agendaCitas = rediseno
+    ? await Promise.all([
+        fetchActiveDoctors(user.clinicId, user.clinic.category),
+        fetchResources(user.clinicId),
+      ]).then(([agendaDoctors, agendaResources]) => ({
+        timezone: tz,
+        doctors: agendaDoctors,
+        resources: agendaResources,
+        permisos: {
+          canEdit: hasPermission(permsUser, "agenda.edit"),
+          canCancel: hasPermission(permsUser, "agenda.delete"),
+        },
+      }))
+    : null;
   // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
   // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
   const linkedPortalAccount = portalAccountLink?.account ?? null;
@@ -539,6 +561,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           creditBalance={creditBalance}
           fotosCount={fotosCount}
           rediseno={rediseno}
+          {...(agendaCitas ? { agendaCitas } : {})}
         />
       </ErrorBoundary>
     </div>

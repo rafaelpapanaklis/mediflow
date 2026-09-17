@@ -115,6 +115,8 @@ function archivosFuenteBajo(dir: string): string[] {
   return salida;
 }
 
+const VENTANA_DEL_EXPEDIENTE = "src/components/dashboard/citas-expediente/ventana-cita.tsx";
+
 test("solo agenda-page-client importa la agenda nueva", () => {
   const permitidos = new Set([CLIENT]);
   const infractores: string[] = [];
@@ -126,7 +128,16 @@ test("solo agenda-page-client importa la agenda nueva", () => {
     if (permitidos.has(ruta)) continue;
 
     const src = readFileSync(join(RAIZ, ruta), "utf8");
-    if (/from ["']@\/components\/dashboard\/agenda-nueva\//.test(src)) {
+    // UNA excepción, y estrecha (ws1-t3): «Editar cita» abierta desde el
+    // expediente toma PRESTADA la ropa de la ventana (`agenda-nueva/ropa`), y
+    // nada más. No monta la agenda nueva; y la ficha solo la monta con la
+    // misma bandera (candado en `citas-expediente/__tests__`). Cualquier otro
+    // import de `agenda-nueva/` desde ese archivo sigue siendo infracción.
+    const importa =
+      ruta === VENTANA_DEL_EXPEDIENTE
+        ? src.replace(/from ["']@\/components\/dashboard\/agenda-nueva\/ropa["']/g, "")
+        : src;
+    if (/from ["']@\/components\/dashboard\/agenda-nueva\//.test(importa)) {
       infractores.push(ruta);
     }
   }

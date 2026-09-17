@@ -48,6 +48,7 @@ import { PlanTratamiento as PlanTratamientoRediseno } from "@/components/dashboa
 import { VentanaNuevoPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
 import { VentanaVerPlan, VentanaEditarPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
 import { Citas as CitasRediseno } from "@/components/dashboard/expediente-rediseno/citas";
+import { VentanaCita, citaAbrible, type AgendaDelExpediente } from "@/components/dashboard/citas-expediente/ventana-cita";
 import { Facturacion as FacturacionRediseno } from "@/components/dashboard/expediente-rediseno/facturacion";
 // Hallazgo 21 (ws1-t5): el umbral hacia el módulo de Ortodoncia, que NO se
 // rediseña; solo la salida hacia él habla el idioma nuevo.
@@ -464,6 +465,12 @@ interface Props {
    * este valor es el que les llega.
    */
   rediseno?: boolean;
+  /**
+   * Solo llega con la bandera encendida: lo que «Editar cita» (la ventana de la
+   * agenda) necesita para abrirse desde la pestaña Citas. Sin ella, la tabla
+   * de Citas solo lista, como siempre.
+   */
+  agendaCitas?: AgendaDelExpediente;
 }
 
 export function PatientDetailClient({
@@ -503,11 +510,14 @@ export function PatientDetailClient({
   facturApiEnabled = false,
   reminderOutcome = null,
   rediseno = false,
+  agendaCitas,
 }: Props) {
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { open: openNewAppointment } = useNewAppointmentDialog();
+  // La cita abierta en «Editar cita» desde la pestaña Citas (solo rediseño).
+  const [citaAbiertaId, setCitaAbiertaId] = useState<string | null>(null);
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -3293,6 +3303,25 @@ export function PatientDetailClient({
               }}
               onAgendar={openNewAppointmentForPatient}
               onCancelar={(a) => handleCancelAppointment(a)}
+              onAbrir={agendaCitas ? (a) => setCitaAbiertaId(a.id) : undefined}
+              abrible={agendaCitas ? (a) => citaAbrible(a.status, agendaCitas.permisos) : undefined}
+            />
+          )}
+          {/* «Editar cita», la MISMA ventana de la agenda. La cita se busca por
+              id en cada render: tras guardar, la tabla y la ventana leen la
+              fila fresca que trae `router.refresh()`. */}
+          {rediseno && agendaCitas && (
+            <VentanaCita
+              cita={citaAbiertaId ? appointments.find((a) => a.id === citaAbiertaId) ?? null : null}
+              pacienteId={patient.id}
+              pacienteNombre={`${patient.firstName} ${patient.lastName}`.trim()}
+              agenda={agendaCitas}
+              userRole={currentUser.role}
+              estado={(st) => {
+                const full = APPT_STATUS_FULL[st] ?? APPT_STATUS_FULL.PENDING;
+                return { texto: t(full.labelKey), tono: full.tono };
+              }}
+              onClose={() => setCitaAbiertaId(null)}
             />
           )}
 
