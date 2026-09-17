@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   MessageCircle, CheckCircle, CheckCircle2, ExternalLink, Eye, EyeOff, Bot,
-  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail, FileText,
+  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail, FileText, AlertTriangle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -41,6 +41,8 @@ interface Props {
   remindersEnabled:      boolean;
   recentReminders:       RecentReminderDTO[];
   recentRemindersFailed: boolean;
+  /** Cumpleaños/recall/seguimientos bloqueados por la ventana de 24 h, 30 días (H-7). */
+  sinPlantilla30d?:      number;
   clinicName:    string;
   /** Rediseño (ws1-t5): el MISMO interruptor por clínica que enciende el
    *  menú de dos niveles. Apagado, esta pantalla se pinta tal cual. */
@@ -104,7 +106,7 @@ export function WhatsAppClient({
   connected: initConnected, phoneNumberId: initPhone, wabaId: initWabaId,
   connMethod: initConnMethod,
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h,
-  remindersEnabled, recentReminders, recentRemindersFailed, clinicName,
+  remindersEnabled, recentReminders, recentRemindersFailed, sinPlantilla30d = 0, clinicName,
   rediseno = false,
 }: Props) {
   const t = useT();
@@ -285,7 +287,7 @@ export function WhatsAppClient({
             router.refresh();
           },
           refrescar: () => router.refresh(),
-          recentReminders, recentRemindersFailed,
+          recentReminders, recentRemindersFailed, sinPlantilla30d,
         }}
       />
     );
@@ -522,6 +524,17 @@ export function WhatsAppClient({
                 </button>
               }
             >
+              {/* H-7: lo que NO salió por la ventana de 24 h, a la vista y sin
+                  buscar fila por fila. Solo aparece si hubo alguno. */}
+              {sinPlantilla30d > 0 && (
+                <div className={`${s.billing} ${s.windowNote}`} role="status">
+                  <AlertTriangle size={16} className={s.billingIcon} />
+                  <div>
+                    <div className={s.billingLabel}>{t("inbox.whatsapp.noTemplateSummaryTitle")}</div>
+                    <p className={s.billingBody}>{t("inbox.whatsapp.noTemplateSummaryBody", { count: sinPlantilla30d })}</p>
+                  </div>
+                </div>
+              )}
               {recentRemindersFailed ? (
                 <p className={s.remEmpty}>{t("inbox.whatsapp.recentFailed")}</p>
               ) : recentReminders.length === 0 ? (

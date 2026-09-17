@@ -24,7 +24,8 @@ import {
   WA_REMINDER_STATUS,
   WA_REMINDER_PENDING_STATUSES,
 } from "@/lib/whatsapp/reminder-status";
-import { isTokenRevoked } from "@/lib/whatsapp/errors";
+import { isTokenRevoked, WhatsAppBlockedError } from "@/lib/whatsapp/errors";
+import { motivoDeBloqueo } from "@/lib/whatsapp/sin-plantilla";
 import { markWhatsAppDisconnected } from "@/lib/whatsapp/connection";
 import { ENDO_WHATSAPP_TEMPLATES } from "@/lib/endodontics/whatsapp-templates";
 import { ORTHO_WHATSAPP_TEMPLATES } from "@/lib/orthodontics/whatsapp-templates";
@@ -381,7 +382,12 @@ export async function processWhatsAppQueue(opts?: {
       // Pausa breve para respetar rate limits.
       await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (e) {
-      const reason = e instanceof Error ? e.message : "error desconocido";
+      const crudo = e instanceof Error ? e.message : "error desconocido";
+      // Bloqueo por ventana de 24 h de un recordatorio SIN cita (cumpleaños,
+      // recall, seguimientos): se guarda el motivo real, no «faltan 5 datos».
+      const reason = e instanceof WhatsAppBlockedError
+        ? motivoDeBloqueo({ reason: crudo, cuelgaDeCita: !!r.appointment?.startsAt })
+        : crudo;
       summary.errors.push({ id: r.id, reason });
       await markFailed(r.id, reason);
       summary.failed++;

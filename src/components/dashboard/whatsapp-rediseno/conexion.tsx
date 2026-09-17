@@ -4,7 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import Link from "next/link";
 import {
   MessageCircle, CheckCircle, CheckCircle2, ExternalLink, Eye, EyeOff, Bot,
-  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail, FileText,
+  Facebook, QrCode, Check, CreditCard, LifeBuoy, Info, RefreshCw, Mail, FileText, AlertTriangle,
 } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import type { RecentReminderDTO } from "@/lib/whatsapp/recent-reminders";
@@ -89,6 +89,8 @@ export type ConexionVM = {
   refrescar: () => void;
   recentReminders: RecentReminderDTO[];
   recentRemindersFailed: boolean;
+  /** Cumpleaños/recall/seguimientos bloqueados por la ventana de 24 h, 30 días (H-7). */
+  sinPlantilla30d?: number;
 };
 
 /** Las plantillas de recordatorio se cobran por unidad: la clínica necesita un
@@ -109,7 +111,7 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
     t, connected, step, setStep, loading, showToken, setShowToken, form, setForm,
     msg, setMsg, defaultMsg, r24h, r1h, setR24h, setR1h, savingMsg, toggleBusy,
     connect, disconnect, saveSettings, saveToggle, connChip, remindersOn, esAvailable,
-    onEmbeddedConnected, refrescar, recentReminders, recentRemindersFailed,
+    onEmbeddedConnected, refrescar, recentReminders, recentRemindersFailed, sinPlantilla30d = 0,
   } = vm;
 
   const pasos = [
@@ -317,6 +319,13 @@ export function ConexionRediseno({ vm }: { vm: ConexionVM }) {
                 </Boton>
               }
             >
+              {/* H-7: lo que NO salió por la ventana de 24 h, a la vista y sin
+                  buscar fila por fila. Solo aparece si hubo alguno. */}
+              {sinPlantilla30d > 0 && (
+                <Nota tono="alerta" icono={<AlertTriangle size={16} />} titulo={t("inbox.whatsapp.noTemplateSummaryTitle")}>
+                  <p className={s.notaCuerpo}>{t("inbox.whatsapp.noTemplateSummaryBody", { count: sinPlantilla30d })}</p>
+                </Nota>
+              )}
               {recentRemindersFailed ? (
                 <p className={s.vacio}>{t("inbox.whatsapp.recentFailed")}</p>
               ) : recentReminders.length === 0 ? (

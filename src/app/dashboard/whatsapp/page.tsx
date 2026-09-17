@@ -36,7 +36,7 @@ export default async function WhatsAppPage() {
   const [recent, rediseno] = await Promise.all([
     connected
       ? getRecentReminders(user.clinicId, user.clinic.timezone)
-      : Promise.resolve({ rows: [], failed: false }),
+      : Promise.resolve({ rows: [], failed: false, sinPlantilla30d: 0 }),
     menuDosNivelesEncendido(user.clinicId),
   ]);
 
@@ -53,6 +53,7 @@ export default async function WhatsAppPage() {
       remindersEnabled={reminders.enabled && reminders.offsets.length > 0}
       recentReminders={recent.rows}
       recentRemindersFailed={recent.failed}
+      sinPlantilla30d={recent.sinPlantilla30d}
       clinicName={user.clinic.name}
       rediseno={rediseno}
     />
