@@ -30,6 +30,7 @@ import { SabinaMessageContent } from "@/components/sabina/message-content";
 import { ToolTrace } from "@/components/sabina/tool-trace";
 import { SabinaErrorNotice } from "@/components/sabina/error-notice";
 import { PropuestaCard } from "@/app/dashboard/sabina/propuesta-card";
+import { CLASES_PIEZAS_SABINA } from "@/components/dashboard/layout-rediseno/sabina";
 import styles from "@/app/dashboard/sabina/sabina.module.css";
 import {
   actuar,
@@ -110,6 +111,10 @@ export function SabinaConversacion({
 }: SabinaConversacionProps) {
   // Un solo juego de clases por render: el que baja la pantalla o el de siempre.
   const c: Record<string, string> = clases ?? styles;
+  // Las piezas del hilo (contenido, rastro de herramientas, avisos) traen su
+  // propia hoja: con la bandera se visten con `layout-rediseno/sabina.ts`;
+  // sin ella no reciben nada y pintan las suyas de siempre.
+  const piezas = rediseno ? CLASES_PIEZAS_SABINA : undefined;
   const estado = useSabinaEstado();
   const contextoDe = useContextoSabina();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -185,7 +190,7 @@ export function SabinaConversacion({
             </div>
           ) : empty && apagada ? (
             <div className={c.systemRow}>
-              <SabinaErrorNotice kind="apagada" />
+              <SabinaErrorNotice kind="apagada" clases={piezas} />
             </div>
           ) : empty ? (
             <div className={c.welcome}>
@@ -221,6 +226,7 @@ export function SabinaConversacion({
                     kind={m.errorKind ?? "unknown"}
                     retrying={retryingId === m.id}
                     onRetry={() => reintentar(m.id, contextoDe())}
+                    clases={piezas}
                   />
                 </div>
               ) : (
@@ -233,7 +239,7 @@ export function SabinaConversacion({
                       {m.pending ? (
                         <ThinkingIndicator startedAt={m.timestamp} c={c} />
                       ) : m.role === "assistant" ? (
-                        <SabinaMessageContent content={m.content || "—"} />
+                        <SabinaMessageContent content={m.content || "—"} clases={piezas} />
                       ) : (
                         <p className={c.userText}>{m.content}</p>
                       )}
@@ -255,7 +261,7 @@ export function SabinaConversacion({
                           rediseno={rediseno}
                         />
                       ))}
-                    {!m.pending && m.role === "assistant" && <ToolTrace tools={m.herramientasUsadas} />}
+                    {!m.pending && m.role === "assistant" && <ToolTrace tools={m.herramientasUsadas} clases={piezas} />}
                     <span className={c.timestamp}>{formatTime(m.timestamp)}</span>
                   </div>
                 </div>

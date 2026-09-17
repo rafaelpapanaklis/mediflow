@@ -56,8 +56,14 @@
 }
 
 /* Contenedor angosto (iPad vertical, sidebar abierto): apila en vez de
-   esconder. El propio <div class="shell"> tiene container-type porque
-   vive dentro de `.raiz`, que ya lo declara. */
+   esconder. `.shell` vive DENTRO de `.raiz` (que declara el contenedor de
+   consulta) — nunca en el propio nodo de `.raiz`: un `@container` no puede
+   estilar a su propio contenedor, así que esta regla exige que `.shell` sea
+   un descendiente (`RaizPaginaWeb` lo monta así, ver landing-config-client).
+   El alto del iframe (`.previaIframeEscritorio`/`Movil`, más abajo) baja con
+   la misma cuenta que `.previaMarco` aquí: si no, el marco se achica y el
+   iframe se queda pidiendo el alto de escritorio, y el marco lo recorta de
+   más de lo que ya recortaba. */
 @container paginaWeb (max-width: 900px) {
   .shell {
     flex-direction: column;
@@ -70,6 +76,8 @@
   .previaMarco {
     height: 70vh !important;
   }
+  .previaIframeEscritorio { height: calc(70vh / 0.35) !important; }
+  .previaIframeMovil { height: calc(70vh / 0.94) !important; }
 }
 
 /* ── Cabecera ────────────────────────────────────────────────────── */
@@ -149,6 +157,15 @@
 .boton:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* El <fieldset> que apaga una pestaña completa en solo lectura hace matar
+   cada control de adentro, pero por sí solo no atenúa nada: el camino viejo
+   sí lo hacía (`disabled:opacity-70` de Tailwind sobre el propio fieldset).
+   Un <fieldset disabled> matchea :disabled en SÍ MISMO, así que esto le da
+   al rediseño la misma pista visual. */
+.fieldsetSoloLectura:disabled {
+  opacity: 0.7;
 }
 
 .botonPrincipal,
@@ -698,6 +715,16 @@
   transition: filter 0.12s, opacity 0.12s;
 }
 
+/* En solo lectura, el <input type=file> que envuelve queda `disabled` por el
+   <fieldset> de la pantalla, pero la propia etiqueta no tiene pseudoclase
+   `:disabled` (no es un control de formulario): sin esto seguía pareciendo
+   clicable — cursor y hover encendidos — aunque no hiciera nada. */
+.galeriaSubir:has(input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .galeriaSubirLlena {
   opacity: 0.45;
   pointer-events: none;
@@ -807,6 +834,17 @@
   .galeriaAccionPeligro:hover { background: var(--danger, #dc2626); }
 }
 
+/* En solo lectura: "Eliminar" es un <button> y el <fieldset> lo deshabilita
+   de verdad (le da :disabled), pero "Reemplazar" es un <label> con el
+   <input type=file> disabled DENTRO — la etiqueta en sí no tiene esa
+   pseudoclase. Las dos seguían pareciendo botones activos sin hacer nada. */
+.galeriaAccion:disabled,
+.galeriaAccion:has(input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* ── Subir foto (dropzone) ───────────────────────────────────────── */
 
 .dropzone {
@@ -826,6 +864,12 @@
 
 @media (hover: hover) {
   .dropzone:hover { border-color: var(--m2-activo); background: var(--m2-iniciales-fondo); }
+}
+
+.dropzone:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .dropzone svg { color: var(--m2-activo); }
@@ -861,6 +905,25 @@
 .previaMarcoSinGuardar {
   border-color: var(--warning, #d97706);
   box-shadow: 0 0 0 2px var(--warning-soft-strong, rgba(217, 119, 6, 0.15));
+}
+
+/* El alto del iframe SIN escalar tiene que seguir al de `.previaMarco` (aquí
+   y en el @container de arriba, con la misma cuenta): son dos cajas
+   independientes y antes solo la primera bajaba a 70vh en angosto — el
+   iframe seguía pidiendo el alto de escritorio completo, así que el marco
+   apilado lo recortaba de más de lo esperado. */
+.previaIframeEscritorio {
+  width: 285.7%;
+  height: calc((100vh - 130px) / 0.35);
+  transform: scale(0.35);
+}
+
+.previaIframeMovil {
+  width: 390px;
+  height: calc((100vh - 130px) / 0.94);
+  transform: scale(0.94);
+  margin: 0 auto;
+  display: block;
 }
 
 .previaPista {

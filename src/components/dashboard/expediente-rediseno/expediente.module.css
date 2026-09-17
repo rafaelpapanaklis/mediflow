@@ -1,0 +1,621 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Expediente del paciente, segunda ola (ws1-t4): los cuatro apartados que
+   quedaron con la ropa vieja — Plan de tratamiento, Citas, Facturación y el
+   MARCO del Odontograma.
+
+   Habla el idioma visual del menú de dos niveles que Rafael aprobó:
+   NO declara tokens propios. La raíz (`raiz.tsx`) monta `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`), que trae los `--m2-*` del menú con su
+   versión oscura y la tipografía; aquí solo hay clases que los leen. Lo que
+   el menú no tiene —éxito, alerta, peligro— sale de los `--pr-*` que la
+   raíz del expediente (`pacientes-rediseno/raiz.tsx`) ya declara encima de
+   esta carpeta, con su versión oscura.
+
+   Solo se monta con el interruptor `menu-dos-niveles` encendido para la
+   clínica. Apagado, el expediente de siempre se pinta exactamente como hoy:
+   no comparten ni un nodo.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.raiz {
+  min-width: 0;
+  color: var(--m2-texto);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Cifras de ancho fijo en TODO lo que cuelga de aquí (horas, importes,
+   contadores). Va sobre los HIJOS y no sobre la raíz a propósito: la raíz
+   lleva `.tokens` del menú, y `tipografia-panel.tsx` le pone a esa clase
+   `font-variant-numeric: normal` con más peso; sus hijos heredan de aquí. */
+.raiz > * {
+  font-variant-numeric: tabular-nums;
+}
+
+.columna {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Cabecera de apartado: título + acción ─────────────────────────── */
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cabeceraIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-activo);
+}
+
+.titulo {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  color: var(--m2-texto);
+}
+
+.contador {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--m2-hover);
+  color: var(--m2-texto-3);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+
+.acciones {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Tarjeta base ──────────────────────────────────────────────────── */
+
+.tarjeta {
+  min-width: 0;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: var(--m2-sombra);
+}
+
+.tarjetaCabeza {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+/* ── Botones ───────────────────────────────────────────────────────── */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, filter 0.12s;
+}
+
+.boton:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.boton:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (hover: hover) {
+  .boton:hover:not(:disabled) { background: var(--m2-tarjeta-hover); border-color: var(--m2-texto-3); }
+}
+
+.botonPrincipal {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+@media (hover: hover) {
+  .botonPrincipal:hover:not(:disabled) {
+    background: var(--m2-activo);
+    border-color: var(--m2-activo);
+    filter: brightness(1.08);
+  }
+}
+
+.botonChico {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.enlace {
+  border: 0;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--m2-activo);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.enlace:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+@media (hover: hover) {
+  .enlace:hover { text-decoration: underline; }
+}
+
+/* Botón de ícono (editar, borrar, cancelar) */
+.icono {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.icono:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+@media (hover: hover) {
+  .icono:hover { background: var(--m2-hover); color: var(--m2-activo); }
+}
+
+.iconoPeligro { color: var(--pr-peligro); }
+
+@media (hover: hover) {
+  .iconoPeligro:hover { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+}
+
+/* ── Etiquetas de estado ───────────────────────────────────────────── */
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.etiquetaPunto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+.etiquetaNeutra { background: var(--m2-hover); color: var(--m2-texto-3); }
+.etiquetaVioleta { background: var(--m2-iniciales-fondo); color: var(--m2-activo); }
+.etiquetaExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.etiquetaAlerta { background: var(--pr-alerta-suave); color: var(--pr-alerta); }
+.etiquetaPeligro { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+
+.apagado { font-size: 10.5px; color: var(--m2-texto-3); white-space: nowrap; }
+
+/* ── Estado vacío ──────────────────────────────────────────────────── */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+}
+
+.vacioIcono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-activo);
+}
+
+.vacioTitulo { font-size: 13px; font-weight: 600; color: var(--m2-texto-2); }
+
+/* ── Plan de tratamiento ───────────────────────────────────────────── */
+
+.kpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .kpis { grid-template-columns: minmax(0, 1fr); }
+}
+
+.kpi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: var(--m2-sombra);
+  min-width: 0;
+}
+
+.kpiIcono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-activo);
+}
+
+.kpiIconoExito { background: var(--pr-exito-suave); color: var(--pr-exito); }
+.kpiIconoNeutro { background: var(--m2-hover); color: var(--m2-texto-3); }
+
+.kpiCifra {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  color: var(--m2-texto);
+}
+
+.kpiEtiqueta {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--m2-texto-3);
+}
+
+.plan {
+  display: block;
+  width: 100%;
+  padding: 16px 18px;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.plan:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+@media (hover: hover) {
+  .plan:hover { border-color: var(--m2-activo); }
+}
+
+.planCabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.planNombre {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.15px;
+  color: var(--m2-texto);
+  overflow-wrap: anywhere;
+}
+
+.planSub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.planDescripcion {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--m2-texto-2);
+  overflow-wrap: anywhere;
+}
+
+.planLado {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.planLado > .etiqueta { margin-right: 4px; }
+
+.progreso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.barra {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--m2-hover);
+  overflow: hidden;
+}
+
+.barraRelleno {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--m2-activo);
+  transition: width 0.25s ease;
+}
+
+.barraRellenoExito { background: var(--pr-exito); }
+
+.progresoCifra {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--m2-texto-2);
+}
+
+.planDatos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.planDato {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.planDatoActivo { color: var(--m2-activo); font-weight: 600; }
+
+/* ── Tablas (Citas, Facturación) ───────────────────────────────────── */
+
+.tablaCaja {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tabla {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tabla th {
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--m2-borde);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tabla td {
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--m2-borde);
+  color: var(--m2-texto);
+  vertical-align: middle;
+}
+
+.tabla tbody tr:last-child td { border-bottom: 0; }
+
+@media (hover: hover) {
+  .tabla tbody tr:hover td { background: var(--m2-hover); }
+}
+
+.filaClic { cursor: pointer; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.derecha { text-align: right; white-space: nowrap; }
+.fuerte { font-weight: 600; }
+.suave { color: var(--m2-texto-2); }
+.tenue { color: var(--m2-texto-3); }
+.tonoExito { color: var(--pr-exito); }
+.tonoAlerta { color: var(--pr-alerta); }
+
+.tablaVacia {
+  padding: 40px 18px;
+  text-align: center;
+  color: var(--m2-texto-3);
+}
+
+/* ═══ Marco del Odontograma ═══════════════════════════════════════════
+   El odontograma (`odontogram-v2/`) es un lienzo clínico con su propia hoja
+   global (`odontogram.css`, todo bajo `.odo-app`). Aquí se viste SOLO su
+   marco —barra de título y controles, cabecera del lienzo, leyenda, paleta y
+   el panel lateral del diente— y el DIBUJO (celdas, números, glifos, caras,
+   escenas 2D/3D) no se toca: ni una regla sobre `.odo-chart`, `.odo-cell`,
+   `.odo-num`, `.odo-glyph-wrap`, `.odo-2d-stage` ni `.odo-3d-stage`.
+   Cada selector lleva `.odo-app` dentro del :global para pesar SIEMPRE un
+   punto más que la regla original (`.odo-app .x`), sin forzar prioridad. */
+
+.marcoOdontograma { min-width: 0; }
+
+.marcoOdontograma :global(.odo-app) {
+  min-height: 0;
+  background: transparent;
+  color: var(--m2-texto);
+}
+
+/* Barra de título: de barra pegajosa de página a tarjeta. Pegajosa chocaba
+   con el menú de la ficha, que también se pega arriba con el rediseño. */
+.marcoOdontograma :global(.odo-app .odo-top) {
+  position: static;
+  gap: 18px;
+  padding: 14px 18px;
+  background: var(--m2-tarjeta);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: var(--m2-sombra);
+  font-family: var(--font-menu), system-ui, sans-serif;
+}
+
+.marcoOdontograma :global(.odo-app .odo-brand-mark) {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--m2-activo);
+  box-shadow: none;
+}
+
+.marcoOdontograma :global(.odo-app .odo-brand-mark svg) { width: 22px; height: 22px; }
+
+.marcoOdontograma :global(.odo-app .odo-title) {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+  color: var(--m2-texto);
+}
+
+.marcoOdontograma :global(.odo-app .odo-sub) { font-size: 12px; font-weight: 500; color: var(--m2-texto-3); }
+
+.marcoOdontograma :global(.odo-app .ctl > label) { color: var(--m2-texto-3); font-weight: 600; letter-spacing: 0.06em; }
+
+.marcoOdontograma :global(.odo-app .seg) {
+  background: var(--m2-buscador-fondo);
+  border: 1px solid var(--m2-borde);
+  border-radius: 9px;
+}
+
+.marcoOdontograma :global(.odo-app .seg-btn) { color: var(--m2-texto-2); font-weight: 600; }
+.marcoOdontograma :global(.odo-app .seg-btn.on) { background: var(--m2-tarjeta); color: var(--m2-activo); box-shadow: var(--m2-sombra); }
+
+@media (hover: hover) and (pointer: fine) {
+  .marcoOdontograma :global(.odo-app .seg-btn:hover) { color: var(--m2-texto); }
+}
+
+.marcoOdontograma :global(.odo-app .odo-main) { padding: 14px 0 0; gap: 14px; }
+
+.marcoOdontograma :global(.odo-app .odo-chart-card),
+.marcoOdontograma :global(.odo-app .odo-palette) {
+  background: var(--m2-tarjeta);
+  border-color: var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: var(--m2-sombra);
+}
+
+.marcoOdontograma :global(.odo-app .odo-chart-head) { font-family: var(--font-menu), system-ui, sans-serif; }
+.marcoOdontograma :global(.odo-app .odo-hint) { color: var(--m2-texto-2); }
+.marcoOdontograma :global(.odo-app .odo-summary) { color: var(--m2-texto-2); font-variant-numeric: tabular-nums; }
+.marcoOdontograma :global(.odo-app .odo-summary b) { color: var(--m2-texto); font-weight: 700; }
+
+.marcoOdontograma :global(.odo-app .odo-clearall) {
+  border-color: var(--m2-tarjeta-borde);
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  border-radius: 9px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .marcoOdontograma :global(.odo-app .odo-clearall:hover) {
+    border-color: var(--pr-peligro);
+    color: var(--pr-peligro);
+    background: var(--pr-peligro-suave);
+  }
+}
+
+/* Leyenda: solo el texto y la línea; los puntos de color son los del grupo
+   clínico y vienen en línea desde `data.ts`. */
+.marcoOdontograma :global(.odo-app .odo-legend) { border-top-color: var(--m2-borde); font-family: var(--font-menu), system-ui, sans-serif; }
+.marcoOdontograma :global(.odo-app .odo-leg-item) { color: var(--m2-texto-2); }
+
+/* Paleta: pestañas de grupo y fichas; la muestra de cada hallazgo
+   (`Surface2D`) es dibujo y no se toca. */
+.marcoOdontograma :global(.odo-app .odo-pal-tabs) { border-bottom-color: var(--m2-borde); font-family: var(--font-menu), system-ui, sans-serif; }
+.marcoOdontograma :global(.odo-app .odo-tab) { color: var(--m2-texto-2); }
+.marcoOdontograma :global(.odo-app .odo-pal-items) { font-family: var(--font-menu), system-ui, sans-serif; }
+.marcoOdontograma :global(.odo-app .odo-chip) { border-color: var(--m2-tarjeta-borde); background: var(--m2-tarjeta); }
+.marcoOdontograma :global(.odo-app .odo-chip.on) { background: var(--m2-tarjeta-hover); }
+.marcoOdontograma :global(.odo-app .odo-chip-lb) { color: var(--m2-texto-2); }
+
+@media (hover: hover) and (pointer: fine) {
+  .marcoOdontograma :global(.odo-app .odo-tab:hover) { color: var(--m2-texto); }
+  .marcoOdontograma :global(.odo-app .odo-chip:hover) { border-color: var(--m2-texto-3); background: var(--m2-tarjeta-hover); }
+}
+
+/* Panel lateral del diente: su cromo (cabecera, pestañas 2D/3D, secciones,
+   lista de hallazgos, nota y botones). Las escenas 2D/3D quedan intactas. */
+.marcoOdontograma :global(.odo-app .odo-detail) { background: var(--m2-tarjeta); font-family: var(--font-menu), system-ui, sans-serif; }
+.marcoOdontograma :global(.odo-app .odo-dt-head) { border-bottom-color: var(--m2-borde); }
+.marcoOdontograma :global(.odo-app .odo-dt-num) { color: var(--m2-texto); font-weight: 700; }
+.marcoOdontograma :global(.odo-app .odo-dt-type) { color: var(--m2-texto-3); }
+.marcoOdontograma :global(.odo-app .odo-dt-close) { background: var(--m2-hover); color: var(--m2-texto-2); }
+.marcoOdontograma :global(.odo-app .odo-viewtabs) { background: var(--m2-buscador-fondo); border: 1px solid var(--m2-borde); }
+.marcoOdontograma :global(.odo-app .odo-viewtab) { color: var(--m2-texto-2); }
+.marcoOdontograma :global(.odo-app .odo-viewtab.on) { background: var(--m2-tarjeta); color: var(--m2-activo); box-shadow: var(--m2-sombra); }
+.marcoOdontograma :global(.odo-app .odo-section-t) { color: var(--m2-texto-3); }
+.marcoOdontograma :global(.odo-app .odo-surf-btn) { border-color: var(--m2-tarjeta-borde); background: var(--m2-tarjeta); color: var(--m2-texto-2); }
+.marcoOdontograma :global(.odo-app .odo-surf-btn small) { color: var(--m2-texto-3); }
+.marcoOdontograma :global(.odo-app .odo-find) { border-color: var(--m2-tarjeta-borde); }
+.marcoOdontograma :global(.odo-app .odo-find-lb) { color: var(--m2-texto); }
+.marcoOdontograma :global(.odo-app .odo-find-loc) { color: var(--m2-texto-3); }
+.marcoOdontograma :global(.odo-app .odo-find-rm) { color: var(--m2-texto-3); }
+.marcoOdontograma :global(.odo-app .odo-empty) { color: var(--m2-texto-3); }
+
+.marcoOdontograma :global(.odo-app .odo-note) {
+  border-color: var(--m2-tarjeta-borde);
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+}
+
+.marcoOdontograma :global(.odo-app .odo-note:focus) {
+  border-color: var(--m2-activo);
+  box-shadow: 0 0 0 3px var(--m2-iniciales-fondo);
+}
+
+.marcoOdontograma :global(.odo-app .odo-btn) { border-color: var(--m2-tarjeta-borde); background: var(--m2-tarjeta); color: var(--m2-texto-2); }
+
+@media (hover: hover) and (pointer: fine) {
+  .marcoOdontograma :global(.odo-app .odo-dt-close:hover) { background: var(--m2-borde); }
+  .marcoOdontograma :global(.odo-app .odo-find-rm:hover) { background: var(--pr-peligro-suave); color: var(--pr-peligro); }
+  .marcoOdontograma :global(.odo-app .odo-btn.danger:hover) { border-color: var(--pr-peligro); color: var(--pr-peligro); background: var(--pr-peligro-suave); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barraRelleno { transition: none; }
+}

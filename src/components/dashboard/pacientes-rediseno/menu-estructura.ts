@@ -1,4 +1,5 @@
 import type { PatientNavItem } from "@/components/dashboard/patient-detail/patient-nav-items";
+import { APARTADOS_FUERA_DEL_MENU } from "@/components/dashboard/presupuestos-en-facturacion/menu";
 
 /**
  * La FORMA del menú de la ficha, acordada con Rafael: seis apartados
@@ -37,7 +38,11 @@ export const GRUPO_CLINICO = [
 
 export const GRUPO_ARCHIVOS = ["radiografias", "fotos", "subidos", "modelos-3d"] as const;
 
-export const GRUPO_MAS = ["presupuestos", "referencias"] as const;
+// «Presupuestos» estuvo aquí hasta ws1-t1: Rafael unió Presupuestos con
+// Facturación y el apartado salió del menú (NO se borró: ver
+// `presupuestos-en-facturacion/menu.ts`). Volver a enseñarlo es vaciar
+// `APARTADOS_FUERA_DEL_MENU`: caería de nuevo en «Más», como todo suelto.
+export const GRUPO_MAS = ["referencias"] as const;
 
 export type IdGrupo = "clinico" | "archivos" | "mas";
 
@@ -82,8 +87,13 @@ function indiceEn(lista: readonly string[], id: string): number {
  *
  * Los grupos vacíos no se devuelven: sin permiso de recetas, consentimientos y
  * expediente, «Clínico» no se pinta como un botón que no abre nada.
+ *
+ * La ÚNICA excepción a «nada desaparece» es deliberada y está escrita con
+ * nombre y apellido: `APARTADOS_FUERA_DEL_MENU`. Esos apartados no se pintan,
+ * pero su pestaña sigue viva y alcanzable por enlace.
  */
-export function construirMenuFicha(items: PatientNavItem[]): MenuFicha {
+export function construirMenuFicha(todos: PatientNavItem[]): MenuFicha {
+  const items = todos.filter((i) => APARTADOS_FUERA_DEL_MENU.indexOf(i.id) === -1);
   const porId: Record<string, PatientNavItem> = {};
   items.forEach((i) => {
     porId[i.id] = i;

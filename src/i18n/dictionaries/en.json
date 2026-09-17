@@ -461,6 +461,9 @@
     "proximamente": "Coming soon",
     "cajaSinAcceso": "The cash register is enabled person by person and your user doesn't have it. Ask the clinic owner.",
     "cajaSinAccesoCorto": "No access",
+    "cajaSinPermisoTitulo": "You don't have access to the cash register",
+    "cajaSinPermisoVolver": "Back to Today",
+    "cajaSinPermisoEquipo": "Turn it on in Team",
     "miPerfil": "My profile",
     "volver": "Back",
     "migasAria": "You are here"
@@ -2977,6 +2980,17 @@
       "createdToast": "Invoice created: {number}"
     }
   },
+  "presupuestosEnFacturacion": {
+    "avisoTitulo": "New charges are now created from Billing. ",
+    "avisoTexto": "There you can already choose one payment or installments, how the patient pays, and send it by email or WhatsApp. The quotes you already had are still here, complete.",
+    "irAFacturacion": "Go to Billing",
+    "guardados": {
+      "one": "{count} saved quote",
+      "other": "{count} saved quotes"
+    },
+    "guardadosPista": "for this patient, from before Quotes was merged into Billing.",
+    "verPresupuestos": "View quotes"
+  },
   "quotes": {
     "title": "Quotes",
     "newQuote": "New quote",
@@ -4626,6 +4640,7 @@
       "tabWaiting": "Waiting room",
       "tabCosts": "Costs & Margin",
       "tabJourney": "Patient Journey",
+      "tabReports": "Reports",
       "heading": "Analytics",
       "sectionsAria": "Analytics sections"
     },
@@ -7626,6 +7641,7 @@
       "currentSubtotalLabel": "Current subtotal:",
       "discountMxnLabel": "Discount (MXN) *",
       "discountHelper": "The total is recalculated as subtotal − discount.",
+      "applyDiscountFirst": "Apply the discount before charging, or leave it as it was.",
       "applying": "Applying…",
       "cancelInvoiceTitle": "Cancel invoice {number}",
       "cancelWarning": "You will not be able to record payments afterward. The reason will be kept in the audit log and the invoice notes.",
@@ -8202,6 +8218,8 @@
       "applying": "Applying…",
       "applyTemplate": "Apply / Use this template",
       "applyWillPublish": "Applying will also publish your site.",
+      "applyKeepsHidden": "Your site will stay hidden. To publish it, use the switch above.",
+      "templateAppliedHidden": "✨ {name} template applied. Your site is still hidden: publish it with the switch above.",
       "primaryColor": "Primary color",
       "taglineLabel": "Slogan / Tagline",
       "taglineHelp": "Short phrase shown below the name in the hero",
@@ -9000,6 +9018,29 @@
       "cargando": "Loading files…"
     }
   },
+  "facturaFicha": {
+    "extrasFallo": "Could not read the payment terms of these invoices: the database did not respond. Reload to see them.",
+    "enviando": "Sending…",
+    "enviarCorreo": "Send by email",
+    "correoEnviado": "Email sent to the patient.",
+    "whatsAppEnviado": "WhatsApp sent to the patient.",
+    "sinCorreo": "The patient has no email on file: add it to their record to send them the invoice by email.",
+    "sinTelefono": "The patient has no phone on file: add it to their record to send them the invoice by WhatsApp.",
+    "tratoTitulo": "This records the agreement; it does not charge. ",
+    "tratoTexto": "The payment terms are written on the invoice so they can be understood at a glance. Payments are still recorded as always, with “Register payment”.",
+    "envioTitulo": "Send the invoice to the patient",
+    "envioNo": "Do not send",
+    "envioNoPista": "Only the invoice is created. You can send it later from its card.",
+    "envioCorreo": "By email",
+    "envioCorreoPista": "To the patient's email on file, when the invoice is created.",
+    "envioWhatsApp": "By WhatsApp",
+    "envioWhatsAppPista": "To the patient's WhatsApp on file, when the invoice is created.",
+    "envioSinPaciente": "Pick the patient first to know where it can be sent.",
+    "errorCondiciones": "The invoice was created, but the payment terms were not saved.",
+    "creadaSinEnviar": "The invoice was created, but it was NOT sent to the patient.",
+    "envioSinConfirmar": "The delivery could not be confirmed: the connection dropped before a response arrived. Before resending, check with the patient or in the Inbox whether it already arrived.",
+    "creadaEnvioSinConfirmar": "The invoice was created, but it could not be confirmed whether it was sent to the patient. Check before resending it from its card."
+  },
   "presupuestoNuevo": {
     "listaTitulo": "Quotes",
     "listaSubtitulo": "What the patient was quoted, and how they will pay for it.",
@@ -9082,5 +9123,88 @@
     "errorFormaDePago": "The quote was saved, but its payment terms were not: the database did not respond. Press Save again to retry.",
     "ilegibleTitulo": "Payment terms could not be read. ",
     "ilegibleTexto": "The database did not respond when this quote was opened, so this screen does not know its payment terms and will not touch them: you can edit the items and save safely. To change the payment terms, reload the page and open it again."
+  },
+  "planTratamiento": {
+    "lista": {
+      "titulo": "Treatment plans",
+      "nuevo": "New treatment plan",
+      "vacio": "No treatment plans",
+      "crearPrimero": "Create the first treatment plan →"
+    },
+    "nuevo": {
+      "titulo": "New treatment plan",
+      "nombre": "Plan name *",
+      "nombrePista": "The patient reads this name in their follow-up WhatsApp: keep it short and plain.",
+      "diagnostico": "Diagnosis",
+      "diagnosticoRotulo": "Diagnosis and reason for the plan",
+      "diagnosticoEjemplo": "E.g. Multiple posterior caries, generalized gingivitis",
+      "hallazgos": "Odontogram findings to treat — tap one to add it to the plan",
+      "hallazgoAgregar": "Add to plan",
+      "procedimientos": "Procedures",
+      "procedimientosPista": "What is done, on which tooth and surface. The price comes from the fee schedule.",
+      "colFase": "Phase",
+      "colProcedimiento": "Procedure",
+      "colDientes": "Teeth",
+      "colCaras": "Surfaces",
+      "colCantidad": "Qty",
+      "colPrecio": "Price",
+      "colImporte": "Amount",
+      "procedimientoEjemplo": "E.g. 2-surface composite restoration",
+      "procedimientoPara": "Procedure for: {motivo}",
+      "elegirDientes": "Pick teeth",
+      "dienteInvalido": "Not an FDI tooth: {dientes}",
+      "quitar": "Remove procedure",
+      "agregar": "Add procedure",
+      "nProcedimientos": {
+        "one": "{count} procedure",
+        "other": "{count} procedures"
+      },
+      "seguimiento": "Sessions, follow-up and cost",
+      "seguimientoPista": "Sessions and the days between them set when the patient is due back; if they don't return, they get a WhatsApp.",
+      "calculado": "Calculated from the procedures",
+      "usarSesiones": {
+        "one": "Use {count} session (from the procedures)",
+        "other": "Use {count} sessions (from the procedures)"
+      },
+      "usarCosto": "Use {total} (sum of the procedures)",
+      "alternativa": "Alternative offered to the patient",
+      "alternativaEjemplo": "E.g. Fixed bridge instead of implant; patient chose implant",
+      "firmaPista": "The patient's signed acceptance is collected today in Quotes; the clinical plan is saved in the plan description, which the patient never sees.",
+      "crear": "Create treatment plan"
+    },
+    "fase": {
+      "urgencia": "Urgent care",
+      "sistemica": "Systemic phase",
+      "higienica": "Phase I · Hygienic",
+      "correctiva": "Phase II · Corrective",
+      "restauradora": "Phase III · Restorative",
+      "mantenimiento": "Phase IV · Maintenance"
+    },
+    "pronostico": {
+      "sinDefinir": "Not set",
+      "bueno": "Good",
+      "reservado": "Guarded",
+      "malo": "Poor"
+    },
+    "cara": {
+      "M": "Mesial",
+      "O": "Occlusal",
+      "I": "Incisal",
+      "D": "Distal",
+      "V": "Buccal",
+      "L": "Palatal / Lingual"
+    },
+    "aviso": {
+      "endoAntesDeCorona": "Tooth {diente}: the root canal goes before the post or crown. Check the phases.",
+      "cicatrizacionAntesDeImplante": "Tooth {diente}: healing is needed between extraction and implant. Unless immediate, put them in different phases."
+    },
+    "texto": {
+      "diagnostico": "Diagnosis",
+      "pronostico": "Prognosis",
+      "total": "Procedures total",
+      "alternativa": "Alternative offered",
+      "notas": "Notes",
+      "por": "for:"
+    }
   }
 }

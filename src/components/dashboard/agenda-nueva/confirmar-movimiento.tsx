@@ -10,7 +10,8 @@
  * dónde.
  *
  * Va en un portal, fuera de la raíz de la agenda, así que trae sus propias
- * variables de color (`.tokensAgenda`) y su letra.
+ * variables de color (`CLASES_PORTAL_AGENDA`: los `--m2-*` del menú con su
+ * versión oscura + los `--ag-*` de `.tokensAgenda`) y su letra.
  */
 
 import * as Dialog from "@radix-ui/react-dialog";
@@ -21,6 +22,7 @@ import type { PlannedReschedule } from "@/lib/agenda/reschedule-flow";
 import { fechaCorta } from "@/lib/agenda-nueva/fechas";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
 import { rangoDePlan } from "@/lib/agenda-nueva/interacciones";
+import { CLASES_PORTAL_AGENDA } from "./ropa";
 import s from "./agenda-nueva.module.css";
 
 export interface ConfirmarMovimientoProps {
@@ -64,9 +66,9 @@ export function ConfirmarMovimiento({ plan, guardando, onConfirmar, onCancelar }
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className={`${s.tokensAgenda} ${s.velo}`} />
+        <Dialog.Overlay className={`${CLASES_PORTAL_AGENDA} ${s.velo}`} />
         <Dialog.Content
-          className={`${s.tokensAgenda} ${instrumentSans.variable} ${s.modalMover}`}
+          className={`${CLASES_PORTAL_AGENDA} ${instrumentSans.variable} ${s.modalMover}`}
           aria-describedby={undefined}
           onEscapeKeyDown={(e) => {
             if (guardando) e.preventDefault();

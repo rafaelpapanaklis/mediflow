@@ -10,6 +10,9 @@ import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
 import type { Prisma } from "@prisma/client";
 import { canUseCaja } from "@/lib/caja-pin";
 import { ModuleLocked } from "@/components/dashboard/module-locked";
+import { CajaSinPermiso } from "@/components/dashboard/sin-permiso-rediseno/caja-sin-permiso";
+import { hasPermission } from "@/lib/auth/permissions";
+import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { CajaClient } from "./caja-client";
@@ -21,7 +24,23 @@ export default async function CajaPage() {
   const viewer = { userId: user.id, role: user.role, clinicId: user.clinicId };
   requirePermissionOrRedirect(user, "billing.view");
   // Gate de Caja por usuario (CONTRATO CAJA v2): sin permiso → módulo bloqueado.
-  if (!canUseCaja(user)) return <ModuleLocked name="Caja" />;
+  if (!canUseCaja(user)) {
+    // Hallazgo 16 del rediseño (ws1-t8): «Caja no está en tu plan → Ver planes»
+    // es falso aquí. La clínica SÍ tiene Caja (billing.view ya pasó arriba); lo
+    // que le falta a ESTE usuario es el interruptor `canAccessCaja` de Equipo.
+    // Con la bandera `menu-dos-niveles` encendida la pantalla dice eso y ofrece
+    // volver a Hoy (o abrir Equipo, si puede editarlo). Con la bandera apagada
+    // se queda el ModuleLocked de siempre, tal cual. La regla de quién entra
+    // (canUseCaja) no cambia.
+    const rediseno = await menuDosNivelesEncendido(user.clinicId);
+    if (!rediseno) return <ModuleLocked name="Caja" />;
+    const { t } = serverTForLocale(localeFromClinic(user.clinic));
+    const puedeEditarEquipo = hasPermission(
+      { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
+      "team.edit",
+    );
+    return <CajaSinPermiso t={t} equipoHref={puedeEditarEquipo ? "/dashboard/team" : undefined} />;
+  }
 
   const [caja, history, invoices, patients, clinic, creditTotal] = await Promise.all([
     getCajaState(user.clinicId),

@@ -1,0 +1,713 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Las ventanas del Plan de tratamiento (ws1-t2): Nuevo, Ver y Editar.
+
+   Hablan el idioma visual del menú de dos niveles. Esta hoja NO declara
+   tokens propios: el velo de cada ventana monta `CLASES_MENU`
+   (`menu-dos-niveles/clases.ts`) y de ahí salen los `--m2-*` con su versión
+   oscura y la tipografía. Lo que el menú no tiene —éxito, alerta, peligro—
+   se lee de los `--pr-*` que declara la raíz del expediente
+   (`pacientes-rediseno/raiz.tsx`), con los semánticos de globals de respaldo.
+
+   Solo se montan con el interruptor `menu-dos-niveles` encendido. Apagado,
+   las tres ventanas de siempre se pintan como hoy: no comparten ni un nodo.
+
+   Pensado para computadoras e iPads: a lo ancho, cada procedimiento es UNA
+   fila; en un iPad la fila se parte en tres renglones, sin esconder nada.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--m2-texto) 40%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: planFundido 180ms ease-out;
+}
+
+.caja {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 1040px);
+  max-height: min(92vh, 900px);
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--m2-texto) 22%, transparent);
+  font-family: var(--font-menu), system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  animation: planAparece 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cajaAngosta { width: min(100%, 600px); }
+
+.caja *,
+.caja *::before,
+.caja *::after { box-sizing: border-box; }
+
+/* Cifras de ancho fijo en todo lo que cuelga de la caja (importes, dientes,
+   sesiones, fechas), sobre Instrument Sans. */
+.caja > * { font-variant-numeric: tabular-nums; }
+
+@keyframes planFundido { from { opacity: 0; } to { opacity: 1; } }
+@keyframes planAparece {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .velo, .caja { animation: none; }
+}
+
+/* ── Cabecera ──────────────────────────────────────────────────────── */
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 16px 10px 20px;
+  border-bottom: 1px solid var(--m2-borde);
+  flex: none;
+}
+
+.cabeceraIcono {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.cabeceraTextos { min-width: 0; flex: 1; }
+
+.titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--m2-texto);
+}
+
+.subtitulo {
+  font-size: 12px;
+  color: var(--m2-texto-3);
+  overflow-wrap: anywhere;
+}
+
+.cerrar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+  cursor: pointer;
+}
+
+.cerrar:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+@media (hover: hover) {
+  .cerrar:hover { background: var(--m2-borde); }
+}
+
+/* ── Cuerpo y secciones ────────────────────────────────────────────── */
+
+.cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 20px 16px;
+}
+
+.seccion {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.seccion:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.seccionTitulo {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.dosColumnas,
+.dosColumnasAncha,
+.tresColumnas {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.dosColumnas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dosColumnasAncha { grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); }
+.tresColumnas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.rotulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+}
+
+.entrada,
+.area {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  font-family: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.entrada { height: 36px; padding: 0 10px; }
+.area { padding: 8px 10px; resize: vertical; line-height: 1.45; }
+
+.entrada::placeholder,
+.area::placeholder { color: var(--m2-texto-3); }
+
+.entrada:focus-visible,
+.area:focus-visible {
+  outline: none;
+  border-color: var(--m2-activo);
+  box-shadow: var(--m2-foco);
+}
+
+.entradaMal { border-color: var(--pr-peligro, var(--danger, #dc2626)); }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.pista {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.pista > svg { flex: none; margin-top: 2px; }
+
+.pistaLinea { font-size: 11.5px; color: var(--m2-texto-3); }
+
+.error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--pr-peligro, var(--danger, #dc2626));
+}
+
+/* ── Fichas: sugerencias de nombre y hallazgos del odontograma ─────── */
+
+.sugerencias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 999px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.ficha:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+@media (hover: hover) {
+  .ficha:hover:not(:disabled) {
+    background: var(--m2-iniciales-fondo);
+    border-color: var(--m2-activo);
+    color: var(--m2-activo);
+  }
+}
+
+.hallazgos { margin-top: 12px; }
+
+.fichaHallazgo { padding-left: 4px; }
+
+.fichaDiente {
+  min-width: 24px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+  font-weight: 700;
+  text-align: center;
+}
+
+.fichaCaras { font-weight: 700; color: var(--m2-texto); }
+
+.fichaPuesta {
+  opacity: 0.5;
+  cursor: default;
+  text-decoration: line-through;
+}
+
+/* ── Procedimientos ────────────────────────────────────────────────── */
+
+.renglones {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.renglon {
+  display: grid;
+  grid-template-columns:
+    minmax(164px, 1.1fr) minmax(160px, 2fr) minmax(112px, 1fr) 146px 58px 96px 92px 32px;
+  gap: 6px;
+  align-items: center;
+}
+
+.renglonCabeza {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--m2-texto-3);
+  padding: 0 1px;
+}
+
+.renglonCaja { min-width: 0; }
+
+.dientesCelda {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.botonDientes,
+.quitar {
+  width: 32px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  cursor: pointer;
+}
+
+.quitar { border-color: transparent; color: var(--pr-peligro, var(--danger, #dc2626)); }
+
+.botonDientes:focus-visible,
+.quitar:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+
+.botonDientesActivo {
+  background: var(--m2-iniciales-fondo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo);
+}
+
+@media (hover: hover) {
+  .botonDientes:hover { border-color: var(--m2-texto-3); }
+  .quitar:hover { background: var(--pr-peligro-suave, var(--m2-hover)); }
+}
+
+.caras {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: 36px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--m2-n2-fondo);
+}
+
+.cara {
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--m2-borde);
+  background: transparent;
+  color: var(--m2-texto-3);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cara:last-child { border-right: 0; }
+.cara:focus-visible { outline: none; box-shadow: inset var(--m2-foco); }
+
+.caraPuesta {
+  background: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+@media (hover: hover) {
+  .cara:hover:not(.caraPuesta) { background: var(--m2-hover); color: var(--m2-texto); }
+}
+
+.importe {
+  font-weight: 600;
+  color: var(--m2-texto);
+  white-space: nowrap;
+}
+
+/* El selector de piezas: las dos arcadas como se ven en el odontograma. */
+.selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 4px;
+  padding: 10px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  overflow-x: auto;
+}
+
+.arcada {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+  min-width: max-content;
+}
+
+.pieza {
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 7px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.pieza:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.piezaLineaMedia { margin-left: 10px; }
+
+.piezaPuesta {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+@media (hover: hover) {
+  .pieza:hover:not(.piezaPuesta) { border-color: var(--m2-activo); color: var(--m2-activo); }
+}
+
+.bajoRenglones {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.avisos {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--pr-alerta-suave, var(--m2-hover));
+  color: var(--pr-alerta, var(--warning, #b45309));
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.aviso > svg { flex: none; margin-top: 2px; }
+
+.resumen {
+  margin-top: 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.resumenFila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(96px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--m2-borde);
+  color: var(--m2-texto-2);
+}
+
+.resumenFila:last-child { border-bottom: 0; }
+.resumenCuenta { font-size: 12px; color: var(--m2-texto-3); }
+
+.resumenTotal {
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto);
+  font-weight: 700;
+}
+
+/* ── Botones y pie ─────────────────────────────────────────────────── */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  color: var(--m2-texto);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, filter 0.12s;
+}
+
+.boton:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.boton:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.botonPrincipal {
+  background: var(--m2-activo);
+  border-color: var(--m2-activo);
+  color: var(--m2-activo-texto);
+}
+
+@media (hover: hover) {
+  .boton:hover:not(:disabled) { background: var(--m2-tarjeta-hover); border-color: var(--m2-texto-3); }
+  .botonPrincipal:hover:not(:disabled) {
+    background: var(--m2-activo);
+    border-color: var(--m2-activo);
+    filter: brightness(1.08);
+  }
+}
+
+.enlace {
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--m2-activo);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.enlace:focus-visible { outline: none; box-shadow: var(--m2-foco); border-radius: 4px; }
+
+@media (hover: hover) {
+  .enlace:hover { text-decoration: underline; }
+}
+
+.pie {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--m2-borde);
+  background: var(--m2-tarjeta);
+  flex: none;
+}
+
+.pieResumen {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.pieResumen strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--m2-texto);
+}
+
+/* ── Ver plan ──────────────────────────────────────────────────────── */
+
+.verCabeza {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.verNombre { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.verDoctor { font-size: 12px; color: var(--m2-texto-3); margin-top: 2px; }
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.etiquetaNeutra { background: var(--m2-hover); color: var(--m2-texto-3); }
+.etiquetaExito { background: var(--pr-exito-suave, var(--m2-hover)); color: var(--pr-exito, var(--m2-soporte)); }
+.etiquetaAlerta { background: var(--pr-alerta-suave, var(--m2-hover)); color: var(--pr-alerta, var(--warning, #b45309)); }
+.etiquetaPeligro { background: var(--pr-peligro-suave, var(--m2-hover)); color: var(--pr-peligro, var(--danger, #dc2626)); }
+
+/* El plan clínico se guarda como texto con saltos de línea: se respetan. */
+.descripcion {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+  background: var(--m2-n1-fondo);
+  color: var(--m2-texto-2);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.progresoCabeza {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.progresoCabeza strong { color: var(--m2-texto); font-weight: 700; }
+
+.barra {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--m2-hover);
+  overflow: hidden;
+}
+
+.barraRelleno { height: 100%; border-radius: 999px; background: var(--m2-activo); }
+.barraRellenoExito { background: var(--pr-exito, var(--m2-soporte)); }
+
+.datos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dato { min-width: 0; }
+.datoValor { margin-top: 2px; font-size: 14px; font-weight: 600; color: var(--m2-texto); }
+
+.sesiones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sesion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  border: 1px solid var(--m2-borde);
+  border-radius: 10px;
+}
+
+.sesionFecha { font-size: 12px; color: var(--m2-texto-3); }
+.vacio { color: var(--m2-texto-3); }
+
+.bloques {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+}
+
+/* ── iPad vertical y ventanas angostas: la fila se parte, nada se esconde ── */
+
+@media (max-width: 1100px) {
+  .renglonCabeza { display: none; }
+
+  .renglon {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) minmax(0, 1fr) 32px;
+    grid-template-areas:
+      "fase proc proc quitar"
+      "dientes caras caras caras"
+      "cantidad precio importe importe";
+    padding: 8px;
+    border: 1px solid var(--m2-borde);
+    border-radius: 12px;
+  }
+
+  .renglon > :nth-child(1) { grid-area: fase; }
+  .renglon > :nth-child(2) { grid-area: proc; }
+  .renglon > :nth-child(3) { grid-area: dientes; }
+  .renglon > :nth-child(4) { grid-area: caras; }
+  .renglon > :nth-child(5) { grid-area: cantidad; }
+  .renglon > :nth-child(6) { grid-area: precio; }
+  .renglon > :nth-child(7) { grid-area: importe; }
+  .renglon > :nth-child(8) { grid-area: quitar; }
+
+  .datos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .dosColumnas,
+  .dosColumnasAncha,
+  .tresColumnas { grid-template-columns: minmax(0, 1fr); }
+}

@@ -27,6 +27,7 @@ import {
   MAX_FILE_MB,
 } from "./import-client";
 import { RealImportClient } from "@/lib/import/client";
+import { ROPA_IMPORTAR, type AparienciaPortal } from "@/components/dashboard/portales-rediseno/ropa";
 import { StepOrigin } from "./step-origin";
 import { StepExport } from "./step-export";
 import { StepWhat } from "./step-what";
@@ -54,10 +55,19 @@ interface Props {
   startInAssisted?: boolean;
   /** Inyección del cliente de datos. Default: RealImportClient (APIs reales). */
   client?: ImportClient;
+  /**
+   * La ROPA (ws1-t4, hallazgo 13). «clasica» pinta exactamente lo de hoy: el
+   * `.modal` global y sus `style`. «nueva» monta las clases de
+   * `portales-rediseno/ropa.tsx` (los tokens del menú de dos niveles): lo
+   * pone Pacientes cuando la clínica tiene el interruptor `menu-dos-niveles`.
+   * No cambia ni un paso, ni el mapeo, ni la validación, ni la importación.
+   */
+  apariencia?: AparienciaPortal;
 }
 
-export function ImportWizard({ open, onClose, onImported, startInAssisted = false, client }: Props) {
+export function ImportWizard({ open, onClose, onImported, startInAssisted = false, client, apariencia = "clasica" }: Props) {
   const t = useT();
+  const nueva = apariencia === "nueva";
   // El cliente por defecto (real) se crea una sola vez por montaje.
   const fallbackClient = useRef<ImportClient>();
   if (!fallbackClient.current) fallbackClient.current = new RealImportClient();
@@ -416,12 +426,14 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay
-          style={{ position: "fixed", inset: 0, background: "rgba(15,10,30,0.55)", backdropFilter: "blur(4px)", zIndex: 90 }}
+          {...(nueva
+            ? { className: ROPA_IMPORTAR.velo }
+            : { style: { position: "fixed", inset: 0, background: "rgba(15,10,30,0.55)", backdropFilter: "blur(4px)", zIndex: 90 } })}
         />
         <Dialog.Content
-          className="modal modal--wide"
+          className={nueva ? ROPA_IMPORTAR.caja : "modal modal--wide"}
           aria-describedby={undefined}
-          style={{
+          style={nueva ? undefined : {
             position: "fixed",
             top: "50%",
             left: "50%",

@@ -20,36 +20,43 @@ const ICON_BY_KIND: Record<SabinaErrorKind, typeof AlertTriangle> = {
  * normal dentro de `respuesta` (CONTRATO.md, regla 3), así que se pinta como
  * un mensaje más de Sabina — este componente es solo para los fallos de la
  * PANTALLA, no para lo que Sabina decide contestar.
+ *
+ * `clases` (REDISEÑO, interruptor `menu-dos-niveles`): el juego de clases del
+ * rediseño (`layout-rediseno/sabina.ts`). Sin él, las de siempre, tal cual.
+ * Los textos salen de SABINA_ERROR_COPY en los dos casos: no cambia ninguno.
  */
 export function SabinaErrorNotice({
   kind,
   retrying,
   onRetry,
+  clases,
 }: {
   kind: SabinaErrorKind;
   retrying?: boolean;
   onRetry?: () => void;
+  clases?: Record<string, string>;
 }) {
+  const c: Record<string, string> = clases ?? styles;
   const copy = SABINA_ERROR_COPY[kind];
   const Icon = ICON_BY_KIND[kind];
 
   return (
-    <div className={styles.errorNotice} data-kind={kind} role="status">
-      <div className={styles.errorIcon}>
+    <div className={c.errorNotice} data-kind={kind} role="status">
+      <div className={c.errorIcon}>
         <Icon size={16} aria-hidden />
       </div>
-      <div className={styles.errorBody}>
-        <div className={styles.errorTitle}>{copy.title}</div>
-        <div className={styles.errorMessage}>{copy.message}</div>
-        <div className={styles.errorActions}>
+      <div className={c.errorBody}>
+        <div className={c.errorTitle}>{copy.title}</div>
+        <div className={c.errorMessage}>{copy.message}</div>
+        <div className={c.errorActions}>
           {kind === "no_balance" && (
-            <Link href="/dashboard/whatsapp/bot/saldo" className={styles.errorLink}>
+            <Link href="/dashboard/whatsapp/bot/saldo" className={c.errorLink}>
               <Wallet size={12} aria-hidden /> Ir al monedero
             </Link>
           )}
           {copy.retryable && onRetry && (
-            <button type="button" className={styles.errorRetryBtn} onClick={onRetry} disabled={retrying}>
-              <RotateCcw size={12} aria-hidden className={retrying ? styles.spin : undefined} />
+            <button type="button" className={c.errorRetryBtn} onClick={onRetry} disabled={retrying}>
+              <RotateCcw size={12} aria-hidden className={retrying ? c.spin : undefined} />
               {retrying ? "Reintentando…" : "Reintentar"}
             </button>
           )}

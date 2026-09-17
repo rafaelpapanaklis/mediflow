@@ -45,8 +45,12 @@ import { CLASES_REDISENO_LOTE } from "@/components/dashboard/sabina-rx-ia-redise
  * El cajón lateral no se lo baja, así que allí se sigue viendo lo de siempre.
  * El test de la carpeta del rediseño comprueba que ninguna clase usada aquí ni
  * en `sabina-conversacion.tsx` se queda sin traducir.
+ *
+ * Se exporta para el cajón lateral (`dashboard/sabina/panel.tsx`, ws1-t2): con
+ * la bandera le baja este MISMO mapa al hilo, y la conversación se ve igual
+ * en las dos puertas.
  */
-const CLASES_REDISENO: Record<string, string> = {
+export const CLASES_REDISENO: Record<string, string> = {
   page: `${piel.pantalla} ${piel.chatSolo}`,
   backdrop: piel.velo,
   drawer: piel.cajon,

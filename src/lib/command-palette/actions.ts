@@ -5,7 +5,17 @@ import {
 } from "lucide-react";
 import type { CommandItem } from "./types";
 
-export function buildGlobalActions(): CommandItem[] {
+export interface OpcionesAccionesGlobales {
+  /**
+   * A dónde manda «Agenda» (G A). La paleta de la barra del menú de dos
+   * niveles pasa la agenda nueva (`/dashboard/agenda`); sin esto —la barra
+   * de siempre— manda a la agenda de siempre, como hasta hoy.
+   */
+  rutaAgenda?: string;
+}
+
+export function buildGlobalActions(opciones?: OpcionesAccionesGlobales): CommandItem[] {
+  const rutaAgenda = opciones?.rutaAgenda ?? "/dashboard/appointments";
   return [
     // ═══ CREAR ═══════════════════════════════════════════════════
     {
@@ -45,7 +55,7 @@ export function buildGlobalActions(): CommandItem[] {
       run: (ctx) => ctx.push("/dashboard") },
     { id: "go:appointments", group: "ir-a", label: "Agenda", icon: Calendar, shortcut: "G A",
       keywords: ["agenda", "calendario", "citas"],
-      run: (ctx) => ctx.push("/dashboard/appointments") },
+      run: (ctx) => ctx.push(rutaAgenda) },
     { id: "go:patients", group: "ir-a", label: "Pacientes", icon: Users, shortcut: "G P",
       run: (ctx) => ctx.push("/dashboard/patients") },
     { id: "go:messages", group: "ir-a", label: "Mensajes", icon: MessageCircle, shortcut: "G M",
