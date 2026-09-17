@@ -24,6 +24,11 @@ import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 // y las clases que visten este modal y su familia. Ver factura-rediseno/.
 import { CLASES_FACTURA_REDISENO, clasesFactura as c } from "@/components/dashboard/factura-rediseno/raiz";
 import { ConfirmacionFactura } from "@/components/dashboard/factura-rediseno/confirmacion";
+// Una sola ventana (solo con `rediseno`): el cobro y el descuento viven DENTRO
+// del detalle en vez de abrir otro diálogo. Ver factura-un-popup/.
+import { CLASES_UN_POPUP, CLASE_CUERPO_CON_COBRO } from "@/components/dashboard/factura-un-popup/raiz";
+import { useCobro } from "@/components/dashboard/factura-un-popup/use-cobro";
+import { SeccionCobro, DescuentoEnLinea, enfocarMontoAlAbrir } from "@/components/dashboard/factura-un-popup/seccion-cobro";
 import { InvoiceCfdiBadge } from "./invoice-cfdi-badge";
 import { invoiceStatusBadge } from "./invoice-status";
 import { REGIMENES_FISCALES, USOS_CFDI, FORMAS_PAGO_SAT } from "@/lib/cfdi-catalogs";
@@ -175,6 +180,28 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialAction, invoice?.id]);
 
+  // UNA SOLA VENTANA (diseño nuevo). Con el interruptor y una factura que se
+  // puede cobrar —las mismas que hoy enseñan «Cobrar ahora» / «Cobrar pago»—
+  // el formulario de la segunda ventana va dentro del detalle, ya desplegado, y
+  // el botón del pie pasa a ser «Registrar pago»: un clic en vez de dos.
+  // `useCobro` hace el MISMO POST que PaymentModal, con el mismo cuerpo, y al
+  // terminar corre el mismo handlePaymentSuccess. Con el interruptor apagado
+  // `cobrable` es false: el hook no hace nada y sigue saliendo PaymentModal.
+  const cobrable = rediseno && !!invoice && ["DRAFT", "PENDING", "PARTIAL", "OVERDUE"].includes(invoice.status);
+  const cobro = useCobro({
+    abierta: open,
+    factura: cobrable && invoice ? { id: invoice.id, balance: invoice.balance } : null,
+    confirmarAntes: invoice?.status === "DRAFT",
+    alOcupar: setBusy,
+    alCobrar: handlePaymentSuccess,
+  });
+  // El descuento en línea arranca con el de la factura, igual que openSub()
+  // al abrir su diálogo. Solo en el diseño nuevo.
+  useEffect(() => {
+    if (cobrable && open) setDiscountAmt(String(invoice?.discount ?? 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cobrable, open, invoice?.id, invoice?.discount]);
+
   if (!invoice) return null;
 
   const status = invoice.status;
@@ -191,6 +218,20 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   // CFDI: uuid efectivo (prop o timbrado optimista) y si aplica facturar.
   const effectiveUuid  = stampedUuid ?? invoice.cfdiUuid ?? null;
   const canInvoiceCfdi = !isDraft && !isCancelled;
+
+  // Una sola ventana: la ropa extra del detalle y el botón que cobra.
+  const ropaUnPopup = cobrable ? CLASES_UN_POPUP : "";
+  const ropaCuerpo  = cobrable ? CLASE_CUERPO_CON_COBRO : "";
+  // El descuento se ofrece donde hoy sale su botón: borrador, o pendiente sin pagos.
+  const admiteDescuento = cobrable && (isDraft || canEditPrice);
+  // Escrito pero sin aplicar: cobrar así lo ignoraría, así que «Registrar
+  // pago» espera a que se aplique (o se deje como estaba).
+  const descuentoPendiente = admiteDescuento && Number(discountAmt || 0) !== (invoice.discount ?? 0);
+  const botonRegistrarPago = (
+    <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={cobro.submit} disabled={busy || cobro.saving || cobro.isInvalid || descuentoPendiente}>
+      {cobro.saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: cobro.amountNum ? " · " + fmtMXNdec(cobro.amountNum) : "" })}
+    </ButtonNew>
+  );
 
   function openSub(which: Exclude<SubAction, null>) {
     setRefundAmount(String(invoice?.paid ?? 0));
@@ -496,7 +537,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-        <DialogContent className={cx("max-w-lg bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal}`)}>
+        <DialogContent onOpenAutoFocus={cobrable ? enfocarMontoAlAbrir : undefined} className={cx("max-w-lg bg-card text-foreground border border-border", `${CLASES_FACTURA_REDISENO} ${c.modal} ${ropaUnPopup}`)}>
           <DialogHeader className={rediseno ? c.cabecera : undefined}>
             <DialogTitle className={cx("text-foreground font-bold flex items-center gap-3 flex-wrap", c.titulo)}>
               <span className={cx("font-mono", c.folio)}>{invoice.invoiceNumber}</span>
@@ -507,7 +548,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             </DialogTitle>
           </DialogHeader>
 
-          <div className={cx("px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0", c.cuerpo)}>
+          <div className={cx("px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0", `${c.cuerpo} ${ropaCuerpo}`)}>
             {/* Resumen — usa tokens de tema (bg-muted/40, border-border, text-muted-foreground) */}
             <div className={cx("bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1.5 text-foreground", c.resumen)}>
               <div className={cx("flex justify-between", c.resumenFila)}><span className={cx("text-muted-foreground", c.rotulo)}>{t("clinical.invoiceDetail.patient")}</span><span className={cx("font-medium", c.valor)}>{patientName}</span></div>
@@ -612,6 +653,25 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 </div>
               </div>
             )}
+
+            {/* Una sola ventana: el cobro (y el descuento) aquí dentro, ya
+                desplegado. Solo con el interruptor; sin él esto no pinta nada. */}
+            {cobrable && (
+              <SeccionCobro
+                cobro={cobro}
+                bloqueado={busy}
+                descuento={admiteDescuento ? (
+                  <DescuentoEnLinea
+                    subtotal={invoice.subtotal ?? invoice.total + (invoice.discount ?? 0)}
+                    valor={discountAmt}
+                    alCambiar={setDiscountAmt}
+                    alAplicar={handleDiscount}
+                    ocupado={busy}
+                    pendiente={descuentoPendiente}
+                  />
+                ) : undefined}
+              />
+            )}
           </div>
 
           <DialogFooter className={cx("flex flex-wrap gap-2", c.pie)}>
@@ -619,15 +679,22 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                 hace ambos pasos (confirm + payment) en un click. */}
             {isDraft && (
               <>
+                {/* Diseño nuevo: el formulario ya está arriba, así que este
+                    botón registra el pago (confirmando antes el borrador). */}
+                {rediseno ? botonRegistrarPago : (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={handleConfirmAndPay} disabled={busy}>
                   {t("clinical.invoiceDetail.chargeNow", { amount: fmtMXNdec(invoice.total) })}
                 </ButtonNew>
+                )}
                 <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
                   {t("clinical.invoiceDetail.editPrice")}
                 </ButtonNew>
+                {/* Diseño nuevo: el descuento es una fila de la sección de cobro. */}
+                {!rediseno && (
                 <ButtonNew variant="secondary" icon={<Tag size={14} aria-hidden />} onClick={() => openSub("discount")} disabled={busy}>
                   {t("clinical.invoiceDetail.applyDiscount")}
                 </ButtonNew>
+                )}
                 <ButtonNew variant="danger" icon={<Trash2 size={14} aria-hidden />} onClick={handleDeleteDraft} disabled={busy}>
                   {t("clinical.invoiceDetail.deleteDraft")}
                 </ButtonNew>
@@ -637,9 +704,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {/* PENDIENTE / PARCIAL */}
             {isPending && (
               <>
+                {rediseno ? botonRegistrarPago : (
                 <ButtonNew variant="primary" icon={<CreditCard size={14} aria-hidden />} onClick={() => setPaymentOpen(true)} disabled={busy}>
                   {t("clinical.invoiceDetail.collectPayment", { amount: fmtMXNdec(invoice.balance) })}
                 </ButtonNew>
+                )}
                 <ButtonNew variant="secondary" icon={<CheckCircle2 size={14} aria-hidden />} onClick={handleMarkPaid} disabled={busy}>
                   {t("clinical.invoiceDetail.markPaid")}
                 </ButtonNew>
@@ -651,9 +720,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                     <ButtonNew variant="secondary" icon={<Pencil size={14} aria-hidden />} onClick={() => openSub("edit-price")} disabled={busy}>
                       {t("clinical.invoiceDetail.editPrice")}
                     </ButtonNew>
+                    {!rediseno && (
                     <ButtonNew variant="secondary" icon={<Tag size={14} aria-hidden />} onClick={() => openSub("discount")} disabled={busy}>
                       {t("clinical.invoiceDetail.applyDiscount")}
                     </ButtonNew>
+                    )}
                   </>
                 )}
                 {invoice.paid === 0 && (

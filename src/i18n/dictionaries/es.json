@@ -7640,6 +7640,7 @@
       "currentSubtotalLabel": "Subtotal actual:",
       "discountMxnLabel": "Descuento (MXN) *",
       "discountHelper": "El total se recalcula como subtotal − descuento.",
+      "applyDiscountFirst": "Aplica el descuento antes de cobrar, o déjalo como estaba.",
       "applying": "Aplicando…",
       "cancelInvoiceTitle": "Cancelar factura {number}",
       "cancelWarning": "No podrá registrar pagos después. La razón quedará en el audit log y en las notas de la factura.",

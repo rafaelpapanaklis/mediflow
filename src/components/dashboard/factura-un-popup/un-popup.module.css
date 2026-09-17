@@ -1,0 +1,131 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Una factura se cobra en UNA ventana (ws1-t2).
+
+   El detalle de la factura con su sección de cobro dentro. Todo cuelga de
+   `.unPopup`, que SOLO se pone sobre el `DialogContent` del detalle cuando la
+   clínica tiene encendido el interruptor `menu-dos-niveles` y la factura
+   tiene saldo que cobrar; sin él, ni una regla de aquí se aplica.
+
+   No declara ningún token ni trae colores propios (los dos hex que hay son
+   RESPALDOS dentro de un `var(--x, #hex)`): LEE los `--m2-*` del menú
+   (los monta `CLASES_FACTURA_REDISENO`, que va en el mismo nodo) y los
+   semánticos de globals.css como respaldo. Los campos, los métodos de pago y
+   los botones ya los viste `factura-rediseno.module.css`; aquí solo está lo
+   que hace falta para que quepan las dos cosas en una ventana:
+
+     · de 900 px de ancho para arriba (portátiles, monitores, iPad tumbado),
+       DOS columnas: a la izquierda la factura (resumen, conceptos,
+       movimientos) y a la derecha el cobro, que ocupa todo el alto;
+     · por debajo (iPad de pie), una sola columna: resumen, cobro, y luego
+       conceptos y movimientos. Nada se esconde por ancho: solo se apila.
+
+   Los selectores doblan la clase (`.unPopup.unPopup`) para ganarle a
+   `.raiz.modal` y a `.raiz .cuerpo` sin depender del orden de carga.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── La sección de cobro ──────────────────────────────────────────────── */
+
+.unPopup .cobro {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 12px;
+  background: var(--m2-tarjeta);
+  box-shadow: var(--m2-sombra);
+  font-variant-numeric: tabular-nums;
+}
+
+.unPopup .cobroTitulo {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--m2-texto);
+}
+
+/* Las notas, más bajas que en la ventana de cobro: aquí comparten alto con la
+   factura. Crecen igual si se escribe (el alto es mínimo, no fijo). */
+.unPopup .cobro textarea.notas.notas {
+  min-height: 46px;
+}
+
+/* ── El descuento, en una fila ────────────────────────────────────────── */
+
+.unPopup .descuento {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--m2-borde);
+}
+
+.unPopup .descuentoFila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.unPopup .cifraEnTexto {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--m2-texto-2);
+}
+
+.unPopup .aviso.aviso {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--warning-strong, #a85a05);
+}
+
+.unPopup .avisoPeligro.avisoPeligro {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--danger, #dc2626);
+}
+
+/* ── Una columna (iPad de pie) ────────────────────────────────────────── */
+
+/* Apilado, el cobro va justo debajo del resumen (Total, Pagado, Saldo) y los
+   conceptos y movimientos siguen después: quien abre para cobrar tiene el
+   monto y los métodos a la vista sin bajar por una factura larga. Todo sigue
+   ahí, en el mismo cuerpo con scroll; solo cambia el orden de apilado. */
+.unPopup.unPopup .cuerpoConCobro > .cobro {
+  order: 1;
+}
+
+.unPopup.unPopup .cuerpoConCobro > :not(.cobro):not(:first-child) {
+  order: 2;
+}
+
+/* ── Dos columnas ─────────────────────────────────────────────────────── */
+
+@media (min-width: 900px) {
+  .unPopup.unPopup.conCobro {
+    width: min(calc(100vw - 32px), 960px);
+  }
+
+  /* Tres filas a su medida para la factura y una cuarta elástica: el cobro
+     cruza las cuatro, y lo que le sobre de alto se lo queda la elástica en
+     vez de separar las tarjetas de la izquierda. */
+  .unPopup.unPopup .cuerpoConCobro {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: repeat(3, min-content) 1fr;
+    column-gap: 18px;
+    row-gap: 14px;
+    align-items: start;
+  }
+
+  .unPopup.unPopup .cuerpoConCobro > * {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .unPopup.unPopup .cuerpoConCobro > .cobro {
+    grid-column: 2;
+    grid-row: 1 / -1;
+  }
+}
